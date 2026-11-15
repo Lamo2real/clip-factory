@@ -1,0 +1,29 @@
+[package]
+name = "clip-factory-desktop"
+version = "1.0.0"
+description = "Clip Factory desktop app: a thin native window around the Clip Factory web app"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+license = "UNLICENSED"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+url = "2"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-window-state = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

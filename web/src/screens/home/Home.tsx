@@ -1,0 +1,208 @@
+import { api } from "../../api/index.ts";
+import type { Clip, Job } from "../../api/types.ts";
+import { Icon } from "../../components/Icon.tsx";
+import { PlatformMark } from "../../components/PlatformMark.tsx";
+import { A, LinkButton, Progress, Skeleton, Swash } from "../../components/ui.tsx";
+import { count, MOMENT_LABEL, plural, timecode } from "../../lib/format.ts";
+import { useLoad, usePoll } from "../../lib/hooks.ts";
+import { GetAppBanner } from "../../components/GetApp.tsx";
+import { NewJobForm } from "./NewJobForm.tsx";
+
+interface HomeData {
+  jobs: Job[];
+  review: Clip[];
+  views: number;
+  postsChecked: number;
+}
+
+async function loadHome(): Promise<HomeData> {
+  const [jobs, review, insights] = await Promise.all([
+    api().listJobs({ limit: 6 }),
+    api().listClips({ status: "review" }),
+    api().insights(),
+  ]);
+  const checked = insights.posts.filter((p) => p.metrics);
+  return {
+    jobs: jobs.jobs,
+    review,
+    views: checked.reduce((n, p) => n + (p.metrics?.views ?? 0), 0),
+    postsChecked: checked.length,
+  };
+}
+
+export function Home() {
+  const { data, setData } = useLoad(loadHome);
+  const working = data?.jobs.filter((j) => j.status === "running" || j.status === "queued") ?? [];
+  usePoll(
+    async () => {
+      const jobs = await api().listJobs({ limit: 6 });
+      setData((d) => (d ? { ...d, jobs: jobs.jobs } : d));
+    },
+    working.length > 0,
+  );
+
+  return (
+    <div className="home">
+      <GetAppBanner />
+      <section className="hero glass glass--sage glass--refract" aria-labelledby="hero-title">
+        <div className="hero__main">
+          <h1 className="hero__title" id="hero-title">
+            Clips worth <Swash>posting</Swash>.
+          </h1>
+          <p className="hero__lede">
+            Paste a link to a stream or a video. Clip Factory finds the best moments and makes short clips. You
+            pick the ones to keep.
+          </p>
+          <NewJobForm />
+        </div>
+        <div className="hero__side">
+          <WorkingCard jobs={data?.jobs ?? null} />
+          <CoverStack clips={data?.review ?? []} />
+        </div>
+      </section>
+
+      <section className="home-row" aria-labelledby="ready-title">
+        <div className="home-row__intro">
+          <h2 className="display-2" id="ready-title">
+            Ready for <em>review</em>.
+          </h2>
+          <p className="muted">
+            {data
+              ? data.review.length
+                ? `${plural(data.review.length, "clip")} waiting. Tap Go to Review to keep or throw away each one.`
+                : "Nothing to check yet. Paste a link above and tap Make clips."
+              : "Checking for new clips…"}
+          </p>
+          <LinkButton href="/review" size="sm" icon="review" iconAfter="chevronRight">
+            Go to Review
+          </LinkButton>
+        </div>
+        <div className="home-row__cards">
+          {data ? (
+            data.review.slice(0, 3).map((c) => <ClipTeaser key={c.clipId} clip={c} />)
+          ) : (
+            <>
+              <Skeleton className="teaser-skel" />
+              <Skeleton className="teaser-skel" />
+              <Skeleton className="teaser-skel" />
+            </>
+          )}
+          {data && data.review.length === 0 ? (
+            <div className="teaser teaser--empty glass">
+              <Icon name="review" size={26} />
+              <p>All done here.</p>
+            </div>
+          ) : null}
+        </div>
+        <Stat views={data?.views ?? null} posts={data?.postsChecked ?? 0} />
+      </section>
+    </div>
+  );
+}
+
+function WorkingCard({ jobs }: { jobs: Job[] | null }) {
+  const working = jobs?.filter((j) => j.status === "running" || j.status === "queued") ?? [];
+  const latest = jobs?.find((j) => j.status === "ready");
+  return (
+    <aside className="working glass" aria-labelledby="working-title">
+      <div className="working__head">
+        <h2 className="working__title" id="working-title">
+          Working now
+        </h2>
+        <A href="/jobs" className="text-link">
+          All jobs
+        </A>
+      </div>
+      {jobs === null ? (
+        <>
+          <Skeleton className="line-skel" />
+          <Skeleton className="line-skel" />
+        </>
+      ) : working.length ? (
+        <ul className="working__list" aria-live="polite">
+          {working.slice(0, 3).map((j) => {
+            const step = j.steps.find((s) => s.status === "running");
+            return (
+              <li key={j.jobId}>
+                <A href={`/jobs/${j.jobId}`} className="working__job">
+                  <span className="working__mark">
+                    <PlatformMark platform={j.source.platform} size={18} />
+                  </span>
+                  <span className="working__text">
+                    <span className="working__name clamp-1">{j.source.title ?? j.source.url ?? "Video"}</span>
+                    <span className="working__step clamp-1">
+                      {j.status === "queued" ? "Waiting to start" : (step?.message ?? step?.label ?? "Working")}
+                    </span>
+                  </span>
+                  <span className="working__pct">{Math.round(j.progress * 100)}%</span>
+                </A>
+                <Progress value={j.progress} label={`${j.source.title ?? "Job"} progress`} />
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="working__idle">
+          Nothing is being made right now.
+          {latest ? (
+            <>
+              {" "}
+              Last finished: <A href={`/jobs/${latest.jobId}`}>{latest.source.title ?? "your last job"}</A> with{" "}
+              {plural(latest.clipCount, "clip")}.
+            </>
+          ) : null}
+        </p>
+      )}
+    </aside>
+  );
+}
+
+/** The newest covers, fanned like prints on a table: proof of what the agent makes. Decorative. */
+function CoverStack({ clips }: { clips: Clip[] }) {
+  const covers = clips.filter((c) => c.coverUrl).slice(0, 3);
+  if (covers.length === 0) return null;
+  return (
+    <div className="cover-stack" aria-hidden="true">
+      {covers.map((c, i) => (
+        <span key={c.clipId} className="cover-stack__item" style={{ ["--n" as string]: i - (covers.length - 1) / 2 }}>
+          <img src={c.coverUrl} alt="" />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ClipTeaser({ clip }: { clip: Clip }) {
+  return (
+    <A href={`/review#clip-${clip.clipId}`} className="teaser glass">
+      <span className="teaser__media">
+        {clip.coverUrl ? <img src={clip.coverUrl} alt="" loading="lazy" /> : null}
+        <span className="teaser__tag">{MOMENT_LABEL[clip.momentType]}</span>
+      </span>
+      <span className="teaser__body">
+        <span className="teaser__hook clamp-2">{clip.hook}</span>
+        <span className="teaser__meta">
+          <span>{timecode(clip.durationSec)}</span>
+          <span className="teaser__score" aria-label={`Score ${clip.score} out of 10`}>
+            {clip.score}/10
+          </span>
+        </span>
+      </span>
+    </A>
+  );
+}
+
+function Stat({ views, posts }: { views: number | null; posts: number }) {
+  return (
+    <div className="stat glass">
+      <span className="stat__value">{views === null ? "–" : count(views)}</span>
+      <span className="stat__dots" aria-hidden="true">
+        {Array.from({ length: 5 }, (_, i) => (
+          <span key={i} />
+        ))}
+      </span>
+      <span className="stat__label">views after 48 hours</span>
+      <span className="stat__sub">{posts ? `across ${plural(posts, "post")}` : "Shown once clips are posted"}</span>
+    </div>
+  );
+}

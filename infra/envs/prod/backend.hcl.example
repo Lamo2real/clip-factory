@@ -1,0 +1,8 @@
+# Only for running Terraform by hand: copy to backend.hcl (git-ignored), then
+#   terraform init -backend-config=backend.hcl
+# deploy.yml creates the bucket on its first run (scripts/ensure-state-bucket.sh) and passes these values itself.
+bucket       = "lamo-labs-state-bucket"
+key          = "clip-factory/prod/terraform.tfstate"
+region       = "eu-north-1"
+encrypt      = true
+use_lockfile = true

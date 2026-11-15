@@ -1,0 +1,90 @@
+import { expect, test } from "@playwright/test";
+import { findOverflow, resolveRoute, ROUTES, settle, WIDTHS } from "./helpers.ts";
+
+// Nothing may run out of its box, at any width from 320px up, on any screen (docs/CONTRACTS.md §11).
+for (const width of WIDTHS) {
+  test(`no overflow on any screen at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const paths: string[] = [];
+    for (const r of ROUTES) paths.push(await resolveRoute(page, r));
+
+    const failures: string[] = [];
+    for (const path of paths) {
+      await page.goto(path);
+      await settle(page);
+      const result = await findOverflow(page);
+      if (result.page > result.viewport) failures.push(`${path}: page scrolls sideways (${result.page}px > ${result.viewport}px)`);
+      for (const o of result.items) failures.push(`${path}: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);
+    }
+
+    // States that only appear after interaction: the upload form, an open checklist, a long link, a skill's text.
+    await page.goto("/");
+    await settle(page);
+    // Centre each control first so the fixed tab bar never sits on top of it.
+    const pick = async (name: string) => {
+      const radio = page.getByRole("radio", { name });
+      await radio.evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await radio.check({ force: true });
+    };
+    await pick("Upload a video");
+    await pick("Exactly");
+    let state = await findOverflow(page);
+    for (const o of state.items) failures.push(`/ (upload): ${o.selector} "${o.text}"`);
+    await pick("Paste a link");
+    await page.getByLabel("YouTube, Twitch or Kick link").fill("https://www.youtube.com/watch?v=" + "x".repeat(300));
+    state = await findOverflow(page);
+    for (const o of state.items) failures.push(`/ (long link): ${o.selector} "${o.text}"`);
+
+    await page.goto("/review");
+    await settle(page);
+    await page.locator(".checklist__summary").first().click();
+    await page.getByRole("tab", { name: "X" }).first().click();
+    await page.getByRole("button", { name: "Throw away" }).first().click();
+    await page.getByRole("button", { name: "Undo" }).waitFor();
+    state = await findOverflow(page);
+    for (const o of state.items) failures.push(`/review (open, undo toast): ${o.selector} "${o.text}"`);
+
+    await page.goto("/settings");
+    await settle(page);
+    await page.getByRole("button", { name: "View" }).first().click();
+    await page.locator(".code").first().waitFor();
+    state = await findOverflow(page);
+    for (const o of state.items) failures.push(`/settings (skill open): ${o.selector} "${o.text}"`);
+
+    // The update bar with its area pills, then its progress, on top of Home and Settings.
+    for (const path of ["/?update=1", "/settings?update=1"]) {
+      await page.goto(path);
+      await settle(page);
+      await page.locator(".update-bar").waitFor();
+      await page.waitForTimeout(700);
+      state = await findOverflow(page);
+      for (const o of state.items) failures.push(`${path} (update bar): ${o.selector} "${o.text}"`);
+      const bar = await page.locator(".update-bar").boundingBox();
+      if (bar && (bar.x < 0 || bar.x + bar.width > width + 0.5)) failures.push(`${path}: update bar leaves the screen`);
+      if (state.page > state.viewport) failures.push(`${path}: page scrolls sideways with the update bar`);
+    }
+
+    // Get the app: each device's version (Mac download, iPhone steps, Android steps) fits.
+    await page.goto("/get-app");
+    await settle(page);
+    for (const device of ["Mac", "Windows", "iPhone or iPad", "Android"]) {
+      await page.getByRole("button", { name: device, exact: true }).click();
+      state = await findOverflow(page);
+      for (const o of state.items) failures.push(`/get-app (${device}): ${o.selector} "${o.text}"`);
+    }
+
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+}
+
+test("the sign-in screen fits at 320px and 1440px", async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.setItem("cf.mockSignedOut", "1"));
+  for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+    const result = await findOverflow(page);
+    expect(result.items, JSON.stringify(result.items)).toEqual([]);
+    expect(result.page).toBeLessThanOrEqual(result.viewport);
+  }
+});

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-mock/
+dev-dist/
+test-results/
+playwright-report/
+screenshots/
+public/config.json

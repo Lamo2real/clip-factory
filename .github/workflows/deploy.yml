@@ -1,0 +1,517 @@
+# Deploys prod on every push to main (no approval step) and on demand. Pushes that only touch docs or the
+# GitHub Pages legal site do not deploy. Setup is in docs/DEPLOYMENT.md. The owner provides:
+#   variable CF_DEPLOY_ROLE_ARN  IAM role GitHub assumes through OIDC
+#   secret   CF_OWNER_EMAIL      the only login (Cognito, admin-created). A secret so it is masked in the
+#                                logs of this public repository.
+# Optional variables: CF_REGION (default eu-north-1), CF_STATE_BUCKET (default lamo-labs-state-bucket).
+#
+# One run deploys from nothing:
+#   preflight - skips everything (with a notice) until the role and the email are set
+#   build     - web bundle, Lambda zip, and the agent image tag (a hash of the agent's sources)
+#   infra     - state bucket if missing, terraform plan, then apply exactly that plan. The apply builds and
+#               pushes the agent image (scripts/push-image.sh) once the ECR repository exists.
+#   web       - config.json from Terraform's outputs, version.json ("What's new": scripts/release-areas.sh over
+#               the commits since the live release), upload to S3, CloudFront refresh
+#   smoke     - the API answers /v1/health and the app serves this release's config.json and version.json
+#   desktop-plan, desktop, desktop-manifest - after the web deploy: the Mac (.dmg) and Windows (.exe) desktop
+#               apps (desktop/, Tauri) are rebuilt only when what they are built from changed or the file is
+#               missing, uploaded to the web bucket under downloads/, and downloads/manifest.json is rewritten.
+#               These jobs never fail the deploy: a broken desktop build leaves the previous installers in place.
+name: deploy
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md" # the top folder only: skills/**/SKILL.md is code and must deploy
+      - "index.html"
+      - "privacy.html"
+      - "terms.html"
+      - "style.css"
+      - ".nojekyll"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.CF_REGION || 'eu-north-1' }}
+  TF_STATE_BUCKET: ${{ vars.CF_STATE_BUCKET || 'lamo-labs-state-bucket' }}
+  TF_STATE_KEY: clip-factory/prod/terraform.tfstate
+  TF_IN_AUTOMATION: "1"
+  TERRAFORM_VERSION: "1.15.8"
+  UV_VERSION: "0.13.6"
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: check the repository settings
+        id: check
+        env:
+          ROLE: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          EMAIL: ${{ secrets.CF_OWNER_EMAIL }}
+        run: |
+          if [ -n "$ROLE" ] && [ -n "$EMAIL" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          missing=()
+          [ -n "$ROLE" ] || missing+=("variable CF_DEPLOY_ROLE_ARN")
+          [ -n "$EMAIL" ] || missing+=("secret CF_OWNER_EMAIL")
+          echo "::notice title=Deploy skipped::Set CF_DEPLOY_ROLE_ARN and CF_OWNER_EMAIL, see docs/DEPLOYMENT.md"
+          {
+            echo "## Deploy skipped"
+            echo
+            echo "Deploy skipped: set CF_DEPLOY_ROLE_ARN and CF_OWNER_EMAIL, see docs/DEPLOYMENT.md."
+            echo
+            printf -- '- Missing: %s\n' "${missing[@]}"
+            echo
+            echo "Add them under Settings, Secrets and variables, Actions, then run this workflow again."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: preflight
+    if: needs.preflight.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      image_tag: ${{ steps.image.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: build the web app
+        working-directory: web
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          # The app compares this with /version.json to offer "What's new" and Reload (docs/CONTRACTS.md §12.2).
+          export VITE_APP_VERSION="${SHA:0:7}"
+          npm ci
+          npm run build
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: api/uv.lock
+      - name: build the Lambda package (api/dist/lambda.zip)
+        working-directory: api
+        run: |
+          uv sync --frozen
+          uv run python scripts/build_lambda.py
+          test -s dist/lambda.zip
+      - name: agent image tag (changes only when the agent's sources change)
+        id: image
+        env:
+          SOURCES_HASH: ${{ hashFiles('agent/**', 'skills/**', 'config/**') }}
+        run: |
+          [ -n "$SOURCES_HASH" ] || { echo "::error::No agent sources found to hash."; exit 1; }
+          echo "tag=agent-${SOURCES_HASH:0:16}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          include-hidden-files: true
+          retention-days: 3
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lambda-zip
+          path: api/dist/lambda.zip
+          retention-days: 3
+          if-no-files-found: error
+
+  infra:
+    needs: [preflight, build]
+    if: needs.preflight.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    # The first apply builds the ARM64 agent image under QEMU.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      app_url: ${{ steps.out.outputs.app_url }}
+      api_url: ${{ steps.out.outputs.api_url }}
+      web_bucket: ${{ steps.out.outputs.web_bucket }}
+      distribution_id: ${{ steps.out.outputs.distribution_id }}
+      tf_outputs: ${{ steps.out.outputs.tf_outputs }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: lambda-zip
+          path: api/dist
+      - name: who GitHub says this job is (what the deploy role's trust policy must match)
+        run: |
+          # Prints only the token's claims, never the token itself.
+          curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" \
+            | python3 -c 'import sys,json,base64; p=json.load(sys.stdin)["value"].split(".")[1]; c=json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4))); print(json.dumps({k:c.get(k) for k in ("sub","aud","repository","ref")}, indent=2))'
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 7200
+          # Several outputs (bucket names, ARNs) contain the account id; a masked id would make GitHub
+          # drop those job outputs.
+          mask-aws-account-id: false
+      - name: Terraform state bucket (created on the first run if missing)
+        id: state
+        env:
+          STATE_BUCKET: ${{ env.TF_STATE_BUCKET }}
+        run: bash scripts/ensure-state-bucket.sh
+      # terraform apply runs scripts/push-image.sh, which needs buildx and ARM64 emulation.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+      - name: terraform init
+        working-directory: infra/envs/prod
+        env:
+          STATE_BUCKET: ${{ steps.state.outputs.bucket }}
+          STATE_REGION: ${{ steps.state.outputs.region }}
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${STATE_REGION}" \
+            -backend-config="use_lockfile=true"
+      - name: terraform plan
+        working-directory: infra/envs/prod
+        env:
+          TF_VAR_region: ${{ env.AWS_REGION }}
+          TF_VAR_owner_email: ${{ secrets.CF_OWNER_EMAIL }}
+          TF_VAR_agent_image_tag: ${{ needs.build.outputs.image_tag }}
+          TF_VAR_lambda_zip_path: ${{ github.workspace }}/api/dist/lambda.zip
+          TF_VAR_app_version: ${{ github.sha }}
+        run: |
+          terraform plan -input=false -out=prod.tfplan
+          # The full plan stays in this log (the owner email is masked), never in a downloadable file.
+          terraform show -no-color prod.tfplan > "${RUNNER_TEMP}/plan.txt"
+          {
+            echo "## Terraform plan"
+            grep -E '^Plan:|No changes' "${RUNNER_TEMP}/plan.txt" || true
+            echo
+            echo "The full plan is in the log of the 'terraform plan' step. It is applied next, without approval."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: terraform apply (exactly the saved plan)
+        working-directory: infra/envs/prod
+        run: terraform apply -input=false -auto-approve prod.tfplan
+      - name: outputs for the web upload and the smoke test
+        id: out
+        working-directory: infra/envs/prod
+        run: |
+          json="$(terraform output -json)"
+          for name in app_url api_url web_bucket distribution_id; do
+            value="$(jq -r --arg n "$name" '.[$n].value // empty' <<<"$json")"
+            [ -n "$value" ] || { echo "::error::Terraform output ${name} is missing."; exit 1; }
+            echo "${name}=${value}" >> "$GITHUB_OUTPUT"
+          done
+          echo "tf_outputs=$(jq -c . <<<"$json")" >> "$GITHUB_OUTPUT"
+
+  web:
+    needs: [preflight, infra]
+    if: needs.preflight.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # scripts/release-areas.sh reads the commits since the live release.
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+      - name: write config.json from Terraform's outputs
+        env:
+          TF_OUTPUTS: ${{ needs.infra.outputs.tf_outputs }}
+          VERSION: ${{ github.sha }}
+        run: |
+          printf '%s' "$TF_OUTPUTS" > "${RUNNER_TEMP}/tf-outputs.json"
+          TF_OUTPUTS_FILE="${RUNNER_TEMP}/tf-outputs.json" bash scripts/write-web-config.sh
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: write version.json (what's new since the live release)
+        env:
+          WEB_BUCKET: ${{ needs.infra.outputs.web_bucket }}
+        run: |
+          prev=""
+          live="${RUNNER_TEMP}/live-version.json"
+          if err="$(aws s3 cp "s3://${WEB_BUCKET}/version.json" "$live" --only-show-errors 2>&1)"; then
+            prev="$(jq -r '.version // empty' "$live" 2>/dev/null || true)"
+            # A live file without a readable version: release-areas.sh then falls back to "Improvements".
+            [ -n "$prev" ] || prev="unknown"
+          elif grep -qE '404|Not Found|NoSuchKey|does not exist' <<<"$err"; then
+            echo "No live version.json: this is the first release."
+          else
+            echo "::warning title=version.json::Could not read the live version.json, so this release is labelled Improvements: ${err}"
+            prev="unknown"
+          fi
+          PREV_VERSION="$prev" bash scripts/write-version-json.sh
+          {
+            echo "## What's new"
+            echo
+            jq -r '"Version `\(.version)`: " + (.areas | join(" · "))' web/dist/version.json
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: upload to S3 and refresh CloudFront
+        env:
+          WEB_BUCKET: ${{ needs.infra.outputs.web_bucket }}
+          DISTRIBUTION_ID: ${{ needs.infra.outputs.distribution_id }}
+        run: bash scripts/upload-web.sh
+
+  smoke:
+    needs: [preflight, infra, web]
+    if: needs.preflight.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: the API answers /v1/health
+        env:
+          API_URL: ${{ needs.infra.outputs.api_url }}
+        run: |
+          url="${API_URL%/}/v1/health"
+          # Retries cover a cold Lambda and API Gateway settling after the first deploy.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if body="$(curl -fsS --max-time 15 "$url")" && jq -e '.ok == true' <<<"$body" >/dev/null; then
+              echo "Health check passed: ${body}"
+              exit 0
+            fi
+            echo "Attempt ${attempt}: ${url} is not healthy yet; retrying in 10 s."
+            sleep 10
+          done
+          echo "::error::${url} did not return ok."
+          exit 1
+      - name: the app serves this release
+        env:
+          APP_URL: ${{ needs.infra.outputs.app_url }}
+          SHA: ${{ github.sha }}
+        run: |
+          url="${APP_URL%/}"
+          curl -fsS --max-time 15 -o /dev/null "${url}/"
+          version="$(curl -fsS --max-time 15 "${url}/config.json" | jq -r .version)"
+          [ "$version" = "$SHA" ] || { echo "::error::${url}/config.json reports version ${version}, expected ${SHA}."; exit 1; }
+          short="$(curl -fsS --max-time 15 "${url}/version.json" | jq -r .version)"
+          [ "$short" = "${SHA:0:7}" ] || { echo "::error::${url}/version.json reports ${short}, expected ${SHA:0:7}."; exit 1; }
+          curl -fsS --max-time 15 "${url}/downloads/manifest.json" | jq -e '.files | type == "object"' >/dev/null \
+            || { echo "::error::${url}/downloads/manifest.json is missing or not a manifest."; exit 1; }
+          {
+            echo "## Clip Factory is deployed"
+            echo
+            echo "App: ${url}"
+            echo
+            echo "Version: \`${SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Decides which desktop installers to rebuild. Each installer in the bucket carries, as S3 metadata, a hash of
+  # what it was built from: desktop/ (docs excluded), the app icon, and the app address baked into it. A
+  # mismatch means desktop/ or the icon changed (or the address did); no file or no hash means it was never
+  # built or the last build failed. Either way that target is rebuilt; otherwise it is skipped.
+  desktop-plan:
+    needs: [preflight, infra, web]
+    if: needs.preflight.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      source_hash: ${{ steps.plan.outputs.source_hash }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: which installers need a build
+        id: plan
+        env:
+          WEB_BUCKET: ${{ needs.infra.outputs.web_bucket }}
+          APP_URL: ${{ needs.infra.outputs.app_url }}
+          SOURCES_HASH: ${{ hashFiles('desktop/**', '!desktop/**/*.md', 'web/public/icons/icon-512.png') }}
+        run: |
+          [ -n "$SOURCES_HASH" ] || { echo "::error::desktop/ not found."; exit 1; }
+          source_hash="$(printf '%s %s' "$SOURCES_HASH" "${APP_URL%/}" | sha256sum | cut -c1-32)"
+          targets='[
+            {"target": "mac", "os": "macos-latest", "rust_targets": "aarch64-apple-darwin,x86_64-apple-darwin",
+             "args": "--target universal-apple-darwin --bundles dmg",
+             "bundle": "src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg",
+             "key": "downloads/Clip-Factory.dmg", "content_type": "application/x-apple-diskimage"},
+            {"target": "windows", "os": "windows-latest", "rust_targets": "",
+             "args": "--bundles nsis",
+             "bundle": "src-tauri/target/release/bundle/nsis/*-setup.exe",
+             "key": "downloads/Clip-Factory-Setup.exe", "content_type": "application/vnd.microsoft.portable-executable"}
+          ]'
+          matrix='[]'
+          summary=()
+          for i in 0 1; do
+            entry="$(jq -c ".[$i]" <<<"$targets")"
+            key="$(jq -r .key <<<"$entry")"
+            live="$(aws s3api head-object --bucket "$WEB_BUCKET" --key "$key" \
+              --query 'Metadata."source-hash"' --output text 2>/dev/null || echo missing)"
+            if [ "$live" = "$source_hash" ]; then
+              summary+=("- ${key}: up to date, not rebuilt")
+            else
+              matrix="$(jq -c --argjson e "$entry" '. + [$e]' <<<"$matrix")"
+              if [ "$live" = "missing" ]; then
+                summary+=("- ${key}: not in the bucket yet, building")
+              else
+                summary+=("- ${key}: desktop app, icon or address changed, building")
+              fi
+            fi
+          done
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+          echo "source_hash=${source_hash}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Desktop apps"
+            echo
+            printf '%s\n' "${summary[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Unsigned builds for now (no Apple or Microsoft certificates; see docs/CONTRACTS.md §12.3).
+  desktop:
+    name: desktop (${{ matrix.target }})
+    needs: [preflight, infra, desktop-plan]
+    if: >-
+      needs.preflight.outputs.enabled == 'true'
+      && needs.desktop-plan.outputs.matrix != ''
+      && needs.desktop-plan.outputs.matrix != '[]'
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.desktop-plan.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+          key: ${{ matrix.target }}
+      - run: npm ci
+      - name: icons from the web app icon
+        run: bash scripts/make-icons.sh
+      - name: build the installer
+        env:
+          CF_APP_URL: ${{ needs.infra.outputs.app_url }}
+          TAURI_ARGS: ${{ matrix.args }}
+        run: |
+          read -ra args <<<"$TAURI_ARGS"
+          npx --no-install tauri build --ci "${args[@]}"
+      - name: find the installer
+        id: file
+        env:
+          BUNDLE_GLOB: ${{ matrix.bundle }}
+        run: |
+          mapfile -t files < <(compgen -G "$BUNDLE_GLOB" || true)
+          [ "${#files[@]}" -eq 1 ] || { echo "::error::Expected one installer at ${BUNDLE_GLOB}, found ${#files[@]}."; exit 1; }
+          echo "path=${files[0]}" >> "$GITHUB_OUTPUT"
+          echo "Built ${files[0]} ($(wc -c <"${files[0]}" | tr -d ' ') bytes)."
+      # Credentials only now: a long build must not outlive the session.
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: upload to the web bucket
+        env:
+          FILE: ${{ steps.file.outputs.path }}
+          WEB_BUCKET: ${{ needs.infra.outputs.web_bucket }}
+          KEY: ${{ matrix.key }}
+          CONTENT_TYPE: ${{ matrix.content_type }}
+          SOURCE_HASH: ${{ needs.desktop-plan.outputs.source_hash }}
+        run: |
+          aws s3 cp "$FILE" "s3://${WEB_BUCKET}/${KEY}" \
+            --cache-control "no-cache" \
+            --content-type "$CONTENT_TYPE" \
+            --content-disposition "attachment; filename=\"${KEY##*/}\"" \
+            --metadata "source-hash=${SOURCE_HASH}" \
+            --only-show-errors
+          echo "Uploaded ${KEY}."
+
+  # Lists only the installers that exist in the bucket, so the app never offers a dead link (§12.1).
+  desktop-manifest:
+    needs: [preflight, infra, web, desktop-plan, desktop]
+    if: >-
+      !cancelled()
+      && needs.preflight.outputs.enabled == 'true'
+      && needs.infra.result == 'success'
+      && needs.web.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: rewrite downloads/manifest.json and refresh CloudFront
+        env:
+          WEB_BUCKET: ${{ needs.infra.outputs.web_bucket }}
+          DISTRIBUTION_ID: ${{ needs.infra.outputs.distribution_id }}
+        run: |
+          version="$(jq -r '.version' desktop/src-tauri/tauri.conf.json)"
+          manifest="$(jq -n --arg version "$version" '{version: $version, files: {}}')"
+          for entry in "mac downloads/Clip-Factory.dmg" "windows downloads/Clip-Factory-Setup.exe"; do
+            read -r name key <<<"$entry"
+            size="$(aws s3api head-object --bucket "$WEB_BUCKET" --key "$key" \
+              --query ContentLength --output text 2>/dev/null || true)"
+            if [[ "$size" =~ ^[0-9]+$ ]] && [ "$size" -gt 0 ]; then
+              manifest="$(jq --arg n "$name" --arg p "/${key}" --argjson s "$size" \
+                '.files[$n] = {path: $p, size: $s}' <<<"$manifest")"
+            fi
+          done
+          printf '%s\n' "$manifest" | aws s3 cp - "s3://${WEB_BUCKET}/downloads/manifest.json" \
+            --cache-control "no-cache" --content-type "application/json" --only-show-errors
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" \
+            --paths "/downloads/*" --query Invalidation.Id --output text
+          {
+            echo "## Desktop downloads"
+            echo
+            echo '```json'
+            jq . <<<"$manifest"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,11 @@
+{
+  "$comment": "The only place model ids live. Everything else reads them from here (Terraform, the agent image).",
+  "profilePrefix": "global",
+  "agentModel": "fable-5-1",
+  "models": {
+    "fable-5-1": {
+      "label": "Claude Fable 5.1",
+      "modelId": "anthropic.claude-fable-5-1"
+    }
+  }
+}
