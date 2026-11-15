@@ -8,6 +8,9 @@ import { useToast } from "../../components/Toasts.tsx";
 import { Button, Empty, ErrorPanel, LinkButton, PageHeader, Segmented, Skeleton } from "../../components/ui.tsx";
 import { count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
+import { useLiveEvents } from "../../lib/live.ts";
+import { applyClipEvent, applyLearningEvent, applyPostEvent, withMedia } from "../../lib/liveCache.ts";
+import { SimilarClips } from "../../components/SimilarClips.tsx";
 import { keepClip, keptMessage, needsKeepAgain, STILL_WORKING } from "../../lib/keep.ts";
 import { ClipStatusPill } from "../jobs/JobDetail.tsx";
 
@@ -17,12 +20,15 @@ interface LibraryData {
   learnings: Learning[];
 }
 
+/** The Library lists clips the owner kept: on their way out, out, or stuck on the way. */
+const inLibrary = (c: Clip) => c.status === "confirmed" || c.status === "publishing" || c.status === "posted" || c.status === "failed";
+
 async function loadLibrary(): Promise<LibraryData> {
   const [all, posts, insights] = await Promise.all([api().listClips({ status: "all" }), api().listPosts(), api().insights()]);
   // Insights carry the freshest metrics; prefer them over the plain post list.
   const withMetrics = new Map(insights.posts.map((p) => [p.postId, p]));
   return {
-    clips: all.filter((c) => c.status === "confirmed" || c.status === "publishing" || c.status === "posted" || c.status === "failed"),
+    clips: all.filter(inLibrary),
     posts: posts.map((p) => withMetrics.get(p.postId) ?? p),
     learnings: insights.learnings,
   };
@@ -44,6 +50,23 @@ export function Library() {
         : d,
     );
   const [filter, setFilter] = useState<Filter>("all");
+
+  // Live: kept clips arrive, posts change state and get their numbers, new learnings appear.
+  useLiveEvents(
+    (e) => {
+      if (e.type === "clip") {
+        const missing = data ? applyClipEvent(data.clips, e, inLibrary).needMedia : [];
+        setData((d) => (d ? { ...d, clips: applyClipEvent(d.clips, e, inLibrary).clips } : d));
+        for (const clipId of missing)
+          void api()
+            .getClip(clipId)
+            .then((fresh) => setData((d) => (d ? { ...d, clips: withMedia(d.clips, fresh) } : d)))
+            .catch(() => undefined);
+      } else if (e.type === "post") setData((d) => (d ? { ...d, posts: applyPostEvent(d.posts, e) } : d));
+      else if (e.type === "learning") setData((d) => (d ? { ...d, learnings: applyLearningEvent(d.learnings, e) } : d));
+    },
+    () => void reload(),
+  );
 
   const clips =
     data?.clips.filter((c) =>
@@ -237,6 +260,7 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
       ) : (
         <p className="muted small">No posts yet.</p>
       )}
+      <SimilarClips clipId={clip.clipId} />
     </article>
   );
 }

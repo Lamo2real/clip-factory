@@ -4,7 +4,9 @@ import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A, LinkButton, Progress, Skeleton, Swash } from "../../components/ui.tsx";
 import { count, MOMENT_LABEL, plural, timecode } from "../../lib/format.ts";
-import { useLoad, usePoll } from "../../lib/hooks.ts";
+import { useLoad } from "../../lib/hooks.ts";
+import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
+import { applyClipEvent, applyJobEvent, withMedia } from "../../lib/liveCache.ts";
 import { GetAppBanner } from "../../components/GetApp.tsx";
 import { NewJobForm } from "./NewJobForm.tsx";
 
@@ -31,9 +33,25 @@ async function loadHome(): Promise<HomeData> {
 }
 
 export function Home() {
-  const { data, setData } = useLoad(loadHome);
+  const { data, setData, reload } = useLoad(loadHome);
   const working = data?.jobs.filter((j) => j.status === "running" || j.status === "queued") ?? [];
-  usePoll(
+  const inReview = (c: Clip) => c.status === "review";
+  useLiveEvents(
+    (e) => {
+      if (e.type === "job") setData((d) => (d ? { ...d, jobs: applyJobEvent(d.jobs, e, 6) } : d));
+      else if (e.type === "clip") {
+        const missing = data ? applyClipEvent(data.review, e, inReview).needMedia : [];
+        setData((d) => (d ? { ...d, review: applyClipEvent(d.review, e, inReview).clips } : d));
+        for (const clipId of missing)
+          void api()
+            .getClip(clipId)
+            .then((fresh) => setData((d) => (d ? { ...d, review: withMedia(d.review, fresh) } : d)))
+            .catch(() => undefined);
+      } else if (e.type === "post") void reload(); // New numbers: the views total is worked out again.
+    },
+    () => void reload(),
+  );
+  useLivePoll(
     async () => {
       const jobs = await api().listJobs({ limit: 6 });
       setData((d) => (d ? { ...d, jobs: jobs.jobs } : d));

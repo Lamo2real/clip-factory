@@ -10,6 +10,7 @@ import { Sidebar, TabBar } from "../components/Nav.tsx";
 import { ToastProvider } from "../components/Toasts.tsx";
 import { UpdateBar } from "../components/UpdateBar.tsx";
 import { GetAppPanel } from "../components/GetApp.tsx";
+import { LiveDot } from "../components/LiveDot.tsx";
 import { A, Button, Empty, LinkButton } from "../components/ui.tsx";
 import { Home } from "../screens/home/Home.tsx";
 import { JobDetail } from "../screens/jobs/JobDetail.tsx";
@@ -129,6 +130,7 @@ function Shell() {
               Clip <em>Factory</em>
             </span>
           </A>
+          <LiveDot />
         </header>
         <main className="main" id="main" ref={main} tabIndex={-1}>
           <Screen route={route} />

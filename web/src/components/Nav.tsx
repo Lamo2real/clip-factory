@@ -3,6 +3,7 @@ import { setPrefs, usePrefs } from "../lib/prefs.ts";
 import { section, useRoute } from "../lib/router.ts";
 import { plural } from "../lib/format.ts";
 import { useInstall } from "../lib/pwa.ts";
+import { LiveDot } from "./LiveDot.tsx";
 import { Icon, type IconName } from "./Icon.tsx";
 import { A } from "./ui.tsx";
 
@@ -94,6 +95,9 @@ export function Sidebar() {
         ))}
       </ul>
       <div className="sidebar__foot">
+        <span className="sidebar__live">
+          <LiveDot compact={sidebarCollapsed} />
+        </span>
         {!installed ? (
           <A
             href="/get-app"

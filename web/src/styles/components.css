@@ -1113,3 +1113,190 @@
 [data-tip]:focus-visible::after {
   display: block;
 }
+
+/* ---------- Live dot (docs/CONTRACTS.md §14.2) ----------
+   A small glass pill with a softly glowing sage light. Shown only while connected; it never turns red or
+   blinks, because a dropped connection is not the owner's problem (the app reconnects by itself). */
+.live-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  min-height: 28px;
+  padding: 4px 11px 4px 9px;
+  border-radius: var(--r-pill);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  animation: live-in var(--dur-3) var(--ease-out) both;
+}
+.live-dot--compact {
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+}
+.live-dot__light {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff 0 12%, var(--sage) 46%, var(--sage-deep) 100%);
+  box-shadow:
+    0 0 0 2px rgb(var(--sage-rgb) / 0.22),
+    0 1px 3px rgb(var(--ink-rgb) / 0.25);
+}
+.live-dot__light::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: rgb(var(--sage-rgb) / 0.45);
+  animation: live-breathe 3.2s ease-in-out infinite;
+}
+@keyframes live-breathe {
+  0%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 0.55;
+  }
+}
+@keyframes live-in {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+.reduce-motion .live-dot__light::after {
+  animation: none;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot__light::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+.topbar .live-dot {
+  margin-left: auto;
+}
+.sidebar__live {
+  display: flex;
+  padding: 0 10px 8px;
+}
+.sidebar.is-collapsed .sidebar__live {
+  justify-content: center;
+  padding-inline: 0;
+}
+.sidebar__live:empty {
+  display: none;
+}
+
+/* ---------- "Like clips that did well" (docs/CONTRACTS.md §14.6) ----------
+   A row of small cards that scrolls sideways when it does not fit, so it never pushes the card wider. */
+.similar {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.similar__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  font-weight: 650;
+}
+.similar__title .icon {
+  color: var(--sage-deep);
+}
+.similar__list {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 -4px;
+  padding: 4px 4px 8px;
+  list-style: none;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--sage-rgb) / 0.7) transparent;
+  border-radius: var(--r-md);
+}
+.similar__list:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.similar__item {
+  display: flex;
+  gap: 9px;
+  flex: none;
+  width: min(212px, 72vw);
+  padding: 7px;
+  border: 1px solid rgb(255 255 255 / 0.55);
+  border-radius: var(--r-sm);
+  background: rgb(var(--offwhite-rgb) / 0.58);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7), 0 4px 14px -10px rgb(var(--ink-rgb) / 0.4);
+  scroll-snap-align: start;
+}
+.similar__cover {
+  flex: none;
+  width: 40px;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(160deg, rgb(var(--sage-rgb) / 0.55), rgb(var(--sage-rgb) / 0.25));
+}
+.similar__cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.similar__text {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+.similar__hook {
+  color: var(--ink);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.similar__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  color: var(--ink-3);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+.similar__views {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.similar-anchor {
+  display: none;
+}
+.callout--info {
+  background: rgb(255 255 255 / 0.62);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgb(var(--sage-rgb) / 0.55);
+}
+.callout--info .icon {
+  flex: none;
+  color: var(--sage-deep);
+}

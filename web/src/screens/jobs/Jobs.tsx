@@ -7,7 +7,9 @@ import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Progress, Skeleton } from "../../components/ui.tsx";
 import { burst } from "../../lib/confetti.ts";
 import { plural, relative } from "../../lib/format.ts";
-import { useLoad, usePoll } from "../../lib/hooks.ts";
+import { useLoad } from "../../lib/hooks.ts";
+import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
+import { applyJobEvent } from "../../lib/liveCache.ts";
 import { mergeJobs, pollLimit } from "./mergeJobs.ts";
 
 export function Jobs() {
@@ -19,18 +21,35 @@ export function Jobs() {
   const jobs = data?.jobs ?? [];
   const active = jobs.some((j) => j.status === "running" || j.status === "queued");
 
-  usePoll(async () => {
-    const fresh = await api().listJobs({ limit: pollLimit(jobs.length) });
-    for (const j of fresh.jobs) {
+  /** A job that just finished gets a small celebration, whether the news came by poll or live. */
+  function celebrate(fresh: Job[]) {
+    for (const j of fresh) {
       const before = seen.current.get(j.jobId);
       if (before && before !== "ready" && j.status === "ready") {
+        seen.current.set(j.jobId, "ready");
         burst();
         toast.success(`${jobTitle(j)} is ready with ${plural(j.clipCount, "clip")}.`);
       }
     }
+  }
+
+  const refetch = async () => {
+    const fresh = await api().listJobs({ limit: pollLimit(jobs.length) });
+    celebrate(fresh.jobs);
     // Only the first page is fetched: merge it in and keep the cursor for "Show older jobs".
     setData((d) => (d ? { jobs: mergeJobs(d.jobs, fresh.jobs), nextCursor: d.nextCursor } : fresh));
-  }, active);
+  };
+
+  // Live updates move the list along; the poll is the fallback (every 30 s while live).
+  useLiveEvents(
+    (e) => {
+      if (e.type !== "job") return;
+      if (e.item) celebrate([e.item]);
+      setData((d) => (d ? { ...d, jobs: applyJobEvent(d.jobs, e) } : d));
+    },
+    () => void refetch().catch(() => undefined),
+  );
+  useLivePoll(refetch, active);
   for (const j of jobs) seen.current.set(j.jobId, j.status);
 
   async function loadMore() {

@@ -150,6 +150,37 @@ export interface Learning {
   postIds: string[];
 }
 
+export interface Performance {
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  posts: number;
+  checkedAt: string;
+}
+
+/** One of the owner's measured clips that is most like a given clip (docs/CONTRACTS.md §14.6). */
+export interface SimilarClip {
+  clipId: string;
+  hook: string;
+  title: string;
+  momentType: MomentType;
+  /** 0..1 (1 - cosine distance, 2 decimals). */
+  similarity: number;
+  performance?: Performance;
+  coverUrl?: string;
+}
+
+/** What the live connection pushes (docs/CONTRACTS.md §14.2). One message per changed item. */
+export type LiveItemType = "job" | "clip" | "post" | "learning";
+export type LiveEvent =
+  | { type: "job"; op: "upsert"; id: string; item: Job; partial?: undefined }
+  | { type: "clip"; op: "upsert"; id: string; item: Clip; partial?: undefined }
+  | { type: "post"; op: "upsert"; id: string; item: Post; partial?: undefined }
+  | { type: "learning"; op: "upsert"; id: string; item: Learning; partial?: undefined }
+  | { type: LiveItemType; op: "delete"; id: string; item?: undefined; partial?: undefined }
+  | { type: LiveItemType; op: "upsert"; id: string; partial: true; item?: undefined };
+
 export interface Me {
   user: { id: string; email: string };
   settings: Settings;
@@ -199,4 +230,5 @@ export interface Api {
   connectAccount(platform: Platform): Promise<void>;
   listPosts(clipId?: string): Promise<Post[]>;
   insights(): Promise<{ learnings: Learning[]; posts: Post[] }>;
+  similarClips(clipId: string): Promise<SimilarClip[]>;
 }

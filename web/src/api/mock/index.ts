@@ -1,7 +1,8 @@
 // The whole HTTP API in memory, with fake latency, so the UI runs with no backend (npm run dev:mock, Playwright).
 import { ApiError, networkError } from "../errors.ts";
-import type { Api, Job, Post, Settings, Skill } from "../types.ts";
+import type { Api, Clip, Job, Post, Settings, SimilarClip, Skill } from "../types.ts";
 import { MOMENTS, PLATFORMS, STEP_KEYS, coverArt, seed, stepsAt, thumbArt, ulid, type Store } from "./fixtures.ts";
+import { installMockLiveControls, mockLive } from "./live.ts";
 
 const STEP_MS = 3500;
 const clone = <T>(v: T): T => structuredClone(v);
@@ -27,11 +28,28 @@ const ALREADY_DECIDED = "This clip has already been confirmed or declined.";
 export interface MockFaults {
   keepStopsAfterSave: number;
   resumeAfterMs: number;
+  /** "Like clips that did well" finds nothing (the strip must hide). */
+  similarEmpty?: boolean;
 }
 
+/** How often each API method was called (window.__cfMockCalls), so tests can tell a poll from a live update. */
+export type MockCalls = Record<string, number>;
+
 export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsAfterSave: 0, resumeAfterMs: 60_000 }): Api {
-  if (typeof window !== "undefined") (window as unknown as { __cfMockFaults?: MockFaults }).__cfMockFaults = faults;
-  // When each kept clip's posting was last started (the API's publishClaimAt).
+  const calls: MockCalls = {};
+  if (typeof window !== "undefined") {
+    (window as unknown as { __cfMockFaults?: MockFaults }).__cfMockFaults = faults;
+    (window as unknown as { __cfMockCalls?: MockCalls }).__cfMockCalls = calls;
+  }
+
+  // Live events carry the same public shapes as the HTTP API, minus the presigned media links (§14.2).
+  const publishJob = (j: Job) => mockLive.publish({ type: "job", op: "upsert", id: j.jobId, item: clone(j) });
+  const publishClip = (c: Clip) => {
+    const { videoUrl: _v, coverUrl: _c, ...rest } = clone(c);
+    mockLive.publish({ type: "clip", op: "upsert", id: c.clipId, item: rest });
+  };
+  const publishPost = (p: Post) => mockLive.publish({ type: "post", op: "upsert", id: p.postId, item: clone(p) });
+  // When each kept clip's posting was last started (stands in for the API's publishState: "pending" timing).
   const claimedAt = new Map<string, number>();
 
   // When each running job's current step began, to move it along over time.
@@ -77,6 +95,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     job.clipCount = count;
     job.progress = 1;
     job.steps = stepsAt(STEP_KEYS.length, "ready");
+    job.updatedAt = new Date().toISOString();
+    for (const c of store.clips) if (c.jobId === job.jobId) publishClip(c);
   }
 
   function tick() {
@@ -89,6 +109,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       }
       const c = clock.get(job.jobId);
       if (job.status !== "running" || !c) continue;
+      const before = job.progress;
       const done = Math.min(STEP_KEYS.length, c.done + Math.floor((now - c.at) / STEP_MS));
       if (done >= STEP_KEYS.length) {
         finish(job);
@@ -99,8 +120,27 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         job.progress = Math.min(0.99, (done + within) / STEP_KEYS.length);
       }
       job.updatedAt = new Date().toISOString();
+      // Like the agent's heartbeats: a message only when the job really moved.
+      if (Math.round(job.progress * 100) !== Math.round(before * 100) || job.status !== "running") publishJob(job);
     }
   }
+
+  /** One step forward for the newest running job, pushed live (tests use it; automation freezes the clock). */
+  function advance() {
+    const j = [...store.jobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).find((x) => x.status === "running");
+    if (!j) return;
+    const done = j.steps.findIndex((s) => s.status === "running") + 1;
+    clock.delete(j.jobId);
+    if (done >= STEP_KEYS.length) finish(j);
+    else {
+      j.steps = stepsAt(done, "running");
+      j.progress = done / STEP_KEYS.length;
+      j.updatedAt = new Date().toISOString();
+    }
+    publishJob(j);
+  }
+  mockLive.tick = tick;
+  installMockLiveControls(advance);
 
   const job = (jobId: string) => {
     const j = store.jobs.find((x) => x.jobId === jobId);
@@ -120,7 +160,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   const publicSkill = ({ content: _content, ...s }: Skill & { content: string }): Skill => s;
   const pendingSkills = new Map<string, string>();
 
-  return {
+  const api: Api = {
     async health() {
       await delay();
       return { ok: true, version: "mock" };
@@ -178,6 +218,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         updatedAt: now,
       };
       store.jobs.unshift(j);
+      publishJob(j);
       return clone(j);
     },
     async listJobs({ limit = 20, cursor } = {}) {
@@ -204,6 +245,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       j.steps = j.steps.map((s) => (s.status === "running" ? { ...s, status: "pending", message: undefined } : s));
       clock.delete(jobId);
       j.updatedAt = new Date().toISOString();
+      publishJob(j);
       return clone(j);
     },
     async retryJob(jobId) {
@@ -216,6 +258,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       j.progress = 0;
       j.createdAt = new Date().toISOString();
       j.updatedAt = j.createdAt;
+      publishJob(j);
       return clone(j);
     },
     async listClips({ status = "review", jobId } = {}) {
@@ -237,6 +280,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       const c = clip(clipId);
       if (c.status !== "review") throw conflict("Captions can only be changed while the clip waits for review.");
       c.captions = { ...c.captions, ...captions };
+      publishClip(c);
       return clone(c);
     },
     async confirmClip(clipId, captions) {
@@ -248,6 +292,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
           .filter((platform) => !have.has(platform))
           .map((platform) => ({ postId: ulid(), clipId, platform, status: "pending_integration" }));
         store.posts.push(...created);
+        publishClip(c);
+        for (const p of created) publishPost(p);
         return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
       };
       // Keep again on a kept clip whose posting never started: finished once the last try is old enough.
@@ -276,6 +322,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       c.decidedAt = new Date().toISOString();
       c.coverUrl = undefined;
       c.videoUrl = undefined;
+      publishClip(c);
       return clone(c);
     },
     async listSkills() {
@@ -365,6 +412,62 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       await delay();
       return { learnings: clone(store.learnings), posts: clone(store.posts.filter((p) => p.metrics)) };
     },
+    async similarClips(clipId) {
+      await delay();
+      const self = clip(clipId);
+      if (faults.similarEmpty) return [];
+      return similar(store, self);
+    },
   };
+
+  // Counts every call, so tests can prove an update came over the live connection and not from a poll.
+  return new Proxy(api, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      if (typeof prop !== "string" || typeof value !== "function") return value;
+      return (...args: unknown[]) => {
+        calls[prop] = (calls[prop] ?? 0) + 1;
+        return (value as (...a: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+}
+
+/**
+ * Stand-in for the S3 Vectors search (§14.6): the owner's measured clips (posted, with numbers), most alike first.
+ * Same moment type counts most, then a similar score. Never the clip itself; at most five.
+ */
+export function similar(store: Store, self: Clip): SimilarClip[] {
+  const measured = new Map<string, Post[]>();
+  for (const p of store.posts) {
+    if (!p.metrics) continue;
+    measured.set(p.clipId, [...(measured.get(p.clipId) ?? []), p]);
+  }
+  return store.clips
+    .filter((c) => c.clipId !== self.clipId && c.status === "posted" && measured.has(c.clipId))
+    .map((c): SimilarClip => {
+      const posts = measured.get(c.clipId)!;
+      const sum = (k: "views" | "likes" | "comments" | "shares") => posts.reduce((n, p) => n + (p.metrics?.[k] ?? 0), 0);
+      const base = c.momentType === self.momentType ? 0.91 : 0.66;
+      const similarity = Math.round(Math.max(0.3, base - Math.abs(c.score - self.score) * 0.04) * 100) / 100;
+      return {
+        clipId: c.clipId,
+        hook: c.hook,
+        title: c.captions.youtubeTitle,
+        momentType: c.momentType,
+        similarity,
+        coverUrl: c.coverUrl,
+        performance: {
+          views: sum("views"),
+          likes: sum("likes"),
+          comments: sum("comments"),
+          shares: sum("shares"),
+          posts: posts.length,
+          checkedAt: posts.map((p) => p.metrics!.checkedAt).sort().at(-1)!,
+        },
+      };
+    })
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, 5);
 }
 
