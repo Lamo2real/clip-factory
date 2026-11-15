@@ -40,9 +40,8 @@ test("the sidebar collapses to icons on desktop and remembers it", async ({ page
 
   await sidebar.getByRole("button", { name: "Collapse menu" }).click();
   await expect(sidebar).toHaveClass(/is-collapsed/);
-  await page.waitForTimeout(600);
-  const narrow = (await sidebar.boundingBox())!.width;
-  expect(narrow).toBeLessThan(wide / 2);
+  // The width animates; wait for it to settle rather than for a fixed time (CI machines are slower).
+  await expect.poll(async () => (await sidebar.boundingBox())!.width, { timeout: 10_000 }).toBeLessThan(wide / 2);
   await expect(sidebar.getByText("Library", { exact: true })).toBeHidden();
   await expect(sidebar.getByRole("link", { name: "Library" })).toBeVisible();
 
