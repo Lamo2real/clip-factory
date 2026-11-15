@@ -3,7 +3,9 @@
 #   variable CF_DEPLOY_ROLE_ARN  IAM role GitHub assumes through OIDC
 #   secret   CF_OWNER_EMAIL      the only login (Cognito, admin-created). A secret so it is masked in the
 #                                logs of this public repository.
-# Optional variables: CF_REGION (default eu-north-1), CF_STATE_BUCKET (default lamo-labs-state-bucket).
+# Optional variables: CF_REGION (default eu-north-1), CF_STATE_BUCKET (default lamo-labs-state-bucket),
+#   CF_MANAGE_API_GATEWAY_ACCOUNT (default true; set false when the account's API Gateway CloudWatch logging role
+#   is managed elsewhere, docs/CONTRACTS.md §14.3).
 #
 # One run deploys from nothing:
 #   preflight - skips everything (with a notice) until the role and the email are set
@@ -12,7 +14,9 @@
 #               pushes the agent image (scripts/push-image.sh) once the ECR repository exists.
 #   web       - config.json from Terraform's outputs, version.json ("What's new": scripts/release-areas.sh over
 #               the commits since the live release), upload to S3, CloudFront refresh
-#   smoke     - the API answers /v1/health and the app serves this release's config.json and version.json
+#   smoke     - the HTTP API answers /v1/health, the webhooks REST API refuses a Meta challenge without the
+#               verify token (403), the WebSocket API refuses a connection without a valid token (401), and
+#               the app serves this release's config.json (with wsUrl) and version.json
 #   desktop-plan, desktop, desktop-manifest - after the web deploy: the Mac (.dmg) and Windows (.exe) desktop
 #               apps (desktop/, Tauri) are rebuilt only when what they are built from changed or the file is
 #               missing, uploaded to the web bucket under downloads/, and downloads/manifest.json is rewritten.
@@ -145,6 +149,8 @@ jobs:
     outputs:
       app_url: ${{ steps.out.outputs.app_url }}
       api_url: ${{ steps.out.outputs.api_url }}
+      ws_url: ${{ steps.out.outputs.ws_url }}
+      hooks_url: ${{ steps.out.outputs.hooks_url }}
       web_bucket: ${{ steps.out.outputs.web_bucket }}
       distribution_id: ${{ steps.out.outputs.distribution_id }}
       tf_outputs: ${{ steps.out.outputs.tf_outputs }}
@@ -201,6 +207,7 @@ jobs:
           TF_VAR_agent_image_tag: ${{ needs.build.outputs.image_tag }}
           TF_VAR_lambda_zip_path: ${{ github.workspace }}/api/dist/lambda.zip
           TF_VAR_app_version: ${{ github.sha }}
+          TF_VAR_manage_api_gateway_account: ${{ vars.CF_MANAGE_API_GATEWAY_ACCOUNT || 'true' }}
         run: |
           terraform plan -input=false -out=prod.tfplan
           # The full plan stays in this log (the owner email is masked), never in a downloadable file.
@@ -219,7 +226,7 @@ jobs:
         working-directory: infra/envs/prod
         run: |
           json="$(terraform output -json)"
-          for name in app_url api_url web_bucket distribution_id; do
+          for name in app_url api_url ws_url hooks_url web_bucket distribution_id; do
             value="$(jq -r --arg n "$name" '.[$n].value // empty' <<<"$json")"
             [ -n "$value" ] || { echo "::error::Terraform output ${name} is missing."; exit 1; }
             echo "${name}=${value}" >> "$GITHUB_OUTPUT"
@@ -304,15 +311,76 @@ jobs:
           done
           echo "::error::${url} did not return ok."
           exit 1
+      - name: the webhooks REST API refuses a Meta challenge without the verify token
+        env:
+          HOOKS_URL: ${{ needs.infra.outputs.hooks_url }}
+        run: |
+          url="${HOOKS_URL%/}/hooks/instagram?hub.mode=subscribe&hub.challenge=cf-smoke"
+          body="${RUNNER_TEMP}/hooks-body.json"
+          # 403 forbidden proves the stage, the Lambda and its SSM read work; it must never echo the challenge.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            status="$(curl -sS --max-time 15 -o "$body" -w '%{http_code}' "$url" || echo 000)"
+            if [ "$status" = "403" ] && jq -e '.error.code == "forbidden"' "$body" >/dev/null 2>&1; then
+              echo "Webhooks check passed: 403 forbidden without the verify token."
+              exit 0
+            fi
+            echo "Attempt ${attempt}: expected 403 forbidden, got ${status}; retrying in 10 s."
+            sleep 10
+          done
+          echo "::error::${HOOKS_URL%/}/hooks/instagram did not answer 403 forbidden without the verify token."
+          exit 1
+      - name: the WebSocket API refuses a connection without a valid token
+        env:
+          WS_URL: ${{ needs.infra.outputs.ws_url }}
+        run: |
+          # Prints the HTTP status of a WebSocket handshake (101 = connected). Standard library only.
+          handshake() {
+            python3 - "$1" <<'PY'
+          import base64, os, socket, ssl, sys, urllib.parse
+          u = urllib.parse.urlsplit(sys.argv[1])
+          path = (u.path or "/") + ("?" + u.query if u.query else "")
+          key = base64.b64encode(os.urandom(16)).decode()
+          request = (f"GET {path} HTTP/1.1\r\nHost: {u.hostname}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                     f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+          with socket.create_connection((u.hostname, u.port or 443), timeout=15) as raw:
+              with ssl.create_default_context().wrap_socket(raw, server_hostname=u.hostname) as tls:
+                  tls.sendall(request.encode())
+                  print(tls.recv(4096).split(b"\r\n", 1)[0].split()[1].decode())
+          PY
+          }
+          url="${WS_URL%/}"
+          # No token: API Gateway rejects it (401) before the authorizer runs. A bad token: the authorizer Lambda
+          # runs and rejects it (401); a broken authorizer would answer 500 instead.
+          for case in "no token|${url}" "bad token|${url}?token=not-a-real-token"; do
+            label="${case%%|*}"
+            target="${case#*|}"
+            passed=false
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              status="$(handshake "$target" 2>/dev/null || echo error)"
+              if [ "$status" = "401" ]; then
+                echo "WebSocket check passed (${label}): 401."
+                passed=true
+                break
+              fi
+              echo "Attempt ${attempt} (${label}): expected 401, got ${status}; retrying in 10 s."
+              sleep 10
+            done
+            [ "$passed" = true ] || { echo "::error::${url} did not refuse a connection with ${label} (expected 401)."; exit 1; }
+          done
       - name: the app serves this release
         env:
           APP_URL: ${{ needs.infra.outputs.app_url }}
+          WS_URL: ${{ needs.infra.outputs.ws_url }}
+          HOOKS_URL: ${{ needs.infra.outputs.hooks_url }}
           SHA: ${{ github.sha }}
         run: |
           url="${APP_URL%/}"
           curl -fsS --max-time 15 -o /dev/null "${url}/"
-          version="$(curl -fsS --max-time 15 "${url}/config.json" | jq -r .version)"
+          config="$(curl -fsS --max-time 15 "${url}/config.json")"
+          version="$(jq -r .version <<<"$config")"
           [ "$version" = "$SHA" ] || { echo "::error::${url}/config.json reports version ${version}, expected ${SHA}."; exit 1; }
+          ws="$(jq -r '.wsUrl // empty' <<<"$config")"
+          [ "$ws" = "${WS_URL%/}" ] || { echo "::error::${url}/config.json has wsUrl '${ws}', expected ${WS_URL%/}."; exit 1; }
           short="$(curl -fsS --max-time 15 "${url}/version.json" | jq -r .version)"
           [ "$short" = "${SHA:0:7}" ] || { echo "::error::${url}/version.json reports ${short}, expected ${SHA:0:7}."; exit 1; }
           curl -fsS --max-time 15 "${url}/downloads/manifest.json" | jq -e '.files | type == "object"' >/dev/null \
@@ -323,6 +391,10 @@ jobs:
             echo "App: ${url}"
             echo
             echo "Version: \`${SHA}\`"
+            echo
+            echo "Live updates (WebSocket): ${WS_URL%/}"
+            echo
+            echo "Webhook address for platform consoles: ${HOOKS_URL%/}/hooks/{platform}"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Decides which desktop installers to rebuild. Each installer in the bucket carries, as S3 metadata, a hash of

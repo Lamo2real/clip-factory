@@ -125,16 +125,23 @@ jobs:
             terraform -chdir="$d" validate
             echo "::endgroup::"
           done
-      # Module tests plan against a mock AWS provider (mock_provider "aws"): no credentials, no AWS calls.
-      - name: terraform test (modules with tests, mock provider)
+      # Tests plan against mock providers (mock_provider "aws"): no credentials, no AWS calls. Every Terraform
+      # root that has *.tftest.hcl files (in tests/ or next to its .tf files) is tested, so a new module's tests
+      # (flows, realtime, hooks, vectors, ...) run without editing this list. A failure stops the job.
+      - name: terraform test (every module and env with tests, mock providers)
         run: |
-          for dir in infra/modules/*/; do
-            [ -d "${dir}tests" ] || continue
-            echo "::group::${dir}"
+          mapfile -t dirs < <(
+            find infra -name '*.tftest.hcl' -not -path '*/.terraform/*' -print \
+              | sed -E 's#/tests/[^/]+$##; s#/[^/]+\.tftest\.hcl$##' | sort -u
+          )
+          [ "${#dirs[@]}" -gt 0 ] || { echo "::error::No *.tftest.hcl files found under infra/."; exit 1; }
+          for dir in "${dirs[@]}"; do
+            echo "::group::terraform test ${dir}"
             terraform -chdir="$dir" init -backend=false -input=false
             terraform -chdir="$dir" test
             echo "::endgroup::"
           done
+          echo "Tested ${#dirs[@]} Terraform roots: ${dirs[*]}"
       - uses: terraform-linters/setup-tflint@v4
       - name: tflint
         working-directory: infra
@@ -153,6 +160,8 @@ jobs:
         run: shellcheck scripts/*.sh desktop/scripts/*.sh
       - name: release-areas.sh against a throwaway git repository
         run: bash scripts/test-release-areas.sh
+      - name: write-web-config.sh against saved Terraform output fixtures (wsUrl required)
+        run: bash scripts/test-write-web-config.sh
 
   changes:
     runs-on: ubuntu-24.04
