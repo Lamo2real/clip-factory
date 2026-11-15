@@ -515,7 +515,9 @@ jobs:
         env:
           BUNDLE_GLOB: ${{ matrix.bundle }}
         run: |
-          mapfile -t files < <(compgen -G "$BUNDLE_GLOB" || true)
+          # Portable on macOS runners, whose /bin/bash 3.2 has no mapfile.
+          files=()
+          while IFS= read -r f; do files+=("$f"); done < <(compgen -G "$BUNDLE_GLOB" || true)
           [ "${#files[@]}" -eq 1 ] || { echo "::error::Expected one installer at ${BUNDLE_GLOB}, found ${#files[@]}."; exit 1; }
           echo "path=${files[0]}" >> "$GITHUB_OUTPUT"
           echo "Built ${files[0]} ($(wc -c <"${files[0]}" | tr -d ' ') bytes)."
