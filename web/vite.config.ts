@@ -1,0 +1,97 @@
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import { defineConfig, type Plugin } from "vite";
+import react from "@vitejs/plugin-react";
+
+const root = import.meta.dirname;
+
+/** Lists public/ files worth precaching (icons, manifest), as site-absolute URLs. */
+function publicFiles(dir = join(root, "public")): string[] {
+  const out: string[] = [];
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) out.push(...publicFiles(full));
+    else if (name !== "config.json") out.push("/" + relative(join(root, "public"), full).split("\\").join("/"));
+  }
+  return out;
+}
+
+/** Reads the current commit from .git without running git (works in CI checkouts and plain clones). */
+function gitShortSha(): string | null {
+  try {
+    const gitDir = join(root, "..", ".git");
+    if (!existsSync(join(gitDir, "HEAD"))) return null;
+    const head = readFileSync(join(gitDir, "HEAD"), "utf8").trim();
+    if (/^[0-9a-f]{40}$/.test(head)) return head.slice(0, 7);
+    const ref = /^ref: (.+)$/.exec(head)?.[1];
+    if (!ref) return null;
+    const loose = join(gitDir, ref);
+    if (existsSync(loose)) return readFileSync(loose, "utf8").trim().slice(0, 7);
+    const packed = existsSync(join(gitDir, "packed-refs")) ? readFileSync(join(gitDir, "packed-refs"), "utf8") : "";
+    const line = packed.split("\n").find((l) => l.endsWith(` ${ref}`));
+    return line ? line.slice(0, 7) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The version this build reports (import.meta.env.VITE_APP_VERSION) and compares with /version.json:
+ * VITE_APP_VERSION from the environment, else the git short sha, else "dev" (which never asks to update).
+ */
+export function appVersion(): string {
+  const fromEnv = process.env.VITE_APP_VERSION?.trim();
+  if (fromEnv) return fromEnv;
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
+  return gitShortSha() ?? "dev";
+}
+
+/**
+ * Emits version.json with this build's version. The deploy overwrites it with the release areas
+ * (scripts/release-areas.sh); this copy keeps local previews and first deploys consistent.
+ */
+function versionFile(version: string): Plugin {
+  return {
+    name: "cf-version-file",
+    apply: "build",
+    generateBundle() {
+      const body = { version, builtAt: new Date().toISOString(), areas: [] as string[] };
+      this.emitFile({ type: "asset", fileName: "version.json", source: JSON.stringify(body) + "\n" });
+    },
+  };
+}
+
+/**
+ * Emits sw.js from sw/sw.js with the build's version and the exact list of hashed assets, so a new
+ * deploy installs a new worker that precaches the new shell and drops the old cache.
+ */
+function serviceWorker(appVer: string): Plugin {
+  return {
+    name: "cf-service-worker",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      const version = `${appVer}-${Date.now().toString(36)}`;
+      // Fonts outside the Latin subset load (and get cached) only if a page ever needs them.
+      const assets = Object.keys(bundle)
+        .filter((f) => !/\.(woff2?|ttf)$/.test(f) || (/-latin-(?!ext)/.test(f) && f.endsWith(".woff2")))
+        .map((f) => "/" + f);
+      const precache = Array.from(new Set(["/", "/index.html", ...assets.filter((a) => a !== "/version.json"), ...publicFiles()]));
+      const source = readFileSync(join(root, "sw/sw.js"), "utf8")
+        .replace("__CF_VERSION__", JSON.stringify(version))
+        .replace("__CF_PRECACHE__", JSON.stringify(precache));
+      this.emitFile({ type: "asset", fileName: "sw.js", source });
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => {
+  // `vite --mode mock` is the same as VITE_MOCK=1: the whole UI runs on the in-memory API.
+  if (mode === "mock") process.env.VITE_MOCK ??= "1";
+  const version = appVersion();
+  return {
+    plugins: [react(), versionFile(version), serviceWorker(version)],
+    define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(version) },
+    server: { port: 5173 },
+    build: { outDir: "dist", sourcemap: false, target: "es2022" },
+  };
+});
