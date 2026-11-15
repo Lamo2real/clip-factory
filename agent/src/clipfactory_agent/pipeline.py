@@ -13,6 +13,7 @@ from typing import Any
 
 from . import captions as captions_mod
 from . import learnings, loudness, proc, sources
+from . import vectors as vectors_mod
 from .agent import Brief, find_moments
 from .bedrock import Bedrock, FrameLayout, ModelError
 from .checklist import (
@@ -55,6 +56,7 @@ class JobState:
     loud: list[float] = field(default_factory=list)
     skills: list[SkillDoc] = field(default_factory=list)
     learnings: list[str] = field(default_factory=list)
+    similar: list[vectors_mod.Hit] = field(default_factory=list)
     chosen: list[Moment] = field(default_factory=list)
     spares: list[Moment] = field(default_factory=list)
     candidates: list[Candidate] = field(default_factory=list)
@@ -90,11 +92,20 @@ class JobState:
 
 
 class Pipeline:
-    def __init__(self, cfg: Config, store: Store, bedrock: Bedrock, transcriber: Transcriber) -> None:
+    def __init__(
+        self,
+        cfg: Config,
+        store: Store,
+        bedrock: Bedrock,
+        transcriber: Transcriber,
+        *,
+        vectors: vectors_mod.Vectors | None = None,
+    ) -> None:
         self.cfg = cfg
         self.store = store
         self.bedrock = bedrock
         self.transcriber = transcriber
+        self.vectors = vectors  # None: no clip vectors and no "what worked before"
 
     def steps(self, st: JobState, tr: Tracker) -> list[tuple[str, StepFn]]:
         def bind(fn: Any) -> StepFn:
@@ -340,8 +351,34 @@ class Pipeline:
             st.workdir, self.cfg.skills_dir, await self.store.skill_rows(st.user_id), self.store.get_bytes
         )
         st.learnings = await learnings.load(self.store, st.user_id)
+        st.similar = await self._similar(st)
         spikes = len(loudness.spikes(st.loud, limit=10_000))
-        return f"Found {spikes} loud moments; using {len(st.skills)} skill(s) and {len(st.learnings)} learning(s)."
+        similar = f" and {len(st.similar)} similar past clip(s)" if st.similar else ""
+        return (
+            f"Found {spikes} loud moments; using {len(st.skills)} skill(s), {len(st.learnings)} learning(s){similar}."
+        )
+
+    async def _similar(self, st: JobState) -> list[vectors_mod.Hit]:
+        """The owner's past clips most like this video, for "What worked before" (never fails the job)."""
+        if self.vectors is None:
+            return []
+        text = vectors_mod.query_text(
+            str(st.source.get("title") or st.source.get("filename") or ""),
+            str(st.source.get("channel") or ""),
+            st.notes,
+            vectors_mod.transcript_text(st.words),
+        )
+        hits = await vectors_mod.what_worked_before(self.vectors, st.user_id, text)
+        if not hits:
+            return []
+        # Only clips that still exist and were not declined: finalize writes vectors before the Clip items, so a
+        # canceled or superseded run can leave a vector without a clip, and a decline racing finalize can leave one.
+        try:
+            statuses = await self.store.clip_statuses(st.user_id, [h.clip_id for h in hits])
+        except Exception as e:
+            log("warn", "vectors.clip_check_failed", error=type(e).__name__, detail=str(e)[:300])
+            return []
+        return [h for h in hits if statuses.get(h.clip_id, "declined") != "declined"]
 
     # --- select ----------------------------------------------------------------------------------------------
 
@@ -362,6 +399,7 @@ class Pipeline:
             skills_text=skills_prompt(st.skills),
             learnings=st.learnings,
             language=st.meta.get("language"),
+            similar=st.similar,
         )
 
     async def select(self, st: JobState, tr: Tracker) -> str:
@@ -604,11 +642,16 @@ class Pipeline:
     async def finalize(self, st: JobState, tr: Tracker) -> str:
         platform = str(st.source.get("platform") or "upload")
         url = str(st.meta.get("webpageUrl") or st.source.get("url") or "")
-        for rank, c in enumerate(st.candidates, start=1):
+        items = [
+            clip_item(st, c, st.clip_ids[id(c)], rank, clip_prefix(st.job_id, st.clip_ids[id(c)]), platform, url)
+            for rank, c in enumerate(st.candidates, start=1)
+        ]
+        # The vectors go first: once a Clip item is visible the owner can Keep or Decline it, and clip-flow then
+        # rewrites (Keep) or the API deletes (Decline) its vector. A later put here would undo that.
+        await tr.check_cancel()
+        await self._put_vectors(st, items)
+        for c, item in zip(st.candidates, items, strict=True):
             await tr.check_cancel()
-            clip_id = st.clip_ids[id(c)]
-            prefix = clip_prefix(st.job_id, clip_id)
-            item = clip_item(st, c, clip_id, rank, prefix, platform, url)
             await self.store.upload(c.render.video, item["videoKey"], "video/mp4")
             await self.store.upload(c.render.cover, item["coverKey"], "image/jpeg")
             try:
@@ -620,8 +663,21 @@ class Pipeline:
                 except Exception as e:
                     log("warn", "finalize.cleanup_failed", job=st.job_id, error=type(e).__name__)
                 raise
-            tr.report(rank / len(st.candidates))
+            tr.report(item["rank"] / len(items))
         return f"{len(st.candidates)} clip(s) ready for review."
+
+    async def _put_vectors(self, st: JobState, items: list[dict[str, Any]]) -> None:
+        """One PutVectors for the new clips (status ``review``), before any of their Clip items exists. A failure is
+        logged, never fatal: the clip flow embeds a clip whose vector is missing when it is kept (docs/CONTRACTS.md
+        §14.6). A vector whose Clip item is never written (cancel, supersede) is dropped by ``_similar``."""
+        if self.vectors is None or not items:
+            return
+        platforms = [str(p) for p in st.settings.get("platforms") or []]
+        try:
+            n = await self.vectors.put_clips(items, platforms)
+            log("info", "vectors.put", job=st.job_id, count=n)
+        except Exception as e:
+            log("warn", "vectors.put_failed", job=st.job_id, error=type(e).__name__, detail=str(e)[:300])
 
 
 def clip_item(

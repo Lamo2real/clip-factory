@@ -55,7 +55,8 @@ StepFn = Callable[[], Awaitable[StepDone | str | None]]
 class Tracker:
     """The job's steps and progress, written to the Job item: on every step change at once, on progress at most every
     few seconds, and a heartbeat at least every 30 seconds. A write refused because the owner canceled the job
-    sets the cancel flag.
+    sets the cancel flag. ``on_beat`` runs on every tick of the heartbeat loop (and once at the start): the durable
+    callback's heartbeat to the job flow hangs off it (docs/CONTRACTS.md §14.4) and throttles itself.
 
     Every write is fenced on ``session_id``, the runtime session this run was invoked in: once a retry has given the
     job a new session, a write raises JobSuperseded, the run is marked ``superseded`` and nothing more is written."""
@@ -69,8 +70,11 @@ class Tracker:
         session_id: str | None = None,
         heartbeat: float = HEARTBEAT_SECONDS,
         flush: float = FLUSH_SECONDS,
+        on_beat: Callable[[], None] | None = None,
     ) -> None:
         self.store = store
+        self.on_beat = on_beat
+        self.error: str | None = None  # the plain-sentence error written with status failed
         self.user_id = user_id
         self.job_id = job_id
         self.session_id = session_id
@@ -125,7 +129,16 @@ class Tracker:
         if not await self._write({"status": "running", "clipCount": 0}, remove=("error",)):
             raise JobCanceled()
         self._owner = asyncio.current_task()
+        self._signal_alive()
         self._loop_task = asyncio.create_task(self._beat())
+
+    def _signal_alive(self) -> None:
+        if self.on_beat is None:
+            return
+        try:
+            self.on_beat()
+        except Exception as e:  # the callback heartbeat is never fatal
+            log("warn", "job.on_beat_failed", job=self.job_id, error=type(e).__name__)
 
     async def _beat(self) -> None:
         while True:
@@ -139,10 +152,12 @@ class Tracker:
                     return
                 except Exception as e:  # a missed heartbeat is not fatal; the next one tries again
                     log("warn", "job.heartbeat_failed", job=self.job_id, error=type(e).__name__)
+                    self._signal_alive()
                     continue
                 if not ok:
                     self._abort()
                     return
+            self._signal_alive()
 
     def mark_superseded(self) -> None:
         """A newer run owns the job: from now on this run writes nothing to it."""
@@ -211,7 +226,8 @@ class Tracker:
         if self.current:
             s = self.step(self.current)
             s.update(status="failed", message=message[:300], finishedAt=now_iso())
-        await self._write({"status": "failed", "error": message[:500]})
+        self.error = message[:500]
+        await self._write({"status": "failed", "error": self.error})
 
     async def finish_canceled(self) -> None:
         if self.superseded:
@@ -289,7 +305,8 @@ async def run_job(
         await tracker.stop()
 
 
-JobFactory = Callable[[str, str, str | None], Awaitable[Any]]
+JobFactory = Callable[[str, str, str | None, str | None], Awaitable[Any]]
+"""``(job_id, user_id, session_id, callback_id)`` → the run's final status."""
 
 
 class JobRunner:
@@ -305,17 +322,21 @@ class JobRunner:
     def busy(self) -> bool:
         return any(not t.done() for t in self.tasks.values())
 
-    def submit(self, job_id: str, user_id: str, session_id: str | None = None) -> bool:
-        """Starts the job (as the run of ``session_id``) unless it is already running here. True when started."""
+    def submit(self, job_id: str, user_id: str, session_id: str | None = None, callback_id: str | None = None) -> bool:
+        """Starts the job (as the run of ``session_id``, reporting to the job flow's ``callback_id``) unless it is
+        already running here. True when started; a duplicate ``process_job`` (the flow's start step is at-least-once)
+        is ignored."""
         running = self.tasks.get(job_id)
         if running and not running.done():
             if self.sessions.get(job_id) != session_id:
                 log("warn", "job.other_run_here", job=job_id, running=self.sessions.get(job_id), asked=session_id)
+            else:
+                log("info", "job.duplicate_ignored", job=job_id, session=session_id)
             return False
 
         async def go() -> None:
             try:
-                await self._run(job_id, user_id, session_id)
+                await self._run(job_id, user_id, session_id, callback_id)
             except asyncio.CancelledError:
                 pass
             except Exception as e:

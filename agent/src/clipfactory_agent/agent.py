@@ -19,6 +19,7 @@ from . import loudness, transcript
 from .bedrock import Bedrock, ModelError
 from .moments import CANDIDATES_SCHEMA, MOMENT_SCHEMA, MOMENT_TYPES, Moment, choose, dedupe, spare_count, validate
 from .util import UserFacingError, hms, log
+from .vectors import Hit, prompt_section
 
 SERVER = "clips"
 MAX_READ = 35 * 60
@@ -44,6 +45,7 @@ class Brief:
     skills_text: str = ""
     learnings: list[str] = field(default_factory=list)
     language: str | None = None
+    similar: list[Hit] = field(default_factory=list)  # "what worked before" (S3 Vectors, §14.6)
 
     @property
     def wanted(self) -> int:
@@ -51,8 +53,10 @@ class Brief:
 
 
 def system_prompt(b: Brief) -> str:
-    """Stable text first (rules, skills), then the owner's learnings, so prompt caching can reuse the prefix."""
+    """Stable text first (rules, skills), then the owner's learnings and similar past clips, so prompt caching can
+    reuse the prefix."""
     learnings = "\n".join(f"- {t}" for t in b.learnings) or "- none yet"
+    similar = prompt_section(b.similar)
     return f"""You are the clip finder of Clip Factory. You read the transcript of one long video (a stream or a video)
 and pick the moments that will make the best vertical short clips (TikTok, Reels, Shorts). Follow the owner's skills
 below; the short-form video playbook is the core: section A2 (self-sufficient, built on a feeling, pays off), the six
@@ -77,7 +81,7 @@ Loudness spikes (shouting, laughing) and YouTube's "most replayed" peaks are str
 </owner_skills>
 
 What the owner learned from earlier clips (most recent first; apply what fits):
-{learnings}"""
+{learnings}""" + (f"\n\n{similar}" if similar else "")
 
 
 def brief_json(b: Brief) -> dict[str, Any]:
