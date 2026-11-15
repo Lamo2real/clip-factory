@@ -1,7 +1,9 @@
 # Business requirements
 
 Source: the owner's brief for Clip Factory Cloud (November 2026) and the owner's follow-up after the first build
-(Get the app, the update bar, the desktop app and kid-proof design: BR-15 to BR-17, NFR-11, NFR-12, UX-12, UX-13).
+(Get the app, the update bar, the desktop app and kid-proof design: BR-15 to BR-17, NFR-11, NFR-12, UX-12, UX-13), and
+the owner's request for a fully serverless Python and Terraform stack with WebSockets, a REST API, durable functions
+and S3 Vectors (NFR-02 AC3 and AC4, NFR-13 to NFR-16, BR-11 AC5, BR-18).
 Every requirement below traces back to one of them. Where
 the brief was open or unclear, the interpretation we chose is stated in [Interpretations and open questions](#interpretations-and-open-questions).
 
@@ -35,7 +37,8 @@ An AI agent on Amazon Bedrock AgentCore, running Claude Fable 5.1, processes eac
 - AC1: The agent runs on AgentCore Runtime (`cf_prod_clip_agent`) and calls Claude Fable 5.1 through Amazon Bedrock.
 - AC2: The job runs without the owner's computer being on.
 - AC3: The job goes through the steps resolve, download, transcribe, analyze, select, render, checklist, captions,
-  finalize, and the app shows each step's status live (polling).
+  finalize, and the app shows each step's status live (pushed over the WebSocket API within seconds, NFR-13; polling
+  only while disconnected).
 
 ### BR-04 Between 5 and 10 viral clips per job
 - AC1: Each finished job has between `clipMin` and `clipMax` clips (defaults 5 and 10; the owner can change both
@@ -90,17 +93,20 @@ legal pages already cover it.
 
 ### BR-11 48-hour performance check feeding learnings
 From "2 days after we've uploaded to the social media on the clips" (see interpretation I-01).
-- AC1: When a post is published, a one-time schedule is created for 48 hours later.
+- AC1: When a clip is posted, its clip flow waits 48 hours (a durable wait that costs nothing while waiting) and then
+  checks every post of that clip.
 - AC2: The check stores views, likes, comments and shares on the post (phase 2 for real numbers).
 - AC3: Claude distils one short learning from the owner's recent posts; the agent receives the latest 10 learnings
   on every job.
 - AC4: The Insights screen lists the learnings and the posts with their numbers.
+- AC5: After the check the clip is remembered with its numbers in the learning memory (NFR-14), so later jobs and the
+  review screens can find it.
 
 ### BR-12 Job control
 - AC1: The owner can cancel a queued or running job.
 - AC2: A failed or cancelled job can be retried from the beginning; an already downloaded source is reused.
-- AC3: A job whose agent stops responding is marked failed within 25 minutes with the message "The agent stopped
-  responding. Press Retry."
+- AC3: A job whose agent stops responding is marked failed within 15 minutes of its last heartbeat with the message
+  "The agent stopped responding. Press Retry." (job-flow callback heartbeat timeout, no scanning watchdog)
 
 ### BR-13 Settings
 - AC1: Settings holds clip range, the longest source length to process (`maxSourceHours`, 1–12, default 6), sound
@@ -160,6 +166,12 @@ be a brief word of the area where a new feature has been modified ... 'settings 
   ([GIT_WORKFLOW.md](GIT_WORKFLOW.md#area-lines-what-the-update-bar-says)).
 - AC5: "Later" hides the bar until the next check.
 
+### BR-18 "Like clips that did well" while reviewing
+- AC1: Review and Library show, under a clip, up to 5 of the owner's own clips that were posted and measured and are
+  most like it, each with cover, hook and views.
+- AC2: The strip is hidden when there are none (today, until posting exists) and never shows an error.
+- AC3: A clip thrown away is removed from this memory.
+
 ---
 
 ## Non-functional requirements
@@ -169,9 +181,16 @@ be a brief word of the area where a new feature has been modified ... 'settings 
 - AC2: The owner's computer is not needed for any step.
 
 ### NFR-02 Serverless architecture
-- AC1: No EC2 instances, no always-on containers, no servers to patch: CloudFront, S3, Cognito, API Gateway,
-  Lambda, DynamoDB, SQS, EventBridge, AgentCore Runtime, Bedrock and Transcribe.
-- AC2: Idle cost is close to zero (pay per request and per stored byte).
+- AC1: No EC2 instances, no always-on containers, no VPC, no servers to patch: CloudFront, S3 (web, media),
+  S3 Vectors, Cognito, API Gateway (HTTP, WebSocket and REST APIs), Lambda (plain and durable functions), DynamoDB
+  with Streams, SSM Parameter Store, AgentCore Runtime, Bedrock, Transcribe, CloudWatch and SNS.
+- AC2: Idle cost is close to zero (pay per request and per stored byte). Services with a standing minimum charge are
+  not deployed (OpenSearch Serverless, [ADR-25](DECISIONS.md#adr-25-s3-vectors-for-the-learning-memory-opensearch-not-deployed)).
+- AC3: "The entire infrastructure should be serverless, meaning CloudFront, S3 buckets, DynamoDB, OpenSearch if we're
+  using that, S3 vectors, API gateway, WebSockets, HTTP, REST API on those API gateways, and Lambda, and durable
+  functions in Lambda." Each of these is used for a real job (OpenSearch is shown as an option, not deployed), see
+  [ARCHITECTURE.md](ARCHITECTURE.md#services-and-why-each-one).
+- AC4: All backend code is Python and all infrastructure is Terraform ([ADR-26](DECISIONS.md#adr-26-python-for-every-backend-terraform-for-every-resource-serverless-only)).
 
 ### NFR-03 Model: Claude Fable 5.1
 - AC1: The agent and every Claude call use Claude Fable 5.1 through the global cross-region inference profile
@@ -195,7 +214,8 @@ be a brief word of the area where a new feature has been modified ... 'settings 
 
 ### NFR-07 Robustness
 - AC1: A failed step is shown with a plain reason and a Retry button.
-- AC2: Stuck jobs are detected by a watchdog; failed publish messages go to a dead-letter queue.
+- AC2: Stuck jobs are detected by the job flow's callback heartbeat timeout; publishing retries inside the clip flow
+  and marks only the failing post `failed`; failed or timed-out durable executions raise an alarm.
 - AC3: Data is protected by DynamoDB point-in-time recovery; clips are kept until declined.
 
 ### NFR-08 Git workflow
@@ -232,6 +252,44 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
   lines, then the folder map `web/areas.json`, with no manual release notes.
 - AC2: `/version.json` and `/downloads/manifest.json` are never cached (by CloudFront or the service worker), so a new
   version is noticed within 5 minutes.
+
+---
+
+### NFR-13 Live updates
+"API gateway, WebSockets."
+- AC1: While the app is open and connected, a change to a job, clip, post or learning appears on screen within about
+  2 seconds of being written, without a refresh.
+- AC2: Only the signed-in owner's own changes are sent, in the same shape as the HTTP API; internal fields never reach
+  the browser.
+- AC3: The connection is opened with the owner's access token, which is never written to any log.
+- AC4: A dropped connection is invisible to the owner: the app reconnects by itself (1 s up to 30 s apart), refetches
+  what is on screen, and polls while disconnected. No error message is shown for it.
+- AC5: Without a live connection (mock mode, old config) the app works exactly as before with polling.
+
+### NFR-14 Learning memory
+"S3 vectors."
+- AC1: Every clip the agent makes is stored as a vector of its text (moment type, hook, title, summary) with the
+  owner's id, status, platforms and score band.
+- AC2: Before choosing moments, the agent receives up to 8 of the owner's posted and measured clips most like the new
+  source ("What worked before"), as advice, never as a rule.
+- AC3: 48 hours after posting, the clip's memory is updated with its numbers.
+- AC4: If the memory cannot be read or written, jobs and screens carry on without it.
+- AC5: The memory has no standing cost (pay per request and per stored vector).
+
+### NFR-15 Durable workflows
+"Lambda, and durable functions in Lambda."
+- AC1: The job workflow (start agent, wait, finish or fail) and the clip workflow (posts, publish, wait 48 hours,
+  metrics, learning, memory) each run as one Lambda durable function, written in Python.
+- AC2: Starting a workflow twice for the same job run or clip run never runs it twice.
+- AC3: Waiting (for the agent, for 48 hours) uses no compute; no queue, schedule or scanning job is needed.
+- AC4: A deploy never changes a workflow already in flight.
+
+### NFR-16 Public webhook endpoint
+- AC1: Platforms reach `{hooks_url}/hooks/{platform}` and `{hooks_url}/oauth/{platform}/callback` on a separate REST
+  API, so the app's own API accepts only the owner's token.
+- AC2: The endpoint is throttled (10 requests a second, burst 20), stores events for 14 days, and never logs query
+  strings (OAuth codes).
+- AC3: Meta and YouTube verification challenges are answered today; TikTok and X answer "not implemented" until phase 2.
 
 ---
 
@@ -336,11 +394,16 @@ it's slow in and slow out, but in the middle, it's really quick ... so that the 
 | I-13 | "A brief word of the area ... 'settings profile picture' or just 'profile picture'. That's it." | 1–3 word labels, at most three, written as `Area:` lines in commits, with a folder map as the fallback (BR-17, [ADR-20](DECISIONS.md#adr-20-update-labels-from-area-commit-lines-then-a-folder-map)). | No. |
 | I-14 | "Even a 6-year-old should be able to use it" | Concrete, testable rules (UX-13) and everyday words on screen: Confirm reads "Keep", Decline reads "Throw away", New job reads "Make clips". The API and these documents keep their technical names. | No. |
 | I-15 | "Once you click reload ... it goes fast to 80% or to 70%" | 75 % in about 0.8 s on an ease-in-out curve, then a slow creep until the new version is ready, then ease to 100 % (UX-12). | No. |
+| I-16 | "OpenSearch if we're using that, S3 vectors" | S3 Vectors holds the learning memory (NFR-14). OpenSearch Serverless is not deployed because it bills a standing minimum even when idle; it is shown dashed in the diagram as an option ([ADR-25](DECISIONS.md#adr-25-s3-vectors-for-the-learning-memory-opensearch-not-deployed)). | Only if keyword search is wanted later. |
+| I-17 | "WebSockets, HTTP, REST API on those API gateways" | Three APIs, each with one job: HTTP API for the app, WebSocket API for live updates, REST API for platform webhooks (NFR-13, NFR-16). | No. |
+| I-18 | "Durable functions in Lambda" | Two durable functions replace the queue, the scheduler, the publisher, the perf-check and the watchdog (NFR-15, [ADR-22](DECISIONS.md#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows)). | No. |
+| I-19 | "Python for backend ... Terraform for the infrastructure as code" | Already the case; recorded as [ADR-26](DECISIONS.md#adr-26-python-for-every-backend-terraform-for-every-resource-serverless-only). The web app (TypeScript) and desktop wrapper (Rust) are front end. | No. |
 
 ## Out of scope for this phase
 
 - Connecting social accounts and posting to YouTube, Instagram, Facebook, TikTok and X (BR-09, BR-10 phase 2).
-- Reading real post metrics (BR-11 AC2 phase 2; the schedule and learnings pipeline exist).
+- Reading real post metrics (BR-11 AC2 phase 2; the clip flow's 48-hour wait, learnings and memory exist).
+- OpenSearch Serverless (an option, not deployed).
 - Whop or Content Rewards campaign reading from the local app.
 - More than one user.
 - A custom domain.
