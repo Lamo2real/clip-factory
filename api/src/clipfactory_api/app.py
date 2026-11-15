@@ -5,7 +5,6 @@ Tests build ``App`` directly with fake clients; nothing here talks to AWS until 
 
 from __future__ import annotations
 
-import json
 import os
 import threading
 from collections.abc import Callable
@@ -15,17 +14,19 @@ from typing import Any
 from . import db, s3
 from .agent_client import AgentClient
 from .clock import Clock, utcnow
+from .flow_client import FlowClient
 from .log import log
 from .skills import BuiltinSkill, load_builtins
+from .vectors import Vectors
 
 
 @dataclass
 class App:
     store: db.Store
     media: s3.Media
-    agent: AgentClient
-    queue: Any
-    queue_url: str
+    agent: AgentClient  # cancel and stop only; process_job is sent by the job-flow
+    flows: FlowClient
+    vectors: Vectors | None = None  # None when the vector index is not configured
     version: str = "dev"
     clock: Clock = utcnow
     # (user id, access token) → the owner's email. Cognito access tokens carry no email claim.
@@ -37,9 +38,6 @@ class App:
         if self._builtin_cache is None:
             self._builtin_cache = self.builtins()
         return self._builtin_cache
-
-    def enqueue_publish(self, user_id: str, clip_id: str) -> None:
-        self.queue.send_message(QueueUrl=self.queue_url, MessageBody=json.dumps({"userId": user_id, "clipId": clip_id}))
 
 
 def region() -> str:
@@ -60,12 +58,6 @@ def _short_config() -> Any:
     from botocore.config import Config
 
     return Config(retries={"mode": "standard", "max_attempts": 2}, connect_timeout=3, read_timeout=5)
-
-
-def sqs_client(reg: str) -> Any:
-    import boto3
-
-    return boto3.client("sqs", region_name=reg, config=_short_config())
 
 
 def _cognito_email_lookup(client: Any) -> Callable[[str, str], str | None]:
@@ -97,16 +89,26 @@ def _cognito_email_lookup(client: Any) -> Callable[[str, str], str | None]:
 def from_env() -> App:
     import boto3
 
-    from . import agent_client
+    from . import agent_client, flow_client, vectors
 
     env = os.environ
     reg = region()
+    vector_store = None
+    if env.get("VECTOR_BUCKET") and env.get("VECTOR_INDEX"):
+        s3v, bedrock = vectors.make_clients(reg)
+        vector_store = Vectors(
+            s3v,
+            bedrock,
+            env["VECTOR_BUCKET"],
+            env["VECTOR_INDEX"],
+            env.get("EMBED_MODEL_ID", vectors.DEFAULT_EMBED_MODEL),
+        )
     return App(
         store=db.Store(table(env["TABLE_NAME"])),
         media=s3.Media(s3.make_client(reg), env["MEDIA_BUCKET"]),
         agent=AgentClient(agent_client.make_client(reg), env.get("AGENT_RUNTIME_ARN", "")),
-        queue=sqs_client(reg),
-        queue_url=env.get("PUBLISH_QUEUE_URL", ""),
+        flows=FlowClient(flow_client.make_client(reg), env.get("JOB_FLOW_ARN", ""), env.get("CLIP_FLOW_ARN", "")),
+        vectors=vector_store,
         version=env.get("VERSION", "dev"),
         email_lookup=_cognito_email_lookup(boto3.client("cognito-idp", region_name=reg, config=_short_config())),
     )

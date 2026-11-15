@@ -1,0 +1,239 @@
+"""``cf-prod-hooks``: the public REST API for platform webhooks and OAuth callbacks (docs/CONTRACTS.md §14.3).
+
+* ``GET /hooks/{platform}``: subscription checks. Meta (Instagram, Facebook) must echo ``hub.challenge`` when
+  ``hub.verify_token`` matches the SSM SecureString ``/cf-prod/hooks/verify-token``; YouTube (PubSubHubbub) must echo
+  it for its video feed topics. TikTok and X arrive in phase 2 (501).
+* ``POST /hooks/{platform}``: the raw event is stored as a ``HOOK#`` item (14-day ``ttl``) and nothing else runs
+  inline. Signatures are checked by ``verify_signature``; phase 1 has no app secrets, so it answers "unverified".
+* ``GET /oauth/{platform}/callback``: redirects to the app's Settings ("arrives soon") until phase 2.
+
+Query strings (OAuth ``code``/``state``, Meta's verify token) and bodies are never logged.
+"""
+
+from __future__ import annotations
+
+import base64
+import binascii
+import hmac
+import json
+import os
+import threading
+import time
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from datetime import timedelta
+from typing import Any, Literal
+from urllib.parse import quote
+
+from . import db
+from .clock import Clock, iso, utcnow
+from .ids import ulid
+from .log import log
+from .settings import PLATFORMS
+
+MAX_BODY_BYTES = 256 * 1024
+MAX_CHALLENGE_CHARS = 512
+HOOK_TTL = timedelta(days=14)
+TOKEN_CACHE_SECONDS = 300
+YOUTUBE_TOPIC = "https://www.youtube.com/xml/feeds/videos.xml"
+META = frozenset({"instagram", "facebook"})
+KEPT_HEADERS = (
+    "content-type",
+    "user-agent",
+    "x-hub-signature-256",
+    "x-hub-signature",
+    "x-tiktok-signature",
+    "x-twitter-webhooks-signature",
+)
+Verdict = Literal["valid", "unverified", "invalid"]
+
+
+def verify_signature(platform: str, headers: Mapping[str, str], raw_body: bytes) -> Verdict:
+    """Checks a webhook's signature. Phase 1 has no platform app secrets yet, so every event is "unverified";
+    phase 2 checks ``x-hub-signature-256`` (Meta), ``x-tiktok-signature`` and ``x-twitter-webhooks-signature`` here."""
+    return "unverified"
+
+
+@dataclass
+class HooksDeps:
+    store: db.Store
+    app_url: str
+    verify_token: Callable[[], str]
+    clock: Clock = field(default=utcnow)
+    verify: Callable[[str, Mapping[str, str], bytes], Verdict] = field(default=verify_signature)
+
+
+def ssm_token_reader(client: Any, name: str, now: Callable[[], float] = time.time) -> Callable[[], str]:
+    """Reads the SecureString with decryption, cached per container for 5 minutes."""
+    cache: dict[str, tuple[str, float]] = {}
+    lock = threading.Lock()
+
+    def read() -> str:
+        with lock:
+            hit = cache.get(name)
+            if hit and now() - hit[1] < TOKEN_CACHE_SECONDS:
+                return hit[0]
+        value = str(client.get_parameter(Name=name, WithDecryption=True)["Parameter"]["Value"])
+        with lock:
+            cache[name] = (value, now())
+        return value
+
+    return read
+
+
+def _response(
+    status: int, body: Any = None, *, text: str | None = None, headers: Mapping[str, str] | None = None
+) -> dict[str, Any]:
+    out_headers = {"cache-control": "no-store", "x-content-type-options": "nosniff", **(headers or {})}
+    if text is not None:
+        out_headers["content-type"] = "text/plain; charset=utf-8"
+        payload = text
+    elif body is None:
+        payload = ""
+    else:
+        out_headers["content-type"] = "application/json"
+        payload = json.dumps(body, separators=(",", ":"))
+    return {"statusCode": status, "headers": out_headers, "body": payload, "isBase64Encoded": False}
+
+
+def _error(status: int, code: str, message: str) -> dict[str, Any]:
+    return _response(status, {"error": {"code": code, "message": message}})
+
+
+def _query(event: Mapping[str, Any]) -> dict[str, str]:
+    raw = event.get("queryStringParameters") or {}
+    return {str(k): str(v) for k, v in raw.items()} if isinstance(raw, Mapping) else {}
+
+
+def _headers(event: Mapping[str, Any]) -> dict[str, str]:
+    raw = event.get("headers") or {}
+    return {str(k).lower(): str(v) for k, v in raw.items()} if isinstance(raw, Mapping) else {}
+
+
+def handle(event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
+    method = str(event.get("httpMethod") or "GET").upper()
+    resource = str(event.get("resource") or "")
+    params = event.get("pathParameters") or {}
+    platform = str(params.get("platform") or "") if isinstance(params, Mapping) else ""
+    request_id = str((event.get("requestContext") or {}).get("requestId") or "")
+    if platform not in PLATFORMS:
+        log("info", "hooks.unknown_platform", method=method, resource=resource, requestId=request_id)
+        return _error(404, "not_found", "We do not support that platform.")
+    try:
+        if resource == "/hooks/{platform}" and method == "GET":
+            out = _verify_subscription(platform, _query(event), deps)
+        elif resource == "/hooks/{platform}" and method == "POST":
+            out = _receive(platform, event, deps)
+        elif resource == "/oauth/{platform}/callback" and method == "GET":
+            location = f"{deps.app_url.rstrip('/')}/settings?account={quote(platform)}&status=coming_soon"
+            out = _response(302, headers={"location": location})
+        else:
+            out = _error(404, "not_found", "That address does not exist.")
+    except Exception as e:
+        log("error", "hooks.internal", platform=platform, error=type(e).__name__, requestId=request_id)
+        out = _error(500, "internal", "Something went wrong on our side. Please try again.")
+    log(
+        "info",
+        "hooks",
+        method=method,
+        resource=resource,
+        platform=platform,
+        status=out["statusCode"],
+        requestId=request_id,
+    )
+    return out
+
+
+def _challenge(query: Mapping[str, str]) -> str | None:
+    value = query.get("hub.challenge")
+    return value if value and len(value) <= MAX_CHALLENGE_CHARS else None
+
+
+def _verify_subscription(platform: str, query: Mapping[str, str], deps: HooksDeps) -> dict[str, Any]:
+    if platform in META:
+        challenge = _challenge(query)
+        given = query.get("hub.verify_token") or ""
+        expected = deps.verify_token()
+        matches = bool(given and expected) and hmac.compare_digest(given.encode(), expected.encode())
+        if query.get("hub.mode") != "subscribe" or not matches or challenge is None:
+            return _error(403, "forbidden", "The verify token does not match.")
+        return _response(200, text=challenge)
+    if platform == "youtube":
+        challenge = _challenge(query)
+        topic = query.get("hub.topic") or ""
+        if (
+            query.get("hub.mode") not in {"subscribe", "unsubscribe"}
+            or not topic.startswith(YOUTUBE_TOPIC)
+            or challenge is None
+        ):
+            return _error(400, "bad_request", "This is not a valid YouTube subscription check.")
+        return _response(200, text=challenge)
+    return _error(501, "not_implemented", "Webhooks for this platform arrive in the next phase.")
+
+
+def _raw_body(event: Mapping[str, Any]) -> tuple[bytes, str, Literal["text", "base64"]]:
+    raw = event.get("body") or ""
+    text = raw if isinstance(raw, str) else ""
+    if event.get("isBase64Encoded"):
+        try:
+            return base64.b64decode(text, validate=True), text, "base64"
+        except (ValueError, binascii.Error):
+            return b"", text, "base64"
+    return text.encode("utf-8"), text, "text"
+
+
+def _receive(platform: str, event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
+    body, stored, encoding = _raw_body(event)
+    if len(body) > MAX_BODY_BYTES or len(stored) > MAX_BODY_BYTES * 4 // 3 + 4:
+        return _error(413, "too_large", "The event is too large.")
+    headers = _headers(event)
+    verdict = deps.verify(platform, headers, body)
+    if verdict == "invalid":
+        return _error(401, "unauthorized", "The signature does not match.")
+    now = deps.clock()
+    hook_id = ulid()
+    deps.store.put(
+        {
+            "pk": f"HOOK#{platform}",
+            "sk": f"HOOK#{hook_id}",
+            "type": "hook",
+            "platform": platform,
+            "receivedAt": iso(now),
+            "headers": {k: headers[k] for k in KEPT_HEADERS if k in headers},
+            "body": stored,
+            "bodyEncoding": encoding,
+            "signature": verdict,
+            "ttl": int((now + HOOK_TTL).timestamp()),
+        }
+    )
+    log("info", "hooks.stored", platform=platform, hookId=hook_id, size=len(body), signature=verdict)
+    return _response(200, {"ok": True})
+
+
+_deps: HooksDeps | None = None
+
+
+def _from_env() -> HooksDeps:
+    import boto3
+    from botocore.config import Config
+
+    from .app import region, table
+
+    env = os.environ
+    ssm = boto3.client("ssm", region_name=region(), config=Config(retries={"mode": "standard"}, read_timeout=3))
+    return HooksDeps(
+        store=db.Store(table(env["TABLE_NAME"])),
+        app_url=env["APP_URL"],
+        verify_token=ssm_token_reader(ssm, env.get("VERIFY_TOKEN_PARAM", "/cf-prod/hooks/verify-token")),
+    )
+
+
+def get_deps(factory: Callable[[], HooksDeps] = _from_env) -> HooksDeps:
+    global _deps
+    if _deps is None:
+        _deps = factory()
+    return _deps
+
+
+def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
+    return handle(event, get_deps())

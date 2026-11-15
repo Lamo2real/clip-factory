@@ -71,6 +71,18 @@ wheels = [
 ]
 
 [[package]]
+name = "aws-durable-execution-sdk-python"
+version = "3.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "boto3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bb/b1/0ac80c258272139fe218d476bd580efd513708c1e17ed8ca902ed8e1d05a/aws_durable_execution_sdk_python-3.0.2.tar.gz", hash = "sha256:ffeab0c7668ea606f75cc63c37bd5feb24f6f6d376661c293e8739d228a565a0", size = 423056, upload-time = "2026-11-09T23:34:29.88Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a7/d1/9de01fd3409b68866e40f996a6602fa7017779920fda7229b62492703867/aws_durable_execution_sdk_python-3.0.2-py3-none-any.whl", hash = "sha256:7fa9a5d2ca21c63bbaeaa5cff349c16f7404c951f76770d884b1468e72f683f9", size = 160964, upload-time = "2026-11-09T23:34:28.252Z" },
+]
+
+[[package]]
 name = "boto3"
 version = "1.44.3"
 source = { registry = "https://pypi.org/simple" }
@@ -103,6 +115,7 @@ name = "clipfactory-api"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aws-durable-execution-sdk-python" },
     { name = "boto3" },
 ]
 
@@ -114,7 +127,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "boto3", specifier = ">=1.43" }]
+requires-dist = [
+    { name = "aws-durable-execution-sdk-python", specifier = ">=3,<4" },
+    { name = "boto3", specifier = ">=1.43" },
+]
 
 [package.metadata.requires-dev]
 dev = [

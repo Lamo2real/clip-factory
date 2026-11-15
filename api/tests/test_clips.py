@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import timedelta
+import json
+from typing import Any
 
 import pytest
 
 from clipfactory_api import db, posts
-from conftest import CAPTIONS, OTHER, USER, Call, Clock, seed_clip
-from fakes import FakeS3, FakeSQS, FakeTable
+from conftest import CAPTIONS, CLIP_FLOW_ARN, OTHER, USER, Call, seed_clip
+from fakes import FakeLambda, FakeS3, FakeS3Vectors, FakeTable
 
 
 def test_list_defaults_to_review(call: Call, store: db.Store, s3_client: FakeS3) -> None:
@@ -90,21 +91,43 @@ def test_patch_requires_captions_and_review(call: Call, store: db.Store) -> None
     assert call("PATCH", f"/v1/clips/{done['clipId']}", {"captions": {"x": "y"}})[0] == 409
 
 
-def test_confirm_creates_posts_and_enqueues(call: Call, store: db.Store, sqs: FakeSQS, table: FakeTable) -> None:
-    call("PUT", "/v1/settings", {"platforms": ["tiktok", "youtube"]})
+def _clip_flow_calls(lambda_client: FakeLambda) -> list[dict[str, Any]]:
+    return [c for c in lambda_client.calls if c["FunctionName"] == CLIP_FLOW_ARN]
+
+
+def test_confirm_creates_posts_and_starts_the_clip_flow(
+    call: Call, store: db.Store, lambda_client: FakeLambda, table: FakeTable
+) -> None:
     clip = seed_clip(store)
-    status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm", {"captions": {"tiktok": "edited"}})
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm", {"captions": {"x": "edited"}})
     assert status == 200
     assert body["clip"]["status"] == "confirmed"
+    assert body["clip"]["captions"]["x"] == "edited"
     assert body["clip"]["decidedAt"] == "2026-11-15T12:00:00.000Z"
-    assert body["clip"]["captions"]["tiktok"] == "edited"
-    assert [p["platform"] for p in body["posts"]] == ["youtube", "tiktok"]
-    assert all(p["status"] == "pending_integration" for p in body["posts"])
-    assert sqs.sent == [{"QueueUrl": sqs.sent[0]["QueueUrl"], "body": {"userId": USER, "clipId": clip["clipId"]}}]
-    stored = table.raw(db.user_pk(USER), db.post_sk(body["posts"][0]["postId"]))
+    for hidden in ("publishState", "postsCreated", "flowRun", "flowExecutionArn", "videoKey", "coverKey"):
+        assert hidden not in body["clip"]
+    assert {p["platform"] for p in body["posts"]} == {"youtube", "instagram", "facebook", "tiktok", "x"}
+    assert {p["status"] for p in body["posts"]} == {"pending_integration"}
+    (start,) = _clip_flow_calls(lambda_client)
+    assert start["InvocationType"] == "Event"
+    assert start["DurableExecutionName"] == f"clip-{clip['clipId']}-1"
+    assert start["Payload"] == json.dumps({"clipId": clip["clipId"], "run": 1, "userId": USER}, sort_keys=True)
+    stored = table.raw(clip["pk"], clip["sk"])
     assert stored is not None
-    assert stored["gsi1pk"] == f"CLIP#{clip['clipId']}"
-    assert stored["gsi1sk"] == "POST#youtube"
+    assert stored["publishState"] == "started"
+    assert stored["postsCreated"] is True
+    assert stored["flowRun"] == 1
+    assert stored["flowExecutionArn"].startswith("arn:aws:lambda:")
+    # The clip and its posts are written in one transaction.
+    (transaction,) = [kw for op, kw in table.calls if op == "transact_write_items"]
+    assert len(transaction["TransactItems"]) == 6
+
+
+def test_confirm_writes_posts_once(call: Call, store: db.Store, table: FakeTable) -> None:
+    clip = seed_clip(store)
+    call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    assert len(posts.posts_for_clip(store, USER, clip["clipId"], consistent=True)) == 5
 
 
 def test_confirm_queues_post_for_connected_platform(call: Call, store: db.Store) -> None:
@@ -112,60 +135,130 @@ def test_confirm_queues_post_for_connected_platform(call: Call, store: db.Store)
         {
             "pk": db.user_pk(USER),
             "sk": "ACCOUNT#youtube#1",
+            "type": "account",
+            "userId": USER,
             "platform": "youtube",
             "status": "connected",
-            "handle": "@me",
         }
     )
     clip = seed_clip(store)
     _, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
-    statuses = {p["platform"]: p["status"] for p in body["posts"]}
-    assert statuses["youtube"] == "queued"
-    assert statuses["x"] == "pending_integration"
-    assert len(statuses) == 5
+    by_platform = {p["platform"]: p["status"] for p in body["posts"]}
+    assert by_platform["youtube"] == "queued"
+    assert by_platform["x"] == "pending_integration"
 
 
-def test_confirm_twice_conflicts(call: Call, store: db.Store, sqs: FakeSQS) -> None:
+def test_confirm_again_while_started_is_a_no_op(call: Call, store: db.Store, lambda_client: FakeLambda) -> None:
     clip = seed_clip(store)
-    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm")[0] == 200
-    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm")[0] == 409
-    assert len(sqs.sent) == 1
+    first = call("POST", f"/v1/clips/{clip['clipId']}/confirm")[1]
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    assert status == 200
+    assert len(_clip_flow_calls(lambda_client)) == 1
+    assert sorted(p["postId"] for p in body["posts"]) == sorted(p["postId"] for p in first["posts"])
 
 
-def test_confirm_survives_queue_failure(call: Call, store: db.Store, sqs: FakeSQS) -> None:
-    sqs.fail = True
+def test_confirm_survives_a_failed_start_and_the_next_confirm_starts_it(
+    call: Call, store: db.Store, lambda_client: FakeLambda, table: FakeTable
+) -> None:
     clip = seed_clip(store)
+    lambda_client.fail = True
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
     assert status == 200
     assert body["clip"]["status"] == "confirmed"
-    for hidden in ("publishState", "publishClaimAt"):
-        assert hidden not in body["clip"]
-
-
-def test_confirm_again_resumes_an_unfinished_confirm(
-    call: Call, store: db.Store, sqs: FakeSQS, table: FakeTable, clock: Clock
-) -> None:
-    call("PUT", "/v1/settings", {"platforms": ["youtube", "tiktok", "x"]})
-    clip = seed_clip(store)
-    sqs.fail = True
-    _, first = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
     assert table.raw(clip["pk"], clip["sk"])["publishState"] == "pending"  # type: ignore[index]
-    # Simulate a Confirm that died part-way: one post is missing.
-    table.items.pop((db.user_pk(USER), db.post_sk(first["posts"][-1]["postId"])))
-    sqs.fail = False
-    # Straight away it is still a conflict: the first request might still be running.
-    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm")[0] == 409
-    clock.now += timedelta(minutes=2)
+    lambda_client.fail = False
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
     assert status == 200
-    assert sorted(p["platform"] for p in body["posts"]) == ["tiktok", "x", "youtube"]
-    assert len(posts.posts_for_clip(store, USER, clip["clipId"], consistent=True)) == 3  # no duplicates
-    assert [m["body"] for m in sqs.sent] == [{"userId": USER, "clipId": clip["clipId"]}]
-    assert table.raw(clip["pk"], clip["sk"])["publishState"] == "enqueued"  # type: ignore[index]
-    # Once queued, it is decided for good.
-    clock.now += timedelta(minutes=2)
-    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm")[0] == 409
-    assert len(sqs.sent) == 1
+    names = [c["DurableExecutionName"] for c in _clip_flow_calls(lambda_client)]
+    assert names == [f"clip-{clip['clipId']}-1", f"clip-{clip['clipId']}-1"]  # same name and payload: idempotent
+    assert table.raw(clip["pk"], clip["sk"])["publishState"] == "started"  # type: ignore[index]
+    assert len(body["posts"]) == 5
+
+
+def test_confirm_already_started_execution_is_a_no_op(
+    call: Call, store: db.Store, lambda_client: FakeLambda, table: FakeTable
+) -> None:
+    clip = seed_clip(store)
+    # The flow is already running (an earlier start whose reply was lost) with another payload.
+    lambda_client.started[f"clip-{clip['clipId']}-1"] = "{}"
+    status, _ = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    assert status == 200
+    stored = table.raw(clip["pk"], clip["sk"])
+    assert stored is not None
+    assert stored["publishState"] == "started"
+    assert "flowExecutionArn" not in stored
+
+
+def test_confirm_of_a_posted_clip_is_a_no_op(call: Call, store: db.Store, lambda_client: FakeLambda) -> None:
+    clip = seed_clip(store, status="posted", publishState="started", postsCreated=True, flowRun=1)
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    assert status == 200
+    assert body["clip"]["status"] == "posted"
+    assert _clip_flow_calls(lambda_client) == []
+
+
+def test_try_again_after_failed_publish_starts_run_two(
+    call: Call, store: db.Store, lambda_client: FakeLambda, table: FakeTable
+) -> None:
+    clip = seed_clip(store, status="failed", publishState="started", postsCreated=True, flowRun=1)
+    pk = db.user_pk(USER)
+    for platform, state in (("youtube", "failed"), ("x", "pending_integration")):
+        store.put(
+            {
+                "pk": pk,
+                "sk": db.post_sk(f"P{platform}"),
+                "gsi1pk": f"CLIP#{clip['clipId']}",
+                "gsi1sk": f"POST#{platform}",
+                "type": "post",
+                "userId": USER,
+                "postId": f"P{platform}",
+                "clipId": clip["clipId"],
+                "platform": platform,
+                "status": state,
+                **({"error": "Posting to YouTube did not work. Press Try again."} if state == "failed" else {}),
+            }
+        )
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    assert status == 200
+    assert body["clip"]["status"] == "confirmed"
+    (start,) = _clip_flow_calls(lambda_client)
+    assert start["DurableExecutionName"] == f"clip-{clip['clipId']}-2"
+    assert json.loads(start["Payload"])["run"] == 2
+    statuses = {p["platform"]: p for p in body["posts"]}
+    assert statuses["youtube"]["status"] == "queued"
+    assert "error" not in statuses["youtube"]
+    assert statuses["x"]["status"] == "pending_integration"
+    stored = table.raw(clip["pk"], clip["sk"])
+    assert stored is not None
+    assert (stored["flowRun"], stored["publishState"]) == (2, "started")
+
+
+def test_confirm_declined_clip_conflicts(call: Call, store: db.Store, lambda_client: FakeLambda) -> None:
+    clip = seed_clip(store, status="declined")
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    assert status == 409
+    assert body["error"]["code"] == "conflict"
+    assert lambda_client.calls == []
+
+
+def test_confirm_race_with_a_parallel_confirm(
+    call: Call, store: db.Store, table: FakeTable, lambda_client: FakeLambda, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clip = seed_clip(store)
+    real = posts.create_for_clip
+
+    def lose_race(*args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        # A parallel Confirm finishes first: it created the posts and set publishState pending.
+        monkeypatch.setattr(posts, "create_for_clip", real)
+        real(*args, **kwargs)
+        raise db.ConditionFailed("lost")
+
+    monkeypatch.setattr(posts, "create_for_clip", lose_race)
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    assert status == 200
+    assert body["clip"]["status"] == "confirmed"
+    assert len(body["posts"]) == 5
+    assert len(_clip_flow_calls(lambda_client)) == 1  # the pending flow was started by this request
 
 
 def test_decline_deletes_files(call: Call, store: db.Store, s3_client: FakeS3, table: FakeTable) -> None:
@@ -187,3 +280,133 @@ def test_decline_only_in_review(call: Call, store: db.Store, s3_client: FakeS3) 
     clip = seed_clip(store, s3_client, status="confirmed")
     assert call("POST", f"/v1/clips/{clip['clipId']}/decline")[0] == 409
     assert clip["videoKey"] in s3_client.objects
+
+
+def test_confirm_only_posts_to_enabled_platforms(call: Call, store: db.Store) -> None:
+    call("PUT", "/v1/settings", {"platforms": ["tiktok", "youtube"]})
+    clip = seed_clip(store)
+    _, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    assert sorted(p["platform"] for p in body["posts"]) == ["tiktok", "youtube"]
+
+
+# --- vectors: decline and "like clips that did well" ---------------------------------------------------------------
+
+
+def _vector(
+    s3v: FakeS3Vectors, clip_id: str, *, user: str = USER, status: str = "performed", distance: float = 0.1
+) -> None:
+    s3v.vectors[clip_id] = {
+        "key": clip_id,
+        "data": {"float32": [0.5] * 1024},
+        "metadata": {
+            "userId": user,
+            "momentType": "rage",
+            "platforms": ["youtube"],
+            "status": status,
+            "scoreBucket": "high",
+            "hook": "meta hook",
+            "title": "meta title",
+            "summary": "s",
+            "performance": json.dumps(
+                {
+                    "views": 1200,
+                    "likes": 80,
+                    "comments": 4,
+                    "shares": 9,
+                    "posts": 1,
+                    "checkedAt": "2026-11-10T00:00:00.000Z",
+                }
+            ),
+        },
+        "distance": distance,
+    }
+
+
+def test_decline_deletes_the_vector(call: Call, store: db.Store, s3v: FakeS3Vectors) -> None:
+    clip = seed_clip(store)
+    _vector(s3v, clip["clipId"], status="review")
+    assert call("POST", f"/v1/clips/{clip['clipId']}/decline")[0] == 200
+    assert clip["clipId"] not in s3v.vectors
+    assert (
+        "delete_vectors",
+        {"vectorBucketName": "cf-prod-vectors-123", "indexName": "clips", "keys": [clip["clipId"]]},
+    ) in s3v.calls
+
+
+def test_decline_survives_a_vector_error(call: Call, store: db.Store, s3v: FakeS3Vectors) -> None:
+    clip = seed_clip(store)
+    s3v.fail = True
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/decline")
+    assert status == 200
+    assert body["clip"]["status"] == "declined"
+
+
+def test_similar_drops_self_filters_by_owner_and_performed(
+    call: Call, store: db.Store, s3v: FakeS3Vectors, s3_client: FakeS3
+) -> None:
+    clip = seed_clip(store)
+    _vector(s3v, clip["clipId"], status="review", distance=0.0)
+    good = [seed_clip(store, s3_client) for _ in range(6)]
+    for n, c in enumerate(good):
+        _vector(s3v, c["clipId"], distance=0.05 * (n + 1))
+    review = seed_clip(store)
+    _vector(s3v, review["clipId"], status="review", distance=0.01)
+    foreign = seed_clip(store, user=OTHER)
+    _vector(s3v, foreign["clipId"], user=OTHER, distance=0.01)
+    status, body = call("GET", f"/v1/clips/{clip['clipId']}/similar")
+    assert status == 200
+    out = body["clips"]
+    assert len(out) == 5
+    ids = [c["clipId"] for c in out]
+    assert clip["clipId"] not in ids
+    assert review["clipId"] not in ids
+    assert foreign["clipId"] not in ids
+    assert [c["similarity"] for c in out] == sorted((c["similarity"] for c in out), reverse=True)
+    first = out[0]
+    assert first["clipId"] == good[0]["clipId"]
+    assert first["similarity"] == 0.95
+    assert first["hook"] == "He lost it"
+    assert first["title"] == CAPTIONS["youtubeTitle"]
+    assert first["momentType"] == "rage"
+    assert first["performance"]["views"] == 1200
+    assert first["coverUrl"].startswith("https://")
+    (query,) = [kw for op, kw in s3v.calls if op == "query_vectors"]
+    assert query["topK"] == 6
+    assert query["filter"] == {"$and": [{"userId": {"$eq": USER}}, {"status": {"$eq": "performed"}}]}
+    assert query["returnMetadata"] is True
+    assert query["returnDistance"] is True
+
+
+def test_similar_skips_declined_and_missing_clips(call: Call, store: db.Store, s3v: FakeS3Vectors) -> None:
+    clip = seed_clip(store)
+    _vector(s3v, clip["clipId"], status="review", distance=0.0)
+    declined = seed_clip(store, status="declined")
+    _vector(s3v, declined["clipId"])
+    _vector(s3v, "01JGONEGONEGONEGONEGONEGON")
+    assert call("GET", f"/v1/clips/{clip['clipId']}/similar") == (200, {"clips": []})
+
+
+def test_similar_is_empty_without_a_vector_or_on_errors(call: Call, store: db.Store, s3v: FakeS3Vectors) -> None:
+    clip = seed_clip(store)
+    assert call("GET", f"/v1/clips/{clip['clipId']}/similar") == (200, {"clips": []})
+    _vector(s3v, clip["clipId"])
+    s3v.fail = True
+    assert call("GET", f"/v1/clips/{clip['clipId']}/similar") == (200, {"clips": []})
+
+
+def test_similar_is_404_for_another_owners_clip(call: Call, store: db.Store) -> None:
+    foreign = seed_clip(store, user=OTHER)
+    assert call("GET", f"/v1/clips/{foreign['clipId']}/similar")[0] == 404
+
+
+def test_confirm_resumes_a_clip_kept_before_flow_runs_existed(
+    call: Call, store: db.Store, lambda_client: FakeLambda, table: FakeTable
+) -> None:
+    clip = seed_clip(store, status="confirmed", publishState="pending")
+    status, _ = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    assert status == 200
+    (start,) = _clip_flow_calls(lambda_client)
+    assert start["DurableExecutionName"] == f"clip-{clip['clipId']}-1"
+    stored = table.raw(clip["pk"], clip["sk"])
+    assert stored is not None
+    assert (stored["publishState"], stored["flowRun"]) == ("started", 1)

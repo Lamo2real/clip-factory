@@ -82,12 +82,13 @@ def create(app: App, req: Request) -> Response:
         "updatedAt": now,
         "sessionId": new_session_id(job_id),
         "heartbeatAt": now,
+        "flowRun": 1,
     }
     if notes:
         item["notes"] = notes
     app.store.put(item, if_absent=True)
     log("info", "job.created", jobId=job_id, platform=source["platform"])
-    job = jobs.start(app.store, app.agent, item, now)
+    job = jobs.start(app.store, app.flows, item, now)
     return ok({"job": jobs.public_job(job)}, 201)
 
 
@@ -131,28 +132,31 @@ def cancel(app: App, req: Request) -> Response:
 def retry(app: App, req: Request) -> Response:
     job = _job_or_404(app, req)
     now = iso(app.clock())
+    expect: dict[str, Any] = {"status": jobs.RESTARTABLE}
+    if job.get("sessionId"):
+        # The run read above must still be current, so two retries never start the same flow name.
+        expect["sessionId"] = [job["sessionId"]]
     try:
         updated = app.store.update(
             job["pk"],
             job["sk"],
-            jobs.restart_fields(job["jobId"], now),
-            remove=["error"],
-            expect_in={"status": jobs.RESTARTABLE},
+            jobs.restart_fields(job["jobId"], now, int(job.get("flowRun") or 1)),
+            remove=["error", "flowExecutionArn"],
+            expect_in=expect,
         )
     except db.ConditionFailed as e:
         raise conflict("Only a failed or stopped job can be retried.") from e
     log("info", "job.retried", jobId=job["jobId"])
     old_session = job.get("sessionId")
     if not old_session or old_session == updated.get("sessionId"):
-        return ok({"job": jobs.public_job(jobs.start(app.store, app.agent, updated, now))})
-    # The old run may still be alive: a watchdog timeout, a start that timed out after the runtime accepted it, or a
-    # Stop whose signal was lost. The new sessionId written above fences its table writes (the agent conditions
-    # every write on its own sessionId); as a backstop, the old runtime session is stopped outright (not sent a
-    # cancel, whose wind-down would still write to the job). The two calls run side by side so the request stays
-    # within one agent call's timeout (well under the 29 s API limit).
+        return ok({"job": jobs.public_job(jobs.start(app.store, app.flows, updated, now))})
+    # The old run may still be alive: a heartbeat timeout, a lost Stop signal. The new sessionId written above
+    # fences its table writes (the agent and the old job-flow condition every write on their own sessionId); as a
+    # backstop, the old runtime session is stopped outright (not sent a cancel, whose wind-down would still write to
+    # the job). The two calls run side by side so the request stays well under the 29 s API limit.
     with ThreadPoolExecutor(max_workers=1) as pool:
         stopping = pool.submit(_stop_old_session, app, job["jobId"], old_session)
-        started = jobs.start(app.store, app.agent, updated, now)
+        started = jobs.start(app.store, app.flows, updated, now)
         stopping.result()
     return ok({"job": jobs.public_job(started)})
 

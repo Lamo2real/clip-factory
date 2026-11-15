@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from datetime import datetime, timedelta
+from collections.abc import Mapping
 from typing import Any
 
-from . import db, posts, s3, settings
-from .clock import iso, parse
+from . import db, s3
 from .errors import bad_request
-from .log import log
 
 Item = dict[str, Any]
 
@@ -29,19 +26,26 @@ STATUS_GROUPS: dict[str, frozenset[str] | None] = {
     "declined": frozenset({"declined"}),
     "all": None,
 }
-# publishState: "pending" from Confirm until the publish message is on the queue, then "enqueued".
-# publishClaimAt: when Confirm (or a later resume) last started that work; it fences concurrent resumes.
-INTERNAL_FIELDS = ("videoKey", "coverKey", "publishState", "publishClaimAt")
+# Internal fields never leave the API (docs/CONTRACTS.md §13, §14.5). publishState is "pending" from Confirm until
+# the durable cf-prod-clip-flow has started, then "started". publishClaimAt is gone but may linger on old items.
+INTERNAL_FIELDS = (
+    "videoKey",
+    "coverKey",
+    "publishState",
+    "postsCreated",
+    "flowRun",
+    "flowExecutionArn",
+    "publishClaimAt",
+)
 PUBLISH_PENDING = "pending"
-PUBLISH_ENQUEUED = "enqueued"
-# The API Lambda stops at 29 s, so a Confirm older than this is no longer running and its unfinished work may be
-# resumed (by a second Confirm or by the watchdog).
-RESUME_AFTER = timedelta(seconds=60)
+PUBLISH_STARTED = "started"
 
 
-def public_clip(item: Item, media: s3.Media) -> Item:
+def public_clip(item: Item, media: s3.Media | None = None) -> Item:
+    """The Clip shape of §5. With ``media`` it carries 1-hour ``videoUrl``/``coverUrl`` links; without (the live
+    WebSocket events) it carries none, and the web keeps the links it already has."""
     clip = db.strip_keys(item, INTERNAL_FIELDS)
-    if item.get("status") != "declined":
+    if media is not None and item.get("status") != "declined":
         if item.get("videoKey"):
             clip["videoUrl"] = media.presign_get(item["videoKey"])
         if item.get("coverKey"):
@@ -80,50 +84,3 @@ def clips_for_job(store: db.Store, user_id: str, job_id: str) -> list[Item]:
 
 def all_clips(store: db.Store, user_id: str) -> list[Item]:
     return store.query_all(db.user_pk(user_id), "CLIP#", newest_first=True)
-
-
-# --- after Confirm: posts and the publish message -------------------------------------------------------------
-
-
-def publish(store: db.Store, enqueue: Callable[[str, str], None], user_id: str, clip: Item) -> list[Item]:
-    """Creates the confirmed clip's missing posts and queues it for the publisher. Safe to repeat: platforms that
-    already have a post are skipped, and the publisher never sends a post twice. Returns all the clip's posts.
-
-    If the message cannot be queued the clip stays ``publishState: pending``; a second Confirm or the watchdog
-    resumes it (``claim_resume``).
-    """
-    existing = [posts.public_post(p) for p in posts.posts_for_clip(store, user_id, clip["clipId"], consistent=True)]
-    have = {p["platform"] for p in existing}
-    wanted = settings.load(store, user_id)["platforms"]
-    created = posts.create_posts(store, user_id, clip["clipId"], [p for p in wanted if p not in have])
-    try:
-        enqueue(user_id, clip["clipId"])
-        store.update(clip["pk"], clip["sk"], {"publishState": PUBLISH_ENQUEUED})
-    except Exception as e:
-        log("error", "clip.enqueue_failed", clipId=clip["clipId"], error=type(e).__name__)
-    return existing + created
-
-
-def claim_resume(store: db.Store, clip: Item, now: datetime) -> Item | None:
-    """The clip, claimed for resuming, if a Confirm stopped before its publish message was queued; else None.
-
-    The claim is a conditional write on ``publishClaimAt``, so two resumes never run at once.
-    """
-    if clip.get("status") != "confirmed" or clip.get("publishState") != PUBLISH_PENDING:
-        return None
-    last = parse(clip.get("publishClaimAt"))
-    if last is None or now - last < RESUME_AFTER:
-        return None
-    try:
-        return store.update(
-            clip["pk"],
-            clip["sk"],
-            {"publishClaimAt": iso(now)},
-            expect_in={
-                "status": ["confirmed"],
-                "publishState": [PUBLISH_PENDING],
-                "publishClaimAt": [clip["publishClaimAt"]],
-            },
-        )
-    except db.ConditionFailed:
-        return None

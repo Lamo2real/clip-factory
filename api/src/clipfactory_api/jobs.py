@@ -1,4 +1,4 @@
-"""Job items: source checks, the initial step list and starting a run on the agent."""
+"""Job items: source checks, the initial step list and starting a run (the durable ``cf-prod-job-flow``)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,9 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from . import db
-from .agent_client import AgentClient, AgentError, new_session_id
+from .agent_client import new_session_id
 from .errors import bad_request
+from .flow_client import FlowClient, FlowStartError
 from .log import log
 
 Item = dict[str, Any]
@@ -25,9 +26,9 @@ STEPS: tuple[tuple[str, str], ...] = (
 )
 ACTIVE = ("queued", "running")
 RESTARTABLE = ("failed", "canceled")
-INTERNAL_FIELDS = ("sessionId", "heartbeatAt")
+INTERNAL_FIELDS = ("sessionId", "heartbeatAt", "flowRun", "flowExecutionArn")
 
-START_FAILED = "We could not start the clip agent. Press Retry to try again."
+START_FAILED = "Could not start. Press Try again."
 
 # Hosts after any "www." is removed. Keep in step with web/src/lib/links.ts, which accepts the same set.
 _HOSTS = {
@@ -77,11 +78,15 @@ def public_job(item: Item) -> Item:
     return db.strip_keys(item, INTERNAL_FIELDS)
 
 
-def start(store: db.Store, agent: AgentClient, job: Item, now: str) -> Item:
-    """Invokes the agent for a job already saved as ``queued``; a failed start marks the job failed."""
+def start(store: db.Store, flows: FlowClient, job: Item, now: str) -> Item:
+    """Starts the job's durable flow for a job already saved as ``queued`` (docs/CONTRACTS.md §14.4).
+
+    The flow invokes the agent and waits for its callback. A failed start marks this run failed; the route still
+    answers 201/200 with the job, so the owner sees "Try again".
+    """
     try:
-        agent.start_job(job["jobId"], job["userId"], job["sessionId"])
-    except AgentError as e:
+        started = flows.start_job_flow(job["jobId"], job["userId"], job["sessionId"], int(job.get("flowRun") or 1))
+    except (FlowStartError, ValueError) as e:
         log("error", "job.start_failed", jobId=job["jobId"], error=str(e))
         try:
             return store.update(
@@ -92,15 +97,25 @@ def start(store: db.Store, agent: AgentClient, job: Item, now: str) -> Item:
                 expect_in={"status": ["queued"], "sessionId": [job["sessionId"]]},
             )
         except db.ConditionFailed:
-            # The agent got far enough to change the job itself; its state is the truth.
             return store.get(job["pk"], job["sk"]) or job
-    log("info", "job.started", jobId=job["jobId"])
-    return job
+    log("info", "job.started", jobId=job["jobId"], flow=started.name, existed=started.execution_arn is None)
+    if not started.execution_arn:
+        return job
+    try:
+        return store.update(
+            job["pk"],
+            job["sk"],
+            {"flowExecutionArn": started.execution_arn},
+            expect_in={"sessionId": [job["sessionId"]]},
+        )
+    except db.ConditionFailed:
+        return store.get(job["pk"], job["sk"]) or job
 
 
-def restart_fields(job_id: str, now: str) -> Item:
+def restart_fields(job_id: str, now: str, previous_run: int) -> Item:
     return {
         "status": "queued",
+        "flowRun": previous_run + 1,
         "steps": new_steps(),
         "progress": 0,
         "clipCount": 0,
