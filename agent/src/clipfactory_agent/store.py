@@ -1,0 +1,349 @@
+"""DynamoDB (single table, docs/CONTRACTS.md §6) and S3 (media bucket, §7) access for the agent."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import math
+from collections.abc import Iterable
+from dataclasses import dataclass
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+from .retry import is_transient, retry
+from .util import JobSuperseded, now_iso
+
+SETTINGS_DEFAULTS: dict[str, Any] = {
+    "clipMin": 5,
+    "clipMax": 10,
+    "maxSourceHours": 6,
+    "soundEnabled": True,
+    "reduceMotion": False,
+    "platforms": ["youtube", "instagram", "facebook", "tiktok", "x"],
+}
+
+
+def user_pk(user_id: str) -> str:
+    return f"USER#{user_id}"
+
+
+def source_prefix(job_id: str) -> str:
+    return f"jobs/{job_id}/source/"
+
+
+# The media bucket's "job-sources-14-days" lifecycle rule only expires jobs/ objects carrying this tag, because a
+# lifecycle filter cannot match jobs/*/source/ (infra/modules/storage: temporary_tag_key / temporary_tag_value).
+TEMPORARY_TAG_KEY = "cf-retention"
+TEMPORARY_TAG_VALUE = "temporary"
+TEMPORARY_TAGGING = f"{TEMPORARY_TAG_KEY}={TEMPORARY_TAG_VALUE}"
+
+
+def is_temporary(key: str) -> bool:
+    """True for jobs/{jobId}/source/* — the copied upload, audio, transcripts and analysis that expire in 14 days."""
+    parts = key.split("/", 3)
+    return len(parts) == 4 and parts[0] == "jobs" and bool(parts[1]) and parts[2] == "source"
+
+
+def clip_prefix(job_id: str, clip_id: str) -> str:
+    return f"jobs/{job_id}/clips/{clip_id}/"
+
+
+def cookies_key(user_id: str) -> str:
+    return f"private/{user_id}/youtube-cookies.txt"
+
+
+def job_key(user_id: str, job_id: str) -> dict[str, str]:
+    return {"pk": user_pk(user_id), "sk": f"JOB#{job_id}"}
+
+
+@dataclass(frozen=True)
+class Fence:
+    """The run a write belongs to: it only goes through while the Job item still carries this ``sessionId``."""
+
+    user_id: str
+    job_id: str
+    session_id: str
+
+
+def _txn_reasons(e: BaseException) -> list[str]:
+    response = getattr(e, "response", None)
+    if not isinstance(response, dict) or (response.get("Error") or {}).get("Code") != "TransactionCanceledException":
+        return []
+    return [str((r or {}).get("Code") or "None") for r in response.get("CancellationReasons") or []]
+
+
+def _txn_transient(e: BaseException) -> bool:
+    """A transaction canceled only because another write touched the same items at that moment is worth retrying."""
+    return is_transient(e) or "TransactionConflict" in _txn_reasons(e)
+
+
+def to_ddb(value: Any) -> Any:
+    """Floats become Decimals (DynamoDB has no float); NaN and infinity are dropped to None."""
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, float):
+        return Decimal(str(round(value, 6))) if math.isfinite(value) else None
+    if isinstance(value, dict):
+        converted = {k: to_ddb(v) for k, v in value.items()}
+        return {k: v for k, v in converted.items() if v is not None}
+    if isinstance(value, list | tuple):
+        return [to_ddb(v) for v in value]
+    return value
+
+
+def from_ddb(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return int(value) if value == value.to_integral_value() else float(value)
+    if isinstance(value, dict):
+        return {k: from_ddb(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [from_ddb(v) for v in value]
+    if isinstance(value, set):
+        return [from_ddb(v) for v in value]
+    return value
+
+
+class Store:
+    """Thin async wrapper over boto3; every call runs in a worker thread and retries transient errors."""
+
+    def __init__(self, table_name: str, bucket: str, region: str, session: Any = None) -> None:
+        import boto3
+        from botocore.config import Config
+
+        s = session or boto3.session.Session(region_name=region)
+        cfg = Config(retries={"max_attempts": 5, "mode": "adaptive"}, connect_timeout=10, read_timeout=60)
+        self.table = s.resource("dynamodb", config=cfg).Table(table_name)
+        self.s3 = s.client("s3", config=cfg)
+        self.transcribe = s.client("transcribe", config=cfg)
+        self.bucket = bucket
+        self.region = region
+
+    async def _call(self, what: str, fn: Any, *args: Any, **kwargs: Any) -> Any:
+        return await retry(lambda: asyncio.to_thread(fn, *args, **kwargs), what=what)
+
+    # --- DynamoDB --------------------------------------------------------------------------------------------
+
+    async def get_job(self, user_id: str, job_id: str) -> dict[str, Any] | None:
+        r = await self._call("ddb.get_job", self.table.get_item, Key=job_key(user_id, job_id))
+        item = r.get("Item")
+        return from_ddb(item) if item else None
+
+    async def update_job(
+        self,
+        user_id: str,
+        job_id: str,
+        fields: dict[str, Any],
+        *,
+        unless_canceled: bool,
+        session_id: str | None = None,
+        remove: tuple[str, ...] = (),
+    ) -> bool:
+        """Sets ``fields`` (plus ``updatedAt``). With ``unless_canceled``, returns False instead of writing when the
+        owner canceled the job meanwhile, so a running step can never flip a canceled job back.
+
+        With ``session_id`` the write only goes through while the job still belongs to that run; when a retry has
+        given the job a new ``sessionId`` meanwhile, nothing is written and JobSuperseded is raised."""
+        from botocore.exceptions import ClientError
+
+        fields = {**fields, "updatedAt": now_iso()}
+        names = {f"#f{i}": k for i, k in enumerate(fields)}
+        values = {f":v{i}": to_ddb(v) for i, v in enumerate(fields.values())}
+        expr = "SET " + ", ".join(f"#f{i} = :v{i}" for i in range(len(fields)))
+        if remove:
+            names.update({f"#r{i}": k for i, k in enumerate(remove)})
+            expr += " REMOVE " + ", ".join(f"#r{i}" for i in range(len(remove)))
+        conditions = ["attribute_exists(pk)"]
+        if unless_canceled:
+            names["#st"] = "status"
+            values[":canceled"] = "canceled"
+            conditions.append("#st <> :canceled")
+        if session_id is not None:
+            names["#sid"] = "sessionId"
+            values[":sid"] = session_id
+            conditions.append("#sid = :sid")
+        kwargs: dict[str, Any] = {
+            "Key": job_key(user_id, job_id),
+            "UpdateExpression": expr,
+            "ExpressionAttributeNames": names,
+            "ExpressionAttributeValues": values,
+            "ConditionExpression": " AND ".join(conditions),
+        }
+        try:
+            await self._call("ddb.update_job", self.table.update_item, **kwargs)
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
+            if session_id is not None:
+                await self._raise_if_superseded(user_id, job_id, session_id)
+            return False
+        return True
+
+    async def _raise_if_superseded(self, user_id: str, job_id: str, session_id: str) -> None:
+        """After a refused write: tells "a newer run owns the job" (or the job is gone) from "the owner canceled"."""
+        r = await self._call("ddb.get_job", self.table.get_item, Key=job_key(user_id, job_id), ConsistentRead=True)
+        item = r.get("Item")
+        if not item or item.get("sessionId") != session_id:
+            raise JobSuperseded()
+
+    async def _fenced_write(self, what: str, fence: Fence, op: dict[str, Any]) -> None:
+        """One write (a transaction Put or Delete in low-level form) that only goes through while the job still
+        carries the fence's ``sessionId``; raises JobSuperseded otherwise and writes nothing."""
+        from botocore.exceptions import ClientError
+
+        key = job_key(fence.user_id, fence.job_id)
+        check = {
+            "ConditionCheck": {
+                "TableName": self.table.name,
+                "Key": {"pk": {"S": key["pk"]}, "sk": {"S": key["sk"]}},
+                "ConditionExpression": "#sid = :sid",
+                "ExpressionAttributeNames": {"#sid": "sessionId"},
+                "ExpressionAttributeValues": {":sid": {"S": fence.session_id}},
+            }
+        }
+        client = self.table.meta.client
+        try:
+            await retry(
+                lambda: asyncio.to_thread(client.transact_write_items, TransactItems=[check, op]),
+                what=what,
+                transient=_txn_transient,
+            )
+        except ClientError as e:
+            reasons = _txn_reasons(e)
+            if reasons and reasons[0] == "ConditionalCheckFailed":
+                raise JobSuperseded() from e
+            raise
+
+    async def get_settings(self, user_id: str) -> dict[str, Any]:
+        r = await self._call("ddb.get_settings", self.table.get_item, Key={"pk": user_pk(user_id), "sk": "SETTINGS"})
+        item = from_ddb(r.get("Item") or {})
+        return {**SETTINGS_DEFAULTS, **{k: v for k, v in item.items() if k in SETTINGS_DEFAULTS}}
+
+    async def _query_prefix(
+        self, user_id: str, prefix: str, *, newest_first: bool = False, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        from boto3.dynamodb.conditions import Key
+
+        items: list[dict[str, Any]] = []
+        kwargs: dict[str, Any] = {
+            "KeyConditionExpression": Key("pk").eq(user_pk(user_id)) & Key("sk").begins_with(prefix),
+            "ScanIndexForward": not newest_first,
+        }
+        while True:
+            if limit:
+                kwargs["Limit"] = limit - len(items)
+            r = await self._call("ddb.query", self.table.query, **kwargs)
+            items += [from_ddb(i) for i in r.get("Items", [])]
+            if not r.get("LastEvaluatedKey") or (limit and len(items) >= limit):
+                return items
+            kwargs["ExclusiveStartKey"] = r["LastEvaluatedKey"]
+
+    async def skill_rows(self, user_id: str) -> list[dict[str, Any]]:
+        return await self._query_prefix(user_id, "SKILL#")
+
+    async def latest_learnings(self, user_id: str, n: int = 10) -> list[dict[str, Any]]:
+        return await self._query_prefix(user_id, "LEARNING#", newest_first=True, limit=n)
+
+    async def job_clips(self, job_id: str) -> list[dict[str, Any]]:
+        from boto3.dynamodb.conditions import Key
+
+        r = await self._call(
+            "ddb.job_clips",
+            self.table.query,
+            IndexName="gsi1",
+            KeyConditionExpression=Key("gsi1pk").eq(f"JOB#{job_id}") & Key("gsi1sk").begins_with("CLIP#"),
+        )
+        return [from_ddb(i) for i in r.get("Items", [])]
+
+    async def put_clip(self, item: dict[str, Any], *, fence: Fence | None = None) -> None:
+        if fence is None:
+            await self._call("ddb.put_clip", self.table.put_item, Item=to_ddb(item))
+            return
+        from boto3.dynamodb.types import TypeSerializer
+
+        ser = TypeSerializer()
+        put = {"TableName": self.table.name, "Item": {k: ser.serialize(v) for k, v in to_ddb(item).items()}}
+        await self._fenced_write("ddb.put_clip", fence, {"Put": put})
+
+    async def delete_item(self, pk: str, sk: str, *, fence: Fence | None = None) -> None:
+        if fence is None:
+            await self._call("ddb.delete", self.table.delete_item, Key={"pk": pk, "sk": sk})
+            return
+        delete = {"TableName": self.table.name, "Key": {"pk": {"S": pk}, "sk": {"S": sk}}}
+        await self._fenced_write("ddb.delete", fence, {"Delete": delete})
+
+    # --- S3 --------------------------------------------------------------------------------------------------
+
+    async def exists(self, key: str) -> bool:
+        from botocore.exceptions import ClientError
+
+        try:
+            await self._call("s3.head", self.s3.head_object, Bucket=self.bucket, Key=key)
+            return True
+        except ClientError as e:
+            if str(e.response.get("Error", {}).get("Code")) in ("404", "NoSuchKey", "NotFound"):
+                return False
+            raise
+
+    async def head(self, key: str) -> dict[str, Any]:
+        r: dict[str, Any] = await self._call("s3.head", self.s3.head_object, Bucket=self.bucket, Key=key)
+        return r
+
+    async def get_bytes(self, key: str) -> bytes:
+        r = await self._call("s3.get", self.s3.get_object, Bucket=self.bucket, Key=key)
+        return await asyncio.to_thread(r["Body"].read)
+
+    async def get_json(self, key: str) -> Any:
+        return json.loads(await self.get_bytes(key))
+
+    async def put_bytes(self, key: str, data: bytes, content_type: str) -> None:
+        extra: dict[str, str] = {"Tagging": TEMPORARY_TAGGING} if is_temporary(key) else {}
+        await self._call(
+            "s3.put", self.s3.put_object, Bucket=self.bucket, Key=key, Body=data, ContentType=content_type, **extra
+        )
+
+    async def put_json(self, key: str, value: Any) -> None:
+        await self.put_bytes(key, json.dumps(value, separators=(",", ":")).encode(), "application/json")
+
+    async def upload(self, path: Path, key: str, content_type: str) -> None:
+        extra = {"ContentType": content_type}
+        if is_temporary(key):
+            extra["Tagging"] = TEMPORARY_TAGGING
+        await self._call("s3.upload", self.s3.upload_file, str(path), self.bucket, key, ExtraArgs=extra)
+
+    async def download(self, key: str, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        await self._call("s3.download", self.s3.download_file, self.bucket, key, str(path))
+
+    async def copy(self, src_key: str, dest_key: str) -> None:
+        """Managed copy: multipart for files over 5 GB, which a plain CopyObject refuses.
+
+        A copy into jobs/{jobId}/source/ replaces the source's tags with the 14-day retention tag (for a multipart copy
+        s3transfer applies it with PutObjectTagging once the copy completes).
+        """
+        extra = {"TaggingDirective": "REPLACE", "Tagging": TEMPORARY_TAGGING} if is_temporary(dest_key) else None
+        await self._call(
+            "s3.copy", self.s3.copy, {"Bucket": self.bucket, "Key": src_key}, self.bucket, dest_key, ExtraArgs=extra
+        )
+
+    async def tag_temporary(self, key: str) -> None:
+        """Tag an object another service wrote (Amazon Transcribe output) so the 14-day lifecycle rule expires it."""
+        tag_set = [{"Key": TEMPORARY_TAG_KEY, "Value": TEMPORARY_TAG_VALUE}]
+        await self._call("s3.tag", self.s3.put_object_tagging, Bucket=self.bucket, Key=key, Tagging={"TagSet": tag_set})
+
+    async def delete_keys(self, keys: Iterable[str]) -> None:
+        batch = [{"Key": k} for k in keys]
+        for i in range(0, len(batch), 1000):
+            await self._call(
+                "s3.delete", self.s3.delete_objects, Bucket=self.bucket, Delete={"Objects": batch[i : i + 1000]}
+            )
+
+    def presign(self, key: str, seconds: int = 3600) -> str:
+        """Presign at each use: URLs signed with role credentials stop working when those credentials rotate."""
+        url: str = self.s3.generate_presigned_url(
+            "get_object", Params={"Bucket": self.bucket, "Key": key}, ExpiresIn=seconds
+        )
+        return url
+
+    def s3_uri(self, key: str) -> str:
+        return f"s3://{self.bucket}/{key}"

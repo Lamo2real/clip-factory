@@ -1,0 +1,9 @@
+# BuildKit reads this for agent/Dockerfile (the build context is the repo root): send only what the image copies.
+*
+!agent/pyproject.toml
+!agent/uv.lock
+!agent/src
+!config
+!skills
+**/__pycache__
+**/*.pyc
