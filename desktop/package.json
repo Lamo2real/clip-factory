@@ -1,0 +1,19 @@
+{
+  "name": "clip-factory-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Clip Factory desktop app (Tauri v2). Loads the deployed web app; bundles no web UI.",
+  "scripts": {
+    "tauri": "tauri",
+    "icons": "bash scripts/make-icons.sh",
+    "dev": "tauri dev",
+    "build:mac": "tauri build --target universal-apple-darwin --bundles dmg",
+    "build:windows": "tauri build --bundles nsis"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

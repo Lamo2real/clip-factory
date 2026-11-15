@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Deliberately empty. The window shows the remote web app, which gets no access to native commands: no files, no shell, no opener. Links are opened from Rust (see src/main.rs), and window size and position are saved by the window-state plugin on the Rust side.",
+  "windows": ["main"],
+  "permissions": []
+}
