@@ -3,7 +3,9 @@
 Source: the owner's brief for Clip Factory Cloud (November 2026) and the owner's follow-up after the first build
 (Get the app, the update bar, the desktop app and kid-proof design: BR-15 to BR-17, NFR-11, NFR-12, UX-12, UX-13), and
 the owner's request for a fully serverless Python and Terraform stack with WebSockets, a REST API, durable functions
-and S3 Vectors (NFR-02 AC3 and AC4, NFR-13 to NFR-16, BR-11 AC5, BR-18).
+and S3 Vectors (NFR-02 AC3 and AC4, NFR-13 to NFR-16, BR-11 AC5, BR-18), and the owner's request to organise
+Settings like a field of apple trees and to choose the click and error sounds (BR-13 AC3 to AC5, UX-09 update, UX-14,
+UX-15).
 Every requirement below traces back to one of them. Where
 the brief was open or unclear, the interpretation we chose is stated in [Interpretations and open questions](#interpretations-and-open-questions).
 
@@ -59,7 +61,7 @@ An AI agent on Amazon Bedrock AgentCore, running Claude Fable 5.1, processes eac
 ### BR-06 Attach skills in Settings
 "I should be able to attach skills in the settings of this application."
 - AC1: The owner can upload a `SKILL.md` file (≤ 1 MB) or a `.zip` that contains one `SKILL.md` (≤ 20 MB).
-- AC2: The skill's name and description are read from its frontmatter and listed in Settings → Skills.
+- AC2: The skill's name and description are read from its frontmatter and listed in Settings › Clip making › Skills.
 - AC3: Each skill can be turned on and off; owner skills can be deleted; built-in skills can only be turned off.
 - AC4: The next job uses every enabled skill, with no redeploy.
 - AC5: The owner can read any skill's content in the app.
@@ -87,7 +89,7 @@ legal pages already cover it.
 
 ### BR-10 Connect social accounts (phase 2)
 "This is a process to connect the social media accounts, of course. But we're gonna hold off that for now."
-- AC1 (phase 1): Settings → Accounts lists YouTube, Instagram, Facebook, TikTok and X as "Not connected"; the Connect
+- AC1 (phase 1): Settings › Posting › Accounts lists YouTube, Instagram, Facebook, TikTok and X as "Not connected"; the Connect
   button explains that connecting arrives in the next phase (`501 not_implemented`).
 - AC2 (phase 2): Each platform connects through its official sign-in (OAuth), tokens are stored in AWS Secrets Manager.
 
@@ -110,8 +112,17 @@ From "2 days after we've uploaded to the social media on the clips" (see interpr
 
 ### BR-13 Settings
 - AC1: Settings holds clip range, the longest source length to process (`maxSourceHours`, 1–12, default 6), sound
-  on/off, reduce motion, the platforms to post to, skills, accounts and an optional YouTube `cookies.txt`.
-- AC2: These settings are saved to the account (`PUT /v1/settings`), so they follow the owner across devices.
+  on/off, the click sound and the error sound, reduce motion, the platforms to post to, skills, accounts and an
+  optional YouTube `cookies.txt`.
+- AC2: These settings are saved to the account (`PUT /v1/settings`), so they follow the owner across devices. The
+  background picture is the one exception: it stays on the device (BR-14).
+- AC3: Every setting has exactly one place in the Settings tree (UX-14,
+  [CONTRACTS.md §15](CONTRACTS.md#15-settings-as-a-tree-and-choosing-your-click-sounds-owner-request-2026-11-16)):
+  Clip making (Clips, Skills, YouTube help), Posting (Accounts, Where clips go), Look & feel (Sounds, Motion,
+  Background), App & account (Get the app, Updates, Account).
+- AC4: `clickSound` and `errorSound` are whole numbers from 1 to 30. `PUT /v1/settings` refuses anything else with a
+  plain message (400). Settings saved before they existed read as the defaults, 6 and 5.
+- AC5: The owner's picks are the defaults for everyone: click sound 6 "Water drop", error sound 5 "Nope nope nope".
 
 ### BR-14 Background of the owner's choice
 From "I should be able to see the background of my phone image" (see interpretation I-02).
@@ -124,8 +135,8 @@ Added after the first build ([CONTRACTS.md §12.1](CONTRACTS.md#121-get-the-app-
 "When I use the app through the browser, there should be a feature in the sidebar to download it to the machine ...
 it should basically recommend the operating system ... if it's a Mac, then it should be a DMG file ... if it's on
 Windows ... an exe file."
-- AC1: From 768 px up, the sidebar has a **Get the app** item. On phones it is a card in Settings plus a one-time
-  banner on Home (the phone tab bar keeps its five items).
+- AC1: From 768 px up, the sidebar has a **Get the app** item. On phones it is the **Settings › App & account › Get the app**
+  branch plus a one-time banner on Home (the phone tab bar keeps its five items).
 - AC2: The app detects the device (Mac, Windows, Linux, ChromeOS, Android, iPhone or iPad) and shows **one** big button
   for it, in plain words:
 
@@ -144,13 +155,14 @@ Windows ... an exe file."
 
 ### BR-16 Never offer the app once it is installed
 "Once you actually download it, then it should not show you that part of the application to install it again."
-- AC1: Get the app (sidebar item, Settings card and Home banner) is hidden when the app runs installed: the browser
+- AC1: Get the app (sidebar item, the Settings branch and Home banner) is hidden when the app runs installed: the browser
   reports `display-mode: standalone` or `window-controls-overlay`, iOS reports `navigator.standalone`, or the desktop
   app is detected (`window.__CF_DESKTOP__` or `ClipFactoryDesktop` in the user agent).
 - AC2: After the browser's `appinstalled` event the device remembers it (`cf.installed=1`) and stops offering the app
   in that browser too.
-- AC3: "Not now" on the Home banner hides it for 30 days on that device. The sidebar item and the Settings card stay
-  available until the app is installed.
+- AC3: "Not now" on the Home banner hides it for 30 days on that device. The sidebar item and the Settings branch stay
+  available until the app is installed. Once installed, the branch leaves the Settings tree and search; its old
+  address says "You already have the app." with a Back button, so a saved link is never a dead end.
 
 ### BR-17 Update bar: what is new, and a Reload button
 "For every single update that I make ... I should have a reload button in the bottom of the page ... And there should
@@ -333,10 +345,12 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 - AC2: Motion is short (under 400 ms for feedback) and respects "reduce motion" (system or app setting).
 
 ### UX-09 Two click sounds, never on scroll
-- AC1: Clicking an enabled control plays a "tap" sound.
-- AC2: Clicking a disabled control, or an error, plays a different "deny" sound.
+- AC1: Clicking an enabled control plays the owner's **click sound** (default 6 "Water drop").
+- AC2: Clicking a disabled control, an error toast, or a failed action plays the owner's **error sound** (default
+  5 "Nope nope nope"), which sounds clearly different.
 - AC3: Scrolling, swiping or dragging on a phone never makes a sound (sounds are tied to the `click` event only).
-- AC4: Sounds can be turned off in Settings.
+- AC4: Sounds can be turned off in Settings › Look & feel › Sounds.
+- AC5: Changing the pick in Settings changes the sound everywhere in the app at once, with no reload.
 
 ### UX-10 Phone, browser and desktop install
 - AC1: The app works in any modern browser on phone and computer.
@@ -373,6 +387,47 @@ it's slow in and slow out, but in the middle, it's really quick ... so that the 
   deny sound and points at what is missing).
 - AC9: Progress is always visible while something is happening, and success is celebrated (UX-08).
 
+### UX-14 Settings organised like a field of apple trees
+"There is a field which is the entire settings, then we have apple trees which has multiple trees, and each tree has
+multiple branches, and each branch has multiple apples, but they also have leaves ... so that it is all organized."
+([CONTRACTS.md §15.1](CONTRACTS.md#15-settings-as-a-tree-and-choosing-your-click-sounds-owner-request-2026-11-16),
+[Settings tree](UX_DESIGN_SYSTEM.md#settings-tree))
+- AC1: Settings (the **field**) opens on four **trees**: Clip making, Posting, Look & feel, App & account. Each tree
+  holds **branches**; each branch holds **apples** (the things you change), each with a **leaf** (one short line of
+  help) unless its name already says it all. No setting sits loose outside a branch.
+- AC2: Every tree and branch has its own address (for example `/settings/look-and-feel/sounds`). Opening that address
+  directly, reloading, the browser's Back button and bookmarks all land on the same place. The old addresses
+  (`/settings#skills` style anchors, `/get-app`, `/settings?account=…&status=…`) keep working.
+- AC3: Every tree and branch page shows a breadcrumb (`Settings › Look & feel › Sounds`), each part a link. On phones a
+  big Back button goes one level up.
+- AC4: Below 1024 px wide, Settings drills down one level at a time. From 1024 px, a folder panel on the left shows the
+  whole tree: trees open and close like folders, the current branch is highlighted, and which folders are open is
+  remembered on that device.
+- AC5: A **Find a setting** box on the Settings page searches every apple, leaf, tree and branch name while you type.
+  Picking a result opens its branch, scrolls to it and highlights it. No match says "No setting called that. Try
+  another word."
+- AC6: The tree, the folder panel and search are kid-proof (UX-13): at most one tomato button per screen, 48 px
+  targets on phones, plain words, nothing overflows from 320 px, and everything works with a keyboard and a screen
+  reader.
+
+### UX-15 Pick your click and error sounds
+"Include this entire page in the Clip Factory to allow the ... user of the application to select the normal click and
+the error clicks. And I actually like the UI ... and the UX." The owner's picks: "Tap sound: 6 Water drop. Error
+sound: 5 Nope nope nope." ([CONTRACTS.md §15.3](CONTRACTS.md#153-sounds), [the picker](UX_DESIGN_SYSTEM.md#the-sounds-branch-the-picker))
+- AC1: Settings › Look & feel › Sounds shows the owner's sound picker: 30 numbered click sounds ("When it works") and
+  30 numbered error sounds ("When it can't"), each card with its number, name and feel, the same names and sounds as
+  the picker page the owner tried.
+- AC2: Tapping a card plays its sound and makes it the pick (a "Pick" badge, `aria-pressed`). One pick per group.
+- AC3: "Try it: Sign in" plays the click sound with a "Signed in" toast; with **Make it fail** on, it plays the error
+  sound with a small shake and "Wrong password. Try again." Nothing is really signed in or out.
+- AC4: A pick saves at once and follows the owner to every device; if the save fails, the pick goes back and the app
+  says so in plain words.
+- AC5: New accounts, and accounts that never picked, use click sound 6 "Water drop" and error sound 5 "Nope nope nope".
+- AC6: With Sounds off, the cards say "Sounds are off" with a "Turn sounds on" button, and tapping a card picks it
+  without playing anything.
+- AC7: The sounds are defined as data (one catalog entry per sound) and played by one player; numbers never change
+  meaning, so a saved pick always plays the same sound.
+
 ---
 
 ## Interpretations and open questions
@@ -398,6 +453,9 @@ it's slow in and slow out, but in the middle, it's really quick ... so that the 
 | I-17 | "WebSockets, HTTP, REST API on those API gateways" | Three APIs, each with one job: HTTP API for the app, WebSocket API for live updates, REST API for platform webhooks (NFR-13, NFR-16). | No. |
 | I-18 | "Durable functions in Lambda" | Two durable functions replace the queue, the scheduler, the publisher, the perf-check and the watchdog (NFR-15, [ADR-22](DECISIONS.md#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows)). | No. |
 | I-19 | "Python for backend ... Terraform for the infrastructure as code" | Already the case; recorded as [ADR-26](DECISIONS.md#adr-26-python-for-every-backend-terraform-for-every-resource-serverless-only). The web app (TypeScript) and desktop wrapper (Rust) are front end. | No. |
+| I-20 | "A field ... apple trees ... branches ... apples, but they also have leaves" | Field = all of Settings, trees = four big groups, branches = sections, apples = the settings you change, leaves = their one-line help (UX-14). The "multiple trees" are the four trees; the field is the Settings page itself. | Are four trees the right split? |
+| I-21 | "Include this entire page ... select the normal click and the error clicks" | The whole sound picker (both groups of 30, Try it with Make it fail) becomes the Sounds branch, in the app's glass style (UX-15). "Tap sound" and "error sound" are called **Click sound** and **Error sound** on screen. | No. |
+| I-22 | Get the app inside the tree | Get the app moves into App & account and, like the sidebar item, disappears once the app is installed (BR-16). | No. |
 
 ## Out of scope for this phase
 
