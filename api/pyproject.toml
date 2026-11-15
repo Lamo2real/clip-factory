@@ -1,0 +1,54 @@
+[project]
+name = "clipfactory-api"
+version = "0.1.0"
+description = "Clip Factory Cloud: the API, publisher, perf-check and watchdog Lambdas."
+requires-python = ">=3.13"
+# boto3 is vendored into the Lambda zip (scripts/build_lambda.py): the runtime's copy can be too old to know
+# the "bedrock-agentcore" service. uv.lock pins the exact version that ships.
+dependencies = ["boto3>=1.43"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4",
+  "ruff>=0.12",
+  "mypy>=1.17",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/clipfactory_api"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "S", "PL", "C4", "PT", "RET"]
+ignore = [
+  "E501",    # the formatter owns line length
+  "PLC0415", # lazy imports keep cold starts short
+  "PLW0603", # Lambdas cache clients in module globals between warm invocations
+  "PLR0911", "PLR0912", "PLR0913", "PLR2004",
+  "S603", "S607",  # the build script runs uv with fixed arguments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "S311", "PLR0915", "PLR0917"]
+
+[tool.mypy]
+python_version = "3.13"
+mypy_path = "src"
+strict = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["boto3", "boto3.*", "botocore", "botocore.*"]
+ignore_missing_imports = true
