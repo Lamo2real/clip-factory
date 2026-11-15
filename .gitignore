@@ -1,0 +1,31 @@
+# dependencies and builds
+node_modules/
+web/dist/
+web/dev-dist/
+web/test-results/
+web/playwright-report/
+api/dist/
+agent/dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+infra/envs/*/backend.hcl
+infra/envs/*/*.tfvars
+!infra/envs/*/*.tfvars.example
+crash.log
+
+# local
+.DS_Store
+.env
+.env.*
+web/public/config.json
