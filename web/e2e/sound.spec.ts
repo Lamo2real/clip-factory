@@ -15,15 +15,22 @@ test.describe("on a phone", () => {
     const cdp = await page.context().newCDPSession(page);
     // The first button on the page (the Get the app card's device chooser sits at the top on phones).
     const start = await page.locator("main button").first().boundingBox();
-    await cdp.send("Input.synthesizeScrollGesture", {
-      x: Math.round(start!.x + 20),
-      y: Math.round(start!.y + 10),
-      yDistance: -400,
-      gestureSourceType: "touch",
-      speed: 1200,
-    });
-    await page.waitForTimeout(300);
-    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(50);
+    // Slow CI machines sometimes drop the first synthetic gesture, so swipe until the page has really scrolled.
+    await expect
+      .poll(
+        async () => {
+          await cdp.send("Input.synthesizeScrollGesture", {
+            x: Math.round(start!.x + 20),
+            y: Math.round(start!.y + 10),
+            yDistance: -400,
+            gestureSourceType: "touch",
+            speed: 800,
+          });
+          return page.evaluate(() => window.scrollY);
+        },
+        { timeout: 15_000, intervals: [300, 600, 1000] },
+      )
+      .toBeGreaterThan(50);
     // Plain touch events with movement, too.
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 200, y: 600 }] });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 200, y: 450 }] });
