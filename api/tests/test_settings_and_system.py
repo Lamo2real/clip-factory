@@ -13,6 +13,8 @@ DEFAULTS = {
     "maxSourceHours": 6,
     "soundEnabled": True,
     "reduceMotion": False,
+    "clickSound": 6,
+    "errorSound": 5,
     "hasYoutubeCookies": False,
     "platforms": ["youtube", "instagram", "facebook", "tiktok", "x"],
 }
@@ -44,6 +46,9 @@ def test_put_settings_ignores_read_only(call: Call) -> None:
         {"clipMin": 11},
         {"clipMin": 2.5},
         {"clipMin": "3"},
+        {"clipMin": float("nan")},
+        {"clipMax": float("inf")},
+        {"maxSourceHours": float("-inf")},
         {"clipMax": 4},  # below the default clipMin of 5
         {"maxSourceHours": 13},
         {"soundEnabled": "yes"},
@@ -56,6 +61,89 @@ def test_put_settings_validation(call: Call, patch: dict[str, object]) -> None:
     status, body = call("PUT", "/v1/settings", patch)
     assert status == 400
     assert body["error"]["code"] == "bad_request"
+
+
+def test_sound_defaults_are_the_owners_picks() -> None:
+    assert settings.DEFAULTS["clickSound"] == 6  # "Water drop"
+    assert settings.DEFAULTS["errorSound"] == 5  # "Nope nope nope"
+
+
+@pytest.mark.parametrize("field", ["clickSound", "errorSound"])
+@pytest.mark.parametrize("value", [1, 30, 17, 12.0])
+def test_put_sound_choice_saved(call: Call, field: str, value: float) -> None:
+    status, body = call("PUT", "/v1/settings", {field: value})
+    assert status == 200
+    assert body["settings"][field] == int(value)
+    assert isinstance(body["settings"][field], int)
+    assert call("GET", "/v1/settings")[1]["settings"][field] == int(value)
+    assert call("GET", "/v1/me")[1]["settings"][field] == int(value)
+
+
+def test_put_both_sounds_keeps_other_settings(call: Call) -> None:
+    status, body = call("PUT", "/v1/settings", {"clickSound": 1, "errorSound": 30})
+    assert status == 200
+    assert body["settings"] == {**DEFAULTS, "clickSound": 1, "errorSound": 30}
+
+
+@pytest.mark.parametrize("field", ["clickSound", "errorSound"])
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (0, "number 0. Pick one from 1 to 30."),
+        (31, "number 31. Pick one from 1 to 30."),
+        (-3, "number -3. Pick one from 1 to 30."),
+        (2.5, "by its number, from 1 to 30."),
+        ("6", "by its number, from 1 to 30."),
+        (True, "by its number, from 1 to 30."),
+        (False, "by its number, from 1 to 30."),
+        (None, "by its number, from 1 to 30."),
+        ([6], "by its number, from 1 to 30."),
+        (float("nan"), "by its number, from 1 to 30."),
+        (float("inf"), "by its number, from 1 to 30."),
+        (float("-inf"), "by its number, from 1 to 30."),
+    ],
+)
+def test_put_sound_validation(call: Call, field: str, value: object, message: str) -> None:
+    status, body = call("PUT", "/v1/settings", {field: value})
+    assert status == 400
+    assert body["error"]["code"] == "bad_request"
+    label = "click sound" if field == "clickSound" else "error sound"
+    assert label in body["error"]["message"]
+    assert body["error"]["message"].endswith(message)
+    assert call("GET", "/v1/settings")[1]["settings"][field] == DEFAULTS[field]  # nothing saved
+
+
+@pytest.mark.parametrize("raw", ["NaN", "Infinity", "-Infinity", "1e999"])
+@pytest.mark.parametrize("field", ["clickSound", "errorSound", "clipMin", "clipMax", "maxSourceHours"])
+def test_put_settings_non_finite_numbers_are_400_not_500(call: Call, field: str, raw: str) -> None:
+    # Python's json.loads accepts these literals, so they reach the validators as float nan/inf.
+    status, body = call("PUT", "/v1/settings", raw=f'{{"{field}": {raw}}}')
+    assert status == 400
+    assert body["error"]["code"] == "bad_request"
+    assert call("GET", "/v1/settings")[1]["settings"][field] == DEFAULTS[field]  # nothing saved
+
+
+def test_bad_stored_non_finite_numbers_fall_back_to_defaults() -> None:
+    out = settings.with_defaults({"clickSound": float("nan"), "errorSound": float("inf"), "clipMin": float("nan")})
+    assert (out["clickSound"], out["errorSound"], out["clipMin"]) == (6, 5, 5)
+
+
+def test_old_stored_settings_without_sounds_read_as_defaults(call: Call, store: db.Store) -> None:
+    store.put({"pk": db.user_pk(USER), "sk": db.SETTINGS_SK, "type": "settings", "userId": USER, "clipMin": 3})
+    got = call("GET", "/v1/settings")[1]["settings"]
+    assert (got["clipMin"], got["clickSound"], got["errorSound"]) == (3, 6, 5)
+    # Saving another setting writes the defaults in, so the stored item is complete afterwards.
+    assert call("PUT", "/v1/settings", {"reduceMotion": True})[0] == 200
+    item = store.get(db.user_pk(USER), db.SETTINGS_SK)
+    assert item is not None
+    assert (item["clickSound"], item["errorSound"]) == (6, 5)
+
+
+def test_bad_stored_sounds_fall_back_to_defaults() -> None:
+    out = settings.with_defaults({"clickSound": True, "errorSound": 99})
+    assert (out["clickSound"], out["errorSound"]) == (6, 5)
+    out = settings.with_defaults({"clickSound": 30, "errorSound": 1})
+    assert (out["clickSound"], out["errorSound"]) == (30, 1)
 
 
 def test_corrupt_stored_settings_fall_back_to_defaults() -> None:
