@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .. import db, posts, s3, settings, validate
+from .. import db, learn, posts, s3, settings, validate
 from ..app import App
 from ..clock import iso
 from ..errors import ApiError, bad_request
@@ -124,6 +124,6 @@ def list_posts(app: App, req: Request) -> Response:
 def insights(app: App, req: Request) -> Response:
     pk = db.user_pk(req.user_id)
     page = app.store.query_page(pk, "LEARNING#", newest_first=True, limit=MAX_LEARNINGS)
-    learnings = [{k: i[k] for k in ("learningId", "text", "createdAt", "postIds") if k in i} for i in page.items]
+    learnings = [learn.public_learning(i) for i in page.items]
     measured = [posts.public_post(p) for p in posts.all_posts(app.store, req.user_id) if p.get("metrics")]
     return ok({"learnings": learnings, "posts": measured})

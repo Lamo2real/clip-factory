@@ -207,6 +207,43 @@ def test_vendored_boto3_knows_agentcore() -> None:
     assert "bedrock-agentcore" in boto3.session.Session().get_available_services()
 
 
+def test_vendored_boto3_knows_durable_executions_and_s3vectors() -> None:
+    """The locked boto3 (the copy build_lambda.py vendors) must expose what §14 calls (docs/CONTRACTS.md §14.10)."""
+    session = boto3.session.Session()
+    assert "s3vectors" in session.get_available_services()
+    lam = session.client("lambda", region_name="eu-north-1")
+    invoke = lam.meta.service_model.operation_model("Invoke")
+    assert "DurableExecutionName" in invoke.input_shape.members
+    assert "DurableExecutionArn" in invoke.output_shape.members
+    for op in (
+        "send_durable_execution_callback_success",
+        "send_durable_execution_callback_failure",
+        "send_durable_execution_callback_heartbeat",
+    ):
+        assert hasattr(lam, op), op
+    s3v = session.client("s3vectors", region_name="eu-north-1")
+    for op in ("put_vectors", "get_vectors", "query_vectors", "delete_vectors"):
+        assert hasattr(s3v, op), op
+    assert "apigatewaymanagementapi" in session.get_available_services()
+
+
+def test_only_the_durable_handlers_load_the_durable_sdk() -> None:
+    """The HTTP, realtime and hooks Lambdas never import the durable execution SDK (cold starts, §14.10)."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys\n"
+        "import clipfactory_api.http, clipfactory_api.routes, clipfactory_api.hooks\n"
+        "import clipfactory_api.realtime.authorizer, clipfactory_api.realtime.ws, clipfactory_api.realtime.broadcast\n"
+        "assert not any(m.startswith('aws_durable_execution_sdk_python') for m in sys.modules), 'durable SDK loaded'\n"
+        "import clipfactory_api.flows.job_flow, clipfactory_api.flows.clip_flow\n"
+        "assert 'aws_durable_execution_sdk_python' in sys.modules\n"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    assert out.returncode == 0, out.stderr
+
+
 # --- agent client ---------------------------------------------------------------------------------------------
 
 
@@ -225,25 +262,38 @@ def test_session_id_rule() -> None:
 def test_agent_client_payloads() -> None:
     fake = FakeAgentCore()
     client = AgentClient(fake, "arn:runtime")
-    client.start_job("J", "U", "cfjob-J-abcdefgh")
+    client.start_job("J", "U", "cfjob-J-abcdefgh", "cb-1")
     client.cancel_job("J", "cfjob-J-abcdefgh")
     start, cancel = fake.calls
     assert start["agentRuntimeArn"] == "arn:runtime"
     assert start["contentType"] == "application/json"
-    assert start["payload"] == {"action": "process_job", "jobId": "J", "userId": "U"}
+    assert start["payload"] == {"action": "process_job", "jobId": "J", "userId": "U", "callbackId": "cb-1"}
     assert cancel["payload"] == {"action": "cancel", "jobId": "J"}
 
 
 def test_agent_client_errors() -> None:
     with pytest.raises(AgentError):
-        AgentClient(FakeAgentCore(), "").start_job("J", "U", "s")
+        AgentClient(FakeAgentCore(), "").start_job("J", "U", "s", "cb")
 
     class Failing:
         def invoke_agent_runtime(self, **_: object) -> dict[str, object]:
             return {"statusCode": 500, "response": io.BytesIO(b"oops")}
 
-    with pytest.raises(AgentError, match="500"):
-        AgentClient(Failing(), "arn").start_job("J", "U", "s")
+    with pytest.raises(AgentError, match="500") as e:
+        AgentClient(Failing(), "arn").start_job("J", "U", "s", "cb")
+    assert e.value.retryable
+
+    throttled = FakeAgentCore()
+    throttled.fail = True  # 503 ServiceUnavailableException
+    with pytest.raises(AgentError) as e:
+        AgentClient(throttled, "arn").start_job("J", "U", "s", "cb")
+    assert e.value.retryable
+
+    refused = FakeAgentCore()
+    refused.reply = {"accepted": False}
+    with pytest.raises(AgentError) as e:
+        AgentClient(refused, "arn").start_job("J", "U", "s", "cb")
+    assert not e.value.retryable
 
 
 def test_agent_client_fits_inside_the_api_lambda_timeout() -> None:
@@ -254,3 +304,48 @@ def test_agent_client_fits_inside_the_api_lambda_timeout() -> None:
     attempts = config.retries["total_max_attempts"]  # botocore counts the first try here
     assert attempts == 1
     assert (config.connect_timeout + config.read_timeout) * attempts < 29
+
+
+def test_every_lambda_builds_its_clients_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Wiring only: boto3 clients are created offline, nothing is called (docs/CONTRACTS.md §9 environment)."""
+    from clipfactory_api import app as app_module
+    from clipfactory_api import hooks
+    from clipfactory_api.flows import clip_flow, job_flow
+    from clipfactory_api.realtime import authorizer, broadcast, ws
+
+    env = {
+        "AWS_REGION": "eu-north-1",
+        "AWS_ACCESS_KEY_ID": "testing",
+        "AWS_SECRET_ACCESS_KEY": "testing",
+        "TABLE_NAME": "cf-prod-data",
+        "MEDIA_BUCKET": "cf-prod-media-123",
+        "AGENT_RUNTIME_ARN": "arn:aws:bedrock-agentcore:eu-north-1:123456789012:runtime/cf_prod_clip_agent-abc",
+        "JOB_FLOW_ARN": "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-job-flow:live",
+        "CLIP_FLOW_ARN": "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-clip-flow:live",
+        "VECTOR_BUCKET": "cf-prod-vectors-123",
+        "VECTOR_INDEX": "clips",
+        "MODEL_ID": "global.anthropic.claude-fable-5-1",
+        "EMBED_MODEL_ID": "amazon.titan-embed-text-v2:0",
+        "WS_ENDPOINT": "https://abc123.execute-api.eu-north-1.amazonaws.com/live",
+        "APP_URL": "https://d111.cloudfront.net",
+        "USER_POOL_ID": "eu-north-1_Pool",
+        "USER_POOL_CLIENT_ID": "client",
+    }
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    api = app_module.from_env()
+    assert api.flows.job_flow_arn.endswith(":cf-prod-job-flow:live")
+    assert api.flows.clip_flow_arn.endswith(":cf-prod-clip-flow:live")
+    assert api.vectors is not None
+    assert (api.vectors.bucket, api.vectors.index) == ("cf-prod-vectors-123", "clips")
+    assert job_flow._from_env().agent is not None
+    flow = clip_flow._from_env()
+    assert flow.model_id == "global.anthropic.claude-fable-5-1"
+    assert flow.vectors is not None
+    assert flow.vectors.embed_model_id == "amazon.titan-embed-text-v2:0"
+    assert ws._from_env().ttl_seconds == 7200
+    assert broadcast._from_env().management.meta.endpoint_url == env["WS_ENDPOINT"]
+    assert hooks._from_env().app_url == env["APP_URL"]
+    verifier = authorizer._get_verifier()
+    assert verifier.issuer == "https://cognito-idp.eu-north-1.amazonaws.com/eu-north-1_Pool"
+    authorizer._verifier = None

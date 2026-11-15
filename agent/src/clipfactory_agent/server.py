@@ -2,30 +2,43 @@
 
 GET /ping answers Healthy, or HealthyBusy while a job runs so AgentCore keeps the session alive.
 POST /invocations takes ``process_job`` (accepted at once, runs in the background), ``cancel`` and ``health``.
+``process_job`` comes from the durable job flow ``cf-prod-job-flow`` with a ``callbackId``: the run heartbeats to it
+and ends by sending success or failure (docs/CONTRACTS.md §14.4). Without ``callbackId`` (local runs, tests) no
+callback is sent.
 
-The run's ``sessionId`` (the AgentCore runtime session the API invoked, also stored on the Job item) comes from the
-``X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`` header AgentCore adds, or from ``sessionId`` in the payload; every job
-write of the run is fenced on it (docs/CONTRACTS.md §13, "One run per job")."""
+The run's ``sessionId`` (the AgentCore runtime session the job flow invoked, chosen by the API and stored on the Job
+item) comes from the ``X-Amzn-Bedrock-AgentCore-Runtime-Session-Id`` header AgentCore adds, or from ``sessionId`` in the
+payload; every job write of the run is fenced on it (docs/CONTRACTS.md §13, "One run per job")."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 import time
-from collections.abc import Mapping
-from typing import Any, Protocol
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Protocol
 
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from .callback import DurableCallback
+from .callback import report as report_outcome
 from .util import log
+
+if TYPE_CHECKING:
+    from .jobs import JobFactory, StepFn, Tracker
+    from .pipeline import JobState
 
 MAX_BODY = 64 * 1024
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 _SESSION = re.compile(r"^[A-Za-z0-9_-]{1,256}$")
+_CALLBACK = re.compile(r"^[\x21-\x7e]{1,2048}$")  # printable ASCII, no spaces; the id is opaque
 SESSION_HEADER = "x-amzn-bedrock-agentcore-runtime-session-id"
 
 
@@ -33,7 +46,9 @@ class Runner(Protocol):
     @property
     def busy(self) -> bool: ...
 
-    def submit(self, job_id: str, user_id: str, session_id: str | None = None) -> bool: ...
+    def submit(
+        self, job_id: str, user_id: str, session_id: str | None = None, callback_id: str | None = None
+    ) -> bool: ...
 
     def cancel(self, job_id: str, session_id: str | None = None) -> bool: ...
 
@@ -73,7 +88,10 @@ def create_app(runner: Runner) -> Starlette:
             user_id = inv.get("userId")
             if not isinstance(user_id, str) or not _ID.match(user_id):
                 return bad("userId is missing or invalid.")
-            started = runner.submit(job_id, user_id, session_id)
+            callback_id = inv.get("callbackId")
+            if callback_id is not None and (not isinstance(callback_id, str) or not _CALLBACK.match(callback_id)):
+                return bad("callbackId is invalid.")
+            started = runner.submit(job_id, user_id, session_id, callback_id)
             log("info", "job.accepted", job=job_id, session=session_id, started=started)
             return JSONResponse({"accepted": True, "jobId": job_id})
         if action == "cancel":
@@ -91,33 +109,132 @@ def create_app(runner: Runner) -> Starlette:
     )
 
 
+class RunStore(Protocol):
+    async def get_job(self, user_id: str, job_id: str) -> dict[str, Any] | None: ...
+
+    async def update_job(
+        self,
+        user_id: str,
+        job_id: str,
+        fields: dict[str, Any],
+        *,
+        unless_canceled: bool,
+        session_id: str | None = None,
+        remove: tuple[str, ...] = (),
+    ) -> bool: ...
+
+
+class StepSource(Protocol):
+    def steps(self, st: JobState, tr: Tracker) -> list[tuple[str, StepFn]]: ...
+
+
+@dataclass(frozen=True)
+class Settled:
+    """A ``process_job`` for a run that must not (re)start: the job already ended, or a newer run owns it."""
+
+    status: str
+    clip_count: int = 0
+    error: str | None = None
+
+
+def settled(job: dict[str, Any] | None, session_id: str | None) -> Settled | None:
+    """None when the run should go ahead (the job is ``queued``, or ``running`` in this session after a container
+    restart); otherwise the outcome to report again. The job flow's ``start-agent`` step is at-least-once, so a
+    ``process_job`` can arrive after this run already finished: it never runs the job twice."""
+    if not job:
+        return Settled("failed", error="This job no longer exists.")
+    if session_id is not None and job.get("sessionId") != session_id:
+        return Settled("superseded")
+    status = str(job.get("status") or "")
+    if status in ("queued", "running"):
+        return None
+    if status == "ready":
+        return Settled("ready", clip_count=int(job.get("clipCount") or 0))
+    if status == "canceled":
+        return Settled("canceled")
+    return Settled("failed", error=str(job.get("error") or "") or None)
+
+
+CallbackFactory = Callable[[str], DurableCallback]
+
+
+def make_run(
+    store: RunStore,
+    pipeline: StepSource,
+    work_root: Path,
+    new_callback: CallbackFactory,
+    new_tracker: Callable[..., Tracker] | None = None,
+) -> JobFactory:
+    """The job run: fences on the session, runs the pipeline, and reports the outcome to the job flow."""
+    from .jobs import Tracker, run_job
+    from .pipeline import JobState
+
+    make_tracker = new_tracker or Tracker
+
+    async def run(job_id: str, user_id: str, session_id: str | None, callback_id: str | None) -> str:
+        cb = new_callback(callback_id) if callback_id else None
+        try:
+            job = await store.get_job(user_id, job_id)
+            if session_id is None:
+                # Not invoked through AgentCore (a local run): fence on the session the job carries now.
+                session_id = str(job["sessionId"]) if job and job.get("sessionId") else None
+                log("warn", "job.no_session_header", job=job_id, session=session_id)
+            done = settled(job, session_id)
+            if done is not None:
+                log("info", "job.duplicate_ignored", job=job_id, session=session_id, status=done.status)
+                await report_outcome(cb, done.status, job_id=job_id, clip_count=done.clip_count, error=done.error)
+                return done.status
+            st = JobState(job_id=job_id, user_id=user_id, workdir=work_root / job_id, session_id=session_id)
+            tracker = make_tracker(store, user_id, job_id, session_id=session_id, on_beat=cb.beat if cb else None)
+            status = await run_job(tracker, pipeline.steps(st, tracker), clip_count=lambda: len(st.candidates))
+            log("info", "job.finished", job=job_id, status=status)
+            await report_outcome(cb, status, job_id=job_id, clip_count=len(st.candidates), error=tracker.error)
+            return status
+        except asyncio.CancelledError:
+            if cb:
+                await report_outcome(cb, "canceled", job_id=job_id, clip_count=0, error=None)
+            raise
+        except Exception:
+            if cb:
+                await report_outcome(cb, "failed", job_id=job_id, clip_count=0, error=None)
+            raise
+        finally:
+            if cb:
+                await cb.close()
+
+    return run
+
+
 def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     """Production wiring inside the container."""
     from .bedrock import Bedrock
+    from .callback import lambda_client
     from .config import load_config
-    from .jobs import JobRunner, Tracker, run_job
-    from .pipeline import JobState, Pipeline
+    from .jobs import JobRunner
+    from .pipeline import Pipeline
     from .store import Store
     from .transcribe import Transcriber
+    from .vectors import Vectors
 
     cfg = load_config(env)
     store = Store(cfg.table, cfg.bucket, cfg.region)
-    pipeline = Pipeline(cfg, store, Bedrock(cfg.model_id, cfg.region), Transcriber(store.transcribe, cfg.bucket))
+    vectors = (
+        Vectors(cfg.vector_bucket, cfg.vector_index, cfg.embed_model_id, cfg.region) if cfg.vector_bucket else None
+    )
+    if vectors is None:
+        log("warn", "vectors.disabled", reason="CF_VECTOR_BUCKET is not set")
+    pipeline = Pipeline(
+        cfg, store, Bedrock(cfg.model_id, cfg.region), Transcriber(store.transcribe, cfg.bucket), vectors=vectors
+    )
+    client: list[Any] = []
 
-    async def run(job_id: str, user_id: str, session_id: str | None) -> Any:
-        if session_id is None:
-            # Not invoked through AgentCore (a local run): fence on the session the job carries now.
-            job = await store.get_job(user_id, job_id)
-            session_id = str(job["sessionId"]) if job and job.get("sessionId") else None
-            log("warn", "job.no_session_header", job=job_id, session=session_id)
-        st = JobState(job_id=job_id, user_id=user_id, workdir=cfg.work_root / job_id, session_id=session_id)
-        tracker = Tracker(store, user_id, job_id, session_id=session_id)
-        status = await run_job(tracker, pipeline.steps(st, tracker), clip_count=lambda: len(st.candidates))
-        log("info", "job.finished", job=job_id, status=status)
-        return status
+    def new_callback(callback_id: str) -> DurableCallback:
+        if not client:
+            client.append(lambda_client(cfg.region))
+        return DurableCallback(callback_id, client[0])
 
-    log("info", "runtime.started", model=cfg.model_id, region=cfg.region)
-    return create_app(JobRunner(run, cfg.work_root))
+    log("info", "runtime.started", model=cfg.model_id, region=cfg.region, vectors=vectors is not None)
+    return create_app(JobRunner(make_run(store, pipeline, cfg.work_root, new_callback), cfg.work_root))
 
 
 def main() -> None:

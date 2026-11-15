@@ -1,6 +1,6 @@
 import { announceSignedOut, type AuthClient } from "../lib/auth.ts";
 import { ApiError, errorFromResponse, networkError } from "./errors.ts";
-import type { Account, Api, Clip, Job, Post, Settings, Skill } from "./types.ts";
+import type { Account, Api, Clip, Job, Post, Settings, SimilarClip, Skill } from "./types.ts";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -90,5 +90,7 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     connectAccount: (platform) => call("POST", `/accounts/${id(platform)}/connect`),
     listPosts: async (clipId) => (await call<{ posts: Post[] }>("GET", `/posts${q({ clipId })}`)).posts,
     insights: () => call("GET", "/insights"),
+    similarClips: async (clipId) =>
+      (await call<{ clips: SimilarClip[] }>("GET", `/clips/${id(clipId)}/similar`)).clips ?? [],
   };
 }

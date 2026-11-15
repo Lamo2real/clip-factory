@@ -1,7 +1,9 @@
-"""Starts and cancels jobs on the AgentCore runtime (docs/CONTRACTS.md §8).
+"""Starts and cancels jobs on the AgentCore runtime (docs/CONTRACTS.md §8, §14.4).
 
 Each job run gets its own runtime session ``cfjob-<jobId>-<8 random chars>``: a retry starts a fresh session (a
 fresh container), while a cancel reuses the running job's session so it reaches the container doing the work.
+``process_job`` is sent by the durable ``cf-prod-job-flow`` (with the callback id the agent ends with); the API
+only sends ``cancel`` and stops sessions.
 """
 
 from __future__ import annotations
@@ -15,8 +17,39 @@ SESSION_PREFIX = "cfjob-"
 MIN_SESSION_LENGTH = 33  # AgentCore rejects shorter runtime session ids
 
 
+RETRYABLE_CODES = frozenset(
+    {
+        "ThrottlingException",
+        "TooManyRequestsException",
+        "ServiceQuotaExceededException",
+        "ServiceUnavailableException",
+        "InternalServerException",
+        "RequestTimeout",
+        "RequestTimeoutException",
+    }
+)
+
+
 class AgentError(Exception):
-    """The runtime refused or failed the call."""
+    """The runtime refused or failed the call. ``retryable`` marks throttling, 5xx and connection problems."""
+
+    def __init__(self, message: str, *, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
+
+def is_retryable(e: BaseException) -> bool:
+    """Throttling, a 5xx answer or a connection/timeout problem: worth another try."""
+    response = getattr(e, "response", None)
+    if isinstance(response, dict):
+        code = response.get("Error", {}).get("Code")
+        status = response.get("ResponseMetadata", {}).get("HTTPStatusCode") or 0
+        return code in RETRYABLE_CODES or int(status) >= 500 or int(status) == 429
+    names = {c.__name__ for c in type(e).__mro__}
+    return bool(
+        names
+        & {"ConnectionError", "TimeoutError", "EndpointConnectionError", "ConnectTimeoutError", "ReadTimeoutError"}
+    )
 
 
 def new_session_id(job_id: str) -> str:
@@ -26,15 +59,14 @@ def new_session_id(job_id: str) -> str:
     return session
 
 
-def make_client(region: str) -> Any:
+def make_client(region: str, *, read_timeout: int = 20) -> Any:
     import boto3
     from botocore.config import Config
 
-    # Invocations return at once ({"accepted": true}); the job runs in the background. The API Lambda (and its
-    # HTTP API integration) stop at 29 s, so the worst case here (connect + read, no retries) must stay well under
-    # that: a slow or hung start then raises AgentError in time for jobs.start to mark the job failed ("Press
-    # Retry") instead of the Lambda being killed and the job sitting queued until the watchdog.
-    config = Config(retries={"mode": "standard", "total_max_attempts": 1}, connect_timeout=3, read_timeout=20)
+    # Invocations return at once ({"accepted": true}); the job runs in the background. In the API Lambda (29 s
+    # limit) the worst case (connect + read, no retries) must stay well under that, so a hung cancel never outlives
+    # the request. The job-flow step has its own durable retries, so botocore never retries here either.
+    config = Config(retries={"mode": "standard", "total_max_attempts": 1}, connect_timeout=3, read_timeout=read_timeout)
     return boto3.client("bedrock-agentcore", region_name=region, config=config)
 
 
@@ -43,8 +75,9 @@ class AgentClient:
         self._client = client
         self._arn = runtime_arn
 
-    def start_job(self, job_id: str, user_id: str, session_id: str) -> None:
-        reply = self._invoke(session_id, {"action": "process_job", "jobId": job_id, "userId": user_id})
+    def start_job(self, job_id: str, user_id: str, session_id: str, callback_id: str) -> None:
+        payload = {"action": "process_job", "jobId": job_id, "userId": user_id, "callbackId": callback_id}
+        reply = self._invoke(session_id, payload)
         if reply.get("accepted") is not True:
             raise AgentError("the agent did not accept the job")
 
@@ -62,7 +95,7 @@ class AgentClient:
             code = getattr(e, "response", {}).get("Error", {}).get("Code")
             if code == "ResourceNotFoundException":
                 return
-            raise AgentError(f"stop failed: {type(e).__name__}") from e
+            raise AgentError(f"stop failed: {type(e).__name__}", retryable=is_retryable(e)) from e
 
     def _invoke(self, session_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         if not self._arn:
@@ -76,11 +109,11 @@ class AgentClient:
                 payload=json.dumps(payload).encode(),
             )
         except Exception as e:
-            raise AgentError(f"invoke failed: {type(e).__name__}") from e
+            raise AgentError(f"invoke failed: {type(e).__name__}", retryable=is_retryable(e)) from e
         status = out.get("statusCode") or out.get("ResponseMetadata", {}).get("HTTPStatusCode") or 200
         body = _read(out.get("response"))
         if status >= 400:
-            raise AgentError(f"runtime answered {status}")
+            raise AgentError(f"runtime answered {status}", retryable=status >= 500 or status == 429)
         try:
             parsed = json.loads(body) if body else {}
         except ValueError:

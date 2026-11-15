@@ -4,7 +4,9 @@ A short log of every significant decision, in Architecture Decision Record style
 options we did not choose, and what follows from it. A decision changes only through a new entry that replaces the
 old one (mark the old one "Replaced by ADR-xx").
 
-All entries: status **Accepted**, November 2026, decided by the build under the owner's "you have full control" brief.
+All entries: status **Accepted**, November 2026, decided by the build under the owner's "you have full control" brief,
+unless marked **Replaced**. ADR-22 to ADR-26 come from the serverless expansion
+([CONTRACTS.md §14](CONTRACTS.md#14-serverless-expansion-websocket-api-rest-api-durable-functions-s3-vectors)).
 
 ---
 
@@ -17,6 +19,11 @@ All entries: status **Accepted**, November 2026, decided by the build under the 
 - **Alternatives.** `us-east-1` (most features first, but further from the owner and from the existing state bucket);
   `eu-central-1` (fine, but no reason to split from the owner's other work).
 - **Consequences.** Model calls may be served from another region through the global profile (ADR-02). Data at rest stays in Stockholm.
+- **Re-checked for the serverless expansion (unchanged).** Everything the expansion adds is available in
+  `eu-north-1`: Lambda durable functions (since 18 December 2025, `python3.13`), S3 Vectors, Titan Text Embeddings V2
+  (in-Region), API Gateway WebSocket and REST APIs, AgentCore Runtime and batch Transcribe. SQS and EventBridge
+  Scheduler are no longer used (ADR-22). Claude Fable 5.1 is reachable from here only through the global profile, which
+  also needs the account's `aws_review` data-retention opt-in ([DEPLOYMENT.md](DEPLOYMENT.md#4-bedrock-model-access-and-data-retention)).
 
 ## ADR-02 Claude Fable 5.1 through the global cross-region inference profile
 
@@ -58,8 +65,13 @@ All entries: status **Accepted**, November 2026, decided by the build under the 
 - **Alternatives.** One table per entity (more IAM, more Terraform, no benefit); Aurora Serverless (minimum cost, a
   VPC, migrations).
 - **Consequences.** Every query is a key lookup or a range on one partition. Adding a second user later needs no change.
+- **Extended by the serverless expansion.** WebSocket connections (`CONN#`) and webhook events (`HOOK#`) live in the
+  same table with a TTL, and the table's stream (`NEW_AND_OLD_IMAGES`) feeds the live updates (ADR-23). A stream filter
+  on the sort-key prefix keeps connection, hook, settings and skill changes away from the broadcaster.
 
 ## ADR-06 Polling instead of WebSockets
+
+**Replaced by [ADR-23](#adr-23-live-updates-over-a-websocket-api-polling-only-as-the-fallback).** Polling remains only as the fallback.
 
 - **Context.** The app shows job progress and new clips. Updates happen every few seconds at most.
 - **Decision.** The web app polls `GET /v1/jobs/{jobId}` every few seconds while a job is open and running, and the
@@ -115,6 +127,9 @@ All entries: status **Accepted**, November 2026, decided by the build under the 
 
 ## ADR-12 Publishing through SQS, the 48-hour check through EventBridge Scheduler
 
+**Replaced by [ADR-22](#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows).** The queue, dead-letter queue,
+publisher, scheduler and perf-check are removed.
+
 - **Context.** Confirm should return at once; uploads to platforms are slow and fail sometimes; each post needs a check
   exactly 48 hours after it goes live.
 - **Decision.** Confirm writes the posts and sends one message to SQS `cf-prod-publish`; the publisher Lambda (batch 1)
@@ -152,6 +167,9 @@ All entries: status **Accepted**, November 2026, decided by the build under the 
 - **Consequences.** HTTPS for free; a custom domain is a roadmap item.
 
 ## ADR-17 A watchdog Lambda instead of an orchestrator
+
+**Replaced by [ADR-22](#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows).** The watchdog and its
+10-minute rule are removed; the job flow's callback heartbeat timeout does the job.
 
 - **Context.** If the agent container dies, nothing else would mark the job as failed.
 - **Decision.** The agent writes `heartbeatAt` at least every 60 seconds. An EventBridge rule runs `cf-prod-watchdog`
@@ -214,3 +232,113 @@ All entries: status **Accepted**, November 2026, decided by the build under the 
   review); TestFlight (builds expire after 90 days).
 - **Consequences.** No file and no store; the installed PWA runs full-screen and gets the same update bar. Push
   notifications for the PWA remain possible later (iOS 16.4+ supports Web Push for Home Screen apps).
+
+## ADR-22 Lambda durable functions for the job and clip workflows
+
+- **Context.** Two long-running workflows had grown out of loose parts. A job needed a watchdog Lambda on a 10-minute
+  rule to notice a dead agent. A kept clip went through an SQS queue and dead-letter queue, a publisher Lambda, a
+  one-time EventBridge Scheduler schedule per post and a perf-check Lambda 48 hours later. Each hand-off was another
+  resource, role and failure mode. The owner asked for "Lambda, and durable functions in Lambda". Lambda durable
+  functions became generally available on 2 December 2025 and reached `eu-north-1` on 18 December 2025 (`python3.13`).
+- **Decision.** Two durable functions written in Python with `aws-durable-execution-sdk-python`, both invoked
+  asynchronously on their `live` alias with a deterministic `DurableExecutionName`:
+  - `cf-prod-job-flow` (`job-{jobId}-{run}`): creates a callback, starts the agent (step `start-agent`), waits for the
+    agent's success or failure with an 8-hour timeout and a 15-minute heartbeat timeout, then `finish` or `fail` +
+    `stop-session`. A missed heartbeat replaces the watchdog.
+  - `cf-prod-clip-flow` (`clip-{clipId}-{run}`): `ensure-posts`, `publish-{platform}` (3 attempts with backoff),
+    `settle-clip`, `wait-48h`, `metrics`, `distil`, `upsert-vector`.
+  Execution timeouts 30 600 s and 259 200 s, retention 14 days, `publish = true`, alias `live`, alarms on
+  `DurableExecutionFailed` and `DurableExecutionTimedOut`.
+- **Alternatives.**
+  - *Keep SQS + Scheduler + watchdog* (ADR-12, ADR-17): works, but six resources and three roles for two workflows,
+    and stuck jobs were found by scanning, up to 25 minutes late.
+  - *AWS Step Functions*: a mature fit with task tokens and wait states, but the workflow would live in Amazon States
+    Language rather than Python next to the code it calls, every state transition is billed, and tests need a second
+    toolchain. The owner asked for Python and for durable functions.
+  - *A long Lambda polling the agent*: 15-minute limit, pays for waiting.
+- **Consequences.** The workflow reads top to bottom as Python and is unit-tested with a fake durable context. Waiting
+  (for the agent, for 48 hours) costs nothing. Retries and checkpoints come from the SDK, so steps must be idempotent
+  (they are at-least-once): post creation is guarded by `postsCreated`, post updates by `status = queued`, and
+  publishing uses `postId` as the idempotency key. Duplicate starts are harmless because the execution name and
+  payload are deterministic. Durable functions support no Lambda destinations, and durable settings can only be set
+  when a function is created. Running executions stay pinned to the version they started on, so deploys never change
+  a flow in flight; old versions are kept. The agent role needs the three `lambda:SendDurableExecutionCallback*`
+  permissions on `function:cf-prod-job-flow:*`.
+
+## ADR-23 Live updates over a WebSocket API, polling only as the fallback
+
+- **Context.** With polling (ADR-06) progress lagged by several seconds, and every open screen polled even when nothing
+  changed. The owner asked for "API gateway, WebSockets". Everything the app shows (jobs, clips, posts, learnings)
+  is written to one DynamoDB table.
+- **Decision.** An API Gateway WebSocket API `cf-prod-ws` (stage `live`). The Cognito access token goes in the
+  `$connect` query string (browsers cannot set headers on a WebSocket) and is checked by a Lambda REQUEST authorizer
+  using only the Python standard library (RS256 against the pool's JWKS, issuer, `token_use`, `client_id`, expiry).
+  Connections are items in the main table with a 2-hour TTL. The table's stream, filtered to `JOB#`, `CLIP#`, `POST#`
+  and `LEARNING#` sort keys, triggers `cf-prod-broadcast`, which sends each change, in the same public shape as the HTTP
+  API, to the owner's connections. The web app keeps one shared connection, reconnects with backoff, pings every 5
+  minutes and reconnects before the 2-hour cap. Polling runs only while disconnected (and every 30 s while live).
+- **Alternatives.** *Keep polling* (simplest, but laggy and chatty). *AWS AppSync Events* (managed pub/sub, but a
+  second API style and auth setup for one feature). *AWS IoT Core MQTT over WebSockets* (powerful, but Cognito identity
+  pools and IoT policies for one owner). *Server-sent events* (need a long-lived HTTP response, which API Gateway and
+  Lambda do not hold open).
+- **Consequences.** Changes appear within about a second. Writers (agent, API, flows) need no change: anything they
+  write is broadcast. The token is in a URL, so access logs use a fixed field list without the query, data tracing is
+  off and no Lambda logs it. API Gateway does not cache WebSocket authorizer results, so the authorizer caches the JWKS
+  and valid tokens per container. A dropped socket is never an error for the owner: the app falls back to polling.
+
+## ADR-24 A separate REST API for public platform webhooks
+
+- **Context.** Phase 2 needs public endpoints that YouTube, Meta, TikTok and X can call: webhook verification, webhook
+  events and OAuth callbacks. They cannot carry the owner's Cognito token. The owner asked for "HTTP, REST API on those
+  API gateways".
+- **Decision.** A Regional API Gateway REST API `cf-prod-hooks` (stage `v1`) with `/hooks/{platform}` (GET, POST) and
+  `/oauth/{platform}/callback` (GET), no authorization, a required `platform` path parameter, per-method throttling
+  (10 requests a second, burst 20), a usage plan as a ceiling, X-Ray, and access logs without the query string. One
+  Lambda, `cf-prod-hooks`, answers challenges (the Meta verify token is an SSM SecureString generated as a write-only
+  value), stores events as `HOOK#` items with a 14-day TTL, and redirects OAuth callbacks to Settings until phase 2.
+- **Alternatives.** *More routes on the HTTP API* (cheaper per request, but it would mix unauthenticated public routes
+  into the JWT-protected app API, and HTTP APIs have no usage plans, request validators or per-method throttling).
+  *Lambda function URLs* (no throttling or validation in front of the code).
+- **Consequences.** The app API stays JWT-only; the public surface is small, throttled and separately logged and
+  alarmed (`cf-prod-hooks-5xx`). REST API logging needs the account-level API Gateway CloudWatch role, which Terraform
+  manages behind `manage_api_gateway_account` ([DEPLOYMENT.md](DEPLOYMENT.md#5-api-gateway-logging-role-one-per-account-and-region)).
+  CreateDeployment is limited to one call every 5 seconds per account, so the WebSocket module deploys after the REST
+  module. Signature checks are a stub (`unverified`) until the platforms' app secrets exist in phase 2.
+
+## ADR-25 S3 Vectors for the learning memory, OpenSearch not deployed
+
+- **Context.** Learnings (one sentence each) say what works in general. The agent and the owner also benefit from
+  seeing specific past clips that resemble the current one, with their real numbers. That needs vector search over a
+  few hundred to a few thousand clips for one owner, with filters by owner and status. The owner listed "OpenSearch if
+  we're using that, S3 vectors".
+- **Decision.** One S3 Vectors bucket `cf-prod-vectors-<accountId>` and index `clips` (float32, 1024 dimensions,
+  cosine; `hook`, `title`, `summary`, `performance` non-filterable). Embeddings from Amazon Titan Text Embeddings V2,
+  which runs in `eu-north-1` itself. The agent writes vectors at finalize and reads the top 8 `performed` clips before
+  moment selection ("What worked before"); the clip flow marks a vector `performed` with its numbers after the 48-hour
+  check; the API serves "Like clips that did well" and deletes a vector on Throw away. OpenSearch Serverless is **not
+  deployed**; the diagram shows it dashed as an option.
+- **Alternatives.** *Amazon OpenSearch Serverless*: full keyword, hybrid and vector search, but a collection bills a
+  standing minimum of OCUs (with or without redundancy) even when idle, far more than this app's whole bill. Exporting
+  S3 Vectors into OpenSearch Serverless through OpenSearch Ingestion is still a preview feature. *Bedrock Knowledge
+  Bases* (built for documents and chunking, not for one record per clip with custom metadata). *Vectors in DynamoDB
+  with brute-force search in Lambda* (fine at this size, but code to maintain and slower as clips grow). *Nova
+  Multimodal Embeddings* (not offered in `eu-north-1`).
+- **Consequences.** Pay per request and per stored vector, nothing standing. Every index argument forces replacement,
+  so the dimension, metric and non-filterable keys are frozen; a change means a new index and a backfill. Queries with a
+  filter or metadata also need `s3vectors:GetVectors`. Vector errors never break a job or a route; the feature simply
+  hides. If keyword or hybrid search is ever needed, OpenSearch Serverless can be added next to it.
+
+## ADR-26 Python for every backend, Terraform for every resource, serverless only
+
+- **Context.** The owner: "I guess you are using Python for backend, and you are using Terraform for the infrastructure
+  as code language ... the entire infrastructure should be serverless."
+- **Decision.** All backend code is Python 3.13: the Lambdas in `api/` (standard library plus vendored `boto3` and
+  `aws-durable-execution-sdk-python`, one zip) and the agent in `agent/`. Every AWS resource is Terraform in `infra/`
+  (AWS provider `>= 6.68, < 7`), including the optional bootstrap of the deploy role. Only managed, pay-per-use
+  services: CloudFront, S3, S3 Vectors, DynamoDB, API Gateway (HTTP, WebSocket, REST), Lambda (plain and durable),
+  AgentCore Runtime, Bedrock, Transcribe, Cognito, SSM, CloudWatch, SNS, ECR. No EC2, no ECS, no VPC. The web app and
+  the desktop wrapper are front-end code (TypeScript, Rust), not backend.
+- **Alternatives.** CloudFormation, CDK or SAM (the owner chose Terraform); TypeScript Lambdas (the owner chose Python).
+- **Consequences.** One language for the backend and its tests (pytest, ruff, mypy), one tool for infrastructure and
+  its tests (`terraform test` with mock providers). Durable functions run on `python3.13`, which the Lambda runtime
+  supports.

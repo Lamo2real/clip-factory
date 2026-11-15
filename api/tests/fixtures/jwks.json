@@ -1,0 +1,17 @@
+{
+ "_comment": "TEST-ONLY RSA key for the WebSocket authorizer tests. The private exponent is published here on purpose; it signs nothing real.",
+ "keys": [
+  {
+   "kty": "RSA",
+   "alg": "RS256",
+   "use": "sig",
+   "kid": "test-key-1",
+   "e": "AQAB",
+   "n": "2k_1OO9qI94J3quiNCWpjldJUN6WGVXlkARj3JiEjA_pTppuoRenCTbpV4vSHM5WbZXk70jgQX8jgeC6znrmUGCj6ZPed6BeHrN7aop4ydbymQbnIMqTyHVOAlSIK9qNL0p9MpmdIuWK5F37f9WldUbEKLurVqyfwTFum7xJ8WOUiykcALFRR5AUje_Ou1TS-GzBsVYguaMaVzRwGNB_PpGADgjFvHINowzR-ga2FFOER1u98TyFufHAt6bi3A2wXI8mxucpLuMf7V9dXHvAyu5EtwfFCy9FsX77WyIN3AaiMc-HMnpnR1Q-AWvv_13z6OEIWRW7axLhlUh6UliQTQ"
+  }
+ ],
+ "private": {
+  "kid": "test-key-1",
+  "d": "AcC9n2FPuWRk9LeDum3urEMH5y6U3Ff2W2GJkIQDk9Aq7q0rHc1O1gUayyAA43o0k82UuIzcheg5kUp6jLk1qkk9TVWgrGzeh2utFC-gA_4WaE4Qzj2jGqUo1Mde0n6dUC7lEY0ADNdjB4qVA9BSTa9AgMhSs-1mZZGZjNZfbmdD_X_Bo_s6Bs0JOK3Qm0nQoqYwv-AMVhkMY4DQzZIw8TlKnxVr4rqRFdmJDG37lW-KlL1-yiUAEMPDdjn_0LvkDxDqcxskWCrEKjwBMRcg_G6ivcPg1sHnQDXaHf4KEdMzfJGLpuPFmmn_CE1_reHRveIkrR_mBlEkSTdBfgD_pQ"
+ }
+}

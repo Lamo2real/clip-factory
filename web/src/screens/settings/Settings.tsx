@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import { putFile } from "../../api/upload.ts";
@@ -16,6 +16,16 @@ import { GetAppPanel } from "../../components/GetApp.tsx";
 import { SkillsSection } from "./SkillsSection.tsx";
 
 const PLATFORMS: Platform[] = ["youtube", "instagram", "facebook", "tiktok", "x"];
+
+/**
+ * The platform the owner just came back from connecting (the hooks API sends them to
+ * /settings?account={platform}&status=coming_soon until connecting arrives, docs/CONTRACTS.md §14.3), or null.
+ */
+export function comingSoonPlatform(search: string): Platform | null {
+  const q = new URLSearchParams(search);
+  const p = q.get("account") as Platform | null;
+  return q.get("status") === "coming_soon" && p && PLATFORMS.includes(p) ? p : null;
+}
 
 const SECTIONS = [
   { id: "skills", label: "Skills" },
@@ -59,8 +69,13 @@ function AccountsSection() {
   const { data } = useLoad(() => api().listAccounts());
   const toast = useToast();
   const id = useId();
+  const [soon] = useState(() => comingSoonPlatform(typeof location === "undefined" ? "" : location.search));
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (soon) section.current?.scrollIntoView({ block: "start" });
+  }, [soon]);
   return (
-    <section className="settings-section glass" id="accounts" aria-labelledby={`${id}-t`}>
+    <section className="settings-section glass" id="accounts" aria-labelledby={`${id}-t`} ref={section}>
       <div className="settings-section__head">
         <div>
           <h2 className="settings-section__title" id={`${id}-t`}>
@@ -69,6 +84,12 @@ function AccountsSection() {
           <p className="muted">Clips you keep are posted to the accounts you connect here. Connecting is coming in a later update.</p>
         </div>
       </div>
+      {soon ? (
+        <p className="callout callout--info" role="status">
+          <Icon name="info" size={18} />
+          <span>Connecting {PLATFORM_LABEL[soon]} arrives soon.</span>
+        </p>
+      ) : null}
       <ul className="account-grid">
         {PLATFORMS.map((p) => {
           const acc = data?.find((a) => a.platform === p);

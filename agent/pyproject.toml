@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Clip Factory Cloud: the AgentCore runtime that turns a long video into reviewed vertical clips."
 requires-python = ">=3.13"
 dependencies = [
-  "boto3>=1.40",
+  "boto3>=1.43",  # durable callback APIs and the s3vectors client (docs/CONTRACTS.md §14.10)
   "claude-agent-sdk>=0.2.178",
   "starlette>=1.0",
   "uvicorn>=0.35",

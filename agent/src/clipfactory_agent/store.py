@@ -104,6 +104,13 @@ def from_ddb(value: Any) -> Any:
     return value
 
 
+def _plain(value: Any) -> str:
+    """A string attribute as the resource's client returns it: plain, or still typed (``{"S": ...}``)."""
+    if isinstance(value, dict):
+        value = value.get("S")
+    return str(value or "")
+
+
 class Store:
     """Thin async wrapper over boto3; every call runs in a worker thread and retries transient errors."""
 
@@ -254,6 +261,31 @@ class Store:
             KeyConditionExpression=Key("gsi1pk").eq(f"JOB#{job_id}") & Key("gsi1sk").begins_with("CLIP#"),
         )
         return [from_ddb(i) for i in r.get("Items", [])]
+
+    async def clip_statuses(self, user_id: str, clip_ids: Iterable[str]) -> dict[str, str]:
+        """``{clipId: status}`` for the owner's Clip items that exist (BatchGetItem; missing clips are absent)."""
+        ids = list(dict.fromkeys(i for i in clip_ids if i))
+        out: dict[str, str] = {}
+        client = self.table.meta.client
+        for start in range(0, len(ids), 100):
+            request: dict[str, Any] = {
+                self.table.name: {
+                    "Keys": [{"pk": user_pk(user_id), "sk": f"CLIP#{i}"} for i in ids[start : start + 100]],
+                    "ProjectionExpression": "clipId, #s",
+                    "ExpressionAttributeNames": {"#s": "status"},
+                }
+            }
+            for _ in range(5):
+                r = await self._call("ddb.clip_statuses", client.batch_get_item, RequestItems=request)
+                for row in (r.get("Responses") or {}).get(self.table.name, []):
+                    out[_plain(row.get("clipId"))] = _plain(row.get("status"))
+                request = r.get("UnprocessedKeys") or {}
+                if not request:
+                    break
+                await asyncio.sleep(0.2)
+            else:
+                raise RuntimeError("DynamoDB left clip keys unprocessed.")
+        return out
 
     async def put_clip(self, item: dict[str, Any], *, fence: Fence | None = None) -> None:
         if fence is None:

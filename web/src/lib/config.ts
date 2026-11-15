@@ -3,6 +3,8 @@ export interface RuntimeConfig {
   userPoolId: string;
   userPoolClientId: string;
   apiUrl: string;
+  /** WebSocket API for live updates (docs/CONTRACTS.md §4, §14.2). Absent in old configs: polling only. */
+  wsUrl?: string;
   version: string;
 }
 
@@ -14,6 +16,8 @@ const MOCK_CONFIG: RuntimeConfig = {
   userPoolId: "eu-north-1_mock",
   userPoolClientId: "mock",
   apiUrl: "mock://api",
+  // Mock mode runs a fake socket on the in-memory store, so live updates can be seen and tested offline.
+  wsUrl: "mock://live",
   version: "mock",
 };
 
@@ -30,7 +34,8 @@ export async function loadConfig(fetcher: typeof fetch = fetch): Promise<Runtime
   if (!res.ok) throw new Error(`config.json ${res.status}`);
   const body = (await res.json()) as Partial<RuntimeConfig>;
   if (!valid(body)) throw new Error("config.json is missing fields");
-  current = { ...body, apiUrl: body.apiUrl.replace(/\/+$/, ""), version: body.version ?? "" };
+  const wsUrl = typeof body.wsUrl === "string" && /^wss:\/\/[^\s?#]+$/.test(body.wsUrl) ? body.wsUrl.replace(/\/+$/, "") : undefined;
+  current = { ...body, apiUrl: body.apiUrl.replace(/\/+$/, ""), wsUrl, version: body.version ?? "" };
   return current;
 }
 

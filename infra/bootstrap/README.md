@@ -29,7 +29,8 @@ What the role may do:
 
 * `PowerUserAccess`: every service the stack uses, but no IAM.
 * IAM only on roles named `cf-prod-*` (the roles the stack creates), `iam:PassRole` of those roles to Lambda,
-  AgentCore and EventBridge Scheduler only, and creating service-linked roles on first use of a service.
+  AgentCore and API Gateway (the account's CloudWatch logging role `cf-prod-apigw-cloudwatch`) only, and creating
+  service-linked roles on first use of a service.
 
 ## Option B: by hand in the IAM console
 

@@ -32,3 +32,16 @@ run "default_certificate_keeps_the_policy_cloudfront_reports" {
     error_message = "minimum_protocol_version must stay unset (TLSv1) with cloudfront_default_certificate = true: CloudFront ignores any other value, so every plan would show a change that never applies."
   }
 }
+
+# docs/CONTRACTS.md §14.2: the web app opens a WebSocket to wss://{id}.execute-api.{region}.amazonaws.com/live.
+run "csp_allows_the_websocket_api" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for d in split("; ", one(one(aws_cloudfront_response_headers_policy.security.security_headers_config).content_security_policy).content_security_policy) :
+      startswith(d, "connect-src ") && contains(split(" ", d), "wss://*.execute-api.us-east-1.amazonaws.com") && contains(split(" ", d), "https://*.execute-api.us-east-1.amazonaws.com")
+    ])
+    error_message = "connect-src must allow both the HTTP API (https://) and the WebSocket API (wss://) in the region."
+  }
+}

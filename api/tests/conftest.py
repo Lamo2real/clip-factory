@@ -11,15 +11,19 @@ import pytest
 from clipfactory_api import db, s3
 from clipfactory_api.agent_client import AgentClient
 from clipfactory_api.app import App
+from clipfactory_api.flow_client import FlowClient
 from clipfactory_api.http import dispatch
 from clipfactory_api.ids import ulid
 from clipfactory_api.routes import ROUTES
 from clipfactory_api.skills import load_builtins
-from fakes import FakeAgentCore, FakeS3, FakeSQS, FakeTable
+from clipfactory_api.vectors import Vectors
+from fakes import FakeAgentCore, FakeEmbeddings, FakeLambda, FakeS3, FakeS3Vectors, FakeTable
 
 USER = "11111111-2222-3333-4444-555555555555"
 OTHER = "99999999-8888-7777-6666-555555555555"
 NOW = datetime(2026, 11, 15, 12, 0, 0, tzinfo=UTC)
+JOB_FLOW_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-job-flow:live"
+CLIP_FLOW_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-clip-flow:live"
 BUILTIN_MD = """---
 name: "short-form-video-playbook"
 description: Plan, script and hook short clips.
@@ -53,8 +57,23 @@ def agentcore() -> FakeAgentCore:
 
 
 @pytest.fixture
-def sqs() -> FakeSQS:
-    return FakeSQS()
+def lambda_client() -> FakeLambda:
+    return FakeLambda()
+
+
+@pytest.fixture
+def s3v() -> FakeS3Vectors:
+    return FakeS3Vectors()
+
+
+@pytest.fixture
+def embeddings() -> FakeEmbeddings:
+    return FakeEmbeddings()
+
+
+@pytest.fixture
+def vectors(s3v: FakeS3Vectors, embeddings: FakeEmbeddings) -> Vectors:
+    return Vectors(s3v, embeddings, "cf-prod-vectors-123", "clips", "amazon.titan-embed-text-v2:0")
 
 
 @pytest.fixture
@@ -77,14 +96,20 @@ def store(table: FakeTable) -> db.Store:
 
 @pytest.fixture
 def app(
-    store: db.Store, s3_client: FakeS3, agentcore: FakeAgentCore, sqs: FakeSQS, clock: Clock, builtin_dir: Path
+    store: db.Store,
+    s3_client: FakeS3,
+    agentcore: FakeAgentCore,
+    lambda_client: FakeLambda,
+    vectors: Vectors,
+    clock: Clock,
+    builtin_dir: Path,
 ) -> App:
     return App(
         store=store,
         media=s3.Media(s3_client, "cf-prod-media-123"),
         agent=AgentClient(agentcore, "arn:aws:bedrock-agentcore:eu-north-1:123:runtime/cf_prod_clip_agent"),
-        queue=sqs,
-        queue_url="https://sqs.eu-north-1.amazonaws.com/123/cf-prod-publish",
+        flows=FlowClient(lambda_client, JOB_FLOW_ARN, CLIP_FLOW_ARN),
+        vectors=vectors,
         version="abc123",
         clock=clock,
         email_lookup=lambda sub, token: "owner@example.com" if token else None,

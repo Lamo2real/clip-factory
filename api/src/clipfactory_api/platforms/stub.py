@@ -8,6 +8,8 @@ LABELS = {"youtube": "YouTube", "instagram": "Instagram", "facebook": "Facebook"
 
 
 class StubAdapter:
+    idempotent = True
+
     def __init__(self, platform: str) -> None:
         self.platform = platform
 
@@ -15,7 +17,7 @@ class StubAdapter:
         label = LABELS.get(self.platform, self.platform)
         return NotConnectedError(f"Posting to {label} arrives in the next phase.")
 
-    def publish(self, clip: Record, account: Record | None) -> Published:
+    def publish(self, clip: Record, account: Record | None, *, idempotency_key: str) -> Published:
         raise self._not_connected()
 
     def metrics(self, post: Record, account: Record | None) -> Metrics:

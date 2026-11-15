@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from .base import Metrics, NotConnectedError, PlatformAdapter, Published, PublishError
-from .stub import StubAdapter
+from .base import Metrics, NotConnectedError, PlatformAdapter, Published, PublishError, RetryablePublishError
+from .stub import LABELS, StubAdapter
 
 PLATFORMS: tuple[str, ...] = ("youtube", "instagram", "facebook", "tiktok", "x")
 
@@ -17,6 +17,10 @@ def adapter_for(platform: str) -> PlatformAdapter:
         raise NotConnectedError(f"Unknown platform: {platform}.") from e
 
 
+def label(platform: str) -> str:
+    return LABELS.get(platform, platform)
+
+
 __all__ = [
     "PLATFORMS",
     "Metrics",
@@ -24,5 +28,7 @@ __all__ = [
     "PlatformAdapter",
     "PublishError",
     "Published",
+    "RetryablePublishError",
     "adapter_for",
+    "label",
 ]

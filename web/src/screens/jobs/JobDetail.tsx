@@ -9,7 +9,9 @@ import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, ErrorPanel, LinkButton, Pill, Progress, Skeleton, type Tone } from "../../components/ui.tsx";
 import { burst } from "../../lib/confetti.ts";
 import { MOMENT_LABEL, plural, relative, timecode } from "../../lib/format.ts";
-import { useLoad, usePoll } from "../../lib/hooks.ts";
+import { useLoad } from "../../lib/hooks.ts";
+import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
+import { applyClipEvent, byRank, withMedia } from "../../lib/liveCache.ts";
 
 const CLIP_STATUS: Record<ClipStatus, { label: string; tone: Tone }> = {
   review: { label: "Needs a look", tone: "tomato" },
@@ -36,15 +38,47 @@ export function JobDetail({ jobId }: { jobId: string }) {
   const job = data?.job;
   const working = job?.status === "running" || job?.status === "queued";
 
-  usePoll(async () => {
-    const next = await api().getJob(jobId);
-    if (lastStatus.current && lastStatus.current !== "ready" && next.job.status === "ready") {
+  /** The job just finished: a small celebration, once. */
+  function celebrate(next: Job) {
+    if (lastStatus.current && lastStatus.current !== "ready" && next.status === "ready") {
+      lastStatus.current = "ready";
       burst();
-      toast.success(`Done. ${plural(next.job.clipCount, "clip")} ready for review.`);
+      toast.success(`Done. ${plural(next.clipCount, "clip")} ready for review.`);
       void refresh().catch(() => undefined);
     }
+  }
+
+  const refetch = async () => {
+    const next = await api().getJob(jobId);
+    celebrate(next.job);
     setData(() => next);
-  }, working);
+  };
+
+  // Live: this job's progress and its clips as they are made. The poll is the fallback (every 30 s while live).
+  useLiveEvents(
+    (e) => {
+      if (e.type === "job" && e.id === jobId) {
+        if (e.op === "delete") return void reload();
+        if (!e.item) return;
+        const item = e.item;
+        celebrate(item);
+        setData((d) => (d ? { ...d, job: item } : d));
+      } else if (e.type === "clip") {
+        if (e.item && e.item.jobId !== jobId) return;
+        // Every clip of this job stays listed, whatever its status; a deleted one leaves.
+        const keep = (c: Clip) => c.jobId === jobId;
+        const missing = data ? applyClipEvent(data.clips, e, keep, byRank).needMedia : [];
+        setData((d) => (d ? { ...d, clips: applyClipEvent(d.clips, e, keep, byRank).clips } : d));
+        for (const clipId of missing)
+          void api()
+            .getClip(clipId)
+            .then((fresh) => setData((d) => (d ? { ...d, clips: withMedia(d.clips, fresh) } : d)))
+            .catch(() => undefined);
+      }
+    },
+    () => void refetch().catch(() => undefined),
+  );
+  useLivePoll(refetch, working);
   if (job) lastStatus.current = job.status;
 
   async function act(kind: "cancel" | "retry") {

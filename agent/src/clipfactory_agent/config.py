@@ -8,6 +8,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+DEFAULT_VECTOR_INDEX = "clips"
+DEFAULT_EMBED_MODEL_ID = "amazon.titan-embed-text-v2:0"
+
 
 @dataclass(frozen=True)
 class Config:
@@ -17,6 +20,9 @@ class Config:
     model_id: str
     skills_dir: Path
     work_root: Path
+    vector_bucket: str | None = None  # S3 Vectors bucket; unset = no "what worked before" and no clip vectors
+    vector_index: str = DEFAULT_VECTOR_INDEX
+    embed_model_id: str = DEFAULT_EMBED_MODEL_ID
 
 
 def model_from_models_json(path: Path) -> str | None:
@@ -49,4 +55,7 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         model_id=model,
         skills_dir=Path(e.get("CF_SKILLS_DIR", "/app/skills")),
         work_root=Path(e.get("CF_WORK_DIR", "/tmp/cf-work")),
+        vector_bucket=e.get("CF_VECTOR_BUCKET") or None,
+        vector_index=e.get("CF_VECTOR_INDEX") or DEFAULT_VECTOR_INDEX,
+        embed_model_id=e.get("CF_EMBED_MODEL_ID") or DEFAULT_EMBED_MODEL_ID,
     )

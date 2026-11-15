@@ -10,3 +10,12 @@ output "media_bucket" { value = module.storage.media_bucket }
 output "table_name" { value = module.data.table_name }
 output "agent_runtime_arn" { value = module.agent.runtime_arn }
 output "ecr_repository_url" { value = module.agent.ecr_repository_url }
+
+# docs/CONTRACTS.md §14.8.
+output "ws_url" { value = module.realtime.ws_url } # config.json wsUrl (required by write-web-config.sh)
+output "hooks_url" { value = module.hooks.hooks_url }
+output "vector_bucket" { value = module.vectors.vector_bucket }
+output "vector_index" { value = module.vectors.vector_index }
+output "job_flow_alias_arn" { value = module.flows.job_flow_alias_arn }
+output "clip_flow_alias_arn" { value = module.flows.clip_flow_alias_arn }
+output "hooks_verify_token_parameter" { value = module.hooks.verify_token_parameter }

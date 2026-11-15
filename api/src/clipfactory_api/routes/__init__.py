@@ -17,6 +17,7 @@ ROUTES: list[Route] = [
     route("GET", "/v1/clips", clips.list_clips),
     route("GET", "/v1/clips/{clipId}", clips.get_clip),
     route("PATCH", "/v1/clips/{clipId}", clips.patch_clip),
+    route("GET", "/v1/clips/{clipId}/similar", clips.similar),
     route("POST", "/v1/clips/{clipId}/confirm", clips.confirm),
     route("POST", "/v1/clips/{clipId}/decline", clips.decline),
     route("GET", "/v1/skills", skills.list_skills),

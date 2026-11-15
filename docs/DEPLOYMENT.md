@@ -1,8 +1,13 @@
 # Deployment
 
 Production deploys from GitHub Actions on every push to `main`, through an IAM role that GitHub assumes with OIDC.
-There are no AWS access keys anywhere. This page covers the one-time setup, what a deploy does, the first sign-in,
-rolling back and tearing everything down.
+There are no AWS access keys anywhere. This page covers the one-time setup (including two account-level settings),
+what a deploy does, the first sign-in, rolling back and tearing everything down.
+
+**What is left for the owner.** Everything is in Terraform except four one-time steps: the OIDC deploy role
+(section 2, or `infra/bootstrap`), the two GitHub settings (section 3), the Bedrock data-retention opt-in for Claude
+Fable 5.1 (section 4) and, only if the account's API Gateway logging role is managed elsewhere, one Terraform
+variable (section 5).
 
 | Setting | Where | Required | Value |
 |---|---|---|---|
@@ -31,7 +36,9 @@ aws iam create-open-id-connect-provider \
 
 ### 2. The deploy role
 
-Create a role named, for example, `cf-github-deploy` with this trust policy. Replace `<ACCOUNT_ID>`. Only workflows
+The quickest way is the Terraform in [`infra/bootstrap`](../infra/bootstrap/README.md), run once with your own
+administrator credentials: it creates the OIDC provider (if missing) and the role, with the trust and permissions
+below, and prints the ARN. To do it by hand instead, create a role named, for example, `cf-github-deploy` with this trust policy. Replace `<ACCOUNT_ID>`. Only workflows
 running on `main` of `Lamo2real/clip-factory-legal` can assume it; pull requests and other branches cannot.
 
 ```json
@@ -61,9 +68,17 @@ as the subject instead; add that string to the `sub` list as well. If the organi
 format, the failing step's error ("Not authorized to perform sts:AssumeRoleWithWebIdentity") means the `sub` above
 does not match; compare it with the format in the organisation's settings.
 
-**Permissions.** The role creates and updates everything in [ARCHITECTURE.md](ARCHITECTURE.md). The simplest choice,
-in line with the owner's convenience-first stance, is the AWS managed policy `AdministratorAccess`, since only `main`
-of this repository can assume the role. A narrower policy that still works:
+Set the role's **maximum session duration to 2 hours** (the first deploy builds the agent image inside the run).
+
+**Permissions.** The role creates and updates everything in [ARCHITECTURE.md](ARCHITECTURE.md). Three choices, from
+broadest to narrowest:
+
+- `AdministratorAccess`, in line with the owner's convenience-first stance, since only `main` of this repository can
+  assume the role.
+- What `infra/bootstrap` sets up: `PowerUserAccess` (every service, no IAM) plus IAM limited to roles named
+  `cf-prod-*`. Its `iam:PassRole` condition must list `lambda.amazonaws.com`, `bedrock-agentcore.amazonaws.com` and
+  `apigateway.amazonaws.com` (the last one for the API Gateway logging role, section 5).
+- The policy below, which lists only what the stack uses:
 
 ```json
 {
@@ -73,12 +88,37 @@ of this repository can assume the role. A narrower policy that still works:
       "Sid": "ServicesClipFactoryUses",
       "Effect": "Allow",
       "Action": [
-        "s3:*", "cloudfront:*", "cognito-idp:*", "apigateway:*", "lambda:*", "dynamodb:*", "sqs:*",
-        "scheduler:*", "events:*", "bedrock-agentcore:*", "bedrock:Get*", "bedrock:List*",
-        "ecr:*", "logs:*", "cloudwatch:*", "sns:*", "acm:Describe*", "acm:List*",
-        "sts:GetCallerIdentity", "tag:GetResources"
+        "s3:*", "cloudfront:*", "cognito-idp:*", "lambda:*", "dynamodb:*",
+        "bedrock-agentcore:*", "bedrock:Get*", "bedrock:List*",
+        "ecr:*", "logs:*", "cloudwatch:*", "sns:*", "xray:*", "acm:Describe*", "acm:List*",
+        "ssm:DescribeParameters", "sts:GetCallerIdentity", "tag:GetResources"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "VectorBucketAndIndex",
+      "Effect": "Allow",
+      "Action": "s3vectors:*",
+      "Resource": "arn:aws:s3vectors:*:<ACCOUNT_ID>:bucket/cf-prod-vectors-*"
+    },
+    {
+      "Sid": "ApiGatewayHttpWebSocketRestAndAccount",
+      "Effect": "Allow",
+      "Action": "apigateway:*",
+      "Resource": [
+        "arn:aws:apigateway:*::/apis*", "arn:aws:apigateway:*::/restapis*",
+        "arn:aws:apigateway:*::/usageplans*", "arn:aws:apigateway:*::/account",
+        "arn:aws:apigateway:*::/tags*"
+      ]
+    },
+    {
+      "Sid": "HooksVerifyTokenParameter",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:PutParameter", "ssm:GetParameter", "ssm:GetParameters", "ssm:DeleteParameter",
+        "ssm:AddTagsToResource", "ssm:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:ssm:*:<ACCOUNT_ID>:parameter/cf-prod/*"
     },
     {
       "Sid": "OwnRolesOnly",
@@ -100,9 +140,14 @@ of this repository can assume the role. A narrower policy that still works:
 ```
 
 What each group is for: S3 (web, media and state buckets), CloudFront (distribution, Origin Access Control,
-invalidations), Cognito (user pool, client, the owner), API Gateway (HTTP API), Lambda, DynamoDB, SQS, EventBridge
-Scheduler and rules, AgentCore (runtime), Bedrock (read model and profile details), ECR (repository, image push),
-CloudWatch Logs and alarms, SNS (alarm topic), IAM (the `cf-prod-*` roles the functions and runtime use).
+invalidations), Cognito (user pool, client, the owner), Lambda (seven functions; for the two durable ones also
+`PublishVersion`, the `live` aliases, the event source mapping, and `ListDurableExecutionsByFunction` and
+`StopDurableExecution`, which a destroy uses to stop running executions), DynamoDB (table, its stream:
+`DescribeStream`, `ListStreams`), S3 Vectors (bucket `cf-prod-vectors-*` and its index), API Gateway (the HTTP,
+WebSocket and REST APIs, the usage plan and the account-level logging setting), SSM (the webhook verify token under
+`/cf-prod/`), AgentCore (runtime), Bedrock (read model and profile details), ECR (repository, image push), CloudWatch
+Logs and alarms, X-Ray, SNS (alarm topic), IAM (the `cf-prod-*` roles, including `cf-prod-apigw-cloudwatch`, which is
+passed to API Gateway). SQS, EventBridge and EventBridge Scheduler are no longer used.
 
 Copy the role's ARN.
 
@@ -116,11 +161,52 @@ In `Lamo2real/clip-factory-legal` → Settings → Secrets and variables → Act
 Until `CF_DEPLOY_ROLE_ARN` and `CF_OWNER_EMAIL` are set, the deploy workflow stops at its first step and says which
 one is missing. CI keeps running on every push.
 
-### 4. Bedrock model access
+### 4. Bedrock model access and data retention
 
-Anthropic models on Bedrock need a one-time use-case form per AWS account. Open the Bedrock console in `eu-north-1`
-→ Model access (or Model catalog), find Claude Fable 5.1 and submit the form if asked. Without it the agent's first
-model call fails with an access error.
+Two one-time steps per AWS account, both in `eu-north-1`:
+
+1. **Anthropic use-case form.** Open the Bedrock console in `eu-north-1` → Model catalog, find Claude Fable 5.1 and
+   submit the form if asked. Titan Text Embeddings V2 (`amazon.titan-embed-text-v2:0`, used for the learning memory)
+   needs no form; if the account still shows a Model access page, enable it there too.
+2. **Data retention mode `aws_review`.** Claude Fable 5.1 is available only to accounts that allow AWS to keep prompts
+   and answers for up to 30 days for human review by AWS (the content is not shared with Anthropic). It is a
+   per-Region account setting with no console page yet. Signed in to the account (for example as an administrator):
+
+   ```bash
+   aws bedrock put-account-data-retention --mode aws_review --region eu-north-1
+   aws bedrock get-account-data-retention --region eu-north-1     # shows "mode": "aws_review"
+   ```
+
+   If your AWS CLI does not know the command or the value yet, update the CLI first. An account already set to the
+   older `provider_data_share` mode needs no change. Because Fable 5.1 is reached through the global cross-Region
+   profile, retained data may be stored in the Region that served the request.
+
+Without these, the agent's first model call (and the clip flow's `distil` step) fails with an access or
+`ValidationException` error, and the job shows a plain failure.
+
+### 5. API Gateway logging role (one per account and Region)
+
+The REST API's execution and access logs and the WebSocket API's logs need API Gateway's account-level CloudWatch
+role. Terraform creates `cf-prod-apigw-cloudwatch` (trusted by `apigateway.amazonaws.com`, policy
+`AmazonAPIGatewayPushToCloudWatchLogs`) and sets it as the account's role in `eu-north-1`
+(`aws_api_gateway_account`). There is only one such setting per account and Region:
+
+- **Nothing else in the account uses it** (the usual case): leave `manage_api_gateway_account = true` (the default).
+- **Another stack already manages it**: set `manage_api_gateway_account = false` (for example as `TF_VAR_` in the
+  deploy workflow or in `prod.tfvars`). That account's existing role is then used and must already be set
+  (API Gateway console → Settings → CloudWatch log role ARN).
+
+Destroying this stack does not unset the account setting; it simply stops managing it.
+
+### 6. After the first deploy: webhook details for phase 2
+
+Nothing to do today. When a platform app is registered in phase 2, its console needs:
+
+| Setting | Value |
+|---|---|
+| Webhook / callback URL | `{hooks_url}/hooks/{platform}` (Terraform output `hooks_url`) |
+| OAuth redirect URL | `{hooks_url}/oauth/{platform}/callback` |
+| Meta verify token | the SecureString `/cf-prod/hooks/verify-token` in Systems Manager → Parameter Store (eu-north-1) → Show decrypted value. Terraform generates it and never stores it in its state. |
 
 ## What a deploy does
 
@@ -135,12 +221,18 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    tagged with a hash of the agent's sources, so unchanged code is not rebuilt.
 5. **Terraform** `init` (S3 backend with lockfile), `plan`, then `apply` of exactly that plan. No manual approval
    (the owner's choice).
+   The apply creates or updates every resource, including the three API Gateway APIs (REST first, then WebSocket,
+   because API Gateway allows one deployment every 5 seconds per account), the seven Lambdas (the two durable ones
+   publish a new version and move their `live` alias; running executions stay on their old version), the stream
+   trigger, the vector bucket and index, the SSM parameter and the alarms. No extra deploy job is needed for them:
+   they all come from the same Lambda zip and the same `terraform apply`.
 6. **Web**: [scripts/write-web-config.sh](../scripts/write-web-config.sh) writes `config.json` from the Terraform
-   outputs; the build is synced to the web bucket and CloudFront is invalidated.
+   outputs, including `wsUrl` from `ws_url` (required; the script stops if it is missing); the build is synced to the
+   web bucket and CloudFront is invalidated.
 7. **What's new**: `scripts/release-areas.sh <prev-sha> <new-sha>` turns the commits since the live version into up to
    three area labels ([how to write them](GIT_WORKFLOW.md#area-lines-what-the-update-bar-says)), and the deploy writes
    `/version.json` last, never cached. Open apps show the update bar within 5 minutes
-   ([ARCHITECTURE.md flow 8](ARCHITECTURE.md#8-updates-versionjson-release-areas-and-the-update-bar)).
+   ([ARCHITECTURE.md flow 11](ARCHITECTURE.md#11-updates-versionjson-release-areas-and-the-update-bar)).
 8. **Smoke test**: `GET /v1/health` must answer `{ "ok": true }`.
 9. **Desktop app** (job `desktop`, only when needed): see [Desktop downloads](#desktop-downloads).
 
@@ -152,7 +244,7 @@ adds about 10–15 minutes on the macOS and Windows runners, in parallel, after 
 
 The Mac `.dmg` and Windows `.exe` offered by **Get the app** are built by the `desktop` job in
 [deploy.yml](../.github/workflows/deploy.yml) ([CONTRACTS.md §12.3](CONTRACTS.md#123-desktop-wrapper-desktop-tauri-v2),
-[ARCHITECTURE.md flow 9](ARCHITECTURE.md#9-get-the-app-and-the-desktop-wrapper)).
+[ARCHITECTURE.md flow 12](ARCHITECTURE.md#12-get-the-app-and-the-desktop-wrapper)).
 
 | | Mac | Windows |
 |---|---|---|
@@ -228,7 +320,10 @@ You stay signed in as long as you open the app at least once every 30 days ([SEC
 - **Infrastructure state**: the state bucket is versioned; an older state version can be restored if a run is
   interrupted. Prefer fixing forward with a new commit.
 - **Data**: DynamoDB point-in-time recovery restores the table to any second in the last 35 days (into a new table).
-  Clips in S3 are not versioned; declined clips are deleted on purpose.
+  Clips in S3 are not versioned; declined clips are deleted on purpose. The learning memory can be rebuilt from the
+  Clip items (the clip flow embeds a clip again when its vector is missing).
+- **Durable flows**: a rollback moves the `live` alias back; executions already running finish on the version they
+  started on.
 
 ## Destroying everything
 
@@ -241,5 +336,7 @@ terraform destroy -var "owner_email=<email>" -var "agent_image_tag=<any>"
 ```
 
 Empty the media and web buckets first if the destroy stops on "bucket not empty", and delete the ECR images if the
-repository refuses to go. The Terraform state bucket, the OIDC provider and the deploy role are not managed by this
+repository refuses to go. The vector bucket has `force_destroy = false`: Terraform deletes the `clips` index first,
+then the bucket. Deleting the two durable functions stops their running executions first and can take up to an hour
+(Terraform waits up to 60 minutes). The API Gateway account logging setting stays as it was. The Terraform state bucket, the OIDC provider and the deploy role are not managed by this
 Terraform; delete them by hand if you no longer need them. GitHub Pages and the legal pages are not affected.

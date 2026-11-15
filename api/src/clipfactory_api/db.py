@@ -19,6 +19,8 @@ from .errors import bad_request
 
 Item = dict[str, Any]
 KEY_FIELDS = ("pk", "sk", "gsi1pk", "gsi1sk")
+MAX_TRANSACT_ITEMS = 100
+MAX_BATCH_GET = 100
 
 
 class ConditionFailed(Exception):
@@ -31,7 +33,11 @@ class TableLike(Protocol):
     def update_item(self, **kwargs: Any) -> Any: ...
     def delete_item(self, **kwargs: Any) -> Any: ...
     def query(self, **kwargs: Any) -> Any: ...
-    def scan(self, **kwargs: Any) -> Any: ...
+
+    @property
+    def name(self) -> str: ...
+    @property
+    def meta(self) -> Any: ...
 
 
 # --- key builders ---------------------------------------------------------------------------------------------
@@ -62,6 +68,10 @@ def post_sk(post_id: str) -> str:
 
 def learning_sk(learning_id: str) -> str:
     return f"LEARNING#{learning_id}"
+
+
+def conn_sk(connection_id: str) -> str:
+    return f"CONN#{connection_id}"
 
 
 # --- number conversion ----------------------------------------------------------------------------------------
@@ -130,6 +140,60 @@ def decode_cursor(cursor: str | None, expected_pk: str, sk_prefix: str) -> Item 
     return key
 
 
+# --- update requests ------------------------------------------------------------------------------------------
+
+
+def update_request(
+    pk: str,
+    sk: str,
+    set_fields: Mapping[str, Any],
+    *,
+    remove: Iterable[str] = (),
+    expect_in: Mapping[str, Iterable[Any]] | None = None,
+    expect_absent: Iterable[str] = (),
+) -> dict[str, Any]:
+    """The UpdateItem parameters (also usable inside a transaction). The item must exist; ``expect_in`` and
+    ``expect_absent`` add conditions."""
+    names: dict[str, str] = {}
+    values: dict[str, Any] = {}
+    sets = []
+    for i, (field, value) in enumerate(set_fields.items()):
+        names[f"#s{i}"] = field
+        values[f":s{i}"] = to_dynamo(value)
+        sets.append(f"#s{i} = :s{i}")
+    removes = []
+    for i, field in enumerate(remove):
+        names[f"#r{i}"] = field
+        removes.append(f"#r{i}")
+    expression = ""
+    if sets:
+        expression += "SET " + ", ".join(sets)
+    if removes:
+        expression += (" " if expression else "") + "REMOVE " + ", ".join(removes)
+    if not expression:
+        raise ValueError("update needs at least one field")
+    conditions = ["attribute_exists(pk)"]
+    for i, (field, allowed) in enumerate((expect_in or {}).items()):
+        names[f"#c{i}"] = field
+        placeholders = []
+        for j, value in enumerate(allowed):
+            values[f":c{i}_{j}"] = to_dynamo(value)
+            placeholders.append(f":c{i}_{j}")
+        conditions.append(f"#c{i} IN ({', '.join(placeholders)})")
+    for i, field in enumerate(expect_absent):
+        names[f"#a{i}"] = field
+        conditions.append(f"attribute_not_exists(#a{i})")
+    kwargs: dict[str, Any] = {
+        "Key": {"pk": pk, "sk": sk},
+        "UpdateExpression": expression,
+        "ConditionExpression": " AND ".join(conditions),
+        "ExpressionAttributeNames": names,
+    }
+    if values:
+        kwargs["ExpressionAttributeValues"] = values
+    return kwargs
+
+
 # --- the store ------------------------------------------------------------------------------------------------
 
 
@@ -165,48 +229,48 @@ class Store:
         *,
         remove: Iterable[str] = (),
         expect_in: Mapping[str, Iterable[Any]] | None = None,
+        expect_absent: Iterable[str] = (),
     ) -> Item:
         """Sets and removes top-level fields on an existing item and returns the new item.
 
         ``expect_in`` makes the write conditional: each named field must hold one of the given values.
+        ``expect_absent`` names fields that must not exist yet.
         """
-        names: dict[str, str] = {}
-        values: dict[str, Any] = {}
-        sets = []
-        for i, (field, value) in enumerate(set_fields.items()):
-            names[f"#s{i}"] = field
-            values[f":s{i}"] = to_dynamo(value)
-            sets.append(f"#s{i} = :s{i}")
-        removes = []
-        for i, field in enumerate(remove):
-            names[f"#r{i}"] = field
-            removes.append(f"#r{i}")
-        expression = ""
-        if sets:
-            expression += "SET " + ", ".join(sets)
-        if removes:
-            expression += (" " if expression else "") + "REMOVE " + ", ".join(removes)
-        if not expression:
-            raise ValueError("update needs at least one field")
-        conditions = ["attribute_exists(pk)"]
-        for i, (field, allowed) in enumerate((expect_in or {}).items()):
-            names[f"#c{i}"] = field
-            placeholders = []
-            for j, value in enumerate(allowed):
-                values[f":c{i}_{j}"] = to_dynamo(value)
-                placeholders.append(f":c{i}_{j}")
-            conditions.append(f"#c{i} IN ({', '.join(placeholders)})")
-        kwargs: dict[str, Any] = {
-            "Key": {"pk": pk, "sk": sk},
-            "UpdateExpression": expression,
-            "ConditionExpression": " AND ".join(conditions),
-            "ExpressionAttributeNames": names,
-            "ReturnValues": "ALL_NEW",
-        }
-        if values:
-            kwargs["ExpressionAttributeValues"] = values
+        kwargs = update_request(pk, sk, set_fields, remove=remove, expect_in=expect_in, expect_absent=expect_absent)
+        kwargs["ReturnValues"] = "ALL_NEW"
         out = self._call(self._table.update_item, **kwargs)
         return dict(from_dynamo(out.get("Attributes", {})))
+
+    def transact(self, *, puts: Iterable[Mapping[str, Any]] = (), updates: Iterable[Mapping[str, Any]] = ()) -> None:
+        """All-or-nothing TransactWriteItems. ``puts`` are new items (each must not exist yet); ``updates`` are
+        requests built by ``update_request``. A failed condition anywhere raises ``ConditionFailed``."""
+        name = self._table.name
+        actions: list[dict[str, Any]] = [{"Update": {"TableName": name, **u}} for u in updates]
+        actions += [
+            {"Put": {"TableName": name, "Item": to_dynamo(p), "ConditionExpression": "attribute_not_exists(pk)"}}
+            for p in puts
+        ]
+        if not actions:
+            return
+        if len(actions) > MAX_TRANSACT_ITEMS:
+            raise ValueError("too many items for one transaction")
+        self._call(self._table.meta.client.transact_write_items, TransactItems=actions)
+
+    def batch_get(self, keys: Iterable[tuple[str, str]]) -> list[Item]:
+        """The items that exist among ``keys`` (BatchGetItem, at most 100 keys per call), in no particular order."""
+        wanted = [{"pk": pk, "sk": sk} for pk, sk in dict.fromkeys(keys)]
+        found: list[Item] = []
+        client = self._table.meta.client
+        name = self._table.name
+        for start in range(0, len(wanted), MAX_BATCH_GET):
+            request: dict[str, Any] = {name: {"Keys": wanted[start : start + MAX_BATCH_GET], "ConsistentRead": True}}
+            for _ in range(5):  # unprocessed keys come back under throttling; a few rounds always clear them
+                out = client.batch_get_item(RequestItems=request)
+                found.extend(from_dynamo(i) for i in out.get("Responses", {}).get(name, []))
+                request = out.get("UnprocessedKeys") or {}
+                if not request:
+                    break
+        return found
 
     def query_page(
         self,
@@ -263,37 +327,12 @@ class Store:
             start = page.last_key
         return items[:cap]
 
-    def scan_jobs(self, statuses: Iterable[str]) -> list[Item]:
-        """Jobs in the given states across all owners (the watchdog's view)."""
-        return self.scan_type("job", "status", statuses)
-
-    def scan_type(self, item_type: str, field: str, allowed: Iterable[str]) -> list[Item]:
-        """Items of one type whose ``field`` holds one of ``allowed``, across all owners."""
-        values: dict[str, Any] = {":type": item_type}
-        placeholders = []
-        for i, value in enumerate(allowed):
-            values[f":v{i}"] = value
-            placeholders.append(f":v{i}")
-        kwargs: dict[str, Any] = {
-            "FilterExpression": f"#type = :type AND #field IN ({', '.join(placeholders)})",
-            "ExpressionAttributeNames": {"#type": "type", "#field": field},
-            "ExpressionAttributeValues": values,
-        }
-        items: list[Item] = []
-        while True:
-            out = self._table.scan(**kwargs)
-            items.extend(from_dynamo(i) for i in out.get("Items", []))
-            last = out.get("LastEvaluatedKey")
-            if not last:
-                return items
-            kwargs["ExclusiveStartKey"] = last
-
     @staticmethod
     def _call(fn: Any, **kwargs: Any) -> Any:
         try:
             return fn(**kwargs)
         except Exception as e:
             code = getattr(e, "response", {}).get("Error", {}).get("Code")
-            if code == "ConditionalCheckFailedException":
+            if code in {"ConditionalCheckFailedException", "TransactionCanceledException"}:
                 raise ConditionFailed(str(e)) from e
             raise

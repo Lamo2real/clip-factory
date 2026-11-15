@@ -92,3 +92,38 @@ def test_dockerfile_builds_the_venv_where_it_runs() -> None:
     copied = re.search(r"COPY --from=build (\S+)/\.venv (\S+)/\.venv", runtime)
     assert copied and copied.group(1) == workdir == copied.group(2)
     assert "PATH=" + workdir + "/.venv/bin" in runtime
+
+
+class FakeDdbClient:
+    def __init__(self, pages: list[dict[str, Any]]) -> None:
+        self.pages = pages
+        self.calls: list[dict[str, Any]] = []
+
+    def batch_get_item(self, **kw: Any) -> dict[str, Any]:
+        self.calls.append(kw)
+        return self.pages.pop(0)
+
+
+class FakeTable:
+    name = "cf-prod-main"
+
+    def __init__(self, client: FakeDdbClient) -> None:
+        self.meta = type("Meta", (), {"client": client})()
+
+
+async def test_clip_statuses_reads_the_owners_clips_and_retries_unprocessed_keys() -> None:
+    client = FakeDdbClient(
+        [
+            {
+                "Responses": {"cf-prod-main": [{"clipId": "A", "status": "review"}]},
+                "UnprocessedKeys": {"cf-prod-main": {"Keys": [{"pk": "USER#U", "sk": "CLIP#B"}]}},
+            },
+            {"Responses": {"cf-prod-main": [{"clipId": {"S": "B"}, "status": {"S": "declined"}}]}},
+        ]
+    )
+    store = Store.__new__(Store)
+    store.table = FakeTable(client)
+    assert await store.clip_statuses("U", ["A", "B", "C", "A"]) == {"A": "review", "B": "declined"}
+    keys = client.calls[0]["RequestItems"]["cf-prod-main"]["Keys"]
+    assert keys == [{"pk": "USER#U", "sk": f"CLIP#{i}"} for i in "ABC"]
+    assert client.calls[1]["RequestItems"] == {"cf-prod-main": {"Keys": [{"pk": "USER#U", "sk": "CLIP#B"}]}}

@@ -1,11 +1,12 @@
 [project]
 name = "clipfactory-api"
 version = "0.1.0"
-description = "Clip Factory Cloud: the API, publisher, perf-check and watchdog Lambdas."
+description = "Clip Factory Cloud: the API, durable flow, WebSocket and webhook Lambdas."
 requires-python = ">=3.13"
-# boto3 is vendored into the Lambda zip (scripts/build_lambda.py): the runtime's copy can be too old to know
-# the "bedrock-agentcore" service. uv.lock pins the exact version that ships.
-dependencies = ["boto3>=1.43"]
+# Both are vendored into the Lambda zip (scripts/build_lambda.py): the runtime's boto3 can be too old to know
+# "bedrock-agentcore", durable executions or "s3vectors", and AWS recommends bundling the durable execution SDK
+# pinned to one major version. uv.lock pins the exact versions that ship.
+dependencies = ["boto3>=1.43", "aws-durable-execution-sdk-python>=3,<4"]
 
 [dependency-groups]
 dev = [

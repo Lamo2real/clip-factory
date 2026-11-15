@@ -9,6 +9,9 @@ import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Pill, Skeleton } 
 import { burst, centerOf } from "../../lib/confetti.ts";
 import { MOMENT_LABEL, plural, timecode } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
+import { useLiveEvents } from "../../lib/live.ts";
+import { applyClipEvent, withMedia } from "../../lib/liveCache.ts";
+import { SimilarClips } from "../../components/SimilarClips.tsx";
 import { keepClip, keptMessage, STILL_WORKING } from "../../lib/keep.ts";
 import { CaptionTabs, captionsTooLong } from "./CaptionTabs.tsx";
 
@@ -45,6 +48,33 @@ export function Review({ jobId }: { jobId: string | null }) {
     el?.scrollIntoView({ block: "start" });
   }, [data]);
 
+  // Clips being kept or thrown away right here: their cards leave on their own, and live news about them waits.
+  const settling = useRef(new Set<string>());
+  const settle = (clipId: string, on: boolean) => (on ? settling.current.add(clipId) : settling.current.delete(clipId));
+
+  // Live: new clips appear as the agent finishes them; clips decided elsewhere leave; caption edits show up.
+  const waiting = (c: Clip) => c.status === "review" && (!jobId || c.jobId === jobId);
+  useLiveEvents(
+    (e) => {
+      if (e.type !== "clip" || settling.current.has(e.id)) return;
+      const missing = data ? applyClipEvent(data, e, waiting).needMedia : [];
+      setData((d) => (d ? applyClipEvent(d, e, waiting).clips : d));
+      for (const clipId of missing)
+        void api()
+          .getClip(clipId)
+          .then((fresh) => setData((d) => (d ? withMedia(d, fresh) : d)))
+          .catch(() => undefined);
+    },
+    () =>
+      void api()
+        .listClips({ status: "review", ...(jobId ? { jobId } : {}) })
+        .then((fresh) => {
+          loadedAt.current = Date.now();
+          setData(() => fresh.filter((c) => !settling.current.has(c.clipId)));
+        })
+        .catch(() => undefined),
+  );
+
   const toast = useToast();
   const { refresh } = useSession();
   const order = useRef<string[]>([]);
@@ -59,14 +89,19 @@ export function Review({ jobId }: { jobId: string | null }) {
 
   /** "Throw away" happens for real only after 8 seconds, so a slip of the finger can be undone. */
   function throwAway(clip: Clip) {
+    settle(clip.clipId, true);
     remove(clip.clipId);
     toast.undo("Clip thrown away.", {
-      onUndo: () => restore(clip),
+      onUndo: () => {
+        settle(clip.clipId, false);
+        restore(clip);
+      },
       onCommit: () => {
         api()
           .declineClip(clip.clipId)
           .then(() => refresh())
           .catch((e) => {
+            settle(clip.clipId, false);
             restore(clip);
             toast.error(`${friendlyMessage(e)} The clip is back in your list.`);
           });
@@ -114,7 +149,7 @@ export function Review({ jobId }: { jobId: string | null }) {
           <ol className="review-list">
             {data.map((c) => (
               <li key={c.clipId} id={`clip-${c.clipId}`} className="review-list__item">
-                <ReviewCard clip={c} onDone={remove} onThrowAway={throwAway} />
+                <ReviewCard clip={c} onDone={remove} onThrowAway={throwAway} onSettling={settle} />
               </li>
             ))}
           </ol>
@@ -130,10 +165,13 @@ function ReviewCard({
   clip,
   onDone,
   onThrowAway,
+  onSettling,
 }: {
   clip: Clip;
   onDone: (clipId: string) => void;
   onThrowAway: (clip: Clip) => void;
+  /** Tells the list this card is leaving (or, after a failed Keep, staying after all). */
+  onSettling: (clipId: string, on: boolean) => void;
 }) {
   const toast = useToast();
   const { refresh } = useSession();
@@ -233,6 +271,7 @@ function ReviewCard({
     setKeepNote("");
     clearTimeout(timer.current);
     settled.current = true;
+    onSettling(clip.clipId, true);
     try {
       const out = await keepClip(api(), clip.clipId, Object.keys(dirty).length ? captions : undefined);
       if (out.kind === "kept") {
@@ -251,6 +290,7 @@ function ReviewCard({
       setBusy(null);
     } catch (e) {
       settled.current = false;
+      onSettling(clip.clipId, false);
       setKeepFailed(true);
       toast.error(friendlyMessage(e));
       setBusy(null);
@@ -392,6 +432,7 @@ function ReviewCard({
         <A href={`/jobs/${clip.jobId}`} className="text-link small review-card__job">
           See the job this clip came from
         </A>
+        <SimilarClips clipId={clip.clipId} />
       </div>
     </article>
   );

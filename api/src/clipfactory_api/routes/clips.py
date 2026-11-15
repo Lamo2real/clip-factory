@@ -1,18 +1,20 @@
-"""/v1/clips: review, caption edits, confirm and decline. Nothing is published without Confirm."""
+"""/v1/clips: review, caption edits, confirm, decline and similar clips. Nothing is published without Confirm."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from .. import clips, db, s3, validate
+from .. import clips, db, posts, s3, settings, validate, vectors
 from ..app import App
 from ..clock import iso
 from ..errors import bad_request, conflict, not_found
+from ..flow_client import FlowStartError
 from ..http import Request, Response, ok
 from ..ids import is_ulid
 from ..log import log
 
-ALREADY_DECIDED = "This clip has already been confirmed or declined."
+ALREADY_DECIDED = "This clip has already been kept or thrown away."
+ALREADY_DECLINED = "This clip was thrown away, so it cannot be kept."
 
 
 def _clip_or_404(app: App, req: Request) -> dict[str, Any]:
@@ -71,37 +73,106 @@ def patch_clip(app: App, req: Request) -> Response:
 
 
 def confirm(app: App, req: Request) -> Response:
+    """Keep a clip (docs/CONTRACTS.md §14.5). Safe to repeat: the posts are created once and the durable
+    ``cf-prod-clip-flow`` start is idempotent on its execution name."""
     body = req.json()
     validate.only_keys(body, {"captions"})
     patch = clips.caption_patch(body["captions"]) if body.get("captions") is not None else {}
     item = _clip_or_404(app, req)
-    resumed = clips.claim_resume(app.store, item, app.clock())
-    if resumed is not None:
-        # An earlier Confirm stopped before the clip was queued (a timeout or an error): finish that work.
-        created = clips.publish(app.store, app.enqueue_publish, req.user_id, resumed)
-        log("info", "clip.confirm_resumed", clipId=resumed["clipId"], posts=len(created))
-        return ok({"clip": clips.public_clip(resumed, app.media), "posts": created})
-    _require_review(item)
-    now = iso(app.clock())
+    if item.get("status") == "review":
+        now = iso(app.clock())
+        fields = {
+            "status": "confirmed",
+            "decidedAt": now,
+            "captions": clips.merged_captions(item.get("captions"), patch),
+            "publishState": clips.PUBLISH_PENDING,
+            "flowRun": 1,
+        }
+        try:
+            created = posts.create_for_clip(
+                app.store,
+                req.user_id,
+                item,
+                settings.load(app.store, req.user_id),
+                now,
+                clip_fields=fields,
+                expect_status=["review"],
+            )
+        except db.ConditionFailed:
+            # Another Confirm (or a Decline) won the race: carry on from the clip's current state.
+            item = _clip_or_404(app, req)
+        else:
+            confirmed = _start_flow(app, {**item, **fields, "postsCreated": True})
+            log("info", "clip.confirmed", clipId=item["clipId"], posts=len(created))
+            return ok({"clip": clips.public_clip(confirmed, app.media), "posts": created})
+    status = item.get("status")
+    if status == "declined":
+        raise conflict(ALREADY_DECLINED)
+    if status == "review":
+        raise conflict("This clip changed while you pressed Keep. Please try again.")
+    if status == "failed":
+        item = _try_again(app, item)
+    elif status in {"confirmed", "publishing"} and item.get("publishState") == clips.PUBLISH_PENDING:
+        item = _start_flow(app, item)  # an earlier Confirm stopped before its flow started
+    return ok({"clip": clips.public_clip(item, app.media), "posts": _posts(app, req.user_id, item["clipId"])})
+
+
+def _posts(app: App, user_id: str, clip_id: str) -> list[dict[str, Any]]:
+    return [posts.public_post(p) for p in posts.posts_for_clip(app.store, user_id, clip_id, consistent=True)]
+
+
+def _start_flow(app: App, clip: dict[str, Any]) -> dict[str, Any]:
+    """Starts ``clip-{clipId}-{flowRun}``; on success the clip becomes ``publishState: started``. A failed start
+    leaves it ``pending``, so the next Confirm starts it again."""
+    run = int(clip.get("flowRun") or 1)
     try:
-        updated = app.store.update(
-            item["pk"],
-            item["sk"],
-            {
-                "status": "confirmed",
-                "decidedAt": now,
-                "captions": clips.merged_captions(item.get("captions"), patch),
-                "publishState": clips.PUBLISH_PENDING,
-                "publishClaimAt": now,
-            },
-            expect_in={"status": ["review"]},
-        )
-    except db.ConditionFailed as e:
-        raise conflict(ALREADY_DECIDED) from e
-    # The confirm itself is not undone if anything below fails: the clip stays publishState pending and is resumed.
-    created = clips.publish(app.store, app.enqueue_publish, req.user_id, updated)
-    log("info", "clip.confirmed", clipId=updated["clipId"], posts=len(created))
-    return ok({"clip": clips.public_clip(updated, app.media), "posts": created})
+        started = app.flows.start_clip_flow(clip["clipId"], clip["userId"], run)
+    except (FlowStartError, ValueError) as e:
+        log("error", "clip.flow_start_failed", clipId=clip["clipId"], run=run, error=str(e))
+        return clip
+    fields: dict[str, Any] = {"publishState": clips.PUBLISH_STARTED, "flowRun": run}
+    if started.execution_arn:
+        fields["flowExecutionArn"] = started.execution_arn
+    expect: dict[str, Any] = {"publishState": [clips.PUBLISH_PENDING]}
+    if clip.get("flowRun"):
+        expect["flowRun"] = [run]  # a clip kept before flow runs existed has none yet
+    try:
+        updated = app.store.update(clip["pk"], clip["sk"], fields, expect_in=expect)
+    except db.ConditionFailed:
+        return app.store.get(clip["pk"], clip["sk"]) or clip
+    log("info", "clip.flow_started", clipId=clip["clipId"], flow=started.name, existed=started.execution_arn is None)
+    return updated
+
+
+def _try_again(app: App, clip: dict[str, Any]) -> dict[str, Any]:
+    """A clip whose every queued post failed: its failed posts go back to ``queued`` and a new flow run starts."""
+    run = int(clip.get("flowRun") or 1)
+    failed = [
+        p
+        for p in posts.posts_for_clip(app.store, clip["userId"], clip["clipId"], consistent=True)
+        if p.get("status") == "failed"
+    ]
+    clip_update = db.update_request(
+        clip["pk"],
+        clip["sk"],
+        {"status": "confirmed", "publishState": clips.PUBLISH_PENDING, "flowRun": run + 1},
+        remove=["flowExecutionArn"],
+        expect_in={"status": ["failed"], "flowRun": [run]} if clip.get("flowRun") else {"status": ["failed"]},
+    )
+    post_updates = [
+        db.update_request(p["pk"], p["sk"], {"status": "queued"}, remove=["error"], expect_in={"status": ["failed"]})
+        for p in failed
+    ]
+    try:
+        app.store.transact(updates=[clip_update, *post_updates])
+    except db.ConditionFailed:
+        current = app.store.get(clip["pk"], clip["sk"]) or clip
+        if current.get("status") == "confirmed" and current.get("publishState") == clips.PUBLISH_PENDING:
+            return _start_flow(app, current)  # a parallel Try again reset it; finish its start
+        return current
+    log("info", "clip.try_again", clipId=clip["clipId"], run=run + 1, posts=len(failed))
+    refreshed = app.store.get(clip["pk"], clip["sk"]) or clip
+    return _start_flow(app, refreshed)
 
 
 def decline(app: App, req: Request) -> Response:
@@ -119,8 +190,72 @@ def decline(app: App, req: Request) -> Response:
     except db.ConditionFailed as e:
         raise conflict(ALREADY_DECIDED) from e
     _delete_files(app, item)
+    _delete_vector(app, req.user_id, item["clipId"])
     log("info", "clip.declined", clipId=item["clipId"])
     return ok({"clip": clips.public_clip(updated, app.media)})
+
+
+def _delete_vector(app: App, user_id: str, clip_id: str) -> None:
+    if app.vectors is None:
+        return
+    try:
+        app.vectors.delete_clip(user_id, clip_id)
+    except Exception as e:  # the clip is declined either way; a leftover vector is never shown (not "performed")
+        log("error", "clip.delete_vector_failed", clipId=clip_id, error=type(e).__name__)
+
+
+def similar(app: App, req: Request) -> Response:
+    """Up to 5 of the owner's measured clips most like this one (docs/CONTRACTS.md §14.6); ``[]`` on any error."""
+    item = _clip_or_404(app, req)
+    if app.vectors is None:
+        return ok({"clips": []})
+    try:
+        hits = app.vectors.similar(req.user_id, item["clipId"], k=vectors.SIMILAR_TOP_K)
+        pk = db.user_pk(req.user_id)
+        found = {c.get("clipId"): c for c in app.store.batch_get((pk, db.clip_sk(h.clip_id)) for h in hits)}
+        out = []
+        for hit in hits:
+            clip = found.get(hit.clip_id)
+            if clip is None or clip.get("status") == "declined" or clip.get("userId") != req.user_id:
+                continue
+            out.append(_similar_clip(app, hit, clip))
+    except Exception as e:
+        log("error", "clip.similar_failed", clipId=item["clipId"], error=type(e).__name__)
+        return ok({"clips": []})
+    out.sort(key=lambda c: -float(c["similarity"]))
+    return ok({"clips": out[: vectors.SIMILAR_MAX]})
+
+
+def _similar_clip(app: App, hit: vectors.Hit, clip: dict[str, Any]) -> dict[str, Any]:
+    meta = hit.metadata
+    raw_captions = clip.get("captions")
+    captions: dict[str, Any] = raw_captions if isinstance(raw_captions, dict) else {}
+    out: dict[str, Any] = {
+        "clipId": hit.clip_id,
+        "hook": str(clip.get("hook") or meta.get("hook") or ""),
+        "title": str(captions.get("youtubeTitle") or meta.get("title") or ""),
+        "momentType": str(clip.get("momentType") or meta.get("momentType") or ""),
+        "similarity": hit.similarity,
+    }
+    performance = _performance(meta.get("performance"))
+    if performance is not None:
+        out["performance"] = performance
+    if clip.get("coverKey"):
+        out["coverUrl"] = app.media.presign_get(clip["coverKey"])
+    return out
+
+
+def _performance(raw: object) -> dict[str, Any] | None:
+    parsed = vectors.parse_performance(raw)
+    if parsed is None:
+        return None
+    perf: dict[str, Any] = {}
+    for key in ("views", "likes", "comments", "shares", "posts"):
+        value = parsed.get(key, 0)
+        perf[key] = int(value) if isinstance(value, int | float) and not isinstance(value, bool) else 0
+    if isinstance(parsed.get("checkedAt"), str):
+        perf["checkedAt"] = parsed["checkedAt"]
+    return perf
 
 
 def _delete_files(app: App, item: dict[str, Any]) -> None:

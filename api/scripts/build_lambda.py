@@ -1,7 +1,9 @@
-"""Builds api/dist/lambda.zip: the one package all four Lambdas share (docs/CONTRACTS.md §9).
+"""Builds api/dist/lambda.zip: the one package all seven Lambdas share (docs/CONTRACTS.md §9, §14.10).
 
 The zip holds ``clipfactory_api``, the locked boto3/botocore (vendored because the Lambda runtime's copy can be
-too old to know "bedrock-agentcore") and the built-in skills from the repository's ``skills/`` folder as package
+too old to know "bedrock-agentcore", durable executions or "s3vectors"), the locked
+``aws-durable-execution-sdk-python`` (AWS recommends bundling it rather than relying on the runtime's copy) and the
+built-in skills from the repository's ``skills/`` folder as package
 data (``clipfactory_api/builtin_skills/<name>/SKILL.md``). Every dependency is pure Python, so the same zip runs on
 arm64. The build is deterministic: same inputs, byte-identical zip (sorted entries, fixed timestamps and modes).
 
@@ -23,12 +25,18 @@ ROOT = API.parent
 PACKAGE = API / "src" / "clipfactory_api"
 SKILLS = ROOT / "skills"
 OUT = API / "dist" / "lambda.zip"
+# Every Lambda handler module (docs/CONTRACTS.md §9): the build fails if one is missing from the zip.
 HANDLERS = (
-    "clipfactory_api/http.py",
-    "clipfactory_api/publisher.py",
-    "clipfactory_api/perf_check.py",
-    "clipfactory_api/watchdog.py",
+    "clipfactory_api/http.py",  # cf-prod-api
+    "clipfactory_api/flows/job_flow.py",  # cf-prod-job-flow (durable)
+    "clipfactory_api/flows/clip_flow.py",  # cf-prod-clip-flow (durable)
+    "clipfactory_api/realtime/authorizer.py",  # cf-prod-ws-authorizer
+    "clipfactory_api/realtime/ws.py",  # cf-prod-ws
+    "clipfactory_api/realtime/broadcast.py",  # cf-prod-broadcast
+    "clipfactory_api/hooks.py",  # cf-prod-hooks
 )
+REQUIRED_PACKAGES = ("boto3==", "botocore==", "aws-durable-execution-sdk-python==")
+VENDORED = ("boto3/__init__.py", "botocore/__init__.py", "aws_durable_execution_sdk_python/__init__.py")
 FIXED_TIME = (1980, 1, 1, 0, 0, 0)
 COMPILED = {".so", ".pyd", ".dylib", ".dll"}
 
@@ -112,8 +120,10 @@ def _zip(source: Path, out: Path) -> list[str]:
 
 def main() -> int:
     reqs = _requirements()
-    if not any(r.lower().startswith(("boto3==", "botocore==")) for r in reqs):
-        raise SystemExit("boto3/botocore are missing from the lock; run `uv lock` in api/")
+    lowered = [r.lower() for r in reqs]
+    absent = [p.rstrip("=") for p in REQUIRED_PACKAGES if not any(r.startswith(p) for r in lowered)]
+    if absent:
+        raise SystemExit(f"{', '.join(absent)} missing from the lock; run `uv lock` in api/")
     with tempfile.TemporaryDirectory(prefix="cf-lambda-") as tmp:
         scratch = Path(tmp)
         stage = scratch / "stage"
@@ -122,9 +132,9 @@ def main() -> int:
         shutil.copytree(PACKAGE, stage / "clipfactory_api", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         skills = _copy_skills(stage / "clipfactory_api" / "builtin_skills")
         names = _zip(stage, OUT)
-    missing = [h for h in HANDLERS if h not in names]
+    missing = [h for h in (*HANDLERS, *VENDORED) if h not in names]
     if missing:
-        raise SystemExit(f"handlers missing from the zip: {missing}")
+        raise SystemExit(f"missing from the zip: {missing}")
     digest = hashlib.sha256(OUT.read_bytes()).hexdigest()
     print(
         f"built {OUT.relative_to(ROOT)}: {OUT.stat().st_size / 1e6:.1f} MB, {len(names)} files, "

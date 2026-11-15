@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Writes the web app's runtime config (docs/CONTRACTS.md §4) from Terraform's outputs:
-#   { "region", "userPoolId", "userPoolClientId", "apiUrl", "version" }
+#   { "region", "userPoolId", "userPoolClientId", "apiUrl", "wsUrl", "version" }
+# Every value is required: apiUrl must be an https:// URL and wsUrl (output ws_url, §14.2) a wss:// URL.
 # Inputs (all optional):
 #   TF_OUTPUTS_FILE  a saved `terraform output -json`; when unset, the script runs it in TF_DIR
 #   TF_DIR           Terraform root, default <repo>/infra/envs/prod
@@ -30,11 +31,15 @@ config="$(jq -e --arg version "$version" '
   def req($k): (.[$k].value // "") as $v
     | if ($v | type) == "string" and $v != "" then $v
       else error("terraform output \"\($k)\" is missing or empty") end;
+  def url($k; $scheme): req($k) | sub("/+$"; "") as $v
+    | if ($v | startswith($scheme + "://")) and ($v | length) > ($scheme | length) + 3 then $v
+      else error("terraform output \"\($k)\" must start with \($scheme)://, got \"\($v)\"") end;
   {
     region: req("region"),
     userPoolId: req("user_pool_id"),
     userPoolClientId: req("user_pool_client_id"),
-    apiUrl: (req("api_url") | sub("/+$"; "")),
+    apiUrl: url("api_url"; "https"),
+    wsUrl: url("ws_url"; "wss"),
     version: $version
   }' <<<"$outputs")"
 

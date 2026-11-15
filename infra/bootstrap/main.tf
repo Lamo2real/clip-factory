@@ -50,7 +50,12 @@ resource "aws_iam_role" "deploy" {
       Condition = {
         StringEquals = {
           "${local.github_host}:aud" = "sts.amazonaws.com"
-          "${local.github_host}:sub" = "repo:${var.github_repository}:ref:refs/heads/${var.branch}"
+          # Both subject formats: the classic "repo:owner/name" and GitHub's immutable "repo:owner@id/name@id"
+          # (this repository sends the immutable one).
+          "${local.github_host}:sub" = [
+            "repo:${var.github_repository}:ref:refs/heads/${var.branch}",
+            "${var.github_immutable_subject_prefix}:ref:refs/heads/${var.branch}",
+          ]
         }
       }
     }]
@@ -81,11 +86,12 @@ resource "aws_iam_role_policy" "stack_roles" {
         Resource = local.stack_roles
       },
       {
-        Sid       = "PassStackRoles"
-        Effect    = "Allow"
-        Action    = ["iam:PassRole"]
-        Resource  = local.stack_roles
-        Condition = { StringEquals = { "iam:PassedToService" = ["lambda.amazonaws.com", "bedrock-agentcore.amazonaws.com", "scheduler.amazonaws.com"] } }
+        Sid      = "PassStackRoles"
+        Effect   = "Allow"
+        Action   = ["iam:PassRole"]
+        Resource = local.stack_roles
+        # Lambda execution roles, the AgentCore runtime role, and cf-prod-apigw-cloudwatch set on the API Gateway account.
+        Condition = { StringEquals = { "iam:PassedToService" = ["lambda.amazonaws.com", "bedrock-agentcore.amazonaws.com", "apigateway.amazonaws.com"] } }
       },
       {
         # First use of Lambda, AgentCore, CloudFront and friends in a fresh account creates their service-linked roles.

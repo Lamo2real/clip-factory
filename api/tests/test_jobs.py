@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 
 from clipfactory_api import db, jobs
-from clipfactory_api.agent_client import AgentClient
 from clipfactory_api.errors import ApiError
+from clipfactory_api.flow_client import FlowClient
 from clipfactory_api.jobs import START_FAILED, STEPS, link_platform
-from conftest import OTHER, USER, Call, seed_clip, seed_job
-from fakes import FakeAgentCore, FakeS3, FakeTable
+from conftest import JOB_FLOW_ARN, OTHER, USER, Call, seed_clip, seed_job
+from fakes import FakeAgentCore, FakeLambda, FakeS3, FakeTable
 
 NEWER_SESSION = "cfjob-01JNEWERRUNSESSIONXXXXXXXX-abcdefgh"
 
@@ -63,7 +64,7 @@ def test_link_platform_rejects(url: str) -> None:
     assert e.value.code == "bad_request"
 
 
-def test_create_link_job(call: Call, table: FakeTable, agentcore: FakeAgentCore) -> None:
+def test_create_link_job(call: Call, table: FakeTable, agentcore: FakeAgentCore, lambda_client: FakeLambda) -> None:
     status, body = call(
         "POST",
         "/v1/jobs",
@@ -86,11 +87,20 @@ def test_create_link_job(call: Call, table: FakeTable, agentcore: FakeAgentCore)
     assert stored is not None
     assert stored["type"] == "job"
     assert stored["userId"] == USER
-    (invocation,) = agentcore.calls
-    assert invocation["payload"] == {"action": "process_job", "jobId": job["jobId"], "userId": USER}
-    assert invocation["runtimeSessionId"] == stored["sessionId"]
-    assert invocation["runtimeSessionId"].startswith(f"cfjob-{job['jobId']}-")
-    assert len(invocation["runtimeSessionId"]) >= 33
+    assert stored["flowRun"] == 1
+    assert stored["sessionId"].startswith(f"cfjob-{job['jobId']}-")
+    assert len(stored["sessionId"]) >= 33
+    assert stored["flowExecutionArn"].startswith("arn:aws:lambda:")
+    assert "flowRun" not in job
+    assert "flowExecutionArn" not in job
+    # The API starts the durable job-flow on its alias; it never invokes the agent with process_job itself.
+    assert agentcore.calls == []
+    (start,) = lambda_client.calls
+    assert start["FunctionName"] == JOB_FLOW_ARN
+    assert start["InvocationType"] == "Event"
+    assert start["DurableExecutionName"] == f"job-{job['jobId']}-1"
+    expected = {"jobId": job["jobId"], "run": 1, "sessionId": stored["sessionId"], "userId": USER}
+    assert start["Payload"] == json.dumps(expected, sort_keys=True)
 
 
 def test_create_job_defaults_target_from_settings(call: Call) -> None:
@@ -142,25 +152,38 @@ def test_upload_job_needs_the_object(call: Call) -> None:
         {"source": {"type": "link", "url": "https://youtu.be/a"}, "extra": 1},
     ],
 )
-def test_create_job_validation(call: Call, body: dict[str, object], agentcore: FakeAgentCore) -> None:
+def test_create_job_validation(call: Call, body: dict[str, object], lambda_client: FakeLambda) -> None:
     status, out = call("POST", "/v1/jobs", body)
     assert status == 400
     assert out["error"]["code"] == "bad_request"
-    assert agentcore.calls == []
+    assert lambda_client.calls == []
 
 
-def test_agent_failure_marks_job_failed(call: Call, agentcore: FakeAgentCore) -> None:
-    agentcore.fail = True
+def test_flow_start_failure_marks_job_failed(call: Call, lambda_client: FakeLambda) -> None:
+    lambda_client.fail = True
     status, body = call("POST", "/v1/jobs", {"source": {"type": "link", "url": "https://youtu.be/abc"}})
     assert status == 201
     assert body["job"]["status"] == "failed"
-    assert body["job"]["error"] == START_FAILED
+    assert body["job"]["error"] == START_FAILED == "Could not start. Press Try again."
 
 
-def test_agent_not_accepting_marks_job_failed(call: Call, agentcore: FakeAgentCore) -> None:
-    agentcore.reply = {"accepted": False}
-    _, body = call("POST", "/v1/jobs", {"source": {"type": "link", "url": "https://youtu.be/abc"}})
-    assert body["job"]["status"] == "failed"
+def test_already_started_job_flow_is_a_no_op(store: db.Store, lambda_client: FakeLambda, table: FakeTable) -> None:
+    job = seed_job(store, status="queued", flowRun=3)
+    lambda_client.started[f"job-{job['jobId']}-3"] = "{}"  # running with another payload: 409 from Lambda
+    out = jobs.start(store, FlowClient(lambda_client, JOB_FLOW_ARN, ""), job, "now")
+    assert out["status"] == "queued"
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    assert stored["status"] == "queued"
+    assert "flowExecutionArn" not in stored
+
+
+def test_flow_start_refuses_an_unqualified_arn(store: db.Store, lambda_client: FakeLambda) -> None:
+    job = seed_job(store, status="queued")
+    unqualified = JOB_FLOW_ARN.rsplit(":", 1)[0]
+    out = jobs.start(store, FlowClient(lambda_client, unqualified, ""), job, "now")
+    assert out["status"] == "failed"
+    assert lambda_client.calls == []
 
 
 def test_list_jobs_newest_first_with_cursor(call: Call, store: db.Store) -> None:
@@ -236,8 +259,10 @@ def test_cancel_conflict(call: Call, store: db.Store, state: str) -> None:
     assert body["error"]["code"] == "conflict"
 
 
-def test_retry_failed_job(call: Call, store: db.Store, agentcore: FakeAgentCore, table: FakeTable) -> None:
-    job = seed_job(store, status="failed", error="Boom", progress=0.6, clipCount=2)
+def test_retry_failed_job(
+    call: Call, store: db.Store, agentcore: FakeAgentCore, lambda_client: FakeLambda, table: FakeTable
+) -> None:
+    job = seed_job(store, status="failed", error="Boom", progress=0.6, clipCount=2, flowRun=1)
     status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
     assert status == 200
     out = body["job"]
@@ -250,9 +275,17 @@ def test_retry_failed_job(call: Call, store: db.Store, agentcore: FakeAgentCore,
     stored = table.raw(job["pk"], job["sk"])
     assert stored is not None
     assert stored["sessionId"] != job["sessionId"]  # a fresh AgentCore session
-    assert agentcore.calls[-1]["runtimeSessionId"] == stored["sessionId"]
-    assert agentcore.calls[-1]["payload"]["action"] == "process_job"
-    # The old run may still be alive (watchdog timeout, lost Stop signal): its session is stopped outright.
+    assert stored["flowRun"] == 2
+    (start,) = lambda_client.calls
+    assert start["DurableExecutionName"] == f"job-{job['jobId']}-2"
+    assert json.loads(start["Payload"]) == {
+        "jobId": job["jobId"],
+        "run": 2,
+        "sessionId": stored["sessionId"],
+        "userId": USER,
+    }
+    assert agentcore.calls == []
+    # The old run may still be alive (heartbeat timeout, lost Stop signal): its session is stopped outright.
     assert agentcore.stopped == [job["sessionId"]]
 
 
@@ -275,11 +308,11 @@ def test_retry_starts_even_if_old_session_cannot_be_stopped(
     assert body["job"]["status"] == "queued"
 
 
-def test_start_failure_does_not_touch_a_newer_run(store: db.Store, agentcore: FakeAgentCore, table: FakeTable) -> None:
+def test_start_failure_does_not_touch_a_newer_run(store: db.Store, lambda_client: FakeLambda, table: FakeTable) -> None:
     job = seed_job(store, status="queued")
     table.items[(job["pk"], job["sk"])]["sessionId"] = NEWER_SESSION  # a later retry already took over
-    agentcore.fail = True
-    jobs.start(store, AgentClient(agentcore, "arn:aws:bedrock-agentcore:eu-north-1:123:runtime/x"), job, "now")
+    lambda_client.fail = True
+    jobs.start(store, FlowClient(lambda_client, JOB_FLOW_ARN, ""), job, "now")
     assert table.raw(job["pk"], job["sk"])["status"] == "queued"  # type: ignore[index]
 
 
@@ -307,9 +340,9 @@ def test_retry_conflict(call: Call, store: db.Store, state: str) -> None:
     assert call("POST", f"/v1/jobs/{job['jobId']}/retry")[0] == 409
 
 
-def test_retry_with_agent_down_fails_again(call: Call, store: db.Store, agentcore: FakeAgentCore) -> None:
+def test_retry_with_lambda_down_fails_again(call: Call, store: db.Store, lambda_client: FakeLambda) -> None:
     job = seed_job(store, status="canceled")
-    agentcore.fail = True
+    lambda_client.fail = True
     _, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
     assert body["job"]["status"] == "failed"
     assert body["job"]["error"] == START_FAILED
