@@ -75,6 +75,25 @@ test("custom areas from window.__cfFakeUpdate, on desktop beside the sidebar", a
   expect(box.x).toBeGreaterThan(sidebar.x + sidebar.width);
 });
 
+test("the bar is centred: in the window without a sidebar, under the content beside it", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?update=1");
+  await settle(page);
+  const bar = page.getByRole("region", { name: "New version" });
+  await expect(bar).toBeVisible();
+  // Beside the sidebar: centred in the space to its right.
+  const side = (await page.locator("nav.sidebar").boundingBox())!;
+  let box = (await bar.boundingBox())!;
+  const contentMid = (side.x + side.width + 1440) / 2;
+  expect(Math.abs(box.x + box.width / 2 - contentMid)).toBeLessThan(24);
+  // Screens without the sidebar (like sign-in): centred in the window.
+  await page.evaluate(() => document.querySelector("nav.sidebar")?.remove());
+  await expect.poll(async () => {
+    box = (await bar.boundingBox())!;
+    return Math.abs(box.x + box.width / 2 - 720);
+  }).toBeLessThan(2);
+});
+
 test("no bar when the server has the same version", async ({ page }) => {
   await page.goto("/");
   await settle(page);

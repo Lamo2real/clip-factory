@@ -625,14 +625,17 @@ h1.getapp__title {
 }
 
 @media (min-width: 768px) {
+  /* Centred: in the window on screens without the sidebar (sign-in), and under the content beside the sidebar. */
   .update-bar {
-    left: calc(var(--sidebar-w) + 14px + var(--gutter));
+    left: var(--gutter);
     right: var(--gutter);
     bottom: 20px;
     max-width: 760px;
     margin-inline: auto;
   }
-  .app:has(.sidebar.is-collapsed) ~ .update-bar,
+  html:has(.sidebar) .update-bar {
+    left: calc(var(--sidebar-w) + 14px + var(--gutter));
+  }
   html:has(.sidebar.is-collapsed) .update-bar {
     left: calc(var(--sidebar-w-collapsed) + 14px + var(--gutter));
   }
