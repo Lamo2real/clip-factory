@@ -1,5 +1,5 @@
 {
-  "$comment": "The only place model ids live. Everything else reads them from here (Terraform, the agent image).",
+  "$comment": "The only place model ids live. Everything else reads them from here (Terraform, the agent image). embeddingModel.modelId is in-Region and used as is (never prefixed with profilePrefix).",
   "profilePrefix": "global",
   "agentModel": "fable-5-1",
   "models": {
@@ -7,5 +7,10 @@
       "label": "Claude Fable 5.1",
       "modelId": "anthropic.claude-fable-5-1"
     }
+  },
+  "embeddingModel": {
+    "label": "Amazon Titan Text Embeddings V2",
+    "modelId": "amazon.titan-embed-text-v2:0",
+    "dimensions": 1024
   }
 }
