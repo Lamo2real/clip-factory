@@ -347,6 +347,8 @@ export function seed(): Store {
       clipMax: 10,
       maxSourceHours: 6,
       soundEnabled: true,
+      clickSound: 6,
+      errorSound: 5,
       reduceMotion: false,
       hasYoutubeCookies: false,
       platforms: [...PLATFORMS],

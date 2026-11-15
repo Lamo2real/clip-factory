@@ -30,7 +30,7 @@ describe("router", () => {
     expect(match("/jobs/01JABCDEFGHJKMNPQRSTVWXYZ0")).toEqual({ name: "job", jobId: "01JABCDEFGHJKMNPQRSTVWXYZ0" });
     expect(match("/review", "?job=J1")).toEqual({ name: "review", jobId: "J1" });
     expect(match("/library")).toEqual({ name: "library" });
-    expect(match("/settings")).toEqual({ name: "settings" });
+    expect(match("/settings")).toEqual({ name: "settings", tree: null, branch: null });
     expect(match("/jobs/a/b")).toEqual({ name: "not_found" });
   });
 });

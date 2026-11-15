@@ -7,6 +7,15 @@ interface ToastItem {
   tone: ToastTone;
   text: string;
   ms: number;
+  /** A toast with a group replaces the one before it in that group instead of stacking under it. */
+  group?: string;
+}
+
+export interface ToastOptions {
+  /** One toast per group on screen: a new one replaces the last (for example, practice taps on "Try it"). */
+  group?: string;
+  /** How long it stays (default 4.2 s, or 7 s for an error). */
+  ms?: number;
 }
 
 export interface UndoOptions {
@@ -19,9 +28,9 @@ export interface UndoOptions {
 }
 
 export interface Toaster {
-  success(text: string): void;
-  error(text: string): void;
-  info(text: string): void;
+  success(text: string, options?: ToastOptions): void;
+  error(text: string, options?: ToastOptions): void;
+  info(text: string, options?: ToastOptions): void;
   /** "Thrown away. Undo": the action only really happens after `ms` (8 s) unless Undo is tapped. */
   undo(text: string, options: UndoOptions): void;
 }
@@ -81,15 +90,16 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
   }, [commit]);
 
   const push = useCallback(
-    (tone: ToastTone, text: string, ms?: number): number => {
+    (tone: ToastTone, text: string, ms?: number, group?: string): number => {
       const id = next.current++;
       const life = ms ?? (tone === "error" ? 7000 : 4200);
       setItems((all) => {
         // Never drop an undo toast that is still counting down: it holds a decision.
-        const keep = all.filter((t) => t.text !== text || t.tone === "undo");
+        const keep = all.filter((t) => t.tone === "undo" || (t.text !== text && (!group || t.group !== group)));
         const old = keep.filter((t) => t.tone !== "undo").slice(-2);
         const undos = keep.filter((t) => t.tone === "undo");
-        return [...undos, ...old, { id, tone, text, ms: life }].sort((a, b) => a.id - b.id);
+        const item: ToastItem = group ? { id, tone, text, ms: life, group } : { id, tone, text, ms: life };
+        return [...undos, ...old, item].sort((a, b) => a.id - b.id);
       });
       if (tone === "error") onErrorRef.current?.();
       if (tone !== "undo") setTimeout(() => dismiss(id), life);
@@ -100,9 +110,9 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
 
   const api = useMemo<Toaster>(
     () => ({
-      success: (t) => void push("success", t),
-      error: (t) => void push("error", t),
-      info: (t) => void push("info", t),
+      success: (t, o) => void push("success", t, o?.ms, o?.group),
+      error: (t, o) => void push("error", t, o?.ms, o?.group),
+      info: (t, o) => void push("info", t, o?.ms, o?.group),
       undo: (t, options) => {
         const ms = options.ms ?? UNDO_MS;
         const id = push("undo", t, ms);

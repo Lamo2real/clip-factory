@@ -1,6 +1,7 @@
 import {
   useId,
   type AnchorHTMLAttributes,
+  type Ref,
   type ButtonHTMLAttributes,
   type CSSProperties,
   type MouseEvent,
@@ -34,6 +35,7 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
   /** Rendered as aria-disabled so the button stays focusable, explains itself, and plays the "deny" sound. */
   disabled?: boolean;
   block?: boolean;
+  ref?: Ref<HTMLButtonElement>;
 }
 
 export function Button({

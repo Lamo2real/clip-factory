@@ -1,13 +1,17 @@
-// Two synthesized sounds (no audio files): "tap" for clicks on things that work, "deny" for clicks on things that
-// are switched off and for errors. Sounds are driven ONLY by the `click` event, which browsers fire for a tap but
-// never for a scroll or a swipe, so scrolling on a phone is always silent.
+// Two kinds of synthesized sound (no audio files): "tap" for clicks on things that work, "deny" for clicks on things
+// that are switched off and for errors. Which of the 30 recipes of each kind plays is the owner's choice
+// (Settings > Look & feel > Sounds, docs/CONTRACTS.md §15.3). Sounds are driven ONLY by the `click` event, which
+// browsers fire for a tap but never for a scroll or a swipe, so scrolling on a phone is always silent.
 
 import { isMock } from "./config.ts";
+import { DEFAULT_CLICK_SOUND, DEFAULT_ERROR_SOUND, recipeFor, type SoundRecipe } from "./soundCatalog.ts";
 
 export type SoundKind = "tap" | "deny";
 
 export interface SoundLogEntry {
   kind: SoundKind;
+  /** Which recipe (1..30 of that kind) played, or would have played when muted. */
+  sound: number;
   muted: boolean;
   at: number;
   target: string;
@@ -63,12 +67,25 @@ function describe(target: EventTarget | null): string {
 
 const isAndroid = () => typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
 
+/** Which recipe plays for each kind: the owner's Click sound and Error sound settings (1..30). */
+export interface SoundChoice {
+  tap: number;
+  deny: number;
+}
+
+const DEFAULT_CHOICE: SoundChoice = { tap: DEFAULT_CLICK_SOUND, deny: DEFAULT_ERROR_SOUND };
+
 export class SoundEngine {
   private ctx: AudioContext | null = null;
+  /** Half a second of white noise, made once per context and shared by every noise voice. */
+  private noise: AudioBuffer | null = null;
   private lastAt = 0;
   private lastKind: SoundKind | null = null;
 
-  constructor(private readonly enabled: () => boolean) {}
+  constructor(
+    private readonly enabled: () => boolean,
+    private readonly chosen: () => SoundChoice = () => DEFAULT_CHOICE,
+  ) {}
 
   /** Called from inside a click handler: creating or resuming the context there is what unlocks audio on iOS. */
   private context(): AudioContext | null {
@@ -89,7 +106,21 @@ export class SoundEngine {
     }
   }
 
-  play(kind: SoundKind, target: EventTarget | null = null): void {
+  private noiseBuffer(ctx: AudioContext): AudioBuffer {
+    if (!this.noise) {
+      const buffer = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.5), ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      this.noise = buffer;
+    }
+    return this.noise;
+  }
+
+  /**
+   * Plays the tap or deny sound. `recipe` picks one of the 30 sounds of that kind (the Sounds settings preview a
+   * card this way); without it the owner's chosen sound plays.
+   */
+  play(kind: SoundKind, target: EventTarget | null = null, recipe?: number): void {
     const now = performance.now();
     // A click on a <label> also clicks its input: one sound per gesture. A deny right after a tap still plays,
     // because that is an error answering the click.
@@ -97,49 +128,61 @@ export class SoundEngine {
     this.lastAt = now;
     this.lastKind = kind;
     const muted = !this.enabled();
+    const sound = recipeFor(kind, recipe ?? this.chosen()[kind]);
     if (isMock || import.meta.env.DEV || import.meta.env.MODE === "test") {
       // Test hook only; capped so a long session cannot grow it without limit.
       const log = (window.__cfSoundLog ??= []);
-      log.push({ kind, muted, at: Math.round(now), target: describe(target) });
+      log.push({ kind, sound: sound.id, muted, at: Math.round(now), target: describe(target) });
       if (log.length > 200) log.splice(0, log.length - 200);
     }
     if (muted) return;
     if (isAndroid()) navigator.vibrate?.(kind === "tap" ? 8 : [14, 50, 14]);
     const ctx = this.context();
     if (!ctx) return;
-    if (kind === "tap") this.tap(ctx);
-    else this.deny(ctx);
+    try {
+      this.render(ctx, sound);
+    } catch {
+      // A browser with a partial Web Audio implementation: stay silent rather than break the click.
+    }
   }
 
-  private voice(ctx: AudioContext, type: OscillatorType, from: number, to: number, start: number, length: number, peak: number) {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = type === "triangle" ? 4200 : 1400;
-    osc.type = type;
-    osc.frequency.setValueAtTime(from, start);
-    osc.frequency.exponentialRampToValueAtTime(to, start + length);
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(peak, start + 0.006);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
-    osc.connect(filter).connect(gain).connect(ctx.destination);
-    osc.start(start);
-    osc.stop(start + length + 0.02);
+  /** Schedules every voice of a recipe, exactly as the owner's sound picker does. */
+  private render(ctx: AudioContext, sound: SoundRecipe) {
+    const start = ctx.currentTime + 0.01;
+    for (const v of sound.voices) {
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+      if (v[0] === "noise") {
+        const [, type, hz, at, length, peak] = v;
+        const src = ctx.createBufferSource();
+        src.buffer = this.noiseBuffer(ctx);
+        filter.type = type;
+        filter.frequency.value = hz;
+        envelope(gain, start + at, length, peak);
+        src.connect(filter).connect(gain).connect(ctx.destination);
+        src.start(start + at);
+        src.stop(start + at + length + 0.02);
+      } else {
+        const [wave, from, to, at, length, peak, lowpass] = v;
+        const osc = ctx.createOscillator();
+        osc.type = wave;
+        filter.type = "lowpass";
+        filter.frequency.value = lowpass;
+        osc.frequency.setValueAtTime(from, start + at);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(20, to), start + at + length);
+        envelope(gain, start + at, length, peak);
+        osc.connect(filter).connect(gain).connect(ctx.destination);
+        osc.start(start + at);
+        osc.stop(start + at + length + 0.02);
+      }
+    }
   }
+}
 
-  /** A soft, bright "tick": a quick downward chirp. */
-  private tap(ctx: AudioContext) {
-    const t = ctx.currentTime;
-    this.voice(ctx, "triangle", 1250, 620, t, 0.07, 0.16);
-  }
-
-  /** A low double "thud": clearly not the tap. */
-  private deny(ctx: AudioContext) {
-    const t = ctx.currentTime;
-    this.voice(ctx, "square", 196, 150, t, 0.09, 0.07);
-    this.voice(ctx, "square", 176, 130, t + 0.11, 0.11, 0.07);
-  }
+function envelope(gain: GainNode, at: number, length: number, peak: number) {
+  gain.gain.setValueAtTime(0.0001, at);
+  gain.gain.exponentialRampToValueAtTime(peak, at + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.0001, at + length);
 }
 
 /** Listens for clicks in the capture phase so a handler that stops propagation cannot silence the sound. */
