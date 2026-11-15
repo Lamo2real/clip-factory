@@ -33,9 +33,9 @@ locals {
   # Presigned uploads (PUT) and clip and cover downloads come straight from the media bucket.
   media_origins = "https://${var.media_bucket}.s3.${var.region}.amazonaws.com https://${var.media_bucket}.s3.amazonaws.com"
 
-  # The browser talks to itself, the HTTP API, Cognito (SRP sign-in and token refresh) and the media bucket.
-  # The API's own host is matched by wildcard: naming it would make this module wait for the API, whose CORS
-  # already waits for this distribution's address.
+  # The browser talks to itself, the HTTP API, the WebSocket API (live updates, wss://), Cognito (SRP sign-in and
+  # token refresh) and the media bucket. The APIs' hosts are matched by wildcard: naming them would make this module
+  # wait for the APIs, whose CORS and redirects already wait for this distribution's address.
   csp = join("; ", [
     "default-src 'self'",
     "script-src 'self'",
@@ -45,7 +45,7 @@ locals {
     # Source thumbnails come from YouTube, Twitch and Kick CDNs; images cannot run code.
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob: ${local.media_origins}",
-    "connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com https://cognito-idp.${var.region}.amazonaws.com ${local.media_origins}",
+    "connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com wss://*.execute-api.${var.region}.amazonaws.com https://cognito-idp.${var.region}.amazonaws.com ${local.media_origins}",
     "worker-src 'self'",
     "manifest-src 'self'",
     "frame-ancestors 'none'",

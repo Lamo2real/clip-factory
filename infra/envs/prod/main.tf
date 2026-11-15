@@ -3,7 +3,8 @@
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
-    aws = { source = "hashicorp/aws", version = ">= 6.68.0, < 7.0.0" }
+    aws    = { source = "hashicorp/aws", version = ">= 6.68.0, < 7.0.0" }
+    random = { source = "hashicorp/random", version = ">= 3.7.0, < 4.0.0" } # the webhook verify token (ephemeral)
   }
   backend "s3" {}
 }
@@ -36,6 +37,11 @@ locals {
     local.model_profile_arn,
     "arn:aws:bedrock:*::foundation-model/${local.agent_model.modelId}",
   ]
+
+  # Titan Text Embeddings V2 is called in-Region, never through a profile (docs/CONTRACTS.md §1, §14.6).
+  embed_model_id   = local.models.embeddingModel.modelId
+  embed_dimensions = local.models.embeddingModel.dimensions
+  embed_model_arn  = "arn:aws:bedrock:${var.region}::foundation-model/${local.embed_model_id}"
 }
 
 module "storage" {
@@ -78,6 +84,13 @@ module "auth" {
   app_url     = module.frontend.app_url
 }
 
+module "vectors" {
+  source     = "../../modules/vectors"
+  name       = local.name
+  account_id = local.account_id
+  dimension  = local.embed_dimensions
+}
+
 module "agent" {
   source            = "../../modules/agent"
   name              = local.name
@@ -91,19 +104,18 @@ module "agent" {
   model_id          = local.model_id
   model_profile_arn = local.model_profile_arn
   model_invoke_arns = local.model_invoke_arns
+  vector_bucket     = module.vectors.vector_bucket
+  vector_index      = module.vectors.vector_index
+  vector_index_arn  = module.vectors.vector_index_arn
+  embed_model_id    = local.embed_model_id
+  embed_model_arn   = local.embed_model_arn
 }
 
-module "api" {
-  source            = "../../modules/api"
+# Durable functions: cf-prod-job-flow (agent run + callback) and cf-prod-clip-flow (publish, 48 h wait, learn).
+module "flows" {
+  source            = "../../modules/flows"
   name              = local.name
-  region            = var.region
-  account_id        = local.account_id
   lambda_zip_path   = var.lambda_zip_path
-  app_version       = coalesce(var.app_version, var.agent_image_tag)
-  app_url           = module.frontend.app_url
-  web_dev_origin    = var.web_dev_origin
-  jwt_issuer        = module.auth.issuer
-  jwt_audience      = module.auth.user_pool_client_id
   table_name        = module.data.table_name
   table_arn         = module.data.table_arn
   media_bucket      = module.storage.media_bucket
@@ -111,13 +123,78 @@ module "api" {
   agent_runtime_arn = module.agent.runtime_arn
   model_id          = local.model_id
   model_invoke_arns = local.model_invoke_arns
+  embed_model_id    = local.embed_model_id
+  embed_model_arn   = local.embed_model_arn
+  vector_bucket     = module.vectors.vector_bucket
+  vector_index      = module.vectors.vector_index
+  vector_index_arn  = module.vectors.vector_index_arn
+}
+
+module "api" {
+  source               = "../../modules/api"
+  name                 = local.name
+  lambda_zip_path      = var.lambda_zip_path
+  app_version          = coalesce(var.app_version, var.agent_image_tag)
+  app_url              = module.frontend.app_url
+  web_dev_origin       = var.web_dev_origin
+  jwt_issuer           = module.auth.issuer
+  jwt_audience         = module.auth.user_pool_client_id
+  table_name           = module.data.table_name
+  table_arn            = module.data.table_arn
+  media_bucket         = module.storage.media_bucket
+  media_bucket_arn     = module.storage.media_bucket_arn
+  agent_runtime_arn    = module.agent.runtime_arn
+  job_flow_alias_arn   = module.flows.job_flow_alias_arn
+  clip_flow_alias_arn  = module.flows.clip_flow_alias_arn
+  job_flow_arn_prefix  = module.flows.function_arns["job-flow"]
+  clip_flow_arn_prefix = module.flows.function_arns["clip-flow"]
+  vector_bucket        = module.vectors.vector_bucket
+  vector_index         = module.vectors.vector_index
+  vector_index_arn     = module.vectors.vector_index_arn
+}
+
+# Platform webhooks (REST API) and the account's API Gateway logging role, which the WebSocket stage needs too.
+module "hooks" {
+  source                     = "../../modules/hooks"
+  name                       = local.name
+  region                     = var.region
+  account_id                 = local.account_id
+  lambda_zip_path            = var.lambda_zip_path
+  table_name                 = module.data.table_name
+  table_arn                  = module.data.table_arn
+  app_url                    = module.frontend.app_url
+  manage_api_gateway_account = var.manage_api_gateway_account
+}
+
+# Live updates (WebSocket API). After hooks: API Gateway allows one CreateDeployment per 5 s per account, and the
+# stage's logging needs the account's CloudWatch role that hooks sets.
+module "realtime" {
+  source              = "../../modules/realtime"
+  name                = local.name
+  region              = var.region
+  account_id          = local.account_id
+  lambda_zip_path     = var.lambda_zip_path
+  table_name          = module.data.table_name
+  table_arn           = module.data.table_arn
+  stream_arn          = module.data.stream_arn
+  user_pool_id        = module.auth.user_pool_id
+  user_pool_client_id = module.auth.user_pool_client_id
+  depends_on          = [module.hooks]
 }
 
 module "monitoring" {
-  source         = "../../modules/monitoring"
-  name           = local.name
-  account_id     = local.account_id
-  alarm_email    = var.alarm_email
-  dlq_name       = module.api.publish_dlq_name
-  function_names = module.api.function_names
+  source      = "../../modules/monitoring"
+  name        = local.name
+  account_id  = local.account_id
+  alarm_email = var.alarm_email
+  function_names = merge(
+    module.api.function_names,
+    module.flows.function_names,
+    module.realtime.function_names,
+    module.hooks.function_names,
+  )
+  durable_function_names = module.flows.durable_function_names
+  stream_consumer_name   = module.realtime.broadcast_function_name
+  hooks_api_name         = module.hooks.hooks_api_name
+  hooks_stage_name       = module.hooks.hooks_stage_name
 }

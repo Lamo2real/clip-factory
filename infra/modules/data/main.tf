@@ -1,4 +1,5 @@
-# The single DynamoDB table (docs/CONTRACTS.md §6): on demand, point-in-time recovery, TTL, one GSI.
+# The single DynamoDB table (docs/CONTRACTS.md §6): on demand, point-in-time recovery, TTL, one GSI, and a stream
+# (new and old images) that feeds the live-update broadcaster (§14.2).
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
@@ -12,6 +13,8 @@ resource "aws_dynamodb_table" "this" {
   hash_key                    = "pk"
   range_key                   = "sk"
   deletion_protection_enabled = var.deletion_protection
+  stream_enabled              = true
+  stream_view_type            = "NEW_AND_OLD_IMAGES"
 
   attribute {
     name = "pk"

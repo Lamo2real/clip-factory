@@ -26,3 +26,9 @@ variable "create_oidc_provider" {
   default     = true
   description = "false when the account already has the token.actions.githubusercontent.com provider (one per account)."
 }
+
+variable "github_immutable_subject_prefix" {
+  type        = string
+  default     = "repo:Lamo2real@143636021/clip-factory-legal@1459036149"
+  description = "The repository's immutable OIDC subject prefix (gh api repos/<owner>/<repo>/actions/oidc/customization/sub → sub_claim_prefix)."
+}

@@ -8,9 +8,12 @@ terraform {
 }
 
 locals {
-  tags         = { Component = "agent" }
-  runtime_name = "${replace(var.name, "-", "_")}_clip_agent"
-  repo_root    = abspath("${path.module}/../../..")
+  tags = { Component = "agent" }
+  # Built from the name, not taken from modules/flows: job-flow already depends on this module's runtime ARN.
+  # Callbacks are authorized against the durable execution ARN (function:NAME:<version>/durable-execution/...).
+  job_flow_executions = "arn:aws:lambda:${var.region}:${var.account_id}:function:${var.name}-job-flow:*"
+  runtime_name        = "${replace(var.name, "-", "_")}_clip_agent"
+  repo_root           = abspath("${path.module}/../../..")
 }
 
 resource "aws_ecr_repository" "agent" {
@@ -125,6 +128,22 @@ resource "aws_iam_role_policy" "agent" {
         Resource = var.model_invoke_arns
       },
       { Sid = "ReadProfile", Effect = "Allow", Action = ["bedrock:GetInferenceProfile"], Resource = var.model_profile_arn },
+      # Ends the job's durable execution: heartbeats while it runs, then success or failure (§14.4).
+      {
+        Sid      = "JobFlowCallback"
+        Effect   = "Allow"
+        Action   = ["lambda:SendDurableExecutionCallbackSuccess", "lambda:SendDurableExecutionCallbackFailure", "lambda:SendDurableExecutionCallbackHeartbeat"]
+        Resource = local.job_flow_executions
+      },
+      # "What worked before": put new clips' vectors at finalize, query similar performed clips before select (§14.6).
+      # A filtered query that returns metadata also needs GetVectors.
+      {
+        Sid      = "ClipVectors"
+        Effect   = "Allow"
+        Action   = ["s3vectors:PutVectors", "s3vectors:QueryVectors", "s3vectors:GetVectors"]
+        Resource = var.vector_index_arn
+      },
+      { Sid = "Embeddings", Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = var.embed_model_arn },
     ]
   })
 }
@@ -158,6 +177,9 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
     CLAUDE_CODE_USE_BEDROCK = "1"
     ANTHROPIC_MODEL         = var.model_id
     AWS_REGION              = var.region
+    CF_VECTOR_BUCKET        = var.vector_bucket
+    CF_VECTOR_INDEX         = var.vector_index
+    CF_EMBED_MODEL_ID       = var.embed_model_id
   }
   tags = local.tags
 }

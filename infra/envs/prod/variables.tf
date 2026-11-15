@@ -41,7 +41,7 @@ variable "lambda_zip_path" {
 variable "alarm_email" {
   type        = string
   default     = ""
-  description = "Optional address for alarm emails (dead-letter queue, Lambda errors). Empty: no email."
+  description = "Optional address for alarm emails (Lambda errors, failed or timed-out durable executions, live-update lag, webhook 5xx). Empty: no email."
   validation {
     condition     = var.alarm_email == "" || can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.alarm_email))
     error_message = "alarm_email must be empty or an email address."
@@ -52,4 +52,10 @@ variable "web_dev_origin" {
   type        = string
   default     = "http://localhost:5173"
   description = "Local Vite dev server, allowed by the API's and the media bucket's CORS."
+}
+
+variable "manage_api_gateway_account" {
+  type        = bool
+  default     = true
+  description = "Set the account's API Gateway CloudWatch logging role (one per account and Region; needed for REST and WebSocket logs). false when the account's setting is managed elsewhere."
 }

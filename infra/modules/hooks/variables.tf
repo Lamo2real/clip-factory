@@ -1,0 +1,31 @@
+variable "name" {
+  type        = string
+  description = "Resource name prefix (cf-prod)."
+}
+
+variable "region" { type = string }
+variable "account_id" { type = string }
+
+variable "lambda_zip_path" {
+  type        = string
+  description = "api/dist/lambda.zip, built before plan. Every function runs this one package."
+}
+
+variable "table_name" { type = string }
+variable "table_arn" { type = string }
+
+variable "app_url" {
+  type        = string
+  description = "The web app's origin: OAuth callbacks redirect back to its Settings screen."
+}
+
+variable "manage_api_gateway_account" {
+  type        = bool
+  default     = true
+  description = "Create the API Gateway CloudWatch logging role and set it on the account (one per account and Region). false when it is managed elsewhere; that role must then already be set."
+}
+
+variable "log_retention_days" {
+  type    = number
+  default = 30
+}

@@ -30,3 +30,22 @@ variable "model_invoke_arns" {
   type        = list(string)
   description = "Every ARN a Bedrock call through the profile touches: the profile and the foundation model in any region."
 }
+
+variable "vector_bucket" {
+  type        = string
+  description = "S3 Vectors bucket holding one vector per clip (CF_VECTOR_BUCKET)."
+}
+
+variable "vector_index" {
+  type        = string
+  description = "The clips index (CF_VECTOR_INDEX)."
+}
+
+variable "vector_index_arn" { type = string }
+
+variable "embed_model_id" {
+  type        = string
+  description = "Titan Text Embeddings V2 model id, in-Region (CF_EMBED_MODEL_ID)."
+}
+
+variable "embed_model_arn" { type = string }

@@ -3,9 +3,6 @@ variable "name" {
   description = "Resource name prefix (cf-prod)."
 }
 
-variable "region" { type = string }
-variable "account_id" { type = string }
-
 variable "lambda_zip_path" {
   type        = string
   description = "api/dist/lambda.zip, built before plan. Every function runs this one package."
@@ -39,12 +36,29 @@ variable "media_bucket" { type = string }
 variable "media_bucket_arn" { type = string }
 variable "agent_runtime_arn" { type = string }
 
-variable "model_id" {
+variable "job_flow_alias_arn" {
   type        = string
-  description = "Inference profile id the perf check calls."
+  description = "cf-prod-job-flow alias live (JOB_FLOW_ARN): the API starts job executions on it."
 }
 
-variable "model_invoke_arns" { type = list(string) }
+variable "clip_flow_alias_arn" {
+  type        = string
+  description = "cf-prod-clip-flow alias live (CLIP_FLOW_ARN): the API starts publish executions on it."
+}
+
+variable "job_flow_arn_prefix" {
+  type        = string
+  description = "Unqualified ARN arn:aws:lambda:REGION:ACCT:function:NAME of job-flow; IAM grants NAME:*."
+}
+
+variable "clip_flow_arn_prefix" {
+  type        = string
+  description = "Unqualified ARN of clip-flow; IAM grants NAME:*."
+}
+
+variable "vector_bucket" { type = string }
+variable "vector_index" { type = string }
+variable "vector_index_arn" { type = string }
 
 variable "log_retention_days" {
   type    = number

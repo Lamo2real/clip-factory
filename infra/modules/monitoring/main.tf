@@ -1,5 +1,6 @@
-# Alarms that email the owner when publishing work lands in the dead-letter queue or a Lambda fails. The topic
-# always exists, so an email address can be added later without touching the alarms.
+# Alarms that email the owner when a Lambda fails, a durable execution fails or times out, the live-update stream
+# falls behind, or the webhook API answers 5xx (docs/CONTRACTS.md §14.9). The topic always exists, so an email
+# address can be added later without touching the alarms.
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
@@ -9,6 +10,24 @@ terraform {
 
 locals {
   tags = { Component = "monitoring" }
+
+  durable_metrics = {
+    durable-failed = {
+      metric      = "DurableExecutionFailed"
+      description = "failed with an error the flow did not expect (a bug: expected outcomes never fail the execution)"
+    }
+    durable-timed-out = {
+      metric      = "DurableExecutionTimedOut"
+      description = "ran past its execution timeout"
+    }
+  }
+
+  # One alarm per durable function and metric, keyed "<fn key>/<suffix>".
+  durable_alarms = merge([
+    for fk, fn in var.durable_function_names : {
+      for mk, m in local.durable_metrics : "${fk}/${mk}" => merge(m, { function = fn, suffix = mk })
+    }
+  ]...)
 }
 
 # Not encrypted with the AWS managed SNS key on purpose: its key policy does not let CloudWatch alarms publish.
@@ -41,23 +60,6 @@ resource "aws_sns_topic_subscription" "email" {
   endpoint  = var.alarm_email
 }
 
-resource "aws_cloudwatch_metric_alarm" "dlq" {
-  alarm_name          = "${var.dlq_name}-not-empty"
-  alarm_description   = "A confirmed clip could not be handed to the publisher three times and is waiting in ${var.dlq_name}."
-  namespace           = "AWS/SQS"
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  dimensions          = { QueueName = var.dlq_name }
-  statistic           = "Maximum"
-  period              = 300
-  evaluation_periods  = 1
-  threshold           = 0
-  comparison_operator = "GreaterThanThreshold"
-  treat_missing_data  = "notBreaching"
-  alarm_actions       = [aws_sns_topic.alarms.arn]
-  ok_actions          = [aws_sns_topic.alarms.arn]
-  tags                = local.tags
-}
-
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   for_each            = var.function_names
   alarm_name          = "${each.value}-errors"
@@ -65,6 +67,57 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   namespace           = "AWS/Lambda"
   metric_name         = "Errors"
   dimensions          = { FunctionName = each.value }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  tags                = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "durable" {
+  for_each            = local.durable_alarms
+  alarm_name          = "${each.value.function}-${each.value.suffix}"
+  alarm_description   = "A durable execution of ${each.value.function} ${each.value.description}. List its executions in the Lambda console (Durable executions tab) and read /aws/lambda/${each.value.function}."
+  namespace           = "AWS/Lambda"
+  metric_name         = each.value.metric
+  dimensions          = { FunctionName = each.value.function }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  tags                = local.tags
+}
+
+# Live updates lag when the broadcaster falls more than 5 minutes behind the table's stream for 15 minutes.
+resource "aws_cloudwatch_metric_alarm" "stream_iterator_age" {
+  alarm_name          = "${var.stream_consumer_name}-iterator-age"
+  alarm_description   = "${var.stream_consumer_name} is more than 5 minutes behind the DynamoDB stream, so live updates are late. Read /aws/lambda/${var.stream_consumer_name}."
+  namespace           = "AWS/Lambda"
+  metric_name         = "IteratorAge"
+  dimensions          = { FunctionName = var.stream_consumer_name }
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 3
+  threshold           = 300000
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  ok_actions          = [aws_sns_topic.alarms.arn]
+  tags                = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "hooks_5xx" {
+  alarm_name          = "${var.hooks_api_name}-5xx"
+  alarm_description   = "The webhook API ${var.hooks_api_name} answered with a server error. Read /aws/apigateway/${var.hooks_api_name} and /aws/lambda/${var.hooks_api_name}."
+  namespace           = "AWS/ApiGateway"
+  metric_name         = "5XXError"
+  dimensions          = { ApiName = var.hooks_api_name, Stage = var.hooks_stage_name }
   statistic           = "Sum"
   period              = 300
   evaluation_periods  = 1
