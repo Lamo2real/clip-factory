@@ -6,8 +6,10 @@ the owner's request for a fully serverless Python and Terraform stack with WebSo
 and S3 Vectors (NFR-02 AC3 and AC4, NFR-13 to NFR-16, BR-11 AC5, BR-18), and the owner's request to organise
 Settings like a field of apple trees and to choose the click and error sounds (BR-13 AC3 to AC5, UX-09 update, UX-14,
 UX-15), and the owner's request to see how every clip performs on each platform, refresh those numbers by itself
-and pick the best clips of each week (BR-19 to BR-21, NFR-17, UX-16), and the owner's request to create, read,
-change and delete skills in Settings and to have every AI call use every skill (BR-05 and BR-06 update, BR-22).
+and pick the best clips of each week (BR-19 to BR-21, NFR-17, UX-16), the owner's request for one kid-proof setup per
+platform so the app can post to all five (BR-09 AC3, BR-10 AC3 to AC5, BR-23, UX-17), and the owner's request to
+create, read, change and delete skills in Settings and to have every AI call use every skill (BR-05 and BR-06 update,
+BR-22).
 Every requirement below traces back to one of them. Where
 the brief was open or unclear, the interpretation we chose is stated in [Interpretations and open questions](#interpretations-and-open-questions).
 
@@ -105,12 +107,18 @@ Upload to X, Meta (Facebook and Instagram) and YouTube; TikTok is added because 
 legal pages already cover it.
 - AC1 (phase 1): Confirmed posts are stored with status `pending_integration` and the app says "Waiting for the account connection".
 - AC2 (phase 2): A queued post is uploaded through the platform's official API and gets its public URL.
+- AC3: Every upload is sent from Clip Factory as a file; a retried step never posts twice; when posting fails the clip
+  says why in one sentence and what to press ([CONTRACTS.md §17.6](CONTRACTS.md#176-tokens-and-real-posting)).
 
 ### BR-10 Connect social accounts (phase 2)
 "This is a process to connect the social media accounts, of course. But we're gonna hold off that for now."
 - AC1 (phase 1): Settings › Posting › Accounts lists YouTube, Instagram, Facebook, TikTok and X as "Not connected"; the Connect
   button explains that connecting arrives in the next phase (`501 not_implemented`).
 - AC2 (phase 2): Each platform connects through its official sign-in (OAuth), tokens are stored in AWS Secrets Manager.
+- AC3: Settings › Posting › Set up posting replaces Accounts (the old address redirects); see BR-23.
+- AC4: Connect opens the platform in the same tab and comes back with confetti and "Connected as …", or with one plain
+  sentence saying what to redo. Meta accounts with several Pages or Instagram accounts get a picker.
+- AC5: Disconnect shows an 8-second Undo and keeps the keys, so **Connect again** works later.
 
 ### BR-11 48-hour performance check feeding learnings
 From "2 days after we've uploaded to the social media on the clips" (see interpretation I-01).
@@ -264,8 +272,6 @@ that week, so that it knows how to edit better in the future."
   replaces the learning; an older save never overwrites a newer one.
 - AC7: An empty week says "No clips this week yet. Make clips on Home." with a link.
 
----
-
 ### BR-22 Every AI call uses every skill
 "The whole AI system should use all of these skills by default, no matter what, as long as I add them: whatever AI
 service we use (Bedrock, AgentCore, whatever), when it is generating stuff or reading stuff."
@@ -286,6 +292,28 @@ service we use (Bedrock, AgentCore, whatever), when it is generating stuff or re
   if the list of skills itself cannot be read, the step fails and retries instead of running without skills.
 - AC6: Turning text into search vectors (Titan embeddings) is not writing or reading by Claude, so it does not get
   skills.
+
+### BR-23 A setup list: one setup per platform, so Clip Factory can post everywhere
+"Facebook, Instagram, YouTube, TikTok, and X should all be a step to connect to in order for this automation to work
+… The steps to set up YouTube should be up to date to today … The user shouldn't have to write code … Even an
+8-year-old should be able to do it." ([the steps](SETUP_POSTING.md),
+[CONTRACTS.md §17](CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16))
+- AC1: Settings › Posting › Set up posting lists the five platforms in the order YouTube, TikTok, Instagram, Facebook,
+  X, with a ring "n of 5 ready" and one line per platform ("Ready", "Step 7 of 23", "Needs you: connect again", "Not
+  started", "Works now, posts stay private").
+- AC2: Each platform's page has four parts (Get ready, Make your {Platform} key, Connect, Go public) of big numbered
+  steps, with everything the platform requires as of the "Steps checked on" date (16 Nov 2026), including the
+  developer account, app, permissions, return address, review or audit, and what each costs.
+- AC3: No code and no typing of values: every value has a Copy button, every page an Open button, every key a paste
+  box that checks its format; uncertain screens get an "If you see…" hint.
+- AC4: The app remembers ticked steps and reopens at the first unfinished one, on any device.
+- AC5: The limits are said plainly before the owner starts: TikTok posts may stay "Only me", Facebook Reels may be
+  visible only to the owner until the app is Live, X costs about $0.015 per post (stopped at $10 a month).
+- AC6: A Home card "Set up posting · n of 5 ready" with **Continue** shows until every platform the owner posts to is
+  ready.
+- AC7: [SETUP_POSTING.md](SETUP_POSTING.md) has the same steps, numbers and titles as the app, checked by a test.
+
+---
 
 ## Non-functional requirements
 
@@ -420,7 +448,7 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
   call is never retried (retrying makes Meta's block longer).
 - AC5: X: at most 1,000 requests per 15 minutes (the limit is 3,500), and an estimated spend cap of **$10 a month**;
   re-reading the same post on the same UTC day counts as free. At the cap, X pauses until the next month, and Settings ›
-  Posting › Accounts says so in one line.
+  Posting › Set up posting says so in one line.
 - AC6: Batches use each platform's largest request size (YouTube 50 ids, TikTok 20, Instagram and Facebook 50, X 100).
 - AC7: Only metrics the platforms still support are read: never Meta `impressions`, `plays`, `post_impressions_unique`
   or `total_video_impressions*`; X video views come from the video's own `view_count`, never from impressions.
@@ -576,6 +604,19 @@ So maybe 5 lines ... for both the phone resolution and the normal laptop's resol
   toggle; every state has words; the page works with a keyboard and a screen reader (the lines are decoration and are
   hidden from screen readers; each stack is a labelled section).
 
+### UX-17 Set up posting that a child can follow
+The owner: "It should be really clear on what to do, the steps, essentially idiot proof. Even an 8-year-old should
+be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
+- AC1: A step card has a number, a picture-like icon, a title of 6 words or fewer, 1–4 sentences of 15 words or
+  fewer with one action each, and the platform's button names in bold exactly as the platform shows them.
+- AC2: One tomato button per screen: the current step's main action (Open, Save keys, Connect {Platform} or Connect
+  again). **I did this**, Copy and Paste are sage and at least 48 px tall.
+- AC3: Copy shows "Copied!" with a sage tick and works without clipboard permission; a bad key shows what it should
+  look like right under the box, and Save keys stays off until the keys look right.
+- AC4: Connecting celebrates (confetti, the success sound, the account's picture and name); every other result plays
+  the error sound and shows one calm sentence and the step to go back to.
+- AC5: Nothing overflows from 320 to 1920 px; phone bottom bar and desktop sidebar as everywhere else.
+
 ---
 
 ## Interpretations and open questions
@@ -613,13 +654,15 @@ So maybe 5 lines ... for both the phone resolution and the normal laptop's resol
 | I-29 | X numbers cost money | X has no free tier for reading posts; reads are paid per post. The app caps its own spend at $10 a month and says so in Settings (NFR-17 AC5, [DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)). | Is $10 a month the right cap? |
 | I-30 | "Create, read, update, delete skills in Settings, following the trees, branches, apples, leaves" | Skills stay one branch (Clip making › Skills) with two apples, **Your skills** and **Add a skill**; each skill gets its own page, and writing and editing get their own pages under the branch, so the tree stays four trees deep at most. Writing a skill is three plain questions, so a child can do it without knowing the `SKILL.md` format (BR-06). | No. |
 | I-31 | "The whole AI system should use all of these skills by default, no matter what ... Bedrock, AgentCore, whatever ... generating stuff or reading stuff" | Every Claude call, on AgentCore (Agent SDK) and on Bedrock directly, in the agent and in the API, gets every skill first in its instructions, and the per-skill on/off switch is removed. Titan embeddings are not "generating or reading" by Claude and get none. Very long skills are shortened to fit (BR-22, [ADR-32](DECISIONS.md#adr-32-every-ai-call-gets-every-skill-through-one-shared-skills-block)). | Are 40,000 characters per skill and 120,000 in total enough? |
+| I-32 | "Each one … should all be a step to connect to" | One setup per platform in a setup list with a ready ring; the owner makes and owns each platform's developer app and pastes its keys, because no shared app can post for a private owner on all five today ([ADR-33](DECISIONS.md#adr-33-posting-setup-bring-your-own-keys-with-a-guided-list-per-platform)). | No. |
+| I-33 | "Up to date to today" | The steps were checked against each platform's docs on 16 Nov 2026; the date is shown on every platform page, and the sources are in [SETUP_POSTING.md](SETUP_POSTING.md#research-sources-checked-on-16-nov-2026). | How often should they be re-checked? |
+| I-34 | Posting on TikTok and Facebook "for everyone" | TikTok may keep posts "Only me" (it often refuses apps used by one person), and Facebook Reels may stay visible only to the owner until Meta lets the app go Live. The setup says so; it cannot be forced. | Accept private TikTok posts if TikTok says no? |
 
 ## Out of scope for this phase
 
-- Connecting social accounts and posting to YouTube, Instagram, Facebook, TikTok and X (BR-09, BR-10 phase 2).
-- Reading real post metrics (BR-11 AC2 phase 2). The clip flow's 48-hour wait, learnings and memory, the stats poller,
-  the Refresh button, the performance page and the weekly best all exist; with no connected account every platform
-  reads "Waiting for connection" and no platform is called (BR-19 to BR-21).
+- Posting automatically the clips that were kept before a platform was connected (they stay "Waiting for connection";
+  [roadmap](ROADMAP.md#phase-2-social-integrations)).
+- Webhook signature checks and acting on webhook events.
 - OpenSearch Serverless (an option, not deployed).
 - Whop or Content Rewards campaign reading from the local app.
 - More than one user.

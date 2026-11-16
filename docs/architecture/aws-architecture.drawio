@@ -4,13 +4,13 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="hdr" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Clip Factory Cloud on AWS. Repo &lt;code&gt;Lamo2real/clip-factory-legal&lt;/code&gt;, branch &lt;code&gt;main&lt;/code&gt;, one AWS account, one environment (&lt;code&gt;prod&lt;/code&gt;, prefix &lt;code&gt;cf-prod&lt;/code&gt;), region &lt;code&gt;eu-north-1&lt;/code&gt;. Backend: Python 3.13. Infrastructure: Terraform in &lt;code&gt;infra/&lt;/code&gt;.&lt;/b&gt;&lt;br&gt;Serverless only: 1 CloudFront distribution &amp;#183; 2 S3 buckets (web, media) &amp;#183; 1 S3 Vectors bucket + index &amp;#183; 1 DynamoDB table + Streams &amp;#183; 3 API Gateway APIs (HTTP, WebSocket, REST) &amp;#183; 9 Lambdas (2 durable functions) · 1 EventBridge rule (stats every 15 min) &amp;#183; 1 AgentCore runtime &amp;#183; Bedrock (Claude Fable 5.1, Titan Embeddings V2) &amp;#183; Transcribe &amp;#183; Cognito &amp;#183; SSM Parameter Store &amp;#183; CloudWatch + SNS &amp;#183; no servers, no containers to run, no VPC &amp;#183; every push to &lt;code&gt;main&lt;/code&gt; deploys through GitHub OIDC" vertex="1">
+        <mxCell id="hdr" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Clip Factory Cloud on AWS. Repo &lt;code&gt;Lamo2real/clip-factory-legal&lt;/code&gt;, branch &lt;code&gt;main&lt;/code&gt;, one AWS account, one environment (&lt;code&gt;prod&lt;/code&gt;, prefix &lt;code&gt;cf-prod&lt;/code&gt;), region &lt;code&gt;eu-north-1&lt;/code&gt;. Backend: Python 3.13. Infrastructure: Terraform in &lt;code&gt;infra/&lt;/code&gt;.&lt;/b&gt;&lt;br&gt;Serverless only: 1 CloudFront distribution &amp;#183; 2 S3 buckets (web, media) &amp;#183; 1 S3 Vectors bucket + index &amp;#183; 1 DynamoDB table + Streams &amp;#183; 3 API Gateway APIs (HTTP, WebSocket, REST) &amp;#183; 9 Lambdas (2 durable functions) · 1 EventBridge rule (stats every 15 min) &amp;#183; 1 AgentCore runtime &amp;#183; Bedrock (Claude Fable 5.1, Titan Embeddings V2) &amp;#183; Transcribe &amp;#183; Cognito &amp;#183; SSM Parameter Store &amp;#183; Secrets Manager (platform keys and tokens) &amp;#183; CloudWatch + SNS &amp;#183; no servers, no containers to run, no VPC &amp;#183; every push to &lt;code&gt;main&lt;/code&gt; deploys through GitHub OIDC" vertex="1">
           <mxGeometry x="0" y="-76" width="2760" height="60" as="geometry" />
         </mxCell>
         <mxCell id="frame" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;" value="" vertex="1">
           <mxGeometry x="0" y="0" width="2760" height="1920" as="geometry" />
         </mxCell>
-        <mxCell id="frame_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontSize=16;fontStyle=1;fontColor=#0050EF;" value="Clip Factory Cloud - paste a link, the agent cuts 5-10 vertical clips, live updates over WebSocket, nothing is posted without the owner's Keep, numbers refresh every 15-30 min, the owner stars the best of each week" vertex="1">
+        <mxCell id="frame_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontSize=16;fontStyle=1;fontColor=#0050EF;" value="Clip Factory Cloud - paste a link, the agent cuts 5-10 vertical clips, live updates over WebSocket, nothing is posted without the owner's Keep, a guided setup connects YouTube, TikTok, Instagram, Facebook and X, numbers refresh every 15-30 min, the owner stars the best of each week" vertex="1">
           <mxGeometry x="20" y="6" width="2700" height="34" as="geometry" />
         </mxCell>
         <mxCell id="devices" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;dashed=1;" value="" vertex="1">
@@ -34,13 +34,13 @@
         <mxCell id="cf" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudfront;fillColor=#8C4FFF;" value=" " vertex="1">
           <mxGeometry x="442" y="110" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="cf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Web distribution (CloudFront)&lt;/b&gt;&lt;br&gt;PWA, &lt;code&gt;config.json&lt;/code&gt; (apiUrl, wsUrl), &lt;code&gt;version.json&lt;/code&gt;; OAC; CSP allows &lt;code&gt;wss://&lt;/code&gt;" vertex="1">
+        <mxCell id="cf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Web distribution (CloudFront)&lt;/b&gt;&lt;br&gt;PWA, &lt;code&gt;config.json&lt;/code&gt; (apiUrl, wsUrl, oauthCallbackBase), &lt;code&gt;version.json&lt;/code&gt;; OAC; CSP allows &lt;code&gt;wss://&lt;/code&gt;" vertex="1">
           <mxGeometry x="360" y="170" width="220" height="90" as="geometry" />
         </mxCell>
         <mxCell id="s3web" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;fillColor=#7AA116;" value=" " vertex="1">
           <mxGeometry x="842" y="110" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="s3web_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-web (S3)&lt;/b&gt;&lt;br&gt;private; the app, &lt;code&gt;version.json&lt;/code&gt;, &lt;code&gt;downloads/&lt;/code&gt; (.dmg, .exe)" vertex="1">
+        <mxCell id="s3web_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-web (S3)&lt;/b&gt;&lt;br&gt;private; the app, &lt;code&gt;version.json&lt;/code&gt;, &lt;code&gt;downloads/&lt;/code&gt; (.dmg, .exe), &lt;code&gt;about.html&lt;/code&gt;, &lt;code&gt;legal/&lt;/code&gt;, TikTok &lt;code&gt;tiktok*.txt&lt;/code&gt; (kept by deploys)" vertex="1">
           <mxGeometry x="760" y="170" width="220" height="90" as="geometry" />
         </mxCell>
         <mxCell id="cog" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cognito;fillColor=#DD344C;" value=" " vertex="1">
@@ -70,7 +70,7 @@
         <mxCell id="api" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
           <mxGeometry x="1242" y="400" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="api_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-api (Lambda)&lt;/b&gt;&lt;br&gt;every &lt;code&gt;/v1&lt;/code&gt; route; presigned URLs; starts both flows; cancel; Keep / Throw away; similar clips; performance + weeks; starts stats refresh and weekly learn" vertex="1">
+        <mxCell id="api_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-api (Lambda)&lt;/b&gt;&lt;br&gt;every &lt;code&gt;/v1&lt;/code&gt; route; presigned URLs; starts both flows; Keep / Throw away; performance + weeks; &lt;b&gt;10&lt;/b&gt; setup: keys to Secrets Manager, Check it, Connect start (signed state, PKCE), choose, disconnect" vertex="1">
           <mxGeometry x="1160" y="460" width="220" height="110" as="geometry" />
         </mxCell>
         <mxCell id="wsauth" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
@@ -94,7 +94,7 @@
         <mxCell id="hooks" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
           <mxGeometry x="1242" y="1360" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="hooks_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-hooks (Lambda)&lt;/b&gt;&lt;br&gt;verify challenges, store &lt;code&gt;HOOK#&lt;/code&gt; events (14 days), OAuth &amp;#8594; Settings (phase 2)" vertex="1">
+        <mxCell id="hooks_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-hooks (Lambda)&lt;/b&gt;&lt;br&gt;verify challenges, store &lt;code&gt;HOOK#&lt;/code&gt; events (14 days); &lt;b&gt;10&lt;/b&gt; OAuth callback: check signed single-use state, exchange code, tokens to Secrets Manager, 302 to the setup page" vertex="1">
           <mxGeometry x="1160" y="1420" width="220" height="110" as="geometry" />
         </mxCell>
         <mxCell id="jf" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
@@ -106,7 +106,7 @@
         <mxCell id="clf" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
           <mxGeometry x="1642" y="1110" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="clf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-clip-flow (Lambda DURABLE, alias live)&lt;/b&gt;&lt;br&gt;&lt;i&gt;ensure-posts&lt;/i&gt; &amp;#8594; &lt;i&gt;publish-{platform}&lt;/i&gt; &amp;#8594; &lt;i&gt;settle-clip&lt;/i&gt; &amp;#8594; &lt;b&gt;wait 48 h&lt;/b&gt; (no compute) &amp;#8594; &lt;i&gt;metrics&lt;/i&gt; &amp;#8594; &lt;i&gt;distil&lt;/i&gt; &amp;#8594; &lt;i&gt;upsert-vector&lt;/i&gt;; replaces SQS, Scheduler, publisher, perf-check" vertex="1">
+        <mxCell id="clf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-clip-flow (Lambda DURABLE, alias live)&lt;/b&gt;&lt;br&gt;&lt;i&gt;ensure-posts&lt;/i&gt; → &lt;i&gt;publish- / wait- / check- / finish-{platform}&lt;/i&gt; → &lt;i&gt;settle-clip&lt;/i&gt; → &lt;b&gt;wait 48 h&lt;/b&gt; (no compute) → &lt;i&gt;metrics&lt;/i&gt; → &lt;i&gt;distil&lt;/i&gt; → &lt;i&gt;upsert-vector&lt;/i&gt;" vertex="1">
           <mxGeometry x="1560" y="1170" width="220" height="120" as="geometry" />
         </mxCell>
         <mxCell id="ddb" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.dynamodb;fillColor=#C925D1;" value=" " vertex="1">
@@ -181,11 +181,11 @@
         <mxCell id="ssm_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;SSM Parameter Store&lt;/b&gt;&lt;br&gt;&lt;code&gt;/cf-prod/hooks/verify-token&lt;/code&gt; SecureString (write-only, never in state)" vertex="1">
           <mxGeometry x="1560" y="1420" width="220" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="social" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=1;" value="&lt;b&gt;Phase 2 - social platforms&lt;/b&gt;&lt;br&gt;YouTube &amp;#183; Instagram &amp;#183; Facebook &amp;#183; TikTok &amp;#183; X&lt;br&gt;(today posts wait as &lt;i&gt;pending_integration&lt;/i&gt;)" vertex="1">
-          <mxGeometry x="2442" y="1100" width="280" height="70" as="geometry" />
+        <mxCell id="social" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=0;" value="&lt;b&gt;Social platforms: upload hosts&lt;/b&gt;&lt;br&gt;YouTube &lt;code&gt;googleapis.com/upload&lt;/code&gt; · TikTok &lt;code&gt;open.tiktokapis.com&lt;/code&gt; · Instagram + Facebook &lt;code&gt;rupload.facebook.com&lt;/code&gt;, &lt;code&gt;graph.facebook.com&lt;/code&gt; · X &lt;code&gt;api.x.com&lt;/code&gt; media upload&lt;br&gt;every upload sent as a file" vertex="1">
+          <mxGeometry x="2442" y="1100" width="280" height="96" as="geometry" />
         </mxCell>
-        <mxCell id="plat" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=1;" value="&lt;b&gt;Platform webhooks + OAuth&lt;/b&gt;&lt;br&gt;Meta, YouTube (phase 2)" vertex="1">
-          <mxGeometry x="370" y="1340" width="200" height="84" as="geometry" />
+        <mxCell id="plat" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=0;" value="&lt;b&gt;Platform consent pages + webhooks&lt;/b&gt;&lt;br&gt;Google, TikTok, Meta, X: the owner approves, the platform redirects to &lt;code&gt;/oauth/{platform}/callback&lt;/code&gt;" vertex="1">
+          <mxGeometry x="370" y="1340" width="200" height="96" as="geometry" />
         </mxCell>
         <mxCell id="e_cf" edge="1" parent="1" source="client" target="cf" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.15;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="HTTPS">
           <mxGeometry relative="1" as="geometry">
@@ -344,7 +344,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="e6a" edge="1" parent="1" source="clf" target="social" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;6&lt;/b&gt; publish each queued post (phase 2)">
+        <mxCell id="e6a" edge="1" parent="1" source="clf" target="social" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;6&lt;/b&gt; publish: start, durable waits + checks, finish">
           <mxGeometry x="0.3" y="0" relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e6b" edge="1" parent="1" source="clf" target="vec" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" value="&lt;b&gt;6&lt;/b&gt; upsert vector (performed + numbers)">
@@ -363,7 +363,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="e_plat" edge="1" parent="1" source="plat" target="rest" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="HTTPS (public)">
+        <mxCell id="e_plat" edge="1" parent="1" source="plat" target="rest" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;10&lt;/b&gt; 302 with code + state (HTTPS, public)">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_rest" edge="1" parent="1" source="rest" target="hooks" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="AWS_PROXY">
@@ -407,7 +407,7 @@
         <mxCell id="roles" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1">
           <mxGeometry x="1160" y="2082" width="56" height="56" as="geometry" />
         </mxCell>
-        <mxCell id="roles_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Runtime IAM roles&lt;/b&gt;&lt;br&gt;one per Lambda (9) + the agent runtime; least privilege; agent may send job-flow callbacks only" vertex="1">
+        <mxCell id="roles_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Runtime IAM roles&lt;/b&gt;&lt;br&gt;one per Lambda (9) + the agent runtime; least privilege; only api, hooks, clip-flow and stats reach &lt;code&gt;cf-prod/platforms/*&lt;/code&gt;" vertex="1">
           <mxGeometry x="1080" y="2142" width="240" height="100" as="geometry" />
         </mxCell>
         <mxCell id="apigwrole" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1">
@@ -466,16 +466,16 @@
         <mxCell id="hw4" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;5. Review and Keep.&lt;/b&gt; The owner watches each clip, sees similar clips that did well, edits captions and presses Keep (or Throw away). Keep writes the posts in one transaction and starts the durable &lt;code&gt;cf-prod-clip-flow&lt;/code&gt; (&lt;code&gt;clip-{clipId}-{run}&lt;/code&gt;)." vertex="1">
           <mxGeometry x="2820" y="468" width="520" height="88" as="geometry" />
         </mxCell>
-        <mxCell id="hw5" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;6. Publish, wait 48 h, learn.&lt;/b&gt; The clip flow publishes each queued post (phase 2), waits 48 hours without compute, reads the numbers, asks Claude for one short learning and marks the clip's vector &lt;i&gt;performed&lt;/i&gt;." vertex="1">
-          <mxGeometry x="2820" y="574" width="520" height="72" as="geometry" />
+        <mxCell id="hw5" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;6. Publish, wait 48 h, learn.&lt;/b&gt; The clip flow publishes each queued post (start, durable waits and checks, finish; no double posts on a retry), waits 48 hours without compute, reads the numbers, asks Claude for one short learning and marks the clip's vector &lt;i&gt;performed&lt;/i&gt;." vertex="1">
+          <mxGeometry x="2820" y="574" width="520" height="80" as="geometry" />
         </mxCell>
         <mxCell id="hw6" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;7. Vectors feed the agent.&lt;/b&gt; Before choosing moments, the agent embeds the new source with Titan V2 and queries S3 Vectors for the owner's 8 most similar performed clips: &quot;What worked before&quot;." vertex="1">
           <mxGeometry x="2820" y="664" width="520" height="72" as="geometry" />
         </mxCell>
-        <mxCell id="hw7" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;Webhooks.&lt;/b&gt; Platforms call the public REST API (throttled, no query strings logged); &lt;code&gt;cf-prod-hooks&lt;/code&gt; answers challenges with the SSM verify token and stores events." vertex="1">
+        <mxCell id="hw7" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;Webhooks.&lt;/b&gt; Platforms call the public REST API (throttled, no query strings logged); &lt;code&gt;cf-prod-hooks&lt;/code&gt; answers challenges with the SSM verify token and stores events (signatures not checked yet)." vertex="1">
           <mxGeometry x="2820" y="754" width="520" height="72" as="geometry" />
         </mxCell>
-        <mxCell id="hw8" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;Legend.&lt;/b&gt; Solid arrow = request or data flow built now; dashed = callback, image pull, option or phase 2. Bold numbers match the steps above. OpenSearch Serverless is drawn dashed because it is not deployed." vertex="1">
+        <mxCell id="hw8" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;Legend.&lt;/b&gt; Solid arrow = request or data flow built now; dashed = callback, image pull, or option. Bold numbers match the steps above. OpenSearch Serverless is drawn dashed because it is not deployed." vertex="1">
           <mxGeometry x="2820" y="1024" width="520" height="72" as="geometry" />
         </mxCell>
         <mxCell id="evr" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.eventbridge;fillColor=#E7157B;" value=" " vertex="1">
@@ -496,7 +496,7 @@
         <mxCell id="learn_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-learn (Lambda)&lt;/b&gt;&lt;br&gt;&lt;b&gt;9&lt;/b&gt; the owner's best-of-week picks: vectors &lt;i&gt;best&lt;/i&gt; true/false, one &quot;Best of week&quot; learning (WEEK#, LEARNING#); 512 MB, 300 s, retries 1" vertex="1">
           <mxGeometry x="1545" y="1700" width="250" height="100" as="geometry" />
         </mxCell>
-        <mxCell id="statapis" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=1;" value="&lt;b&gt;Platform stats APIs (tokens in phase 2)&lt;/b&gt;&lt;br&gt;YouTube Data + Analytics · TikTok video query · Instagram + Facebook Graph insights · X posts lookup&lt;br&gt;every 15 min: YouTube, TikTok, X; every 30 min: Instagram, Facebook" vertex="1">
+        <mxCell id="statapis" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=0;" value="&lt;b&gt;Platform stats APIs (tokens from Secrets Manager)&lt;/b&gt;&lt;br&gt;YouTube Data + Analytics · TikTok video query · Instagram + Facebook Graph insights · X posts lookup&lt;br&gt;every 15 min: YouTube, TikTok, X; every 30 min: Instagram, Facebook" vertex="1">
           <mxGeometry x="2442" y="1790" width="280" height="96" as="geometry" />
         </mxCell>
         <mxCell id="e8a" edge="1" parent="1" source="evr" target="stats" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;8&lt;/b&gt; tick every 15 min">
@@ -519,7 +519,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="e8d" edge="1" parent="1" source="stats" target="statapis" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;8&lt;/b&gt; fetch_stats in batches (50 / 20 / 100 ids), never over a platform's limit">
+        <mxCell id="e8d" edge="1" parent="1" source="stats" target="statapis" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=0;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;8&lt;/b&gt; fetch_stats in batches (50 / 20 / 100 ids), never over a platform's limit">
           <mxGeometry x="0.3" y="0" relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="1400" y="1682" />
@@ -574,6 +574,41 @@
         </mxCell>
         <mxCell id="hw10" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;9. Best of the week.&lt;/b&gt; The owner stars the week's best clips; &lt;code&gt;cf-prod-learn&lt;/code&gt; marks their vectors &lt;i&gt;best&lt;/i&gt; and asks Claude Fable 5.1 for one &quot;Best of week&quot; learning the agent reads first." vertex="1">
           <mxGeometry x="2820" y="944" width="520" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="sm" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.secrets_manager;fillColor=#DD344C;" value=" " vertex="1">
+          <mxGeometry x="1847" y="1360" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="sm_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Secrets Manager&lt;/b&gt;&lt;br&gt;&lt;code&gt;cf-prod/platforms/*&lt;/code&gt;: app keys + tokens (runtime); &lt;code&gt;cf-prod/oauth/state-key&lt;/code&gt; (write-only)" vertex="1">
+          <mxGeometry x="1800" y="1422" width="155" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="e10a" edge="1" parent="1" source="hooks" target="sm" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.8;entryDx=0;entryDy=0;" value="&lt;b&gt;10&lt;/b&gt; state key; write tokens">
+          <mxGeometry relative="1" as="geometry" x="-0.1" y="0">
+            <Array as="points">
+              <mxPoint x="1440" y="1402" />
+              <mxPoint x="1440" y="1548" />
+              <mxPoint x="1790" y="1548" />
+              <mxPoint x="1790" y="1405" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10b" edge="1" parent="1" source="clf" target="sm" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;" value="tokens, refresh">
+          <mxGeometry relative="1" as="geometry" x="0.3" y="0">
+            <Array as="points">
+              <mxPoint x="1800" y="1166" />
+              <mxPoint x="1800" y="1380" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10c" edge="1" parent="1" source="client" target="plat" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.9;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;10&lt;/b&gt; Connect: consent page, same tab">
+          <mxGeometry relative="1" as="geometry" x="0.6" y="0">
+            <Array as="points">
+              <mxPoint x="200" y="458" />
+              <mxPoint x="200" y="1388" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="hw11" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;10. Set up posting.&lt;/b&gt; The owner follows a step list per platform, pastes the keys of their own developer app (stored only in Secrets Manager) and presses Connect; the platform sends them back to &lt;code&gt;cf-prod-hooks&lt;/code&gt;, which checks the signed single-use state, exchanges the code and stores the token. &lt;code&gt;cf-prod-api&lt;/code&gt;, the clip flow and the stats poller read keys and tokens from there." vertex="1">
+          <mxGeometry x="2820" y="1110" width="520" height="104" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

@@ -136,7 +136,7 @@ Settings                                   /settings
 │   ├── Skills         Your skills (read, edit, delete; always used), Add a skill (write or upload)
 │   └── YouTube help   YouTube cookies: add, remove
 ├── Posting                                /settings/posting
-│   ├── Accounts       YouTube, Instagram, Facebook, TikTok, X (Coming soon)
+│   ├── Set up posting the five setups (YouTube, TikTok, Instagram, Facebook, X), "n of 5 ready" (was Accounts)
 │   └── Where clips go the platforms to post to (at least one)
 ├── Look & feel                            /settings/look-and-feel
 │   ├── Sounds         Sounds on/off, Click sound, Error sound, Try it
@@ -467,12 +467,12 @@ Numbers are compact (`Intl.NumberFormat` with `notation: "compact"`: 1.2K, 3.4M)
 
 | State | Words | Link |
 |---|---|---|
-| Waiting for connection | "Connect {Platform} in Settings › Posting › Accounts." | `/settings/posting/accounts` |
+| Waiting for connection | "Connect {Platform} in Settings › Posting › Set up posting." | `/settings/posting/setup/{platform}` |
 | Not posted | "Not posted here. Turn on {Platform} in Settings › Posting › Where clips go." | `/settings/posting/where` |
 | Posting | "Posting now…" with a small spinner | – |
 | Posted privately (TikTok) | "Posted privately. TikTok shows numbers after the app is approved." | – |
 | Posted, no numbers yet | "Numbers are on the way. Check back in a few minutes." | – |
-| Failed | "Posting failed: {reason}. Go to Review and press Try again." (`--danger` text) | Review |
+| Failed | "Posting failed: {reason}. Go to Library and press Try again." (`--danger` text) | Library |
 
 **Live.** A `post` event for one of this clip's posts replaces that stack's numbers and adds a sparkline point; a
 `clip` event updates the star; a reconnect or a `partial` event refetches the page. With no live connection the page
@@ -495,6 +495,38 @@ refetches every 60 s.
   API refuses more with "Pick clips from this week only." for clips of another week).
 - Empty week: "No clips this week yet. Make clips on Home." with a link to Home.
 - No tomato button on This week: starring is the action, and it saves by itself.
+
+## Set up posting
+
+The setup list and the five platform pages
+([CONTRACTS.md §17.1](CONTRACTS.md#171-what-the-owner-sees), [UX-17](BUSINESS_REQUIREMENTS.md#ux-17-set-up-posting-that-a-child-can-follow),
+the steps in [SETUP_POSTING.md](SETUP_POSTING.md)).
+
+- **The list** (`/settings/posting/setup`): a big ring "2 of 5 ready" in Times, then five big glass cards in the order
+  YouTube, TikTok, Instagram, Facebook, X: platform mark, name, a small progress ring, one state line ("Ready", "Step
+  7 of 23", "Needs you: connect again", "Not started", "Works now, posts stay private"). Leaf: "Do each one once. After
+  that Clip Factory posts by itself."
+- **A platform page**: mark, name, ring, "About 20 minutes · Free" (X: "Costs a little"), "Steps checked on 16 Nov
+  2026", then the four parts as glass sections (Get ready, Make your {Platform} key, Connect, Go public). Step numbers
+  run on across the parts. The first unfinished step is open and scrolled into view; finished steps fold into a sage
+  tick row that opens again on tap. Below the parts, **When it's done**: the account's picture and name, **Check it**,
+  **Connect again**, **Disconnect**, and the platform's own settings (YouTube "Who can see your clips", the X spend note).
+- **A step card**: number in a circle, an icon, a title (≤ 6 words), 1–4 short sentences, platform button names in
+  **bold** exactly as the platform writes them, then only what the step needs: **Open {site}** (new tab), **Copy**
+  chips (label plus the value in a mono font; "Copied!" with a sage tick), paste boxes with **Paste** and a format check
+  under the box, the TikTok upload box, "**If you see** … do …" hints, and **I did this** (sage, ≥ 48 px).
+- **Colour**: one tomato button per screen, the current step's main action (Open, else Save keys, else Connect
+  {Platform}, else Connect again when a token has died). Everything else is sage or glass. Error results never turn the
+  page red: a calm glass card with one sentence and the step to go back to.
+- **Delight**: Connect comes back with confetti (skipped with reduced motion), the success sound and a big card
+  "Connected as **@name**" with the avatar while the ring fills. Saved keys and a good **Check it** get a sage tick and
+  the success sound.
+- **Mistakes are cheap**: Disconnect is an 8-second "Disconnecting YouTube… Undo" toast, never a dialog. Keys stay
+  saved, so **Connect again** is one tap.
+- **Home card** "Set up posting · 2 of 5 ready" with the next platform's name and **Continue** (sage, not the Home
+  tomato), until every platform the owner posts to is ready.
+- **Overflow**: long values (redirect URIs, client ids) wrap inside their chip (`overflow-wrap: anywhere`), never
+  widen the card; every page fits from 320 to 1920 px.
 
 ## Skill pages
 

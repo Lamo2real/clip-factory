@@ -6,8 +6,9 @@ Clip Factory Cloud is a serverless application in one AWS account and one enviro
 
 The diagram is [architecture/aws-architecture.drawio](architecture/aws-architecture.drawio) (a PNG copy is
 [architecture/aws-architecture.png](architecture/aws-architecture.png)). Names, routes, shapes and keys are defined in
-[CONTRACTS.md](CONTRACTS.md), especially [§14](CONTRACTS.md#14-serverless-expansion-websocket-api-rest-api-durable-functions-s3-vectors)
-and [§16](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16) (clip numbers and the weekly best)
+[CONTRACTS.md](CONTRACTS.md), especially [§14](CONTRACTS.md#14-serverless-expansion-websocket-api-rest-api-durable-functions-s3-vectors),
+[§16](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16) (clip numbers and the weekly best),
+[§17](CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16) (posting setup, Connect and real posting)
 and [§18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16) (skills, and every AI call using every skill);
 this document explains how the pieces work together and why.
 
@@ -42,17 +43,23 @@ flowchart LR
   ddb -- "4 stream, filtered" --> bc[Lambda cf-prod-broadcast]
   bc -- PostToConnection --> ws
   lapi -- "5 Keep, then 6 async invoke" --> clf[["Durable Lambda cf-prod-clip-flow"]]
-  clf -- "publish, phase 2" --> social[YouTube, Instagram, Facebook, TikTok, X]
+  clf -- "6 publish: start, wait, check, finish" --> social[Upload hosts: YouTube, TikTok, Instagram, Facebook, X]
+  clf -- "tokens, refresh" --> sm[(Secrets Manager cf-prod/platforms/*)]
   clf -- "wait 48 h, metrics, distil" --> bedrock
   clf -- "6 upsert vector" --> vec
-  platforms[Platform webhooks and OAuth, phase 2] --> rest[API Gateway REST API]
+  owner -- "10 Connect: consent page, same tab" --> platforms[Platform consent pages and webhooks]
+  platforms -- "10 302 back with code and state" --> rest[API Gateway REST API]
   rest --> hooks[Lambda cf-prod-hooks] --> ddb
   hooks --> ssm[SSM Parameter Store: verify token]
+  hooks -- "10 state key, code exchange, write tokens" --> sm
+  lapi -- "10 save keys, Check it, connect" --> sm
+  lapi -- "TikTok verification file" --> web
   os[OpenSearch Serverless: not deployed]:::off -. option .- vec
   evr[EventBridge rule cf-prod-stats, rate 15 minutes] -- "8 tick" --> st[Lambda cf-prod-stats]
   lapi -- "8 Refresh numbers, async" --> st
   st -- "8 due posts (gsi2), metrics, STAT#, RATE#" --> ddb
-  st -. "8 batched reads, phase 2 tokens" .-> stapi[Platform stats APIs: YouTube, TikTok, Instagram, Facebook, X]
+  st -- "8 tokens" --> sm
+  st -- "8 batched reads" --> stapi[Platform stats APIs: YouTube, TikTok, Instagram, Facebook, X]
   lapi -- "9 weekly best saved, async" --> lrn[Lambda cf-prod-learn]
   lrn -- "9 Best of week learning" --> bedrock
   lrn -- "9 best true or false" --> vec
@@ -68,25 +75,26 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | Service | Resource | Why |
 |---|---|---|
 | Amazon CloudFront | web distribution | HTTPS, caching for the PWA, `config.json`, `version.json` and `downloads/manifest.json` never cached. Origin Access Control keeps the bucket private. The CSP allows `wss://*.execute-api.eu-north-1.amazonaws.com` for live updates. |
-| Amazon S3 | `cf-prod-web` | The built web app, `version.json` (what is new), and `downloads/` (the desktop `.dmg` and `.exe` plus `manifest.json`). Private; only CloudFront reads it. |
+| Amazon S3 | `cf-prod-web` | The built web app, `version.json` (what is new), `downloads/` (the desktop `.dmg` and `.exe` plus `manifest.json`), the public `about.html`, `legal/privacy.html` and `legal/terms.html`, and TikTok's `tiktok*.txt` verification files (written by `cf-prod-api`, never deleted by a deploy). Private; only CloudFront reads it. |
 | Amazon S3 | `cf-prod-media-<accountId>` | Uploads, extracted audio, transcripts, rendered clips and covers, skills and the optional YouTube cookies. Private, SSE-S3, sources expire after 14 days. Browsers use presigned URLs only. |
 | Amazon S3 Vectors | bucket `cf-prod-vectors-<accountId>`, index `clips` (1024 dimensions, cosine, float32) | The learning memory: one vector per clip, so the agent can find "what worked before" and the app can show "Like clips that did well". Paid per request and per stored vector, nothing standing. See [ADR-25](DECISIONS.md#adr-25-s3-vectors-for-the-learning-memory-opensearch-not-deployed). |
 | Amazon Cognito | user pool `cf-prod-users`, client `cf-prod-web` | One owner, admin-created. Short access tokens and a rotating 30-day refresh token. |
 | Amazon API Gateway, HTTP API | `/v1` routes | The app's API. Cheapest type, with a built-in JWT authorizer. CORS for the app and `localhost:5173`. |
 | Amazon API Gateway, WebSocket API | `cf-prod-ws`, stage `live` | Pushes job, clip, post and learning changes to open apps, so screens update without waiting for a poll. See [ADR-23](DECISIONS.md#adr-23-live-updates-over-a-websocket-api-polling-only-as-the-fallback). |
-| Amazon API Gateway, REST API | `cf-prod-hooks`, stage `v1` | The one public, unauthenticated surface: platform webhooks and OAuth callbacks (phase 2), with per-method throttling, a usage plan, request validation and X-Ray. See [ADR-24](DECISIONS.md#adr-24-a-separate-rest-api-for-public-platform-webhooks). |
-| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, skills (write, upload, read, change, delete), starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`). |
-| AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
+| Amazon API Gateway, REST API | `cf-prod-hooks`, stage `v1` | The one public, unauthenticated surface: platform webhooks and the OAuth callback that finishes Connect, with per-method throttling, a usage plan, request validation and X-Ray. See [ADR-24](DECISIONS.md#adr-24-a-separate-rest-api-for-public-platform-webhooks). |
+| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, skills (write, upload, read, change, delete), starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`), the posting setup (keys to Secrets Manager, Check it, Connect start, choose, disconnect, TikTok's verification file to the web bucket). |
+| AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda | `cf-prod-learn` | The weekly best ([flow 14](#14-best-of-the-week)): marks the starred clips' vectors `best`, asks Claude Fable 5.1 (with the skills block) for one "Best of week" learning. See [ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal). |
 | Amazon EventBridge | rule `cf-prod-stats`, `rate(15 minutes)` | The only schedule in the system: one tick for the stats poller, its rate taken from the smallest interval in `config/platforms.json`. A few thousand invocations a month. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda, durable function | `cf-prod-job-flow` (alias `live`) | Starts the agent for a job and waits (no compute) for its callback; fails the job if heartbeats stop. Replaces the watchdog. See [ADR-22](DECISIONS.md#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows). |
-| AWS Lambda, durable function | `cf-prod-clip-flow` (alias `live`) | After Keep: makes the posts, publishes (phase 2), waits 48 hours (no compute), reads metrics, writes a learning, updates the clip's vector. Replaces the publish queue, the publisher, the scheduler and perf-check. |
+| AWS Lambda, durable function | `cf-prod-clip-flow` (alias `live`) | After Keep: makes the posts, publishes each one (start, durable waits and checks, finish; tokens from Secrets Manager), waits 48 hours (no compute), reads metrics, writes a learning, updates the clip's vector. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). Replaces the publish queue, the publisher, the scheduler and perf-check. |
 | AWS Lambda | `cf-prod-ws-authorizer` | Checks the Cognito access token on `$connect` (standard library RS256 check, no extra packages). |
 | AWS Lambda | `cf-prod-ws` | `$connect` stores the connection, `$disconnect` removes it, `$default` answers `ping`. |
 | AWS Lambda | `cf-prod-broadcast` | Reads the DynamoDB stream and sends each change to the owner's open connections. |
-| AWS Lambda | `cf-prod-hooks` | Answers webhook verification challenges, stores webhook events, redirects OAuth callbacks to Settings. |
+| AWS Lambda | `cf-prod-hooks` | Answers webhook verification challenges, stores webhook events, and finishes Connect: checks the signed state, exchanges the code, stores the token in Secrets Manager, redirects to the setup page with a result code ([flow 16](#16-set-up-posting-connect-and-real-posting)). |
 | Amazon DynamoDB | `cf-prod-data` + stream | Single table for all entities including WebSocket connections, webhook events, stats snapshots (`STAT#`, 90-day TTL), the weekly picks (`WEEK#`) and the per-platform rate budgets (`RATE#`); a sparse `gsi2` holds only the posts due for a stats poll. On-demand, point-in-time recovery, TTL, stream `NEW_AND_OLD_IMAGES` feeding `cf-prod-broadcast`. See [ADR-05](DECISIONS.md#adr-05-one-dynamodb-table-single-table-design). |
 | AWS Systems Manager Parameter Store | `/cf-prod/hooks/verify-token` (SecureString) | The Meta webhook verify token. Generated by Terraform as a write-only value, so it never enters the Terraform state. |
+| AWS Secrets Manager | `cf-prod/oauth/state-key` (Terraform, write-only value) and `cf-prod/platforms/{platform}/{app,token,pending}` (created at runtime) | The only place for the owner's platform app keys and account tokens, and the key that signs the Connect `state` ([flow 16](#16-set-up-posting-connect-and-real-posting), [ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). `cf-prod-api` and `cf-prod-hooks` write all of them; `cf-prod-clip-flow` and `cf-prod-stats` can read `cf-prod/platforms/*` but write only the token secrets `cf-prod/platforms/*/token-*` (Terraform output `platform_token_secrets_arn` of the hooks module). At most about 16 secrets. |
 | Amazon Bedrock AgentCore Runtime | `cf_prod_clip_agent` | Runs the agent container for as long as a job needs, one isolated session per job. See [ADR-03](DECISIONS.md#adr-03-amazon-bedrock-agentcore-runtime--claude-agent-sdk-for-the-agent). |
 | Amazon Bedrock | Claude Fable 5.1 (global profile), Titan Text Embeddings V2 (in-Region) | Fable: moment selection, facecam detection, checklist judgement, captions, learnings. Every Fable call, through the Agent SDK or Converse, gets the owner's skills block first ([flow 15](#15-skills-every-ai-call-gets-every-skill)). Titan: 1024-number embeddings of clip text for S3 Vectors (no skills: not text generation). |
 | Amazon Transcribe | batch jobs | Word-level timestamps and language detection. |
@@ -106,11 +114,11 @@ All nine share one zip (`api/dist/lambda.zip`), Python 3.13, arm64, JSON logs, X
 |---|---|---|---|
 | `cf-prod-api` | HTTP API | as before | no |
 | `cf-prod-job-flow` | `cf-prod-api`, async invoke of alias `live` | 256 MB / 120 s per invocation; whole execution up to 8 h 30 min | yes, retention 14 days |
-| `cf-prod-clip-flow` | `cf-prod-api`, async invoke of alias `live` | 512 MB / 900 s per invocation; whole execution up to 3 days | yes, retention 14 days |
+| `cf-prod-clip-flow` | `cf-prod-api`, async invoke of alias `live` | 1024 MB / 900 s per invocation (chunked uploads); whole execution up to 3 days | yes, retention 14 days |
 | `cf-prod-ws-authorizer` | WebSocket `$connect` | 128 MB / 10 s | no |
 | `cf-prod-ws` | WebSocket routes | 128 MB / 10 s | no |
 | `cf-prod-broadcast` | DynamoDB stream (filtered) | 256 MB / 60 s | no |
-| `cf-prod-hooks` | REST API | 256 MB / 10 s | no |
+| `cf-prod-hooks` | REST API | 256 MB / 28 s (the code exchange calls the platform) | no |
 | `cf-prod-stats` | EventBridge rule `cf-prod-stats` (every 15 min) and `cf-prod-api` (async, Refresh numbers) | 256 MB / 300 s; stops starting requests after 240 s; async retries 0, event age 15 min | no |
 | `cf-prod-learn` | `cf-prod-api`, async invoke on `PUT /v1/weeks/{week}/best` | 512 MB / 300 s; async retries 1, event age 1 h | no |
 
@@ -369,12 +377,15 @@ shows **Try again**, which starts `clip-{clipId}-{flowRun + 1}`.
 ```mermaid
 flowchart TD
   s([clip-flow starts]) --> ep["step ensure-posts<br/>create posts if missing, clip publishing if any is queued"]
-  ep --> pub{"any post queued?<br/>(phase 2: account connected)"}
-  pub -- "yes, per platform" --> pp["step publish-{platform}<br/>3 attempts, backoff, idempotency key = postId"]
-  pp -- "retries exhausted" --> pf["step post-failed-{platform}: post failed"]
-  pp --> settle
+  ep --> pub{"any post queued?<br/>(account connected)"}
+  pub -- "yes, one platform after another" --> pp["step publish-{platform}: start<br/>(saves publishHandle, 3 attempts)"]
+  pp --> chk{"processing?"}
+  chk -- yes --> wt["wait-{platform}-{n}: no compute"] --> ck["step check-{platform}-{n}"] --> chk
+  chk -- "ready_to_finish" --> fin["step finish-{platform}"] --> chk
+  chk -- done --> mp["post posted (in that step)"] --> settle
+  pp -- "error, reconnect needed, over maxChecks" --> pf["post failed with a plain sentence"]
   pf --> settle
-  pub -- "no (today: every post pending_integration)" --> settle["step settle-clip<br/>posted, failed or confirmed"]
+  pub -- "no (no account: pending_integration)" --> settle["step settle-clip<br/>posted, failed or confirmed"]
   settle -- "nothing posted" --> uv1["step upsert-vector (status confirmed)"] --> np([outcome not_posted])
   settle -- "at least one posted" --> w48["wait-48h: Duration 48 h, no compute"]
   w48 --> met["step metrics: views, likes, comments, shares per post"]
@@ -387,14 +398,20 @@ sequenceDiagram
   autonumber
   participant C as cf-prod-clip-flow
   participant D as DynamoDB
-  participant X as Platform API (phase 2)
+  participant X as Platform API
   participant B as Bedrock (Fable 5.1, Titan V2)
   participant V as S3 Vectors
   C->>D: step ensure-posts
-  loop each queued post (phase 2)
-    C->>X: step publish-{platform}: upload with that platform's caption
-    X-->>C: public URL
-    C->>D: post posted, postedAt, perfCheckAt = postedAt + 48 h
+  loop each queued post, one platform after another
+    C->>X: step publish-{platform}: start (create, upload the file in chunks)
+    C->>D: publishHandle (so a replay resumes, never posts twice)
+    loop while processing
+      Note over C: wait-{platform}-{n}: no compute
+      C->>X: step check-{platform}-{n}: status
+    end
+    C->>X: step finish-{platform} (Instagram, Facebook, X)
+    X-->>C: post id and URL
+    C->>D: post posted, postedAt, statsId, perfCheckAt = postedAt + 48 h
   end
   C->>D: step settle-clip: clip posted
   Note over C: wait-48h: checkpoint, no compute, no schedule
@@ -408,7 +425,11 @@ sequenceDiagram
 
 The `metrics` step reads the numbers through the same stats refresh as the poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)),
 so it shares the platforms' budgets. Every step is at-least-once, so each is written to be safe to repeat: posts are created only once (`postsCreated`),
-a post is updated only while it is `queued`, and publishing passes `postId` as the platform's idempotency key. A
+a post is updated only while it is `queued`, and every platform call that creates something first saves a
+`publishHandle`, so a replayed step resumes the upload instead of starting a second one. The few calls that cannot be
+repeated safely on the platform side (TikTok init, Instagram `media_publish`, X post) are at-most-once: if one is
+interrupted, the post fails with "We are not sure it posted. Look on {Platform} before you press Try again."
+Publishing in detail is in [flow 16](#16-set-up-posting-connect-and-real-posting). A
 durable execution stays pinned to the Lambda version it started on, so a deploy during the 48-hour wait never changes
 a running flow.
 
@@ -434,7 +455,7 @@ specific past clips that resemble the one at hand, with their real numbers.
 
 ### 9. Platform webhooks (REST API)
 
-Ready for phase 2; nothing runs inline except storing the event.
+Webhooks: nothing runs inline except storing the event. The OAuth callback on the same API is [flow 16](#16-set-up-posting-connect-and-real-posting).
 
 ```mermaid
 sequenceDiagram
@@ -454,11 +475,11 @@ sequenceDiagram
   H->>D: put HOOK#instagram event, ttl 14 days
   H-->>P: 200 {"ok": true}
   P->>G: GET /oauth/youtube/callback?code=...&state=...
-  H-->>P: 302 to the app: /settings?account=youtube&status=coming_soon
+  H-->>P: 302 to the app: /settings/posting/setup/youtube?result=connected (flow 16)
 ```
 
 The REST access log has no query string (OAuth callbacks carry `code` and `state`). Each method is throttled to 10
-requests a second (burst 20), and `tiktok` and `x` answer `501` until phase 2.
+requests a second (burst 20), and the `tiktok` and `x` webhooks answer `501` (not built yet); their OAuth callbacks work.
 
 ### 10. Deploy
 
@@ -476,7 +497,7 @@ sequenceDiagram
   G->>E: build and push agent image (tag = hash of agent sources)
   G->>TF: apply the plan
   TF->>AWS: Cognito, three APIs, nine Lambdas (two durable, new version + alias live),<br/>EventBridge rule cf-prod-stats, table + stream + gsi2, buckets, vector bucket + index, SSM, runtime, alarms
-  G->>AWS: write config.json (apiUrl, wsUrl) from outputs, sync web to S3, invalidate CloudFront
+  G->>AWS: write config.json (apiUrl, wsUrl, oauthCallbackBase) from outputs, sync web to S3 (keeps tiktok*.txt), invalidate CloudFront
   G->>AWS: write version.json with the release areas (flow 11)
   opt desktop/ or the icon changed, or a download is missing
     G->>AWS: desktop job: build .dmg and .exe, upload to downloads/ (flow 12)
@@ -622,7 +643,7 @@ sequenceDiagram
   participant E as EventBridge rule cf-prod-stats
   participant S as cf-prod-stats
   participant D as DynamoDB (gsi2, RATE#, POST#, STAT#)
-  participant P as Platform API (phase 2)
+  participant P as Platform API
   participant B as cf-prod-broadcast
   participant W as Web app
   E->>S: scheduled event, every 15 min
@@ -631,7 +652,7 @@ sequenceDiagram
   loop each platform not blocked, each chunk, until 240 s
     S->>D: reserve: one conditional UpdateItem on RATE#{platform}
     alt budget left
-      S->>P: one batched read (tokens from Secrets Manager, phase 2)
+      S->>P: one batched read (tokens from Secrets Manager)
       P-->>S: numbers + headers (quota, BUC usage, x-rate-limit-reset)
       S->>D: record: headers, blockedUntil when a limit is near or hit
       S->>D: per post: metrics, statsDueAt, gsi2sk (or REMOVE gsi2 when final)
@@ -654,7 +675,7 @@ sequenceDiagram
   participant A as cf-prod-api
   participant D as DynamoDB
   participant S as cf-prod-stats
-  participant P as Platform API (phase 2)
+  participant P as Platform API
   participant B as cf-prod-broadcast
   W->>A: POST /v1/clips/{clipId}/stats/refresh {platforms?}
   A->>D: Clip, Posts (gsi1 CLIP#), Accounts, RATE# budgets
@@ -802,6 +823,82 @@ read the skill items fails the step, whose normal retry runs, so no call quietly
 streaming model call is made anywhere except through these helpers, or without the `skills` argument. The only model
 calls without skills are the Titan embeddings in `vectors.py`.
 
+### 16. Set up posting, Connect and real posting
+
+The owner sets up each platform once in **Settings › Posting › Set up posting**
+([CONTRACTS.md §17](CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16),
+the steps in [SETUP_POSTING.md](SETUP_POSTING.md)): make a developer app on the platform's website by following the
+step cards, paste its keys, press **Check it**, then **Connect**. Numbered **10** in the diagram.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Owner (web app)
+  participant A as cf-prod-api
+  participant SM as Secrets Manager
+  participant D as DynamoDB
+  participant P as Platform (consent page, token endpoint)
+  participant H as cf-prod-hooks (REST GET /oauth/{platform}/callback)
+  O->>A: GET /v1/setup (steps done, gates, values to copy: redirect URI, privacy URL, ...)
+  O->>A: PUT /v1/setup/{platform}/keys {clientId, clientSecret, configId?}
+  A->>SM: create or put cf-prod/platforms/{platform}/app
+  A->>D: SETUP#{platform}: keysSavedAt, masked hints only
+  O->>A: POST /v1/setup/{platform}/check
+  A->>P: key test (dummy code or client credentials)
+  O->>A: POST /v1/accounts/{platform}/connect
+  A->>SM: GetSecretValue cf-prod/oauth/state-key (cached 5 min)
+  A->>D: OAUTH#{nonce} (TTL exp + 5 min)
+  A-->>O: authorizeUrl (state = v1.nonce.exp.HMAC; PKCE challenge for YouTube and X)
+  O->>P: same tab: sign in, approve
+  P->>H: 302 ?code&state
+  H->>H: verify HMAC, expiry, platform
+  H->>D: consume OAUTH#{nonce} once (conditional delete)
+  H->>SM: read app keys
+  H->>P: exchange code (exact redirect URI, PKCE verifier), read profile
+  H->>SM: write cf-prod/platforms/{platform}/token (or pending choices for Meta)
+  H->>D: ACCOUNT#{platform} connected (name, avatar), SETUP#{platform}
+  H-->>O: 302 {app_url}/settings/posting/setup/{platform}?result=connected
+  D-->>O: live event "setup" (stream → cf-prod-broadcast → WebSocket)
+```
+
+**Values the owner copies.** `GET /v1/setup` serves every value a platform asks for, built from `APP_URL` and
+`HOOKS_URL`: the website (`/about.html`), privacy and terms (`/legal/…`, on the app's own domain because TikTok
+verifies by URL prefix and Google lists every domain, [ADR-37](DECISIONS.md#adr-37-about-privacy-and-terms-on-the-apps-own-domain)),
+the data-deletion URL and one exact redirect URI per platform. TikTok's verification file is uploaded through the API
+into the web bucket root and invalidated in CloudFront.
+
+**The callback** is the only public step. It trusts nothing in the request except a state that it signed, that has not
+expired and that has not been used; it always redirects to one fixed page with a code from a fixed list, never logs
+the query, and stores tokens only in Secrets Manager ([ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager),
+[SECURITY.md](SECURITY.md#platform-keys-and-tokens)). Meta can return several Pages or Instagram accounts: the choices
+wait in a short-lived `pending` secret and the owner picks one in the app (`POST /v1/accounts/{platform}/choose`).
+Instagram uses Facebook Login for Business with a **user** access token: the callback exchanges it for the
+long-lived one (`fb_exchange_token`), reads `me/accounts` with each Page's `instagram_business_account`, and keeps
+only the Pages that have one. One → connected at once; several → `choose`; none → `no_accounts`. The token secret then
+holds the Instagram account id, the Page id and that Page's access token, which posting and numbers use.
+
+**Gates.** What each platform still has to allow is a gate on the setup: YouTube `published_app` (the Google app must
+be **In production**, or tokens die after 7 days), TikTok `app_review` and `posting_audit` (until both pass, posts are
+"Only me"), Facebook `app_live` (Reels stay visible to the owner until the app is Live), X `credits`. A platform is
+**ready** when it is connected and no gate needs the owner.
+
+**Posting.** The clip flow ([flow 7](#7-clip-flow-publish-wait-48-hours-learn)) asks `SecretsTokenProvider` for the
+token (refreshed 5 minutes before expiry; TikTok and X rotate refresh tokens, so a 30-second lease serialises
+refreshes and the new secret is written before use), then runs the platform's publisher
+([ADR-35](DECISIONS.md#adr-35-every-upload-is-sent-as-a-file-and-posting-waits-inside-the-clip-flow)). Every upload is
+sent as a file read from S3 in 8 MB ranges:
+
+| Platform | Start | Check (durable wait between) | Finish |
+|---|---|---|---|
+| YouTube | resumable session on `www.googleapis.com/upload/youtube/v3/videos`, 8 MB chunks, privacy from Settings | `videos.list` processing status, every 30 s, up to 60 | – |
+| TikTok | `creator_info`, then Direct Post `init` with the Post to TikTok sheet's choices, `FILE_UPLOAD` chunks | `status/fetch`, every 15 s, up to 80; the public id may come later (follow-up loop) | – |
+| Instagram | publishing limit check, `REELS` container, upload to `rupload.facebook.com/ig-api-upload` | container `status_code`, every 60 s, up to 15 | `media_publish`, permalink |
+| Facebook | `video_reels` start, upload to `rupload.facebook.com/video-upload` | video `status`, every 30 s, up to 40 | `video_reels` finish `PUBLISHED` |
+| X | `media/upload` initialize, 4 MB appends, finalize | media status after `check_after_secs`, up to 20 | `POST /2/tweets` with links removed |
+
+Disconnect (after an 8-second Undo in the app) revokes the token where possible, deletes the token secret and, for
+YouTube, asks `cf-prod-stats` to `forget` stored YouTube numbers.
+
 ## Failure handling
 
 | What can fail | What happens |
@@ -814,7 +911,13 @@ calls without skills are the Titan embeddings in `vectors.py`.
 | A job runs longer than 8 hours | The callback times out and the job fails with the same plain message; long sources are capped by `maxSourceHours`. |
 | Bedrock throttling | The SDK retries with exponential backoff; the global profile spreads load across regions. |
 | The owner cancels | The API sends `{action: cancel}` to the session and stops it; the agent marks the job `canceled` and sends `Canceled`, so the flow writes nothing. |
-| Publishing a post fails (phase 2) | The `publish-{platform}` step retries 3 times with backoff; then `post-failed-{platform}` marks only that post `failed`. If every queued post failed, the clip shows **Try again**. |
+| Publishing a post fails | `publish-`, `check-` and `finish-{platform}` retry 3 times on retryable errors; then only that post is `failed` with the platform's friendly sentence ("YouTube says slow down…", "Your X credits ran out…"). If every queued post failed, the clip shows **Try again**. Raw platform messages go to the logs only. |
+| A platform token is dead (revoked, expired, password changed) | The post fails with "Connect {Platform} again in Settings › Posting › Set up posting, then press Try again."; the account becomes `needs_reconnect`, the setup page shows a tomato **Connect again**, and the stats poller skips that platform. |
+| A platform takes too long to process a video | After `maxChecks` YouTube and TikTok posts are marked posted (the platform finishes alone); Instagram, Facebook and X fail with "{Platform} could not finish this video. Press Try again." |
+| A step that cannot be repeated is interrupted (TikTok init, Instagram publish, X post) | The post fails with "We are not sure it posted. Look on {Platform} before you press Try again." instead of risking a double post. |
+| Two refreshes of a rotating token at once (TikTok, X) | A 30-second lease on the account item lets one refresh; the other waits and re-reads the new secret. The new token is written before it is used. |
+| The Connect callback fails | The owner lands on the platform's setup page with one plain sentence and the step to redo (`denied`, `expired`, `keys_wrong`, `redirect_wrong`, `missing_permissions`, `no_channel`, `no_accounts`, `no_pages`, `platform_down`, `error`). |
+| X credits run out | The X gate turns to "Your X credits ran out. Buy more in console.x.com › Billing › Credits, then press Try again."; the app's own $10 monthly cap stops X earlier. |
 | Reading metrics fails for a platform | That platform is skipped after 3 attempts; the others still count. The clip flow's `metrics` step uses the shared stats refresh and falls back to the stored numbers when a platform is blocked. |
 | A platform limit is near or hit (stats) | The platform's `RATE#` budget gets `blockedUntil` (YouTube: 08:00 UTC; TikTok: 1 min; Meta: Meta's own wait, at least 60 min after a throttle; X: `x-rate-limit-reset` or the 1st of next month at the $10 cap). The poller skips it, its posts stay due, Refresh answers "Next check in …". A Meta throttle is never retried. |
 | A stats read fails (5xx, network) | Retried twice (1 s, 4 s), except Meta throttles; then `statsError` holds a plain sentence on the post and it waits its normal interval. No tight loop, no raise. |
@@ -858,7 +961,8 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | DynamoDB (incl. stream reads by Lambda), other Lambdas, SSM standard parameter | Requests | under $1 |
 | EventBridge rule + `cf-prod-stats` | about 2,900 ticks a month (every 15 min), each a few seconds; post writes and 90-day `STAT#` snapshots | cents |
 | YouTube, TikTok, Instagram, Facebook APIs | Free within their quotas; the budgets stay well under them | $0 |
-| X API (phase 2) | Pay per use: about $0.005 per post read, a post read again on the same UTC day free, so about $0.15 per post over its 30 days | capped at $10 by the app ([DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)) |
+| X API | Pay per use: $0.015 per post; about $0.005 per post read, a post read again on the same UTC day free, so about $0.15 per post over its 30 days | posts and reads together capped at $10 by the app ([DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)) |
+| AWS Secrets Manager | At most about 16 secrets (the state key, and an app, token and short-lived pending secret per platform) at $0.40 each, plus API calls (cached 5 minutes) | about $6 at most |
 | `cf-prod-learn` | One small Fable 5.1 call per changed set of weekly picks | cents |
 | S3 | Clips kept; sources expire after 14 days | under $1 |
 | CloudFront | Web app, config, `version.json` checks, desktop downloads (about 10 MB each) | under $1 |
@@ -908,3 +1012,13 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
   `total_video_views_unique` when v26.0 ships, so they are never read; reach comes from
   `post_total_media_view_unique`, guarded (absent if it errors). The Graph version lives in `config/platforms.json`.
 - **Snapshots last 90 days** (TTL); the latest totals stay on the post for as long as the clip exists.
+- **Each platform's app belongs to the owner** ([ADR-33](DECISIONS.md#adr-33-posting-setup-bring-your-own-keys-with-a-guided-list-per-platform)),
+  so the platforms' limits for new apps apply: TikTok posts stay "Only me" until TikTok approves the app and its
+  posting audit (it may refuse a tool used by one person); Facebook Reels may stay visible only to the owner until the
+  Meta app is Live (Meta may ask for App Review first; unconfirmed); YouTube's Google app must stay **In production**,
+  and Google deletes OAuth clients unused for 6 months; X charges per post.
+- **Clips kept before a platform was connected** are not posted automatically after Connect
+  ([roadmap](ROADMAP.md#phase-2-social-integrations)).
+- **A new app address breaks Connect.** The redirect URIs and website addresses pasted on the platforms contain the
+  CloudFront and REST API hosts; after a custom domain or a rebuilt REST API, redo the "return address" steps (Check it
+  reports `redirect_wrong`).

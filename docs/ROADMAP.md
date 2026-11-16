@@ -26,35 +26,56 @@ See the [README](../README.md#status) for status.
 Goal: confirmed clips are posted to the owner's accounts, and their numbers flow back to the clip page every 15–30
 minutes for 30 days (and into the 48-hour learning).
 
-| Platform | Connect with | Post with | Numbers (the stats adapter, [ADR-29](DECISIONS.md#adr-29-stats-refresh-intervals-per-platform)) | Notes |
-|---|---|---|---|---|
-| YouTube (Shorts) | Google OAuth 2.0 (`youtube.upload`, `youtube.readonly`) | YouTube Data API v3 `videos.insert` (resumable upload) | `videos.list` statistics every 15 min (1 unit per 50 videos); YouTube Analytics (`yt-analytics.readonly`) every 6 h for watch time, engaged views, shares | 10,000 units a day; numbers keep 3,000 for uploads. Videos under 3 minutes in 9:16 become Shorts. |
-| Instagram (Reels) | Meta Login (Facebook Login for Business) with a Professional account linked to a Facebook Page | Instagram Graph API: create a `REELS` media container from a public video URL, then publish | Media insights every 30 min (`views`, `reach`, `saved`, `shares`, watch time; never `plays` or `impressions`) on `graph.facebook.com`; scopes `instagram_basic`, `instagram_manage_insights`, `instagram_content_publish`, `pages_show_list` (the Facebook Login scopes, not the `instagram_business_*` ones, which only work on `graph.instagram.com`) | Needs a Meta app with Instagram permissions reviewed by Meta. Budget scales with the account's impressions. |
-| Facebook (Page Reels) | Same Meta Login | Pages API video reels upload | Reels `video_insights` every 30 min (plays, replays, reactions, watch time); reach from `post_total_media_view_unique`; `read_insights` | Same Meta app as Instagram. Impressions metrics retire with Graph v26.0 and are not used. |
-| TikTok | Login Kit | Content Posting API (direct post) | `/v2/video/query/` every 15 min with the post's `publicaly_available_post_id` (`video.list`) | The app must pass TikTok's audit before posts can be public, and only public posts have numbers. The legal pages at the repo root exist for this review. |
-| X | OAuth 2.0 with PKCE | Media upload (chunked) + post creation | `GET /2/tweets?ids=` every 15 min (video `view_count`, public and, for 30 days, non-public metrics) | Pay per use: needs credits; the app caps number reads at $10 a month ([DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)). |
+**Built by the posting setup request** ([CONTRACTS.md §17](CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16),
+the owner's words: one setup per platform, no code, "an 8-year-old should be able to do it"):
 
-Work items:
-1. **Accounts screen**: Connect, Reconnect, Disconnect per platform; several accounts per platform; status and handle.
-2. **OAuth callback**: `GET {hooks_url}/oauth/{platform}/callback` on the REST API already exists and redirects to
-   Settings; phase 2 swaps the redirect for the code exchange. Tokens stored in AWS Secrets Manager (one secret per connected account),
-   Account items in DynamoDB without tokens (`ACCOUNT#<platform>#<id>`).
-3. **Platform adapters** in `api/` behind one interface: `publish(clip, caption) → url`, `metrics(post) → numbers`,
-   `refresh_token()`.
-4. **Publishing**: implement `publish` in each adapter; the clip flow's `publish-{platform}` steps (3 attempts,
-   backoff, `postId` as idempotency key) and the 48-hour wait already exist.
-5. **Numbers**: give the stats adapters (`fetch_stats`, already built against recorded answers) their tokens from
-   Secrets Manager (`cf-prod/platforms/*`, plus `secretsmanager:GetSecretValue` on `cf-prod-stats`), and set each post's
-   `statsId` at publish (TikTok's public id from `/v2/post/publish/status/fetch/`). The poller, the Refresh button, the
-   clip page and the clip flow's `metrics`, `distil` and `upsert-vector` steps then work with real numbers.
-6. **TikTok audit** so posts can be public and have numbers; **X credits** and a spend limit in the X console.
-7. **Webhooks**: verify signatures per platform with the app secrets (`verify_signature` today returns
-   `unverified`), and act on stored `HOOK#` events (for example a post removed by the platform).
-8. **Token refresh**: the adapters refresh a token when a `publish` or `metrics` step finds it close to expiry (a
-   durable function with a daily wait if some platform needs refreshing without use), and mark accounts
-   `needs_reconnect` when refresh fails, with a banner in the app.
-9. **Per-clip platform choice** at Confirm (today: every platform enabled in Settings).
-10. **Undo window**: a short delay after Confirm during which the owner can take it back.
+- **Set up posting** (Settings › Posting, replaces Accounts): a setup list of the five platforms with a "2 of 5 ready"
+  ring and, per platform, big numbered step cards in four parts (Get ready, Make your key, Connect, Go public), with
+  Open and Copy buttons, paste boxes that check the key, "If you see…" hints and the date the steps were checked. The
+  same steps are written out in [SETUP_POSTING.md](SETUP_POSTING.md). A Home card shows until every platform is ready.
+- **Bring your own keys** ([ADR-33](DECISIONS.md#adr-33-posting-setup-bring-your-own-keys-with-a-guided-list-per-platform)):
+  the owner makes one developer app per platform (two Meta apps, [ADR-36](DECISIONS.md#adr-36-instagram-and-facebook-get-two-separate-meta-apps)),
+  pastes the keys, presses **Check it**, then **Connect**.
+- **Real Connect**: OAuth in the same tab with a signed single-use state and PKCE where supported; the REST callback
+  exchanges the code, keeps tokens only in Secrets Manager and comes back with confetti or one plain sentence
+  ([ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). Choose an
+  account when Meta returns several; Disconnect with an 8-second Undo; Connect again.
+- **Real posting**: one `start → check → finish` publisher per platform, every upload sent as a file, durable waits
+  between checks, no double posts on a retry, friendly error sentences
+  ([ADR-35](DECISIONS.md#adr-35-every-upload-is-sent-as-a-file-and-posting-waits-inside-the-clip-flow)). Token refresh
+  (rotating for TikTok and X), "Connect again" when a token dies.
+- **Real numbers**: the stats adapters get their tokens from the same secrets.
+- **Public pages on the app's domain** (About, Privacy with "How to delete your data", Terms) and TikTok's
+  verification file ([ADR-37](DECISIONS.md#adr-37-about-privacy-and-terms-on-the-apps-own-domain)).
+- **TikTok's Post to TikTok sheet** before Keep (privacy with no default, Comments, Duet, Stitch, commercial content),
+  and **Who can see your clips** for YouTube (Everyone, link only, only me).
+- **X spend guard**: $0.015 per post counted against the $10 monthly cap; no links in X posts.
+
+| Platform | Connect with | Post with | Numbers ([ADR-29](DECISIONS.md#adr-29-stats-refresh-intervals-per-platform)) | What may stay limited |
+|---|---|---|---|---|
+| YouTube (Shorts) | Google OAuth 2.0 with PKCE (`youtube.upload`, `youtube.readonly`, `yt-analytics.readonly`) | Data API v3 `videos.insert`, resumable upload in 8 MB chunks | `videos.list` every 15 min; Analytics every 6 h | Nothing: published unverified app; quota extension only past about 100 uploads a day. |
+| TikTok | Login Kit (`user.info.basic`, `video.publish`, `video.list`) | Content Posting API Direct Post, `FILE_UPLOAD` in chunks | `/v2/video/query/` every 15 min (public posts only) | Posts are "Only me" until TikTok approves the app and its posting audit, which it may refuse for a one-person tool. |
+| Instagram (Reels) | Instagram API with Facebook Login (Facebook Login for Business configuration, user access token, the linked Page's token, Graph v27.0) | `REELS` container, resumable upload to `rupload.facebook.com`, then `media_publish` | Media insights every 30 min | Nothing expected; if Reels do not show for others, Meta may want the app Live. |
+| Facebook (Page Reels) | Facebook Login for Business (Page token, Graph v27.0) | `video_reels` start, binary upload, finish `PUBLISHED` | Reels insights every 30 min | Reels visible only to the owner until the app is Live; Meta may ask for App Review first (unconfirmed). |
+| X | OAuth 2.0 with PKCE (`tweet.read`, `tweet.write`, `users.read`, `media.write`, `offline.access`) | Chunked media upload (4 MB), then `POST /2/tweets` | `GET /2/tweets?ids=` every 15 min | Pay per use: about $0.015 per post plus number reads, capped at $10 a month by the app. |
+
+Still open in phase 2:
+1. **Clips kept before a platform was connected** stay "Waiting for connection" and are **not posted automatically**
+   after Connect. Next step: offer "Post the waiting clips" on the platform's "Connected as" card (one tap, the clip
+   flow's normal publish steps, newest first), or post them on **Try again** per clip.
+2. **Webhooks**: verify signatures per platform with the app secrets (`verify_signature` today returns `unverified`),
+   and act on stored `HOOK#` events (for example a post removed by the platform).
+3. **A daily token keep-alive** for platforms whose refresh tokens expire when unused (TikTok's refresh token lasts
+   365 days; Google deletes unused keys after 6 months): today a refresh happens when a post or a number read needs
+   the token, and the app shows "Connect again" when it is too late.
+4. **Facebook Disconnect cannot revoke the app**: only the Page token is kept, and a Page token cannot remove the
+   app's access. Removing the app in Facebook's **Business integrations** settings is the owner's own step
+   ([After setup](SETUP_POSTING.md#after-setup)). Next step: keep the user token long enough to call
+   `DELETE /me/permissions` on Disconnect, if Meta's rules allow it.
+5. **Per-clip platform choice** at Keep (today: every platform enabled in Settings).
+6. **Undo window**: a short delay after Keep during which the owner can take it back.
+7. **Re-check the setup steps** against the platforms every few months and update `checkedOn`
+   ([how](SETUP_POSTING.md#for-maintainers-keeping-the-app-and-this-page-in-step)).
 
 ## Later
 
