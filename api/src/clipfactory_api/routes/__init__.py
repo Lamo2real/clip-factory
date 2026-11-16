@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..http import Route, route
-from . import clips, jobs, performance, setup, skills, system, weeks
+from . import clips, help, jobs, performance, setup, skills, system, weeks
 
 ROUTES: list[Route] = [
     route("GET", "/v1/health", system.health, public=True),
@@ -51,4 +51,7 @@ ROUTES: list[Route] = [
     route("GET", "/v1/insights", system.insights),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
+    # Ask Clip Factory (§19.6): the help package loads only inside these two handlers.
+    route("GET", "/v1/help", help.status),
+    route("POST", "/v1/help/answers", help.answer),
 ]

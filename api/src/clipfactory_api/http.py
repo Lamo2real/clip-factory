@@ -3,7 +3,8 @@
 API Gateway's CORS configuration answers preflights and adds the CORS headers, so this layer only has to make
 sure an OPTIONS request that reaches it is harmless. Every error leaves as
 ``{"error": {"code", "message"}}`` with a plain-English message; unexpected failures are logged with the
-request id and returned as ``internal`` without details.
+request id and returned as ``internal`` without details. Every error body also carries the API Gateway
+``requestId`` next to ``error`` (§19.6), so the owner can hand over one code that finds the one log line.
 """
 
 from __future__ import annotations
@@ -55,6 +56,7 @@ class Request:
 class Response:
     status: int
     body: JsonBody | None = None
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 Handler = Callable[[App, Request], Response]
@@ -82,8 +84,12 @@ def no_content() -> Response:
     return Response(204)
 
 
-def _json_response(status: int, body: JsonBody | None) -> dict[str, Any]:
+def _json_response(
+    status: int, body: JsonBody | None, extra_headers: Mapping[str, str] | None = None
+) -> dict[str, Any]:
     headers = {"content-type": "application/json", "cache-control": "no-store"}
+    for name, value in (extra_headers or {}).items():
+        headers[name.lower()] = value
     return {
         "statusCode": status,
         "headers": headers,
@@ -91,11 +97,21 @@ def _json_response(status: int, body: JsonBody | None) -> dict[str, Any]:
     }
 
 
-def error_response(status: int, code: str, message: str, field: str | None = None) -> dict[str, Any]:
-    error: dict[str, Any] = {"code": code, "message": message}
+def error_response(
+    status: int,
+    code: str,
+    message: str,
+    request_id: str = "",
+    *,
+    field: str | None = None,
+    extra: Mapping[str, Any] | None = None,
+    headers: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    error: JsonBody = {"code": code, "message": message}
     if field:
         error["field"] = field
-    return _json_response(status, {"error": error})
+    error.update(extra or {})
+    return _json_response(status, {"error": error, "requestId": request_id}, headers)
 
 
 def _path(event: Mapping[str, Any]) -> str:
@@ -149,7 +165,7 @@ def dispatch(event: Mapping[str, Any], app: App | Callable[[], App], routes: lis
                 break
         if matched is None:
             if path_known:
-                return error_response(405, "bad_request", "That action is not allowed here.")
+                return error_response(405, "bad_request", "That action is not allowed here.", request_id)
             raise not_found("That address does not exist.")
         chosen, params = matched
         claims = _claims(event)
@@ -170,13 +186,13 @@ def dispatch(event: Mapping[str, Any], app: App | Callable[[], App], routes: lis
         resolved = app if isinstance(app, App) else app()
         response = chosen.handler(resolved, request)
         log("info", "http", method=method, path=chosen.pattern.pattern, status=response.status, requestId=request_id)
-        return _json_response(response.status, response.body)
+        return _json_response(response.status, response.body, response.headers)
     except ApiError as e:
         log("info", "http.error", method=method, status=e.status, code=e.code, requestId=request_id)
-        return error_response(e.status, e.code, e.message, e.field)
+        return error_response(e.status, e.code, e.message, request_id, field=e.field, extra=e.extra, headers=e.headers)
     except Exception as e:
         log("error", "http.internal", method=method, error=type(e).__name__, detail=str(e), requestId=request_id)
-        return error_response(500, "internal", "Something went wrong on our side. Please try again.")
+        return error_response(500, "internal", "Something went wrong on our side. Please try again.", request_id)
 
 
 _app: App | None = None

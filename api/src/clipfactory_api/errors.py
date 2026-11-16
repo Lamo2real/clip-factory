@@ -2,14 +2,31 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 
 class ApiError(Exception):
-    def __init__(self, status: int, code: str, message: str, field: str | None = None) -> None:
+    """``field`` names the form field the message belongs under (§18.2); ``extra`` adds fields to the error
+    object (``retryAfter``, §19.6); ``headers`` adds response headers."""
+
+    def __init__(
+        self,
+        status: int,
+        code: str,
+        message: str,
+        field: str | None = None,
+        *,
+        extra: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> None:
         super().__init__(message)
         self.status = status
         self.code = code
         self.message = message
         self.field = field  # the form field the message belongs under, when there is one (§18.2)
+        self.extra = dict(extra or {})
+        self.headers = dict(headers or {})
 
 
 def bad_request(message: str, field: str | None = None) -> ApiError:

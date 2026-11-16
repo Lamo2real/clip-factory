@@ -9,6 +9,7 @@ import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from . import db, s3
@@ -26,6 +27,60 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class HelpDeps:
+    """Ask Clip Factory (docs/CONTRACTS.md §19.6). Off unless ``HELP_ENABLED`` is "true". The Bedrock client is
+    made on the first model call, so no other route pays for it."""
+
+    enabled: bool = False
+    model_id: str = ""
+    monthly_cap: int = 2000
+    rate_per_minute: int = 6
+    rate_per_hour: int = 60
+    app_url: str = ""
+    # () → bedrock-runtime client; None turns the model step off.
+    bedrock: Callable[[], Any] | None = None
+    # (url, timeout seconds, max bytes) → body, for the deployed corpus; None uses the bundled copy only.
+    fetcher: Callable[[str, float, int], bytes] | None = None
+    corpus_file: Path | None = None  # tests: a corpus file instead of the bundled one
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, "") or default)
+    except ValueError:
+        return default
+
+
+def help_from_env(reg: str) -> HelpDeps:
+    env = os.environ
+    model_id = env.get("HELP_MODEL_ID", "")
+    client: list[Any] = []
+
+    def bedrock() -> Any:
+        if not client:
+            from .help.model import make_client
+
+            client.append(make_client(reg))
+        return client[0]
+
+    def fetch(url: str, timeout: float, max_bytes: int) -> bytes:
+        from .help.corpus import urllib_fetch
+
+        return urllib_fetch(url, timeout, max_bytes)
+
+    return HelpDeps(
+        enabled=env.get("HELP_ENABLED", "false").strip().lower() == "true",
+        model_id=model_id,
+        monthly_cap=_int_env("HELP_MONTHLY_CAP", 2000),
+        rate_per_minute=_int_env("HELP_RATE_PER_MINUTE", 6),
+        rate_per_hour=_int_env("HELP_RATE_PER_HOUR", 60),
+        app_url=env.get("APP_URL", ""),
+        bedrock=bedrock if model_id else None,
+        fetcher=fetch,
+    )
+
+
+@dataclass
 class App:
     store: db.Store
     media: s3.Media
@@ -40,6 +95,7 @@ class App:
     builtins: Callable[[], list[BuiltinSkill]] = load_builtins
     oauth: OAuthEnv | None = None  # posting setup (§17.4); None until its secrets and URLs are configured
     web_files: WebFiles | None = None  # TikTok verification files on the web bucket (§17.4)
+    help: HelpDeps = field(default_factory=HelpDeps)
     _builtin_cache: list[BuiltinSkill] | None = field(default=None, repr=False)
 
     def builtin_skills(self) -> list[BuiltinSkill]:
@@ -124,6 +180,7 @@ def from_env() -> App:
         email_lookup=_cognito_email_lookup(boto3.client("cognito-idp", region_name=reg, config=_short_config())),
         oauth=oauth,
         web_files=web_files,
+        help=help_from_env(reg),
     )
 
 
