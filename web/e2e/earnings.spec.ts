@@ -268,7 +268,7 @@ for (const width of [320, 375, 768, 1440, 1920]) {
     await page.getByLabel("Your amount for 1,000 views on Facebook").fill("x");
     await page.locator('[data-money-rate="facebook"]').getByRole("button", { name: "Save" }).click();
     await expect(page.locator('[data-money-rate="facebook"]').getByRole("alert")).toBeVisible();
-    await page.waitForTimeout(500);
+    await animationsDone(page); // the "no" shake and the message's entrance are over
     await expectNoOverflow(page, `money ${width}`);
 
     await page.goto("/library");

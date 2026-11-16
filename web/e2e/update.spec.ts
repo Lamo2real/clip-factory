@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { settle } from "./helpers.ts";
+import { animationsDone, settle } from "./helpers.ts";
 
 // The update bar (docs/CONTRACTS.md §12.2), driven by the mock build's fake update (?update=1 / window.__cfFakeUpdate).
 
@@ -13,7 +13,8 @@ test("a new version shows the bar with what changed, and Reload runs to 100% and
   await expect(bar.getByText("New version ready")).toBeVisible();
   await expect(bar.getByRole("list", { name: "What changed" }).getByRole("listitem")).toHaveText(["Settings", "Profile picture"]);
 
-  // It sits above the phone tab bar, never on top of it.
+  // It sits above the phone tab bar, never on top of it (where it rests: it slides up from below the screen first).
+  await animationsDone(page);
   const barBox = (await bar.boundingBox())!;
   const tabs = (await page.locator("nav.tabbar").boundingBox())!;
   expect(barBox.y + barBox.height).toBeLessThanOrEqual(tabs.y);
@@ -98,6 +99,7 @@ test("no bar when the server has the same version", async ({ page }) => {
   await page.goto("/");
   await settle(page);
   await page.evaluate(() => window.__cfCheckForUpdate?.());
+  // The wait is the test: given time, no bar comes.
   await page.waitForTimeout(300);
   await expect(page.getByRole("region", { name: "New version" })).toBeHidden();
 });

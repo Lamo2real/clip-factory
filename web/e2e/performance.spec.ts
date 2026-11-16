@@ -286,7 +286,7 @@ test("the big numbers line up across the columns, so the best is easy to spot", 
 
   await page.setViewportSize({ width: 1024, height: 768 });
   await expect(page.locator(".perf-lines")).toHaveAttribute("data-layout", "rows");
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(300); // a beat for the new layout's lines to start drawing; the wait that counts is the next line
   await animationsDone(page);
   const t = await tops(page, '[data-metric="top"]');
   expect(new Set(t.slice(0, 3)).size, "row 1").toBe(1);

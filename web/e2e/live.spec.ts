@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { findOverflow, settle, WIDTHS } from "./helpers.ts";
+import { animationsDone, findOverflow, settle, WIDTHS } from "./helpers.ts";
 
 // Live updates in mock mode: a fake WebSocket on the in-memory store (docs/CONTRACTS.md §14.2, §14.12).
 interface LiveControls {
@@ -75,6 +75,7 @@ test("with the live API unavailable the app keeps working on polls, with no dot 
     live.drop();
   });
   await expect(liveDot(page)).toHaveCount(0);
+  // The wait is the test: given time, still no dot and no message.
   await page.waitForTimeout(2500);
   await expect(liveDot(page)).toHaveCount(0);
   await expect(page.locator(".toast")).toHaveCount(0);
@@ -113,6 +114,7 @@ test("Review and Library show clips that did well, and hide the strip when there
   });
   await page.locator(".sidebar__item[href='/review'], .tabbar__item[href='/review']").filter({ visible: true }).first().click();
   await expect(page.locator(".review-card").first()).toBeVisible();
+  // The wait is the test: given time, the strip still does not come.
   await page.waitForTimeout(800);
   await expect(page.locator(".similar")).toHaveCount(0);
   await expect(page.getByText("Like clips that did well")).toHaveCount(0);
@@ -146,7 +148,7 @@ for (const width of WIDTHS) {
       const n = await cards.count();
       for (let i = 0; i < n; i++) await cards.nth(i).scrollIntoViewIfNeeded();
       await expect(page.locator(".similar").first()).toBeVisible();
-      await page.waitForTimeout(300);
+      await animationsDone(page); // the strips have come in
       const r = await findOverflow(page);
       if (r.page > r.viewport) failures.push(`${path}: page scrolls sideways (${r.page}px > ${r.viewport}px)`);
       for (const o of r.items) failures.push(`${path}: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);

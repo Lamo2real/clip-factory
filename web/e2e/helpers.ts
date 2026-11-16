@@ -32,6 +32,38 @@ export async function settle(page: Page) {
   await page.waitForFunction(() => !document.querySelector(".skeleton, .boot"), undefined, { timeout: 15_000 });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(650);
+  // The page rises 8 px into place as it opens (`page-in` on `.main > *`, 420 ms). Animations only advance when a
+  // frame is drawn, and a runner without a GPU can draw its frames later than the wait above, so a place read right
+  // after settle() could still be mid-rise. Wait on the entrance itself (endless animations never count).
+  await page.waitForFunction(
+    () =>
+      Array.from(document.querySelectorAll(".main > *")).every((el) =>
+        el.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity),
+      ),
+    undefined,
+    { timeout: 15_000 },
+  );
+}
+
+/**
+ * Waits until the Ask launcher has settled: not stepped aside for a scroll and not moving, for three frames in a row
+ * (its measure runs on the frame after a change and its move starts on the next). Frames and events, not time.
+ */
+export async function launcherSettled(page: Page) {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        let calm = 0;
+        const tick = () => {
+          const el = document.querySelector<HTMLElement>(".help-launcher");
+          const still = !el || (el.dataset.dodge !== "scroll" && el.getAnimations().every((a) => a.playState !== "running"));
+          calm = still ? calm + 1 : 0;
+          if (calm >= 3) resolve();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
 }
 
 /** Resolves the ":running" / ":failed" placeholders to real job ids from the mock list. */

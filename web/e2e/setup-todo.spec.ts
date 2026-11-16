@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { Platform } from "../src/api/types.ts";
 import { GUIDES, SETUP_ORDER } from "../src/setup/index.ts";
-import { animationsDone, CLIPS, findOverflow, MIXED_SETUP, mixedSetup, openClip, openTodo, settle } from "./helpers.ts";
+import { animationsDone, CLIPS, findOverflow, launcherSettled, MIXED_SETUP, mixedSetup, openClip, openTodo, settle } from "./helpers.ts";
 
 // The floating "Set up posting" to-do list (docs/CONTRACTS.md §17.13): on every signed-in page, Set up and Skip
 // (with a confirm) on every row that is not ready, un-skip, gone with a celebration when everything is ready or
@@ -294,6 +294,7 @@ test.describe("the floating setup list at 1440 px", () => {
     // Gone after a reload too, and Settings still has everything.
     await page.reload();
     await settle(page);
+    // The wait is the test: given time, the list does not come back.
     await page.waitForTimeout(400);
     await expect(page.locator(".setup-todo")).toHaveCount(0);
     await page.goto("/settings/posting/setup");
@@ -402,6 +403,8 @@ test.describe("the floating setup list at 1440 px", () => {
     const rows = rail.locator(".setup-todo__scroll");
     const fits = () => rows.evaluate((el) => el.scrollHeight <= el.clientHeight + 1);
     const clearOfAsk = async () => {
+      // The Ask pill finds its place a frame after the window changes and slides there: measure it at rest.
+      await launcherSettled(page);
       const a = (await rail.boundingBox())!;
       const ask = (await page.locator(".help-launcher").boundingBox())!;
       return a.y + a.height <= ask.y;
@@ -499,21 +502,7 @@ test.describe("the floating setup list at 1440 px", () => {
 // column on a short window).
 test("the Ask pill keeps its corner under the open list at every scroll position", async ({ page }) => {
   test.setTimeout(120_000);
-  const settled = () =>
-    page.evaluate(
-      () =>
-        new Promise<void>((resolve) => {
-          let calm = 0;
-          const tick = () => {
-            const el = document.querySelector<HTMLElement>(".help-launcher");
-            const still = !el || (el.dataset.dodge !== "scroll" && el.getAnimations().every((a) => a.playState !== "running"));
-            calm = still ? calm + 1 : 0;
-            if (calm >= 3) resolve();
-            else requestAnimationFrame(tick);
-          };
-          requestAnimationFrame(tick);
-        }),
-    );
+  const settled = () => launcherSettled(page);
   const failures: string[] = [];
   for (const [width, height, path] of [
     [1920, 900, "/library?update=1"],
@@ -663,11 +652,12 @@ test.describe("the floating setup list on a phone", () => {
     const panel = page.locator(".setup-todo-panel");
     await expect(panel).toBeVisible();
     await expect(panel.locator(".todo-row")).toHaveCount(5);
+    // Measured once the panel has dropped in: where it rests, not a place on its way there.
+    await animationsDone(page);
     const tabbar = (await page.locator(".tabbar").boundingBox())!;
     const p = (await panel.boundingBox())!;
     expect(p.y + p.height).toBeLessThanOrEqual(tabbar.y);
-    // Phone targets are 48 px (kid-proof), with 8 px between the two buttons of a row (measured once the panel has dropped in).
-    await animationsDone(page);
+    // Phone targets are 48 px (kid-proof), with 8 px between the two buttons of a row.
     for (const b of await panel.locator(".btn, button").all()) {
       const size = (await b.boundingBox())!;
       expect(Math.min(size.width, size.height), await b.getAttribute("aria-label") ?? "").toBeGreaterThanOrEqual(48);
@@ -832,7 +822,7 @@ for (const width of [320, 375, 768, 1024, 1280, 1440, 1920] as const) {
           }
         }
         await page.evaluate(() => window.scrollTo(0, 0));
-        await page.waitForTimeout(150);
+        await still(page);
         const r = await findOverflow(page);
         if (r.page > r.viewport) failures.push(`${path}: page scrolls sideways (${r.page} > ${r.viewport})`);
         for (const o of r.items) failures.push(`${path}: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ACT_MS } from "../src/lib/motion.ts";
-import { settle } from "./helpers.ts";
+import { animationsDone, settle } from "./helpers.ts";
 import { actTransforms, actWidths, MOTION_WIDTHS, noSideScroll, pauseActs, tapAct } from "./motionHelpers.ts";
 
 // Action motion in Settings (docs/CONTRACTS.md §20.11 (c)): search, branches, sounds, skills and Set up posting.
@@ -191,12 +191,14 @@ test.describe("motion in Settings: nothing overflows while it plays", () => {
       await open(page, SETUP);
       await page.locator('[data-step="key-project"] .gstep__head').click();
       await page.locator('[data-step="key-paste"] .gstep__head').click();
-      await page.waitForTimeout(300);
+      await animationsDone(page); // both steps have unfolded
       const before = await actWidths(page);
       // Copy and Paste only: they stay on the page (the others navigate, fold their step or sign in).
       await page.evaluate(() => {
         for (const el of document.querySelectorAll<HTMLElement>('[data-act="copy"], [data-act="paste"]')) el.click();
       });
+      // A beat for the taps' motions to start, then they are held half way. Kept as a wait on purpose: the motions are
+      // shorter than a late frame, so waiting to see one running could miss it and hang.
       await page.waitForTimeout(30);
       await pauseActs(page, 0.5);
       expect(await noSideScroll(page)).toBe(true);

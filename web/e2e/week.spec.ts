@@ -81,6 +81,7 @@ test("stars save together after the last tap, then Clip Factory learns from them
   await expect(page.getByText("Learning from your picks…")).toBeVisible();
   await expect(page.locator(".week__quote")).toBeVisible();
   await expect(page.locator(".week__quote")).toContainText(/Your picks .* first second/);
+  // The wait is the test: nothing more is sent after the one save.
   await page.waitForTimeout(1200);
   expect(await calls(page, "saveWeekBest")).toBe(saves + 1);
   await expect(stars.nth(1)).toHaveAttribute("aria-pressed", "true");

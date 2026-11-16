@@ -363,7 +363,8 @@ for (const scheme of ["light", "dark"] as const) {
       await open(page);
       for (const mode of ["See-through", "Colours", "Picture"]) {
         await page.getByRole("radio", { name: mode }).check();
-        await page.waitForTimeout(300);
+        await expect(page.getByRole("radio", { name: mode })).toBeChecked();
+        await animationsDone(page); // the highlight has slid over and the mode's own controls are in
         const o = await findOverflow(page);
         expect(o.page, `${mode}: page scroll`).toBeLessThanOrEqual(o.viewport);
         expect(o.items, `${mode}: overflow`).toEqual([]);

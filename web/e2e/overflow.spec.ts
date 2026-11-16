@@ -90,7 +90,7 @@ for (const width of WIDTHS) {
       await page.goto(path);
       await settle(page);
       await page.locator(".update-bar").waitFor();
-      await page.waitForTimeout(700);
+      await animationsDone(page); // the bar slides in
       state = await findOverflow(page);
       for (const o of state.items) failures.push(`${path} (update bar): ${o.selector} "${o.text}"`);
       const bar = await page.locator(".update-bar").boundingBox();

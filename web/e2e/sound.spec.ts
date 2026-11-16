@@ -36,6 +36,7 @@ test.describe("on a phone", () => {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 200, y: 450 }] });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 200, y: 300 }] });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    // The wait is the test: given time, no click and no sound follow the swipe.
     await page.waitForTimeout(300);
     const counts = await page.evaluate(() => {
       const w = window as unknown as { __touches: number; __clicks: number };
@@ -79,6 +80,7 @@ test.describe("on a phone", () => {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y - 120 }] });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y - 260 }] });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    // The wait is the test: given time, no click and no sound follow the swipe.
     await page.waitForTimeout(300);
     const counts = await page.evaluate(() => {
       const w = window as unknown as { __touches: number; __clicks: number; __played: number };

@@ -78,6 +78,7 @@ test.describe("at 375px", () => {
     const count = await cards.count();
     await cards.last().getByRole("button", { name: "Throw away" }).click();
     await expect(cards).toHaveCount(count - 1);
+    // The wait is the test: given time, the page has not been pulled back up to the linked clip.
     await page.waitForTimeout(300);
     const y = await page.evaluate(() => scrollY);
     const linked = await page.evaluate(() => document.getElementById(location.hash.slice(1))?.getBoundingClientRect().top ?? null);

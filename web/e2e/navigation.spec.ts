@@ -76,6 +76,7 @@ test.describe("a slow page change never blocks taps for long", () => {
     await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "Set up posting" }).click();
     const card = page.locator(".setup-card[data-platform='youtube']");
     await expect(card).toBeVisible();
+    // The time is the test: the fade, slowed to 5 s, must have been ended by the app's own cap well before that.
     await page.waitForTimeout(700);
     const box = (await card.boundingBox())!;
     expect(await hitTag(page, box.x + box.width / 2, box.y + box.height / 2)).not.toBe("HTML");
@@ -90,8 +91,8 @@ test.describe("a slow page change never blocks taps for long", () => {
     await settle(page);
     await page.addStyleTag({ content: slowFade });
     await page.locator("nav.sidebar").getByRole("link", { name: "Library", exact: true }).click();
-    await page.waitForTimeout(100);
-    expect(await hitTag(page, 640, 450)).toBe("HTML");
+    // The fade is over the page (it starts a frame or two after the tap, so wait to see it, not for a fixed time).
+    await expect.poll(() => hitTag(page, 640, 450)).toBe("HTML");
     await page.mouse.click(5, 895);
     await expect.poll(() => hitTag(page, 640, 450)).not.toBe("HTML");
   });
