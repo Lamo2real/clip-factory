@@ -3,7 +3,7 @@ import type { Platform } from "../src/api/types.ts";
 import { MOCK_VALUES } from "../src/api/mock/setup.ts";
 import { maskKey } from "../src/lib/keyFormats.ts";
 import { allSteps, GUIDES, resolveValue, resultCopy, SETUP_ORDER, type GuideStep } from "../src/setup/index.ts";
-import { findOverflow, settle } from "./helpers.ts";
+import { animationsDone, findOverflow, settle } from "./helpers.ts";
 
 // The posting setup, clicked through for every platform on a phone and on a desktop (docs/CONTRACTS.md §17.12):
 // Home card → Set up posting → the platform's steps → keys → Check it → Connect on the pretend consent page →
@@ -39,11 +39,12 @@ const step = (page: Page, id: string) => page.locator(`[data-step="${id}"]`);
 const soundKinds = (page: Page) => page.evaluate(() => (window.__cfSoundLog ?? []).map((e) => e.kind));
 /** Every choice in a setup picker is a real tap target (≥ 44 px tall). */
 async function pickerTargets(page: Page, id: string, label: string, failures: string[]) {
+  await animationsDone(page);
   const sizes = await step(page, id)
     .locator(".gstep__picker .segmented__opt")
     .evaluateAll((els) => els.map((e) => ({ text: e.textContent?.trim() ?? "", ...e.getBoundingClientRect().toJSON() }) as { text: string; height: number; width: number }));
   if (!sizes.length) failures.push(`${label}: no picker in ${id}`);
-  for (const o of sizes) if (o.height < 44) failures.push(`${label}: "${o.text}" is ${Math.round(o.height)} px tall`);
+  for (const o of sizes) if (o.height < 43.5) failures.push(`${label}: "${o.text}" is ${Math.round(o.height)} px tall`);
 }
 const tomatoes = (page: Page) => page.locator("main .btn--primary").filter({ visible: true });
 
@@ -340,12 +341,14 @@ for (const size of [
     for (const platform of SETUP_ORDER) {
       await page.goto(`/settings/posting/setup/${platform}`);
       await settle(page);
+      // Measured at rest: mid-slide a 44 px crumb can read 43.99999 px (a fractional translate).
+      await animationsDone(page);
       const crumbs = await page
         .locator(".crumbs__link, .crumbs__here")
         .filter({ visible: true })
         .evaluateAll((els) => els.map((e) => ({ text: e.textContent?.trim() ?? "", ...e.getBoundingClientRect().toJSON() }) as { text: string; width: number; height: number }));
       if (!crumbs.length) failures.push(`${platform}: no breadcrumb`);
-      for (const c of crumbs) if (c.height < 44 || c.width < 44) failures.push(`${platform}: crumb "${c.text}" is ${Math.round(c.width)}x${Math.round(c.height)}`);
+      for (const c of crumbs) if (c.height < 43.5 || c.width < 43.5) failures.push(`${platform}: crumb "${c.text}" is ${Math.round(c.width)}x${Math.round(c.height)}`);
       for (const id of platform === "youtube" ? ["public-privacy"] : platform === "tiktok" ? ["public-review"] : []) {
         await step(page, id).locator(".gstep__head").click();
         await pickerTargets(page, id, `${platform} ${size.width}px`, failures);

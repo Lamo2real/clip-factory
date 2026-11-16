@@ -155,7 +155,17 @@ test("at 1440 px every line ends at its stack's top centre", async ({ page }) =>
   }
   // Still true after the window changes size (the ResizeObserver redraws them).
   await page.setViewportSize({ width: 1180, height: 900 });
-  await page.waitForTimeout(300);
+  // Wait on the redraw itself (a slow runner can take longer than any fixed pause), then check every end.
+  await expect
+    .poll(async () => {
+      let worst = 0;
+      for (const e of await lineEnds(page)) {
+        const box = (await stack(page, e.line).boundingBox())!;
+        worst = Math.max(worst, Math.abs(e.x - (box.x + box.width / 2)), Math.abs(e.y - box.y));
+      }
+      return worst;
+    })
+    .toBeLessThanOrEqual(2);
   for (const e of await lineEnds(page)) {
     const box = (await stack(page, e.line).boundingBox())!;
     expect(Math.abs(e.x - (box.x + box.width / 2)), `${e.line} x after resize`).toBeLessThanOrEqual(2);

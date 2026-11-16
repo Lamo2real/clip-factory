@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { Platform } from "../src/api/types.ts";
 import { GUIDES, SETUP_ORDER } from "../src/setup/index.ts";
-import { findOverflow, settle, WIDTHS } from "./helpers.ts";
+import { animationsDone, findOverflow, settle, WIDTHS } from "./helpers.ts";
 
 // The Set up posting lists (docs/CONTRACTS.md §17.1), audited at every phone width with touch (320–430) and every
 // tablet/desktop width (768–1920): every step open, Copy buttons, paste boxes, Connect, resume after a reload, the
@@ -13,6 +13,8 @@ const step = (page: Page, id: string) => page.locator(`[data-step="${id}"]`);
 
 /** Overflow, small targets, controls off the screen and more than one tomato on what is shown now. */
 async function problems(page: Page, label: string, phone: boolean): Promise<string[]> {
+  // Measured at rest: mid-slide a 44 px box can read 43.99999 px (a fractional translate).
+  await animationsDone(page);
   const out: string[] = [];
   const o = await findOverflow(page);
   if (o.page > o.viewport) out.push(`${label}: the page scrolls sideways (${o.page} > ${o.viewport})`);
@@ -26,7 +28,7 @@ async function problems(page: Page, label: string, phone: boolean): Promise<stri
       const b = e.getBoundingClientRect();
       if (!b.width || !b.height || getComputedStyle(e).display === "inline") continue;
       const name = (e.getAttribute("aria-label") || e.textContent || e.tagName).trim().slice(0, 40);
-      if (b.height < min || b.width < min) bad.push(`"${name}" is ${Math.round(b.width)}x${Math.round(b.height)}`);
+      if (b.height < min - 0.5 || b.width < min - 0.5) bad.push(`"${name}" is ${Math.round(b.width)}x${Math.round(b.height)}`);
       if (b.right > vw + 0.5 || b.left < -0.5) bad.push(`"${name}" is off the screen`);
     }
     const tomatoes = [...document.querySelectorAll<HTMLElement>("main .btn--primary")].filter((e) => e.getBoundingClientRect().height > 0);
