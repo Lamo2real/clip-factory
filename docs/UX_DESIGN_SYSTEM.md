@@ -85,13 +85,40 @@ Variants: `.glass--sage` (hero, active nav), `.glass--strong` (dialogs and sheet
 easy to read), `.glass--tomato`, `.glass--clear`. In Chromium, `.glass--refract` also bends the backdrop through the
 `#cf-refract` SVG filter.
 
-**The backdrop.** A fixed layer behind the app with three large blurred blobs (sage, off-white, a little tomato) that
-drift slowly (60-second loop, paused with reduced motion). The owner can choose a background image in Settings; it
-replaces the blobs and the glass shows it through.
+**What is behind the glass (Settings › Look & feel › Background, [CONTRACTS.md §22](CONTRACTS.md#22-background-modes-and-see-through-glass-owner-request-2026-11-16)).**
+Three choices, picked from three preview tiles with one sliding highlight:
 
-**About the phone's wallpaper.** The owner asked to see the phone's background through the app. Browsers and
-installed PWAs cannot see the operating system's wallpaper, so the glass shows the app backdrop or the owner's chosen
-image instead. Choosing the same photo as the phone's wallpaper gives the same effect.
+* **See-through (the default).** In the Mac and Windows app the page itself is transparent and the window's own
+  glass shows what is behind it, blurred by the system: macOS Liquid Glass (26+) or the under-window vibrancy
+  material, Windows 11 acrylic, Windows 10 blur. You can guess the shapes (the edges of a car on the wallpaper), never
+  read them. In a browser, an installed web app or on a phone nothing can look behind the page, so see-through shows
+  the **frosted Clip Factory colours**: the drifting blobs behind a pane of frost, with two soft highlights slowly
+  moving through it like light in glass. The Background page says why in one plain sentence and links to Get the app.
+* **Picture.** The owner's own photo (kept on the device), under a light off-white veil.
+* **Colours.** 1 to 3 colours from ten named swatches or the owner's own, drifting as a soft mesh.
+
+**Glass strength** (see-through): Clear (default) shows more of what is behind, Frosted less. In a browser or on a
+phone it thickens the frost over the Clip Factory colours, so it always does something.
+
+**The tint keeps text readable on every background.** Its strength is worked out, not guessed (`lib/background.ts`):
+the smallest off-white at which ink, ink-2, ink-3 and tomato-ink all reach 4.5:1 on the darkest thing behind.
+
+**In see-through the tint sits on the panels, not on the window.** Between panels the desktop shows through the
+window's own glass untouched (Clear) or lightly frosted (Frosted, 0.30), so the car on the wallpaper stays guessable.
+Every glass panel, and every piece of text that sits straight on the window (page title and its line, breadcrumbs,
+headings between panels), carries the panel tint; loose text gets it as a soft scrim hugging the words.
+
+| Backdrop | Darkest thing behind | Tint |
+|---|---|---|
+| See-through, Windows 10 blur (the app's tint is used) | The app's off-white tint over black, ≈ rgb(136, 135, 131) | Panels: Clear 0.68; Frosted 0.64 over the 0.30 window frost |
+| See-through, Windows 11 acrylic, macOS (system material, no app tint), or a dark setting | Black | Panels: Clear 0.86; Frosted 0.89 over the 0.30 window frost |
+| Colours | Each colour, and every half-and-half blend of two | 0 (light colours) up to 0.83 (Night), over the whole backdrop; the previews in Settings wear it too |
+| Picture | (unchanged) | 0.18, plus the panels' own tint |
+| Reduce transparency (system) | – | 0.94 everywhere |
+
+**Glass panels in see-through.** Same recipe (blur, saturation, the lit 1 px rim, the inner top highlight, the
+shadow, refraction in Chromium); the tint is the panel tint above, so the panel holds the contrast and the gaps stay
+clear.
 
 ## Typography
 
@@ -190,7 +217,7 @@ Settings                                   /settings
 ├── Look & feel                            /settings/look-and-feel
 │   ├── Sounds         Sounds on/off, Click sound, Error sound, Try it
 │   ├── Motion         Reduce motion
-│   └── Background     Background picture (this device only)
+│   └── Background     What's behind the glass (See-through, Picture, Colours), Glass strength, Background picture (this device only), Background colours
 └── App & account                          /settings/app
     ├── Get the app    the install card for this device
     ├── Updates        this version, Check for updates

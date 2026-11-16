@@ -150,6 +150,40 @@ CF_E2E_PORT=4185 npx playwright test e2e/motion.spec.ts e2e/motion-*.spec.ts --w
 | Playwright `e2e/overflow.spec.ts` (through `findOverflow` in `e2e/helpers.ts`) | Glyphs inside `.act:not(.is-idle)` are skipped while they play (like the flying plane); an idle `.act` is measured, so a glyph that overflows at rest fails. |
 | Playwright `e2e/screenshots.spec.ts` | `screenshots/motion-mid-{light,dark}-{375,1440}.png`: send, keep, delete, refresh, save and copy paused at 50 % in the gallery. |
 
+## Background modes and see-through glass
+
+See-through, Picture and Colours ([CONTRACTS.md §22](CONTRACTS.md#22-background-modes-and-see-through-glass-owner-request-2026-11-16)).
+Everything but the native window effect is tested offline against the mock app.
+
+```bash
+cd web
+npx vitest run test/background.test.ts
+CF_E2E_PORT=4186 npx playwright test e2e/background.spec.ts --project=chromium
+cd ../api && uv run pytest tests/test_settings_and_system.py
+cd ../desktop/src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+```
+
+| Suite | Must show |
+|---|---|
+| Vitest `test/background.test.ts` | WCAG contrast maths; `minVeil` is the smallest veil reaching 4.5:1 for ink, ink-2, ink-3 and tomato-ink; `TINTED_FLOOR` is the app tint (140/255) over black and needs 0.68; only Windows `blur` in light gets that floor, everything else assumes black; every glass, light and dark, Clear and Frosted reaches AA on the panels; Clear leaves the gaps clear, Frosted shows less through; colours are 1–3 distinct `#rrggbb`; the colours veil holds AA on each colour and each pairwise blend; `resolveLook` for every mode; only `__CF_DESKTOP__ === true` with a known `__CF_GLASS__` means real glass; the computer and phone sentences word for word; prefs defaults and junk; a picture with no saved mode starts in Picture; `applyLook` puts `see-through`, `data-backdrop`, `data-strength`, `--backdrop-veil` and `--panel-veil` on `<html>`. |
+| pytest `test_settings_and_system.py` | Defaults (no `backgroundMode` until saved, `clear`, the Clip Factory colours), saving (lower case, repeats dropped), a saved mode survives other saves, each refusal with its message, malformed stored values read as defaults. |
+| Playwright `e2e/background.spec.ts` | Default and browser fallback (frosted backdrop, caustics, the sentence and its Get the app link); on an iPhone the phone sentence and no link; switching modes; the backdrop draws exactly the chosen colours with the computed veil; a fourth colour is refused; your own colour; persistence over a reload; Picture with and without a picture; an old picture with no saved mode is still shown (and after a reload); Glass strength picks see-through and thickens the frost; Night alone: previews wear the veil, the soft-colours line shows; search finds the new apples. Simulated desktop (`page.addInitScript` sets `__CF_DESKTOP__` and `__CF_GLASS__`): `html` and `body` transparent, no tint between panels for Clear, panels at `--panel-veil`, every page text colour at AA over the darkest glass (vibrancy, blur, acrylic dark), Colours brings the page back; no visible text straight on the window on any screen at 375 and 1440 px; glass `none` shows the in-app sentence. At 320, 375, 768, 1440 and 1920 px, light and dark: no overflow in any mode, one-line tile names, AA text on the darkest colour. |
+| Playwright `e2e/screenshots.spec.ts` | `settings-background-*.png` (phone and desktop) and `see-through-simulated-*.png`: the simulated desktop (Windows blur path) over a car picture blurred like the system would, with the app's own tint laid over it. |
+
+**What only a built app shows.** The native effect (macOS vibrancy or Liquid Glass, Windows acrylic or blur) is drawn
+by the operating system outside the web page, so no browser test can see it. After a desktop build, check by hand on
+a Mac and a Windows 11 PC, with a high-contrast wallpaper (a car photo) and with a plain black one:
+
+- [ ] The car's edges are guessable between the panels and softly through them, never sharp.
+- [ ] On the black wallpaper, every text is easy to read (that is the case the tint is computed for).
+- [ ] **Black wallpaper on Windows 11 (22H2+, acrylic) and on macOS (15 and older, and 26+):** the system draws its
+      own light material there and ignores the app's tint, so the web assumes black and gives panels 0.86. Note how
+      light the empty window looks over black. If the material is clearly never darker than mid-grey, the floor in
+      `glassFloor` (`web/src/lib/background.ts`) can be raised for that glass so its panels get clearer.
+- [ ] Frosted shows less than Clear; Colours and Picture cover the desktop completely.
+- [ ] The window stays glassy when another app is in front, and resizing or dragging does not lag.
+- [ ] Windows 10: the blur works; Linux: an ordinary window and the "This computer can't show see-through" line.
+
 ## What the tests must cover
 
 ### Web (Playwright, mock mode)

@@ -397,7 +397,7 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
 ### 12.3 Desktop wrapper (`desktop/`, Tauri v2)
 * A thin native window that loads `app_url` (no bundled UI), window title "Clip Factory", the app icon, minimum size
   380×600, remembers size/position, external links open in the system browser, user agent suffix `ClipFactoryDesktop`,
-  injects `window.__CF_DESKTOP__ = true`. Updates come from the website itself (the update banner), so the wrapper rarely changes.
+  injects `window.__CF_DESKTOP__ = true` and `window.__CF_GLASS__` (the native see-through glass, §22.2). Updates come from the website itself (the update banner), so the wrapper rarely changes.
 * Built in deploy.yml after the web deploy (job `desktop`, matrix `macos-latest` → universal `.dmg`,
   `windows-latest` → NSIS `.exe`), app URL from terraform output, uploaded to the web bucket as
   `downloads/Clip-Factory.dmg` and `downloads/Clip-Factory-Setup.exe`, then `downloads/manifest.json` rewritten.
@@ -959,7 +959,7 @@ The owner's picture: *the field* is all of Settings, the *trees* are a few big g
 | | **Money** `/money` (§21) | Do I get paid here? (`earningsPaid`), Money for 1,000 views (`earningsRates`), Where the numbers come from | amounts are best guesses |
 | **Look & feel** `/settings/look-and-feel` | **Sounds** `/sounds` | Sounds on/off (`soundEnabled`); **Click sound** (1 of 30, `clickSound`); **Error sound** (1 of 30, `errorSound`); Try it | sounds only play when you tap, never when you scroll |
 | | **Motion** `/motion` | Reduce motion (`reduceMotion`) | |
-| | **Background** `/background` | Background picture (this device only) | |
+| | **Background** `/background` | What's behind the glass, Glass strength, Background picture (this device only), Background colours (§22) | |
 | **App & account** `/settings/app` | **Get the app** `/get-the-app` | the device-aware install card (§12.1) | |
 | | **Updates** `/updates` | this version, Check for updates (§12.2) | |
 | | **Account** `/account` | signed-in email, Sign out | |
@@ -2843,7 +2843,8 @@ on a platform's setup page) becomes a doc on that page, and the element there ca
 | `skills-edit` / `skills-delete` | open a skill, **Edit** / **Delete** (with Undo); built-ins cannot be changed | Open Skills `/settings/clip-making/skills#your-skills` |
 | `skills-what` | what a skill is; every AI call uses every skill, always (§18: no on/off); to stop using one, open it and **Delete**; built-ins stay | Open Skills `/settings/clip-making/skills#your-skills` |
 | `sounds-click` / `sounds-error` / `sounds-off` | pick **Click sound** / **Error sound** (30 each, tap a card to hear it) / turn Sounds off | Open Sounds `/settings/look-and-feel/sounds#click-sound` (…`#error-sound`, `#sounds-on`) |
-| `motion-and-background` | Reduce motion, Background picture | Open Motion / Background |
+| `motion-and-background` | Reduce motion, Background | Open Motion / Background |
+| `background-see-through` | See-through, Picture or Colours; Clear or Frosted (§22) | Open Background / Pick colours |
 | `get-app-desktop` (`when: desktop, os mac/windows, installed false`), `get-app-browser` (`when: desktop, os linux/chromeos/unknown, installed false`: install from the browser, no download), `get-app-iphone` (`os: ios`), `get-app-android` (`os: android`) | install, per §12.1 | Get the app `/settings/app/get-the-app` → `get-app` |
 | `updates` | the update bar, **Reload**, **Check for updates** | Open Updates `/settings/app/updates#check-updates` |
 | `youtube-cookies` | when YouTube blocks downloads | Open YouTube help `/settings/clip-making/youtube#youtube-cookies` |
@@ -3470,11 +3471,11 @@ When Settings › Look & feel › Motion › Reduce motion is on **or** the OS r
 
 ### 20.7 Undo and the rewind
 
-Throw away, Stop job, skill Delete, cookies Remove, Use the colours, verification-file Remove and Disconnect only
+Throw away, Stop job, skill Delete, cookies Remove, Remove picture, verification-file Remove and Disconnect only
 really happen after the 8 s Undo toast (`toast.undo`, `UNDO_MS`). Their motion plays **at the tap** (the owner sees
 the result at once). If Undo is tapped:
 
-* the button is still on screen (cookies Remove, Use the colours, verification Remove, Disconnect): the
+* the button is still on screen (cookies Remove, Remove picture, verification Remove, Disconnect): the
   screen keeps the `useAction` handle and calls `handle.rewind()` from `onUndo`: the glyph plays its motion backwards
   (`animation-direction: reverse`, `--act-rewind` 360 ms, ending at rest);
 * the button is swapped for a note at the tap and comes back on Undo (Stop job: "Stopping in a few seconds" replaces
@@ -3640,7 +3641,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | branches.tsx:120 Remove (cookies) | `delete` | handle; `rewind()` on Undo |
 | branches.tsx:148 Post to platform check-chips | `tick` | on turning on; off: press |
 | branches.tsx:226 Choose / Change picture | `upload` | on `change` with a file |
-| branches.tsx:230 Use the colours | `undo` | handle; `rewind()` on Undo |
+| branches.tsx PictureApple Remove picture (was Use the colours) | `undo` | handle; `rewind()` on Undo |
 | branches.tsx:255 GetAppPanel | see (d) | |
 | branches.tsx:287 Check for updates | `refresh` | |
 | branches.tsx:303 Sign out | `disconnect` | |
@@ -3923,3 +3924,157 @@ unrounded amounts, so a total may differ from the sum of the shown cents by a ce
   the Settings edit flow (refusals, save, switch, sources, effect on the clip page, Use the usual), Find a setting,
   Library and This week (order unchanged), and no overflow at 320/375/768/1440/1920. Screenshots
   `clip-earnings*.png` and `settings-money*.png` (phone and desktop, light and dark) in `screenshots.spec.ts`.
+
+
+## 22. Background modes and see-through glass (owner request, 2026-11-16)
+
+The owner wants the whole app to feel like liquid glass you can almost see through: "if there's a car behind it, I
+can see the edges of the car", on the Mac and Windows app and on phones. Three choices sit in
+Settings › Look & feel › Background; **see-through is the default**.
+
+| Mode | What is behind the glass |
+|---|---|
+| `see-through` (default) | Desktop app with native glass: whatever is behind the window (the wallpaper, other windows), blurred by the system; it shows between the panels and softly through them, so it can be guessed, never read. Anywhere else: frosted Clip Factory colours with slow light moving through them. |
+| `picture` | The owner's own picture (kept on the device, as before, §12). No picture yet: the Clip Factory colours. |
+| `colours` | 1 to 3 colours the owner picks (swatches or their own colour), blended as a slow mesh. |
+
+### 22.1 Settings (api, `settings.py`)
+
+`Settings` gains three fields (all `PUT /v1/settings`, validated, §5 errors):
+
+```ts
+backgroundMode?: "see-through" | "picture" | "colours"  // no server default: absent until saved
+backgroundColours: string[]   // 1..3 distinct "#rrggbb", stored lower case; default ["#9caf88", "#f7f5ef", "#e8412c"]
+glassStrength: "clear" | "frosted"                       // default "clear"
+```
+
+Bad values are 400 with a plain message ("Pick what goes behind the glass: See-through, Picture or Colours.",
+"Pick Clear or Frosted glass.", "Pick 1 to 3 colours.", "Colours must be like #9caf88."). A malformed stored value
+reads as the default. The picture itself never leaves the device (`localStorage` `cf.background`). The web keeps a
+copy of the three fields in `cf.prefs` so the look applies before `/v1/me` answers, like sound and motion (§15.4);
+old servers without the fields read as the defaults.
+
+**Upgrade rule (existing pictures).** `backgroundMode` has no server default: `GET /v1/settings` and `/v1/me` leave
+it out until the owner saves one, and the web never copies an absent mode over the device's. Until then the device
+decides: no mode in `cf.prefs` and a picture in `cf.background` (set before see-through existed) → `picture`, so the
+owner keeps seeing their picture after the upgrade; otherwise `see-through`. Once saved, the saved mode wins
+everywhere.
+
+### 22.2 Desktop window glass (`desktop/`, Tauri v2)
+
+* `src-tauri/src/main.rs` picks the glass from the operating system before the window is built:
+  macOS → `vibrancy` (Tauri effects `LiquidGlassRegular` on macOS 26+, falling back to `UnderWindowBackground` on
+  11–15, state `Active`); Windows build ≥ 22621 (11 22H2+) → `acrylic`; Windows 10 1809 (17763) to 11 21H2 → `blur`
+  (acrylic lags while dragging on those builds); anything else (Linux, older Windows) → `none`. Mica is not used: it
+  only shows the wallpaper's colours, never the shapes the owner wants to guess.
+* With glass, the window is `transparent(true)` with those effects and a light off-white tint (`GLASS_TINT`,
+  247/245/239 at 140/255). Only the Windows `blur` path is known to use that tint: on Windows 11 22H2+ acrylic,
+  window-vibrancy sets only the system backdrop type and drops the colour (tauri documents `color` as having no
+  effect on Windows 11), macOS 11–15 vibrancy takes no tint, and the Liquid Glass tint is unproven. The window theme
+  is forced to **Light**, because the web app is drawn light.
+* macOS transparency needs `app.macOSPrivateApi: true` (tauri.conf.json) and tauri's `macos-private-api` feature.
+  This rules out the Mac App Store, which the app does not use (unsigned `.dmg`, §12.3).
+* The injected script now starts with `window.__CF_GLASS__ = "vibrancy" | "acrylic" | "blur" | "none"`, followed by
+  `init.js` (`__CF_DESKTOP__ = true`, outward links). The remote page still gets **no** Tauri IPC
+  (`withGlobalTauri` off, empty capability).
+* `windows-version` (already in the lock file through tauri) reads the Windows build. Unit tests cover the choice
+  per OS and build and the script prefix.
+
+### 22.3 Web: what is drawn (`lib/background.ts`, `lib/look.ts`, `components/Backdrop.tsx`, `styles/glass.css`)
+
+* `readNativeGlass(window)` trusts `__CF_GLASS__` only when `__CF_DESKTOP__ === true` and the value is one of
+  `vibrancy`, `mica`, `acrylic`, `blur`; anything else is `none`. `resolveLook` turns mode + picture + colours +
+  strength + glass + light/dark into one of: `window`, `frosted`, `picture`, `brand`, `colours`.
+* `applyLook` (run in `main.tsx` before the first paint, then by `Backdrop` on every change) sets
+  `html[data-backdrop]`, `html[data-glass]`, the `--backdrop-veil` custom property and, for `window` only,
+  `html.see-through`, which makes `html` and `body` transparent so the native glass shows.
+* **The tint (contrast).** Off-white whose strength is computed, not guessed: `minVeil` is the smallest alpha at
+  which every text colour that can sit on it (ink, ink-2, ink-3, tomato-ink) reaches 4.5:1 against the off-white
+  composited (sRGB, as browsers do) over the **darkest** thing behind it.
+  * See-through (`seeThroughVeils(glass, scheme, strength)`): the tint lives **on the panels and on loose text**, not
+    over the whole window, so the wallpaper stays guessable between them. Two values go on `<html>`:
+    `--backdrop-veil` over the whole window (Clear 0, Frosted 0.30) and `--panel-veil` on every `.glass` panel and
+    on every piece of text that sits straight on the window (page title and its line, breadcrumbs, the phone
+    top-bar name, the headings and lines between panels, back links, review count, setup part titles), as a scrim
+    that hugs the words (`box-shadow` spread, so nothing moves). Pick-one tracks outside panels (`.segmented`,
+    `.tabs`) lay their shade over the same tint.
+  * The darkest glass (`glassFloor`): `blur` in light → `TINTED_FLOOR`, the app's tint over black, worked out from
+    the same numbers as `GLASS_TINT` (`GLASS_TINT_ALPHA` = 140/255, ≈ rgb(135.6, 134.5, 131.2)). `acrylic` and
+    `vibrancy` (the system's own material, no app tint) and any dark setting → **black**: nothing is promised there.
+  * Panel tint: Clear = the minimum over that floor (blur 0.68; acrylic, vibrancy and dark 0.86); Frosted = the
+    minimum over the floor under the 0.30 window frost, + 0.10 (blur 0.64 on top of the frost, others 0.89), so a
+    Frosted panel shows less through than a Clear one.
+  * Colours: each chosen colour and every half-and-half blend of two (an sRGB blend can be darker than both); the
+    darkest decides. Light colours need no veil; Night alone needs 0.83. The Colours tile and the colours strip
+    in Settings wear the same veil (`--preview-veil`), so they look like the result; at 0.5 or more the card adds
+    "Dark colours show soft, so words stay easy to read."
+  * Picture: unchanged (the 0.18 off-white veil and the panels' own tint, §12).
+  * `prefers-reduced-transparency: reduce` raises the veil to 0.94 in every mode.
+* **Panels in see-through.** `.glass` (and `.glass--clear`) keeps the recipe (blur, saturation, lit rim, inner
+  highlight, shadow, refraction in Chromium); its tint is `--panel-veil`. Playwright checks, on every screen at 375
+  and 1440 px, that no visible text sits straight on the transparent window (`looseText` in `e2e/helpers.ts`).
+* **Frosted fallback** (see-through in a browser, installed PWA, phone, or the desktop app with `none`): the usual
+  sage/off-white/tomato blobs (already blurred), a milky frost pane (Clear: white 0.22 → off-white 0.10; Frosted,
+  `html[data-strength="frosted"]`: white 0.50 → off-white 0.38, so Glass strength always does something; no full-screen
+  `backdrop-filter`, so phones do not repaint it every frame) and two soft caustic highlights drifting over 26 s and
+  34 s (soft-light). Reduced motion stops them like every other loop.
+* **Colours mesh:** a 160° gradient through the colours plus the drifting blobs in `--c1..--c3` (one or two colours
+  repeat the last), then the veil.
+
+### 22.4 Why phones and browsers cannot see through
+
+Web pages, installed PWAs and phone home-screen apps are drawn on an opaque surface; no browser lets a page see the
+wallpaper or windows behind it. Only the desktop app owns its window. The Background page says so in one sentence
+under the choice whenever see-through is picked and there is no native glass:
+
+> See-through works in the Mac and Windows app. Browsers don't let apps look behind them, so here you get the Clip
+> Factory colours. **Get the app** (→ `/get-app`)
+
+The **Get the app** link shows only on a Mac or Windows computer (`lib/device.ts`), where the app can do
+see-through. On a phone (iPhone, iPad, Android), where getting the app gives a home-screen app that still cannot,
+the sentence is "See-through works in the Mac and Windows app on a computer. Phones don't let apps look behind
+them, so here you get the Clip Factory colours." with no link. Other computers (Linux, Chromebook) get the browser
+sentence without the link.
+
+In the desktop app without glass (Linux, old Windows): "This computer can't show see-through, so here you get the
+Clip Factory colours." (no link).
+
+### 22.5 Settings › Look & feel › Background (web, `screens/settings/branches.tsx`)
+
+Branch line: "See-through glass, your picture or your colours." Apples (`lib/settingsTree.ts`, each a `data-help`
+anchor for Ask Clip Factory):
+
+| Apple id | Name | Leaf | Control |
+|---|---|---|---|
+| `background-kind` | What's behind the glass | Pick See-through, Picture or Colours. | A radio group of three preview tiles with one `<Glide>` (`.bg-modes`, `glide--tile`): a blurred car behind frost, your picture (or the picture icon), your colours. The note of §22.4 under it. |
+| `glass-strength` | Glass strength | Clear shows more of what's behind. Frosted shows less. | `Segmented` Clear / Frosted. Choosing one also picks See-through. In the desktop app it sets the window frost and panel tint; elsewhere it thickens the frost over the Clip Factory colours. |
+| `background-picture` | Background picture | Use your own picture behind the glass. It stays on this device. | Choose / Change picture (`upload`), Remove picture (`undo`, rewinds on Undo). A picked picture also picks Picture. |
+| `background-colours` | Background colours | Mix up to 3 colours behind the glass. | A preview strip, ten named swatches (Sage, Cream, Tomato, Sunny, Mint, Sky, Ocean, Grape, Bubblegum, Night; `aria-pressed`) and "Your own colour" (`input type=color`, saved on `change` only). Tapping a colour adds or removes it and picks Colours. A fourth: "You can mix 3 colours. Tap one of yours to take it off first." The last one: "Keep at least one colour. Pick another one first." |
+
+The apple whose mode is in use shows an "In use" pill. The three tile names stay on one line at every width
+(`white-space: nowrap`, a slightly smaller size on narrow phones), so "See-through" never splits at its hyphen. Every control is reachable by keyboard; the cursor never
+changes (§20.14); hover lights up the tiles and swatches.
+
+### 22.6 Tests
+
+* Vitest `test/background.test.ts`: contrast maths against WCAG reference values; `minVeil` is minimal and reaches AA;
+  `TINTED_FLOOR` is the app tint over black (0.68 needed); the floor per glass (only `blur` in light is tinted);
+  every glass, scheme and strength reaches AA on the panels; Clear leaves the gaps clear and Frosted shows less
+  through; colours validation and veils (each colour and pairwise blend); `resolveLook` for every mode; only the
+  wrapper can claim glass; the notes' exact sentences (computer and phone); prefs defaults and junk; an existing
+  picture with no saved mode starts in Picture; `applyLook` on `<html>`.
+* pytest `api/tests/test_settings_and_system.py`: defaults (no `backgroundMode` until saved), saving (lower case,
+  repeats dropped), every refusal and its message, malformed stored values.
+* Playwright `e2e/background.spec.ts`: the default and the browser fallback note with its Get the app link; on a
+  phone the phone sentence and no link; switching modes, the chosen colours on the backdrop, the fourth-colour
+  refusal, your own colour, persistence over a reload; Picture without and with a picture; an existing picture
+  survives the upgrade (and a reload); Glass strength picks see-through and changes the frost; Night alone: the
+  previews wear the backdrop's veil and the soft-colours line shows; search finds the new apples; a simulated
+  desktop (`addInitScript` setting `__CF_DESKTOP__` / `__CF_GLASS__`) has transparent `html` and `body`, no tint
+  between panels for Clear, panels at `--panel-veil`, every page text colour at AA over the darkest glass (vibrancy,
+  blur, acrylic dark); no text straight on the window on any screen at 375 and 1440 px; `none` glass in the app; no
+  overflow, one-line tile names and AA text at 320, 375, 768, 1440 and 1920 px, light and dark, in every mode.
+* `e2e/screenshots.spec.ts`: the Background page, and a simulated see-through desktop (Windows blur path) over a car
+  picture standing in for the wallpaper, with the app's own tint over it as the system would draw it (the real
+  native blur can only be seen in a built app).
+* desktop: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (CI, Linux).
