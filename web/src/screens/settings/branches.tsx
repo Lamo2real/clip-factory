@@ -1,6 +1,6 @@
 // Every branch of the settings tree except Skills and Sounds (they have their own files). Each branch page is a
 // few glass panels of apples; the words (names and leaves) come from lib/settingsTree.ts.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import { putFile } from "../../api/upload.ts";
@@ -9,10 +9,29 @@ import { useSession } from "../../app/session.tsx";
 import { GetAppPanel } from "../../components/GetApp.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { ActGlyph, Button, Pill, Skeleton, Stepper } from "../../components/ui.tsx";
+import { A, ActGlyph, Button, Pill, Segmented, Skeleton, Stepper } from "../../components/ui.tsx";
+import { Glide } from "../../components/Glide.tsx";
+import { Icon } from "../../components/Icon.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 import { useAction } from "../../lib/motion.ts";
 import { setPrefs, shrinkImage, usePrefs } from "../../lib/prefs.ts";
+import {
+  BACKGROUND_MODES,
+  MAX_COLOURS,
+  SWATCHES,
+  SOFT_COLOURS_NOTE,
+  SOFT_COLOURS_VEIL,
+  colourName,
+  coloursVeil,
+  hexToRgb,
+  luminance,
+  normaliseColours,
+  seeThroughNote,
+  type BackgroundMode,
+  type GlassStrength,
+} from "../../lib/background.ts";
+import { currentOs } from "../../lib/device.ts";
+import { inDesktopApp, nativeGlass } from "../../lib/look.ts";
 import { APP_VERSION, checkForUpdate, updateState } from "../../lib/update.ts";
 import { Apple, AppleSwitch, Panel, usePickAction } from "./parts.tsx";
 
@@ -233,14 +252,131 @@ export function MotionBranch() {
   );
 }
 
+const MODE_LABEL: Record<BackgroundMode, string> = { "see-through": "See-through", picture: "Picture", colours: "Colours" };
+
+/**
+ * Settings › Look & feel › Background (§22.5): what sits behind the glass. The choice is a glide bar of three
+ * preview tiles; under it, one apple per choice. Using any of them (a strength, a picture, a colour) also picks it.
+ */
 export function BackgroundBranch() {
+  const prefs = usePrefs();
+  const { me, saveSettings } = useSession();
+  const mode = me?.settings.backgroundMode ?? prefs.backgroundMode;
+  const strength = me?.settings.glassStrength ?? prefs.glassStrength;
+  const colours = normaliseColours(me?.settings.backgroundColours ?? prefs.backgroundColours);
+  const glass = nativeGlass();
+  const os = currentOs();
+  const desktopApp = inDesktopApp();
+  const note = mode === "see-through" ? seeThroughNote(glass, desktopApp, os === "ios" || os === "android") : null;
+  // "Get the app" only where the app can show see-through: a Mac or Windows computer not already in the app.
+  const offerApp = !desktopApp && (os === "mac" || os === "windows");
+  const choose = (next: BackgroundMode) => (next === mode ? null : saveSettings({ backgroundMode: next }));
+
+  return (
+    <>
+      <Panel>
+        <Apple id="background-kind" wide>
+          <BackgroundModes mode={mode} picture={prefs.background} colours={colours} onChange={(m) => void choose(m)} />
+          {note ? (
+            <p className="bg-note" data-help="see-through-note">
+              <Icon name="info" size={18} />
+              <span>
+                {note}
+                {offerApp ? (
+                  <>
+                    {" "}
+                    <A href="/get-app" className="text-link bg-note__link">
+                      Get the app
+                    </A>
+                  </>
+                ) : null}
+              </span>
+            </p>
+          ) : null}
+        </Apple>
+      </Panel>
+      <Panel className="bg-options">
+        <Apple id="glass-strength" aside={mode === "see-through" ? <Pill tone="sage">In use</Pill> : null}>
+          <Segmented<GlassStrength>
+            label="Glass strength"
+            value={strength}
+            options={[
+              { value: "clear", label: "Clear", help: "glass-clear" },
+              { value: "frosted", label: "Frosted", help: "glass-frosted" },
+            ]}
+            onChange={(v) => void saveSettings({ glassStrength: v, backgroundMode: "see-through" })}
+          />
+        </Apple>
+        <PictureApple inUse={mode === "picture"} onPicked={() => void choose("picture")} />
+        <ColoursApple inUse={mode === "colours"} colours={colours} onChange={(next) => void saveSettings({ backgroundColours: next, backgroundMode: "colours" })} />
+      </Panel>
+    </>
+  );
+}
+
+/** The three choices as tiles that each show what you get; the glide slides to the chosen one. */
+function BackgroundModes({
+  mode,
+  picture,
+  colours,
+  onChange,
+}: {
+  mode: BackgroundMode;
+  picture: string | null;
+  colours: string[];
+  onChange: (m: BackgroundMode) => void;
+}) {
+  const name = useId();
+  return (
+    <div className="bg-modes" role="radiogroup" aria-labelledby="background-kind-name" data-help-dodge="">
+      <Glide active=".bg-mode.is-on" className="glide--tile" />
+      {BACKGROUND_MODES.map((m) => (
+        <label key={m} className={`bg-mode${m === mode ? " is-on" : ""}`} data-help={`background-${m}`}>
+          <input type="radio" name={name} value={m} checked={m === mode} onChange={() => onChange(m)} />
+          <span className={`bg-tile bg-tile--${m}`} aria-hidden="true" style={m === "colours" ? colourPreviewStyle(colours) : undefined}>
+            {m === "see-through" ? <SeeThroughArt /> : m === "picture" ? picture ? <img src={picture} alt="" /> : <Icon name="image" size={26} /> : null}
+          </span>
+          <span className="bg-mode__name">{MODE_LABEL[m]}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** The colours as they will really look: blended, under the same veil the backdrop gets (`--preview-veil`). */
+function colourPreviewStyle(colours: string[]): CSSProperties {
+  const [c1, c2 = c1, c3 = c2] = colours;
+  return {
+    background: `radial-gradient(circle at 25% 25%, ${c1} 0, transparent 70%), radial-gradient(circle at 80% 70%, ${c3} 0, transparent 70%), linear-gradient(140deg, ${c1}, ${c2}, ${c3})`,
+    "--preview-veil": String(coloursVeil(colours)),
+  } as CSSProperties;
+}
+
+/** A car on a sunny wallpaper, softly blurred behind frosted glass: you can guess what it is, not read it. */
+function SeeThroughArt() {
+  return (
+    <>
+      <svg className="bg-tile__scene" viewBox="0 0 120 90" preserveAspectRatio="xMidYMid slice">
+        <rect width="120" height="90" fill="#7cc4f2" />
+        <circle cx="96" cy="20" r="11" fill="#f6c945" />
+        <rect y="62" width="120" height="28" fill="#5c7a4a" />
+        <path d="M18 64c2-9 7-13 16-14l10-9c3-3 7-4 11-4h22c5 0 9 2 12 6l7 8c9 1 15 5 16 13z" fill="#e8412c" />
+        <circle cx="38" cy="66" r="8" fill="#1e2a1b" />
+        <circle cx="86" cy="66" r="8" fill="#1e2a1b" />
+      </svg>
+      <span className="bg-tile__frost" />
+    </>
+  );
+}
+
+function PictureApple({ inUse, onPicked }: { inUse: boolean; onPicked: () => void }) {
   const prefs = usePrefs();
   const toast = useToast();
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const pick = usePickAction("upload");
-  // Kept here: "Use the colours" goes with the picture and comes back rewinding on Undo.
-  const colours = useAction("undo");
+  // Kept here: "Remove picture" goes with the picture and comes back rewinding on Undo.
+  const remove = useAction("undo");
 
   async function pickBackground(f: File) {
     pick.play();
@@ -254,7 +390,10 @@ export function BackgroundBranch() {
       if (!setPrefs({ background: url })) {
         pick.fail({ sound: false });
         toast.error("That picture is too big for this device. Pick a smaller one.");
-      } else toast.success("Background set on this device.");
+      } else {
+        onPicked();
+        toast.success("Background set on this device.");
+      }
     } catch {
       pick.fail({ sound: false });
       toast.error("That picture could not be opened. Pick a JPG or PNG.");
@@ -265,55 +404,127 @@ export function BackgroundBranch() {
   }
 
   return (
-    <Panel>
-      <Apple id="background-picture" wide>
-        <div className="bg-picker">
-          <span className="bg-picker__preview" aria-hidden="true">
-            {prefs.background ? <img src={prefs.background} alt="" /> : <span className="bg-picker__mesh" />}
-          </span>
-          <div className="bg-picker__text">
-            <span className="muted small">{prefs.background ? "Using your picture." : "Using the Clip Factory colours."}</span>
-            <div className="row-actions">
-              <input
-                ref={file}
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                tabIndex={-1}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void pickBackground(f);
+    <Apple id="background-picture" wide aside={inUse ? <Pill tone="sage">In use</Pill> : null}>
+      <div className="bg-picker">
+        <span className="bg-picker__preview" aria-hidden="true">
+          {prefs.background ? <img src={prefs.background} alt="" /> : <span className="bg-picker__mesh" />}
+        </span>
+        <div className="bg-picker__text">
+          <span className="muted small">{prefs.background ? "Your picture is ready." : "No picture yet. Until you pick one, you get the Clip Factory colours."}</span>
+          <div className="row-actions">
+            <input
+              ref={file}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              tabIndex={-1}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void pickBackground(f);
+              }}
+            />
+            <Button size="sm" icon="image" act={pick} playOnClick={false} loading={busy} onClick={() => file.current?.click()}>
+              {prefs.background ? "Change picture" : "Choose a picture"}
+            </Button>
+            {prefs.background ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="x"
+                act={remove}
+                onClick={() => {
+                  const before = prefs.background;
+                  setPrefs({ background: null });
+                  toast.undo("Picture removed.", {
+                    onUndo: () => {
+                      setPrefs({ background: before });
+                      remove.rewind();
+                    },
+                    onCommit: () => undefined,
+                  });
                 }}
-              />
-              <Button size="sm" icon="image" act={pick} playOnClick={false} loading={busy} onClick={() => file.current?.click()}>
-                {prefs.background ? "Change picture" : "Choose a picture"}
+              >
+                Remove picture
               </Button>
-              {prefs.background ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  icon="x"
-                  act={colours}
-                  onClick={() => {
-                    const before = prefs.background;
-                    setPrefs({ background: null });
-                    toast.undo("Picture removed.", {
-                      onUndo: () => {
-                        setPrefs({ background: before });
-                        colours.rewind();
-                      },
-                      onCommit: () => undefined,
-                    });
-                  }}
-                >
-                  Use the colours
-                </Button>
-              ) : null}
-            </div>
+            ) : null}
           </div>
         </div>
-      </Apple>
-    </Panel>
+      </div>
+    </Apple>
+  );
+}
+
+/** Up to three colours from the swatches, or your own from the colour picker. They blend behind the glass. */
+function ColoursApple({ inUse, colours, onChange }: { inUse: boolean; colours: string[]; onChange: (next: string[]) => void }) {
+  const toast = useToast();
+  const own = useRef<HTMLInputElement>(null);
+  const latest = useRef({ colours, onChange });
+  latest.current = { colours, onChange };
+
+  const add = (hex: string) => {
+    const { colours: now, onChange: save } = latest.current;
+    if (now.includes(hex)) return save(now);
+    if (now.length >= MAX_COLOURS) {
+      toast.info("You can mix 3 colours. Tap one of yours to take it off first.");
+      return;
+    }
+    save([...now, hex]);
+  };
+  const toggle = (hex: string) => {
+    if (!colours.includes(hex)) return add(hex);
+    if (colours.length === 1) {
+      // Tapping the only colour just picks Colours; there is always at least one.
+      if (!inUse) onChange(colours);
+      else toast.info("Keep at least one colour. Pick another one first.");
+      return;
+    }
+    onChange(colours.filter((c) => c !== hex));
+  };
+
+  // The colour picker reports every drag step as "input"; only the final pick ("change") is saved.
+  useEffect(() => {
+    const el = own.current;
+    if (!el) return;
+    const done = () => add(el.value.toLowerCase());
+    el.addEventListener("change", done);
+    return () => el.removeEventListener("change", done);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const custom = colours.filter((c) => !SWATCHES.some((s) => s.hex === c));
+  return (
+    <Apple id="background-colours" wide aside={inUse ? <Pill tone="sage">In use</Pill> : null}>
+      <div className="bg-colours">
+        <span className="bg-colours__mix" aria-hidden="true" style={colourPreviewStyle(colours)} />
+        <div className="swatches" role="group" aria-label="Colours">
+          {[...SWATCHES.map((s) => s.hex), ...custom].map((hex) => {
+            const on = colours.includes(hex);
+            return (
+              <button
+                key={hex}
+                type="button"
+                className={`swatch${on ? " is-on" : ""}${luminance(hexToRgb(hex)) > 0.4 ? " is-light" : ""}`}
+                style={{ "--swatch": hex } as CSSProperties}
+                aria-pressed={on}
+                aria-label={colourName(hex)}
+                title={colourName(hex)}
+                onClick={() => toggle(hex)}
+              >
+                {on ? <Icon name="check" size={20} /> : null}
+              </button>
+            );
+          })}
+          <label className="swatch swatch--own" title="Your own colour">
+            <input ref={own} type="color" defaultValue="#7fd8be" aria-label="Your own colour" />
+            <Icon name="plus" size={20} />
+          </label>
+        </div>
+        <span className="muted small">
+          {colours.length === 1 ? "1 colour picked." : `${colours.length} colours picked.`} Tap a colour to add it or take it off.
+          {coloursVeil(colours) >= SOFT_COLOURS_VEIL ? <span className="bg-colours__soft"> {SOFT_COLOURS_NOTE}</span> : null}
+        </span>
+      </div>
+    </Apple>
   );
 }
 

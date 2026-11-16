@@ -72,7 +72,7 @@ test.describe("motion in Settings (APPLY c)", () => {
     expect((await tapAct(tryIt)).cls).toContain("is-play");
   });
 
-  test("Background: the picture uploads when picked; Use the colours rewinds on Undo", async ({ page }) => {
+  test("Background: the picture uploads when picked; Remove picture rewinds on Undo", async ({ page }) => {
     await open(page, "/settings/look-and-feel/background");
     const choose = page.getByRole("button", { name: "Choose a picture" });
     await expect(choose).toHaveAttribute("data-act", "upload");
@@ -81,11 +81,11 @@ test.describe("motion in Settings (APPLY c)", () => {
     await expect(page.locator('[data-act="upload"] .act')).toHaveClass(/is-(play|idle)/);
     await expect(page.getByText("Background set on this device.")).toBeVisible();
 
-    const colours = page.getByRole("button", { name: "Use the colours" });
-    await expect(colours).toHaveAttribute("data-act", "undo");
-    await colours.click();
+    const remove = page.getByRole("button", { name: "Remove picture" });
+    await expect(remove).toHaveAttribute("data-act", "undo");
+    await remove.click();
     await page.getByRole("button", { name: "Undo" }).click();
-    await expect(page.getByRole("button", { name: "Use the colours" }).locator(".act")).toHaveClass(/is-rewind/);
+    await expect(page.getByRole("button", { name: "Remove picture" }).locator(".act")).toHaveClass(/is-rewind/);
   });
 
   test("YouTube cookies: a bad file fails, a good one uploads, Remove rewinds on Undo", async ({ page }) => {

@@ -242,14 +242,32 @@ export const TREES: Tree[] = [
       {
         slug: "background",
         name: "Background",
-        line: "Your own picture behind the glass.",
+        line: "See-through glass, your picture or your colours.",
         icon: "image",
         apples: [
+          {
+            id: "background-kind",
+            name: "What's behind the glass",
+            leaf: "Pick See-through, Picture or Colours.",
+            words: ["see-through", "see through", "transparent", "liquid glass", "glass", "behind", "desktop", "computer background", "mode"],
+          },
+          {
+            id: "glass-strength",
+            name: "Glass strength",
+            leaf: "Clear shows more of what's behind. Frosted shows less.",
+            words: ["see-through", "see through", "transparent", "blur", "blurry", "frosted", "clear", "strength"],
+          },
           {
             id: "background-picture",
             name: "Background picture",
             leaf: "Use your own picture behind the glass. It stays on this device.",
-            words: ["wallpaper", "photo", "colours", "colors", "image"],
+            words: ["wallpaper", "photo", "image"],
+          },
+          {
+            id: "background-colours",
+            name: "Background colours",
+            leaf: "Mix up to 3 colours behind the glass.",
+            words: ["colours", "colors", "colour", "color", "gradient", "rainbow", "paint", "swatch"],
           },
         ],
       },

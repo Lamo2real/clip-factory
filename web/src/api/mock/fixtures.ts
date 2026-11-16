@@ -507,6 +507,9 @@ export function seed(): Store {
       earningsRates: {},
       earningsPaid: {},
       setupSkipped: [],
+      // No backgroundMode: like the server, absent until saved, so the device decides (§22.1).
+      backgroundColours: ["#9caf88", "#f7f5ef", "#e8412c"],
+      glassStrength: "clear",
     },
     accounts: PLATFORMS.map((platform) => ({ platform, status: "not_connected" })),
   };

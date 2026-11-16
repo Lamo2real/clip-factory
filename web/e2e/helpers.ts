@@ -497,4 +497,47 @@ export async function mixedSetup(page: Page) {
     sessionStorage.setItem("cf-mock-setup", JSON.stringify(state));
     sessionStorage.setItem("cf-mock-setup-skipped", JSON.stringify(["tiktok"]));
   }, step);
+/**
+ * See-through (§22.3): every visible piece of text must sit on a tinted surface (a glass panel, a scrim, a button),
+ * never straight on the transparent window. Returns the text that does not, as "selector: text".
+ * A surface counts when its own colour or gradient is at least `minAlpha` opaque.
+ */
+export async function looseText(page: Page, minAlpha = 0.5): Promise<string[]> {
+  return page.evaluate((min) => {
+    const alphaOf = (css: string): number => {
+      if (!css || css === "none") return 0;
+      let best = 0;
+      for (const m of css.matchAll(/rgba?\(([^)]*)\)/g)) {
+        const parts = m[1]!.split(/[\s,/]+/).filter(Boolean);
+        best = Math.max(best, parts.length >= 4 ? Number(parts[3]) : 1);
+      }
+      if (/url\(/.test(css)) best = 1;
+      return best;
+    };
+    const tinted = (el: Element): boolean => {
+      for (let n: Element | null = el; n && n !== document.body; n = n.parentElement) {
+        const s = getComputedStyle(n);
+        if (n.classList.contains("backdrop")) return false;
+        // The chosen choice of a glide bar sits on the glide, a sibling drawn under it.
+        if (n.matches(".has-glide > .is-on")) return true;
+        if (alphaOf(s.backgroundColor) >= min || alphaOf(s.backgroundImage) >= min) return true;
+      }
+      return false;
+    };
+    const out: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+      const text = t.textContent?.trim();
+      const el = t.parentElement;
+      if (!text || !el) continue;
+      if (el.closest(".sr-only, [aria-hidden='true'], script, style, svg, .glass-defs")) continue;
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      if (r.width === 0 || r.height === 0 || s.visibility === "hidden" || Number(s.opacity) === 0) continue;
+      if (tinted(el)) continue;
+      const cls = typeof el.className === "string" && el.className ? "." + el.className.trim().split(/\s+/).join(".") : "";
+      out.push(`${el.tagName.toLowerCase()}${cls}: ${text.slice(0, 40)}`);
+    }
+    return [...new Set(out)];
+  }, minAlpha);
 }

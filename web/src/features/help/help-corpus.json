@@ -1,5 +1,5 @@
 {
-  "version": "09a1044cc894",
+  "version": "8100d13bb273",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -9,6 +9,7 @@
     "src/components/JobBits.tsx",
     "src/components/Nav.tsx",
     "src/components/PerfLines.tsx",
+    "src/components/ProgressRing.tsx",
     "src/components/Sheet.tsx",
     "src/components/SimilarClips.tsx",
     "src/features/help/helpKb.json",
@@ -17,6 +18,7 @@
     "src/screens/clip/ClipPerformance.tsx",
     "src/screens/home/Home.tsx",
     "src/screens/home/NewJobForm.tsx",
+    "src/screens/home/SetupCard.tsx",
     "src/screens/jobs/JobDetail.tsx",
     "src/screens/jobs/Jobs.tsx",
     "src/screens/jobs/mergeJobs.ts",
@@ -25,7 +27,8 @@
     "src/screens/library/WeekView.tsx",
     "src/screens/review/CaptionTabs.tsx",
     "src/screens/review/Review.tsx",
-    "src/screens/review/TikTokSheet.tsx"
+    "src/screens/review/TikTokSheet.tsx",
+    "src/screens/settings/setup/useSetup.ts"
   ],
   "routes": [
     "/",
@@ -1200,48 +1203,6 @@
       }
     },
     {
-      "id": "setup-list-gone",
-      "kind": "guide",
-      "route": "/settings/posting/setup",
-      "hash": "setup-todo",
-      "where": "Settings › Posting › Set up posting",
-      "title": "Where did my setup list go?",
-      "keywords": [
-        "setup list",
-        "set up list",
-        "to-do",
-        "todo",
-        "checklist",
-        "list gone",
-        "list disappeared",
-        "where did it go",
-        "skip",
-        "skipped",
-        "un-skip",
-        "unskip",
-        "set up posting pill",
-        "top right"
-      ],
-      "answer": "The **Set up posting** list sits at the top right until each place is set up or skipped. When all five are done or skipped, it says **All set!** and goes away. It comes back by itself if a place you set up needs you again. You can always find every place, skip one, or bring back one you skipped in **Settings › Posting › Set up posting**.",
-      "steps": [
-        "Tap **Settings**.",
-        "Tap **Posting**, then **Set up posting**.",
-        "Find the place you skipped. It says **Skipped**.",
-        "Tap **Un-skip** to put it back on the list, or tap its card to set it up now."
-      ],
-      "actions": [
-        {
-          "id": "setup-list-gone:setup",
-          "label": "Open Set up posting",
-          "to": "/settings/posting/setup#setup-todo",
-          "highlight": [
-            "setup-todo"
-          ]
-        }
-      ],
-      "extends": "§17"
-    },
-    {
       "id": "where-clips-go",
       "kind": "guide",
       "route": "/settings/posting/where",
@@ -1581,7 +1542,7 @@
       "route": "/settings/look-and-feel/motion",
       "hash": "reduce-motion",
       "where": "Settings › Look & feel",
-      "title": "Make it calmer: Reduce motion and Background picture",
+      "title": "Make it calmer: Reduce motion and Background",
       "keywords": [
         "calmer",
         "calm",
@@ -1590,18 +1551,14 @@
         "animation",
         "dizzy",
         "confetti",
-        "dark",
-        "background",
-        "wallpaper",
-        "picture",
-        "change background"
+        "dark"
       ],
-      "answer": "Turn on **Reduce motion** to stop confetti, page moves and the moving background. You can also put your own **Background picture** behind the glass.",
+      "answer": "Turn on **Reduce motion** to stop confetti, page moves and the moving background. In **Background** you can pick plain **Colours** instead of the glass or a picture.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Look & feel**.",
         "Tap **Motion** and turn on **Reduce motion**.",
-        "Or tap **Background** to pick your own picture."
+        "Or tap **Background** and pick **Colours** or **Picture**."
       ],
       "actions": [
         {
@@ -1615,9 +1572,64 @@
         {
           "id": "motion-and-background:background",
           "label": "Open Background",
-          "to": "/settings/look-and-feel/background#background-picture",
+          "to": "/settings/look-and-feel/background#background-kind",
           "highlight": [
-            "background-picture"
+            "background-kind"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "background-see-through",
+      "kind": "guide",
+      "route": "/settings/look-and-feel/background",
+      "hash": "background-kind",
+      "where": "Settings › Look & feel › Background",
+      "title": "See through the app, or pick a picture or colours",
+      "keywords": [
+        "see-through",
+        "see through",
+        "transparent",
+        "glass",
+        "liquid glass",
+        "behind",
+        "desktop",
+        "computer background",
+        "wallpaper",
+        "background",
+        "picture",
+        "colours",
+        "colors",
+        "frosted",
+        "clear",
+        "blur",
+        "change background",
+        "background colour",
+        "background color"
+      ],
+      "answer": "In **Background** pick **See-through**, **Picture** or **Colours**. See-through lets what is behind the window peek through the glass in the Mac and Windows app. Browsers and phones can't look behind the app, so there you get the Clip Factory colours.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Look & feel**.",
+        "Tap **Background**.",
+        "Tap **See-through**, **Picture** or **Colours**.",
+        "For See-through, pick **Clear** or **Frosted** glass."
+      ],
+      "actions": [
+        {
+          "id": "background-see-through:kind",
+          "label": "Open Background",
+          "to": "/settings/look-and-feel/background#background-kind",
+          "highlight": [
+            "background-kind"
+          ]
+        },
+        {
+          "id": "background-see-through:colours",
+          "label": "Pick colours",
+          "to": "/settings/look-and-feel/background#background-colours",
+          "highlight": [
+            "background-colours"
           ]
         }
       ]
@@ -2027,7 +2039,8 @@
         "link",
         "progress",
         "many",
-        "number"
+        "number",
+        "continue"
       ],
       "answer": "Paste a link to a stream or a video. Clip Factory finds the best moments and makes short clips. You pick the ones to keep.",
       "steps": [
@@ -2573,7 +2586,6 @@
       "title": "Set up posting",
       "keywords": [
         "Set up posting",
-        "The setup list on your screen",
         "Who can see your YouTube clips",
         "What X costs"
       ],
@@ -2626,48 +2638,6 @@
       ],
       "highlight": [
         "setup-posting"
-      ]
-    },
-    {
-      "id": "apple-setup-todo",
-      "kind": "apple",
-      "route": "/settings/posting/setup",
-      "hash": "setup-todo",
-      "where": "Settings › Posting › Set up posting",
-      "title": "The setup list on your screen",
-      "keywords": [
-        "to-do",
-        "todo",
-        "checklist",
-        "list",
-        "skip",
-        "skipped",
-        "un-skip",
-        "unskip",
-        "gone",
-        "disappeared",
-        "where did it go",
-        "pill",
-        "setup list"
-      ],
-      "answer": "It stays at the top right until each place is set up or skipped. Skipped ones wait here.",
-      "steps": [
-        "Tap **Settings**.",
-        "Tap **Posting**, then **Set up posting**.",
-        "Find **The setup list on your screen**."
-      ],
-      "actions": [
-        {
-          "id": "apple-setup-todo:open",
-          "label": "Open Set up posting",
-          "to": "/settings/posting/setup#setup-todo",
-          "highlight": [
-            "setup-todo"
-          ]
-        }
-      ],
-      "highlight": [
-        "setup-todo"
       ]
     },
     {
@@ -3222,9 +3192,12 @@
       "where": "Settings › Look & feel › Background",
       "title": "Background",
       "keywords": [
-        "Background picture"
+        "What's behind the glass",
+        "Glass strength",
+        "Background picture",
+        "Background colours"
       ],
-      "answer": "Your own picture behind the glass.",
+      "answer": "See-through glass, your picture or your colours.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Look & feel**, then **Background**."
@@ -3238,6 +3211,81 @@
       ]
     },
     {
+      "id": "apple-background-kind",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/background",
+      "hash": "background-kind",
+      "where": "Settings › Look & feel › Background",
+      "title": "What's behind the glass",
+      "keywords": [
+        "see-through",
+        "see through",
+        "transparent",
+        "liquid glass",
+        "glass",
+        "behind",
+        "desktop",
+        "computer background",
+        "mode"
+      ],
+      "answer": "Pick See-through, Picture or Colours.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Look & feel**, then **Background**.",
+        "Find **What's behind the glass**."
+      ],
+      "actions": [
+        {
+          "id": "apple-background-kind:open",
+          "label": "Open Background",
+          "to": "/settings/look-and-feel/background#background-kind",
+          "highlight": [
+            "background-kind"
+          ]
+        }
+      ],
+      "highlight": [
+        "background-kind"
+      ]
+    },
+    {
+      "id": "apple-glass-strength",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/background",
+      "hash": "glass-strength",
+      "where": "Settings › Look & feel › Background",
+      "title": "Glass strength",
+      "keywords": [
+        "see-through",
+        "see through",
+        "transparent",
+        "blur",
+        "blurry",
+        "frosted",
+        "clear",
+        "strength"
+      ],
+      "answer": "Clear shows more of what's behind. Frosted shows less.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Look & feel**, then **Background**.",
+        "Find **Glass strength**."
+      ],
+      "actions": [
+        {
+          "id": "apple-glass-strength:open",
+          "label": "Open Background",
+          "to": "/settings/look-and-feel/background#glass-strength",
+          "highlight": [
+            "glass-strength"
+          ]
+        }
+      ],
+      "highlight": [
+        "glass-strength"
+      ]
+    },
+    {
       "id": "apple-background-picture",
       "kind": "apple",
       "route": "/settings/look-and-feel/background",
@@ -3247,8 +3295,6 @@
       "keywords": [
         "wallpaper",
         "photo",
-        "colours",
-        "colors",
         "image"
       ],
       "answer": "Use your own picture behind the glass. It stays on this device.",
@@ -3269,6 +3315,43 @@
       ],
       "highlight": [
         "background-picture"
+      ]
+    },
+    {
+      "id": "apple-background-colours",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/background",
+      "hash": "background-colours",
+      "where": "Settings › Look & feel › Background",
+      "title": "Background colours",
+      "keywords": [
+        "colours",
+        "colors",
+        "colour",
+        "color",
+        "gradient",
+        "rainbow",
+        "paint",
+        "swatch"
+      ],
+      "answer": "Mix up to 3 colours behind the glass.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Look & feel**, then **Background**.",
+        "Find **Background colours**."
+      ],
+      "actions": [
+        {
+          "id": "apple-background-colours:open",
+          "label": "Open Background",
+          "to": "/settings/look-and-feel/background#background-colours",
+          "highlight": [
+            "background-colours"
+          ]
+        }
+      ],
+      "highlight": [
+        "background-colours"
       ]
     },
     {

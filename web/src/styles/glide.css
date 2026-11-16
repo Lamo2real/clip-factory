@@ -5,6 +5,7 @@
 .segmented,
 .tabs,
 .lib-tabs,
+.bg-modes,
 .sidebar__list,
 .tabbar__list {
   position: relative;
@@ -74,11 +75,13 @@
 .segmented__opt,
 .tab,
 .lib-tab,
+.bg-mode,
 .sidebar__list > li,
 .tabbar__cell {
   position: relative;
   z-index: 1;
 }
+.has-glide > .bg-mode.is-on,
 .has-glide > .segmented__opt.is-on,
 .has-glide > .tab.is-on,
 .has-glide > .lib-tab.is-on,
@@ -104,6 +107,11 @@
 .tabs > .glide {
   background: linear-gradient(180deg, #fff, rgb(var(--offwhite-rgb) / 0.9));
   box-shadow: 0 2px 8px -2px rgb(var(--ink-rgb) / 0.25);
+}
+
+/* Background choices: a glass tile the size of the chosen choice. */
+.glide--tile {
+  border-radius: var(--r-md);
 }
 
 /* Library views: the dark chosen pill. */
