@@ -83,13 +83,25 @@ c4="$(change api/z.py "long label
 Area: one two three four five")"
 check "trailers: labels cut to three words" '["one two three"]' "$(run "$c3" "$c4")"
 
+c4b="$(change api/z2.py "labels that would end on a joining word
+
+Area: Fixes: Home and Jobs
+Area: Sign in
+Area: Tips for the new clips")"
+check "trailers: a cut never ends on a joining word; short labels stay as written" \
+  '["Fixes: Home","Sign in","Tips"]' "$(run "$c4" "$c4b")"
+c4c="$(change api/z3.py "a label of joining words only
+
+Area: of the and for")"
+check "trailers: a cut keeps at least one word" '["of"]' "$(run "$c4b" "$c4c")"
+
 # 2. No trailers: changed files through web/areas.json, longest prefix wins, most-changed area first.
 c5="$(
   change web/src/routes/settings/profile-picture/Pic.tsx "pic" >/dev/null
   change web/src/routes/settings/profile-picture/Crop.tsx "crop" >/dev/null
   change web/src/routes/settings/Theme.tsx "theme"
 )"
-check "files: longest prefix, most-changed first" '["Profile picture","Settings"]' "$(run "$c4" "$c5")"
+check "files: longest prefix, most-changed first" '["Profile picture","Settings"]' "$(run "$c4c" "$c5")"
 
 c6="$(change web/src/routes/settings-old/x.ts "lookalike folder is not settings")"
 check "files: a prefix must end at a folder boundary" '["Improvements"]' "$(run "$c5" "$c6")"
@@ -109,10 +121,10 @@ check "unmapped files" '["Improvements"]' "$(run "$c7" "$c8")"
 check "same commit" '["Improvements"]' "$(run "$c8" "$c8")"
 check "prev unknown here" '["Improvements"]' "$(run 0123456789abcdef0123456789abcdef01234567 "$c8")"
 check "prev is newer than new (rollback)" '["Improvements"]' "$(run "$c8" "$c7")"
-check "short shas work" '["Profile picture","Settings"]' "$(run "${c4:0:7}" "${c5:0:7}")"
-check "missing areas file" '["Improvements"]' "$(AREAS_FILE="${work}/none.json" run "$c4" "$c5")"
+check "short shas work" '["Profile picture","Settings"]' "$(run "${c4c:0:7}" "${c5:0:7}")"
+check "missing areas file" '["Improvements"]' "$(AREAS_FILE="${work}/none.json" run "$c4c" "$c5")"
 echo '[1,2]' >"${work}/bad.json"
-check "areas file that is not an object" '["Improvements"]' "$(AREAS_FILE="${work}/bad.json" run "$c4" "$c5")"
+check "areas file that is not an object" '["Improvements"]' "$(AREAS_FILE="${work}/bad.json" run "$c4c" "$c5")"
 
 g checkout -q -b side "$base"
 side="$(change other.txt "side branch

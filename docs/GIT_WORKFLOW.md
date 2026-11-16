@@ -52,6 +52,8 @@ trailer lines in the commit message, read by `scripts/release-areas.sh` at deplo
   share that paragraph with other trailers such as `Co-Authored-By:`.
 - A label is **1–3 words**, the name of the place the owner sees on screen, capitalised like a heading's first word:
   `Settings`, `Profile picture`, `Review`, `Get the app`, `Sounds`, `Sign in`.
+  A longer label is cut to its first 3 words (never ending on a joining word such as "and"), so keep it short
+  yourself: `Fixes: Home` rather than `Fixes: Home and Jobs`.
 - No sentences, no full stops, no technical words (`API`, `Lambda`, `Terraform`, `refactor`), no version numbers.
 - At most three per commit. Across all commits in a deploy, the first three different labels are shown.
 - Changes the owner cannot see (infrastructure, CI, tests) need no `Area:` line. The folder map

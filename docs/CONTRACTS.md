@@ -379,7 +379,8 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
 ### 12.2 Update banner ("What's new" + Reload)
 * Each deploy writes `/version.json` (no-cache): `{"version":"<git sha short>","builtAt":"<ISO>","areas":["Settings","Profile picture"]}`.
   The web build embeds its own version as `import.meta.env.VITE_APP_VERSION`.
-* `areas` = at most 3 labels of 1–3 words, no sentences. Source, in order: commit trailers `Area: <label>` in the commits
+* `areas` = at most 3 labels of 1–3 words, no sentences. A longer label is cut to its first 3 words, and a cut never
+  ends on a joining word or punctuation (`Fixes: Home and Jobs` shows as `Fixes: Home`). Source, in order: commit trailers `Area: <label>` in the commits
   since the last deployed version; else changed files mapped through `web/areas.json` (`{"web/src/routes/settings": "Settings", ...}`,
   longest prefix wins); else `["Improvements"]`. Built by `scripts/release-areas.sh <prev-sha> <new-sha>` in deploy.yml
   (prev-sha read from the live `/version.json` in the web bucket; first deploy → `["First release"]`).
