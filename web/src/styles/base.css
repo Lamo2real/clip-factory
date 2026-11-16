@@ -108,7 +108,10 @@ a {
   outline: none;
 }
 :focus-visible {
-  outline: none;
+  /* The ring is an outline as well as a shadow: a component's own box-shadow (buttons, glass, chips) replaces the
+     shadow ring, but it cannot hide the outline. Both sit in the same 3–5.5 px band, so they read as one ring. */
+  outline: 2.5px solid var(--tomato-deep);
+  outline-offset: 3px;
   box-shadow: var(--focus);
   border-radius: var(--r-sm);
 }
