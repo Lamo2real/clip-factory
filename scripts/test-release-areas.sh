@@ -121,6 +121,14 @@ Area: Elsewhere")"
 check "prev on another branch" '["Improvements"]' "$(run "$side" "$c8")"
 g checkout -q main
 
+# 3b. An "Area:" line split from Co-Authored-By by a blank line is not a git trailer, but still counts.
+c9="$(change web/src/x.ts "split area line
+
+Area: Clip numbers, This week
+
+Co-Authored-By: someone <someone@example.com>")"
+check "Area line outside the trailer block" '["Clip numbers","This week"]' "$(run "$c8" "$c9")"
+
 # 4. Usage errors exit non-zero.
 if run "$c8" >/dev/null; then
   check "missing argument fails" "exit 2" "exit 0"
