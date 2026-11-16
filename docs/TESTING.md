@@ -115,6 +115,10 @@ visually hidden text (`.sr-only`). The spec has an allow-list for decorative `ar
 entry must say why. `whiteContrastOnGradient()` in `helpers.ts` (white labels on tomato buttons, used by
 `audit-performance.spec.ts`) uses the same browser-side contrast kit.
 
+The same three checks read the floating setup list in every face it has (open column, folded pill, glass bar, phone
+sheet, skip question, "All set!", the Settings cards), light and dark: see
+[The floating setup to-do list](#the-floating-setup-to-do-list).
+
 The unit test `web/test/designTokens.test.ts` keeps [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md)'s colour and radius
 tables equal to `web/src/styles/tokens.css` and fails on a hard-coded `border-radius` outside the `--r-*` scale.
 
@@ -452,20 +456,84 @@ its pretend consent page `/mock-oauth/{platform}`.
 - **This page and the app agree** (Vitest `setup-docs.test.ts`): it reads [SETUP_POSTING.md](SETUP_POSTING.md) and
   checks that under each `## {Platform}` heading every step title of that platform's guide appears, with the same
   number and in the same part (`### Part n: {part title}`, then `#### {number}. {title}`).
-- **Playwright** (mock mode, `e2e/setup.spec.ts`, every journey at 375×812 and 1440×900, for every platform): Home card
-  "0 of 5 ready" → Set up posting → platform page; Get ready ticks; every Open button has the exact `href` and
+- **Playwright** (mock mode, `e2e/setup.spec.ts`, every journey at 375×812 and 1440×900, for every platform): the
+  floating setup list "0/5" with that platform's **Set up** link → Set up posting → platform page; Get ready ticks; every Open button has the exact `href` and
   `target=_blank`; Copy puts the value on the clipboard and shows "Copied!"; a bad key shows the friendly error and Save
   stays disabled; good keys show only masked hints; Check it with working keys and nothing connected says "Your keys work. Now press
   Connect {Platform}." (the same sentence as the API); TikTok's verification file is listed; Connect →
   pretend consent → **Allow** → confetti, "Connected as", full ring; Facebook and Instagram choose an account; **Cancel**
   → the `denied` sentence; a reload resumes at the first unfinished step; TikTok shows "Works now, but your TikTok posts
   stay private until TikTok says yes."; an expired token shows the tomato **Connect again**; Disconnect → Undo within
-  8 s keeps it, after 8 s it is gone; all five ready → the Home card is gone and "5 of 5 ready".
+  8 s keeps it, after 8 s it is gone; all five ready → the floating setup list is gone and "5 of 5 ready".
   `e2e/tiktok-sheet.spec.ts`: Keep stays disabled until a privacy is chosen; branded content hides "Only me".
   **Try again** on a failed clip whose TikTok post needs new privacy choices opens the Post to TikTok sheet first and
   sends `{tiktok: {...}}` in the confirm body; the mock replaces that post's `postOptions`.
   `overflow.spec.ts` covers the setup list, each platform page, `/mock-oauth/youtube`, `/about.html` and the TikTok
   sheet from 320 to 1920 px; `screenshots.spec.ts` adds the list and the YouTube page at 375 and 1440, light and dark.
+
+### The floating setup to-do list
+From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owner-request-2026-11-16).
+
+- **Web units** (Vitest `test/setupTodo.test.ts`): a row per platform in the setup order with the right state and
+  line; the list shows while anything is left and not before the data is in; it goes away when all are ready, all are
+  skipped, or a mix; a confirmed skip finishes a row in any state that is not ready (half done, a dead token, an
+  account to pick, a gate in `action`), so skipping every row always ends the list; an unconfirmed skip changes
+  nothing (only the saved `setupSkipped` counts); ready wins over a skip and makes that skip stale, so a platform that
+  was ready and stops being ready comes back; skip and un-skip keep the canonical order; both skip questions, the
+  skipped note and the three "All set!" lines; hidden on the setup pages only; the pill, never the column, on a clip's
+  page. **House rules read from the CSS**: `setup-todo.css` sets no `cursor`, no `backdrop-filter` and no background
+  on a surface (the column, the pill, the bar, the panel, the card are the shared `.glass`); and with the column open
+  at `TODO_RAIL_MIN` (1440 px) the page keeps at least the room it has at every width where a layout goes wider (it
+  fails if someone adds a wider layout or widens the column). `test/session.test.tsx`: a settings updater builds on a
+  save that is still on its way, so two list changes sent close together both land. `test/setupTodoList.test.tsx`
+  (the component, as the pill): a device that has seen the list keeps its room while the setups load and gives it
+  back when they cannot be read, one that has not holds none; the panel is a dialog with the page behind it `inert`;
+  **Skip** asks first, **Keep it** saves nothing, the confirmed skip and **Un-skip** each save the whole list.
+- **API** (pytest): `setupSkipped` defaults to `[]`, is saved in canonical order without repeats, un-skip shrinks it,
+  bad values are 400 and a bad stored value reads as `[]` (`test_settings_and_system.py`); a skipped platform that is
+  not connected gets a `pending_integration` post, never `queued`, and a skipped connected one is still `queued`
+  (`test_clips.py`).
+- **Playwright** (`e2e/setup-todo.spec.ts`): on every main page and not on the setup pages; a clip's page shows the
+  pill on its glass bar and keeps its five-column fan; **Set up** opens each platform's page; **Skip** needs the
+  confirm (**Keep it** is first, focused and the tomato button; **Keep it**, Escape and a tap outside change nothing),
+  lasts after a reload, **Un-skip** from the list; a row that needs the owner (X out of credits) can be skipped,
+  skipping every row ends the list, and once X is ready its skip is dropped, so it comes back when it needs the owner
+  again; ready + skipped → "All set!" with the line for how it ended, confetti and the success sound, then gone, still
+  gone after a reload, Settings says "All done"; an expired token brings it back with "Needs you: connect again";
+  reduced motion has no confetti; it asks for the setups again on a page change; fold to the pill and unfold,
+  remembered after a reload; Settings › Set up posting: **Skip** with the same confirm, "Skipped" on the card,
+  **Un-skip**. **Where it sits**: the column opens at 1440 px and not at 1439 or 1280 px, the page keeps at least its
+  1100 px room and Home's headline keeps its full stop; at 1440×860, 1440×790 and 1536×730 every row and both of its
+  buttons show without scrolling, clear of the Ask pill, and a 600 px tall window fades the bottom; "All set!" on a
+  setup page moves nothing at 1440 and 375 px. **Phones**: the pill above the brand row, the panel above the tab bar,
+  48 px targets with 8 px between a row's buttons, the page behind the panel `inert` (messages are not), Tab and
+  Shift+Tab stay inside, Escape returns focus to the pill, **Set up** lands focus on `<main>`; the pill stays on
+  screen at every scroll position of every main page on its glass bar, and Tab brings a control out from under the
+  bar; the last skip from the panel leaves focus on `<main>`; at 320 px the pill still says "Set up posting".
+  **Everywhere**: at 320, 375, 768, 1024, 1280, 1440 and 1920 px in light and dark it covers no control at the top,
+  middle or bottom of any main page, nothing overflows, every target in the open list is at least 44 px (48 px on
+  phones), and the pointer stays the plain arrow on the list and on the skip question.
+- **Readable** (`e2e/contrast.spec.ts`, the three checks of [Contrast and text size](#contrast-and-text-size)): the
+  routes carry the list in its plainest face (five "Not started" rows: the column at 1440 px, the pill at 320 and
+  375 px); six more tests read every other face in light and dark: the open column and the phone sheet with one row of
+  every kind (`mixedSetup` in `e2e/helpers.ts`: ready, skipped, half done, needs you, not started), the folded pill,
+  the pill under the pointer and on its glass bar, the skip question over the column and over the sheet, "All set!"
+  as the column's card and in the pill's strip (its goodbye timer is held so it can be read), and Settings › Set up
+  posting with its Skip and Un-skip lines. Each makes sure the list's own words were among the text it read.
+- **The audit's specs run with the list showing**: `audit-setup.spec.ts` (the Settings cards with their Skip lines at
+  every width, and the rule Home's card had: no line of the list starts with a lone mark at 320–414 px),
+  `performance.spec.ts` and `audit-performance.spec.ts` (no setup is skipped first), `glide.spec.ts` (only the arrow
+  cursor), `overflow.spec.ts` (ready rows included) and `help.spec.ts` (the launcher never rests on a control, the
+  list's buttons included, at every width, with the update bar and with other fonts).
+- **The list and the Ask pill**: `e2e/setup-todo.spec.ts` checks at 1920×900 with the update bar, 1440×900 and
+  1440×600 (rows scrolled out of the column) that the Ask pill keeps its corner under the open column at every scroll
+  position: not lifted, not stepped aside, on none of the list's buttons, at least 12 px below the column. Vitest
+  `test/helpDodgeText.test.ts` covers `shownBox` (what a scroller cuts off is no obstacle; a fixed box and an
+  absolutely placed one are cut only by what really holds them) and `controlBoxes` with the column's own scroller.
+- **No jump on load**: on a device that has seen the list, a reload keeps the list's room from the first paint (the
+  shell's paddings never change while the page loads) at 1440 and 375 px.
+  `screenshots.spec.ts` writes `setup-todo`, `-open`, `-skip`, `-skipped` and `-all-set` at 375, 1024 and 1440 px,
+  light and dark, and `setup-todo-scrolled` (the pill on its glass bar) at 375 and 1024 px.
 
 ### Agent (pytest)
 - `/ping` answers `Healthy` when idle and `HealthyBusy` while a job runs; `/invocations` accepts `process_job`,

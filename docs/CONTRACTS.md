@@ -176,7 +176,8 @@ interface Settings { clipMin: number /* 1..10, default 5 */; clipMax: number /* 
                      reduceMotion: boolean /* default false */; hasYoutubeCookies: boolean /* read-only */;
                      platforms: Platform[] /* default all five */;
                      clickSound: number /* 1..30, default 6 "Water drop" (§15) */;
-                     errorSound: number /* 1..30, default 5 "Nope nope nope" (§15) */ }
+                     errorSound: number /* 1..30, default 5 "Nope nope nope" (§15) */;
+                     setupSkipped: Platform[] /* default [], confirmed skips on the setup to-do list (§17.13) */ }
 type Platform = "youtube" | "instagram" | "facebook" | "tiktok" | "x";
 // Account: superseded by §17.4 (adds "choose_account", name, avatarUrl, connectedAt, missing, reason, reconnectBy, choices)
 interface Account { platform: Platform; status: "not_connected" | "connected" | "needs_reconnect" | "choose_account"; handle?: string }
@@ -1586,8 +1587,8 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
 * **Choose** (Meta with several Pages / Instagram accounts): a picker of big avatar cards; tapping one connects it.
 * **Disconnect**: tapping shows an 8 s toast "Disconnecting YouTube… Undo"; the `DELETE` is sent only when the toast
   ends (§12.4: undo instead of a scary dialog). **Connect again** keeps the keys.
-* **Home card** "Set up posting · 2 of 5 ready" (ring + the next platform's name + **Continue**) shows while any
-  platform in `settings.platforms` is not ready; it disappears when they all are. It is not the tomato CTA on Home.
+* ~~**Home card** "Set up posting · 2 of 5 ready"~~: replaced by the floating setup to-do list (§17.13), which shows
+  on every signed-in page, so the owner never sees two competing lists. `screens/home/SetupCard.tsx` is removed.
 * **Review › Keep** with TikTok connected: the **Post to TikTok** sheet (§17.8) must be filled before Keep is enabled.
 * Kid-proof everywhere (§12.4): ≥ 48 px targets, nothing overflows from 320 to 1920 px, phone bottom bar / desktop
   sidebar unchanged, click sound on click only, success/error sounds, glass, Sage/Off-white/Tomato, Inter + Times.
@@ -2145,7 +2146,7 @@ TikTok sheet. Mock `values` use `https://dexample.cloudfront.net` and
 |---|---|
 | infra | `infra/**` (§17.9, tftests), `config/platforms.json` (§17.7), `scripts/write-web-config.sh`, `scripts/upload-web.sh`, `scripts/test-write-web-config.sh` |
 | api | `api/**`: `oauth/{__init__,state,secrets,formats,providers,callback,tokens,setup}.py`, `routes/setup.py`, `routes/system.py` (accounts routes), `routes/__init__.py`, `hooks.py` (callback), `posts.py` (Account shape, `set_stats_id`), `settings.py` (`youtubePrivacy`), `routes/clips.py` (TikTok options on confirm), `platforms/**` (publishers, `errors.py`), `flows/clip_flow.py` (§17.6 steps), `stats/**` (tokens, `forget`, config §17.7), `realtime/broadcast.py` (`setup`), `app.py` (secrets/http clients), tests |
-| web | `web/**`: `src/setup/*.ts` (§17.2), `screens/settings/setup/{SetupList,SetupPlatform,StepCard,KeyForm,ChooseAccount}.tsx`, `components/ProgressRing.tsx`, `screens/home/SetupCard.tsx`, `screens/review/TikTokSheet.tsx`, `lib/{keyFormats,setupProgress}.ts`, `lib/settingsTree.ts` (Posting › Set up posting; redirects), `lib/router.ts`, `api/{index,types}.ts`, `api/mock/setup.ts`, `public/{about.html,legal/privacy.html,legal/terms.html,brand/clip-factory-1024.png}`, `lib/config.ts` (`oauthCallbackBase`), removal of `comingSoonPlatform`, tests |
+| web | `web/**`: `src/setup/*.ts` (§17.2), `screens/settings/setup/{SetupList,SetupPlatform,StepCard,KeyForm,ChooseAccount}.tsx`, `components/ProgressRing.tsx`, `screens/home/SetupCard.tsx` (removed by §17.13), `screens/review/TikTokSheet.tsx`, `lib/{keyFormats,setupProgress}.ts`, `lib/settingsTree.ts` (Posting › Set up posting; redirects), `lib/router.ts`, `api/{index,types}.ts`, `api/mock/setup.ts`, `public/{about.html,legal/privacy.html,legal/terms.html,brand/clip-factory-1024.png}`, `lib/config.ts` (`oauthCallbackBase`), removal of `comingSoonPlatform`, tests |
 | docs | `docs/**` except this file: `SETUP_POSTING.md` (new), `ROADMAP.md`, `SECURITY.md`, `ARCHITECTURE.md` (+ drawio: Secrets Manager, OAuth callback path, platform upload hosts), `DECISIONS.md`, `TESTING.md`, `DEPLOYMENT.md` (deploy role: `secretsmanager:CreateSecret`, `PutSecretValue`, `GetSecretValue` (Terraform refresh reads the version), `DescribeSecret`, `DeleteSecret`, `TagResource`, `GetResourcePolicy` on `secret:cf-prod/oauth/*`) |
 
 Shared names: `oauth.state.sign(key, platform, nonce, exp)`, `oauth.state.verify(key, platform, state, now) -> nonce`,
@@ -2182,14 +2183,14 @@ Shared names: `oauth.state.sign(key, platform, nonce, exp)`, `oauth.state.verify
   samples (same as api); `setupProgress` (ring excludes optional, auto steps, current step = first not done, ready
   rule); result-code copy exists for every code × platform; Google JSON paste fills both boxes.
   **Playwright (mock mode)** `e2e/setup.spec.ts`, each journey at **375×812 and 1440×900**, for **every platform**:
-  Home card "0 of 5 ready" → Setup list → platform page; tick the Get ready steps; every Open button has the exact
+  the floating setup list "0/5" (§17.13) → Setup list → platform page; tick the Get ready steps; every Open button has the exact
   `href` and `target=_blank`; Copy puts the resolved value on the clipboard (granted permission) and shows "Copied!";
   a bad key shows the friendly error and Save stays disabled; good keys save and show only masked hints; **Check it** →
   ok; TikTok verification file upload lists the file; **Connect** → mock consent → **Allow** → back with confetti
   canvas, "Connected as", ring complete; Facebook/Instagram choose a page; **Cancel** → `denied` copy; reload resumes at
   the first not-done step; TikTok shows "Works now, but your TikTok posts stay private until TikTok says yes."; expired
-  token → "Connect again" tomato; Disconnect → Undo within 8 s keeps it, after 8 s it is gone; all five ready → Home
-  card gone and "5 of 5 ready". `e2e/tiktok-sheet.spec.ts`: Keep disabled until privacy chosen, branded hides "Only
+  token → "Connect again" tomato; Disconnect → Undo within 8 s keeps it, after 8 s it is gone; all five ready → the
+  floating setup list gone and "5 of 5 ready". `e2e/tiktok-sheet.spec.ts`: Keep disabled until privacy chosen, branded hides "Only
   me"; **Try again** on a failed clip whose TikTok post needs new privacy choices opens the sheet first and sends
   `tiktok` in the confirm body (mock `_try_again` replaces `postOptions`). `overflow.spec.ts` +
   `/settings/posting/setup`, each platform page, `/mock-oauth/youtube`, `/about.html`, the
@@ -2197,6 +2198,174 @@ Shared names: `oauth.state.sign(key, platform, nonce, exp)`, `oauth.state.verify
   `settings-tree.spec.ts`: `/settings/posting/accounts` and `?account=x&status=coming_soon` redirect to the setup.
 * **docs**: `docs/SETUP_POSTING.md` has, per platform, the same parts, step numbers and titles as §17.2 (a web Vitest
   `setup-docs.test.ts` reads `../docs/SETUP_POSTING.md` and checks every step title appears under its platform heading).
+
+### 17.13 The floating setup to-do list (owner request, 2026-11-16)
+
+The owner's words: *"make sure there's a to-do list that is always on the top right of my screen, only for the setup
+of each social media platform, so I can connect to them and everything is set up. Once that's done, the to-do list
+disappears. It's always going to be there unless I either clicked Skip on each of those and then confirmed that, or
+completed them all. But it will always be in Settings, of course."* It replaces §17.1's Home card.
+
+**Rows** (`web/src/lib/setupTodo.ts`, pure, `todoRows(setups, settings.setupSkipped)`): YouTube, TikTok, Instagram,
+Facebook, X (`SETUP_ORDER`), each with its mark, name and one state, checked in this order:
+
+| State | When | Line | Actions |
+|---|---|---|---|
+| `ready` | `computeReady(setup)` (§17.4); wins over a skip | "Ready" (sage tick on the mark) | none |
+| `skipped` | in `setupSkipped` and not ready, whatever else it is waiting for | "Skipped" | **Set up**, **Un-skip** |
+| `needs_you` | an account exists but is not ready (`needs_reconnect`, `choose_account`, or connected with a gate in `action`) | "Needs you: connect again" / "Needs you: pick an account" / "Needs you: one more step" | **Set up**, **Skip** |
+| `not_started` | `notStarted(setup)` (§17.1) | "Not started" | **Set up**, **Skip** |
+| `in_progress` | anything else | "In progress: n of m" (`progressOf` counted steps) | **Set up**, **Skip** |
+
+* **Every row that is not ready can be skipped**, so skipping each one (and confirming) always ends the list, as the
+  owner asked. A skip that has become meaningless is dropped: when a skipped platform is ready, the client removes it
+  from `setupSkipped` (`staleSkips`, one `PUT /v1/settings`). So a platform that was ready and stops being ready (a
+  dead token, an account to pick, a gate) always comes back with its row; only a new, confirmed Skip hides it again.
+* **Set up** opens `/settings/posting/setup/{platform}`. **Skip** opens a small glass confirm
+  (`components/SkipConfirm.tsx` on `components/Sheet.tsx`): title "Skip {Platform}?", text "You won't post there until
+  you set it up. You can do it later in Settings." (a connected platform, which is still posted to: "{Platform} is
+  connected but needs one more step. Skip only takes it off this list. You can finish it later in Settings."), buttons
+  **Keep it** (first, focused, the tomato `primary`: the safe answer is the strong one; Escape and a tap outside also
+  mean Keep it) and **Skip {Platform}** (glass, no `act`: opting out is quiet, §20.1). Only the confirmed answer saves
+  `setupSkipped` (`withSkip`); asking changes nothing. **Un-skip** (`act="undo"`) saves `withoutSkip`, from the list
+  while it shows and from Settings.
+* **Saving**: every change to `setupSkipped` goes through `screens/settings/setup/useSkips.ts`, which calls
+  `saveSettings(updater)` (`app/session.tsx`): the new list is built from the newest settings on screen, saves still on
+  their way included, never from a copy a component read earlier, so a skip, an un-skip and a dropped stale skip sent
+  close together cannot undo each other.
+* **Visible** (`todoVisible`) while any row is not `ready` or `skipped`, i.e. it goes away when every platform is ready,
+  every platform is skipped, or any mix. It is not decided before both `GET /v1/setup` and `/v1/me` have answered.
+* **Celebration**: when the list goes from open to done (in this page, or on an earlier visit on this device:
+  `localStorage["cf-setup-todo-open"]`), the card turns into a sage "**All set!**" with a line that says how it ended
+  (`doneLine`): all ready "Every place is ready.", all skipped "All skipped. Set them up any time in Settings.", a mix
+  "Done for now. Skipped ones wait in Settings.". Confetti (§12.4 `burst`, skipped with reduced motion) and the
+  `success` sound (§20.8, muted when Sounds is off); it stays 2.6 s (1.3 s with reduced motion), then slides off to the
+  right (fades with reduced motion). It is a status (`role="status"`, no taps). Where the list was on screen, its room
+  stays until the card has left, then the page takes it back (the page moves once, after the celebration). If the
+  keyboard was on the list (the last Skip, the panel), focus moves to `<main>` instead of being lost. It comes back by
+  itself when a platform needs the owner again.
+* **Fresh**: the list lives for the whole visit, so it reads `GET /v1/setup` once at the start, again on every live
+  `setup` event (§17.4, the fast path) and again on every page change, so what the owner just did on a setup page
+  shows on the list even when no live update arrives.
+
+**Where it sits** (`web/src/components/SetupTodo.tsx`, mounted once in the signed-in shell as a direct child of
+`.app`, styles `web/src/styles/setup-todo.css`). It never covers a control, by reserving room rather than floating
+over the page:
+
+* **≥ 1440 px, open** (`data-mode="rail"`, `TODO_RAIL_MIN` / `TODO_RAIL_QUERY` in `lib/setupTodo.ts`): a glass column
+  (`--todo-w` 304 px, `glass glass--refract` like the sidebar) fixed at the top right; `.shell` gets 24 + 304 + 24 px
+  of right padding instead of its gutter, so the page is narrower, never covered. **Why 1440**: every page lays itself
+  out wider from some window width (two columns from 1024 or 1100 px); with the column open the page must still have at
+  least the room it has at those widths with nothing beside it (764 px at 1100; it has 786 px at 1440, and would have
+  only 626 px at 1280, where Home's hero was squeezed). `test/setupTodo.test.ts` reads the widths from the CSS and
+  fails if a wider layout or a wider column breaks this. Its height stops 14 px above the Ask pill and the update bar
+  (`--help-bottom`). The head (ring, title, **–**) stays; the rows and the line under them scroll inside it, and when
+  more is below than fits the bottom fades out (`.setup-todo__scroll.has-more`). Short windows pack it tighter so all
+  five rows and their buttons show at once: under 900 px tall the head's second line is hidden and the rows sit
+  closer; under 820 px the column's padding shrinks and the line under the rows is hidden (it then needs about 690 px:
+  a 900 px laptop screen in a browser and a 1080p one at 125 % both fit). **–** folds it to the pill; the choice is per
+  device (`localStorage["cf-setup-todo-collapsed"]`); the pill unfolds it.
+* **< 1440 px, folded, and on a clip's page** (`data-mode="pill"`; `/clips/{id}` needs its whole width to fan out its
+  five columns, so there the list is always the pill, `todoNoRailOn`): a 48 px glass pill at the top right, ring +
+  "Set up posting" + "2/5" (the words show at every width, 320 px too; its name reads "Set up posting: 2 of 5 done").
+  The page leaves a strip for it at the top: `--todo-top` (60 px on phones, 58 px from 768 px) on `html`, added to
+  `.shell`'s top padding, so at the top of every page nothing is under it (phones: above the brand row and Live dot;
+  the tab bar is at the bottom). Behind the pill is `.setup-todo-bar`, a `.glass` bar over that strip (`--todo-bar-h`:
+  66 / 76 px; from 768 px it starts right of the sidebar): invisible at the top of the page, there (`is-scrolled`, and
+  it takes the taps) as soon as the page scrolls, so the page slides under glass and the pill stays on screen at
+  every scroll position; it never steps aside. `html` gets `scroll-padding-top` below the bar, so Tab, a `#part` link
+  and `scrollIntoView` stop below it; sticky parts of pages add `--todo-top` (Review's video, Settings' folder panel);
+  the clip page's video is shorter by `--todo-top` (`performance.css`), so the stacks (desktop) and the winner and five
+  chips (phones) still start on the first screen. Tapping the pill opens the list as a glass panel dropping from the
+  top (phones: full width, stopping above the tab bar; tablets and the clip page: 380 px at the right) over a light
+  scrim, where it covers the pill. The panel is a real dialog, like Ask's sheet on a phone (§19.8): everything behind
+  it is `inert` while it is open (messages, `.toasts`, stay tappable), Tab and Shift+Tab go round inside it (`trapTab`
+  from `components/Sheet.tsx`), and × / Escape / a tap outside close it and give focus back to the pill. It is open
+  only on the page it was opened on, so a page change (Set up) closes it in the same render and focus lands on the new
+  page as after any page change.
+* It never hides while rows remain: folding only makes it the pill.
+* **The Ask pill** (§19.8) rests under the open column, 14 px below it. The list's buttons are controls like any
+  other, so the launcher can never come to rest on one (only `.setup-todo-bar` and the open panel's
+  `.setup-todo-scrim` are in its chrome list, `features/help/dodge.ts`). And because the launcher only keeps clear of
+  what shows (§19.8 `shownBox`), a strip of the page that runs on under the column, or rows scrolled out of the column
+  on a short window, never lift it onto the list or make it step aside: with the column open it stays in its corner
+  at every scroll position.
+* **No jump on load**: the list waits for the setups, so it arrives a moment after the page. Where the list was on
+  screen the last time this device looked (`localStorage["cf-setup-todo-open"]`), an empty `.setup-todo--hold` with
+  the same `data-mode` keeps its room from the first paint, so the page does not move when the list shows.
+* **Glass only**: the column, the pill, the bar, the panel and the "All set!" card are `.glass` elements (the card
+  `.glass--sage`, the panel with the dense tint of `.sheet.glass`) and take their tint from `--glass-tint`; none sets a
+  background or a `backdrop-filter` of its own. Rows are light tiles inside that glass, as in other panels. No rule
+  sets `cursor` (§20.14): the pill, the rows and the round **–** / × buttons (`.icon-btn`) light up on hover.
+* **Sizes**: every control is at least 44 px (48 px on phones, `--tap`); the pill is 48 px everywhere.
+* **Not shown** on `/settings/posting/setup` and `/settings/posting/setup/{platform}`: those pages are the full list
+  and the steps themselves, so the floating copy would repeat them. The celebration still plays there, as a card that
+  floats over the page and takes no room (`data-mode="done"`), so the page does not move. Not on sign-in, the pretend
+  consent page or the public pages (they are outside the signed-in shell).
+
+**Server** (`api/src/clipfactory_api/settings.py`): `Settings.setupSkipped: Platform[]`, default `[]`, validated like
+`platforms` (a list of known platform names; returned in canonical order without repeats; anything else → 400
+`bad_request`; a bad stored value falls back to `[]`). It is the same on every device. **Posting is unchanged**:
+`posts.create_posts_once` makes posts for `settings.platforms` only, `queued` only when that platform's account is
+connected, else `pending_integration`, and the clip flow makes no publish step for `pending_integration`
+(`flows/clip_flow.py`). So a skipped platform that is not connected is never tried, and a skipped one that is connected
+is posted to as before; skipping does not remove it from **Where clips go** (connecting it later starts posting there
+with no other change).
+
+**Mock** (§17.10): `putSettings` validates `setupSkipped` the same way and keeps it in `sessionStorage`
+(`cf-mock-setup-skipped`), so a reload keeps the skips like the server does.
+
+**Settings › Posting › Set up posting** keeps the full list always: a new apple `setup-todo` ("The setup list on your
+screen", leaf "It stays at the top right until each place is set up or skipped. Skipped ones wait here."; title "On
+your screen: 2 of 5 done" or "All done: the list is gone"). Each platform is one glass card (`li.setup-card-wrap.glass`):
+the link to its page (`a.setup-card`, as before) and, under a hairline inside the same card, its line
+(`.setup-card__skip`): "Want to do it later?" with **Skip** (the same confirm) while it is not ready and not skipped;
+once skipped, the card's state line says "Skipped" (the same word as the floating list) and the line reads "You won't
+post to {Platform} until you set it up." (connected: "{Platform} is connected but needs one more step.") with
+**Un-skip**. A ready card has no line. The link fills what is left of the card, so cards in one row are the same
+height. Ask Clip Factory has the guide `setup-list-gone` ("Where did my setup list go?", §19.3) →
+`/settings/posting/setup#setup-todo`.
+
+**Tests**: Vitest `test/setupTodo.test.ts` (rows and states, all ready, all skipped, a mix, a skip finishes a row in
+any state that is not ready, ready wins over a skip and makes it stale, a platform that was ready comes back,
+unconfirmed skip changes nothing, skip/un-skip order, both skip questions, the skipped note, the three "All set!"
+lines, hidden pages, no column on a clip's page, and the column's width rule read from the CSS: with it open at
+`TODO_RAIL_MIN` the page keeps the room of every wider layout's starting width; `setup-todo.css` sets no cursor, no
+`backdrop-filter` and no background on a surface), `test/setupTodoList.test.tsx` (the component: its room kept while the setups load and given back when they cannot
+be read, the panel as a dialog with the page behind it `inert`, the skip question), `test/helpDodgeText.test.ts`
+(`shownBox`, `controlBoxes` with the
+column's own scroller) and `test/session.test.tsx` (an updater builds on a save still on its way); pytest
+`test_settings_and_system.py` (default, saved in order without repeats, un-skip, validation, bad stored value) and
+`test_clips.py` (a skipped platform that is not connected gets `pending_integration`, a skipped connected one is still
+`queued`); Playwright `e2e/setup-todo.spec.ts` (every main page and not the setup pages; a clip's page shows the pill
+on its bar and keeps its fan; Set up per platform; Skip needs the confirm, Keep it is first, focused and the strong
+button, Keep it / Escape / a tap outside change nothing; persists after reload; un-skip; a `needs_you` row (X out of
+credits) can be skipped, skipping every row ends the list, and once X is ready its skip is dropped and it comes back
+when it needs the owner; gone with "All set!" and the right line, confetti and the success sound; no confetti with
+reduced motion; back on an expired token; it asks for the setups again on a page change; fold and unfold; Settings ›
+Set up posting: Skip with the confirm, "Skipped" on the card, Un-skip; at 1440×860, 1440×790 and 1536×730 every row and
+both its buttons show without scrolling and stay clear of the Ask pill, a 600 px tall window fades the bottom; the
+column opens at 1440 px and not at 1439 or 1280, the page keeps at least its 1100 px room and Home's headline keeps its
+full stop; "All set!" on a setup page does not move the page at 1440 and 375 px; phone pill + panel above the tab bar
+and below nothing, the page behind the panel is `inert` and messages are not, Tab and Shift+Tab stay in the panel, Set
+up from the panel lands focus on `<main>`; the pill stays on screen at every scroll position of the main pages on its
+glass bar, and Tab brings a control out from under the bar; the last skip from the panel leaves focus on `<main>`; at
+320 px the pill still says "Set up posting"; the Ask pill keeps its corner under the open column at every scroll
+position (1920 px with the update bar, 1440×900, 1440×600 with rows scrolled out of the column): not lifted, not
+stepped aside, on none of the list's buttons; a reload keeps the list's room from the first paint at 1440 and 375 px;
+never covers a control at 320/375/768/1024/1280/1440/1920 in light and dark at the top, middle and bottom of each page,
+no overflow with the plain list and with one row of every kind, targets ≥ 44 px (48 px on phones), only the arrow
+cursor); `e2e/contrast.spec.ts` reads every face of the list with the audit's three checks (axe, every text run against
+every background, no text under 12 px), in light and dark: the open column and the phone sheet (320 and 375 px) with
+one row of every kind (`mixedSetup` in `e2e/helpers.ts`), the folded pill, the pill under the pointer and on its glass
+bar, the skip question over the column and over the sheet, "All set!" as the column's card and in the pill's strip, and
+Settings › Set up posting with its Skip and Un-skip lines; `e2e/audit-setup.spec.ts` holds the list to the rule the
+Home card had (no line starts with a lone mark, 320–414 px) and audits the Settings cards with their Skip lines at
+every width (48 px targets on phones); `e2e/setup.spec.ts` uses the list instead of the Home card;
+`performance.spec.ts` and `audit-performance.spec.ts` run with the list showing (no setup is skipped first);
+`e2e/glide.spec.ts` (no cursor but the arrow) covers the list on every main page; `screenshots.spec.ts` adds
+`setup-todo{,-open,-skip,-skipped,-all-set}` at 375, 1024 and 1440, light and dark, and `setup-todo-scrolled` (the pill
+on its glass bar) at 375 and 1024.
 
 ## 18. Skills: full create, read, update, delete; every AI call uses every skill (owner request, 2026-11-16)
 
@@ -2481,7 +2650,8 @@ not a word of its own so that Ask Clip Factory does not answer "write my homewor
 `.is-off` style and `setSkillEnabled` are deleted. Layout: one column < 1024 px (rows full width, ≥ 48 px targets,
 form fields full width, the instructions box ≥ 10 lines and auto-growing), two columns ≥ 1024 px (folder panel +
 content, form max 720 px wide; on a skill's page the head with Edit/Delete, the meta line and the cards share one
-820 px column, so the buttons end where the cards end); nothing overflows from 320 to 1920 px (long names and unbroken words wrap,
+820 px column, so the buttons end where the cards end, also when the head is too narrow for one row and they wrap
+under the title, as with the setup list's column open beside the page, §17.13); nothing overflows from 320 to 1920 px (long names and unbroken words wrap,
 `user-text`); click sound only on a click; error sound with error toasts.
 
 Web API (`api/types.ts`): `listSkills()`, `getSkill(id): SkillDetail`, `writeSkill(form): Skill`,
@@ -2666,6 +2836,7 @@ on a platform's setup page) becomes a doc on that page, and the element there ca
 | `posting-setup-{youtube,instagram,facebook,tiktok,x}` (`extends: §17`) | how to connect that platform: **Set up posting**, its card, the steps, **Connect {Platform}** | Open Set up posting `/settings/posting/setup` → `setup-{platform}` (the card); Set up {Platform} `/settings/posting/setup/{platform}` → `setup-connect`, `setup-progress` |
 | `where-clips-go` | choose platforms (at least one) | Open Where clips go `/settings/posting/where#post-to` |
 | `accounts-connected` | how many places are ready (live `accounts_connected`) | Open Set up posting `/settings/posting/setup#setup-posting` → `setup-posting` |
+| `setup-list-gone` (`extends: §17`) | "Where did my setup list go?": the floating list (§17.13) leaves when each place is ready or skipped, comes back when one needs you; **Skip**, skipped ones and **Un-skip** are in Set up posting | Open Set up posting `/settings/posting/setup#setup-todo` → `setup-todo` |
 | `x-costs` ("What X charges for numbers") | X charges per number check; stops at $10 a month | Open X setup `/settings/posting/setup/x#x-cost` → `x-cost` |
 | `skills-add` | **Write a skill** (three questions) or **Upload a file** (.md or .zip) | Open Skills `/settings/clip-making/skills#add-skill` → `add-skill`; Write a skill `/settings/clip-making/skills/new` → `skill-form` |
 | `skills-write` | make your own skill: the three questions, **Save skill** | Write a skill `/settings/clip-making/skills/new` → `skill-form` |
@@ -2900,7 +3071,12 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   taps (`data-moving`, `pointer-events: none`), so a tap on a control it passes over reaches the control. When lifting
   would push it above 40 % of the window height, it steps aside (hidden, `data-dodge="blocked"`) instead, so on long
   lists of rows (Jobs, Settings on a phone, Review at 1440 px) it shows once the owner scrolls to a free spot or the
-  end. **Words**: it also keeps off lines of text (text nodes in its column, measured with `Range.getClientRects`;
+  end. **Only what shows counts** (`shownBox`): a control or a line of words is measured by the part of it inside
+  every ancestor that cuts off its content (a scroller, a clamped line, a card with hidden overflow; a fixed box is
+  not cut by what holds it, an absolutely placed one only from the box it is placed against). A tab scrolled out of
+  its row, the third line of a two-line clamp, or a strip that runs on under another panel is not on screen there, so
+  it is no obstacle. The setup list (§17.13) is not chrome: its buttons are controls the launcher keeps off like any
+  other. **Words**: it also keeps off lines of text (text nodes in its column, measured with `Range.getClientRects`;
   text never seen on screen, i.e. hidden, inert, `aria-hidden` or `.sr-only`, does not count) when a spot clear of both controls and words is within the same 40 % reach. When there is none (on a phone, words
   usually run the full width) it takes the control-only spot and marks itself `data-on-words`; words alone never make
   it step aside, so Ask is always there to tap. Scrolling moves the words out from under it. Settled, it never covers a control at any width from 320 to 1920 px, at the top of a page or after scrolling,
@@ -3401,7 +3577,6 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | Control | Kind | Notes |
 |---|---|---|
 | Home.tsx:97 Go to Review, :133 All jobs, :148 working job row, :171 Last finished, :198 Review teaser | press | |
-| SetupCard.tsx:38 Continue | press | |
 | NewJobForm.tsx:128 Paste a link / Pick a video | `toggle` | via Segmented |
 | NewJobForm.tsx:167 Clear link | `clear` | |
 | NewJobForm.tsx:171 Paste | `paste` | the linkbox mark `pop` stays |
@@ -3482,6 +3657,8 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | SkillPages.tsx:633 Use the example | `paste` | |
 | SkillPages.tsx:650 **Save / Make the skill** (Tomato) | `save` | create keeps confetti 110 and `skill-pop`; `fail()` on error |
 | setup/SetupList.tsx:41 platform card; StepCard.tsx:73 open link; KeyForm.tsx:116 Change keys, :209 Keep the saved keys; SetupPlatform.tsx:362 Go to step N; MockConsent.tsx:37 Cancel | press | |
+| setup/SetupList.tsx Skip \<Platform\> (opens the question, §17.13) | press | |
+| setup/SetupList.tsx Un-skip \<Platform\> | `undo` | |
 | StepCard.tsx:48 step header | state | chevron turns 90° |
 | StepCard.tsx:87 icon download | `download` | |
 | StepCard.tsx:120 Not done yet | `undo` | |
@@ -3514,6 +3691,9 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | UpdateBar.tsx:69 **Reload** (Tomato) | existing | the spark spin / pop / confetti stays as the `refresh` motion; its icon gets `act="refresh"` for the tap; nothing new waits |
 | Toasts.tsx:134 Undo | press | the rewind plays on the source control (§20.7) |
 | Toasts.tsx:141 Close message; Sheet.tsx:50 scrim / Escape | press / none | |
+| SetupTodo.tsx the pill, **–** (make it small), × (close), Set up \<Platform\>, Skip \<Platform\> (opens the question) | press | navigation, opening and closing stay quiet (§17.13) |
+| SetupTodo.tsx Un-skip \<Platform\> | `undo` | |
+| SkipConfirm.tsx Keep it, Skip \<Platform\> | press | opting out is quiet: no tick, no success sound; "All set!" (confetti, success) plays only when the list is really finished |
 | PlatformStack.tsx:103 setup link, :145 Open on \<Platform\> | press | |
 | App.tsx:107 Try again (boot failed) | `retry` | the reload happens at the tap |
 | App.tsx:152 Skip link | none | |
