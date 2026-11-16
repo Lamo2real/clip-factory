@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { findOverflow, resolveRoute, ROUTES, settle, WIDTHS } from "./helpers.ts";
+import { CLIPS, findOverflow, openClip, resolveRoute, ROUTES, settle, WIDTHS } from "./helpers.ts";
 
 // Nothing may run out of its box, at any width from 320px up, on any screen (docs/CONTRACTS.md §11).
 for (const width of WIDTHS) {
@@ -117,3 +117,41 @@ test("the sign-in screen fits at 320px and 1440px", async ({ page }) => {
     expect(result.page).toBeLessThanOrEqual(result.viewport);
   }
 });
+
+// The clip performance page (every calm state is on one of the three clips) and This week (§16.11).
+for (const width of [320, 375, 600, 768, 1024, 1440]) {
+  test(`clip pages and This week fit at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const failures: string[] = [];
+    const check = async (label: string) => {
+      const result = await findOverflow(page);
+      if (result.page > result.viewport) failures.push(`${label}: page scrolls sideways (${result.page}px > ${result.viewport}px)`);
+      for (const o of result.items) failures.push(`${label}: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);
+    };
+    for (const hook of Object.values(CLIPS)) {
+      await openClip(page, hook);
+      await check(`/clips (${hook})`);
+    }
+    // After a refresh, with its toast and "Next check in" on the button.
+    await page.locator(".perf__refresh").click();
+    await page.locator(".toast").first().waitFor();
+    await check("/clips (after refresh)");
+
+    for (const path of ["/library?view=week", "/library"]) {
+      await page.goto(path);
+      await settle(page);
+      await check(path);
+    }
+    await page.goto("/library?view=week");
+    await settle(page);
+    await page.locator(".week-card").first().getByRole("button", { name: "Best this week" }).click();
+    await page.getByText("Learning from your picks…").waitFor();
+    await check("/library?view=week (learning)");
+    await page.locator(".week__quote").waitFor();
+    await check("/library?view=week (learned)");
+    await page.getByRole("link", { name: "Earlier week" }).click();
+    await settle(page);
+    await check("/library?view=week (last week)");
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+}

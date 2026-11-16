@@ -15,7 +15,15 @@ from clipfactory_api.flows import TransientError, error_type
 from clipfactory_api.flows.clip_flow import ClipFlowDeps, run_clip_flow, summed_performance
 from clipfactory_api.flows.job_flow import STOPPED_MESSAGE, JobFlowDeps, clip_count_from, run_job_flow
 from clipfactory_api.jobs import START_FAILED
-from clipfactory_api.platforms import Metrics, NotConnectedError, Published, PublishError, RetryablePublishError
+from clipfactory_api.platforms import (
+    Metrics,
+    NotConnectedError,
+    Published,
+    PublishError,
+    ResponseMeta,
+    RetryablePublishError,
+    StatsBatch,
+)
 from clipfactory_api.vectors import Vectors
 from conftest import USER, Clock, seed_clip, seed_job
 from fakes import FakeAgentCore, FakeBedrock, FakeCallback, FakeDurableContext, FakeS3Vectors, FakeTable
@@ -374,17 +382,36 @@ class FakeAdapter:
         self.fail = list(fail or [])
         self.published: list[str] = []
         self.metric_failures: list[Exception] = []
+        self.stats_calls = 0
 
     def publish(self, clip: dict[str, Any], account: dict[str, Any] | None, *, idempotency_key: str) -> Published:
         if self.fail:
             raise self.fail.pop(0)
         self.published.append(idempotency_key)
-        return Published(url=f"https://{self.platform}.example/{idempotency_key}", posted_at="2026-11-15T12:00:00.000Z")
+        return Published(
+            url=f"https://{self.platform}.example/{idempotency_key}",
+            posted_at="2026-11-15T12:00:00.000Z",
+            platform_post_id=f"{self.platform}-{idempotency_key}",
+            stats_id=f"{self.platform}-{idempotency_key}",
+        )
 
     def metrics(self, post: dict[str, Any], account: dict[str, Any] | None) -> Metrics:
-        if self.metric_failures:
-            raise self.metric_failures.pop(0)
         return Metrics(views=1000, likes=50, comments=5, shares=7)
+
+    def fetch_stats(
+        self, posts: list[dict[str, Any]], account: dict[str, Any] | None, *, now: Any, want_insights: bool, http: Any
+    ) -> StatsBatch:
+        """Like a real adapter: a platform 5xx comes back as the batch's status (refresh tries twice more)."""
+        self.stats_calls += 1
+        if self.metric_failures:
+            failure = self.metric_failures.pop(0)
+            if isinstance(failure, NotConnectedError):
+                raise failure
+            return StatsBatch(
+                errors={p["postId"]: str(failure) for p in posts}, meta=ResponseMeta(status=503), requests=1
+            )
+        results = {p["postId"]: {"views": 1000, "likes": 50, "comments": 5, "shares": 7, "extra": {}} for p in posts}
+        return StatsBatch(results=results, requests=1)
 
 
 class PendingAdapter(FakeAdapter):
@@ -754,3 +781,86 @@ def test_transient_dynamodb_errors_are_retried(
     run_clip_flow(ctx, _event(clip), _clip_deps(store, {}))
     assert ctx.attempts["ensure-posts"] == 2
     assert isinstance(TransientError("x"), Exception)
+
+
+# --- clip-flow and the stats fields (§16.3, §16.5) ------------------------------------------------------------------
+
+
+class PrivateTikTok(FakeAdapter):
+    def publish(self, clip: dict[str, Any], account: dict[str, Any] | None, *, idempotency_key: str) -> Published:
+        self.published.append(idempotency_key)
+        return Published(
+            url="https://www.tiktok.com/@owner",
+            posted_at="2026-11-15T12:00:00.000Z",
+            platform_post_id="v_pub_123",
+            stats_id=None,
+            privacy="private",
+        )
+
+
+def test_clip_flow_publish_writes_the_stats_fields(store: db.Store, table: FakeTable) -> None:
+    _connect(store, "youtube", "tiktok")
+    clip = _kept_clip(store)
+    adapters = {"youtube": FakeAdapter("youtube"), "tiktok": PrivateTikTok("tiktok")}
+    ctx = FakeDurableContext()
+    run_clip_flow(ctx, _event(clip), _clip_deps(store, adapters))
+    by = {p["platform"]: p for p in posts.posts_for_clip(store, USER, clip["clipId"], consistent=True)}
+    youtube = by["youtube"]
+    assert youtube["platformPostId"] == f"youtube-{youtube['postId']}"
+    assert youtube["statsId"] == f"youtube-{youtube['postId']}"
+    assert youtube["privacy"] == "public"
+    assert youtube["statsDueAt"] == "2026-11-15T12:15:00.000Z"  # postedAt + minIntervalMinutes
+    assert youtube["gsi2pk"] == "STATS"
+    assert youtube["gsi2sk"].startswith("2026-11-15T12:")
+    assert youtube["gsi2sk"].endswith(f"#{youtube['postId']}")
+    tiktok = by["tiktok"]
+    assert tiktok["status"] == "posted"
+    assert tiktok["privacy"] == "private"
+    assert tiktok["platformPostId"] == "v_pub_123"
+    for absent in ("statsId", "statsDueAt", "gsi2pk", "gsi2sk"):
+        assert absent not in tiktok  # never polled
+    # The metrics step read youtube through the shared refresh: metrics, schedule and a first snapshot.
+    assert youtube["metrics"]["views"] == 1000
+    assert youtube["lastSnapshotAt"]
+    assert store.query_all(db.user_pk(USER), f"STAT#{youtube['postId']}#")
+    measured = ctx.results["metrics"]["measured"]
+    assert [m["platform"] for m in measured] == ["youtube"]  # private TikTok: no numbers
+    assert adapters["tiktok"].stats_calls == 0
+
+
+def test_clip_flow_metrics_fall_back_to_stored_metrics_when_blocked(store: db.Store) -> None:
+    _connect(store, "youtube")
+    clip = _kept_clip(store)
+    adapter = FakeAdapter("youtube")
+    store.put({"pk": "RATE#youtube", "sk": "BUDGET", "type": "rate", "blockedUntil": "2026-11-20T08:00:00.000Z"})
+    ctx = FakeDurableContext()
+    deps = _clip_deps(store, {"youtube": adapter})
+    # The poller stored numbers earlier; the flow's own read is blocked.
+    original = deps.store.update
+
+    def update(pk: str, sk: str, fields: dict[str, Any], **kw: Any) -> dict[str, Any]:
+        if fields.get("status") == "posted":
+            fields = {
+                **fields,
+                "metrics": {
+                    "views": 77,
+                    "likes": 7,
+                    "comments": 1,
+                    "shares": None,
+                    "checkedAt": "2026-11-16T00:00:00.000Z",
+                },
+            }
+        return original(pk, sk, fields, **kw)
+
+    deps.store.update = update  # type: ignore[method-assign]
+    out = run_clip_flow(ctx, _event(clip), deps)
+    assert out["outcome"] == "done"
+    (row,) = ctx.results["metrics"]["measured"]
+    assert row["metrics"] == {
+        "views": 77,
+        "likes": 7,
+        "comments": 1,
+        "shares": None,
+        "checkedAt": "2026-11-16T00:00:00.000Z",
+    }
+    assert adapter.stats_calls == 0

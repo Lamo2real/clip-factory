@@ -1,16 +1,54 @@
-"""Platform adapters by name. Phase 2 replaces a stub here with a real adapter, one platform at a time."""
+"""Platform adapters by name (docs/CONTRACTS.md §14.5, §16.5).
+
+Each platform has its real adapter: the stats field mapping is complete, publishing arrives in phase 2. Until then
+``posts.connected_account`` is always ``None`` and the default token provider reports "not connected", so no
+adapter call ever reaches the network.
+"""
 
 from __future__ import annotations
 
-from .base import Metrics, NotConnectedError, PlatformAdapter, Published, PublishError, RetryablePublishError
+from .base import (
+    AdapterBase,
+    HttpClient,
+    HttpRequest,
+    HttpResponse,
+    Metrics,
+    NotConnectedError,
+    PlatformAdapter,
+    Published,
+    PublishError,
+    ResponseMeta,
+    RetryablePublishError,
+    StatsAdapter,
+    StatsBatch,
+    TokenProvider,
+    no_tokens,
+)
+from .facebook import FacebookAdapter
+from .instagram import InstagramAdapter
 from .stub import LABELS, StubAdapter
+from .tiktok import TikTokAdapter
+from .x import XAdapter
+from .youtube import YouTubeAdapter
 
 PLATFORMS: tuple[str, ...] = ("youtube", "instagram", "facebook", "tiktok", "x")
+ADAPTER_CLASSES: dict[str, type[AdapterBase]] = {
+    "youtube": YouTubeAdapter,
+    "tiktok": TikTokAdapter,
+    "instagram": InstagramAdapter,
+    "facebook": FacebookAdapter,
+    "x": XAdapter,
+}
 
-_ADAPTERS: dict[str, PlatformAdapter] = {name: StubAdapter(name) for name in PLATFORMS}
+
+def make_adapters(*, tokens: TokenProvider = no_tokens, graph_api_version: str = "v25.0") -> dict[str, AdapterBase]:
+    return {name: cls(tokens=tokens, graph_api_version=graph_api_version) for name, cls in ADAPTER_CLASSES.items()}
 
 
-def adapter_for(platform: str) -> PlatformAdapter:
+_ADAPTERS: dict[str, AdapterBase] = make_adapters()
+
+
+def adapter_for(platform: str) -> AdapterBase:
     try:
         return _ADAPTERS[platform]
     except KeyError as e:
@@ -22,13 +60,23 @@ def label(platform: str) -> str:
 
 
 __all__ = [
+    "ADAPTER_CLASSES",
     "PLATFORMS",
+    "AdapterBase",
+    "HttpClient",
+    "HttpRequest",
+    "HttpResponse",
     "Metrics",
     "NotConnectedError",
     "PlatformAdapter",
     "PublishError",
     "Published",
+    "ResponseMeta",
     "RetryablePublishError",
+    "StatsAdapter",
+    "StatsBatch",
+    "StubAdapter",
     "adapter_for",
     "label",
+    "make_adapters",
 ]

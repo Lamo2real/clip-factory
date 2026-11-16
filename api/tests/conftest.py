@@ -11,6 +11,7 @@ import pytest
 from clipfactory_api import db, s3
 from clipfactory_api.agent_client import AgentClient
 from clipfactory_api.app import App
+from clipfactory_api.async_invoke import AsyncInvoker
 from clipfactory_api.flow_client import FlowClient
 from clipfactory_api.http import dispatch
 from clipfactory_api.ids import ulid
@@ -24,6 +25,8 @@ OTHER = "99999999-8888-7777-6666-555555555555"
 NOW = datetime(2026, 11, 15, 12, 0, 0, tzinfo=UTC)
 JOB_FLOW_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-job-flow:live"
 CLIP_FLOW_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-clip-flow:live"
+STATS_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-stats"
+LEARN_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-learn"
 BUILTIN_MD = """---
 name: "short-form-video-playbook"
 description: Plan, script and hook short clips.
@@ -110,6 +113,7 @@ def app(
         agent=AgentClient(agentcore, "arn:aws:bedrock-agentcore:eu-north-1:123:runtime/cf_prod_clip_agent"),
         flows=FlowClient(lambda_client, JOB_FLOW_ARN, CLIP_FLOW_ARN),
         vectors=vectors,
+        invoker=AsyncInvoker(lambda_client, STATS_ARN, LEARN_ARN),
         version="abc123",
         clock=clock,
         email_lookup=lambda sub, token: "owner@example.com" if token else None,

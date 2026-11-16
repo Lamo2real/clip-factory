@@ -94,6 +94,12 @@ export interface Clip {
   score: number;
   createdAt: string;
   decidedAt?: string;
+  /** Starred "Best this week" (docs/CONTRACTS.md §16). */
+  best?: boolean;
+  /** The ISO week it was starred in, "yyyy-Www". */
+  bestWeek?: string;
+  /** Sum of the posted posts' views; absent when nothing was measured yet. */
+  totalViews?: number;
 }
 
 export interface Skill {
@@ -127,12 +133,65 @@ export interface Account {
   handle?: string;
 }
 
+// ---------- Stats (docs/CONTRACTS.md §16.3) ----------
+// Every extra field is optional: a number the platform did not send is absent, never 0. Times are in seconds.
+export interface YouTubeExtra {
+  engagedViews?: number;
+  watchMinutes?: number;
+  avgViewSeconds?: number;
+  avgViewPercent?: number;
+  subscribersGained?: number;
+}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- TikTok only sends the common four.
+export interface TikTokExtra {}
+export interface InstagramExtra {
+  reach?: number;
+  saved?: number;
+  reposts?: number;
+  totalInteractions?: number;
+  avgWatchSeconds?: number;
+  totalWatchSeconds?: number;
+  skipRatePercent?: number;
+}
+export interface FacebookExtra {
+  initialPlays?: number;
+  replays?: number;
+  reactions?: Record<string, number>;
+  commentsAndShares?: number;
+  avgWatchSeconds?: number;
+  totalWatchSeconds?: number;
+  followsGained?: number;
+  reachUnique?: number;
+}
+export interface XExtra {
+  impressions?: number;
+  reposts?: number;
+  quotes?: number;
+  bookmarks?: number;
+  linkClicks?: number;
+  profileClicks?: number;
+  engagements?: number;
+  playback0?: number;
+  playback25?: number;
+  playback50?: number;
+  playback75?: number;
+  playback100?: number;
+}
+export type AnyExtra = YouTubeExtra & TikTokExtra & InstagramExtra & FacebookExtra & XExtra;
+
 export interface PostMetrics {
-  views: number;
-  likes: number;
-  comments: number;
-  shares: number;
+  /** null = "this platform does not say" (yet). */
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
   checkedAt: string;
+  /** When the fast counts were read. */
+  metricsUpdatedAt?: string;
+  /** When the slow insights were read. */
+  insightsUpdatedAt?: string;
+  final?: true;
+  extra?: YouTubeExtra | TikTokExtra | InstagramExtra | FacebookExtra | XExtra;
 }
 
 export interface Post {
@@ -144,6 +203,12 @@ export interface Post {
   postedAt?: string;
   perfCheckAt?: string;
   metrics?: PostMetrics;
+  /** TikTok posts from an app that is not approved yet are private (§16.3). */
+  privacy?: "public" | "private";
+  /** A stats refresh is running. */
+  refreshing?: boolean;
+  /** Earliest manual refresh. */
+  nextRefreshAt?: string;
   error?: string;
 }
 
@@ -152,6 +217,79 @@ export interface Learning {
   text: string;
   createdAt: string;
   postIds: string[];
+  /** Absent = "post". */
+  kind?: "post" | "week";
+  week?: string;
+  title?: string;
+  clipIds?: string[];
+}
+
+export type PerfStatus = "posted" | "posted_private" | "waiting_for_connection" | "posting" | "failed" | "not_posted";
+
+export interface PlatformPerformance {
+  platform: Platform;
+  status: PerfStatus;
+  account: "connected" | "not_connected" | "needs_reconnect";
+  postId?: string;
+  url?: string;
+  postedAt?: string;
+  metrics: PostMetrics | null;
+  updatedAt?: string;
+  insightsUpdatedAt?: string;
+  nextAllowedAt?: string;
+  refreshing: boolean;
+  final: boolean;
+  error?: string;
+}
+
+export interface SeriesPoint {
+  at: string;
+  views: number;
+}
+
+export interface ClipPerformance {
+  clip: Clip;
+  /** Always five, in STATS_ORDER. */
+  posts: PlatformPerformance[];
+  series: Partial<Record<Platform, SeriesPoint[]>>;
+  totals: { views: number; likes: number; comments: number; shares: number; platformsPosted: number; updatedAt?: string };
+  bestPlatform: Platform | null;
+  bestThisWeek: boolean;
+  week: string | null;
+  weekAnchorAt: string;
+}
+
+export interface RefreshResult {
+  platform: Platform;
+  status: "started" | "too_soon" | "blocked" | "not_posted" | "not_connected" | "private";
+  nextAllowedAt?: string;
+  note?: string;
+}
+
+export interface WeekClip {
+  clip: Clip;
+  anchorAt: string;
+  posted: boolean;
+  totals: { views: number; likes: number; comments: number; shares: number };
+  views: Partial<Record<Platform, number | null>>;
+  best: boolean;
+}
+
+export type LearnState = "none" | "learning" | "done" | "skipped" | "failed";
+
+export interface WeekSummary {
+  week: string;
+  from: string;
+  to: string;
+  clipIds: string[];
+  savedAt?: string;
+  learnState: LearnState;
+  learningId?: string;
+}
+
+export interface WeekView extends WeekSummary {
+  clips: WeekClip[];
+  learning?: Learning;
 }
 
 export interface Performance {
@@ -176,12 +314,13 @@ export interface SimilarClip {
 }
 
 /** What the live connection pushes (docs/CONTRACTS.md §14.2). One message per changed item. */
-export type LiveItemType = "job" | "clip" | "post" | "learning";
+export type LiveItemType = "job" | "clip" | "post" | "learning" | "week";
 export type LiveEvent =
   | { type: "job"; op: "upsert"; id: string; item: Job; partial?: undefined }
   | { type: "clip"; op: "upsert"; id: string; item: Clip; partial?: undefined }
   | { type: "post"; op: "upsert"; id: string; item: Post; partial?: undefined }
   | { type: "learning"; op: "upsert"; id: string; item: Learning; partial?: undefined }
+  | { type: "week"; op: "upsert"; id: string; item: WeekSummary; partial?: undefined }
   | { type: LiveItemType; op: "delete"; id: string; item?: undefined; partial?: undefined }
   | { type: LiveItemType; op: "upsert"; id: string; partial: true; item?: undefined };
 
@@ -235,4 +374,12 @@ export interface Api {
   listPosts(clipId?: string): Promise<Post[]>;
   insights(): Promise<{ learnings: Learning[]; posts: Post[] }>;
   similarClips(clipId: string): Promise<SimilarClip[]>;
+  /** GET /v1/clips/{clipId}/performance (§16.2). */
+  clipPerformance(clipId: string): Promise<ClipPerformance>;
+  /** POST /v1/clips/{clipId}/stats/refresh: one result per platform asked (default all five). */
+  refreshStats(clipId: string, platforms?: Platform[]): Promise<RefreshResult[]>;
+  /** GET /v1/weeks/{week}?from=&to= */
+  getWeek(week: string, from: string, to: string): Promise<WeekView>;
+  /** PUT /v1/weeks/{week}/best: 202 when the picks changed (learning starts), 200 when they did not. */
+  saveWeekBest(week: string, body: { from: string; to: string; clipIds: string[] }): Promise<WeekView>;
 }

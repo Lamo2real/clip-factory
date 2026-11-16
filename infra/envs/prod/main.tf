@@ -130,6 +130,26 @@ module "flows" {
   vector_index_arn  = module.vectors.vector_index_arn
 }
 
+# Clip numbers (cf-prod-stats on an EventBridge tick from config/platforms.json) and the weekly best learning
+# (cf-prod-learn), docs/CONTRACTS.md §16.
+module "stats" {
+  source                = "../../modules/stats"
+  name                  = local.name
+  region                = var.region
+  account_id            = local.account_id
+  lambda_zip_path       = var.lambda_zip_path
+  table_name            = module.data.table_name
+  table_arn             = module.data.table_arn
+  model_id              = local.model_id
+  model_invoke_arns     = local.model_invoke_arns
+  embed_model_id        = local.embed_model_id
+  embed_model_arn       = local.embed_model_arn
+  vector_bucket         = module.vectors.vector_bucket
+  vector_index          = module.vectors.vector_index
+  vector_index_arn      = module.vectors.vector_index_arn
+  platforms_config_path = "${path.module}/../../../config/platforms.json"
+}
+
 module "api" {
   source               = "../../modules/api"
   name                 = local.name
@@ -148,6 +168,8 @@ module "api" {
   clip_flow_alias_arn  = module.flows.clip_flow_alias_arn
   job_flow_arn_prefix  = module.flows.function_arns["job-flow"]
   clip_flow_arn_prefix = module.flows.function_arns["clip-flow"]
+  stats_function_arn   = module.stats.stats_function_arn
+  learn_function_arn   = module.stats.learn_function_arn
   vector_bucket        = module.vectors.vector_bucket
   vector_index         = module.vectors.vector_index
   vector_index_arn     = module.vectors.vector_index_arn
@@ -192,7 +214,9 @@ module "monitoring" {
     module.flows.function_names,
     module.realtime.function_names,
     module.hooks.function_names,
+    module.stats.function_names,
   )
+  schedule_rule_names    = module.stats.schedule_rule_names
   durable_function_names = module.flows.durable_function_names
   stream_consumer_name   = module.realtime.broadcast_function_name
   hooks_api_name         = module.hooks.hooks_api_name

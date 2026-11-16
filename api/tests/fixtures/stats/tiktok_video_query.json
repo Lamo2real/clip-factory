@@ -1,0 +1,17 @@
+{
+  "data": {
+    "videos": [
+      {
+        "id": "7301234567890123456",
+        "share_url": "https://www.tiktok.com/@owner/video/7301234567890123456",
+        "view_count": 25500,
+        "like_count": 3100,
+        "comment_count": 210,
+        "share_count": 405
+      }
+    ],
+    "cursor": 0,
+    "has_more": false
+  },
+  "error": { "code": "ok", "message": "", "log_id": "202611161200000102030405060708090A" }
+}

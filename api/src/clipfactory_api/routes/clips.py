@@ -45,11 +45,14 @@ def list_clips(app: App, req: Request) -> Response:
         items = clips.all_clips(app.store, req.user_id)
     if wanted is not None:
         items = [c for c in items if c.get("status") in wanted]
-    return ok({"clips": [clips.public_clip(c, app.media) for c in items]})
+    by_clip = clips.posts_by_clip(posts.all_posts(app.store, req.user_id)) if items else {}
+    return ok({"clips": [clips.public_clip(c, app.media, posts=by_clip.get(c["clipId"], [])) for c in items]})
 
 
 def get_clip(app: App, req: Request) -> Response:
-    return ok({"clip": clips.public_clip(_clip_or_404(app, req), app.media)})
+    item = _clip_or_404(app, req)
+    found = posts.posts_for_clip(app.store, req.user_id, item["clipId"])
+    return ok({"clip": clips.public_clip(item, app.media, posts=found)})
 
 
 def patch_clip(app: App, req: Request) -> Response:

@@ -56,6 +56,24 @@ variable "clip_flow_arn_prefix" {
   description = "Unqualified ARN of clip-flow; IAM grants NAME:*."
 }
 
+variable "stats_function_arn" {
+  type        = string
+  description = "Unqualified ARN of cf-prod-stats (STATS_FUNCTION_ARN): manual \"Refresh numbers\"."
+  validation {
+    condition     = can(regex("^arn:aws[a-z-]*:lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9_-]+$", var.stats_function_arn))
+    error_message = "stats_function_arn must be an unqualified Lambda function ARN."
+  }
+}
+
+variable "learn_function_arn" {
+  type        = string
+  description = "Unqualified ARN of cf-prod-learn (LEARN_FUNCTION_ARN): weekly best learning."
+  validation {
+    condition     = can(regex("^arn:aws[a-z-]*:lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9_-]+$", var.learn_function_arn))
+    error_message = "learn_function_arn must be an unqualified Lambda function ARN."
+  }
+}
+
 variable "vector_bucket" { type = string }
 variable "vector_index" { type = string }
 variable "vector_index_arn" { type = string }

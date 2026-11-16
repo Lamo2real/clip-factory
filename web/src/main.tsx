@@ -9,6 +9,7 @@ import "./styles/layout.css";
 import "./styles/screens.css";
 import "./styles/system.css";
 import "./styles/settings.css";
+import "./styles/performance.css";
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

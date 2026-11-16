@@ -1,6 +1,6 @@
 """``cf-prod-broadcast``: DynamoDB Streams on ``cf-prod-data`` → the owner's open WebSockets (docs/CONTRACTS.md §14.2).
 
-The event source mapping only delivers ``JOB#``, ``CLIP#``, ``POST#`` and ``LEARNING#`` items. Per batch the last
+The event source mapping only delivers ``JOB#``, ``CLIP#``, ``POST#``, ``LEARNING#`` and ``WEEK#`` items. Per batch the last
 record per item wins (job heartbeats coalesce); each becomes one ``LiveEvent``, built by the same public-shape
 functions the HTTP API uses, so internal fields never leave. An event over 24 KB is sent as ``partial: true`` (the
 web refetches). Closed connections (410 Gone) are deleted; other send errors are logged and skipped. Only a
@@ -14,14 +14,14 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .. import clips, db, jobs, learn, posts
+from .. import clips, db, jobs, learn, posts, weeks
 from ..log import log
 from . import MAX_EVENT_BYTES, encode, is_gone, management_client
 
 Item = dict[str, Any]
 
-TYPES = {"JOB#": "job", "CLIP#": "clip", "POST#": "post", "LEARNING#": "learning"}
-ID_FIELDS = {"job": "jobId", "clip": "clipId", "post": "postId", "learning": "learningId"}
+TYPES = {"JOB#": "job", "CLIP#": "clip", "POST#": "post", "LEARNING#": "learning", "WEEK#": "week"}
+ID_FIELDS = {"job": "jobId", "clip": "clipId", "post": "postId", "learning": "learningId", "week": "week"}
 
 
 def _public(kind: str, item: Item) -> Item:
@@ -31,6 +31,8 @@ def _public(kind: str, item: Item) -> Item:
         return clips.public_clip(item)  # no presigned links: the web keeps the ones it has
     if kind == "post":
         return posts.public_post(item)
+    if kind == "week":
+        return weeks.public_week(item)
     return learn.public_learning(item)
 
 
@@ -76,7 +78,7 @@ def _kind(sk: str) -> tuple[str, str] | None:
 
 
 def message_for(record: Mapping[str, Any], deserialize: Callable[[Mapping[str, Any]], Item]) -> dict[str, Any] | None:
-    """The LiveEvent for one stream record, or None when the record is not an owner's job/clip/post/learning."""
+    """The LiveEvent for one stream record, or None when the record is not an owner's job/clip/post/learning/week."""
     key = _key(record)
     if key is None or not key[0].startswith("USER#"):
         return None

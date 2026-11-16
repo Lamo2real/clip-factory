@@ -35,3 +35,9 @@ variable "hooks_stage_name" {
   type    = string
   default = "v1"
 }
+
+variable "schedule_rule_names" {
+  type        = map(string)
+  default     = {}
+  description = "EventBridge schedule rules watched for failed invocations, keyed by job (stats = cf-prod-stats)."
+}

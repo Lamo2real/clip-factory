@@ -4,128 +4,559 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="hdr" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Clip Factory Cloud on AWS. Repo &lt;code&gt;Lamo2real/clip-factory-legal&lt;/code&gt;, branch &lt;code&gt;main&lt;/code&gt;, one AWS account, one environment (&lt;code&gt;prod&lt;/code&gt;, prefix &lt;code&gt;cf-prod&lt;/code&gt;), region &lt;code&gt;eu-north-1&lt;/code&gt;. Backend: Python 3.13. Infrastructure: Terraform in &lt;code&gt;infra/&lt;/code&gt;.&lt;/b&gt;&lt;br&gt;Serverless only: 1 CloudFront distribution &amp;#183; 2 S3 buckets (web, media) &amp;#183; 1 S3 Vectors bucket + index &amp;#183; 1 DynamoDB table + Streams &amp;#183; 3 API Gateway APIs (HTTP, WebSocket, REST) &amp;#183; 7 Lambdas (2 durable functions) &amp;#183; 1 AgentCore runtime &amp;#183; Bedrock (Claude Fable 5.1, Titan Embeddings V2) &amp;#183; Transcribe &amp;#183; Cognito &amp;#183; SSM Parameter Store &amp;#183; CloudWatch + SNS &amp;#183; no servers, no containers to run, no VPC &amp;#183; every push to &lt;code&gt;main&lt;/code&gt; deploys through GitHub OIDC" vertex="1"><mxGeometry x="0" y="-76" width="2760" height="60" as="geometry" /></mxCell>
-        <mxCell id="frame" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;" value="" vertex="1"><mxGeometry x="0" y="0" width="2760" height="1580" as="geometry" /></mxCell>
-        <mxCell id="frame_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontSize=16;fontStyle=1;fontColor=#0050EF;" value="Clip Factory Cloud - paste a link, the agent cuts 5-10 vertical clips, live updates over WebSocket, nothing is posted without the owner's Keep" vertex="1"><mxGeometry x="20" y="6" width="2700" height="34" as="geometry" /></mxCell>
-        <mxCell id="devices" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;dashed=1;" value="" vertex="1"><mxGeometry x="16" y="60" width="150" height="960" as="geometry" /></mxCell>
-        <mxCell id="devices_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Owner's devices&lt;/b&gt;" vertex="1"><mxGeometry x="20" y="64" width="142" height="20" as="geometry" /></mxCell>
-        <mxCell id="owner" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.user;" value="Owner&lt;br&gt;(the only login)" vertex="1"><mxGeometry x="60" y="100" width="60" height="60" as="geometry" /></mxCell>
-        <mxCell id="client" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.client;" value="Web app&lt;br&gt;(browser,&lt;br&gt;desktop PWA)" vertex="1"><mxGeometry x="58" y="400" width="64" height="64" as="geometry" /></mxCell>
-        <mxCell id="phone" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.mobile_client;" value="Phone&lt;br&gt;(installed PWA)" vertex="1"><mxGeometry x="67" y="640" width="46" height="64" as="geometry" /></mxCell>
-        <mxCell id="desktop" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.client;" value="Desktop app&lt;br&gt;(Tauri .dmg / .exe,&lt;br&gt;opens app_url)" vertex="1"><mxGeometry x="58" y="860" width="64" height="64" as="geometry" /></mxCell>
-        <mxCell id="cf" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudfront;fillColor=#8C4FFF;" value=" " vertex="1"><mxGeometry x="442" y="110" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="cf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Web distribution (CloudFront)&lt;/b&gt;&lt;br&gt;PWA, &lt;code&gt;config.json&lt;/code&gt; (apiUrl, wsUrl), &lt;code&gt;version.json&lt;/code&gt;; OAC; CSP allows &lt;code&gt;wss://&lt;/code&gt;" vertex="1"><mxGeometry x="360" y="170" width="220" height="90" as="geometry" /></mxCell>
-        <mxCell id="s3web" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;fillColor=#7AA116;" value=" " vertex="1"><mxGeometry x="842" y="110" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="s3web_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-web (S3)&lt;/b&gt;&lt;br&gt;private; the app, &lt;code&gt;version.json&lt;/code&gt;, &lt;code&gt;downloads/&lt;/code&gt; (.dmg, .exe)" vertex="1"><mxGeometry x="760" y="170" width="220" height="90" as="geometry" /></mxCell>
-        <mxCell id="cog" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cognito;fillColor=#DD344C;" value=" " vertex="1"><mxGeometry x="442" y="640" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="cog_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-users (Cognito)&lt;/b&gt;&lt;br&gt;admin-create only, SRP; access token 15 min, refresh 30 days (rotating)" vertex="1"><mxGeometry x="360" y="700" width="220" height="110" as="geometry" /></mxCell>
-        <mxCell id="http" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.api_gateway;fillColor=#E7157B;" value=" " vertex="1"><mxGeometry x="842" y="400" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="http_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;HTTP API (API Gateway)&lt;/b&gt;&lt;br&gt;&lt;code&gt;/v1&lt;/code&gt; routes; JWT authorizer (Cognito); CORS for the app + localhost:5173" vertex="1"><mxGeometry x="760" y="460" width="220" height="110" as="geometry" /></mxCell>
-        <mxCell id="ws" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.api_gateway;fillColor=#E7157B;" value=" " vertex="1"><mxGeometry x="842" y="880" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="ws_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;WebSocket API (API Gateway)&lt;/b&gt;&lt;br&gt;&lt;code&gt;cf-prod-ws&lt;/code&gt;, stage &lt;code&gt;live&lt;/code&gt;; &lt;code&gt;$connect&lt;/code&gt; / &lt;code&gt;$disconnect&lt;/code&gt; / &lt;code&gt;$default&lt;/code&gt;; access log without query" vertex="1"><mxGeometry x="760" y="940" width="220" height="110" as="geometry" /></mxCell>
-        <mxCell id="rest" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.api_gateway;fillColor=#E7157B;" value=" " vertex="1"><mxGeometry x="842" y="1360" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="rest_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;REST API (API Gateway)&lt;/b&gt;&lt;br&gt;&lt;code&gt;cf-prod-hooks&lt;/code&gt;, stage &lt;code&gt;v1&lt;/code&gt;: &lt;code&gt;/hooks/{platform}&lt;/code&gt;, &lt;code&gt;/oauth/{platform}/callback&lt;/code&gt;; 10 rps, usage plan, X-Ray" vertex="1"><mxGeometry x="760" y="1420" width="220" height="110" as="geometry" /></mxCell>
-        <mxCell id="api" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1"><mxGeometry x="1242" y="400" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="api_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-api (Lambda)&lt;/b&gt;&lt;br&gt;every &lt;code&gt;/v1&lt;/code&gt; route; presigned URLs; starts both flows; cancel; Keep / Throw away; similar clips" vertex="1"><mxGeometry x="1160" y="460" width="220" height="110" as="geometry" /></mxCell>
-        <mxCell id="wsauth" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1"><mxGeometry x="1242" y="650" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="wsauth_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-ws-authorizer (Lambda)&lt;/b&gt;&lt;br&gt;REQUEST authorizer on &lt;code&gt;$connect&lt;/code&gt;: RS256 check of the access token (stdlib), never logs it" vertex="1"><mxGeometry x="1160" y="710" width="220" height="90" as="geometry" /></mxCell>
-        <mxCell id="bc" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1"><mxGeometry x="1242" y="880" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="bc_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-broadcast (Lambda)&lt;/b&gt;&lt;br&gt;stream batch &amp;#8594; public shapes &amp;#8594; PostToConnection; 410 deletes the connection" vertex="1"><mxGeometry x="1160" y="940" width="220" height="90" as="geometry" /></mxCell>
-        <mxCell id="wsfn" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1"><mxGeometry x="1242" y="1110" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="wsfn_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-ws (Lambda)&lt;/b&gt;&lt;br&gt;stores / removes connections (TTL 2 h), answers ping" vertex="1"><mxGeometry x="1160" y="1170" width="220" height="80" as="geometry" /></mxCell>
-        <mxCell id="hooks" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1"><mxGeometry x="1242" y="1360" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="hooks_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-hooks (Lambda)&lt;/b&gt;&lt;br&gt;verify challenges, store &lt;code&gt;HOOK#&lt;/code&gt; events (14 days), OAuth &amp;#8594; Settings (phase 2)" vertex="1"><mxGeometry x="1160" y="1420" width="220" height="110" as="geometry" /></mxCell>
-        <mxCell id="jf" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1"><mxGeometry x="1642" y="400" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="jf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-job-flow (Lambda DURABLE, alias live)&lt;/b&gt;&lt;br&gt;callback &lt;i&gt;agent-done&lt;/i&gt; (8 h, heartbeat 15 min) &amp;#8594; &lt;i&gt;start-agent&lt;/i&gt; &amp;#8594; wait, no compute &amp;#8594; &lt;i&gt;finish&lt;/i&gt; or &lt;i&gt;fail&lt;/i&gt; + &lt;i&gt;stop-session&lt;/i&gt;; replaces the watchdog" vertex="1"><mxGeometry x="1560" y="460" width="220" height="110" as="geometry" /></mxCell>
-        <mxCell id="clf" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1"><mxGeometry x="1642" y="1110" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="clf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-clip-flow (Lambda DURABLE, alias live)&lt;/b&gt;&lt;br&gt;&lt;i&gt;ensure-posts&lt;/i&gt; &amp;#8594; &lt;i&gt;publish-{platform}&lt;/i&gt; &amp;#8594; &lt;i&gt;settle-clip&lt;/i&gt; &amp;#8594; &lt;b&gt;wait 48 h&lt;/b&gt; (no compute) &amp;#8594; &lt;i&gt;metrics&lt;/i&gt; &amp;#8594; &lt;i&gt;distil&lt;/i&gt; &amp;#8594; &lt;i&gt;upsert-vector&lt;/i&gt;; replaces SQS, Scheduler, publisher, perf-check" vertex="1"><mxGeometry x="1560" y="1170" width="220" height="120" as="geometry" /></mxCell>
-        <mxCell id="ddb" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.dynamodb;fillColor=#C925D1;" value=" " vertex="1"><mxGeometry x="1642" y="700" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="ddb_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-data (DynamoDB)&lt;/b&gt;&lt;br&gt;single table + gsi1, PITR, TTL: jobs, clips, posts, learnings, skills, connections (CONN#), hook events (HOOK#)" vertex="1"><mxGeometry x="1706" y="700" width="170" height="120" as="geometry" /></mxCell>
-        <mxCell id="stream" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.dynamodb_stream;" value="" vertex="1"><mxGeometry x="1650" y="770" width="40" height="36" as="geometry" /></mxCell>
-        <mxCell id="stream_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=right;verticalAlign=top;rounded=0;fontSize=9;" value="&lt;b&gt;DynamoDB Streams&lt;/b&gt;&lt;br&gt;NEW_AND_OLD_IMAGES" vertex="1"><mxGeometry x="1530" y="772" width="116" height="34" as="geometry" /></mxCell>
-        <mxCell id="rt" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock_agentcore;fillColor=#01A88D;" value=" " vertex="1"><mxGeometry x="2030" y="400" width="80" height="80" as="geometry" /></mxCell>
-        <mxCell id="rt_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;AgentCore Runtime cf_prod_clip_agent&lt;/b&gt;&lt;br&gt;ARM64 container: Claude Agent SDK, yt-dlp, ffmpeg; one session per job; skills + 10 learnings + what worked before; heartbeats the job flow" vertex="1"><mxGeometry x="2118" y="440" width="270" height="100" as="geometry" /></mxCell>
-        <mxCell id="media" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;fillColor=#7AA116;" value=" " vertex="1"><mxGeometry x="2042" y="700" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="media_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-media (S3)&lt;/b&gt;&lt;br&gt;uploads, audio, transcripts, clips + covers, skills, cookies; SSE-S3; sources expire after 14 days" vertex="1"><mxGeometry x="2106" y="714" width="280" height="80" as="geometry" /></mxCell>
-        <mxCell id="vec" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3_vectors;fillColor=#7AA116;" value=" " vertex="1"><mxGeometry x="2042" y="1000" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="vec_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-vectors (S3 Vectors)&lt;/b&gt;&lt;br&gt;index &lt;code&gt;clips&lt;/code&gt;: float32, 1024, cosine; filter by userId, status, momentType; the learning memory" vertex="1"><mxGeometry x="2106" y="1014" width="280" height="80" as="geometry" /></mxCell>
-        <mxCell id="br2" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock;fillColor=#01A88D;" value=" " vertex="1"><mxGeometry x="2442" y="1250" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="br2_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Amazon Bedrock (same models)&lt;/b&gt;&lt;br&gt;distil: Claude Fable 5.1, effort low; embed: Titan V2" vertex="1"><mxGeometry x="2506" y="1264" width="215" height="60" as="geometry" /></mxCell>
-        <mxCell id="os" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elasticsearch_service;fillColor=#8C4FFF;" value=" " vertex="1"><mxGeometry x="2042" y="1440" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="os_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;OpenSearch Serverless - NOT DEPLOYED (option)&lt;/b&gt;&lt;br&gt;standing OCU minimum; S3 Vectors export is preview; only if keyword or hybrid search is ever needed" vertex="1"><mxGeometry x="2106" y="1454" width="280" height="80" as="geometry" /></mxCell>
-        <mxCell id="os_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;dashed=1;" value="" vertex="1"><mxGeometry x="2026" y="1426" width="388" height="100" as="geometry" /></mxCell>
-        <mxCell id="ecr" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ecr;fillColor=#ED7100;" value=" " vertex="1"><mxGeometry x="2442" y="110" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="ecr_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;agent image (ECR)&lt;/b&gt;&lt;br&gt;tag = hash of the agent sources" vertex="1"><mxGeometry x="2506" y="124" width="220" height="50" as="geometry" /></mxCell>
-        <mxCell id="src" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;" value="&lt;b&gt;Video sources&lt;/b&gt;&lt;br&gt;YouTube &amp;#183; Twitch &amp;#183; Kick (yt-dlp) or an upload" vertex="1"><mxGeometry x="2442" y="220" width="300" height="56" as="geometry" /></mxCell>
-        <mxCell id="br" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock;fillColor=#01A88D;" value=" " vertex="1"><mxGeometry x="2442" y="400" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="br_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Amazon Bedrock&lt;/b&gt;&lt;br&gt;Claude Fable 5.1 via &lt;code&gt;global.anthropic.claude-fable-5-1&lt;/code&gt; (aws_review retention); Titan Text Embeddings V2 in-Region" vertex="1"><mxGeometry x="2506" y="414" width="215" height="100" as="geometry" /></mxCell>
-        <mxCell id="tr" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.transcribe;fillColor=#01A88D;" value=" " vertex="1"><mxGeometry x="2442" y="640" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="tr_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Amazon Transcribe&lt;/b&gt;&lt;br&gt;batch, word timestamps, auto language; reads audio.m4a from and writes transcript.json to the media bucket" vertex="1"><mxGeometry x="2506" y="654" width="215" height="80" as="geometry" /></mxCell>
-        <mxCell id="ssm" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.systems_manager;fillColor=#E7157B;" value=" " vertex="1"><mxGeometry x="1642" y="1360" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="ssm_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;SSM Parameter Store&lt;/b&gt;&lt;br&gt;&lt;code&gt;/cf-prod/hooks/verify-token&lt;/code&gt; SecureString (write-only, never in state)" vertex="1"><mxGeometry x="1560" y="1420" width="220" height="80" as="geometry" /></mxCell>
-        <mxCell id="social" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=1;" value="&lt;b&gt;Phase 2 - social platforms&lt;/b&gt;&lt;br&gt;YouTube &amp;#183; Instagram &amp;#183; Facebook &amp;#183; TikTok &amp;#183; X&lt;br&gt;(today posts wait as &lt;i&gt;pending_integration&lt;/i&gt;)" vertex="1"><mxGeometry x="2442" y="1100" width="280" height="70" as="geometry" /></mxCell>
-        <mxCell id="plat" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=1;" value="&lt;b&gt;Platform webhooks + OAuth&lt;/b&gt;&lt;br&gt;Meta, YouTube (phase 2)" vertex="1"><mxGeometry x="370" y="1340" width="200" height="84" as="geometry" /></mxCell>
-        <mxCell id="e_cf" edge="1" parent="1" source="client" target="cf" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.15;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="HTTPS"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="250" y="410" /><mxPoint x="250" y="138" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_cog" edge="1" parent="1" source="client" target="cog" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="sign in (SRP)"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="250" y="454" /><mxPoint x="250" y="668" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_oac" edge="1" parent="1" source="cf" target="s3web" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="OAC"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e1" edge="1" parent="1" source="client" target="http" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;1&lt;/b&gt; REST + JWT"><mxGeometry x="-0.2" y="0" relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e1b" edge="1" parent="1" source="client" target="media" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;1&lt;/b&gt; upload: presigned PUT; play: presigned GET (1 h)"><mxGeometry x="-0.55" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="90" y="300" /><mxPoint x="1940" y="300" /><mxPoint x="1940" y="728" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_inv" edge="1" parent="1" source="http" target="api" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="invoke"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e2" edge="1" parent="1" source="api" target="jf" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;2&lt;/b&gt; start: async invoke on alias &lt;i&gt;live&lt;/i&gt;,&lt;br&gt;name job-{jobId}-{run}"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e3" edge="1" parent="1" source="jf" target="rt" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.29;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;" value="&lt;b&gt;3&lt;/b&gt; InvokeAgentRuntime&lt;br&gt;process_job + callbackId"><mxGeometry x="0.3" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="1720" y="416" /></Array><mxPoint x="0" y="-16" as="offset" /></mxGeometry></mxCell>
-        <mxCell id="e3b" edge="1" parent="1" source="rt" target="jf" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=0;exitY=0.45;exitDx=0;exitDy=0;entryX=1;entryY=0.64;entryDx=0;entryDy=0;" value="&lt;b&gt;3&lt;/b&gt; callback: heartbeat (&amp;#8804; 5 min),&lt;br&gt;success / failure"><mxGeometry x="0.3" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="1720" y="436" /></Array><mxPoint x="0" y="18" as="offset" /></mxGeometry></mxCell>
-        <mxCell id="e_br" edge="1" parent="1" source="rt" target="br" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.1;exitDx=0;exitDy=0;entryX=0;entryY=0.14;entryDx=0;entryDy=0;" value="Converse + embeddings"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_ecr" edge="1" parent="1" source="ecr" target="rt" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" value="image"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="2050" y="138" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_src" edge="1" parent="1" source="rt" target="src" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="download"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="2090" y="248" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_tr" edge="1" parent="1" source="rt" target="tr" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="transcription job"><mxGeometry x="0.5" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="2420" y="424" /><mxPoint x="2420" y="668" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_rtddb" edge="1" parent="1" source="rt" target="ddb" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" value="steps, progress, clips"><mxGeometry x="0.4" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="1880" y="456" /><mxPoint x="1880" y="660" /><mxPoint x="1670" y="660" /></Array></mxGeometry></mxCell>
-        <mxCell id="e7" edge="1" parent="1" source="rt" target="vec" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;startArrow=classic;exitX=0;exitY=0.95;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;7&lt;/b&gt; what worked before (query);&lt;br&gt;finalize: put vectors"><mxGeometry x="0.2" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="1990" y="476" /><mxPoint x="1990" y="1028" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_rtmedia" edge="1" parent="1" source="rt" target="media" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;" value="audio, transcript,&lt;br&gt;clip.mp4, cover"><mxGeometry x="0" y="0" relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e5" edge="1" parent="1" source="api" target="ddb" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;" value="&lt;b&gt;5&lt;/b&gt; Keep: clip + posts (1 transaction)"><mxGeometry x="0.6" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="1430" y="447" /><mxPoint x="1430" y="714" /></Array><mxPoint x="0" y="-12" as="offset" /></mxGeometry></mxCell>
-        <mxCell id="e5b" edge="1" parent="1" source="api" target="clf" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.95;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;" value="&lt;b&gt;5&lt;/b&gt; start clip flow: async, alias &lt;i&gt;live&lt;/i&gt;,&lt;br&gt;name clip-{clipId}-{run}"><mxGeometry x="0.85" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="1400" y="453" /><mxPoint x="1400" y="1124" /></Array><mxPoint x="0" y="-16" as="offset" /></mxGeometry></mxCell>
-        <mxCell id="e4a" edge="1" parent="1" source="stream" target="bc" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;4&lt;/b&gt; stream, filtered: JOB#, CLIP#, POST#, LEARNING#"><mxGeometry x="0.3" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="1670" y="908" /></Array></mxGeometry></mxCell>
-        <mxCell id="e4b" edge="1" parent="1" source="bc" target="ws" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;4&lt;/b&gt; PostToConnection"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e4c" edge="1" parent="1" source="ws" target="client" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;startArrow=classic;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.95;entryDx=0;entryDy=0;" value="&lt;b&gt;4&lt;/b&gt; wss: live events&lt;br&gt;(token on $connect)"><mxGeometry x="-0.3" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="290" y="908" /><mxPoint x="290" y="461" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_auth" edge="1" parent="1" source="ws" target="wsauth" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="$connect"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="870" y="678" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_wsfn" edge="1" parent="1" source="ws" target="wsfn" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="routes"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1070" y="928" /><mxPoint x="1070" y="1138" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_wsddb" edge="1" parent="1" source="wsfn" target="ddb" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.6;entryDx=0;entryDy=0;" value="CONN# items"><mxGeometry x="0.5" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="1460" y="1138" /><mxPoint x="1460" y="734" /></Array></mxGeometry></mxCell>
-        <mxCell id="e6a" edge="1" parent="1" source="clf" target="social" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;6&lt;/b&gt; publish each queued post (phase 2)"><mxGeometry x="0.3" y="0" relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e6b" edge="1" parent="1" source="clf" target="vec" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" value="&lt;b&gt;6&lt;/b&gt; upsert vector (performed + numbers)"><mxGeometry x="-0.4" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="1900" y="1121" /><mxPoint x="1900" y="1042" /></Array></mxGeometry></mxCell>
-        <mxCell id="e6c" edge="1" parent="1" source="clf" target="br2" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.8;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;6&lt;/b&gt; after the 48 h wait: distil one learning, embed"><mxGeometry x="0.3" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="1860" y="1155" /><mxPoint x="1860" y="1278" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_plat" edge="1" parent="1" source="plat" target="rest" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="HTTPS (public)"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_rest" edge="1" parent="1" source="rest" target="hooks" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="AWS_PROXY"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_ssm" edge="1" parent="1" source="hooks" target="ssm" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="verify token"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_hddb" edge="1" parent="1" source="hooks" target="ddb" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.95;entryDx=0;entryDy=0;" value="HOOK# events"><mxGeometry x="-0.3" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="1490" y="1371" /><mxPoint x="1490" y="753" /></Array></mxGeometry></mxCell>
-        <mxCell id="e_os" edge="1" parent="1" source="os" target="vec" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" value="option: export (preview)"><mxGeometry x="-0.6" y="0" relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="frame2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;" value="" vertex="1"><mxGeometry x="0" y="1660" width="2760" height="280" as="geometry" /></mxCell>
-        <mxCell id="frame2_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontSize=16;fontStyle=1;fontColor=#0050EF;" value="Delivery, security and operations - GitHub OIDC (no long-lived AWS keys); one account, one environment" vertex="1"><mxGeometry x="20" y="1666" width="2700" height="30" as="geometry" /></mxCell>
-        <mxCell id="gha" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;" value="&lt;b&gt;GitHub Actions&lt;/b&gt;&lt;br&gt;&lt;code&gt;ci.yml&lt;/code&gt;: every push and PR (pytest, ruff, mypy, web tests, terraform validate + test)&lt;br&gt;&lt;code&gt;deploy.yml&lt;/code&gt;: push to &lt;code&gt;main&lt;/code&gt;: Lambda zip (boto3 + durable SDK), agent image, plan + apply, web + &lt;code&gt;config.json&lt;/code&gt; (wsUrl), &lt;code&gt;version.json&lt;/code&gt;; desktop job on macOS + Windows runners" vertex="1"><mxGeometry x="24" y="1710" width="490" height="150" as="geometry" /></mxCell>
-        <mxCell id="oidc" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1"><mxGeometry x="700" y="1742" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="oidc_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Deploy role (IAM, GitHub OIDC)&lt;/b&gt;&lt;br&gt;trusts only &lt;code&gt;main&lt;/code&gt; of the repo; &lt;code&gt;CF_DEPLOY_ROLE_ARN&lt;/code&gt;; optional &lt;code&gt;infra/bootstrap&lt;/code&gt;" vertex="1"><mxGeometry x="640" y="1802" width="200" height="100" as="geometry" /></mxCell>
-        <mxCell id="tfstate" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;fillColor=#7AA116;" value=" " vertex="1"><mxGeometry x="930" y="1742" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="tfstate_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Terraform state (S3)&lt;/b&gt;&lt;br&gt;&lt;code&gt;clip-factory/prod/terraform.tfstate&lt;/code&gt;, lockfile" vertex="1"><mxGeometry x="870" y="1802" width="200" height="90" as="geometry" /></mxCell>
-        <mxCell id="roles" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1"><mxGeometry x="1160" y="1742" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="roles_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Runtime IAM roles&lt;/b&gt;&lt;br&gt;one per Lambda (7) + the agent runtime; least privilege; agent may send job-flow callbacks only" vertex="1"><mxGeometry x="1080" y="1802" width="240" height="100" as="geometry" /></mxCell>
-        <mxCell id="apigwrole" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1"><mxGeometry x="1460" y="1742" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="apigwrole_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-apigw-cloudwatch&lt;/b&gt;&lt;br&gt;account-level API Gateway log role (REST + WebSocket logs); &lt;code&gt;manage_api_gateway_account&lt;/code&gt;" vertex="1"><mxGeometry x="1380" y="1802" width="240" height="100" as="geometry" /></mxCell>
-        <mxCell id="cw" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudwatch_2;fillColor=#E7157B;" value=" " vertex="1"><mxGeometry x="1780" y="1742" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="cw_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;CloudWatch&lt;/b&gt;&lt;br&gt;JSON logs + X-Ray; alarms: Lambda errors, &lt;code&gt;DurableExecutionFailed&lt;/code&gt; / &lt;code&gt;TimedOut&lt;/code&gt;, broadcast iterator age, REST 5xx" vertex="1"><mxGeometry x="1680" y="1802" width="280" height="110" as="geometry" /></mxCell>
-        <mxCell id="sns" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sns;fillColor=#E7157B;" value=" " vertex="1"><mxGeometry x="2140" y="1742" width="56" height="56" as="geometry" /></mxCell>
-        <mxCell id="sns_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-alarms (SNS)&lt;/b&gt;&lt;br&gt;emails &lt;code&gt;alarm_email&lt;/code&gt;" vertex="1"><mxGeometry x="2060" y="1802" width="240" height="60" as="geometry" /></mxCell>
-        <mxCell id="e_gha" edge="1" parent="1" source="gha" target="oidc" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.4;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="AssumeRole-&lt;br&gt;WithWebIdentity"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_tf" edge="1" parent="1" source="oidc" target="tfstate" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="plan / apply"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_cw" edge="1" parent="1" source="cw" target="sns" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="alarm"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_push" edge="1" parent="1" source="gha" target="ecr" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" value="docker push (agent image)"><mxGeometry x="-0.3" y="0" relative="1" as="geometry"><Array as="points"><mxPoint x="540" y="1835" /><mxPoint x="540" y="1922" /><mxPoint x="2745" y="1922" /><mxPoint x="2745" y="80" /><mxPoint x="2470" y="80" /></Array></mxGeometry></mxCell>
-        <mxCell id="hw" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontSize=16;fontStyle=1;fontColor=#0050EF;" value="How it works" vertex="1"><mxGeometry x="2820" y="6" width="520" height="34" as="geometry" /></mxCell>
-        <mxCell id="hw0" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;1. Upload or link.&lt;/b&gt; The owner signs in (Cognito) and pastes a YouTube, Twitch or Kick link, or uploads a video with a presigned PUT straight to S3. The web app calls the HTTP API with its JWT." vertex="1"><mxGeometry x="2820" y="60" width="520" height="72" as="geometry" /></mxCell>
-        <mxCell id="hw1" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;2. Job flow starts.&lt;/b&gt; &lt;code&gt;cf-prod-api&lt;/code&gt; stores the job and starts the durable &lt;code&gt;cf-prod-job-flow&lt;/code&gt; (async invoke on alias &lt;i&gt;live&lt;/i&gt;, idempotent name &lt;code&gt;job-{jobId}-{run}&lt;/code&gt;)." vertex="1"><mxGeometry x="2820" y="150" width="520" height="72" as="geometry" /></mxCell>
-        <mxCell id="hw2" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;3. The agent works.&lt;/b&gt; The job flow creates a callback and starts the AgentCore session. The agent downloads audio, runs Transcribe, asks Claude Fable 5.1 for 5-10 moments, renders clips with ffmpeg and writes them to S3 and DynamoDB. It heartbeats the callback; success or failure resumes the flow. 15 minutes without a heartbeat fails the job (no watchdog)." vertex="1"><mxGeometry x="2820" y="240" width="520" height="104" as="geometry" /></mxCell>
-        <mxCell id="hw3" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;4. Live updates.&lt;/b&gt; Every job, clip, post and learning change flows through the DynamoDB stream to &lt;code&gt;cf-prod-broadcast&lt;/code&gt;, which pushes it over the WebSocket API to the owner's open apps. The token is checked on &lt;code&gt;$connect&lt;/code&gt;. Polling only while disconnected." vertex="1"><mxGeometry x="2820" y="362" width="520" height="88" as="geometry" /></mxCell>
-        <mxCell id="hw4" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;5. Review and Keep.&lt;/b&gt; The owner watches each clip, sees similar clips that did well, edits captions and presses Keep (or Throw away). Keep writes the posts in one transaction and starts the durable &lt;code&gt;cf-prod-clip-flow&lt;/code&gt; (&lt;code&gt;clip-{clipId}-{run}&lt;/code&gt;)." vertex="1"><mxGeometry x="2820" y="468" width="520" height="88" as="geometry" /></mxCell>
-        <mxCell id="hw5" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;6. Publish, wait 48 h, learn.&lt;/b&gt; The clip flow publishes each queued post (phase 2), waits 48 hours without compute, reads the numbers, asks Claude for one short learning and marks the clip's vector &lt;i&gt;performed&lt;/i&gt;." vertex="1"><mxGeometry x="2820" y="574" width="520" height="72" as="geometry" /></mxCell>
-        <mxCell id="hw6" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;7. Vectors feed the agent.&lt;/b&gt; Before choosing moments, the agent embeds the new source with Titan V2 and queries S3 Vectors for the owner's 8 most similar performed clips: &quot;What worked before&quot;." vertex="1"><mxGeometry x="2820" y="664" width="520" height="72" as="geometry" /></mxCell>
-        <mxCell id="hw7" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;Webhooks.&lt;/b&gt; Platforms call the public REST API (throttled, no query strings logged); &lt;code&gt;cf-prod-hooks&lt;/code&gt; answers challenges with the SSM verify token and stores events." vertex="1"><mxGeometry x="2820" y="754" width="520" height="72" as="geometry" /></mxCell>
-        <mxCell id="hw8" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;Legend.&lt;/b&gt; Solid arrow = request or data flow built now; dashed = callback, image pull, option or phase 2. Bold numbers match the steps above. OpenSearch Serverless is drawn dashed because it is not deployed." vertex="1"><mxGeometry x="2820" y="844" width="520" height="72" as="geometry" /></mxCell>
+        <mxCell id="hdr" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Clip Factory Cloud on AWS. Repo &lt;code&gt;Lamo2real/clip-factory-legal&lt;/code&gt;, branch &lt;code&gt;main&lt;/code&gt;, one AWS account, one environment (&lt;code&gt;prod&lt;/code&gt;, prefix &lt;code&gt;cf-prod&lt;/code&gt;), region &lt;code&gt;eu-north-1&lt;/code&gt;. Backend: Python 3.13. Infrastructure: Terraform in &lt;code&gt;infra/&lt;/code&gt;.&lt;/b&gt;&lt;br&gt;Serverless only: 1 CloudFront distribution &amp;#183; 2 S3 buckets (web, media) &amp;#183; 1 S3 Vectors bucket + index &amp;#183; 1 DynamoDB table + Streams &amp;#183; 3 API Gateway APIs (HTTP, WebSocket, REST) &amp;#183; 9 Lambdas (2 durable functions) · 1 EventBridge rule (stats every 15 min) &amp;#183; 1 AgentCore runtime &amp;#183; Bedrock (Claude Fable 5.1, Titan Embeddings V2) &amp;#183; Transcribe &amp;#183; Cognito &amp;#183; SSM Parameter Store &amp;#183; CloudWatch + SNS &amp;#183; no servers, no containers to run, no VPC &amp;#183; every push to &lt;code&gt;main&lt;/code&gt; deploys through GitHub OIDC" vertex="1">
+          <mxGeometry x="0" y="-76" width="2760" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="frame" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;" value="" vertex="1">
+          <mxGeometry x="0" y="0" width="2760" height="1920" as="geometry" />
+        </mxCell>
+        <mxCell id="frame_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontSize=16;fontStyle=1;fontColor=#0050EF;" value="Clip Factory Cloud - paste a link, the agent cuts 5-10 vertical clips, live updates over WebSocket, nothing is posted without the owner's Keep, numbers refresh every 15-30 min, the owner stars the best of each week" vertex="1">
+          <mxGeometry x="20" y="6" width="2700" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="devices" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;dashed=1;" value="" vertex="1">
+          <mxGeometry x="16" y="60" width="150" height="960" as="geometry" />
+        </mxCell>
+        <mxCell id="devices_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Owner's devices&lt;/b&gt;" vertex="1">
+          <mxGeometry x="20" y="64" width="142" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="owner" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.user;" value="Owner&lt;br&gt;(the only login)" vertex="1">
+          <mxGeometry x="60" y="100" width="60" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="client" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.client;" value="Web app&lt;br&gt;(browser,&lt;br&gt;desktop PWA)" vertex="1">
+          <mxGeometry x="58" y="400" width="64" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="phone" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.mobile_client;" value="Phone&lt;br&gt;(installed PWA)" vertex="1">
+          <mxGeometry x="67" y="640" width="46" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="desktop" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.client;" value="Desktop app&lt;br&gt;(Tauri .dmg / .exe,&lt;br&gt;opens app_url)" vertex="1">
+          <mxGeometry x="58" y="860" width="64" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="cf" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudfront;fillColor=#8C4FFF;" value=" " vertex="1">
+          <mxGeometry x="442" y="110" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="cf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Web distribution (CloudFront)&lt;/b&gt;&lt;br&gt;PWA, &lt;code&gt;config.json&lt;/code&gt; (apiUrl, wsUrl), &lt;code&gt;version.json&lt;/code&gt;; OAC; CSP allows &lt;code&gt;wss://&lt;/code&gt;" vertex="1">
+          <mxGeometry x="360" y="170" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="s3web" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;fillColor=#7AA116;" value=" " vertex="1">
+          <mxGeometry x="842" y="110" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="s3web_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-web (S3)&lt;/b&gt;&lt;br&gt;private; the app, &lt;code&gt;version.json&lt;/code&gt;, &lt;code&gt;downloads/&lt;/code&gt; (.dmg, .exe)" vertex="1">
+          <mxGeometry x="760" y="170" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="cog" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cognito;fillColor=#DD344C;" value=" " vertex="1">
+          <mxGeometry x="442" y="640" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="cog_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-users (Cognito)&lt;/b&gt;&lt;br&gt;admin-create only, SRP; access token 15 min, refresh 30 days (rotating)" vertex="1">
+          <mxGeometry x="360" y="700" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="http" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.api_gateway;fillColor=#E7157B;" value=" " vertex="1">
+          <mxGeometry x="842" y="400" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="http_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;HTTP API (API Gateway)&lt;/b&gt;&lt;br&gt;&lt;code&gt;/v1&lt;/code&gt; routes; JWT authorizer (Cognito); CORS for the app + localhost:5173" vertex="1">
+          <mxGeometry x="760" y="460" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ws" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.api_gateway;fillColor=#E7157B;" value=" " vertex="1">
+          <mxGeometry x="842" y="880" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="ws_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;WebSocket API (API Gateway)&lt;/b&gt;&lt;br&gt;&lt;code&gt;cf-prod-ws&lt;/code&gt;, stage &lt;code&gt;live&lt;/code&gt;; &lt;code&gt;$connect&lt;/code&gt; / &lt;code&gt;$disconnect&lt;/code&gt; / &lt;code&gt;$default&lt;/code&gt;; access log without query" vertex="1">
+          <mxGeometry x="760" y="940" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="rest" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.api_gateway;fillColor=#E7157B;" value=" " vertex="1">
+          <mxGeometry x="842" y="1360" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="rest_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;REST API (API Gateway)&lt;/b&gt;&lt;br&gt;&lt;code&gt;cf-prod-hooks&lt;/code&gt;, stage &lt;code&gt;v1&lt;/code&gt;: &lt;code&gt;/hooks/{platform}&lt;/code&gt;, &lt;code&gt;/oauth/{platform}/callback&lt;/code&gt;; 10 rps, usage plan, X-Ray" vertex="1">
+          <mxGeometry x="760" y="1420" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="api" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="1242" y="400" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="api_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-api (Lambda)&lt;/b&gt;&lt;br&gt;every &lt;code&gt;/v1&lt;/code&gt; route; presigned URLs; starts both flows; cancel; Keep / Throw away; similar clips; performance + weeks; starts stats refresh and weekly learn" vertex="1">
+          <mxGeometry x="1160" y="460" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="wsauth" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="1242" y="650" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="wsauth_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-ws-authorizer (Lambda)&lt;/b&gt;&lt;br&gt;REQUEST authorizer on &lt;code&gt;$connect&lt;/code&gt;: RS256 check of the access token (stdlib), never logs it" vertex="1">
+          <mxGeometry x="1160" y="710" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="bc" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="1242" y="880" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="bc_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-broadcast (Lambda)&lt;/b&gt;&lt;br&gt;stream batch &amp;#8594; public shapes &amp;#8594; PostToConnection; 410 deletes the connection" vertex="1">
+          <mxGeometry x="1160" y="940" width="220" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="wsfn" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="1242" y="1110" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="wsfn_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-ws (Lambda)&lt;/b&gt;&lt;br&gt;stores / removes connections (TTL 2 h), answers ping" vertex="1">
+          <mxGeometry x="1160" y="1170" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="hooks" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="1242" y="1360" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="hooks_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-hooks (Lambda)&lt;/b&gt;&lt;br&gt;verify challenges, store &lt;code&gt;HOOK#&lt;/code&gt; events (14 days), OAuth &amp;#8594; Settings (phase 2)" vertex="1">
+          <mxGeometry x="1160" y="1420" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="jf" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="1642" y="400" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="jf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-job-flow (Lambda DURABLE, alias live)&lt;/b&gt;&lt;br&gt;callback &lt;i&gt;agent-done&lt;/i&gt; (8 h, heartbeat 15 min) &amp;#8594; &lt;i&gt;start-agent&lt;/i&gt; &amp;#8594; wait, no compute &amp;#8594; &lt;i&gt;finish&lt;/i&gt; or &lt;i&gt;fail&lt;/i&gt; + &lt;i&gt;stop-session&lt;/i&gt;; replaces the watchdog" vertex="1">
+          <mxGeometry x="1560" y="460" width="220" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="clf" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="1642" y="1110" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="clf_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-clip-flow (Lambda DURABLE, alias live)&lt;/b&gt;&lt;br&gt;&lt;i&gt;ensure-posts&lt;/i&gt; &amp;#8594; &lt;i&gt;publish-{platform}&lt;/i&gt; &amp;#8594; &lt;i&gt;settle-clip&lt;/i&gt; &amp;#8594; &lt;b&gt;wait 48 h&lt;/b&gt; (no compute) &amp;#8594; &lt;i&gt;metrics&lt;/i&gt; &amp;#8594; &lt;i&gt;distil&lt;/i&gt; &amp;#8594; &lt;i&gt;upsert-vector&lt;/i&gt;; replaces SQS, Scheduler, publisher, perf-check" vertex="1">
+          <mxGeometry x="1560" y="1170" width="220" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="ddb" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.dynamodb;fillColor=#C925D1;" value=" " vertex="1">
+          <mxGeometry x="1642" y="700" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="ddb_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-data (DynamoDB)&lt;/b&gt;&lt;br&gt;single table + gsi1 + sparse gsi2 (posts due for a stats poll), PITR, TTL: jobs, clips, posts, learnings, skills, connections (CONN#), hook events (HOOK#), STAT# snapshots (90 d), WEEK# picks, RATE# budgets" vertex="1">
+          <mxGeometry x="1706" y="700" width="170" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="stream" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.dynamodb_stream;" value="" vertex="1">
+          <mxGeometry x="1650" y="770" width="40" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="stream_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=right;verticalAlign=top;rounded=0;fontSize=9;" value="&lt;b&gt;DynamoDB Streams&lt;/b&gt;&lt;br&gt;NEW_AND_OLD_IMAGES" vertex="1">
+          <mxGeometry x="1530" y="772" width="116" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="rt" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock_agentcore;fillColor=#01A88D;" value=" " vertex="1">
+          <mxGeometry x="2030" y="400" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="rt_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;AgentCore Runtime cf_prod_clip_agent&lt;/b&gt;&lt;br&gt;ARM64 container: Claude Agent SDK, yt-dlp, ffmpeg; one session per job; skills + 10 learnings + what worked before; heartbeats the job flow" vertex="1">
+          <mxGeometry x="2118" y="440" width="270" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="media" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;fillColor=#7AA116;" value=" " vertex="1">
+          <mxGeometry x="2042" y="700" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="media_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-media (S3)&lt;/b&gt;&lt;br&gt;uploads, audio, transcripts, clips + covers, skills, cookies; SSE-S3; sources expire after 14 days" vertex="1">
+          <mxGeometry x="2106" y="714" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="vec" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3_vectors;fillColor=#7AA116;" value=" " vertex="1">
+          <mxGeometry x="2042" y="1000" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="vec_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-vectors (S3 Vectors)&lt;/b&gt;&lt;br&gt;index &lt;code&gt;clips&lt;/code&gt;: float32, 1024, cosine; filter by userId, status, momentType; the learning memory" vertex="1">
+          <mxGeometry x="2106" y="1014" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="br2" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock;fillColor=#01A88D;" value=" " vertex="1">
+          <mxGeometry x="2442" y="1250" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="br2_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Amazon Bedrock (same models)&lt;/b&gt;&lt;br&gt;distil: Claude Fable 5.1, effort low; embed: Titan V2" vertex="1">
+          <mxGeometry x="2506" y="1264" width="215" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="os" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elasticsearch_service;fillColor=#8C4FFF;" value=" " vertex="1">
+          <mxGeometry x="2042" y="1440" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="os_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;OpenSearch Serverless - NOT DEPLOYED (option)&lt;/b&gt;&lt;br&gt;standing OCU minimum; S3 Vectors export is preview; only if keyword or hybrid search is ever needed" vertex="1">
+          <mxGeometry x="2106" y="1454" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="os_box" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;dashed=1;" value="" vertex="1">
+          <mxGeometry x="2026" y="1426" width="388" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ecr" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ecr;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="2442" y="110" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="ecr_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;agent image (ECR)&lt;/b&gt;&lt;br&gt;tag = hash of the agent sources" vertex="1">
+          <mxGeometry x="2506" y="124" width="220" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="src" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;" value="&lt;b&gt;Video sources&lt;/b&gt;&lt;br&gt;YouTube &amp;#183; Twitch &amp;#183; Kick (yt-dlp) or an upload" vertex="1">
+          <mxGeometry x="2442" y="220" width="300" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="br" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock;fillColor=#01A88D;" value=" " vertex="1">
+          <mxGeometry x="2442" y="400" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="br_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Amazon Bedrock&lt;/b&gt;&lt;br&gt;Claude Fable 5.1 via &lt;code&gt;global.anthropic.claude-fable-5-1&lt;/code&gt; (aws_review retention); Titan Text Embeddings V2 in-Region" vertex="1">
+          <mxGeometry x="2506" y="414" width="215" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="tr" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.transcribe;fillColor=#01A88D;" value=" " vertex="1">
+          <mxGeometry x="2442" y="640" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="tr_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Amazon Transcribe&lt;/b&gt;&lt;br&gt;batch, word timestamps, auto language; reads audio.m4a from and writes transcript.json to the media bucket" vertex="1">
+          <mxGeometry x="2506" y="654" width="215" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ssm" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.systems_manager;fillColor=#E7157B;" value=" " vertex="1">
+          <mxGeometry x="1642" y="1360" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="ssm_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;SSM Parameter Store&lt;/b&gt;&lt;br&gt;&lt;code&gt;/cf-prod/hooks/verify-token&lt;/code&gt; SecureString (write-only, never in state)" vertex="1">
+          <mxGeometry x="1560" y="1420" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="social" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=1;" value="&lt;b&gt;Phase 2 - social platforms&lt;/b&gt;&lt;br&gt;YouTube &amp;#183; Instagram &amp;#183; Facebook &amp;#183; TikTok &amp;#183; X&lt;br&gt;(today posts wait as &lt;i&gt;pending_integration&lt;/i&gt;)" vertex="1">
+          <mxGeometry x="2442" y="1100" width="280" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="plat" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=1;" value="&lt;b&gt;Platform webhooks + OAuth&lt;/b&gt;&lt;br&gt;Meta, YouTube (phase 2)" vertex="1">
+          <mxGeometry x="370" y="1340" width="200" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cf" edge="1" parent="1" source="client" target="cf" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.15;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="HTTPS">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="250" y="410" />
+              <mxPoint x="250" y="138" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_cog" edge="1" parent="1" source="client" target="cog" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="sign in (SRP)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="250" y="454" />
+              <mxPoint x="250" y="668" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_oac" edge="1" parent="1" source="cf" target="s3web" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="OAC">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="client" target="http" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;1&lt;/b&gt; REST + JWT">
+          <mxGeometry x="-0.2" y="0" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1b" edge="1" parent="1" source="client" target="media" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;1&lt;/b&gt; upload: presigned PUT; play: presigned GET (1 h)">
+          <mxGeometry x="-0.55" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="90" y="300" />
+              <mxPoint x="1940" y="300" />
+              <mxPoint x="1940" y="728" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_inv" edge="1" parent="1" source="http" target="api" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="invoke">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="api" target="jf" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;2&lt;/b&gt; start: async invoke on alias &lt;i&gt;live&lt;/i&gt;,&lt;br&gt;name job-{jobId}-{run}">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="jf" target="rt" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.29;exitDx=0;exitDy=0;entryX=0;entryY=0.2;entryDx=0;entryDy=0;" value="&lt;b&gt;3&lt;/b&gt; InvokeAgentRuntime&lt;br&gt;process_job + callbackId">
+          <mxGeometry x="0.3" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1720" y="416" />
+            </Array>
+            <mxPoint x="0" y="-16" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3b" edge="1" parent="1" source="rt" target="jf" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=0;exitY=0.45;exitDx=0;exitDy=0;entryX=1;entryY=0.64;entryDx=0;entryDy=0;" value="&lt;b&gt;3&lt;/b&gt; callback: heartbeat (&amp;#8804; 5 min),&lt;br&gt;success / failure">
+          <mxGeometry x="0.3" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1720" y="436" />
+            </Array>
+            <mxPoint x="0" y="18" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_br" edge="1" parent="1" source="rt" target="br" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.1;exitDx=0;exitDy=0;entryX=0;entryY=0.14;entryDx=0;entryDy=0;" value="Converse + embeddings">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ecr" edge="1" parent="1" source="ecr" target="rt" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" value="image">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2050" y="138" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_src" edge="1" parent="1" source="rt" target="src" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="download">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2090" y="248" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_tr" edge="1" parent="1" source="rt" target="tr" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="transcription job">
+          <mxGeometry x="0.5" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2420" y="424" />
+              <mxPoint x="2420" y="668" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_rtddb" edge="1" parent="1" source="rt" target="ddb" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0;exitY=0.7;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" value="steps, progress, clips">
+          <mxGeometry x="0.4" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1880" y="456" />
+              <mxPoint x="1880" y="660" />
+              <mxPoint x="1670" y="660" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="rt" target="vec" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;startArrow=classic;exitX=0;exitY=0.95;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;7&lt;/b&gt; what worked before (query);&lt;br&gt;finalize: put vectors">
+          <mxGeometry x="0.2" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1990" y="476" />
+              <mxPoint x="1990" y="1028" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_rtmedia" edge="1" parent="1" source="rt" target="media" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;" value="audio, transcript,&lt;br&gt;clip.mp4, cover">
+          <mxGeometry x="0" y="0" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="api" target="ddb" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;" value="&lt;b&gt;5&lt;/b&gt; Keep: clip + posts (1 transaction)">
+          <mxGeometry x="0.6" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1430" y="447" />
+              <mxPoint x="1430" y="714" />
+            </Array>
+            <mxPoint x="0" y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5b" edge="1" parent="1" source="api" target="clf" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.95;exitDx=0;exitDy=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;" value="&lt;b&gt;5&lt;/b&gt; start clip flow: async, alias &lt;i&gt;live&lt;/i&gt;,&lt;br&gt;name clip-{clipId}-{run}">
+          <mxGeometry x="0.85" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1400" y="453" />
+              <mxPoint x="1400" y="1124" />
+            </Array>
+            <mxPoint x="0" y="-16" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4a" edge="1" parent="1" source="stream" target="bc" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;4&lt;/b&gt; stream, filtered: JOB#, CLIP#, POST#, LEARNING#, WEEK#">
+          <mxGeometry x="0.3" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1670" y="908" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4b" edge="1" parent="1" source="bc" target="ws" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;4&lt;/b&gt; PostToConnection">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4c" edge="1" parent="1" source="ws" target="client" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;startArrow=classic;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.95;entryDx=0;entryDy=0;" value="&lt;b&gt;4&lt;/b&gt; wss: live events&lt;br&gt;(token on $connect)">
+          <mxGeometry x="-0.3" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="290" y="908" />
+              <mxPoint x="290" y="461" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_auth" edge="1" parent="1" source="ws" target="wsauth" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="$connect">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="870" y="678" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_wsfn" edge="1" parent="1" source="ws" target="wsfn" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="routes">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1070" y="928" />
+              <mxPoint x="1070" y="1138" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_wsddb" edge="1" parent="1" source="wsfn" target="ddb" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.6;entryDx=0;entryDy=0;" value="CONN# items">
+          <mxGeometry x="0.5" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1460" y="1138" />
+              <mxPoint x="1460" y="734" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6a" edge="1" parent="1" source="clf" target="social" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;6&lt;/b&gt; publish each queued post (phase 2)">
+          <mxGeometry x="0.3" y="0" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6b" edge="1" parent="1" source="clf" target="vec" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" value="&lt;b&gt;6&lt;/b&gt; upsert vector (performed + numbers)">
+          <mxGeometry x="-0.4" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1900" y="1121" />
+              <mxPoint x="1900" y="1042" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6c" edge="1" parent="1" source="clf" target="br2" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.8;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;6&lt;/b&gt; after the 48 h wait: distil one learning, embed">
+          <mxGeometry x="0.3" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1860" y="1155" />
+              <mxPoint x="1860" y="1278" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_plat" edge="1" parent="1" source="plat" target="rest" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="HTTPS (public)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_rest" edge="1" parent="1" source="rest" target="hooks" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="AWS_PROXY">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ssm" edge="1" parent="1" source="hooks" target="ssm" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="verify token">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_hddb" edge="1" parent="1" source="hooks" target="ddb" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.95;entryDx=0;entryDy=0;" value="HOOK# events">
+          <mxGeometry x="-0.3" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1490" y="1371" />
+              <mxPoint x="1490" y="753" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_os" edge="1" parent="1" source="os" target="vec" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" value="option: export (preview)">
+          <mxGeometry x="-0.6" y="0" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="frame2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;" value="" vertex="1">
+          <mxGeometry x="0" y="2000" width="2760" height="280" as="geometry" />
+        </mxCell>
+        <mxCell id="frame2_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontSize=16;fontStyle=1;fontColor=#0050EF;" value="Delivery, security and operations - GitHub OIDC (no long-lived AWS keys); one account, one environment" vertex="1">
+          <mxGeometry x="20" y="2006" width="2700" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="gha" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;" value="&lt;b&gt;GitHub Actions&lt;/b&gt;&lt;br&gt;&lt;code&gt;ci.yml&lt;/code&gt;: every push and PR (pytest, ruff, mypy, web tests, terraform validate + test)&lt;br&gt;&lt;code&gt;deploy.yml&lt;/code&gt;: push to &lt;code&gt;main&lt;/code&gt;: Lambda zip (boto3 + durable SDK), agent image, plan + apply, web + &lt;code&gt;config.json&lt;/code&gt; (wsUrl), &lt;code&gt;version.json&lt;/code&gt;; desktop job on macOS + Windows runners" vertex="1">
+          <mxGeometry x="24" y="2050" width="490" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="oidc" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1">
+          <mxGeometry x="700" y="2082" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="oidc_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Deploy role (IAM, GitHub OIDC)&lt;/b&gt;&lt;br&gt;trusts only &lt;code&gt;main&lt;/code&gt; of the repo; &lt;code&gt;CF_DEPLOY_ROLE_ARN&lt;/code&gt;; optional &lt;code&gt;infra/bootstrap&lt;/code&gt;" vertex="1">
+          <mxGeometry x="640" y="2142" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="tfstate" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;fillColor=#7AA116;" value=" " vertex="1">
+          <mxGeometry x="930" y="2082" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="tfstate_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Terraform state (S3)&lt;/b&gt;&lt;br&gt;&lt;code&gt;clip-factory/prod/terraform.tfstate&lt;/code&gt;, lockfile" vertex="1">
+          <mxGeometry x="870" y="2142" width="200" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="roles" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1">
+          <mxGeometry x="1160" y="2082" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="roles_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Runtime IAM roles&lt;/b&gt;&lt;br&gt;one per Lambda (9) + the agent runtime; least privilege; agent may send job-flow callbacks only" vertex="1">
+          <mxGeometry x="1080" y="2142" width="240" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="apigwrole" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.identity_and_access_management;fillColor=#DD344C;" value=" " vertex="1">
+          <mxGeometry x="1460" y="2082" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="apigwrole_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-apigw-cloudwatch&lt;/b&gt;&lt;br&gt;account-level API Gateway log role (REST + WebSocket logs); &lt;code&gt;manage_api_gateway_account&lt;/code&gt;" vertex="1">
+          <mxGeometry x="1380" y="2142" width="240" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="cw" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudwatch_2;fillColor=#E7157B;" value=" " vertex="1">
+          <mxGeometry x="1780" y="2082" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="cw_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;CloudWatch&lt;/b&gt;&lt;br&gt;JSON logs + X-Ray; alarms: Lambda errors, &lt;code&gt;DurableExecutionFailed&lt;/code&gt; / &lt;code&gt;TimedOut&lt;/code&gt;, broadcast iterator age, REST 5xx" vertex="1">
+          <mxGeometry x="1680" y="2142" width="280" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="sns" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sns;fillColor=#E7157B;" value=" " vertex="1">
+          <mxGeometry x="2140" y="2082" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="sns_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-alarms (SNS)&lt;/b&gt;&lt;br&gt;emails &lt;code&gt;alarm_email&lt;/code&gt;" vertex="1">
+          <mxGeometry x="2060" y="2142" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e_gha" edge="1" parent="1" source="gha" target="oidc" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.4;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="AssumeRole-&lt;br&gt;WithWebIdentity">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_tf" edge="1" parent="1" source="oidc" target="tfstate" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="plan / apply">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cw" edge="1" parent="1" source="cw" target="sns" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="alarm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_push" edge="1" parent="1" source="gha" target="ecr" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" value="docker push (agent image)">
+          <mxGeometry x="-0.3" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="540" y="2175" />
+              <mxPoint x="540" y="2262" />
+              <mxPoint x="2745" y="2262" />
+              <mxPoint x="2745" y="80" />
+              <mxPoint x="2470" y="80" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="hw" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;rounded=0;fontSize=16;fontStyle=1;fontColor=#0050EF;" value="How it works" vertex="1">
+          <mxGeometry x="2820" y="6" width="520" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="hw0" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;1. Upload or link.&lt;/b&gt; The owner signs in (Cognito) and pastes a YouTube, Twitch or Kick link, or uploads a video with a presigned PUT straight to S3. The web app calls the HTTP API with its JWT." vertex="1">
+          <mxGeometry x="2820" y="60" width="520" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="hw1" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;2. Job flow starts.&lt;/b&gt; &lt;code&gt;cf-prod-api&lt;/code&gt; stores the job and starts the durable &lt;code&gt;cf-prod-job-flow&lt;/code&gt; (async invoke on alias &lt;i&gt;live&lt;/i&gt;, idempotent name &lt;code&gt;job-{jobId}-{run}&lt;/code&gt;)." vertex="1">
+          <mxGeometry x="2820" y="150" width="520" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="hw2" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;3. The agent works.&lt;/b&gt; The job flow creates a callback and starts the AgentCore session. The agent downloads audio, runs Transcribe, asks Claude Fable 5.1 for 5-10 moments, renders clips with ffmpeg and writes them to S3 and DynamoDB. It heartbeats the callback; success or failure resumes the flow. 15 minutes without a heartbeat fails the job (no watchdog)." vertex="1">
+          <mxGeometry x="2820" y="240" width="520" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="hw3" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;4. Live updates.&lt;/b&gt; Every job, clip, post and learning change flows through the DynamoDB stream to &lt;code&gt;cf-prod-broadcast&lt;/code&gt;, which pushes it over the WebSocket API to the owner's open apps. The token is checked on &lt;code&gt;$connect&lt;/code&gt;. Polling only while disconnected." vertex="1">
+          <mxGeometry x="2820" y="362" width="520" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="hw4" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;5. Review and Keep.&lt;/b&gt; The owner watches each clip, sees similar clips that did well, edits captions and presses Keep (or Throw away). Keep writes the posts in one transaction and starts the durable &lt;code&gt;cf-prod-clip-flow&lt;/code&gt; (&lt;code&gt;clip-{clipId}-{run}&lt;/code&gt;)." vertex="1">
+          <mxGeometry x="2820" y="468" width="520" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="hw5" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;6. Publish, wait 48 h, learn.&lt;/b&gt; The clip flow publishes each queued post (phase 2), waits 48 hours without compute, reads the numbers, asks Claude for one short learning and marks the clip's vector &lt;i&gt;performed&lt;/i&gt;." vertex="1">
+          <mxGeometry x="2820" y="574" width="520" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="hw6" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;7. Vectors feed the agent.&lt;/b&gt; Before choosing moments, the agent embeds the new source with Titan V2 and queries S3 Vectors for the owner's 8 most similar performed clips: &quot;What worked before&quot;." vertex="1">
+          <mxGeometry x="2820" y="664" width="520" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="hw7" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;Webhooks.&lt;/b&gt; Platforms call the public REST API (throttled, no query strings logged); &lt;code&gt;cf-prod-hooks&lt;/code&gt; answers challenges with the SSM verify token and stores events." vertex="1">
+          <mxGeometry x="2820" y="754" width="520" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="hw8" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;Legend.&lt;/b&gt; Solid arrow = request or data flow built now; dashed = callback, image pull, option or phase 2. Bold numbers match the steps above. OpenSearch Serverless is drawn dashed because it is not deployed." vertex="1">
+          <mxGeometry x="2820" y="1024" width="520" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="evr" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.eventbridge;fillColor=#E7157B;" value=" " vertex="1">
+          <mxGeometry x="842" y="1640" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="evr_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-stats rule (EventBridge)&lt;/b&gt;&lt;br&gt;&lt;code&gt;rate(15 minutes)&lt;/code&gt; = the smallest &lt;code&gt;minIntervalMinutes&lt;/code&gt; in &lt;code&gt;config/platforms.json&lt;/code&gt;; each post still waits its own interval" vertex="1">
+          <mxGeometry x="740" y="1700" width="260" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="stats" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="1242" y="1640" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="stats_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-stats (Lambda)&lt;/b&gt;&lt;br&gt;&lt;b&gt;8&lt;/b&gt; poller + manual refresh: due posts from gsi2, reserve the platform budget, fetch in batches, write metrics + STAT#; 256 MB, 300 s, retries 0" vertex="1">
+          <mxGeometry x="1140" y="1700" width="250" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="learn" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value=" " vertex="1">
+          <mxGeometry x="1642" y="1640" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="learn_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-learn (Lambda)&lt;/b&gt;&lt;br&gt;&lt;b&gt;9&lt;/b&gt; the owner's best-of-week picks: vectors &lt;i&gt;best&lt;/i&gt; true/false, one &quot;Best of week&quot; learning (WEEK#, LEARNING#); 512 MB, 300 s, retries 1" vertex="1">
+          <mxGeometry x="1545" y="1700" width="250" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="statapis" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=1;" value="&lt;b&gt;Platform stats APIs (tokens in phase 2)&lt;/b&gt;&lt;br&gt;YouTube Data + Analytics · TikTok video query · Instagram + Facebook Graph insights · X posts lookup&lt;br&gt;every 15 min: YouTube, TikTok, X; every 30 min: Instagram, Facebook" vertex="1">
+          <mxGeometry x="2442" y="1790" width="280" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="e8a" edge="1" parent="1" source="evr" target="stats" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;8&lt;/b&gt; tick every 15 min">
+          <mxGeometry x="0" y="0" relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8b" edge="1" parent="1" source="api" target="stats" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" value="&lt;b&gt;8&lt;/b&gt; Refresh numbers:&lt;br&gt;async invoke">
+          <mxGeometry x="0.82" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1420" y="442" />
+              <mxPoint x="1420" y="1610" />
+              <mxPoint x="1270" y="1610" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8c" edge="1" parent="1" source="stats" target="ddb" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.9;entryDx=0;entryDy=0;" value="&lt;b&gt;8&lt;/b&gt; metrics, statsDueAt,&lt;br&gt;STAT#, RATE#">
+          <mxGeometry x="-0.15" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1500" y="1654" />
+              <mxPoint x="1500" y="750" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8d" edge="1" parent="1" source="stats" target="statapis" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;8&lt;/b&gt; fetch_stats in batches (50 / 20 / 100 ids), never over a platform's limit">
+          <mxGeometry x="0.3" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1400" y="1682" />
+              <mxPoint x="1400" y="1838" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9a" edge="1" parent="1" source="api" target="learn" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.95;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" value="&lt;b&gt;9&lt;/b&gt; PUT weeks/best:&lt;br&gt;async invoke">
+          <mxGeometry x="0.93" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1460" y="453" />
+              <mxPoint x="1460" y="1668" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9b" edge="1" parent="1" source="learn" target="br2" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.85;entryDx=0;entryDy=0;" value="&lt;b&gt;9&lt;/b&gt; Converse: one Best of week learning">
+          <mxGeometry x="0.55" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1960" y="1654" />
+              <mxPoint x="1960" y="1298" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9c" edge="1" parent="1" source="learn" target="vec" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.8;entryDx=0;entryDy=0;" value="&lt;b&gt;9&lt;/b&gt; best = true / false">
+          <mxGeometry x="0.75" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2000" y="1682" />
+              <mxPoint x="2000" y="1045" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="hw9" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;8. Numbers refresh.&lt;/b&gt; An EventBridge rule ticks every 15 minutes; &lt;code&gt;cf-prod-stats&lt;/code&gt; reads the posts that are due (each platform no faster than its safe interval: YouTube, TikTok, X 15 min; Instagram, Facebook 30 min; slower as posts age; 30 days, then a final snapshot). Refresh numbers on the clip page invokes it at once, inside the same budgets." vertex="1">
+          <mxGeometry x="2820" y="844" width="520" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="hw10" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;9. Best of the week.&lt;/b&gt; The owner stars the week's best clips; &lt;code&gt;cf-prod-learn&lt;/code&gt; marks their vectors &lt;i&gt;best&lt;/i&gt; and asks Claude Fable 5.1 for one &quot;Best of week&quot; learning the agent reads first." vertex="1">
+          <mxGeometry x="2820" y="944" width="520" height="72" as="geometry" />
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>

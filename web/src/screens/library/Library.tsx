@@ -5,7 +5,9 @@ import type { Clip, Learning, Post } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { Button, Empty, ErrorPanel, LinkButton, PageHeader, Segmented, Skeleton } from "../../components/ui.tsx";
+import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Segmented, Skeleton } from "../../components/ui.tsx";
+import { compact } from "../../lib/metrics.ts";
+import { WeekView } from "./WeekView.tsx";
 import { count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
@@ -36,7 +38,38 @@ async function loadLibrary(): Promise<LibraryData> {
 
 type Filter = "all" | "waiting" | "posted";
 
-export function Library() {
+/** Library: every kept clip, or This week's clips with their "Best this week" stars (§16.8). */
+export function Library({ view = "all", week = null }: { view?: "all" | "week"; week?: string | null }) {
+  return (
+    <div className="page">
+      <PageHeader
+        title={
+          <>
+            What went <em>out</em>, and how it did.
+          </>
+        }
+        lede={
+          view === "week"
+            ? "This week's clips, most views first. Star the ones that did best, and Clip Factory learns how to make more like them."
+            : "Clips you kept and posted. Tap a clip to see how it did on each app."
+        }
+      />
+      <nav className="lib-tabs" aria-label="Library views">
+        <A href="/library" className={`lib-tab${view === "all" ? " is-on" : ""}`} aria-current={view === "all" ? "page" : undefined}>
+          <Icon name="library" size={18} />
+          All clips
+        </A>
+        <A href="/library?view=week" className={`lib-tab${view === "week" ? " is-on" : ""}`} aria-current={view === "week" ? "page" : undefined}>
+          <Icon name="star" size={18} />
+          This week
+        </A>
+      </nav>
+      {view === "week" ? <WeekView key={week ?? "now"} week={week} /> : <AllClips />}
+    </div>
+  );
+}
+
+function AllClips() {
   const { data, error, reload, setData } = useLoad(loadLibrary);
   // Keep again worked: swap in the fresh clip and its new posts.
   const kept = (clip: Clip, posts: Post[]) =>
@@ -75,21 +108,17 @@ export function Library() {
   const totals = (data?.posts ?? []).reduce(
     (t, p) => {
       if (!p.metrics) return t;
-      return { views: t.views + p.metrics.views, likes: t.likes + p.metrics.likes, shares: t.shares + p.metrics.shares };
+      return {
+        views: t.views + (p.metrics.views ?? 0),
+        likes: t.likes + (p.metrics.likes ?? 0),
+        shares: t.shares + (p.metrics.shares ?? 0),
+      };
     },
     { views: 0, likes: 0, shares: 0 },
   );
 
   return (
-    <div className="page">
-      <PageHeader
-        title={
-          <>
-            What went <em>out</em>, and how it did.
-          </>
-        }
-        lede="Clips you kept and posted. Two days after a post goes up, Clip Factory checks how it did and learns from it."
-      />
+    <>
       {error && !data ? <ErrorPanel message={error} onRetry={reload} /> : null}
       {!data && !error ? <Skeleton className="review-skel" /> : null}
       {data ? (
@@ -122,7 +151,7 @@ export function Library() {
                     <span key={i} />
                   ))}
                 </span>
-                <span className="stat__label">views after 48 hours</span>
+                <span className="stat__label">views across every app</span>
               </div>
               <div className="mini-stats">
                 <div className="mini-stat glass">
@@ -175,7 +204,7 @@ export function Library() {
           )}
         </>
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -186,17 +215,23 @@ const POST_STATUS: Record<Post["status"], string> = {
   failed: "Failed",
 };
 
+
 function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKept: (clip: Clip, posts: Post[]) => void }) {
   // Posts still waiting for an account read as one line, not five identical rows.
   const waiting = posts.filter((p) => p.status === "pending_integration");
+  const totalViews = clip.totalViews ?? posts.reduce((n, p) => n + (p.metrics?.views ?? 0), 0);
   const rest = posts.filter((p) => p.status !== "pending_integration");
   return (
     <article className="lib-card glass" aria-labelledby={`lib-${clip.clipId}`}>
       <div className="lib-card__top">
-        <span className="lib-card__cover">{clip.coverUrl ? <img src={clip.coverUrl} alt="" loading="lazy" /> : null}</span>
+        <A href={`/clips/${clip.clipId}`} className="lib-card__cover" tabIndex={-1} aria-hidden="true">
+          {clip.coverUrl ? <img src={clip.coverUrl} alt="" loading="lazy" /> : null}
+        </A>
         <div className="lib-card__head">
           <h3 className="lib-card__hook clamp-3 user-text" id={`lib-${clip.clipId}`}>
-            {clip.hook}
+            <A href={`/clips/${clip.clipId}`} className="lib-card__link">
+              {clip.hook}
+            </A>
           </h3>
           <span className="muted small">
             {MOMENT_LABEL[clip.momentType]}
@@ -205,6 +240,9 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
           <ClipStatusPill status={clip.status} />
         </div>
       </div>
+      <LinkButton href={`/clips/${clip.clipId}`} size="sm" icon="chart" iconAfter="chevronRight" className="lib-card__see">
+        {totalViews > 0 ? `${count(totalViews)} views · See how it did` : "See how it did"}
+      </LinkButton>
       {posts.length ? (
         <ul className="posts">
           {waiting.length ? (
@@ -232,18 +270,21 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
                 </span>
               </span>
               {p.metrics ? (
-                <span className="post__metrics" aria-label={`${p.metrics.views} views, ${p.metrics.likes} likes, ${p.metrics.comments} comments`}>
+                <span
+                  className="post__metrics"
+                  aria-label={`${p.metrics.views ?? "no"} views, ${p.metrics.likes ?? "no"} likes, ${p.metrics.comments ?? "no"} comments`}
+                >
                   <span>
                     <Icon name="eye" size={15} />
-                    {count(p.metrics.views)}
+                    {compact(p.metrics.views)}
                   </span>
                   <span>
                     <Icon name="heart" size={15} />
-                    {count(p.metrics.likes)}
+                    {compact(p.metrics.likes)}
                   </span>
                   <span>
                     <Icon name="comment" size={15} />
-                    {count(p.metrics.comments)}
+                    {compact(p.metrics.comments)}
                   </span>
                 </span>
               ) : null}

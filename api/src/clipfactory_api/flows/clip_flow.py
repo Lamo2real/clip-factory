@@ -9,7 +9,9 @@ Started by Confirm (``clip-{clipId}-{flowRun}`` on the alias ``live``) with ``{"
 3. ``settle-clip``: the clip becomes ``posted`` (≥ 1 post posted), ``failed`` (every queued post failed) or stays
    ``confirmed`` (nothing was queued). Nothing posted → ``upsert-vector`` (``confirmed``), outcome ``not_posted``.
 4. ``wait-48h``: a durable wait, no compute and no schedule.
-5. ``metrics`` → 6. ``distil`` (one Learning) → 7. ``upsert-vector`` (``performed`` + the summed performance).
+5. ``metrics`` (``stats.refresh.refresh_posts``, the poller's code path and rate budget; a blocked or failing
+   platform keeps the numbers the poller stored) → 6. ``distil`` (one Learning) → 7. ``upsert-vector``
+   (``performed`` + the summed performance).
 
 Steps are at-least-once: a publish step reads the post first and never sends a post that is no longer ``queued``,
 and every write is conditional, so a replayed step changes nothing twice.
@@ -22,14 +24,13 @@ import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import timedelta
 from typing import Any
 
 from aws_durable_execution_sdk_python import DurableContext, StepError, durable_execution
 from aws_durable_execution_sdk_python.config import Duration, StepSemantics
 
 from .. import db, learn, posts, settings
-from ..clock import Clock, iso, parse, utcnow
+from ..clock import Clock, iso, utcnow
 from ..log import log
 from ..platforms import (
     NotConnectedError,
@@ -39,12 +40,13 @@ from ..platforms import (
     adapter_for,
     label,
 )
+from ..platforms.base import HttpClient, urllib_client
+from ..stats.refresh import StatsDeps, refresh_posts
 from ..vectors import Vectors
 from . import TransientError, error_message, retrying, transient
 
-PERF_CHECK_DELAY = timedelta(hours=48)
 WAIT = Duration.from_hours(48)
-METRIC_ATTEMPTS = 3
+COMMON_METRICS = ("views", "likes", "comments", "shares")
 DECIDED = ("confirmed", "publishing", "posted", "failed")
 
 Item = dict[str, Any]
@@ -59,6 +61,8 @@ class ClipFlowDeps:
     adapters: Callable[[str], PlatformAdapter] = field(default=adapter_for)
     clock: Clock = field(default=utcnow)
     sleep: Callable[[float], None] = field(default=time.sleep)
+    http: HttpClient = field(default=urllib_client)
+    accounts: Callable[[db.Store, str, str], Item | None] = field(default=posts.connected_account)
 
 
 @dataclass(frozen=True)
@@ -246,15 +250,8 @@ def publish_post(deps: ClipFlowDeps, target: Target, post_id: str) -> dict[str, 
                 )
             )
         return {"status": "pending_integration"}
-    posted_at = parse(result.posted_at) or deps.clock()
-    fields = {
-        "status": "posted",
-        "url": result.url,
-        "postedAt": iso(posted_at),
-        "perfCheckAt": iso(posted_at + PERF_CHECK_DELAY),
-    }
     try:
-        _guard(lambda: deps.store.update(pk, sk, fields, remove=["error"], expect_in={"status": ["queued"]}))
+        _guard(lambda: posts.mark_posted(deps.store, post, result, deps.clock()))
     except db.ConditionFailed:
         current = _guard(lambda: deps.store.get(pk, sk)) or {}
         return {"status": current.get("status")}
@@ -303,40 +300,40 @@ def _account(deps: ClipFlowDeps, target: Target, platform: str) -> Item | None:
     return account
 
 
-def _save_metrics(deps: ClipFlowDeps, post: Item, metrics: dict[str, Any]) -> None:
-    _guard(lambda: deps.store.update(post["pk"], post["sk"], {"metrics": metrics}))
+def _stats_deps(deps: ClipFlowDeps) -> StatsDeps:
+    return StatsDeps(
+        store=deps.store,
+        http=deps.http,
+        adapters=deps.adapters,
+        clock=deps.clock,
+        sleep=deps.sleep,
+        accounts=deps.accounts,
+    )
 
 
 def read_metrics(deps: ClipFlowDeps, target: Target) -> dict[str, Any]:
-    """48-hour metrics for every posted post; a platform that still fails after 3 attempts is skipped."""
+    """The 48-hour numbers of every posted post through the shared stats refresh. A platform that is blocked,
+    not connected or still failing keeps the metrics the poller stored; a post with none at all is skipped."""
+    rows = [p for p in _post_rows(deps, target) if p.get("status") == "posted"]
+    report = _guard(lambda: refresh_posts(_stats_deps(deps), rows, reason="flow", now=deps.clock()))
     measured = []
-    for post in _post_rows(deps, target):
-        if post.get("status") != "posted":
-            continue
-        platform = str(post["platform"])
-        account = _account(deps, target, platform)
-        metrics: dict[str, Any] | None = None
-        for attempt in range(METRIC_ATTEMPTS):
-            try:
-                m = deps.adapters(platform).metrics(post, account)
-            except (NotConnectedError, PublishError) as e:
-                if isinstance(e, RetryablePublishError) and attempt + 1 < METRIC_ATTEMPTS:
-                    deps.sleep(2**attempt)
-                    continue
-                log("info", "clip_flow.no_metrics", postId=post["postId"], platform=platform, reason=type(e).__name__)
-                break
-            metrics = {
-                "views": m.views,
-                "likes": m.likes,
-                "comments": m.comments,
-                "shares": m.shares,
-                "checkedAt": iso(deps.clock()),
-            }
-            break
+    for post in rows:
+        post_id = str(post["postId"])
+        metrics = report.updated.get(post_id)
+        if metrics is None and isinstance(post.get("metrics"), dict):
+            metrics = post["metrics"]
         if metrics is None:
+            log(
+                "info",
+                "clip_flow.no_metrics",
+                postId=post_id,
+                platform=post.get("platform"),
+                reason=report.outcomes.get(post_id),
+            )
             continue
-        _save_metrics(deps, post, metrics)
-        measured.append({"postId": post["postId"], "platform": platform, "metrics": metrics})
+        row = {k: metrics.get(k) for k in COMMON_METRICS}
+        row["checkedAt"] = str(metrics.get("metricsUpdatedAt") or metrics.get("checkedAt") or iso(deps.clock()))
+        measured.append({"postId": post_id, "platform": str(post["platform"]), "metrics": row})
     return {"measured": measured}
 
 

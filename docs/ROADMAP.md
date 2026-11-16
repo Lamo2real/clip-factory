@@ -10,19 +10,26 @@ Added by the serverless expansion ([CONTRACTS.md §14](CONTRACTS.md#14-serverles
 two Lambda durable functions (the job flow with the agent callback, and the clip flow with publishing, the 48-hour wait
 and learning) in place of the queue, scheduler and watchdog; live updates over a WebSocket API; a REST API for platform
 webhooks; and the S3 Vectors learning memory ("What worked before", "Like clips that did well").
+Added by the owner's clip performance request ([CONTRACTS.md §16](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16)):
+the clip performance page (the video, five smooth lines, five platform stacks) for phones, laptops and monitors; the
+numbers poller (one EventBridge rule, `cf-prod-stats`, per-platform intervals and budgets from
+`config/platforms.json`) and the Refresh numbers button; Library › This week with the owner's weekly best picks and
+the "Best of week" learning (`cf-prod-learn`). It all works today with no account connected and shows real numbers as
+soon as phase 2 connects the platforms.
 See the [README](../README.md#status) for status.
 
 ## Phase 2: social integrations
 
-Goal: confirmed clips are posted to the owner's accounts, and their numbers flow back 48 hours later.
+Goal: confirmed clips are posted to the owner's accounts, and their numbers flow back to the clip page every 15–30
+minutes for 30 days (and into the 48-hour learning).
 
-| Platform | Connect with | Post with | Metrics for the 48-hour check | Notes |
+| Platform | Connect with | Post with | Numbers (the stats adapter, [ADR-29](DECISIONS.md#adr-29-stats-refresh-intervals-per-platform)) | Notes |
 |---|---|---|---|---|
-| YouTube (Shorts) | Google OAuth 2.0 (`youtube.upload`, `youtube.readonly`) | YouTube Data API v3 `videos.insert` (resumable upload) | YouTube Analytics API or `videos.list` statistics | Default upload quota is limited per day; request more if needed. Videos under 3 minutes in 9:16 become Shorts. |
-| Instagram (Reels) | Meta Login (Facebook Login for Business) with a Professional account linked to a Facebook Page | Instagram Graph API: create a `REELS` media container from a public video URL, then publish | Media insights (plays, likes, comments, shares) | Needs a Meta app with Instagram permissions reviewed by Meta. |
-| Facebook (Page Reels) | Same Meta Login | Pages API video reels upload | Video insights | Same Meta app as Instagram. |
-| TikTok | Login Kit | Content Posting API (direct post) | Video query / Display API | The app must pass TikTok's audit before posts can be public. The legal pages at the repo root exist for this review. |
-| X | OAuth 2.0 with PKCE | Media upload (chunked) + post creation | Post public metrics | Posting needs a paid API tier; check the current plan before building. |
+| YouTube (Shorts) | Google OAuth 2.0 (`youtube.upload`, `youtube.readonly`) | YouTube Data API v3 `videos.insert` (resumable upload) | `videos.list` statistics every 15 min (1 unit per 50 videos); YouTube Analytics (`yt-analytics.readonly`) every 6 h for watch time, engaged views, shares | 10,000 units a day; numbers keep 3,000 for uploads. Videos under 3 minutes in 9:16 become Shorts. |
+| Instagram (Reels) | Meta Login (Facebook Login for Business) with a Professional account linked to a Facebook Page | Instagram Graph API: create a `REELS` media container from a public video URL, then publish | Media insights every 30 min (`views`, `reach`, `saved`, `shares`, watch time; never `plays` or `impressions`) on `graph.facebook.com`; scopes `instagram_basic`, `instagram_manage_insights`, `instagram_content_publish`, `pages_show_list` (the Facebook Login scopes, not the `instagram_business_*` ones, which only work on `graph.instagram.com`) | Needs a Meta app with Instagram permissions reviewed by Meta. Budget scales with the account's impressions. |
+| Facebook (Page Reels) | Same Meta Login | Pages API video reels upload | Reels `video_insights` every 30 min (plays, replays, reactions, watch time); reach from `post_total_media_view_unique`; `read_insights` | Same Meta app as Instagram. Impressions metrics retire with Graph v26.0 and are not used. |
+| TikTok | Login Kit | Content Posting API (direct post) | `/v2/video/query/` every 15 min with the post's `publicaly_available_post_id` (`video.list`) | The app must pass TikTok's audit before posts can be public, and only public posts have numbers. The legal pages at the repo root exist for this review. |
+| X | OAuth 2.0 with PKCE | Media upload (chunked) + post creation | `GET /2/tweets?ids=` every 15 min (video `view_count`, public and, for 30 days, non-public metrics) | Pay per use: needs credits; the app caps number reads at $10 a month ([DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)). |
 
 Work items:
 1. **Accounts screen**: Connect, Reconnect, Disconnect per platform; several accounts per platform; status and handle.
@@ -33,15 +40,18 @@ Work items:
    `refresh_token()`.
 4. **Publishing**: implement `publish` in each adapter; the clip flow's `publish-{platform}` steps (3 attempts,
    backoff, `postId` as idempotency key) and the 48-hour wait already exist.
-5. **Metrics**: implement `metrics` in each adapter; the clip flow's `metrics`, `distil` and `upsert-vector` steps then
-   produce learnings on Insights and fill the learning memory.
-6. **Webhooks**: verify signatures per platform with the app secrets (`verify_signature` today returns
+5. **Numbers**: give the stats adapters (`fetch_stats`, already built against recorded answers) their tokens from
+   Secrets Manager (`cf-prod/platforms/*`, plus `secretsmanager:GetSecretValue` on `cf-prod-stats`), and set each post's
+   `statsId` at publish (TikTok's public id from `/v2/post/publish/status/fetch/`). The poller, the Refresh button, the
+   clip page and the clip flow's `metrics`, `distil` and `upsert-vector` steps then work with real numbers.
+6. **TikTok audit** so posts can be public and have numbers; **X credits** and a spend limit in the X console.
+7. **Webhooks**: verify signatures per platform with the app secrets (`verify_signature` today returns
    `unverified`), and act on stored `HOOK#` events (for example a post removed by the platform).
-7. **Token refresh**: the adapters refresh a token when a `publish` or `metrics` step finds it close to expiry (a
+8. **Token refresh**: the adapters refresh a token when a `publish` or `metrics` step finds it close to expiry (a
    durable function with a daily wait if some platform needs refreshing without use), and mark accounts
    `needs_reconnect` when refresh fails, with a banner in the app.
-8. **Per-clip platform choice** at Confirm (today: every platform enabled in Settings).
-9. **Undo window**: a short delay after Confirm during which the owner can take it back.
+9. **Per-clip platform choice** at Confirm (today: every platform enabled in Settings).
+10. **Undo window**: a short delay after Confirm during which the owner can take it back.
 
 ## Later
 
@@ -55,7 +65,12 @@ Work items:
 - **AWS WAF** on the REST API stage if webhook traffic is ever abused.
 - **Live clipping**: follow a live Twitch or Kick stream and cut clips as it happens.
 - **Campaigns**: bring back the local app's Whop / Content Rewards campaign reading (rules, rates, required tags).
-- **Clip editor**: adjust start and end, swap the hook, re-render one clip.
+- **Clip editor**: adjust start and end, swap the hook, re-render one clip. The weekly best picks could then also
+  steer editing choices (layout, pacing), not only which moments are picked and how they are hooked.
+- **Clip numbers, more**: suggest the week's best picks (the owner still decides), compare two clips side by side,
+  a per-platform "best time to post" from the snapshots, and YouTube Analytics `engagedViews` as the Shorts headline
+  number if the owner prefers it to every-play `viewCount`.
+- **Longer history**: keep weekly totals beyond the 90-day snapshot TTL for a long-term chart.
 - **More sources**: X videos, Instagram and TikTok links, podcasts.
 - **Cost guard**: a monthly AWS Budget with an email alert, and a per-job estimate before starting.
 - **Multiple users** (sign-up, per-user quotas), if the tool is ever shared.

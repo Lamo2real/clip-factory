@@ -1,0 +1,50 @@
+{
+  "$comment": "Stats refresh limits per platform (docs/CONTRACTS.md §16.4). Change values here only.",
+  "graphApiVersion": "v25.0",
+  "pollWindowDays": 30,
+  "snapshotTtlDays": 90,
+  "snapshotEveryMinutes": 60,
+  "ageTierHours": [48, 168, 720],
+  "order": ["youtube", "tiktok", "instagram", "facebook", "x"],
+  "platforms": {
+    "youtube": {
+      "label": "YouTube", "viewsField": "statistics.viewCount",
+      "minIntervalMinutes": 15, "tierIntervalsMinutes": [15, 30, 120], "manualCooldownMinutes": 5,
+      "insightsIntervalMinutes": 360, "slowNote": "Updates daily",
+      "idsPerRequest": 50,
+      "scopes": ["https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/yt-analytics.readonly",
+                 "https://www.googleapis.com/auth/youtube.upload"],
+      "budget": { "kind": "daily_units", "dailyUnits": 10000, "reserveUnits": 3000, "unitsPerCall": 1,
+                  "blockOn": ["quotaExceeded", "rateLimitExceeded"] }
+    },
+    "tiktok": {
+      "label": "TikTok", "viewsField": "view_count",
+      "minIntervalMinutes": 15, "tierIntervalsMinutes": [15, 30, 120], "manualCooldownMinutes": 5,
+      "idsPerRequest": 20,
+      "scopes": ["user.info.basic", "video.list", "video.publish"],
+      "budget": { "kind": "per_minute", "requestsPerMinute": 600, "useAtMost": 300, "blockOn": ["rate_limit_exceeded"] }
+    },
+    "instagram": {
+      "label": "Instagram", "viewsField": "views",
+      "minIntervalMinutes": 30, "tierIntervalsMinutes": [30, 60, 360], "manualCooldownMinutes": 30,
+      "slowNote": "Can take 2 days", "idsPerRequest": 50,
+      "scopes": ["instagram_basic", "instagram_manage_insights", "instagram_content_publish", "pages_show_list"],
+      "budget": { "kind": "meta_buc", "stopAtPercent": 75, "throttleCodes": [80002], "minBlockMinutes": 60 }
+    },
+    "facebook": {
+      "label": "Facebook", "viewsField": "fb_reels_total_plays",
+      "minIntervalMinutes": 30, "tierIntervalsMinutes": [30, 60, 360], "manualCooldownMinutes": 30,
+      "slowNote": "Can take 2 days", "idsPerRequest": 50,
+      "scopes": ["pages_show_list", "pages_read_engagement", "read_insights", "pages_manage_posts", "pages_manage_engagement"],
+      "budget": { "kind": "meta_buc", "stopAtPercent": 75, "throttleCodes": [80001], "minBlockMinutes": 60 }
+    },
+    "x": {
+      "label": "X", "viewsField": "media.public_metrics.view_count",
+      "minIntervalMinutes": 15, "tierIntervalsMinutes": [15, 30, 120], "manualCooldownMinutes": 5,
+      "idsPerRequest": 100, "nonPublicMaxAgeDays": 30,
+      "scopes": ["tweet.read", "users.read", "tweet.write", "media.write", "offline.access"],
+      "budget": { "kind": "x", "appRequestsPer15Min": 3500, "userRequestsPer15Min": 5000, "useAtMost": 1000,
+                  "usdPerPostRead": 0.005, "monthlyUsd": 10 }
+    }
+  }
+}

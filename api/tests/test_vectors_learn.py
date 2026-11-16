@@ -302,9 +302,10 @@ def test_distil_only_learns_from_a_finished_answer(store: db.Store, bedrock: Fak
 
 
 @pytest.mark.parametrize("platform", PLATFORMS)
-def test_stub_adapters_report_not_connected(platform: str) -> None:
+def test_phase_one_adapters_report_not_connected(platform: str) -> None:
     adapter = adapter_for(platform)
-    assert adapter.idempotent is True
+    assert adapter.platform == platform
+    assert adapter.idempotent is (platform != "x")  # X has no idempotency key for a new post
     with pytest.raises(NotConnectedError, match="next phase"):
         adapter.publish({}, None, idempotency_key="P")
     with pytest.raises(NotConnectedError):

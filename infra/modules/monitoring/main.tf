@@ -1,5 +1,6 @@
 # Alarms that email the owner when a Lambda fails, a durable execution fails or times out, the live-update stream
-# falls behind, or the webhook API answers 5xx (docs/CONTRACTS.md §14.9). The topic always exists, so an email
+# falls behind, the webhook API answers 5xx (docs/CONTRACTS.md §14.9), or a schedule cannot start its function
+# (the stats refresh tick, §16.9). The topic always exists, so an email
 # address can be added later without touching the alarms.
 terraform {
   required_version = ">= 1.11.0"
@@ -125,5 +126,25 @@ resource "aws_cloudwatch_metric_alarm" "hooks_5xx" {
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alarms.arn]
+  tags                = local.tags
+}
+
+# A scheduled rule could not invoke its function (permission removed, function deleted or throttled past the event's
+# age), so clip numbers stop refreshing. Two misses in a row: one late tick is covered by the next.
+resource "aws_cloudwatch_metric_alarm" "schedule_failed" {
+  for_each            = var.schedule_rule_names
+  alarm_name          = "${each.value}-failed-invocations"
+  alarm_description   = "The schedule ${each.value} could not start its function, so the ${each.key} job is not running. Check the rule's target and the function's resource policy."
+  namespace           = "AWS/Events"
+  metric_name         = "FailedInvocations"
+  dimensions          = { RuleName = each.value }
+  statistic           = "Sum"
+  period              = 900
+  evaluation_periods  = 2
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  ok_actions          = [aws_sns_topic.alarms.arn]
   tags                = local.tags
 }

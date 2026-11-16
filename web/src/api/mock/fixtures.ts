@@ -1,6 +1,8 @@
 // Realistic demo data for mock mode: jobs in every state, clips waiting for review, posts with 48-hour numbers.
-import type { Account, Captions, Clip, Job, Learning, MomentType, Platform, Post, Settings, Skill, Step, StepKey } from "../types.ts";
+import type { Account, Captions, Clip, Job, Learning, MomentType, Platform, Post, SeriesPoint, Settings, Skill, Step, StepKey } from "../types.ts";
+import { isoWeek, weekRange, shiftWeek, weekStart } from "../../lib/week.ts";
 import { coverArt, thumbArt } from "./art.ts";
+import { growth, metricsFor, type WeekItem } from "./statsData.ts";
 
 const B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 let counter = 0;
@@ -92,6 +94,15 @@ function checklist(score: number) {
 }
 
 const PLATFORMS: Platform[] = ["youtube", "instagram", "facebook", "tiktok", "x"];
+const STATS_INDEX: Record<Platform, number> = { youtube: 0, tiktok: 1, instagram: 2, facebook: 3, x: 4 };
+
+/** Last week's clips (their own hooks, so no card repeats another). */
+const OLDER: (typeof MOMENTS)[number][] = [
+  { hook: "The bank job went perfectly. Then Marco spoke.", summary: "A flawless heist falls apart over the radio.", type: "interaction", score: 9 },
+  { hook: "Ninety seconds of pure police chase", summary: "The longest chase of the weekend, start to finish.", type: "chaos", score: 8 },
+  { hook: "He tried to park a plane", summary: "A landing on the motorway that nearly works.", type: "no_way", score: 7 },
+  { hook: "Quiet. Too quiet.", summary: "The calm before the ambush at the docks.", type: "first_reaction", score: 6 },
+];
 
 export interface Store {
   jobs: Job[];
@@ -101,6 +112,10 @@ export interface Store {
   learnings: Learning[];
   settings: Settings;
   accounts: Account[];
+  /** Sparkline points per post id, oldest first (the STAT# snapshots, §16.3). */
+  snapshots: Record<string, SeriesPoint[]>;
+  /** WEEK# items by "yyyy-Www". */
+  weeks: Record<string, WeekItem>;
 }
 
 function makeClip(job: Job, rank: number, m: (typeof MOMENTS)[number], status: Clip["status"], seed: number, tags: string, ageMs: number): Clip {
@@ -241,40 +256,115 @@ export function seed(): Store {
   // One kept clip whose posting never started (the Keep stopped half way): the Library offers "Try again" for it.
   const stuck = clips.filter((c) => c.status === "confirmed").at(-1);
   const posts: Post[] = [];
-  const metricsBase = [48210, 12900, 3100];
-  clips
-    .filter((c) => c.status === "posted" || c.status === "confirmed")
-    .forEach((c, ci) => {
-      if (c === stuck) return;
-      for (const [pi, platform] of PLATFORMS.entries()) {
-        const postedAgo = 3 * 24 * HOUR - ci * HOUR;
-        if (c.status === "posted") {
-          const base = (metricsBase[ci % 3] ?? 2000) / (pi + 1);
-          const checked = postedAgo > 48 * HOUR;
-          posts.push({
-            postId: ulid(Date.now() - postedAgo),
-            clipId: c.clipId,
-            platform,
-            status: "posted",
-            url: `https://example.com/${platform}/${c.clipId.slice(-6)}`,
-            postedAt: iso(postedAgo),
-            perfCheckAt: new Date(Date.now() - postedAgo + 48 * HOUR).toISOString(),
-            metrics: checked
-              ? {
-                  views: Math.round(base),
-                  likes: Math.round(base * 0.071),
-                  comments: Math.round(base * 0.006),
-                  shares: Math.round(base * 0.012),
-                  checkedAt: iso(postedAgo - 48 * HOUR),
-                }
-              : undefined,
-          });
-        } else {
-          posts.push({ postId: ulid(), clipId: c.clipId, platform, status: "pending_integration" });
-        }
-      }
-    });
+  const snapshots: Store["snapshots"] = {};
+  for (const c of clips.filter((x) => x.status === "confirmed" && x !== stuck)) {
+    for (const platform of PLATFORMS) posts.push({ postId: ulid(), clipId: c.clipId, platform, status: "pending_integration" });
+  }
 
+  // Posted clips. This week's are spread over the days of the week so far (it may be Monday morning), last week's
+  // over last week, so "This week" always has clips and "Earlier week" goes back to real ones.
+  const now = Date.now();
+  const thisWeek = isoWeek(new Date(now));
+  const monday = weekStart(thisWeek).getTime();
+  const sinceMonday = Math.max(now - monday, 6 * MIN);
+  const lastWeek = shiftWeek(thisWeek, -1);
+
+  type Plan = { platform: Platform; state: "numbers" | "private" | "waiting" | "failed" | "none" | "posting" | "fresh"; views?: number; insights?: boolean };
+  const post = (c: Clip, at: number, plan: Plan, seedN: number) => {
+    if (plan.state === "none") return;
+    const id = ulid(at);
+    const base: Post = { postId: id, clipId: c.clipId, platform: plan.platform, status: "posted" };
+    if (plan.state === "waiting") return void posts.push({ ...base, status: "pending_integration" });
+    if (plan.state === "posting") return void posts.push({ ...base, status: "queued" });
+    if (plan.state === "failed")
+      return void posts.push({ ...base, status: "failed", error: "Facebook said the video was too long for a Reel" });
+    const p: Post = {
+      ...base,
+      url: `https://example.com/${plan.platform}/${c.clipId.slice(-6)}`,
+      postedAt: new Date(at).toISOString(),
+      perfCheckAt: new Date(at + 48 * HOUR).toISOString(),
+    };
+    if (plan.state === "private") p.privacy = "private";
+    if (plan.state === "numbers" && plan.views) {
+      const checked = now - ((seedN * 3 + 2) % 11) * MIN - 40_000;
+      p.metrics = metricsFor(plan.platform, plan.views, c.durationSec, seedN, {
+        insights: plan.insights !== false,
+        checkedAt: new Date(checked).toISOString(),
+        insightsAt: new Date(Math.max(at, now - 26 * HOUR)).toISOString(),
+      });
+      snapshots[id] = growth(at, checked, plan.views);
+    }
+    if (plan.platform === "tiktok") p.privacy = p.privacy ?? "public";
+    posts.push(p);
+  };
+
+  const kickPosted = clips.filter((c) => c.status === "posted");
+  const thisWeekPlans: Plan[][] = [
+    [
+      { platform: "youtube", state: "numbers", views: 48_210 },
+      { platform: "tiktok", state: "numbers", views: 126_400 },
+      { platform: "instagram", state: "numbers", views: 22_950 },
+      { platform: "facebook", state: "numbers", views: 9_870 },
+      { platform: "x", state: "numbers", views: 3_420 },
+    ],
+    [
+      { platform: "youtube", state: "numbers", views: 12_905 },
+      { platform: "tiktok", state: "private" },
+      { platform: "instagram", state: "waiting" },
+      { platform: "facebook", state: "failed" },
+      { platform: "x", state: "none" },
+    ],
+    [
+      { platform: "youtube", state: "posting" },
+      { platform: "tiktok", state: "fresh" },
+      { platform: "instagram", state: "numbers", views: 3_104, insights: false },
+      { platform: "facebook", state: "numbers", views: 1_260 },
+      { platform: "x", state: "numbers", views: 845 },
+    ],
+  ];
+  kickPosted.forEach((c, ci) => {
+    const at = now - (sinceMonday * (ci + 1)) / 4;
+    c.decidedAt = new Date(Math.min(Date.parse(c.decidedAt ?? c.createdAt), at - 10 * MIN)).toISOString();
+    (thisWeekPlans[ci] ?? thisWeekPlans[0]!).forEach((plan, pi) => post(c, at + pi * 40_000, plan, ci * 5 + pi));
+  });
+
+  // Last week: a finished job whose clips were all posted, one of them starred, with the learning it taught.
+  const highlights = job(
+    {
+      status: "ready",
+      source: {
+        type: "link",
+        platform: "youtube",
+        url: "https://www.youtube.com/watch?v=Zi_XLOBDo_Y",
+        title: "Weekend highlights: the bank job, take four",
+        channel: "LamoPlays",
+        durationSec: 5 * 3600 + 20 * 60,
+        thumbnailUrl: thumbArt(5, "Bank job"),
+      },
+      notes: "#gtarp",
+      clipCount: 4,
+    },
+    now - monday + 8 * 24 * HOUR,
+    9,
+  );
+  const older: Clip[] = OLDER.map((m, i) => {
+    const c = makeClip(highlights, i + 1, m, "posted", 20 + i, "#gtarp", now - monday + 8 * 24 * HOUR - (i + 1) * MIN);
+    return c;
+  });
+  const lastWeekViews = [61_300, 18_740, 7_215, 2_480];
+  const lastMonday = weekStart(lastWeek).getTime();
+  older.forEach((c, ci) => {
+    const at = lastMonday + (ci * 1.4 + 0.6) * 24 * HOUR;
+    c.decidedAt = new Date(at - 30 * MIN).toISOString();
+    PLATFORMS.forEach((platform, pi) => {
+      const share = [0.32, 0.38, 0.16, 0.09, 0.05][STATS_INDEX[platform]]!;
+      post(c, at + pi * 50_000, { platform, state: "numbers", views: Math.round(lastWeekViews[ci]! * share * (1 + pi * 0.03)) }, 40 + ci * 5 + pi);
+    });
+  });
+  const starred = older[1]!;
+  starred.best = true;
+  starred.bestWeek = lastWeek;
+  clips.push(...older);
   const skills: Store["skills"] = [
     {
       skillId: "builtin-short-form-video-playbook",
@@ -315,7 +405,18 @@ export function seed(): Store {
   ];
 
   const posted = posts.filter((p) => p.metrics);
+  const weekLearning: Learning = {
+    learningId: ulid(lastMonday + 7 * 24 * HOUR - 2 * HOUR),
+    kind: "week",
+    week: lastWeek,
+    title: `Best of week ${lastWeek}`,
+    text: "Your pick opened on the chase in the first second and kept the betrayal for the end. Start on the action, and save the twist for the last few seconds.",
+    createdAt: new Date(Math.min(now - 5 * MIN, lastMonday + 7 * 24 * HOUR - 2 * HOUR)).toISOString(),
+    clipIds: [starred.clipId],
+    postIds: posts.filter((p) => p.clipId === starred.clipId && p.status === "posted").map((p) => p.postId),
+  };
   const learnings: Learning[] = [
+    weekLearning,
     {
       learningId: ulid(Date.now() - 20 * HOUR),
       text: "Chaos clips with a number in the hook (\"Twelve cars, one bridge\") got three times the views of rage clips.",
@@ -337,11 +438,23 @@ export function seed(): Store {
   ];
 
   return {
-    jobs: [queued, running, twitch, failed, kick, canceled],
+    jobs: [queued, running, twitch, failed, kick, highlights, canceled],
     clips,
     posts,
     skills,
     learnings,
+    snapshots,
+    weeks: {
+      [lastWeek]: {
+        week: lastWeek,
+        ...weekRange(lastWeek),
+        clipIds: [starred.clipId],
+        savedAt: new Date(lastMonday + 7 * 24 * HOUR - 3 * HOUR).toISOString(),
+        learnState: "done",
+        learningId: weekLearning.learningId,
+        revision: 1,
+      },
+    },
     settings: {
       clipMin: 5,
       clipMax: 10,

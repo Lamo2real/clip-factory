@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "@playwright/test";
-import { settle } from "./helpers.ts";
+import { CLIPS, openClip, settle } from "./helpers.ts";
 
 const dir = join(import.meta.dirname, "..", "screenshots");
 mkdirSync(dir, { recursive: true });
@@ -32,6 +32,40 @@ for (const size of SIZES) {
       });
     }
   });
+}
+
+// The clip performance page and Library › This week (§16.8), light and dark, phone and desktop. The page top shows
+// the video and the lines; "-stacks" is scrolled to the five platform stacks.
+for (const size of SIZES) {
+  for (const scheme of ["light", "dark"] as const) {
+    test.describe(`${size.name} ${size.width}x${size.height} ${scheme}`, () => {
+      test.use({
+        viewport: { width: size.width, height: size.height },
+        deviceScaleFactor: size.scale,
+        hasTouch: size.touch,
+        isMobile: size.touch,
+        colorScheme: scheme,
+      });
+      const suffix = `${scheme === "dark" ? "-dark" : ""}-${size.width}x${size.height}`;
+      test(`screenshot clip performance ${scheme}`, async ({ page }) => {
+        await openClip(page, CLIPS.all);
+        await page.waitForTimeout(900);
+        await page.screenshot({ path: join(dir, `clip-performance${suffix}.png`) });
+        await page.evaluate(() => {
+          const top = document.querySelector(".perf__preview")!.getBoundingClientRect().bottom + scrollY;
+          window.scrollTo(0, top - (window.innerWidth < 600 ? 120 : 180));
+        });
+        await page.waitForTimeout(400);
+        await page.screenshot({ path: join(dir, `clip-performance-stacks${suffix}.png`) });
+      });
+      test(`screenshot this week ${scheme}`, async ({ page }) => {
+        await page.goto("/library?view=week");
+        await settle(page);
+        await page.waitForTimeout(600);
+        await page.screenshot({ path: join(dir, `library-week${suffix}.png`) });
+      });
+    });
+  }
 }
 
 test("screenshot get-app on an iPhone (picture steps)", async ({ browser }) => {

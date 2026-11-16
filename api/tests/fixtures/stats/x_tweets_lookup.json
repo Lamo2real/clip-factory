@@ -1,0 +1,23 @@
+{
+  "data": [
+    {
+      "id": "1857000000000000001",
+      "created_at": "2026-11-15T12:00:00.000Z",
+      "edit_history_tweet_ids": ["1857000000000000001"],
+      "attachments": { "media_keys": ["7_1857000000000000099"] },
+      "public_metrics": { "retweet_count": 12, "reply_count": 9, "like_count": 140, "quote_count": 2, "bookmark_count": 6, "impression_count": 9800 },
+      "non_public_metrics": { "impression_count": 9800, "url_link_clicks": 3, "user_profile_clicks": 27, "engagements": 310 },
+      "organic_metrics": { "impression_count": 9800, "like_count": 140, "reply_count": 9, "retweet_count": 12, "url_link_clicks": 3, "user_profile_clicks": 27 }
+    }
+  ],
+  "includes": {
+    "media": [
+      {
+        "media_key": "7_1857000000000000099",
+        "type": "video",
+        "public_metrics": { "view_count": 4300 },
+        "non_public_metrics": { "playback_0_count": 4300, "playback_25_count": 2900, "playback_50_count": 1800, "playback_75_count": 1100, "playback_100_count": 640 }
+      }
+    ]
+  }
+}

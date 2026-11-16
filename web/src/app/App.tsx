@@ -17,6 +17,7 @@ import { Home } from "../screens/home/Home.tsx";
 import { JobDetail } from "../screens/jobs/JobDetail.tsx";
 import { Jobs } from "../screens/jobs/Jobs.tsx";
 import { Library } from "../screens/library/Library.tsx";
+import { ClipPerformance } from "../screens/clip/ClipPerformance.tsx";
 import { Review } from "../screens/review/Review.tsx";
 import { Settings } from "../screens/settings/Settings.tsx";
 import { SignIn } from "../screens/SignIn.tsx";
@@ -30,6 +31,7 @@ const TITLES: Record<Route["name"], string> = {
   job: "Job",
   review: "Review",
   library: "Library",
+  clip: "Clip numbers",
   settings: "Settings",
   get_app: "Get the app",
   not_found: "Not found",
@@ -42,6 +44,7 @@ export function titleFor(route: Route): string {
     const branch = tree && route.branch ? findBranch(tree, route.branch) : undefined;
     return `${branch?.name ?? tree?.name ?? "Settings"} · Settings`;
   }
+  if (route.name === "library" && route.view === "week") return "This week · Library";
   return TITLES[route.name];
 }
 
@@ -172,7 +175,9 @@ function Screen({ route }: { route: Route }) {
     case "review":
       return <Review jobId={route.jobId} />;
     case "library":
-      return <Library />;
+      return <Library view={route.view} week={route.week} />;
+    case "clip":
+      return <ClipPerformance key={route.clipId} clipId={route.clipId} />;
     case "settings":
       return <Settings tree={route.tree} branch={route.branch} />;
     case "get_app":

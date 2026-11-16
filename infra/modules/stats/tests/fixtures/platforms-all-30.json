@@ -1,0 +1,11 @@
+{
+  "$comment": "Test override: every platform at 30 minutes, so the tick must be rate(30 minutes).",
+  "order": ["youtube", "tiktok", "instagram", "facebook", "x"],
+  "platforms": {
+    "youtube": { "minIntervalMinutes": 30 },
+    "tiktok": { "minIntervalMinutes": 30 },
+    "instagram": { "minIntervalMinutes": 30 },
+    "facebook": { "minIntervalMinutes": 30 },
+    "x": { "minIntervalMinutes": 30 }
+  }
+}

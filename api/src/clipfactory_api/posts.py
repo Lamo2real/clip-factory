@@ -3,18 +3,98 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from datetime import datetime, timedelta
 from typing import Any
 
 from . import db
+from .clock import iso, parse, utcnow
 from .ids import ulid
 from .settings import PLATFORMS
 
 Item = dict[str, Any]
-POST_FIELDS = ("postId", "clipId", "platform", "status", "url", "postedAt", "perfCheckAt", "metrics", "error")
+POST_FIELDS = (
+    "postId",
+    "clipId",
+    "platform",
+    "status",
+    "url",
+    "postedAt",
+    "perfCheckAt",
+    "privacy",
+    "nextRefreshAt",
+    "error",
+)
+COMMON_METRICS = ("views", "likes", "comments", "shares")
+REFRESH_CLAIM = timedelta(minutes=5)  # a manual refresh counts as running for this long (§16.2)
+PERF_CHECK_DELAY = timedelta(hours=48)
 
 
-def public_post(item: Item) -> Item:
-    return {k: item[k] for k in POST_FIELDS if k in item}
+def public_metrics(raw: Any) -> Item | None:
+    """``PostMetrics`` (§16.3) as the web reads it: the common four always present (``null`` = the platform does
+    not say), ``metricsUpdatedAt`` filled in for metrics stored before §16 (only ``checkedAt``), ``extra`` always an
+    object."""
+    if not isinstance(raw, Mapping):
+        return None
+    out: Item = {k: raw.get(k) for k in COMMON_METRICS}
+    checked = raw.get("metricsUpdatedAt") or raw.get("checkedAt")
+    if checked:
+        out["checkedAt"] = raw.get("checkedAt") or checked
+        out["metricsUpdatedAt"] = checked
+    if raw.get("insightsUpdatedAt"):
+        out["insightsUpdatedAt"] = raw["insightsUpdatedAt"]
+    if raw.get("final"):
+        out["final"] = True
+    extra = raw.get("extra")
+    out["extra"] = dict(extra) if isinstance(extra, Mapping) else {}
+    return out
+
+
+def is_refreshing(item: Mapping[str, Any], now: datetime | None = None) -> bool:
+    started = parse(item.get("refreshStartedAt"))
+    return started is not None and (now or utcnow()) - started < REFRESH_CLAIM
+
+
+def public_post(item: Item, now: datetime | None = None) -> Item:
+    """The Post shape of §5/§16.3. Internal fields (``platformPostId``, ``statsId``, ``statsDueAt``, ``gsi2*``,
+    ``refreshStartedAt``, ``lastSnapshotAt``, ``insightsDueAt``, ``statsError``) never leave."""
+    out = {k: item[k] for k in POST_FIELDS if k in item}
+    metrics = public_metrics(item.get("metrics"))
+    if metrics is not None:
+        out["metrics"] = metrics
+    out["refreshing"] = is_refreshing(item, now)
+    return out
+
+
+def mark_posted(store: db.Store, post: Mapping[str, Any], published: Any, now: datetime) -> Item:
+    """Writes a queued post as ``posted`` with the stats fields of §16.3 (conditional on ``status = queued``).
+
+    ``published`` is a ``platforms.Published``. A post with a ``statsId`` joins the poller's sparse ``gsi2`` with its
+    first poll ``minIntervalMinutes`` after posting; a private TikTok post (no ``statsId``) never does.
+    Raises ``db.ConditionFailed`` when the post is no longer queued."""
+    from .stats import config
+
+    posted_at = parse(published.posted_at) or now
+    fields: Item = {
+        "status": "posted",
+        "url": published.url,
+        "postedAt": iso(posted_at),
+        "perfCheckAt": iso(posted_at + PERF_CHECK_DELAY),
+        "privacy": published.privacy if published.privacy in {"public", "private"} else "public",
+    }
+    if published.platform_post_id:
+        fields["platformPostId"] = published.platform_post_id
+    if published.stats_id and fields["privacy"] == "public":
+        cfg = config.load()
+        due = iso(posted_at + timedelta(minutes=cfg.platform(str(post["platform"])).min_interval))
+        fields.update(
+            {
+                "statsId": published.stats_id,
+                "statsDueAt": due,
+                "gsi2pk": db.STATS_GSI_PK,
+                "gsi2sk": f"{due}#{post['postId']}",
+            }
+        )
+    return store.update(str(post["pk"]), str(post["sk"]), fields, remove=["error"], expect_in={"status": ["queued"]})
 
 
 def account_items(store: db.Store, user_id: str) -> list[Item]:

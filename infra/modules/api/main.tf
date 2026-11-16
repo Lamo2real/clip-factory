@@ -1,6 +1,6 @@
 # cf-prod-api and the HTTP API in front of it (docs/CONTRACTS.md §5, §9). Background work runs elsewhere: the
-# durable functions in modules/flows (jobs, publishing, the 48-hour check), live updates in modules/realtime and
-# platform webhooks in modules/hooks (§14).
+# durable functions in modules/flows (jobs, publishing, the 48-hour check), live updates in modules/realtime,
+# platform webhooks in modules/hooks (§14), and clip numbers and weekly learning in modules/stats (§16).
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
@@ -31,6 +31,9 @@ locals {
         VECTOR_INDEX      = var.vector_index
         APP_URL           = var.app_url
         VERSION           = var.app_version
+        # §16: "Refresh numbers" and "Best this week" hand off to these (async Invoke, unqualified ARNs).
+        STATS_FUNCTION_ARN = var.stats_function_arn
+        LEARN_FUNCTION_ARN = var.learn_function_arn
       }
     }
   }
@@ -47,6 +50,8 @@ locals {
       { Sid = "Agent", Action = ["bedrock-agentcore:InvokeAgentRuntime", "bedrock-agentcore:StopRuntimeSession"], Resource = [var.agent_runtime_arn, "${var.agent_runtime_arn}/*"] },
       # Start durable executions on the live alias (any qualifier of the two flows, never other functions).
       { Sid = "StartFlows", Action = ["lambda:InvokeFunction"], Resource = ["${var.job_flow_arn_prefix}:*", "${var.clip_flow_arn_prefix}:*"] },
+      # POST /v1/clips/{id}/stats/refresh and PUT /v1/weeks/{week}/best (InvocationType=Event, unqualified).
+      { Sid = "StatsAndLearn", Action = ["lambda:InvokeFunction"], Resource = [var.stats_function_arn, var.learn_function_arn] },
       # GET /v1/clips/{id}/similar (read the clip's vector, query with filters) and decline (delete the vector).
       { Sid = "Vectors", Action = ["s3vectors:GetVectors", "s3vectors:QueryVectors", "s3vectors:DeleteVectors"], Resource = [var.vector_index_arn] },
     ]

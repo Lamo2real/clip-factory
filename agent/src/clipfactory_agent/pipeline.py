@@ -56,6 +56,7 @@ class JobState:
     loud: list[float] = field(default_factory=list)
     skills: list[SkillDoc] = field(default_factory=list)
     learnings: list[str] = field(default_factory=list)
+    week_learnings: list[str] = field(default_factory=list)
     similar: list[vectors_mod.Hit] = field(default_factory=list)
     chosen: list[Moment] = field(default_factory=list)
     spares: list[Moment] = field(default_factory=list)
@@ -350,13 +351,12 @@ class Pipeline:
         st.skills = await prepare_skills(
             st.workdir, self.cfg.skills_dir, await self.store.skill_rows(st.user_id), self.store.get_bytes
         )
-        st.learnings = await learnings.load(self.store, st.user_id)
+        taught = await learnings.load(self.store, st.user_id)
+        st.week_learnings, st.learnings = taught.week, taught.other
         st.similar = await self._similar(st)
         spikes = len(loudness.spikes(st.loud, limit=10_000))
         similar = f" and {len(st.similar)} similar past clip(s)" if st.similar else ""
-        return (
-            f"Found {spikes} loud moments; using {len(st.skills)} skill(s), {len(st.learnings)} learning(s){similar}."
-        )
+        return f"Found {spikes} loud moments; using {len(st.skills)} skill(s), {len(taught)} learning(s){similar}."
 
     async def _similar(self, st: JobState) -> list[vectors_mod.Hit]:
         """The owner's past clips most like this video, for "What worked before" (never fails the job)."""
@@ -398,6 +398,7 @@ class Pipeline:
             heatmap=list(st.meta.get("heatmap") or []),
             skills_text=skills_prompt(st.skills),
             learnings=st.learnings,
+            week_learnings=st.week_learnings,
             language=st.meta.get("language"),
             similar=st.similar,
         )

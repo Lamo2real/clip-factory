@@ -10,9 +10,10 @@ AgentCore**, running **Claude Fable 5.1** with the owner's **skills** (SKILL.md 
 the source, transcribes it, finds the most viral moments, and cuts **5–10 vertical clips** (1080×1920, hook text,
 burned-in captions, cover image, pre-post checklist, a caption per platform). The clips appear in the app for review.
 **Nothing is published without the owner's Confirm.** Confirmed clips are queued for publishing to the connected
-social accounts (YouTube, Instagram, Facebook, TikTok, X; integrations arrive in a later phase). **48 hours after a
-clip is posted** its performance is checked, and what worked is distilled into "learnings" the agent uses on the next
-jobs.
+social accounts (YouTube, Instagram, Facebook, TikTok, X; integrations arrive in a later phase). Once posted, each
+clip's **numbers per platform are refreshed every 15–30 minutes** (each platform's safe limit) for 30 days and shown on
+the clip's performance page (§16); **48 hours after a clip is posted** what worked is distilled into "learnings", and
+every week the owner stars the **best clips of the week**, which teaches the agent how to cut the next jobs (§16).
 
 ## 1. Names, region, accounts
 
@@ -42,6 +43,7 @@ jobs.
 ```
 /                           GitHub Pages legal site (do not move) + README.md
 config/models.json          the only place model ids live
+config/platforms.json       per-platform stats refresh intervals, batch sizes and rate budgets (§16.4)
 skills/<name>/SKILL.md      built-in skills, bundled into the agent image and seeded for the owner
 docs/                       BUSINESS_REQUIREMENTS, ARCHITECTURE, CONTRACTS (this), AGENT, UX_DESIGN_SYSTEM,
                             DEPLOYMENT, SECURITY, TESTING, DECISIONS, ROADMAP; docs/architecture/aws-architecture.drawio
@@ -124,6 +126,10 @@ Codes: `bad_request`, `unauthorized`, `forbidden` (REST hooks API only, §14.3),
 | POST `/v1/accounts/{platform}/connect` | – | `501 not_implemented` ("Connecting accounts arrives in the next phase.") |
 | GET `/v1/posts` | query `clipId?` | `{ "posts": Post[] }` |
 | GET `/v1/insights` | – | `{ "learnings": Learning[], "posts": Post[] }` (posts with metrics) |
+| GET `/v1/clips/{clipId}/performance` | – | `ClipPerformance` (§16.2; 404 if not the caller's or `review`/`declined`) |
+| POST `/v1/clips/{clipId}/stats/refresh` | `{ "platforms"?: Platform[] }` (default: all) | `202 { "platforms": RefreshResult[] }` (§16.2; never bypasses a platform's limits) |
+| GET `/v1/weeks/{week}` | `week` = `yyyy-Www` (ISO week); query `from`, `to` (ISO UTC instants of the owner's local Monday 00:00 and next Monday 00:00) | `{ "week": WeekView }` (§16.2) |
+| PUT `/v1/weeks/{week}/best` | `{ "from", "to", "clipIds": string[] }` (0–10 ids of that week's clips) | `202 { "week": WeekView }` (starts the async `cf-prod-learn`, §16.6); `200` when the picks did not change |
 
 ### Shapes (TypeScript notation; the Python side uses the same keys)
 
@@ -146,7 +152,9 @@ interface Clip { clipId: string; jobId: string; rank: number; status: ClipStatus
                  sourceUrlAt?: string; layout: "facecam_top" | "blur_fill";
                  videoUrl?: string; coverUrl?: string;      // presigned GET, 1 h, added by the API
                  captions: Captions; checklist: { items: ChecklistItem[]; fixes: string[] };
-                 score: number /* 1..10 */; createdAt: string; decidedAt?: string }
+                 score: number /* 1..10 */; createdAt: string; decidedAt?: string;
+                 best?: boolean /* starred "Best this week" (§16) */; bestWeek?: string /* "yyyy-Www" */;
+                 totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */ }
 interface Skill { skillId: string; name: string; description: string; enabled: boolean; builtin: boolean;
                   format: "md" | "zip"; size: number; createdAt: string }
 interface Settings { clipMin: number /* 1..10, default 5 */; clipMax: number /* clipMin..10, default 10 */;
@@ -159,30 +167,40 @@ type Platform = "youtube" | "instagram" | "facebook" | "tiktok" | "x";
 interface Account { platform: Platform; status: "not_connected" | "connected" | "needs_reconnect"; handle?: string }
 interface Post { postId: string; clipId: string; platform: Platform; status: "pending_integration" | "queued" | "posted" | "failed";
                  url?: string; postedAt?: string; perfCheckAt?: string;
-                 metrics?: { views: number; likes: number; comments: number; shares: number; checkedAt: string }; error?: string }
-interface Learning { learningId: string; text: string; createdAt: string; postIds: string[] }
+                 metrics?: PostMetrics /* §16.3; views/likes/comments/shares may be null = "this platform does not say" */;
+                 privacy?: "public" | "private" /* TikTok unaudited posts are private, §16.3 */;
+                 refreshing?: boolean /* a stats refresh is running (refreshStartedAt < 5 min ago) */;
+                 nextRefreshAt?: string /* earliest manual refresh, §16.5 */; error?: string }
+interface Learning { learningId: string; text: string; createdAt: string; postIds: string[];
+                     kind?: "post" | "week" /* absent = "post" */; week?: string; title?: string /* "Best of week 2026-W46" */;
+                     clipIds?: string[] /* week learnings: the picked clips */ }
 interface Performance { views: number; likes: number; comments: number; shares: number; posts: number; checkedAt: string }
 interface SimilarClip { clipId: string; hook: string; title: string; momentType: MomentType;
                         similarity: number /* 0..1 = 1 - cosine distance, 2 decimals */; performance?: Performance;
                         coverUrl?: string /* presigned GET, 1 h */ }
+// PostMetrics, ClipPerformance, PlatformPerformance, RefreshResult, WeekView, WeekClip: §16.2–§16.3.
 ```
-Ids are ULIDs (26 chars, time-sortable). Timestamps are ISO-8601 UTC strings.
+`Performance` sums treat a `null` metric as 0. Ids are ULIDs (26 chars, time-sortable). Timestamps are ISO-8601 UTC strings.
 
 ## 6. DynamoDB (single table `cf-prod-data`, on-demand, PITR on, Streams `NEW_AND_OLD_IMAGES`)
 
-Keys: `pk` (S), `sk` (S); GSI `gsi1` on `gsi1pk`/`gsi1sk` (projection ALL); TTL attribute `ttl`.
+Keys: `pk` (S), `sk` (S); GSI `gsi1` on `gsi1pk`/`gsi1sk` (projection ALL); sparse GSI `gsi2` on `gsi2pk`/`gsi2sk`
+(S/S, projection ALL; only posts due for a stats poll carry these, §16.3); TTL attribute `ttl`.
 `userId` is the Cognito `sub`. The stream feeds `cf-prod-broadcast` (§14.2).
 
 | Item | pk | sk | gsi1pk / gsi1sk | Other attributes |
 |---|---|---|---|---|
 | Settings | `USER#{userId}` | `SETTINGS` | – | Settings fields |
 | Job | `USER#{userId}` | `JOB#{jobId}` | – | Job fields + `type="job"`, `userId`, `sessionId` (AgentCore session), `heartbeatAt`, `flowRun`, `flowExecutionArn` (§14.4) |
-| Clip | `USER#{userId}` | `CLIP#{clipId}` | `JOB#{jobId}` / `CLIP#{rank:03d}` | Clip fields (minus URLs) + `type="clip"`, `userId`, `videoKey`, `coverKey`, `publishState`, `postsCreated`, `flowRun`, `flowExecutionArn` (§14.5) |
+| Clip | `USER#{userId}` | `CLIP#{clipId}` | `JOB#{jobId}` / `CLIP#{rank:03d}` | Clip fields (minus URLs, minus computed `totalViews`) + `type="clip"`, `userId`, `videoKey`, `coverKey`, `publishState`, `postsCreated`, `flowRun`, `flowExecutionArn` (§14.5), `best`, `bestWeek` (§16) |
 | Connection | `USER#{userId}` | `CONN#{connectionId}` | `CONN#{connectionId}` / `CONN` | `type="conn"`, `userId`, `connectionId`, `connectedAt`, `ttl` (§14.2) |
 | Hook event | `HOOK#{platform}` | `HOOK#{hookId}` | – | `type="hook"`, `platform`, `receivedAt`, `headers`, `body`, `bodyEncoding`, `signature`, `ttl` (§14.3) |
 | Skill | `USER#{userId}` | `SKILL#{skillId}` | – | Skill fields + `key` (S3) |
-| Post | `USER#{userId}` | `POST#{postId}` | `CLIP#{clipId}` / `POST#{platform}` | Post fields |
-| Learning | `USER#{userId}` | `LEARNING#{learningId}` | – | Learning fields |
+| Post | `USER#{userId}` | `POST#{postId}` | `CLIP#{clipId}` / `POST#{platform}`; gsi2 `STATS` / `{statsDueAt}#{postId}` while polled | Post fields + internal `platformPostId`, `statsId`, `statsDueAt`, `insightsDueAt`, `refreshStartedAt`, `lastSnapshotAt` (§16.3) |
+| Stat snapshot | `USER#{userId}` | `STAT#{postId}#{iso}` | – | `type="stat"`, `postId`, `clipId`, `platform`, `at`, `views`, `likes`, `comments`, `shares`, `final?`, `ttl` (90 days) (§16.3) |
+| Week | `USER#{userId}` | `WEEK#{yyyy-Www}` | – | `type="week"`, WeekView fields without `clips` + `revision`, `unpickedClipIds` (§16.3) |
+| Rate budget | `RATE#{platform}` | `BUDGET` | – | `type="rate"`, per-platform counters, `blockedUntil` (§16.4) |
+| Learning | `USER#{userId}` | `LEARNING#{learningId}` | – | Learning fields (incl. `kind`, `week`, `title`, `clipIds`) |
 | Account (later) | `USER#{userId}` | `ACCOUNT#{platform}#{id}` | – | handle, status (tokens never here; Secrets Manager later) |
 
 Built-in skills are not items: the API lists `skills/*/SKILL.md` bundled in its package as `builtin: true` and stores
@@ -217,8 +235,9 @@ only the owner's enable/disable choice as `SKILL#builtin-<name>` items.
   structured outputs) use the same model id.
 * Skills: built-in skills from `/app/skills` plus the owner's **enabled** skills from S3 are written to
   `<workdir>/.claude/skills/<name>/SKILL.md` (zips extracted) so the Claude Agent SDK loads them; their text is also
-  included in the moment-selection prompt. The agent also receives the owner's latest 10 learnings and the top 8
-  similar past clips from S3 Vectors ("What worked before", §14.6).
+  included in the moment-selection prompt. The agent also receives the owner's latest 4 "Best of week" learnings, the
+  latest 10 other learnings and the top 8 similar past clips from S3 Vectors, the owner's best-of-week picks first
+  ("What worked before", §14.6, §16.7).
 * Pipeline steps (keys in §5): resolve (yt-dlp metadata / S3 head) → download (audio only for links; capped at
   `maxSourceHours`) → transcribe (Amazon Transcribe, word timestamps, language auto) → analyze (loudness spikes, chat
   of transcript windows) → select (Claude: 5–10 moments within `clipTarget`, six moment types, hooks) → render (ffmpeg:
@@ -235,7 +254,9 @@ only the owner's enable/disable choice as `SKILL#builtin-<name>` items.
 
 | Function | Handler | Trigger | Environment |
 |---|---|---|---|
-| `cf-prod-api` | `clipfactory_api.http.handler` | HTTP API (all routes) | `TABLE_NAME`, `MEDIA_BUCKET`, `AGENT_RUNTIME_ARN`, `JOB_FLOW_ARN`, `CLIP_FLOW_ARN`, `VECTOR_BUCKET`, `VECTOR_INDEX`, `APP_URL`, `VERSION` |
+| `cf-prod-api` | `clipfactory_api.http.handler` | HTTP API (all routes) | `TABLE_NAME`, `MEDIA_BUCKET`, `AGENT_RUNTIME_ARN`, `JOB_FLOW_ARN`, `CLIP_FLOW_ARN`, `VECTOR_BUCKET`, `VECTOR_INDEX`, `APP_URL`, `VERSION`, `STATS_FUNCTION_ARN`, `LEARN_FUNCTION_ARN` (§16) |
+| `cf-prod-stats` | `clipfactory_api.stats.handler.handler` | EventBridge rule `cf-prod-stats` `rate(15 minutes)` + async Invoke by `cf-prod-api` (manual refresh) | `TABLE_NAME`, `STATS_TIME_BUDGET_SECONDS=240` (§16.5) |
+| `cf-prod-learn` | `clipfactory_api.weekly.handler` | async Invoke by `cf-prod-api` on `PUT /v1/weeks/{week}/best` | `TABLE_NAME`, `MODEL_ID`, `EMBED_MODEL_ID`, `VECTOR_BUCKET`, `VECTOR_INDEX` (§16.6) |
 | `cf-prod-job-flow` (durable, alias `live`) | `clipfactory_api.flows.job_flow.handler` | async Invoke by `cf-prod-api` on the alias | `TABLE_NAME`, `AGENT_RUNTIME_ARN` |
 | `cf-prod-clip-flow` (durable, alias `live`) | `clipfactory_api.flows.clip_flow.handler` | async Invoke by `cf-prod-api` on the alias | `TABLE_NAME`, `MEDIA_BUCKET`, `MODEL_ID`, `EMBED_MODEL_ID`, `VECTOR_BUCKET`, `VECTOR_INDEX` |
 | `cf-prod-ws-authorizer` | `clipfactory_api.realtime.authorizer.handler` | WebSocket `$connect` REQUEST authorizer | `USER_POOL_ID`, `USER_POOL_CLIENT_ID` |
@@ -249,7 +270,8 @@ the SQS publish queue and the EventBridge resources: §14.
 * Confirm → API writes one `Post` per enabled platform (`pending_integration` while no account is connected for that
   platform, `queued` when connected) and starts the durable `cf-prod-clip-flow` (§14.5), which publishes the `queued`
   ones through the platform adapter (adapters arrive in phase 2; today every platform is `pending_integration`), waits
-  48 hours, reads metrics, distils one short Learning and updates the clip's vector.
+  48 hours, reads metrics (through the shared stats refresh, §16.5), distils one short Learning and updates the clip's
+  vector. Between and after those steps `cf-prod-stats` keeps every posted post's numbers fresh for 30 days (§16).
 * A `running` job whose agent stops sending heartbeats for 15 minutes becomes `failed` ("The agent stopped
   responding. Press Retry.") through the job-flow callback heartbeat timeout (§14.4), not a scan.
 
@@ -257,7 +279,8 @@ the SQS publish queue and the EventBridge resources: §14.
 
 `app_url`, `api_url`, `region`, `user_pool_id`, `user_pool_client_id`, `web_bucket`, `distribution_id`,
 `media_bucket`, `table_name`, `agent_runtime_arn`, `ecr_repository_url`, and from §14: `ws_url`, `hooks_url`,
-`vector_bucket`, `vector_index`, `job_flow_alias_arn`, `clip_flow_alias_arn`. `write-web-config.sh` requires `ws_url`.
+`vector_bucket`, `vector_index`, `job_flow_alias_arn`, `clip_flow_alias_arn`, and from §16: `stats_function_name`,
+`learn_function_name`, `stats_rule_name`, `stats_tick_minutes`. `write-web-config.sh` requires `ws_url`.
 
 Terraform input variables (envs/prod): `region`, `owner_email`, `agent_image_tag`, `lambda_zip_path`
 (default `../../../api/dist/lambda.zip`), `alarm_email` (optional), `web_dev_origin` (default `http://localhost:5173`),
@@ -278,6 +301,9 @@ Terraform input variables (envs/prod): `region`, `owner_email`, `agent_image_tag
   sound on clicks of disabled ones and on errors. Driven only by the `click` event, so scrolling never makes a sound.
   Off switch in Settings.
 * Nothing may overflow its box at any width from 320 px up (enforced by Playwright tests).
+* **Library** has two views: "All clips" (every kept clip, newest first, each card shows total views when measured)
+  and "This week" (the week's clips sorted by views with a big "Best this week" star each, arrows for earlier weeks,
+  §16.8). Tapping any clip in Library opens its performance page `/clips/{clipId}` (§16.8).
 * Installable PWA (manifest + service worker) on phone and desktop.
 
 ## 12. Get the app, updates, and kid-proof UX (added by the owner after the first build)
@@ -368,7 +394,7 @@ AgentCore Runtime, Transcribe, Bedrock. Backend code is Python 3.13 (`api/`, `ag
 | Lambda `cf-prod-watchdog`, file `api/src/clipfactory_api/watchdog.py` | `cf-prod-job-flow` callback heartbeat timeout (§14.4) |
 | SQS `cf-prod-publish`, DLQ `cf-prod-publish-dlq`, their policies and the event source mapping | durable execution (no queue) |
 | EventBridge Scheduler group `cf-prod`, role `cf-prod-scheduler`, one-time schedules `perf-{postId}` | `context.wait(48 h)` in `cf-prod-clip-flow` |
-| EventBridge rule `cf-prod-watchdog` (rate 10 minutes), its target, permission and `event_invoke_config` | – |
+| EventBridge rule `cf-prod-watchdog` (rate 10 minutes), its target, permission and `event_invoke_config` | – (the only EventBridge rule since §16 is `cf-prod-stats`) |
 | Env vars `PUBLISH_QUEUE_URL`, `PERF_CHECK_FUNCTION_ARN`, `SCHEDULER_ROLE_ARN`, `SCHEDULE_GROUP` | `JOB_FLOW_ARN`, `CLIP_FLOW_ARN` on `cf-prod-api` |
 | Clip field `publishClaimAt`; clip `publishState` value `enqueued` | `publishState: "pending" \| "started"` (§14.5) |
 | `api` module output `publish_dlq_name`; monitoring variable `dlq_name` and alarm `cf-prod-publish-dlq-not-empty` | durable-execution alarms (§14.9) |
@@ -427,10 +453,10 @@ Missing/invalid token: `raise Exception("Unauthorized")` (API Gateway answers 40
 * `aws_lambda_event_source_mapping`: `starting_position = "LATEST"`, `batch_size = 100`,
   `maximum_batching_window_in_seconds = 1`, `maximum_retry_attempts = 2`, `maximum_record_age_in_seconds = 600`,
   `bisect_batch_on_function_error = true`, `function_response_types = ["ReportBatchItemFailures"]`, and exactly one filter:
-  `pattern = jsonencode({ dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }] } } } })`.
-  (So `CONN#`, `HOOK#`, `SETTINGS`, `SKILL#` changes never reach it.)
+  `pattern = jsonencode({ dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }] } } } })`.
+  (So `CONN#`, `HOOK#`, `SETTINGS`, `SKILL#`, `STAT#` and `RATE#…/BUDGET` changes never reach it.)
 * Per batch: keep only the last record per (`pk`, `sk`) (heartbeats coalesce); `userId` = `pk` minus `USER#`; `type`
-  from the `sk` prefix (`JOB#`→`job`, `CLIP#`→`clip`, `POST#`→`post`, `LEARNING#`→`learning`); INSERT/MODIFY →
+  from the `sk` prefix (`JOB#`→`job`, `CLIP#`→`clip`, `POST#`→`post`, `LEARNING#`→`learning`, `WEEK#`→`week`); INSERT/MODIFY →
   `op: "upsert"` from `NewImage`, REMOVE → `op: "delete"` from `OldImage`. Query the owner's connections
   (`pk = USER#{userId}`, `begins_with(sk, "CONN#")`) and PostToConnection to each. `GoneException` (410) → DeleteItem the
   Connection. Other post errors are logged and skipped (the web refetches on reconnect). Only a failed DynamoDB query
@@ -442,12 +468,13 @@ Missing/invalid token: `raise Exception("Unauthorized")` (API Gateway answers 40
     | { type: "clip"; op: "upsert"; id: string; item: Clip /* without videoUrl/coverUrl */ }
     | { type: "post"; op: "upsert"; id: string; item: Post }
     | { type: "learning"; op: "upsert"; id: string; item: Learning }
-    | { type: "job" | "clip" | "post" | "learning"; op: "delete"; id: string }
-    | { type: "job" | "clip" | "post" | "learning"; op: "upsert"; id: string; partial: true } // item too big: refetch
+    | { type: "week"; op: "upsert"; id: string /* "yyyy-Www" */; item: WeekSummary /* §16.2 */ }
+    | { type: "job" | "clip" | "post" | "learning" | "week"; op: "delete"; id: string }
+    | { type: "job" | "clip" | "post" | "learning" | "week"; op: "upsert"; id: string; partial: true } // item too big: refetch
     | { type: "pong"; at: string } | { type: "error"; code: "bad_request" };
   ```
   `item` is built by the **same public-shape functions the HTTP API uses** (`jobs.public_job`, `clips.public_clip`
-  without presigning, `posts.public_post`, the Learning shape), so internal fields (`sessionId`, `videoKey`,
+  without presigning, `posts.public_post`, the Learning shape, `weeks.public_week`), so internal fields (`sessionId`, `videoKey`,
   `publishState`, `flowExecutionArn`, …) never leave. If the serialized event exceeds 24 KB (frame limit 32 KB) send
   the `partial: true` form instead.
 * IAM: `dynamodb:Query`, `dynamodb:DeleteItem` on the table; `dynamodb:DescribeStream`, `GetRecords`,
@@ -606,14 +633,18 @@ Replaces the publish queue, DLQ, publisher, Scheduler group/role and perf-check.
      `publish(post, idempotency_key=postId)`; retry 3 attempts, exponential backoff, `retryable_error_types =
      [RetryablePublishError]`, `StepSemantics.AT_LEAST_ONCE_PER_RETRY` (an adapter whose platform has no idempotency
      key uses `AT_MOST_ONCE_PER_RETRY`). Post update conditional on `status = queued`: `posted`, `url`, `postedAt`,
-     `perfCheckAt = postedAt + 48 h`. Exhausted retries (`StepError`) → step `post-failed-{platform}` sets the post
+     `perfCheckAt = postedAt + 48 h`, plus the stats fields of §16.3 (`platformPostId`, `statsId`, `privacy`,
+     `statsDueAt = postedAt + minIntervalMinutes`, `gsi2pk = "STATS"`, `gsi2sk = "{statsDueAt}#{postId}"`; a private
+     TikTok post without `statsId` gets no gsi2 attributes), written by `posts.mark_posted(...)`. Exhausted retries (`StepError`) → step `post-failed-{platform}` sets the post
      `failed` with a plain `error`.
   3. `settle-clip`: clip `posted` if ≥ 1 post is `posted`; `failed` if every queued post failed; `confirmed` if none
      was queued. If nothing was posted: step `upsert-vector` (status `confirmed`) and return outcome `not_posted` (today's
      path, while every platform is `pending_integration`).
   4. `context.wait(Duration.from_hours(48), name="wait-48h")`: no compute, no schedule.
-  5. `metrics`: for each posted post, adapter metrics → `metrics` (`checkedAt`) on the Post; a platform that fails
-     after 3 attempts is skipped.
+  5. `metrics`: `stats.refresh.refresh_posts(deps, posted_posts, reason="flow", now)` (§16.5; the same code as the
+     poller, so it respects every rate budget and writes `metrics` + a snapshot); a platform that is blocked or fails
+     after 3 attempts keeps its latest stored `Post.metrics` (written by the poller), and only a post with no metrics
+     at all is skipped.
   6. `distil`: `learn.distil(user_id)`: Bedrock **Converse** with `MODEL_ID` (`global.anthropic.claude-fable-5-1`),
      `inferenceConfig={"maxTokens": 4000}` (room for adaptive thinking + one sentence), no `temperature`/`topP`/`topK`,
      `additionalModelRequestFields={"output_config": {"effort": "low"}}` (as perf-check did). Writes one Learning; outcomes
@@ -642,20 +673,24 @@ Replaces the publish queue, DLQ, publisher, Scheduler group/role and perf-check.
 * **Vector:** `key = clipId`; filterable metadata `userId` (string), `momentType` (string), `platforms` (list of
   strings: the enabled platforms at finalize, the posted ones after the check), `status` (`"review" | "confirmed" |
   "performed"`), `scoreBucket` (`"low"` score ≤ 4, `"mid"` 5–7, `"high"` ≥ 8); non-filterable `hook`, `title`
-  (`youtubeTitle`), `summary`, `performance` (JSON string of `Performance`, absent until measured). Filterable metadata
+  (`youtubeTitle`), `summary`, `performance` (JSON string of `Performance`, absent until measured); filterable `best`
+  (boolean, §16.6: `true` while the owner has the clip starred "Best this week"; written `false` by agent finalize;
+  every later metadata write merges and keeps it; a new filterable key needs no new index). Filterable metadata
   stays under 2 KB.
 * **Who writes/reads:**
 
   | Who | When | Calls | IAM (index ARN unless noted) |
   |---|---|---|---|
   | agent | finalize: one `PutVectors` for all new clips, status `review` | Titan + `put_vectors` | `s3vectors:PutVectors`, `bedrock:InvokeModel` on the Titan ARN |
-  | agent | before `select`: query text `f"{title}\n{channel}\n{notes}\n{transcript[:4000]}"`, `topK=8`, filter `{"$and": [{"userId": {"$eq": sub}}, {"status": {"$eq": "performed"}}]}`; fewer than 3 hits → again with `{"userId": {"$eq": sub}}` only; any error → skip, log `vectors.query_failed` | Titan + `query_vectors(returnMetadata=True, returnDistance=True)` | `s3vectors:QueryVectors`, `s3vectors:GetVectors` |
+  | agent | before `select`: query text `f"{title}\n{channel}\n{notes}\n{transcript[:4000]}"` (one embedding), first `topK=4` with filter `{"$and": [{"userId": {"$eq": sub}}, {"best": {"$eq": true}}]}`, then `topK=8` with `{"$and": [{"userId": {"$eq": sub}}, {"status": {"$eq": "performed"}}]}`; merge (dedupe by key, best hits first), cap 8; fewer than 3 hits in total → again with `{"userId": {"$eq": sub}}` only; any error → skip, log `vectors.query_failed` (§16.7) | Titan + `query_vectors(returnMetadata=True, returnDistance=True)` | `s3vectors:QueryVectors`, `s3vectors:GetVectors` |
+  | learn | `cf-prod-learn`: `best=true` on picked clips, `best=false` on unpicked ones (get, merge, put; missing vector → embed from the Clip item) | as clip-flow | `s3vectors:GetVectors`, `s3vectors:PutVectors`, Titan |
   | clip-flow | `upsert-vector`: `get_vectors(keys=[clipId], returnData=True, returnMetadata=True)`, merge metadata, `put_vectors`; vector missing → embed from the Clip item | as listed | `s3vectors:GetVectors`, `s3vectors:PutVectors`, Titan |
   | api | decline: `delete_vectors(keys=[clipId])` (errors logged, never fail the route) | | `s3vectors:DeleteVectors` |
   | api | `GET /v1/clips/{id}/similar` | see below | `s3vectors:GetVectors`, `s3vectors:QueryVectors` |
 
   The agent's prompt section is titled "What worked before" and lists per hit: moment type, hook, title, summary,
-  performance (views, likes) and similarity; it is advice, never a rule.
+  performance (views, likes) and similarity, and "Owner's pick: best of the week" for `best` hits; it is advice, never
+  a rule.
 * **`GET /v1/clips/{clipId}/similar`** (`routes/clips.py`, `vectors.py`): 404 if the clip is not the caller's;
   `get_vectors(keys=[clipId], returnData=True)` (none → `{"clips": []}`); `query_vectors(topK=6, filter={"$and":
   [{"userId": {"$eq": sub}}, {"status": {"$eq": "performed"}}]}, returnMetadata=True, returnDistance=True)`; drop the clip
@@ -676,10 +711,12 @@ Recorded as an ADR in `docs/DECISIONS.md`.
 
 ```
 infra/modules/
-  data/       + stream_enabled, stream_view_type = NEW_AND_OLD_IMAGES; output stream_arn
+  data/       + stream_enabled, stream_view_type = NEW_AND_OLD_IMAGES; output stream_arn; + sparse GSI gsi2 (§16.3)
+  stats/      NEW (§16.9): cf-prod-stats (+ EventBridge rule cf-prod-stats), cf-prod-learn, roles, log groups
   api/        only cf-prod-api + the HTTP API (queue, DLQ, scheduler, watchdog, publisher, perf-check removed);
               new inputs job_flow_arn_prefix, clip_flow_arn_prefix (function:NAME, for IAM ":*"), job_flow_alias_arn,
-              clip_flow_alias_arn, vector_bucket, vector_index, vector_index_arn; output function_names = { api = ... }
+              clip_flow_alias_arn, vector_bucket, vector_index, vector_index_arn, stats_function_arn,
+              learn_function_arn (§16.9); output function_names = { api = ... }
   flows/      NEW: cf-prod-job-flow, cf-prod-clip-flow (+ roles, log groups, alias live, durable_config)
               inputs: name, region, account_id, lambda_zip_path, table_name/arn, media_bucket/_arn, agent_runtime_arn,
               model_id, model_invoke_arns, embed_model_id, embed_model_arn, vector_bucket, vector_index, vector_index_arn,
@@ -708,7 +745,7 @@ module.hooks.hooks_url`, `vector_bucket`, `vector_index`, `job_flow_alias_arn`, 
 ### 14.9 Monitoring (SNS topic `cf-prod-alarms` as today)
 
 * `Errors > 0` (5 min, Sum, alarm `{fn}-errors` as today) for `cf-prod-api`, `cf-prod-job-flow`, `cf-prod-clip-flow`,
-  `cf-prod-ws`, `cf-prod-broadcast`, `cf-prod-hooks`. Not for `cf-prod-ws-authorizer`: rejecting a token raises by
+  `cf-prod-ws`, `cf-prod-broadcast`, `cf-prod-hooks`, `cf-prod-stats`, `cf-prod-learn` (§16.9). Not for `cf-prod-ws-authorizer`: rejecting a token raises by
   design, so its `realtime` `function_names` output leaves it out.
 * `AWS/Lambda` `DurableExecutionFailed > 0` and `DurableExecutionTimedOut > 0` (dimension `FunctionName`, 5 min, Sum,
   `notBreaching`) for `cf-prod-job-flow` and `cf-prod-clip-flow`: names `{fn}-durable-failed`, `{fn}-durable-timed-out`.
@@ -748,6 +785,8 @@ module.hooks.hooks_url`, `vector_bucket`, `vector_index`, `job_flow_alias_arn`, 
 | agent | `agent/**` (callback, vectors, "What worked before", duplicate `process_job`) |
 | web + ci/docs | `web/**` (live.ts, polling fallback, similar strip, Settings `coming_soon`), `scripts/write-web-config.sh`, `.github/**`, `docs/**` except this file |
 
+The §16 split (clip performance, stats, weekly best) is in §16.10.
+
 Shared function names across builders: `posts.create_for_clip(store, user_id, clip, settings, now) -> list[Post]`,
 `learn.distil(store, bedrock, model_id, user_id) -> str` (outcome), `vectors.embed_text(clip) -> str`,
 `vectors.upsert_clip(...)`, `vectors.delete_clip(user_id, clip_id)`, `vectors.similar(user_id, clip_id, k=5)`,
@@ -780,9 +819,10 @@ Shared function names across builders: `posts.create_for_clip(store, user_id, cl
   well" strip hidden when empty; no overflow from 320 px.
 * **infra** (`terraform test` with mock providers, `terraform validate`, `fmt -check`): flows have `publish = true`,
   alias `live`, `durable_config` 30600 / 259200 s and retention 14, `timeouts.delete = "60m"`, no destinations; the ESM
-  has exactly one filter with the four prefixes; the WebSocket authorizer sets no TTL/payload version; WS and REST logs
+  has exactly one filter with the five prefixes (§16 adds `WEEK#`); the WebSocket authorizer sets no TTL/payload version; WS and REST logs
   contain no query/`requestOverride` and `data_trace_enabled = false`; index is float32/1024/cosine with the four
-  non-filterable keys; no `aws_sqs_queue`, `aws_scheduler_*` or `aws_cloudwatch_event_rule` remains; outputs of §10 exist.
+  non-filterable keys; no `aws_sqs_queue` or `aws_scheduler_*` remains, and the only `aws_cloudwatch_event_rule` is
+  `cf-prod-stats` (§16.9); outputs of §10 exist.
 
 ## 15. Settings as a tree, and choosing your click sounds (owner request, 2026-11-16)
 
@@ -835,3 +875,520 @@ Branch routes are nested: `/settings/look-and-feel/sounds`. `/get-app` keeps wor
 * `Settings` gains `clickSound: number /* 1..30, default 6 */` and `errorSound: number /* 1..30, default 5 */`,
   validated in PUT `/v1/settings` (integers 1–30, else 400 with a plain message). Stored settings without them read
   as the defaults.
+
+## 16. Clip performance, stats refresh and weekly best (owner request, 2026-11-16)
+
+The owner's words: *"click on any video and see how they performed for each social media platform ... the video on
+top ... lines that go, in a smooth manner, leading to each vertical stack of information ... YouTube, TikTok,
+Instagram, X, Facebook ... select the ones that perform best during that week, so that it knows how to edit better
+in the future ... the stats ... should be an API call where I can just refresh it ... every 15 or 30 minutes, or
+whatever the lowest limit is for each API."* Where this section and an earlier one disagree, this one wins.
+
+Platform order everywhere in this section (stacks, arrays, tests): **YouTube, TikTok, Instagram, Facebook, X**
+(`["youtube", "tiktok", "instagram", "facebook", "x"]`, constant `STATS_ORDER`).
+
+### 16.1 What the owner gets
+
+* **Clip performance page** `/clips/{clipId}`: the 9:16 video on top, five smooth lines growing out of it into five
+  platform stacks (views, likes, comments, ... whatever that platform really offers), a crown on the best platform, a
+  "Best this week" star, one tomato **Refresh numbers** button. Numbers update live over the WebSocket.
+* **Automatic refresh**: an EventBridge tick every 15 minutes; each platform is polled no faster than its own safe
+  interval (YouTube, TikTok, X 15 min; Instagram, Facebook 30 min), slower as posts age, for 30 days, then one final
+  snapshot.
+* **Library › This week**: the week's clips sorted by views; the owner stars the best ones; Fable 5.1 writes one
+  "Best of week" learning and the starred clips are preferred in the agent's "What worked before".
+
+### 16.2 API (all JWT, §5 errors; file `api/src/clipfactory_api/routes/performance.py` and `routes/weeks.py`)
+
+`HTTP API` keeps its single `ANY /v1/{proxy+}` route: no API Gateway change.
+
+**GET `/v1/clips/{clipId}/performance`** → `200 ClipPerformance`. 404 `not_found` when the clip is not the caller's
+or its status is `review`/`declined` ("This clip has no numbers yet. Keep it first."). Reads: the Clip, its Posts
+(gsi1 `CLIP#{clipId}`), the Accounts, the STAT# snapshots of each post (Query `begins_with(sk, "STAT#{postId}#")`,
+`ScanIndexForward = false`, `Limit 500`, re-sorted oldest first, then downsampled to ≤ 60 points evenly by time,
+the last point always kept).
+
+```ts
+type PerfStatus = "posted" | "posted_private" | "waiting_for_connection" | "posting" | "failed" | "not_posted";
+interface PlatformPerformance {
+  platform: Platform; status: PerfStatus;
+  account: "connected" | "not_connected" | "needs_reconnect";
+  postId?: string; url?: string /* "Open on YouTube" */; postedAt?: string;
+  metrics: PostMetrics | null;            // §16.3; null until the first successful read
+  updatedAt?: string;                     // metrics.metricsUpdatedAt (fast counts)
+  insightsUpdatedAt?: string;             // metrics.insightsUpdatedAt (slow insights)
+  nextAllowedAt?: string;                 // earliest manual refresh for this post (§16.5); absent = now
+  refreshing: boolean;                    // refreshStartedAt within the last 5 min
+  final: boolean;                         // the day-30 final snapshot was taken (no more automatic polls)
+  error?: string;                         // Post.error (failed posting) or the last stats error, plain sentence
+}
+interface ClipPerformance {
+  clip: Clip;                             // with presigned videoUrl + coverUrl (1 h), best, bestWeek, totalViews
+  posts: PlatformPerformance[];           // always exactly five, in STATS_ORDER
+  series: Partial<Record<Platform, { at: string; views: number }[]>>;  // sparkline points; absent = no snapshots
+  totals: { views: number; likes: number; comments: number; shares: number; platformsPosted: number;
+            updatedAt?: string /* newest metricsUpdatedAt */ };       // null metrics count as 0
+  bestPlatform: Platform | null;          // highest non-null metrics.views > 0; ties → earlier in STATS_ORDER
+  bestThisWeek: boolean;                  // = clip.best === true
+  week: string | null;                    // = clip.bestWeek when starred, else null (the web computes the anchor week)
+  weekAnchorAt: string;                   // earliest postedAt of the clip's posts, else clip.decidedAt (§16.6)
+}
+```
+Status mapping per platform (first match wins): no Post for the platform → `not_posted`; Post `pending_integration`
+→ `waiting_for_connection`; `queued` → `posting`; `failed` → `failed`; `posted` with `privacy: "private"` →
+`posted_private`; `posted` → `posted`.
+
+**POST `/v1/clips/{clipId}/stats/refresh`** body `{ "platforms"?: Platform[] }` (unknown platform → 400). 404 as above.
+For each requested platform in STATS_ORDER, build one `RefreshResult`:
+```ts
+interface RefreshResult {
+  platform: Platform;
+  status: "started" | "too_soon" | "blocked" | "not_posted" | "not_connected" | "private";
+  nextAllowedAt?: string;   // when the next manual refresh is allowed (too_soon / blocked / started)
+  note?: string;            // plain sentence, e.g. "Instagram numbers can take up to 2 days to settle."
+}
+```
+* `not_posted`: no Post or Post not `posted`. `private`: `privacy: "private"` (TikTok; note "TikTok shows numbers
+  after the app is approved."). `not_connected`: no connected Account (note "Connect {Platform} in Settings › Posting ›
+  Accounts.").
+* `blocked`: the platform's rate budget has `blockedUntil > now` (§16.4) → `nextAllowedAt = blockedUntil`.
+* Otherwise claim the post with one conditional UpdateItem: `SET refreshStartedAt = :now, nextRefreshAt = :next`
+  where `:next = now + manualCooldownMinutes`, condition `(attribute_not_exists(nextRefreshAt) OR nextRefreshAt <= :now)
+  AND (attribute_not_exists(refreshStartedAt) OR refreshStartedAt < :nowMinus5m)`. Failed condition → `too_soon` with
+  the stored `nextRefreshAt`. Success → `started` with `nextAllowedAt = :next`; the Instagram and Facebook results carry
+  the note "Instagram numbers can take up to 2 days to settle." / "Facebook numbers can take up to 2 days to settle."
+* If ≥ 1 is `started`: one `lambda.invoke(FunctionName=STATS_FUNCTION_ARN, InvocationType="Event", Payload=
+  {"action": "refresh", "userId", "clipId", "postIds": [...started]})`. Invoke failure → clear `refreshStartedAt` and
+  `nextRefreshAt` on those posts and still return `202`, with those entries as `blocked` and the note "Could not check
+  right now. Try again in a minute." (`nextAllowedAt = now + 1 min`).
+* Always `202 { "platforms": RefreshResult[] }`. The numbers arrive as `post` upserts on the WebSocket (§16.8).
+
+**GET `/v1/weeks/{week}?from=&to=`**. `week` must match `^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$`; `from`/`to` are ISO UTC
+instants with `to - from` between 167 h and 169 h (DST) and `from` within 14 h of the ISO Monday 00:00 UTC of `week`;
+else 400 `bad_request` ("That week does not look right. Go back to This week."). A clip belongs to the week that
+contains its **anchor** = earliest `postedAt` of its posts, else `decidedAt` (kept but not posted yet); statuses
+`confirmed`, `publishing`, `posted`, `failed` only.
+```ts
+interface WeekClip { clip: Clip /* coverUrl presigned; no videoUrl */; anchorAt: string; posted: boolean;
+                     totals: { views: number; likes: number; comments: number; shares: number };
+                     views: Partial<Record<Platform, number | null>>; best: boolean }
+interface WeekSummary { week: string; from: string; to: string; clipIds: string[] /* the picks */; savedAt?: string;
+                        learnState: "none" | "learning" | "done" | "skipped" | "failed"; learningId?: string }
+interface WeekView extends WeekSummary { clips: WeekClip[] /* sorted: views desc, then anchorAt desc */;
+                                          learning?: Learning /* the week's "Best of week" learning */ }
+```
+No WEEK item yet → `clipIds: []`, `learnState: "none"`. Reads: Query all `POST#` and `CLIP#` items of the owner
+(single owner, small), filter in code.
+
+**PUT `/v1/weeks/{week}/best`** body `{ "from", "to", "clipIds" }` (same checks; `clipIds` unique, ≤ 10, each in that
+week's `clips`, else 400 "Pick clips from this week only."). Same set as stored → `200 { week }`, nothing else happens.
+Otherwise one TransactWriteItems (≤ 21 items): Put the WEEK item (`revision + 1`, `clipIds`, `unpickedClipIds = old −
+new`, `savedAt = now`, `learnState = "learning"` when `clipIds` is non-empty, else `"skipped"`), Update each newly picked
+Clip `best = true, bestWeek = week`, each unpicked Clip `best = false REMOVE bestWeek`. Then
+`lambda.invoke(FunctionName=LEARN_FUNCTION_ARN, InvocationType="Event", Payload={"userId", "week", "revision"})`
+(also for an empty set, to clear vectors and the old learning). Invoke failure → WEEK `learnState = "failed"`; the
+route still answers. Response `202 { week: WeekView }`.
+Stored picks whose clip has since left the week (its anchor moved, for example a clip kept on Sunday and posted on
+Monday) are dropped quietly from the incoming `clipIds` before the checks; their `best` flag is cleared only while
+`bestWeek` is still this week. GET returns `clipIds` filtered to clips still in the week, so the web can resend them.
+
+Public shapes come from `performance.public_performance(...)` and `weeks.public_week(item)` (WeekSummary, used by the
+broadcast too). Internal fields (`revision`, `unpickedClipIds`, `refreshStartedAt`, `statsDueAt`, `gsi2*`,
+`platformPostId`, `statsId`, `lastSnapshotAt`, `insightsDueAt`) never leave the API.
+
+### 16.3 DynamoDB items
+
+**Post (additions).**
+| Attribute | Meaning |
+|---|---|
+| `platformPostId` | the platform's id of the post (YouTube video id, TikTok publish id, IG media id, FB post id `{pageId}_{postId}`, X tweet id) |
+| `statsId` | the id the stats API takes: YouTube video id; TikTok `publicaly_available_post_id` from `/v2/post/publish/status/fetch/` (absent while private); IG media id; FB **video id** of the Reel; X tweet id |
+| `privacy` | `"public"`, or `"private"` for TikTok `SELF_ONLY` (unaudited app): no `statsId`, never polled |
+| `metrics` | `PostMetrics` below (latest) |
+| `statsDueAt` | ISO: next automatic poll; with `gsi2pk = "STATS"`, `gsi2sk = "{statsDueAt}#{postId}"` while the post is within the 30-day window; both gsi2 attributes REMOVEd after the final snapshot |
+| `insightsDueAt` | ISO: next slow-insights read (YouTube Analytics only; §16.4 `insightsIntervalMinutes`) |
+| `refreshStartedAt`, `nextRefreshAt` | manual refresh claim and cooldown (§16.2) |
+| `lastSnapshotAt` | ISO of the last STAT# item |
+| `statsError` | last stats error, plain sentence (cleared on success) |
+
+```ts
+interface PostMetrics {
+  views: number | null; likes: number | null; comments: number | null; shares: number | null; // common four
+  checkedAt: string;          // = metricsUpdatedAt (kept for §5/§14 readers and learn.distil)
+  metricsUpdatedAt: string;   // fast counts read time
+  insightsUpdatedAt?: string; // slow insights read time
+  final?: true;               // day-30 final snapshot taken
+  extra: YouTubeExtra | TikTokExtra | InstagramExtra | FacebookExtra | XExtra;  // keyed by Post.platform
+}
+// Every extra field is optional; a field the API did not return (removed, deprecated, not ready, empty set) is
+// ABSENT, never 0. Times are converted to seconds (Meta returns milliseconds).
+interface YouTubeExtra   { engagedViews?: number; watchMinutes?: number; avgViewSeconds?: number; avgViewPercent?: number;
+                           subscribersGained?: number }                      // shares comes from Analytics into `shares`
+interface TikTokExtra    {}                                                  // views/likes/comments/shares only
+interface InstagramExtra { reach?: number; saved?: number; reposts?: number; totalInteractions?: number;
+                           avgWatchSeconds?: number; totalWatchSeconds?: number; skipRatePercent?: number }
+interface FacebookExtra  { initialPlays?: number; replays?: number; reactions?: Record<string, number>;
+                           commentsAndShares?: number; avgWatchSeconds?: number; totalWatchSeconds?: number;
+                           followsGained?: number; reachUnique?: number }
+interface XExtra         { impressions?: number; reposts?: number; quotes?: number; bookmarks?: number;
+                           linkClicks?: number; profileClicks?: number; engagements?: number;
+                           playback0?: number; playback25?: number; playback50?: number; playback75?: number; playback100?: number }
+```
+
+**Field mapping (the adapters implement exactly this; tests use recorded fake responses, §16.11).**
+| Platform | Request | → `views` | `likes` | `comments` | `shares` | `extra` |
+|---|---|---|---|---|---|---|
+| YouTube fast | `GET https://www.googleapis.com/youtube/v3/videos?part=statistics&id={≤50 ids}` (1 unit/call) | `statistics.viewCount` (Shorts count replays since 2025-03-31) | `likeCount` | `commentCount` | – (null until Analytics) | – (`favoriteCount` ignored; no dislikes) |
+| YouTube slow | `GET https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate={earliest postedAt date}&endDate={today}&metrics=views,engagedViews,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained&dimensions=video&filters=video=={≤50 ids}` | (not used for views) | | | `shares` | `engagedViews`, `watchMinutes` = estimatedMinutesWatched, `avgViewSeconds` = averageViewDuration, `avgViewPercent` = averageViewPercentage, `subscribersGained` |
+| TikTok | `POST https://open.tiktokapis.com/v2/video/query/?fields=id,share_url,view_count,like_count,comment_count,share_count` body `{"filters":{"video_ids":[≤20]}}` | `view_count` | `like_count` | `comment_count` | `share_count` | – |
+| Instagram | `GET https://graph.facebook.com/{graphApiVersion}/{ig-user-id}/media?fields=id,permalink,media_product_type,timestamp,like_count,comments_count,insights.metric(views,reach,saved,shares,total_interactions,reposts,ig_reels_avg_watch_time,ig_reels_video_view_total_time,reels_skip_rate)&limit=50` (pages until all wanted ids found or `timestamp` older than 31 days) | insights `views` | `like_count` | `comments_count` | insights `shares` | `reach`, `saved`, `reposts`, `totalInteractions`, `avgWatchSeconds` = ig_reels_avg_watch_time/1000, `totalWatchSeconds` = ig_reels_video_view_total_time/1000, `skipRatePercent` = reels_skip_rate. Never `impressions`, `plays`, `ig_reels_aggregated_all_plays_count`. A metric error (code 100) drops that metric for the run and retries once without it |
+| Facebook | `GET https://graph.facebook.com/{graphApiVersion}/?ids={≤50 video ids}&fields=video_insights.metric(blue_reels_play_count,fb_reels_total_plays,fb_reels_replay_count,post_video_avg_time_watched,post_video_view_time,post_video_followers,post_video_likes_by_reaction_type,post_video_social_actions)` (period lifetime); guarded reach: `GET /{graphApiVersion}/?ids={post ids}&fields=insights.metric(post_total_media_view_unique)` (error → `reachUnique` absent) | `fb_reels_total_plays` | sum of `post_video_likes_by_reaction_type` | null | null | `initialPlays` = blue_reels_play_count, `replays`, `reactions`, `commentsAndShares` = post_video_social_actions, `avgWatchSeconds`, `totalWatchSeconds`, `followsGained` = post_video_followers, `reachUnique`. Never `post_impressions_unique`, `total_video_impressions*`, `total_video_views_unique` |
+| X | `GET https://api.x.com/2/tweets?ids={≤100}&tweet.fields=public_metrics,non_public_metrics,organic_metrics,created_at&expansions=attachments.media_keys&media.fields=public_metrics,non_public_metrics` (user context); posts ≥ 30 days old: same without `non_public_metrics`/`organic_metrics` (both fields) | attached video media `public_metrics.view_count` (never `impression_count`) | `like_count` | `reply_count` | `retweet_count` | `impressions` = public impression_count, `reposts` = retweet_count, `quotes`, `bookmarks`, `linkClicks` = url_link_clicks, `profileClicks` = user_profile_clicks, `engagements`, `playback0..100` = media non_public playback_{n}_count |
+
+**STAT# snapshot** (`pk USER#{userId}`, `sk STAT#{postId}#{iso}`): `type "stat"`, `postId`, `clipId`, `platform`,
+`at`, `views`, `likes`, `comments`, `shares` (nullable numbers), `final?: true`, `ttl = now + snapshotTtlDays (90) d`.
+Written after a successful fast read when `lastSnapshotAt` is absent, or ≥ `snapshotEveryMinutes` (60) ago, or the
+views changed by ≥ 1 % since the last snapshot and ≥ 15 min passed, or it is the final read. Totals survive the TTL on
+`Post.metrics`.
+
+**WEEK item** (`pk USER#{userId}`, `sk WEEK#{yyyy-Www}`): `type "week"`, `week`, `from`, `to`, `clipIds`, `savedAt`,
+`learnState`, `learningId?`, `learnedAt?`, `revision` (number, starts 1), `unpickedClipIds`.
+
+**Rate budget** (`pk RATE#{platform}`, `sk BUDGET`, app-wide; this is a single-owner app): `type "rate"`, `platform`,
+`updatedAt`, `blockedUntil?` (ISO), `blockedReason?`, and per platform:
+| Platform | Counters |
+|---|---|
+| youtube | `dayKey` (`YYYY-MM-DD` of `now − 8 h`, i.e. Pacific Standard; at most 1 h off in summer, covered by the reserve), `unitsUsed` |
+| tiktok | `minuteKey` (`YYYY-MM-DDTHH:MM` UTC), `requestsThisMinute` |
+| instagram, facebook | `buc` = parsed `X-Business-Use-Case-Usage` `{ callCount, totalCputime, totalTime, estimatedTimeToRegainAccess, at }` (highest entry of the header) |
+| x | `windowKey` (15-min UTC bucket), `requestsThisWindow`, `resetAt` (from `x-rate-limit-reset`), `dayKey` (UTC), `dayPostIds` (string set: posts already read today, free re-reads), `monthKey` (`YYYY-MM` UTC), `monthUsd` (estimated spend) |
+
+Reservation (`stats/budget.py`): `reserve(store, platform, cost, now) -> Reserved | Blocked(next_allowed_at)` is one
+conditional `UpdateItem` (`ADD` the counter; condition: same key and counter ≤ limit − cost, or a new key which SETs
+the counter; and `blockedUntil` absent or ≤ now). After the call `record(store, platform, response_meta, now)` stores
+headers and sets `blockedUntil` per §16.4. Poller and manual refresh go through the same functions.
+
+### 16.4 `config/platforms.json` (read by Terraform and by the code; copied into the zip)
+
+`api/scripts/build_lambda.py` copies it to `clipfactory_api/config/platforms.json` inside the zip; code loads it with
+`importlib.resources` (`stats.config.load()`), tests load the repo file. Terraform: `local.platforms =
+jsondecode(file("${path.root}/../../../config/platforms.json"))`, `local.stats_tick =
+min([for p in values(local.platforms.platforms) : p.minIntervalMinutes]...)` (= 15) → rule `rate(15 minutes)`.
+
+```json
+{
+  "$comment": "Stats refresh limits per platform (docs/CONTRACTS.md §16.4). Change values here only.",
+  "graphApiVersion": "v25.0",
+  "pollWindowDays": 30,
+  "snapshotTtlDays": 90,
+  "snapshotEveryMinutes": 60,
+  "ageTierHours": [48, 168, 720],
+  "order": ["youtube", "tiktok", "instagram", "facebook", "x"],
+  "platforms": {
+    "youtube": {
+      "label": "YouTube", "viewsField": "statistics.viewCount",
+      "minIntervalMinutes": 15, "tierIntervalsMinutes": [15, 30, 120], "manualCooldownMinutes": 5,
+      "insightsIntervalMinutes": 360, "slowNote": "Updates daily",
+      "idsPerRequest": 50,
+      "scopes": ["https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/yt-analytics.readonly",
+                 "https://www.googleapis.com/auth/youtube.upload"],
+      "budget": { "kind": "daily_units", "dailyUnits": 10000, "reserveUnits": 3000, "unitsPerCall": 1,
+                  "blockOn": ["quotaExceeded", "rateLimitExceeded"] }
+    },
+    "tiktok": {
+      "label": "TikTok", "viewsField": "view_count",
+      "minIntervalMinutes": 15, "tierIntervalsMinutes": [15, 30, 120], "manualCooldownMinutes": 5,
+      "idsPerRequest": 20,
+      "scopes": ["user.info.basic", "video.list", "video.publish"],
+      "budget": { "kind": "per_minute", "requestsPerMinute": 600, "useAtMost": 300, "blockOn": ["rate_limit_exceeded"] }
+    },
+    "instagram": {
+      "label": "Instagram", "viewsField": "views",
+      "minIntervalMinutes": 30, "tierIntervalsMinutes": [30, 60, 360], "manualCooldownMinutes": 30,
+      "slowNote": "Can take 2 days", "idsPerRequest": 50,
+      "scopes": ["instagram_basic", "instagram_manage_insights", "instagram_content_publish", "pages_show_list"],
+      "budget": { "kind": "meta_buc", "stopAtPercent": 75, "throttleCodes": [80002], "minBlockMinutes": 60 }
+    },
+    "facebook": {
+      "label": "Facebook", "viewsField": "fb_reels_total_plays",
+      "minIntervalMinutes": 30, "tierIntervalsMinutes": [30, 60, 360], "manualCooldownMinutes": 30,
+      "slowNote": "Can take 2 days", "idsPerRequest": 50,
+      "scopes": ["pages_show_list", "pages_read_engagement", "read_insights", "pages_manage_posts", "pages_manage_engagement"],
+      "budget": { "kind": "meta_buc", "stopAtPercent": 75, "throttleCodes": [80001], "minBlockMinutes": 60 }
+    },
+    "x": {
+      "label": "X", "viewsField": "media.public_metrics.view_count",
+      "minIntervalMinutes": 15, "tierIntervalsMinutes": [15, 30, 120], "manualCooldownMinutes": 5,
+      "idsPerRequest": 100, "nonPublicMaxAgeDays": 30,
+      "scopes": ["tweet.read", "users.read", "tweet.write", "media.write", "offline.access"],
+      "budget": { "kind": "x", "appRequestsPer15Min": 3500, "userRequestsPer15Min": 5000, "useAtMost": 1000,
+                  "usdPerPostRead": 0.005, "monthlyUsd": 10 }
+    }
+  }
+}
+```
+Rules:
+* **Interval for a post** = `tierIntervalsMinutes[i]` where `i` = first tier with post age (now − postedAt) ≤
+  `ageTierHours[i]` (≤ 48 h, ≤ 7 d, ≤ 30 d). Never below `minIntervalMinutes`. Next `statsDueAt = readAt + interval`.
+* **Final**: the first read with age ≥ `pollWindowDays` writes `metrics.final = true`, a `final` STAT#, and REMOVEs
+  `gsi2pk`/`gsi2sk`. Manual refresh still works afterwards (X then reads public metrics only).
+* **Blocking** (`record`): youtube `403` with reason in `blockOn` → `blockedUntil` = next `dayKey` boundary (08:00 UTC);
+  stop when `unitsUsed + cost > dailyUnits − reserveUnits` (uploads keep their 3,000-unit reserve). tiktok `429` /
+  `rate_limit_exceeded` → now + 1 min; stop at `useAtMost` per minute. meta: after every response parse
+  `X-Business-Use-Case-Usage`; any of call_count/total_cputime/total_time ≥ `stopAtPercent` → `blockedUntil = now +
+  max(estimated_time_to_regain_access, 15) min`; error code in `throttleCodes` → `now + max(estimated_time_to_regain_access,
+  minBlockMinutes) min`, and **no retry** (retries extend Meta's block). x: `429` → `blockedUntil = x-rate-limit-reset`;
+  stop at `useAtMost` per 15-min window; before each request estimate cost = `usdPerPostRead` × ids not in `dayPostIds`;
+  `monthUsd + cost > monthlyUsd` → `blockedUntil` = first day of next month, `blockedReason "monthly_cap"`.
+* Every 5xx/network error: the step retries twice (1 s, 4 s) except Meta throttles; then `statsError` is set and
+  `statsDueAt = now + interval` (no tight loop).
+
+### 16.5 Poller and refresh: Lambda `cf-prod-stats`
+
+Package `api/src/clipfactory_api/stats/`: `__init__.py`, `config.py` (load/validate platforms.json, `interval_for(...)`),
+`budget.py` (§16.3), `refresh.py` (`refresh_posts(deps, posts, *, reason: "poll" | "manual" | "flow", now) ->
+RefreshReport`, the one code path), `poll.py` (`run_tick(deps, now)`), `handler.py` (`handler(event, context)`).
+Adapters: `platforms/{youtube,tiktok,instagram,facebook,x}.py` implement, beside `publish`/`metrics`:
+```python
+class StatsAdapter(Protocol):
+    platform: str
+    def fetch_stats(self, posts: list[Record], account: Record | None, *, now: datetime,
+                    want_insights: bool, http: HttpClient) -> StatsBatch: ...
+# StatsBatch(results: dict[postId, PostMetrics-dict], errors: dict[postId, str], meta: ResponseMeta(status, headers,
+#            error_code, retry_after), requests: int, units: int)
+# HttpClient = Callable[[HttpRequest], HttpResponse] (urllib in production, a recorder in tests); one request per
+# idsPerRequest chunk; NotConnectedError when account is None.
+```
+`metrics(post, account)` of §14 stays and is implemented as `fetch_stats([post])` mapped to `Metrics`. Phase 1:
+`platforms.adapter_for(platform)` returns the real adapter class, but `posts.connected_account` is always `None`, so
+every call ends `not_connected` and nothing reaches the network. Tokens (phase 2) come from Secrets Manager; no token
+ever lands in DynamoDB, logs or responses.
+
+* **Handler events.** EventBridge scheduled event (`source == "aws.events"`) → `run_tick`. `{"action": "refresh",
+  "userId", "clipId", "postIds"}` → `refresh_posts(reason="manual")` on those posts, then REMOVE `refreshStartedAt`
+  (always, also on errors). Anything else → log `stats.bad_event`, return.
+* **`run_tick`**: Query `gsi2` `gsi2pk = "STATS" AND gsi2sk <= "{nowIso}#~"` (paginate, ≤ 2,000 posts); group by
+  platform in `order`; per platform skip all when `blockedUntil > now`; chunk by `idsPerRequest`; for each chunk
+  `reserve` → `fetch_stats` → `record`; write results; YouTube posts with `insightsDueAt` absent or ≤ now are also sent
+  with `want_insights=True` (separate Analytics request per ≤ 50 ids, `insightsDueAt = now + 360 min`). Stop starting
+  new requests when `STATS_TIME_BUDGET_SECONDS` (240) have passed; the rest stays due for the next tick. Log one
+  `stats.tick` line `{posts, requests, updated, blocked: [platforms], errors}`.
+* **Writing a result** (per post, one UpdateItem): `metrics` (merge: fast fields + `metricsUpdatedAt`; slow fields +
+  `insightsUpdatedAt` only when insights were read; previous slow values kept otherwise), `checkedAt`, `statsDueAt`,
+  `gsi2sk` (or REMOVE gsi2 when final), REMOVE `statsError`; then the STAT# put when §16.3 says so (`lastSnapshotAt`).
+  The Post change reaches the browser as a `post` upsert (broadcast filter `POST#`).
+* **Skipped posts.** The token check runs before `budget.reserve`. A `not_connected` or `blocked` post is moved on
+  without `statsError` (to `blockedUntil`, or by one interval); a `not_connected` post past `pollWindowDays` leaves gsi2.
+* **YouTube cost.** `daily_units` is charged `unitsPerCall` per `videos.list` request only. The YouTube Analytics
+  (insights) request has its own quota and is not charged to this budget.
+* **Errors** never raise out of the handler (EventBridge would retry); a bug raises and alarms (§14.9).
+
+### 16.6 Weekly best learning: Lambda `cf-prod-learn`
+
+File `api/src/clipfactory_api/weekly.py`: `handler(event, context)` → `learn_week(deps, user_id, week, revision)`.
+Input `{"userId", "week", "revision"}`.
+1. GetItem the WEEK item; `revision` differs (a newer save) → return `superseded`, write nothing.
+2. Vectors: for each `clipIds` → merge metadata `best = true`; each `unpickedClipIds` → `best = false` (§14.6; vector
+   missing → embed from the Clip item and put it). Errors logged (`weekly.vector_failed`), never fatal.
+3. `clipIds` empty → delete the week's Learning (`learningId` on the item) if any, set `learnState "skipped"`, done.
+4. Build the prompt rows for **every** clip of that week (same week rule as §16.2, from the stored `from`/`to`):
+   `picked` (bool), `hook`, `momentType`, `durationSec`, `layout`, `score`, `youtubeTitle`, the first 200 chars of the
+   TikTok caption, per-platform `views/likes/comments/shares`, `totalViews`. Bedrock **Converse** `MODEL_ID`
+   (`global.anthropic.claude-fable-5-1`), `maxTokens 4000`, `additionalModelRequestFields={"output_config": {"effort":
+   "low"}}`, no temperature/topP/topK (as `learn.distil`). System prompt: compare the owner's picks with the rest of
+   the week (hooks, moment types, length, captions, numbers) and answer with ONE plain-text learning of 1–3 short
+   sentences (≤ 500 chars) the clip-picking agent should apply next time; the picks matter more than raw views.
+5. `end_turn` with text → re-read the WEEK item, still the same `revision` → Put Learning `{learningId (reuse the
+   item's learningId, else new ULID), kind: "week", week, title: "Best of week {week}", text, clipIds, postIds (the
+   picked clips' posted post ids), createdAt}` and Update WEEK `learnState "done"`, `learningId`, `learnedAt`. Stop
+   reasons `max_tokens`/`refusal`/`content_filtered`/empty → `learnState "failed"`, no Learning (§13). Bedrock errors
+   retry twice, then `failed`.
+Returns `{"week", "outcome": "learning" | "skipped" | "superseded" | "failed" | <stop reason>}`. The LEARNING# and
+WEEK# changes reach the browser over the WebSocket. Shared pure functions live in `learn.py`
+(`learn.week_rows(...)`, `learn.ask_week(...)`) so the clip-flow distil and this share the Converse helper.
+
+### 16.7 Agent change (`agent/src/clipfactory_agent/vectors.py`, `learnings.py`)
+
+* "What worked before" query: the two-query merge of §14.6 (best first, then performed, ≤ 8, fallback < 3 hits);
+  `best` hits are labelled "Owner's pick: best of the week".
+* Learnings brief: Query `begins_with(sk, "LEARNING#")`, newest first, ≤ 50 items; the latest **4** with `kind ==
+  "week"` go first under the heading "The owner's best-of-week picks taught", then the latest **10** others under
+  "Learnings". Both appear in the moment-selection prompt; empty groups are left out.
+* Finalize writes `best: false` in each new vector's metadata.
+
+### 16.8 Web
+
+**Routes** (`web/src/lib/router.ts`): `/clips/{clipId}` → `{ name: "clip", clipId }` (nav section `library`);
+`/library` → All clips; `/library?view=week` → This week (current ISO week); `/library?view=week&week=2026-W45` →
+that week. Files: `screens/clip/ClipPerformance.tsx`, `components/PerfLines.tsx` (the SVG lines),
+`components/PlatformStack.tsx`, `components/Sparkline.tsx`, `screens/library/WeekView.tsx`, `lib/week.ts` (ISO week
+of a date in the browser's time zone, Monday start; `weekRange(week) -> {from, to}` as UTC ISO of local Monday 00:00
+and next Monday 00:00; `weekLabel` "10–16 Nov"), `lib/metrics.ts` (compact numbers with `Intl.NumberFormat(…,
+{notation: "compact"})`, "–" for null, durations "1:05"), API methods in `api/index.ts` + mock fixtures.
+
+**Entry points**: tapping any Library card opens `/clips/{clipId}`; on Review, a kept clip's card shows "See how it
+does" → `/clips/{clipId}`; Back returns to where the owner came from (else `/library`).
+
+**Page layout (top to bottom)**
+1. Header row: Back, the hook as the title (serif italic, wraps, never truncated off-screen).
+2. Preview: `<video controls playsinline preload="metadata" poster={coverUrl} src={videoUrl}>`, `aspect-ratio: 9/16`,
+   rounded glass frame, centred; width 280 px (≥ 1024), 240 px (600–1023), `min(100%, 56vh * 9/16)` (< 600). No
+   autoplay. No `videoUrl` → the cover image.
+3. Stat block beside/under the preview: big total views (display serif) with "views across platforms" and a small
+   "(each app counts views its own way)"; the **"Best this week" star** toggle (≥ 48 px, `aria-pressed`, sage glass,
+   not tomato); the one tomato **Refresh numbers** button (icon + word, spinner while any `started` post is still
+   `refreshing`; when every platform is `too_soon`/`blocked` it reads "Next check in 4 min" and a tap plays the deny
+   sound with a toast saying when). "Updated 3 min ago" (newest `updatedAt`) under it.
+4. The lines + five stacks (STATS_ORDER).
+
+**Lines** (`PerfLines`, one `<svg aria-hidden="true">` absolutely positioned behind the stacks, recomputed with a
+`ResizeObserver` on the page container; coordinates from `getBoundingClientRect` of the preview and each stack):
+* Each line is one cubic bezier from the preview's bottom centre `(x0, y0)` to the top centre of its stack
+  `(xi, yi)`: `M x0 y0 C x0 (y0 + 0.55·dy), xi (yi − 0.55·dy), xi yi` with `dy = yi − y0`. Stroke 2 px, round caps,
+  sage `#9CAF88` at 70 % (ink at 35 % in dark mode); the best platform's line is tomato. A 6 px dot at each end.
+* Draw-in: `pathLength="1"`, `stroke-dasharray: 1`, `stroke-dashoffset` 1 → 0 over 900 ms
+  `cubic-bezier(0.22, 1, 0.36, 1)`, staggered 80 ms in STATS_ORDER, once per page load; the stacks fade/rise 12 px as
+  their line arrives. `prefers-reduced-motion: reduce` or `settings.reduceMotion` → lines drawn at once, no fade.
+* **≥ 1024 px**: five equal columns (`grid-template-columns: repeat(5, minmax(0, 1fr))`, gap 16 px), the lines fan
+  out from the preview (≥ 96 px vertical space between preview and stacks).
+* **600–1023 px**: a 6-track grid (`repeat(6, minmax(0, 1fr))`, column gap ≥ 24 px): YouTube/TikTok/Instagram span
+  tracks 1–2/3–4/5–6 in row 1; Facebook spans 2–3 and X 4–5 in row 2, so their centres sit exactly at 1/3 and 2/3 of
+  the width, in the gutters between the row-1 cards: their lines run straight down through those gutters, never over
+  a card.
+* **< 600 px (phones)**: stacks are full-width cards in one column with `padding-left: 44px` space; a trunk line
+  runs from the preview's bottom centre, curves to `x = 20px` and runs down the left; each card gets a branch: from
+  the trunk at the card's top + 28 px, a quarter-curve (`C` with 16 px handles) into the card's left edge at the
+  platform mark. The trunk ends at the last branch. Cards stay full width minus the 16 px gutter; nothing overflows
+  at 320 px.
+
+**A stack** (`PlatformStack`, `<section aria-labelledby>`, glass card, same order as the DOM reads):
+platform mark (`PlatformMark`) + name, a small crown icon with "Best" (visually hidden text) on `bestPlatform`; status
+chip: Posted / Posted privately / Waiting for connection / Posting / Failed / Not posted; the big views number; metric
+rows (icon, label, value; labels wrap, values never cut) showing **only** that platform's fields:
+* YouTube: Views, Likes, Comments; slow group "Updates daily": Engaged views, Watch time, Average view, Average %
+  watched, Shares, New subscribers.
+* TikTok: Views, Likes, Comments, Shares.
+* Instagram: Likes, Comments; slow group "Can take 2 days": Views (top number), Reach, Shares, Saves, Reposts, Average
+  watch, Total watch, Skip rate.
+* Facebook: slow group "Can take 2 days": Plays (top number), First plays, Replays, Reactions (emoji breakdown),
+  Comments + shares, Average watch, Total watch, New followers, Reach (when present).
+* X: Video views, Impressions, Likes, Reposts, Quotes, Replies, Bookmarks, Link clicks, Profile clicks, Watched to
+  25/50/75/100 % (only while present).
+Absent fields are not shown (no "0" rows). Then the sparkline (`Sparkline`, 120×32 SVG polyline of `series[platform]`,
+≥ 2 points else hidden, `role="img"` `aria-label="Views went from 1.2K to 8.4K"`), "Updated 3 min ago" (fast) and,
+for slow groups, "Insights from 2 days ago" (`insightsUpdatedAt`); "Open on {Platform}" link (`url`, new tab,
+`rel="noopener noreferrer"`); "Next check in 12 min" when `nextAllowedAt` is in the future.
+**Calm states** (no numbers, one plain line + one link button, never an error colour except Failed):
+* Waiting for connection: "Connect {Platform} in Settings › Posting › Accounts." → `/settings/posting/accounts`.
+* Not posted: "Not posted here. Turn on {Platform} in Settings › Posting › Where clips go." →
+  `/settings/posting/where`.
+* Posting: "Posting now…" with a small spinner.
+* Posted privately (TikTok): "Posted privately. TikTok shows numbers after the app is approved."
+* Posted, no metrics yet: "Numbers are on the way. Check back in a few minutes."
+* Failed: "Posting failed: {error}. Go to Review and press Try again."
+
+**Live**: `post` upserts for this clip's posts replace that stack's data (metrics, refreshing, nextRefreshAt) and add
+a series point; `clip` upserts update the star; reconnect or `partial` → refetch `GET …/performance`. Polling fallback
+while disconnected: every 60 s on this page.
+
+**Library › This week** (`WeekView`): tabs "All clips | This week" (pills); header "This week · 10–16 Nov" (or "Week of
+3–9 Nov") with ‹ › arrow buttons (› disabled on the current week, aria-labels "Earlier week"/"Later week"); list of
+`WeekClip` cards sorted as served: rank number, cover, hook, total views (or "Not posted yet"), a row of five tiny
+platform marks with views, and a big star toggle "Best this week" (≥ 48 px, `aria-pressed`). Toggling is optimistic
+and saved by `PUT …/best` 800 ms after the last change (one request); a toast "Saved. Clip Factory will learn from your
+picks." Under the header a status line from `learnState`: learning → "Learning from your picks…" (spinner); done →
+the learning text in a glass quote with "Best of week" label; failed → "Could not learn this time. Change a pick to
+try again."; none/skipped → "Star the clips that did best this week." Empty week: "No clips this week yet. Make clips
+on Home." with a link. `week` events and `learning` upserts (kind `week`) update it live.
+
+**Settings › Posting › Accounts** gets a leaf under X: "X charges a little for every number check. Clip Factory stops
+at $10 a month." (value from a shared constant mirroring `platforms.json` `x.budget.monthlyUsd`, served in mock data).
+
+### 16.9 Terraform (module `infra/modules/stats`, wired in `envs/prod`)
+
+* **`cf-prod-stats`**: handler `clipfactory_api.stats.handler.handler`, python3.13, arm64, 256 MB, timeout 300 s,
+  shared zip, X-Ray active, JSON logs `/aws/lambda/cf-prod-stats`, env `TABLE_NAME`, `STATS_TIME_BUDGET_SECONDS = 240`.
+  No reserved concurrency (new accounts' limits forbid it; budgets are conditional writes).
+  `aws_lambda_function_event_invoke_config`: `maximum_retry_attempts = 0`, `maximum_event_age_in_seconds = 900`.
+  Role `cf-prod-fn-stats`: `dynamodb:GetItem`, `PutItem`, `UpdateItem`, `Query`, `BatchGetItem` on the table and
+  `index/*`; logs; X-Ray. (Phase 2 adds `secretsmanager:GetSecretValue` on `cf-prod/platforms/*`.)
+* **EventBridge**: `aws_cloudwatch_event_rule` `cf-prod-stats`, `schedule_expression = "rate(${local.stats_tick}
+  minutes)"` (15, from platforms.json), `state = "ENABLED"`; `aws_cloudwatch_event_target` → the function (unqualified
+  ARN); `aws_lambda_permission` for `events.amazonaws.com` with `source_arn` = the rule ARN.
+* **`cf-prod-learn`**: handler `clipfactory_api.weekly.handler`, 512 MB, timeout 300 s, env `TABLE_NAME`, `MODEL_ID`,
+  `EMBED_MODEL_ID`, `VECTOR_BUCKET`, `VECTOR_INDEX`; event invoke config `maximum_retry_attempts = 1`,
+  `maximum_event_age_in_seconds = 3600`. Role `cf-prod-fn-learn`: `dynamodb:GetItem`, `PutItem`, `UpdateItem`,
+  `DeleteItem`, `Query`, `BatchGetItem` on the table and `index/*`; `bedrock:InvokeModel` on `model_invoke_arns` and
+  the Titan ARN; `s3vectors:GetVectors`, `s3vectors:PutVectors` on the index ARN; logs; X-Ray.
+* **api module**: env `STATS_FUNCTION_ARN`, `LEARN_FUNCTION_ARN` (unqualified ARNs built from names); IAM
+  `lambda:InvokeFunction` on both.
+* **data module**: `global_secondary_index { name = "gsi2", hash_key = "gsi2pk", range_key = "gsi2sk",
+  projection_type = "ALL" }` + attributes `gsi2pk`, `gsi2sk` (S). Online, no data migration.
+* Module inputs: `name`, `region`, `account_id`, `lambda_zip_path`, `table_name/arn`, `model_id`, `model_invoke_arns`,
+  `embed_model_id`, `embed_model_arn`, `vector_bucket`, `vector_index`, `vector_index_arn`, `platforms_config_path`,
+  `log_retention_days`; outputs `stats_function_arn`, `learn_function_arn`, `stats_rule_name`, `stats_tick_minutes`,
+  `function_names = { stats = "cf-prod-stats", learn = "cf-prod-learn" }` (merged into monitoring). Env outputs (§10):
+  `stats_function_name`, `learn_function_name`, `stats_rule_name`, `stats_tick_minutes`.
+* The broadcast ESM filter gains `WEEK#` (§14.2). `docs/ARCHITECTURE.md` and the drawio add EventBridge →
+  `cf-prod-stats` → platform APIs, `cf-prod-api` → `cf-prod-stats`/`cf-prod-learn`, `cf-prod-learn` → Bedrock + S3 Vectors.
+
+### 16.10 Who builds what (five parallel builders; each stays inside its files)
+
+| Builder | Owns |
+|---|---|
+| infra | `infra/**` (`modules/stats` new, `data` gsi2, `api` env/IAM, `realtime` filter `WEEK#`, `monitoring` alarms, `envs/prod` wiring/outputs, tftests), `config/platforms.json` (exactly §16.4) |
+| api-core | `routes/performance.py`, `routes/weeks.py`, `performance.py`, `weeks.py`, `weekly.py`, `learn.py` (week helpers), `posts.py` (`mark_posted`, public Post additions), `clips.py` (`best`, `bestWeek`, `totalViews`), `http.py`/`app.py` wiring, `realtime/broadcast.py` (`week` type), `api/scripts/build_lambda.py` (copy platforms.json), their tests |
+| api-stats | `stats/**`, `platforms/{base,stub,youtube,tiktok,instagram,facebook,x}.py`, `flows/clip_flow.py` (publish stats fields, `metrics` step via `refresh_posts`), `tests/test_stats*.py`, `tests/fixtures/stats/**`, `tests/test_flows.py` updates |
+| agent | `agent/**` (§16.7) |
+| web + docs | `web/**` (§16.8, mock fixtures, unit + e2e tests, screenshots), `docs/**` except this file (ARCHITECTURE, drawio, UX_DESIGN_SYSTEM, TESTING, DEPLOYMENT: X credits note) |
+
+Shared names: `stats.refresh.refresh_posts(deps, posts, *, reason, now) -> RefreshReport`,
+`stats.config.load() -> PlatformsConfig`, `stats.config.interval_for(cfg, platform, posted_at, now) -> int`
+(minutes), `stats.budget.reserve/record`, `performance.public_performance(clip, posts, accounts, snapshots, now)`,
+`weeks.week_bounds_ok(week, from_, to)`, `weeks.week_clips(store, user_id, from_, to)`, `weeks.public_week(item)`,
+`posts.mark_posted(store, post, published, now)`, `learn.ask_week(bedrock, model_id, rows) -> (stop_reason, text)`.
+
+### 16.11 Tests (offline, fakes only)
+
+* **api-core** (`pytest`): performance always returns five platforms in STATS_ORDER with the status mapping of §16.2,
+  totals ignore nulls, `bestPlatform` tie → earlier platform, series downsampled to ≤ 60 with the last point kept,
+  404 for review/declined/other owner, internal fields absent; refresh: `too_soon` honours `nextRefreshAt`, `blocked`
+  honours `blockedUntil`, `private`/`not_connected`/`not_posted`, a single async invoke with only the started post ids,
+  invoke failure rolls the claim back, Meta notes present; weeks: bad id / bad from-to → 400, anchor rule (postedAt
+  else decidedAt), sort order, PUT ≤ 10 / foreign clip → 400, same set → 200 and no invoke, transaction sets
+  `best`/`bestWeek` and clears unpicked, `revision` increments, invoke payload; `learn_week`: superseded writes nothing,
+  vectors best true/false (and survives vector errors), empty picks delete the old learning, stop reasons → `failed`,
+  learning id reused on re-save, Converse config (maxTokens 4000, effort low, no temperature); broadcast maps `WEEK#`
+  → `week` with `public_week`; build zip contains `clipfactory_api/config/platforms.json`.
+* **api-stats**: `config.load` validates the repo file (all five platforms, the §16.4 values); `interval_for` tiers at
+  47 h / 49 h / 8 d / 31 d; each adapter builds the exact URLs/bodies of §16.3 with the batch size (51 YouTube ids → 2
+  requests, 21 TikTok → 2, 101 X → 2), X drops non-public fields for posts ≥ 30 days, and maps recorded responses in
+  `tests/fixtures/stats/{youtube_videos_list,youtube_analytics_report,tiktok_video_query,instagram_media,facebook_video_insights,facebook_post_views,x_tweets_lookup}.json`
+  to `PostMetrics` (ms → s, missing → absent, never `impressions` for Meta, X views from media `view_count`); error
+  fixtures: YouTube `quotaExceeded` → blocked till 08:00 UTC, TikTok 429 → +1 min, Instagram 80002 with
+  `estimated_time_to_regain_access` → blocked and **no retry**, BUC header ≥ 75 % → blocked, X 429 → `x-rate-limit-reset`,
+  X monthly cap; `reserve` is atomic (two concurrent reservations over the limit → one blocked); `run_tick` reads only
+  due posts, respects `STATS_TIME_BUDGET_SECONDS`, writes metrics + `statsDueAt`/`gsi2sk`, snapshot rules (60 min / 1 % /
+  final), final at 30 days removes gsi2; YouTube insights only every 360 min and slow values kept between reads;
+  phase-1 adapters with no account → `not_connected`, zero HTTP calls; manual refresh clears `refreshStartedAt` even on
+  errors; handler never raises on expected errors; clip-flow `metrics` step uses `refresh_posts` and falls back to
+  stored metrics when blocked; publish writes the §14.5 stats fields (private TikTok: no gsi2).
+* **agent**: best query first then performed, dedupe, cap 8, fallback < 3; "Owner's pick" label; learnings brief
+  orders week learnings first (≤ 4) then ≤ 10 others; finalize writes `best: false`.
+* **infra** (`terraform test`, mock providers): rule `cf-prod-stats` `rate(15 minutes)` derived from platforms.json
+  (a test override with all intervals 30 → `rate(30 minutes)`), target + permission source ARN, stats retry 0 / age 900,
+  learn retry 1, IAM statements exactly as §16.9 (no `s3vectors` or `bedrock` on stats), api env + invoke permission,
+  gsi2 present with projection ALL, ESM filter has the five prefixes, alarms for both functions, §10 outputs.
+* **web** (Vitest): `lib/week.ts` (ISO week of 2026-01-01 = 2026-W01, 2027-01-01 = 2026-W53, Monday start, DST weeks
+  give 167/169 h ranges), bezier path builder for the three layouts (`PerfLines.paths(layout, rects)`), compact number
+  formatting, status → copy mapping, live merge of `post`/`week` events. **Playwright (mock mode)**,
+  `e2e/performance.spec.ts`: Library card → `/clips/{id}`; five stacks in STATS_ORDER with their own metric labels (no
+  "Saves" on TikTok, no "Impressions" on Instagram/Facebook); crown on the mock best; Refresh → spinner → numbers
+  change (mock pushes a `post` event) → "Next check in" shown; too-soon tap → deny toast; each calm state copy and
+  link target; star toggle persists; lines: five `path`s exist and at 1440 px every line ends within 2 px of its stack's
+  top centre, at 800 px row-2 lines do not intersect row-1 cards, at 375 px a trunk + five branches; reduced motion →
+  no animation (`getAnimations()` empty). `e2e/week.spec.ts`: This week tab, sorted by views, ‹ to the previous week and
+  › disabled on the current one, star → one PUT after the debounce, "Learning from your picks…" → learning text after
+  the mock `learning` event, empty week copy. `overflow.spec.ts` gains `/clips/{id}`, `/library?view=week` at 320, 375,
+  600, 768, 1024, 1440 px (no horizontal scroll, no element outside its box); `screenshots.spec.ts` adds both pages at
+  375 and 1440 px, light and dark.

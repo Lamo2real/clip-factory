@@ -16,6 +16,11 @@ variables {
     ws        = "cf-test-ws"
     broadcast = "cf-test-broadcast"
     hooks     = "cf-test-hooks"
+    stats     = "cf-test-stats"
+    learn     = "cf-test-learn"
+  }
+  schedule_rule_names = {
+    stats = "cf-test-stats"
   }
   durable_function_names = {
     job-flow  = "cf-test-job-flow"
@@ -31,7 +36,7 @@ run "alarms_match_the_contract" {
   assert {
     condition = toset([for a in aws_cloudwatch_metric_alarm.lambda_errors : a.alarm_name]) == toset([
       "cf-test-api-errors", "cf-test-job-flow-errors", "cf-test-clip-flow-errors", "cf-test-ws-errors",
-      "cf-test-broadcast-errors", "cf-test-hooks-errors",
+      "cf-test-broadcast-errors", "cf-test-hooks-errors", "cf-test-stats-errors", "cf-test-learn-errors",
     ])
     error_message = "Every watched function gets an <fn>-errors alarm."
   }
@@ -69,5 +74,38 @@ run "alarms_match_the_contract" {
       aws_cloudwatch_metric_alarm.hooks_5xx.metric_name == "5XXError" &&
     aws_cloudwatch_metric_alarm.hooks_5xx.dimensions == tomap({ ApiName = "cf-test-hooks", Stage = "v1" }))
     error_message = "The webhook API alarm watches 5XXError on ApiName cf-prod-hooks, stage v1."
+  }
+}
+
+# docs/CONTRACTS.md §16.9: the stats tick is watched for failed invocations (numbers would silently stop refreshing).
+run "stats_schedule_is_watched" {
+  command = plan
+
+  assert {
+    condition = (aws_cloudwatch_metric_alarm.schedule_failed["stats"].alarm_name == "cf-test-stats-failed-invocations" &&
+      aws_cloudwatch_metric_alarm.schedule_failed["stats"].namespace == "AWS/Events" &&
+      aws_cloudwatch_metric_alarm.schedule_failed["stats"].metric_name == "FailedInvocations" &&
+      aws_cloudwatch_metric_alarm.schedule_failed["stats"].dimensions == tomap({ RuleName = "cf-test-stats" }) &&
+      aws_cloudwatch_metric_alarm.schedule_failed["stats"].threshold == 0 &&
+    aws_cloudwatch_metric_alarm.schedule_failed["stats"].treat_missing_data == "notBreaching")
+    error_message = "The stats rule needs a FailedInvocations > 0 alarm on its RuleName."
+  }
+
+  assert {
+    condition     = output.alarm_names["stats"] == "cf-test-stats-errors" && output.alarm_names["learn"] == "cf-test-learn-errors"
+    error_message = "cf-prod-stats and cf-prod-learn get <fn>-errors alarms."
+  }
+}
+
+run "no_schedules_no_schedule_alarms" {
+  command = plan
+
+  variables {
+    schedule_rule_names = {}
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.schedule_failed) == 0
+    error_message = "Without schedule rules there are no FailedInvocations alarms."
   }
 }

@@ -1,0 +1,19 @@
+{
+  "kind": "youtube#videoListResponse",
+  "etag": "Wb0rqBGgJ1Wlc1ytXzS0X2QW8Ks",
+  "items": [
+    {
+      "kind": "youtube#video",
+      "etag": "pXk1o3Zt0tHnJ1z2RAi5hQx8f2g",
+      "id": "dQw4w9WgXcQ",
+      "statistics": { "viewCount": "8412", "likeCount": "611", "favoriteCount": "0", "commentCount": "47" }
+    },
+    {
+      "kind": "youtube#video",
+      "etag": "Lr8a9cJ0b3Wq6y2y8x1kQ0m5n7o",
+      "id": "aBcDeFgHiJk",
+      "statistics": { "viewCount": "120", "favoriteCount": "0", "commentCount": "3" }
+    }
+  ],
+  "pageInfo": { "totalResults": 2, "resultsPerPage": 2 }
+}

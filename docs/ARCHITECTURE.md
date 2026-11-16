@@ -6,7 +6,8 @@ Clip Factory Cloud is a serverless application in one AWS account and one enviro
 
 The diagram is [architecture/aws-architecture.drawio](architecture/aws-architecture.drawio) (a PNG copy is
 [architecture/aws-architecture.png](architecture/aws-architecture.png)). Names, routes, shapes and keys are defined in
-[CONTRACTS.md](CONTRACTS.md), especially [§14](CONTRACTS.md#14-serverless-expansion-websocket-api-rest-api-durable-functions-s3-vectors);
+[CONTRACTS.md](CONTRACTS.md), especially [§14](CONTRACTS.md#14-serverless-expansion-websocket-api-rest-api-durable-functions-s3-vectors)
+and [§16](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16) (clip numbers and the weekly best);
 this document explains how the pieces work together and why.
 
 ![Clip Factory Cloud on AWS](architecture/aws-architecture.png)
@@ -47,6 +48,14 @@ flowchart LR
   rest --> hooks[Lambda cf-prod-hooks] --> ddb
   hooks --> ssm[SSM Parameter Store: verify token]
   os[OpenSearch Serverless: not deployed]:::off -. option .- vec
+  evr[EventBridge rule cf-prod-stats, rate 15 minutes] -- "8 tick" --> st[Lambda cf-prod-stats]
+  lapi -- "8 Refresh numbers, async" --> st
+  st -- "8 due posts (gsi2), metrics, STAT#, RATE#" --> ddb
+  st -. "8 batched reads, phase 2 tokens" .-> stapi[Platform stats APIs: YouTube, TikTok, Instagram, Facebook, X]
+  lapi -- "9 weekly best saved, async" --> lrn[Lambda cf-prod-learn]
+  lrn -- "9 Best of week learning" --> bedrock
+  lrn -- "9 best true or false" --> vec
+  lrn --> ddb
   classDef off stroke-dasharray: 5 5
 ```
 
@@ -65,14 +74,17 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | Amazon API Gateway, HTTP API | `/v1` routes | The app's API. Cheapest type, with a built-in JWT authorizer. CORS for the app and `localhost:5173`. |
 | Amazon API Gateway, WebSocket API | `cf-prod-ws`, stage `live` | Pushes job, clip, post and learning changes to open apps, so screens update without waiting for a poll. See [ADR-23](DECISIONS.md#adr-23-live-updates-over-a-websocket-api-polling-only-as-the-fallback). |
 | Amazon API Gateway, REST API | `cf-prod-hooks`, stage `v1` | The one public, unauthenticated surface: platform webhooks and OAuth callbacks (phase 2), with per-method throttling, a usage plan, request validation and X-Ray. See [ADR-24](DECISIONS.md#adr-24-a-separate-rest-api-for-public-platform-webhooks). |
-| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, starting the two durable flows, cancel, Keep and Throw away, similar clips. |
+| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`). |
+| AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
+| AWS Lambda | `cf-prod-learn` | The weekly best ([flow 14](#14-best-of-the-week)): marks the starred clips' vectors `best`, asks Claude Fable 5.1 for one "Best of week" learning. See [ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal). |
+| Amazon EventBridge | rule `cf-prod-stats`, `rate(15 minutes)` | The only schedule in the system: one tick for the stats poller, its rate taken from the smallest interval in `config/platforms.json`. A few thousand invocations a month. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda, durable function | `cf-prod-job-flow` (alias `live`) | Starts the agent for a job and waits (no compute) for its callback; fails the job if heartbeats stop. Replaces the watchdog. See [ADR-22](DECISIONS.md#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows). |
 | AWS Lambda, durable function | `cf-prod-clip-flow` (alias `live`) | After Keep: makes the posts, publishes (phase 2), waits 48 hours (no compute), reads metrics, writes a learning, updates the clip's vector. Replaces the publish queue, the publisher, the scheduler and perf-check. |
 | AWS Lambda | `cf-prod-ws-authorizer` | Checks the Cognito access token on `$connect` (standard library RS256 check, no extra packages). |
 | AWS Lambda | `cf-prod-ws` | `$connect` stores the connection, `$disconnect` removes it, `$default` answers `ping`. |
 | AWS Lambda | `cf-prod-broadcast` | Reads the DynamoDB stream and sends each change to the owner's open connections. |
 | AWS Lambda | `cf-prod-hooks` | Answers webhook verification challenges, stores webhook events, redirects OAuth callbacks to Settings. |
-| Amazon DynamoDB | `cf-prod-data` + stream | Single table for all entities including WebSocket connections and webhook events. On-demand, point-in-time recovery, TTL, stream `NEW_AND_OLD_IMAGES` feeding `cf-prod-broadcast`. See [ADR-05](DECISIONS.md#adr-05-one-dynamodb-table-single-table-design). |
+| Amazon DynamoDB | `cf-prod-data` + stream | Single table for all entities including WebSocket connections, webhook events, stats snapshots (`STAT#`, 90-day TTL), the weekly picks (`WEEK#`) and the per-platform rate budgets (`RATE#`); a sparse `gsi2` holds only the posts due for a stats poll. On-demand, point-in-time recovery, TTL, stream `NEW_AND_OLD_IMAGES` feeding `cf-prod-broadcast`. See [ADR-05](DECISIONS.md#adr-05-one-dynamodb-table-single-table-design). |
 | AWS Systems Manager Parameter Store | `/cf-prod/hooks/verify-token` (SecureString) | The Meta webhook verify token. Generated by Terraform as a write-only value, so it never enters the Terraform state. |
 | Amazon Bedrock AgentCore Runtime | `cf_prod_clip_agent` | Runs the agent container for as long as a job needs, one isolated session per job. See [ADR-03](DECISIONS.md#adr-03-amazon-bedrock-agentcore-runtime--claude-agent-sdk-for-the-agent). |
 | Amazon Bedrock | Claude Fable 5.1 (global profile), Titan Text Embeddings V2 (in-Region) | Fable: moment selection, facecam detection, checklist judgement, captions, learnings. Titan: 1024-number embeddings of clip text for S3 Vectors. |
@@ -86,7 +98,7 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 
 ### Lambda functions
 
-All seven share one zip (`api/dist/lambda.zip`), Python 3.13, arm64, JSON logs, X-Ray active
+All nine share one zip (`api/dist/lambda.zip`), Python 3.13, arm64, JSON logs, X-Ray active
 ([CONTRACTS.md §9](CONTRACTS.md#9-lambdas-one-zip-apidistlambdazip-python-313-arm64-package-clipfactory_api)).
 
 | Function | Started by | Memory / timeout | Durable |
@@ -98,6 +110,8 @@ All seven share one zip (`api/dist/lambda.zip`), Python 3.13, arm64, JSON logs, 
 | `cf-prod-ws` | WebSocket routes | 128 MB / 10 s | no |
 | `cf-prod-broadcast` | DynamoDB stream (filtered) | 256 MB / 60 s | no |
 | `cf-prod-hooks` | REST API | 256 MB / 10 s | no |
+| `cf-prod-stats` | EventBridge rule `cf-prod-stats` (every 15 min) and `cf-prod-api` (async, Refresh numbers) | 256 MB / 300 s; stops starting requests after 240 s; async retries 0, event age 15 min | no |
+| `cf-prod-learn` | `cf-prod-api`, async invoke on `PUT /v1/weeks/{week}/best` | 512 MB / 300 s; async retries 1, event age 1 h | no |
 
 ### What was removed
 
@@ -112,6 +126,10 @@ The expansion removed these, with nothing left that refers to them ([CONTRACTS.m
 | EventBridge Scheduler group, role and one-time `perf-{postId}` schedules | `context.wait(48 h)` inside `cf-prod-clip-flow` |
 | The DLQ alarm | alarms on `DurableExecutionFailed` and `DurableExecutionTimedOut` |
 | Polling as the only way to see progress | WebSocket push; polling stays as the fallback |
+
+The watchdog's EventBridge rule stays gone. [§16](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16)
+adds exactly one new rule, `cf-prod-stats`, for a different job (reading numbers for many posts on a clock), see
+[ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling).
 
 ## Data flows
 
@@ -285,7 +303,7 @@ sequenceDiagram
   H->>D: put Connection CONN#{connectionId}, ttl 2 h
   G-->>W: connected (polling slows to every 30 s)
   Note over D,B: the agent, the API or a flow writes a Job, Clip, Post or Learning
-  D->>B: stream batch (filter: JOB#, CLIP#, POST#, LEARNING# only)
+  D->>B: stream batch (filter: JOB#, CLIP#, POST#, LEARNING#, WEEK# only)
   B->>B: keep the last change per item, build the public shape
   B->>D: query the owner's connections
   B->>G: PostToConnection {type, op, id, item}
@@ -385,7 +403,8 @@ sequenceDiagram
   C->>V: step upsert-vector: GetVectors, merge metadata, PutVectors (performed)
 ```
 
-Every step is at-least-once, so each is written to be safe to repeat: posts are created only once (`postsCreated`),
+The `metrics` step reads the numbers through the same stats refresh as the poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)),
+so it shares the platforms' budgets. Every step is at-least-once, so each is written to be safe to repeat: posts are created only once (`postsCreated`),
 a post is updated only while it is `queued`, and publishing passes `postId` as the platform's idempotency key. A
 durable execution stays pinned to the Lambda version it started on, so a deploy during the 48-hour wait never changes
 a running flow.
@@ -404,6 +423,7 @@ and `performance`.
 | Owner opens a clip | API | `/similar` returns up to 5 of the owner's measured clips most like it |
 | Keep, nothing posted | clip-flow | status `confirmed` |
 | 48 hours after posting | clip-flow | status `performed` with the summed numbers |
+| Owner stars it as best of the week | `cf-prod-learn` | metadata `best = true` (unstarred: `best = false`); `best` clips come first in "What worked before" |
 | Throw away | API | deleted |
 
 Two kinds of memory work together: **learnings** are short sentences about what works in general; **vectors** find
@@ -452,7 +472,7 @@ sequenceDiagram
   G->>TF: init (S3 state, lockfile), plan
   G->>E: build and push agent image (tag = hash of agent sources)
   G->>TF: apply the plan
-  TF->>AWS: Cognito, three APIs, seven Lambdas (two durable, new version + alias live),<br/>table + stream, buckets, vector bucket + index, SSM, runtime, alarms
+  TF->>AWS: Cognito, three APIs, nine Lambdas (two durable, new version + alias live),<br/>EventBridge rule cf-prod-stats, table + stream + gsi2, buckets, vector bucket + index, SSM, runtime, alarms
   G->>AWS: write config.json (apiUrl, wsUrl) from outputs, sync web to S3, invalidate CloudFront
   G->>AWS: write version.json with the release areas (flow 11)
   opt desktop/ or the icon changed, or a download is missing
@@ -567,6 +587,155 @@ picture steps to Add to Home Screen, because Apple allows no app download outsid
 `navigator.standalone` (iOS), the desktop wrapper markers, and `cf.installed=1` in local storage (set on the
 `appinstalled` event).
 
+### 13. Clip numbers: the poller and Refresh numbers
+
+The owner sees every clip's numbers per platform on `/clips/{clipId}`
+([CONTRACTS.md §16.5](CONTRACTS.md#165-poller-and-refresh-lambda-cf-prod-stats)). One code path,
+`stats.refresh.refresh_posts`, reads them for three callers: the EventBridge tick (`reason "poll"`), the Refresh button
+(`"manual"`) and the clip flow's `metrics` step after 48 hours (`"flow"`). All three go through the same per-platform
+budget, so together they can never pass a platform's limit.
+
+**What makes a post due.** When a post is published, its `statsDueAt` is set and it gets `gsi2pk = "STATS"`,
+`gsi2sk = "{statsDueAt}#{postId}"`. That sparse index is the due-queue: only posts inside their 30-day window carry
+it. After each reading the next `statsDueAt` is `readAt + interval`, where the interval depends on the platform and
+the post's age ([ADR-29](DECISIONS.md#adr-29-stats-refresh-intervals-per-platform)):
+
+| Post age | YouTube, TikTok, X | Instagram, Facebook |
+|---|---|---|
+| up to 48 hours | every 15 min | every 30 min |
+| up to 7 days | every 30 min | every 60 min |
+| up to 30 days | every 2 h | every 6 h |
+| 30 days | one final reading, then the post leaves `gsi2` | same |
+
+YouTube's slow insights (YouTube Analytics: watch time, engaged views, shares, new subscribers) are read at most every
+6 hours (`insightsDueAt`), because Google needs 48–72 hours to process them. Private TikTok posts (unaudited app) have
+no stats id and never enter the queue.
+
+**The tick.**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant E as EventBridge rule cf-prod-stats
+  participant S as cf-prod-stats
+  participant D as DynamoDB (gsi2, RATE#, POST#, STAT#)
+  participant P as Platform API (phase 2)
+  participant B as cf-prod-broadcast
+  participant W as Web app
+  E->>S: scheduled event, every 15 min
+  S->>D: Query gsi2: gsi2pk = STATS and gsi2sk <= "{now}#~" (up to 2,000 posts)
+  S->>S: group by platform in STATS_ORDER, chunk by idsPerRequest (50, 20, 50, 50, 100)
+  loop each platform not blocked, each chunk, until 240 s
+    S->>D: reserve: one conditional UpdateItem on RATE#{platform}
+    alt budget left
+      S->>P: one batched read (tokens from Secrets Manager, phase 2)
+      P-->>S: numbers + headers (quota, BUC usage, x-rate-limit-reset)
+      S->>D: record: headers, blockedUntil when a limit is near or hit
+      S->>D: per post: metrics, statsDueAt, gsi2sk (or REMOVE gsi2 when final)
+      S->>D: STAT# snapshot (first, every 60 min, 1 % change, or final, TTL 90 days)
+    else blocked
+      S->>S: skip the platform, its posts stay due for the next tick
+    end
+  end
+  S->>S: log stats.tick {posts, requests, updated, blocked, errors}
+  D->>B: stream: POST# changed
+  B->>W: post upsert: the stack updates, the sparkline gains a point
+```
+
+**Refresh numbers.**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant W as Web app (clip page)
+  participant A as cf-prod-api
+  participant D as DynamoDB
+  participant S as cf-prod-stats
+  participant P as Platform API (phase 2)
+  participant B as cf-prod-broadcast
+  W->>A: POST /v1/clips/{clipId}/stats/refresh {platforms?}
+  A->>D: Clip, Posts (gsi1 CLIP#), Accounts, RATE# budgets
+  loop each platform in STATS_ORDER
+    alt no post / private / no account / blocked
+      A->>A: not_posted, private, not_connected or blocked (with nextAllowedAt)
+    else
+      A->>D: claim: SET refreshStartedAt, nextRefreshAt = now + cooldown<br/>if nextRefreshAt <= now and no refresh in the last 5 min
+      A->>A: started, or too_soon when the claim fails
+    end
+  end
+  A->>S: one Invoke (Event) {action refresh, userId, clipId, postIds of started}
+  A-->>W: 202 {platforms: RefreshResult[]} (spinner, "Next check in 5 min")
+  S->>D: reserve budget (same as the tick)
+  S->>P: batched read
+  S->>D: metrics, STAT#, then always REMOVE refreshStartedAt
+  D->>B: stream: POST# changed
+  B->>W: post upsert: new numbers, spinner stops
+```
+
+The cooldown is 5 minutes for YouTube, TikTok and X and 30 minutes for Instagram and Facebook, so pressing Refresh
+again and again never spends more than the poller would. If the invoke itself fails, the API rolls the claims back and
+answers `blocked` with "Could not check right now. Try again in a minute."
+
+**Budgets** ([CONTRACTS.md §16.3](CONTRACTS.md#163-dynamodb-items)) are one item per platform (`RATE#{platform}`),
+reserved with one conditional `UpdateItem` before every request, so two Lambdas at once can never both take the last
+units:
+
+| Platform | Counted as | Stop at | When a limit hits |
+|---|---|---|---|
+| YouTube | quota units per Pacific day (1 per `videos.list` call of up to 50 ids, 1 per Analytics report) | 7,000 of 10,000 (3,000 kept for uploads) | `quotaExceeded` / `rateLimitExceeded`: paused until 08:00 UTC |
+| TikTok | requests per UTC minute | 300 of 600 | `429` / `rate_limit_exceeded`: paused 1 minute |
+| Instagram, Facebook | Meta's `X-Business-Use-Case-Usage` header (call count, CPU time, total time, in %) | 75 % of any counter | throttle `80002` / `80001`: paused for Meta's `estimated_time_to_regain_access` (at least 60 min), **no retry** |
+| X | requests per 15 minutes, plus an estimated spend | 1,000 of 3,500; $10 a month | `429`: paused until `x-rate-limit-reset`; monthly cap: paused until the 1st |
+
+In phase 1 no account is connected, so every adapter answers `not_connected` and nothing reaches the network; the
+poller, the queue and the budgets are already in place.
+
+### 14. Best of the week
+
+The owner stars the week's best clips in **Library › This week**; the picks teach the agent
+([CONTRACTS.md §16.6](CONTRACTS.md#166-weekly-best-learning-lambda-cf-prod-learn),
+[ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal), [AGENT.md](AGENT.md#best-of-the-week)).
+
+A week is an ISO week (Monday start) in the **owner's own time zone**: the web computes `from` and `to` (local Monday
+00:00 to the next Monday 00:00, as UTC instants, 167–169 hours across a clock change) and sends them with the week id.
+A clip belongs to the week of its **anchor**: its earliest `postedAt`, or `decidedAt` while it is kept but not posted.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant W as Web app (This week)
+  participant A as cf-prod-api
+  participant D as DynamoDB
+  participant L as cf-prod-learn
+  participant V as S3 Vectors
+  participant B as Bedrock (Fable 5.1, Titan V2)
+  participant BC as cf-prod-broadcast
+  W->>A: GET /v1/weeks/2026-W46?from=...&to=...
+  A->>D: Query POST# and CLIP# of the owner, WEEK#2026-W46
+  A-->>W: WeekView: clips sorted by views, picks, learnState
+  W->>W: owner stars clips (optimistic), waits 800 ms after the last tap
+  W->>A: PUT /v1/weeks/2026-W46/best {from, to, clipIds}
+  alt same picks as stored
+    A-->>W: 200 {week}, nothing else happens
+  else changed
+    A->>D: TransactWriteItems: WEEK (revision + 1, learnState learning),<br/>picked clips best = true, unpicked best = false
+    A->>L: Invoke (Event) {userId, week, revision}
+    A-->>W: 202 {week}: "Learning from your picks..."
+    L->>D: GetItem WEEK: revision still the same? (else superseded, no write)
+    L->>V: picked: metadata best = true, unpicked: best = false (errors logged only)
+    L->>D: rows for every clip of the week (picked, hook, moment type, length, captions, numbers)
+    L->>B: Converse, maxTokens 4000, effort low: one 1-3 sentence learning
+    B-->>L: end_turn + text
+    L->>D: same revision? Put Learning (kind week, "Best of week 2026-W46"), WEEK learnState done
+  end
+  D->>BC: stream: WEEK#, LEARNING#, CLIP# changed
+  BC->>W: week and learning events: the learning appears in a glass quote
+```
+
+An empty set of picks deletes that week's learning and ends `skipped`. A model answer that is cut off, refused or
+filtered ends `failed` ("Could not learn this time. Change a pick to try again."), and Bedrock errors are retried
+twice. Because every write checks `revision`, a quick second save always wins over a slower first one.
+
 ## Failure handling
 
 | What can fail | What happens |
@@ -580,7 +749,12 @@ picture steps to Add to Home Screen, because Apple allows no app download outsid
 | Bedrock throttling | The SDK retries with exponential backoff; the global profile spreads load across regions. |
 | The owner cancels | The API sends `{action: cancel}` to the session and stops it; the agent marks the job `canceled` and sends `Canceled`, so the flow writes nothing. |
 | Publishing a post fails (phase 2) | The `publish-{platform}` step retries 3 times with backoff; then `post-failed-{platform}` marks only that post `failed`. If every queued post failed, the clip shows **Try again**. |
-| Reading metrics fails for a platform | That platform is skipped after 3 attempts; the others still count. |
+| Reading metrics fails for a platform | That platform is skipped after 3 attempts; the others still count. The clip flow's `metrics` step uses the shared stats refresh and falls back to the stored numbers when a platform is blocked. |
+| A platform limit is near or hit (stats) | The platform's `RATE#` budget gets `blockedUntil` (YouTube: 08:00 UTC; TikTok: 1 min; Meta: Meta's own wait, at least 60 min after a throttle; X: `x-rate-limit-reset` or the 1st of next month at the $10 cap). The poller skips it, its posts stay due, Refresh answers "Next check in …". A Meta throttle is never retried. |
+| A stats read fails (5xx, network) | Retried twice (1 s, 4 s), except Meta throttles; then `statsError` holds a plain sentence on the post and it waits its normal interval. No tight loop, no raise. |
+| The tick has more due posts than fit in 240 s | It stops starting requests at 240 s; the rest stay due and go first on the next tick. |
+| Two ticks or a tick and a Refresh run at once | Budgets are conditional writes, so they cannot overspend together; a post read twice simply gets the newer numbers. |
+| `cf-prod-learn` fails or is superseded | A newer save wins (the `revision` check); a failed invoke or model answer leaves "Could not learn this time. Change a pick to try again."; vector errors are logged and never stop the learning. |
 | Distil gets no usable answer (`max_tokens`, `refusal`, `content_filtered`) | Logged; no Learning is written; the vector is still updated. |
 | S3 Vectors or Titan errors | Agent: the "What worked before" section is skipped. `/similar`: returns `[]`. Throw away: logged, the route still succeeds. |
 | A durable execution fails or times out | Alarms `{fn}-durable-failed` and `{fn}-durable-timed-out` email the owner. A failed execution means a bug, because expected outcomes never raise. |
@@ -612,6 +786,10 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | S3 Vectors | A few hundred vectors, a few queries per job | cents |
 | API Gateway (HTTP, WebSocket, REST) | Requests, WebSocket messages and connection minutes while the app is open | under $1 |
 | DynamoDB (incl. stream reads by Lambda), other Lambdas, SSM standard parameter | Requests | under $1 |
+| EventBridge rule + `cf-prod-stats` | about 2,900 ticks a month (every 15 min), each a few seconds; post writes and 90-day `STAT#` snapshots | cents |
+| YouTube, TikTok, Instagram, Facebook APIs | Free within their quotas; the budgets stay well under them | $0 |
+| X API (phase 2) | Pay per use: about $0.005 per post read, a post read again on the same UTC day free, so about $0.15 per post over its 30 days | capped at $10 by the app ([DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)) |
+| `cf-prod-learn` | One small Fable 5.1 call per changed set of weekly picks | cents |
 | S3 | Clips kept; sources expire after 14 days | under $1 |
 | CloudFront | Web app, config, `version.json` checks, desktop downloads (about 10 MB each) | under $1 |
 | OpenSearch Serverless | not deployed (would have a standing minimum of OCUs) | $0 |
@@ -648,3 +826,15 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
   files must be rebuilt: delete them from `downloads/` and the next deploy rebuilds them
   ([DEPLOYMENT.md](DEPLOYMENT.md#desktop-downloads)). Already installed copies keep opening the old address.
 - **No iPhone download.** Apple allows no app files outside its store; iPhone and iPad use Add to Home Screen.
+- **Numbers are not live to the second.** YouTube's `viewCount` is cached and can trail YouTube Studio by minutes;
+  since 31 March 2025 Shorts views count every play and replay. YouTube Analytics lags 48–72 hours, Meta says its
+  numbers can be up to 48 hours late, and Meta's `reach` and skip rate are estimates. Each app counts views its own
+  way, which the page says next to the total.
+- **TikTok numbers need TikTok's audit.** An unaudited app can post only privately, and private posts have no public
+  id and no numbers.
+- **X's private numbers last 30 days.** Impressions, link clicks and watch-through percentages (`non_public_metrics`)
+  are only given for posts younger than 30 days; after that only public numbers are read.
+- **Facebook metrics are changing.** Graph API v25.0 retires `post_impressions_unique`, `total_video_impressions*` and
+  `total_video_views_unique` when v26.0 ships, so they are never read; reach comes from
+  `post_total_media_view_unique`, guarded (absent if it errors). The Graph version lives in `config/platforms.json`.
+- **Snapshots last 90 days** (TTL); the latest totals stay on the post for as long as the clip exists.

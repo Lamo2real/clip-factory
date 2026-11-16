@@ -3,6 +3,7 @@ import { ApiError, networkError } from "../errors.ts";
 import type { Api, Clip, Job, Post, Settings, SimilarClip, Skill } from "../types.ts";
 import { MOMENTS, PLATFORMS, STEP_KEYS, coverArt, seed, stepsAt, thumbArt, ulid, type Store } from "./fixtures.ts";
 import { installMockLiveControls, mockLive } from "./live.ts";
+import { statsApi, type StatsFaults } from "./stats.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 
 const STEP_MS = 3500;
@@ -26,7 +27,7 @@ const ALREADY_DECIDED = "This clip has already been confirmed or declined.";
  * save the clip and then fail like a dropped connection, before posting starts. `resumeAfterMs` is how old a
  * stuck Keep must be before Keep again finishes it (the API waits 60 seconds).
  */
-export interface MockFaults {
+export interface MockFaults extends StatsFaults {
   keepStopsAfterSave: number;
   resumeAfterMs: number;
   /** "Like clips that did well" finds nothing (the strip must hide). */
@@ -142,6 +143,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   }
   mockLive.tick = tick;
   installMockLiveControls(advance);
+
+  const stats = statsApi({ store, publish: (ev) => mockLive.publish(ev), faults, automated: frozen });
 
   const job = (jobId: string) => {
     const j = store.jobs.find((x) => x.jobId === jobId);
@@ -267,6 +270,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       tick();
       return clone(
         store.clips
+          .map((c) => stats.withTotal(c))
           .filter((c) => status === "all" || c.status === status)
           .filter((c) => !jobId || c.jobId === jobId)
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.rank - b.rank),
@@ -274,7 +278,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     async getClip(clipId) {
       await delay();
-      return clone(clip(clipId));
+      return clone(stats.withTotal(clip(clipId)));
     },
     async updateClip(clipId, captions) {
       await delay(120, 260);
@@ -420,6 +424,22 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       const self = clip(clipId);
       if (faults.similarEmpty) return [];
       return similar(store, self);
+    },
+    async clipPerformance(clipId) {
+      await delay();
+      return stats.performance(clipId);
+    },
+    async refreshStats(clipId, platforms) {
+      await delay(120, 260);
+      return stats.refresh(clipId, platforms);
+    },
+    async getWeek(week, from, to) {
+      await delay();
+      return stats.getWeek(week, from, to);
+    },
+    async saveWeekBest(week, body) {
+      await delay(120, 260);
+      return stats.saveBest(week, body);
     },
   };
 

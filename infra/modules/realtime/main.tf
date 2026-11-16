@@ -73,9 +73,10 @@ locals {
     ]
   }
 
-  # Only these item types reach the broadcaster; CONN#, HOOK#, SETTINGS and SKILL# changes never do.
+  # Only these item types reach the broadcaster; CONN#, HOOK#, SETTINGS, SKILL#, STAT# (stats snapshots) and the
+  # RATE# budgets never do. WEEK# carries the weekly best picks and learning state (§16.6).
   stream_filter = jsonencode({
-    dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }] } } }
+    dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }] } } }
   })
 }
 

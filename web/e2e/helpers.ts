@@ -76,3 +76,29 @@ export async function findOverflow(page: Page): Promise<{ page: number; viewport
     return { page: document.documentElement.scrollWidth, viewport: window.innerWidth, items };
   });
 }
+
+/** This week's mock clips (docs/CONTRACTS.md §16): every platform state appears on one of them. */
+export const CLIPS = {
+  /** Posted everywhere with numbers; TikTok has the most views (the crown). */
+  all: "One shot. Whole lobby gone.",
+  /** YouTube numbers, TikTok private, Instagram waiting, Facebook failed, X not posted. */
+  mixed: "He finally lost it at 3 a.m.",
+  /** YouTube posting, TikTok posted without numbers yet, the rest with numbers. */
+  fresh: "Police chase in reverse",
+} as const;
+
+/**
+ * Opens a clip's performance page from the Library, the way the owner does. (The mock makes new ids on every page
+ * load, so a clip page is reached by clicking, never by typing its address.)
+ */
+export async function openClip(page: Page, hook: string) {
+  await page.goto("/library");
+  await settle(page);
+  const card = page.locator(".lib-card", { has: page.locator(".lib-card__hook", { hasText: hook }) });
+  await card.locator(".lib-card__link").click();
+  await page.waitForURL(/\/clips\/[A-Z0-9]+$/);
+  await page.locator("[data-stack]").nth(4).waitFor();
+  await settle(page);
+  // The lines draw in over about 1.3 s.
+  await page.waitForTimeout(900);
+}

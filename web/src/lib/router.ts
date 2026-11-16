@@ -10,7 +10,10 @@ export type Route =
   | { name: "jobs" }
   | { name: "job"; jobId: string }
   | { name: "review"; jobId: string | null }
-  | { name: "library" }
+  /** Library: All clips, or This week (a given ISO week, or the current one when `week` is null). §16.8 */
+  | { name: "library"; view: "all" | "week"; week: string | null }
+  /** One clip's performance page. */
+  | { name: "clip"; clipId: string }
   /** Settings is a tree (docs/CONTRACTS.md §15.1): the field, a tree, or one of its branches. */
   | { name: "settings"; tree: string | null; branch: string | null }
   | { name: "get_app" }
@@ -24,7 +27,14 @@ export function match(pathname: string, search = ""): Route {
   const job = /^\/jobs\/([A-Za-z0-9_-]{1,64})$/.exec(path);
   if (job) return { name: "job", jobId: job[1]! };
   if (path === "/review") return { name: "review", jobId: query.get("job") };
-  if (path === "/library") return { name: "library" };
+  if (path === "/library") {
+    const week = query.get("week");
+    return query.get("view") === "week"
+      ? { name: "library", view: "week", week: week || null }
+      : { name: "library", view: "all", week: null };
+  }
+  const clip = /^\/clips\/([A-Za-z0-9_-]{1,64})$/.exec(path);
+  if (clip) return { name: "clip", clipId: clip[1]! };
   const settings = /^\/settings(?:\/([a-z-]{1,40}))?(?:\/([a-z-]{1,40}))?$/.exec(path);
   if (settings) {
     const [, treeSlug, branchSlug] = settings;
@@ -95,11 +105,23 @@ function transition(update: () => void) {
 export function navigate(to: string, { replace = false } = {}) {
   if (to === here()) return;
   transition(() => {
-    if (replace) history.replaceState(null, "", to);
-    else history.pushState(null, "", to);
+    if (replace) history.replaceState({ cfDepth: depth() }, "", to);
+    else history.pushState({ cfDepth: depth() + 1 }, "", to);
     emit();
     window.scrollTo({ top: 0 });
   });
+}
+
+/** How many in-app pages lie behind this one (0 = the owner arrived here from outside the app). */
+function depth(): number {
+  const d = (history.state as { cfDepth?: unknown } | null)?.cfDepth;
+  return typeof d === "number" ? d : 0;
+}
+
+/** Back to where the owner came from inside the app, or to `fallback` when they arrived here from a link. */
+export function goBack(fallback: string): void {
+  if (depth() > 0) history.back();
+  else navigate(fallback, { replace: true });
 }
 
 export function useRoute(): Route {
@@ -135,6 +157,8 @@ export function section(route: Route): "home" | "jobs" | "review" | "library" | 
   switch (route.name) {
     case "job":
       return "jobs";
+    case "clip":
+      return "library";
     case "not_found":
       return null;
     default:

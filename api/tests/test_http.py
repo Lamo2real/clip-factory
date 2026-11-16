@@ -137,6 +137,10 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/accounts/youtube/connect"),
         ("GET", "/v1/posts"),
         ("GET", "/v1/insights"),
+        ("GET", "/v1/clips/X/performance"),
+        ("POST", "/v1/clips/X/stats/refresh"),
+        ("GET", "/v1/weeks/2026-W46"),
+        ("PUT", "/v1/weeks/2026-W46/best"),
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)

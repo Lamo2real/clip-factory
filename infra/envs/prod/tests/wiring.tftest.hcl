@@ -43,8 +43,36 @@ run "whole_stack_plans" {
 
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
-      "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks",
+      "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn",
     ])
     error_message = "Every function except the WebSocket authorizer is watched for errors."
+  }
+}
+
+# docs/CONTRACTS.md §16.9 and §10: the stats tick comes from config/platforms.json, the API knows both new
+# functions, the table has gsi2 and the broadcaster passes WEEK# items.
+run "clip_performance_is_wired" {
+  command = plan
+
+  assert {
+    condition = (output.stats_function_name == "cf-prod-stats" && output.learn_function_name == "cf-prod-learn" &&
+    output.stats_rule_name == "cf-prod-stats" && output.stats_tick_minutes == 15)
+    error_message = "§10 outputs: stats_function_name cf-prod-stats, learn_function_name cf-prod-learn, stats_rule_name cf-prod-stats, stats_tick_minutes 15."
+  }
+
+  assert {
+    condition     = module.stats.stats_tick_minutes == min([for p in values(jsondecode(file("../../../config/platforms.json")).platforms) : p.minIntervalMinutes]...)
+    error_message = "The tick is the lowest minIntervalMinutes in config/platforms.json."
+  }
+
+  assert {
+    condition = (module.stats.stats_function_arn == "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-stats" &&
+    module.stats.learn_function_arn == "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-learn")
+    error_message = "cf-prod-api gets the unqualified ARNs of cf-prod-stats and cf-prod-learn."
+  }
+
+  assert {
+    condition     = toset(keys(module.monitoring.schedule_alarm_names)) == toset(["stats"])
+    error_message = "The stats rule is watched for failed invocations."
   }
 }

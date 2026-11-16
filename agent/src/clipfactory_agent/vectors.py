@@ -2,8 +2,9 @@
 
 At finalize the agent writes one vector per new clip (Titan Text Embeddings V2, 1024 floats, cosine) with the clip's
 filterable metadata (``userId``, ``momentType``, ``platforms``, ``status = "review"``, ``scoreBucket``) and the
-non-filterable ``hook``, ``title`` and ``summary``. Before moment selection it looks up the owner's past clips most
-like this video, preferring the ones whose performance was measured, and lists them in the prompt as advice."""
+non-filterable ``hook``, ``title`` and ``summary``, and ``best = false`` (the owner's "Best this week" star, §16.6).
+Before moment selection it looks up the owner's past clips most like this video: the owner's best-of-week picks first,
+then the ones whose performance was measured, and lists them in the prompt as advice (§16.7)."""
 
 from __future__ import annotations
 
@@ -18,7 +19,9 @@ from .util import log
 
 DIMENSIONS = 1024
 TOP_K = 8
+BEST_TOP_K = 4  # the owner's starred "Best this week" clips asked for first (§16.7)
 MIN_PERFORMED_HITS = 3
+BEST_LABEL = "Owner's pick: best of the week"
 QUERY_TRANSCRIPT_CHARS = 4000
 EMBED_TEXT_CHARS = 8000
 PUT_BATCH = 500  # PutVectors takes at most 500 vectors per call
@@ -73,7 +76,8 @@ def score_bucket(score: float | int | None) -> str:
 
 
 def clip_metadata(clip: dict[str, Any], platforms: Sequence[str]) -> dict[str, Any]:
-    """The metadata of a new clip's vector (status ``review``; ``performance`` is added after the 48-hour check)."""
+    """The metadata of a new clip's vector (status ``review``, ``best`` false; ``performance`` is added after the
+    48-hour check, ``best`` is set by the owner's weekly picks)."""
     title = _title(clip)
     return {
         "userId": str(clip["userId"]),
@@ -81,6 +85,7 @@ def clip_metadata(clip: dict[str, Any], platforms: Sequence[str]) -> dict[str, A
         "platforms": [str(p) for p in platforms],
         "status": "review",
         "scoreBucket": score_bucket(clip.get("score")),
+        "best": False,
         "hook": str(clip.get("hook") or "")[:MAX_HOOK],
         "title": title[:MAX_TITLE],
         "summary": str(clip.get("summary") or "")[:MAX_SUMMARY],
@@ -99,6 +104,7 @@ class Hit:
     summary: str
     performance: dict[str, Any] | None
     status: str
+    best: bool = False
 
 
 def _performance(raw: Any) -> dict[str, Any] | None:
@@ -125,6 +131,7 @@ def hit_from(row: dict[str, Any]) -> Hit:
         summary=str(meta.get("summary") or ""),
         performance=_performance(meta.get("performance")),
         status=str(meta.get("status") or ""),
+        best=meta.get("best") is True,
     )
 
 
@@ -141,13 +148,15 @@ def prompt_section(hits: Sequence[Hit]) -> str:
         return ""
     lines = [
         "What worked before (the owner's past clips most like this video, most similar first). This is advice, "
-        "never a rule: use it to judge which moments and hooks tend to land, not to copy them."
+        "never a rule: use it to judge which moments and hooks tend to land, not to copy them. "
+        f'"{BEST_LABEL}" marks a clip the owner starred as one of the best of its week: those matter most.'
     ]
     for h in hits:
         p = h.performance
         perf = f"{_count(p.get('views'))} views, {_count(p.get('likes'))} likes" if p else "not measured yet"
+        pick = f"{BEST_LABEL} | " if h.best else ""
         lines.append(
-            f"- similarity {h.similarity:.2f} | moment type: {h.moment_type.replace('_', ' ') or 'unknown'} | "
+            f"- {pick}similarity {h.similarity:.2f} | moment type: {h.moment_type.replace('_', ' ') or 'unknown'} | "
             f"hook: {h.hook!r} | title: {h.title!r} | performance: {perf} | summary: {h.summary[:400]}"
         )
     return "\n".join(lines)
@@ -238,17 +247,34 @@ class Vectors:
         return sorted((h for h in hits if h.clip_id), key=lambda h: -h.similarity)
 
 
+def merge(*groups: Sequence[Hit], cap: int = TOP_K) -> list[Hit]:
+    """The groups in order (each already most similar first), each clip once (its first, so best-first), at most
+    ``cap``."""
+    seen: set[str] = set()
+    out: list[Hit] = []
+    for group in groups:
+        for h in group:
+            if h.clip_id in seen:
+                continue
+            seen.add(h.clip_id)
+            out.append(h)
+    return out[:cap]
+
+
 async def what_worked_before(vectors: Vectors | None, user_id: str, text: str) -> list[Hit]:
-    """The owner's past clips most like ``text``: measured ones first; with fewer than three of those, any of the
-    owner's clips. Never fails the job: any error is logged and nothing is returned."""
+    """The owner's past clips most like ``text`` (§14.6, §16.7): the owner's best-of-week picks first, then measured
+    clips, at most eight; with fewer than three in total, filled up with any of the owner's clips. Never fails the
+    job: any error is logged and nothing is returned."""
     if vectors is None:
         return []
     try:
         vector = await vectors.embed(text)
         mine = {"userId": {"$eq": user_id}}
-        hits = await vectors.query(vector, {"$and": [mine, {"status": {"$eq": "performed"}}]})
+        best = await vectors.query(vector, {"$and": [mine, {"best": {"$eq": True}}]}, BEST_TOP_K)
+        performed = await vectors.query(vector, {"$and": [mine, {"status": {"$eq": "performed"}}]})
+        hits = merge(best, performed)
         if len(hits) < MIN_PERFORMED_HITS:
-            hits = await vectors.query(vector, mine)
+            hits = merge(hits, await vectors.query(vector, mine))
         return hits
     except Exception as e:
         log("warn", "vectors.query_failed", error=type(e).__name__, detail=str(e)[:300])

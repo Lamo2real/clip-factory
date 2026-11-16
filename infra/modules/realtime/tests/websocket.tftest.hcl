@@ -2,7 +2,7 @@
 #   cd infra/modules/realtime && terraform init -backend=false && terraform test
 #
 # docs/CONTRACTS.md §14.2 and §14.12: the WebSocket authorizer sets no HTTP-only settings, the token in the query
-# string never reaches a log, the stream mapping has exactly one filter with the four item prefixes, and each
+# string never reaches a log, the stream mapping has exactly one filter with the five item prefixes (§16.9 adds WEEK#), and each
 # function may do only what its code does.
 
 mock_provider "aws" {
@@ -119,7 +119,7 @@ run "the_token_is_never_logged" {
   }
 }
 
-run "stream_mapping_has_one_filter_with_four_prefixes" {
+run "stream_mapping_has_one_filter_with_five_prefixes" {
   command = plan
 
   assert {
@@ -129,9 +129,9 @@ run "stream_mapping_has_one_filter_with_four_prefixes" {
 
   assert {
     condition = jsondecode(one(one(aws_lambda_event_source_mapping.broadcast.filter_criteria).filter).pattern) == {
-      dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }] } } }
+      dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }] } } }
     }
-    error_message = "The filter must pass only JOB#, CLIP#, POST# and LEARNING# items."
+    error_message = "The filter must pass only JOB#, CLIP#, POST#, LEARNING# and WEEK# items (never STAT# or RATE#)."
   }
 
   assert {

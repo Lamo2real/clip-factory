@@ -11,6 +11,7 @@ import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, Pill, Skeleton, Stepper } from "../../components/ui.tsx";
+import { X_MONTHLY_USD } from "../../lib/metrics.ts";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { setPrefs, shrinkImage, usePrefs } from "../../lib/prefs.ts";
@@ -184,6 +185,12 @@ export function AccountsBranch() {
             );
           })}
         </ul>
+        <p className="callout callout--info account-note" id="x-cost">
+          <Icon name="info" size={18} />
+          <span>
+            X charges a little for every number check. Clip Factory stops at ${X_MONTHLY_USD} a month.
+          </span>
+        </p>
       </Apple>
     </Panel>
   );
