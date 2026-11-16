@@ -51,7 +51,8 @@ export function useLoad<T>(load: () => Promise<T>, key: string = ""): Loaded<T> 
 
 /**
  * Calls `tick` every `interval` ms while `active`, pausing while the app is hidden. Failures back off
- * (3 s, 6 s, 12 s … up to 30 s) so a flaky connection is not hammered; one success resets the pace.
+ * (doubling, up to 30 s or four intervals, never faster than `interval`) so a flaky connection is not hammered;
+ * one success resets the pace.
  */
 export function usePoll(tick: () => Promise<unknown>, active: boolean, interval = 3000): void {
   const tickRef = useRef(tick);
@@ -80,7 +81,8 @@ export function usePoll(tick: () => Promise<unknown>, active: boolean, interval 
         await tickRef.current();
         wait = interval;
       } catch {
-        wait = Math.min(30_000, wait * 2);
+        // Back off after a failure, but never check more often than the normal interval.
+        wait = Math.min(Math.max(30_000, interval * 4), wait * 2);
       } finally {
         inFlight = false;
       }

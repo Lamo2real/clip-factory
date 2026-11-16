@@ -107,7 +107,8 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
     if (!el || typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width;
-      if (w !== undefined) setStageWidth(Math.round(w));
+      // Unrounded: the CSS container queries compare the exact width, so a stage of 619.6 px must stay "trunk" here too.
+      if (w !== undefined) setStageWidth(w);
     });
     ro.observe(el);
     stageObserver.current = ro;
@@ -213,7 +214,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   function explainOff() {
     if (state.refreshing) return;
     if (state.allWaiting && state.nextAt)
-      toast.info(`Next check in ${until(state.nextAt, Date.now()) || "a minute"}. Each app only lets Clip Factory look so often.`, { group: "refresh" });
+      toast.info(`Next check in ${until(state.nextAt, now) || "a minute"}. Each app only lets Clip Factory look so often.`, { group: "refresh" });
     else if (!state.checkable) toast.info("Nothing is posted yet, so there are no numbers to check.", { group: "refresh" });
   }
 
@@ -378,7 +379,8 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
             >
               {label}
             </Button>
-            <p className="perf__updated" aria-live="polite">
+            {/* Not a live region: the clock re-renders it every minute. New numbers are announced by the toast. */}
+            <p className="perf__updated">
               {perf.totals.updatedAt ? `Updated ${ago(perf.totals.updatedAt, now)}` : "No numbers yet"}
             </p>
           </div>
