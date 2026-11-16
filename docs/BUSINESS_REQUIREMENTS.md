@@ -5,7 +5,8 @@ Source: the owner's brief for Clip Factory Cloud (November 2026) and the owner's
 the owner's request for a fully serverless Python and Terraform stack with WebSockets, a REST API, durable functions
 and S3 Vectors (NFR-02 AC3 and AC4, NFR-13 to NFR-16, BR-11 AC5, BR-18), and the owner's request to organise
 Settings like a field of apple trees and to choose the click and error sounds (BR-13 AC3 to AC5, UX-09 update, UX-14,
-UX-15).
+UX-15), and the owner's request to see how every clip performs on each platform, refresh those numbers by itself
+and pick the best clips of each week (BR-19 to BR-21, NFR-17, UX-16).
 Every requirement below traces back to one of them. Where
 the brief was open or unclear, the interpretation we chose is stated in [Interpretations and open questions](#interpretations-and-open-questions).
 
@@ -97,7 +98,8 @@ legal pages already cover it.
 From "2 days after we've uploaded to the social media on the clips" (see interpretation I-01).
 - AC1: When a clip is posted, its clip flow waits 48 hours (a durable wait that costs nothing while waiting) and then
   checks every post of that clip.
-- AC2: The check stores views, likes, comments and shares on the post (phase 2 for real numbers).
+- AC2: The check stores views, likes, comments and shares on the post through the same stats refresh as BR-20, so it
+  never goes over a platform's limit (phase 2 for real numbers).
 - AC3: Claude distils one short learning from the owner's recent posts; the agent receives the latest 10 learnings
   on every job.
 - AC4: The Insights screen lists the learnings and the posts with their numbers.
@@ -184,6 +186,66 @@ be a brief word of the area where a new feature has been modified ... 'settings 
 - AC2: The strip is hidden when there are none (today, until posting exists) and never shows an error.
 - AC3: A clip thrown away is removed from this memory.
 
+### BR-19 See how a clip did on each platform
+"I will see which ones get most views and how many views they get and what the status is from each social media
+platform ... so that I can click on any video and see how they performed for each social media platform."
+([CONTRACTS.md §16](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16),
+[the page](UX_DESIGN_SYSTEM.md#clip-performance-page))
+- AC1: Tapping any clip in Library opens its performance page at `/clips/{clipId}`. On Review, a kept clip's card
+  shows "See how it does", which opens the same page. Back returns to where the owner came from (else Library).
+- AC2: The page always shows five platform stacks, in this order: YouTube, TikTok, Instagram, Facebook, X. Each stack
+  shows its status in plain words: Posted, Posted privately, Waiting for connection, Posting, Failed or Not posted.
+- AC3: Each stack shows only the numbers that platform really gives (YouTube: views, likes, comments, and daily
+  insights such as watch time; TikTok: views, likes, comments, shares; Instagram: likes, comments, and views, reach,
+  saves and watch time that can take 2 days; Facebook: plays, reactions, watch time; X: video views, impressions,
+  likes, reposts, replies, bookmarks). A number the platform did not return is left out, never shown as 0.
+- AC4: The top of the page shows the total views across platforms with the note "(each app counts views its own
+  way)", and the platform with the most views carries a crown.
+- AC5: Each stack shows when its numbers were last checked ("Updated 3 min ago"), a small views-over-time line once
+  there are two or more readings, and an "Open on {Platform}" link to the post.
+- AC6: A stack with no numbers is calm, never red (except Failed), and says what to do: connect the account, turn the
+  platform on, wait, or press Try again on Review.
+- AC7: A clip still in review, a thrown-away clip, or another owner's clip gives "This clip has no numbers yet. Keep it
+  first." with a way back.
+
+### BR-20 Numbers that refresh by themselves, and a Refresh button
+"The stats on the video for each social media platform should be a API call where I can just refresh it. But also, it
+should do it every 15 minutes or 30 minutes. Or whatever the lowest limit is for each API."
+([ADR-29](DECISIONS.md#adr-29-stats-refresh-intervals-per-platform),
+[ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling))
+- AC1: Every posted post is checked automatically: YouTube, TikTok and X every 15 minutes, Instagram and Facebook every
+  30 minutes, for the first 48 hours; then every 30 / 60 minutes up to 7 days and every 2 / 6 hours up to 30 days;
+  then one final reading. The intervals live in one file, `config/platforms.json`.
+- AC2: YouTube's slower insights (watch time, engaged views, shares, new subscribers) are read at most every 6 hours,
+  because YouTube needs 2–3 days to process them.
+- AC3: The page has one tomato **Refresh numbers** button that asks every platform at once
+  (`POST /v1/clips/{clipId}/stats/refresh`). New numbers appear on screen by themselves within seconds (WebSocket), and
+  the button spins while they are on the way.
+- AC4: A refresh never goes over a platform's limit: a platform checked moments ago answers "Next check in 4 min";
+  a platform that is resting after a limit answers when it can be asked again. When every platform has to wait, the
+  button reads "Next check in … min" and a tap plays the error sound with a toast saying when.
+- AC5: Instagram and Facebook results carry "{Platform} numbers can take up to 2 days to settle."
+- AC6: While the page is open and the live connection is down, it refetches every 60 seconds.
+
+### BR-21 Pick the best clips of each week, so the next clips are cut better
+"I should be able to select the ones for the week. So each week, I will select the ones that perform best during
+that week, so that it knows how to edit better in the future."
+([ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal), [AGENT.md](AGENT.md#best-of-the-week))
+- AC1: Library has two tabs, "All clips" and "This week". This week lists the week's kept clips sorted by total views,
+  each with its cover, hook, views per platform and a big **Best this week** star (≥ 48 px).
+- AC2: ‹ and › arrows move between weeks (› is off on the current week). A week runs Monday to Sunday in the owner's
+  own time zone; a clip belongs to the week of its first post (or, if not posted yet, the week it was kept).
+- AC3: Starring and unstarring is instant and saved once, 800 ms after the last tap, with "Saved. Clip Factory will
+  learn from your picks." Up to 10 picks a week. The star on the clip's performance page is the same choice.
+- AC4: After a save, Claude Fable 5.1 compares the picks with the rest of that week (hooks, moment types, length,
+  captions, numbers) and writes one short "Best of week" learning; the page shows "Learning from your picks…" and then
+  the learning itself. If it cannot, it says "Could not learn this time. Change a pick to try again."
+- AC5: The agent reads the latest 4 "Best of week" learnings first, before the other learnings, and the starred clips
+  come first in "What worked before", labelled "Owner's pick: best of the week".
+- AC6: Unstarring everything in a week removes that week's learning and the clips' "best" mark. Changing picks again
+  replaces the learning; an older save never overwrites a newer one.
+- AC7: An empty week says "No clips this week yet. Make clips on Home." with a link.
+
 ---
 
 ## Non-functional requirements
@@ -195,7 +257,8 @@ be a brief word of the area where a new feature has been modified ... 'settings 
 ### NFR-02 Serverless architecture
 - AC1: No EC2 instances, no always-on containers, no VPC, no servers to patch: CloudFront, S3 (web, media),
   S3 Vectors, Cognito, API Gateway (HTTP, WebSocket and REST APIs), Lambda (plain and durable functions), DynamoDB
-  with Streams, SSM Parameter Store, AgentCore Runtime, Bedrock, Transcribe, CloudWatch and SNS.
+  with Streams, SSM Parameter Store, one EventBridge rule (the stats tick, BR-20), AgentCore Runtime, Bedrock,
+  Transcribe, CloudWatch and SNS.
 - AC2: Idle cost is close to zero (pay per request and per stored byte). Services with a standing minimum charge are
   not deployed (OpenSearch Serverless, [ADR-25](DECISIONS.md#adr-25-s3-vectors-for-the-learning-memory-opensearch-not-deployed)).
 - AC3: "The entire infrastructure should be serverless, meaning CloudFront, S3 buckets, DynamoDB, OpenSearch if we're
@@ -269,7 +332,7 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 
 ### NFR-13 Live updates
 "API gateway, WebSockets."
-- AC1: While the app is open and connected, a change to a job, clip, post or learning appears on screen within about
+- AC1: While the app is open and connected, a change to a job, clip, post, learning or week's picks appears on screen within about
   2 seconds of being written, without a refresh.
 - AC2: Only the signed-in owner's own changes are sent, in the same shape as the HTTP API; internal fields never reach
   the browser.
@@ -287,6 +350,8 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 - AC3: 48 hours after posting, the clip's memory is updated with its numbers.
 - AC4: If the memory cannot be read or written, jobs and screens carry on without it.
 - AC5: The memory has no standing cost (pay per request and per stored vector).
+- AC6: Clips the owner starred as best of the week are marked `best` in the memory and are offered to the agent
+  first (BR-21).
 
 ### NFR-15 Durable workflows
 "Lambda, and durable functions in Lambda."
@@ -302,6 +367,28 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 - AC2: The endpoint is throttled (10 requests a second, burst 20), stores events for 14 days, and never logs query
   strings (OAuth codes).
 - AC3: Meta and YouTube verification challenges are answered today; TikTok and X answer "not implemented" until phase 2.
+
+### NFR-17 Stay inside every platform's limits and costs
+"Whatever the lowest limit is for each API."
+([CONTRACTS.md §16.4](CONTRACTS.md#164-configplatformsjson-read-by-terraform-and-by-the-code-copied-into-the-zip))
+- AC1: The automatic refresh and the Refresh button share one budget per platform, kept in DynamoDB and reserved with
+  one conditional write before every request, so two refreshes at once can never go over a limit together.
+- AC2: YouTube: at most 7,000 of the 10,000 daily quota units are used for numbers (3,000 stay for uploads); a quota
+  error pauses YouTube until the quota resets (08:00 UTC).
+- AC3: TikTok: at most 300 requests a minute (the limit is 600); a "rate limit exceeded" answer pauses it for a minute.
+- AC4: Instagram and Facebook: the `X-Business-Use-Case-Usage` header is read after every call; at 75 % of any
+  counter, or on a throttle error (80002, 80001), the platform pauses for at least the time Meta gives, and a throttled
+  call is never retried (retrying makes Meta's block longer).
+- AC5: X: at most 1,000 requests per 15 minutes (the limit is 3,500), and an estimated spend cap of **$10 a month**;
+  re-reading the same post on the same UTC day counts as free. At the cap, X pauses until the next month, and Settings ›
+  Posting › Accounts says so in one line.
+- AC6: Batches use each platform's largest request size (YouTube 50 ids, TikTok 20, Instagram and Facebook 50, X 100).
+- AC7: Only metrics the platforms still support are read: never Meta `impressions`, `plays`, `post_impressions_unique`
+  or `total_video_impressions*`; X video views come from the video's own `view_count`, never from impressions.
+- AC8: Platform tokens never reach DynamoDB, logs or responses; no request is made for a platform without a connected
+  account (phase 1: no request at all).
+- AC9: An expected failure (limits, a deleted post, an expired token) never stops the poller and never repeats in a
+  tight loop: the post waits its normal interval and shows the reason in plain words.
 
 ---
 
@@ -428,6 +515,27 @@ sound: 5 Nope nope nope." ([CONTRACTS.md §15.3](CONTRACTS.md#153-sounds), [the 
 - AC7: The sounds are defined as data (one catalog entry per sound) and played by one player; numbers never change
   meaning, so a saved pick always plays the same sound.
 
+### UX-16 The performance page: the video on top, smooth lines to five stacks
+"It should be quite a nice design actually. So we should have the video on top, like the preview of it, the thumbnail
+of it, and then there's like ... lines that go, in a smooth manner, leading to each vertical stack of information ...
+So maybe 5 lines ... for both the phone resolution and the normal laptop's resolution or PC ... monitors."
+([anatomy per screen size](UX_DESIGN_SYSTEM.md#clip-performance-page))
+- AC1: The clip's 9:16 video sits on top, centred in a rounded glass frame, with its cover as the poster; it never
+  plays by itself.
+- AC2: Five smooth curved lines grow out of the bottom of the video, one to the top of each platform stack. They draw
+  in once, one after another (80 ms apart, 900 ms each), and the stacks rise in as their line arrives. The best
+  platform's line is tomato, the others sage. With reduce motion (system or app setting) the lines are simply there.
+- AC3: Laptops and monitors (≥ 1024 px): five equal columns side by side, the lines fanning out from the video and
+  ending exactly at the top centre of each stack.
+- AC4: Tablets and small laptops (600–1023 px): three stacks in the first row, two in the second, the second-row lines
+  running straight down the gaps between the first-row cards, never over a card.
+- AC5: Phones (< 600 px): one column of full-width cards; one trunk line runs from the video down the left edge, and a
+  small curved branch leads into each card.
+- AC6: Nothing overflows at any width from 320 px; numbers never get cut off; labels wrap.
+- AC7: Kid-proof (UX-13): the only tomato button is **Refresh numbers**; the **Best this week** star is a big sage
+  toggle; every state has words; the page works with a keyboard and a screen reader (the lines are decoration and are
+  hidden from screen readers; each stack is a labelled section).
+
 ---
 
 ## Interpretations and open questions
@@ -456,11 +564,20 @@ sound: 5 Nope nope nope." ([CONTRACTS.md §15.3](CONTRACTS.md#153-sounds), [the 
 | I-20 | "A field ... apple trees ... branches ... apples, but they also have leaves" | Field = all of Settings, trees = four big groups, branches = sections, apples = the settings you change, leaves = their one-line help (UX-14). The "multiple trees" are the four trees; the field is the Settings page itself. | Are four trees the right split? |
 | I-21 | "Include this entire page ... select the normal click and the error clicks" | The whole sound picker (both groups of 30, Try it with Make it fail) becomes the Sounds branch, in the app's glass style (UX-15). "Tap sound" and "error sound" are called **Click sound** and **Error sound** on screen. | No. |
 | I-22 | Get the app inside the tree | Get the app moves into App & account and, like the sidebar item, disappears once the app is installed (BR-16). | No. |
+| I-23 | "There's like 4 lines ... So maybe 5 lines" | Five lines, one per platform the app posts to: YouTube, TikTok, Instagram, Facebook, X (UX-16). | No. |
+| I-24 | "Every 15 minutes or 30 minutes. Or whatever the lowest limit is for each API" | The safe floor per platform, not the hard limit: 15 min for YouTube, TikTok and X, 30 min for Instagram and Facebook (whose numbers settle over 2 days anyway), slower as a post ages, for 30 days (BR-20, [ADR-29](DECISIONS.md#adr-29-stats-refresh-intervals-per-platform)). | Is 30 days of refreshing long enough? |
+| I-25 | "What the status is from each social media platform" | The posting status per platform (Posted, Posted privately, Waiting for connection, Posting, Failed, Not posted) next to its numbers (BR-19 AC2). | No. |
+| I-26 | "Select the ones that perform best during that week" | The owner stars them by hand (up to 10 a week); the app sorts by views to help, but never picks for the owner, because each app counts views differently and the owner's taste is the signal ([ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal)). | Should the app suggest picks later? |
+| I-27 | "So that it knows how to edit better in the future" | The picks shape **which moments are chosen and how they are hooked and captioned** (a "Best of week" learning and "best" clips first in "What worked before"). Editing itself (cuts, layout) follows the skills; a clip editor is on the [roadmap](ROADMAP.md#later). | Does the owner want the picks to change editing style directly? |
+| I-28 | Real numbers on TikTok | TikTok shows posts from unaudited apps only privately and gives them no numbers, so TikTok reads "Posted privately. TikTok shows numbers after the app is approved." until the app passes TikTok's audit ([ROADMAP.md](ROADMAP.md#phase-2-social-integrations)). | Waiting for TikTok's audit. |
+| I-29 | X numbers cost money | X has no free tier for reading posts; reads are paid per post. The app caps its own spend at $10 a month and says so in Settings (NFR-17 AC5, [DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)). | Is $10 a month the right cap? |
 
 ## Out of scope for this phase
 
 - Connecting social accounts and posting to YouTube, Instagram, Facebook, TikTok and X (BR-09, BR-10 phase 2).
-- Reading real post metrics (BR-11 AC2 phase 2; the clip flow's 48-hour wait, learnings and memory exist).
+- Reading real post metrics (BR-11 AC2 phase 2). The clip flow's 48-hour wait, learnings and memory, the stats poller,
+  the Refresh button, the performance page and the weekly best all exist; with no connected account every platform
+  reads "Waiting for connection" and no platform is called (BR-19 to BR-21).
 - OpenSearch Serverless (an option, not deployed).
 - Whop or Content Rewards campaign reading from the local app.
 - More than one user.

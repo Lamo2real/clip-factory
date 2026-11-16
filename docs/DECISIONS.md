@@ -9,7 +9,11 @@ unless marked **Replaced**. ADR-22 to ADR-26 come from the serverless expansion
 ([CONTRACTS.md §14](CONTRACTS.md#14-serverless-expansion-websocket-api-rest-api-durable-functions-s3-vectors)).
 ADR-27 and ADR-28 come from the owner's Settings tree and sound picker request
 ([CONTRACTS.md §15](CONTRACTS.md#15-settings-as-a-tree-and-choosing-your-click-sounds-owner-request-2026-11-16)); the
-sound choices in ADR-28 were made by the owner.
+sound choices in ADR-28 were made by the owner. ADR-29 to ADR-31 come from the owner's clip performance request
+([CONTRACTS.md §16](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16)): the
+owner asked for "every 15 minutes or 30 minutes, or whatever the lowest limit is", for a refresh button, and to pick
+the best clips each week; the exact intervals and mechanisms were decided by the build from the platforms' published
+limits.
 
 ---
 
@@ -392,3 +396,95 @@ publisher, scheduler and perf-check are removed.
   well formed, peaks at most 0.5, every sound under half a second). The first build's sounds stay as click 1 "Glass
   tick" and error 1 "Double thud", so nothing is lost. Removing a sound later would need a mapping for saved picks,
   which the frozen-ids rule avoids.
+
+## ADR-29 Stats refresh intervals per platform
+
+- **Context.** The owner wants each clip's numbers per platform, refreshed "every 15 minutes or 30 minutes. Or
+  whatever the lowest limit is for each API", plus a Refresh button. The five APIs limit and bill very differently,
+  and their numbers settle at different speeds (checked against each platform's documentation, November 2026):
+
+  | Platform | Read used | Limit or cost | How fresh the numbers are |
+  |---|---|---|---|
+  | YouTube | `videos.list?part=statistics` (up to 50 ids, **1 quota unit a call**); YouTube Analytics `reports` for watch time, engaged views, shares | 10,000 units a day per project, reset at midnight Pacific; uploads need units too | `viewCount` is near real time but cached (minutes behind Studio); Shorts count every play and replay since 31 March 2025; Analytics lags **48–72 hours** |
+  | TikTok | `POST /v2/video/query/` (up to 20 ids) | **600 requests a minute** per endpoint, sliding window; `429 rate_limit_exceeded` | Live counts; only views, likes, comments, shares. Unaudited apps post privately and get **no** numbers |
+  | Instagram | media insights via field expansion on `/{ig-user-id}/media` (50 reels a request) | Business Use Case: **4,800 × the account's impressions** per 24 h; error `80002`; retries extend the block | Meta: data "can be delayed up to 48 hours"; `views`, `reach` and skip rate are estimates or "in development" |
+  | Facebook | `video_insights` (lifetime only) for up to 50 Reels a request | Pages BUC: **4,800 × engaged users** per 24 h; error `80001` | Up to 48 hours to settle; impressions and unique-views metrics retire with v26.0 |
+  | X | `GET /2/tweets?ids=` (up to 100) with public, non-public and media metrics | 3,500 requests / 15 min per app; **pay per use**, about $0.005 per post read, the same post again on the same UTC day free | Live; non-public metrics only for posts under 30 days old |
+
+- **Decision.** A **safe floor per platform**, not the hard limit, kept in one file, `config/platforms.json`, which
+  Terraform and the code both read:
+  - **15 minutes** for YouTube, TikTok and X, **30 minutes** for Instagram and Facebook, for the first 48 hours; then
+    30 / 60 minutes up to 7 days and 2 h / 6 h up to 30 days; then one final reading and the post leaves the queue.
+  - YouTube Analytics at most every **6 hours**: it only moves once a day.
+  - **Budgets below the limits**: YouTube stops at 7,000 units a day (3,000 kept for uploads); TikTok uses at most 300
+    of 600 requests a minute; Meta stops at 75 % of any `X-Business-Use-Case-Usage` counter and never retries a
+    throttle; X uses at most 1,000 of 3,500 requests per 15 minutes and stops at an estimated **$10 a month**.
+  - **Refresh numbers** goes through the same budgets with a per-post cooldown: 5 minutes for YouTube, TikTok and X,
+    30 minutes for Instagram and Facebook. It never bypasses a limit; when it must wait, it says until when.
+  - Largest batch per request everywhere (50, 20, 50, 50, 100 ids), so cost grows with the number of batches, not posts.
+- **Why these numbers.** At 15 minutes, 50 YouTube posts cost 96 units a day: under 1 % of the quota, so the floor is set
+  by how often the number really changes, not by the quota. TikTok's 600 a minute is never close. Instagram and
+  Facebook budgets scale with the account's own reach, so a new account has a small one, and their numbers settle over
+  two days; reading every 15 minutes would spend budget on numbers that have not moved yet. X is the only one that
+  costs money, and its 24-hour de-duplication means 15 minutes costs the same as once a day (about $0.15 per post over
+  30 days), so freshness is free there until the monthly cap. Slowing down with age matches how clips behave: most
+  views come in the first two days.
+- **Alternatives.** *The hard limits* (YouTube could poll every few seconds by quota alone; Meta's limit depends on
+  reach and can shrink overnight; going up to the edge leaves nothing for uploads and the button). *One interval for
+  all* (30 minutes everywhere wastes YouTube's and TikTok's freshness; 15 everywhere spends Meta budget on unsettled
+  numbers). *Webhooks instead of polling* (none of the five platforms pushes view counts to a webhook). *Polling forever* (X's private numbers end at 30 days, and old clips barely move; the final
+  snapshot keeps the totals).
+- **Consequences.** Numbers on the page are at most 15–30 minutes old in the first two days and say how old they are.
+  Changing an interval, a batch size, a budget or the Graph API version is a one-line change in `config/platforms.json`
+  and a push. The X cap needs the owner's credits (DEPLOYMENT.md, "X API credits for clip numbers"). TikTok numbers
+  wait for TikTok's app audit.
+
+## ADR-30 One EventBridge rule and a due-queue for stats polling
+
+- **Context.** Every posted post must be read on its own schedule (ADR-29) for 30 days, while the Refresh button can
+  read any of them at once. §14 removed the watchdog's EventBridge rule and the per-post EventBridge Scheduler
+  schedules in favour of durable waits (ADR-22). The clip flow's durable execution lasts at most 3 days.
+- **Decision.** One EventBridge rule, `cf-prod-stats`, `rate(15 minutes)` (the smallest `minIntervalMinutes`, read from
+  `config/platforms.json` by Terraform), targets a plain Lambda `cf-prod-stats`. The **due-queue** is a sparse DynamoDB
+  index: a post carries `gsi2pk = "STATS"`, `gsi2sk = "{statsDueAt}#{postId}"` only while it is inside its 30-day
+  window, so each tick is one Query for `gsi2sk <= now`. Each platform's limits are one `RATE#{platform}` item reserved
+  with a conditional write before every request. The tick stops starting requests after 240 s; the rest stay due. The
+  Refresh button claims the posts with a conditional write and invokes the same Lambda asynchronously (`InvocationType
+  Event`, no retries). The clip flow's 48-hour `metrics` step calls the same `refresh_posts`.
+- **Alternatives.** *A durable function per post with `wait` between reads* (about 700 waits per post over 30 days,
+  longer than the 3-day clip flow; a manual refresh would need to wake a sleeping execution; many executions to
+  watch). *EventBridge Scheduler, one schedule per post* (the pattern §14 removed: schedules to create, move and clean
+  up for every post and every interval change). *A Step Functions loop* (a state machine per post or a long-running
+  one; more moving parts and cost for the same thing). *Polling from the browser* (works only while the page is open
+  and would put platform tokens near the browser). *A tick every minute* (four times the invocations for nothing: no
+  platform interval is shorter than 15 minutes).
+- **Consequences.** About 2,900 invocations a month, near zero cost, and nothing per post to create or clean up: a
+  post joins the queue by getting `statsDueAt` and leaves it by losing `gsi2`. All callers share the budgets, so a tick
+  and a button press together can never overspend. The rule is the system's only schedule (no EventBridge Scheduler, no
+  other rule). If the intervals in `config/platforms.json` all become 30 minutes, the rule
+  becomes `rate(30 minutes)` by itself. The stats Lambda has no async retries (the next tick is the retry) and never
+  raises on expected errors; a bug raises and alarms.
+
+## ADR-31 The weekly best is an explicit owner signal
+
+- **Context.** The owner: "Each week, I will select the ones that perform best during that week, so that it knows how
+  to edit better in the future." The app already learns automatically from numbers (the clip flow's `distil`, the
+  `performed` vectors), but numbers across platforms are not comparable: YouTube Shorts count replays, Meta's views are
+  estimates that settle over two days, X's video views differ from impressions, TikTok shows none while unaudited.
+- **Decision.** The owner **stars** up to 10 clips a week in Library › This week (sorted by views to help) or on a
+  clip's page. A week is an ISO week in the owner's own time zone; a clip belongs to the week of its first post (else
+  the day it was kept). Saving (`PUT /v1/weeks/{week}/best`) writes the picks in one transaction with a `revision` and
+  starts `cf-prod-learn`, which marks the vectors `best = true / false` and asks Claude Fable 5.1 for **one** "Best of
+  week" learning comparing the picks with the rest of the week. The agent reads the latest 4 week learnings before the
+  other 10 learnings, and `best` clips come first in "What worked before".
+- **Alternatives.** *Pick the top clips by views automatically* (the owner asked to choose; views are not comparable
+  across apps and miss what the owner likes; automatic learning from numbers already exists). *A thumbs up / down on
+  every clip* (more taps, weaker signal than "the best of this week"). *Rank all clips of the week* (heavier for a
+  child to use; a star is one tap). *A learning per picked clip* (many near-duplicate sentences crowding the prompt;
+  one per week compares picks with non-picks). *Learning on a weekly schedule* (the owner may pick late or change
+  picks; learning on save is simpler and immediate).
+- **Consequences.** The owner's taste outranks raw numbers in what the agent sees. Re-saving replaces the week's
+  learning (same `learningId`), unstarring everything removes it, and the `revision` check means a slow older run
+  never overwrites a newer save. The picks shape which moments are chosen and how they are hooked and captioned; they
+  do not change the editing rules in the skills. The week's boundaries come from the browser, so a week always matches
+  the owner's calendar, including the weeks the clocks change (167 or 169 hours).

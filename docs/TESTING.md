@@ -95,7 +95,9 @@ in `docs/` and `README.md` points at a file that exists.
 - **Accounts**: every platform shows "Not connected"; Connect explains it arrives in the next phase.
 - **Navigation**: below 768 px a bottom tab bar with icons only (no visible text, every item has an `aria-label`);
   from 768 px a sidebar that collapses with the hamburger and remembers the choice.
-- **No overflow**: every screen at 320, 375, 390, 430, 768, 1024 and 1440 px. The test fails if the page scrolls
+- **No overflow**: every screen at 320, 375, 390, 430, 768, 1024 and 1440 px; `/clips/{id}` and
+  `/library?view=week` also at 600 px (the page's own breakpoint). Screenshots of both pages at 375 and 1440 px, light
+  and dark. The test fails if the page scrolls
   sideways or any element's `scrollWidth` is larger than its `clientWidth` (except elements that are meant to scroll,
   which are marked).
 - **Sounds** ([UX-09](BUSINESS_REQUIREMENTS.md#ux-09-two-click-sounds-never-on-scroll)): a click on an enabled
@@ -140,6 +142,28 @@ in `docs/` and `README.md` points at a file that exists.
   error toast for a dropped socket.
 - **Like clips that did well** ([BR-18](BUSINESS_REQUIREMENTS.md#br-18-like-clips-that-did-well-while-reviewing)): the
   strip shows mock similar clips and is hidden when the list is empty; no overflow from 320 px.
+- **Clip performance page** (`e2e/performance.spec.ts`, [BR-19](BUSINESS_REQUIREMENTS.md#br-19-see-how-a-clip-did-on-each-platform),
+  [BR-20](BUSINESS_REQUIREMENTS.md#br-20-numbers-that-refresh-by-themselves-and-a-refresh-button),
+  [UX-16](BUSINESS_REQUIREMENTS.md#ux-16-the-performance-page-the-video-on-top-smooth-lines-to-five-stacks)):
+  - A Library card opens `/clips/{id}`; Back returns to Library; a kept clip on Review shows "See how it does".
+  - Five stacks in the order YouTube, TikTok, Instagram, Facebook, X, each with only its own metric labels (no
+    "Saves" on TikTok, no "Impressions" on Instagram or Facebook); a missing number is not shown as 0; the crown sits on
+    the mock's best platform.
+  - Refresh numbers → spinner → the numbers change when the mock pushes a `post` event → "Next check in" appears; a
+    tap while every platform must wait plays the error sound and shows the toast saying when.
+  - Each calm state (Waiting for connection, Not posted, Posting, Posted privately, no numbers yet, Failed) shows its
+    words and its link goes to the right Settings branch or Review.
+  - The Best this week star toggles (`aria-pressed`) and survives a reload.
+  - Lines: five `path`s exist; at 1440 px every line ends within 2 px of its stack's top centre; at 800 px the row-2
+    lines do not cross any row-1 card; at 375 px there is one trunk and five branches; with reduced motion
+    `getAnimations()` is empty.
+- **This week** (`e2e/week.spec.ts`, [BR-21](BUSINESS_REQUIREMENTS.md#br-21-pick-the-best-clips-of-each-week-so-the-next-clips-are-cut-better)):
+  the tab opens `/library?view=week`; clips are sorted by views; ‹ goes to the previous week and › is off on the current
+  one; starring sends exactly one `PUT …/best` after the 800 ms debounce; "Learning from your picks…" turns into the
+  learning text after the mock `learning` event; an empty week shows "No clips this week yet. Make clips on Home."
+- **Performance units** (Vitest): `lib/week.ts` (2026-01-01 is 2026-W01, 2027-01-01 is 2026-W53, weeks start on
+  Monday, clock-change weeks are 167 and 169 hours); the Bézier builder `PerfLines.paths(layout, rects)` for the three
+  layouts; compact numbers ("1.2K", "–" for null, "1:05"); status → words; live merge of `post` and `week` events.
 - **Settings `coming_soon`**: `/settings?account=youtube&status=coming_soon` shows "Connecting YouTube arrives soon."
 - **Kid-proof** ([UX-13](BUSINESS_REQUIREMENTS.md#ux-13-kid-proof-a-68-year-old-can-use-it)): at most one tomato
   button per screen (plus the update bar's Reload); every button on phones is at least 48 × 48 px; every button except
@@ -172,6 +196,43 @@ in `docs/` and `README.md` points at a file that exists.
   `errorSound` from 1 to 30 and refuses 0, 31, 2.5, `"6"`, `true` and `null` with `400 bad_request` and a plain message;
   `GET /v1/settings` on settings stored without them returns 6 and 5.
 - DynamoDB keys match [CONTRACTS.md §6](CONTRACTS.md#6-dynamodb-single-table-cf-prod-data-on-demand-pitr-on-streams-new_and_old_images).
+
+- Clip performance ([CONTRACTS.md §16.2](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16)):
+  always five platforms in STATS_ORDER with the status mapping; totals treat null as 0; the best platform's tie goes to
+  the earlier platform; snapshots are read newest first (at most 500, so a long history keeps its newest points), put
+  back in time order, then downsampled to at most 60 points and keep the last one; 404 for `review`,
+  `declined` and another owner's clip; internal fields (`statsId`, `refreshStartedAt`, `statsDueAt`, `gsi2*`,
+  `revision` and the rest) never appear.
+- Refresh: `too_soon` honours `nextRefreshAt`, `blocked` honours `blockedUntil`; `private`, `not_connected`,
+  `not_posted`; one async invoke with only the started post ids; a failed invoke rolls the claim back and answers
+  `blocked` with "Could not check right now. Try again in a minute."; the Instagram and Facebook notes are present.
+- Weeks: a bad week id or `from`/`to` gives 400; a clip's week is its first `postedAt`, else `decidedAt`; sort order;
+  more than 10 picks or a clip from another week gives 400; the same picks give 200 and no invoke; the transaction sets
+  `best`/`bestWeek` and clears unpicked clips; `revision` goes up by one; the learn invoke payload.
+- `learn_week`: a superseded revision writes nothing; vectors get `best` true/false and the run survives vector errors;
+  empty picks delete the old learning; `max_tokens`, `refusal`, `content_filtered` end `failed`; the learning id is
+  reused on a re-save; Converse uses `maxTokens 4000`, effort low and no temperature.
+- The broadcaster maps `WEEK#` to `week` events; the Lambda zip contains `clipfactory_api/config/platforms.json`.
+
+### Stats poller (`api/tests/test_stats*.py`, pytest)
+Recorded platform answers live in `api/tests/fixtures/stats/` (YouTube `videos.list` and Analytics, TikTok video
+query, Instagram media, Facebook video insights and post views, X posts lookup). No test reaches a network.
+- `config.load` validates the repository's `config/platforms.json` (all five platforms, the values in
+  [§16.4](CONTRACTS.md#164-configplatformsjson-read-by-terraform-and-by-the-code-copied-into-the-zip)); `interval_for`
+  gives the right tier at 47 h, 49 h, 8 days and 31 days.
+- Each adapter builds the exact URLs and bodies with its batch size (51 YouTube ids → 2 requests, 21 TikTok → 2,
+  101 X → 2), X drops the non-public fields for posts 30 days or older, and the recorded answers map to `PostMetrics`
+  (milliseconds → seconds, missing → absent, never `impressions` for Meta, X views from the video's `view_count`).
+- Limits: YouTube `quotaExceeded` → blocked until 08:00 UTC; TikTok 429 → 1 minute; Instagram 80002 with
+  `estimated_time_to_regain_access` → blocked and **no retry**; a BUC header at 75 % → blocked; X 429 → until
+  `x-rate-limit-reset`; the X monthly cap; two reservations at once over the limit → one is blocked.
+- The tick reads only due posts, respects `STATS_TIME_BUDGET_SECONDS`, writes metrics, `statsDueAt` and `gsi2sk`,
+  writes snapshots by the rules (60 min, 1 % change, final), and removes `gsi2` at 30 days; YouTube insights are read
+  only every 360 minutes and slow values are kept between reads.
+- Phase 1: with no account every adapter answers `not_connected` and makes zero HTTP calls; a manual refresh always
+  clears `refreshStartedAt`, even on errors; the handler never raises on expected errors; the clip flow's `metrics` step
+  uses `refresh_posts` and falls back to stored numbers when blocked; publishing writes the stats fields (a private
+  TikTok post gets no `gsi2`).
 
 ### Durable flows (`api/tests/test_flows.py`, pytest)
 A `FakeDurableContext` runs each `step` at once and records its name, records each `wait` and its duration, and hands
@@ -209,21 +270,32 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
 - Callbacks: with a `callbackId` the agent heartbeats at most every 5 minutes, sends success after the job is `ready`,
   sends `JobFailed`, `Canceled` or `Superseded` failures, ignores "callback already closed" errors, and sends nothing
   without a `callbackId`. A duplicate `process_job` for a running job is accepted and ignored.
-- Vectors: finalize puts one vector per clip with the §14.6 metadata; "What worked before" queries `performed` first and
-  falls back to all of the owner's clips under 3 hits; a vector error skips the section.
+- Vectors: finalize puts one vector per clip with the §14.6 metadata and `best: false`; "What worked before" queries
+  `best` first, then `performed`, removes duplicates, keeps at most 8, falls back to all of the owner's clips under 3
+  hits, and labels `best` hits "Owner's pick: best of the week"; a vector error skips the section.
+- Learnings brief: up to 4 week learnings first under "The owner's best-of-week picks taught", then up to 10 others
+  under "Learnings"; empty groups are left out.
 
 ### Infrastructure
 - `terraform validate` passes; formatting is clean.
 - Cognito client: 15-minute access and ID tokens, 30-day refresh token, rotation on, SRP only.
 - Flows: `publish = true`, alias `live`, `durable_config` 30 600 s (job) and 259 200 s (clip) with 14 days retention,
   `timeouts.delete = "60m"`, no destinations.
-- The stream trigger has exactly one filter with the four sort-key prefixes.
+- The stream trigger has exactly one filter with the five sort-key prefixes (`JOB#`, `CLIP#`, `POST#`, `LEARNING#`,
+  `WEEK#`).
 - The WebSocket authorizer sets no result TTL and no payload format version; WebSocket and REST logs contain no query
   or `requestOverride` and `data_trace_enabled = false`.
 - The vector index is float32, 1024, cosine with the four non-filterable keys.
-- No `aws_sqs_queue`, `aws_scheduler_*` or `aws_cloudwatch_event_rule` remains.
+- No `aws_sqs_queue` or `aws_scheduler_*` remains; the only `aws_cloudwatch_event_rule` is `cf-prod-stats`.
+- Stats ([CONTRACTS.md §16.9](CONTRACTS.md#169-terraform-module-inframodulesstats-wired-in-envsprod)): the rule is
+  `rate(15 minutes)`, derived from `config/platforms.json` (a test override with every interval at 30 gives
+  `rate(30 minutes)`); its target and the Lambda permission's source ARN; `cf-prod-stats` retries 0 and event age 900 s,
+  `cf-prod-learn` retries 1; the IAM statements are exactly those of §16.9 (no Bedrock or S3 Vectors on stats); the API
+  has `STATS_FUNCTION_ARN`, `LEARN_FUNCTION_ARN` and may invoke both; `gsi2` exists with projection ALL; alarms exist for
+  both functions.
 - The outputs in [CONTRACTS.md §10](CONTRACTS.md#10-terraform-outputs-read-by-deployyml) exist with those names,
-  including `ws_url`, `hooks_url`, `vector_bucket`, `vector_index`, `job_flow_alias_arn`, `clip_flow_alias_arn`.
+  including `ws_url`, `hooks_url`, `vector_bucket`, `vector_index`, `job_flow_alias_arn`, `clip_flow_alias_arn`,
+  `stats_function_name`, `learn_function_name`, `stats_rule_name`, `stats_tick_minutes`.
 
 ## Manual checks after the first deploy
 
@@ -241,5 +313,9 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
 7. Upload a skill in Settings, start another job and check that the clips follow it.
 8. Open **Get the app** on a Mac and on Windows; download, follow the first-open hint, and check that Get the app is
    gone inside the desktop app. On an iPhone, follow the three steps.
-9. Push a small change with an `Area:` line; within 5 minutes the open app (browser and desktop app) shows the update
+9. Keep a clip and open it from Library: five stacks read "Waiting for connection" with a link to Accounts; Refresh
+   numbers answers without calling any platform. In CloudWatch Logs, `/aws/lambda/cf-prod-stats` shows a `stats.tick`
+   line every 15 minutes. In Library › This week, star the clip: "Learning from your picks…" turns into a "Best of
+   week" learning within a minute or two.
+10. Push a small change with an `Area:` line; within 5 minutes the open app (browser and desktop app) shows the update
    bar with that label; press Reload and watch it finish.

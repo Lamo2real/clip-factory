@@ -34,13 +34,23 @@ from the browser). It is built so simply that a child could use it.
    Sounds** you pick your click sound and your error sound from 30 each and try them on a pretend Sign in button; the
    defaults are the owner's picks, **Water drop** and **Nope nope nope**
    ([details](docs/UX_DESIGN_SYSTEM.md#settings-tree)).
+10. **See how every clip did, everywhere.** Tap any clip in Library: the video sits on top and five smooth lines lead
+    to five stacks, one each for YouTube, TikTok, Instagram, Facebook and X, with that platform's own numbers (views,
+    likes, comments, shares, watch time and more), its status and a crown on the best one. The numbers refresh by
+    themselves (every 15 minutes for YouTube, TikTok and X, every 30 for Instagram and Facebook, slower as a post ages,
+    for 30 days), and **Refresh numbers** asks again at once, never over a platform's limit
+    ([details](docs/UX_DESIGN_SYSTEM.md#clip-performance-page)).
+11. **Star the best of the week.** Library › This week lists the week's clips by views. Star the best ones, and
+    Claude writes one "Best of week" learning, so the next clips are picked and hooked more like them
+    ([details](docs/AGENT.md#best-of-the-week)).
 
 ## Architecture
 
 Python for every backend, Terraform for every resource, and serverless only: CloudFront, S3 (web, media),
 S3 Vectors, DynamoDB with Streams, three API Gateway APIs (HTTP for the app, WebSocket for live updates, REST for
-platform webhooks), seven Lambdas (two of them durable functions), Amazon Bedrock AgentCore, Claude Fable 5.1 and
-Titan embeddings on Bedrock, Transcribe, Cognito, SSM Parameter Store, CloudWatch and SNS. No servers, no containers to
+platform webhooks), nine Lambdas (two of them durable functions), one EventBridge rule (the 15-minute numbers tick),
+Amazon Bedrock AgentCore, Claude Fable 5.1 and Titan embeddings on Bedrock, Transcribe, Cognito, SSM Parameter Store,
+CloudWatch and SNS. No servers, no containers to
 run, no VPC. OpenSearch Serverless is drawn as an option, not deployed.
 
 ![Clip Factory Cloud on AWS](docs/architecture/aws-architecture.png)
@@ -54,10 +64,10 @@ it in draw.io or at app.diagrams.net); [docs/ARCHITECTURE.md](docs/ARCHITECTURE.
 |---|---|
 | [Business requirements](docs/BUSINESS_REQUIREMENTS.md) | Every requirement from the owner's brief, numbered, with acceptance criteria and open questions |
 | [Contracts](docs/CONTRACTS.md) | The single source of truth: routes, data shapes, DynamoDB keys, S3 layout, names, outputs |
-| [Architecture](docs/ARCHITECTURE.md) | AWS services and why, the durable job and clip flows, live updates, the learning memory, webhooks, sequence diagrams, failure handling, cost, limits |
-| [Agent](docs/AGENT.md) | How the clip agent behaves: pipeline steps, tools, skills, prompts, the learnings loop |
-| [UX design system](docs/UX_DESIGN_SYSTEM.md) | Colours, liquid glass, type, layout, navigation, the Settings tree and search, the sound catalog and picker, motion, overflow rules, PWA, Get the app card, update bar and reload curve, kid-proof checklist |
-| [Deployment](docs/DEPLOYMENT.md) | One-time AWS and GitHub setup (deploy role, Bedrock data retention, API Gateway logging role), what a deploy does, desktop downloads and their first open, release labels, first sign-in, rollback, tearing down |
+| [Architecture](docs/ARCHITECTURE.md) | AWS services and why, the durable job and clip flows, live updates, the learning memory, webhooks, the numbers poller and the weekly best, sequence diagrams, failure handling, cost, limits |
+| [Agent](docs/AGENT.md) | How the clip agent behaves: pipeline steps, tools, skills, prompts, the learnings loop, best of the week |
+| [UX design system](docs/UX_DESIGN_SYSTEM.md) | Colours, liquid glass, type, layout, navigation, the Settings tree and search, the sound catalog and picker, the clip performance page (lines and stacks per screen size) and This week, motion, overflow rules, PWA, Get the app card, update bar and reload curve, kid-proof checklist |
+| [Deployment](docs/DEPLOYMENT.md) | One-time AWS and GitHub setup (deploy role, Bedrock data retention, API Gateway logging role), what a deploy does, desktop downloads and their first open, release labels, clip numbers and X API credits, first sign-in, rollback, tearing down |
 | [Security](docs/SECURITY.md) | What is protected and how, token lifetimes, the owner's convenience-first stance |
 | [Testing](docs/TESTING.md) | Every test suite, how to run it locally, what CI runs |
 | [Decisions](docs/DECISIONS.md) | Why each major choice was made |
@@ -69,14 +79,15 @@ it in draw.io or at app.diagrams.net); [docs/ARCHITECTURE.md](docs/ARCHITECTURE.
 ```
 /                         GitHub Pages legal site (index.html, privacy.html, terms.html, style.css, .nojekyll) + this README
 config/models.json        the only place model ids live
+config/platforms.json     numbers refresh intervals, batch sizes and rate budgets per platform
 skills/<name>/SKILL.md    built-in skills (bundled into the agent and seeded for the owner)
 docs/                     all documentation and the architecture diagram
 web/                      the app: React 19 + Vite + TypeScript, installable PWA (web/areas.json: folder → update label)
 desktop/                  the desktop app: a thin Tauri v2 window around the live web app (.dmg and .exe)
 api/                      Python 3.13 Lambdas: HTTP API, durable job and clip flows, WebSocket (authorizer, connections,
-                          broadcast), platform webhooks
+                          broadcast), platform webhooks, the numbers poller (stats) and the weekly learn
 agent/                    Python 3.13 AgentCore runtime (Claude Agent SDK, yt-dlp, ffmpeg) and its Dockerfile
-infra/                    Terraform: envs/prod, modules (incl. flows, realtime, hooks, vectors) and bootstrap (deploy role)
+infra/                    Terraform: envs/prod, modules (incl. flows, realtime, hooks, vectors, stats) and bootstrap (deploy role)
 scripts/                  deploy helpers (state bucket, image push, web config, release areas)
 .github/workflows/        ci.yml (every push and pull request), deploy.yml (every push to main)
 ```
@@ -128,6 +139,7 @@ steps are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 | 1 | Update bar with area labels and the smooth Reload | Added after the first build |
 | 1 | Kid-proof screens (one next step, big buttons, Undo instead of "Are you sure?") | Added after the first build |
 | 1 | Settings as a tree with search and a folder panel; pick your click and error sounds (30 each) | Added after the first build ([contracts §15](docs/CONTRACTS.md#15-settings-as-a-tree-and-choosing-your-click-sounds-owner-request-2026-11-16)) |
+| 1 | Clip performance page (video, five lines, five stacks), numbers refresh every 15–30 min and Refresh numbers, Library › This week with the weekly best | Added ([contracts §16](docs/CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16)); shows real numbers once accounts connect |
 | 2 | Connect YouTube, Instagram, Facebook, TikTok, X and post confirmed clips | Planned ([roadmap](docs/ROADMAP.md)) |
-| 2 | Real metrics for the 48-hour check | Planned |
+| 2 | Real numbers from each platform (tokens for the stats adapters, TikTok audit, X credits) | Planned |
 | Later | Signed and notarized desktop builds | Planned ([roadmap](docs/ROADMAP.md#later)) |

@@ -112,6 +112,16 @@ broadest to narrowest:
       ]
     },
     {
+      "Sid": "StatsScheduleRule",
+      "Effect": "Allow",
+      "Action": [
+        "events:PutRule", "events:DeleteRule", "events:DescribeRule", "events:EnableRule", "events:DisableRule",
+        "events:PutTargets", "events:RemoveTargets", "events:ListTargetsByRule",
+        "events:TagResource", "events:UntagResource", "events:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:events:*:<ACCOUNT_ID>:rule/cf-prod-*"
+    },
+    {
       "Sid": "HooksVerifyTokenParameter",
       "Effect": "Allow",
       "Action": [
@@ -140,14 +150,15 @@ broadest to narrowest:
 ```
 
 What each group is for: S3 (web, media and state buckets), CloudFront (distribution, Origin Access Control,
-invalidations), Cognito (user pool, client, the owner), Lambda (seven functions; for the two durable ones also
+invalidations), Cognito (user pool, client, the owner), Lambda (nine functions; for the two durable ones also
 `PublishVersion`, the `live` aliases, the event source mapping, and `ListDurableExecutionsByFunction` and
 `StopDurableExecution`, which a destroy uses to stop running executions), DynamoDB (table, its stream:
 `DescribeStream`, `ListStreams`), S3 Vectors (bucket `cf-prod-vectors-*` and its index), API Gateway (the HTTP,
 WebSocket and REST APIs, the usage plan and the account-level logging setting), SSM (the webhook verify token under
 `/cf-prod/`), AgentCore (runtime), Bedrock (read model and profile details), ECR (repository, image push), CloudWatch
 Logs and alarms, X-Ray, SNS (alarm topic), IAM (the `cf-prod-*` roles, including `cf-prod-apigw-cloudwatch`, which is
-passed to API Gateway). SQS, EventBridge and EventBridge Scheduler are no longer used.
+passed to API Gateway), EventBridge (one rule, `cf-prod-stats`, the stats tick, with its Lambda target). SQS and
+EventBridge Scheduler are no longer used.
 
 Copy the role's ARN.
 
@@ -222,9 +233,10 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
 5. **Terraform** `init` (S3 backend with lockfile), `plan`, then `apply` of exactly that plan. No manual approval
    (the owner's choice).
    The apply creates or updates every resource, including the three API Gateway APIs (REST first, then WebSocket,
-   because API Gateway allows one deployment every 5 seconds per account), the seven Lambdas (the two durable ones
+   because API Gateway allows one deployment every 5 seconds per account), the nine Lambdas (the two durable ones
    publish a new version and move their `live` alias; running executions stay on their old version), the stream
-   trigger, the vector bucket and index, the SSM parameter and the alarms. No extra deploy job is needed for them:
+   trigger, the EventBridge rule `cf-prod-stats` (every 15 minutes, read from `config/platforms.json`), the vector
+   bucket and index, the SSM parameter and the alarms. No extra deploy job is needed for them:
    they all come from the same Lambda zip and the same `terraform apply`.
 6. **Web**: [scripts/write-web-config.sh](../scripts/write-web-config.sh) writes `config.json` from the Terraform
    outputs, including `wsUrl` from `ws_url` (required; the script stops if it is missing); the build is synced to the
@@ -297,6 +309,35 @@ Area: Profile picture
 Rules, examples and the squash-merge detail are in [GIT_WORKFLOW.md](GIT_WORKFLOW.md#area-lines-what-the-update-bar-says).
 Without `Area:` lines the labels come from the changed folders (`web/areas.json`), and failing that the bar says
 "Improvements".
+
+## Clip numbers and their limits
+
+The stats poller ([ARCHITECTURE.md flow 13](ARCHITECTURE.md#13-clip-numbers-the-poller-and-refresh-numbers)) is
+deployed by the same `terraform apply`: the Lambda `cf-prod-stats`, the Lambda `cf-prod-learn` and the EventBridge rule
+`cf-prod-stats`. Its rate comes from [`config/platforms.json`](../config/platforms.json): the smallest
+`minIntervalMinutes` (15) becomes `rate(15 minutes)`. To change an interval, a batch size or a budget, edit that one
+file and push; Terraform and the code both read it ([ADR-29](DECISIONS.md#adr-29-stats-refresh-intervals-per-platform)).
+Nothing needs setting up today: with no account connected, no platform is called. In phase 2 each platform's app
+needs the read scopes listed in `config/platforms.json` (for example YouTube `youtube.readonly` and
+`yt-analytics.readonly`, Instagram `instagram_basic`, `instagram_manage_insights` and `pages_show_list` (Facebook Login for Business, so the
+token works on `graph.facebook.com`, the host the code calls), Facebook `read_insights`, X `tweet.read`).
+
+To pause automatic refreshing (for example while testing a platform app), disable the rule in the EventBridge console
+(eu-north-1 → Rules → `cf-prod-stats` → Disable). The next deploy turns it back on. The Refresh button keeps working.
+
+### X API credits for clip numbers
+
+X has no free way to read post numbers: reads are **pay per use** (about $0.005 per post read; the same post read
+again on the same UTC day is not charged again, which X calls a soft guarantee). Phase 2 needs:
+
+1. A project and app in the X developer console with OAuth 2.0 (PKCE) and the scopes `tweet.read`, `users.read`,
+   `tweet.write`, `media.write`, `offline.access`.
+2. **Credits** on that account. A clip refreshed for its 30 days costs about $0.15 on X; ten clips a week stays near
+   $6 a month.
+3. The app's own guard: it estimates the spend before every read and stops X at **$10 a month**
+   (`x.budget.monthlyUsd` in `config/platforms.json`); Settings › Posting › Accounts says "X charges a little for every
+   number check. Clip Factory stops at $10 a month." To change the cap, change that value (and the matching shared
+   constant in the web app) and push. Set a spend limit in the X developer console as well, as a second fence.
 
 ## First sign-in
 

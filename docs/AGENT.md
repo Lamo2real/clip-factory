@@ -6,7 +6,7 @@ Runtime (`cf_prod_clip_agent`) and thinks with Claude Fable 5.1. The code is in 
 
 ## What it may and may not do
 
-- It **may** read the job, the owner's settings, enabled skills and learnings; query and write clip vectors in
+- It **may** read the job, the owner's settings, enabled skills and learnings (including the "Best of week" ones); query and write clip vectors in
   S3 Vectors; download the source; call Transcribe and Bedrock (Claude Fable 5.1, Titan Text Embeddings V2); run
   ffmpeg; write clips to S3 and Clip items to DynamoDB; update the job's status, steps and progress; and send its job
   flow callback (heartbeat, success, failure).
@@ -41,7 +41,7 @@ nothing is sent.
 | 2 | Download (`download`) | Links: audio only, cut at `maxSourceHours`. Uploads: extracts the audio from the file in S3. Writes `audio.m4a` (and `meta.json`). | yt-dlp, ffmpeg |
 | 3 | Transcribe (`transcribe`) | Amazon Transcribe batch job, word timestamps, language detected automatically. Writes `transcript.json` and `words.json` (`[start, end, word]`). | Transcribe |
 | 4 | Analyze (`analyze`) | Loudness per second (`loudness.json`) to find shouting and laughing spikes; splits the transcript into windows (about 30 minutes) with their spikes. | ffmpeg |
-| 5 | Select (`select`) | First, "What worked before": the source's title, channel, notes and transcript start are embedded with Titan and the top 8 similar `performed` clips of this owner are read from S3 Vectors (fewer than 3 → any of the owner's clips; an error → skipped). Then Claude reads each window with the skills, learnings and those examples and proposes moments; a final pass ranks them, keeps `clipTarget.max` plus a few spares, and writes hooks. | Bedrock |
+| 5 | Select (`select`) | First, "What worked before": the source's title, channel, notes and transcript start are embedded with Titan and up to 8 similar clips of this owner are read from S3 Vectors: the owner's `best` (best-of-the-week) clips first, then `performed` ones (fewer than 3 → any of the owner's clips; an error → skipped). Then Claude reads each window with the skills, learnings and those examples and proposes moments; a final pass ranks them, keeps `clipTarget.max` plus a few spares, and writes hooks. | Bedrock |
 | 6 | Render (`render`) | Per moment: downloads only that section of video; Claude looks at one frame to find the facecam; ffmpeg builds 1080×1920 (facecam on top, gameplay below, or a blurred fill when there is no facecam), trims dead air, adds the hook and burned-in ASS captions, makes the cover from the peak frame. | yt-dlp, ffmpeg, Bedrock (vision) |
 | 7 | Checklist (`checklist`) | Runs the pre-post checklist from the skills. Measured items (sound and motion in the first second, hook length, clip length, captions present) are computed; judgement items (makes sense with zero context, pays off) are asked of Claude. One fix pass; a clip that still fails is replaced by a spare. | ffmpeg, Bedrock |
 | 8 | Captions (`captions`) | One caption per platform: YouTube title (under 60 characters) and description, Instagram, Facebook, TikTok, X. Required tags from the owner's notes are added by code, so they are never forgotten. | Bedrock |
@@ -77,13 +77,15 @@ The prompts are part of the agent code in `agent/`. What each one is for:
 | Prompt | Intent | Output |
 |---|---|---|
 | System | Who the agent is (a short-form editor for this owner), the rules it may never break (never publish; only clip what the source contains; plain English), and that skills and learnings come first. | – |
-| What worked before | Per similar past clip: moment type, hook, title, summary, views and likes, similarity. Advice, never a rule. | (part of the select prompt) |
+| What worked before | Per similar past clip: moment type, hook, title, summary, views and likes, similarity; the owner's starred clips first, labelled "Owner's pick: best of the week". Advice, never a rule. | (part of the select prompt) |
+| Learnings brief | The latest 4 "Best of week" learnings under "The owner's best-of-week picks taught", then the latest 10 other learnings under "Learnings"; empty groups left out. | (part of the select prompt) |
 | Window scan | For one transcript window plus its loudness spikes: find every candidate moment that fits one of the six moment types and stands on its own. | Structured list: start, end, moment type, why, draft hook |
 | Rank and pick | All candidates together: remove overlaps, prefer variety of moment types, pick between `clipTarget.min` and `max`, keep spares. | Ranked moments with a score 1–10 |
 | Facecam | One frame: is there a facecam, and where (box)? | Box or "none" |
 | Checklist judge | Given the measured values and the transcript of the clip, answer the judgement questions honestly and propose one concrete fix. | Pass/fail per item, fixes |
 | Captions | One caption per platform in that platform's style and length, from the hook, summary and the owner's notes. | `Captions` object |
 | Learning (clip flow, step `distil`) | From recent posts and their numbers: one short, specific learning ("Hot takes under 25 s got 3× the views of chaos clips"). | One sentence |
+| Best of week (`cf-prod-learn`) | Compare the owner's picks with the rest of that week (hooks, moment types, length, captions, numbers) and say what the clip picker should repeat; the picks matter more than raw views. | 1–3 short sentences, at most 500 characters |
 
 Structured outputs use Bedrock Converse with a JSON schema, so the code never parses free text.
 
@@ -93,14 +95,45 @@ Structured outputs use Bedrock Converse with a JSON schema, so the code never pa
    of each post (step `metrics`).
 2. Claude compares recent posts and writes one short learning (step `distil`).
 3. The clip's vector is marked `performed` with its numbers (step `upsert-vector`).
-4. Every new job receives the owner's latest 10 learnings next to the skills, and the 8 most similar performed clips as
-   "What worked before".
+4. Every new job receives the owner's latest 4 "Best of week" learnings and latest 10 other learnings next to the
+   skills, and the 8 most similar clips as "What worked before", the owner's best-of-week picks first
+   ([below](#best-of-the-week)).
 5. The Insights screen shows the learnings and the numbers behind them; Review and Library show "Like clips that did
    well".
 
 Until social integrations exist (phase 2), there are no posts with numbers, so no learnings are created and no
 vector reaches `performed`. The loop is
 in place and starts working as soon as the first clip is posted.
+
+## Best of the week
+
+The owner's words: "Each week, I will select the ones that perform best during that week, so that it knows how to edit
+better in the future." Raw views are a weak teacher (each app counts views differently, YouTube Shorts count replays,
+Meta numbers settle over two days), so the owner's own stars are the strongest signal the agent gets
+([ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal),
+[CONTRACTS.md §16.6–16.7](CONTRACTS.md#166-weekly-best-learning-lambda-cf-prod-learn)).
+
+1. **The owner stars clips** in Library › This week (or with the star on a clip's performance page): up to 10 a week,
+   sorted by views to help. Saving starts the Lambda `cf-prod-learn` (not the agent runtime).
+2. **The memory is marked.** Each starred clip's vector gets `best = true`, each unstarred one `best = false`. New
+   vectors start with `best = false` (finalize).
+3. **One learning per week.** Claude Fable 5.1 reads every clip of that week as a row (picked or not, hook, moment
+   type, length, layout, score, YouTube title, the start of the TikTok caption, views, likes, comments and shares per
+   platform, total views) and writes one plain learning of 1–3 short sentences, for example "Your picks open on the
+   loudest second and stay under 25 s; skip slow build-ups even when they got views." It is stored as a Learning with
+   `kind "week"` and the title "Best of week 2026-W46"; saving new picks for that week replaces it, and unstarring
+   every clip removes it.
+4. **The next job uses it.** Before choosing moments the agent reads:
+   - the latest 4 week learnings first, under "The owner's best-of-week picks taught", then the latest 10 other
+     learnings under "Learnings";
+   - "What worked before" in two queries merged: clips marked `best` first, then other measured (`performed`) clips,
+     up to 8 without duplicates (fewer than 3 hits tops up with any of the owner's clips). A `best` clip is labelled
+     "Owner's pick: best of the week".
+5. **It shows.** The week's learning appears in This week under the header, and on the Insights screen with the others.
+
+What the picks change: which moments are chosen, how they are ranked, and how hooks and captions are written. They
+never override the owner's skills or the rules above (never publish, only clip what is in the source), and they are
+advice to the agent, not a rule. If the vectors or the learning cannot be read, the job carries on without them.
 
 ## Limits and guarantees
 
