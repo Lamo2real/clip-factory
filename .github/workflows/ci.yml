@@ -1,6 +1,7 @@
 # Checks every push and pull request. Offline only: never calls AWS or Bedrock, needs no secrets.
-# The jobs run in parallel; a newer push to the same branch cancels the older run. The desktop job (Tauri,
-# desktop/) runs only when desktop/ changed, since it needs the Linux web view libraries and a Rust build.
+# The jobs run in parallel (the browser tests as 6 shards); a newer push to the same branch cancels the older
+# run. The desktop job (Tauri, desktop/) runs only when desktop/ changed, since it needs the Linux web view
+# libraries and a Rust build.
 name: ci
 on:
   push:
@@ -18,10 +19,11 @@ env:
   TERRAFORM_VERSION: "1.15.8"
 
 jobs:
-  web:
+  # The web checks are three jobs. Branch protection requires the check named `web`, which is the small gate
+  # at the end: it passes only when web-checks and every web-e2e shard passed.
+  web-checks:
     runs-on: ubuntu-24.04
-    # Over 300 Playwright tests at many widths; 4 workers on the 4-CPU runner keep it near 15 minutes.
-    timeout-minutes: 75
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web
@@ -40,20 +42,63 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - name: Playwright (mock mode, Chromium)
+
+  # About 760 Playwright tests at many widths took 32 to 40 minutes as one job. Playwright splits them evenly
+  # over the shards below (fullyParallel, so it splits test by test); each shard builds the mock app once and
+  # runs its share with 4 workers on the 4-CPU runner. To add a shard, add a number to the list: the total is
+  # read from the matrix size.
+  web-e2e:
+    name: web-e2e (${{ matrix.shard }}/${{ strategy.job-total }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Playwright (mock mode, Chromium), shard ${{ matrix.shard }} of ${{ strategy.job-total }}
+        env:
+          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: |
           npx playwright install --with-deps chromium
-          npm run e2e -- --workers=4
+          npm run e2e -- --shard="$SHARD" --workers=4
       - name: upload the Playwright report
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: |
             web/playwright-report
             web/test-results
           retention-days: 7
           if-no-files-found: ignore
+
+  # The required check. always() makes it report a failure (not "skipped", which branch protection would accept)
+  # when a job it needs failed or was cancelled.
+  web:
+    needs: [web-checks, web-e2e]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: web-checks and every web-e2e shard passed
+        env:
+          CHECKS: ${{ needs.web-checks.result }}
+          E2E: ${{ needs.web-e2e.result }}
+        run: |
+          echo "web-checks: ${CHECKS}"
+          echo "web-e2e (all shards): ${E2E}"
+          [ "$CHECKS" = "success" ] && [ "$E2E" = "success" ]
 
   api:
     runs-on: ubuntu-24.04
