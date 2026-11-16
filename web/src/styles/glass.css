@@ -83,52 +83,16 @@
   background: rgb(var(--offwhite-rgb) / var(--backdrop-veil, 0));
 }
 
-/* See-through in the desktop app: the page itself is transparent, so the window's own glass (macOS vibrancy or
-   Liquid Glass, Windows acrylic or blur) shows the desktop behind it, blurred. Between the panels nothing more is
-   drawn for Clear (a light frost for Frosted), so the wallpaper's shapes stay guessable. */
+/* See-through in the desktop app (the window look): the page itself is transparent, so the window's own glass
+   (macOS Liquid Glass or vibrancy, Windows acrylic or blur) shows the desktop behind it, blurred. Between the panels
+   nothing more is drawn for Clear (a light frost for Frosted), so the shapes behind stay guessable. The panels'
+   own tint for this look is set further down, after the glass recipes it replaces. */
 html.see-through,
 html.see-through body {
   background: transparent;
 }
 .backdrop--window {
   background: none;
-}
-/* The readability tint lives on the panels and on loose text only: --panel-veil (lib/background.ts) is the least
-   off-white that keeps every text colour at WCAG AA over the darkest the window glass can be. Rims, highlights and
-   shadows stay, so a panel still reads as a pane of glass. */
-html.see-through .glass,
-html.see-through .glass--clear {
-  --glass-tint: linear-gradient(140deg, rgb(255 255 255 / var(--panel-veil)), rgb(var(--offwhite-rgb) / var(--panel-veil)));
-}
-/* Text that sits straight on the window (page titles and their line, breadcrumbs, headings between panels) gets
-   the same tint as a soft scrim hugging it. The spread shadow pads it without moving anything. */
-html.see-through
-  :is(
-    .page-head__text,
-    .crumbs__list,
-    .topbar .brand__name,
-    .home-row__intro > :is(h2, p),
-    .back-link,
-    .review-count,
-    .setup-part__title,
-    .setup-part__note
-  ) {
-  border-radius: 12px;
-  background: rgb(var(--offwhite-rgb) / var(--panel-veil));
-  box-shadow: 0 0 0 6px rgb(var(--offwhite-rgb) / var(--panel-veil));
-}
-/* Headings and lines between panels hug their words instead of running the full width as a bar. */
-html.see-through :is(.home-row__intro > :is(h2, p), .review-count, .setup-part__title, .setup-part__note) {
-  width: fit-content;
-  max-width: 100%;
-}
-/* Pick-one tracks that sit straight on the window keep their shade, laid over the tint. */
-html.see-through :is(.segmented, .tabs) {
-  background-color: rgb(var(--offwhite-rgb) / var(--panel-veil));
-  background-image: linear-gradient(rgb(var(--ink-rgb) / 0.08), rgb(var(--ink-rgb) / 0.08));
-}
-html.see-through .lib-tab:not(.is-on) {
-  background: rgb(255 255 255 / max(0.8, var(--panel-veil)));
 }
 
 /* See-through anywhere else: browsers and phones cannot look behind the page, so the Clip Factory colours sit
@@ -262,6 +226,152 @@ html[data-strength="frosted"] .backdrop__frost {
   --glass-tint: linear-gradient(140deg, rgb(255 255 255 / 0.42), rgb(var(--offwhite-rgb) / 0.28));
 }
 
+/* ---------- The window look: tints (docs/CONTRACTS.md §22.3) ---------- */
+
+/* The readability tint lives on the panels and on loose text only: --panel-veil (lib/background.ts) is the least
+   off-white that keeps every text colour of this look (tokens.css) at WCAG AA over the darkest the window glass
+   can be. Rims, highlights and shadows stay, so a panel still reads as a pane of glass. Sage and tomato glass turn
+   off-white too: over a dark desktop their own tints would be too dark to read on.
+   :where() keeps this rule as light as `.glass` itself, so a surface with a denser tint of its own (toasts, sheets,
+   the Ask panel, the update bar: they float over the page's own words and pictures, which can be darker than any
+   window glass) keeps it. */
+:where(html.see-through) :is(.glass, .glass--clear) {
+  --glass-tint: linear-gradient(140deg, rgb(255 255 255 / var(--panel-veil)), rgb(var(--offwhite-rgb) / var(--panel-veil)));
+}
+/* Nothing that holds words is weaker than the panel tint: what can sit straight on the window carries at least
+   that much. (0.62 and 0.42 are the tab bar's own tint in layout.css; 0.7 and 0.5, 0.22 and 0.6 the glass, ghost
+   and danger buttons' in components.css; 0.8 is the Library tabs' hover strength in performance.css, used at rest
+   here.) The button rules are written `html:where(.see-through)`: just heavier than the plain button, lighter than
+   a button with a fill of its own (the sage buttons), which keeps it. */
+html.see-through .tabbar {
+  --glass-tint: linear-gradient(
+    140deg,
+    rgb(255 255 255 / max(0.62, var(--panel-veil))),
+    rgb(var(--offwhite-rgb) / max(0.42, var(--panel-veil)))
+  );
+}
+html:where(.see-through) .btn--glass {
+  background: linear-gradient(
+    140deg,
+    rgb(255 255 255 / max(0.7, var(--panel-veil))),
+    rgb(var(--offwhite-rgb) / max(0.5, var(--panel-veil)))
+  );
+}
+html:where(.see-through) .btn--ghost {
+  background: rgb(255 255 255 / max(0.22, var(--panel-veil)));
+}
+html:where(.see-through) .btn--danger {
+  background: rgb(255 255 255 / max(0.6, var(--panel-veil)));
+}
+/* Hover still lights a button up: a step more than at rest, never less. */
+html:where(.see-through) .btn--glass:hover:not([aria-disabled="true"]) {
+  background: linear-gradient(
+    140deg,
+    rgb(255 255 255 / max(0.85, var(--panel-veil) + 0.12)),
+    rgb(var(--offwhite-rgb) / max(0.66, var(--panel-veil) + 0.12))
+  );
+}
+html:where(.see-through) .btn--ghost:hover:not([aria-disabled="true"]) {
+  background: rgb(255 255 255 / max(0.5, var(--panel-veil) + 0.12));
+}
+/* The danger button's hover is a tomato tint: here it lies over the button's white instead of replacing it. */
+html:where(.see-through) .btn--danger:hover:not([aria-disabled="true"]) {
+  background:
+    linear-gradient(rgb(var(--tomato-rgb) / 0.08), rgb(var(--tomato-rgb) / 0.08)),
+    rgb(255 255 255 / max(0.6, var(--panel-veil)));
+}
+html.see-through .lib-tab:not(.is-on) {
+  background: rgb(255 255 255 / max(0.8, var(--panel-veil)));
+}
+html.see-through .brand__mark {
+  background-color: rgb(var(--offwhite-rgb) / var(--panel-veil));
+}
+/* Text that sits straight on the window (page titles and their line, breadcrumbs, headings and lines between
+   panels) gets the same tint as a soft scrim hugging it. The spread shadow pads it without moving anything. */
+html.see-through
+  :is(
+    .page-head__text,
+    .crumbs__list,
+    .topbar .brand__name,
+    .home-row__intro > :is(h2, p),
+    .back-link,
+    .review-count,
+    .setup-part__title,
+    .setup-part__note,
+    .perf__head,
+    .perf__updated > span,
+    .week__title,
+    .week__learn,
+    .week__money,
+    .skill-meta
+  ) {
+  border-radius: var(--r-sm);
+  background: rgb(var(--offwhite-rgb) / var(--panel-veil));
+  box-shadow: 0 0 0 6px rgb(var(--offwhite-rgb) / var(--panel-veil));
+}
+/* Headings and lines between panels hug their words instead of running the full width as a bar. */
+html.see-through
+  :is(
+    .home-row__intro > :is(h2, p),
+    .review-count,
+    .setup-part__title,
+    .setup-part__note,
+    .week__title,
+    .week__learn,
+    .week__money,
+    .skill-meta
+  ) {
+  width: fit-content;
+  max-width: 100%;
+}
+/* The centred ones stay centred. */
+html.see-through :is(.week__title, .week__learn) {
+  justify-self: center;
+}
+html.see-through .perf__updated > span {
+  display: inline-block;
+}
+/* Pick-one tracks keep their shade of ink (0.08), laid over a little more tint than a panel has (+0.1), so the
+   labels on the shade stay at AA even when the track sits straight on the window. Both numbers are TRACK_SHADE and
+   TRACK_EXTRA_VEIL in lib/background.ts, where the contrast is worked out for every glass. */
+html.see-through :is(.segmented, .tabs, .bg-modes) {
+  background-color: rgb(var(--offwhite-rgb) / calc(var(--panel-veil) + 0.1));
+  background-image: linear-gradient(rgb(var(--ink-rgb) / 0.08), rgb(var(--ink-rgb) / 0.08));
+}
+/* Tinted chips on a panel (the tomato "Didn't work" pill, the sound tags, "If you need it", code words, the
+   lit-up setting) get a wash of white (0.2, CHIP_LIFT in lib/background.ts) over their tint. A tint of ink or
+   tomato dims what is under it; on a panel that is only just light enough, the words on the chip would drop
+   below AA. Over the darkest glass, where it matters, an ink or tomato chip with the wash is never darker than
+   the panel it sits on, so its words keep AA (over a lighter glass it can be, with contrast to spare). */
+html.see-through
+  :is(
+    .pill--tomato,
+    .sound-group .apple__tag,
+    .sound-card:not(.is-picked) .sound-card__num,
+    .gstep__optional,
+    .md__code,
+    .perf__novideo,
+    .clip-tile__media,
+    .checklist__fixes,
+    .apple.is-found
+  ) {
+  background-image: linear-gradient(rgb(255 255 255 / 0.2), rgb(255 255 255 / 0.2));
+}
+/* The Get the app card is a panel itself: when it is lit up, its ring shows it and its tint stays as it is. */
+html.see-through .getapp.is-found {
+  background-color: transparent;
+}
+/* Placeholders are lighter than any text colour the panel tint is worked out for, and so is the tomato of the
+   "not passed" mark: here they take the meta text colour and the tomato text colour. Typed words stay ink, so a
+   placeholder still looks like one. */
+html.see-through ::placeholder {
+  color: var(--ink-3);
+  opacity: 1;
+}
+html.see-through .checklist__items .is-fail > .icon {
+  color: var(--tomato-ink);
+}
+
 /* Chromium: bend the backdrop as well as blurring it (see the #cf-refract filter). */
 .refract .glass--refract {
   backdrop-filter: url(#cf-refract) blur(14px) saturate(1.75);
@@ -282,11 +392,14 @@ html[data-strength="frosted"] .backdrop__frost {
   .backdrop__veil {
     background: rgb(var(--offwhite-rgb) / 0.94);
   }
-  .glass,
-  html.see-through .glass {
+  .glass {
     --glass-tint: linear-gradient(140deg, rgb(255 255 255 / 0.92), rgb(var(--offwhite-rgb) / 0.9));
   }
   .glass--sage {
     --glass-tint: linear-gradient(150deg, rgb(196 210 180 / 0.96), rgb(176 194 158 / 0.95));
+  }
+  /* In the window look sage glass stays off-white, as above. */
+  :where(html.see-through) .glass--sage {
+    --glass-tint: linear-gradient(140deg, rgb(255 255 255 / 0.92), rgb(var(--offwhite-rgb) / 0.9));
   }
 }

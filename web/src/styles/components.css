@@ -272,7 +272,7 @@
   margin-top: 1px;
 }
 .field__status.is-ok {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
   font-weight: 600;
 }
 .field__status.is-bad {
@@ -894,7 +894,7 @@
   margin-top: 1px;
 }
 .toast--success > .icon {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .toast--error > .icon {
   color: var(--tomato-deep);
@@ -1300,7 +1300,7 @@
   font-weight: 650;
 }
 .similar__title .icon {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .similar__list {
   display: flex;
@@ -1383,5 +1383,5 @@
 }
 .callout--info .icon {
   flex: none;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }

@@ -3,8 +3,14 @@
 
 export type BackgroundMode = "see-through" | "picture" | "colours";
 export type GlassStrength = "clear" | "frosted";
-/** The native window glass the desktop app draws behind the page (`window.__CF_GLASS__`, set by desktop/). */
-export type NativeGlass = "vibrancy" | "mica" | "acrylic" | "blur" | "none";
+/**
+ * The native window glass the desktop app draws behind the page (`window.__CF_GLASS__`, set by desktop/):
+ * `liquid` is macOS 26+ Liquid Glass, `vibrancy` the under-window material of macOS 15 and older, `acrylic` Windows 11
+ * 22H2+, `blur` Windows 10 1809 to Windows 11 21H2. `mica` is understood but never sent (§22.2).
+ */
+export type NativeGlass = "liquid" | "vibrancy" | "mica" | "acrylic" | "blur" | "none";
+/** Every glass that really shows the desktop. An unknown name (a newer desktop app, an older web bundle) is "none". */
+const REAL_GLASSES: readonly string[] = ["liquid", "vibrancy", "mica", "acrylic", "blur"] satisfies NativeGlass[];
 export type Scheme = "light" | "dark";
 export type Rgb = readonly [number, number, number];
 
@@ -64,7 +70,7 @@ export function colourName(hex: string): string {
 export function readNativeGlass(w: { __CF_DESKTOP__?: unknown; __CF_GLASS__?: unknown } | undefined): NativeGlass {
   if (!w || w.__CF_DESKTOP__ !== true) return "none";
   const g = w.__CF_GLASS__;
-  return g === "vibrancy" || g === "mica" || g === "acrylic" || g === "blur" ? g : "none";
+  return typeof g === "string" && REAL_GLASSES.includes(g) ? (g as NativeGlass) : "none";
 }
 
 // ---------- Contrast (WCAG 2.x) ----------
@@ -93,8 +99,37 @@ export function mix(over: Rgb, under: Rgb, alpha: number): Rgb {
 /** WCAG AA for body text. */
 export const AA = 4.5;
 
-/** Every text colour that can sit straight on the backdrop: ink, ink-2, ink-3 and tomato-ink (tokens.css). */
-export const TEXT_COLOURS: readonly Rgb[] = ["#1e2a1b", "#2f3b2c", "#46523f", "#a92b1b"].map(hexToRgb);
+/**
+ * The text colour tokens (`:root` in styles/tokens.css): every colour that words are written in on glass.
+ * test/background.test.ts reads tokens.css and every stylesheet, so this list, the tokens and the `color:`
+ * declarations stay in step.
+ */
+export const TEXT_TOKENS = {
+  "--ink": "#1e2a1b",
+  "--ink-2": "#2f3b2c",
+  "--ink-3": "#46523f",
+  "--tomato-ink": "#962414",
+  "--sage-ink": "#4f6340",
+  "--sage-text": "#3d4f31",
+} as const;
+export type TextToken = keyof typeof TEXT_TOKENS;
+/**
+ * The window look (`html.see-through` in tokens.css): the lightest four go deeper there, each still clearly its own
+ * colour (grey-green, tomato, sage), so the panels need much less tint and more of the desktop shows through them
+ * (§22.3). Each has a relative luminance of 0.047 or less; the darker two stay as they are.
+ */
+export const WINDOW_TEXT_TOKENS: Record<TextToken, string> = {
+  ...TEXT_TOKENS,
+  "--ink-3": "#344031",
+  "--tomato-ink": "#74190e",
+  "--sage-ink": "#2c421c",
+  "--sage-text": "#2c421c",
+};
+
+/** Every text colour that can sit straight on the backdrop outside the window look: ink, ink-2, ink-3, tomato-ink. */
+export const TEXT_COLOURS: readonly Rgb[] = (["--ink", "--ink-2", "--ink-3", "--tomato-ink"] as const).map((t) => hexToRgb(TEXT_TOKENS[t]));
+/** Every text colour of the window look. All see-through maths uses this set. */
+export const TEXT_COLOURS_WINDOW: readonly Rgb[] = Object.values(WINDOW_TEXT_TOKENS).map(hexToRgb);
 /** The veil and the glass are Clip Factory off-white. */
 export const VEIL: Rgb = hexToRgb("#f7f5ef");
 
@@ -106,18 +141,59 @@ export const GLASS_TINT_ALPHA = 140 / 255;
 /** What that tint gives over a black wallpaper: about rgb(135.6, 134.5, 131.2). Worked out, never rounded by hand. */
 export const TINTED_FLOOR: Rgb = mix(VEIL, [0, 0, 0], GLASS_TINT_ALPHA);
 const BLACK: Rgb = [0, 0, 0];
+const WHITE: Rgb = [255, 255, 255];
+
+/**
+ * macOS Liquid Glass as it really draws, measured on 2026-11-16 on macOS 27.2 (system in dark mode, the window
+ * forced to the light theme, Tauri 2.12.5 / window-vibrancy 0.8.1, `LiquidGlassRegular` with the tint above, page
+ * transparent): a helper window put pure black, then pure white, straight behind the real window and the screen was
+ * captured. While the window is in use the system honours the app's tint (it behaves like the tint at about 62-73%
+ * over the blurred desktop); while another app is in use it drops the tint for a neutral light grey at about 58%.
+ * A panel then composites as `mix(VEIL, glass, veil)`, within about 3 levels of what was measured.
+ */
+export const LIQUID_MEASURED = {
+  /** The window is in use. */
+  active: { overBlack: [180, 171, 148], overWhite: [249, 248, 245] },
+  /** The window shows, but another app is in use: the darkest Liquid Glass gets. */
+  inactive: { overBlack: [118, 118, 118], overWhite: [225, 225, 225] },
+} as const satisfies Record<string, { overBlack: Rgb; overWhite: Rgb }>;
+/** How much darker than measured the page assumes Liquid Glass can get (another Mac, another macOS update). */
+export const LIQUID_SAFETY = 0.1;
+/** The darkest Liquid Glass the page plans for: the inactive glass over black, a tenth darker, rgb(106.2, 106.2, 106.2). */
+export const LIQUID_FLOOR: Rgb = mix(BLACK, LIQUID_MEASURED.inactive.overBlack, LIQUID_SAFETY);
+/** The darkest Liquid Glass while the window is in use, exactly as measured. */
+export const LIQUID_ACTIVE_FLOOR: Rgb = LIQUID_MEASURED.active.overBlack;
 
 /**
  * The darkest the native window glass can be behind the page (docs/CONTRACTS.md §22.3).
+ * - `liquid` (macOS 26+): measured, see `LIQUID_MEASURED`. The floor is the inactive glass over black, a tenth darker.
  * - `blur` (Windows 10 1809 to Windows 11 21H2): the system honours the app's tint, so the glass is never darker than
- *   the tint over black, `TINTED_FLOOR`.
- * - `acrylic` (Windows 11 22H2+) and `vibrancy` (macOS): the system draws its own light material and drops the app's
- *   tint (Windows 11 acrylic ignores it; macOS 11-15 vibrancy takes none; macOS 26 Liquid Glass is unproven), so
+ *   the tint over black, `TINTED_FLOOR`. Worked out, not measured.
+ * - `acrylic` (Windows 11 22H2+), `mica` and `vibrancy` (macOS 15 and older): not measured. The system draws its own
+ *   material and drops the app's tint (Windows 11 acrylic ignores it; the macOS vibrancy material takes none), so
  *   nothing is promised: assume black.
- * - A dark system setting could give a dark material on any of them: assume black.
+ * - A dark setting inside the window (the desktop app forces light, so this should never happen) could give a dark
+ *   material on any of them: assume black.
  */
 export function glassFloor(glass: NativeGlass, scheme: Scheme): Rgb {
-  return glass === "blur" && scheme === "light" ? TINTED_FLOOR : BLACK;
+  if (scheme === "dark") return BLACK;
+  if (glass === "liquid") return LIQUID_FLOOR;
+  if (glass === "blur") return TINTED_FLOOR;
+  return BLACK;
+}
+
+/**
+ * Everything the page's text is checked against for this glass: the floor it plans for, the lightest the glass can
+ * be (white) and, for Liquid Glass in the light setting, both measured floors as well (in use it is khaki, not grey).
+ */
+export function glassChecks(glass: NativeGlass, scheme: Scheme): { name: string; behind: Rgb }[] {
+  const checks: { name: string; behind: Rgb }[] = [
+    { name: "floor", behind: glassFloor(glass, scheme) },
+    { name: "white", behind: WHITE },
+  ];
+  if (glass === "liquid" && scheme === "light")
+    checks.push({ name: "active floor", behind: LIQUID_ACTIVE_FLOOR }, { name: "inactive floor as measured", behind: LIQUID_MEASURED.inactive.overBlack });
+  return checks;
 }
 
 /**
@@ -125,8 +201,25 @@ export function glassFloor(glass: NativeGlass, scheme: Scheme): Rgb {
  * (§22.3). Clear: nothing over the window's own glass in the gaps. Frosted: a light frost over the whole window too.
  */
 const PAGE_VEIL: Record<GlassStrength, number> = { clear: 0, frosted: 0.3 };
-/** How much heavier a Frosted panel is than the least that keeps text readable. */
-const FROSTED_EXTRA = 0.1;
+/** A panel never carries less than this, however light the glass behind it: it must still read as a pane. */
+export const MIN_PANEL_VEIL = 0.35;
+/** How much heavier a Frosted panel is than a Clear one. */
+export const FROSTED_EXTRA = 0.15;
+/** A Frosted panel never goes fully solid. */
+export const MAX_FROSTED_PANEL_VEIL = 0.95;
+
+// Three numbers styles/glass.css uses in the window look; test/background.test.ts reads them out of the CSS and
+// works out the contrast for every glass, so they are not guesses either.
+/** Pick-one tracks (`.segmented`, `.tabs`, the Background tiles) lay this shade of ink over their tint. */
+export const TRACK_SHADE = 0.08;
+/** So a track carries this much more tint than a panel, and the labels on its shade stay at AA. */
+export const TRACK_EXTRA_VEIL = 0.1;
+/**
+ * Tinted chips on a panel (the tomato pill, the sound tags, "If you need it") get this much white over their
+ * tint, so over the darkest glass an ink or tomato chip is never darker than the panel it sits on and its words
+ * keep AA. (Over a lighter glass a chip can be darker than its panel; the words then have contrast to spare.)
+ */
+export const CHIP_LIFT = 0.2;
 
 /**
  * The smallest veil strength (0..1, rounded up to 0.01) at which every text colour reaches `target` contrast on the
@@ -148,18 +241,37 @@ export interface SeeThroughVeils {
   panel: number;
 }
 
-/** The two tints in see-through for this glass, system setting and strength. */
+/**
+ * The two tints in see-through for this glass, setting and strength, worked out for the window look's text colours.
+ * Clear: nothing between the panels; a panel carries the least that keeps every text colour at AA on the darkest
+ * glass (never less than `MIN_PANEL_VEIL`). Frosted: a light frost everywhere and heavier panels, so it always shows
+ * less than Clear.
+ */
 export function seeThroughVeils(glass: NativeGlass, scheme: Scheme, strength: GlassStrength): SeeThroughVeils {
-  const page = PAGE_VEIL[strength];
-  const base = minVeil(mix(VEIL, glassFloor(glass, scheme), page));
-  const panel = strength === "frosted" ? Math.min(0.95, round2(base + FROSTED_EXTRA)) : base;
-  return { page, panel };
+  const clear = Math.max(MIN_PANEL_VEIL, minVeil(glassFloor(glass, scheme), TEXT_COLOURS_WINDOW));
+  if (strength === "clear") return { page: PAGE_VEIL.clear, panel: clear };
+  return { page: PAGE_VEIL.frosted, panel: Math.max(clear, Math.min(MAX_FROSTED_PANEL_VEIL, round2(clear + FROSTED_EXTRA))) };
 }
 
-/** What text actually sits on in see-through, over the darkest glass: the page tint, then the panel tint. */
-export function seeThroughWorstBackground(glass: NativeGlass, scheme: Scheme, strength: GlassStrength): Rgb {
+/**
+ * What text on a panel actually sits on in see-through: the page tint, then the panel tint, over `behind` (the
+ * darkest the glass can be unless another colour is given).
+ */
+export function seeThroughWorstBackground(glass: NativeGlass, scheme: Scheme, strength: GlassStrength, behind: Rgb = glassFloor(glass, scheme)): Rgb {
   const v = seeThroughVeils(glass, scheme, strength);
-  return mix(VEIL, mix(VEIL, glassFloor(glass, scheme), v.page), v.panel);
+  return mix(VEIL, mix(VEIL, behind, v.page), v.panel);
+}
+
+/** What a label on a pick-one track sits on when the track is straight on the window: its tint, then its shade. */
+export function seeThroughTrackBackground(glass: NativeGlass, scheme: Scheme, strength: GlassStrength, behind: Rgb = glassFloor(glass, scheme)): Rgb {
+  const v = seeThroughVeils(glass, scheme, strength);
+  const tinted = mix(VEIL, mix(VEIL, behind, v.page), Math.min(1, v.panel + TRACK_EXTRA_VEIL));
+  return mix(hexToRgb(TEXT_TOKENS["--ink"]), tinted, TRACK_SHADE);
+}
+
+/** What words on a tinted chip sit on: the panel, the chip's own tint (`tint` at `alpha`), then the white wash. */
+export function seeThroughChipBackground(glass: NativeGlass, scheme: Scheme, strength: GlassStrength, tint: Rgb, alpha: number, behind: Rgb = glassFloor(glass, scheme)): Rgb {
+  return mix(WHITE, mix(tint, seeThroughWorstBackground(glass, scheme, strength, behind), alpha), CHIP_LIFT);
 }
 
 /**

@@ -140,7 +140,7 @@
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.65);
 }
 .sidebar__getapp .sidebar__icon {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 
 .page--narrow {
@@ -231,7 +231,7 @@ h1.getapp__title {
 .getapp__safari .icon {
   flex: none;
   margin-top: 1px;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .getapp__hint.is-now {
   color: var(--ink);
@@ -502,7 +502,7 @@ h1.getapp__title {
   animation: spark-spin 1.6s var(--ease-out) infinite;
 }
 .update-bar__spark.is-done {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
   background: linear-gradient(150deg, #fff, rgb(var(--sage-rgb) / 0.45));
   animation: pop 420ms var(--ease-spring);
 }

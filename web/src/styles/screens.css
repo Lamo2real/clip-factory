@@ -831,7 +831,7 @@
   color: var(--ink-2);
 }
 .save-state.is-saved {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
   font-weight: 600;
 }
 .save-state.is-failed {
@@ -864,7 +864,7 @@
   color: var(--tomato-ink);
 }
 .checklist__score.is-ok {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .checklist__chev {
   transition: transform var(--dur-2) var(--ease-out);
@@ -887,7 +887,7 @@
   font-size: 0.93rem;
 }
 .checklist__items .is-pass > .icon {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .checklist__items .is-fail > .icon {
   color: var(--tomato-deep);
@@ -1225,11 +1225,12 @@
 .bg-mode:has(input:focus-visible) {
   box-shadow: var(--focus);
 }
-/* One line, like the other two names: "See-through" must not split at its hyphen on a phone. */
+/* One line, like the other two names: "See-through" must not split at its hyphen on a phone. Never under the
+   smallest text size (--fs-xs). */
 .bg-mode__name {
   max-width: 100%;
   white-space: nowrap;
-  font-size: clamp(0.72rem, 2.9vw, 0.86rem);
+  font-size: clamp(var(--fs-xs), 2.9vw, 0.86rem);
 }
 @media (max-width: 400px) {
   .bg-modes {
@@ -1237,6 +1238,19 @@
   }
   .bg-mode {
     padding-inline: 2px;
+  }
+}
+/* The narrowest phones: a little less air around the tiles, so "See-through" still fits at the smallest text size. */
+@media (max-width: 340px) {
+  .bg-modes {
+    gap: 2px;
+    padding: 4px;
+  }
+  .bg-mode {
+    padding-inline: 1px;
+  }
+  .bg-mode__name {
+    letter-spacing: -0.01em;
   }
 }
 .bg-tile {
@@ -1247,7 +1261,7 @@
   max-width: 120px;
   aspect-ratio: 4 / 3;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: calc(var(--r-md) - 4px);
   color: var(--ink-2);
   background:
     radial-gradient(circle at 20% 15%, rgb(var(--sage-rgb)) 0, transparent 60%),
