@@ -197,7 +197,8 @@ export function statsApi({ store, publish, faults, automated }: Deps) {
         const posted = posts.filter((p) => p.status === "posted");
         const sum = (k: "views" | "likes" | "comments" | "shares") => posted.reduce((n, p) => n + (p.metrics?.[k] ?? 0), 0);
         const views: WeekClip["views"] = {};
-        for (const p of posted) views[p.platform] = p.metrics?.views ?? null;
+        // Private posts never get numbers (§16.2): they are left out of the per-app views.
+        for (const p of posted) if (p.privacy !== "private") views[p.platform] = p.metrics?.views ?? null;
         const { videoUrl: _v, ...clip } = clone(withTotal(c));
         return {
           clip,

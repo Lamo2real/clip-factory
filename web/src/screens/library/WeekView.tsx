@@ -168,7 +168,8 @@ export function WeekView({ week: asked }: { week: string | null }) {
         </button>
       </div>
 
-      {data ? <LearnLine week={data} /> : null}
+      {/* Only above clips: on an empty week "Star the clips…" would ask for something that is not there. */}
+      {data && data.clips.length > 0 ? <LearnLine week={data} current={isCurrent} /> : null}
 
       {error && !data ? <ErrorPanel message={error} onRetry={() => void load()} /> : null}
       {!data && !error ? <Skeleton className="review-skel" /> : null}
@@ -203,7 +204,7 @@ export function WeekView({ week: asked }: { week: string | null }) {
   );
 }
 
-function LearnLine({ week }: { week: Week }) {
+function LearnLine({ week, current }: { week: Week; current: boolean }) {
   if (week.learnState === "learning")
     return (
       <p className="week__learn" role="status">
@@ -231,7 +232,7 @@ function LearnLine({ week }: { week: Week }) {
   return (
     <p className="week__learn" role="status">
       <Icon name="star" size={18} />
-      Star the clips that did best this week.
+      {current ? "Star the clips that did best this week." : "Star the clips that did best that week."}
     </p>
   );
 }
@@ -255,7 +256,8 @@ function WeekCard({ item, rank, on, onToggle }: { item: WeekClip; rank: number; 
   const top = bestApp(apps);
   return (
     <article className={`week-card glass${on ? " is-best" : ""}`} aria-labelledby={id}>
-      <span className="week-card__rank" aria-label={`Number ${rank}`}>
+      {/* The list is an <ol>, so the position is already announced; the big number is for the eyes. */}
+      <span className="week-card__rank" aria-hidden="true">
         {rank}
       </span>
       <A href={`/clips/${clip.clipId}`} className="week-card__cover" tabIndex={-1} aria-hidden="true">

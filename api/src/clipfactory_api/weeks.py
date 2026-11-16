@@ -104,7 +104,8 @@ def week_clip(clip: Item, clip_posts: list[Item], anchor: str, week: str, media:
     views: Item = {}
     for platform in STATS_ORDER:
         post = by_platform.get(platform)
-        if post is not None and post.get("status") == "posted":
+        # A private post (TikTok before app approval) never gets numbers: leave it out rather than promise some.
+        if post is not None and post.get("status") == "posted" and post.get("privacy") != "private":
             views[platform] = _views_of(post)
     return {
         "clip": clips.public_clip(clip, media, posts=clip_posts, video=False),

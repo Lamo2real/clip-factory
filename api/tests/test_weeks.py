@@ -134,6 +134,18 @@ def test_week_anchor_rule_sort_and_shape(call: Call, store: db.Store) -> None:
     assert view["clips"][2]["anchorAt"] == "2026-11-14T10:00:00.000Z"
 
 
+def test_week_views_leave_out_private_posts(call: Call, store: db.Store) -> None:
+    """A private TikTok never gets numbers, so the week card must not show "numbers soon" for it."""
+    clip = kept(store, decided="2026-11-12T10:00:00.000Z", status="posted")
+    post(store, clip, "youtube", "2026-11-12T10:00:00.000Z", 600)
+    private = post(store, clip, "tiktok", "2026-11-12T10:00:00.000Z")
+    private["privacy"] = "private"
+    store.put(private)
+    status, body = call("GET", f"/v1/weeks/{WEEK}", query=Q)
+    assert status == 200
+    assert body["week"]["clips"][0]["views"] == {"youtube": 600}
+
+
 # --- PUT best -----------------------------------------------------------------------------------------------------
 
 
