@@ -33,7 +33,7 @@ export function Apple({
   if (!found) throw new Error(`Unknown setting ${id}`);
   const { apple } = found;
   return (
-    <section className={`apple${wide ? " apple--wide" : ""}`} id={id} aria-labelledby={`${id}-name`} aria-describedby={`${id}-leaf`} tabIndex={-1}>
+    <section className={`apple${wide ? " apple--wide" : ""}`} id={id} data-help={id} aria-labelledby={`${id}-name`} aria-describedby={`${id}-leaf`} tabIndex={-1}>
       <div className="apple__text">
         <div className="apple__head">
           <h2 className="apple__name" id={`${id}-name`}>
@@ -66,6 +66,7 @@ export function AppleSwitch({
       type="button"
       role="switch"
       className="switch"
+      data-help-dodge=""
       aria-checked={checked}
       aria-labelledby={`${apple}-name`}
       aria-describedby={`${apple}-leaf`}

@@ -109,3 +109,49 @@ run "no_schedules_no_schedule_alarms" {
     error_message = "Without schedule rules there are no FailedInvocations alarms."
   }
 }
+
+# docs/CONTRACTS.md §19.9: Ask Clip Factory's model errors and timeouts (each fell back to a plain answer) are
+# counted from the help.answer log line and alarm at 10 in an hour.
+run "help_model_failures_are_watched" {
+  command = plan
+
+  variables {
+    help_log_group_name = "/aws/lambda/cf-test-api"
+  }
+
+  assert {
+    condition = (aws_cloudwatch_log_metric_filter.help_model_failures[0].log_group_name == "/aws/lambda/cf-test-api" &&
+      strcontains(aws_cloudwatch_log_metric_filter.help_model_failures[0].pattern, "$.event = \"help.answer\"") &&
+      strcontains(aws_cloudwatch_log_metric_filter.help_model_failures[0].pattern, "$.outcome = \"kb_model_error\"") &&
+      strcontains(aws_cloudwatch_log_metric_filter.help_model_failures[0].pattern, "$.outcome = \"kb_model_timeout\"") &&
+      aws_cloudwatch_log_metric_filter.help_model_failures[0].metric_transformation[0].namespace == "cf-test" &&
+    aws_cloudwatch_log_metric_filter.help_model_failures[0].metric_transformation[0].name == "HelpModelFailures")
+    error_message = "The metric filter counts help.answer lines with outcome kb_model_error or kb_model_timeout as <name>/HelpModelFailures."
+  }
+
+  assert {
+    condition = (aws_cloudwatch_metric_alarm.help_model_failures[0].alarm_name == "cf-test-help-model-failures" &&
+      aws_cloudwatch_metric_alarm.help_model_failures[0].namespace == "cf-test" &&
+      aws_cloudwatch_metric_alarm.help_model_failures[0].metric_name == "HelpModelFailures" &&
+      aws_cloudwatch_metric_alarm.help_model_failures[0].statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.help_model_failures[0].period == 3600 &&
+      aws_cloudwatch_metric_alarm.help_model_failures[0].threshold == 10 &&
+      aws_cloudwatch_metric_alarm.help_model_failures[0].comparison_operator == "GreaterThanOrEqualToThreshold" &&
+    aws_cloudwatch_metric_alarm.help_model_failures[0].treat_missing_data == "notBreaching")
+    error_message = "Alarm <name>-help-model-failures: Sum of HelpModelFailures >= 10 in one hour, notBreaching."
+  }
+
+  assert {
+    condition     = output.help_alarm_name == "cf-test-help-model-failures"
+    error_message = "help_alarm_name names the help model alarm."
+  }
+}
+
+run "no_help_log_group_no_help_alarm" {
+  command = plan
+
+  assert {
+    condition     = length(aws_cloudwatch_log_metric_filter.help_model_failures) == 0 && length(aws_cloudwatch_metric_alarm.help_model_failures) == 0 && output.help_alarm_name == null
+    error_message = "Without the API log group there is no help metric filter or alarm."
+  }
+}

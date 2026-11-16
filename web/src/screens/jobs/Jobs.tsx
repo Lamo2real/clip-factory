@@ -127,7 +127,7 @@ function JobRow({ job }: { job: Job }) {
   const working = job.status === "running" || job.status === "queued";
   const step = job.steps.find((s) => s.status === "running");
   return (
-    <A href={`/jobs/${job.jobId}`} className="job-row glass">
+    <A href={`/jobs/${job.jobId}`} className="job-row glass" data-help={job.status === "failed" ? "failed-job" : undefined}>
       <SourceThumb job={job} className="job-row__thumb" />
       <span className="job-row__body">
         <span className="job-row__title clamp-2 user-text">{jobTitle(job)}</span>

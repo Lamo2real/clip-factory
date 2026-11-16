@@ -66,7 +66,8 @@ export async function findOverflow(page: Page): Promise<{ page: number; viewport
       return `${el.tagName.toLowerCase()}${cls ? "." + cls : ""}`;
     };
     for (const el of Array.from(document.querySelectorAll<HTMLElement>("body *"))) {
-      if (el.closest(".sr-only, svg, .backdrop, .confetti, .glass-defs")) continue;
+      // The paper plane in flight leaves its button on purpose (it lands back inside).
+      if (el.closest(".sr-only, svg, .backdrop, .confetti, .glass-defs, .fly.is-flying")) continue;
       if (["INPUT", "TEXTAREA", "SELECT", "OPTION", "SCRIPT", "STYLE", "CANVAS", "VIDEO"].includes(el.tagName)) continue;
       const s = getComputedStyle(el);
       if (s.display === "inline" || s.display === "none" || s.visibility === "hidden" || s.position === "fixed") continue;

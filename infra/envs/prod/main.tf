@@ -29,7 +29,8 @@ locals {
   # config/models.json is the only place model ids live (docs/CONTRACTS.md §1).
   models      = jsondecode(file("${path.module}/../../../config/models.json"))
   agent_model = local.models.models[local.models.agentModel]
-  model_id    = "${local.models.profilePrefix}.${local.agent_model.modelId}"
+  # A model's own profilePrefix overrides the top-level one (§19.5); Fable has none, so it stays global.
+  model_id = "${try(local.agent_model.profilePrefix, local.models.profilePrefix)}.${local.agent_model.modelId}"
   # A call through a cross-region profile is authorised on the profile here and on the foundation model in
   # whichever region serves it (none, for a global profile), hence the region wildcard.
   model_profile_arn = "arn:aws:bedrock:${var.region}:${local.account_id}:inference-profile/${local.model_id}"
@@ -42,6 +43,17 @@ locals {
   embed_model_id   = local.models.embeddingModel.modelId
   embed_dimensions = local.models.embeddingModel.dimensions
   embed_model_arn  = "arn:aws:bedrock:${var.region}::foundation-model/${local.embed_model_id}"
+
+  # Ask Clip Factory (docs/CONTRACTS.md §19.5, §19.9): Claude Haiku through the EU geo profile, so questions stay in
+  # the EU. A geo profile is authorised on the profile here and on the foundation model in each destination region
+  # it may route to, listed in config/models.json (no region wildcard, unlike the global profile above).
+  help_model     = local.models.models[local.models.helpModel]
+  help_model_id  = "${try(local.help_model.profilePrefix, local.models.profilePrefix)}.${local.help_model.modelId}"
+  help_model_arn = "arn:aws:bedrock:${var.region}:${local.account_id}:inference-profile/${local.help_model_id}"
+  help_model_invoke_arns = concat(
+    [local.help_model_arn],
+    [for r in local.help_model.profileRegions : "arn:aws:bedrock:${r}::foundation-model/${local.help_model.modelId}"],
+  )
 }
 
 module "storage" {
@@ -192,6 +204,11 @@ module "api" {
   web_bucket_arn          = module.storage.web_bucket_arn
   distribution_id         = module.frontend.distribution_id
   distribution_arn        = module.frontend.distribution_arn
+  # Ask Clip Factory (§19.9). The kill switch item in the table can still turn it off without a deploy.
+  help_enabled           = var.help_enabled
+  help_model_id          = local.help_model_id
+  help_model_invoke_arns = local.help_model_invoke_arns
+  help_monthly_cap       = var.help_monthly_cap
 }
 
 # Platform webhooks (REST API), the OAuth callback and its state key and the account's API Gateway logging role, which the WebSocket stage needs too.
@@ -240,4 +257,6 @@ module "monitoring" {
   stream_consumer_name   = module.realtime.broadcast_function_name
   hooks_api_name         = module.hooks.hooks_api_name
   hooks_stage_name       = module.hooks.hooks_stage_name
+  # §19.9: Ask Clip Factory's model calls that fell back to plain answers (errors and timeouts).
+  help_log_group_name = module.api.log_group_name
 }

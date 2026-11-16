@@ -159,6 +159,7 @@ export function Toggle({
         type="button"
         role="switch"
         className="switch"
+        data-help-dodge=""
         aria-checked={checked}
         aria-labelledby={`${id}-l`}
         aria-describedby={description ? `${id}-d` : undefined}
@@ -180,15 +181,16 @@ export function Segmented<T extends string>({
   label,
 }: {
   value: T;
-  options: { value: T; label: string }[];
+  /** `help` puts a data-help anchor on the option (Ask Clip Factory spotlights it, docs/CONTRACTS.md §19.8). */
+  options: { value: T; label: string; help?: string }[];
   onChange: (v: T) => void;
   label: string;
 }) {
   const name = useId();
   return (
-    <div className="segmented" role="radiogroup" aria-label={label}>
+    <div className="segmented" role="radiogroup" aria-label={label} data-help-dodge="">
       {options.map((o) => (
-        <label key={o.value} className={`segmented__opt${o.value === value ? " is-on" : ""}`}>
+        <label key={o.value} className={`segmented__opt${o.value === value ? " is-on" : ""}`} data-help={o.help}>
           <input
             type="radio"
             name={name}

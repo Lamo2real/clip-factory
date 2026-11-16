@@ -1,0 +1,2162 @@
+{
+  "version": "fixture-1",
+  "app": "clip-factory",
+  "generatedFrom": "api/tests (hand-made stand-in for web/scripts/help-corpus.mjs)",
+  "routes": [
+    "/",
+    "/jobs",
+    "/jobs/:jobId",
+    "/review",
+    "/library",
+    "/clips/:clipId",
+    "/settings",
+    "/settings/:tree",
+    "/settings/:tree/:branch",
+    "/get-app"
+  ],
+  "synonyms": {
+    "delete": "throw away",
+    "remove": "throw away",
+    "trash": "throw away",
+    "discard": "throw away",
+    "confirm": "keep",
+    "approve": "keep",
+    "save clip": "keep",
+    "retry": "try again",
+    "redo": "try again",
+    "insta": "instagram",
+    "ig": "instagram",
+    "yt": "youtube",
+    "tik tok": "tiktok",
+    "twitter": "x",
+    "vod": "source",
+    "stream": "source",
+    "video": "source",
+    "link": "source",
+    "stats": "performance",
+    "statistics": "performance",
+    "numbers": "performance",
+    "views": "performance",
+    "sound effect": "sound",
+    "beep": "sound",
+    "install": "get the app",
+    "download": "get the app",
+    "dark": "reduce motion",
+    "calm": "reduce motion",
+    "calmer": "reduce motion"
+  },
+  "docs": [
+    {
+      "id": "page-home",
+      "kind": "page",
+      "route": "/",
+      "where": "Home",
+      "title": "Home",
+      "keywords": [
+        "Paste",
+        "Tap to choose a video",
+        "How many clips",
+        "Notes",
+        "Clear link"
+      ],
+      "answer": "Home is where you start: paste a link or choose a video, then make clips.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "page-home-open",
+          "label": "Go to Home",
+          "to": "/"
+        }
+      ]
+    },
+    {
+      "id": "page-jobs",
+      "kind": "page",
+      "route": "/jobs",
+      "where": "Jobs",
+      "title": "Jobs",
+      "keywords": [
+        "All jobs",
+        "Job progress"
+      ],
+      "answer": "Jobs shows every clip job and how far it is.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "page-jobs-open",
+          "label": "Open Jobs",
+          "to": "/jobs",
+          "highlight": [
+            "nav-jobs"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "page-review",
+      "kind": "page",
+      "route": "/review",
+      "where": "Review",
+      "title": "Review",
+      "keywords": [
+        "Checks before posting",
+        "Ideas to make it better",
+        "Caption per platform"
+      ],
+      "answer": "Review shows the clips waiting for you to keep or throw away.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "page-review-open",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "nav-review"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "page-library",
+      "kind": "page",
+      "route": "/library",
+      "where": "Library",
+      "title": "Library",
+      "keywords": [
+        "Library views",
+        "Views on each app"
+      ],
+      "answer": "Library shows all your clips and how they do.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "page-library-open",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "nav-library"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "page-library-week",
+      "kind": "page",
+      "route": "/library?view=week",
+      "where": "Library › This week",
+      "title": "This week",
+      "keywords": [
+        "Best this week",
+        "Earlier week",
+        "Later week",
+        "Go back to This week"
+      ],
+      "answer": "This week shows the clips you posted this week.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "page-library-week-open",
+          "label": "Open This week",
+          "to": "/library?view=week",
+          "highlight": [
+            "this-week-tab"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "settings-clip-making-clips",
+      "kind": "page",
+      "route": "/settings/clip-making/clips",
+      "where": "Settings › Clip making › Clips",
+      "title": "Clips",
+      "keywords": [
+        "How many clips",
+        "Longest video"
+      ],
+      "answer": "How many clips, and how long a video can be.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-clip-making-clips-open",
+          "label": "Open Clips",
+          "to": "/settings/clip-making/clips"
+        }
+      ]
+    },
+    {
+      "id": "settings-clip-count",
+      "kind": "apple",
+      "route": "/settings/clip-making/clips",
+      "hash": "clip-count",
+      "where": "Settings › Clip making › Clips",
+      "title": "How many clips",
+      "keywords": [
+        "number",
+        "fewest",
+        "most",
+        "amount"
+      ],
+      "answer": "Clip Factory makes between your fewest and most clips each time.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-clip-count-open",
+          "label": "Open Clips",
+          "to": "/settings/clip-making/clips#clip-count",
+          "highlight": [
+            "clip-count"
+          ]
+        }
+      ],
+      "highlight": [
+        "clip-count"
+      ]
+    },
+    {
+      "id": "settings-longest-video",
+      "kind": "apple",
+      "route": "/settings/clip-making/clips",
+      "hash": "longest-video",
+      "where": "Settings › Clip making › Clips",
+      "title": "Longest video",
+      "keywords": [
+        "hours",
+        "stream",
+        "length",
+        "source"
+      ],
+      "answer": "For a longer video, only the first part is used.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-longest-video-open",
+          "label": "Open Clips",
+          "to": "/settings/clip-making/clips#longest-video",
+          "highlight": [
+            "longest-video"
+          ]
+        }
+      ],
+      "highlight": [
+        "longest-video"
+      ]
+    },
+    {
+      "id": "settings-clip-making-skills",
+      "kind": "page",
+      "route": "/settings/clip-making/skills",
+      "where": "Settings › Clip making › Skills",
+      "title": "Skills",
+      "keywords": [
+        "Add a skill",
+        "Your skills"
+      ],
+      "answer": "Teach Clip Factory how you like your clips.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-clip-making-skills-open",
+          "label": "Open Skills",
+          "to": "/settings/clip-making/skills"
+        }
+      ]
+    },
+    {
+      "id": "settings-add-skill",
+      "kind": "apple",
+      "route": "/settings/clip-making/skills",
+      "hash": "add-skill",
+      "where": "Settings › Clip making › Skills",
+      "title": "Add a skill",
+      "keywords": [
+        "upload",
+        "md",
+        "zip",
+        "new skill"
+      ],
+      "answer": "A SKILL.md file (up to 1 MB) or a .zip with one inside (up to 20 MB).",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-add-skill-open",
+          "label": "Open Skills",
+          "to": "/settings/clip-making/skills#add-skill",
+          "highlight": [
+            "add-skill"
+          ]
+        }
+      ],
+      "highlight": [
+        "add-skill"
+      ]
+    },
+    {
+      "id": "settings-your-skills",
+      "kind": "apple",
+      "route": "/settings/clip-making/skills",
+      "hash": "your-skills",
+      "where": "Settings › Clip making › Skills",
+      "title": "Your skills",
+      "keywords": [
+        "switch",
+        "turn off",
+        "delete",
+        "view"
+      ],
+      "answer": "Skills that are on are used every time you make clips.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-your-skills-open",
+          "label": "Open Skills",
+          "to": "/settings/clip-making/skills#your-skills",
+          "highlight": [
+            "your-skills"
+          ]
+        }
+      ],
+      "highlight": [
+        "your-skills"
+      ]
+    },
+    {
+      "id": "settings-clip-making-youtube",
+      "kind": "page",
+      "route": "/settings/clip-making/youtube",
+      "where": "Settings › Clip making › YouTube help",
+      "title": "YouTube help",
+      "keywords": [
+        "YouTube cookies"
+      ],
+      "answer": "For when YouTube blocks a video.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-clip-making-youtube-open",
+          "label": "Open YouTube help",
+          "to": "/settings/clip-making/youtube"
+        }
+      ]
+    },
+    {
+      "id": "settings-youtube-cookies",
+      "kind": "apple",
+      "route": "/settings/clip-making/youtube",
+      "hash": "youtube-cookies",
+      "where": "Settings › Clip making › YouTube help",
+      "title": "YouTube cookies",
+      "keywords": [
+        "cookies.txt",
+        "blocked",
+        "download"
+      ],
+      "answer": "You can skip this. Add them only if YouTube blocks a video.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-youtube-cookies-open",
+          "label": "Open YouTube help",
+          "to": "/settings/clip-making/youtube#youtube-cookies",
+          "highlight": [
+            "youtube-cookies"
+          ]
+        }
+      ],
+      "highlight": [
+        "youtube-cookies"
+      ]
+    },
+    {
+      "id": "settings-posting-setup",
+      "kind": "page",
+      "route": "/settings/posting/setup",
+      "where": "Settings › Posting › Set up posting",
+      "title": "Set up posting",
+      "keywords": [
+        "Set up posting",
+        "Who can see your YouTube clips",
+        "What X costs"
+      ],
+      "answer": "Connect YouTube, TikTok, Instagram, Facebook and X.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**."
+      ],
+      "actions": [
+        {
+          "id": "settings-posting-setup:open",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup"
+        }
+      ]
+    },
+    {
+      "id": "apple-setup-posting",
+      "kind": "apple",
+      "route": "/settings/posting/setup",
+      "hash": "setup-posting",
+      "where": "Settings › Posting › Set up posting",
+      "title": "Set up posting",
+      "keywords": [
+        "YouTube",
+        "Instagram",
+        "Facebook",
+        "TikTok",
+        "connect",
+        "login",
+        "accounts",
+        "keys",
+        "steps"
+      ],
+      "answer": "Do each one once. After that Clip Factory posts by itself.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Find **Set up posting**."
+      ],
+      "actions": [
+        {
+          "id": "apple-setup-posting:open",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup#setup-posting",
+          "highlight": [
+            "setup-posting"
+          ]
+        }
+      ],
+      "highlight": [
+        "setup-posting"
+      ]
+    },
+    {
+      "id": "settings-posting-where",
+      "kind": "page",
+      "route": "/settings/posting/where",
+      "where": "Settings › Posting › Where clips go",
+      "title": "Where clips go",
+      "keywords": [
+        "Post kept clips to"
+      ],
+      "answer": "Pick the places your kept clips are posted.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-posting-where-open",
+          "label": "Open Where clips go",
+          "to": "/settings/posting/where"
+        }
+      ]
+    },
+    {
+      "id": "settings-post-to",
+      "kind": "apple",
+      "route": "/settings/posting/where",
+      "hash": "post-to",
+      "where": "Settings › Posting › Where clips go",
+      "title": "Post kept clips to",
+      "keywords": [
+        "platforms",
+        "YouTube",
+        "Instagram",
+        "Facebook",
+        "TikTok",
+        "X"
+      ],
+      "answer": "Pick at least one place.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-post-to-open",
+          "label": "Open Where clips go",
+          "to": "/settings/posting/where#post-to",
+          "highlight": [
+            "post-to"
+          ]
+        }
+      ],
+      "highlight": [
+        "post-to"
+      ]
+    },
+    {
+      "id": "settings-look-and-feel-sounds",
+      "kind": "page",
+      "route": "/settings/look-and-feel/sounds",
+      "where": "Settings › Look & feel › Sounds",
+      "title": "Sounds",
+      "keywords": [
+        "Sounds",
+        "Click sound",
+        "Error sound",
+        "Try it"
+      ],
+      "answer": "Turn sounds on or off, and pick your two sounds.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-look-and-feel-sounds-open",
+          "label": "Open Sounds",
+          "to": "/settings/look-and-feel/sounds"
+        }
+      ]
+    },
+    {
+      "id": "settings-sounds-on",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/sounds",
+      "hash": "sounds-on",
+      "where": "Settings › Look & feel › Sounds",
+      "title": "Sounds",
+      "keywords": [
+        "mute",
+        "quiet",
+        "silent",
+        "volume",
+        "on",
+        "off"
+      ],
+      "answer": "Sounds only play when you tap, never when you scroll.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-sounds-on-open",
+          "label": "Open Sounds",
+          "to": "/settings/look-and-feel/sounds#sounds-on",
+          "highlight": [
+            "sounds-on"
+          ]
+        }
+      ],
+      "highlight": [
+        "sounds-on"
+      ]
+    },
+    {
+      "id": "settings-click-sound",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/sounds",
+      "hash": "click-sound",
+      "where": "Settings › Look & feel › Sounds",
+      "title": "Click sound",
+      "keywords": [
+        "tap",
+        "click",
+        "beep",
+        "noise",
+        "when it works"
+      ],
+      "answer": "Plays when you tap something that works.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-click-sound-open",
+          "label": "Open Sounds",
+          "to": "/settings/look-and-feel/sounds#click-sound",
+          "highlight": [
+            "click-sound"
+          ]
+        }
+      ],
+      "highlight": [
+        "click-sound"
+      ]
+    },
+    {
+      "id": "settings-error-sound",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/sounds",
+      "hash": "error-sound",
+      "where": "Settings › Look & feel › Sounds",
+      "title": "Error sound",
+      "keywords": [
+        "wrong",
+        "fail",
+        "deny",
+        "noise",
+        "when it can't"
+      ],
+      "answer": "Plays when something can't be done.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-error-sound-open",
+          "label": "Open Sounds",
+          "to": "/settings/look-and-feel/sounds#error-sound",
+          "highlight": [
+            "error-sound"
+          ]
+        }
+      ],
+      "highlight": [
+        "error-sound"
+      ]
+    },
+    {
+      "id": "settings-try-sounds",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/sounds",
+      "hash": "try-sounds",
+      "where": "Settings › Look & feel › Sounds",
+      "title": "Try it",
+      "keywords": [
+        "test",
+        "preview",
+        "listen"
+      ],
+      "answer": "Hear your two sounds on a pretend Sign in button.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-try-sounds-open",
+          "label": "Open Sounds",
+          "to": "/settings/look-and-feel/sounds#try-sounds",
+          "highlight": [
+            "try-sounds"
+          ]
+        }
+      ],
+      "highlight": [
+        "try-sounds"
+      ]
+    },
+    {
+      "id": "settings-look-and-feel-motion",
+      "kind": "page",
+      "route": "/settings/look-and-feel/motion",
+      "where": "Settings › Look & feel › Motion",
+      "title": "Motion",
+      "keywords": [
+        "Reduce motion"
+      ],
+      "answer": "Less moving around on the screen.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-look-and-feel-motion-open",
+          "label": "Open Motion",
+          "to": "/settings/look-and-feel/motion"
+        }
+      ]
+    },
+    {
+      "id": "settings-reduce-motion",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/motion",
+      "hash": "reduce-motion",
+      "where": "Settings › Look & feel › Motion",
+      "title": "Reduce motion",
+      "keywords": [
+        "animation",
+        "dizzy",
+        "confetti",
+        "still"
+      ],
+      "answer": "Turns off confetti, page moves and the moving background.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-reduce-motion-open",
+          "label": "Open Motion",
+          "to": "/settings/look-and-feel/motion#reduce-motion",
+          "highlight": [
+            "reduce-motion"
+          ]
+        }
+      ],
+      "highlight": [
+        "reduce-motion"
+      ]
+    },
+    {
+      "id": "settings-look-and-feel-background",
+      "kind": "page",
+      "route": "/settings/look-and-feel/background",
+      "where": "Settings › Look & feel › Background",
+      "title": "Background",
+      "keywords": [
+        "Background picture"
+      ],
+      "answer": "Your own picture behind the glass.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-look-and-feel-background-open",
+          "label": "Open Background",
+          "to": "/settings/look-and-feel/background"
+        }
+      ]
+    },
+    {
+      "id": "settings-background-picture",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/background",
+      "hash": "background-picture",
+      "where": "Settings › Look & feel › Background",
+      "title": "Background picture",
+      "keywords": [
+        "wallpaper",
+        "photo",
+        "colours",
+        "colors",
+        "image"
+      ],
+      "answer": "Use your own picture behind the glass. It stays on this device.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-background-picture-open",
+          "label": "Open Background",
+          "to": "/settings/look-and-feel/background#background-picture",
+          "highlight": [
+            "background-picture"
+          ]
+        }
+      ],
+      "highlight": [
+        "background-picture"
+      ]
+    },
+    {
+      "id": "settings-app-get-the-app",
+      "kind": "page",
+      "route": "/settings/app/get-the-app",
+      "where": "Settings › App & account › Get the app",
+      "title": "Get the app",
+      "keywords": [
+        "Get the app"
+      ],
+      "answer": "Open Clip Factory like any other app.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-app-get-the-app-open",
+          "label": "Open Get the app",
+          "to": "/settings/app/get-the-app"
+        }
+      ],
+      "when": {
+        "installed": false
+      }
+    },
+    {
+      "id": "settings-get-app",
+      "kind": "apple",
+      "route": "/settings/app/get-the-app",
+      "hash": "get-app",
+      "where": "Settings › App & account › Get the app",
+      "title": "Get the app",
+      "keywords": [
+        "install",
+        "download",
+        "home screen",
+        "desktop",
+        "phone"
+      ],
+      "answer": "Put Clip Factory on this device, next to your other apps.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-get-app-open",
+          "label": "Open Get the app",
+          "to": "/settings/app/get-the-app#get-app",
+          "highlight": [
+            "get-app"
+          ]
+        }
+      ],
+      "highlight": [
+        "get-app"
+      ],
+      "when": {
+        "installed": false
+      }
+    },
+    {
+      "id": "settings-app-updates",
+      "kind": "page",
+      "route": "/settings/app/updates",
+      "where": "Settings › App & account › Updates",
+      "title": "Updates",
+      "keywords": [
+        "This version",
+        "Check for updates"
+      ],
+      "answer": "Your version, and checking for a new one.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-app-updates-open",
+          "label": "Open Updates",
+          "to": "/settings/app/updates"
+        }
+      ]
+    },
+    {
+      "id": "settings-this-version",
+      "kind": "apple",
+      "route": "/settings/app/updates",
+      "hash": "this-version",
+      "where": "Settings › App & account › Updates",
+      "title": "This version",
+      "keywords": [
+        "version",
+        "build",
+        "number"
+      ],
+      "answer": "New versions arrive by themselves.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-this-version-open",
+          "label": "Open Updates",
+          "to": "/settings/app/updates#this-version",
+          "highlight": [
+            "this-version"
+          ]
+        }
+      ],
+      "highlight": [
+        "this-version"
+      ]
+    },
+    {
+      "id": "settings-check-updates",
+      "kind": "apple",
+      "route": "/settings/app/updates",
+      "hash": "check-updates",
+      "where": "Settings › App & account › Updates",
+      "title": "Check for updates",
+      "keywords": [
+        "update",
+        "new version",
+        "reload",
+        "refresh"
+      ],
+      "answer": "Looks for a new version right now.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-check-updates-open",
+          "label": "Open Updates",
+          "to": "/settings/app/updates#check-updates",
+          "highlight": [
+            "check-updates"
+          ]
+        }
+      ],
+      "highlight": [
+        "check-updates"
+      ]
+    },
+    {
+      "id": "settings-app-account",
+      "kind": "page",
+      "route": "/settings/app/account",
+      "where": "Settings › App & account › Account",
+      "title": "Account",
+      "keywords": [
+        "Signed in as",
+        "Sign out"
+      ],
+      "answer": "Who is signed in, and signing out.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-app-account-open",
+          "label": "Open Account",
+          "to": "/settings/app/account"
+        }
+      ]
+    },
+    {
+      "id": "settings-signed-in",
+      "kind": "apple",
+      "route": "/settings/app/account",
+      "hash": "signed-in",
+      "where": "Settings › App & account › Account",
+      "title": "Signed in as",
+      "keywords": [
+        "email",
+        "user",
+        "me",
+        "profile"
+      ],
+      "answer": "The email you use to sign in.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-signed-in-open",
+          "label": "Open Account",
+          "to": "/settings/app/account#signed-in",
+          "highlight": [
+            "signed-in"
+          ]
+        }
+      ],
+      "highlight": [
+        "signed-in"
+      ]
+    },
+    {
+      "id": "settings-sign-out",
+      "kind": "apple",
+      "route": "/settings/app/account",
+      "hash": "sign-out",
+      "where": "Settings › App & account › Account",
+      "title": "Sign out",
+      "keywords": [
+        "log out",
+        "logout",
+        "leave",
+        "exit"
+      ],
+      "answer": "Signs you out of Clip Factory here.",
+      "steps": [],
+      "actions": [
+        {
+          "id": "settings-sign-out-open",
+          "label": "Open Account",
+          "to": "/settings/app/account#sign-out",
+          "highlight": [
+            "sign-out"
+          ]
+        }
+      ],
+      "highlight": [
+        "sign-out"
+      ]
+    },
+    {
+      "id": "make-clips-link",
+      "kind": "guide",
+      "route": "/",
+      "where": "Home",
+      "title": "Make clips from a link",
+      "keywords": [
+        "youtube link",
+        "twitch",
+        "kick",
+        "paste link",
+        "url",
+        "stream",
+        "vod",
+        "make clips",
+        "new clips"
+      ],
+      "answer": "Paste a YouTube, Twitch or Kick link on Home and tap **Make clips**. Clip Factory finds the best moments for you.",
+      "steps": [
+        "Go to **Home**.",
+        "Tap **Paste** to put your link in the box.",
+        "Tap **Make clips**.",
+        "Watch it work in **Jobs**."
+      ],
+      "actions": [
+        {
+          "id": "make-clips-link-home",
+          "label": "Go to Home",
+          "to": "/",
+          "highlight": [
+            "paste-link",
+            "make-clips"
+          ]
+        }
+      ],
+      "suggest": true
+    },
+    {
+      "id": "make-clips-upload",
+      "kind": "guide",
+      "route": "/",
+      "where": "Home",
+      "title": "Make clips from your own video",
+      "keywords": [
+        "upload",
+        "upload video",
+        "my own video",
+        "file",
+        "mp4",
+        "computer",
+        "phone video",
+        "choose a video"
+      ],
+      "answer": "Tap **Tap to choose a video** on Home, pick your file, then tap **Make clips**.",
+      "steps": [
+        "Go to **Home**.",
+        "Tap **Tap to choose a video**.",
+        "Pick the video file.",
+        "Tap **Make clips**."
+      ],
+      "actions": [
+        {
+          "id": "make-clips-upload-home",
+          "label": "Go to Home",
+          "to": "/",
+          "highlight": [
+            "upload-video"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "job-progress",
+      "kind": "guide",
+      "route": "/jobs",
+      "where": "Jobs",
+      "title": "Where is my job",
+      "keywords": [
+        "job",
+        "jobs",
+        "progress",
+        "how long",
+        "waiting",
+        "cancel",
+        "stop",
+        "status"
+      ],
+      "answer": "Your job is on the **Jobs** page. It shows each step and how far it is. Most jobs take a few minutes.",
+      "steps": [
+        "Tap **Jobs**.",
+        "Tap your job to see its steps.",
+        "Tap **Cancel** to stop it."
+      ],
+      "actions": [
+        {
+          "id": "job-progress-jobs",
+          "label": "Open Jobs",
+          "to": "/jobs",
+          "highlight": [
+            "nav-jobs"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "job-failed",
+      "kind": "guide",
+      "route": "/jobs",
+      "where": "Jobs",
+      "title": "When a job failed",
+      "keywords": [
+        "failed",
+        "fail",
+        "error",
+        "broke",
+        "broken",
+        "not working",
+        "stuck",
+        "try again"
+      ],
+      "answer": "Open the job and tap **Try again**. It starts over and uses the video it already saved.",
+      "steps": [
+        "Tap **Jobs**.",
+        "Tap the job that failed.",
+        "Tap **Try again**."
+      ],
+      "actions": [
+        {
+          "id": "job-failed-jobs",
+          "label": "Open Jobs",
+          "to": "/jobs",
+          "highlight": [
+            "try-again"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "review-keep",
+      "kind": "guide",
+      "route": "/review",
+      "where": "Review",
+      "title": "What Keep does",
+      "keywords": [
+        "keep",
+        "approve",
+        "confirm",
+        "post my clip",
+        "queue",
+        "publish",
+        "accept"
+      ],
+      "answer": "**Keep** sends the clip to be posted on your platforms. Nothing is posted until you tap **Keep**.",
+      "steps": [
+        "Tap **Review**.",
+        "Watch the clip.",
+        "Tap **Keep** to post it."
+      ],
+      "actions": [
+        {
+          "id": "review-keep-review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "keep"
+          ]
+        }
+      ],
+      "suggest": true
+    },
+    {
+      "id": "review-throw-away",
+      "kind": "guide",
+      "route": "/review",
+      "where": "Review",
+      "title": "Throw away a clip",
+      "keywords": [
+        "throw away",
+        "delete",
+        "remove",
+        "bin",
+        "undo",
+        "get rid",
+        "trash",
+        "dont want"
+      ],
+      "answer": "Tap **Throw away** on Review and the clip is gone. Changed your mind? Tap **Undo** within 8 seconds.",
+      "steps": [
+        "Tap **Review**.",
+        "Tap **Throw away**.",
+        "Tap **Undo** if it was a mistake."
+      ],
+      "actions": [
+        {
+          "id": "review-throw-away-review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "throw-away"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "review-captions",
+      "kind": "guide",
+      "route": "/review",
+      "where": "Review",
+      "title": "Change a caption",
+      "keywords": [
+        "caption",
+        "captions",
+        "title",
+        "description",
+        "edit text",
+        "words",
+        "hashtags",
+        "per platform"
+      ],
+      "answer": "Each platform has its own caption. Change it on Review before you tap **Keep**.",
+      "steps": [
+        "Tap **Review**.",
+        "Tap the platform under **Caption per platform**.",
+        "Change the words.",
+        "Tap **Keep**."
+      ],
+      "actions": [
+        {
+          "id": "review-captions-review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "captions"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clip-posting-failed",
+      "kind": "guide",
+      "route": "/review",
+      "where": "Review",
+      "title": "When a post failed",
+      "keywords": [
+        "post failed",
+        "failed post",
+        "not posted",
+        "did not post",
+        "posting error"
+      ],
+      "answer": "If a post failed, open the clip on Review and tap **Try again**.",
+      "steps": [
+        "Tap **Review**.",
+        "Find the clip that says Failed.",
+        "Tap **Try again**."
+      ],
+      "actions": [
+        {
+          "id": "clip-posting-failed-review",
+          "label": "Open Review",
+          "to": "/review"
+        }
+      ]
+    },
+    {
+      "id": "clip-performance",
+      "kind": "guide",
+      "route": "/library",
+      "where": "Library",
+      "title": "See how a clip is doing",
+      "keywords": [
+        "views",
+        "likes",
+        "performance",
+        "how is my clip doing",
+        "clip numbers",
+        "one clip",
+        "stats"
+      ],
+      "answer": "Open **Library** and tap a clip. You see its views, likes and comments on each app.",
+      "steps": [
+        "Tap **Library**.",
+        "Tap the clip.",
+        "Look at **Views on each app**."
+      ],
+      "actions": [
+        {
+          "id": "clip-performance-library",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "nav-library"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "refresh-numbers",
+      "kind": "guide",
+      "route": "/library",
+      "where": "Library",
+      "title": "Refresh numbers",
+      "keywords": [
+        "refresh",
+        "refresh numbers",
+        "update numbers",
+        "next check",
+        "old numbers",
+        "late numbers",
+        "stats"
+      ],
+      "answer": "Numbers update by themselves. Tap **Refresh numbers** on a clip to check now. Instagram and Facebook can take 2 days.",
+      "steps": [
+        "Tap **Library**.",
+        "Tap the clip.",
+        "Tap **Refresh numbers**."
+      ],
+      "actions": [
+        {
+          "id": "refresh-numbers-library",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "refresh-numbers"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "this-week-best",
+      "kind": "guide",
+      "route": "/library?view=week",
+      "where": "Library › This week",
+      "title": "Star the best clips this week",
+      "keywords": [
+        "this week",
+        "best",
+        "star",
+        "favourite",
+        "favorite",
+        "learn",
+        "weekly",
+        "best this week"
+      ],
+      "answer": "In Library, open **This week** and tap the star on your favourite clips. Clip Factory learns from them.",
+      "steps": [
+        "Tap **Library**.",
+        "Tap **This week**.",
+        "Tap the star on a clip."
+      ],
+      "actions": [
+        {
+          "id": "this-week-best-week",
+          "label": "Open This week",
+          "to": "/library?view=week",
+          "highlight": [
+            "best-star"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "best-clip-week-views",
+      "kind": "guide",
+      "route": "/library?view=week",
+      "where": "Library › This week",
+      "title": "Views of my best clip this week",
+      "keywords": [
+        "best clip",
+        "how many views",
+        "top clip",
+        "most views",
+        "this week views"
+      ],
+      "answer": "Your best clip is first in **This week**.",
+      "steps": [
+        "Tap **Library**.",
+        "Tap **This week**."
+      ],
+      "actions": [
+        {
+          "id": "best-clip-week-views-week",
+          "label": "See this week",
+          "to": "/library?view=week",
+          "highlight": [
+            "this-week-tab"
+          ]
+        }
+      ],
+      "live": {
+        "metric": "best_clip_week_views",
+        "text": "Your best clip this week got {value} views.",
+        "range": "this_week"
+      },
+      "suggest": true
+    },
+    {
+      "id": "tiktok-private",
+      "kind": "guide",
+      "route": "/settings/posting/setup/tiktok",
+      "where": "Settings › Posting › Set up posting › TikTok",
+      "title": "Why my clip is private on TikTok",
+      "keywords": [
+        "tiktok",
+        "private",
+        "only me",
+        "hidden",
+        "not public",
+        "nobody sees",
+        "tiktok private",
+        "posted privately",
+        "nobody can see"
+      ],
+      "answer": "TikTok shows posts from Clip Factory privately until Clip Factory's TikTok app is approved. Your clip is posted, only you can see it for now, and its numbers come after.",
+      "steps": [
+        "Open the clip in **Library**.",
+        "TikTok says **Posted privately**. That is normal for now."
+      ],
+      "actions": [
+        {
+          "id": "tiktok-private:library",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "nav-library"
+          ]
+        }
+      ],
+      "suggest": true
+    },
+    {
+      "id": "posting-setup-youtube",
+      "kind": "guide",
+      "route": "/settings/posting/setup/youtube",
+      "where": "Settings › Posting › Set up posting › YouTube",
+      "title": "Connect YouTube",
+      "keywords": [
+        "connect",
+        "account",
+        "login",
+        "log in",
+        "link account",
+        "add account",
+        "youtube",
+        "yt",
+        "channel",
+        "connect youtube",
+        "youtube account",
+        "link youtube",
+        "post to youtube",
+        "shorts"
+      ],
+      "answer": "Open **Set up posting** and tap **YouTube**. Follow its steps one by one: make your key, paste it, then tap **Connect YouTube**. You do it once, then Clip Factory posts there by itself.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **YouTube**.",
+        "Do each step in order.",
+        "Tap **Connect YouTube**."
+      ],
+      "actions": [
+        {
+          "id": "posting-setup-youtube:list",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup",
+          "highlight": [
+            "setup-youtube"
+          ]
+        },
+        {
+          "id": "posting-setup-youtube:page",
+          "label": "Set up YouTube",
+          "to": "/settings/posting/setup/youtube"
+        }
+      ],
+      "extends": "§17"
+    },
+    {
+      "id": "posting-setup-instagram",
+      "kind": "guide",
+      "route": "/settings/posting/setup/instagram",
+      "where": "Settings › Posting › Set up posting › Instagram",
+      "title": "Connect Instagram",
+      "keywords": [
+        "connect",
+        "account",
+        "login",
+        "log in",
+        "link account",
+        "add account",
+        "instagram",
+        "insta",
+        "ig",
+        "reels",
+        "connect instagram",
+        "instagram account",
+        "link instagram",
+        "post to instagram"
+      ],
+      "answer": "Open **Set up posting** and tap **Instagram**. Follow its steps one by one: make your key, paste it, then tap **Connect Instagram**. You do it once, then Clip Factory posts there by itself.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **Instagram**.",
+        "Do each step in order.",
+        "Tap **Connect Instagram**."
+      ],
+      "actions": [
+        {
+          "id": "posting-setup-instagram:list",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup",
+          "highlight": [
+            "setup-instagram"
+          ]
+        },
+        {
+          "id": "posting-setup-instagram:page",
+          "label": "Set up Instagram",
+          "to": "/settings/posting/setup/instagram"
+        }
+      ],
+      "extends": "§17"
+    },
+    {
+      "id": "posting-setup-facebook",
+      "kind": "guide",
+      "route": "/settings/posting/setup/facebook",
+      "where": "Settings › Posting › Set up posting › Facebook",
+      "title": "Connect Facebook",
+      "keywords": [
+        "connect",
+        "account",
+        "login",
+        "log in",
+        "link account",
+        "add account",
+        "facebook",
+        "fb",
+        "page",
+        "connect facebook",
+        "facebook page",
+        "link facebook",
+        "post to facebook"
+      ],
+      "answer": "Open **Set up posting** and tap **Facebook**. Follow its steps one by one: make your key, paste it, then tap **Connect Facebook**. You do it once, then Clip Factory posts there by itself.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **Facebook**.",
+        "Do each step in order.",
+        "Tap **Connect Facebook**."
+      ],
+      "actions": [
+        {
+          "id": "posting-setup-facebook:list",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup",
+          "highlight": [
+            "setup-facebook"
+          ]
+        },
+        {
+          "id": "posting-setup-facebook:page",
+          "label": "Set up Facebook",
+          "to": "/settings/posting/setup/facebook"
+        }
+      ],
+      "extends": "§17"
+    },
+    {
+      "id": "posting-setup-tiktok",
+      "kind": "guide",
+      "route": "/settings/posting/setup/tiktok",
+      "where": "Settings › Posting › Set up posting › TikTok",
+      "title": "Connect TikTok",
+      "keywords": [
+        "connect",
+        "account",
+        "login",
+        "log in",
+        "link account",
+        "add account",
+        "tiktok",
+        "tik tok",
+        "connect tiktok",
+        "tiktok account",
+        "link tiktok",
+        "post to tiktok"
+      ],
+      "answer": "Open **Set up posting** and tap **TikTok**. Follow its steps one by one: make your key, paste it, then tap **Connect TikTok**. You do it once, then Clip Factory posts there by itself.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **TikTok**.",
+        "Do each step in order.",
+        "Tap **Connect TikTok**."
+      ],
+      "actions": [
+        {
+          "id": "posting-setup-tiktok:list",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup",
+          "highlight": [
+            "setup-tiktok"
+          ]
+        },
+        {
+          "id": "posting-setup-tiktok:page",
+          "label": "Set up TikTok",
+          "to": "/settings/posting/setup/tiktok"
+        }
+      ],
+      "extends": "§17"
+    },
+    {
+      "id": "posting-setup-x",
+      "kind": "guide",
+      "route": "/settings/posting/setup/x",
+      "where": "Settings › Posting › Set up posting › X",
+      "title": "Connect X",
+      "keywords": [
+        "connect",
+        "account",
+        "login",
+        "log in",
+        "link account",
+        "add account",
+        "x",
+        "twitter",
+        "post to x",
+        "tweet",
+        "connect x",
+        "x account",
+        "link x"
+      ],
+      "answer": "Open **Set up posting** and tap **X**. Follow its steps one by one: make your key, paste it, then tap **Connect X**. You do it once, then Clip Factory posts there by itself.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **X**.",
+        "Do each step in order.",
+        "Tap **Connect X**."
+      ],
+      "actions": [
+        {
+          "id": "posting-setup-x:list",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup",
+          "highlight": [
+            "setup-x"
+          ]
+        },
+        {
+          "id": "posting-setup-x:page",
+          "label": "Set up X",
+          "to": "/settings/posting/setup/x"
+        }
+      ],
+      "extends": "§17"
+    },
+    {
+      "id": "where-clips-go",
+      "kind": "guide",
+      "route": "/settings/posting/where",
+      "where": "Settings › Posting › Where clips go",
+      "title": "Choose where clips go",
+      "keywords": [
+        "platforms",
+        "which apps",
+        "where",
+        "post to",
+        "choose",
+        "pick places"
+      ],
+      "answer": "Pick the places your kept clips are posted. Pick at least one.",
+      "steps": [
+        "Open **Where clips go**.",
+        "Tap the places you want."
+      ],
+      "actions": [
+        {
+          "id": "where-clips-go-open",
+          "label": "Open Where clips go",
+          "to": "/settings/posting/where#post-to",
+          "highlight": [
+            "post-to"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "x-costs",
+      "kind": "guide",
+      "route": "/settings/posting/setup/x",
+      "hash": "x-cost",
+      "where": "Settings › Posting › Set up posting › X",
+      "title": "What X charges for numbers",
+      "keywords": [
+        "cost",
+        "money",
+        "price",
+        "pay",
+        "paid",
+        "dollars",
+        "x",
+        "twitter",
+        "expensive",
+        "x cost",
+        "charges",
+        "x charges",
+        "x price",
+        "does x cost money",
+        "x money"
+      ],
+      "answer": "X charges a little for every number check. The checks stop at $10 a month, so X never costs more.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **X** and read **What X costs**."
+      ],
+      "actions": [
+        {
+          "id": "x-costs:setup",
+          "label": "Open X setup",
+          "to": "/settings/posting/setup/x#x-cost",
+          "highlight": [
+            "x-cost"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "skills-add",
+      "kind": "guide",
+      "route": "/settings/clip-making/skills",
+      "where": "Settings › Clip making › Skills",
+      "title": "Add a skill",
+      "keywords": [
+        "add",
+        "upload",
+        "new skill",
+        "skill.md",
+        "zip",
+        "md file"
+      ],
+      "answer": "Tap **Add a skill** and pick a SKILL.md file or a .zip with one inside.",
+      "steps": [
+        "Open **Skills**.",
+        "Tap **Add a skill**.",
+        "Pick the file."
+      ],
+      "actions": [
+        {
+          "id": "skills-add-open",
+          "label": "Open Skills",
+          "to": "/settings/clip-making/skills#add-skill",
+          "highlight": [
+            "add-skill"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "skills-what",
+      "kind": "guide",
+      "route": "/settings/clip-making/skills",
+      "where": "Settings › Clip making › Skills",
+      "title": "What a skill is",
+      "keywords": [
+        "skill",
+        "skills",
+        "what is a skill",
+        "turn off",
+        "switch",
+        "built in",
+        "teach",
+        "on off"
+      ],
+      "answer": "A skill teaches Clip Factory how you like your clips. All the AI in Clip Factory uses your skills that are on. Use the switch to turn one off.",
+      "steps": [
+        "Open **Skills**.",
+        "Look at **Your skills**.",
+        "Use the switch to turn a skill on or off."
+      ],
+      "actions": [
+        {
+          "id": "skills-what-open",
+          "label": "Open Skills",
+          "to": "/settings/clip-making/skills#your-skills",
+          "highlight": [
+            "your-skills"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sounds-click",
+      "kind": "guide",
+      "route": "/settings/look-and-feel/sounds",
+      "where": "Settings › Look & feel › Sounds",
+      "title": "Change the click sound",
+      "keywords": [
+        "click sound",
+        "tap sound",
+        "beep",
+        "noise",
+        "click"
+      ],
+      "answer": "Open Sounds and pick a **Click sound**. Tap a card to hear it.",
+      "steps": [
+        "Open **Sounds**.",
+        "Find **Click sound**.",
+        "Tap a card to hear it and pick it."
+      ],
+      "actions": [
+        {
+          "id": "sounds-click-open",
+          "label": "Open Sounds",
+          "to": "/settings/look-and-feel/sounds#click-sound",
+          "highlight": [
+            "click-sound"
+          ]
+        }
+      ],
+      "suggest": true
+    },
+    {
+      "id": "sounds-error",
+      "kind": "guide",
+      "route": "/settings/look-and-feel/sounds",
+      "where": "Settings › Look & feel › Sounds",
+      "title": "Change the error sound",
+      "keywords": [
+        "error sound",
+        "wrong sound",
+        "fail sound",
+        "error"
+      ],
+      "answer": "Open Sounds and pick an **Error sound**. Tap a card to hear it.",
+      "steps": [
+        "Open **Sounds**.",
+        "Find **Error sound**.",
+        "Tap a card to hear it and pick it."
+      ],
+      "actions": [
+        {
+          "id": "sounds-error-open",
+          "label": "Open Sounds",
+          "to": "/settings/look-and-feel/sounds#error-sound",
+          "highlight": [
+            "error-sound"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sounds-off",
+      "kind": "guide",
+      "route": "/settings/look-and-feel/sounds",
+      "where": "Settings › Look & feel › Sounds",
+      "title": "Turn sounds off",
+      "keywords": [
+        "sounds off",
+        "mute",
+        "quiet",
+        "silent",
+        "turn off sounds",
+        "no sound",
+        "volume"
+      ],
+      "answer": "Turn the **Sounds** switch off and Clip Factory stays quiet.",
+      "steps": [
+        "Open **Sounds**.",
+        "Turn **Sounds** off."
+      ],
+      "actions": [
+        {
+          "id": "sounds-off-open",
+          "label": "Open Sounds",
+          "to": "/settings/look-and-feel/sounds#sounds-on",
+          "highlight": [
+            "sounds-on"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "motion-and-background",
+      "kind": "guide",
+      "route": "/settings/look-and-feel/motion",
+      "where": "Settings › Look & feel",
+      "title": "Calmer screen and background",
+      "keywords": [
+        "reduce motion",
+        "calm",
+        "calmer",
+        "animation",
+        "confetti",
+        "change background",
+        "background picture",
+        "wallpaper",
+        "dark"
+      ],
+      "answer": "Turn on **Reduce motion** for a calmer screen. Pick a **Background picture** to put your own picture behind the glass.",
+      "steps": [
+        "Open **Motion** and turn on **Reduce motion**.",
+        "Open **Background** and pick a **Background picture**."
+      ],
+      "actions": [
+        {
+          "id": "motion-open",
+          "label": "Open Motion",
+          "to": "/settings/look-and-feel/motion#reduce-motion",
+          "highlight": [
+            "reduce-motion"
+          ]
+        },
+        {
+          "id": "background-open",
+          "label": "Open Background",
+          "to": "/settings/look-and-feel/background#background-picture",
+          "highlight": [
+            "background-picture"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "get-app-desktop",
+      "kind": "guide",
+      "route": "/settings/app/get-the-app",
+      "where": "Settings › App & account › Get the app",
+      "title": "Get the app on your computer",
+      "keywords": [
+        "download",
+        "mac",
+        "windows",
+        "desktop app",
+        "install",
+        "computer",
+        "laptop"
+      ],
+      "answer": "Get Clip Factory for your Mac or Windows computer and open it like any other app.",
+      "steps": [
+        "Open **Get the app**.",
+        "Tap the download button.",
+        "Open the file and follow the steps."
+      ],
+      "actions": [
+        {
+          "id": "get-app-desktop-open",
+          "label": "Get the app",
+          "to": "/settings/app/get-the-app",
+          "highlight": [
+            "get-app"
+          ]
+        }
+      ],
+      "when": {
+        "device": [
+          "desktop"
+        ],
+        "os": [
+          "mac",
+          "windows"
+        ],
+        "installed": false
+      }
+    },
+    {
+      "id": "get-app-iphone",
+      "kind": "guide",
+      "route": "/settings/app/get-the-app",
+      "where": "Settings › App & account › Get the app",
+      "title": "Add Clip Factory to your iPhone",
+      "keywords": [
+        "iphone",
+        "ipad",
+        "home screen",
+        "add to home screen",
+        "install",
+        "safari",
+        "share button"
+      ],
+      "answer": "In Safari, tap **Share** and then **Add to Home Screen**.",
+      "steps": [
+        "Open Clip Factory in Safari.",
+        "Tap **Share**.",
+        "Tap **Add to Home Screen**."
+      ],
+      "actions": [
+        {
+          "id": "get-app-iphone-open",
+          "label": "Get the app",
+          "to": "/settings/app/get-the-app",
+          "highlight": [
+            "get-app"
+          ]
+        }
+      ],
+      "when": {
+        "os": [
+          "ios"
+        ],
+        "installed": false
+      }
+    },
+    {
+      "id": "get-app-android",
+      "kind": "guide",
+      "route": "/settings/app/get-the-app",
+      "where": "Settings › App & account › Get the app",
+      "title": "Add Clip Factory to your Android phone",
+      "keywords": [
+        "android",
+        "phone",
+        "home screen",
+        "install",
+        "chrome"
+      ],
+      "answer": "In Chrome, tap **Install app** to put Clip Factory on your home screen.",
+      "steps": [
+        "Open **Get the app**.",
+        "Tap **Install app**."
+      ],
+      "actions": [
+        {
+          "id": "get-app-android-open",
+          "label": "Get the app",
+          "to": "/settings/app/get-the-app",
+          "highlight": [
+            "get-app"
+          ]
+        }
+      ],
+      "when": {
+        "os": [
+          "android"
+        ],
+        "installed": false
+      }
+    },
+    {
+      "id": "updates",
+      "kind": "guide",
+      "route": "/settings/app/updates",
+      "where": "Settings › App & account › Updates",
+      "title": "Update the app",
+      "keywords": [
+        "update",
+        "new version",
+        "reload",
+        "check for updates",
+        "old version",
+        "latest"
+      ],
+      "answer": "New versions arrive by themselves. When the update bar shows up, tap **Reload**. You can also tap **Check for updates**.",
+      "steps": [
+        "Open **Updates**.",
+        "Tap **Check for updates**.",
+        "Tap **Reload** when it asks."
+      ],
+      "actions": [
+        {
+          "id": "updates-open",
+          "label": "Open Updates",
+          "to": "/settings/app/updates#check-updates",
+          "highlight": [
+            "check-updates"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "youtube-cookies",
+      "kind": "guide",
+      "route": "/settings/clip-making/youtube",
+      "where": "Settings › Clip making › YouTube help",
+      "title": "When YouTube blocks a video",
+      "keywords": [
+        "youtube blocked",
+        "sign in to confirm",
+        "not a bot",
+        "cookies",
+        "youtube error",
+        "download failed"
+      ],
+      "answer": "Sometimes YouTube says sign in to confirm you're not a bot. Then add your **YouTube cookies** file, and try again.",
+      "steps": [
+        "Open **YouTube help**.",
+        "Tap **YouTube cookies**.",
+        "Add your file.",
+        "Tap **Try again** on the job."
+      ],
+      "actions": [
+        {
+          "id": "youtube-cookies-open",
+          "label": "Open YouTube help",
+          "to": "/settings/clip-making/youtube#youtube-cookies",
+          "highlight": [
+            "youtube-cookies"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clip-count",
+      "kind": "guide",
+      "route": "/settings/clip-making/clips",
+      "where": "Settings › Clip making › Clips",
+      "title": "How many clips are made",
+      "keywords": [
+        "more clips",
+        "fewer clips",
+        "how many clips",
+        "number of clips",
+        "each time",
+        "longest video"
+      ],
+      "answer": "Clip Factory makes between your fewest and most clips each time. Change the numbers in **How many clips**.",
+      "steps": [
+        "Open **Clips**.",
+        "Change **How many clips**."
+      ],
+      "actions": [
+        {
+          "id": "clip-count-open",
+          "label": "Open Clips",
+          "to": "/settings/clip-making/clips#clip-count",
+          "highlight": [
+            "clip-count"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "review-waiting",
+      "kind": "guide",
+      "route": "/review",
+      "where": "Review",
+      "title": "Clips waiting in Review",
+      "keywords": [
+        "waiting",
+        "clips waiting",
+        "to check",
+        "new clips ready",
+        "ready"
+      ],
+      "answer": "Open **Review** to keep or throw them away.",
+      "steps": [
+        "Tap **Review**."
+      ],
+      "actions": [
+        {
+          "id": "review-waiting-open",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "nav-review"
+          ]
+        }
+      ],
+      "live": {
+        "metric": "review_waiting",
+        "text": "You have {value} clips waiting in Review."
+      }
+    },
+    {
+      "id": "jobs-running",
+      "kind": "guide",
+      "route": "/jobs",
+      "where": "Jobs",
+      "title": "Jobs running now",
+      "keywords": [
+        "running",
+        "anything running",
+        "busy",
+        "working",
+        "in progress",
+        "right now"
+      ],
+      "answer": "Open **Jobs** to see them.",
+      "steps": [
+        "Tap **Jobs**."
+      ],
+      "actions": [
+        {
+          "id": "jobs-running-open",
+          "label": "Open Jobs",
+          "to": "/jobs",
+          "highlight": [
+            "nav-jobs"
+          ]
+        }
+      ],
+      "live": {
+        "metric": "jobs_running",
+        "text": "{value} jobs are running right now."
+      }
+    },
+    {
+      "id": "sign-out",
+      "kind": "guide",
+      "route": "/settings/app/account",
+      "where": "Settings › App & account › Account",
+      "title": "Sign out",
+      "keywords": [
+        "sign out",
+        "log out",
+        "logout",
+        "leave",
+        "exit",
+        "switch user"
+      ],
+      "answer": "Open Account and tap **Sign out**.",
+      "steps": [
+        "Open **Account**.",
+        "Tap **Sign out**."
+      ],
+      "actions": [
+        {
+          "id": "sign-out-open",
+          "label": "Open Account",
+          "to": "/settings/app/account#sign-out",
+          "highlight": [
+            "sign-out"
+          ]
+        }
+      ]
+    }
+  ]
+}

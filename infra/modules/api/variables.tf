@@ -130,6 +130,46 @@ variable "vector_bucket" { type = string }
 variable "vector_index" { type = string }
 variable "vector_index_arn" { type = string }
 
+variable "help_enabled" {
+  type        = bool
+  default     = false
+  description = "Ask Clip Factory (docs/CONTRACTS.md §19): HELP_ENABLED. Off unless the environment turns it on."
+}
+
+variable "help_model_id" {
+  type        = string
+  default     = ""
+  description = "HELP_MODEL_ID, the inference profile the help model step calls (<profilePrefix>.<modelId> of helpModel in config/models.json). Empty: no model, plain answers only, and no Bedrock permission."
+  validation {
+    condition     = var.help_model_id == "" || can(regex("^[a-z]+\\.[a-z0-9.-]+$", var.help_model_id))
+    error_message = "help_model_id must be empty or an inference profile id such as eu.anthropic.claude-haiku-5-5."
+  }
+}
+
+variable "help_model_invoke_arns" {
+  type        = list(string)
+  default     = []
+  description = "What HELP_MODEL_ID may invoke: its inference profile ARN and the foundation model in each destination region of the profile."
+  validation {
+    condition     = alltrue([for a in var.help_model_invoke_arns : can(regex("^arn:aws[a-z-]*:bedrock:[a-z0-9-]+:([0-9]{12}:inference-profile|:foundation-model)/[a-z0-9.:-]+$", a))])
+    error_message = "help_model_invoke_arns must be Bedrock inference-profile or foundation-model ARNs."
+  }
+  validation {
+    condition     = (var.help_model_id == "") == (length(var.help_model_invoke_arns) == 0)
+    error_message = "help_model_id and help_model_invoke_arns go together: both set or both empty."
+  }
+}
+
+variable "help_monthly_cap" {
+  type        = number
+  default     = 2000
+  description = "HELP_MONTHLY_CAP: most model-written help answers per 30-day window."
+  validation {
+    condition     = var.help_monthly_cap >= 0 && floor(var.help_monthly_cap) == var.help_monthly_cap
+    error_message = "help_monthly_cap must be a whole number, 0 or more."
+  }
+}
+
 variable "log_retention_days" {
   type    = number
   default = 30

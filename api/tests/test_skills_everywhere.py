@@ -157,3 +157,16 @@ def test_the_scan_catches_each_bypass(tmp_path: Path, files: dict[str, str], exp
     found = problems(_write_package(tmp_path, files))
     assert found, files
     assert any(expected in p for p in found), found
+
+
+def test_the_help_call_is_scanned_like_every_other() -> None:
+    """Ask Clip Factory (§19.5) has no exception: its one model call is a ``converse_text`` call with ``skills=``."""
+    path = SRC / "help" / "model.py"
+    tree = ast.parse(path.read_text())
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and _called_name(n) == "converse_text"]
+    assert len(calls) == 1
+    assert any(k.arg == "skills" for k in calls[0].keywords)
+    assert _file_problems("help/model.py", tree) == []
+    # Swapping the helper for a direct Bedrock call in the help module is caught.
+    bypass = path.read_text().replace("converse_text(\n            bedrock,", "bedrock.converse(\n            bedrock,")
+    assert any("outside learn.converse_text" in p for p in _file_problems("help/model.py", ast.parse(bypass)))

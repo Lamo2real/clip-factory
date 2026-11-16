@@ -232,6 +232,9 @@ unless its name already says it all.
 | Platform stack | Glass card per platform on the clip page: mark, status chip, big number, only that platform's metric rows, sparkline, "Open on …". See [A platform stack](#a-platform-stack). |
 | Performance lines | Decorative SVG Béziers from the preview to each stack, drawn in once. See [The lines](#the-lines). |
 | Star toggle | "Best this week": sage glass toggle, star icon + words, ≥ 48 px, `aria-pressed`. Never tomato. |
+| Ask launcher | Sage glass pill "Ask" with a sparkle (desktop) or a 56 px icon-only circle (phones). Never tomato. See [Ask Clip Factory](#ask-clip-factory). |
+| Ask panel | Glass, non-modal dialog; answers with numbered steps and up to two buttons. See [Ask Clip Factory](#ask-clip-factory). |
+| Spotlight ring | Sage ring with a soft tomato glow around the control a help button points at; fades over 2.4 s; a still ring with reduced motion. |
 
 ## Sounds
 
@@ -616,6 +619,28 @@ when a new skill is saved.
 - Reduced motion (system `prefers-reduced-motion` or `reduceMotion` in Settings): no confetti, no drifting backdrop,
   fades only.
 
+### Action animation (a button acts out what it does)
+
+A reusable pattern: when an icon button does its job, its icon acts it out once. The first user is the paper-plane
+**Send** button of the [Ask field](#ask-clip-factory); other one-icon buttons can adopt the same motion.
+
+| Phase | Time | What moves | Easing |
+|---|---|---|---|
+| Crouch | 0 to ~95 ms | the plane dips and shrinks a little (`scale(0.92)`) | `--ease-out` |
+| Lift and fly | ~95 to 520 ms | it tilts −16° and flies 34 px right and 30 px up, fading out, with a soft trail | `--ease-out` |
+| Return | 520 to 760 ms | a fresh plane fades and grows back in | `--ease-out` |
+
+Rules:
+- Transform and opacity only, once per activation, never loops. A new activation restarts it.
+- It never delays the work: the request starts at once, and the result (bubble, answer, toast) does not wait for it.
+- It is decoration, never the only feedback. It plays only when the action really happens; a disabled button neither
+  flies nor makes the click sound.
+- The click sound plays only on a click or tap (not on Enter).
+- Reduced motion (system or Settings): a 300 ms fade only, no flight, no trail.
+- Build it with `useLaunch()` and `<Flight>` from `web/src/components/PaperPlane.tsx` and the `.fly` classes in
+  `web/src/styles/fly.css` (tune `--fly-x`, `--fly-y`, `--fly-tilt`, `--fly-angle`, `--fly-ms`, `--fly-back-ms`); do not
+  hand-roll a new one per button.
+
 ## Overflow rules (never let text leave its box)
 
 These are global rules, not per-component fixes:
@@ -754,6 +779,54 @@ xychart-beta
 Why it works: the first 0.8 s shows most of the progress, so the press feels instant; the slow creep hides the
 unknown wait without ever freezing; the quick finish and sparkle land the reward.
 
+## Ask Clip Factory
+
+The help assistant ([BR-24](BUSINESS_REQUIREMENTS.md#br-24-ask-clip-factory-answers-that-take-you-there),
+[UX-18](BUSINESS_REQUIREMENTS.md#ux-18-ask-clip-factory-looks-and-behaves-like-the-rest-of-the-app),
+[CONTRACTS.md §19.8](CONTRACTS.md#198-web-websrcfeatureshelp), [HELP_ASSISTANT.md](HELP_ASSISTANT.md)). It is on every
+signed-in page and follows every rule on this page.
+
+```
+ Desktop (≥ 768 px)                                  Phone (< 768 px)
+ ┌──────────────────────────────┐                    ┌───────────────────────┐
+ │ Ask Clip Factory  Start over ×│                    │ Ask Clip Factory    × │  full-screen sheet,
+ │ Hi! What do you want to do?  │                    │ Hi! What do you want  │  safe-area padding
+ │ (How do I make clips…?)      │  3 suggestion      │ to do?                │
+ │ (What does Keep do?)         │  chips             │ (chips)               │
+ │ (How many views…?)           │                    │                       │
+ │[Ask me how to do it…    (➤)] │  Ask field, full   │[Ask me how to do… (➤)]│
+ │                              │  width, ➤ = send   │                       │
+ └──────────────────────────────┘ 400 px             └───────────────────────┘
+                     (✦ Ask)  pill, 24 px from the right,       (✦) 56 px circle above
+   [ update bar ]             12 px above the update bar        the tab bar and update bar
+```
+
+| Part | Spec |
+|---|---|
+| Launcher, desktop | Sage glass pill, sparkle icon + "Ask", fixed bottom right (`right: 24px`), 12 px above the update bar when it shows (the bar publishes its height as `--update-bar-h`). |
+| Launcher, phone | 56 px icon-only glass circle, `aria-label="Ask Clip Factory"`, `right: max(16px, safe-area-inset-right)`, bottom = tab bar + safe area + 18 px + `--update-bar-h` (+ 10 px when the bar shows). Never covers the tab bar or the update bar. |
+| Dodge | Hides (fade + 12 px slide) while scrolling down more than 8 px; back on scroll up or 600 ms after scrolling stops; stays while it or the panel has focus. Never sits on a control: lifts to the first free spot above every link, button, field, tab, switch or focusable element it would overlap (found on the page by itself), plus blocks marked `data-help-dodge` (the Review action bar, the Home link box, the sound grid, the **Try it** controls). Takes no taps while it slides. If lifting would take it above 40 % of the window height it steps aside (hidden) instead, so at 1440 px on Review it stays hidden until you scroll. No slide with reduced motion. |
+| Room on phones | Pages get extra bottom padding under their last control, so the settled launcher never covers a control at 320, 375, 390 or 430 px, with or without the update bar. |
+| Panel, desktop | Non-modal dialog (`aria-modal="false"`), 400 px wide, `max-height: min(640px, 100dvh - 140px)`, anchored above the launcher, `.glass--strong`. If it would cover the control an answer button just lit up, it closes (the chat is kept). |
+| Panel, phone | Modal full-screen sheet (`aria-modal="true"`; the page and the launcher are `inert`; Tab stays in the sheet) with safe-area padding; covers the tab bar while open; Close brings it back. |
+| Conversation | Kept when the panel closes and reopens, in memory only, until **Start over** (or a reload). |
+| Header | "Ask Clip Factory" in Times italic, **Start over** (quiet), Close (×, 48 px). |
+| Empty state | "Hi! What do you want to do?" and three suggestion chips chosen by page and device. Default: "How do I make clips from a Twitch link?", "What does Keep do?", "How many views did my best clip get this week?" (Settings pages swap the second for the sounds question; clip pages show "Why is my clip private on TikTok?"). |
+| Ask field | One glass field across the **full width** of the panel (10 px from each edge), one line (52 px) growing to four lines then scrolling, radius 26 px, focus ring on the whole field. Textarea 16 px, placeholder "Ask me how to do something", 300 letters (counter from 250, under the field), Enter sends, Shift+Enter new line, the phone keyboard shows "send". At its right end, inside the field: a round 44 px icon-only **Send** button with a paper plane (`aria-label="Send"`). Tomato while it is the one main action, sage once an answer button is tomato, off (`aria-disabled`) when the field is empty, an answer is coming or the 429 countdown runs. Sending plays the [action animation](#action-animation-a-button-acts-out-what-it-does): the plane flies off (520 ms) and a new one fades back (240 ms); the question bubble shows at once. With reduced motion the plane only fades. On phones the sheet follows the visible screen so the keyboard never hides the field. |
+| Thinking | Three bouncing sage dots; "Still looking…" after 6 s; still dots with reduced motion. |
+| Answer | One or two sentences (button names in bold), numbered steps (`<ol>`, ≤ 6), up to two buttons with icon + word. Only the **first button of the newest answer is tomato**; older answers' buttons and the Ask button turn sage, so the screen keeps one tomato. Whether the model helped is never shown. |
+| Live number | A soft shimmer where the number goes, then the number in the app's compact format ("1.2K"). |
+| Unknown or refused | The fixed sentence and the three chips again; unknown also offers **Go Home**, except while you are on Home. |
+| Unsaved change | Inline, inside the panel: "You have a change that isn't saved yet. Leave anyway?" with **Stay** and **Leave** (both sage). No browser dialog. |
+| Spotlight | Waits up to 4 s for the control, scrolls it to the centre (smooth unless reduced motion), draws a sage ring with a soft tomato glow that fades over 2.4 s, says "Here it is: {label}" politely, never moves focus. A target taller than 60 % of the window rings only its heading, scrolled to 80 px from the top. |
+| Notices | 429: "Let's take a short break. You can ask again in {n} seconds." with a countdown and Ask disabled. Off: "Ask Clip Factory is turned off right now." Under a 503, local fallback or failed number: a small link "Something went wrong? Copy the help code" that copies the request id and toasts "Copied. Send this code to whoever helps you with Clip Factory." |
+| Sounds | The click sound only on a click or tap (send button, chips, buttons), not when Enter sends; the error sound with the 429, 503 and failed-number notices; nothing when an answer arrives. |
+| Keyboard and screen readers | Focus goes to the textarea on open; on desktop Tab stays natural (non-modal), in the phone sheet it stays inside; Escape closes and returns focus to whatever opened it; the log is `aria-live="polite"`. |
+
+**Writing answers and guides.** Same voice as the screens: words a child knows, one idea per step, the button's exact
+name in bold, no em or en dashes, no emojis, no jargon (never "job ID", "token", "API"). Steps start with a verb:
+"Tap **Make clips**."
+
 ## Kid-proof checklist
 
 The owner's bar: "even a 6-year-old should be able to use it, or an 8-year-old"
@@ -766,7 +839,8 @@ changes one is checked against this list.
 
 **Big and clear**
 - [ ] Every tap target ≥ 48 × 48 px on phones, with at least 8 px between neighbours.
-- [ ] Buttons show icon + word everywhere except the phone tab bar.
+- [ ] Buttons show icon + word everywhere except the phone tab bar and the send button inside the Ask field (its
+  placeholder says what it does, and it has `aria-label` and a tip).
 - [ ] Body text 16 px or larger; no grey-on-grey.
 
 **Words a child knows**
@@ -789,6 +863,7 @@ changes one is checked against this list.
 - [ ] Every screen has a way forward and a way back.
 - [ ] Empty states name the exact button to tap: "Nothing here yet. Tap **Make clips** to start."
 - [ ] Every error says what to do next, with the button to do it.
+- [ ] Every button and setting a guide names has a `data-help` anchor (or is an apple), so **Ask** can point at it.
 
 **Mistakes are cheap**
 - [ ] No "Are you sure?" dialogs. Throwing away shows a toast with **Undo** for 8 s; nothing is deleted until it ends.

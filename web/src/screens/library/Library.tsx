@@ -60,7 +60,7 @@ export function Library({ view = "all", week = null }: { view?: "all" | "week"; 
           <Icon name="library" size={18} />
           All clips
         </A>
-        <A href="/library?view=week" className={`lib-tab${view === "week" ? " is-on" : ""}`} aria-current={view === "week" ? "page" : undefined}>
+        <A href="/library?view=week" className={`lib-tab${view === "week" ? " is-on" : ""}`} aria-current={view === "week" ? "page" : undefined} data-help="this-week-tab">
           <Icon name="star" size={18} />
           This week
         </A>

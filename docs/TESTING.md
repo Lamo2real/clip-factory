@@ -14,6 +14,7 @@ with `validate` without a backend and `terraform test` against a mock AWS provid
 | API Lambdas | `api/` | pytest, ruff, mypy (uv) | yes | yes |
 | Agent runtime | `agent/` | pytest, ruff, mypy (uv) | yes | yes |
 | Infrastructure | `infra/` | `terraform fmt -check`, `terraform validate`, `terraform test` (mock provider), tflint | yes | plan and apply |
+| Help corpus drift | `web/` | `node scripts/help-corpus.mjs --check` (corpus, routes table in [HELP_ASSISTANT.md](HELP_ASSISTANT.md), `/v1/help` rows of CONTRACTS §19); the CI web job runs it right after `npm ci`, before type check, lint and tests | yes | – (the build regenerates the corpus) |
 | Documentation | `docs/`, `README.md` | relative-link and anchor check, draw.io XML parse and PNG export (below); `docs/SETUP_POSTING.md` is also checked by the web test `setup-docs.test.ts` | by hand (the setup page: yes, through the web tests) | – |
 | Workflows and scripts | `.github/`, `scripts/` | actionlint, shellcheck where available | yes | – |
 
@@ -29,7 +30,7 @@ npm run dev:mock          # the app on http://localhost:5173 with the mock API
 npm test                  # unit and component tests
 npx playwright install    # once, downloads the test browsers
 npx playwright test       # end-to-end and layout tests (start the mock server themselves)
-CF_E2E_PORT=4233 npx playwright test   # same, on another port
+CF_E2E_PORT=4233 npx playwright test   # same, on another port (when 4179, the default, is taken)
 ```
 
 Playwright serves the mock app on port 4179 and reuses a server already on that port. If another checkout's preview
@@ -66,6 +67,34 @@ xmllint --noout docs/architecture/aws-architecture.drawio
 
 Re-export the PNG whenever the `.drawio` file changes (the README shows the PNG), and check that every relative link
 in `docs/` and `README.md` points at a file that exists.
+
+## Ask Clip Factory
+
+The help assistant ([CONTRACTS.md §19.11](CONTRACTS.md#1911-tests-offline-fakes-only-no-aws-no-network),
+[HELP_ASSISTANT.md](HELP_ASSISTANT.md)) is tested offline like everything else: a fake Bedrock client, a fake corpus
+fetcher, the mock API with a deterministic fake model, no network.
+
+**One shared eval file**, `web/src/features/help/helpEvals.json`: at least 44 cases `{q, expect, context?, history?}`
+where `expect` is a doc id, `"unknown"` or `"refused"`. Both retrievers run it (`api/tests/test_help_evals.py` and
+`web/test/helpRetrieve.test.ts`) and each case must pick the expected top doc. A case without its own `context` uses
+the file's `defaultContext` in both runners (`api/tests/help_support.py` `eval_cases`, the same as the web test). The API test reads the web files
+straight from the repository (it is skipped only if they are missing), so the Python and TypeScript retrievers cannot
+drift apart; `api/tests/fixtures/help/evals.json` adds API-only cases on top. It holds the seven questions of
+[BR-24](BUSINESS_REQUIREMENTS.md#br-24-ask-clip-factory-answers-that-take-you-there) AC3 and the list in §19.11,
+including the follow-up "and the error sound?", the typo "instagarm connect", device cases ("download for mac" on a
+desktop, "add to home screen" on iOS), unknown ("what's the weather") and refused ("what is my password").
+
+```bash
+cd web && node scripts/help-corpus.mjs --check && npx vitest run test/help
+cd api && uv run pytest -q tests/test_help*.py
+```
+
+| Suite | Must show |
+|---|---|
+| API (pytest) | Off by default (flag unset: GET off, POST 403); kill switch `enabled: false` → 403, `model: false` → kb, read once per 60 s; 6 a minute and 60 an hour → 429 with `Retry-After` and `retryAfter`; cap reached → `kb_cap` and no model call; no model call for unknown or refused; bad bodies → 400; the exact Converse request (model id, `maxTokens` 700, no temperature, thinking disabled, schema with `additionalProperties: false`, the owner's skills block first and the help rules after it, sent through the shared `learn.converse_text` (§18.6), client timeouts, `max_attempts` 1); invented action id dropped; ungrounded bold name, invented digit or a live number written out → kb; malformed JSON, stop reasons, timeout, ClientError → kb; deadline skip; skills that cannot be loaded → `kb_skills` and no model call; `test_skills_everywhere.py` finds no model call outside the helper; corpus meta parse, other host or bad path refused, 10-minute cache, bundled fallback, sensitive filter; questions and answers never in any captured log record (token counts are logged as `usageIn` and `usageOut`); `requestId` in every error body; follow-up merge; exactly two help routes; the zip's `corpus.json` equals the web file (`tests/test_help_corpus.py::test_full_build_puts_the_web_corpus_in_the_zip` runs the whole Lambda build offline, with the dependency install faked, in every pytest run, so it is never skipped in CI); model answers with a link or domain, or a price the owner typed, fall back to the plain answer (`kb_ungrounded`). |
+| Web (Vitest) | Retriever evals; composer; `when` filter; a bad action `to` is dropped; generator `--check`; nothing sensitive and no em or en dashes in the corpus; `helpApi` 27 s timeout, no `keepalive`, one refresh on 401; 429 → countdown and no retry; 5xx or network → local answer; status off → hidden and no local answers; live fill and live failure; unsaved guard; dodge math. |
+| Playwright, mock mode (`e2e/help.spec.ts`, 375 × 812 and 1440 × 900) | Launcher name and place (not over the tab bar or update bar, above the update bar on desktop); three suggestions; "Where do I change my click sound?" → steps, tomato **Open Sounds**, navigation to `/settings/look-and-feel/sounds`, the Click sound row gets the ring (panel closed on 375, open on 1440); the best-clip question shows the mock number; a refusal; `#429` notice with Ask disabled; `#503` → local answer and the copy-code link; `#off` → launcher gone; Escape returns focus; the Ask field spans the panel with a 44 px icon-only **Send** paper plane inside it (off when empty, Shift+Enter adds a line, four lines then scroll), the plane flies with its trail on send and the question bubble shows at once, the tap sound plays on click only; reduced motion → no animations, the plane only fades; each posting and skills guide opens its real page (`/settings/posting/setup/{platform}`, `/settings/clip-making/skills…`) and lights up its control (`setup-connect`/`setup-progress`, `skill-form`, `skill-edit`, `skill-delete`); dodge on scroll; no launcher over **Keep** on Review before any scroll (375 and 1440); after an answer button the spotlit control is the element at its centre (`elementFromPoint`), so nothing covers it; the conversation is still there after Close and reopen; Tab stays inside the phone sheet; the settled phone launcher covers no control at 320, 375, 390 and 430 px, with and without `?update=1`. `overflow.spec.ts` adds the open panel at 320, 375, 768, 1024, 1440 and 1920 px, with a five-line question and the field's width; `screenshots.spec.ts` adds it at 375 and 1440 px, plus `help-review-launcher-*`, `help-spotlight-keep-*`, `help-panel-reopened-*`, `help-ask-box-*` and `help-plane-flying-*`. Port 4179 by default, `CF_E2E_PORT` for another ([Web](#web)). |
+| Infrastructure (`terraform test`) | `HELP_*` env on `cf-prod-api` (enabled in prod, off by module default); statement `HelpModel` has only `bedrock:InvokeModel` on the EU profile ARN and the six foundation-model ARNs; the model id comes from `config/models.json` (`eu.` for help, Fable still `global.`); CORS exposes `retry-after`; the metric filter and the alarm exist; `models.json` parses and `helpModel` names a model. |
 
 ## What the tests must cover
 
@@ -248,7 +277,10 @@ in `docs/` and `README.md` points at a file that exists.
   `skills=`, an alias of `.converse` or `.invoke_model` (used without calling it), a model method named in a string
   (`getattr(b, "converse")`), `getattr` / `attrgetter` / `methodcaller` with a computed name, `converse_text` used
   without calling it, an `invoke_model` that is not the Titan call (`modelId=self.embed_model_id`) in
-  `vectors.py`, and any `converse_stream`, with a failing sample for each; the build zip contains
+  `vectors.py`, and any `converse_stream`, with a failing sample for each; the help call (Ask Clip Factory) is kept
+  under the same rule by `test_the_help_call_is_scanned_like_every_other` (one `converse_text(skills=...)` in
+  `help/model.py`, a direct call flagged) and `test_the_owners_own_skills_reach_the_model` (one skills block first, the
+  help rules last); the build zip contains
   `builtin_skills/*/SKILL.md`.
 - Settings sounds ([CONTRACTS.md §15.4](CONTRACTS.md#154-api)): `PUT /v1/settings` accepts `clickSound` and
   `errorSound` from 1 to 30 and refuses 0, 31, 2.5, `"6"`, `true` and `null` with `400 bad_request` and a plain message;
@@ -450,3 +482,8 @@ its pretend consent page `/mock-oauth/{platform}`.
    **Disconnect**, wait 8 s: the token secret is gone. Then the other four platforms the same way (X costs a little).
 11. Push a small change with an `Area:` line; within 5 minutes the open app (browser and desktop app) shows the update
    bar with that label; press Reload and watch it finish.
+11. Open **Ask** on a phone and on a desktop. Ask "Where do I change my click sound?": the steps appear, **Open Sounds**
+   goes to Look & feel › Sounds and the Click sound row lights up. Ask "How many views did my best clip get this
+   week?" and check the number matches Library › This week. In CloudWatch Logs, `/aws/lambda/cf-prod-api` shows one
+   `help.answer` line per question with no question text. If every answer comes back in plain words only, open
+   Claude Haiku 5.5 once in the Bedrock console ([DEPLOYMENT.md](DEPLOYMENT.md#4-bedrock-model-access-and-data-retention)).

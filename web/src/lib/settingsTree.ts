@@ -78,7 +78,8 @@ export const TREES: Tree[] = [
             id: "add-skill",
             name: "Add a skill",
             leaf: "Write one by answering three easy questions, or upload a skill file from your computer.",
-            words: ["write", "new", "upload", "md", "zip"],
+            // "write" is in the leaf, so Find a setting still finds it; as a keyword it made Ask Clip Factory answer "write my homework".
+            words: ["new", "upload", "md", "zip"],
           },
         ],
       },
@@ -126,7 +127,7 @@ export const TREES: Tree[] = [
           {
             id: "x-cost",
             name: "What X costs",
-            leaf: "About 1.5 cents a clip. Clip Factory stops at $10 a month.",
+            leaf: "About 1.5 cents a post. It stops at $10 a month.",
             words: ["X", "twitter", "money", "price", "credits", "card", "pay"],
             href: "/settings/posting/setup/x#x-cost",
           },

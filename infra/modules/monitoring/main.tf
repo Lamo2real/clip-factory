@@ -1,6 +1,6 @@
 # Alarms that email the owner when a Lambda fails, a durable execution fails or times out, the live-update stream
 # falls behind, the webhook API answers 5xx (docs/CONTRACTS.md §14.9), or a schedule cannot start its function
-# (the stats refresh tick, §16.9). The topic always exists, so an email
+# (the stats refresh tick, §16.9), or Ask Clip Factory's model keeps failing (§19.9). The topic always exists, so an email
 # address can be added later without touching the alarms.
 terraform {
   required_version = ">= 1.11.0"
@@ -143,6 +143,40 @@ resource "aws_cloudwatch_metric_alarm" "schedule_failed" {
   evaluation_periods  = 2
   threshold           = 0
   comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  ok_actions          = [aws_sns_topic.alarms.arn]
+  tags                = local.tags
+}
+
+# Ask Clip Factory (docs/CONTRACTS.md §19.9): a model call that errors or times out falls back to the plain answer,
+# so the owner never notices. Ten in an hour means the model is broken (often the first-call Marketplace step in
+# docs/DEPLOYMENT.md), not a blip. The help.answer line carries only ids and outcomes, never the question.
+resource "aws_cloudwatch_log_metric_filter" "help_model_failures" {
+  count          = var.help_log_group_name == "" ? 0 : 1
+  name           = "${var.name}-help-model-failures"
+  log_group_name = var.help_log_group_name
+  pattern        = "{ ($.event = \"help.answer\") && (($.outcome = \"kb_model_error\") || ($.outcome = \"kb_model_timeout\")) }"
+  metric_transformation {
+    namespace     = var.name
+    name          = "HelpModelFailures"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "help_model_failures" {
+  count               = var.help_log_group_name == "" ? 0 : 1
+  alarm_name          = "${var.name}-help-model-failures"
+  alarm_description   = "Ask Clip Factory's model failed or timed out ${var.help_model_failure_threshold} or more times in an hour; answers are the plain ones meanwhile. Query help.answer lines in ${var.help_log_group_name} by outcome, and see docs/DEPLOYMENT.md (open the model once in the Bedrock console)."
+  namespace           = var.name
+  metric_name         = "HelpModelFailures"
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  threshold           = var.help_model_failure_threshold
+  comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alarms.arn]
   ok_actions          = [aws_sns_topic.alarms.arn]

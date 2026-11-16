@@ -64,6 +64,22 @@ def test_config(tmp_path: Path) -> None:
         load_config({"CF_REGION": "r", "CF_MEDIA_BUCKET": "b", "CF_MODEL_ID": "m"})
 
 
+def test_model_profile_prefix_per_model(tmp_path: Path) -> None:
+    def write(models: dict[str, object], top: str | None = "global") -> Path:
+        data: dict[str, object] = {"agentModel": "a", "models": models}
+        if top is not None:
+            data["profilePrefix"] = top
+        path = tmp_path / "models.json"
+        path.write_text(json.dumps(data), "utf-8")
+        return path
+
+    assert model_from_models_json(write({"a": {"modelId": "anthropic.m", "profilePrefix": "eu"}})) == "eu.anthropic.m"
+    assert model_from_models_json(write({"a": {"modelId": "anthropic.m"}})) == "global.anthropic.m"
+    assert model_from_models_json(write({"a": {"modelId": "anthropic.m", "profilePrefix": ""}})) == "global.anthropic.m"
+    assert model_from_models_json(write({"a": {"modelId": "anthropic.m"}}, top=None)) == "anthropic.m"
+    assert model_from_models_json(write({"b": {"modelId": "anthropic.m"}})) is None
+
+
 def test_platforms_and_links() -> None:
     assert sources.platform_of("https://www.youtube.com/watch?v=abc") == "youtube"
     assert sources.platform_of("https://youtu.be/abc") == "youtube"

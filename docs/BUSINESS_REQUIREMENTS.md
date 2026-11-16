@@ -9,7 +9,8 @@ UX-15), and the owner's request to see how every clip performs on each platform,
 and pick the best clips of each week (BR-19 to BR-21, NFR-17, UX-16), the owner's request for one kid-proof setup per
 platform so the app can post to all five (BR-09 AC3, BR-10 AC3 to AC5, BR-23, UX-17), and the owner's request to
 create, read, change and delete skills in Settings and to have every AI call use every skill (BR-05 and BR-06 update,
-BR-22).
+BR-22), and the owner's request for an in-app helper that answers questions and shows the way, built on the in-app
+assistant pattern and using the skills (BR-24, NFR-18, UX-18).
 Every requirement below traces back to one of them. Where
 the brief was open or unclear, the interpretation we chose is stated in [Interpretations and open questions](#interpretations-and-open-questions).
 
@@ -280,7 +281,8 @@ service we use (Bedrock, AgentCore, whatever), when it is generating stuff or re
 - AC1: Every call that asks Claude to write, pick, judge, describe or read something gets **every** skill: the
   built-in ones and every skill the owner added. That covers the clip agent on AgentCore (moment picking with the
   Claude Agent SDK and its Bedrock fallback, the facecam check, the checklist with its hook rewrite, the captions) and
-  the API's Bedrock calls (the 48-hour learning and the weekly best learning).
+  the API's Bedrock calls (the 48-hour learning, the weekly best learning and Ask Clip Factory's optional rewrite,
+  [BR-24](#br-24-ask-clip-factory-answers-that-take-you-there)).
 - AC2: There is no way to switch a skill off, and no call may skip the skills: a test in each code package fails the
   build if a model call does not go through the shared helpers that add them.
 - AC3: The skills always come first in the instructions, in the same order (built-in ones, then the owner's by name),
@@ -312,6 +314,36 @@ service we use (Bedrock, AgentCore, whatever), when it is generating stuff or re
 - AC6: A Home card "Set up posting · n of 5 ready" with **Continue** shows until every platform the owner posts to is
   ready.
 - AC7: [SETUP_POSTING.md](SETUP_POSTING.md) has the same steps, numbers and titles as the app, checked by a test.
+
+### BR-24 Ask Clip Factory: answers that take you there
+The owner asked for the in-app assistant pattern, "tailored towards the Clip Factory app's use case", applied to the
+whole application, and for every AI call to use the skills.
+([CONTRACTS.md §19](CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16),
+[HELP_ASSISTANT.md](HELP_ASSISTANT.md))
+- AC1: Every signed-in page has an **Ask** launcher that opens **Ask Clip Factory**. It answers how-to and where-is
+  questions about every screen and every setting of the app.
+- AC2: Each answer is one or two short sentences, at most 6 numbered steps using the app's own button names in bold,
+  and up to two buttons that open the right page and light up the right control.
+- AC3: These questions are answered correctly: "How do I make clips from a Twitch link?", "Where do I change my click
+  sound?", "Why is my clip private on TikTok?", "How do I connect Instagram?", "How many views did my best clip get
+  this week?", "How do I add a skill?", "What does Keep do?", plus the rest of the shared eval file (at least 44).
+- AC4: Numbers in an answer (views this week, clips waiting, jobs running) are the owner's real numbers, read by the
+  app with the owner's own sign-in; if a number cannot be read, the answer says so and offers the page that shows it.
+- AC5: A question it cannot answer gets "I don't know that one yet. Try other words, or pick a question below." and
+  three suggestions; it never invents a page, button, setting, price or number.
+- AC6: Questions about passwords, keys, the cookie file's contents, other people's accounts or clips, or Clip
+  Factory's own servers get "I can't help with that. I only know how to use Clip Factory."
+- AC7: Answers work without the AI model: when the model is off, over its cap, slow or failing, the owner still gets
+  a complete answer and never sees a model error. When the API cannot be reached, the app answers from its own copy
+  of the knowledge.
+- AC8: When the model is used, it gets every skill first, like every AI call ([BR-22](#br-22-every-ai-call-uses-every-skill)),
+  followed by the rules that keep it to the facts, so its tone and clip advice follow the skills. If the skills cannot
+  be read, the model is not asked and the plain answer is shown.
+- AC9: Follow-ups work: "and the error sound?" after asking about the click sound answers about the error sound.
+- AC10: The knowledge is built from the app's code on every build, so a renamed button or a new setting is in the
+  answers after the next deploy; CI fails when the committed knowledge is out of date.
+- AC11: Mac and Windows download steps appear only on desktops without the app installed, iPhone steps only on iOS,
+  Android steps only on Android.
 
 ---
 
@@ -458,6 +490,27 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
   tight loop: the post waits its normal interval and shows the reason in plain words.
 
 ---
+
+### NFR-18 The help assistant is private, capped and easy to turn off
+([CONTRACTS.md §19.6](CONTRACTS.md#196-api-in-cf-prod-api-file-apisrcclipfactory_apirouteshelppy-package-apisrcclipfactory_apihelp),
+[ADR-38](DECISIONS.md#adr-38-bm25-over-vectors-for-help-and-the-model-is-optional),
+[ADR-39](DECISIONS.md#adr-39-help-runs-in-cf-prod-api-with-claude-haiku-55-through-the-eu-profile))
+- AC1: Questions and answers are never stored and never logged; each request logs one line with its request id and
+  outcome only.
+- AC2: The model is Claude Haiku 5.5 through the EU inference profile, so help questions are processed in EU Regions
+  only. Its id lives only in `config/models.json`.
+- AC3: At most 6 questions a minute and 60 an hour; at most 2,000 model answers per 30 days, after which answers come
+  from search only. A rate-limited question is never retried automatically.
+- AC4: A deploy flag (on in prod) and a kill switch that needs no deploy. When the switch is off, the launcher
+  disappears and the app stops answering from its own copy too.
+- AC5: Help runs inside `cf-prod-api` (two routes, same JWT); the HTTP API keeps its single proxy route; the only new
+  permission is `bedrock:InvokeModel` on the EU profile and its six EU models.
+- AC6: The model call has timeouts (3 s connect, 10 s read, no retry) and a deadline, so a slow model falls back to
+  the plain answer instead of hanging; the browser gives up after 27 s and answers locally.
+- AC7: The server reads the knowledge only from the app's own address (the meta tag in `index.html`, an `/assets/`
+  path on the same origin), caches it 10 minutes and falls back to the copy bundled in the Lambda.
+- AC8: The knowledge never contains keys, ids, emails or infrastructure words; a test fails if it does.
+- AC9: A failing model raises an alarm (10 failures in an hour) to `cf-prod-alarms`.
 
 ## Design and experience requirements
 
@@ -619,6 +672,22 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 
 ---
 
+### UX-18 Ask Clip Factory looks and behaves like the rest of the app
+([UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#ask-clip-factory))
+- AC1: Desktop: a sage glass pill **Ask** with a sparkle icon, bottom right, 12 px above the update bar when it shows.
+  Phones: a 56 px icon-only glass circle that never covers the tab bar or the update bar and hides while you scroll
+  down.
+- AC2: The panel is glass, 400 px wide on desktop and a full-screen sheet on phones; it opens with "Hi! What do you
+  want to do?" and three suggested questions that fit the page and the device.
+- AC3: Only the first button of the newest answer is tomato; the launcher is never tomato.
+- AC4: The click sound plays on taps only; a rate-limit or error notice plays the error sound; nothing plays when an
+  answer simply arrives.
+- AC5: Leaving a page with an unsaved caption edit or pasted link asks "You have a change that isn't saved yet. Leave
+  anyway?" with **Stay** and **Leave**; never a scary dialog.
+- AC6: The spotlight ring fades over 2.4 s and is a still ring with reduced motion; Escape closes the panel and returns
+  focus; it works with a keyboard and a screen reader.
+- AC7: Nothing overflows from 320 to 1920 px, with the panel open.
+
 ## Interpretations and open questions
 
 | Id | The brief said | What we built | Open? |
@@ -657,6 +726,10 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 | I-32 | "Each one … should all be a step to connect to" | One setup per platform in a setup list with a ready ring; the owner makes and owns each platform's developer app and pastes its keys, because no shared app can post for a private owner on all five today ([ADR-33](DECISIONS.md#adr-33-posting-setup-bring-your-own-keys-with-a-guided-list-per-platform)). | No. |
 | I-33 | "Up to date to today" | The steps were checked against each platform's docs on 16 Nov 2026; the date is shown on every platform page, and the sources are in [SETUP_POSTING.md](SETUP_POSTING.md#research-sources-checked-on-16-nov-2026). | How often should they be re-checked? |
 | I-34 | Posting on TikTok and Facebook "for everyone" | TikTok may keep posts "Only me" (it often refuses apps used by one person), and Facebook Reels may stay visible only to the owner until Meta lets the app go Live. The setup says so; it cannot be forced. | Accept private TikTok posts if TikTok says no? |
+| I-35 | "Implement it into Clip Factory ... the entire system ... applied to this concept" | One assistant that knows every screen and setting of the app (BR-24), built from the app's code. The pattern's roles, plans, tenants and "ask the owner" are dropped (one owner); a `when` filter on device and install state takes their place. | No. |
+| I-36 | "The whole AI system must use the skills" | The help model gets every skill first, like every AI call (BR-22, I-31), then the grounding rules: skills shape tone and clip advice, the corpus decides facts (BR-24 AC8). | No. |
+| I-37 | The pattern's per-tenant and platform caps | One owner, so one cap: 2,000 model answers per 30 days, plus 6 a minute and 60 an hour (NFR-18). | Is 2,000 a month the right cap? |
+| I-38 | "How do I connect Instagram?" | The answer sends the owner to Settings › Posting › Set up posting, lights up that platform's card and offers its own steps page (CONTRACTS §17). | No. |
 
 ## Out of scope for this phase
 

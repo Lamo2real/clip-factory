@@ -8,8 +8,9 @@ The diagram is [architecture/aws-architecture.drawio](architecture/aws-architect
 [architecture/aws-architecture.png](architecture/aws-architecture.png)). Names, routes, shapes and keys are defined in
 [CONTRACTS.md](CONTRACTS.md), especially [§14](CONTRACTS.md#14-serverless-expansion-websocket-api-rest-api-durable-functions-s3-vectors),
 [§16](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16) (clip numbers and the weekly best),
-[§17](CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16) (posting setup, Connect and real posting)
-and [§18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16) (skills, and every AI call using every skill);
+[§17](CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16) (posting setup, Connect and real posting),
+[§18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16) (skills, and every AI call using every skill)
+and [§19](CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16) (Ask Clip Factory, the help assistant);
 this document explains how the pieces work together and why.
 
 ![Clip Factory Cloud on AWS](architecture/aws-architecture.png)
@@ -64,6 +65,8 @@ flowchart LR
   lrn -- "9 Best of week learning" --> bedrock
   lrn -- "9 best true or false" --> vec
   lrn --> ddb
+  lapi -- "11 help answer, optional" --> haiku[Bedrock: Claude Haiku 5.5, EU profile]
+  lapi -- "11 help corpus, cached 10 min" --> cf
   classDef off stroke-dasharray: 5 5
 ```
 
@@ -82,7 +85,7 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | Amazon API Gateway, HTTP API | `/v1` routes | The app's API. Cheapest type, with a built-in JWT authorizer. CORS for the app and `localhost:5173`. |
 | Amazon API Gateway, WebSocket API | `cf-prod-ws`, stage `live` | Pushes job, clip, post and learning changes to open apps, so screens update without waiting for a poll. See [ADR-23](DECISIONS.md#adr-23-live-updates-over-a-websocket-api-polling-only-as-the-fallback). |
 | Amazon API Gateway, REST API | `cf-prod-hooks`, stage `v1` | The one public, unauthenticated surface: platform webhooks and the OAuth callback that finishes Connect, with per-method throttling, a usage plan, request validation and X-Ray. See [ADR-24](DECISIONS.md#adr-24-a-separate-rest-api-for-public-platform-webhooks). |
-| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, skills (write, upload, read, change, delete), starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`), the posting setup (keys to Secrets Manager, Check it, Connect start, choose, disconnect, TikTok's verification file to the web bucket). |
+| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, skills (write, upload, read, change, delete), starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`), the posting setup (keys to Secrets Manager, Check it, Connect start, choose, disconnect, TikTok's verification file to the web bucket), and Ask Clip Factory ([flow 17](#17-ask-clip-factory-the-help-assistant): search, compose, the optional Haiku rewrite; the help code loads only on its two routes). |
 | AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda | `cf-prod-learn` | The weekly best ([flow 14](#14-best-of-the-week)): marks the starred clips' vectors `best`, asks Claude Fable 5.1 (with the skills block) for one "Best of week" learning. See [ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal). |
 | Amazon EventBridge | rule `cf-prod-stats`, `rate(15 minutes)` | The only schedule in the system: one tick for the stats poller, its rate taken from the smallest interval in `config/platforms.json`. A few thousand invocations a month. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
@@ -97,9 +100,10 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | AWS Secrets Manager | `cf-prod/oauth/state-key` (Terraform, write-only value) and `cf-prod/platforms/{platform}/{app,token,pending}` (created at runtime) | The only place for the owner's platform app keys and account tokens, and the key that signs the Connect `state` ([flow 16](#16-set-up-posting-connect-and-real-posting), [ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). `cf-prod-api` and `cf-prod-hooks` write all of them; `cf-prod-clip-flow` and `cf-prod-stats` can read `cf-prod/platforms/*` but write only the token secrets `cf-prod/platforms/*/token-*` (Terraform output `platform_token_secrets_arn` of the hooks module). At most about 16 secrets. |
 | Amazon Bedrock AgentCore Runtime | `cf_prod_clip_agent` | Runs the agent container for as long as a job needs, one isolated session per job. See [ADR-03](DECISIONS.md#adr-03-amazon-bedrock-agentcore-runtime--claude-agent-sdk-for-the-agent). |
 | Amazon Bedrock | Claude Fable 5.1 (global profile), Titan Text Embeddings V2 (in-Region) | Fable: moment selection, facecam detection, checklist judgement, captions, learnings. Every Fable call, through the Agent SDK or Converse, gets the owner's skills block first ([flow 15](#15-skills-every-ai-call-gets-every-skill)). Titan: 1024-number embeddings of clip text for S3 Vectors (no skills: not text generation). |
+| Amazon Bedrock | Claude Haiku 5.5 (EU profile `eu.anthropic.claude-haiku-5-5`) | Ask Clip Factory only: rewrites a found answer in friendlier words. Optional, capped at 2,000 answers per 30 days, EU Regions only. See [ADR-39](DECISIONS.md#adr-39-help-runs-in-cf-prod-api-with-claude-haiku-55-through-the-eu-profile). |
 | Amazon Transcribe | batch jobs | Word-level timestamps and language detection. |
 | Amazon ECR | agent repository | The ARM64 agent image, tagged by a hash of its sources. |
-| Amazon CloudWatch | logs, alarms | JSON logs for every function and the agent; access logs for the WebSocket and REST APIs (never the query string); alarms on Lambda errors, failed or timed-out durable executions, stream lag and REST 5xx. |
+| Amazon CloudWatch | logs, alarms | JSON logs for every function and the agent; access logs for the WebSocket and REST APIs (never the query string); alarms on Lambda errors, failed or timed-out durable executions, stream lag, REST 5xx and help model failures (metric filter `cf-prod/HelpModelFailures`, alarm `cf-prod-help-model-failures`). |
 | Amazon SNS | `cf-prod-alarms` | Emails `alarm_email` when an alarm fires (optional). |
 | AWS IAM | GitHub OIDC deploy role, one role per function, the API Gateway logging role | No long-lived keys anywhere; each function can touch only what it needs. |
 | Amazon OpenSearch Serverless | not deployed | Shown dashed in the diagram as an option for keyword or hybrid search later ([ADR-25](DECISIONS.md#adr-25-s3-vectors-for-the-learning-memory-opensearch-not-deployed)). |
@@ -112,7 +116,7 @@ All nine share one zip (`api/dist/lambda.zip`), Python 3.13, arm64, JSON logs, X
 
 | Function | Started by | Memory / timeout | Durable |
 |---|---|---|---|
-| `cf-prod-api` | HTTP API | as before | no |
+| `cf-prod-api` | HTTP API | 512 MB / 29 s (unchanged by help) | no |
 | `cf-prod-job-flow` | `cf-prod-api`, async invoke of alias `live` | 256 MB / 120 s per invocation; whole execution up to 8 h 30 min | yes, retention 14 days |
 | `cf-prod-clip-flow` | `cf-prod-api`, async invoke of alias `live` | 1024 MB / 900 s per invocation (chunked uploads); whole execution up to 3 days | yes, retention 14 days |
 | `cf-prod-ws-authorizer` | WebSocket `$connect` | 128 MB / 10 s | no |
@@ -796,6 +800,7 @@ flowchart LR
   BLK --> A2[Agent: Converse fallback, facecam, checklist and hooks, captions]
   BLK --> A3[API: clip-flow distil, 48 h]
   BLK --> A4[API: cf-prod-learn, weekly best]
+  BLK --> A5[API: Ask Clip Factory, Haiku rewrite]
   T[Titan embeddings] -.no skills, not text generation.-> V[(S3 Vectors)]
 ```
 
@@ -812,6 +817,7 @@ that process and the call is retried without it.
 | Agent (AgentCore Runtime) | Agent SDK moment picking; Converse: moment fallback, facecam, checklist (with the hook rewrite), captions | once per job at `analyze`; also written to `.claude/skills/` for the SDK |
 | `cf-prod-clip-flow` step `distil` | `learn.converse_text` | `skill_prompt.load_skills` just before the call |
 | `cf-prod-learn` | `learn.converse_text` | `skill_prompt.load_skills` just before the call |
+| `cf-prod-api`, Ask Clip Factory ([flow 17](#17-ask-clip-factory-the-help-assistant)) | `learn.converse_text` (Haiku 5.5, JSON schema) | `skill_prompt.load_block` per answer that reaches the model |
 
 The Lambda loader reads the owner's `SKILL#` items with one Query and each file through a small in-memory cache keyed
 by the S3 key (at most 64 files and 16 MB per container), so a warm Lambda reads S3 only after a skill changes. Both
@@ -899,6 +905,58 @@ sent as a file read from S3 in 8 MB ranges:
 Disconnect (after an 8-second Undo in the app) revokes the token where possible, deletes the token secret and, for
 YouTube, asks `cf-prod-stats` to `forget` stored YouTube numbers.
 
+### 17. Ask Clip Factory: the help assistant
+
+The owner asks "how do I…" or "where is…" and gets short steps plus a button that opens the page and lights up the
+control ([CONTRACTS.md §19](CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16),
+[HELP_ASSISTANT.md](HELP_ASSISTANT.md), [ADR-38](DECISIONS.md#adr-38-bm25-over-vectors-for-help-and-the-model-is-optional),
+[ADR-39](DECISIONS.md#adr-39-help-runs-in-cf-prod-api-with-claude-haiku-55-through-the-eu-profile)).
+
+**Build time.** `web/scripts/help-corpus.mjs` turns the router, the navigation, the Settings tree, the screens and the
+curated guides (`helpKb.json`) into `help-corpus.json` (committed). The Vite build also emits a content-hashed copy,
+`/assets/help-corpus.<hash>.json` (cached forever), and names it in a `cf-help-corpus` meta tag in `index.html` (never
+cached), so the API always finds the corpus that matches the deployed screens. `build_lambda.py` bundles the same file
+into the Lambda zip as the fallback.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant W as Web app (Ask panel)
+  participant A as cf-prod-api (help)
+  participant D as DynamoDB
+  participant C as CloudFront (app)
+  participant B as Bedrock (Haiku 5.5, EU profile)
+  W->>A: POST /v1/help/answers {question, history ≤ 4, context}
+  A->>D: HELP / SWITCH (at most every 60 s)
+  A->>D: USER# / HELP#RATE: conditional update (6 a minute, 60 an hour)
+  opt corpus older than 10 minutes
+    A->>C: GET /index.html, read the cf-help-corpus meta
+    A->>C: GET /assets/help-corpus.{hash}.json (same origin only)
+  end
+  A->>A: when filter (device, os, installed), refusal check, BM25 top 6, compose
+  alt known, model allowed, cap reserved (HELP / CAP#window)
+    A->>B: Converse: the owner's skills block, then the rules, JSON schema, maxTokens 700
+    B-->>A: {known, text, steps, actionIds, sourceIds}
+    A->>A: ground check (buttons, paths, numbers), else the composed answer
+  end
+  A-->>W: answer, mode, requestId (one help.answer log line, no text)
+  opt answer has a live number
+    W->>A: GET /v1/weeks/{week} or /v1/me (the owner's token, as the pages do)
+  end
+  W->>W: button: route check, unsaved guard, navigate, spotlight data-help
+```
+
+- **Without the model** the composed answer is complete; the model only rewords it. Unknown and refused questions
+  never reach Bedrock. Any model problem (timeout, bad JSON, a stop reason, an invented button or number) returns the
+  composed answer with `mode: "kb"`.
+- **Skills**: like every model call ([flow 15](#15-skills-every-ai-call-gets-every-skill)), the help call goes through
+  `learn.converse_text`, so the owner's skills block (`skill_prompt.load_block`) comes first and the help rules after
+  it; the rules keep facts to the knowledge, the skills set the tone and the clip advice. If the skills cannot be read,
+  the model is not called and the composed answer is used (outcome `kb_skills`).
+- **In the browser**: help calls use their own quiet `fetch` (27 s timeout), so no page refetches. On a network
+  error, a timeout or a 5xx the panel answers from its own copy of the corpus with the same rules; on 429 it shows a
+  countdown and never retries by itself; on `help_off` the launcher disappears and the local copy is not used.
+
 ## Failure handling
 
 | What can fail | What happens |
@@ -943,6 +1001,12 @@ YouTube, asks `cf-prod-stats` to `forget` stored YouTube numbers.
 | The new service worker is slow to activate | The reload bar creeps, and after 10 s the page reloads anyway. |
 | `release-areas.sh` finds nothing usable | The label is "Improvements". The deploy never fails because of labels. |
 | A desktop build fails | The `desktop` job fails on its own; the web deploy has already finished. The old files and `manifest.json` stay. |
+| The help model is slow, failing or not yet subscribed | Timeouts (3 s connect, 10 s read, no retry) and a 24 s deadline end the call; the owner gets the composed answer. Ten failures in an hour raise `cf-prod-help-model-failures`. |
+| The help model's answer is not grounded | Unknown action ids are dropped; an unknown bold button name, path or number sends back the composed answer (outcome `kb_ungrounded`). |
+| The deployed help corpus cannot be fetched or is invalid | The last good copy stays in use, else the copy bundled in the zip. |
+| The help API is unreachable or answers 5xx | The panel answers locally from the same corpus and shows "Copy the help code". |
+| Too many help questions | `429` with `Retry-After`; the panel counts down and never retries by itself. |
+| The help assistant must stop now | Kill switch `HELP` / `SWITCH` (60 s), no deploy ([DEPLOYMENT.md](DEPLOYMENT.md#ask-clip-factory-kill-switch)). |
 | A download file is missing | `manifest.json` does not list it; Get the app falls back to the browser install. The next deploy rebuilds it. |
 
 ## Cost notes
@@ -964,6 +1028,7 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | X API | Pay per use: $0.015 per post; about $0.005 per post read, a post read again on the same UTC day free, so about $0.15 per post over its 30 days | posts and reads together capped at $10 by the app ([DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)) |
 | AWS Secrets Manager | At most about 16 secrets (the state key, and an app, token and short-lived pending secret per platform) at $0.40 each, plus API calls (cached 5 minutes) | about $6 at most |
 | `cf-prod-learn` | One small Fable 5.1 call per changed set of weekly picks | cents |
+| Bedrock, Claude Haiku 5.5 (help) | Only questions that found a match: about 1 to 2.5k input and 150 to 400 output tokens each; capped at 2,000 answers per 30 days | cents at normal use; a few dollars at the cap |
 | S3 | Clips kept; sources expire after 14 days | under $1 |
 | CloudFront | Web app, config, `version.json` checks, desktop downloads (about 10 MB each) | under $1 |
 | OpenSearch Serverless | not deployed (would have a standing minimum of OCUs) | $0 |
@@ -1011,6 +1076,11 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 - **Facebook metrics are changing.** Graph API v25.0 retires `post_impressions_unique`, `total_video_impressions*` and
   `total_video_views_unique` when v26.0 ships, so they are never read; reach comes from
   `post_total_media_view_unique`, guarded (absent if it errors). The Graph version lives in `config/platforms.json`.
+- **Help knows the app, not the world.** Ask Clip Factory answers only from the corpus built from the app; anything
+  else gets "I don't know that one yet." It never reads the owner's clips itself; numbers come from the browser.
+- **Help model first use.** Haiku 5.5 is billed through AWS Marketplace; on an account that has never used it the
+  first calls may fail, and a new output schema can take Bedrock about 90 s to compile once. Both fall back to the
+  plain answer ([DEPLOYMENT.md](DEPLOYMENT.md#4-bedrock-model-access-and-data-retention)).
 - **Snapshots last 90 days** (TTL); the latest totals stay on the post for as long as the clip exists.
 - **Each platform's app belongs to the owner** ([ADR-33](DECISIONS.md#adr-33-posting-setup-bring-your-own-keys-with-a-guided-list-per-platform)),
   so the platforms' limits for new apps apply: TikTok posts stay "Only me" until TikTok approves the app and its
