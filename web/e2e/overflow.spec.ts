@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { CLIPS, findOverflow, openClip, resolveRoute, ROUTES, settle, WIDTHS } from "./helpers.ts";
 
+const SKILL_PAGES = { written: "01JZ8S00000000000000000001", zip: "01JZ8S00000000000000000002", tricky: "01JZ8S00000000000000000003" };
+
 // Nothing may run out of its box, at any width from 320px up, on any screen (docs/CONTRACTS.md §11).
 for (const width of WIDTHS) {
   test(`no overflow on any screen at ${width}px`, async ({ page }) => {
@@ -44,12 +46,13 @@ for (const width of WIDTHS) {
     state = await findOverflow(page);
     for (const o of state.items) failures.push(`/review (open, undo toast): ${o.selector} "${o.text}"`);
 
-    await page.goto("/settings/clip-making/skills");
+    // A skill's page with tricky text (raw HTML, long lines), and the delete sheet over it.
+    await page.goto(`/settings/clip-making/skills/${SKILL_PAGES.tricky}`);
     await settle(page);
-    await page.getByRole("button", { name: "View" }).first().click();
-    await page.locator(".code").first().waitFor();
+    await page.getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("dialog").waitFor();
     state = await findOverflow(page);
-    for (const o of state.items) failures.push(`/settings skills (skill open): ${o.selector} "${o.text}"`);
+    for (const o of state.items) failures.push(`/settings skill (delete sheet): ${o.selector} "${o.text}"`);
 
     // Find a setting with results, and with nothing found.
     await page.goto("/settings");
@@ -70,6 +73,8 @@ for (const width of WIDTHS) {
     await page.getByRole("switch", { name: "Make it fail" }).click();
     await page.getByRole("button", { name: "Try it: Sign in" }).click();
     await page.getByText("Wrong password. Try again.").waitFor();
+    // The "no" shake moves the button 6 px for 320 ms; measure once it has stopped, not mid-shake.
+    await page.waitForFunction(() => !document.getAnimations().some((x) => (x as CSSAnimation).animationName === "try-shake" && x.playState === "running"));
     state = await findOverflow(page);
     for (const o of state.items) failures.push(`/settings sounds (failed try): ${o.selector} "${o.text}"`);
     if (state.page > state.viewport) failures.push(`/settings sounds: page scrolls sideways`);
@@ -152,6 +157,44 @@ for (const width of [320, 375, 600, 768, 1024, 1440]) {
     await page.getByRole("link", { name: "Earlier week" }).click();
     await settle(page);
     await check("/library?view=week (last week)");
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+}
+
+// The Skills branch and its pages (§18.7): list, write, a skill (with its markdown), its edit form, at every size.
+for (const width of [320, 375, 600, 768, 1024, 1440, 1920]) {
+  test(`skills pages fit at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const failures: string[] = [];
+    const check = async (label: string) => {
+      const result = await findOverflow(page);
+      if (result.page > result.viewport) failures.push(`${label}: page scrolls sideways (${result.page}px > ${result.viewport}px)`);
+      for (const o of result.items) failures.push(`${label}: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);
+    };
+    const base = "/settings/clip-making/skills";
+    for (const path of [
+      base,
+      `${base}/new`,
+      `${base}/${SKILL_PAGES.written}`,
+      `${base}/${SKILL_PAGES.zip}`,
+      `${base}/${SKILL_PAGES.tricky}`,
+      `${base}/builtin-short-form-video-playbook`,
+      `${base}/${SKILL_PAGES.written}/edit`,
+      `${base}/${SKILL_PAGES.zip}/edit`,
+      `${base}/nope`,
+    ]) {
+      await page.goto(path);
+      await settle(page);
+      await check(path);
+    }
+    // Long unbroken words in every field, with their counters and hints.
+    await page.goto(`${base}/new`);
+    await settle(page);
+    await page.getByLabel("What is the skill called?").fill("W".repeat(70));
+    await page.getByLabel("When should Clip Factory use it?").fill("x".repeat(400));
+    await page.getByLabel("What should it do?").fill("https://example.com/" + "y".repeat(600));
+    await page.getByRole("button", { name: "Save skill" }).click();
+    await check(`${base}/new (long words, errors)`);
     expect(failures, failures.join("\n")).toEqual([]);
   });
 }

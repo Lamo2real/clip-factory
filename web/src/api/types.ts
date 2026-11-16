@@ -102,16 +102,46 @@ export interface Clip {
   totalViews?: number;
 }
 
+/** One skill (docs/CONTRACTS.md §5, §18). Every skill is always used: there is no on/off switch. */
 export interface Skill {
   skillId: string;
+  /** The frontmatter slug. */
   name: string;
+  /** The name people see (§18.2). */
+  title: string;
   description: string;
-  enabled: boolean;
   builtin: boolean;
+  source: "builtin" | "written" | "upload";
   format: "md" | "zip";
+  /** Bytes of the stored file. */
   size: number;
   createdAt: string;
+  updatedAt: string;
+  /** ≥ 1; sent back on every save so a change made somewhere else is noticed (§18.4). */
+  version: number;
 }
+
+/** The three questions of "Write a skill" (§18.2). */
+export interface SkillForm {
+  title: string;
+  description: string;
+  instructions: string;
+}
+
+/** GET /v1/skills/{skillId} (§18.3). */
+export interface SkillDetail {
+  skill: Skill;
+  /** The SKILL.md text. */
+  content: string;
+  /** null for built-ins, or when it cannot be changed here (`formBlocked` says why). */
+  form: SkillForm | null;
+  formBlocked?: "builtin" | "too_long";
+  /** Zip only: the other files inside, sorted; [] for .md. */
+  files: string[];
+}
+
+/** PUT /v1/skills/{skillId}: the form, or a whole new file, with the version last read. */
+export type SkillUpdate = { version: number } & (SkillForm | { key: string });
 
 export interface Settings {
   clipMin: number;
@@ -359,12 +389,19 @@ export interface Api {
   updateClip(clipId: string, captions: Partial<Captions>): Promise<Clip>;
   confirmClip(clipId: string, captions?: Partial<Captions>): Promise<{ clip: Clip; posts: Post[] }>;
   declineClip(clipId: string): Promise<Clip>;
+  /** GET /v1/skills: built-ins first, then the owner's, by name (§18.3). */
   listSkills(): Promise<Skill[]>;
-  createSkillUpload(filename: string): Promise<PresignedPut & { skillId: string }>;
+  /** GET /v1/skills/{skillId}. */
+  getSkill(skillId: string): Promise<SkillDetail>;
+  /** POST /v1/skills with the three answers (§18.2). */
+  writeSkill(form: SkillForm): Promise<Skill>;
+  /** PUT /v1/skills/{skillId} (§18.4); 409 when `version` is stale. */
+  updateSkill(skillId: string, body: SkillUpdate): Promise<Skill>;
+  /** POST /v1/skills/uploads; with `skillId` the file replaces that skill's file (§18.4). */
+  createSkillUpload(filename: string, skillId?: string): Promise<PresignedPut & { skillId: string }>;
+  /** POST /v1/skills after the upload. */
   createSkill(body: { skillId: string; key: string }): Promise<Skill>;
-  setSkillEnabled(skillId: string, enabled: boolean): Promise<Skill>;
   deleteSkill(skillId: string): Promise<void>;
-  skillContent(skillId: string): Promise<string>;
   getSettings(): Promise<Settings>;
   putSettings(patch: Partial<Settings>): Promise<Settings>;
   createCookiesUpload(filename: string): Promise<PresignedPut>;

@@ -12,7 +12,9 @@ const DESKTOP = { viewport: { width: 1280, height: 900 } } as const;
 /** The navigation that is showing: the icon tab bar on phones, the sidebar on larger screens. */
 const nav = (page: Page) => page.locator("nav.tabbar, nav.sidebar").filter({ visible: true });
 
-const SCREENS = ["/", "/jobs", "/review", "/library", ...SETTINGS_ROUTES, "/get-app", "/nope"];
+/** The Skills pages under their branch (§18.7): write, a skill, its edit form. */
+const SKILL_SCREENS = ["new", "01JZ8S00000000000000000001", "01JZ8S00000000000000000001/edit"].map((p) => `/settings/clip-making/skills/${p}`);
+const SCREENS = ["/", "/jobs", "/review", "/library", ...SETTINGS_ROUTES, ...SKILL_SCREENS, "/get-app", "/nope"];
 
 for (const [name, use] of [
   ["phone", PHONE],

@@ -67,16 +67,16 @@ export const TREES: Tree[] = [
         icon: "file",
         apples: [
           {
-            id: "add-skill",
-            name: "Add a skill",
-            leaf: "A SKILL.md file (up to 1 MB) or a .zip with one inside (up to 20 MB).",
-            words: ["upload", "md", "zip", "new skill"],
-          },
-          {
             id: "your-skills",
             name: "Your skills",
-            leaf: "Skills that are on are used every time you make clips.",
-            words: ["switch", "turn off", "delete", "view"],
+            leaf: "Clip Factory uses every skill here, every time it makes or checks anything.",
+            words: ["read", "edit", "change", "delete", "always used"],
+          },
+          {
+            id: "add-skill",
+            name: "Add a skill",
+            leaf: "Write one by answering three easy questions, or upload a skill file from your computer.",
+            words: ["write", "new", "upload", "md", "zip"],
           },
         ],
       },

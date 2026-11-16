@@ -13,12 +13,15 @@ export type ErrorCode =
 export class ApiError extends Error {
   readonly status: number;
   readonly code: ErrorCode;
+  /** Which form field the problem is in, when the server says (`error.field`, e.g. "title"). */
+  readonly field?: string;
 
-  constructor(status: number, code: ErrorCode, message: string) {
+  constructor(status: number, code: ErrorCode, message: string, field?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    if (field) this.field = field;
   }
 }
 
@@ -51,12 +54,13 @@ function codeForStatus(status: number): ErrorCode {
  * The server's message is used when present because the contract makes it a plain sentence for the owner.
  */
 export function errorFromResponse(status: number, body: unknown): ApiError {
-  const envelope = (body as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+  const envelope = (body as { error?: { code?: unknown; message?: unknown; field?: unknown } } | null)?.error;
   const rawCode = typeof envelope?.code === "string" ? envelope.code : "";
   const code: ErrorCode = KNOWN.has(rawCode) ? (rawCode as ErrorCode) : codeForStatus(status);
   const message =
     typeof envelope?.message === "string" && envelope.message.trim() ? envelope.message.trim() : FALLBACK[code];
-  return new ApiError(status, code, message);
+  const field = typeof envelope?.field === "string" && /^[a-z]{1,40}$/i.test(envelope.field) ? envelope.field : undefined;
+  return new ApiError(status, code, message, field);
 }
 
 export function networkError(): ApiError {

@@ -93,6 +93,33 @@ describe("httpApi", () => {
     });
   });
 
+  it("skills: read one, write, update with the version, replace a file (§18)", async () => {
+    const skill = { skillId: "S1", version: 2 };
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === "GET" ? json(200, { skill, content: "x", form: null, files: [] }) : json(200, { skill }),
+    );
+    const api = httpApi({ baseUrl: "https://api.test", auth: auth(["tok"]), fetcher });
+    await expect(api.getSkill("S1")).resolves.toMatchObject({ content: "x" });
+    await api.writeSkill({ title: "T", description: "When.", instructions: "Do." });
+    await api.updateSkill("S1", { version: 2, title: "T", description: "When.", instructions: "Do." });
+    await api.createSkillUpload("a.md", "S1");
+    const calls = fetcher.mock.calls.map(([url, init]) => [init?.method, url, init?.body]);
+    expect(calls).toEqual([
+      ["GET", "https://api.test/v1/skills/S1", undefined],
+      ["POST", "https://api.test/v1/skills", JSON.stringify({ title: "T", description: "When.", instructions: "Do." })],
+      ["PUT", "https://api.test/v1/skills/S1", JSON.stringify({ version: 2, title: "T", description: "When.", instructions: "Do." })],
+      ["POST", "https://api.test/v1/skills/uploads", JSON.stringify({ filename: "a.md", skillId: "S1" })],
+    ]);
+  });
+
+  it("keeps the server's field hint on an error", async () => {
+    const fetcher = vi.fn(async () =>
+      json(409, { error: { code: "conflict", message: "You already have a skill called X. Pick another name.", field: "title" } }),
+    );
+    const api = httpApi({ baseUrl: "https://api.test", auth: auth(["tok"]), fetcher });
+    await expect(api.writeSkill({ title: "X", description: "abc", instructions: "y" })).rejects.toMatchObject({ status: 409, field: "title" });
+  });
+
   it("treats 204 as success with no body", async () => {
     const fetcher = vi.fn(async () => new Response(null, { status: 204 }));
     const api = httpApi({ baseUrl: "https://api.test", auth: auth(["tok"]), fetcher });

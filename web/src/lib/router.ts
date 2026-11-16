@@ -16,6 +16,11 @@ export type Route =
   | { name: "clip"; clipId: string }
   /** Settings is a tree (docs/CONTRACTS.md §15.1): the field, a tree, or one of its branches. */
   | { name: "settings"; tree: string | null; branch: string | null }
+  /**
+   * A skill under Settings › Clip making › Skills (§18.7): writing a new one, reading one, or changing one.
+   * `skillId` null with mode "read" is an address that cannot be a skill ("We could not find that skill").
+   */
+  | { name: "skill"; mode: "new" | "read" | "edit"; skillId: string | null }
   | { name: "get_app" }
   | { name: "not_found" };
 
@@ -35,6 +40,8 @@ export function match(pathname: string, search = ""): Route {
   }
   const clip = /^\/clips\/([A-Za-z0-9_-]{1,64})$/.exec(path);
   if (clip) return { name: "clip", clipId: clip[1]! };
+  const skill = /^\/settings\/clip-making\/skills\/(.+)$/.exec(path);
+  if (skill) return skillRoute(skill[1]!);
   const settings = /^\/settings(?:\/([a-z-]{1,40}))?(?:\/([a-z-]{1,40}))?$/.exec(path);
   if (settings) {
     const [, treeSlug, branchSlug] = settings;
@@ -49,6 +56,31 @@ export function match(pathname: string, search = ""): Route {
   return { name: "not_found" };
 }
 
+/** Owner skills have ULIDs; built-ins are `builtin-<name>` (§18.7). */
+export const SKILL_ID_RE = /^(?:[0-9A-HJKMNP-TV-Z]{26}|builtin-[a-z0-9-]{1,64})$/;
+
+/** The base of every skill page. */
+export const SKILLS_PATH = "/settings/clip-making/skills";
+
+export function skillPath(skillId: string | null, mode: "read" | "edit" = "read"): string {
+  if (!skillId) return `${SKILLS_PATH}/new`;
+  return `${SKILLS_PATH}/${encodeURIComponent(skillId)}${mode === "edit" ? "/edit" : ""}`;
+}
+
+function skillRoute(rest: string): Route {
+  if (rest === "new") return { name: "skill", mode: "new", skillId: null };
+  const parts = rest.split("/");
+  let id: string;
+  try {
+    id = decodeURIComponent(parts[0]!);
+  } catch {
+    id = "";
+  }
+  const mode = parts.length === 1 ? "read" : parts.length === 2 && parts[1] === "edit" ? "edit" : null;
+  if (!mode || !SKILL_ID_RE.test(id)) return { name: "skill", mode: "read", skillId: null };
+  return { name: "skill", mode, skillId: id };
+}
+
 const listeners = new Set<() => void>();
 const here = () => location.pathname + location.search + location.hash;
 // The hash is part of what is watched, so a jump to `#an-apple` on the same page is noticed too.
@@ -59,8 +91,35 @@ function emit() {
   for (const fn of listeners) fn();
 }
 
+/**
+ * A page with unsaved typing can stop the owner leaving (§18.7 "Leave without saving?"). The guard gets where the
+ * owner wants to go and a function that goes there; it returns true when it is holding them (it shows its own
+ * question and calls `proceed` on Leave).
+ */
+export type LeaveGuard = (to: string, proceed: () => void) => boolean;
+let guard: LeaveGuard | null = null;
+
+/** Installs a leave guard until the returned function is called. */
+export function setLeaveGuard(g: LeaveGuard): () => void {
+  guard = g;
+  return () => {
+    if (guard === g) guard = null;
+  };
+}
+
+const samePage = (a: string, b: string) => a.split("#")[0] === b.split("#")[0];
+
 if (typeof window !== "undefined") {
-  window.addEventListener("popstate", () => transition(emit));
+  window.addEventListener("popstate", () => {
+    const to = here();
+    const from = href;
+    if (guard && !samePage(to, from) && guard(to, () => navigate(to, { replace: true, force: true }))) {
+      // Browser Back already moved the address: put this page back while the owner decides.
+      history.pushState({ cfDepth: depth() + 1 }, "", from);
+      return;
+    }
+    transition(emit);
+  });
   window.addEventListener("hashchange", emit);
 }
 
@@ -102,8 +161,12 @@ function transition(update: () => void) {
   vt.finished.then(done, done);
 }
 
-export function navigate(to: string, { replace = false } = {}) {
+export function navigate(to: string, { replace = false, force = false } = {}) {
   if (to === here()) return;
+  if (!force && guard && !samePage(to, here())) {
+    const g = guard;
+    if (g(to, () => navigate(to, { replace, force: true }))) return;
+  }
   transition(() => {
     if (replace) history.replaceState({ cfDepth: depth() }, "", to);
     else history.pushState({ cfDepth: depth() + 1 }, "", to);
@@ -159,6 +222,8 @@ export function section(route: Route): "home" | "jobs" | "review" | "library" | 
       return "jobs";
     case "clip":
       return "library";
+    case "skill":
+      return "settings";
     case "not_found":
       return null;
     default:

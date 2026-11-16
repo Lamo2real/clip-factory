@@ -1,12 +1,20 @@
 // Realistic demo data for mock mode: jobs in every state, clips waiting for review, posts with 48-hour numbers.
-import type { Account, Captions, Clip, Job, Learning, MomentType, Platform, Post, SeriesPoint, Settings, Skill, Step, StepKey } from "../types.ts";
+import type { Account, Captions, Clip, Job, Learning, MomentType, Platform, Post, SeriesPoint, Settings, Step, StepKey } from "../types.ts";
 import { isoWeek, weekRange, shiftWeek, weekStart } from "../../lib/week.ts";
 import { coverArt, thumbArt } from "./art.ts";
+import type { MockSkill } from "./skills.ts";
 import { growth, metricsFor, type WeekItem } from "./statsData.ts";
 
 const B32 = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 let counter = 0;
 /** A ULID-shaped id (26 chars, time-sortable). Deterministic randomness keeps screenshots stable. */
+/** The fixture skills' ids (§18.9): a written .md, a .zip, and one with tricky bits. */
+export const SKILL_IDS = {
+  written: "01JZ8S00000000000000000001",
+  zip: "01JZ8S00000000000000000002",
+  tricky: "01JZ8S00000000000000000003",
+} as const;
+
 export function ulid(time = Date.now()): string {
   let t = time;
   let head = "";
@@ -108,7 +116,7 @@ export interface Store {
   jobs: Job[];
   clips: Clip[];
   posts: Post[];
-  skills: (Skill & { content: string })[];
+  skills: MockSkill[];
   learnings: Learning[];
   settings: Settings;
   accounts: Account[];
@@ -365,42 +373,72 @@ export function seed(): Store {
   starred.best = true;
   starred.bestWeek = lastWeek;
   clips.push(...older);
+  // Fixed ids, so a skill page can be opened by its address and survives a reload (the mock keeps nothing else).
   const skills: Store["skills"] = [
     {
       skillId: "builtin-short-form-video-playbook",
       name: "short-form-video-playbook",
+      title: "Short form video playbook",
       description:
         "Plan, script, hook, edit and package videos and clips for TikTok, Reels, Shorts and YouTube.",
-      enabled: true,
       builtin: true,
+      source: "builtin",
       format: "md",
       size: 7847,
-      createdAt: iso(30 * 24 * HOUR),
+      createdAt: "2026-11-15T00:00:00.000Z",
+      updatedAt: "2026-11-15T00:00:00.000Z",
+      version: 1,
+      files: [],
       content:
-        "---\nname: short-form-video-playbook\ndescription: Plan, script, hook, edit and package videos and clips.\n---\n\n# Short-form and YouTube video playbook\n\nA repeatable system for making videos and clips that people click on and watch to the end.\n\n## A. Clip\n\n1. Find the moment: a reaction, a fight, a fail, a hot take.\n2. Hook in the first second. Put the payoff on screen early.\n3. Captions big, centred, two to four words at a time.\n4. End on a loop so the replay feels seamless.\n",
+        "---\nname: short-form-video-playbook\ndescription: Plan, script, hook, edit and package videos and clips.\n---\n\n# Short-form and YouTube video playbook\n\nA repeatable system for making videos and clips that people **click on** and *watch to the end*.\n\n## A. Clip\n\n1. Find the moment: a reaction, a fight, a fail, a hot take.\n2. Hook in the first second. Put the payoff on screen early.\n3. Captions big, centred, two to four words at a time.\n4. End on a loop so the replay feels seamless.\n\n> Short beats long when in doubt.\n\n```\nhook -> payoff -> loop\n```\n",
     },
     {
-      skillId: ulid(Date.now() - 6 * 24 * HOUR),
+      skillId: SKILL_IDS.written,
       name: "gta-rp-hooks",
-      description: "Hooks and caption rules that work for GTA roleplay clips: name the character, tease the betrayal.",
-      enabled: true,
+      title: "GTA RP hooks",
+      description: "Every time it picks moments and writes hooks for my GTA roleplay clips.",
       builtin: false,
+      source: "written",
       format: "md",
       size: 2310,
       createdAt: iso(6 * 24 * HOUR),
+      updatedAt: iso(3 * 24 * HOUR),
+      version: 2,
+      files: [],
       content:
-        "---\nname: gta-rp-hooks\ndescription: Hooks and caption rules for GTA roleplay clips.\n---\n\n# GTA RP hooks\n\n- Lead with the character's name when the audience knows them.\n- Tease the betrayal, never reveal it in the hook.\n- Keep police chases under 40 seconds.\n",
+        '---\nname: gta-rp-hooks\ndescription: "Every time it picks moments and writes hooks for my GTA roleplay clips."\n---\n\n# GTA RP hooks\n\n- Lead with the character\'s name when the audience knows them.\n- Tease the betrayal, never reveal it in the hook.\n- Keep police chases under 40 seconds.\n',
     },
     {
-      skillId: ulid(Date.now() - 2 * 24 * HOUR),
+      skillId: SKILL_IDS.zip,
       name: "brand-voice",
+      title: "Brand voice",
       description: "The channel's tone: dry, quick, never mean. Banned words and the sign-off line.",
-      enabled: false,
       builtin: false,
+      source: "upload",
       format: "zip",
       size: 18_402,
       createdAt: iso(2 * 24 * HOUR),
-      content: "---\nname: brand-voice\ndescription: The channel's tone.\n---\n\n# Brand voice\n\nDry, quick, never mean.\n",
+      updatedAt: iso(2 * 24 * HOUR),
+      version: 1,
+      files: ["banned-words.txt", "examples/sign-off.txt"],
+      content:
+        "---\nname: brand-voice\ndescription: \"The channel's tone: dry, quick, never mean. Banned words and the sign-off line.\"\nlicense: Own words\n---\n\n# Brand voice\n\nDry, quick, never mean. See banned-words.txt for the words to leave out.\n",
+    },
+    {
+      skillId: SKILL_IDS.tricky,
+      name: "safety-test",
+      title: "Safety test",
+      description: "A skill with tricky bits in it, to show they stay plain words.",
+      builtin: false,
+      source: "upload",
+      format: "md",
+      size: 412,
+      createdAt: iso(26 * HOUR),
+      updatedAt: iso(26 * HOUR),
+      version: 1,
+      files: [],
+      content:
+        "---\nname: safety-test\ndescription: A skill with tricky bits in it, to show they stay plain words.\n---\n\n# Safety test\n\n<script>alert(1)</script>\n\n<img src=x onerror=alert(2)>\n\nDo not [tap this](javascript:alert(3)). A real link: [Clip Factory help](https://example.com/help).\n\n![a cat](https://example.com/cat.png)\n",
     },
   ];
 

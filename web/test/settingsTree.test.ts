@@ -31,7 +31,8 @@ describe("the settings tree", () => {
         expect(b.apples.length).toBeGreaterThan(0);
         for (const a of b.apples) {
           expect(a.name.trim()).not.toBe("");
-          expect(a.leaf.length).toBeLessThanOrEqual(100);
+          // One short line; the Add a skill leaf is the contract's own words (§18.7), 103 letters.
+          expect(a.leaf.length).toBeLessThanOrEqual(110);
           expect(a.leaf).toMatch(/\.$/);
         }
       }
@@ -40,6 +41,13 @@ describe("the settings tree", () => {
   it("the Sounds branch has Sounds, Click sound, Error sound and Try it", () => {
     const sounds = TREES[2]!.branches[0]!;
     expect(sounds.apples.map((a) => a.name)).toEqual(["Sounds", "Click sound", "Error sound", "Try it"]);
+  });
+
+  it("the Skills branch has Your skills, then Add a skill, with no switch words (§18.7)", () => {
+    const skills = TREES[0]!.branches[1]!;
+    expect(skills.apples.map((a) => a.id)).toEqual(["your-skills", "add-skill"]);
+    expect(skills.apples[0]!.leaf).toBe("Clip Factory uses every skill here, every time it makes or checks anything.");
+    expect(JSON.stringify(skills)).not.toMatch(/switch|turn off/i);
   });
 
   it("hides Get the app once the app is installed", () => {
@@ -118,6 +126,8 @@ describe("Find a setting", () => {
     expect(names("error")[0]).toBe("Error sound");
     expect(names("Sign OUT")[0]).toBe("Sign out");
     expect(names("skill")).toEqual(expect.arrayContaining(["Add a skill", "Your skills"]));
+    expect(names("write a skill")[0]).toBe("Add a skill");
+    expect(names("always used")[0]).toBe("Your skills");
   });
 
   it("finds apples by their leaf, and says so", () => {

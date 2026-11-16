@@ -92,6 +92,21 @@ test.describe("on a phone", () => {
     expect(lit).toBeLessThan(2100);
   });
 
+  test("searching “write a skill” finds Add a skill, which leads to Write a skill (§18.7)", async ({ page }) => {
+    await page.goto("/settings");
+    await settle(page);
+    await page.getByLabel("Find a setting").fill("write a skill");
+    const hit = page.getByRole("listbox", { name: "Settings found" }).getByRole("option").first();
+    await expect(hit).toContainText("Add a skill");
+    await expect(hit).toContainText("Clip making › Skills");
+    await hit.click();
+    await expect(page).toHaveURL(/\/settings\/clip-making\/skills#add-skill$/);
+    await expect(page.locator("#add-skill")).toBeFocused();
+    await page.getByRole("link", { name: "Write a skill" }).click();
+    await expect(page).toHaveURL(/\/settings\/clip-making\/skills\/new$/);
+    await expect(page.getByLabel("What is the skill called?")).toBeVisible();
+  });
+
   test("searching for “clip” does not list Sign out or Get the app", async ({ page }) => {
     await page.goto("/settings");
     await settle(page);

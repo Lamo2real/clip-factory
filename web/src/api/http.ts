@@ -1,6 +1,6 @@
 import { announceSignedOut, type AuthClient } from "../lib/auth.ts";
 import { ApiError, errorFromResponse, networkError } from "./errors.ts";
-import type { Account, Api, Clip, ClipPerformance, Job, Post, RefreshResult, Settings, SimilarClip, Skill, WeekView } from "./types.ts";
+import type { Account, Api, Clip, ClipPerformance, Job, Post, RefreshResult, Settings, SimilarClip, Skill, SkillDetail, WeekView } from "./types.ts";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -75,13 +75,13 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
       call("POST", `/clips/${id(clipId)}/confirm`, captions ? { captions } : {}),
     declineClip: async (clipId) => (await call<{ clip: Clip }>("POST", `/clips/${id(clipId)}/decline`)).clip,
     listSkills: async () => (await call<{ skills: Skill[] }>("GET", "/skills")).skills,
-    createSkillUpload: (filename) => call("POST", "/skills/uploads", { filename }),
+    getSkill: (skillId) => call<SkillDetail>("GET", `/skills/${id(skillId)}`),
+    writeSkill: async (form) => (await call<{ skill: Skill }>("POST", "/skills", form)).skill,
+    updateSkill: async (skillId, body) => (await call<{ skill: Skill }>("PUT", `/skills/${id(skillId)}`, body)).skill,
+    createSkillUpload: (filename, skillId) =>
+      call("POST", "/skills/uploads", skillId ? { filename, skillId } : { filename }),
     createSkill: async (body) => (await call<{ skill: Skill }>("POST", "/skills", body)).skill,
-    setSkillEnabled: async (skillId, enabled) =>
-      (await call<{ skill: Skill }>("PATCH", `/skills/${id(skillId)}`, { enabled })).skill,
     deleteSkill: (skillId) => call("DELETE", `/skills/${id(skillId)}`),
-    skillContent: async (skillId) =>
-      (await call<{ content: string }>("GET", `/skills/${id(skillId)}/content`)).content,
     getSettings: async () => (await call<{ settings: Settings }>("GET", "/settings")).settings,
     putSettings: async (patch) => (await call<{ settings: Settings }>("PUT", "/settings", patch)).settings,
     createCookiesUpload: (filename) => call("POST", "/settings/cookies", { filename }),
