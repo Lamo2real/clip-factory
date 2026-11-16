@@ -49,3 +49,15 @@ variable "embed_model_id" {
 }
 
 variable "embed_model_arn" { type = string }
+
+variable "permissions_boundary_arn" {
+  type        = string
+  default     = ""
+  description = "Permissions boundary for this module's IAM roles (infra/bootstrap's cf-prod-role-boundary). Empty: none."
+}
+
+variable "log_retention_days" {
+  type        = number
+  default     = 30
+  description = "Retention of the runtime's log group, the same as every other log group in the stack."
+}

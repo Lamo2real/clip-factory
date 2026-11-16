@@ -27,6 +27,32 @@ locals {
   provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : "arn:aws:iam::${local.account_id}:oidc-provider/${local.github_host}"
   # Every role the prod stack creates is named cf-prod-*; the deploy role may manage only those.
   stack_roles = "arn:aws:iam::${local.account_id}:role/cf-prod-*"
+  # Every cf-prod-* role must carry this permissions boundary (the prod stack sets it from the repository variable
+  # CF_ROLE_BOUNDARY_ARN). Without it, creating cf-prod-x with AdministratorAccess and assuming it would make the
+  # deploy role an administrator.
+  boundary_arn = "arn:aws:iam::${local.account_id}:policy/${var.role_boundary_name}"
+  must_carry_boundary = {
+    StringEquals = { "iam:PermissionsBoundary" = local.boundary_arn }
+  }
+  # Granting permissions to a cf-prod-* role. Enforced: only to a role that carries the boundary. Not enforced (the
+  # one-time switch-over of an existing stack, see README.md): as before, so the next deploy can add the boundary.
+  grant_actions = ["iam:CreateRole", "iam:PutRolePolicy", "iam:AttachRolePolicy"]
+}
+
+# The most any cf-prod-* role (Lambda, AgentCore, API Gateway logging) can ever do, whatever is attached to it: no
+# IAM, Organizations or account settings. The roles need none of those, and the deploy role already has the rest.
+resource "aws_iam_policy" "role_boundary" {
+  name        = var.role_boundary_name
+  description = "Permissions boundary for every cf-prod-* role: everything except IAM, Organizations and account settings."
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "NoIamOrAccount"
+      Effect    = "Allow"
+      NotAction = ["iam:*", "organizations:*", "account:*"]
+      Resource  = "*"
+    }]
+  })
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
@@ -62,8 +88,9 @@ resource "aws_iam_role" "deploy" {
   })
 }
 
-# Everything except IAM and Organizations, plus IAM limited to the stack's own roles. Narrower than administrator,
-# broad enough that new modules deploy without editing this role.
+# PowerUserAccess is everything except IAM, Organizations and account settings. IAM is added only for the stack's
+# own cf-prod-* roles, and permissions can be granted to such a role only when it carries the boundary above, so
+# the deploy role cannot use IAM to give itself (or a role it can reach) more than PowerUserAccess.
 resource "aws_iam_role_policy_attachment" "power_user" {
   role       = aws_iam_role.deploy.name
   policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
@@ -74,32 +101,72 @@ resource "aws_iam_role_policy" "stack_roles" {
   role = aws_iam_role.deploy.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "ManageStackRoles"
-        Effect = "Allow"
-        Action = [
-          "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy", "iam:TagRole", "iam:UntagRole",
-          "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole",
-          "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:AttachRolePolicy", "iam:DetachRolePolicy",
-        ]
-        Resource = local.stack_roles
-      },
-      {
-        Sid      = "PassStackRoles"
-        Effect   = "Allow"
-        Action   = ["iam:PassRole"]
-        Resource = local.stack_roles
-        # Lambda execution roles, the AgentCore runtime role, and cf-prod-apigw-cloudwatch set on the API Gateway account.
-        Condition = { StringEquals = { "iam:PassedToService" = ["lambda.amazonaws.com", "bedrock-agentcore.amazonaws.com", "apigateway.amazonaws.com"] } }
-      },
-      {
-        # First use of Lambda, AgentCore, CloudFront and friends in a fresh account creates their service-linked roles.
-        Sid      = "ServiceLinkedRoles"
-        Effect   = "Allow"
-        Action   = ["iam:CreateServiceLinkedRole"]
-        Resource = "arn:aws:iam::${local.account_id}:role/aws-service-role/*"
-      },
-    ]
+    Statement = concat(
+      [
+        {
+          # Reading, tagging and taking permissions away need no boundary check.
+          Sid    = "ManageStackRoles"
+          Effect = "Allow"
+          Action = [
+            "iam:DeleteRole", "iam:GetRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy", "iam:TagRole", "iam:UntagRole",
+            "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole",
+            "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:DetachRolePolicy",
+          ]
+          Resource = local.stack_roles
+        },
+        {
+          Sid       = "SetTheBoundaryOnly"
+          Effect    = "Allow"
+          Action    = ["iam:PutRolePermissionsBoundary"]
+          Resource  = local.stack_roles
+          Condition = local.must_carry_boundary
+        },
+      ],
+      # One of the two, picked by enforce_role_boundary.
+      [for st in [
+        {
+          Sid       = "GrantOnlyWithinBoundary"
+          Effect    = "Allow"
+          Action    = local.grant_actions
+          Resource  = local.stack_roles
+          Condition = local.must_carry_boundary
+        },
+        {
+          Sid      = "GrantBeforeBoundarySwitchOver"
+          Effect   = "Allow"
+          Action   = local.grant_actions
+          Resource = local.stack_roles
+        },
+      ] : st if(st.Sid == "GrantOnlyWithinBoundary") == var.enforce_role_boundary],
+      [
+        {
+          Sid      = "KeepTheBoundary"
+          Effect   = "Deny"
+          Action   = ["iam:DeleteRolePermissionsBoundary"]
+          Resource = local.stack_roles
+        },
+        {
+          Sid      = "BoundaryIsReadOnly"
+          Effect   = "Deny"
+          Action   = ["iam:CreatePolicyVersion", "iam:DeletePolicy", "iam:DeletePolicyVersion", "iam:SetDefaultPolicyVersion"]
+          Resource = aws_iam_policy.role_boundary.arn
+        },
+        {
+          Sid      = "PassStackRoles"
+          Effect   = "Allow"
+          Action   = ["iam:PassRole"]
+          Resource = local.stack_roles
+          # Lambda execution roles, the AgentCore runtime role, and cf-prod-apigw-cloudwatch set on the API Gateway account.
+          Condition = { StringEquals = { "iam:PassedToService" = ["lambda.amazonaws.com", "bedrock-agentcore.amazonaws.com", "apigateway.amazonaws.com"] } }
+        },
+        {
+          # First use of Lambda, AgentCore, CloudFront and friends in a fresh account creates their service-linked roles.
+          Sid      = "ServiceLinkedRoles"
+          Effect   = "Allow"
+          Action   = ["iam:CreateServiceLinkedRole"]
+          Resource = "arn:aws:iam::${local.account_id}:role/aws-service-role/*"
+        },
+      ],
+    )
   })
 }

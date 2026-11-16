@@ -174,3 +174,9 @@ variable "log_retention_days" {
   type    = number
   default = 30
 }
+
+variable "permissions_boundary_arn" {
+  type        = string
+  default     = ""
+  description = "Permissions boundary for this module's IAM roles (infra/bootstrap's cf-prod-role-boundary). Empty: none."
+}

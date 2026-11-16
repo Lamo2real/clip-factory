@@ -58,7 +58,8 @@ resource "terraform_data" "image" {
 }
 
 resource "aws_iam_role" "agent" {
-  name = "${var.name}-agent"
+  name                 = "${var.name}-agent"
+  permissions_boundary = var.permissions_boundary_arn == "" ? null : var.permissions_boundary_arn
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -82,6 +83,8 @@ resource "aws_iam_role_policy" "agent" {
     Statement = [
       { Sid = "PullImage", Effect = "Allow", Action = ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"], Resource = aws_ecr_repository.agent.arn },
       { Sid = "EcrToken", Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
+      # The runtime's group is created (with retention) by terraform_data.runtime_logs right after the runtime;
+      # CreateLogGroup stays so a first log line written before that step is not lost.
       {
         Sid      = "Logs"
         Effect   = "Allow"
@@ -182,4 +185,38 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
     CF_EMBED_MODEL_ID       = var.embed_model_id
   }
   tags = local.tags
+}
+
+# AgentCore writes the runtime's logs to /aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT and, left alone, creates
+# that group with no expiry. The name is only known once the runtime exists, and in a running stack the service has
+# usually created the group already, which an aws_cloudwatch_log_group cannot adopt without a manual import. So the
+# apply creates it if it is missing and always sets the same retention as every other log group in the stack. It
+# runs again whenever the runtime (its id) or the retention changes. A destroy leaves the group in place.
+resource "terraform_data" "runtime_logs" {
+  triggers_replace = [aws_bedrockagentcore_agent_runtime.agent.agent_runtime_id, var.log_retention_days]
+  input = {
+    log_group      = "/aws/bedrock-agentcore/runtimes/${aws_bedrockagentcore_agent_runtime.agent.agent_runtime_id}-DEFAULT"
+    retention_days = var.log_retention_days
+  }
+  provisioner "local-exec" {
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      if out="$(aws logs create-log-group --log-group-name "$LOG_GROUP" --tags "Project=clip-factory,Environment=prod,ManagedBy=terraform,Component=agent" 2>&1)"; then
+        echo "Created $LOG_GROUP."
+      elif grep -q ResourceAlreadyExistsException <<<"$out"; then
+        echo "$LOG_GROUP already exists."
+      else
+        echo "$out" >&2
+        exit 1
+      fi
+      aws logs put-retention-policy --log-group-name "$LOG_GROUP" --retention-in-days "$RETENTION_DAYS"
+      echo "$LOG_GROUP keeps logs for $RETENTION_DAYS days."
+    EOT
+    environment = {
+      LOG_GROUP      = self.input.log_group
+      RETENTION_DAYS = tostring(self.input.retention_days)
+      AWS_REGION     = var.region
+    }
+  }
 }

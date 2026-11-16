@@ -7,6 +7,13 @@
 mock_provider "aws" {
   override_during = plan
 
+  mock_resource "aws_bedrockagentcore_agent_runtime" {
+    defaults = {
+      agent_runtime_id  = "cf_test_clip_agent-AbCdEf1234"
+      agent_runtime_arn = "arn:aws:bedrock-agentcore:eu-north-1:123456789012:runtime/cf_test_clip_agent-AbCdEf1234"
+    }
+  }
+
   mock_resource "aws_ecr_repository" {
     defaults = {
       arn            = "arn:aws:ecr:eu-north-1:123456789012:repository/cf-test-agent"
@@ -87,5 +94,45 @@ run "role_allows_callbacks_vectors_and_titan" {
       ]
     ]))
     error_message = "The agent never deletes vectors or invokes Lambdas."
+  }
+}
+
+run "runtime_logs_expire" {
+  command = plan
+
+  assert {
+    condition     = terraform_data.runtime_logs.input.log_group == "/aws/bedrock-agentcore/runtimes/cf_test_clip_agent-AbCdEf1234-DEFAULT"
+    error_message = "Terraform owns the runtime's log group /aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT."
+  }
+
+  assert {
+    condition     = terraform_data.runtime_logs.input.retention_days == 30 && output.log_group_name == terraform_data.runtime_logs.input.log_group
+    error_message = "The runtime's logs are kept 30 days, like every other log group (never forever)."
+  }
+}
+
+run "runtime_logs_follow_the_retention" {
+  command = plan
+
+  variables {
+    log_retention_days = 14
+  }
+
+  assert {
+    condition     = terraform_data.runtime_logs.input.retention_days == 14
+    error_message = "log_retention_days sets the runtime's log retention."
+  }
+}
+
+run "role_carries_the_permissions_boundary" {
+  command = plan
+
+  variables {
+    permissions_boundary_arn = "arn:aws:iam::123456789012:policy/cf-prod-role-boundary"
+  }
+
+  assert {
+    condition     = aws_iam_role.agent.permissions_boundary == "arn:aws:iam::123456789012:policy/cf-prod-role-boundary"
+    error_message = "The agent role carries the deploy role's permissions boundary (infra/bootstrap)."
   }
 }

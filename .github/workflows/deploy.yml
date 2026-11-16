@@ -3,9 +3,12 @@
 #   variable CF_DEPLOY_ROLE_ARN  IAM role GitHub assumes through OIDC
 #   secret   CF_OWNER_EMAIL      the only login (Cognito, admin-created). A secret so it is masked in the
 #                                logs of this public repository.
+# Optional secret CF_ALARM_EMAIL: where the cf-prod-alarms emails go (default CF_OWNER_EMAIL). AWS sends a
+#   "Subscription Confirmation" email after the first deploy; no alarm email arrives until it is confirmed.
 # Optional variables: CF_REGION (default eu-north-1), CF_STATE_BUCKET (default lamo-labs-state-bucket),
 #   CF_MANAGE_API_GATEWAY_ACCOUNT (default true; set false when the account's API Gateway CloudWatch logging role
-#   is managed elsewhere, docs/CONTRACTS.md §14.3).
+#   is managed elsewhere, docs/CONTRACTS.md §14.3), CF_ROLE_BOUNDARY_ARN (infra/bootstrap output role_boundary_arn:
+#   every cf-prod-* role carries it, so the deploy role cannot make itself an administrator; docs/DEPLOYMENT.md §2).
 #
 # One run deploys from nothing:
 #   preflight - skips everything (with a notice) until the role and the email are set
@@ -17,9 +20,10 @@
 #   smoke     - the HTTP API answers /v1/health, the webhooks REST API refuses a Meta challenge without the
 #               verify token (403), the WebSocket API refuses a connection without a valid token (401), and
 #               the app serves this release's config.json (with wsUrl) and version.json
-#   desktop-plan, desktop, desktop-manifest - after the web deploy: the Mac (.dmg) and Windows (.exe) desktop
-#               apps (desktop/, Tauri) are rebuilt only when what they are built from changed or the file is
-#               missing, uploaded to the web bucket under downloads/, and downloads/manifest.json is rewritten.
+#   desktop-plan, desktop, desktop-upload, desktop-manifest - after the web deploy: the Mac (.dmg) and Windows
+#               (.exe) desktop apps (desktop/, Tauri) are rebuilt only when what they are built from changed or the
+#               file is missing. The build job has no OIDC token (it runs npm and cargo); desktop-upload copies the
+#               installer to the web bucket under downloads/, and downloads/manifest.json is rewritten.
 #               These jobs never fail the deploy: a broken desktop build leaves the previous installers in place.
 name: deploy
 on:
@@ -62,8 +66,12 @@ jobs:
         env:
           ROLE: ${{ vars.CF_DEPLOY_ROLE_ARN }}
           EMAIL: ${{ secrets.CF_OWNER_EMAIL }}
+          BOUNDARY: ${{ vars.CF_ROLE_BOUNDARY_ARN }}
         run: |
           if [ -n "$ROLE" ] && [ -n "$EMAIL" ]; then
+            if [ -z "$BOUNDARY" ]; then
+              echo "::notice title=No role boundary::Set the variable CF_ROLE_BOUNDARY_ARN (see docs/DEPLOYMENT.md, section 2) so the deploy role cannot give itself more access."
+            fi
             echo "enabled=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -90,8 +98,8 @@ jobs:
     outputs:
       image_tag: ${{ steps.image.outputs.tag }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
           cache: npm
@@ -105,7 +113,7 @@ jobs:
           export VITE_APP_VERSION="${SHA:0:7}"
           npm ci
           npm run build
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
@@ -123,14 +131,14 @@ jobs:
         run: |
           [ -n "$SOURCES_HASH" ] || { echo "::error::No agent sources found to hash."; exit 1; }
           echo "tag=agent-${SOURCES_HASH:0:16}" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: web-dist
           path: web/dist
           include-hidden-files: true
           retention-days: 3
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: lambda-zip
           path: api/dist/lambda.zip
@@ -155,8 +163,8 @@ jobs:
       distribution_id: ${{ steps.out.outputs.distribution_id }}
       tf_outputs: ${{ steps.out.outputs.tf_outputs }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: lambda-zip
           path: api/dist
@@ -166,7 +174,7 @@ jobs:
           curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" \
             | python3 -c 'import sys,json,base64; p=json.load(sys.stdin)["value"].split(".")[1]; c=json.loads(base64.urlsafe_b64decode(p+"="*(-len(p)%4))); print(json.dumps({k:c.get(k) for k in ("sub","aud","repository","ref")}, indent=2))'
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -180,11 +188,11 @@ jobs:
           STATE_BUCKET: ${{ env.TF_STATE_BUCKET }}
         run: bash scripts/ensure-state-bucket.sh
       # terraform apply runs scripts/push-image.sh, which needs buildx and ARM64 emulation.
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
         with:
           platforms: arm64
-      - uses: docker/setup-buildx-action@v3
-      - uses: hashicorp/setup-terraform@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
@@ -204,10 +212,13 @@ jobs:
         env:
           TF_VAR_region: ${{ env.AWS_REGION }}
           TF_VAR_owner_email: ${{ secrets.CF_OWNER_EMAIL }}
+          # Alarm emails (docs/CONTRACTS.md §14.9) go to CF_ALARM_EMAIL, or to the owner when it is not set.
+          TF_VAR_alarm_email: ${{ secrets.CF_ALARM_EMAIL || secrets.CF_OWNER_EMAIL }}
           TF_VAR_agent_image_tag: ${{ needs.build.outputs.image_tag }}
           TF_VAR_lambda_zip_path: ${{ github.workspace }}/api/dist/lambda.zip
           TF_VAR_app_version: ${{ github.sha }}
           TF_VAR_manage_api_gateway_account: ${{ vars.CF_MANAGE_API_GATEWAY_ACCOUNT || 'true' }}
+          TF_VAR_role_permissions_boundary_arn: ${{ vars.CF_ROLE_BOUNDARY_ARN }}
         run: |
           terraform plan -input=false -out=prod.tfplan
           # The full plan stays in this log (the owner email is masked), never in a downloadable file.
@@ -242,11 +253,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # scripts/release-areas.sh reads the commits since the live release.
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: web-dist
           path: web/dist
@@ -257,7 +268,7 @@ jobs:
         run: |
           printf '%s' "$TF_OUTPUTS" > "${RUNNER_TEMP}/tf-outputs.json"
           TF_OUTPUTS_FILE="${RUNNER_TEMP}/tf-outputs.json" bash scripts/write-web-config.sh
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -414,8 +425,8 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       source_hash: ${{ steps.plan.outputs.source_hash }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -479,24 +490,25 @@ jobs:
         include: ${{ fromJSON(needs.desktop-plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    # No id-token here: npm ci, cargo build scripts and the Tauri CLI run in this job, and none of them may be able
+    # to ask GitHub for a token that assumes the deploy role. desktop-upload does the upload.
     permissions:
       contents: read
-      id-token: write
     defaults:
       run:
         shell: bash
         working-directory: desktop
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: desktop/package-lock.json
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           targets: ${{ matrix.rust_targets }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: desktop/src-tauri -> target
           key: ${{ matrix.target }}
@@ -521,8 +533,49 @@ jobs:
           [ "${#files[@]}" -eq 1 ] || { echo "::error::Expected one installer at ${BUNDLE_GLOB}, found ${#files[@]}."; exit 1; }
           echo "path=${files[0]}" >> "$GITHUB_OUTPUT"
           echo "Built ${files[0]} ($(wc -c <"${files[0]}" | tr -d ' ') bytes)."
-      # Credentials only now: a long build must not outlive the session.
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-${{ matrix.target }}
+          # upload-artifact paths are relative to the workspace, not to the desktop/ working directory.
+          path: desktop/${{ steps.file.outputs.path }}
+          retention-days: 1
+          if-no-files-found: error
+
+  # The only desktop job that can assume the deploy role. It runs no code from npm, cargo or the build: it downloads
+  # the installer the build job made and copies it to the web bucket.
+  desktop-upload:
+    name: desktop-upload (${{ matrix.target }})
+    needs: [preflight, infra, desktop-plan, desktop]
+    if: >-
+      !cancelled()
+      && needs.preflight.outputs.enabled == 'true'
+      && needs.desktop-plan.outputs.matrix != ''
+      && needs.desktop-plan.outputs.matrix != '[]'
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.desktop-plan.outputs.matrix) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # A target whose build failed has no artifact: this leg fails and the previous installer stays in place.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-${{ matrix.target }}
+          path: ${{ runner.temp }}/installer
+      - name: find the installer
+        id: file
+        env:
+          DIR: ${{ runner.temp }}/installer
+        run: |
+          mapfile -t files < <(find "$DIR" -type f)
+          [ "${#files[@]}" -eq 1 ] || { echo "::error::Expected one installer in the build's artifact, found ${#files[@]}."; exit 1; }
+          echo "path=${files[0]}" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -544,7 +597,7 @@ jobs:
 
   # Lists only the installers that exist in the bucket, so the app never offers a dead link (§12.1).
   desktop-manifest:
-    needs: [preflight, infra, web, desktop-plan, desktop]
+    needs: [preflight, infra, web, desktop-plan, desktop, desktop-upload]
     if: >-
       !cancelled()
       && needs.preflight.outputs.enabled == 'true'
@@ -557,8 +610,8 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: aws-actions/configure-aws-credentials@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}

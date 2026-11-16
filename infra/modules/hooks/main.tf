@@ -27,7 +27,14 @@ locals {
   platform_secrets_arn = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${local.secret_prefix}*"
   # Only the {platform}/token secrets: what clip-flow and stats may write back after a refresh.
   platform_token_secrets_arn = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${local.secret_prefix}*/token-*"
-  state_key_name             = "${var.name}/oauth/state-key"
+  # cf-prod-hooks, per kind: the owner's app keys ({platform}/app, written only by cf-prod-api) are only read; the
+  # token and the short-lived Meta choices ({platform}/pending) are written, and pending is deleted. No "-" before
+  # the "*": for a secret that does not exist yet, Secrets Manager checks the name without its random suffix, and
+  # the code needs ResourceNotFoundException there (not AccessDenied) to create it or to read "not set up".
+  platform_app_secrets_arn     = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${local.secret_prefix}*/app*"
+  platform_token_names_arn     = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${local.secret_prefix}*/token*"
+  platform_pending_secrets_arn = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${local.secret_prefix}*/pending*"
+  state_key_name               = "${var.name}/oauth/state-key"
 
   # The three public methods, keyed for for_each.
   methods = {
@@ -45,7 +52,8 @@ resource "aws_cloudwatch_log_group" "fn" {
 }
 
 resource "aws_iam_role" "fn" {
-  name = "${var.name}-fn-hooks"
+  name                 = "${var.name}-fn-hooks"
+  permissions_boundary = var.permissions_boundary_arn == "" ? null : var.permissions_boundary_arn
   assume_role_policy = jsonencode({
     Version   = "2012-10-17"
     Statement = [{ Effect = "Allow", Principal = { Service = "lambda.amazonaws.com" }, Action = "sts:AssumeRole" }]
@@ -53,9 +61,11 @@ resource "aws_iam_role" "fn" {
   tags = local.tags
 }
 
-# Stores hook events (PutItem) and reads the verify token (the aws/ssm key needs no IAM statement). The OAuth
-# callback consumes the state item (DeleteItem), updates ACCOUNT#/SETUP# (GetItem, UpdateItem), reads the state key
-# and writes the token secrets (the aws/secretsmanager key needs no IAM statement either).
+# Stores hook events (PutItem on HOOK#) and reads the verify token (the aws/ssm key needs no IAM statement). The
+# OAuth callback consumes the state item (DeleteItem on OAUTH#), writes and updates the owner's ACCOUNT#/SETUP#
+# items (USER#), reads the state key and the platform's app keys, writes the token and pending secrets and deletes
+# the pending one (the aws/secretsmanager key needs no IAM statement either). This Lambda is public, so it can
+# never change or delete the owner's app keys, and touches only those three partitions of the table.
 resource "aws_iam_role_policy" "fn" {
   name = "least-privilege"
   role = aws_iam_role.fn.id
@@ -64,15 +74,39 @@ resource "aws_iam_role_policy" "fn" {
     Statement = [
       { Sid = "Logs", Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = "${aws_cloudwatch_log_group.fn.arn}:*" },
       { Sid = "Tracing", Effect = "Allow", Action = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"], Resource = "*" },
-      { Sid = "HookEvents", Effect = "Allow", Action = ["dynamodb:PutItem"], Resource = [var.table_arn] },
+      {
+        Sid       = "HookEvents"
+        Effect    = "Allow"
+        Action    = ["dynamodb:PutItem"]
+        Resource  = [var.table_arn]
+        Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["HOOK#*", "USER#*"] } }
+      },
       { Sid = "VerifyToken", Effect = "Allow", Action = ["ssm:GetParameter"], Resource = [local.verify_token_arn] },
-      { Sid = "OAuthItems", Effect = "Allow", Action = ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"], Resource = [var.table_arn] },
+      {
+        Sid       = "OAuthItems"
+        Effect    = "Allow"
+        Action    = ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"]
+        Resource  = [var.table_arn]
+        Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["OAUTH#*", "USER#*"] } }
+      },
       { Sid = "OAuthStateKey", Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = [aws_secretsmanager_secret.state_key.arn] },
       {
-        Sid      = "PlatformSecrets"
+        Sid      = "PlatformAppKeys"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+        Resource = [local.platform_app_secrets_arn]
+      },
+      {
+        Sid      = "PlatformTokens"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:TagResource"]
+        Resource = [local.platform_token_names_arn]
+      },
+      {
+        Sid      = "PlatformPending"
         Effect   = "Allow"
         Action   = ["secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource"]
-        Resource = [local.platform_secrets_arn]
+        Resource = [local.platform_pending_secrets_arn]
       },
     ]
   })
@@ -320,8 +354,9 @@ resource "aws_api_gateway_usage_plan" "hooks" {
 # REST execution and access logs and WebSocket logs are written with this role. Turn manage_api_gateway_account off
 # when something else already manages the account's setting.
 resource "aws_iam_role" "apigw_cloudwatch" {
-  count = var.manage_api_gateway_account ? 1 : 0
-  name  = "${var.name}-apigw-cloudwatch"
+  count                = var.manage_api_gateway_account ? 1 : 0
+  name                 = "${var.name}-apigw-cloudwatch"
+  permissions_boundary = var.permissions_boundary_arn == "" ? null : var.permissions_boundary_arn
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
