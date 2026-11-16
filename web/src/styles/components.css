@@ -293,6 +293,41 @@
     background-color var(--dur-1),
     box-shadow var(--dur-1);
 }
+/* Password field with its Show / Hide button inside the right edge. */
+.password {
+  position: relative;
+  min-width: 0;
+}
+.password__input {
+  min-height: 56px;
+  padding-right: 96px;
+}
+.password__toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.password__toggle:hover {
+  background: rgb(var(--ink-rgb) / 0.06);
+}
+.password__toggle:focus-visible {
+  box-shadow: var(--focus);
+}
 .input::placeholder {
   color: #5f6a5a;
 }
@@ -390,7 +425,7 @@
 }
 .linkbox__input {
   flex: 1;
-  min-height: 46px;
+  min-height: 48px;
   padding: 8px 6px;
   border: 0;
   background: transparent;
