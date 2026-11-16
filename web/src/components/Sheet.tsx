@@ -1,9 +1,39 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+
+/** Everything Tab can land on inside a dialog. */
+const FOCUSABLE =
+  "button:not([disabled]), a[href], input:not([disabled]):not([type='hidden']), select:not([disabled]), textarea:not([disabled]), video[controls], summary, [tabindex]:not([tabindex='-1'])";
+
+/**
+ * Keeps Tab and Shift+Tab inside `box` (a modal dialog): from the last control Tab goes to the first, and back.
+ * Focus that sits on the dialog itself (or anywhere outside it) moves to the first or last control.
+ */
+export function trapTab(e: { key: string; shiftKey: boolean; preventDefault(): void }, box: HTMLElement | null): void {
+  if (e.key !== "Tab" || !box) return;
+  const all = Array.from(box.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.getClientRects().length > 0 || el === document.activeElement);
+  if (!all.length) {
+    e.preventDefault();
+    return;
+  }
+  const first = all[0]!;
+  const last = all[all.length - 1]!;
+  const at = document.activeElement;
+  const inside = at instanceof Node && box.contains(at) && at !== box;
+  if (e.shiftKey && (at === first || !inside)) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && (at === last || !inside)) {
+    e.preventDefault();
+    first.focus();
+  }
+}
 
 /**
  * A small glass question over the page ("Delete this skill?", "Leave without saving?"). It is a real dialog: focus
  * moves into it and comes back afterwards, Tab stays inside, Escape or a tap outside closes it (as the safe answer).
- * Used only where an 8-second Undo cannot help (§18.5, §18.7).
+ * Used only where an 8-second Undo cannot help (§18.5, §18.7). It is drawn on document.body (a portal), so its scrim
+ * covers the whole screen even when the page that asks sits inside a glass card or a moving page.
  */
 export function Sheet({
   title,
@@ -32,21 +62,10 @@ export function Sheet({
       onClose();
       return;
     }
-    if (e.key !== "Tab" || !box.current) return;
-    const all = Array.from(box.current.querySelectorAll<HTMLElement>("button, a[href], [tabindex]:not([tabindex='-1'])"));
-    if (!all.length) return;
-    const first = all[0]!;
-    const last = all[all.length - 1]!;
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
+    trapTab(e, box.current);
   }
 
-  return (
+  return createPortal(
     <div className="sheet-scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={box}
@@ -67,6 +86,7 @@ export function Sheet({
         ) : null}
         <div className="sheet__actions">{actions}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Captions, Clip, TikTokPostOptions } from "../../api/types.ts";
@@ -14,7 +14,8 @@ import { useLiveEvents } from "../../lib/live.ts";
 import { applyClipEvent, withMedia } from "../../lib/liveCache.ts";
 import { SimilarClips } from "../../components/SimilarClips.tsx";
 import { keepClip, keptMessage, STILL_WORKING } from "../../lib/keep.ts";
-import { CaptionTabs, captionsTooLong } from "./CaptionTabs.tsx";
+import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAways.ts";
+import { CaptionTabs, captionsTooLong, type CaptionTabsHandle } from "./CaptionTabs.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
 import { useUnsaved } from "../../features/help/unsaved.ts";
 
@@ -44,14 +45,23 @@ export function Review({ jobId }: { jobId: string | null }) {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [reload]);
 
-  // Arriving from a clip link (/review#clip-…) scrolls to that clip once the list is on screen.
+  // Arriving from a clip link (/review#clip-…) scrolls to that clip once the list is on screen: once per arrival,
+  // so later list changes (Keep, Throw away, Undo, live news) never pull the page back to it.
+  const scrolledTo = useRef<string | null>(null);
   useEffect(() => {
-    if (!data || !location.hash) return;
+    if (!data || !location.hash || scrolledTo.current === location.hash) return;
     const el = document.getElementById(location.hash.slice(1));
-    el?.scrollIntoView({ block: "start" });
+    if (!el) return;
+    el.scrollIntoView({ block: "start" });
+    scrolledTo.current = location.hash;
   }, [data]);
 
-  // Clips being kept or thrown away right here: their cards leave on their own, and live news about them waits.
+  // Thrown away (Undo still counting down, or already declined): left out of the list, even after leaving Review and
+  // coming back while the server still lists the clip as waiting (the store outlives this screen).
+  const thrown = useThrownAway();
+  const visible = data ? data.filter((c) => !thrown.has(c.clipId)) : null;
+
+  // Clips being kept right here: their cards leave on their own, and live news about them waits.
   const settling = useRef(new Set<string>());
   const settle = (clipId: string, on: boolean) => (on ? settling.current.add(clipId) : settling.current.delete(clipId));
 
@@ -79,13 +89,34 @@ export function Review({ jobId }: { jobId: string | null }) {
   );
 
   const toast = useToast();
-  const { refresh } = useSession();
+  const { me, refresh } = useSession();
   // Clips kept on this visit: each gets a "See how it does" link once its card has left the list.
   const [justKept, setJustKept] = useState<Clip[]>([]);
   const kept = (clip: Clip) => setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
-  const order = useRef<string[]>([]);
-  if (data) for (const c of data) if (!order.current.includes(c.clipId)) order.current.push(c.clipId);
-  const remove = (clipId: string) => setData((d) => (d ? d.filter((c) => c.clipId !== clipId) : d));
+  // Where focus goes when a card leaves while it holds focus: the next card's title (or the one before, or the empty
+  // state's Make clips), so keyboard and screen reader users keep their place (§12.4).
+  const focusNext = useRef<string | null>(null);
+  const leaving = (clipId: string) => {
+    const card = document.getElementById(`clip-${clipId}`);
+    const at = document.activeElement;
+    if (card && at && at !== document.body && !card.contains(at)) return;
+    // Read from the page, not from a list kept by this render: the card's leave runs a moment after the tap, and the
+    // list may have changed since (another card kept, live news).
+    const after = (card?.nextElementSibling ?? card?.previousElementSibling) as HTMLElement | null | undefined;
+    focusNext.current = after?.id.startsWith("clip-") ? `hook-${after.id.slice("clip-".length)}` : "review-empty";
+  };
+  useLayoutEffect(() => {
+    const target = focusNext.current;
+    if (!target) return;
+    const el =
+      target === "review-empty" ? document.querySelector<HTMLElement>(".review-empty a, .review-empty .empty__title") : document.getElementById(target);
+    focusNext.current = null;
+    el?.focus();
+  });
+  const remove = (clipId: string) => {
+    leaving(clipId);
+    setData((d) => (d ? d.filter((c) => c.clipId !== clipId) : d));
+  };
   // Cards coming back after Undo (or a failed throw away) play the mirror of their leaving motion (§20.7).
   const [returning, setReturning] = useState<ReadonlySet<string>>(() => new Set());
   const returnTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -93,47 +124,36 @@ export function Review({ jobId }: { jobId: string | null }) {
     const timers = returnTimers.current;
     return () => timers.forEach((t) => clearTimeout(t));
   }, []);
-  // Puts a clip back where it was (by rank and job) after Undo, or when throwing it away failed.
-  const restore = (clip: Clip) => {
-    setData((d) => {
-      if (!d || d.some((c) => c.clipId === clip.clipId)) return d;
-      return [...d, clip].sort((a, b) => order.current.indexOf(a.clipId) - order.current.indexOf(b.clipId));
-    });
-    setReturning((r) => new Set(r).add(clip.clipId));
-    clearTimeout(returnTimers.current.get(clip.clipId));
-    returnTimers.current.set(
-      clip.clipId,
-      setTimeout(() => {
-        returnTimers.current.delete(clip.clipId);
-        setReturning((r) => {
-          const next = new Set(r);
-          next.delete(clip.clipId);
-          return next;
-        });
-      }, ACT_REWIND_MS),
-    );
-  };
+  // A thrown-away clip comes back (Undo, or the decline failed): it is still in the list, so it shows again in its
+  // place, plays the mirror of its leaving motion and takes the focus.
+  useEffect(
+    () =>
+      onClipBack((clipId) => {
+        // Undo (tapped in its toast, or focus already lost) takes the focus to the card that came back; a decline
+        // that fails later never pulls the focus away from what the owner is doing now.
+        const at = document.activeElement;
+        if (!at || at === document.body || at.closest(".toasts")) focusNext.current = `hook-${clipId}`;
+        setReturning((r) => new Set(r).add(clipId));
+        clearTimeout(returnTimers.current.get(clipId));
+        returnTimers.current.set(
+          clipId,
+          setTimeout(() => {
+            returnTimers.current.delete(clipId);
+            setReturning((r) => {
+              const next = new Set(r);
+              next.delete(clipId);
+              return next;
+            });
+          }, ACT_REWIND_MS),
+        );
+      }),
+    [],
+  );
 
   /** "Throw away" happens for real only after 8 seconds, so a slip of the finger can be undone. */
   function throwAway(clip: Clip) {
-    settle(clip.clipId, true);
-    remove(clip.clipId);
-    toast.undo("Clip thrown away.", {
-      onUndo: () => {
-        settle(clip.clipId, false);
-        restore(clip);
-      },
-      onCommit: () => {
-        api()
-          .declineClip(clip.clipId)
-          .then(() => refresh())
-          .catch((e) => {
-            settle(clip.clipId, false);
-            restore(clip);
-            toast.error(`${friendlyMessage(e)} The clip is back in your list.`);
-          });
-      },
-    });
+    leaving(clip.clipId);
+    throwAwayWithUndo(clip, toast, () => void refresh().catch(() => undefined));
   }
 
   return (
@@ -144,7 +164,11 @@ export function Review({ jobId }: { jobId: string | null }) {
             Yes or <em>no</em>, clip by clip.
           </>
         }
-        lede="Watch each clip. Tap Keep to post it, or Throw away if you do not like it. Nothing posts until you tap Keep."
+        lede={
+          jobId
+            ? "These clips all come from one job. Tap Keep to post one, or Throw away if you do not like it. Tap Show every job to see the rest."
+            : "Watch each clip. Tap Keep to post it, or Throw away if you do not like it. Nothing posts until you tap Keep."
+        }
         actions={
           jobId ? (
             <LinkButton href="/review" size="sm" icon="x" act="clear">
@@ -173,26 +197,28 @@ export function Review({ jobId }: { jobId: string | null }) {
       ) : null}
       {error && !data ? <ErrorPanel message={error} onRetry={reload} /> : null}
       {!data && !error ? <Skeleton className="review-skel" /> : null}
-      {data && data.length === 0 ? (
-        <Empty
-          icon="checkCircle"
-          title="All done!"
-          action={
-            <LinkButton href="/" variant="primary" icon="scissors">
-              Make clips
-            </LinkButton>
-          }
-        >
-          There is nothing to check right now. Tap Make clips to get new ones.
-        </Empty>
+      {visible && visible.length === 0 ? (
+        <div className="review-empty">
+          <Empty
+            icon="checkCircle"
+            title="All done!"
+            action={
+              <LinkButton href="/" variant="primary" icon="scissors">
+                Make clips
+              </LinkButton>
+            }
+          >
+            There is nothing to check right now. Tap Make clips to get new ones.
+          </Empty>
+        </div>
       ) : null}
-      {data && data.length > 0 ? (
+      {visible && visible.length > 0 ? (
         <>
           <p className="review-count" aria-live="polite">
-            {plural(data.length, "clip")} waiting
+            {jobId ? reviewCountForJob(visible.length, me?.counts.review) : `${plural(visible.length, "clip")} waiting`}
           </p>
           <ol className="review-list">
-            {data.map((c, i) => (
+            {visible.map((c, i) => (
               <li key={c.clipId} id={`clip-${c.clipId}`} className="review-list__item">
                 <ReviewCard clip={c} next={i === 0} returning={returning.has(c.clipId)} onDone={remove} onKept={kept} onThrowAway={throwAway} onSettling={settle} />
               </li>
@@ -202,6 +228,12 @@ export function Review({ jobId }: { jobId: string | null }) {
       ) : null}
     </div>
   );
+}
+
+/** The count line on a Review filtered to one job: says it is one job, and how many wait in all when that is more. */
+export function reviewCountForJob(here: number, all: number | undefined): string {
+  const line = `${plural(here, "clip")} from this job waiting`;
+  return all !== undefined && all > here ? `${line} (${all} in all)` : line;
 }
 
 type SaveState = "idle" | "saving" | "saved" | "failed";
@@ -247,6 +279,9 @@ function ReviewCard({
   // The TikTok sheet's choices from the Keep that did not finish: Try again sends them again.
   const lastTikTok = useRef<TikTokPostOptions | undefined>(undefined);
   const confirmRef = useRef<HTMLDivElement>(null);
+  const tabs = useRef<CaptionTabsHandle>(null);
+  // Stable, so the open sheet is not re-set-up on every typed letter (§17.8).
+  const closeSheet = useCallback(() => setSheet(false), []);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // The latest unsaved edits, and whether the clip was already kept or thrown away (then nothing more is saved).
   const dirtyRef = useRef(dirty);
@@ -330,7 +365,13 @@ function ReviewCard({
   async function confirm() {
     if (captionsTooLong(captions)) {
       keepAct.fail({ sound: false });
-      toast.error("One caption is longer than its platform allows. Make the one marked in red shorter, then tap Keep.");
+      // Opens the too-long tab (it may be scrolled out of sight) and names the platform.
+      const name = tabs.current?.showTooLong();
+      toast.error(
+        name
+          ? `Your ${name} caption is longer than its platform allows. Make it shorter, then tap Keep.`
+          : "One caption is longer than its platform allows. Make it shorter, then tap Keep.",
+      );
       return;
     }
     // TikTok connected: its rules say the owner picks who can see the post first (§17.8).
@@ -410,19 +451,21 @@ function ReviewCard({
           <Pill tone="sage">Score {clip.score}/10</Pill>
           <Pill tone="neutral">{clip.layout === "facecam_top" ? "Facecam on top" : "Blurred fill"}</Pill>
         </div>
-        <h2 className="review-card__hook user-text" id={`hook-${clip.clipId}`}>
+        <h2 className="review-card__hook user-text" id={`hook-${clip.clipId}`} tabIndex={-1}>
           {clip.hook}
         </h2>
         <p className="review-card__summary user-text">{clip.summary}</p>
         <p className="review-card__source">
-          <Icon name="link" size={16} />
+          {/* The icon sits inside the link (or the plain line), so it never wraps onto a line of its own. */}
           {clip.sourceUrlAt ? (
             <a href={clip.sourceUrlAt} target="_blank" rel="noreferrer noopener" className="text-link">
+              <Icon name="link" size={16} />
               From {timecode(clip.sourceStart)} to {timecode(clip.sourceEnd)} in the source
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
           ) : (
-            <span>
+            <span className="review-card__source-text">
+              <Icon name="link" size={16} />
               From {timecode(clip.sourceStart)} to {timecode(clip.sourceEnd)} in the source
             </span>
           )}
@@ -492,7 +535,7 @@ function ReviewCard({
         </details>
 
         <div data-help="captions" data-help-dodge="">
-          <CaptionTabs captions={captions} onChange={edit} />
+          <CaptionTabs captions={captions} onChange={edit} handle={tabs} />
         </div>
         <p className={`save-state is-${save}`} aria-live="polite">
           {save === "saving" ? "Saving…" : save === "saved" ? "Captions saved" : save === "failed" ? "Not saved yet. Your changes are saved when you tap Keep." : ""}
@@ -533,7 +576,7 @@ function ReviewCard({
             caption={captions.tiktok}
             onCaption={(text) => edit({ tiktok: text })}
             onKeep={(options) => void keep(options)}
-            onClose={() => setSheet(false)}
+            onClose={closeSheet}
             busy={busy === "confirm"}
             act={sheetAct}
           />
