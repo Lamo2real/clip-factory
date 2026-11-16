@@ -38,7 +38,7 @@ export function SetupList() {
           return (
             <li key={p}>
               {data ? (
-                <A href={setupPath(p)} className={`setup-card glass${setup?.ready ? " is-ready" : ""}`} data-platform={p}>
+                <A href={setupPath(p)} className={`setup-card glass${setup?.ready ? " is-ready" : ""}`} data-platform={p} data-help={`setup-${p}`}>
                   <span className={`setup-card__mark is-${p}`}>
                     <PlatformMark platform={p} size={28} />
                   </span>

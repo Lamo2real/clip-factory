@@ -15,13 +15,29 @@ locals {
   table_resources = [var.table_arn, "${var.table_arn}/index/*"]
   media_prefixes  = ["uploads", "jobs", "skills", "private"]
 
+  # Ask Clip Factory (docs/CONTRACTS.md §19.6, §19.9). Off unless the env turns it on; without a model id it
+  # answers from the help knowledge only. The per-user rate limits are fixed by the contract.
+  help_env = merge(
+    {
+      HELP_ENABLED         = var.help_enabled ? "true" : "false"
+      HELP_MONTHLY_CAP     = tostring(var.help_monthly_cap)
+      HELP_RATE_PER_MINUTE = "6"
+      HELP_RATE_PER_HOUR   = "60"
+    },
+    var.help_model_id == "" ? {} : { HELP_MODEL_ID = var.help_model_id },
+  )
+  # One Converse call per answer through the help profile, nothing else from Bedrock.
+  help_permissions = var.help_model_id == "" ? [] : [
+    { Sid = "HelpModel", Action = ["bedrock:InvokeModel"], Resource = var.help_model_invoke_arns },
+  ]
+
   # One function; a map so the resource addresses (aws_lambda_function.fn["api"]) stay as they were.
   functions = {
     api = {
       handler = "clipfactory_api.http.handler"
       timeout = 29
       memory  = 512
-      env = {
+      env = merge(local.help_env, {
         TABLE_NAME        = var.table_name
         MEDIA_BUCKET      = var.media_bucket
         AGENT_RUNTIME_ARN = var.agent_runtime_arn
@@ -41,13 +57,13 @@ locals {
         OAUTH_STATE_SECRET = var.oauth_state_secret_name
         WEB_BUCKET         = var.web_bucket
         DISTRIBUTION_ID    = var.distribution_id
-      }
+      })
     }
   }
 
   # What each function may do beyond writing its own logs and traces.
   permissions = {
-    api = [
+    api = concat(local.help_permissions, [
       # Confirm writes the clip and its posts in one transaction.
       { Sid = "Data", Action = local.data_rw, Resource = local.table_resources },
       # Presigned uploads and downloads, decline (deletes the clip's files), skill and cookie files.
@@ -72,7 +88,7 @@ locals {
       # The TikTok URL-verification file (tiktok*.txt) at the web bucket root, then a one-path invalidation.
       { Sid = "VerificationFiles", Action = ["s3:PutObject", "s3:DeleteObject"], Resource = ["${var.web_bucket_arn}/tiktok*"] },
       { Sid = "Invalidate", Action = ["cloudfront:CreateInvalidation"], Resource = [var.distribution_arn] },
-    ]
+    ])
   }
 }
 
@@ -151,7 +167,9 @@ resource "aws_apigatewayv2_api" "http" {
     allow_origins = [var.app_url, var.web_dev_origin]
     allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     allow_headers = ["authorization", "content-type"]
-    max_age       = 3600
+    # Ask Clip Factory's 429 says when to ask again (§19.6); the browser may only read it if it is exposed.
+    expose_headers = ["retry-after"]
+    max_age        = 3600
   }
   tags = local.tags
 }

@@ -20,7 +20,9 @@ use all of them "no matter what", and ADR-33 to ADR-37 come from the owner's pos
 ([CONTRACTS.md §17](CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16)),
 where the owner asked for one setup per platform that "an 8-year-old should be able to do", with no code, up to date
 with what each platform requires today; how the skills rule is enforced and the posting mechanisms were decided by the
-build, the latter from the platforms' docs as of 2026-11-16.
+build, the latter from the platforms' docs as of 2026-11-16. ADR-38 and ADR-39 come from the owner's request for an in-app help assistant
+([CONTRACTS.md §19](CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16)), built on
+the in-app assistant pattern the owner supplied; the owner asked that every AI call use the skills.
 
 ---
 
@@ -637,3 +639,52 @@ publisher, scheduler and perf-check are removed.
 - **Consequences.** Every value the platforms ask for comes from `GET /v1/setup` and is one Copy button. If the app
   moves to a custom domain, every platform's redirect URI and website must be updated (the setup's **Check it** finds
   a mismatch).
+
+## ADR-38 BM25 over vectors for help, and the model is optional
+
+- **Context.** The owner wants a helper that answers "how do I…" and "where is…" in steps a child can follow and then
+  shows the button. The knowledge is small (a few hundred short docs generated from the app's own code plus about 40
+  guides), English only, full of exact UI words (**Keep**, **Throw away**, **Click sound**), and it changes with every
+  UI change. A wrong answer ("press Publish", a page that does not exist) is worse than "I don't know".
+- **Decision.** Retrieval is an in-memory **BM25** ranker (k1 1.2, b 0.75; title and keywords weighted highest; shared
+  synonyms, a light stemmer and one-edit typo matching), implemented twice with the same rules (Python in the API,
+  TypeScript in the browser) and checked against one shared eval file of at least 44 Clip Factory questions. A match
+  must pass a minimum score, cover half the content words and hit a title or keyword, else the answer is a fixed "I
+  don't know that one yet.". A composer turns the best match into the full answer. **The model is optional**: Claude
+  Haiku only rewrites that answer, and any model output that names a button, path or number not found in the matches
+  is replaced by the composed answer.
+- **Alternatives.** *Embeddings in S3 Vectors* (already deployed for the learning memory, ADR-25) or *a Bedrock
+  Knowledge Base*: an embedding call per question and per corpus change, a vector index to keep in sync with every
+  deploy, fuzzy similarity that blurs exact button names ("Keep" vs "Keep going"), harder to test offline and to
+  explain when it is wrong; a Knowledge Base also bills a standing vector store. *Let the model answer from the whole
+  corpus* (bigger prompts, invented steps, nothing to fall back on when it fails). *A static FAQ page* (no navigation,
+  no spotlight, goes stale). *Model required* (every Bedrock hiccup, Marketplace subscription gap or cap would break
+  help).
+- **Consequences.** Help works with the model off, capped, slow or broken, and in the browser when the API is down. It
+  costs nothing per question without the model, is deterministic and testable offline, and an unknown or refused
+  question never costs a model call. Synonyms and keywords have to be curated for wording BM25 cannot bridge ("make it
+  calmer" → Reduce motion); the eval file is the guard. The two retrievers must stay identical, which the shared eval
+  file checks in both CI jobs.
+
+## ADR-39 Help runs in cf-prod-api with Claude Haiku 5.5 through the EU profile
+
+- **Context.** The pattern puts help in its own Lambda. Clip Factory has one owner, one HTTP API with a single
+  `ANY /v1/{proxy+}` route and the Cognito JWT authorizer, and a few questions a day. The agent uses Claude Fable 5.1
+  through the global profile (ADR-02). The help prompt holds the owner's question and the owner's skills.
+- **Decision.** Two routes, `GET /v1/help` and `POST /v1/help/answers`, in the existing `cf-prod-api`; the help package
+  is imported only on those routes, so other routes pay no cold-start cost. The model is **Claude Haiku 5.5** (the
+  newest Haiku on Bedrock, checked 2026-11-16) through the **EU** inference profile `eu.anthropic.claude-haiku-5-5`, set
+  as `helpModel` in `config/models.json` with a per-model `profilePrefix: "eu"` (Fable keeps the top-level `global`).
+  Cost is capped in code: 6 questions a minute, 60 an hour and 2,000 model answers per 30 days, all as conditional
+  DynamoDB writes on the existing table. A deploy flag (`HELP_ENABLED`) and a kill-switch item switch it off without a
+  deploy.
+- **Alternatives.** *A separate `cf-prod-help` Lambda* (a second deploy unit, role and log group for a few requests a
+  day, with no isolation benefit for one owner). *The global profile* (questions and skills could be processed outside
+  the EU for no gain at this volume). *Fable 5.1* (slower and dearer than needed to reword a few sentences, and
+  `aws_review` retention). *A separate request-guard table* (one more table; the single-table design, ADR-05, covers it).
+- **Consequences.** IAM grows by one statement: `bedrock:InvokeModel` on the EU profile and its six destination
+  foundation models only. A new structured-output schema can take Bedrock up to about 90 s to compile once; that first
+  call times out and falls back to the plain answer. Haiku 5.5 is billed through AWS Marketplace, so on an account that
+  has never used it the first call may fail until the model has been opened once; help stays on plain answers until
+  then. Like every model call (ADR-32), the help call goes through the shared `learn.converse_text`, so the owner's
+  skills block comes first and the help rules after it; when the skills cannot be read, help answers without the model.

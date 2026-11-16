@@ -105,7 +105,8 @@ export function WeekView({ week: asked }: { week: string | null }) {
   );
 
   function toggle(clipId: string) {
-    const now = picks ?? data?.clipIds ?? [];
+    // The newest taps first: quick taps can come before the screen has drawn the last one.
+    const now = pending.current ?? picks ?? data?.clipIds ?? [];
     const on = !now.includes(clipId);
     if (on && now.length >= MAX_PICKS) {
       toast.error(`You can star up to ${MAX_PICKS} clips a week. Take a star off another clip first.`);
@@ -302,6 +303,8 @@ function WeekCard({ item, rank, on, onToggle }: { item: WeekClip; rank: number; 
         aria-pressed={on}
         aria-label="Best this week"
         aria-describedby={id}
+        data-help="best-star"
+        data-help-dodge=""
         onClick={onToggle}
       >
         <Icon name="star" size={26} fill={on ? "currentColor" : "none"} />

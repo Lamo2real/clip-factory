@@ -64,14 +64,17 @@ test("stars save together after the last tap, then Clip Factory learns from them
   await settle(page);
   const stars = page.locator(".week-card").getByRole("button", { name: "Best this week" });
   const saves = await calls(page, "saveWeekBest");
-  await stars.nth(0).click();
-  await stars.nth(1).click();
-  await stars.nth(2).click();
-  await stars.nth(2).click(); // changed its mind
+  // Four quick taps, the last one changing its mind. They run in one go in the page, so nothing can be sent between
+  // them however slow the machine is, and the count read straight after shows nothing went out yet.
+  const sentDuringTaps = await stars.evaluateAll((els) => {
+    for (const i of [0, 1, 2, 2]) (els[i] as HTMLElement).click();
+    return (window as MockWindow).__cfMockCalls?.saveWeekBest ?? 0;
+  });
+  expect(sentDuringTaps).toBe(saves); // nothing sent yet: waiting for the last tap
   await expect(stars.nth(0)).toHaveAttribute("aria-pressed", "true");
+  await expect(stars.nth(1)).toHaveAttribute("aria-pressed", "true");
   await expect(stars.nth(2)).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByText("2 stars", { exact: false })).toBeVisible();
-  expect(await calls(page, "saveWeekBest")).toBe(saves); // nothing sent yet: waiting for the last tap
   await expect(page.getByText("Saved. Clip Factory will learn from your picks.")).toBeVisible();
   expect(await calls(page, "saveWeekBest")).toBe(saves + 1);
 

@@ -225,3 +225,63 @@ test("screenshot setup: every platform page fresh, and the pickers on a phone an
     await context.close();
   }
 });
+
+// Ask Clip Factory's panel with an answer (docs/CONTRACTS.md §19.11), phone and desktop.
+for (const size of [
+  { width: 375, height: 812, scale: 2, touch: true },
+  { width: 1440, height: 900, scale: 1, touch: false },
+]) {
+  test.describe(`help panel ${size.width}x${size.height}`, () => {
+    test.use({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, hasTouch: size.touch, isMobile: size.touch });
+    test(`screenshot help panel ${size.width}x${size.height}`, async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+      const panel = page.getByRole("dialog", { name: "Ask Clip Factory" });
+      await page.screenshot({ path: join(dir, `help-panel-empty-${size.width}x${size.height}.png`) });
+      const box = panel.getByLabel("Your question");
+      await box.fill("Where do I change my click sound?");
+      await box.press("Enter");
+      await panel.locator(".help-actions").last().waitFor();
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(dir, `help-panel-${size.width}x${size.height}.png`) });
+    });
+    // The Ask box: a two-line question with the paper plane inside the field, then the plane mid-flight.
+    test(`screenshot help ask box ${size.width}x${size.height}`, async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+      const panel = page.getByRole("dialog", { name: "Ask Clip Factory" });
+      const box = panel.getByLabel("Your question");
+      await box.fill("How do I connect YouTube?\nAnd does it post by itself?");
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: join(dir, `help-ask-box-${size.width}x${size.height}.png`) });
+      await panel.getByRole("button", { name: "Send", exact: true }).click();
+      await page.waitForTimeout(220);
+      await page.screenshot({ path: join(dir, `help-plane-flying-${size.width}x${size.height}.png`) });
+    });
+    // Review with the launcher clear of Keep, then the answer button lighting Keep up (the panel steps away when it
+    // would cover it), and the panel opened again with the same answer.
+    test(`screenshot help spotlight on Review ${size.width}x${size.height}`, async ({ page }) => {
+      await page.goto("/review");
+      await settle(page);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: join(dir, `help-review-launcher-${size.width}x${size.height}.png`) });
+      // Where the launcher has no room it steps aside, so open the panel the way any screen can.
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("cf:help", { detail: {} })));
+      const panel = page.getByRole("dialog", { name: "Ask Clip Factory" });
+      const box = panel.getByLabel("Your question");
+      await box.fill("What does Keep do?");
+      await box.press("Enter");
+      await panel.getByRole("button", { name: "Open Review" }).click();
+      await page.locator("[data-help-spotlit]").waitFor();
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: join(dir, `help-spotlight-keep-${size.width}x${size.height}.png`) });
+      if (await panel.count()) await panel.getByRole("button", { name: "Close" }).click();
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("cf:help", { detail: {} })));
+      await panel.locator(".help-steps").waitFor();
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: join(dir, `help-panel-reopened-${size.width}x${size.height}.png`) });
+    });
+  });
+}

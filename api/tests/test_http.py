@@ -24,7 +24,29 @@ def test_protected_route_without_sub_is_unauthorized(call: Call) -> None:
 def test_unknown_path_is_not_found(call: Call) -> None:
     status, body = call("GET", "/v1/nope")
     assert status == 404
-    assert body == {"error": {"code": "not_found", "message": "That address does not exist."}}
+    assert body == {"error": {"code": "not_found", "message": "That address does not exist."}, "requestId": "req-1"}
+
+
+def test_every_error_body_carries_the_request_id(call: Call) -> None:
+    for method, path, kw in (
+        ("GET", "/v1/me", {"sub": None}),
+        ("DELETE", "/v1/jobs", {}),
+        ("PUT", "/v1/settings", {"raw": "{"}),
+    ):
+        status, body = call(method, path, **kw)
+        assert status >= 400
+        assert body["requestId"] == "req-1"
+
+
+def test_response_headers_are_merged(app: App) -> None:
+    from clipfactory_api.http import Response, route
+
+    def handler(_app: App, _req: object) -> Response:
+        return Response(200, {"ok": True}, {"Retry-After": "5"})
+
+    out = dispatch(make_event("GET", "/v1/x"), app, [route("GET", "/v1/x", handler)])  # type: ignore[arg-type]
+    assert out["headers"]["retry-after"] == "5"
+    assert out["headers"]["content-type"] == "application/json"
 
 
 def test_wrong_method_on_known_path(call: Call) -> None:
@@ -155,6 +177,9 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/accounts/youtube/choose"),
         ("DELETE", "/v1/accounts/youtube"),
         ("GET", "/v1/accounts/tiktok/creator-info"),
+        # §19.6: Ask Clip Factory
+        ("GET", "/v1/help"),
+        ("POST", "/v1/help/answers"),
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)

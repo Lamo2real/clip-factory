@@ -105,7 +105,7 @@ function SoundGroup({
     <Panel className={`sound-group is-${kind}`}>
       <Apple id={apple} title={title} wide>
         {!soundsOn ? <SoundsOffNote onTurnOn={onTurnOn} /> : null}
-        <ul className="sound-grid" aria-label={`${label}s`}>
+        <ul className="sound-grid" aria-label={`${label}s`} data-help-dodge="">
           {list.map((sound) => {
             const chosen = sound.id === picked;
             return (
@@ -190,7 +190,7 @@ function TryIt({
   return (
     <Panel className="try-it">
       <Apple id="try-sounds">
-        <div className="try-it__controls">
+        <div className="try-it__controls" data-help-dodge="">
           <div className="try-it__fail">
             <span className="try-it__fail-label" id={`${id}-fail`}>
               Make it fail
@@ -199,6 +199,7 @@ function TryIt({
               type="button"
               role="switch"
               className="switch"
+              data-help-dodge=""
               aria-checked={fail}
               aria-labelledby={`${id}-fail`}
               onClick={() => setFail((f) => !f)}

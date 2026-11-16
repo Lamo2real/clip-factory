@@ -41,3 +41,15 @@ variable "schedule_rule_names" {
   default     = {}
   description = "EventBridge schedule rules watched for failed invocations, keyed by job (stats = cf-prod-stats)."
 }
+
+variable "help_log_group_name" {
+  type        = string
+  default     = ""
+  description = "cf-prod-api's log group (/aws/lambda/cf-prod-api), where Ask Clip Factory writes one help.answer line per question (docs/CONTRACTS.md §19.9). Empty: no help model alarm."
+}
+
+variable "help_model_failure_threshold" {
+  type        = number
+  default     = 10
+  description = "Help model calls that errored or timed out in one hour before the alarm fires. Each one still gave the owner a plain answer."
+}

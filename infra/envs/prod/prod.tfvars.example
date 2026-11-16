@@ -7,5 +7,8 @@ app_version     = "set-by-deploy-workflow"
 lambda_zip_path = "../../../api/dist/lambda.zip"
 alarm_email     = ""
 web_dev_origin  = "http://localhost:5173"
+# Ask Clip Factory (in-app help). The HELP/SWITCH table item turns it off without a deploy.
+help_enabled     = true
+help_monthly_cap = 2000
 # false only when another stack already sets the account's API Gateway CloudWatch role.
 manage_api_gateway_account = true

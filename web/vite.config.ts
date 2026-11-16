@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { defineConfig, type Plugin } from "vite";
@@ -85,12 +86,37 @@ function serviceWorker(appVer: string): Plugin {
   };
 }
 
+/**
+ * Ask Clip Factory's corpus for the API (docs/CONTRACTS.md §19.2): emits assets/help-corpus.<sha256-12>.json
+ * (immutable, cached) and names it in index.html (uploaded no-cache) with a cf-help-corpus meta tag, so the API
+ * always reads the corpus of the UI that is deployed. The app itself imports the corpus lazily.
+ */
+export function helpCorpusFile(source: Buffer | string): string {
+  return `assets/help-corpus.${createHash("sha256").update(source).digest("hex").slice(0, 12)}.json`;
+}
+
+function helpCorpus(): Plugin {
+  let fileName = "";
+  return {
+    name: "cf-help-corpus",
+    apply: "build",
+    buildStart() {
+      const source = readFileSync(join(root, "src/features/help/help-corpus.json"));
+      fileName = helpCorpusFile(source);
+      this.emitFile({ type: "asset", fileName, source });
+    },
+    transformIndexHtml() {
+      return [{ tag: "meta", attrs: { name: "cf-help-corpus", content: `/${fileName}` }, injectTo: "head" }];
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   // `vite --mode mock` is the same as VITE_MOCK=1: the whole UI runs on the in-memory API.
   if (mode === "mock") process.env.VITE_MOCK ??= "1";
   const version = appVersion();
   return {
-    plugins: [react(), versionFile(version), serviceWorker(version)],
+    plugins: [react(), helpCorpus(), versionFile(version), serviceWorker(version)],
     define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(version) },
     server: { port: 5173 },
     build: { outDir: "dist", sourcemap: false, target: "es2022" },

@@ -11,15 +11,36 @@ export function UpdateBar() {
   const [running, setRunning] = useState(false);
   const show = !!available && (!dismissed || running);
 
+  const bar = useRef<HTMLDivElement>(null);
+
   // Lets the page leave room at the bottom (and lift the toasts) while the bar is up.
   useEffect(() => {
     document.documentElement.classList.toggle("has-update-bar", show);
     return () => document.documentElement.classList.remove("has-update-bar");
   }, [show]);
 
+  // --update-bar-h on <html>: the bar's height, 0 while hidden, so Ask Clip Factory's launcher sits above it (§19.8).
+  useEffect(() => {
+    const root = document.documentElement;
+    const el = bar.current;
+    const set = (h: number) => root.style.setProperty("--update-bar-h", `${Math.round(h)}px`);
+    if (!show || !el) {
+      set(0);
+      return;
+    }
+    set(el.getBoundingClientRect().height);
+    if (typeof ResizeObserver === "undefined") return () => set(0);
+    const ro = new ResizeObserver(() => set(el.getBoundingClientRect().height));
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      set(0);
+    };
+  }, [show]);
+
   if (!available || !show) return null;
   return (
-    <div className="update-bar glass glass--strong" role="region" aria-label="New version">
+    <div ref={bar} className="update-bar glass glass--strong" role="region" aria-label="New version">
       {running ? <Updating info={available} /> : <Offer info={available} onReload={() => setRunning(true)} />}
     </div>
   );

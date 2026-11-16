@@ -238,7 +238,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
     if (step.upload) out.push(<VerificationUpload key="upload" setup={setup} onChange={(s) => stayOpen(step.id, s)} reload={reload} />);
     if (step.auto === "connected")
       out.push(
-        <div className="gstep__connect" key="connect">
+        <div className="gstep__connect" key="connect" data-help="setup-connect">
           <Button
             variant={primary ? "primary" : "glass"}
             size="lg"
@@ -273,7 +273,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
     }
     if (step.extra === "youtube-privacy")
       out.push(
-        <div className="gstep__picker" id="youtube-privacy" key="privacy" tabIndex={-1}>
+        <div className="gstep__picker" id="youtube-privacy" data-help="youtube-privacy" key="privacy" tabIndex={-1}>
           <span className="gstep__picker-label" id="youtube-privacy-name">
             Who can see your YouTube clips
           </span>
@@ -304,7 +304,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
       );
     if (step.extra === "x-cost")
       out.push(
-        <p className="callout callout--info" id="x-cost" key="x-cost" tabIndex={-1}>
+        <p className="callout callout--info" id="x-cost" data-help="x-cost" key="x-cost" tabIndex={-1}>
           <Icon name="info" size={18} />
           <span>{xLeaf} Posting costs about $1.50 for 100 clips.</span>
         </p>,
@@ -319,7 +319,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
 
   return (
     <div className="setup-page">
-      <header className="setup-head glass">
+      <header className="setup-head glass" data-help="setup-progress">
         <span className={`setup-head__mark is-${platform}`}>
           <PlatformMark platform={platform} size={34} />
         </span>

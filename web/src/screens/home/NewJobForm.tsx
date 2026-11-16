@@ -11,6 +11,7 @@ import { Button, Progress, Segmented, Stepper } from "../../components/ui.tsx";
 import { bytes } from "../../lib/format.ts";
 import { checkLink, extractLink, KIND_LABEL, PLATFORM_NAMES } from "../../lib/links.ts";
 import { navigate } from "../../lib/router.ts";
+import { useUnsaved } from "../../features/help/unsaved.ts";
 
 const MAX_UPLOAD = 5 * 1024 ** 3;
 
@@ -35,6 +36,8 @@ export function NewJobForm() {
   const linkInput = useRef<HTMLInputElement>(null);
   const [nudge, setNudge] = useState(false);
   const mounted = useRef(true);
+  // A pasted link that is not sent yet, or an upload in progress: Ask Clip Factory asks before leaving (§19.8).
+  useUnsaved(() => (mode === "link" && link.trim().length > 0 && !busy) || progress !== null);
 
   // Leaving Home stops a running upload: it has no progress or Cancel anywhere else, and must not pull the owner
   // back to a job page later from whatever screen they moved on to.
@@ -132,7 +135,7 @@ export function NewJobForm() {
         }}
         options={[
           { value: "link", label: "Paste a link" },
-          { value: "upload", label: "Upload a video" },
+          { value: "upload", label: "Upload a video", help: "upload-video" },
         ]}
       />
 
@@ -141,7 +144,7 @@ export function NewJobForm() {
           <label className="field__label" htmlFor={`${id}-link`}>
             YouTube, Twitch or Kick link
           </label>
-          <div className={`linkbox${check.state === "ok" ? " is-ok" : ""}${showLinkError ? " is-bad" : ""}`}>
+          <div className={`linkbox${check.state === "ok" ? " is-ok" : ""}${showLinkError ? " is-bad" : ""}`} data-help-dodge="">
             <span className={`linkbox__mark${platform ? ` is-${platform}` : ""}`} aria-hidden="true">
               {platform ? <PlatformMark platform={platform} size={22} /> : <Icon name="link" />}
             </span>
@@ -165,7 +168,7 @@ export function NewJobForm() {
                 <Icon name="x" size={18} />
               </button>
             ) : (
-              <button type="button" className="linkbox__paste" onClick={pasteFromClipboard}>
+              <button type="button" className="linkbox__paste" onClick={pasteFromClipboard} data-help="paste-link">
                 <Icon name="paste" size={18} />
                 <span>Paste</span>
               </button>
@@ -284,6 +287,7 @@ export function NewJobForm() {
           variant="primary"
           size="lg"
           icon="scissors"
+          data-help="make-clips"
           disabled={!ready}
           loading={busy}
           onClickCapture={() => {

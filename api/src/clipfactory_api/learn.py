@@ -139,20 +139,36 @@ def distil_learning(
 
 
 def converse_text(
-    bedrock: Any, model_id: str, system: str, user_text: str, *, max_chars: int, skills: SkillsBlock
+    bedrock: Any,
+    model_id: str,
+    system: str,
+    user_text: str,
+    *,
+    max_chars: int,
+    skills: SkillsBlock,
+    max_tokens: int = MAX_TOKENS,
+    request_fields: Mapping[str, Any] | None = None,
+    output_config: Mapping[str, Any] | None = None,
+    on_response: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> tuple[str, str]:
-    """One Converse call with the shared Fable 5.1 settings (maxTokens 4000, effort low, no sampling parameters)
-    and the owner's skills block first in the system prompt. Returns (stopReason, answer text). Reasoning blocks
-    (``reasoningContent``) are not part of the answer. When Bedrock refuses the cache point, cache points are
-    turned off for this process and the call is sent again without it."""
+    """One Converse call with the owner's skills block first in the system prompt. Returns (stopReason, answer
+    text). Reasoning blocks (``reasoningContent``) are not part of the answer. When Bedrock refuses the cache point,
+    cache points are turned off for this process and the call is sent again without it.
+
+    The defaults are the shared Fable 5.1 settings (maxTokens 4000, effort low, no sampling parameters). Ask Clip
+    Factory (§19.5) passes its own ``max_tokens``, ``request_fields`` and JSON-schema ``output_config``, and reads
+    the token usage through ``on_response``."""
+    fields = dict(request_fields) if request_fields is not None else {"output_config": {"effort": EFFORT}}
+    extra: dict[str, Any] = {"outputConfig": dict(output_config)} if output_config is not None else {}
 
     def send() -> Any:
         return bedrock.converse(
             modelId=model_id,
             system=compose_system(skills, system),
             messages=[{"role": "user", "content": [{"text": user_text}]}],
-            inferenceConfig={"maxTokens": MAX_TOKENS},
-            additionalModelRequestFields={"output_config": {"effort": EFFORT}},
+            inferenceConfig={"maxTokens": max_tokens},
+            additionalModelRequestFields=fields,
+            **extra,
         )
 
     try:
@@ -162,6 +178,8 @@ def converse_text(
             raise
         turn_cache_points_off()
         out = send()
+    if on_response is not None:
+        on_response(out)
     stop_reason = str(out.get("stopReason") or "")
     blocks = out.get("output", {}).get("message", {}).get("content", [])
     text = " ".join(b["text"] for b in blocks if isinstance(b, dict) and isinstance(b.get("text"), str))

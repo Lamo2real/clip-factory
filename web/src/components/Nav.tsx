@@ -76,6 +76,7 @@ export function Sidebar() {
             <A
               href={item.href}
               className={`sidebar__item${active === item.key ? " is-active" : ""}`}
+              data-help={`nav-${item.key}`}
               aria-current={active === item.key ? "page" : undefined}
               aria-label={sidebarCollapsed ? accessible(item) : undefined}
               data-tip={sidebarCollapsed ? item.label : undefined}
@@ -134,6 +135,7 @@ export function TabBar() {
             <A
               href={item.href}
               className={`tabbar__item${active === item.key ? " is-active" : ""}`}
+              data-help={`nav-${item.key}`}
               aria-current={active === item.key ? "page" : undefined}
               aria-label={accessible(item)}
               title={item.label}

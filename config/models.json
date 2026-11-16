@@ -1,11 +1,18 @@
 {
-  "$comment": "The only place model ids live. Everything else reads them from here (Terraform, the agent image). embeddingModel.modelId is in-Region and used as is (never prefixed with profilePrefix).",
+  "$comment": "The only place model ids live. Everything else reads them from here (Terraform, the agent image). A model's own profilePrefix overrides the top-level one (Haiku for Ask Clip Factory uses the EU geo profile, docs/CONTRACTS.md §19.5); profileRegions lists that profile's destination regions, for IAM. embeddingModel.modelId is in-Region and used as is (never prefixed with profilePrefix).",
   "profilePrefix": "global",
   "agentModel": "fable-5-1",
+  "helpModel": "haiku-5-5",
   "models": {
     "fable-5-1": {
       "label": "Claude Fable 5.1",
       "modelId": "anthropic.claude-fable-5-1"
+    },
+    "haiku-5-5": {
+      "label": "Claude Haiku 5.5",
+      "modelId": "anthropic.claude-haiku-5-5",
+      "profilePrefix": "eu",
+      "profileRegions": ["eu-central-1", "eu-north-1", "eu-south-1", "eu-south-2", "eu-west-1", "eu-west-3"]
     }
   },
   "embeddingModel": {

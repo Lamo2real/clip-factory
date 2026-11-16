@@ -51,13 +51,17 @@ from the browser). It is built so simply that a child could use it.
     **Connect**, approve on the platform, and you are back with confetti. No code, and the steps were checked
     against each platform on 16 Nov 2026. TikTok posts may stay private until TikTok approves the app, and X costs a
     little per post ([the steps](docs/SETUP_POSTING.md)).
+13. **Ask Clip Factory.** Tap **Ask** on any page and type "Where do I change my click sound?" or "How many views did
+    my best clip get this week?". You get a few short steps with the app's own button names, and a button that opens
+    the right page and lights up the right control. It answers from knowledge built from the app itself, so it never
+    makes things up, and it still works when the AI model is off ([details](docs/HELP_ASSISTANT.md)).
 
 ## Architecture
 
 Python for every backend, Terraform for every resource, and serverless only: CloudFront, S3 (web, media),
 S3 Vectors, DynamoDB with Streams, three API Gateway APIs (HTTP for the app, WebSocket for live updates, REST for
 platform webhooks), nine Lambdas (two of them durable functions), one EventBridge rule (the 15-minute numbers tick),
-Amazon Bedrock AgentCore, Claude Fable 5.1 and Titan embeddings on Bedrock, Transcribe, Cognito, SSM Parameter Store,
+Amazon Bedrock AgentCore, Claude Fable 5.1, Claude Haiku 5.5 (EU profile, for Ask Clip Factory) and Titan embeddings on Bedrock, Transcribe, Cognito, SSM Parameter Store,
 Secrets Manager (the only place for platform keys and tokens), CloudWatch and SNS. No servers, no containers to
 run, no VPC. OpenSearch Serverless is drawn as an option, not deployed.
 
@@ -74,8 +78,9 @@ it in draw.io or at app.diagrams.net); [docs/ARCHITECTURE.md](docs/ARCHITECTURE.
 | [Business requirements](docs/BUSINESS_REQUIREMENTS.md) | Every requirement from the owner's brief, numbered, with acceptance criteria and open questions |
 | [Contracts](docs/CONTRACTS.md) | The single source of truth: routes, data shapes, DynamoDB keys, S3 layout, names, outputs |
 | [Architecture](docs/ARCHITECTURE.md) | AWS services and why, the durable job and clip flows, live updates, the learning memory, webhooks, the numbers poller and the weekly best, sequence diagrams, failure handling, cost, limits |
+| [Ask Clip Factory](docs/HELP_ASSISTANT.md) | The in-app help assistant: how it answers, the guides, adding a guide or anchor, the model and its fallback, the kill switch, live numbers, the routes it links to |
 | [Agent](docs/AGENT.md) | How the clip agent behaves: pipeline steps, tools, skills, prompts, the learnings loop, best of the week |
-| [UX design system](docs/UX_DESIGN_SYSTEM.md) | Colours, liquid glass, type, layout, navigation, the Settings tree and search, the sound catalog and picker, the clip performance page (lines and stacks per screen size) and This week, motion, overflow rules, PWA, Get the app card, update bar and reload curve, kid-proof checklist |
+| [UX design system](docs/UX_DESIGN_SYSTEM.md) | Colours, liquid glass, type, layout, navigation, the Settings tree and search, the sound catalog and picker, the clip performance page (lines and stacks per screen size) and This week, the Ask Clip Factory launcher and panel, motion, overflow rules, PWA, Get the app card, update bar and reload curve, kid-proof checklist |
 | [Deployment](docs/DEPLOYMENT.md) | One-time AWS and GitHub setup (deploy role, Bedrock data retention, API Gateway logging role), what a deploy does, desktop downloads and their first open, release labels, clip numbers and X API credits, first sign-in, rollback, tearing down |
 | [Security](docs/SECURITY.md) | What is protected and how, token lifetimes, platform keys and tokens in Secrets Manager, the Connect state, the owner's convenience-first stance |
 | [Testing](docs/TESTING.md) | Every test suite, how to run it locally, what CI runs |
@@ -149,6 +154,7 @@ steps are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 | 1 | Kid-proof screens (one next step, big buttons, Undo instead of "Are you sure?") | Added after the first build |
 | 1 | Settings as a tree with search and a folder panel; pick your click and error sounds (30 each) | Added after the first build ([contracts §15](docs/CONTRACTS.md#15-settings-as-a-tree-and-choosing-your-click-sounds-owner-request-2026-11-16)) |
 | 1 | Clip performance page (video, five lines, five stacks), numbers refresh every 15–30 min and Refresh numbers, Library › This week with the weekly best | Added ([contracts §16](docs/CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16)); shows real numbers once accounts connect |
+| 1 | Ask Clip Factory: in-app help with steps, navigation and spotlight, grounded in the app's own code, Claude Haiku 5.5 optional | Added ([contracts §19](docs/CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16), [help](docs/HELP_ASSISTANT.md)) |
 | 2 | Set up posting: a guided setup list per platform, real Connect (OAuth, tokens in Secrets Manager) and real posting to YouTube, TikTok, Instagram, Facebook and X | Added ([contracts §17](docs/CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16), [steps](docs/SETUP_POSTING.md)); works once the owner sets up each platform |
 | 2 | Real numbers from each platform | Added with the setup; TikTok numbers need TikTok's audit |
 | 2 | Post clips kept before a platform was connected, webhook signatures | Planned ([roadmap](docs/ROADMAP.md#phase-2-social-integrations)) |
