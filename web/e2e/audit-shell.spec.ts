@@ -213,4 +213,21 @@ test.describe("app shell", () => {
     });
     expect(ring).toEqual({ tag: "MAIN", focusVisible: true, outline: "none", shadow: "none" });
   });
+
+  test("a route change hands focus to main and the Skip to content link stays out of sight until tabbed to", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/settings");
+    await settle(page);
+    await page.locator(".tabbar a[href=\"/jobs\"]").click();
+    await settle(page);
+    const skip = page.locator(".skip-link");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("main");
+    expect((await skip.boundingBox())!.y + (await skip.boundingBox())!.height).toBeLessThanOrEqual(0);
+    await page.goto("/");
+    await settle(page);
+    await page.keyboard.press("Tab");
+    await expect(skip).toBeFocused();
+    // It slides down (transition on top), so wait for it to land in view.
+    await expect.poll(async () => (await skip.boundingBox())!.y).toBeGreaterThanOrEqual(0);
+  });
 });

@@ -1016,7 +1016,7 @@
   padding: 2px 8px;
   border-radius: var(--r-pill);
   background: rgb(var(--sage-rgb) / 0.35);
-  color: var(--sage-deep);
+  color: var(--sage-text); /* --sage-deep is under 4.5:1 on this tint */
   font-size: var(--fs-xs);
   font-weight: 700;
   white-space: nowrap;
@@ -1109,12 +1109,6 @@
   color: var(--ink-2);
   font-weight: 600;
 }
-@media (prefers-color-scheme: dark) {
-  .perf__how-box {
-    background: rgb(var(--ink-rgb) / 0.08);
-  }
-}
-
 /* Library and This week: a clip's money guess (with a visible "Best guess" tag) and the week total. */
 .earned-chip {
   display: inline-grid;
@@ -1148,7 +1142,7 @@
   padding: 1px 8px;
   border-radius: var(--r-pill);
   background: rgb(var(--sage-rgb) / 0.35);
-  color: var(--sage-deep);
+  color: var(--sage-text); /* --sage-deep is only ~3.9:1 on this tint */
   font-size: var(--fs-xs);
   font-weight: 700;
   white-space: nowrap;

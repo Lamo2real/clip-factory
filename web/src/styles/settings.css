@@ -1359,7 +1359,7 @@ ol.md__list {
 .money__paid-word {
   font-size: var(--fs-small);
   font-weight: 700;
-  color: var(--sage-deep);
+  color: var(--sage-text); /* --sage-deep is only ~4.2:1 on the glass here */
 }
 .money__item.is-off .money__paid-word {
   color: var(--ink-2);
@@ -1439,7 +1439,7 @@ ol.md__list {
   min-height: 44px;
   padding: 0;
   border: 0;
-  border-radius: var(--r-sm, 10px);
+  border-radius: var(--r-sm);
   background: none;
   color: var(--ink);
   font: inherit;
@@ -1490,9 +1490,4 @@ ol.md__list {
 .money__date {
   color: var(--ink-2);
   font-size: var(--fs-xs);
-}
-@media (prefers-color-scheme: dark) {
-  .money__item {
-    background: rgb(var(--ink-rgb) / 0.05);
-  }
 }
