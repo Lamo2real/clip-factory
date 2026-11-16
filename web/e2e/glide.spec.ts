@@ -39,16 +39,26 @@ test.describe("glide", () => {
       const bar = page.locator(".segmented").first();
       await expect(bar).toHaveClass(/has-glide/);
       await landsOn(bar, ".segmented__opt.is-on");
-      const start = (await boxes(bar, ".segmented__opt.is-on")).glide[0]!;
-      await bar.locator(".segmented__opt", { hasText: "Upload a video" }).click();
+      // Record the glide's x on every frame from the tap until it settles, inside the page (no round trips).
+      const xs = await bar.evaluate(
+        (el) =>
+          new Promise<{ start: number; end: number; seen: number[] }>((done) => {
+            const g = el.querySelector<HTMLElement>(":scope > .glide")!;
+            const target = [...el.querySelectorAll<HTMLElement>(".segmented__opt")].find((o) => o.textContent?.includes("Upload a video"))!;
+            const start = g.getBoundingClientRect().x;
+            const seen: number[] = [];
+            const t0 = performance.now();
+            const tick = () => {
+              seen.push(g.getBoundingClientRect().x);
+              if (performance.now() - t0 < 900) requestAnimationFrame(tick);
+              else done({ start, end: target.getBoundingClientRect().x, seen });
+            };
+            target.querySelector("input")!.click();
+            requestAnimationFrame(tick);
+          }),
+      );
       // It travels: part-way across before it lands (not a jump).
-      const seen: number[] = [];
-      for (let i = 0; i < 12; i++) {
-        seen.push((await boxes(bar, ".segmented__opt.is-on")).glide[0]!);
-        await page.waitForTimeout(25);
-      }
-      const end = (await bar.locator(".segmented__opt.is-on").boundingBox())!.x;
-      expect(seen.some((x) => x > start + 4 && x < end - 4)).toBe(true);
+      expect(xs.seen.some((x) => x > xs.start + 4 && x < xs.end - 4)).toBe(true);
       await landsOn(bar, ".segmented__opt.is-on");
       // The chosen option no longer paints its own pill; the glide is the pill.
       expect(await bar.locator(".segmented__opt.is-on").evaluate((el) => getComputedStyle(el).backgroundImage)).toBe("none");
