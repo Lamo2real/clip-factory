@@ -77,7 +77,9 @@ export function Glide({
     };
 
     place();
-    const ro = new ResizeObserver(place);
+    // Older browsers and test DOMs have no ResizeObserver: then window resizes and class changes still move it.
+    const ro: Pick<ResizeObserver, "observe" | "disconnect"> =
+      typeof ResizeObserver === "undefined" ? { observe: () => undefined, disconnect: () => undefined } : new ResizeObserver(place);
     ro.observe(box);
     for (const child of Array.from(box.children)) if (child !== glide) ro.observe(child);
     // Ignore our own writes (the bar's has-glide class, the glide's classes and style), or this would feed itself.
