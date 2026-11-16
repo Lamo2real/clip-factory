@@ -5,7 +5,7 @@
 #   Run inside the repository (deploy.yml checks out with fetch-depth 0, so the whole history is there).
 #   AREAS_FILE  optional, default <repository>/web/areas.json: {"web/src/routes/settings": "Settings", ...}
 # Where the labels come from, first match wins:
-#   1. "Area: <label>" trailers in the commits after <prev-sha> up to <new-sha> (newest first)
+#   1. "Area: <label>" lines (trailers, or own lines in the message) in the commits after <prev-sha> up to <new-sha> (newest first)
 #   2. the changed files mapped through AREAS_FILE (longest matching folder wins; most-changed area first)
 #   3. ["Improvements"], also when <prev-sha> is unknown here or not an ancestor of <new-sha>
 # Labels are trimmed, cut to 3 words, de-duplicated (ignoring case), and at most 3 are printed.
@@ -48,8 +48,9 @@ tidy='
   | reduce .[] as $l ([]; if any(.[]; ascii_downcase == ($l | ascii_downcase)) then . else . + [$l] end)
   | .[:$max]'
 
-# 1. Commit trailers.
-trailers="$(git log --format='%(trailers:key=Area,valueonly)' "${prev}..${new}")"
+# 1. "Area:" lines. Read from the whole message, not only git's trailer block, so a blank line between
+#    "Area:" and "Co-Authored-By:" (which leaves Area outside the trailers) still counts.
+trailers="$(git log --format='%B' "${prev}..${new}" | sed -n -E 's/^[[:space:]]*Area:[[:space:]]*(.*)$/\1/p' || true)"
 labels="$(jq -cR -s --argjson max "$MAX_LABELS" "split(\"\\n\") | ${tidy}" <<<"$trailers")" ||
   fallback "could not read the Area trailers"
 if [ "$labels" != "[]" ]; then
