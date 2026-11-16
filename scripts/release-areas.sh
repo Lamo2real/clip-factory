@@ -8,7 +8,9 @@
 #   1. "Area: <label>" lines (trailers, or own lines in the message) in the commits after <prev-sha> up to <new-sha> (newest first)
 #   2. the changed files mapped through AREAS_FILE (longest matching folder wins; most-changed area first)
 #   3. ["Improvements"], also when <prev-sha> is unknown here or not an ancestor of <new-sha>
-# Labels are trimmed, cut to 3 words, de-duplicated (ignoring case), and at most 3 are printed.
+# Labels are trimmed, cut to 3 words, de-duplicated (ignoring case), and at most 3 are printed. A cut never leaves a
+# joining word or punctuation hanging at the end: "Fixes: Home and Jobs" prints "Fixes: Home", not "Fixes: Home and".
+# A label of 3 words or fewer is printed as written ("Sign in" stays "Sign in").
 # Never fails a deploy over labels: anything unexpected falls back to ["Improvements"] with a warning on stderr.
 set -euo pipefail
 
@@ -40,11 +42,18 @@ git merge-base --is-ancestor "$prev" "$new" || fallback "commit $1 is not an anc
 # Cleans, de-duplicates and caps a JSON array of raw labels. Commas split one trailer into several labels.
 # shellcheck disable=SC2016 # jq variables, not shell ones
 tidy='
+  ["and","&","+","or","of","the","a","an","for","to","with","in","on","at","by","from"] as $joiners |
   [ .[] | strings | split(",")[]
     | gsub("[\\s]+"; " ") | sub("^ "; "") | sub(" $"; "")
     | select(length > 0)
-    | (split(" ")[:3] | join(" "))
-    | .[:40] | sub(" $"; "") ]
+    | (split(" ") as $words
+        | if ($words | length) > 3 then
+            ($words[:3]
+              | until(length <= 1 or ((.[-1] | ascii_downcase) as $w | $joiners | index($w) | not); .[:-1])
+              | join(" ") | sub("[\\s:;,.&+/-]+$"; ""))
+          else $words | join(" ") end)
+    | .[:40] | sub(" $"; "")
+    | select(length > 0) ]
   | reduce .[] as $l ([]; if any(.[]; ascii_downcase == ($l | ascii_downcase)) then . else . + [$l] end)
   | .[:$max]'
 
