@@ -1,8 +1,9 @@
-"""Platform adapters by name (docs/CONTRACTS.md §14.5, §16.5).
+"""Platform adapters by name (docs/CONTRACTS.md §14.5, §16.5, §17.6).
 
-Each platform has its real adapter: the stats field mapping is complete, publishing arrives in phase 2. Until then
-``posts.connected_account`` is always ``None`` and the default token provider reports "not connected", so no
-adapter call ever reaches the network.
+Each platform has its real stats adapter; posting goes through ``publishers`` (start → check → finish) and
+``errors`` maps platform answers to plain sentences. The default token provider reports "not connected"; the Lambdas
+pass ``oauth.tokens.SecretsTokenProvider`` (``make_adapters(tokens=...)``), so nothing reaches a platform without a
+connected account.
 """
 
 from __future__ import annotations
@@ -41,7 +42,7 @@ ADAPTER_CLASSES: dict[str, type[AdapterBase]] = {
 }
 
 
-def make_adapters(*, tokens: TokenProvider = no_tokens, graph_api_version: str = "v25.0") -> dict[str, AdapterBase]:
+def make_adapters(*, tokens: TokenProvider = no_tokens, graph_api_version: str = "v27.0") -> dict[str, AdapterBase]:
     return {name: cls(tokens=tokens, graph_api_version=graph_api_version) for name, cls in ADAPTER_CLASSES.items()}
 
 

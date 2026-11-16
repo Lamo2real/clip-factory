@@ -443,3 +443,24 @@ def test_broadcast_reports_records_only_when_the_query_fails(
     out = broadcast.process({"Records": [_record(_job(), seq="11"), _record(_job(), seq="12")]}, bc_deps)
     assert out == {"batchItemFailures": [{"itemIdentifier": "11"}, {"itemIdentifier": "12"}]}
     assert management.sent == []
+
+
+@pytest.mark.parametrize(
+    ("sk", "event"),
+    [("ACCOUNT#youtube", "MODIFY"), ("SETUP#tiktok", "INSERT"), ("SETUP#x", "REMOVE"), ("ACCOUNT#x#1", "MODIFY")],
+)
+def test_broadcast_setup_changes_are_partial(
+    bc_deps: broadcast.BroadcastDeps, management: FakeManagement, sk: str, event: str
+) -> None:
+    item = {
+        "pk": f"USER#{USER}",
+        "sk": sk,
+        "type": "setup",
+        "userId": USER,
+        "platform": sk.split("#")[1],
+        "keyHints": {"clientSecret": "••••abcd"},
+        "accountId": "secret-ish",
+    }
+    broadcast.process({"Records": [_record(item, event=event)]}, bc_deps)
+    platform = sk.split("#")[1]
+    assert [m for _, m in management.sent] == [{"type": "setup", "op": "upsert", "id": platform, "partial": True}] * 2

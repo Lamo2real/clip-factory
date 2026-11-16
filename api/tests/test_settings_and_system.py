@@ -17,6 +17,7 @@ DEFAULTS = {
     "errorSound": 5,
     "hasYoutubeCookies": False,
     "platforms": ["youtube", "instagram", "facebook", "tiktok", "x"],
+    "youtubePrivacy": "public",
 }
 
 
@@ -215,13 +216,6 @@ def test_accounts(call: Call, store: db.Store) -> None:
     assert body["accounts"][-1] == {"platform": "x", "status": "connected", "handle": "@me"}
 
 
-def test_connect_is_not_implemented(call: Call) -> None:
-    status, body = call("POST", "/v1/accounts/youtube/connect")
-    assert status == 501
-    assert body == {"error": {"code": "not_implemented", "message": "Connecting accounts arrives in the next phase."}}
-    assert call("POST", "/v1/accounts/myspace/connect")[0] == 404
-
-
 def test_posts_and_insights(call: Call, store: db.Store) -> None:
     clip = seed_clip(store)
     _, confirmed = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
@@ -250,3 +244,17 @@ def test_posts_and_insights(call: Call, store: db.Store) -> None:
     assert body["learnings"][0]["text"] == "Short hooks win."
     assert [p["postId"] for p in body["posts"]] == [post["postId"]]
     assert body["posts"][0]["metrics"]["views"] == 10
+
+
+@pytest.mark.parametrize("value", ["public", "unlisted", "private"])
+def test_youtube_privacy_choice(call: Call, value: str) -> None:
+    status, body = call("PUT", "/v1/settings", {"youtubePrivacy": value})
+    assert status == 200
+    assert body["settings"]["youtubePrivacy"] == value
+
+
+@pytest.mark.parametrize("value", ["everyone", "", None, 1])
+def test_youtube_privacy_is_checked(call: Call, value: object) -> None:
+    status, body = call("PUT", "/v1/settings", {"youtubePrivacy": value})
+    assert status == 400
+    assert "YouTube" in body["error"]["message"]

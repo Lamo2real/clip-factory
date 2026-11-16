@@ -1,6 +1,7 @@
 """``cf-prod-broadcast``: DynamoDB Streams on ``cf-prod-data`` → the owner's open WebSockets (docs/CONTRACTS.md §14.2).
 
-The event source mapping only delivers ``JOB#``, ``CLIP#``, ``POST#``, ``LEARNING#`` and ``WEEK#`` items. Per batch the last
+The event source mapping only delivers ``JOB#``, ``CLIP#``, ``POST#``, ``LEARNING#``, ``WEEK#``, ``ACCOUNT#`` and
+``SETUP#`` items (the last two become ``{type: "setup", op: "upsert", id: platform, partial: true}``, §17.4). Per batch the last
 record per item wins (job heartbeats coalesce); each becomes one ``LiveEvent``, built by the same public-shape
 functions the HTTP API uses, so internal fields never leave. An event over 24 KB is sent as ``partial: true`` (the
 web refetches). Closed connections (410 Gone) are deleted; other send errors are logged and skipped. Only a
@@ -20,7 +21,17 @@ from . import MAX_EVENT_BYTES, encode, is_gone, management_client
 
 Item = dict[str, Any]
 
-TYPES = {"JOB#": "job", "CLIP#": "clip", "POST#": "post", "LEARNING#": "learning", "WEEK#": "week"}
+TYPES = {
+    "JOB#": "job",
+    "CLIP#": "clip",
+    "POST#": "post",
+    "LEARNING#": "learning",
+    "WEEK#": "week",
+    "ACCOUNT#": "setup",
+    "SETUP#": "setup",
+}
+# Setup changes carry no item: the web refetches GET /v1/setup (§17.4), so keys, hints and tokens never ride along.
+PARTIAL_ONLY = frozenset({"setup"})
 ID_FIELDS = {"job": "jobId", "clip": "clipId", "post": "postId", "learning": "learningId", "week": "week"}
 
 
@@ -87,6 +98,8 @@ def message_for(record: Mapping[str, Any], deserialize: Callable[[Mapping[str, A
         return None
     kind, item_id = found
     data = record.get("dynamodb") or {}
+    if kind in PARTIAL_ONLY:
+        return {"type": kind, "op": "upsert", "id": item_id.split("#", 1)[0], "partial": True}
     if record.get("eventName") == "REMOVE":
         return {"type": kind, "op": "delete", "id": item_id}
     image = data.get("NewImage")

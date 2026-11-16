@@ -1,4 +1,4 @@
-"""Health, the signed-in owner, uploads, settings, accounts, posts and insights."""
+"""Health, the signed-in owner, uploads, settings, posts and insights (accounts: ``routes/setup.py``, §17.4)."""
 
 from __future__ import annotations
 
@@ -101,16 +101,6 @@ def create_cookies_upload(app: App, req: Request) -> Response:
 def delete_cookies(app: App, req: Request) -> Response:
     app.media.delete(s3.cookies_key(req.user_id))
     return no_content()
-
-
-def list_accounts(app: App, req: Request) -> Response:
-    return ok({"accounts": posts.accounts(app.store, req.user_id)})
-
-
-def connect_account(app: App, req: Request) -> Response:
-    if req.params["platform"] not in settings.PLATFORMS:
-        raise ApiError(404, "not_found", "We do not support that platform.")
-    raise ApiError(501, "not_implemented", "Connecting accounts arrives in the next phase.")
 
 
 def list_posts(app: App, req: Request) -> Response:

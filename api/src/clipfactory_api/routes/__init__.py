@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..http import Route, route
-from . import clips, jobs, performance, skills, system, weeks
+from . import clips, jobs, performance, setup, skills, system, weeks
 
 ROUTES: list[Route] = [
     route("GET", "/v1/health", system.health, public=True),
@@ -34,8 +34,19 @@ ROUTES: list[Route] = [
     route("PUT", "/v1/settings", system.put_settings),
     route("POST", "/v1/settings/cookies", system.create_cookies_upload),
     route("DELETE", "/v1/settings/cookies", system.delete_cookies),
-    route("GET", "/v1/accounts", system.list_accounts),
-    route("POST", "/v1/accounts/{platform}/connect", system.connect_account),
+    route("GET", "/v1/accounts", setup.list_accounts),
+    route("GET", "/v1/accounts/tiktok/creator-info", setup.creator_info),
+    route("POST", "/v1/accounts/{platform}/connect", setup.connect),
+    route("POST", "/v1/accounts/{platform}/choose", setup.choose),
+    route("DELETE", "/v1/accounts/{platform}", setup.disconnect),
+    route("GET", "/v1/setup", setup.get_setup),
+    route("POST", "/v1/setup/tiktok/verification-file", setup.tiktok_file),
+    route("DELETE", "/v1/setup/tiktok/verification-file/{filename}", setup.delete_tiktok_file),
+    route("GET", "/v1/setup/{platform}", setup.get_platform),
+    route("PATCH", "/v1/setup/{platform}", setup.patch_platform),
+    route("PUT", "/v1/setup/{platform}/keys", setup.put_keys),
+    route("DELETE", "/v1/setup/{platform}/keys", setup.delete_keys),
+    route("POST", "/v1/setup/{platform}/check", setup.check),
     route("GET", "/v1/posts", system.list_posts),
     route("GET", "/v1/insights", system.insights),
     route("GET", "/v1/weeks/{week}", weeks.get_week),

@@ -38,6 +38,10 @@ class RetryablePublishError(PublishError):
     """A passing problem (rate limit, platform outage, network): the flow tries the step again."""
 
 
+class ReconnectNeededError(PublishError):
+    """The account's token is dead (revoked, expired refresh token): the owner must press Connect again (§17.6)."""
+
+
 class StatsUnavailableError(Exception):
     """The platform answered, but without usable numbers (a bad status, an error body)."""
 
@@ -167,7 +171,8 @@ TokenProvider = Callable[[str, Record], str]
 
 
 def no_tokens(platform: str, account: Record) -> str:
-    """Phase 1: tokens come from Secrets Manager in phase 2, so every platform is "not connected" until then."""
+    """No token source configured (tests, local runs): every platform is "not connected". The Lambdas pass
+    ``oauth.tokens.SecretsTokenProvider`` instead (§17.6)."""
     from .stub import LABELS
 
     raise NotConnectedError(f"Connecting {LABELS.get(platform, platform)} arrives in the next phase.")
@@ -229,7 +234,7 @@ class AdapterBase:
     label = ""
     idempotent = True
 
-    def __init__(self, *, tokens: TokenProvider = no_tokens, graph_api_version: str = "v25.0") -> None:
+    def __init__(self, *, tokens: TokenProvider = no_tokens, graph_api_version: str = "v27.0") -> None:
         self._tokens = tokens
         self.graph_api_version = graph_api_version
 
@@ -241,7 +246,7 @@ class AdapterBase:
 
     def token(self, account: Record | None) -> str:
         if account is None:
-            raise NotConnectedError(f"Connect {self.label} in Settings › Posting › Accounts.")
+            raise NotConnectedError(f"Connect {self.label} in Settings › Posting › Set up posting.")
         return self._tokens(self.platform, account)
 
     def fetch_stats(
@@ -309,3 +314,109 @@ def insight_values(node: Any) -> dict[str, Any]:
         if value is not None:
             out[row["name"]] = value
     return out
+
+
+# --- publishing (docs/CONTRACTS.md §17.6) ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Progress:
+    """Where one post's publishing stands. ``handle`` is everything needed to resume or check it (JSON only), and is
+    saved on the post as the internal ``publishHandle``. ``check_after`` is the wait before the next check (seconds)."""
+
+    state: str  # "processing" | "ready_to_finish" | "done"
+    handle: dict[str, Any]
+    check_after: int = 30
+    published: Published | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"state": self.state, "handle": self.handle, "checkAfter": self.check_after}
+        if self.published is not None:
+            p = self.published
+            out["published"] = {
+                "url": p.url,
+                "postedAt": p.posted_at,
+                "platformPostId": p.platform_post_id,
+                "statsId": p.stats_id,
+                "privacy": p.privacy,
+            }
+        return out
+
+    @staticmethod
+    def from_json(raw: dict[str, Any]) -> Progress:
+        found = raw.get("published")
+        published = None
+        if isinstance(found, dict):
+            published = Published(
+                url=str(found.get("url") or ""),
+                posted_at=str(found.get("postedAt") or ""),
+                platform_post_id=found.get("platformPostId"),
+                stats_id=found.get("statsId"),
+                privacy=str(found.get("privacy") or "public"),
+            )
+        return Progress(
+            state=str(raw.get("state")),
+            handle=dict(raw.get("handle") or {}),
+            check_after=int(raw.get("checkAfter") or 30),
+            published=published,
+        )
+
+
+class VideoSource(Protocol):
+    """The kept clip's MP4 (``jobs/{jobId}/clips/{clipId}/clip.mp4``), read in ranges so a large file never sits in
+    memory twice. ``presigned_url`` is only for the URL-pull fallbacks (Instagram ``video_url``, Facebook
+    ``file_url``)."""
+
+    @property
+    def size(self) -> int: ...
+
+    def read(self, start: int, end: int) -> bytes: ...  # bytes [start, end)
+
+    def presigned_url(self, seconds: int = 3600) -> str: ...
+
+
+@dataclass
+class PublishJob:
+    post: Record
+    clip: Record
+    account: Record
+    creds: Any  # oauth.tokens.Credentials (Any here: platforms never import oauth)
+    video: VideoSource
+    options: dict[str, Any]  # per-platform post options (TikTok's sheet, §17.8)
+    settings: dict[str, Any]
+    http: HttpClient
+    config: dict[str, Any] = field(default_factory=dict)  # platforms.json "publish" block
+    save: Callable[[dict[str, Any]], None] = field(default=lambda _handle: None)  # writes publishHandle at once
+    now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
+    graph_api_version: str = "v27.0"
+
+    @property
+    def handle(self) -> dict[str, Any]:
+        raw = self.post.get("publishHandle")
+        return dict(raw) if isinstance(raw, dict) else {}
+
+
+class Publisher(Protocol):
+    platform: str
+    start_semantics: str  # "at_least_once" | "at_most_once"
+    finish_semantics: str
+    needs_credentials: bool
+
+    def start(self, job: PublishJob) -> Progress: ...
+
+    def check(self, job: PublishJob, handle: dict[str, Any]) -> Progress: ...
+
+    def finish(self, job: PublishJob, handle: dict[str, Any]) -> Progress: ...
+
+
+def appsecret_proof(app_secret: str, token: str) -> str:
+    """Meta's ``appsecret_proof``: HMAC-SHA256 of the access token keyed with the app secret, hex."""
+    import hashlib
+    import hmac
+
+    return hmac.new(app_secret.encode(), token.encode(), hashlib.sha256).hexdigest()
+
+
+def obj(value: Any) -> dict[str, Any]:
+    """``value`` when it is a JSON object, else an empty one (platform answers are not always the shape we expect)."""
+    return value if isinstance(value, dict) else {}

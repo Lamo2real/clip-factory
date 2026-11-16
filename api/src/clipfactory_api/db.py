@@ -247,6 +247,20 @@ class Store:
     def delete(self, pk: str, sk: str) -> None:
         self._table.delete_item(Key={"pk": pk, "sk": sk})
 
+    def delete_once(self, pk: str, sk: str) -> Item | None:
+        """Deletes an existing item and returns it; None when it was already gone (single-use tokens, §17.5)."""
+        try:
+            out = self._call(
+                self._table.delete_item,
+                Key={"pk": pk, "sk": sk},
+                ConditionExpression="attribute_exists(pk)",
+                ReturnValues="ALL_OLD",
+            )
+        except ConditionFailed:
+            return None
+        old = out.get("Attributes") if isinstance(out, Mapping) else None
+        return dict(from_dynamo(old)) if old else None
+
     def update(
         self,
         pk: str,

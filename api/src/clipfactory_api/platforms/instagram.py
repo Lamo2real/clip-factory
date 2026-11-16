@@ -68,10 +68,10 @@ class InstagramAdapter(AdapterBase):
     ) -> StatsBatch:
         token = self.token(account)
         batch = StatsBatch()
-        user_id = str((account or {}).get("platformUserId") or "")
+        user_id = str((account or {}).get("platformUserId") or (account or {}).get("accountId") or "")
         wanted = {stats_id(p): str(p["postId"]) for p in posts if stats_id(p)}
         if not user_id or not wanted:
-            self.missing(batch, posts, "Connect Instagram again in Settings › Posting › Accounts.")
+            self.missing(batch, posts, "Connect Instagram again in Settings › Posting › Set up posting.")
             return batch
         metrics = METRICS
         request: HttpRequest | None = self.media_request(user_id, token, metrics)

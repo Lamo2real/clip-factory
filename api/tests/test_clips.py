@@ -215,7 +215,11 @@ def test_try_again_after_failed_publish_starts_run_two(
                 "clipId": clip["clipId"],
                 "platform": platform,
                 "status": state,
-                **({"error": "Posting to YouTube did not work. Press Try again."} if state == "failed" else {}),
+                **(
+                    {"error": "Posting to YouTube did not work. Press Try again.", "publishHandle": {"videoId": "v"}}
+                    if state == "failed"
+                    else {}
+                ),
             }
         )
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
@@ -228,6 +232,7 @@ def test_try_again_after_failed_publish_starts_run_two(
     assert statuses["youtube"]["status"] == "queued"
     assert "error" not in statuses["youtube"]
     assert statuses["x"]["status"] == "pending_integration"
+    assert "publishHandle" not in (table.raw(pk, db.post_sk("Pyoutube")) or {})  # a fresh upload, not a resume
     stored = table.raw(clip["pk"], clip["sk"])
     assert stored is not None
     assert (stored["flowRun"], stored["publishState"]) == (2, "started")
@@ -410,3 +415,124 @@ def test_confirm_resumes_a_clip_kept_before_flow_runs_existed(
     stored = table.raw(clip["pk"], clip["sk"])
     assert stored is not None
     assert (stored["publishState"], stored["flowRun"]) == ("started", 1)
+
+
+# --- §17.8: the "Post to TikTok" sheet ------------------------------------------------------------------------------
+
+TIKTOK = {
+    "privacyLevel": "PUBLIC_TO_EVERYONE",
+    "disableComment": True,
+    "disableDuet": False,
+    "disableStitch": False,
+    "brandContent": False,
+    "brandOrganic": True,
+}
+
+
+def _connect_tiktok(store: db.Store) -> None:
+    store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": "ACCOUNT#tiktok",
+            "type": "account",
+            "userId": USER,
+            "platform": "tiktok",
+            "status": "connected",
+        }
+    )
+
+
+def test_keep_with_tiktok_connected_needs_the_sheet(call: Call, store: db.Store) -> None:
+    _connect_tiktok(store)
+    clip = seed_clip(store)
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    assert status == 400
+    assert body["error"]["message"] == "Pick who can see it on TikTok."
+    assert store.get(db.user_pk(USER), db.clip_sk(clip["clipId"]))["status"] == "review"  # type: ignore[index]
+
+
+def test_keep_stores_the_tiktok_choices_on_the_tiktok_post(call: Call, store: db.Store, table: FakeTable) -> None:
+    _connect_tiktok(store)
+    clip = seed_clip(store)
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm", {"tiktok": TIKTOK})
+    assert status == 200
+    tiktok = next(p for p in body["posts"] if p["platform"] == "tiktok")
+    assert tiktok["status"] == "queued"
+    assert "postOptions" not in tiktok
+    stored = table.raw(db.user_pk(USER), db.post_sk(tiktok["postId"]))
+    assert stored is not None
+    assert stored["postOptions"] == TIKTOK
+    others = [p for p in table.all() if p.get("type") == "post" and p["platform"] != "tiktok"]
+    assert all("postOptions" not in p for p in others)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"privacyLevel": "EVERYONE"},
+        {**TIKTOK, "privacyLevel": "SELF_ONLY", "brandContent": True},
+        {**TIKTOK, "disableDuet": "no"},
+        {**TIKTOK, "extra": 1},
+        "public",
+    ],
+)
+def test_tiktok_choices_are_checked(call: Call, store: db.Store, options: object) -> None:
+    clip = seed_clip(store)
+    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm", {"tiktok": options})[0] == 400
+
+
+def test_keep_without_tiktok_connected_needs_no_sheet(call: Call, store: db.Store) -> None:
+    clip = seed_clip(store)
+    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm")[0] == 200
+
+
+def _failed_clip_with_posts(store: db.Store, old: dict[str, object]) -> dict[str, object]:
+    clip = seed_clip(store, status="failed", publishState="started", postsCreated=True, flowRun=1)
+    for platform in ("tiktok", "youtube"):
+        store.put(
+            {
+                "pk": db.user_pk(USER),
+                "sk": db.post_sk(f"P{platform}"),
+                "gsi1pk": f"CLIP#{clip['clipId']}",
+                "gsi1sk": f"POST#{platform}",
+                "type": "post",
+                "userId": USER,
+                "postId": f"P{platform}",
+                "clipId": clip["clipId"],
+                "platform": platform,
+                "status": "failed",
+                "error": "Pick who can see it on TikTok again, then press Try again.",
+                **({"postOptions": old} if platform == "tiktok" else {}),
+            }
+        )
+    return clip
+
+
+def test_try_again_with_new_tiktok_choices_replaces_the_old_ones(
+    call: Call, store: db.Store, table: FakeTable, lambda_client: FakeLambda
+) -> None:
+    _connect_tiktok(store)
+    old = {**TIKTOK, "privacyLevel": "FOLLOWER_OF_CREATOR"}
+    clip = _failed_clip_with_posts(store, old)
+    new = {**TIKTOK, "privacyLevel": "SELF_ONLY", "brandContent": False}
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm", {"tiktok": new})
+    assert status == 200
+    assert {p["platform"]: p["status"] for p in body["posts"]} == {"tiktok": "queued", "youtube": "queued"}
+    assert all("postOptions" not in p for p in body["posts"])
+    tiktok = table.raw(db.user_pk(USER), db.post_sk("Ptiktok"))
+    assert tiktok is not None
+    assert tiktok["postOptions"] == new
+    youtube = table.raw(db.user_pk(USER), db.post_sk("Pyoutube"))
+    assert youtube is not None
+    assert "postOptions" not in youtube
+    (start,) = _clip_flow_calls(lambda_client)
+    assert json.loads(start["Payload"])["run"] == 2
+
+
+def test_try_again_without_tiktok_choices_keeps_the_old_ones(call: Call, store: db.Store, table: FakeTable) -> None:
+    _connect_tiktok(store)
+    clip = _failed_clip_with_posts(store, TIKTOK)
+    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm")[0] == 200
+    tiktok = table.raw(db.user_pk(USER), db.post_sk("Ptiktok"))
+    assert tiktok is not None
+    assert (tiktok["status"], tiktok["postOptions"]) == ("queued", TIKTOK)

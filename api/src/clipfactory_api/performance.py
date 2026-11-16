@@ -133,7 +133,11 @@ def public_performance(
 ) -> Item:
     """``ClipPerformance``. ``snapshots`` maps postId → its STAT# items (oldest first)."""
     by_platform = latest_by_platform(clip_posts)
-    account_status = {str(a.get("platform")): str(a.get("status") or "not_connected") for a in accounts}
+    # §16.2 knows three account states; a Meta account still being picked (§17.4 choose_account) is not connected.
+    known = {"connected", "needs_reconnect"}
+    account_status = {
+        str(a.get("platform")): str(a.get("status")) if a.get("status") in known else "not_connected" for a in accounts
+    }
     rows = [
         platform_performance(p, by_platform.get(p), account_status.get(p, "not_connected"), now) for p in STATS_ORDER
     ]
@@ -171,4 +175,4 @@ def public_performance(
 
 
 def connect_note(platform: str) -> str:
-    return f"Connect {label(platform)} in Settings › Posting › Accounts."
+    return f"Connect {label(platform)} in Settings › Posting › Set up posting."

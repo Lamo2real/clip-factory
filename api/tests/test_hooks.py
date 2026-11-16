@@ -192,11 +192,13 @@ def test_phase_one_signatures_are_unverified() -> None:
 
 
 @pytest.mark.parametrize("platform", ["youtube", "instagram", "facebook", "tiktok", "x"])
-def test_oauth_callback_redirects_to_settings(deps: hooks.HooksDeps, platform: str) -> None:
+def test_oauth_callback_without_secrets_redirects_with_error(deps: hooks.HooksDeps, platform: str) -> None:
     query = {"code": "SECRET-CODE", "state": "SECRET-STATE"}
     out = hooks.handle(_event("GET", "/oauth/{platform}/callback", platform, query=query), deps)
     assert out["statusCode"] == 302
-    assert out["headers"]["location"] == f"{APP_URL}/settings?account={platform}&status=coming_soon"
+    assert out["headers"]["location"] == f"{APP_URL}/settings/posting/setup/{platform}?result=error"
+    assert out["headers"]["cache-control"] == "no-store"
+    assert out["headers"]["referrer-policy"] == "no-referrer"
 
 
 def test_unknown_platform_is_404(deps: hooks.HooksDeps, table: FakeTable) -> None:

@@ -26,6 +26,10 @@ class AsyncInvoker:
     def refresh_stats(self, user_id: str, clip_id: str, post_ids: list[str]) -> None:
         self._invoke(self.stats_arn, {"action": "refresh", "userId": user_id, "clipId": clip_id, "postIds": post_ids})
 
+    def forget(self, user_id: str, platform: str) -> None:
+        """``cf-prod-stats`` drops the numbers it read from a disconnected platform (YouTube policy, §17.6)."""
+        self._invoke(self.stats_arn, {"action": "forget", "userId": user_id, "platform": platform})
+
     def learn_week(self, user_id: str, week: str, revision: int) -> None:
         self._invoke(self.learn_arn, {"userId": user_id, "week": week, "revision": revision})
 

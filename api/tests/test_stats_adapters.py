@@ -181,7 +181,7 @@ def test_instagram_request_and_mapping() -> None:
     batch = InstagramAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=False, http=http)
     (url,) = http.urls
     assert url == (
-        "https://graph.facebook.com/v25.0/17841400000000000/media?fields=id,permalink,media_product_type,timestamp,"
+        "https://graph.facebook.com/v27.0/17841400000000000/media?fields=id,permalink,media_product_type,timestamp,"
         "like_count,comments_count,insights.metric(views,reach,saved,shares,total_interactions,reposts,"
         "ig_reels_avg_watch_time,ig_reels_video_view_total_time,reels_skip_rate)&limit=50"
     )
@@ -215,11 +215,11 @@ def test_instagram_follows_pages_until_found_or_too_old() -> None:
                 "insights": {"data": [{"name": "views", "values": [{"value": 80}]}]},
             }
         ],
-        "paging": {"next": "https://graph.facebook.com/v25.0/17841400000000000/media?after=X2&limit=50"},
+        "paging": {"next": "https://graph.facebook.com/v27.0/17841400000000000/media?after=X2&limit=50"},
     }
     http = FakeHttp((200, "instagram_media"), (200, page2))
     batch = InstagramAdapter(tokens=tokens).fetch_stats([wanted], ACCOUNT, now=NOW, want_insights=False, http=http)
-    assert http.urls[1] == "https://graph.facebook.com/v25.0/17841400000000000/media?after=QVFIUjVuYXVFZA&limit=50"
+    assert http.urls[1] == "https://graph.facebook.com/v27.0/17841400000000000/media?after=QVFIUjVuYXVFZA&limit=50"
     assert len(http.calls) == 2  # found on page 2: no third page
     assert batch.insights[wanted["postId"]]["views"] == 80
     old = {"data": [{"id": "1", "timestamp": "2026-10-01T10:00:00+0000"}], "paging": {"next": page2["paging"]["next"]}}
@@ -276,10 +276,10 @@ def test_facebook_requests_and_mapping() -> None:
     http = FakeHttp((200, "facebook_video_insights"), (200, "facebook_post_views"))
     batch = FacebookAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=False, http=http)
     assert http.urls == [
-        "https://graph.facebook.com/v25.0/?ids=1234567890123456&fields=video_insights.metric(blue_reels_play_count,"
+        "https://graph.facebook.com/v27.0/?ids=1234567890123456&fields=video_insights.metric(blue_reels_play_count,"
         "fb_reels_total_plays,fb_reels_replay_count,post_video_avg_time_watched,post_video_view_time,"
         "post_video_followers,post_video_likes_by_reaction_type,post_video_social_actions)",
-        "https://graph.facebook.com/v25.0/?ids=111222333_444555666&fields=insights.metric(post_total_media_view_unique)",
+        "https://graph.facebook.com/v27.0/?ids=111222333_444555666&fields=insights.metric(post_total_media_view_unique)",
     ]
     for banned in ("post_impressions_unique", "total_video_impressions", "total_video_views_unique", "impressions"):
         assert all(banned not in u for u in http.urls)

@@ -75,15 +75,42 @@ def patch_clip(app: App, req: Request) -> Response:
     return ok({"clip": clips.public_clip(updated, app.media)})
 
 
+TIKTOK_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY")
+TIKTOK_SWITCHES = ("disableComment", "disableDuet", "disableStitch", "brandContent", "brandOrganic")
+
+
+def tiktok_options(raw: Any) -> dict[str, Any]:
+    """The "Post to TikTok" sheet's choices (§17.8), validated."""
+    body = validate.obj(raw, "tiktok")
+    validate.only_keys(body, {"privacyLevel", *TIKTOK_SWITCHES})
+    privacy = body.get("privacyLevel")
+    if privacy not in TIKTOK_PRIVACY:
+        raise bad_request("Pick who can see it on TikTok.")
+    out: dict[str, Any] = {"privacyLevel": privacy}
+    for name in TIKTOK_SWITCHES:
+        out[name] = validate.boolean(body.get(name, False), name)
+    if out["brandContent"] and privacy == "SELF_ONLY":
+        raise bad_request("Branded content cannot be posted as Only me on TikTok. Pick who can see it.")
+    return out
+
+
 def confirm(app: App, req: Request) -> Response:
     """Keep a clip (docs/CONTRACTS.md §14.5). Safe to repeat: the posts are created once and the durable
-    ``cf-prod-clip-flow`` start is idempotent on its execution name."""
+    ``cf-prod-clip-flow`` start is idempotent on its execution name. With TikTok connected and enabled, the TikTok
+    sheet's choices are required (§17.8)."""
     body = req.json()
-    validate.only_keys(body, {"captions"})
+    validate.only_keys(body, {"captions", "tiktok"})
     patch = clips.caption_patch(body["captions"]) if body.get("captions") is not None else {}
+    options = tiktok_options(body["tiktok"]) if body.get("tiktok") is not None else None
     item = _clip_or_404(app, req)
     if item.get("status") == "review":
         now = iso(app.clock())
+        current_settings = settings.load(app.store, req.user_id)
+        tiktok_queued = "tiktok" in current_settings.get("platforms", []) and (
+            posts.connected_account(app.store, req.user_id, "tiktok") is not None
+        )
+        if tiktok_queued and options is None:
+            raise bad_request("Pick who can see it on TikTok.")
         fields = {
             "status": "confirmed",
             "decidedAt": now,
@@ -96,10 +123,11 @@ def confirm(app: App, req: Request) -> Response:
                 app.store,
                 req.user_id,
                 item,
-                settings.load(app.store, req.user_id),
+                current_settings,
                 now,
                 clip_fields=fields,
                 expect_status=["review"],
+                post_options={"tiktok": options} if options else None,
             )
         except db.ConditionFailed:
             # Another Confirm (or a Decline) won the race: carry on from the clip's current state.
@@ -114,7 +142,7 @@ def confirm(app: App, req: Request) -> Response:
     if status == "review":
         raise conflict("This clip changed while you pressed Keep. Please try again.")
     if status == "failed":
-        item = _try_again(app, item)
+        item = _try_again(app, item, tiktok=options)
     elif status in {"confirmed", "publishing"} and item.get("publishState") == clips.PUBLISH_PENDING:
         item = _start_flow(app, item)  # an earlier Confirm stopped before its flow started
     return ok({"clip": clips.public_clip(item, app.media), "posts": _posts(app, req.user_id, item["clipId"])})
@@ -147,8 +175,10 @@ def _start_flow(app: App, clip: dict[str, Any]) -> dict[str, Any]:
     return updated
 
 
-def _try_again(app: App, clip: dict[str, Any]) -> dict[str, Any]:
-    """A clip whose every queued post failed: its failed posts go back to ``queued`` and a new flow run starts."""
+def _try_again(app: App, clip: dict[str, Any], *, tiktok: dict[str, Any] | None = None) -> dict[str, Any]:
+    """A clip whose every queued post failed: its failed posts go back to ``queued`` and a new flow run starts.
+    New TikTok sheet choices (``tiktok``) replace the failed TikTok post's ``postOptions``, so a privacy TikTok no
+    longer offers can be picked again."""
     run = int(clip.get("flowRun") or 1)
     failed = [
         p
@@ -163,7 +193,14 @@ def _try_again(app: App, clip: dict[str, Any]) -> dict[str, Any]:
         expect_in={"status": ["failed"], "flowRun": [run]} if clip.get("flowRun") else {"status": ["failed"]},
     )
     post_updates = [
-        db.update_request(p["pk"], p["sk"], {"status": "queued"}, remove=["error"], expect_in={"status": ["failed"]})
+        # A fresh publishHandle: Try again starts a new upload instead of resuming the one that failed (§17.6).
+        db.update_request(
+            p["pk"],
+            p["sk"],
+            {"status": "queued", **({"postOptions": tiktok} if tiktok and p.get("platform") == "tiktok" else {})},
+            remove=["error", "publishHandle"],
+            expect_in={"status": ["failed"]},
+        )
         for p in failed
     ]
     try:

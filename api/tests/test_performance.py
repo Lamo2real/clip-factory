@@ -290,7 +290,7 @@ def test_refresh_statuses(
     assert by["facebook"] == {
         "platform": "facebook",
         "status": "not_connected",
-        "note": "Connect Facebook in Settings › Posting › Accounts.",
+        "note": "Connect Facebook in Settings › Posting › Set up posting.",
     }
     assert by["x"] == {"platform": "x", "status": "not_posted"}
     (invoke,) = _refresh_invokes(lambda_client)

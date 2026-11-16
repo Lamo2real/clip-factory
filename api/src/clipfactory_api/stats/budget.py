@@ -296,3 +296,32 @@ def record(
     if reset is not None:
         _set(store, platform, {"type": "rate", "platform": platform, "updatedAt": iso(now), "resetAt": iso(reset)})
     return None
+
+
+X_POST_CAP_TEXT = "Clip Factory stopped X at your $10 limit this month."
+
+
+def charge_post(store: db.Store, now: datetime, *, cfg: config.PlatformsConfig | None = None) -> bool:
+    """Counts one X post (``budget.usdPerPost``, §17.7) into ``monthUsd`` before it is sent. False when that would
+    go over ``monthlyUsd`` (nothing is counted then). Same compare-and-swap as ``reserve``."""
+    cfg = cfg or config.load()
+    budget = cfg.platform("x").budget
+    price = float(budget.get("usdPerPost") or 0)
+    if price <= 0:
+        return True
+    month_key = now.astimezone(UTC).strftime("%Y-%m")
+    for _ in range(CAS_ATTEMPTS):
+        item = get_budget(store, "x")
+        spent = float(item.get("monthUsd") or 0) if item.get("monthKey") == month_key else 0.0
+        if spent + price > float(budget["monthlyUsd"]) + 1e-9:
+            log("warning", "stats.x_post_cap", monthUsd=spent)
+            return False
+        fields: dict[str, Any] = {"monthKey": month_key, "monthUsd": round(spent + price, 6)}
+        if "dayPostIds" in item:
+            fields["dayPostIds"] = set(item["dayPostIds"])
+        try:
+            _write(store, "x", item, fields, now)
+        except db.ConditionFailed:
+            continue
+        return True
+    return False
