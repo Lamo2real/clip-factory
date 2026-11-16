@@ -163,6 +163,8 @@ test.describe("This week on a phone", () => {
     await page.goto("/library?view=week");
     await settle(page);
     const card = page.locator(".week-card").first();
+    // Keep the card clear of the phone tab bar (the money line makes it taller), then measure it.
+    await card.evaluate((e) => e.scrollIntoView({ block: "center" }));
     const box = (await card.boundingBox())!;
     const star = card.locator(".star-btn--card");
     const pressed = await star.getAttribute("aria-pressed");

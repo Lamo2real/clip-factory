@@ -14,6 +14,9 @@ import { applyWeekEvent } from "../../lib/liveCache.ts";
 import { STATS_ORDER, compact, full } from "../../lib/metrics.ts";
 import { useAction } from "../../lib/motion.ts";
 import { navigate } from "../../lib/router.ts";
+import { useSession } from "../../app/session.tsx";
+import { clipEarnings, sumUsd, zeroReason, type ClipEarnings } from "../../lib/earnings.ts";
+import { EarnedChip } from "../../components/EarnedChip.tsx";
 import { compareWeeks, isWeek, isoWeek, shiftWeek, weekLabel, weekRange } from "../../lib/week.ts";
 
 /** Picks are saved this long after the last star tap, as one request. */
@@ -30,6 +33,7 @@ export function WeekView({ week: asked }: { week: string | null }) {
   const isCurrent = week === current;
   const range = weekRange(week);
   const toast = useToast();
+  const { me } = useSession();
 
   const [data, setData] = useState<Week | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +149,7 @@ export function WeekView({ week: asked }: { week: string | null }) {
   const later = shiftWeek(week, 1);
   const laterOff = isCurrent || compareWeeks(later, current) > 0;
   const shown = picks ?? data?.clipIds ?? [];
+  const money = weekMoney(data, me?.settings);
 
   return (
     <section className="week" aria-labelledby="week-title">
@@ -217,14 +222,18 @@ export function WeekView({ week: asked }: { week: string | null }) {
       ) : null}
       {data && data.clips.length > 0 ? (
         <>
-          <p className="week__count" aria-live="polite">
-            {plural(data.clips.length, "clip")} · {shown.length ? `${plural(shown.length, "star")}` : "no stars yet"}
-          </p>
+          <div className="week__money">
+            <p className="week__count" aria-live="polite">
+              {plural(data.clips.length, "clip")} · {shown.length ? `${plural(shown.length, "star")}` : "no stars yet"}
+            </p>
+            {money.total !== null ? <EarnedChip as="p" kind="week" usd={money.total} reason={money.reason} lead={isCurrent ? "This week earned" : "That week earned"} /> : null}
+          </div>
           <ol className="week-list">
             {data.clips.map((c, i) => (
               <li key={c.clip.clipId}>
                 <WeekCard
                   item={c}
+                  earned={money.byClip.get(c.clip.clipId) ?? null}
                   rank={i + 1}
                   on={shown.includes(c.clip.clipId)}
                   onToggle={() => toggle(c.clip.clipId)}
@@ -284,14 +293,32 @@ export function bestApp(apps: { platform: Platform; views: number | null }[]): P
   return best?.platform ?? null;
 }
 
+/**
+ * Each clip's money guess and the week's total (§21), from the view count each app pays for (`paidViews`, falling
+ * back to `views` on an older server); the order and Best this week are untouched.
+ */
+export function weekMoney(week: Pick<Week, "clips"> | null, settings: Parameters<typeof clipEarnings>[2]) {
+  const byClip = new Map<string, ClipEarnings | null>();
+  for (const c of week?.clips ?? []) {
+    const views = c.paidViews ?? c.views;
+    byClip.set(c.clip.clipId, Object.keys(views).length ? clipEarnings(views, c.clip.durationSec, settings) : null);
+  }
+  const all = [...byClip.values()];
+  const total = sumUsd(all.map((e) => e?.usd));
+  return { byClip, total, reason: total === 0 ? zeroReason(all.flatMap((e) => e?.platforms ?? [])) : "" };
+}
+
 function WeekCard({
   item,
+  earned,
   rank,
   on,
   onToggle,
   failShot,
 }: {
   item: WeekClip;
+  /** The clip's money guess; null when it is on no app yet. */
+  earned: ClipEarnings | null;
   rank: number;
   on: boolean;
   onToggle: () => boolean;
@@ -336,6 +363,7 @@ function WeekCard({
             "Not posted yet"
           )}
         </p>
+        {apps.length ? <EarnedChip as="p" usd={earned?.usd ?? null} reason={earned?.reason} /> : null}
         {apps.length ? (
           <ul className="week-card__marks" aria-label="Views on each app">
             {apps.map(({ platform: p, views: v }) => (

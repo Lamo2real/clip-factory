@@ -157,6 +157,13 @@ export interface Settings {
   platforms: Platform[];
   /** Who can see new YouTube clips (docs/CONTRACTS.md §17.6). Absent on old servers: "public". */
   youtubePrivacy?: YoutubePrivacy;
+  /**
+   * The owner's own US dollars for every 1,000 views, per platform (docs/CONTRACTS.md §21). A platform that is
+   * absent uses the usual amount from config/earnings.json. Absent on old servers: {}.
+   */
+  earningsRates?: Partial<Record<Platform, number>>;
+  /** "Do I get paid here?" per platform; absent uses config/earnings.json `paysPerView`. Absent on old servers: {}. */
+  earningsPaid?: Partial<Record<Platform, boolean>>;
 }
 
 export type YoutubePrivacy = "public" | "unlisted" | "private";
@@ -434,6 +441,11 @@ export interface WeekClip {
   posted: boolean;
   totals: { views: number; likes: number; comments: number; shares: number };
   views: Partial<Record<Platform, number | null>>;
+  /**
+   * The view count each app pays for (§21.3): YouTube engaged views, Facebook first plays, X impressions, else
+   * `views`. Same keys as `views`. Absent on older servers (the web then uses `views`).
+   */
+  paidViews?: Partial<Record<Platform, number | null>>;
   best: boolean;
 }
 

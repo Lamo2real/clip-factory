@@ -37,6 +37,7 @@ import { Trail } from "./parts.tsx";
 import { SkillScreen } from "./SkillPages.tsx";
 import { SkillsSection } from "./SkillsSection.tsx";
 import { SoundsBranch } from "./SoundsBranch.tsx";
+import { MoneyBranch } from "./MoneyBranch.tsx";
 import { SetupList } from "./setup/SetupList.tsx";
 import { SetupPlatform } from "./setup/SetupPlatform.tsx";
 import { openHelp } from "../../features/help/context.ts";
@@ -49,6 +50,7 @@ const BRANCHES: Record<string, () => ReactNode> = {
   "clip-making/youtube": () => <YoutubeBranch />,
   "posting/setup": () => <SetupList />,
   "posting/where": () => <WhereBranch />,
+  "posting/money": () => <MoneyBranch />,
   "look-and-feel/sounds": () => <SoundsBranch />,
   "look-and-feel/motion": () => <MotionBranch />,
   "look-and-feel/background": () => <BackgroundBranch />,

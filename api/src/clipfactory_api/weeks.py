@@ -73,6 +73,22 @@ def _views_of(post: Item) -> int | None:
     return int(views) if isinstance(views, int | float) and not isinstance(views, bool) else None
 
 
+# The view count each app's money rate is based on (docs/CONTRACTS.md §21.3): YouTube engaged views (no replays),
+# Facebook first plays (no replays), X impressions. Other apps, or a post without the better number yet, use views.
+PAID_VIEW_FIELD = {"youtube": "engagedViews", "facebook": "initialPlays", "x": "impressions"}
+
+
+def _paid_views_of(platform: str, post: Item) -> int | None:
+    metrics = post.get("metrics")
+    extra = metrics.get("extra") if isinstance(metrics, dict) else None
+    field = PAID_VIEW_FIELD.get(platform)
+    if field and isinstance(extra, dict):
+        better = extra.get(field)
+        if isinstance(better, int | float) and not isinstance(better, bool) and better >= 0:
+            return int(better)
+    return _views_of(post)
+
+
 def week_entries(store: db.Store, user_id: str, start: datetime, end: datetime) -> list[tuple[Item, list[Item], str]]:
     """(Clip item, its posts, anchorAt) for every kept clip anchored in [start, end). Single owner: reading all of
     the owner's clips and posts is small, and the filter runs here."""
@@ -102,17 +118,20 @@ def week_clip(clip: Item, clip_posts: list[Item], anchor: str, week: str, media:
         for k in TOTAL_FIELDS
     }
     views: Item = {}
+    paid_views: Item = {}
     for platform in STATS_ORDER:
         post = by_platform.get(platform)
         # A private post (TikTok before app approval) never gets numbers: leave it out rather than promise some.
         if post is not None and post.get("status") == "posted" and post.get("privacy") != "private":
             views[platform] = _views_of(post)
+            paid_views[platform] = _paid_views_of(platform, post)
     return {
         "clip": clips.public_clip(clip, media, posts=clip_posts, video=False),
         "anchorAt": anchor,
         "posted": any(p.get("status") == "posted" for p in clip_posts),
         "totals": totals,
         "views": views,
+        "paidViews": paid_views,
         "best": clip.get("best") is True and clip.get("bestWeek") == week,
     }
 
