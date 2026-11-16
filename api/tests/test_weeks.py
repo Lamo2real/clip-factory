@@ -126,6 +126,7 @@ def test_week_anchor_rule_sort_and_shape(call: Call, store: db.Store) -> None:
     assert first["posted"] is True
     assert first["totals"] == {"views": 900, "likes": 2, "comments": 0, "shares": 0}
     assert first["views"] == {"youtube": 600, "tiktok": 300, "x": None}
+    assert first["paidViews"] == {"youtube": 600, "tiktok": 300, "x": None}
     assert first["best"] is False
     assert first["clip"]["coverUrl"].startswith("https://")
     assert "videoUrl" not in first["clip"]
@@ -144,6 +145,36 @@ def test_week_views_leave_out_private_posts(call: Call, store: db.Store) -> None
     status, body = call("GET", f"/v1/weeks/{WEEK}", query=Q)
     assert status == 200
     assert body["week"]["clips"][0]["views"] == {"youtube": 600}
+    assert body["week"]["clips"][0]["paidViews"] == {"youtube": 600}
+
+
+def test_week_paid_views_use_the_count_each_app_pays_for(call: Call, store: db.Store) -> None:
+    """Money (§21.3): YouTube engaged views, Facebook first plays, X impressions; else plain views."""
+    clip = kept(store, decided="2026-11-12T10:00:00.000Z", status="posted")
+    extras = {"youtube": {"engagedViews": 400}, "facebook": {"initialPlays": 70}, "x": {"impressions": 900}}
+    for platform, views in (("youtube", 600), ("tiktok", 300), ("facebook", 100), ("x", 50), ("instagram", 20)):
+        item = post(store, clip, platform, "2026-11-12T10:00:00.000Z", views)
+        if platform in extras:
+            item["metrics"]["extra"] = extras[platform]
+        if platform == "instagram":
+            item["metrics"]["extra"] = {"engagedViews": 1, "bad": True}
+        store.put(item)
+    other = kept(store, decided="2026-11-12T10:00:00.000Z", status="posted")
+    broken = post(store, other, "youtube", "2026-11-12T10:00:00.000Z", 10)
+    broken["metrics"]["extra"] = {"engagedViews": True}
+    store.put(broken)
+    status, body = call("GET", f"/v1/weeks/{WEEK}", query=Q)
+    assert status == 200
+    rows = {row["clip"]["clipId"]: row for row in body["week"]["clips"]}
+    assert rows[clip["clipId"]]["views"] == {"youtube": 600, "tiktok": 300, "instagram": 20, "facebook": 100, "x": 50}
+    assert rows[clip["clipId"]]["paidViews"] == {
+        "youtube": 400,
+        "tiktok": 300,
+        "instagram": 20,
+        "facebook": 70,
+        "x": 900,
+    }
+    assert rows[other["clipId"]]["paidViews"] == {"youtube": 10}
 
 
 # --- PUT best -----------------------------------------------------------------------------------------------------

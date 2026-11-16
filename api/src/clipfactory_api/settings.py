@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import Any
 
@@ -24,7 +25,13 @@ DEFAULTS: dict[str, Any] = {
     "errorSound": 5,  # the owner's pick: "Nope nope nope"
     "platforms": list(PLATFORMS),
     "youtubePrivacy": "public",  # §17.6: who can see the YouTube uploads (YouTube policy wants the owner's choice)
+    # §21 Earnings: the owner's own USD per 1,000 views and "Do I get paid here?" per platform. A platform that is
+    # absent uses the default from config/earnings.json (typicalUsdPer1000 / paysPerView), which the web reads.
+    "earningsRates": {},
+    "earningsPaid": {},
 }
+# Mirrors config/earnings.json `maxUsdPer1000` (a test keeps them equal).
+MAX_USD_PER_1000 = 100
 YOUTUBE_PRIVACY = ("public", "unlisted", "private")
 EDITABLE = frozenset(DEFAULTS)
 READ_ONLY = frozenset({"hasYoutubeCookies"})
@@ -32,7 +39,9 @@ READ_ONLY = frozenset({"hasYoutubeCookies"})
 
 def with_defaults(stored: Mapping[str, Any] | None) -> dict[str, Any]:
     """Stored values over defaults; anything unknown or malformed in storage falls back to the default."""
-    out = {k: (list(v) if isinstance(v, list) else v) for k, v in DEFAULTS.items()}
+    out: dict[str, Any] = {
+        k: (list(v) if isinstance(v, list) else dict(v) if isinstance(v, dict) else v) for k, v in DEFAULTS.items()
+    }
     for field in EDITABLE:
         if stored and field in stored:
             try:
@@ -59,6 +68,10 @@ def _check_field(field: str, value: Any) -> Any:
                     "Pick who can see your YouTube clips: everyone, only people with the link, or only you."
                 )
             return value
+        case "earningsRates":
+            return _earnings_map(value, _usd_per_1000)
+        case "earningsPaid":
+            return _earnings_map(value, _paid)
         case "platforms":
             if not isinstance(value, list) or not all(isinstance(p, str) for p in value):
                 raise bad_request("platforms must be a list of platform names.")
@@ -77,6 +90,35 @@ def _sound_number(value: Any, label: str) -> int:
     if not 1 <= number <= SOUND_COUNT:
         raise bad_request(f"There is no {label} number {number}. Pick one from 1 to {SOUND_COUNT}.")
     return number
+
+
+def _earnings_map(value: Any, check: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise bad_request("Money settings must list each app by name.")
+    unknown = [p for p in value if p not in PLATFORMS]
+    if unknown:
+        raise bad_request(f"Unknown platform: {unknown[0]}.")
+    return {p: check(value[p], p) for p in PLATFORMS if p in value}
+
+
+def _usd_per_1000(value: Any, platform: str) -> float | int:
+    """A non-negative amount of US dollars for 1,000 views, at most ``MAX_USD_PER_1000``, with at most 2 decimals."""
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        raise bad_request(f"Type the {platform} amount as a number, like 0.05.")
+    if value < 0:
+        raise bad_request(f"The {platform} amount cannot be less than 0.")
+    if value > MAX_USD_PER_1000:
+        raise bad_request(f"The {platform} amount can be at most {MAX_USD_PER_1000} dollars for 1,000 views.")
+    cents = round(value * 100)
+    if abs(value * 100 - cents) > 1e-6:
+        raise bad_request(f"Use at most 2 numbers after the dot for {platform}, like 0.05.")
+    return cents // 100 if cents % 100 == 0 else cents / 100
+
+
+def _paid(value: Any, platform: str) -> bool:
+    if not isinstance(value, bool):
+        raise bad_request(f"Say yes or no for {platform}: true or false.")
+    return value
 
 
 def merge_update(current: Mapping[str, Any], patch: Mapping[str, Any]) -> dict[str, Any]:

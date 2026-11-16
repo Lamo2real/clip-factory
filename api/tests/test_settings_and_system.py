@@ -18,6 +18,8 @@ DEFAULTS = {
     "hasYoutubeCookies": False,
     "platforms": ["youtube", "instagram", "facebook", "tiktok", "x"],
     "youtubePrivacy": "public",
+    "earningsRates": {},
+    "earningsPaid": {},
 }
 
 
@@ -258,3 +260,89 @@ def test_youtube_privacy_is_checked(call: Call, value: object) -> None:
     status, body = call("PUT", "/v1/settings", {"youtubePrivacy": value})
     assert status == 400
     assert "YouTube" in body["error"]["message"]
+
+
+# ---------- Earnings (§21): the owner's own rate per 1,000 views and "Do I get paid here?" ----------
+
+
+def test_earnings_max_matches_config() -> None:
+    import json
+    from pathlib import Path
+
+    config = json.loads((Path(__file__).resolve().parents[2] / "config" / "earnings.json").read_text())
+    assert config["maxUsdPer1000"] == settings.MAX_USD_PER_1000
+    assert sorted(config["platforms"]) == sorted(settings.PLATFORMS)
+    # YouTube, Facebook and X start on, so the owner sees a best guess per clip there (it only counts inside each
+    # app's paid program); TikTok (Sweden not eligible, clips under 60 s) and Instagram (invite-only) start off (§21.1).
+    assert {name: p["paysPerView"] for name, p in config["platforms"].items()} == {
+        "youtube": True,
+        "tiktok": False,
+        "instagram": False,
+        "facebook": True,
+        "x": True,
+    }
+    for p in config["platforms"].values():
+        assert 0 <= p["lowUsdPer1000"] <= p["typicalUsdPer1000"] <= p["highUsdPer1000"] <= config["maxUsdPer1000"]
+        assert p["kidRules"]
+        assert p["kidCounts"]
+        assert p["sources"]
+        assert all(s["url"].startswith("https://") and s["date"] for s in p["sources"])
+
+
+def test_put_earnings_saved_and_kept_in_order(call: Call) -> None:
+    rates = {"x": 0.12, "youtube": 0.07, "tiktok": 0, "facebook": 100}
+    status, body = call("PUT", "/v1/settings", {"earningsRates": rates, "earningsPaid": {"tiktok": True, "x": False}})
+    assert status == 200
+    got = body["settings"]
+    assert got["earningsRates"] == {"youtube": 0.07, "tiktok": 0, "facebook": 100, "x": 0.12}
+    assert list(got["earningsRates"]) == ["youtube", "facebook", "tiktok", "x"]
+    assert got["earningsPaid"] == {"tiktok": True, "x": False}
+    assert got["clipMin"] == DEFAULTS["clipMin"]
+    assert call("GET", "/v1/settings")[1] == body
+    # Sending the map again replaces it: a platform left out goes back to the default.
+    status, body = call("PUT", "/v1/settings", {"earningsRates": {"youtube": 0.05}})
+    assert body["settings"]["earningsRates"] == {"youtube": 0.05}
+    assert body["settings"]["earningsPaid"] == {"tiktok": True, "x": False}
+
+
+@pytest.mark.parametrize("value", [0, 0.01, 0.5, 1.2, 99.99, 100, 3.0])
+def test_put_earnings_rate_ok(call: Call, value: float) -> None:
+    status, body = call("PUT", "/v1/settings", {"earningsRates": {"youtube": value}})
+    assert status == 200
+    assert body["settings"]["earningsRates"]["youtube"] == value
+
+
+@pytest.mark.parametrize(
+    ("patch", "message"),
+    [
+        ({"earningsRates": {"youtube": -0.01}}, "less than 0"),
+        ({"earningsRates": {"youtube": 100.01}}, "at most 100"),
+        ({"earningsRates": {"youtube": 0.055}}, "2 numbers after the dot"),
+        ({"earningsRates": {"youtube": "0.05"}}, "as a number"),
+        ({"earningsRates": {"youtube": True}}, "as a number"),
+        ({"earningsRates": {"youtube": None}}, "as a number"),
+        ({"earningsRates": {"myspace": 1}}, "Unknown platform"),
+        ({"earningsRates": [0.05]}, "each app by name"),
+        ({"earningsPaid": {"tiktok": "yes"}}, "true or false"),
+        ({"earningsPaid": {"tiktok": 1}}, "true or false"),
+        ({"earningsPaid": "all"}, "each app by name"),
+    ],
+)
+def test_put_earnings_validation(call: Call, patch: dict[str, object], message: str) -> None:
+    status, body = call("PUT", "/v1/settings", patch)
+    assert status == 400
+    assert body["error"]["code"] == "bad_request"
+    assert message in body["error"]["message"]
+
+
+@pytest.mark.parametrize("raw", ["NaN", "Infinity", "-Infinity", "1e999"])
+def test_put_earnings_non_finite_is_400(call: Call, raw: str) -> None:
+    status, _body = call("PUT", "/v1/settings", raw=f'{{"earningsRates": {{"x": {raw}}}}}')
+    assert status == 400
+
+
+def test_old_or_bad_stored_earnings_read_as_defaults() -> None:
+    out = settings.with_defaults({"earningsRates": {"youtube": -5}, "earningsPaid": {"x": "nope"}})
+    assert out["earningsRates"] == {}
+    assert out["earningsPaid"] == {}
+    assert settings.with_defaults(None)["earningsRates"] is not settings.DEFAULTS["earningsRates"]
