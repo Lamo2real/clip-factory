@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ACT_MS, ACT_REWIND_MS } from "../src/lib/motion.ts";
 import { settle } from "./helpers.ts";
-import { actTransforms, actWidths, MOTION_WIDTHS, noSideScroll, pauseActs, recordAct, tapAct } from "./motionHelpers.ts";
+import { actTransforms, actWidths, MOTION_WIDTHS, noSideScroll, pauseActs, recordAct, tapAct, tapUntilPhase } from "./motionHelpers.ts";
 
 // Action motion on Home, Jobs and Review (docs/CONTRACTS.md §20.11 (a)). The handler always fires first; the motion
 // is decoration on the button's own glyph; failures shake; Undo rewinds or brings the card back.
@@ -51,9 +51,10 @@ test.describe("motion: Home (APPLY a)", () => {
     await page.evaluate(() => navigator.clipboard.writeText(""));
     const paste = page.getByRole("button", { name: "Paste" });
     await expect(paste).toHaveAttribute("data-act", "paste");
-    const { cls } = await tapAct(paste);
-    expect(cls).toMatch(/act--paste/);
-    await expect(paste.locator(".act")).toHaveClass(/is-fail/);
+    await expect(paste.locator(".act")).toHaveClass(/act--paste/);
+    // The shake is short and starts after the clipboard answers, so wait for it inside the page: a polling check can
+    // miss it on a busy machine.
+    expect(await tapUntilPhase(paste, "is-fail")).toBe(true);
     await expect(page.getByText("Nothing is copied yet.")).toBeVisible();
 
     await page.evaluate(() => navigator.clipboard.writeText("https://youtu.be/dQw4w9WgXcQ"));
