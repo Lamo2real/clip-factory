@@ -615,6 +615,8 @@
 .sound-group.is-tap {
   --kind: var(--sage-deep);
   --kind-soft: rgb(var(--sage-rgb) / 0.4);
+  /* Small tag text on the sage tint: a deeper sage keeps it above 4.5:1. */
+  --kind-text: #3d4f31;
 }
 .sound-group.is-deny {
   --kind: var(--tomato-ink);
@@ -622,7 +624,7 @@
 }
 .sound-group .apple__tag {
   background: var(--kind-soft);
-  color: var(--kind);
+  color: var(--kind-text, var(--kind));
 }
 .sound-group .apple__name {
   font-family: var(--font-display);

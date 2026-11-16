@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { settle } from "./helpers.ts";
+import { SETTINGS_ROUTES, settle } from "./helpers.ts";
 
 // Findings from the November 2026 UI/UX audit, each pinned so it cannot come back,
 // plus the whole owner journey on a phone and on a desktop.
@@ -12,8 +12,7 @@ const DESKTOP = { viewport: { width: 1280, height: 900 } } as const;
 /** The navigation that is showing: the icon tab bar on phones, the sidebar on larger screens. */
 const nav = (page: Page) => page.locator("nav.tabbar, nav.sidebar").filter({ visible: true });
 
-// Settings is being rebuilt on its own branch; it joins this list once that lands.
-const SCREENS = ["/", "/jobs", "/review", "/library", "/get-app", "/nope"];
+const SCREENS = ["/", "/jobs", "/review", "/library", ...SETTINGS_ROUTES, "/get-app", "/nope"];
 
 for (const [name, use] of [
   ["phone", PHONE],
@@ -34,6 +33,13 @@ for (const [name, use] of [
         if (labels.length > 1) extra.push(`${path}: ${labels.join(", ")}`);
       }
       expect(extra, extra.join("\n")).toEqual([]);
+    });
+
+    test("the small sound tags in Settings read clearly (at least 4.5:1)", async ({ page }) => {
+      await page.goto("/settings/look-and-feel/sounds");
+      await settle(page);
+      const color = await page.locator(".sound-group.is-tap .apple__tag").first().evaluate((el) => getComputedStyle(el).color);
+      expect(color).toBe("rgb(61, 79, 49)");
     });
 
     test("Review: only the top clip's Keep is tomato, and the next one takes over", async ({ page }) => {
