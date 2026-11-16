@@ -13,6 +13,7 @@ window shows the live website, so every web release reaches desktop users throug
 | Window | Title "Clip Factory", starts at 1200 × 820, never smaller than 380 × 600. |
 | Remembers size and position | `tauri-plugin-window-state` (saved on close, restored on start). |
 | Links to other sites | Open in the system browser (`tauri-plugin-opener`, called from Rust). Mail links open the mail app. Anything else (`file:`, custom schemes) is blocked. |
+| See-through glass | The window is transparent with a native material behind the page, so the desktop shows through, blurred (docs/CONTRACTS.md §22): macOS Liquid Glass on macOS 26+, the under-window vibrancy material on 11–15; Windows 11 22H2+ acrylic; Windows 10 1809 to 11 21H2 blur. Light theme forced and an off-white tint laid in (only the Windows blur path is known to use it; Windows 11 acrylic and macOS draw their own light material), and the web app tints its panels so dark text stays readable over any wallpaper. Linux and older Windows get an ordinary window. The page learns which one through `window.__CF_GLASS__` (`vibrancy`, `acrylic`, `blur` or `none`). |
 | Tells the web app it is installed | `window.__CF_DESKTOP__ = true` (injected by `src-tauri/src/init.js` before the page loads) and a user agent ending in `ClipFactoryDesktop/<version>`. The web app then hides "Get the app". |
 | Icon | Generated from `web/public/icons/icon-512.png` by `scripts/make-icons.sh` (also run by every CI build). |
 | Installers | Mac: universal `.dmg` (Apple silicon and Intel). Windows: NSIS `-setup.exe`, installs for the current user only and fetches the WebView2 runtime if missing. |
@@ -21,7 +22,11 @@ window shows the live website, so every web release reaches desktop users throug
 
 The page inside the window is a remote website, so it gets **no native access at all**: the only capability
 (`src-tauri/capabilities/main.json`) grants nothing, `withGlobalTauri` is off, and there is no file system or
-shell plugin. Opening links and saving the window state happen in Rust. Navigation away from the app's own
+shell plugin. Opening links and saving the window state happen in Rust. The window glass is chosen and applied in
+Rust too; the page only reads `window.__CF_GLASS__`.
+
+`app.macOSPrivateApi` is on (tauri.conf.json, with tauri's `macos-private-api` feature): macOS needs it for a
+transparent web view. It keeps the app out of the Mac App Store, which it does not use. Navigation away from the app's own
 origin is cancelled in `src-tauri/src/main.rs` and handed to the system browser.
 
 About the user agent: web views cannot append to their default user agent, so the wrapper sets a full one in
@@ -34,13 +39,14 @@ desktop/
   package.json                 the Tauri CLI (pinned), and npm scripts
   scripts/make-icons.sh        icons from the web app icon
   src-tauri/
-    Cargo.toml, Cargo.lock     Rust crate (tauri 2, opener and window-state plugins)
+    Cargo.toml, Cargo.lock     Rust crate (tauri 2 with macos-private-api, opener and window-state plugins,
+                               windows-version on Windows)
     build.rs                   reads and checks CF_APP_URL
     tauri.conf.json            product name, identifier app.clipfactory.desktop, bundle settings
     capabilities/main.json     deliberately empty permission set
     icons/                     generated, committed
-    src/main.rs                the window, link handling, user agent (+ unit tests)
-    src/init.js                injected script (desktop flag, outward links)
+    src/main.rs                the window, its glass, link handling, user agent (+ unit tests)
+    src/init.js                injected script (desktop flag, glass name, outward links)
 ```
 
 ## Build it yourself

@@ -4,7 +4,8 @@
 //! Clip Factory desktop: one native window that shows the deployed web app (docs/CONTRACTS.md §12.3).
 //! It bundles no web UI: updates come from the website itself, so this wrapper rarely changes.
 
-use tauri::{Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
+use tauri::{Theme, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
 /// The deployed app, baked in by build.rs from `CF_APP_URL`.
@@ -18,6 +19,86 @@ const TITLE: &str = "Clip Factory";
 const MIN_SIZE: (f64, f64) = (380.0, 600.0);
 const START_SIZE: (f64, f64) = (1200.0, 820.0);
 
+/// The light tint laid into the native glass (Clip Factory off-white, a little over half strength). Only the
+/// Windows `Blur` path is known to honour it: Windows 11 22H2+ acrylic drops the colour (window-vibrancy sets only
+/// the system backdrop type there), macOS 11-15 vibrancy takes none, and macOS 26 Liquid Glass is unproven. So the
+/// web page assumes black behind every glass except `blur` (web/src/lib/background.ts `glassFloor`, §22.3), and
+/// works out the tint over black from these same numbers (`GLASS_TINT_ALPHA`); keep the two in step.
+const GLASS_TINT: Color = Color(247, 245, 239, 140);
+
+/// The native see-through material behind the page (docs/CONTRACTS.md §22). The web app reads its name from
+/// `window.__CF_GLASS__` and turns its own background transparent only when it is not `none`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Glass {
+    /// macOS: Liquid Glass on macOS 26 and newer, the under-window vibrancy material before that.
+    Vibrancy,
+    /// Windows 11 22H2 and newer: blurred acrylic, shows soft shapes of what is behind.
+    Acrylic,
+    /// Windows 10 1809 to Windows 11 21H2: blur behind, smooth there (acrylic lags while dragging on those builds).
+    Blur,
+    /// Anything else (Linux, older Windows): a normal window; the web app draws its own background.
+    None,
+}
+
+impl Glass {
+    /// What this computer can draw: `mac` for macOS, or the Windows build number (None off Windows).
+    fn for_os(mac: bool, windows_build: Option<u32>) -> Glass {
+        match windows_build {
+            _ if mac => Glass::Vibrancy,
+            Some(build) if build >= 22621 => Glass::Acrylic,
+            Some(build) if build >= 17763 => Glass::Blur,
+            _ => Glass::None,
+        }
+    }
+
+    fn here() -> Glass {
+        Glass::for_os(cfg!(target_os = "macos"), windows_build())
+    }
+
+    /// The value of `window.__CF_GLASS__`.
+    fn name(self) -> &'static str {
+        match self {
+            Glass::Vibrancy => "vibrancy",
+            Glass::Acrylic => "acrylic",
+            Glass::Blur => "blur",
+            Glass::None => "none",
+        }
+    }
+
+    /// The native effects for the window; None keeps an ordinary opaque window.
+    fn effects(self) -> Option<EffectsBuilder> {
+        let effects: &[Effect] = match self {
+            // Tauri tries Liquid Glass first and falls back to the vibrancy material on macOS 15 and older.
+            Glass::Vibrancy => &[Effect::LiquidGlassRegular, Effect::UnderWindowBackground],
+            Glass::Acrylic => &[Effect::Acrylic],
+            Glass::Blur => &[Effect::Blur],
+            Glass::None => return None,
+        };
+        Some(
+            EffectsBuilder::new()
+                .effects(effects.iter().copied())
+                // Stays glassy when another app is in front, instead of turning flat grey.
+                .state(EffectState::Active)
+                .color(GLASS_TINT),
+        )
+    }
+}
+
+#[cfg(windows)]
+fn windows_build() -> Option<u32> {
+    Some(windows_version::OsVersion::current().build)
+}
+
+#[cfg(not(windows))]
+fn windows_build() -> Option<u32> {
+    None
+}
+
+/// The injected script, led by the glass this window has.
+fn init_script(glass: Glass) -> String {
+    format!("window.__CF_GLASS__ = \"{}\";\n{INIT_SCRIPT}", glass.name())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -27,14 +108,22 @@ fn main() {
             let app_url = Url::parse(APP_URL)?;
             let handle = app.handle().clone();
             let home = app_url.clone();
+            let glass = Glass::here();
 
-            WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::External(app_url))
-                .title(TITLE)
-                .inner_size(START_SIZE.0, START_SIZE.1)
-                .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
-                .center()
-                .user_agent(&user_agent())
-                .initialization_script(INIT_SCRIPT)
+            let mut window =
+                WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::External(app_url))
+                    .title(TITLE)
+                    .inner_size(START_SIZE.0, START_SIZE.1)
+                    .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
+                    .center()
+                    // The web app is drawn light, so the glass behind it is the light material too (§22.3).
+                    .theme(Some(Theme::Light))
+                    .user_agent(&user_agent())
+                    .initialization_script(init_script(glass));
+            if let Some(effects) = glass.effects() {
+                window = window.transparent(true).effects(effects.build());
+            }
+            window
                 .on_navigation(move |url| {
                     if stays_inside(&home, url) {
                         return true;
@@ -107,6 +196,26 @@ mod tests {
         assert!(opens_outside(&url("mailto:a@example.com")));
         assert!(!opens_outside(&url("file:///etc/passwd")));
         assert!(!opens_outside(&url("ms-settings:privacy")));
+    }
+
+    #[test]
+    fn glass_follows_what_the_computer_can_draw() {
+        assert_eq!(Glass::for_os(true, None), Glass::Vibrancy);
+        assert_eq!(Glass::for_os(false, Some(26100)), Glass::Acrylic);
+        assert_eq!(Glass::for_os(false, Some(22621)), Glass::Acrylic);
+        assert_eq!(Glass::for_os(false, Some(22000)), Glass::Blur);
+        assert_eq!(Glass::for_os(false, Some(19045)), Glass::Blur);
+        assert_eq!(Glass::for_os(false, Some(17134)), Glass::None);
+        assert_eq!(Glass::for_os(false, None), Glass::None);
+        assert!(Glass::None.effects().is_none());
+        assert!(Glass::Acrylic.effects().is_some());
+    }
+
+    #[test]
+    fn the_script_names_the_glass_first() {
+        let script = init_script(Glass::Acrylic);
+        assert!(script.starts_with("window.__CF_GLASS__ = \"acrylic\";\n"));
+        assert!(script.contains("window.__CF_DESKTOP__ = true"));
     }
 
     #[test]
