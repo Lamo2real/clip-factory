@@ -177,7 +177,7 @@ export function NewJobForm() {
                 <Icon name="checkCircle" size={18} />
                 <span>
                   {PLATFORM_NAMES[check.platform]} {KIND_LABEL[check.kind]} found.
-                  {check.kind === "live" ? " The agent clips the latest broadcast." : ""}
+                  {check.kind === "live" ? " Clip Factory clips the latest broadcast." : ""}
                 </span>
               </>
             ) : showLinkError ? (
@@ -265,7 +265,7 @@ export function NewJobForm() {
 
       <div className="field">
         <label className="field__label" htmlFor={`${id}-notes`}>
-          Notes for the agent <span className="field__optional">you can skip this</span>
+          Notes for Clip Factory <span className="field__optional">you can skip this</span>
         </label>
         <textarea
           id={`${id}-notes`}

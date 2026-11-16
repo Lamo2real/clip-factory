@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { friendlyMessage } from "../api/errors.ts";
+import { ApiError, friendlyMessage } from "../api/errors.ts";
 
 export interface Loaded<T> {
   data: T | null;
   error: string | null;
+  /** The last load failed because the thing is gone (404): trying again cannot help. */
+  missing: boolean;
   loading: boolean;
   reload: () => Promise<void>;
   setData: (fn: (prev: T | null) => T | null) => void;
@@ -13,6 +15,7 @@ export interface Loaded<T> {
 export function useLoad<T>(load: () => Promise<T>, key: string = ""): Loaded<T> {
   const [data, setState] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
   const [loading, setLoading] = useState(true);
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -26,9 +29,13 @@ export function useLoad<T>(load: () => Promise<T>, key: string = ""): Loaded<T> 
       if (mine === seq.current) {
         setState(value);
         setError(null);
+        setMissing(false);
       }
     } catch (e) {
-      if (mine === seq.current) setError(friendlyMessage(e));
+      if (mine === seq.current) {
+        setError(friendlyMessage(e));
+        setMissing(e instanceof ApiError && e.code === "not_found");
+      }
     } finally {
       if (mine === seq.current) setLoading(false);
     }
@@ -39,7 +46,7 @@ export function useLoad<T>(load: () => Promise<T>, key: string = ""): Loaded<T> 
   }, [reload, key]);
 
   const setData = useCallback((fn: (prev: T | null) => T | null) => setState((p) => fn(p)), []);
-  return { data, error, loading, reload, setData };
+  return { data, error, missing, loading, reload, setData };
 }
 
 /**

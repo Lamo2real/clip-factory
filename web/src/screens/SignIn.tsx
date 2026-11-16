@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type InputHTMLAttributes } from "react";
 import { auth, authProblem, CHALLENGE_EXPIRED, challengeExpired, PASSWORD_RULES, passwordProblem } from "../lib/auth.ts";
 import { Icon } from "../components/Icon.tsx";
 import { Button, Swash } from "../components/ui.tsx";
@@ -107,10 +107,8 @@ export function SignIn({ onDone, note }: { onDone: () => void; note?: string | n
                 <label className="field__label" htmlFor={`${id}-p`}>
                   Password
                 </label>
-                <input
+                <PasswordInput
                   id={`${id}-p`}
-                  className="input"
-                  type="password"
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -122,10 +120,8 @@ export function SignIn({ onDone, note }: { onDone: () => void; note?: string | n
               <label className="field__label" htmlFor={`${id}-n`}>
                 New password
               </label>
-              <input
+              <PasswordInput
                 id={`${id}-n`}
-                className="input"
-                type="password"
                 autoComplete="new-password"
                 value={fresh}
                 onChange={(e) => setFresh(e.target.value)}
@@ -153,5 +149,25 @@ export function SignIn({ onDone, note }: { onDone: () => void; note?: string | n
         </form>
       </section>
     </main>
+  );
+}
+
+/** A password field with a Show / Hide button, so a typo can be seen before it costs a sign-in attempt. */
+function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "className">) {
+  const [shown, setShown] = useState(false);
+  return (
+    <div className="password">
+      <input {...props} className="input password__input" type={shown ? "text" : "password"} />
+      <button
+        type="button"
+        className="password__toggle"
+        aria-pressed={shown}
+        aria-controls={props.id}
+        onClick={() => setShown((v) => !v)}
+      >
+        <Icon name="eye" size={18} />
+        <span>{shown ? "Hide" : "Show"}</span>
+      </button>
+    </div>
   );
 }

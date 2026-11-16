@@ -13,7 +13,7 @@ test("paste a link, see the platform, start a job", async ({ page }) => {
   await expect(page.getByText("YouTube video found.")).toBeVisible();
   await page.getByRole("radio", { name: "Exactly" }).check({ force: true });
   await page.getByRole("button", { name: "More: Number of clips" }).click();
-  await page.getByLabel(/Notes for the agent/).fill("#gta6 #launch");
+  await page.getByLabel(/Notes for Clip Factory/).fill("#gta6 #launch");
   await page.getByRole("button", { name: "Make clips" }).click();
   await expect(page).toHaveURL(/\/jobs\/[0-9A-Z]{26}$/);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
