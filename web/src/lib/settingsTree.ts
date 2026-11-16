@@ -147,6 +147,38 @@ export const TREES: Tree[] = [
           },
         ],
       },
+      {
+        slug: "money",
+        name: "Money",
+        line: "How much each app pays you for views.",
+        icon: "coin",
+        apples: [
+          {
+            id: "money-how",
+            name: "How the money is worked out",
+            leaf: "Each app pays a tiny amount for every 1,000 views. Clip Factory uses it to guess what each clip earned.",
+            words: ["earn", "earnings", "money", "paid", "pay", "income", "revenue", "estimate", "guess", "per 1000", "rpm"],
+          },
+          {
+            id: "money-paid",
+            name: "Do I get paid here?",
+            leaf: "YouTube, Facebook and X start on, the rest start off. Money only counts in that app's paid program.",
+            words: ["earn", "money", "paid", "pay", "monetization", "partner program", "creator rewards", "bonus", "YouTube", "TikTok", "Instagram", "Facebook", "X"],
+          },
+          {
+            id: "money-rate",
+            name: "Money for 1,000 views",
+            leaf: "Type what an app really pays you. Find it on that app's own money page.",
+            words: ["rate", "rpm", "cpm", "per 1000", "dollars", "cents", "usd", "how much", "income", "revenue", "amount"],
+          },
+          {
+            id: "money-sources",
+            name: "Where the numbers come from",
+            leaf: "The usual amounts are guesses from public pages. Each one shows its date.",
+            words: ["sources", "links", "estimate", "guess", "why", "checked"],
+          },
+        ],
+      },
     ],
   },
   {

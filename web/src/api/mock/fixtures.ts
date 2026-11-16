@@ -504,6 +504,8 @@ export function seed(): Store {
       hasYoutubeCookies: false,
       platforms: [...PLATFORMS],
       youtubePrivacy: "public",
+      earningsRates: {},
+      earningsPaid: {},
     },
     accounts: PLATFORMS.map((platform) => ({ platform, status: "not_connected" })),
   };

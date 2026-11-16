@@ -13,11 +13,11 @@ import { BRANCH_ROUTES } from "../src/screens/settings/Settings.tsx";
 import { titleFor } from "../src/app/App.tsx";
 
 describe("the settings tree", () => {
-  it("has the four trees and eleven branches of §15.1, in order", () => {
+  it("has the four trees and twelve branches of §15.1 and §21, in order", () => {
     expect(TREES.map((t) => t.slug)).toEqual(["clip-making", "posting", "look-and-feel", "app"]);
     expect(TREES.map((t) => t.branches.map((b) => b.slug))).toEqual([
       ["clips", "skills", "youtube"],
-      ["setup", "where"],
+      ["setup", "where", "money"],
       ["sounds", "motion", "background"],
       ["get-the-app", "updates", "account"],
     ]);

@@ -1,6 +1,6 @@
 // The whole HTTP API in memory, with fake latency, so the UI runs with no backend (npm run dev:mock, Playwright).
 import { ApiError, networkError } from "../errors.ts";
-import type { Api, Clip, Job, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
+import type { Api, Clip, Job, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
 import { TIKTOK_PICK_AGAIN } from "../../lib/keep.ts";
 import { MOMENTS, PLATFORMS, STEP_KEYS, coverArt, seed, stepsAt, thumbArt, ulid, type Store } from "./fixtures.ts";
 import { installMockLiveControls, mockLive } from "./live.ts";
@@ -8,6 +8,7 @@ import { setupApi } from "./setup.ts";
 import { statsApi, type StatsFaults } from "./stats.ts";
 import { skillsApi, type MockSkillControls } from "./skills.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
+import { MAX_RATE } from "../../lib/earnings.ts";
 
 const STEP_MS = 3500;
 const clone = <T>(v: T): T => structuredClone(v);
@@ -408,6 +409,22 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (!isSoundId(next.errorSound)) throw bad("Pick an error sound from 1 to 30.");
       if (next.youtubePrivacy !== undefined && !["public", "unlisted", "private"].includes(next.youtubePrivacy))
         throw bad("Pick who can see your YouTube clips.");
+      for (const [field, map] of [["earningsRates", next.earningsRates], ["earningsPaid", next.earningsPaid]] as const) {
+        if (map === undefined) continue;
+        if (typeof map !== "object" || map === null || Array.isArray(map)) throw bad("Money settings must list each app by name.");
+        for (const [p, v] of Object.entries(map)) {
+          if (!PLATFORMS.includes(p as Platform)) throw bad(`Unknown platform: ${p}.`);
+          if (field === "earningsPaid" && typeof v !== "boolean") throw bad(`Say yes or no for ${p}: true or false.`);
+          if (field === "earningsRates") {
+            if (typeof v !== "number" || !Number.isFinite(v)) throw bad(`Type the ${p} amount as a number, like 0.05.`);
+            if (v < 0) throw bad(`The ${p} amount cannot be less than 0.`);
+            if (v > MAX_RATE) throw bad(`The ${p} amount can be at most ${MAX_RATE} dollars for 1,000 views.`);
+            if (Math.abs(v * 100 - Math.round(v * 100)) > 1e-6) throw bad(`Use at most 2 numbers after the dot for ${p}, like 0.05.`);
+          }
+        }
+        // Like the API: the usual platform order, nothing else.
+        (next as unknown as Record<string, unknown>)[field] = Object.fromEntries(PLATFORMS.filter((p) => p in map).map((p) => [p, (map as Record<string, unknown>)[p]]));
+      }
       store.settings = next;
       return clone(next);
     },

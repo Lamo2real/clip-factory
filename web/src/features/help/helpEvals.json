@@ -72,6 +72,9 @@
     { "q": "write a skill", "expect": "skills-write" },
     { "q": "How do I change a skill?", "expect": "skills-edit" },
     { "q": "delete a skill", "expect": "skills-delete" },
-    { "q": "set up youtube", "expect": "posting-setup-youtube" }
+    { "q": "set up youtube", "expect": "posting-setup-youtube" },
+    { "q": "How much did my clip earn?", "expect": "clip-earnings" },
+    { "q": "how much money did I make from my video", "expect": "clip-earnings" },
+    { "q": "Where do I change how much YouTube pays me?", "expect": "money-rates" }
   ]
 }

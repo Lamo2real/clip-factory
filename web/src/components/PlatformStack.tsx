@@ -10,6 +10,7 @@ import { Icon } from "./Icon.tsx";
 import { PlatformMark } from "./PlatformMark.tsx";
 import { Sparkline } from "./Sparkline.tsx";
 import { LinkButton, Pill, type Tone } from "./ui.tsx";
+import { APP_NAME, moneyPhrase, moneyWords, type PlatformEarning } from "../lib/earnings.ts";
 
 const CHIP_TONE: Record<PlatformPerformance["status"], Tone> = {
   posted: "sage",
@@ -38,6 +39,34 @@ function Rows({ rows, reactions }: { rows: MetricRow[]; reactions?: Record<strin
   );
 }
 
+/**
+ * "Earned about $0.42" for this app (§21), or $0 with the plain reason (switched off, clip too short). A switched-off
+ * app with views also says what it would be if the app paid the owner.
+ */
+function Earned({ earning }: { earning: PlatformEarning }) {
+  const { why, usd, reason, usdIfOn } = earning;
+  const words = moneyWords(why === "paid" ? (usd ?? 0) : 0);
+  return (
+    <div className={`pstack__earned is-${why}`} data-earned={earning.platform}>
+      <p className="pstack__earned-line">
+        <Icon name="coin" size={16} />
+        {why === "no_views" ? (
+          <span>No money yet</span>
+        ) : (
+          <span>
+            Earned {words.about}
+            <strong className="pstack__earned-num">{words.amount}</strong>
+          </span>
+        )}
+      </p>
+      {reason ? <p className="pstack__earned-why">{reason}</p> : null}
+      {why === "off" && usdIfOn !== null ? (
+        <p className="pstack__earned-why">{moneyPhrase(`If ${APP_NAME[earning.platform]} paid you, this would be`, usdIfOn)}.</p>
+      ) : null}
+    </div>
+  );
+}
+
 const insightsAgo = (iso: string, now: number) => {
   const a = ago(iso, now);
   return a === "just now" ? "Insights just in" : `Insights from ${a}`;
@@ -49,9 +78,12 @@ export function PlatformStack({
   best,
   index,
   now,
+  earning,
   ref,
 }: {
   perf: PlatformPerformance;
+  /** The money estimate for this app (§21); shown with the numbers. */
+  earning?: PlatformEarning;
   series?: SeriesPoint[];
   best: boolean;
   index: number;
@@ -127,6 +159,7 @@ export function PlatformStack({
                 {perf.insightsUpdatedAt ? <p className="pstack__ago">{insightsAgo(perf.insightsUpdatedAt, now)}</p> : null}
               </div>
             ) : null}
+            {earning ? <Earned earning={earning} /> : null}
             <Sparkline series={series} best={best} />
           </>
         ) : null}

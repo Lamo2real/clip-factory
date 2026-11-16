@@ -1224,3 +1224,203 @@ ol.md__list {
     animation: none;
   }
 }
+
+/* ---------- Settings › Posting › Money (docs/CONTRACTS.md §21) ---------- */
+.money__how {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.money__list {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.money__item {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: rgb(255 255 255 / 0.32);
+  border: 1px solid rgb(var(--ink-rgb) / 0.06);
+}
+.money__app {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 700;
+}
+.money__app svg {
+  flex: none;
+}
+/* The mark on a small dark tile, like the stacks: X's mark never sits bare beside the word "X". */
+.money__tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgb(var(--ink-rgb) / 0.88);
+  color: var(--offwhite);
+  --mark-cut: var(--ink);
+}
+.money__app-name {
+  overflow-wrap: anywhere;
+}
+.money__paid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.money__paid .money__app {
+  flex: 1 1 auto;
+}
+.money__paid-word {
+  font-size: var(--fs-small);
+  font-weight: 700;
+  color: var(--sage-deep);
+}
+.money__item.is-off .money__paid-word {
+  color: var(--ink-2);
+}
+.money__note {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+/* An app that is on: the money only counts inside that app's paid program (§21.1). */
+.money__rule {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.money__rule .icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--sage-deep);
+}
+.money__usual {
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.money__usual strong {
+  font-size: 1rem;
+}
+.money__range {
+  color: var(--ink-2);
+}
+.money__form {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.money__label {
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.money__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.money__input {
+  position: relative;
+  flex: 0 1 11rem;
+  min-width: 7.5rem;
+}
+.money__dollar {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  transform: translateY(-50%);
+  font-weight: 650;
+  color: var(--ink-2);
+  pointer-events: none;
+}
+.input.money__field {
+  padding-left: 30px;
+  font-variant-numeric: tabular-nums;
+}
+.money__help {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.money__more {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm, 10px);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.money__more:hover .money__more-word {
+  text-decoration-color: currentColor;
+}
+.money__more .money__app {
+  flex: 1 1 auto;
+}
+.money__more-word {
+  font-size: var(--fs-small);
+  font-weight: 650;
+  color: var(--tomato-ink);
+  text-decoration: underline;
+  text-decoration-color: rgb(var(--tomato-rgb) / 0.4);
+}
+/* Each source link is a full 44 px tap target; its date sits on its own line under it. */
+.money__link {
+  display: flex;
+  min-height: 44px;
+  padding-block: 8px;
+  align-items: center;
+}
+.money__sources {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.money__fine {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.money__links {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.money__links li {
+  display: grid;
+  min-width: 0;
+}
+.money__date {
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+}
+@media (prefers-color-scheme: dark) {
+  .money__item {
+    background: rgb(var(--ink-rgb) / 0.05);
+  }
+}
