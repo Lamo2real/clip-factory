@@ -1,5 +1,5 @@
 {
-  "version": "d1469a3c730c",
+  "version": "09a1044cc894",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -9,7 +9,6 @@
     "src/components/JobBits.tsx",
     "src/components/Nav.tsx",
     "src/components/PerfLines.tsx",
-    "src/components/ProgressRing.tsx",
     "src/components/Sheet.tsx",
     "src/components/SimilarClips.tsx",
     "src/features/help/helpKb.json",
@@ -18,7 +17,6 @@
     "src/screens/clip/ClipPerformance.tsx",
     "src/screens/home/Home.tsx",
     "src/screens/home/NewJobForm.tsx",
-    "src/screens/home/SetupCard.tsx",
     "src/screens/jobs/JobDetail.tsx",
     "src/screens/jobs/Jobs.tsx",
     "src/screens/jobs/mergeJobs.ts",
@@ -27,8 +25,7 @@
     "src/screens/library/WeekView.tsx",
     "src/screens/review/CaptionTabs.tsx",
     "src/screens/review/Review.tsx",
-    "src/screens/review/TikTokSheet.tsx",
-    "src/screens/settings/setup/useSetup.ts"
+    "src/screens/review/TikTokSheet.tsx"
   ],
   "routes": [
     "/",
@@ -1203,6 +1200,48 @@
       }
     },
     {
+      "id": "setup-list-gone",
+      "kind": "guide",
+      "route": "/settings/posting/setup",
+      "hash": "setup-todo",
+      "where": "Settings › Posting › Set up posting",
+      "title": "Where did my setup list go?",
+      "keywords": [
+        "setup list",
+        "set up list",
+        "to-do",
+        "todo",
+        "checklist",
+        "list gone",
+        "list disappeared",
+        "where did it go",
+        "skip",
+        "skipped",
+        "un-skip",
+        "unskip",
+        "set up posting pill",
+        "top right"
+      ],
+      "answer": "The **Set up posting** list sits at the top right until each place is set up or skipped. When all five are done or skipped, it says **All set!** and goes away. It comes back by itself if a place you set up needs you again. You can always find every place, skip one, or bring back one you skipped in **Settings › Posting › Set up posting**.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Find the place you skipped. It says **Skipped**.",
+        "Tap **Un-skip** to put it back on the list, or tap its card to set it up now."
+      ],
+      "actions": [
+        {
+          "id": "setup-list-gone:setup",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup#setup-todo",
+          "highlight": [
+            "setup-todo"
+          ]
+        }
+      ],
+      "extends": "§17"
+    },
+    {
       "id": "where-clips-go",
       "kind": "guide",
       "route": "/settings/posting/where",
@@ -1988,8 +2027,7 @@
         "link",
         "progress",
         "many",
-        "number",
-        "continue"
+        "number"
       ],
       "answer": "Paste a link to a stream or a video. Clip Factory finds the best moments and makes short clips. You pick the ones to keep.",
       "steps": [
@@ -2535,6 +2573,7 @@
       "title": "Set up posting",
       "keywords": [
         "Set up posting",
+        "The setup list on your screen",
         "Who can see your YouTube clips",
         "What X costs"
       ],
@@ -2587,6 +2626,48 @@
       ],
       "highlight": [
         "setup-posting"
+      ]
+    },
+    {
+      "id": "apple-setup-todo",
+      "kind": "apple",
+      "route": "/settings/posting/setup",
+      "hash": "setup-todo",
+      "where": "Settings › Posting › Set up posting",
+      "title": "The setup list on your screen",
+      "keywords": [
+        "to-do",
+        "todo",
+        "checklist",
+        "list",
+        "skip",
+        "skipped",
+        "un-skip",
+        "unskip",
+        "gone",
+        "disappeared",
+        "where did it go",
+        "pill",
+        "setup list"
+      ],
+      "answer": "It stays at the top right until each place is set up or skipped. Skipped ones wait here.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Find **The setup list on your screen**."
+      ],
+      "actions": [
+        {
+          "id": "apple-setup-todo:open",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup#setup-todo",
+          "highlight": [
+            "setup-todo"
+          ]
+        }
+      ],
+      "highlight": [
+        "setup-todo"
       ]
     },
     {

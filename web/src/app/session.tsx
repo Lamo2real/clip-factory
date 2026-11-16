@@ -9,11 +9,17 @@ import { getPrefs, setPrefs, type Prefs } from "../lib/prefs.ts";
 import { DEFAULT_CLICK_SOUND, DEFAULT_ERROR_SOUND, isSoundId } from "../lib/soundCatalog.ts";
 import { useToast } from "../components/Toasts.tsx";
 
+/**
+ * What to save: the changed fields, or a function that builds them from the newest settings on screen (including
+ * saves still on their way), so a list such as `setupSkipped` built from a copy read earlier cannot undo another change.
+ */
+export type SettingsPatch = Partial<Settings> | ((now: Settings) => Partial<Settings>);
+
 interface Session {
   me: Me | null;
   refresh: () => Promise<void>;
   /** Saves settings on the server; sound (and which sounds) and motion also apply on this device straight away. */
-  saveSettings: (patch: Partial<Settings>) => Promise<Settings | null>;
+  saveSettings: (patch: SettingsPatch) => Promise<Settings | null>;
   signOut: () => void;
 }
 
@@ -113,7 +119,10 @@ export function SessionProvider({ children, onSignOut }: { children: ReactNode; 
   useLivePoll(refresh, true, me && me.counts.running > 0 ? 10_000 : 30_000);
 
   const saveSettings = useCallback(
-    async (patch: Partial<Settings>) => {
+    async (change: SettingsPatch) => {
+      // An updater reads the settings as they are this instant: `shown` already holds every save made before it.
+      if (typeof change === "function" && !shown.current) return null;
+      const patch = typeof change === "function" ? change(shown.current!) : change;
       const edit = (settingsEdit.current += 1);
       const local = devicePrefs(patch);
       const oldPrefs = before(getPrefs(), local);

@@ -734,7 +734,8 @@
   }
   .review-card__media {
     position: sticky;
-    top: 24px;
+    /* Below the setup list's glass bar while it shows (§17.13). */
+    top: calc(24px + var(--todo-top, 0px));
   }
 }
 .player {

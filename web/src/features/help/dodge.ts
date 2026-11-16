@@ -56,15 +56,58 @@ export function liftFor(base: Box, obstacles: readonly Box[], max: number): numb
 /** What counts as a control the launcher must never sit on (a link, a button, a field, anything focusable). */
 export const CONTROLS =
   'a[href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="switch"], [role="tab"], [role="checkbox"], [role="radio"], [role="slider"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
-/** Fixed chrome the launcher is already placed clear of by CSS (and its own panel and spotlight). */
-const CHROME = ".help-launcher, .help-panel, .help-ring, .update-bar, .tabbar, .sidebar";
+/**
+ * Fixed chrome the launcher is already placed clear of by CSS (and its own panel and spotlight). Of the setup list
+ * (§17.13) only the glass bar behind its pill and the open panel's scrim are chrome (the page is inert under the
+ * scrim); the list's own buttons are controls like any other, so the launcher can never come to rest on one.
+ */
+const CHROME = ".help-launcher, .help-panel, .help-ring, .update-bar, .tabbar, .sidebar, .setup-todo-bar, .setup-todo-scrim";
+
+/** True for an `overflow-x` / `overflow-y` value that cuts off what runs past the box. */
+const cuts = (overflow: string) => overflow !== "" && overflow !== "visible";
 
 /**
- * Every control on screen the launcher could cover, as boxes. A control that holds other controls (a card that is a
- * link with a star inside) counts through the ones inside; elements marked data-help-dodge (a row of choices, the
- * Review action row) count as one block. Pure DOM reading, so it works for any page without marking it up.
+ * What shows of a box: the part inside every ancestor that cuts off its content (a scroller, a clamped line, a card
+ * with hidden overflow). A tab scrolled out of its row, a strip that runs on under another panel or the third line of
+ * a two-line clamp is not on screen there, so the launcher has nothing to keep clear of. `own` also lets the element
+ * itself cut (for words: the element they are in may clamp them). Null when nothing of the box shows.
  */
-export function controlBoxes(doc: Document = document, viewportHeight = window.innerHeight): Box[] {
+export function shownBox(el: Element, rect: Box, own = false): Box | null {
+  const box: Box = { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
+  const view = el.ownerDocument.defaultView;
+  if (!view) return box;
+  // Inside an absolutely placed box, the ancestors between it and the box it is placed against do not cut it off.
+  let placed = false;
+  for (let node: Element | null = el; node && node !== el.ownerDocument.body && node !== el.ownerDocument.documentElement; node = node.parentElement) {
+    const s = view.getComputedStyle(node);
+    if (placed && s.position !== "static" && s.position !== "") placed = false;
+    if (!placed && (own || node !== el) && s.display !== "contents" && (cuts(s.overflowX) || cuts(s.overflowY))) {
+      const r = node.getBoundingClientRect();
+      if (cuts(s.overflowX)) {
+        box.left = Math.max(box.left, r.left);
+        box.right = Math.min(box.right, r.right);
+      }
+      if (cuts(s.overflowY)) {
+        box.top = Math.max(box.top, r.top);
+        box.bottom = Math.min(box.bottom, r.bottom);
+      }
+      if (box.right - box.left < 1 || box.bottom - box.top < 1) return null;
+    }
+    // A fixed box is laid out against the window: what holds it does not cut it off.
+    if (s.position === "fixed") break;
+    if (s.position === "absolute") placed = true;
+  }
+  return box;
+}
+
+/**
+ * Every control on screen the launcher could cover, as boxes: what shows of each (`shownBox`). A control that holds
+ * other controls (a card that is a link with a star inside) counts through the ones inside; elements marked
+ * data-help-dodge (a row of choices, the Review action row) count as one block. Pure DOM reading, so it works for any
+ * page without marking it up. With `column` (the launcher's own left and right edge) only controls in that column are
+ * returned: the others can never be under it.
+ */
+export function controlBoxes(doc: Document = document, viewportHeight = window.innerHeight, column?: Pick<Box, "left" | "right">): Box[] {
   const out: Box[] = [];
   const seen = new Set<Element>();
   const add = (el: Element) => {
@@ -72,10 +115,12 @@ export function controlBoxes(doc: Document = document, viewportHeight = window.i
     seen.add(el);
     const r = el.getBoundingClientRect();
     if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= viewportHeight) return;
+    if (column && (r.right <= column.left || r.left >= column.right)) return;
     if (el.closest("[inert], [hidden]")) return;
     const s = getComputedStyle(el);
     if (s.visibility === "hidden" || s.pointerEvents === "none") return;
-    out.push({ top: r.top, bottom: r.bottom, left: r.left, right: r.right });
+    const shown = shownBox(el, r);
+    if (shown) out.push(shown);
   };
   for (const el of Array.from(doc.querySelectorAll("[data-help-dodge]"))) add(el);
   for (const el of Array.from(doc.querySelectorAll(CONTROLS))) {
@@ -110,7 +155,10 @@ export function textBoxes(zone: Box, doc: Document = document): Box[] {
     if (s.visibility === "hidden" || Number(s.opacity) === 0) continue;
     range.selectNodeContents(node);
     for (const r of Array.from(range.getClientRects())) {
-      if (r.width >= 1 && r.height >= 1 && hits(r)) out.push({ top: r.top, bottom: r.bottom, left: r.left, right: r.right });
+      if (r.width < 1 || r.height < 1 || !hits(r)) continue;
+      // Only what shows of the line: the rest of a clamped or scrolled-away line is not there to be covered.
+      const shown = shownBox(parent, r, true);
+      if (shown && hits(shown)) out.push(shown);
     }
   }
   return out;
@@ -172,7 +220,7 @@ export function useDodge(
       if (!el) return;
       const base = restingBox(el);
       const max = window.innerHeight * 0.4;
-      const { lift: next, onWords: over } = pickLift(base, controlBoxes(), textBoxes(reachZone(base, max)), max);
+      const { lift: next, onWords: over } = pickLift(base, controlBoxes(document, window.innerHeight, base), textBoxes(reachZone(base, max)), max);
       setOnWords(over);
       setBlocked(next === null);
       // Whole pixels, so sub-pixel layout noise does not keep nudging it.

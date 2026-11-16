@@ -32,11 +32,12 @@
   }
   .folders {
     position: sticky;
-    top: calc(env(safe-area-inset-top) + 28px);
+    /* Below the setup list's glass bar while it shows (§17.13). */
+    top: calc(env(safe-area-inset-top) + 28px + var(--todo-top, 0px));
     display: grid;
     gap: 6px;
     align-content: start;
-    max-height: calc(100dvh - 56px);
+    max-height: calc(100dvh - 56px - var(--todo-top, 0px));
     overflow-y: auto;
     padding: 10px;
     border-radius: var(--r-xl);
@@ -1002,6 +1003,11 @@
 }
 .skill-head__actions > .btn {
   min-width: 128px;
+}
+/* When the head is too narrow for one row (a small window, or the setup list's column open beside the page, §17.13),
+   Edit and Delete wrap under the title and still end where the cards end. */
+.skill-head__actions {
+  margin-left: auto;
 }
 @media (max-width: 479px) {
   .skill-head__actions {

@@ -118,6 +118,12 @@ export const TREES: Tree[] = [
             words: ["YouTube", "Instagram", "Facebook", "TikTok", "X", "connect", "login", "accounts", "keys", "steps"],
           },
           {
+            id: "setup-todo",
+            name: "The setup list on your screen",
+            leaf: "It stays at the top right until each place is set up or skipped. Skipped ones wait here.",
+            words: ["to-do", "todo", "checklist", "list", "skip", "skipped", "un-skip", "unskip", "gone", "disappeared", "where did it go", "pill", "setup list"],
+          },
+          {
             id: "youtube-privacy",
             name: "Who can see your YouTube clips",
             leaf: "Everyone, only people with the link, or only you.",

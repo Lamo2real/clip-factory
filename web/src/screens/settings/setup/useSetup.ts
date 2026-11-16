@@ -1,4 +1,5 @@
-// GET /v1/setup for the setup screens and the Home card, kept fresh by live `setup` events (docs/CONTRACTS.md §17.4).
+// GET /v1/setup for the setup screens and the floating setup list (§17.13), kept fresh by live `setup` events
+// (docs/CONTRACTS.md §17.4).
 import { useCallback } from "react";
 import { api } from "../../../api/index.ts";
 import type { PlatformSetup, SetupOverview } from "../../../api/types.ts";
