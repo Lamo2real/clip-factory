@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 
 export const ROUTES = ["/", "/jobs", "/jobs/:running", "/jobs/:failed", "/review", "/library", "/settings", "/get-app", "/nope"] as const;
-export const WIDTHS = [320, 360, 375, 390, 414, 768, 1024, 1280, 1440] as const;
+export const WIDTHS = [320, 360, 375, 390, 414, 430, 768, 1024, 1280, 1440, 1920] as const;
 
 /** Waits until the screen has its data (no skeletons) and entrance animations have settled. */
 export async function settle(page: Page) {

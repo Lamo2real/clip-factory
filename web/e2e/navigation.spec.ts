@@ -18,8 +18,8 @@ test.describe("phones", () => {
         await expect(item).toHaveAttribute("aria-label", /\w+/);
         await expect(item.locator("svg").first()).toBeVisible();
         const box = await item.boundingBox();
-        expect(box!.width).toBeGreaterThanOrEqual(44);
-        expect(box!.height).toBeGreaterThanOrEqual(44);
+        expect(box!.width).toBeGreaterThanOrEqual(48);
+        expect(box!.height).toBeGreaterThanOrEqual(48);
       }
       await bar.getByRole("link", { name: /^Review/ }).click();
       await expect(page).toHaveURL(/\/review$/);
