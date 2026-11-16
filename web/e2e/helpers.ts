@@ -99,6 +99,18 @@ export async function openClip(page: Page, hook: string) {
   await page.waitForURL(/\/clips\/[A-Z0-9]+$/);
   await page.locator("[data-stack]").nth(4).waitFor();
   await settle(page);
-  // The lines draw in over about 1.3 s.
-  await page.waitForTimeout(900);
+  // The lines draw in and the stacks rise over about 1.3 s; a fixed wait was too short on slow CI runners.
+  await animationsDone(page);
+}
+
+/** Waits until every finite animation (draw-ins, rises, fades) has finished; endless ones (the backdrop) are ignored. */
+export async function animationsDone(page: Page) {
+  await page.waitForFunction(
+    () =>
+      document
+        .getAnimations()
+        .every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity),
+    undefined,
+    { timeout: 15_000 },
+  );
 }
