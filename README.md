@@ -12,8 +12,10 @@ from the browser). It is built so simply that a child could use it.
 1. **Sign in.** One owner account (Amazon Cognito). You stay signed in for as long as you use the app at least once a month.
 2. **Paste a link or upload a file.** A YouTube, Twitch or Kick link, or a video from your device.
 3. **The agent gets to work in the cloud.** An agent on Amazon Bedrock AgentCore, running Claude Fable 5.1, downloads
-   the audio, transcribes it with Amazon Transcribe and finds the most viral moments, guided by the skills you
-   attach in Settings and by what worked on earlier posts.
+   the audio, transcribes it with Amazon Transcribe and finds the most viral moments, guided by your skills and by
+   what worked on earlier posts. In Settings › Clip making › Skills you write a skill by answering three questions
+   (or upload a `SKILL.md` or `.zip`), read it, change it and delete it. Every skill is always used: every AI call,
+   on AgentCore or Bedrock, in the agent or the API, gets all of them first.
    Every step appears on screen within a second or two, pushed over a WebSocket connection.
 4. **It cuts 5 to 10 clips.** Each clip is 1080×1920 with a text hook, burned-in captions, a cover image, a pre-post
    checklist and a caption for each platform.
@@ -80,7 +82,7 @@ it in draw.io or at app.diagrams.net); [docs/ARCHITECTURE.md](docs/ARCHITECTURE.
 /                         GitHub Pages legal site (index.html, privacy.html, terms.html, style.css, .nojekyll) + this README
 config/models.json        the only place model ids live
 config/platforms.json     numbers refresh intervals, batch sizes and rate budgets per platform
-skills/<name>/SKILL.md    built-in skills (bundled into the agent and seeded for the owner)
+skills/<name>/SKILL.md    built-in skills (bundled into the agent and the API; read-only, always used)
 docs/                     all documentation and the architecture diagram
 web/                      the app: React 19 + Vite + TypeScript, installable PWA (web/areas.json: folder → update label)
 desktop/                  the desktop app: a thin Tauri v2 window around the live web app (.dmg and .exe)

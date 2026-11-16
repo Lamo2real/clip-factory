@@ -16,6 +16,9 @@ numbers poller (one EventBridge rule, `cf-prod-stats`, per-platform intervals an
 `config/platforms.json`) and the Refresh numbers button; Library › This week with the owner's weekly best picks and
 the "Best of week" learning (`cf-prod-learn`). It all works today with no account connected and shows real numbers as
 soon as phase 2 connects the platforms.
+Added by the owner's skills request ([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16)):
+skills can be written, read, changed and deleted in Settings › Clip making › Skills; the on/off switch is gone, and
+every AI call (agent and API, Agent SDK and Bedrock Converse) gets every skill.
 See the [README](../README.md#status) for status.
 
 ## Phase 2: social integrations

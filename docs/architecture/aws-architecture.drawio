@@ -551,6 +551,24 @@
             </Array>
           </mxGeometry>
         </mxCell>
+        <mxCell id="e_clfskills" edge="1" parent="1" source="clf" target="media" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=0.85;exitY=0;exitDx=0;exitDy=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;" value="&lt;b&gt;6&lt;/b&gt; distil: read skills/* (s3:GetObject only)">
+          <mxGeometry x="-0.2" y="0" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1690" y="870" />
+              <mxPoint x="2056" y="870" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_learnskills" edge="1" parent="1" source="learn" target="media" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;" value="&lt;b&gt;9&lt;/b&gt; read skills/*&lt;br&gt;(s3:GetObject only)">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="322" y="-78" as="offset" />
+            <Array as="points">
+              <mxPoint x="2020" y="1668" />
+              <mxPoint x="2020" y="890" />
+              <mxPoint x="2084" y="890" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
         <mxCell id="hw9" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;8. Numbers refresh.&lt;/b&gt; An EventBridge rule ticks every 15 minutes; &lt;code&gt;cf-prod-stats&lt;/code&gt; reads the posts that are due (each platform no faster than its safe interval: YouTube, TikTok, X 15 min; Instagram, Facebook 30 min; slower as posts age; 30 days, then a final snapshot). Refresh numbers on the clip page invokes it at once, inside the same budgets." vertex="1">
           <mxGeometry x="2820" y="844" width="520" height="88" as="geometry" />
         </mxCell>
