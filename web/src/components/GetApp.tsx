@@ -31,7 +31,16 @@ const PICK: { os: DeviceOs; label: string; icon: IconName }[] = [
  * The whole "Get the app" panel. Renders nothing when the app is already installed here, unless `installedNote`
  * asks for a friendly "you already have it" line instead (the /get-app page, so it is never a dead end).
  */
-export function GetAppPanel({ headingLevel = 2, installedNote = false }: { headingLevel?: 1 | 2; installedNote?: boolean }) {
+export function GetAppPanel({
+  headingLevel = 2,
+  installedNote = false,
+  title,
+}: {
+  headingLevel?: 1 | 2;
+  installedNote?: boolean;
+  /** Replaces "Get the app" where the page heading already says it (the Settings branch). */
+  title?: ReactNode;
+}) {
   const { installed, canPrompt } = useInstall();
   const manifest = useManifest();
   const detected = currentOs();
@@ -78,7 +87,11 @@ export function GetAppPanel({ headingLevel = 2, installedNote = false }: { headi
         </span>
         <div className="getapp__text">
           <H className="getapp__title" id={`${id}-t`}>
-            Get the <em>app</em>
+            {title ?? (
+              <>
+                Get the <em>app</em>
+              </>
+            )}
           </H>
           <p className="getapp__lede">
             {guess ? `Looks like you are on ${articleFor(os)}${OS_NAME[os]}. ` : ""}

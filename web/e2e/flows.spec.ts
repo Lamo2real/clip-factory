@@ -95,7 +95,7 @@ test("retry a failed job and stop a running one", async ({ page }) => {
 });
 
 test("settings: skills, preferences, appearance", async ({ page }) => {
-  await page.goto("/settings");
+  await page.goto("/settings/clip-making/skills");
   await settle(page);
 
   await page.locator('input[type="file"][accept^=".md"]').setInputFiles({
@@ -110,12 +110,28 @@ test("settings: skills, preferences, appearance", async ({ page }) => {
   await builtIn.getByRole("switch").click();
   await expect(builtIn.getByRole("switch")).toHaveAttribute("aria-checked", "false");
 
-  await page.getByRole("button", { name: "More: Longest source in hours" }).click();
-  await expect(page.locator(".pref", { hasText: "Longest source" }).locator("output")).toHaveText("7");
+  await page.goto("/settings/clip-making/clips");
+  await settle(page);
+  await page.getByRole("button", { name: "More: Longest video in hours" }).click();
+  await expect(page.locator("#longest-video output")).toHaveText("7");
+  await page.getByRole("button", { name: "Fewer: Most clips" }).click();
+  await expect(page.locator("#clip-count output").nth(1)).toHaveText("9");
 
+  await page.goto("/settings/look-and-feel/motion");
+  await settle(page);
   await page.getByRole("switch", { name: "Reduce motion" }).click();
   await expect(page.locator("html")).toHaveClass(/reduce-motion/);
 
+  // Where clips go: the last place cannot be turned off, and says why.
+  await page.goto("/settings/posting/where");
+  await settle(page);
+  for (const p of ["Instagram", "Facebook", "TikTok", "X"]) await page.getByRole("checkbox", { name: p, exact: true }).uncheck();
+  await page.getByRole("checkbox", { name: "YouTube" }).click({ force: true });
+  await expect(page.getByRole("checkbox", { name: "YouTube" })).toBeChecked();
+  await expect(page.getByText("Keep at least one place.", { exact: false })).toBeVisible();
+
+  await page.goto("/settings/clip-making/youtube");
+  await settle(page);
   await page.locator('input[type="file"][accept=".txt,text/plain"]').setInputFiles({
     name: "cookies.txt",
     mimeType: "text/plain",

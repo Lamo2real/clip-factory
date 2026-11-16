@@ -7,14 +7,14 @@ test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
   test("a touch scroll is silent; a tap makes the tap sound", async ({ page }) => {
-    await page.goto("/settings");
+    await page.goto("/settings/look-and-feel/sounds");
     await settle(page);
     await page.evaluate(() => (window.__cfSoundLog = []));
 
     // A real touch swipe that starts on a button: it scrolls, so no click and no sound.
     const cdp = await page.context().newCDPSession(page);
-    // The first button on the page (the Get the app card's device chooser sits at the top on phones).
-    const start = await page.locator("main button").first().boundingBox();
+    // Start the swipe on a button (the big Back button at the top of a settings page on phones).
+    const start = await page.locator("main .btn").first().boundingBox();
     // Count what the swipe really produced. Headless Linux browsers do not always scroll for a synthetic gesture,
     // so the test asserts the part that matters: touches arrived, no click fired, no sound played.
     await page.evaluate(() => {
@@ -72,7 +72,7 @@ test("enabled controls tap, switched-off controls deny, errors deny", async ({ p
   expect(await log(page)).toEqual(["deny", "tap"]);
 
   // A "coming soon" button is switched off: deny, and a note says why.
-  await page.goto("/settings");
+  await page.goto("/settings/posting/accounts");
   await settle(page);
   await page.evaluate(() => (window.__cfSoundLog = []));
   await page.getByRole("button", { name: /Connect YouTube/ }).click({ force: true });
@@ -91,12 +91,12 @@ test("enabled controls tap, switched-off controls deny, errors deny", async ({ p
 });
 
 test("the Sound setting mutes every sound", async ({ page }) => {
-  await page.goto("/settings");
+  await page.goto("/settings/look-and-feel/sounds");
   await settle(page);
   await page.getByRole("switch", { name: "Sounds" }).click();
   await expect(page.getByRole("switch", { name: "Sounds" })).toHaveAttribute("aria-checked", "false");
   await page.evaluate(() => (window.__cfSoundLog = []));
-  await page.getByRole("link", { name: "Skills" }).first().click();
+  await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Look & feel" }).click();
   const entries = await page.evaluate(() => window.__cfSoundLog ?? []);
   expect(entries.length).toBe(1);
   expect(entries.every((e) => e.muted)).toBe(true);

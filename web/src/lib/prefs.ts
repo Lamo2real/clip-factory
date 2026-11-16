@@ -1,25 +1,49 @@
-// Per-device preferences. Sound and motion also live in the owner's Settings on the server; the copy here makes
-// them apply instantly on start. The background picture never leaves the device.
+// Per-device preferences. Sound (on/off and which click and error sound) and motion also live in the owner's
+// Settings on the server; the copy here makes them apply instantly on start. The background picture and the
+// Settings folder panel's open/closed trees never leave the device.
 import { useSyncExternalStore } from "react";
+import { DEFAULT_CLICK_SOUND, DEFAULT_ERROR_SOUND, isSoundId } from "./soundCatalog.ts";
 
 export interface Prefs {
   soundEnabled: boolean;
+  /** Click sound 1..30 (docs/CONTRACTS.md §15.3). */
+  clickSound: number;
+  /** Error sound 1..30. */
+  errorSound: number;
   reduceMotion: boolean;
   sidebarCollapsed: boolean;
+  /** Trees the owner folded shut in the Settings folder panel (wide screens). */
+  closedTrees: string[];
+  /** False until the folder panel has been seen once; a first visit opens only the current tree. */
+  foldersSet: boolean;
   background: string | null;
 }
 
 const KEY = "cf.prefs";
 const BG_KEY = "cf.background";
-const DEFAULTS: Prefs = { soundEnabled: true, reduceMotion: false, sidebarCollapsed: false, background: null };
+const DEFAULTS: Prefs = {
+  soundEnabled: true,
+  clickSound: DEFAULT_CLICK_SOUND,
+  errorSound: DEFAULT_ERROR_SOUND,
+  reduceMotion: false,
+  sidebarCollapsed: false,
+  closedTrees: [],
+  foldersSet: false,
+  background: null,
+};
 
 function read(): Prefs {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Prefs>;
     return {
       soundEnabled: raw.soundEnabled ?? DEFAULTS.soundEnabled,
+      clickSound: isSoundId(raw.clickSound) ? raw.clickSound : DEFAULTS.clickSound,
+      errorSound: isSoundId(raw.errorSound) ? raw.errorSound : DEFAULTS.errorSound,
       reduceMotion: raw.reduceMotion ?? DEFAULTS.reduceMotion,
       sidebarCollapsed: raw.sidebarCollapsed ?? DEFAULTS.sidebarCollapsed,
+      closedTrees: Array.isArray(raw.closedTrees) ? raw.closedTrees.filter((t): t is string => typeof t === "string") : [],
+      // Someone who already folded a tree shut has made their choice.
+      foldersSet: raw.foldersSet === true || (Array.isArray(raw.closedTrees) && raw.closedTrees.length > 0),
       background: localStorage.getItem(BG_KEY),
     };
   } catch {

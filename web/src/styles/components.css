@@ -462,10 +462,10 @@
   transition: background-color var(--dur-2) var(--ease-out);
 }
 .switch::before {
-  /* Enlarges the touch target to 44px without changing the drawing. */
+  /* Enlarges the touch target to 48 x 64 px without changing the drawing. */
   content: "";
   position: absolute;
-  inset: -5px 0;
+  inset: -7px -4px;
 }
 .switch__thumb {
   position: absolute;

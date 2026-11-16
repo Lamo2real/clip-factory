@@ -104,10 +104,108 @@ The person in the reference image is not used.
 
 | Width | Navigation |
 |---|---|
-| < 768 px | Bottom glass tab bar, **icons only**, no words. Each icon has an `aria-label` and a tooltip on long-press. Five items: Home, New job, Review (with badge), Insights, Settings. Respects `env(safe-area-inset-bottom)`. Each target ≥ 48 × 48 px. "Get the app" is not a tab: it is a card in Settings and a one-time banner on Home. |
+| < 768 px | Bottom glass tab bar, **icons only**, no words. Each icon has an `aria-label` and a tooltip on long-press. Five items: Home, New job, Review (with badge), Insights, Settings. Respects `env(safe-area-inset-bottom)`. Each target ≥ 48 × 48 px. "Get the app" is not a tab: it is the Settings › App & account › Get the app branch and a one-time banner on Home. |
 | ≥ 768 px | Left glass sidebar with icons and names. A hamburger (three stripes) at the top collapses it to icons only; the choice is remembered on that device. Collapsed items show their name as a tooltip. A **Get the app** item (download icon) sits at the bottom of the sidebar, apart from the main items, and disappears once the app is installed. |
 
 The active item uses `--glass-sage` and a small tomato dot. The current page has `aria-current="page"`.
+
+## Settings tree
+
+The owner's picture: "there is a field which is the entire settings, then we have apple trees which has multiple
+trees, and each tree has multiple branches, and each branch has multiple apples, but they also have leaves ... so that
+it is all organized." Settings is built exactly like that, and every setting has one place in it. The contract is
+[CONTRACTS.md §15](CONTRACTS.md#15-settings-as-a-tree-and-choosing-your-click-sounds-owner-request-2026-11-16).
+
+| Word | What it is on screen | Example |
+|---|---|---|
+| **Field** | All of Settings, the page at `/settings` | Settings |
+| **Tree** | One of four big groups, its own page | Look & feel |
+| **Branch** | A section inside a tree, its own page | Sounds |
+| **Apple** | One thing you can change: a switch, a picker, a button | Click sound |
+| **Leaf** | One short line of help under an apple or a branch | "Sounds only play when you tap, never when you scroll." |
+
+### The map
+
+Every tree and every branch is a real address, so a link, the browser's Back button and a bookmark all work. Branch
+addresses sit under their tree: `/settings/look-and-feel/sounds`.
+
+```
+Settings                                   /settings
+├── Clip making                            /settings/clip-making
+│   ├── Clips          How many clips, Longest video
+│   ├── Skills         every skill (on/off, view, delete with Undo), Add a skill (.md or .zip)
+│   └── YouTube help   YouTube cookies: add, remove
+├── Posting                                /settings/posting
+│   ├── Accounts       YouTube, Instagram, Facebook, TikTok, X (Coming soon)
+│   └── Where clips go the platforms to post to (at least one)
+├── Look & feel                            /settings/look-and-feel
+│   ├── Sounds         Sounds on/off, Click sound, Error sound, Try it
+│   ├── Motion         Reduce motion
+│   └── Background     Background picture (this device only)
+└── App & account                          /settings/app
+    ├── Get the app    the install card for this device
+    ├── Updates        this version, Check for updates
+    └── Account        signed-in email, Sign out
+```
+
+Branch slugs: `clips`, `skills`, `youtube`, `accounts`, `where`, `sounds`, `motion`, `background`, `get-the-app`,
+`updates`, `account`. Old addresses keep working: `/settings#skills` style anchors redirect to their branch, `/get-app`
+shows the same install card, and `/settings?account=…&status=…` (the OAuth return) still shows its message.
+
+**Where a new setting goes.** Pick the tree by *what the owner is doing* (making clips, posting them, how the app
+looks and sounds, the app itself), then the branch by *the thing it changes*. A new setting never sits loose on the
+field or on a tree page; if no branch fits, add a branch. A branch with one apple is fine. Every apple gets a leaf
+unless its name already says it all.
+
+### What each level looks like
+
+| Level | Layout |
+|---|---|
+| **Field** `/settings` | Serif title "Make it *yours*." (the word *yours* in italic) with the lede "How your clips are made, where they go, and how the app looks and sounds.", then a **Find a setting** search box, then the four trees as big glass cards in the card grid: icon, name, one line (for example "How your clips are made."), then how many apples it holds and its branch names ("… settings · Clips, Skills, YouTube help"). |
+| **Tree** | Breadcrumb, the tree's title, its branches as glass cards: icon, name, one line. |
+| **Branch** | Breadcrumb, the branch's title, its apples as rows grouped in glass panels. Each row: the label on the left, the control on the right (below it on narrow phones), the leaf under the label in `--ink-soft` small text. |
+
+- **Breadcrumb on every level:** `Settings › Look & feel › Sounds`, each part a link, the last one `aria-current="page"`.
+  It truncates from the left on narrow screens, never wraps the page sideways.
+- **Back:** phones get a big secondary **Back** pill (arrow icon + "Back", 48 px tall) at the top of every tree and
+  branch page; it goes one level up, not browser-back, so it never leaves Settings by surprise.
+- **One tomato button per screen at most.** Most branches have none: switches and pickers save by themselves. The
+  Sounds branch's tomato button is "Try it: Sign in".
+- **Saving:** every apple saves the moment it changes (optimistic, like the Sound switch); a failed save puts the
+  control back (it reloads the saved settings), plays the error sound and shows the app's friendly error message for
+  what went wrong (`friendlyMessage`), in a tomato toast. The owner just taps again to retry.
+
+### Phone and desktop
+
+| Width | How you move through the tree |
+|---|---|
+| < 1024 px | **Drill down.** The field shows the trees; tap a tree to see its branches; tap a branch to see its apples. Back and the breadcrumb go up. One level on screen at a time. |
+| ≥ 1024 px | **Folder panel.** A left glass panel inside Settings (beside the app sidebar) shows the whole tree; the content of the chosen level sits on the right. |
+
+**The folder panel** (≥ 1024 px):
+- Each tree is a folder row (chevron, icon, name). Clicking it opens or closes the folder like a file browser; the
+  branches inside are links. Opening a tree's page also opens its folder.
+- The current branch (or tree) uses `--glass-sage` and the small tomato dot, like the app's sidebar, with
+  `aria-current="page"`.
+- Which folders are open is remembered on that device (`localStorage`, wrapped so a private window still works); on a
+  first visit only the current tree is open.
+- It is a `nav` labelled "Settings sections"; folders are buttons with `aria-expanded`. Arrow Up and Down move between
+  rows, Right opens a folder, Left closes it, Enter follows a link.
+- Panel width 260 px, its own scroll if the tree is taller than the screen; names truncate with a tooltip.
+- The 1024 px switch is Settings' own breakpoint, chosen so the app sidebar, the folder panel and a comfortable content
+  column fit side by side; the app's general breakpoints are unchanged.
+
+### Find a setting
+
+- One pill search box at the top of the field (and at the top of the folder panel on desktop), labelled
+  "Find a setting", placeholder "Try “sound” or “skills”", a magnifier icon and a clear (×) button.
+- It searches every apple and every leaf by name, and also tree and branch names, ignoring case and accents, while
+  you type. "sound", "click", "beep" all find the Sounds apples (each apple may carry a few extra everyday words).
+- Results list under the box: the apple's name with its place under it (`Look & feel › Sounds`). Tapping a result
+  opens that branch, scrolls to the apple and highlights it for 2 seconds (a soft sage glow; with reduced motion, a
+  plain outline).
+- Nothing found: "Nothing found for “<what you typed>”. Try a shorter word, like “sound”." Never an empty box.
+- The list is a `listbox` linked to the box; Up and Down move, Enter opens, Escape clears.
 
 ## Components
 
@@ -134,21 +232,101 @@ The active item uses `--glass-sage` and a small tomato dot. The current page has
 
 ## Sounds
 
-Two sounds, synthesised with the Web Audio API (no audio files):
+Two kinds of sound, synthesised with the Web Audio API (no audio files). The owner picks which one plays for each,
+from 30 choices each, in **Settings › Look & feel › Sounds**
+([CONTRACTS.md §15.3](CONTRACTS.md#153-sounds)):
 
-| Sound | When |
-|---|---|
-| **Tap** (short, soft, high click) | A click on an enabled button, link, tab, switch or card. |
-| **Deny** (lower, duller double tick) | A click on a disabled control, and when an action fails with an error. |
+| Sound | When | Default (the owner's pick) |
+|---|---|---|
+| **Click sound** (`clickSound`) | A click on an enabled button, link, tab, switch or card. | **6 "Water drop"**, plip-plop |
+| **Error sound** (`errorSound`) | A click on a disabled control, an error toast, and when an action fails. | **5 "Nope nope nope"**, three quick blips |
+
+These replace the first build's two fixed sounds (a glass "tap" and a double-thud "deny"); both are still in the
+catalog as click 1 "Glass tick" and error 1 "Double thud".
+
+### The sound catalog
+
+The 30 click sounds and 30 error sounds come from the sound picker page the owner tried and liked. They are data, not
+code: `web/src/lib/soundCatalog.ts` holds one entry per sound, `{ id, name, feel, voices }`, and one player plays any
+entry. A voice is either a tone or a burst of noise:
+
+| Voice | Shape | Meaning |
+|---|---|---|
+| Tone | `[wave, startHz, endHz, at, length, peak, lowpassHz]` | an oscillator (`sine`, `triangle`, `square`, `sawtooth`) gliding from `startHz` to `endHz`, starting `at` seconds in, lasting `length` seconds, at gain `peak`, through a low-pass filter |
+| Noise | `["noise", filterType, filterHz, at, length, peak]` | white noise through a `lowpass`, `highpass` or `bandpass` filter |
+
+Numbers are the ids the owner sees on the cards (1–30 in each group) and the values stored in settings. The ids are
+frozen: a sound may be retuned, but never renumbered or removed, so a saved pick always means the same sound.
+
+| # | Click sound ("When it works") | Feel | Error sound ("When it can't") | Feel |
+|---|---|---|---|---|
+| 1 | Glass tick | The app's sound today | Double thud | The app's sound today |
+| 2 | Soft pop | Round and quick | Buzz | Short low buzz |
+| 3 | Bubble | Rises a little | Step down | Two notes falling |
+| 4 | Wood block | Dry and woody | Bonk | Cartoon bonk |
+| 5 | Marimba | Warm mallet note | **Nope nope nope** (default) | Three quick blips |
+| 6 | **Water drop** (default) | Plip-plop | Low hum | Grumbly |
+| 7 | Bell ting | Tiny bell | Wrong note | Two clashing notes |
+| 8 | Key clack | Mechanical keyboard | Slide down | Falls away |
+| 9 | Pluck | A plucked string | Soft double | Two soft knocks |
+| 10 | Kalimba | Thumb piano | Error beep | Classic beep-beep |
+| 11 | Micro click | Barely there | Clunk | Dull and heavy |
+| 12 | Coin | Two quick notes up | Wobble | Wobbly no |
+| 13 | Chirp up | Small and happy | Minor fall | Three sad notes |
+| 14 | Soft thump | Deep and gentle | Muffled knock | Knock knock, no |
+| 15 | Glass ping | Clear and high | Rasp | Scratchy |
+| 16 | Pebble | Little stone tap | Bass drop | Deep fall |
+| 17 | Toggle | Switch flick | Tsk tsk | Two dry clicks |
+| 18 | Bloop | Playful | Stab | Sharp and sour |
+| 19 | Sparkle | Three rising notes | Deflate | Air going out |
+| 20 | Mallet | Soft and round | Locked | Latch, then thud |
+| 21 | Snap | Finger snap | Two-tone down | Uh-oh |
+| 22 | Cushion | Pillowy press | Growl | Low rumble |
+| 23 | Tink | Tiny and sharp | Rubber | Bouncy no |
+| 24 | Two-step | Two notes up | Hollow block | Two wooden knocks |
+| 25 | Harp | Gentle strum | Fizzle | Spark that dies |
+| 26 | Cork pop | Pop! | Honk | Little horn |
+| 27 | Crystal | Glassy shimmer | Glitch | Steps tumbling down |
+| 28 | Thock | Deep keyboard | Mini trombone | Wah-wah-wah |
+| 29 | Chime | Little chord | Plunk | Low and short |
+| 30 | Feather | Softest of all | Muted double | Two padded taps |
+
+### The Sounds branch (the picker)
+
+The branch is the picker page the owner liked, inside Settings and in the app's glass style:
+
+1. **Sounds** switch (`soundEnabled`) with its leaf "Sounds only play when you tap, never when you scroll."
+2. **When it works** (click sounds) and **When it can't** (error sounds): two groups of numbered glass cards in the card
+   grid. Each card shows its number in a round badge, its name and its feel. Tapping a card plays it and picks it: the
+   card gets a sage edge and a "Pick" badge, and `aria-pressed="true"`; the card that was picked before lets go. The
+   playing card's number pulses once (none with reduced motion).
+3. **Try it**: the tomato button "Try it: Sign in" and a **Make it fail** switch beside it.
+   - Off: plays the click sound and shows a sage toast "Signed in".
+   - On: plays the error sound, the button gives a small shake (none with reduced motion) and a tomato toast says
+     "Wrong password. Try again."
+   - It is pretend: nothing is signed in or out.
+4. A line under **Try it** says the picks in words, one coloured dot each: "Click 6: Water drop" and
+   "Error 5: Nope nope nope" (with the owner's defaults). It is `aria-live="polite"`, so a new pick is read out.
+
+Picks save the moment you tap (optimistic, like the Sounds switch) to the account (`PUT /v1/settings`), so they follow
+the owner to every device. When **Sounds is off**, the cards stay visible but quiet: a note at the top says "Sounds
+are off" with a secondary button "Turn sounds on", and tapping a card still picks it but plays nothing. No surprise
+noise for someone who turned sound off.
+
+The cards are real buttons (keyboard and screen reader friendly), at least 48 px tall, and wrap their names instead of
+overflowing at 320 px. Card taps play only the card's own sound, never the click sound on top of it.
 
 Rules:
 - **Click only, never on scroll.** Sounds are triggered from the `click` event alone. Browsers do not fire `click`
   for scrolls, swipes or drags, so scrolling on a phone never makes a sound. Never use `pointerdown`, `touchstart`
   or `scroll` for sounds.
 - Disabled controls get no native click, so they are marked `aria-disabled="true"` (kept focusable and clickable)
-  and their click plays deny instead of doing anything.
+  and their click plays the error sound instead of doing anything.
 - The audio context is created on the first click (browsers require a user gesture).
-- Settings → Sound turns both off (`soundEnabled`). Sounds are quiet (peak gain about 0.15).
+- The Sounds switch turns both off (`soundEnabled`). Sounds stay short (under half a second) and soft: no voice in the
+  catalog peaks above gain 0.5, and the noise and low tones that reach it are filtered so they sound gentle.
+- Settings saved before the picker existed have no `clickSound` or `errorSound`; they read as 6 and 5. An unknown
+  number (outside 1–30) also plays the default, never silence or an error.
 
 ## Motion and delight
 
@@ -204,8 +382,9 @@ h1, h2, h3, p, li, dd, td, label, button { overflow-wrap: anywhere; }
 
 ## Get the app card
 
-Where it lives: the **Get the app** page from the sidebar (≥ 768 px); on phones a card at the top of Settings and a
-one-time banner on Home. Rules are in [CONTRACTS.md §12.1](CONTRACTS.md#121-get-the-app-sidebar-item-on-phones-a-card-in-settings-plus-a-one-time-banner-on-home).
+Where it lives: the **Get the app** page from the sidebar (≥ 768 px); on every screen size the
+**Settings › App & account › Get the app** branch (the same card; `/get-app` keeps working) and a one-time banner on
+Home. Rules are in [CONTRACTS.md §12.1](CONTRACTS.md#121-get-the-app-sidebar-item-on-phones-a-card-in-settings-plus-a-one-time-banner-on-home).
 
 Anatomy, top to bottom, inside one `.glass--strong` card:
 
@@ -336,7 +515,7 @@ changes one is checked against this list.
 - [ ] No "Are you sure?" dialogs. Throwing away shows a toast with **Undo** for 8 s; nothing is deleted until it ends.
 - [ ] Forms can't be filled in wrong: a **Paste** button next to the link box, the link checked while typing (platform
   icon appears), hints right under the field, the main button inactive until the input is valid (its click plays the
-  deny sound and points at what is missing).
+  error sound and points at what is missing).
 
 **Always know what is happening**
 - [ ] Anything that takes longer than 300 ms shows progress.

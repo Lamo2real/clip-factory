@@ -1,45 +1,87 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { api } from "../../api/index.ts";
-import { friendlyMessage } from "../../api/errors.ts";
-import { putFile } from "../../api/upload.ts";
-import type { Platform } from "../../api/types.ts";
-import { useSession } from "../../app/session.tsx";
+// Settings as a tree (docs/CONTRACTS.md §15): the field (all of Settings, with "Find a setting"), the trees, their
+// branches, and on each branch the apples (settings) with their leaves (help). Phones drill down page by page with
+// a big Back button; from 1024 px a folder panel on the left shows the whole tree.
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Icon } from "../../components/Icon.tsx";
-import { PlatformMark } from "../../components/PlatformMark.tsx";
-import { useToast } from "../../components/Toasts.tsx";
-import { Button, PageHeader, Skeleton, Stepper, Toggle } from "../../components/ui.tsx";
-import { PLATFORM_LABEL } from "../../lib/format.ts";
-import { useLoad } from "../../lib/hooks.ts";
-import { setPrefs, shrinkImage, usePrefs } from "../../lib/prefs.ts";
+import { A, LinkButton, PageHeader } from "../../components/ui.tsx";
+import { plural } from "../../lib/format.ts";
+import { prefersReducedMotion, setPrefs, usePrefs } from "../../lib/prefs.ts";
 import { useInstall } from "../../lib/pwa.ts";
-import { GetAppPanel } from "../../components/GetApp.tsx";
+import { navigate, useHash } from "../../lib/router.ts";
+import {
+  appleCount,
+  findBranch,
+  findTree,
+  searchSettings,
+  settingsPath,
+  visibleTrees,
+  type Branch,
+  type SearchHit,
+  type Tree,
+} from "../../lib/settingsTree.ts";
+import {
+  AccountBranch,
+  AccountsBranch,
+  BackgroundBranch,
+  ClipsBranch,
+  GetAppBranch,
+  MotionBranch,
+  UpdatesBranch,
+  WhereBranch,
+  YoutubeBranch,
+} from "./branches.tsx";
 import { SkillsSection } from "./SkillsSection.tsx";
+import { SoundsBranch } from "./SoundsBranch.tsx";
 
-const PLATFORMS: Platform[] = ["youtube", "instagram", "facebook", "tiktok", "x"];
+export { comingSoonPlatform } from "./branches.tsx";
 
-/**
- * The platform the owner just came back from connecting (the hooks API sends them to
- * /settings?account={platform}&status=coming_soon until connecting arrives, docs/CONTRACTS.md §14.3), or null.
- */
-export function comingSoonPlatform(search: string): Platform | null {
-  const q = new URLSearchParams(search);
-  const p = q.get("account") as Platform | null;
-  return q.get("status") === "coming_soon" && p && PLATFORMS.includes(p) ? p : null;
-}
+/** What each branch page shows, by `tree/branch`. */
+const BRANCHES: Record<string, () => ReactNode> = {
+  "clip-making/clips": () => <ClipsBranch />,
+  "clip-making/skills": () => <SkillsSection />,
+  "clip-making/youtube": () => <YoutubeBranch />,
+  "posting/accounts": () => <AccountsBranch />,
+  "posting/where": () => <WhereBranch />,
+  "look-and-feel/sounds": () => <SoundsBranch />,
+  "look-and-feel/motion": () => <MotionBranch />,
+  "look-and-feel/background": () => <BackgroundBranch />,
+  "app/get-the-app": () => <GetAppBranch />,
+  "app/updates": () => <UpdatesBranch />,
+  "app/account": () => <AccountBranch />,
+};
 
-const SECTIONS = [
-  { id: "skills", label: "Skills" },
-  { id: "accounts", label: "Accounts" },
-  { id: "clips", label: "Clips" },
-  { id: "appearance", label: "Appearance" },
-  { id: "app", label: "App" },
-];
+/** Every branch route in the tree, for tests: each must have a page. */
+export const BRANCH_ROUTES = Object.keys(BRANCHES);
 
-export function Settings() {
+export function Settings({ tree: treeSlug = null, branch: branchSlug = null }: { tree?: string | null; branch?: string | null }) {
   const { installed } = useInstall();
-  const sections = installed ? SECTIONS : [{ id: "get-app", label: "Get the app" }, ...SECTIONS];
+  const trees = useMemo(() => visibleTrees(installed), [installed]);
+  const tree = treeSlug ? findTree(treeSlug) : undefined;
+  const branch = tree && branchSlug ? findBranch(tree, branchSlug) : undefined;
+
   return (
     <div className="page settings">
+      <div className="settings-layout">
+        <FolderPanel trees={trees} tree={tree?.slug ?? null} branch={branch?.slug ?? null} installed={installed} />
+        <div className="settings-content">
+          {tree && branch ? (
+            <BranchPage tree={tree} branch={branch} />
+          ) : tree ? (
+            <TreePage tree={trees.find((t) => t.slug === tree.slug) ?? tree} />
+          ) : (
+            <FieldPage trees={trees} installed={installed} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- The field: all of Settings ----------
+
+function FieldPage({ trees, installed }: { trees: Tree[]; installed: boolean }) {
+  return (
+    <>
       <PageHeader
         title={
           <>
@@ -48,342 +90,392 @@ export function Settings() {
         }
         lede="How your clips are made, where they go, and how the app looks and sounds."
       />
-      <nav className="chips" aria-label="Settings sections">
-        {sections.map((s) => (
-          <a key={s.id} href={`#${s.id}`} className="chip">
-            {s.label}
-          </a>
+      <FindSetting installed={installed} />
+      <ul className="tree-cards" aria-label="Settings groups">
+        {trees.map((t) => (
+          <li key={t.slug}>
+            <A href={settingsPath(t.slug)} className="tree-card glass">
+              <span className="tree-card__icon" aria-hidden="true">
+                <Icon name={t.icon} size={26} />
+              </span>
+              <span className="tree-card__text">
+                <span className="tree-card__name">{t.name}</span>
+                <span className="tree-card__line">{t.line}</span>
+                <span className="tree-card__count">
+                  {plural(appleCount(t), "setting")} · {t.branches.map((b) => b.name).join(", ")}
+                </span>
+              </span>
+              <Icon name="chevronRight" size={22} className="icon tree-card__go" />
+            </A>
+          </li>
         ))}
-      </nav>
-      <GetAppPanel />
-      <SkillsSection />
-      <AccountsSection />
-      <ClipsSection />
-      <AppearanceSection />
-      <AppSection />
+      </ul>
+    </>
+  );
+}
+
+/** How many results "Find a setting" lists at most. */
+const MAX_HITS = 8;
+
+/**
+ * The search box over every apple and leaf. Its results are a listbox: Up and Down move through them, Enter opens
+ * the one marked (or the best match), Escape clears, and a tap opens one. `compact` is the folder panel's copy.
+ */
+function FindSetting({ installed, compact = false }: { installed: boolean; compact?: boolean }) {
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(-1);
+  const id = useId();
+  const hits = useMemo(() => searchSettings(query, installed).slice(0, MAX_HITS), [query, installed]);
+  const typed = query.trim().length > 0;
+  const open = typed && hits.length > 0;
+  const optionId = (i: number) => `${id}-hit-${i}`;
+
+  function go(hit: SearchHit | undefined) {
+    if (!hit) return;
+    setQuery("");
+    setActive(-1);
+    navigate(hit.href);
+  }
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    go(hits[active] ?? hits[0]);
+  }
+
+  function keys(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape") {
+      if (!query) return;
+      e.preventDefault();
+      setQuery("");
+      setActive(-1);
+    } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && open) {
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setActive((i) => (i < 0 ? (step > 0 ? 0 : hits.length - 1) : (i + step + hits.length) % hits.length));
+    }
+  }
+
+  // Keeps the marked result in view in a short panel.
+  useEffect(() => {
+    if (active >= 0) document.getElementById(optionId(active))?.scrollIntoView?.({ block: "nearest" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  return (
+    <div className={`find${compact ? " find--compact" : " glass"}`} role="search" aria-label="Search settings">
+      <form className="find__form" onSubmit={submit}>
+        <label className={compact ? "sr-only" : "find__label"} htmlFor={`${id}-q`}>
+          Find a setting
+        </label>
+        <div className="find__box">
+          <Icon name="search" size={20} />
+          <input
+            id={`${id}-q`}
+            className="find__input"
+            type="search"
+            role="combobox"
+            value={query}
+            placeholder={compact ? "Find a setting" : "Try “sound” or “skills”"}
+            autoComplete="off"
+            enterKeyHint="go"
+            aria-autocomplete="list"
+            aria-expanded={open}
+            aria-describedby={`${id}-status`}
+            aria-controls={`${id}-results`}
+            aria-activedescendant={open && active >= 0 ? optionId(active) : undefined}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActive(-1);
+            }}
+            onKeyDown={keys}
+          />
+          {typed ? (
+            <button
+              type="button"
+              className="find__clear"
+              aria-label="Clear the search"
+              onClick={() => {
+                setQuery("");
+                setActive(-1);
+              }}
+            >
+              <Icon name="x" size={18} />
+            </button>
+          ) : null}
+        </div>
+      </form>
+      <p className={typed ? "find__status" : "sr-only"} id={`${id}-status`} role="status">
+        {!typed ? "" : hits.length ? `${plural(hits.length, "setting")} found. Tap one to go there.` : `Nothing found for “${query.trim()}”. Try a shorter word, like “sound”.`}
+      </p>
+      <ul className="find__results" id={`${id}-results`} role="listbox" aria-label="Settings found" hidden={!open}>
+        {open
+          ? hits.map((hit, i) => <FindResult key={hit.apple.id} id={optionId(i)} hit={hit} active={i === active} onOpen={() => go(hit)} />)
+          : null}
+      </ul>
     </div>
   );
 }
 
-function AccountsSection() {
-  const { data } = useLoad(() => api().listAccounts());
-  const toast = useToast();
-  const id = useId();
-  const [soon] = useState(() => comingSoonPlatform(typeof location === "undefined" ? "" : location.search));
-  const section = useRef<HTMLElement>(null);
-  useEffect(() => {
-    if (soon) section.current?.scrollIntoView({ block: "start" });
-  }, [soon]);
+function FindResult({ id, hit, active, onOpen }: { id: string; hit: SearchHit; active: boolean; onOpen: () => void }) {
   return (
-    <section className="settings-section glass" id="accounts" aria-labelledby={`${id}-t`} ref={section}>
-      <div className="settings-section__head">
-        <div>
-          <h2 className="settings-section__title" id={`${id}-t`}>
-            Accounts
-          </h2>
-          <p className="muted">Clips you keep are posted to the accounts you connect here. Connecting is coming in a later update.</p>
+    // Picked with the pointer here, and with the keyboard from the search box (aria-activedescendant).
+    <li id={id} role="option" aria-selected={active} className={`find-hit${active ? " is-active" : ""}`} onClick={onOpen}>
+      <span className="find-hit__icon" aria-hidden="true">
+        <Icon name={hit.branch.icon} size={20} />
+      </span>
+      <span className="find-hit__text">
+        <span className="find-hit__name">{hit.apple.name}</span>
+        <span className="find-hit__path">
+          {hit.tree.name} › {hit.branch.name}
+        </span>
+        <span className={`find-hit__leaf${hit.found === "leaf" ? " is-match" : ""}`}>{hit.apple.leaf}</span>
+      </span>
+      <Icon name="chevronRight" size={20} className="icon find-hit__go" />
+    </li>
+  );
+}
+
+// ---------- A tree: its branches ----------
+
+function TreePage({ tree }: { tree: Tree }) {
+  return (
+    <>
+      <Trail tree={tree} />
+      <header className="page-head settings-head">
+        <div className="page-head__text">
+          <h1 className="page-head__title">{tree.name}</h1>
+          <p className="page-head__lede">{tree.line}</p>
         </div>
+      </header>
+      <ul className="branch-cards" aria-label={`${tree.name} sections`}>
+        {tree.branches.map((b) => (
+          <li key={b.slug}>
+            <A href={settingsPath(tree.slug, b.slug)} className="branch-card glass">
+              <span className="branch-card__icon" aria-hidden="true">
+                <Icon name={b.icon} size={22} />
+              </span>
+              <span className="branch-card__text">
+                <span className="branch-card__name">{b.name}</span>
+                <span className="branch-card__line">{b.line}</span>
+                <span className="branch-card__apples">{b.apples.map((a) => a.name).join(" · ")}</span>
+              </span>
+              <Icon name="chevronRight" size={20} className="icon branch-card__go" />
+            </A>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+// ---------- A branch: its apples ----------
+
+/** The found apple lights up for 2 seconds, once the page has had a moment to draw. */
+const SHOW_AFTER_MS = 120;
+const FOUND_MS = 2000;
+
+function BranchPage({ tree, branch }: { tree: Tree; branch: Branch }) {
+  const hash = useHash();
+  const body = useRef<HTMLDivElement>(null);
+  const render = BRANCHES[`${tree.slug}/${branch.slug}`];
+
+  // "Find a setting" (and old links) land here with #apple: bring it into view, light it up, and focus it.
+  useEffect(() => {
+    if (!hash) return;
+    let el: HTMLElement | null = null;
+    const show = setTimeout(() => {
+      el = document.getElementById(hash);
+      if (!el || !body.current?.contains(el)) return;
+      // A tall apple (a grid of 30 sound cards) goes to the top, so its name and leaf stay on screen; a short one
+      // sits in the middle.
+      const tall = el.getBoundingClientRect().height > window.innerHeight * 0.6;
+      el.scrollIntoView({ block: tall ? "start" : "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      el.classList.remove("is-found");
+      void el.offsetWidth;
+      el.classList.add("is-found");
+      el.focus({ preventScroll: true });
+    }, SHOW_AFTER_MS);
+    const fade = setTimeout(() => el?.classList.remove("is-found"), SHOW_AFTER_MS + FOUND_MS);
+    return () => {
+      clearTimeout(show);
+      clearTimeout(fade);
+      el?.classList.remove("is-found");
+    };
+  }, [hash, branch.slug]);
+
+  return (
+    <>
+      <Trail tree={tree} branch={branch} />
+      <header className="page-head settings-head">
+        <div className="page-head__text">
+          <h1 className="page-head__title">{branch.name}</h1>
+          <p className="page-head__lede">{branch.line}</p>
+        </div>
+      </header>
+      <div className="branch-body" ref={body}>
+        {render?.()}
       </div>
-      {soon ? (
-        <p className="callout callout--info" role="status">
-          <Icon name="info" size={18} />
-          <span>Connecting {PLATFORM_LABEL[soon]} arrives soon.</span>
-        </p>
-      ) : null}
-      <ul className="account-grid">
-        {PLATFORMS.map((p) => {
-          const acc = data?.find((a) => a.platform === p);
-          const connected = acc?.status === "connected";
+    </>
+  );
+}
+
+// ---------- Breadcrumb, and a big Back button on phones ----------
+
+function Trail({ tree, branch }: { tree: Tree; branch?: Branch }) {
+  const up = branch ? { href: settingsPath(tree.slug), name: tree.name } : { href: settingsPath(), name: "Settings" };
+  return (
+    <div className="trail">
+      <LinkButton href={up.href} size="lg" icon="chevronLeft" className="trail__back" aria-label={`Back to ${up.name}`}>
+        Back
+      </LinkButton>
+      <nav className="crumbs" aria-label="Breadcrumb">
+        <ol className="crumbs__list">
+          <li className="crumbs__item">
+            <A href={settingsPath()} className="crumbs__link">
+              Settings
+            </A>
+          </li>
+          <li className="crumbs__item">
+            <Icon name="chevronRight" size={16} className="icon crumbs__sep" />
+            {branch ? (
+              <A href={settingsPath(tree.slug)} className="crumbs__link">
+                {tree.name}
+              </A>
+            ) : (
+              <span className="crumbs__here" aria-current="page">
+                {tree.name}
+              </span>
+            )}
+          </li>
+          {branch ? (
+            <li className="crumbs__item">
+              <Icon name="chevronRight" size={16} className="icon crumbs__sep" />
+              <span className="crumbs__here" aria-current="page">
+                {branch.name}
+              </span>
+            </li>
+          ) : null}
+        </ol>
+      </nav>
+    </div>
+  );
+}
+
+// ---------- The folder panel (1024 px and wider) ----------
+
+/** The trees that start shut on a first visit: every one but the tree you are in. */
+function firstVisitClosed(trees: readonly Tree[], tree: string | null): string[] {
+  return trees.map((t) => t.slug).filter((slug) => slug !== tree);
+}
+
+/** The rows the arrow keys move between, top to bottom: All settings, each folder, and the branches in open folders. */
+const ROWS = ".folders__home, .folders__toggle, .folders__branches:not([hidden]) .folders__branch";
+
+function FolderPanel({
+  trees,
+  tree,
+  branch,
+  installed,
+}: {
+  trees: Tree[];
+  tree: string | null;
+  branch: string | null;
+  installed: boolean;
+}) {
+  const { closedTrees, foldersSet } = usePrefs();
+  const id = useId();
+  const nav = useRef<HTMLElement>(null);
+  const closed = foldersSet ? closedTrees : firstVisitClosed(trees, tree);
+
+  // A first visit opens only the current tree, and remembers that. After that, going into a tree opens its folder,
+  // so the current page is always visible in the panel.
+  useEffect(() => {
+    if (!foldersSet) setPrefs({ closedTrees: firstVisitClosed(trees, tree), foldersSet: true });
+    else if (tree && closedTrees.includes(tree)) setPrefs({ closedTrees: closedTrees.filter((t) => t !== tree) });
+    // Only when the page changes: folding the current tree shut afterwards is the owner's choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tree]);
+
+  const setOpen = (slug: string, open: boolean) => {
+    if (open === !closed.includes(slug)) return;
+    setPrefs({ closedTrees: open ? closed.filter((t) => t !== slug) : [...closed, slug], foldersSet: true });
+  };
+
+  // Arrow Up and Down move between rows, Right opens a folder (or steps into it), Left closes it (or steps out to
+  // it from a branch), Home and End jump to the first and last row. Enter follows a link as usual.
+  function keys(e: KeyboardEvent<HTMLElement>) {
+    const row = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>(ROWS) : null;
+    if (!row || !nav.current?.contains(row)) return;
+    const rows = Array.from(nav.current.querySelectorAll<HTMLElement>(ROWS));
+    const at = rows.indexOf(row);
+    const folder = row.closest<HTMLElement>(".folders__tree");
+    const slug = folder?.dataset.tree;
+    const toggle = folder?.querySelector<HTMLElement>(".folders__toggle");
+    let next: HTMLElement | undefined;
+    if (e.key === "ArrowDown") next = rows[Math.min(at + 1, rows.length - 1)];
+    else if (e.key === "ArrowUp") next = rows[Math.max(at - 1, 0)];
+    else if (e.key === "Home") next = rows[0];
+    else if (e.key === "End") next = rows[rows.length - 1];
+    else if (e.key === "ArrowRight" && slug && row === toggle) {
+      if (closed.includes(slug)) setOpen(slug, true);
+      else next = folder?.querySelector<HTMLElement>(".folders__branch") ?? undefined;
+    } else if (e.key === "ArrowLeft" && slug) {
+      if (row === toggle) setOpen(slug, false);
+      else next = toggle ?? undefined;
+    } else return;
+    e.preventDefault();
+    next?.focus();
+  }
+
+  return (
+    <nav className="folders glass" aria-label="Settings sections" ref={nav} onKeyDown={keys}>
+      {/* The field has its own search box at the top; elsewhere the panel carries one. */}
+      {tree ? <FindSetting installed={installed} compact /> : null}
+      <A href={settingsPath()} className={`folders__home${!tree ? " is-current" : ""}`} aria-current={!tree ? "page" : undefined}>
+        <Icon name="settings" size={20} />
+        <span>All settings</span>
+      </A>
+      <ul className="folders__trees">
+        {trees.map((t) => {
+          const open = !closed.includes(t.slug);
+          const here = tree === t.slug;
           return (
-            <li key={p} className="account glass">
-              <span className={`account__mark is-${p}`}>
-                <PlatformMark platform={p} size={24} />
-              </span>
-              <span className="account__text">
-                <span className="account__name">{PLATFORM_LABEL[p]}</span>
-                <span className="account__status">
-                  {!data ? "Checking…" : connected ? (acc?.handle ?? "Connected") : acc?.status === "needs_reconnect" ? "Needs reconnecting" : "Not connected"}
-                </span>
-              </span>
-              <Button
-                size="sm"
-                disabled
-                aria-label={`Connect ${PLATFORM_LABEL[p]}: coming soon`}
-                className="account__btn"
-                // Switched off, so it plays the "deny" sound; the toast says why.
-                onClickCapture={() => toast.info("Connecting accounts is coming in a later update. Your kept clips will wait.")}
+            <li key={t.slug} data-tree={t.slug} className={`folders__tree${open ? " is-open" : ""}${here ? " is-here" : ""}`}>
+              <button
+                type="button"
+                className="folders__toggle"
+                aria-expanded={open}
+                aria-controls={`${id}-${t.slug}`}
+                onClick={() => setOpen(t.slug, !open)}
               >
-                Coming soon
-              </Button>
+                <Icon name="chevronRight" size={16} className="icon folders__chevron" />
+                <Icon name={t.icon} size={20} />
+                <span className="folders__name" title={t.name}>
+                  {t.name}
+                </span>
+              </button>
+              <ul className="folders__branches" id={`${id}-${t.slug}`} hidden={!open}>
+                {t.branches.map((b) => {
+                  const current = here && branch === b.slug;
+                  return (
+                    <li key={b.slug}>
+                      <A
+                        href={settingsPath(t.slug, b.slug)}
+                        className={`folders__branch${current ? " is-current" : ""}`}
+                        aria-current={current ? "page" : undefined}
+                        title={b.name}
+                      >
+                        <Icon name={b.icon} size={18} />
+                        <span>{b.name}</span>
+                      </A>
+                    </li>
+                  );
+                })}
+              </ul>
             </li>
           );
         })}
       </ul>
-    </section>
-  );
-}
-
-function ClipsSection() {
-  const { me, saveSettings } = useSession();
-  const id = useId();
-  const s = me?.settings;
-  return (
-    <section className="settings-section glass" id="clips" aria-labelledby={`${id}-t`}>
-      <div className="settings-section__head">
-        <div>
-          <h2 className="settings-section__title" id={`${id}-t`}>
-            Clip preferences
-          </h2>
-          <p className="muted">What Clip Factory does when you tap Make clips. You can still pick an exact number each time.</p>
-        </div>
-      </div>
-      {!s ? (
-        <Skeleton className="line-skel" />
-      ) : (
-        <div className="pref-grid">
-          <div className="pref">
-            <span className="pref__label" id={`${id}-min`}>
-              Fewest clips
-            </span>
-            <Stepper label="Fewest clips" value={s.clipMin} min={1} max={s.clipMax} onChange={(n) => void saveSettings({ clipMin: n })} />
-          </div>
-          <div className="pref">
-            <span className="pref__label">Most clips</span>
-            <Stepper label="Most clips" value={s.clipMax} min={s.clipMin} max={10} onChange={(n) => void saveSettings({ clipMax: n })} />
-          </div>
-          <div className="pref">
-            <span className="pref__label">Longest source</span>
-            <Stepper
-              label="Longest source in hours"
-              value={s.maxSourceHours}
-              min={1}
-              max={12}
-              onChange={(n) => void saveSettings({ maxSourceHours: n })}
-            />
-            <span className="pref__hint">hours. For longer streams, only the first part is used.</span>
-          </div>
-          <fieldset className="pref pref--wide">
-            <legend className="pref__label">Post confirmed clips to</legend>
-            <div className="check-chips">
-              {PLATFORMS.map((p) => {
-                const on = s.platforms.includes(p);
-                const last = on && s.platforms.length === 1;
-                return (
-                  <label key={p} className={`check-chip${on ? " is-on" : ""}`}>
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      aria-disabled={last || undefined}
-                      onChange={() => {
-                        if (last) return;
-                        void saveSettings({ platforms: on ? s.platforms.filter((x) => x !== p) : PLATFORMS.filter((x) => x === p || s.platforms.includes(x)) });
-                      }}
-                    />
-                    <PlatformMark platform={p} size={18} />
-                    <span>{PLATFORM_LABEL[p]}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function AppearanceSection() {
-  const { me, saveSettings } = useSession();
-  const prefs = usePrefs();
-  const toast = useToast();
-  const id = useId();
-  const file = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
-  const sound = me?.settings.soundEnabled ?? prefs.soundEnabled;
-  const motion = me?.settings.reduceMotion ?? prefs.reduceMotion;
-
-  async function pickBackground(f: File) {
-    if (!f.type.startsWith("image/")) return toast.error("That is not a picture. Tap Choose a picture and pick a JPG or PNG.");
-    setBusy(true);
-    try {
-      const url = await shrinkImage(f);
-      if (!setPrefs({ background: url })) toast.error("That picture is too big for this device. Pick a smaller one.");
-      else toast.success("Background set on this device.");
-    } catch {
-      toast.error("That picture could not be opened. Pick a JPG or PNG.");
-    } finally {
-      setBusy(false);
-      if (file.current) file.current.value = "";
-    }
-  }
-
-  return (
-    <section className="settings-section glass" id="appearance" aria-labelledby={`${id}-t`}>
-      <div className="settings-section__head">
-        <div>
-          <h2 className="settings-section__title" id={`${id}-t`}>
-            Appearance
-          </h2>
-          <p className="muted">Sound and motion follow you to every device. The background picture stays on this one.</p>
-        </div>
-      </div>
-      <div className="toggles">
-        <Toggle
-          label="Sounds"
-          description="A soft tick when you tap, a low thud when something can't be done."
-          checked={sound}
-          onChange={(v) => void saveSettings({ soundEnabled: v })}
-        />
-        <Toggle
-          label="Reduce motion"
-          description="Turns off confetti, page transitions and the moving background."
-          checked={motion}
-          onChange={(v) => void saveSettings({ reduceMotion: v })}
-        />
-      </div>
-      <div className="bg-picker">
-        <span className="bg-picker__preview" aria-hidden="true">
-          {prefs.background ? <img src={prefs.background} alt="" /> : <span className="bg-picker__mesh" />}
-        </span>
-        <div className="bg-picker__text">
-          <span className="pref__label">Background picture</span>
-          <span className="muted small">
-            Use your own wallpaper behind the glass. {prefs.background ? "Using your picture." : "Using the Clip Factory colours."}
-          </span>
-          <div className="row-actions">
-            <input
-              ref={file}
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              tabIndex={-1}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void pickBackground(f);
-              }}
-            />
-            <Button size="sm" icon="image" loading={busy} onClick={() => file.current?.click()}>
-              {prefs.background ? "Change picture" : "Choose a picture"}
-            </Button>
-            {prefs.background ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                icon="x"
-                onClick={() => {
-                  const before = prefs.background;
-                  setPrefs({ background: null });
-                  toast.undo("Picture removed.", { onUndo: () => setPrefs({ background: before }), onCommit: () => undefined });
-                }}
-              >
-                Use the colours
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function AppSection() {
-  const { me, refresh, signOut } = useSession();
-  const toast = useToast();
-  const id = useId();
-  const file = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState<"cookies" | null>(null);
-  const [removing, setRemoving] = useState(false);
-  const hasCookies = (me?.settings.hasYoutubeCookies ?? false) && !removing;
-
-  async function uploadCookies(f: File) {
-    if (f.size > 1024 ** 2) return toast.error("That file is too big to be cookies.txt. Export cookies.txt again and pick that file.");
-    setBusy("cookies");
-    try {
-      const up = await api().createCookiesUpload(f.name);
-      await putFile(up, f);
-      await refresh();
-      toast.success("YouTube cookies saved. Retry any job YouTube blocked.");
-    } catch (e) {
-      toast.error(friendlyMessage(e));
-    } finally {
-      setBusy(null);
-      if (file.current) file.current.value = "";
-    }
-  }
-
-  function removeCookies() {
-    setRemoving(true);
-    toast.undo("YouTube cookies removed.", {
-      onUndo: () => setRemoving(false),
-      onCommit: () => {
-        api()
-          .deleteCookies()
-          .then(() => refresh())
-          .catch((e) => toast.error(`${friendlyMessage(e)} Your cookies are still saved.`))
-          .finally(() => setRemoving(false));
-      },
-    });
-  }
-
-  return (
-    <section className="settings-section glass" id="app" aria-labelledby={`${id}-t`}>
-      <div className="settings-section__head">
-        <div>
-          <h2 className="settings-section__title" id={`${id}-t`}>
-            App
-          </h2>
-          <p className="muted">Help with YouTube downloads, and signing out.</p>
-        </div>
-      </div>
-      <div className="app-rows">
-        <div className="app-row">
-          <span className="app-row__icon" aria-hidden="true">
-            <Icon name="cookie" />
-          </span>
-          <div className="app-row__text">
-            <span className="pref__label">YouTube cookies</span>
-            <span className="muted small">
-              {hasCookies
-                ? "Saved. They are only used to download YouTube videos."
-                : "You can skip this. If YouTube blocks a video, export cookies.txt from your browser and add it here."}
-            </span>
-          </div>
-          <div className="row-actions">
-            <input
-              ref={file}
-              type="file"
-              accept=".txt,text/plain"
-              className="sr-only"
-              tabIndex={-1}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void uploadCookies(f);
-              }}
-            />
-            <Button size="sm" icon="upload" loading={busy === "cookies"} onClick={() => file.current?.click()}>
-              {hasCookies ? "Replace" : "Add cookies.txt"}
-            </Button>
-            {hasCookies ? (
-              <Button size="sm" variant="ghost" icon="trash" onClick={removeCookies}>
-                Remove
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="app-row">
-          <span className="app-row__icon" aria-hidden="true">
-            <Icon name="logout" />
-          </span>
-          <div className="app-row__text">
-            <span className="pref__label">Sign out</span>
-            <span className="muted small user-text">{me ? `Signed in as ${me.user.email}.` : "Signed in."}</span>
-          </div>
-          <Button size="sm" variant="ghost" icon="logout" onClick={signOut}>
-            Sign out
-          </Button>
-        </div>
-      </div>
-    </section>
+    </nav>
   );
 }

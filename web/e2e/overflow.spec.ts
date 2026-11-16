@@ -44,15 +44,44 @@ for (const width of WIDTHS) {
     state = await findOverflow(page);
     for (const o of state.items) failures.push(`/review (open, undo toast): ${o.selector} "${o.text}"`);
 
-    await page.goto("/settings");
+    await page.goto("/settings/clip-making/skills");
     await settle(page);
     await page.getByRole("button", { name: "View" }).first().click();
     await page.locator(".code").first().waitFor();
     state = await findOverflow(page);
-    for (const o of state.items) failures.push(`/settings (skill open): ${o.selector} "${o.text}"`);
+    for (const o of state.items) failures.push(`/settings skills (skill open): ${o.selector} "${o.text}"`);
+
+    // Find a setting with results, and with nothing found.
+    await page.goto("/settings");
+    await settle(page);
+    await page.getByLabel("Find a setting").fill("sound");
+    await page.locator(".find-hit").first().waitFor();
+    state = await findOverflow(page);
+    for (const o of state.items) failures.push(`/settings (search results): ${o.selector} "${o.text}"`);
+    await page.getByLabel("Find a setting").fill("x".repeat(80));
+    state = await findOverflow(page);
+    for (const o of state.items) failures.push(`/settings (nothing found): ${o.selector} "${o.text}"`);
+    if (state.page > state.viewport) failures.push(`/settings (nothing found): page scrolls sideways`);
+
+    // Sounds: a long pick and a failed Try it with its toast, then off (with the notes and the "Sounds are off" toast).
+    await page.goto("/settings/look-and-feel/sounds");
+    await settle(page);
+    await page.getByRole("button", { name: /^Error sound 28:/ }).click();
+    await page.getByRole("switch", { name: "Make it fail" }).click();
+    await page.getByRole("button", { name: "Try it: Sign in" }).click();
+    await page.getByText("Wrong password. Try again.").waitFor();
+    state = await findOverflow(page);
+    for (const o of state.items) failures.push(`/settings sounds (failed try): ${o.selector} "${o.text}"`);
+    if (state.page > state.viewport) failures.push(`/settings sounds: page scrolls sideways`);
+    await page.getByRole("switch", { name: "Sounds" }).click();
+    await page.getByRole("button", { name: "Try it: Sign in" }).click();
+    await page.getByText("Sounds are off. Turn them on to hear it.").waitFor();
+    state = await findOverflow(page);
+    for (const o of state.items) failures.push(`/settings sounds (off, try): ${o.selector} "${o.text}"`);
+    if (state.page > state.viewport) failures.push(`/settings sounds (off): page scrolls sideways`);
 
     // The update bar with its area pills, then its progress, on top of Home and Settings.
-    for (const path of ["/?update=1", "/settings?update=1"]) {
+    for (const path of ["/?update=1", "/settings?update=1", "/settings/look-and-feel/sounds?update=1"]) {
       await page.goto(path);
       await settle(page);
       await page.locator(".update-bar").waitFor();

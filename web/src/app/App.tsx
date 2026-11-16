@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { initApi } from "../api/index.ts";
 import { auth, onSignedOut } from "../lib/auth.ts";
 import { loadConfig } from "../lib/config.ts";
 import { usePrefs } from "../lib/prefs.ts";
-import { useRoute, type Route } from "../lib/router.ts";
+import { navigate, useHash, useRoute, type Route } from "../lib/router.ts";
+import { findBranch, findTree, legacySettingsRedirect } from "../lib/settingsTree.ts";
 import { sounds } from "../lib/sounds.ts";
 import { Backdrop, GlassFilter } from "../components/Backdrop.tsx";
 import { Sidebar, TabBar } from "../components/Nav.tsx";
@@ -33,6 +34,16 @@ const TITLES: Record<Route["name"], string> = {
   get_app: "Get the app",
   not_found: "Not found",
 };
+
+/** The tab title: deeper Settings pages name where you are ("Sounds · Settings"). */
+export function titleFor(route: Route): string {
+  if (route.name === "settings" && route.tree) {
+    const tree = findTree(route.tree);
+    const branch = tree && route.branch ? findBranch(tree, route.branch) : undefined;
+    return `${branch?.name ?? tree?.name ?? "Settings"} · Settings`;
+  }
+  return TITLES[route.name];
+}
 
 export function App() {
   const [boot, setBoot] = useState<Boot>({ state: "loading" });
@@ -101,18 +112,27 @@ export function App() {
 
 function Shell() {
   const route = useRoute();
+  const hash = useHash();
   const main = useRef<HTMLElement>(null);
   const first = useRef(true);
+  // Compared by value: a new route object for the same page (or a jump within it) is not a page change.
+  const page = JSON.stringify(route);
+
+  // Old one-page Settings links (`/settings#skills`, the hooks API's `?account=…`) go to their branch (§15.1).
+  useLayoutEffect(() => {
+    const to = legacySettingsRedirect(location.pathname, location.search, location.hash);
+    if (to) navigate(to, { replace: true });
+  }, [page, hash]);
 
   // After a page change, move focus to the page so screen readers start at its heading.
   useEffect(() => {
-    document.title = `${TITLES[route.name]} · Clip Factory`;
+    document.title = `${titleFor(JSON.parse(page) as Route)} · Clip Factory`;
     if (first.current) {
       first.current = false;
       return;
     }
     main.current?.focus({ preventScroll: true });
-  }, [route]);
+  }, [page]);
 
   return (
     <div className="app">
@@ -154,7 +174,7 @@ function Screen({ route }: { route: Route }) {
     case "library":
       return <Library />;
     case "settings":
-      return <Settings />;
+      return <Settings tree={route.tree} branch={route.branch} />;
     case "get_app":
       return (
         <div className="page page--narrow">

@@ -121,6 +121,8 @@ test("Review and Library show clips that did well, and hide the strip when there
 test("Settings says when connecting a platform arrives", async ({ page }) => {
   await page.goto("/settings?account=instagram&status=coming_soon");
   await settle(page);
+  // The old one-page link lands on the Accounts branch, query kept (§15.1).
+  await expect(page).toHaveURL(/\/settings\/posting\/accounts\?account=instagram&status=coming_soon$/);
   await expect(page.locator("#accounts").getByRole("status")).toHaveText("Connecting Instagram arrives soon.");
   await page.goto("/settings");
   await settle(page);

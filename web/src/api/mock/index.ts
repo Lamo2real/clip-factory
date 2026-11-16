@@ -3,6 +3,7 @@ import { ApiError, networkError } from "../errors.ts";
 import type { Api, Clip, Job, Post, Settings, SimilarClip, Skill } from "../types.ts";
 import { MOMENTS, PLATFORMS, STEP_KEYS, coverArt, seed, stepsAt, thumbArt, ulid, type Store } from "./fixtures.ts";
 import { installMockLiveControls, mockLive } from "./live.ts";
+import { isSoundId } from "../../lib/soundCatalog.ts";
 
 const STEP_MS = 3500;
 const clone = <T>(v: T): T => structuredClone(v);
@@ -383,6 +384,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (next.clipMax < next.clipMin || next.clipMax > 10) throw bad("The largest number of clips must be between the smallest and 10.");
       if (next.maxSourceHours < 1 || next.maxSourceHours > 12) throw bad("Source length must be between 1 and 12 hours.");
       if (!next.platforms.every((p) => PLATFORMS.includes(p))) throw bad("Unknown platform.");
+      if (!isSoundId(next.clickSound)) throw bad("Pick a click sound from 1 to 30.");
+      if (!isSoundId(next.errorSound)) throw bad("Pick an error sound from 1 to 30.");
       store.settings = next;
       return clone(next);
     },

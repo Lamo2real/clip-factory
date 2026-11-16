@@ -1,6 +1,13 @@
 import type { Page } from "@playwright/test";
+import { settingsPath, TREES } from "../src/lib/settingsTree.ts";
 
-export const ROUTES = ["/", "/jobs", "/jobs/:running", "/jobs/:failed", "/review", "/library", "/settings", "/get-app", "/nope"] as const;
+/** Every page of the settings tree (§15.1): the field, each tree, each branch. */
+export const SETTINGS_ROUTES: string[] = [
+  settingsPath(),
+  ...TREES.flatMap((t) => [settingsPath(t.slug), ...t.branches.map((b) => settingsPath(t.slug, b.slug))]),
+];
+
+export const ROUTES: string[] = ["/", "/jobs", "/jobs/:running", "/jobs/:failed", "/review", "/library", ...SETTINGS_ROUTES, "/get-app", "/nope"];
 export const WIDTHS = [320, 360, 375, 390, 414, 768, 1024, 1280, 1440] as const;
 
 /** Waits until the screen has its data (no skeletons) and entrance animations have settled. */

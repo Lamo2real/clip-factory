@@ -73,14 +73,53 @@ in `docs/` and `README.md` points at a file that exists.
 - **Link validation**: YouTube, Twitch and Kick are accepted; any other link is refused before a job is created.
 - **Skills**: upload a `.md`, toggle on and off, view content; built-in skills cannot be deleted.
 - **Settings**: clip range limits (1–10, min ≤ max), sound and reduce motion switches persist.
+- **Settings tree** ([UX-14](BUSINESS_REQUIREMENTS.md#ux-14-settings-organised-like-a-field-of-apple-trees)):
+  - `/settings` shows the four trees with their apple counts; each tree page shows its branches; every branch of
+    [CONTRACTS.md §15.1](CONTRACTS.md#15-settings-as-a-tree-and-choosing-your-click-sounds-owner-request-2026-11-16)
+    opens by its address directly (a fresh page load) and after a reload, with the right title and breadcrumb.
+  - Every setting the app has appears in exactly one branch (a unit test over the tree data: no duplicates, no
+    setting missing, every branch has at least one apple, every apple has a leaf or is marked as needing none).
+  - Breadcrumb parts are links and go to their level; the phone Back button goes one level up; browser Back returns
+    to the previous level.
+  - Old addresses: `/settings#skills` (and each old anchor) lands on its branch; `/get-app` shows the install card.
+  - Below 1024 px there is no folder panel; at 1024 and 1440 px the panel shows the whole tree, folders open and close
+    with a click and with the Left and Right keys, the current branch has `aria-current="page"`, and the open folders
+    are the same after a reload. A blocked `localStorage` still renders the panel.
+  - **Find a setting**: "click" finds Click sound under `Look & feel › Sounds`; "COOKIES" finds the YouTube cookies;
+    picking a result opens the branch with that apple highlighted and in view; a nonsense word shows "No setting
+    called that. Try another word."; Escape clears; the keyboard can move through results.
+  - With the app installed (standalone), Get the app is gone from the tree and search, and `/settings/app/get-the-app`
+    says "You already have the app." with a way back.
+  - No overflow at every width from 320 px, at most one tomato button per screen, axe clean, on the field, every tree
+    and every branch.
 - **Accounts**: every platform shows "Not connected"; Connect explains it arrives in the next phase.
 - **Navigation**: below 768 px a bottom tab bar with icons only (no visible text, every item has an `aria-label`);
   from 768 px a sidebar that collapses with the hamburger and remembers the choice.
 - **No overflow**: every screen at 320, 375, 390, 430, 768, 1024 and 1440 px. The test fails if the page scrolls
   sideways or any element's `scrollWidth` is larger than its `clientWidth` (except elements that are meant to scroll,
   which are marked).
-- **Sounds**: a click on an enabled control plays tap; a click on a disabled control plays deny; a scroll or swipe
-  plays nothing; the Settings switch silences both. (The audio layer is spied on, nothing is actually played.)
+- **Sounds** ([UX-09](BUSINESS_REQUIREMENTS.md#ux-09-two-click-sounds-never-on-scroll)): a click on an enabled
+  control plays the chosen click sound; a click on a disabled control or an error toast plays the chosen error sound;
+  a scroll or swipe plays nothing; the Sounds switch silences both. A fresh account plays click 6 "Water drop" and
+  error 5 "Nope nope nope". (The audio layer is spied on, nothing is actually played.)
+- **Sound picker** ([UX-15](BUSINESS_REQUIREMENTS.md#ux-15-pick-your-click-and-error-sounds)):
+  - The Sounds branch shows 30 cards under "When it works" and 30 under "When it can't", numbered 1–30, with the
+    names and feels of the [catalog](UX_DESIGN_SYSTEM.md#the-sound-catalog); cards 6 and 5 carry the "Pick" badge on a
+    fresh account.
+  - Tapping a card plays that recipe (the spy sees its id), moves the "Pick" badge and `aria-pressed` to it, and sends
+    `PUT /v1/settings` with the new `clickSound` or `errorSound`; after a reload the pick is still there. A failed save
+    puts the old pick back and says so.
+  - After a new pick, clicking any other button in the app plays the new sound with no reload.
+  - "Try it: Sign in" plays the click sound and shows "Signed in"; with Make it fail on, it plays the error sound,
+    shakes (not with reduced motion) and shows "Wrong password. Try again."
+  - With Sounds off: the "Sounds are off" note and "Turn sounds on" button appear, tapping a card picks it and plays
+    nothing; "Turn sounds on" turns sound back on.
+  - Cards are buttons reachable by keyboard, at least 48 px tall on phones, and do not overflow at 320 px with the
+    longest names ("Nope nope nope", "Mini trombone").
+- **Sound catalog** (Vitest): exactly 30 click and 30 error entries, ids 1–30 in each group with no gaps, names unique
+  in a group and equal to the owner's picker page, every voice well formed (tone: a known wave, positive frequencies,
+  `at` ≥ 0, `length` > 0, `0 < peak ≤ 0.5`; noise: a known filter type), every sound ends within 0.5 s; id 6 is
+  "Water drop" and error id 5 is "Nope nope nope"; an unknown id falls back to the default.
 - **Accessibility**: an axe scan on each screen reports no serious or critical issues.
 - **PWA**: the manifest and service worker are served; the service worker never caches `/config.json`,
   `/version.json`, `/downloads/manifest.json` or API calls.
@@ -129,6 +168,9 @@ in `docs/` and `README.md` points at a file that exists.
 - The vendored boto3 exposes `invoke(..., DurableExecutionName=...)`, the `send_durable_execution_callback_*` calls and
   the `s3vectors` client; `vectors.embed_text` matches the shared fixture the agent also tests.
 - Skill upload: frontmatter is parsed; a zip without exactly one `SKILL.md` is refused.
+- Settings sounds ([CONTRACTS.md §15.4](CONTRACTS.md#154-api)): `PUT /v1/settings` accepts `clickSound` and
+  `errorSound` from 1 to 30 and refuses 0, 31, 2.5, `"6"`, `true` and `null` with `400 bad_request` and a plain message;
+  `GET /v1/settings` on settings stored without them returns 6 and 5.
 - DynamoDB keys match [CONTRACTS.md §6](CONTRACTS.md#6-dynamodb-single-table-cf-prod-data-on-demand-pitr-on-streams-new_and_old_images).
 
 ### Durable flows (`api/tests/test_flows.py`, pytest)
@@ -194,6 +236,8 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
 5. Open `{hooks_url}/hooks/youtube?hub.mode=subscribe&hub.topic=https://www.youtube.com/xml/feeds/videos.xml%3Fchannel_id%3Dx&hub.challenge=hello`
    in a browser: it answers `hello`.
 6. Install the app on a phone and on a desktop; scroll a long list on the phone and confirm there is no sound.
+   Open Settings › Look & feel › Sounds, pick another click sound on the phone, and check the desktop plays it too
+   after its next settings load. Find a setting by typing "sound".
 7. Upload a skill in Settings, start another job and check that the clips follow it.
 8. Open **Get the app** on a Mac and on Windows; download, follow the first-open hint, and check that Get the app is
    gone inside the desktop app. On an iPhone, follow the three steps.

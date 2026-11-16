@@ -8,9 +8,11 @@ import { useToast } from "../../components/Toasts.tsx";
 import { Button, ErrorPanel, Pill, Progress, Skeleton } from "../../components/ui.tsx";
 import { bytes } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
+import { Apple, Panel } from "./parts.tsx";
 
 const LIMITS = { md: 1024 ** 2, zip: 20 * 1024 ** 2 };
 
+/** Settings > Clip making > Skills: add a skill, and every skill with its switch, View and Delete (Undo). */
 export function SkillsSection() {
   const { data, error, reload, setData } = useLoad(() => api().listSkills());
   const toast = useToast();
@@ -63,18 +65,9 @@ export function SkillsSection() {
   }
 
   return (
-    <section className="settings-section glass" id="skills" aria-labelledby={`${id}-t`}>
-      <div className="settings-section__head">
-        <div>
-          <h2 className="settings-section__title" id={`${id}-t`}>
-            Skills
-          </h2>
-          <p className="muted">
-            Skills teach Clip Factory how you like your clips: the start, the speed, the captions, what to skip. Skills
-            that are switched on are used every time.
-          </p>
-        </div>
-        <div className="settings-section__actions">
+    <>
+      <Panel>
+        <Apple id="add-skill">
           <input
             ref={input}
             type="file"
@@ -90,26 +83,32 @@ export function SkillsSection() {
           <Button icon="upload" loading={progress !== null} onClick={() => input.current?.click()}>
             Add a skill
           </Button>
-        </div>
-      </div>
-      {progress !== null ? <Progress value={progress} label="Skill upload progress" /> : null}
-      <p className="field__hint">A SKILL.md file (up to 1 MB) or a .zip with one SKILL.md inside (up to 20 MB).</p>
-      {error && !data ? <ErrorPanel message={error} onRetry={reload} /> : null}
-      {!data && !error ? <Skeleton className="line-skel" /> : null}
-      {data ? (
-        <ul className="skill-list">
-          {data.map((s) => (
-            <li key={s.skillId}>
-              <SkillRow
-                skill={s}
-                onChange={(next) => setData((d) => d?.map((x) => (x.skillId === next.skillId ? next : x)) ?? d)}
-                onRemove={() => remove(s)}
-              />
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
+        </Apple>
+        {progress !== null ? <Progress value={progress} label="Skill upload progress" /> : null}
+      </Panel>
+      <Panel>
+        <Apple id="your-skills" wide>
+          {error && !data ? <ErrorPanel message={error} onRetry={reload} /> : null}
+          {!data && !error ? <Skeleton className="line-skel" /> : null}
+          {data && data.length === 0 ? (
+            <p className="muted">No skills yet. Tap Add a skill to teach Clip Factory how you like your clips.</p>
+          ) : null}
+          {data && data.length > 0 ? (
+            <ul className="skill-list">
+              {data.map((s) => (
+                <li key={s.skillId}>
+                  <SkillRow
+                    skill={s}
+                    onChange={(next) => setData((d) => d?.map((x) => (x.skillId === next.skillId ? next : x)) ?? d)}
+                    onRemove={() => remove(s)}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Apple>
+      </Panel>
+    </>
   );
 }
 

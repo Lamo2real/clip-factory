@@ -58,7 +58,7 @@ Skills tell the agent what "good" looks like. They are plain `SKILL.md` files wi
 - **Built-in skills** live in [`skills/`](../skills/short-form-video-playbook/SKILL.md) in the repository and are
   bundled into the agent image at `/app/skills`. Today there is one: `short-form-video-playbook` (clipping
   workflow, six moment types, hooks, editing, packaging, pre-post checklist).
-- **Owner skills** are uploaded in Settings → Skills as a `.md` file or a `.zip` containing one `SKILL.md` (with any
+- **Owner skills** are uploaded in Settings › Clip making › Skills as a `.md` file or a `.zip` containing one `SKILL.md` (with any
   supporting files). They are stored at `skills/<userId>/<skillId>/` in the media bucket.
 - **Enabled** skills only. The owner can turn any skill off, including built-in ones.
 

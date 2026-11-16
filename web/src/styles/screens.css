@@ -1025,37 +1025,7 @@
   height: 40px;
 }
 
-/* ---------- Settings ---------- */
-.settings-section {
-  display: grid;
-  gap: 16px;
-  padding: clamp(16px, 3.2vw, 30px);
-  border-radius: var(--r-xl);
-  scroll-margin-top: 20px;
-}
-.settings-section__head {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px 24px;
-}
-.settings-section__head > div:first-child {
-  display: grid;
-  gap: 6px;
-  flex: 1 1 320px;
-  max-width: 66ch;
-}
-.settings-section__title {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: var(--fs-h2);
-  line-height: 1.05;
-}
-.settings-section__actions {
-  display: flex;
-  gap: 10px;
-}
+/* ---------- Settings: skills, accounts, background (layout lives in settings.css) ---------- */
 .skill-list {
   display: grid;
   gap: 10px;
@@ -1160,27 +1130,6 @@
   color: var(--ink-3);
 }
 
-.pref-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
-  gap: 18px;
-}
-.pref {
-  display: grid;
-  gap: 8px;
-  align-content: start;
-  justify-items: start;
-}
-.pref--wide {
-  grid-column: 1 / -1;
-}
-.pref__label {
-  font-weight: 650;
-}
-.pref__hint {
-  font-size: var(--fs-small);
-  color: var(--ink-2);
-}
 .check-chips {
   display: flex;
   flex-wrap: wrap;
@@ -1221,13 +1170,6 @@
   box-shadow: var(--focus);
 }
 
-.toggles {
-  display: grid;
-  border-top: 1px solid rgb(var(--ink-rgb) / 0.08);
-}
-.toggles > * {
-  border-bottom: 1px solid rgb(var(--ink-rgb) / 0.08);
-}
 .bg-picker {
   display: flex;
   flex-wrap: wrap;
@@ -1266,32 +1208,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-.app-rows {
-  display: grid;
-  gap: 4px;
-}
-.app-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 14px;
-  padding: 12px 0;
-  border-top: 1px solid rgb(var(--ink-rgb) / 0.08);
-}
-.app-row__icon {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: rgb(var(--sage-rgb) / 0.42);
-}
-.app-row__text {
-  display: grid;
-  gap: 2px;
-  flex: 1 1 200px;
 }
 
 /* A kept clip whose posting never started: the message and its Try again button. */

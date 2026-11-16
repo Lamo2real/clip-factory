@@ -114,3 +114,114 @@ describe("SoundEngine audio context", () => {
     expect(window.__cfSoundLog!.length).toBeLessThanOrEqual(200);
   });
 });
+
+describe("SoundEngine plays the chosen recipes", () => {
+  // A fake Web Audio graph that records what was scheduled.
+  let made: { contexts: number; oscillators: { type: string; from: number }[]; noises: number; buffers: number };
+  beforeEach(() => {
+    made = { contexts: 0, oscillators: [], noises: 0, buffers: 0 };
+    window.__cfSoundLog = [];
+    const param = () => ({ value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} });
+    const node = () => ({ connect: (n: unknown) => n });
+    class FakeContext {
+      state = "running";
+      currentTime = 1;
+      sampleRate = 8000;
+      destination = {};
+      constructor() {
+        made.contexts++;
+      }
+      resume = async () => undefined;
+      createGain() {
+        return { ...node(), gain: param() };
+      }
+      createBiquadFilter() {
+        return { ...node(), type: "", frequency: param() };
+      }
+      createOscillator() {
+        const freq = { ...param(), from: 0, setValueAtTime(v: number) { freq.from = v; } };
+        const osc = { ...node(), type: "", frequency: freq, start() { made.oscillators.push({ type: osc.type, from: freq.from }); }, stop() {} };
+        return osc;
+      }
+      createBufferSource() {
+        return { ...node(), buffer: null, start() { made.noises++; }, stop() {} };
+      }
+      createBuffer(_c: number, length: number) {
+        made.buffers++;
+        return { getChannelData: () => new Float32Array(length) };
+      }
+    }
+    (window as { AudioContext?: unknown }).AudioContext = FakeContext;
+  });
+  afterEach(() => {
+    delete (window as { AudioContext?: unknown }).AudioContext;
+  });
+
+  it("plays the owner's click and error sounds (defaults 6 and 5) and logs which", () => {
+    const engine = new SoundEngine(() => true);
+    engine.play("tap");
+    // Water drop: two sine voices, 1500 Hz then 2200 Hz.
+    expect(made.oscillators).toEqual([
+      { type: "sine", from: 1500 },
+      { type: "sine", from: 2200 },
+    ]);
+    made.oscillators = [];
+    engine.play("deny");
+    // Nope nope nope: three square blips at 150 Hz.
+    expect(made.oscillators).toEqual(Array.from({ length: 3 }, () => ({ type: "square", from: 150 })));
+    expect(window.__cfSoundLog).toMatchObject([
+      { kind: "tap", sound: 6, muted: false },
+      { kind: "deny", sound: 5, muted: false },
+    ]);
+  });
+
+  it("follows the chosen sounds as they change", () => {
+    const choice = { tap: 2, deny: 4 };
+    const engine = new SoundEngine(() => true, () => choice);
+    engine.play("tap");
+    expect(made.oscillators).toEqual([{ type: "sine", from: 900 }]); // Soft pop
+    choice.tap = 9;
+    made.oscillators = [];
+    vi.spyOn(performance, "now").mockReturnValue(10_000);
+    engine.play("tap");
+    expect(made.oscillators).toEqual([{ type: "sawtooth", from: 660 }]); // Pluck
+    expect(window.__cfSoundLog!.map((e) => e.sound)).toEqual([2, 9]);
+    vi.restoreAllMocks();
+  });
+
+  it("previews any recipe by number, and logs it even when muted (but plays nothing)", () => {
+    let on = true;
+    const engine = new SoundEngine(() => on);
+    engine.play("deny", null, 17); // Tsk tsk: two noise clicks
+    expect(made.noises).toBe(2);
+    expect(made.oscillators).toEqual([]);
+    on = false;
+    vi.spyOn(performance, "now").mockReturnValue(20_000);
+    engine.play("tap", null, 30);
+    vi.restoreAllMocks();
+    expect(made.oscillators).toEqual([]);
+    expect(window.__cfSoundLog).toMatchObject([
+      { kind: "deny", sound: 17, muted: false },
+      { kind: "tap", sound: 30, muted: true },
+    ]);
+  });
+
+  it("shares one audio context and one noise buffer", () => {
+    const engine = new SoundEngine(() => true);
+    let t = 30_000;
+    vi.spyOn(performance, "now").mockImplementation(() => (t += 100));
+    engine.play("tap", null, 4); // Wood block: has a noise voice
+    engine.play("tap", null, 8); // Key clack: noise too
+    engine.play("deny", null, 11); // Clunk: noise too
+    vi.restoreAllMocks();
+    expect(made.contexts).toBe(1);
+    expect(made.buffers).toBe(1);
+    expect(made.noises).toBe(3);
+  });
+
+  it("an unknown choice falls back to the default", () => {
+    const engine = new SoundEngine(() => true, () => ({ tap: 99, deny: 0 }));
+    engine.play("tap");
+    expect(window.__cfSoundLog![0]!.sound).toBe(6);
+  });
+});
