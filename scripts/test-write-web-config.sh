@@ -24,6 +24,7 @@ fixture() {
     api_url:             {value: "https://abc123.execute-api.eu-north-1.amazonaws.com/", type: "string", sensitive: false},
     ws_url:              {value: "wss://wsid42.execute-api.eu-north-1.amazonaws.com/live", type: "string", sensitive: false},
     hooks_url:           {value: "https://rest99.execute-api.eu-north-1.amazonaws.com/v1", type: "string", sensitive: false},
+    oauth_callback_base: {value: "https://rest99.execute-api.eu-north-1.amazonaws.com/v1/oauth", type: "string", sensitive: false},
     app_url:             {value: "https://d111111abcdef8.cloudfront.net", type: "string", sensitive: false}
   }'
 }
@@ -40,13 +41,13 @@ run() {
 
 # 1. Every field, in the contract's shape, with the trailing slash of api_url removed.
 if run full '.'; then
-  expected='{"region":"eu-north-1","userPoolId":"eu-north-1_AbCdEf123","userPoolClientId":"1example23clientid","apiUrl":"https://abc123.execute-api.eu-north-1.amazonaws.com","wsUrl":"wss://wsid42.execute-api.eu-north-1.amazonaws.com/live","version":"0123456789abcdef0123456789abcdef01234567"}'
+  expected='{"region":"eu-north-1","userPoolId":"eu-north-1_AbCdEf123","userPoolClientId":"1example23clientid","apiUrl":"https://abc123.execute-api.eu-north-1.amazonaws.com","wsUrl":"wss://wsid42.execute-api.eu-north-1.amazonaws.com/live","oauthCallbackBase":"https://rest99.execute-api.eu-north-1.amazonaws.com/v1/oauth","version":"0123456789abcdef0123456789abcdef01234567"}'
   if [ "$(jq -cS . "$out")" = "$(jq -cS . <<<"$expected")" ]; then
-    ok "writes region, pool ids, apiUrl, wsUrl and version"
+    ok "writes region, pool ids, apiUrl, wsUrl, oauthCallbackBase and version"
   else
     not_ok "unexpected config: $(cat "$out")"
   fi
-  if [ "$(jq -r 'keys_unsorted | join(",")' "$out")" = "region,userPoolId,userPoolClientId,apiUrl,wsUrl,version" ]; then
+  if [ "$(jq -r 'keys_unsorted | join(",")' "$out")" = "region,userPoolId,userPoolClientId,apiUrl,wsUrl,oauthCallbackBase,version" ]; then
     ok "writes exactly the contract's keys, nothing from other outputs"
   else
     not_ok "unexpected keys: $(jq -c 'keys_unsorted' "$out")"
@@ -60,6 +61,13 @@ if run ws_slash '.ws_url.value += "/"' && [ "$(jq -r .wsUrl "$out")" = "wss://ws
   ok "removes a trailing slash from wsUrl"
 else
   not_ok "trailing slash on ws_url: $(cat "$log")"
+fi
+
+# 3. A trailing slash on oauth_callback_base is removed (the web appends /{platform}/callback).
+if run oauth_slash '.oauth_callback_base.value += "/"' && [ "$(jq -r .oauthCallbackBase "$out")" = "https://rest99.execute-api.eu-north-1.amazonaws.com/v1/oauth" ]; then
+  ok "removes a trailing slash from oauthCallbackBase"
+else
+  not_ok "trailing slash on oauth_callback_base: $(cat "$log")"
 fi
 
 # expect_failure <name> <filter> <text the error must contain>
@@ -84,6 +92,11 @@ expect_failure api_not_https '.api_url.value = "http://abc123.execute-api.eu-nor
 expect_failure missing_api 'del(.api_url)' 'terraform output "api_url" is missing or empty'
 expect_failure missing_pool 'del(.user_pool_id)' 'terraform output "user_pool_id" is missing or empty'
 expect_failure ws_not_string '.ws_url.value = 42' 'terraform output "ws_url" is missing or empty'
+expect_failure missing_oauth 'del(.oauth_callback_base)' 'terraform output "oauth_callback_base" is missing or empty'
+expect_failure empty_oauth '.oauth_callback_base.value = ""' 'terraform output "oauth_callback_base" is missing or empty'
+expect_failure oauth_not_https '.oauth_callback_base.value = "http://rest99.execute-api.eu-north-1.amazonaws.com/v1/oauth"' 'terraform output "oauth_callback_base" must start with https://'
+expect_failure oauth_wrong_path '.oauth_callback_base.value = "https://rest99.execute-api.eu-north-1.amazonaws.com/v1"' 'terraform output "oauth_callback_base" must end with /oauth'
+expect_failure oauth_callback_path '.oauth_callback_base.value = "https://rest99.execute-api.eu-north-1.amazonaws.com/v1/oauth/youtube/callback"' 'terraform output "oauth_callback_base" must end with /oauth'
 
 echo
 echo "${passed} passed, ${failed} failed"

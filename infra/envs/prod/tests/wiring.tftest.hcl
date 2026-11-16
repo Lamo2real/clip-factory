@@ -76,3 +76,36 @@ run "clip_performance_is_wired" {
     error_message = "The stats rule is watched for failed invocations."
   }
 }
+
+# docs/CONTRACTS.md §17.9 and §17.12: Set up posting. The callback base is {hooks_url}/oauth (config.json
+# oauthCallbackBase) and the secret names the modules share come from the hooks module (per-module tests check each
+# role and environment).
+run "posting_setup_is_wired" {
+  command = plan
+
+  override_resource {
+    target          = module.hooks.aws_api_gateway_stage.v1
+    override_during = plan
+    values          = { invoke_url = "https://rest123.execute-api.eu-north-1.amazonaws.com/v1" }
+  }
+
+  assert {
+    condition     = output.oauth_callback_base == "https://rest123.execute-api.eu-north-1.amazonaws.com/v1/oauth" && endswith(output.oauth_callback_base, "/oauth")
+    error_message = "oauth_callback_base must be {hooks_url}/oauth."
+  }
+
+  assert {
+    condition     = module.hooks.platform_secrets_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/platforms/*" && module.hooks.secret_prefix == "cf-prod/platforms/"
+    error_message = "Platform keys and tokens live under cf-prod/platforms/ (§17.4)."
+  }
+
+  assert {
+    condition     = module.hooks.platform_token_secrets_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/platforms/*/token-*"
+    error_message = "clip-flow and stats may only write the cf-prod/platforms/{platform}/token secrets."
+  }
+
+  assert {
+    condition     = module.hooks.oauth_state_secret_name == "cf-prod/oauth/state-key"
+    error_message = "The OAuth state key is cf-prod/oauth/state-key."
+  }
+}

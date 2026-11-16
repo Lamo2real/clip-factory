@@ -1,9 +1,10 @@
 # Offline plan test (mock AWS provider, no credentials, no AWS calls; the random provider runs locally):
 #   cd infra/modules/hooks && terraform init -backend=false && terraform test
 #
-# docs/CONTRACTS.md §14.3 and §14.12: three public methods with a path-parameter validator, throttling, a usage
-# plan, logs without the query string or data tracing, the verify token kept out of state, and a Lambda that may only
-# store hook events and read that token.
+# docs/CONTRACTS.md §14.3, §14.12, §17.9 and §17.12: three public methods with a path-parameter validator,
+# throttling, a usage plan, logs without the query string or data tracing, the verify token and the OAuth state key
+# kept out of state, and a Lambda that may only store hook events, read the verify token, consume OAuth state items
+# and write the platform token secrets under <name>/platforms/.
 
 mock_provider "aws" {
   override_during = plan
@@ -22,6 +23,10 @@ mock_provider "aws" {
 
   mock_resource "aws_api_gateway_stage" {
     defaults = { invoke_url = "https://rest123.execute-api.eu-north-1.amazonaws.com/v1" }
+  }
+
+  mock_resource "aws_secretsmanager_secret" {
+    defaults = { arn = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/oauth/state-key-AbCdEf" }
   }
 }
 
@@ -135,21 +140,68 @@ run "verify_token_and_lambda" {
   }
 
   assert {
-    condition     = one(aws_lambda_function.fn.environment).variables == tomap({ TABLE_NAME = "cf-test-data", APP_URL = "https://app.example.test", VERIFY_TOKEN_PARAM = "/cf-test/hooks/verify-token" })
-    error_message = "cf-prod-hooks environment must match docs/CONTRACTS.md §9."
+    condition = one(aws_lambda_function.fn.environment).variables == tomap({
+      TABLE_NAME         = "cf-test-data"
+      APP_URL            = "https://app.example.test"
+      VERIFY_TOKEN_PARAM = "/cf-test/hooks/verify-token"
+      SECRET_PREFIX      = "cf-test/platforms/"
+      OAUTH_STATE_SECRET = "cf-test/oauth/state-key"
+    })
+    error_message = "cf-prod-hooks environment must match docs/CONTRACTS.md §9 and §17.9 (SECRET_PREFIX, OAUTH_STATE_SECRET)."
   }
 
   assert {
-    condition     = aws_lambda_function.fn.memory_size == 256 && aws_lambda_function.fn.timeout == 10 && aws_lambda_function.fn.handler == "clipfactory_api.hooks.handler"
-    error_message = "cf-prod-hooks is 256 MB / 10 s, handler clipfactory_api.hooks.handler."
+    condition     = aws_lambda_function.fn.memory_size == 256 && aws_lambda_function.fn.timeout == 28 && aws_lambda_function.fn.handler == "clipfactory_api.hooks.handler"
+    error_message = "cf-prod-hooks is 256 MB / 28 s (the OAuth callback exchanges the code, §17.9), handler clipfactory_api.hooks.handler."
   }
 
   assert {
     condition = toset(flatten([for s in jsondecode(aws_iam_role_policy.fn.policy).Statement : s.Action])) == toset([
       "logs:CreateLogStream", "logs:PutLogEvents", "xray:PutTraceSegments", "xray:PutTelemetryRecords",
       "dynamodb:PutItem", "ssm:GetParameter",
+      "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem",
+      "secretsmanager:GetSecretValue", "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue",
+      "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource",
     ])
-    error_message = "cf-prod-hooks may only store hook events and read the verify token."
+    error_message = "cf-prod-hooks may only store hook events, read the verify token, handle OAuth items and the platform secrets (§17.9)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "OAuthItems" && toset(s.Action) == toset(["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"]) &&
+      s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"]
+    ])
+    error_message = "The callback consumes OAUTH#/STATE (DeleteItem) and updates ACCOUNT#/SETUP# on the table only (no indexes)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "OAuthStateKey" && s.Action == ["secretsmanager:GetSecretValue"] &&
+      s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/oauth/state-key-AbCdEf"]
+    ])
+    error_message = "The state key may only be read, and only that one secret."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "PlatformSecrets" && toset(s.Action) == toset([
+        "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource",
+      ]) && s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*"]
+    ])
+    error_message = "Platform keys and tokens are managed only under <name>/platforms/* (§17.4)."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement : [
+        for r in flatten([s.Resource]) : startswith(s.Sid == null ? "" : s.Sid, "Tracing") || !strcontains(r, "*") || r == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*" || endswith(r, ":*")
+      ]
+    ]))
+    error_message = "No wildcard resources beyond the platform secrets prefix, the log group streams and X-Ray."
   }
 
   assert {
@@ -168,6 +220,40 @@ run "verify_token_and_lambda" {
   assert {
     condition     = output.function_names == { hooks = "cf-test-hooks" }
     error_message = "function_names must list cf-prod-hooks."
+  }
+}
+
+run "oauth_state_key_stays_out_of_state" {
+  command = plan
+
+  assert {
+    condition     = aws_secretsmanager_secret.state_key.name == "cf-test/oauth/state-key"
+    error_message = "The OAuth state key is the secret <name>/oauth/state-key."
+  }
+
+  assert {
+    condition     = aws_secretsmanager_secret_version.state_key.secret_string_wo_version == 1 && length(regexall("(?m)^\\s+secret_string\\s+=", file("main.tf"))) == 0
+    error_message = "The state key must be written with secret_string_wo (never secret_string), so it never enters the state."
+  }
+
+  assert {
+    condition     = output.oauth_callback_base == "https://rest123.execute-api.eu-north-1.amazonaws.com/v1/oauth" && endswith(output.oauth_callback_base, "/oauth")
+    error_message = "oauth_callback_base is {hooks_url}/oauth (the web appends /{platform}/callback)."
+  }
+
+  assert {
+    condition     = output.oauth_state_secret_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/oauth/state-key-AbCdEf"
+    error_message = "oauth_state_secret_arn is the state key's ARN (callers may only read it)."
+  }
+
+  assert {
+    condition     = output.platform_secrets_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*" && output.secret_prefix == "cf-test/platforms/"
+    error_message = "platform_secrets_arn covers exactly <name>/platforms/*."
+  }
+
+  assert {
+    condition     = output.platform_token_secrets_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token-*"
+    error_message = "platform_token_secrets_arn covers only the <name>/platforms/{platform}/token secrets."
   }
 }
 

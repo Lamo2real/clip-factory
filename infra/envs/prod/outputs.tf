@@ -25,3 +25,7 @@ output "stats_function_name" { value = module.stats.function_names["stats"] }
 output "learn_function_name" { value = module.stats.function_names["learn"] }
 output "stats_rule_name" { value = module.stats.stats_rule_name }
 output "stats_tick_minutes" { value = module.stats.stats_tick_minutes } # lowest minIntervalMinutes in config/platforms.json
+
+# docs/CONTRACTS.md §17.9: config.json oauthCallbackBase (required by write-web-config.sh). Redirect URIs are
+# {oauth_callback_base}/{platform}/callback.
+output "oauth_callback_base" { value = module.hooks.oauth_callback_base }

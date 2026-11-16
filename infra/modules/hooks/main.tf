@@ -1,9 +1,11 @@
-# Platform webhooks and OAuth callbacks (docs/CONTRACTS.md §14.3): the REST API cf-prod-hooks (stage v1), the
-# cf-prod-hooks Lambda behind it, the Meta verify token in SSM, and the account-level CloudWatch role API Gateway
-# needs for REST and WebSocket logs.
+# Platform webhooks and OAuth callbacks (docs/CONTRACTS.md §14.3, §17.5, §17.9): the REST API cf-prod-hooks (stage
+# v1), the cf-prod-hooks Lambda behind it, the Meta verify token in SSM, the OAuth state key in Secrets Manager, and
+# the account-level CloudWatch role API Gateway needs for REST and WebSocket logs.
 #
-# Public on purpose (platforms cannot send a Cognito token), so it is throttled hard and stores what arrives
-# without running anything else. OAuth callbacks carry code/state in the query string: no log contains it.
+# Public on purpose (platforms cannot send a Cognito token), so it is throttled hard. Webhooks are only stored. The
+# OAuth callback checks the signed single-use state, exchanges the code and writes the owner's token to Secrets
+# Manager (cf-prod/platforms/*), never to DynamoDB or a log. Callbacks carry code/state in the query string: no log
+# contains it.
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
@@ -18,6 +20,14 @@ locals {
   stage_name        = "v1"
   verify_token_name = "/${var.name}/hooks/verify-token"
   verify_token_arn  = "arn:aws:ssm:${var.region}:${var.account_id}:parameter${local.verify_token_name}"
+
+  # §17.4: the owner's platform app keys, tokens and pending Meta choices are secrets created at runtime under this
+  # prefix (secret ARNs end in a random 6-character suffix, hence the wildcard).
+  secret_prefix        = "${var.name}/platforms/"
+  platform_secrets_arn = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${local.secret_prefix}*"
+  # Only the {platform}/token secrets: what clip-flow and stats may write back after a refresh.
+  platform_token_secrets_arn = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${local.secret_prefix}*/token-*"
+  state_key_name             = "${var.name}/oauth/state-key"
 
   # The three public methods, keyed for for_each.
   methods = {
@@ -43,7 +53,9 @@ resource "aws_iam_role" "fn" {
   tags = local.tags
 }
 
-# Stores hook events (PutItem) and reads the verify token (the aws/ssm key needs no IAM statement).
+# Stores hook events (PutItem) and reads the verify token (the aws/ssm key needs no IAM statement). The OAuth
+# callback consumes the state item (DeleteItem), updates ACCOUNT#/SETUP# (GetItem, UpdateItem), reads the state key
+# and writes the token secrets (the aws/secretsmanager key needs no IAM statement either).
 resource "aws_iam_role_policy" "fn" {
   name = "least-privilege"
   role = aws_iam_role.fn.id
@@ -54,6 +66,14 @@ resource "aws_iam_role_policy" "fn" {
       { Sid = "Tracing", Effect = "Allow", Action = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"], Resource = "*" },
       { Sid = "HookEvents", Effect = "Allow", Action = ["dynamodb:PutItem"], Resource = [var.table_arn] },
       { Sid = "VerifyToken", Effect = "Allow", Action = ["ssm:GetParameter"], Resource = [local.verify_token_arn] },
+      { Sid = "OAuthItems", Effect = "Allow", Action = ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"], Resource = [var.table_arn] },
+      { Sid = "OAuthStateKey", Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = [aws_secretsmanager_secret.state_key.arn] },
+      {
+        Sid      = "PlatformSecrets"
+        Effect   = "Allow"
+        Action   = ["secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource"]
+        Resource = [local.platform_secrets_arn]
+      },
     ]
   })
 }
@@ -66,7 +86,7 @@ resource "aws_lambda_function" "fn" {
   handler          = "clipfactory_api.hooks.handler"
   filename         = var.lambda_zip_path
   source_code_hash = filebase64sha256(var.lambda_zip_path)
-  timeout          = 10
+  timeout          = 28 # the OAuth callback makes several platform calls; the REST integration waits 29 s
   memory_size      = 256
   tracing_config {
     mode = "Active"
@@ -80,6 +100,8 @@ resource "aws_lambda_function" "fn" {
       TABLE_NAME         = var.table_name
       APP_URL            = var.app_url
       VERIFY_TOKEN_PARAM = local.verify_token_name
+      SECRET_PREFIX      = local.secret_prefix
+      OAUTH_STATE_SECRET = local.state_key_name
     }
   }
   tags       = local.tags
@@ -101,6 +123,27 @@ resource "aws_ssm_parameter" "verify_token" {
   value_wo         = ephemeral.random_password.verify_token.result
   value_wo_version = 1
   tags             = local.tags
+}
+
+# ---------- OAuth state key (§17.4) ----------
+# HMAC key that signs the single-use OAuth state and derives the PKCE verifier. Generated during apply and written
+# only to Secrets Manager (write-only argument): it never enters the plan or the state. Bump
+# secret_string_wo_version to rotate it (connects started before the rotation then come back "expired").
+ephemeral "random_password" "state_key" {
+  length  = 64
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "state_key" {
+  name        = local.state_key_name
+  description = "Signs Clip Factory's OAuth state and PKCE verifier (docs/CONTRACTS.md §17.4)."
+  tags        = local.tags
+}
+
+resource "aws_secretsmanager_secret_version" "state_key" {
+  secret_id                = aws_secretsmanager_secret.state_key.id
+  secret_string_wo         = ephemeral.random_password.state_key.result
+  secret_string_wo_version = 1
 }
 
 # ---------- REST API ----------

@@ -128,28 +128,35 @@ module "flows" {
   vector_bucket     = module.vectors.vector_bucket
   vector_index      = module.vectors.vector_index
   vector_index_arn  = module.vectors.vector_index_arn
+  # §17.6: the clip flow posts with the owner's tokens (read, refresh).
+  secret_prefix              = module.hooks.secret_prefix
+  platform_secrets_arn       = module.hooks.platform_secrets_arn
+  platform_token_secrets_arn = module.hooks.platform_token_secrets_arn
 }
 
 # Clip numbers (cf-prod-stats on an EventBridge tick from config/platforms.json) and the weekly best learning
 # (cf-prod-learn), docs/CONTRACTS.md §16.
 module "stats" {
-  source                = "../../modules/stats"
-  name                  = local.name
-  region                = var.region
-  account_id            = local.account_id
-  lambda_zip_path       = var.lambda_zip_path
-  table_name            = module.data.table_name
-  table_arn             = module.data.table_arn
-  media_bucket          = module.storage.media_bucket
-  media_bucket_arn      = module.storage.media_bucket_arn
-  model_id              = local.model_id
-  model_invoke_arns     = local.model_invoke_arns
-  embed_model_id        = local.embed_model_id
-  embed_model_arn       = local.embed_model_arn
-  vector_bucket         = module.vectors.vector_bucket
-  vector_index          = module.vectors.vector_index
-  vector_index_arn      = module.vectors.vector_index_arn
-  platforms_config_path = "${path.module}/../../../config/platforms.json"
+  source                     = "../../modules/stats"
+  name                       = local.name
+  region                     = var.region
+  account_id                 = local.account_id
+  lambda_zip_path            = var.lambda_zip_path
+  table_name                 = module.data.table_name
+  table_arn                  = module.data.table_arn
+  media_bucket               = module.storage.media_bucket
+  media_bucket_arn           = module.storage.media_bucket_arn
+  model_id                   = local.model_id
+  model_invoke_arns          = local.model_invoke_arns
+  embed_model_id             = local.embed_model_id
+  embed_model_arn            = local.embed_model_arn
+  vector_bucket              = module.vectors.vector_bucket
+  vector_index               = module.vectors.vector_index
+  vector_index_arn           = module.vectors.vector_index_arn
+  platforms_config_path      = "${path.module}/../../../config/platforms.json"
+  secret_prefix              = module.hooks.secret_prefix
+  platform_secrets_arn       = module.hooks.platform_secrets_arn
+  platform_token_secrets_arn = module.hooks.platform_token_secrets_arn
 }
 
 module "api" {
@@ -175,9 +182,19 @@ module "api" {
   vector_bucket        = module.vectors.vector_bucket
   vector_index         = module.vectors.vector_index
   vector_index_arn     = module.vectors.vector_index_arn
+  # Set up posting (docs/CONTRACTS.md §17.4, §17.9): api ← hooks ← frontend, no cycle.
+  hooks_url               = module.hooks.hooks_url
+  secret_prefix           = module.hooks.secret_prefix
+  platform_secrets_arn    = module.hooks.platform_secrets_arn
+  oauth_state_secret_arn  = module.hooks.oauth_state_secret_arn
+  oauth_state_secret_name = module.hooks.oauth_state_secret_name
+  web_bucket              = module.storage.web_bucket
+  web_bucket_arn          = module.storage.web_bucket_arn
+  distribution_id         = module.frontend.distribution_id
+  distribution_arn        = module.frontend.distribution_arn
 }
 
-# Platform webhooks (REST API) and the account's API Gateway logging role, which the WebSocket stage needs too.
+# Platform webhooks (REST API), the OAuth callback and its state key and the account's API Gateway logging role, which the WebSocket stage needs too.
 module "hooks" {
   source                     = "../../modules/hooks"
   name                       = local.name

@@ -3,7 +3,8 @@
 #
 # docs/CONTRACTS.md §14.4, §14.5 and §14.12: both flows are durable functions with a published version and an alias
 # `live`, the agreed execution timeouts and retention, a 60-minute delete timeout, no Lambda destinations, and roles
-# that allow exactly what the code calls.
+# that allow exactly what the code calls. §17.9: clip-flow reads and refreshes platform tokens (1024 MB); job-flow
+# gets no Secrets Manager access.
 
 mock_provider "aws" {
   override_during = plan
@@ -29,6 +30,10 @@ variables {
   vector_bucket     = "cf-test-vectors-123456789012"
   vector_index      = "clips"
   vector_index_arn  = "arn:aws:s3vectors:eu-north-1:123456789012:bucket/cf-test-vectors-123456789012/index/clips"
+
+  secret_prefix              = "cf-test/platforms/"
+  platform_secrets_arn       = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*"
+  platform_token_secrets_arn = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token-*"
 }
 
 run "both_flows_are_durable_with_alias_live" {
@@ -81,8 +86,8 @@ run "both_flows_are_durable_with_alias_live" {
 
   assert {
     condition = (aws_lambda_function.fn["job-flow"].memory_size == 256 && aws_lambda_function.fn["job-flow"].timeout == 120 &&
-    aws_lambda_function.fn["clip-flow"].memory_size == 512 && aws_lambda_function.fn["clip-flow"].timeout == 900)
-    error_message = "job-flow is 256 MB / 120 s, clip-flow 512 MB / 900 s."
+    aws_lambda_function.fn["clip-flow"].memory_size == 1024 && aws_lambda_function.fn["clip-flow"].timeout == 900)
+    error_message = "job-flow is 256 MB / 120 s, clip-flow 1024 MB / 900 s (§17.9)."
   }
 }
 
@@ -95,8 +100,13 @@ run "environment_matches_the_contract" {
   }
 
   assert {
-    condition     = toset(keys(one(aws_lambda_function.fn["clip-flow"].environment).variables)) == toset(["EMBED_MODEL_ID", "MEDIA_BUCKET", "MODEL_ID", "TABLE_NAME", "VECTOR_BUCKET", "VECTOR_INDEX"])
-    error_message = "clip-flow gets exactly TABLE_NAME, MEDIA_BUCKET, MODEL_ID, EMBED_MODEL_ID, VECTOR_BUCKET and VECTOR_INDEX."
+    condition     = toset(keys(one(aws_lambda_function.fn["clip-flow"].environment).variables)) == toset(["EMBED_MODEL_ID", "MEDIA_BUCKET", "MODEL_ID", "SECRET_PREFIX", "TABLE_NAME", "VECTOR_BUCKET", "VECTOR_INDEX"])
+    error_message = "clip-flow gets exactly TABLE_NAME, MEDIA_BUCKET, MODEL_ID, EMBED_MODEL_ID, VECTOR_BUCKET, VECTOR_INDEX and SECRET_PREFIX."
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["clip-flow"].environment).variables["SECRET_PREFIX"] == "cf-test/platforms/"
+    error_message = "clip-flow's SECRET_PREFIX is <name>/platforms/ (§17.9)."
   }
 
   assert {
@@ -128,8 +138,42 @@ run "roles_allow_exactly_what_the_code_calls" {
       "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:BatchGetItem",
       "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem",
       "s3:GetObject", "bedrock:InvokeModel", "s3vectors:GetVectors", "s3vectors:PutVectors",
+      "secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue",
     ])
-    error_message = "clip-flow's actions must match docs/CONTRACTS.md §14.5."
+    error_message = "clip-flow's actions must match docs/CONTRACTS.md §14.5 and §17.9."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["clip-flow"].policy).Statement :
+      s.Sid == "PlatformSecretsRead" && s.Action == ["secretsmanager:GetSecretValue"] &&
+      s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*"]
+    ])
+    error_message = "clip-flow reads app keys and tokens only under <name>/platforms/*."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["clip-flow"].policy).Statement :
+      s.Sid == "PlatformTokens" && s.Action == ["secretsmanager:PutSecretValue"] &&
+      s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token-*"]
+    ])
+    error_message = "clip-flow writes only refreshed tokens (<name>/platforms/*/token-*), never app keys or pending choices."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.fn["clip-flow"].policy).Statement :
+      !contains(s.Action, "secretsmanager:PutSecretValue") || s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token-*"]
+    ])
+    error_message = "clip-flow may not put any secret other than the token secrets."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.fn["job-flow"].policy).Statement : alltrue([for a in s.Action : !startswith(a, "secretsmanager:")])
+    ])
+    error_message = "job-flow gets no Secrets Manager access."
   }
 
   assert {

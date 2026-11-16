@@ -34,6 +34,13 @@ locals {
         # §16: "Refresh numbers" and "Best this week" hand off to these (async Invoke, unqualified ARNs).
         STATS_FUNCTION_ARN = var.stats_function_arn
         LEARN_FUNCTION_ARN = var.learn_function_arn
+        # §17.4: Set up posting. Redirect URIs are built from HOOKS_URL; keys and tokens live under SECRET_PREFIX;
+        # the TikTok verification file goes to the web bucket root and is invalidated on the distribution.
+        HOOKS_URL          = var.hooks_url
+        SECRET_PREFIX      = var.secret_prefix
+        OAUTH_STATE_SECRET = var.oauth_state_secret_name
+        WEB_BUCKET         = var.web_bucket
+        DISTRIBUTION_ID    = var.distribution_id
       }
     }
   }
@@ -54,6 +61,17 @@ locals {
       { Sid = "StatsAndLearn", Action = ["lambda:InvokeFunction"], Resource = [var.stats_function_arn, var.learn_function_arn] },
       # GET /v1/clips/{id}/similar (read the clip's vector, query with filters) and decline (delete the vector).
       { Sid = "Vectors", Action = ["s3vectors:GetVectors", "s3vectors:QueryVectors", "s3vectors:DeleteVectors"], Resource = [var.vector_index_arn] },
+      # §17.4: save, check and delete the owner's platform keys; connect, choose and disconnect (token secrets).
+      {
+        Sid      = "PlatformSecrets"
+        Action   = ["secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource"]
+        Resource = [var.platform_secrets_arn]
+      },
+      # Sign the OAuth state and derive the PKCE verifier on connect.
+      { Sid = "OAuthStateKey", Action = ["secretsmanager:GetSecretValue"], Resource = [var.oauth_state_secret_arn] },
+      # The TikTok URL-verification file (tiktok*.txt) at the web bucket root, then a one-path invalidation.
+      { Sid = "VerificationFiles", Action = ["s3:PutObject", "s3:DeleteObject"], Resource = ["${var.web_bucket_arn}/tiktok*"] },
+      { Sid = "Invalidate", Action = ["cloudfront:CreateInvalidation"], Resource = [var.distribution_arn] },
     ]
   }
 }
