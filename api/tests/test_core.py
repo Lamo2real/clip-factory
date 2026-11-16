@@ -236,6 +236,7 @@ def test_only_the_durable_handlers_load_the_durable_sdk() -> None:
         "import sys\n"
         "import clipfactory_api.http, clipfactory_api.routes, clipfactory_api.hooks\n"
         "import clipfactory_api.realtime.authorizer, clipfactory_api.realtime.ws, clipfactory_api.realtime.broadcast\n"
+        "import clipfactory_api.stats.handler, clipfactory_api.weekly\n"
         "assert not any(m.startswith('aws_durable_execution_sdk_python') for m in sys.modules), 'durable SDK loaded'\n"
         "import clipfactory_api.flows.job_flow, clipfactory_api.flows.clip_flow\n"
         "assert 'aws_durable_execution_sdk_python' in sys.modules\n"

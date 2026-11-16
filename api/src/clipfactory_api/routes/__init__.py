@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..http import Route, route
-from . import clips, jobs, skills, system
+from . import clips, jobs, performance, skills, system, weeks
 
 ROUTES: list[Route] = [
     route("GET", "/v1/health", system.health, public=True),
@@ -20,6 +20,8 @@ ROUTES: list[Route] = [
     route("GET", "/v1/clips/{clipId}/similar", clips.similar),
     route("POST", "/v1/clips/{clipId}/confirm", clips.confirm),
     route("POST", "/v1/clips/{clipId}/decline", clips.decline),
+    route("GET", "/v1/clips/{clipId}/performance", performance.get_performance),
+    route("POST", "/v1/clips/{clipId}/stats/refresh", performance.refresh),
     route("GET", "/v1/skills", skills.list_skills),
     route("POST", "/v1/skills/uploads", skills.create_upload),
     route("POST", "/v1/skills", skills.register),
@@ -34,4 +36,6 @@ ROUTES: list[Route] = [
     route("POST", "/v1/accounts/{platform}/connect", system.connect_account),
     route("GET", "/v1/posts", system.list_posts),
     route("GET", "/v1/insights", system.insights),
+    route("GET", "/v1/weeks/{week}", weeks.get_week),
+    route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
 ]

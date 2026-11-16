@@ -1,4 +1,4 @@
-"""Placeholder adapters: every platform reports "not connected" until its integration exists."""
+"""Platform labels, and a stand-in adapter that is never connected (handy in tests and local runs)."""
 
 from __future__ import annotations
 

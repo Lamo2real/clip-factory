@@ -5,7 +5,8 @@ Every clip has one vector in the index ``clips`` of the vector bucket ``cf-prod-
 ``review``); the clip-flow merges in ``confirmed`` or ``performed`` plus the measured performance; Decline deletes
 it; ``GET /v1/clips/{id}/similar`` reads it to find the owner's measured clips most like this one.
 
-Filterable metadata: ``userId``, ``momentType``, ``platforms`` (list), ``status``, ``scoreBucket``.
+Filterable metadata: ``userId``, ``momentType``, ``platforms`` (list), ``status``, ``scoreBucket``, ``best``
+(the owner starred the clip "Best this week", §16.6; every other write keeps it).
 Non-filterable (declared on the index, frozen): ``hook``, ``title``, ``summary``, ``performance`` (JSON string).
 """
 
@@ -179,9 +180,33 @@ class Vectors:
         else:
             values = self.embed(embed_text(clip))
             metadata = clip_metadata(clip, status, platforms or [])
+            metadata["best"] = clip.get("best") is True
             outcome = "created"
         if performance is not None:
             metadata["performance"] = performance_json(performance)
+        self._s3v.put_vectors(
+            vectorBucketName=self.bucket,
+            indexName=self.index,
+            vectors=[{"key": clip_id, "data": {"float32": [float(x) for x in values]}, "metadata": metadata}],
+        )
+        return outcome
+
+    def set_best(self, clip: Mapping[str, Any], best: bool) -> str:
+        """Merges the filterable ``best`` flag into the clip's vector (§16.6), keeping everything else; a missing
+        vector is embedded from the Clip item first. Returns ``updated`` or ``created``."""
+        clip_id = str(clip["clipId"])
+        existing = self.get(clip_id)
+        values = ((existing or {}).get("data") or {}).get("float32")
+        if existing is not None and isinstance(values, list) and values:
+            metadata = dict(existing.get("metadata") or {})
+            metadata.setdefault("userId", str(clip["userId"]))
+            outcome = "updated"
+        else:
+            values = self.embed(embed_text(clip))
+            status = "performed" if clip.get("status") == "posted" else "confirmed"
+            metadata = clip_metadata(clip, status, [])
+            outcome = "created"
+        metadata["best"] = bool(best)
         self._s3v.put_vectors(
             vectorBucketName=self.bucket,
             indexName=self.index,

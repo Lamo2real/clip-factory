@@ -9,7 +9,7 @@ when the model finished its answer (``end_turn``) and there is text: ``max_token
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from . import db, posts
@@ -27,7 +27,20 @@ MAX_LEARNING_CHARS = 280
 MAX_TOKENS = 4000
 EFFORT = "low"
 STOP_OUTCOMES = frozenset({"max_tokens", "refusal", "content_filtered"})
-LEARNING_FIELDS = ("learningId", "text", "createdAt", "postIds")
+LEARNING_FIELDS = ("learningId", "text", "createdAt", "postIds", "kind", "week", "title", "clipIds")
+MAX_WEEK_LEARNING_CHARS = 500
+CAPTION_CHARS = 200
+WEEK_PLATFORMS = ("youtube", "tiktok", "instagram", "facebook", "x")
+
+WEEK_SYSTEM_PROMPT = (
+    "You help a creator learn what makes their short vertical gaming clips work. You get every clip they kept this "
+    "week: whether the owner picked it as one of the week's best (picked), its hook, moment type, length in "
+    "seconds, layout, the agent's score, the YouTube title, the start of the TikTok caption and the numbers per "
+    "platform. Compare the owner's picks with the rest of the week (hooks, moment types, length, captions, numbers) "
+    "and reply with ONE plain-text learning of 1 to 3 short sentences (at most 500 characters) that the "
+    "clip-picking agent should apply when it cuts the next videos. The owner's picks matter more than raw views. "
+    "Plain text only: no preamble, no quotes, no lists."
+)
 
 SYSTEM_PROMPT = (
     "You help a creator learn what makes their short vertical clips perform. You get recent posts with their "
@@ -52,7 +65,7 @@ def distil_learning(
     store: db.Store, bedrock: Any, model_id: str, user_id: str, *, clock: Clock = utcnow
 ) -> tuple[str, str | None]:
     """Like ``distil``, plus the new Learning's id when one was written."""
-    measured = [p for p in posts.all_posts(store, user_id) if p.get("metrics")][:RECENT_POSTS]
+    measured = [p for p in posts.all_posts(store, user_id) if isinstance(p.get("metrics"), dict)][:RECENT_POSTS]
     if not measured:
         return "no_metrics", None
     pk = db.user_pk(user_id)
@@ -68,7 +81,7 @@ def distil_learning(
                 "momentType": clip.get("momentType", ""),
                 "durationSec": clip.get("durationSec"),
                 "score": clip.get("score"),
-                "metrics": {k: p["metrics"].get(k, 0) for k in ("views", "likes", "comments", "shares")},
+                "metrics": {k: p["metrics"].get(k) or 0 for k in ("views", "likes", "comments", "shares")},
             }
         )
     stop_reason, text = _ask_model(bedrock, model_id, rows)
@@ -94,12 +107,13 @@ def distil_learning(
     return "learning", learning_id
 
 
-def _ask_model(bedrock: Any, model_id: str, rows: list[dict[str, Any]]) -> tuple[str, str]:
-    """Returns (stopReason, answer text). Reasoning blocks (``reasoningContent``) are not part of the answer."""
+def converse_text(bedrock: Any, model_id: str, system: str, user_text: str, *, max_chars: int) -> tuple[str, str]:
+    """One Converse call with the shared Fable 5.1 settings (maxTokens 4000, effort low, no sampling parameters).
+    Returns (stopReason, answer text). Reasoning blocks (``reasoningContent``) are not part of the answer."""
     out = bedrock.converse(
         modelId=model_id,
-        system=[{"text": SYSTEM_PROMPT}],
-        messages=[{"role": "user", "content": [{"text": "Recent posts:\n" + json.dumps(rows, indent=1)}]}],
+        system=[{"text": system}],
+        messages=[{"role": "user", "content": [{"text": user_text}]}],
         inferenceConfig={"maxTokens": MAX_TOKENS},
         additionalModelRequestFields={"output_config": {"effort": EFFORT}},
     )
@@ -107,4 +121,53 @@ def _ask_model(bedrock: Any, model_id: str, rows: list[dict[str, Any]]) -> tuple
     blocks = out.get("output", {}).get("message", {}).get("content", [])
     text = " ".join(b["text"] for b in blocks if isinstance(b, dict) and isinstance(b.get("text"), str))
     text = " ".join(text.split()).strip().strip('"')
-    return stop_reason, text[:MAX_LEARNING_CHARS]
+    return stop_reason, text[:max_chars]
+
+
+def _ask_model(bedrock: Any, model_id: str, rows: list[dict[str, Any]]) -> tuple[str, str]:
+    return converse_text(
+        bedrock, model_id, SYSTEM_PROMPT, "Recent posts:\n" + json.dumps(rows, indent=1), max_chars=MAX_LEARNING_CHARS
+    )
+
+
+def _count(value: Any) -> int | None:
+    return int(value) if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+
+def week_rows(entries: Sequence[tuple[Mapping[str, Any], Sequence[Mapping[str, Any]], bool]]) -> list[dict[str, Any]]:
+    """One prompt row per kept clip of the week: (Clip item, its posts, picked by the owner)."""
+    rows = []
+    for clip, clip_posts, picked in entries:
+        raw_captions = clip.get("captions")
+        captions: Mapping[str, Any] = raw_captions if isinstance(raw_captions, Mapping) else {}
+        numbers: dict[str, Any] = {}
+        total = 0
+        for post in clip_posts:
+            platform = post.get("platform")
+            metrics = post.get("metrics")
+            if post.get("status") != "posted" or platform not in WEEK_PLATFORMS or not isinstance(metrics, Mapping):
+                continue
+            numbers[str(platform)] = {k: _count(metrics.get(k)) for k in ("views", "likes", "comments", "shares")}
+            total += _count(metrics.get("views")) or 0
+        rows.append(
+            {
+                "picked": bool(picked),
+                "hook": str(clip.get("hook") or ""),
+                "momentType": str(clip.get("momentType") or ""),
+                "durationSec": clip.get("durationSec"),
+                "layout": str(clip.get("layout") or ""),
+                "score": clip.get("score"),
+                "youtubeTitle": str(captions.get("youtubeTitle") or ""),
+                "tiktokCaption": str(captions.get("tiktok") or "")[:CAPTION_CHARS],
+                "platforms": {p: numbers[p] for p in WEEK_PLATFORMS if p in numbers},
+                "totalViews": total,
+            }
+        )
+    return rows
+
+
+def ask_week(bedrock: Any, model_id: str, rows: list[dict[str, Any]]) -> tuple[str, str]:
+    """(stopReason, the one "Best of week" learning) for the week's prompt rows."""
+    picked = sum(1 for r in rows if r.get("picked"))
+    user_text = f"This week's kept clips ({picked} picked by the owner):\n" + json.dumps(rows, indent=1)
+    return converse_text(bedrock, model_id, WEEK_SYSTEM_PROMPT, user_text, max_chars=MAX_WEEK_LEARNING_CHARS)

@@ -1,0 +1,38 @@
+{
+  "data": [
+    {
+      "id": "17900000000000001",
+      "permalink": "https://www.instagram.com/reel/C0abcDEF123/",
+      "media_product_type": "REELS",
+      "timestamp": "2026-11-14T18:00:00+0000",
+      "like_count": 420,
+      "comments_count": 31,
+      "insights": {
+        "data": [
+          { "name": "views", "period": "lifetime", "values": [{ "value": 15800 }], "title": "Views", "id": "17900000000000001/insights/views/lifetime" },
+          { "name": "reach", "period": "lifetime", "values": [{ "value": 9100 }], "title": "Accounts reached", "id": "17900000000000001/insights/reach/lifetime" },
+          { "name": "saved", "period": "lifetime", "values": [{ "value": 77 }], "title": "Saved", "id": "17900000000000001/insights/saved/lifetime" },
+          { "name": "shares", "period": "lifetime", "values": [{ "value": 58 }], "title": "Shares", "id": "17900000000000001/insights/shares/lifetime" },
+          { "name": "total_interactions", "period": "lifetime", "values": [{ "value": 590 }], "title": "Interactions", "id": "17900000000000001/insights/total_interactions/lifetime" },
+          { "name": "reposts", "period": "lifetime", "values": [], "title": "Reposts", "id": "17900000000000001/insights/reposts/lifetime" },
+          { "name": "ig_reels_avg_watch_time", "period": "lifetime", "values": [{ "value": 7350 }], "title": "Average watch time", "id": "17900000000000001/insights/ig_reels_avg_watch_time/lifetime" },
+          { "name": "ig_reels_video_view_total_time", "period": "lifetime", "values": [{ "value": 116130000 }], "title": "Watch time", "id": "17900000000000001/insights/ig_reels_video_view_total_time/lifetime" },
+          { "name": "reels_skip_rate", "period": "lifetime", "values": [{ "value": 38.5 }], "title": "Skip rate", "id": "17900000000000001/insights/reels_skip_rate/lifetime" }
+        ]
+      }
+    },
+    {
+      "id": "17900000000000777",
+      "permalink": "https://www.instagram.com/reel/C0zzzOTHER/",
+      "media_product_type": "REELS",
+      "timestamp": "2026-11-12T10:00:00+0000",
+      "like_count": 12,
+      "comments_count": 1,
+      "insights": { "data": [{ "name": "views", "period": "lifetime", "values": [{ "value": 300 }] }] }
+    }
+  ],
+  "paging": {
+    "cursors": { "before": "QVFIUmxtbm9fZA", "after": "QVFIUjVuYXVFZA" },
+    "next": "https://graph.facebook.com/v25.0/17841400000000000/media?after=QVFIUjVuYXVFZA&limit=50"
+  }
+}

@@ -78,6 +78,7 @@ class FakeTable:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.meta = _Meta(_FakeTableClient(self))
         self.fail_queries = False
+        self.page_size: int | None = None  # set to force pagination in tests
 
     # helpers for tests
     def all(self) -> list[dict[str, Any]]:
@@ -98,7 +99,13 @@ class FakeTable:
         for value in _walk(item):
             assert not isinstance(value, float), "floats must be stored as Decimal"
         key = (item["pk"], item["sk"])
-        if kw.get("ConditionExpression") == "attribute_not_exists(pk)" and key in self.items:
+        condition = kw.get("ConditionExpression")
+        if condition and not evaluate(
+            condition,
+            self.items.get(key),
+            kw.get("ExpressionAttributeNames", {}),
+            kw.get("ExpressionAttributeValues", {}),
+        ):
             raise client_error("ConditionalCheckFailedException")
         self.items[key] = copy.deepcopy(item)
         return {}
@@ -113,55 +120,40 @@ class FakeTable:
         key = (kw["Key"]["pk"], kw["Key"]["sk"])
         names = kw.get("ExpressionAttributeNames", {})
         values = kw.get("ExpressionAttributeValues", {})
+        for value in _walk(values):
+            assert not isinstance(value, float), "floats must be stored as Decimal"
         current = self.items.get(key)
-        for clause in kw["ConditionExpression"].split(" AND "):
-            if clause == "attribute_exists(pk)":
-                if current is None:
-                    raise client_error("ConditionalCheckFailedException")
-                continue
-            absent = re.fullmatch(r"attribute_not_exists\((#a\d+)\)", clause)
-            if absent:
-                if current is not None and names[absent.group(1)] in current:
-                    raise client_error("ConditionalCheckFailedException")
-                continue
-            m = re.fullmatch(r"(#c\d+) IN \((.+)\)", clause)
-            assert m, clause
-            allowed = [values[p.strip()] for p in m.group(2).split(",")]
-            if current is None or current.get(names[m.group(1)]) not in allowed:
-                raise client_error("ConditionalCheckFailedException")
-        assert current is not None
-        expression = kw["UpdateExpression"]
-        set_part = re.search(r"SET (.+?)(?: REMOVE |$)", expression)
-        remove_part = re.search(r"REMOVE (.+)$", expression)
-        if set_part:
-            for assignment in set_part.group(1).split(", "):
-                name, value = assignment.split(" = ")
-                current[names[name]] = copy.deepcopy(values[value])
-        if remove_part:
-            for name in remove_part.group(1).split(", "):
-                current.pop(names[name], None)
-        return {"Attributes": copy.deepcopy(current)}
+        condition = kw.get("ConditionExpression")
+        if condition and not evaluate(condition, current, names, values):
+            raise client_error("ConditionalCheckFailedException")
+        target = copy.deepcopy(current) if current is not None else {"pk": key[0], "sk": key[1]}
+        apply_update(kw["UpdateExpression"], target, names, values)
+        self.items[key] = target
+        return {"Attributes": copy.deepcopy(target)}
 
     def query(self, **kw: Any) -> dict[str, Any]:
         self.calls.append(("query", kw))
         if self.fail_queries:
             raise client_error("ProvisionedThroughputExceededException", 400)
-        m = re.fullmatch(r"(\w+) = :pk AND begins_with\((\w+), :prefix\)", kw["KeyConditionExpression"])
-        assert m, kw["KeyConditionExpression"]
-        pk_name, sk_name = m.groups()
-        assert ("IndexName" in kw) == (pk_name == "gsi1pk")
-        assert not (kw.get("ConsistentRead") and "IndexName" in kw), "GSIs do not support ConsistentRead"
-        pk, prefix = kw["ExpressionAttributeValues"][":pk"], kw["ExpressionAttributeValues"][":prefix"]
+        index = kw.get("IndexName")
+        pk_name, sk_name = INDEX_KEYS[index]
+        expression = kw["KeyConditionExpression"]
+        assert expression.split(" ", 1)[0] == pk_name, expression
+        assert not (kw.get("ConsistentRead") and index), "GSIs do not support ConsistentRead"
+        values = kw["ExpressionAttributeValues"]
+        names = kw.get("ExpressionAttributeNames", {})
         matches = [
-            i for i in self.items.values() if i.get(pk_name) == pk and str(i.get(sk_name, "")).startswith(prefix)
+            i for i in self.items.values() if pk_name in i and sk_name in i and evaluate(expression, i, names, values)
         ]
+        if "FilterExpression" in kw:
+            matches = [i for i in matches if evaluate(kw["FilterExpression"], i, names, values)]
         matches.sort(key=lambda i: (_sort_key(i, sk_name), i["pk"], i["sk"]), reverse=not kw["ScanIndexForward"])
         start = kw.get("ExclusiveStartKey")
         if start:
             marker = (start[sk_name], start["pk"], start["sk"])
             idx = next(n for n, i in enumerate(matches) if (_sort_key(i, sk_name), i["pk"], i["sk"]) == marker)
             matches = matches[idx + 1 :]
-        limit = kw.get("Limit")
+        limit = kw.get("Limit") or self.page_size
         out: dict[str, Any] = {}
         if limit and len(matches) > limit:
             matches = matches[:limit]
@@ -169,6 +161,209 @@ class FakeTable:
             out["LastEvaluatedKey"] = {k: last[k] for k in {"pk", "sk", pk_name, sk_name}}
         out["Items"] = copy.deepcopy(matches)
         return out
+
+
+INDEX_KEYS: dict[str | None, tuple[str, str]] = {
+    None: ("pk", "sk"),
+    "gsi1": ("gsi1pk", "gsi1sk"),
+    "gsi2": ("gsi2pk", "gsi2sk"),
+}
+
+
+# --- a small DynamoDB expression engine (conditions, key conditions, updates) ---------------------------------------
+
+_TOKEN = re.compile(r"\s*(#\w+|:\w+|<>|<=|>=|[()=<>,+-]|[A-Za-z_][\w.]*)")
+_MISSING = object()
+
+
+def _tokens(text: str) -> list[str]:
+    out: list[str] = []
+    pos = 0
+    text = text.strip()
+    while pos < len(text):
+        m = _TOKEN.match(text, pos)
+        assert m, f"cannot parse expression at {text[pos:]!r}"
+        out.append(m.group(1))
+        pos = m.end()
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+    return out
+
+
+class _Eval:
+    def __init__(self, text: str, item: dict[str, Any] | None, names: dict[str, str], values: dict[str, Any]) -> None:
+        self.toks = _tokens(text)
+        self.i = 0
+        self.item = item or {}
+        self.names = names
+        self.values = values
+
+    def peek(self) -> str | None:
+        return self.toks[self.i] if self.i < len(self.toks) else None
+
+    def take(self, expected: str | None = None) -> str:
+        tok = self.toks[self.i]
+        if expected is not None:
+            assert tok.upper() == expected, f"expected {expected}, got {tok}"
+        self.i += 1
+        return tok
+
+    def run(self) -> bool:
+        result = self.or_expr()
+        assert self.peek() is None, f"trailing tokens: {self.toks[self.i :]}"
+        return result
+
+    def or_expr(self) -> bool:
+        result = self.and_expr()
+        while (self.peek() or "").upper() == "OR":
+            self.take()
+            right = self.and_expr()
+            result = result or right
+        return result
+
+    def and_expr(self) -> bool:
+        result = self.not_expr()
+        while (self.peek() or "").upper() == "AND":
+            self.take()
+            right = self.not_expr()
+            result = result and right
+        return result
+
+    def not_expr(self) -> bool:
+        if (self.peek() or "").upper() == "NOT":
+            self.take()
+            return not self.not_expr()
+        return self.primary()
+
+    def name(self, tok: str) -> str:
+        return self.names[tok] if tok.startswith("#") else tok
+
+    def operand(self) -> Any:
+        tok = self.take()
+        if tok.startswith(":"):
+            return self.values[tok]
+        return self.item.get(self.name(tok), _MISSING)
+
+    def primary(self) -> bool:
+        tok = self.peek()
+        assert tok is not None
+        if tok == "(":
+            self.take()
+            result = self.or_expr()
+            self.take(")")
+            return result
+        lowered = tok.lower()
+        if lowered in {"attribute_exists", "attribute_not_exists"}:
+            self.take()
+            self.take("(")
+            path = self.name(self.take())
+            self.take(")")
+            present = path in self.item
+            return present if lowered == "attribute_exists" else not present
+        if lowered == "begins_with":
+            self.take()
+            self.take("(")
+            left = self.operand()
+            self.take(",")
+            right = self.operand()
+            self.take(")")
+            return isinstance(left, str) and left.startswith(right)
+        left = self.operand()
+        op = self.take()
+        if op.upper() == "IN":
+            self.take("(")
+            options = [self.operand()]
+            while self.peek() == ",":
+                self.take()
+                options.append(self.operand())
+            self.take(")")
+            return left is not _MISSING and left in options
+        if op.upper() == "BETWEEN":
+            low = self.operand()
+            self.take("AND")
+            high = self.operand()
+            return left is not _MISSING and low <= left <= high
+        right = self.operand()
+        if left is _MISSING or right is _MISSING:
+            return op == "<>" and (left is _MISSING) != (right is _MISSING)
+        if op == "=":
+            return bool(left == right)
+        if op == "<>":
+            return bool(left != right)
+        if type(left) is not type(right) and not (_is_num(left) and _is_num(right)):
+            return False
+        return bool({"<": left < right, "<=": left <= right, ">": left > right, ">=": left >= right}[op])
+
+
+def _is_num(v: Any) -> bool:
+    return isinstance(v, int | Decimal) and not isinstance(v, bool)
+
+
+def evaluate(text: str, item: dict[str, Any] | None, names: dict[str, str], values: dict[str, Any]) -> bool:
+    return _Eval(text, item, names, values).run()
+
+
+def _split_top(text: str) -> list[str]:
+    parts, depth, current = [], 0, ""
+    for ch in text:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append(current.strip())
+            current = ""
+        else:
+            current += ch
+    if current.strip():
+        parts.append(current.strip())
+    return parts
+
+
+def apply_update(expression: str, item: dict[str, Any], names: dict[str, str], values: dict[str, Any]) -> None:
+    clauses = re.split(r"\b(SET|REMOVE|ADD|DELETE)\b", expression)
+    assert clauses[0].strip() == "", expression
+
+    def name(tok: str) -> str:
+        return names[tok.strip()] if tok.strip().startswith("#") else tok.strip()
+
+    def value(tok: str) -> Any:
+        tok = tok.strip()
+        if tok.startswith(":"):
+            return copy.deepcopy(values[tok])
+        m = re.fullmatch(r"if_not_exists\((\S+?),\s*(\S+?)\)", tok)
+        if m:
+            current = item.get(name(m.group(1)), _MISSING)
+            return copy.deepcopy(current) if current is not _MISSING else value(m.group(2))
+        m = re.fullmatch(r"(.+?)\s*([+-])\s*(.+)", tok)
+        if m:
+            left, right = value(m.group(1)), value(m.group(3))
+            return left + right if m.group(2) == "+" else left - right
+        found = item.get(name(tok), _MISSING)
+        assert found is not _MISSING, f"{tok} is not set"
+        return copy.deepcopy(found)
+
+    for keyword, body in zip(clauses[1::2], clauses[2::2], strict=True):
+        for part in _split_top(body):
+            if keyword == "SET":
+                target, expr = part.split("=", 1)
+                item[name(target)] = value(expr)
+            elif keyword == "REMOVE":
+                item.pop(name(part), None)
+            elif keyword == "ADD":
+                target, operand = part.split()
+                add = copy.deepcopy(values[operand])
+                current = item.get(name(target))
+                if isinstance(add, set):
+                    item[name(target)] = (current or set()) | add
+                else:
+                    item[name(target)] = (current or 0) + add
+            else:  # DELETE from a set
+                target, operand = part.split()
+                current = item.get(name(target)) or set()
+                item[name(target)] = current - values[operand]
+                if not item[name(target)]:
+                    item.pop(name(target))
 
 
 def _walk(value: Any) -> Any:
@@ -282,6 +477,9 @@ class FakeLambda:
         self.calls.append({**kw, "Payload": payload, "payload": json.loads(payload)})
         if self.fail:
             raise client_error("ServiceException", 500)
+        if "DurableExecutionName" not in kw:  # a plain async Invoke (cf-prod-stats, cf-prod-learn)
+            assert kw["InvocationType"] == "Event"
+            return {"StatusCode": 202}
         name = kw["DurableExecutionName"]
         if name in self.started and self.started[name] != payload:
             raise client_error("DurableExecutionAlreadyStartedException", 409)
@@ -464,3 +662,45 @@ class FakeSSM:
     def get_parameter(self, **kw: Any) -> dict[str, Any]:
         self.calls.append(kw)
         return {"Parameter": {"Name": kw["Name"], "Value": self.value}}
+
+
+# --- platform HTTP ---------------------------------------------------------------------------------------------------
+
+STATS_FIXTURES = __import__("pathlib").Path(__file__).parent / "fixtures" / "stats"
+
+
+def stats_fixture(name: str) -> bytes:
+    return (STATS_FIXTURES / f"{name}.json").read_bytes()
+
+
+class FakeHttp:
+    """An ``HttpClient`` that answers with recorded responses, in order, and records every request.
+
+    Each answer is ``(status, body)`` or ``(status, body, headers)``; ``body`` is a fixture name, a dict or bytes.
+    An answer may also be an exception instance, which is raised (a network error)."""
+
+    def __init__(self, *answers: Any) -> None:
+        self.answers = list(answers)
+        self.calls: list[Any] = []
+
+    def __call__(self, request: Any) -> Any:
+        from clipfactory_api.platforms import HttpResponse
+
+        self.calls.append(request)
+        assert self.answers, f"unexpected request: {request.method} {request.url}"
+        answer = self.answers.pop(0)
+        if isinstance(answer, BaseException):
+            raise answer
+        status, body, *rest = answer
+        headers = {k.lower(): v for k, v in (rest[0] if rest else {}).items()}
+        if isinstance(body, str):
+            raw = stats_fixture(body)
+        elif isinstance(body, bytes):
+            raw = body
+        else:
+            raw = json.dumps(body).encode()
+        return HttpResponse(status, headers, raw)
+
+    @property
+    def urls(self) -> list[str]:
+        return [c.url for c in self.calls]

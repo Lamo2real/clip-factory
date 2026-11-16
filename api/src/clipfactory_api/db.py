@@ -74,6 +74,28 @@ def conn_sk(connection_id: str) -> str:
     return f"CONN#{connection_id}"
 
 
+def stat_sk(post_id: str, at: str) -> str:
+    """A stats snapshot of one post (docs/CONTRACTS.md §16.3)."""
+    return f"STAT#{post_id}#{at}"
+
+
+def stat_prefix(post_id: str) -> str:
+    return f"STAT#{post_id}#"
+
+
+def week_sk(week: str) -> str:
+    return f"WEEK#{week}"
+
+
+def rate_pk(platform: str) -> str:
+    """The app-wide rate budget of one platform (single-owner app, §16.3)."""
+    return f"RATE#{platform}"
+
+
+RATE_SK = "BUDGET"
+STATS_GSI_PK = "STATS"
+
+
 # --- number conversion ----------------------------------------------------------------------------------------
 
 
@@ -86,6 +108,8 @@ def to_dynamo(value: Any) -> Any:
         return {k: to_dynamo(v) for k, v in value.items() if v is not None}
     if isinstance(value, list | tuple):
         return [to_dynamo(v) for v in value]
+    if isinstance(value, set | frozenset):
+        return {to_dynamo(v) for v in value}
     raise TypeError(f"cannot store {type(value).__name__} in DynamoDB")
 
 
@@ -94,7 +118,9 @@ def from_dynamo(value: Any) -> Any:
         return int(value) if value == value.to_integral_value() else float(value)
     if isinstance(value, Mapping):
         return {k: from_dynamo(v) for k, v in value.items()}
-    if isinstance(value, list | tuple | set):
+    if isinstance(value, set | frozenset):
+        return sorted(from_dynamo(v) for v in value)
+    if isinstance(value, list | tuple):
         return [from_dynamo(v) for v in value]
     return value
 
@@ -241,11 +267,58 @@ class Store:
         out = self._call(self._table.update_item, **kwargs)
         return dict(from_dynamo(out.get("Attributes", {})))
 
-    def transact(self, *, puts: Iterable[Mapping[str, Any]] = (), updates: Iterable[Mapping[str, Any]] = ()) -> None:
+    def update_expr(
+        self,
+        pk: str,
+        sk: str,
+        update: str,
+        *,
+        condition: str | None = None,
+        names: Mapping[str, str] | None = None,
+        values: Mapping[str, Any] | None = None,
+    ) -> Item:
+        """A raw UpdateItem (any update and condition expression) that returns the new item. Unlike ``update``
+        it creates a missing item unless the condition says otherwise. A failed condition raises
+        ``ConditionFailed``."""
+        kwargs: dict[str, Any] = {"Key": {"pk": pk, "sk": sk}, "UpdateExpression": update, "ReturnValues": "ALL_NEW"}
+        if condition:
+            kwargs["ConditionExpression"] = condition
+        if names:
+            kwargs["ExpressionAttributeNames"] = dict(names)
+        if values:
+            kwargs["ExpressionAttributeValues"] = {k: to_dynamo(v) for k, v in values.items()}
+        out = self._call(self._table.update_item, **kwargs)
+        return dict(from_dynamo(out.get("Attributes", {})))
+
+    @staticmethod
+    def put_if(
+        item: Mapping[str, Any],
+        condition: str,
+        *,
+        names: Mapping[str, str] | None = None,
+        values: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """A Put request with its own condition, for ``transact(raw_puts=...)``."""
+        request: dict[str, Any] = {"Item": to_dynamo(item), "ConditionExpression": condition}
+        if names:
+            request["ExpressionAttributeNames"] = dict(names)
+        if values:
+            request["ExpressionAttributeValues"] = {k: to_dynamo(v) for k, v in values.items()}
+        return request
+
+    def transact(
+        self,
+        *,
+        puts: Iterable[Mapping[str, Any]] = (),
+        updates: Iterable[Mapping[str, Any]] = (),
+        raw_puts: Iterable[Mapping[str, Any]] = (),
+    ) -> None:
         """All-or-nothing TransactWriteItems. ``puts`` are new items (each must not exist yet); ``updates`` are
-        requests built by ``update_request``. A failed condition anywhere raises ``ConditionFailed``."""
+        requests built by ``update_request``; ``raw_puts`` are built by ``put_if``. A failed condition anywhere
+        raises ``ConditionFailed``."""
         name = self._table.name
-        actions: list[dict[str, Any]] = [{"Update": {"TableName": name, **u}} for u in updates]
+        actions: list[dict[str, Any]] = [{"Put": {"TableName": name, **p}} for p in raw_puts]
+        actions += [{"Update": {"TableName": name, **u}} for u in updates]
         actions += [
             {"Put": {"TableName": name, "Item": to_dynamo(p), "ConditionExpression": "attribute_not_exists(pk)"}}
             for p in puts
@@ -325,6 +398,26 @@ class Store:
             if not page.last_key:
                 break
             start = page.last_key
+        return items[:cap]
+
+    def query_stats_due(self, max_sk: str, *, cap: int = 2000) -> list[Item]:
+        """Posts due for a stats poll: sparse gsi2 ``gsi2pk = "STATS" AND gsi2sk <= max_sk``, oldest due first."""
+        items: list[Item] = []
+        start: Any = None
+        while len(items) < cap:
+            kwargs: dict[str, Any] = {
+                "IndexName": "gsi2",
+                "KeyConditionExpression": "gsi2pk = :pk AND gsi2sk <= :max",
+                "ExpressionAttributeValues": {":pk": STATS_GSI_PK, ":max": max_sk},
+                "ScanIndexForward": True,
+            }
+            if start:
+                kwargs["ExclusiveStartKey"] = start
+            out = self._table.query(**kwargs)
+            items.extend(from_dynamo(i) for i in out.get("Items", []))
+            start = out.get("LastEvaluatedKey")
+            if not start:
+                break
         return items[:cap]
 
     @staticmethod

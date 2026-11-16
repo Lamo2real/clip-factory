@@ -4,7 +4,8 @@ The zip holds ``clipfactory_api``, the locked boto3/botocore (vendored because t
 too old to know "bedrock-agentcore", durable executions or "s3vectors"), the locked
 ``aws-durable-execution-sdk-python`` (AWS recommends bundling it rather than relying on the runtime's copy) and the
 built-in skills from the repository's ``skills/`` folder as package
-data (``clipfactory_api/builtin_skills/<name>/SKILL.md``). Every dependency is pure Python, so the same zip runs on
+data (``clipfactory_api/builtin_skills/<name>/SKILL.md``) and ``config/platforms.json`` (the stats limits, §16.4) as
+``clipfactory_api/config/platforms.json``. Every dependency is pure Python, so the same zip runs on
 arm64. The build is deterministic: same inputs, byte-identical zip (sorted entries, fixed timestamps and modes).
 
 Run from anywhere:  uv run --project api python api/scripts/build_lambda.py   (needs uv)
@@ -24,6 +25,8 @@ API = Path(__file__).resolve().parents[1]
 ROOT = API.parent
 PACKAGE = API / "src" / "clipfactory_api"
 SKILLS = ROOT / "skills"
+PLATFORMS_CONFIG = ROOT / "config" / "platforms.json"
+PLATFORMS_CONFIG_IN_ZIP = "clipfactory_api/config/platforms.json"
 OUT = API / "dist" / "lambda.zip"
 # Every Lambda handler module (docs/CONTRACTS.md §9): the build fails if one is missing from the zip.
 HANDLERS = (
@@ -34,6 +37,8 @@ HANDLERS = (
     "clipfactory_api/realtime/ws.py",  # cf-prod-ws
     "clipfactory_api/realtime/broadcast.py",  # cf-prod-broadcast
     "clipfactory_api/hooks.py",  # cf-prod-hooks
+    "clipfactory_api/stats/handler.py",  # cf-prod-stats (§16.5)
+    "clipfactory_api/weekly.py",  # cf-prod-learn (§16.6)
 )
 REQUIRED_PACKAGES = ("boto3==", "botocore==", "aws-durable-execution-sdk-python==")
 VENDORED = ("boto3/__init__.py", "botocore/__init__.py", "aws_durable_execution_sdk_python/__init__.py")
@@ -94,6 +99,20 @@ def _copy_skills(dest: Path) -> int:
     return count
 
 
+def _copy_platforms_config(dest: Path) -> None:
+    """``config/platforms.json`` → ``clipfactory_api/config/platforms.json``, validated first (a bad edit fails the
+    build, never a poll)."""
+    if not PLATFORMS_CONFIG.is_file():
+        raise SystemExit(f"missing {PLATFORMS_CONFIG.relative_to(ROOT)} (docs/CONTRACTS.md §16.4)")
+    sys.path.insert(0, str(API / "src"))
+    from clipfactory_api.stats import config
+
+    cfg = config.load(PLATFORMS_CONFIG)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(PLATFORMS_CONFIG, dest)
+    print(f"  platforms config: {len(cfg.platforms)} platforms, tick every {cfg.tick_minutes} minutes")
+
+
 def _zip(source: Path, out: Path) -> list[str]:
     files = sorted(
         p
@@ -131,8 +150,9 @@ def main() -> int:
         _install(reqs, stage, scratch)
         shutil.copytree(PACKAGE, stage / "clipfactory_api", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         skills = _copy_skills(stage / "clipfactory_api" / "builtin_skills")
+        _copy_platforms_config(stage / PLATFORMS_CONFIG_IN_ZIP)
         names = _zip(stage, OUT)
-    missing = [h for h in (*HANDLERS, *VENDORED) if h not in names]
+    missing = [h for h in (*HANDLERS, *VENDORED, PLATFORMS_CONFIG_IN_ZIP) if h not in names]
     if missing:
         raise SystemExit(f"missing from the zip: {missing}")
     digest = hashlib.sha256(OUT.read_bytes()).hexdigest()

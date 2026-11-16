@@ -13,6 +13,7 @@ from typing import Any
 
 from . import db, s3
 from .agent_client import AgentClient
+from .async_invoke import AsyncInvoker
 from .clock import Clock, utcnow
 from .flow_client import FlowClient
 from .log import log
@@ -27,6 +28,7 @@ class App:
     agent: AgentClient  # cancel and stop only; process_job is sent by the job-flow
     flows: FlowClient
     vectors: Vectors | None = None  # None when the vector index is not configured
+    invoker: AsyncInvoker | None = None  # cf-prod-stats / cf-prod-learn (§16.2)
     version: str = "dev"
     clock: Clock = utcnow
     # (user id, access token) → the owner's email. Cognito access tokens carry no email claim.
@@ -93,6 +95,7 @@ def from_env() -> App:
 
     env = os.environ
     reg = region()
+    lambda_client = flow_client.make_client(reg)
     vector_store = None
     if env.get("VECTOR_BUCKET") and env.get("VECTOR_INDEX"):
         s3v, bedrock = vectors.make_clients(reg)
@@ -107,8 +110,9 @@ def from_env() -> App:
         store=db.Store(table(env["TABLE_NAME"])),
         media=s3.Media(s3.make_client(reg), env["MEDIA_BUCKET"]),
         agent=AgentClient(agent_client.make_client(reg), env.get("AGENT_RUNTIME_ARN", "")),
-        flows=FlowClient(flow_client.make_client(reg), env.get("JOB_FLOW_ARN", ""), env.get("CLIP_FLOW_ARN", "")),
+        flows=FlowClient(lambda_client, env.get("JOB_FLOW_ARN", ""), env.get("CLIP_FLOW_ARN", "")),
         vectors=vector_store,
+        invoker=AsyncInvoker(lambda_client, env.get("STATS_FUNCTION_ARN", ""), env.get("LEARN_FUNCTION_ARN", "")),
         version=env.get("VERSION", "dev"),
         email_lookup=_cognito_email_lookup(boto3.client("cognito-idp", region_name=reg, config=_short_config())),
     )

@@ -41,16 +41,44 @@ PUBLISH_PENDING = "pending"
 PUBLISH_STARTED = "started"
 
 
-def public_clip(item: Item, media: s3.Media | None = None) -> Item:
-    """The Clip shape of §5. With ``media`` it carries 1-hour ``videoUrl``/``coverUrl`` links; without (the live
-    WebSocket events) it carries none, and the web keeps the links it already has."""
+def public_clip(
+    item: Item,
+    media: s3.Media | None = None,
+    *,
+    posts: list[Item] | None = None,
+    video: bool = True,
+) -> Item:
+    """The Clip shape of §5. With ``media`` it carries 1-hour ``coverUrl`` (and, unless ``video=False``,
+    ``videoUrl``) links; without (the live WebSocket events) it carries none, and the web keeps the links it already
+    has. With the clip's ``posts`` it carries ``totalViews`` (absent when nothing was measured)."""
     clip = db.strip_keys(item, INTERNAL_FIELDS)
+    clip.pop("totalViews", None)
     if media is not None and item.get("status") != "declined":
-        if item.get("videoKey"):
+        if video and item.get("videoKey"):
             clip["videoUrl"] = media.presign_get(item["videoKey"])
         if item.get("coverKey"):
             clip["coverUrl"] = media.presign_get(item["coverKey"])
+    if posts is not None:
+        total = total_views(posts)
+        if total is not None:
+            clip["totalViews"] = total
     return clip
+
+
+def total_views(posts: list[Item]) -> int | None:
+    """Sum of ``metrics.views`` over the posted posts; ``None`` when none has a views number yet."""
+    views = [
+        p["metrics"].get("views") for p in posts if p.get("status") == "posted" and isinstance(p.get("metrics"), dict)
+    ]
+    numbers = [int(v) for v in views if isinstance(v, int | float) and not isinstance(v, bool)]
+    return sum(numbers) if numbers else None
+
+
+def posts_by_clip(posts: list[Item]) -> dict[str, list[Item]]:
+    out: dict[str, list[Item]] = {}
+    for post in posts:
+        out.setdefault(str(post.get("clipId")), []).append(post)
+    return out
 
 
 def caption_patch(value: Any) -> dict[str, str]:
