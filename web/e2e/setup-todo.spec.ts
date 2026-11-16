@@ -96,11 +96,27 @@ const listCursors = (page: Page) =>
       .filter((c) => c !== "default"),
   );
 
-/** After a scroll: lets the bar's fade (it frosts over a quarter of a second) and the pill's entrance finish. */
+/**
+ * After a scroll: waits for the bar to be in the state the scroll asks for, then for its fade (it frosts over a quarter
+ * of a second) and the pill's entrance to finish. The bar gets `is-scrolled` from a scroll listener, and the browser
+ * sends scroll events with its next frame; on a slow machine (the Linux CI runner draws the glass without a GPU) that
+ * frame can come later than any fixed wait, so this waits on the state, never on a clock.
+ */
 async function still(page: Page) {
-  await page.waitForTimeout(120);
+  await page.waitForFunction(() => {
+    const bar = document.querySelector(".setup-todo-bar");
+    if (bar && bar.classList.contains("is-scrolled") !== window.scrollY > 0) return false;
+    return Array.from(document.querySelectorAll(".setup-todo-bar, .setup-todo")).every((el) => el.getAnimations().every((a) => a.playState !== "running"));
+  });
+}
+
+/**
+ * The open list has landed: its drop-in (which starts at 98 % size, so every button measures 2 % small until it ends)
+ * and anything moving inside it are over. Waits on the animations themselves, for the same reason as `still`.
+ */
+async function landed(page: Page) {
   await page.waitForFunction(() =>
-    Array.from(document.querySelectorAll(".setup-todo-bar, .setup-todo")).every((el) => el.getAnimations().every((a) => a.playState !== "running")),
+    Array.from(document.querySelectorAll(".setup-todo--rail, .setup-todo-panel")).every((el) => el.getAnimations({ subtree: true }).every((a) => a.playState !== "running")),
   );
 }
 
@@ -817,7 +833,7 @@ for (const width of [320, 375, 768, 1024, 1280, 1440, 1920] as const) {
       await page.goto("/");
       await settle(page);
       const list = await openTodo(page);
-      await page.waitForTimeout(450);
+      await landed(page);
       const r = await findOverflow(page);
       for (const o of r.items) failures.push(`open list: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);
       if (r.page > r.viewport) failures.push(`open list: page scrolls sideways`);
@@ -838,7 +854,7 @@ for (const width of [320, 375, 768, 1024, 1280, 1440, 1920] as const) {
       await page.goto("/");
       await settle(page);
       const mixed = await openTodo(page);
-      await page.waitForTimeout(450);
+      await landed(page);
       for (const [platform, state] of Object.entries(MIXED_SETUP)) await expect(mixed.locator(`.todo-row[data-platform='${platform}']`)).toHaveAttribute("data-state", state);
       const m = await findOverflow(page);
       for (const o of m.items) failures.push(`open list, every kind of row: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);
