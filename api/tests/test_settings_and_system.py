@@ -20,6 +20,7 @@ DEFAULTS = {
     "youtubePrivacy": "public",
     "earningsRates": {},
     "earningsPaid": {},
+    "setupSkipped": [],
 }
 
 
@@ -57,6 +58,10 @@ def test_put_settings_ignores_read_only(call: Call) -> None:
         {"soundEnabled": "yes"},
         {"platforms": ["myspace"]},
         {"platforms": "youtube"},
+        {"setupSkipped": ["myspace"]},
+        {"setupSkipped": "tiktok"},
+        {"setupSkipped": [1]},
+        {"setupSkipped": None},
         {"theme": "dark"},
     ],
 )
@@ -346,3 +351,32 @@ def test_old_or_bad_stored_earnings_read_as_defaults() -> None:
     assert out["earningsRates"] == {}
     assert out["earningsPaid"] == {}
     assert settings.with_defaults(None)["earningsRates"] is not settings.DEFAULTS["earningsRates"]
+
+
+# ---------- The floating setup to-do list (§17.13): confirmed skips ----------
+
+
+def test_setup_skipped_is_saved_in_order_without_repeats(call: Call) -> None:
+    """§17.13: confirmed skips live on the server, so every device hides the same rows."""
+    status, body = call("PUT", "/v1/settings", {"setupSkipped": ["x", "tiktok", "x"]})
+    assert status == 200
+    assert body["settings"]["setupSkipped"] == ["tiktok", "x"]
+    assert call("GET", "/v1/settings")[1]["settings"]["setupSkipped"] == ["tiktok", "x"]
+    assert call("GET", "/v1/me")[1]["settings"]["setupSkipped"] == ["tiktok", "x"]
+    # Un-skip: the list shrinks; other settings stay as they were.
+    status, body = call("PUT", "/v1/settings", {"setupSkipped": ["x"]})
+    assert status == 200
+    assert body["settings"] == {**DEFAULTS, "setupSkipped": ["x"]}
+
+
+@pytest.mark.parametrize("value", [["myspace"], "tiktok", [1], None, {"x": True}])
+def test_setup_skipped_is_checked(call: Call, value: object) -> None:
+    status, body = call("PUT", "/v1/settings", {"setupSkipped": value})
+    assert status == 400
+    assert body["error"]["code"] == "bad_request"
+
+
+def test_setup_skipped_bad_stored_value_falls_back_to_none_skipped() -> None:
+    assert settings.with_defaults({"setupSkipped": ["myspace"]})["setupSkipped"] == []
+    assert settings.with_defaults({"setupSkipped": "x"})["setupSkipped"] == []
+    assert settings.with_defaults({"setupSkipped": ["x", "youtube"]})["setupSkipped"] == ["youtube", "x"]
