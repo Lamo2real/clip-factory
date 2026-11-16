@@ -13,8 +13,11 @@ export interface RuntimeConfig {
   version: string;
 }
 
-/** The whole UI runs on the in-memory API (npm run dev:mock, Playwright). Replaced at build time. */
-export const isMock = import.meta.env.VITE_MOCK === "1";
+/**
+ * The whole UI runs on the in-memory API (npm run dev:mock, Playwright). Replaced at build time. `import.meta.env`
+ * is undefined when plain Node loads this file (scripts/help-corpus.mjs reads the router), hence the `?.`.
+ */
+export const isMock = (import.meta.env as ImportMetaEnv | undefined)?.VITE_MOCK === "1";
 
 const MOCK_CONFIG: RuntimeConfig = {
   region: "eu-north-1",

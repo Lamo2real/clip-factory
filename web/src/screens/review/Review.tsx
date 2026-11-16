@@ -15,6 +15,7 @@ import { SimilarClips } from "../../components/SimilarClips.tsx";
 import { keepClip, keptMessage, STILL_WORKING } from "../../lib/keep.ts";
 import { CaptionTabs, captionsTooLong } from "./CaptionTabs.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
+import { useUnsaved } from "../../features/help/unsaved.ts";
 
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
 export const MEDIA_FRESH_MS = 50 * 60 * 1000;
@@ -221,6 +222,8 @@ function ReviewCard({
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const settled = useRef(false);
+  // Ask Clip Factory asks before taking the owner away from a caption edit that is not saved yet (§19.8).
+  useUnsaved(() => !settled.current && Object.keys(dirtyRef.current).length > 0);
 
   // Fresh presigned links after the old ones expired (keyed by the link they replace, so a list reload wins).
   const [media, setMedia] = useState<{ was: string | undefined; videoUrl?: string; coverUrl?: string } | null>(null);
@@ -451,7 +454,9 @@ function ReviewCard({
           ) : null}
         </details>
 
-        <CaptionTabs captions={captions} onChange={edit} />
+        <div data-help="captions" data-help-dodge="">
+          <CaptionTabs captions={captions} onChange={edit} />
+        </div>
         <p className={`save-state is-${save}`} aria-live="polite">
           {save === "saving" ? "Saving…" : save === "saved" ? "Captions saved" : save === "failed" ? "Not saved yet. Your changes are saved when you tap Keep." : ""}
         </p>
@@ -467,14 +472,15 @@ function ReviewCard({
             </p>
           </div>
         ) : null}
-        <div className="review-card__actions" ref={confirmRef}>
-          <Button variant="ghost" icon="trash" disabled={busy !== null || leaving} onClick={throwAway}>
+        <div className="review-card__actions" ref={confirmRef} data-help-dodge="">
+          <Button variant="ghost" icon="trash" data-help="throw-away" disabled={busy !== null || leaving} onClick={throwAway}>
             Throw away
           </Button>
           <Button
             variant={next ? "primary" : "glass"}
             size="lg"
             icon={keepFailed ? "retry" : "check"}
+            data-help={keepFailed ? "try-again keep" : "keep"}
             loading={busy === "confirm"}
             disabled={leaving}
             onClick={confirm}

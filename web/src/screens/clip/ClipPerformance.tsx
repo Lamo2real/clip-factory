@@ -362,6 +362,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
               className={`star-btn glass glass--sage${perf.bestThisWeek ? " is-on" : ""}`}
               aria-pressed={perf.bestThisWeek}
               aria-busy={starBusy || undefined}
+              data-help="best-star"
               onClick={toggleStar}
             >
               <Icon name="star" size={24} fill={perf.bestThisWeek ? "currentColor" : "none"} />
@@ -375,6 +376,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
               disabled={off}
               onClick={refresh}
               onClickCapture={off ? explainOff : undefined}
+              data-help="refresh-numbers"
               className={`perf__refresh${waiting ? " is-waiting" : ""}`}
             >
               {label}

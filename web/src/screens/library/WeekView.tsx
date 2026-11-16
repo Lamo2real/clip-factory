@@ -302,6 +302,8 @@ function WeekCard({ item, rank, on, onToggle }: { item: WeekClip; rank: number; 
         aria-pressed={on}
         aria-label="Best this week"
         aria-describedby={id}
+        data-help="best-star"
+        data-help-dodge=""
         onClick={onToggle}
       >
         <Icon name="star" size={26} fill={on ? "currentColor" : "none"} />

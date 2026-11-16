@@ -37,6 +37,8 @@ import { SkillsSection } from "./SkillsSection.tsx";
 import { SoundsBranch } from "./SoundsBranch.tsx";
 import { SetupList } from "./setup/SetupList.tsx";
 import { SetupPlatform } from "./setup/SetupPlatform.tsx";
+import { openHelp } from "../../features/help/context.ts";
+import { useHelpSwitch } from "../../features/help/status.ts";
 
 /** What each branch page shows, by `tree/branch`. */
 const BRANCHES: Record<string, () => ReactNode> = {
@@ -154,6 +156,7 @@ function FindSetting({ installed, compact = false }: { installed: boolean; compa
   const hits = useMemo(() => searchSettings(query, installed).slice(0, MAX_HITS), [query, installed]);
   const typed = query.trim().length > 0;
   const open = typed && hits.length > 0;
+  const helpOn = useHelpSwitch() === "on";
   const optionId = (i: number) => `${id}-hit-${i}`;
 
   function go(hit: SearchHit | undefined) {
@@ -238,6 +241,16 @@ function FindSetting({ installed, compact = false }: { installed: boolean; compa
           ? hits.map((hit, i) => <FindResult key={hit.apple.id} id={optionId(i)} hit={hit} active={i === active} onOpen={() => go(hit)} />)
           : null}
       </ul>
+      {typed && !hits.length && helpOn ? (
+        <button type="button" className="find__ask" onClick={() => openHelp(query.trim())}>
+          <Icon name="sparkle" size={20} />
+          <span className="find__ask-text">
+            <span className="find__ask-name">Ask Clip Factory</span>
+            <span className="find__ask-q user-text">{query.trim()}</span>
+          </span>
+          <Icon name="chevronRight" size={20} />
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -24,6 +24,7 @@ import { SignIn } from "../screens/SignIn.tsx";
 import { SessionProvider } from "./session.tsx";
 import { MockConsent } from "../screens/settings/setup/MockConsent.tsx";
 import { GUIDES } from "../setup/index.ts";
+import { AskClipFactory } from "../features/help/HelpLauncher.tsx";
 
 type Boot = { state: "loading" } | { state: "signed_out"; note: string | null } | { state: "ready" } | { state: "broken" };
 
@@ -169,6 +170,7 @@ function Shell() {
         </main>
       </div>
       <TabBar />
+      <AskClipFactory />
     </div>
   );
 }

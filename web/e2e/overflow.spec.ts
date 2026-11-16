@@ -269,3 +269,30 @@ for (const width of WIDTHS) {
     expect(failures, failures.join("\n")).toEqual([]);
   });
 }
+
+// Ask Clip Factory's panel (docs/CONTRACTS.md §19.11): open, with an answer, at every width it must fit.
+for (const width of [320, 375, 768, 1024, 1440, 1920]) {
+  test(`the Ask Clip Factory panel fits at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/?update=1");
+    await settle(page);
+    await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+    const panel = page.getByRole("dialog", { name: "Ask Clip Factory" });
+    const failures: string[] = [];
+    const check = async (label: string) => {
+      const result = await findOverflow(page);
+      if (result.page > result.viewport) failures.push(`${label}: page scrolls sideways (${result.page}px > ${result.viewport}px)`);
+      for (const o of result.items) failures.push(`${label}: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);
+      const box = (await panel.boundingBox())!;
+      if (box.x < 0 || box.x + box.width > width + 0.5) failures.push(`${label}: the panel leaves the screen`);
+    };
+    await check("empty");
+    const box = panel.getByLabel("Your question");
+    await box.fill("How many views did my best clip get this week?");
+    await box.press("Enter");
+    await panel.locator(".help-actions").last().waitFor();
+    await box.fill("x".repeat(260));
+    await check("answer and a long question");
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+}

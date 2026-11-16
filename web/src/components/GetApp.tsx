@@ -116,7 +116,7 @@ export function GetAppPanel({
         <span className="getapp__other-label" id={`${id}-pick`}>
           {guess ? "Not right? Pick your device:" : "Pick your device:"}
         </span>
-        <div className="getapp__chips" role="group" aria-labelledby={`${id}-pick`}>
+        <div className="getapp__chips" role="group" aria-labelledby={`${id}-pick`} data-help-dodge="">
           {PICK.map((p) => (
             <button
               key={p.os}

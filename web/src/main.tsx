@@ -11,6 +11,7 @@ import "./styles/system.css";
 import "./styles/settings.css";
 import "./styles/performance.css";
 import "./styles/setup.css";
+import "./styles/help.css";
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

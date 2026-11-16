@@ -203,7 +203,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
               </p>
             ) : null}
             {job.status === "failed" || job.status === "canceled" ? (
-              <Button variant="primary" icon="retry" loading={busy === "retry"} onClick={() => act("retry")}>
+              <Button variant="primary" icon="retry" data-help="try-again" loading={busy === "retry"} onClick={() => act("retry")}>
                 Try again
               </Button>
             ) : null}
