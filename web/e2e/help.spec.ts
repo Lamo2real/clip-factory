@@ -148,6 +148,15 @@ for (const size of SIZES) {
       if (await panel(page).count()) await panel(page).getByRole("button", { name: "Close" }).click({ timeout: 3000 }).catch(() => undefined);
       await expect(panel(page)).toHaveCount(0);
       await page.mouse.wheel(0, -5);
+      // Where controls fill its column the launcher steps aside until the owner scrolls to a free spot (§19.8). Whether
+      // this exact spot is free depends on what is above it on the page: with the setup list's strip at the top
+      // (§17.13) Keep is centred a little lower, and the next card ends under the launcher. So scroll on a little,
+      // like the owner would, until it is back.
+      await launcherSettled(page);
+      for (let step = 0; step < 20 && (await launcher(page).getAttribute("data-dodge")) === "blocked"; step++) {
+        await page.mouse.wheel(0, 40);
+        await launcherSettled(page);
+      }
       await expect(launcher(page)).not.toHaveClass(/is-hidden/, { timeout: 2000 });
       await launcher(page).click();
       await expect(panel(page).locator(".help-msg--me")).toHaveText(["What does Keep do?"]);

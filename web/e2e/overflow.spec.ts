@@ -254,7 +254,7 @@ for (const width of WIDTHS) {
     await check("/settings/posting/setup (3 ready)");
     await page.goto("/");
     await settle(page);
-    await check("/ (setup card)");
+    await check("/ (setup list)");
 
     await page.goto("/review");
     await settle(page);

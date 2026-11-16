@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "@playwright/test";
-import { CLIPS, openClip, settle } from "./helpers.ts";
+import { CLIPS, openClip, openTodo, settle } from "./helpers.ts";
 import { GALLERY, pauseActs, tapAct } from "./motionHelpers.ts";
 
 const dir = join(import.meta.dirname, "..", "screenshots");
@@ -181,6 +181,57 @@ for (const size of [
   }
 }
 
+// The floating setup to-do list (§17.13): the pill and the open list on a phone, the column and the pill on wide
+// screens, the skip question, a skipped row, and "All set!".
+for (const size of [
+  { name: "phone", width: 375, height: 812, scale: 2, touch: true },
+  { name: "tablet", width: 1024, height: 768, scale: 1, touch: false },
+  { name: "desktop", width: 1440, height: 900, scale: 1, touch: false },
+]) {
+  for (const scheme of ["light", "dark"] as const) {
+    test.describe(`setup todo ${size.name} ${size.width}x${size.height} ${scheme}`, () => {
+      test.use({
+        viewport: { width: size.width, height: size.height },
+        deviceScaleFactor: size.scale,
+        hasTouch: size.touch,
+        isMobile: size.touch,
+        colorScheme: scheme,
+      });
+      const suffix = `${scheme === "dark" ? "-dark" : ""}-${size.width}x${size.height}`;
+      test(`screenshot setup todo ${scheme}`, async ({ page }) => {
+        await page.goto("/");
+        await settle(page);
+        await page.screenshot({ path: join(dir, `setup-todo${suffix}.png`) });
+        // The pill on its glass bar, with the page under it (the open column has no bar).
+        if (size.width < 1440) {
+          await page.evaluate(() => window.scrollTo(0, 420));
+          await page.waitForTimeout(500);
+          await page.screenshot({ path: join(dir, `setup-todo-scrolled${suffix}.png`) });
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await page.waitForTimeout(300);
+        }
+        await page.evaluate(() => (window as unknown as { __cfMock: { setup: { finish(p: string): void } } }).__cfMock.setup.finish("youtube"));
+        const list = await openTodo(page);
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: join(dir, `setup-todo-open${suffix}.png`) });
+        await list.getByRole("button", { name: "Skip TikTok" }).click();
+        await page.waitForTimeout(450);
+        await page.screenshot({ path: join(dir, `setup-todo-skip${suffix}.png`) });
+        await page.getByRole("dialog", { name: "Skip TikTok?" }).getByRole("button", { name: "Skip TikTok" }).click();
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: join(dir, `setup-todo-skipped${suffix}.png`) });
+        for (const p of ["Instagram", "Facebook", "X"]) {
+          await list.getByRole("button", { name: `Skip ${p}` }).click();
+          await page.getByRole("dialog", { name: `Skip ${p}?` }).getByRole("button", { name: `Skip ${p}` }).click();
+        }
+        await page.locator(".setup-todo--done").waitFor();
+        await page.waitForTimeout(700);
+        await page.screenshot({ path: join(dir, `setup-todo-all-set${suffix}.png`) });
+      });
+    });
+  }
+}
+
 test("screenshot setup: YouTube connected and the pretend consent page", async ({ browser }) => {
   for (const size of [
     { width: 375, height: 812, scale: 2 },
@@ -201,7 +252,7 @@ test("screenshot setup: YouTube connected and the pretend consent page", async (
     await page.screenshot({ path: join(dir, `setup-consent-${size.width}x${size.height}.png`) });
     await page.goto("/");
     await settle(page);
-    await page.screenshot({ path: join(dir, `home-setup-card-${size.width}x${size.height}.png`) });
+    await page.screenshot({ path: join(dir, `home-setup-list-${size.width}x${size.height}.png`) });
     await context.close();
   }
 });
