@@ -332,6 +332,8 @@ test.describe("Sounds", () => {
     await panel.getByRole("link", { name: "Accounts" }).click();
     await expect(page).toHaveURL(/\/accounts$/);
     await settle(page);
+    // Wait for the accounts to load: "Checking…" changes width, and a forced click at the old spot would miss.
+    await expect(page.getByText("Checking…")).toHaveCount(0);
     await clearLog(page);
     await page.getByRole("button", { name: /Connect YouTube/ }).click({ force: true });
     await expect.poll(async () => (await soundLog(page)).map((e) => [e.kind, e.sound])).toEqual([["deny", 21]]);

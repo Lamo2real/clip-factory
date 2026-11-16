@@ -60,3 +60,38 @@ test("every screen has one main landmark and a level-one heading", async ({ page
     await expect(page.locator("h1")).toHaveCount(1);
   }
 });
+
+// While a page-change View Transition runs, the browser sends every tap to <html>, not to the button under the
+// finger. On a slow device (no GPU help with the glass) the fade can take seconds; the router cuts it short.
+test.describe("a slow page change never blocks taps for long", () => {
+  test.use({ viewport: { width: 1280, height: 900 } });
+  const slowFade = "::view-transition-old(root),::view-transition-new(root){animation-duration:5s!important}";
+  const hitTag = (page: import("@playwright/test").Page, x: number, y: number) =>
+    page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, { x, y });
+
+  test("the fade ends by itself within half a second", async ({ page }) => {
+    await page.goto("/settings/posting/where");
+    await settle(page);
+    await page.addStyleTag({ content: slowFade });
+    await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "Accounts" }).click();
+    const btn = page.getByRole("button", { name: /Connect YouTube/ });
+    await expect(btn).toBeVisible();
+    await page.waitForTimeout(700);
+    const box = (await btn.boundingBox())!;
+    expect(await hitTag(page, box.x + box.width / 2, box.y + box.height / 2)).not.toBe("HTML");
+    await page.evaluate(() => (window.__cfSoundLog = []));
+    await btn.click({ force: true });
+    await expect.poll(() => page.evaluate(() => (window.__cfSoundLog ?? []).map((e) => e.kind))).toEqual(["deny"]);
+  });
+
+  test("a tap during the fade ends it at once", async ({ page }) => {
+    await page.goto("/jobs");
+    await settle(page);
+    await page.addStyleTag({ content: slowFade });
+    await page.locator("nav.sidebar").getByRole("link", { name: "Library", exact: true }).click();
+    await page.waitForTimeout(100);
+    expect(await hitTag(page, 640, 450)).toBe("HTML");
+    await page.mouse.click(5, 895);
+    await expect.poll(() => hitTag(page, 640, 450)).not.toBe("HTML");
+  });
+});
