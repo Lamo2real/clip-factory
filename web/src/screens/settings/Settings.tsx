@@ -460,8 +460,9 @@ function FolderPanel({
             <li key={t.slug} data-tree={t.slug} className={`folders__tree${open ? " is-open" : ""}${here ? " is-here" : ""}`}>
               <button
                 type="button"
-                className="folders__toggle"
+                className={`folders__toggle${here && !branch ? " is-current" : ""}`}
                 aria-expanded={open}
+                aria-current={here && !branch ? "page" : undefined}
                 aria-controls={`${id}-${t.slug}`}
                 onClick={() => setOpen(t.slug, !open)}
               >

@@ -623,7 +623,7 @@ function FormView({
         const long = q.field === "instructions";
         const common = {
           id: fieldId,
-          className: `input${long ? " textarea skill-form__long" : ""}`,
+          className: `input${long ? " textarea skill-form__long" : q.field === "description" ? " textarea skill-form__grow" : ""}`,
           value,
           "aria-invalid": error ? true : undefined,
           "aria-describedby": `${fieldId}-ex ${fieldId}-st`,
