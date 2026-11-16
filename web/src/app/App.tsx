@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { initApi } from "../api/index.ts";
 import { auth, onSignedOut } from "../lib/auth.ts";
 import { loadConfig } from "../lib/config.ts";
@@ -25,6 +25,11 @@ import { SessionProvider } from "./session.tsx";
 import { MockConsent } from "../screens/settings/setup/MockConsent.tsx";
 import { GUIDES } from "../setup/index.ts";
 import { AskClipFactory } from "../features/help/HelpLauncher.tsx";
+/**
+ * The motion gallery (§20.10): mock builds only. Tested on import.meta.env directly (not isMock) so a real build
+ * drops the import and does not even carry the code.
+ */
+const MotionGallery = import.meta.env.VITE_MOCK === "1" ? lazy(() => import("../dev/MotionGallery.tsx").then((m) => ({ default: m.MotionGallery }))) : null;
 
 type Boot = { state: "loading" } | { state: "signed_out"; note: string | null } | { state: "ready" } | { state: "broken" };
 
@@ -39,6 +44,7 @@ const TITLES: Record<Route["name"], string> = {
   skill: "Skill",
   get_app: "Get the app",
   mock_oauth: "Pretend sign-in",
+  motion_gallery: "Motion gallery",
   not_found: "Not found",
 };
 
@@ -104,7 +110,7 @@ export function App() {
         </div>
       ) : boot.state === "broken" ? (
         <main className="boot" id="main">
-          <Empty icon="alert" title="Clip Factory could not start" action={<Button variant="primary" icon="retry" onClick={() => location.reload()}>Try again</Button>}>
+          <Empty icon="alert" title="Clip Factory could not start" action={<Button variant="primary" icon="retry" act="retry" onClick={() => location.reload()}>Try again</Button>}>
             Check that you are online (Wi-Fi or mobile data), then tap Try again.
           </Empty>
         </main>
@@ -193,6 +199,12 @@ function Screen({ route }: { route: Route }) {
       return <Settings tree={route.tree} branch={route.branch} platform={route.platform ?? null} />;
     case "skill":
       return <Settings skill={{ mode: route.mode, skillId: route.skillId }} />;
+    case "motion_gallery":
+      return MotionGallery ? (
+        <Suspense fallback={null}>
+          <MotionGallery />
+        </Suspense>
+      ) : null;
     case "get_app":
       return (
         <div className="page page--narrow">

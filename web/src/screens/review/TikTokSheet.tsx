@@ -7,6 +7,7 @@ import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, TikTokCreator, TikTokPostOptions } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { Button, Toggle } from "../../components/ui.tsx";
+import { useAction, type ActionHandle } from "../../lib/motion.ts";
 
 export const PRIVACY_LABEL: Record<string, string> = {
   PUBLIC_TO_EVERYONE: "Everyone",
@@ -36,6 +37,7 @@ export function TikTokSheet({
   onClose,
   busy,
   action = "Keep",
+  act,
 }: {
   clip: Clip;
   caption: string;
@@ -46,9 +48,15 @@ export function TikTokSheet({
   busy: boolean;
   /** The big button's word: Keep, or Try again on a failed clip. */
   action?: "Keep" | "Try again";
+  /**
+   * The big button's motion (§20.11 (a)): Keep posts to TikTok, so the plane flies; Try again turns. Pass a handle to
+   * shake it when posting fails (the owner's own error path); without one the sheet uses its own.
+   */
+  act?: ActionHandle;
 }) {
   const id = useId();
   const dialog = useRef<HTMLDivElement>(null);
+  const ownAct = useAction(action === "Keep" ? "send" : "retry");
   const [creator, setCreator] = useState<TikTokCreator | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [privacy, setPrivacy] = useState("");
@@ -201,6 +209,7 @@ export function TikTokSheet({
             variant="primary"
             size="lg"
             icon={action === "Keep" ? "check" : "retry"}
+            act={act ?? ownAct}
             loading={busy}
             disabled={!ready || !creator || tooLong}
             onClick={() =>

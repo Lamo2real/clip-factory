@@ -308,6 +308,13 @@
 }
 .star-btn.is-on .icon {
   color: #fff;
+}
+/* The on-state tilt sits on the motion wrapper, not the icon: a transformed icon would make its .act__item box
+   scroll (the overflow rule) even at rest. The act-star spin ends at 360deg on the item, so the pose is the same. */
+.star-btn .act {
+  transition: transform var(--dur-3) var(--ease-spring);
+}
+.star-btn.is-on .act {
   transform: rotate(-12deg) scale(1.12);
 }
 .star-btn:active {

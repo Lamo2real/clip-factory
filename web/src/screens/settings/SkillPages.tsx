@@ -6,15 +6,16 @@ import { putFile } from "../../api/upload.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { Sheet } from "../../components/Sheet.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { Button, Empty, ErrorPanel, LinkButton, Progress, Skeleton } from "../../components/ui.tsx";
+import { ActGlyph, Button, Empty, ErrorPanel, LinkButton, Progress, Skeleton } from "../../components/ui.tsx";
 import { burst, centerOf } from "../../lib/confetti.ts";
 import { useLoad } from "../../lib/hooks.ts";
+import { useAction } from "../../lib/motion.ts";
 import { drawBlocks, inlineText, parseMarkdown } from "../../lib/markdown.ts";
 import { navigate, setLeaveGuard, skillPath, SKILLS_PATH } from "../../lib/router.ts";
 import type { Branch, Tree } from "../../lib/settingsTree.ts";
 import { checkForm, cleanForm, DESCRIPTION_MAX, INSTRUCTIONS_MAX, nameTaken, slug, TITLE_MAX, type FormProblems, type SkillField } from "../../lib/skillName.ts";
 import { sounds } from "../../lib/sounds.ts";
-import { Trail, type Crumb } from "./parts.tsx";
+import { Trail, usePickAction, type Crumb } from "./parts.tsx";
 import { deleteWithUndo, markNewSkill, useHiddenSkills, useUndoableDeletes } from "./skillDeletes.ts";
 import { SkillBadges, skillFileProblem, skillOrigin, uploadProblem } from "./SkillsSection.tsx";
 
@@ -208,7 +209,7 @@ function ReadPage({ tree, branch, skillId }: Place & { skillId: string }) {
               <Button icon="x" onClick={() => setAsking(false)}>
                 Keep it
               </Button>
-              <Button variant="danger" icon="trash" onClick={remove}>
+              <Button variant="danger" icon="trash" act="delete" onClick={remove}>
                 Delete
               </Button>
             </>
@@ -311,23 +312,28 @@ function EditPage({ tree, branch, skillId }: Place & { skillId: string }) {
   /** A 409 that is not about the name: someone changed the skill on another screen. */
   const stale = (e: unknown) => e instanceof ApiError && e.code === "conflict" && !isNameTaken(e);
 
+  /** Saves the words; false when it was changed somewhere else (the sheet then asks what to do). */
   async function saveForm(form: SkillForm, button: HTMLElement | null) {
     try {
       saved(await api().updateSkill(skillId, { version: detail.skill.version, ...form }), button);
+      return true;
     } catch (e) {
       if (!stale(e)) throw e;
       sounds.play("deny", button);
       setConflict({ kind: "form", form });
+      return false;
     }
   }
 
   async function saveFile(key: string, button: HTMLElement | null) {
     try {
       saved(await api().updateSkill(skillId, { version: detail.skill.version, key }), button);
+      return true;
     } catch (e) {
       if (!stale(e)) throw e;
       sounds.play("deny", button);
       setConflict({ kind: "file", key });
+      return false;
     }
   }
 
@@ -337,8 +343,9 @@ function EditPage({ tree, branch, skillId }: Place & { skillId: string }) {
     setRound((r) => r + 1);
   }
 
+  /** Saves over the other change; false when that fails too (the error toast says why). */
   async function saveMineAnyway() {
-    if (!conflict) return;
+    if (!conflict) return false;
     setBusy(true);
     try {
       const fresh = await api().getSkill(skillId);
@@ -347,9 +354,11 @@ function EditPage({ tree, branch, skillId }: Place & { skillId: string }) {
       const skill = await api().updateSkill(skillId, body);
       setConflict(null);
       saved(skill, null);
+      return true;
     } catch (e) {
       setConflict(null);
       toast.error(friendlyMessage(e));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -383,10 +392,10 @@ function EditPage({ tree, branch, skillId }: Place & { skillId: string }) {
           onClose={() => setConflict(null)}
           actions={
             <>
-              <Button variant="primary" icon="retry" onClick={() => void takeNewest()}>
+              <Button variant="primary" icon="retry" act="refresh" onClick={() => void takeNewest()}>
                 Use the newest
               </Button>
-              <Button icon="check" loading={busy} onClick={() => void saveMineAnyway()}>
+              <Button icon="check" act="save" loading={busy} onClick={() => saveMineAnyway()}>
                 Save mine anyway
               </Button>
             </>
@@ -409,22 +418,29 @@ function ReplaceFile({
   skillId: string;
   skills: Skill[] | null;
   primary: boolean;
-  onUploaded: (key: string, button: HTMLElement | null) => Promise<void>;
+  /** Saves the uploaded file; false when it could not be saved (and the screen has said why). */
+  onUploaded: (key: string, button: HTMLElement | null) => Promise<boolean>;
 }) {
   const toast = useToast();
   const input = useRef<HTMLInputElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
+  const pick = usePickAction("upload");
 
   async function upload(file: File) {
+    pick.play();
     const check = skillFileProblem(file);
-    if ("problem" in check) return toast.error(check.problem);
+    if ("problem" in check) {
+      pick.fail({ sound: false });
+      return toast.error(check.problem);
+    }
     setProgress(0);
     try {
       const up = await api().createSkillUpload(file.name, skillId);
       await putFile(up, file, setProgress);
-      await onUploaded(up.key, button.current);
+      if (!(await onUploaded(up.key, button.current))) pick.fail({ sound: false });
     } catch (e) {
+      pick.fail({ sound: false });
       toast.error(uploadProblem(e, skills));
     } finally {
       setProgress(null);
@@ -456,6 +472,8 @@ function ReplaceFile({
           variant={primary ? "primary" : "ghost"}
           size="lg"
           icon="upload"
+          act={pick}
+          playOnClick={false}
           loading={progress !== null}
           onClick={() => input.current?.click()}
         >
@@ -510,8 +528,8 @@ function FormView({
   cancelHref: string;
   /** Show "Use the example" for empty fields. */
   examples?: boolean;
-  /** Saves and moves on; throws to show the problem. */
-  onSave: (form: SkillForm, button: HTMLElement | null) => Promise<void>;
+  /** Saves and moves on; throws to show the problem, or resolves to false when it has shown it itself. */
+  onSave: (form: SkillForm, button: HTMLElement | null) => Promise<boolean | void>;
 }) {
   const id = useId();
   const toast = useToast();
@@ -522,6 +540,8 @@ function FormView({
   const [saving, setSaving] = useState(false);
   const [leaving, setLeaving] = useState<(() => void) | null>(null);
   const saveButton = useRef<HTMLButtonElement>(null);
+  // Save is a submit button: the tick pops at the tap, and the form's own checks call fail() (§20.5).
+  const saveAct = useAction("save");
   const instructions = useRef<HTMLTextAreaElement>(null);
   const description = useRef<HTMLTextAreaElement>(null);
 
@@ -571,13 +591,16 @@ function FormView({
     const first = QUESTIONS.find((q) => problems[q.field])?.field;
     if (first) {
       sounds.play("deny", saveButton.current);
+      saveAct.fail({ sound: false });
       focusField(first);
       return;
     }
     setSaving(true);
     try {
-      await onSave(cleanForm(values), saveButton.current);
+      if ((await onSave(cleanForm(values), saveButton.current)) === false) saveAct.fail({ sound: false });
     } catch (err) {
+      // The deny sound comes from the field's message or the error toast.
+      saveAct.fail({ sound: false });
       const field = isNameTaken(err) ? "title" : err instanceof ApiError && QUESTIONS.some((q) => q.field === err.field) ? (err.field as SkillField) : null;
       if (field) {
         sounds.play("deny", saveButton.current);
@@ -629,11 +652,7 @@ function FormView({
             )}
             <p className="field__hint skill-form__example" id={`${fieldId}-ex`}>
               <span className="user-text">For example: “{q.example}”</span>
-              {examples && !value.trim() ? (
-                <button type="button" className="skill-form__use" onClick={() => set(q.field, q.example)}>
-                  Use the example
-                </button>
-              ) : null}
+              {examples && !value.trim() ? <UseExample onUse={() => set(q.field, q.example)} /> : null}
             </p>
             <p className={`field__status${error ? " is-bad" : ""}`} id={`${fieldId}-st`} aria-live="polite">
               {error ? (
@@ -647,7 +666,7 @@ function FormView({
         );
       })}
       <div className="skill-form__actions">
-        <Button ref={saveButton} type="submit" variant="primary" size="lg" icon="check" loading={saving} data-sound="off">
+        <Button ref={saveButton} type="submit" variant="primary" size="lg" icon="check" act={saveAct} loading={saving} data-sound="off">
           {saveLabel}
         </Button>
         <LinkButton href={cancelHref} variant="ghost" size="lg" icon="x">
@@ -680,5 +699,27 @@ function FormView({
         </Sheet>
       ) : null}
     </form>
+  );
+}
+
+/** "Use the example": drops the example into the empty box (`paste`, §20.11). The button goes once the box has words. */
+function UseExample({ onUse }: { onUse: () => void }) {
+  const act = useAction("paste");
+  return (
+    <button
+      type="button"
+      className="skill-form__use"
+      data-act="paste"
+      style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+      onClick={() => {
+        onUse();
+        act.play();
+      }}
+    >
+      <ActGlyph act={act}>
+        <Icon name="paste" size={16} />
+      </ActGlyph>
+      Use the example
+    </button>
   );
 }

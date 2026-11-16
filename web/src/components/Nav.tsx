@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useSession } from "../app/session.tsx";
 import { setPrefs, usePrefs } from "../lib/prefs.ts";
 import { section, useRoute } from "../lib/router.ts";
@@ -42,6 +43,10 @@ function Badge({ n }: { n: number }) {
   );
 }
 
+// .act-turn gives the span its own box (motion.css); only the angle is set here.
+const TURN = { "--act-turn": "180deg" } as CSSProperties;
+const FLIP: CSSProperties = { display: "inline-grid", transform: "rotate(180deg)" };
+
 /** Larger screens: a glass sidebar that folds down to icons. The choice is remembered on this device. */
 export function Sidebar() {
   const { active, review, running, accessible } = useNavState();
@@ -59,7 +64,17 @@ export function Sidebar() {
           data-tip={sidebarCollapsed ? "Expand menu" : undefined}
           onClick={() => setPrefs({ sidebarCollapsed: !sidebarCollapsed })}
         >
-          <Icon name={sidebarCollapsed ? "menu" : "sidebar"} />
+          {/* §20.11: state-driven, no shot. The wrapper turns 180° with aria-expanded (240 ms, instant under reduced
+              motion); the panel glyph is drawn pre-turned so it still reads the right way round when open. */}
+          <span className="act-turn sidebar__turn" style={TURN} aria-hidden="true">
+            {sidebarCollapsed ? (
+              <Icon name="menu" />
+            ) : (
+              <span style={FLIP}>
+                <Icon name="sidebar" />
+              </span>
+            )}
+          </span>
         </button>
         <A href="/" className="brand" aria-label="Clip Factory home">
           <span className="brand__mark" aria-hidden="true">

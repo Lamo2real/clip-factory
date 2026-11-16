@@ -66,8 +66,9 @@ export async function findOverflow(page: Page): Promise<{ page: number; viewport
       return `${el.tagName.toLowerCase()}${cls ? "." + cls : ""}`;
     };
     for (const el of Array.from(document.querySelectorAll<HTMLElement>("body *"))) {
-      // The paper plane in flight leaves its button on purpose (it lands back inside).
-      if (el.closest(".sr-only, svg, .backdrop, .confetti, .glass-defs, .fly.is-flying")) continue;
+      // The paper plane in flight leaves its button on purpose (it lands back inside), and so does any action motion
+      // while it plays (§20: a glyph mid-pop or mid-shake). At rest (.is-idle) an .act is measured like anything else.
+      if (el.closest(".sr-only, svg, .backdrop, .confetti, .glass-defs, .fly.is-flying, .act:not(.is-idle)")) continue;
       if (["INPUT", "TEXTAREA", "SELECT", "OPTION", "SCRIPT", "STYLE", "CANVAS", "VIDEO"].includes(el.tagName)) continue;
       const s = getComputedStyle(el);
       if (s.display === "inline" || s.display === "none" || s.visibility === "hidden" || s.position === "fixed") continue;

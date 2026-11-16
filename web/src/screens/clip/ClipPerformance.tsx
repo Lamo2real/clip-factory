@@ -9,12 +9,13 @@ import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { PerfLines, type LinesLayout } from "../../components/PerfLines.tsx";
 import { PlatformStack } from "../../components/PlatformStack.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { Button, Empty, LinkButton, Skeleton } from "../../components/ui.tsx";
+import { ActGlyph, Button, Empty, LinkButton, Skeleton } from "../../components/ui.tsx";
 import { MOMENT_LABEL, PLATFORM_LABEL, plural } from "../../lib/format.ts";
 import { useMedia, usePoll } from "../../lib/hooks.ts";
 import { useLiveEvents, useLiveStatus } from "../../lib/live.ts";
 import { applyPerfEvent, withTotals } from "../../lib/liveCache.ts";
 import { STATS_ORDER, ago, compact, full, until } from "../../lib/metrics.ts";
+import { useAction } from "../../lib/motion.ts";
 import { prefersReducedMotion, usePrefs } from "../../lib/prefs.ts";
 import { goBack } from "../../lib/router.ts";
 import { isoWeek, weekRange } from "../../lib/week.ts";
@@ -85,6 +86,9 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   const [error, setError] = useState<{ message: string; missing: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [starBusy, setStarBusy] = useState(false);
+  // §20: Refresh numbers turns, the star spins; both shake (without a second deny) when the toast says it failed.
+  const refreshAct = useAction("refresh");
+  const starAct = useAction("star");
   const toast = useToast();
   const now = useNow();
   const [stageWidth, setStageWidth] = useState<number | null>(null);
@@ -160,7 +164,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
                 Go to Library
               </LinkButton>
               {error.missing ? null : (
-                <Button icon="retry" onClick={() => void load().catch(() => undefined)}>
+                <Button icon="retry" act="retry" onClick={() => load()}>
                   Try again
                 </Button>
               )}
@@ -204,6 +208,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
       if (msg.tone === "success") toast.success(msg.text, { group: "refresh" });
       else toast.info(msg.text, { group: "refresh" });
     } catch (e) {
+      refreshAct.fail({ sound: false });
       toast.error(friendlyMessage(e));
     } finally {
       setBusy(false);
@@ -235,6 +240,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
       toast.success("Saved. Clip Factory will learn from your picks.", { group: "star" });
     } catch (e) {
       setPerf((p) => (p ? { ...p, bestThisWeek: !on, week: !on ? week : null, clip: { ...p.clip, best: !on } } : p));
+      starAct.fail({ sound: false });
       toast.error(friendlyMessage(e));
     } finally {
       setStarBusy(false);
@@ -363,9 +369,16 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
               aria-pressed={perf.bestThisWeek}
               aria-busy={starBusy || undefined}
               data-help="best-star"
-              onClick={toggleStar}
+              data-act="star"
+              onClick={() => {
+                if (starBusy) return;
+                void toggleStar();
+                starAct.play();
+              }}
             >
-              <Icon name="star" size={24} fill={perf.bestThisWeek ? "currentColor" : "none"} />
+              <ActGlyph act={starAct}>
+                <Icon name="star" size={24} fill={perf.bestThisWeek ? "currentColor" : "none"} />
+              </ActGlyph>
               <span>Best this week</span>
             </button>
             <Button
@@ -374,6 +387,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
               icon={waiting ? "clock" : "retry"}
               loading={state.refreshing}
               disabled={off}
+              act={refreshAct}
               onClick={refresh}
               onClickCapture={off ? explainOff : undefined}
               data-help="refresh-numbers"

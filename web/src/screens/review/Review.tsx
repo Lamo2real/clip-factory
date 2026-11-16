@@ -8,6 +8,7 @@ import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Pill, Skeleton } from "../../components/ui.tsx";
 import { burst, centerOf } from "../../lib/confetti.ts";
 import { MOMENT_LABEL, plural, timecode } from "../../lib/format.ts";
+import { ACT_REWIND_MS, useAction } from "../../lib/motion.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { applyClipEvent, withMedia } from "../../lib/liveCache.ts";
@@ -85,12 +86,33 @@ export function Review({ jobId }: { jobId: string | null }) {
   const order = useRef<string[]>([]);
   if (data) for (const c of data) if (!order.current.includes(c.clipId)) order.current.push(c.clipId);
   const remove = (clipId: string) => setData((d) => (d ? d.filter((c) => c.clipId !== clipId) : d));
+  // Cards coming back after Undo (or a failed throw away) play the mirror of their leaving motion (§20.7).
+  const [returning, setReturning] = useState<ReadonlySet<string>>(() => new Set());
+  const returnTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const timers = returnTimers.current;
+    return () => timers.forEach((t) => clearTimeout(t));
+  }, []);
   // Puts a clip back where it was (by rank and job) after Undo, or when throwing it away failed.
-  const restore = (clip: Clip) =>
+  const restore = (clip: Clip) => {
     setData((d) => {
       if (!d || d.some((c) => c.clipId === clip.clipId)) return d;
       return [...d, clip].sort((a, b) => order.current.indexOf(a.clipId) - order.current.indexOf(b.clipId));
     });
+    setReturning((r) => new Set(r).add(clip.clipId));
+    clearTimeout(returnTimers.current.get(clip.clipId));
+    returnTimers.current.set(
+      clip.clipId,
+      setTimeout(() => {
+        returnTimers.current.delete(clip.clipId);
+        setReturning((r) => {
+          const next = new Set(r);
+          next.delete(clip.clipId);
+          return next;
+        });
+      }, ACT_REWIND_MS),
+    );
+  };
 
   /** "Throw away" happens for real only after 8 seconds, so a slip of the finger can be undone. */
   function throwAway(clip: Clip) {
@@ -125,7 +147,7 @@ export function Review({ jobId }: { jobId: string | null }) {
         lede="Watch each clip. Tap Keep to post it, or Throw away if you do not like it. Nothing posts until you tap Keep."
         actions={
           jobId ? (
-            <LinkButton href="/review" size="sm" icon="x">
+            <LinkButton href="/review" size="sm" icon="x" act="clear">
               Show every job
             </LinkButton>
           ) : undefined
@@ -172,7 +194,7 @@ export function Review({ jobId }: { jobId: string | null }) {
           <ol className="review-list">
             {data.map((c, i) => (
               <li key={c.clipId} id={`clip-${c.clipId}`} className="review-list__item">
-                <ReviewCard clip={c} next={i === 0} onDone={remove} onKept={kept} onThrowAway={throwAway} onSettling={settle} />
+                <ReviewCard clip={c} next={i === 0} returning={returning.has(c.clipId)} onDone={remove} onKept={kept} onThrowAway={throwAway} onSettling={settle} />
               </li>
             ))}
           </ol>
@@ -187,6 +209,7 @@ type SaveState = "idle" | "saving" | "saved" | "failed";
 function ReviewCard({
   clip,
   next,
+  returning,
   onDone,
   onKept,
   onThrowAway,
@@ -195,6 +218,8 @@ function ReviewCard({
   clip: Clip;
   /** The top card: its Keep is the screen's one tomato button; the cards below get a quiet Keep. */
   next: boolean;
+  /** Just put back by Undo: the card plays its return (§20.7). */
+  returning: boolean;
   onDone: (clipId: string) => void;
   /** Kept: the list offers a link to the clip's numbers. */
   onKept: (clip: Clip) => void;
@@ -214,6 +239,11 @@ function ReviewCard({
   // The last Keep did not finish: the button becomes "Try again", which asks the server to finish it.
   const [keepFailed, setKeepFailed] = useState(false);
   const [keepNote, setKeepNote] = useState("");
+  // Keep's heart pops when a keep really starts (Try again's arrow turns once it failed); a Keep that is refused or
+  // does not finish shakes it.
+  // The TikTok sheet's Keep flies its own plane and shakes on its own button when posting fails (§20.11 (a)).
+  const keepAct = useAction(keepFailed ? "retry" : "keep");
+  const sheetAct = useAction("send");
   // The TikTok sheet's choices from the Keep that did not finish: Try again sends them again.
   const lastTikTok = useRef<TikTokPostOptions | undefined>(undefined);
   const confirmRef = useRef<HTMLDivElement>(null);
@@ -299,6 +329,7 @@ function ReviewCard({
 
   async function confirm() {
     if (captionsTooLong(captions)) {
+      keepAct.fail({ sound: false });
       toast.error("One caption is longer than its platform allows. Make the one marked in red shorter, then tap Keep.");
       return;
     }
@@ -315,6 +346,9 @@ function ReviewCard({
         return;
       }
     }
+    // The heart (or Try again's arrow) plays only now that a keep really starts: not on the tap that opens the
+    // TikTok sheet, and never on a refused Keep (§20.5, §20.8).
+    keepAct.play();
     await keep(keepFailed ? lastTikTok.current : undefined);
   }
 
@@ -344,10 +378,13 @@ function ReviewCard({
       setKeepFailed(true);
       setKeepNote(STILL_WORKING);
       setBusy(null);
+      (tiktok ? sheetAct : keepAct).fail();
     } catch (e) {
       settled.current = false;
       onSettling(clip.clipId, false);
       setKeepFailed(true);
+      // The error toast plays the deny sound.
+      (tiktok ? sheetAct : keepAct).fail({ sound: false });
       toast.error(friendlyMessage(e));
       setBusy(null);
     }
@@ -363,7 +400,7 @@ function ReviewCard({
   const passed = clip.checklist.items.filter((i) => i.pass).length;
 
   return (
-    <article className={`review-card glass${leaving ? " is-leaving" : ""}`} aria-labelledby={`hook-${clip.clipId}`}>
+    <article className={`review-card glass${leaving ? " is-leaving" : returning ? " is-returning" : ""}`} aria-labelledby={`hook-${clip.clipId}`}>
       <div className="review-card__head">
         <div className="review-card__tags">
           <Pill tone="tomato">{MOMENT_LABEL[clip.momentType]}</Pill>
@@ -426,7 +463,7 @@ function ReviewCard({
             <span className={`checklist__score${passed === clip.checklist.items.length ? " is-ok" : ""}`}>
               {passed} of {clip.checklist.items.length} passed
             </span>
-            <Icon name="chevronRight" size={18} className="icon checklist__chev" />
+            <Icon name="chevronRight" size={18} className="icon checklist__chev act-turn" />
           </summary>
           <ul className="checklist__items">
             {clip.checklist.items.map((i) => (
@@ -473,13 +510,15 @@ function ReviewCard({
           </div>
         ) : null}
         <div className="review-card__actions" ref={confirmRef} data-help-dodge="">
-          <Button variant="ghost" icon="trash" data-help="throw-away" disabled={busy !== null || leaving} onClick={throwAway}>
+          <Button variant="ghost" icon="trash" act="throw" data-help="throw-away" disabled={busy !== null || leaving} onClick={throwAway}>
             Throw away
           </Button>
           <Button
             variant={next ? "primary" : "glass"}
             size="lg"
             icon={keepFailed ? "retry" : "check"}
+            act={keepAct}
+            playOnClick={false}
             data-help={keepFailed ? "try-again keep" : "keep"}
             loading={busy === "confirm"}
             disabled={leaving}
@@ -496,6 +535,7 @@ function ReviewCard({
             onKeep={(options) => void keep(options)}
             onClose={() => setSheet(false)}
             busy={busy === "confirm"}
+            act={sheetAct}
           />
         ) : null}
         <A href={`/jobs/${clip.jobId}`} className="text-link small review-card__job">

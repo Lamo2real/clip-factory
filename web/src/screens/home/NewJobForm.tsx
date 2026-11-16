@@ -7,9 +7,10 @@ import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { Button, Progress, Segmented, Stepper } from "../../components/ui.tsx";
+import { ActGlyph, Button, Progress, Segmented, Stepper } from "../../components/ui.tsx";
 import { bytes } from "../../lib/format.ts";
 import { checkLink, extractLink, KIND_LABEL, PLATFORM_NAMES } from "../../lib/links.ts";
+import { useAction } from "../../lib/motion.ts";
 import { navigate } from "../../lib/router.ts";
 import { useUnsaved } from "../../features/help/unsaved.ts";
 
@@ -36,6 +37,11 @@ export function NewJobForm() {
   const linkInput = useRef<HTMLInputElement>(null);
   const [nudge, setNudge] = useState(false);
   const mounted = useRef(true);
+  // Action motion (§20.11 (a)): Make clips' scissors fly; Paste drops in; Clear spins away; the dropzone's arrow rises.
+  const send = useAction("send");
+  const pasteAct = useAction("paste");
+  const clearAct = useAction("clear");
+  const uploadAct = useAction("upload");
   // A pasted link that is not sent yet, or an upload in progress: Ask Clip Factory asks before leaving (§19.8).
   useUnsaved(() => (mode === "link" && link.trim().length > 0 && !busy) || progress !== null);
 
@@ -65,12 +71,14 @@ export function NewJobForm() {
     try {
       const text = await navigator.clipboard.readText();
       if (!text.trim()) {
+        pasteAct.fail({ sound: false });
         toast.info("Nothing is copied yet. Copy a link from YouTube, Twitch or Kick first.");
         return;
       }
       takeLink(text);
       setTouched(true);
     } catch {
+      pasteAct.fail({ sound: false });
       linkInput.current?.focus();
       toast.info("Press and hold in the box, then choose Paste.");
     }
@@ -80,8 +88,14 @@ export function NewJobForm() {
     setFile(f);
     setFileError(null);
     if (!f) return;
-    if (!f.type.startsWith("video/")) setFileError("That is not a video. Tap the box and pick an MP4 or MOV file.");
-    else if (f.size > MAX_UPLOAD) setFileError(`That file is ${bytes(f.size)}. Videos can be up to 5 GB. Pick a shorter one.`);
+    // Played on the file arriving, not on the tap that opens the picker (§20.11 (a)).
+    if (!f.type.startsWith("video/")) {
+      setFileError("That is not a video. Tap the box and pick an MP4 or MOV file.");
+      uploadAct.fail();
+    } else if (f.size > MAX_UPLOAD) {
+      setFileError(`That file is ${bytes(f.size)}. Videos can be up to 5 GB. Pick a shorter one.`);
+      uploadAct.fail();
+    } else uploadAct.play();
   }
 
   async function submit(e: FormEvent) {
@@ -110,7 +124,11 @@ export function NewJobForm() {
     } catch (err) {
       if ((err as DOMException)?.name === "AbortError")
         toast.info(mounted.current ? "Upload canceled." : "Upload stopped because you left Home. Start it again from Home.");
-      else toast.error(friendlyMessage(err));
+      else {
+        // The error toast already plays the deny sound (§20.5).
+        send.fail({ sound: false });
+        toast.error(friendlyMessage(err));
+      }
     } finally {
       setBusy(false);
       setProgress(null);
@@ -164,12 +182,34 @@ export function NewJobForm() {
               aria-describedby={`${id}-status`}
             />
             {link ? (
-              <button type="button" className="icon-btn linkbox__clear" aria-label="Clear link" onClick={() => setLink("")}>
-                <Icon name="x" size={18} />
+              <button
+                type="button"
+                className="icon-btn linkbox__clear"
+                aria-label="Clear link"
+                data-act="clear"
+                onClick={() => {
+                  setLink("");
+                  clearAct.play();
+                }}
+              >
+                <ActGlyph act={clearAct}>
+                  <Icon name="x" size={18} />
+                </ActGlyph>
               </button>
             ) : (
-              <button type="button" className="linkbox__paste" onClick={pasteFromClipboard} data-help="paste-link">
-                <Icon name="paste" size={18} />
+              <button
+                type="button"
+                className="linkbox__paste"
+                data-help="paste-link"
+                data-act="paste"
+                onClick={() => {
+                  void pasteFromClipboard();
+                  pasteAct.play();
+                }}
+              >
+                <ActGlyph act={pasteAct}>
+                  <Icon name="paste" size={18} />
+                </ActGlyph>
                 <span>Paste</span>
               </button>
             )}
@@ -212,7 +252,9 @@ export function NewJobForm() {
               aria-describedby={`${id}-fs`}
               onChange={(e) => pick(e.target.files?.[0] ?? null)}
             />
-            <Icon name={file ? "file" : "upload"} size={26} />
+            <ActGlyph act={uploadAct}>
+              <Icon name={file ? "file" : "upload"} size={26} />
+            </ActGlyph>
             <span className="dropzone__text">
               {file ? (
                 <>
@@ -242,7 +284,7 @@ export function NewJobForm() {
           {progress !== null ? (
             <div className="upload-progress">
               <Progress value={progress} label="Upload progress" />
-              <Button size="sm" variant="ghost" icon="x" onClick={() => abort.current?.abort()}>
+              <Button size="sm" variant="ghost" icon="x" act="clear" onClick={() => abort.current?.abort()}>
                 Cancel upload
               </Button>
             </div>
@@ -287,6 +329,7 @@ export function NewJobForm() {
           variant="primary"
           size="lg"
           icon="scissors"
+          act={send}
           data-help="make-clips"
           disabled={!ready}
           loading={busy}

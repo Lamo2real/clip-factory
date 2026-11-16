@@ -6,7 +6,8 @@ import { bytes } from "../lib/format.ts";
 import { bannerSnoozed, downloadStarted, loadDownloads, promptInstall, rememberDownloaded, snoozeBanner, useInstall } from "../lib/pwa.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 import { useToast } from "./Toasts.tsx";
-import { Button, LinkButton } from "./ui.tsx";
+import { useAction, watchResult } from "../lib/motion.ts";
+import { ActGlyph, Button, LinkButton } from "./ui.tsx";
 
 function useManifest(): DownloadManifest | null | undefined {
   const [m, setM] = useState<DownloadManifest | null | undefined>(undefined);
@@ -48,6 +49,8 @@ export function GetAppPanel({
   const [started, setStarted] = useState(downloadStarted);
   const toast = useToast();
   const id = useId();
+  // §20.11: the newly picked device chip's label bumps (`toggle`); one handle, shown on the chosen chip only.
+  const pick = useAction("toggle");
   const H = headingLevel === 1 ? "h1" : "h2";
 
   if (installed) {
@@ -75,6 +78,7 @@ export function GetAppPanel({
   const plan = planFor(os, manifest ?? null, canPrompt && os === detected, os === detected ? ua : "");
   const guess = os === detected && detected !== "unknown";
 
+  // Returns the prompt's promise so a failing prompt plays the button's failure motion (§20.5). Dismissing is not a failure.
   async function install() {
     if (await promptInstall()) toast.success("Installed. Find Clip Factory with your other apps.");
   }
@@ -123,13 +127,23 @@ export function GetAppPanel({
               type="button"
               className={`chip getapp__chip${os === p.os ? " is-on" : ""}`}
               aria-pressed={os === p.os}
+              data-act="toggle"
               onClick={() => {
                 setOs(p.os);
                 setStarted(false);
+                pick.play();
               }}
             >
               <Icon name={p.icon} size={18} />
-              <span>{p.label}</span>
+              {os === p.os ? (
+                <span className={`act act--toggle act--text is-${pick.phase}`}>
+                  <span className="act__item" key={pick.shot}>
+                    {p.label}
+                  </span>
+                </span>
+              ) : (
+                <span>{p.label}</span>
+              )}
             </button>
           ))}
         </div>
@@ -152,9 +166,12 @@ function PlanView({
   plan: GetAppPlan;
   started: boolean;
   onStart: () => void;
-  onInstall: () => void;
+  onInstall: () => Promise<void>;
   canPrompt: boolean;
 }) {
+  // §20.11: the download link and "install from this browser" both play `download`. Hooks stay above the switch.
+  const fetchIt = useAction("download");
+  const alt = useAction("download");
   switch (plan.kind) {
     case "download":
       return (
@@ -164,17 +181,33 @@ function PlanView({
               className="btn btn--primary btn--lg getapp__download"
               href={plan.file.path}
               download
+              data-act="download"
               onClick={() => {
                 rememberDownloaded();
                 onStart();
+                fetchIt.play();
               }}
             >
-              <Icon name="download" size={20} />
+              <ActGlyph act={fetchIt}>
+                <Icon name="download" size={20} />
+              </ActGlyph>
               <span className="btn__label">{plan.label}</span>
             </a>
             {canPrompt ? (
-              <button type="button" className="text-link getapp__alt" onClick={onInstall}>
-                or install from this browser
+              <button
+                type="button"
+                className="text-link getapp__alt"
+                data-act="download"
+                onClick={() => {
+                  const result = onInstall();
+                  alt.play();
+                  watchResult(result, () => alt.fail());
+                }}
+              >
+                <ActGlyph act={alt}>
+                  <Icon name="download" size={16} />
+                </ActGlyph>
+                <span>or install from this browser</span>
               </button>
             ) : null}
           </div>
@@ -201,7 +234,7 @@ function PlanView({
     case "prompt":
       return (
         <div className="getapp__actions">
-          <Button variant="primary" size="lg" icon="download" onClick={onInstall}>
+          <Button variant="primary" size="lg" icon="download" act="download" onClick={onInstall}>
             Install app
           </Button>
         </div>
@@ -269,12 +302,16 @@ function CopyLink() {
         variant="primary"
         size="lg"
         icon={done ? "check" : "link"}
+        act="copy"
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(location.origin + "/get-app");
             setDone(true);
+            return true;
           } catch {
             toast.info("Copy the address at the top of the screen instead.");
+            // §20.5: false plays the copy's failure (shake + deny), never the "Link copied" success.
+            return false;
           }
         }}
       >

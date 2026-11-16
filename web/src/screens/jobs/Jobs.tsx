@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Job } from "../../api/types.ts";
@@ -6,17 +6,23 @@ import { JobStatusPill, jobTitle, sourceMeta, SourceThumb } from "../../componen
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Progress, Skeleton } from "../../components/ui.tsx";
 import { burst } from "../../lib/confetti.ts";
+import { useAction } from "../../lib/motion.ts";
 import { plural, relative } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { applyJobEvent } from "../../lib/liveCache.ts";
 import { mergeJobs, pollLimit } from "./mergeJobs.ts";
 
+/** Show older jobs loads more below: its chevron points and steps down (§20.3 `--act-dir`). */
+const DOWN = { "--act-dir-in": "90deg" } as CSSProperties;
+
 export function Jobs() {
   const { data, error, reload, setData } = useLoad(() => api().listJobs({ limit: 20 }));
   const [more, setMore] = useState(false);
   const toast = useToast();
   const seen = useRef(new Map<string, Job["status"]>());
+  // Show older jobs: the chevron steps on (§20.11 (a)); a page that does not load shakes it instead.
+  const older = useAction("next");
 
   const jobs = data?.jobs ?? [];
   const active = jobs.some((j) => j.status === "running" || j.status === "queued");
@@ -59,6 +65,7 @@ export function Jobs() {
       const page = await api().listJobs({ limit: 20, cursor: data.nextCursor });
       setData((d) => (d ? { jobs: [...d.jobs, ...page.jobs], nextCursor: page.nextCursor } : page));
     } catch (e) {
+      older.fail({ sound: false });
       toast.error(friendlyMessage(e));
     } finally {
       setMore(false);
@@ -114,7 +121,7 @@ export function Jobs() {
       ) : null}
       {data?.nextCursor ? (
         <div className="center-row">
-          <Button icon="chevronRight" onClick={loadMore} loading={more}>
+          <Button icon="chevronDown" act={older} style={DOWN} onClick={loadMore} loading={more}>
             Show older jobs
           </Button>
         </div>

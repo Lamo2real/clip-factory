@@ -31,7 +31,12 @@ export type Route =
   /** Mock mode only: the pretend consent page Connect goes to (§17.10). */
   | { name: "mock_oauth"; platform: Platform }
   | { name: "get_app" }
+  /** Mock (e2e) mode only: one button per action motion kind (docs/CONTRACTS.md §20.10). Never in a real build. */
+  | { name: "motion_gallery" }
   | { name: "not_found" };
+
+/** The motion gallery's address (mock mode only). */
+export const MOTION_GALLERY_PATH = "/__motion";
 
 export function match(pathname: string, search = ""): Route {
   const path = pathname.replace(/\/+$/, "") || "/";
@@ -69,6 +74,7 @@ export function match(pathname: string, search = ""): Route {
   const consent = /^\/mock-oauth\/([a-z]{1,20})$/.exec(path);
   if (consent && isMock && SETUP_PLATFORMS.includes(consent[1] as Platform)) return { name: "mock_oauth", platform: consent[1] as Platform };
   if (path === "/get-app") return { name: "get_app" };
+  if (isMock && path === MOTION_GALLERY_PATH) return { name: "motion_gallery" };
   return { name: "not_found" };
 }
 
@@ -235,6 +241,7 @@ export function useHash(): string {
 export function section(route: Route): "home" | "jobs" | "review" | "library" | "settings" | "get_app" | null {
   switch (route.name) {
     case "mock_oauth":
+    case "motion_gallery":
       return null;
     case "job":
       return "jobs";

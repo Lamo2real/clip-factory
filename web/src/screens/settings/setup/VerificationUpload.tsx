@@ -6,7 +6,9 @@ import { friendlyMessage } from "../../../api/errors.ts";
 import type { PlatformSetup } from "../../../api/types.ts";
 import { Icon } from "../../../components/Icon.tsx";
 import { useToast } from "../../../components/Toasts.tsx";
-import { Button } from "../../../components/ui.tsx";
+import { ActGlyph, Button } from "../../../components/ui.tsx";
+import { useAction } from "../../../lib/motion.ts";
+import { usePickAction } from "../parts.tsx";
 
 const NAME = /^tiktok[A-Za-z0-9_-]{4,64}\.txt$/;
 
@@ -25,15 +27,28 @@ export function VerificationUpload({
   const [over, setOver] = useState(false);
   const [hidden, setHidden] = useState<string[]>([]);
   const files = (setup.files ?? []).filter((f) => !hidden.includes(f));
+  const pick = usePickAction("upload");
+  // One bin for the file removed last: its row goes while the Undo is up and comes back rewinding (§20.7).
+  const removeAct = useAction("delete");
+  const [removed, setRemoved] = useState<string | null>(null);
 
   async function send(f: File) {
-    if (!NAME.test(f.name)) return toast.error("That is not TikTok's file. Its name starts with tiktok and ends with .txt.");
-    if (f.size > 4096) return toast.error("That file is too big to be TikTok's. Download it again from TikTok.");
+    pick.play();
+    const problem = !NAME.test(f.name)
+      ? "That is not TikTok's file. Its name starts with tiktok and ends with .txt."
+      : f.size > 4096
+        ? "That file is too big to be TikTok's. Download it again from TikTok."
+        : null;
+    if (problem) {
+      pick.fail({ sound: false });
+      return toast.error(problem);
+    }
     setBusy(true);
     try {
       onChange(await api().uploadVerificationFile(f.name, await f.text()));
       toast.success("File is online. Now press Verify on TikTok.");
     } catch (e) {
+      pick.fail({ sound: false });
       toast.error(friendlyMessage(e));
     } finally {
       setBusy(false);
@@ -42,8 +57,14 @@ export function VerificationUpload({
 
   function remove(name: string) {
     setHidden((h) => [...h, name]);
+    setRemoved(name);
+    removeAct.play();
     toast.undo("File removed.", {
-      onUndo: () => setHidden((h) => h.filter((x) => x !== name)),
+      onUndo: () => {
+        setHidden((h) => h.filter((x) => x !== name));
+        setRemoved(name);
+        removeAct.rewind();
+      },
       onCommit: () => {
         api()
           .deleteVerificationFile(name)
@@ -87,7 +108,7 @@ export function VerificationUpload({
             e.target.value = "";
           }}
         />
-        <Button size="sm" icon="upload" loading={busy} onClick={() => input.current?.click()}>
+        <Button size="sm" icon="upload" act={pick} playOnClick={false} loading={busy} onClick={() => input.current?.click()}>
           Pick the file
         </Button>
       </div>
@@ -98,8 +119,10 @@ export function VerificationUpload({
               <Icon name="checkCircle" size={18} />
               <code className="upload-box__name">{f}</code>
               <span className="upload-box__online">Online</span>
-              <button type="button" className="upload-box__remove" aria-label={`Remove ${f}`} onClick={() => remove(f)}>
-                <Icon name="x" size={18} />
+              <button type="button" className="upload-box__remove" aria-label={`Remove ${f}`} data-act="delete" onClick={() => remove(f)}>
+                <ActGlyph act={f === removed ? removeAct : { kind: "delete", shot: 0, phase: "idle" }}>
+                  <Icon name="x" size={18} />
+                </ActGlyph>
               </button>
             </li>
           ))}

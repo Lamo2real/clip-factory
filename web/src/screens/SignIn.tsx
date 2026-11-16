@@ -1,7 +1,8 @@
 import { useId, useState, type FormEvent, type InputHTMLAttributes } from "react";
 import { auth, authProblem, CHALLENGE_EXPIRED, challengeExpired, PASSWORD_RULES, passwordProblem } from "../lib/auth.ts";
 import { Icon } from "../components/Icon.tsx";
-import { Button, Swash } from "../components/ui.tsx";
+import { ActGlyph, Button, Swash } from "../components/ui.tsx";
+import { useAction } from "../lib/motion.ts";
 
 export function SignIn({ onDone, note }: { onDone: () => void; note?: string | null }) {
   const [step, setStep] = useState<"credentials" | "new_password">("credentials");
@@ -11,6 +12,9 @@ export function SignIn({ onDone, note }: { onDone: () => void; note?: string | n
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const id = useId();
+  // §20.11 (d): the link snaps at the tap; anything that stops the sign-in shakes it, with the deny sound (the
+  // red line under the form plays none). No success visuals: signing in simply opens the app.
+  const connect = useAction("connect");
 
   function startAgain() {
     setStep("credentials");
@@ -25,12 +29,14 @@ export function SignIn({ onDone, note }: { onDone: () => void; note?: string | n
     if (step === "credentials") {
       if (!email.trim() || !password) {
         setError("Enter your email and password.");
+        connect.fail();
         return;
       }
     } else {
       const problem = passwordProblem(fresh);
       if (problem) {
         setError(problem);
+        connect.fail();
         return;
       }
     }
@@ -42,6 +48,7 @@ export function SignIn({ onDone, note }: { onDone: () => void; note?: string | n
         setPassword("");
       } else onDone();
     } catch (err) {
+      connect.fail();
       if (step === "new_password" && challengeExpired(err)) {
         // The invitation challenge only lives a few minutes; retrying it can never work, so go back a step.
         startAgain();
@@ -138,11 +145,11 @@ export function SignIn({ onDone, note }: { onDone: () => void; note?: string | n
               <span>{error}</span>
             </p>
           ) : null}
-          <Button type="submit" variant="primary" size="lg" block loading={busy} iconAfter="chevronRight">
+          <Button type="submit" variant="primary" size="lg" block loading={busy} icon="key" act={connect}>
             {step === "credentials" ? "Sign in" : "Save password and continue"}
           </Button>
           {step === "new_password" ? (
-            <Button type="button" variant="ghost" block onClick={startAgain} disabled={busy}>
+            <Button type="button" variant="ghost" block act="retry" onClick={startAgain} disabled={busy}>
               Start again
             </Button>
           ) : null}
@@ -155,6 +162,8 @@ export function SignIn({ onDone, note }: { onDone: () => void; note?: string | n
 /** A password field with a Show / Hide button, so a typo can be seen before it costs a sign-in attempt. */
 function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "className">) {
   const [shown, setShown] = useState(false);
+  // The eye blinks as the password shows or hides (§20.11 (d) `blink`).
+  const blink = useAction("blink");
   return (
     <div className="password">
       <input {...props} className="input password__input" type={shown ? "text" : "password"} />
@@ -163,9 +172,15 @@ function PasswordInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, "type"
         className="password__toggle"
         aria-pressed={shown}
         aria-controls={props.id}
-        onClick={() => setShown((v) => !v)}
+        data-act="blink"
+        onClick={() => {
+          setShown((v) => !v);
+          blink.play();
+        }}
       >
-        <Icon name="eye" size={18} />
+        <ActGlyph act={blink}>
+          <Icon name="eye" size={18} />
+        </ActGlyph>
         <span>{shown ? "Hide" : "Show"}</span>
       </button>
     </div>

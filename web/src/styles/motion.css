@@ -1,0 +1,859 @@
+/* ---------- Action motion (lib/motion.ts, docs/CONTRACTS.md §20) ----------
+   One small motion on a button's glyph that shows what a tap just did. The handler always runs first; this is
+   decoration. Only transform and opacity move (the fail tint and the reduced fade change one glyph's colour).
+   DOM: <span class="act act--<kind> is-<phase>" aria-hidden><span class="act__item" key=shot>glyph</span></span>.
+   Each kind sets --act-anim / --act-dur / --act-ease; the shared rules below play it, rewind it or replace it. */
+:root {
+  --act-press: 180ms;
+  --act-short: 360ms;
+  --act-mid: 480ms;
+  --act-long: 600ms;
+  --act-fail: 320ms;
+  --act-rewind: 360ms;
+  --act-fade: 240ms;
+}
+
+.act {
+  --act-anim: none;
+  --act-dur: var(--act-short);
+  --act-ease: var(--ease-out);
+  /* The fail tint; a lighter one on the tomato button so it still reads. */
+  --act-tint: var(--tomato-deep);
+  /* next / prev / nudge: which way the chevron leaves (0deg right, 180deg left, 90deg down). A screen sets
+     --act-dir-in on the button (it inherits; --act-dir itself is set here, so a parent could not override it). */
+  --act-dir: var(--act-dir-in, 0deg);
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  pointer-events: none;
+  /* Nothing around the glyph ever moves; the button's own overflow: hidden clips a glyph that flies off. */
+  contain: layout style;
+}
+.btn--primary .act {
+  --act-tint: rgb(255 255 255 / 0.62);
+}
+.act__item {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.act.is-play .act__item {
+  will-change: transform, opacity;
+  animation: var(--act-anim) var(--act-dur) var(--act-ease) both;
+}
+/* Undo (§20.7): the same motion backwards, ending at rest. */
+.act.is-rewind .act__item {
+  will-change: transform, opacity;
+  animation: var(--act-anim) var(--act-rewind) var(--act-ease) reverse both;
+}
+
+/* ---------- Failure (§20.5): back to rest, a gentle shake, tomato for the first half ---------- */
+.act.is-fail {
+  animation: act-tint var(--act-fail) linear;
+}
+.act.is-fail .act__item {
+  animation: act-fail var(--act-fail) var(--ease-out) both;
+}
+.act.is-fail-fade {
+  animation: act-tint var(--act-fade) linear;
+}
+@keyframes act-tint {
+  0%,
+  50% {
+    color: var(--act-tint);
+  }
+}
+@keyframes act-fail {
+  0%,
+  100% {
+    transform: none;
+  }
+  16% {
+    transform: translateX(-4px);
+  }
+  33% {
+    transform: translateX(4px);
+  }
+  50% {
+    transform: translateX(-4px);
+  }
+  66% {
+    transform: translateX(4px);
+  }
+  83% {
+    transform: translateX(-2px);
+  }
+}
+
+/* ---------- Reduced-motion stand-in (§20.6): an opacity dip and a sage tint, no movement ---------- */
+.act.is-fade {
+  animation: act-fade-tint var(--act-fade) ease-out;
+}
+.act.is-fade .act__item {
+  animation: act-fade var(--act-fade) ease-out;
+}
+@keyframes act-fade {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes act-fade-tint {
+  50% {
+    color: var(--sage);
+  }
+}
+
+/* ---------- Rings and ghosts (pseudo-elements on the item, so a new shot restarts them) ---------- */
+.act__item::before,
+.act__item::after {
+  content: none;
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+}
+.act--keep.is-play .act__item::after,
+.act--save.is-play .act__item::after,
+.act--connect.is-play .act__item::after,
+.act--star.is-play .act__item::after,
+.act--check.is-play .act__item::before,
+.act--check.is-play .act__item::after {
+  content: "";
+  border: 2px solid var(--sage);
+  /* A gentler ease than --ease-out, and the opacity holds until 45 %, so a child sees the ring (not a 100 ms flash). */
+  animation: act-ring var(--act-mid) cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+.act--check.is-play .act__item::after {
+  animation-delay: 120ms;
+}
+@keyframes act-ring {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  45% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+.act--check.is-play .act__item::before,
+.act--check.is-play .act__item::after {
+  animation-name: act-radar;
+}
+@keyframes act-radar {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  45% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+.act--play.is-play .act__item::before,
+.act--play.is-play .act__item::after {
+  content: "";
+  border: 1.5px solid currentColor;
+  animation: act-wave var(--act-mid) var(--ease-out) both;
+}
+.act--play.is-play .act__item::after {
+  animation-delay: 120ms;
+}
+@keyframes act-wave {
+  from {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  to {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+/* The copy ghost: a sheet outline that slides off the glyph. */
+.act--copy.is-play .act__item::before {
+  content: "";
+  inset: 15%;
+  border-radius: 3px;
+  border: 1.6px solid currentColor;
+  animation: act-ghost var(--act-short) var(--ease-out) both;
+}
+@keyframes act-ghost {
+  from {
+    transform: none;
+    opacity: 0.7;
+  }
+  to {
+    transform: translate(4px, -4px);
+    opacity: 0;
+  }
+}
+
+/* ---------- The kinds (§20.3) ---------- */
+.act--send {
+  --act-anim: fly-off;
+  --act-dur: 520ms;
+  --fly-x: 34px;
+  --fly-y: -30px;
+  --fly-tilt: -16deg;
+  --fly-angle: -41deg;
+}
+/* Send is the §19 flight (keyframes in fly.css): off, then a fresh one fades back. */
+.act--send.is-play .act__item {
+  animation:
+    fly-off 520ms var(--ease-out) forwards,
+    fly-back 240ms var(--ease-out) 520ms forwards;
+}
+.act__trail {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 38px;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, currentColor 75%, transparent);
+  opacity: 0;
+  transform-origin: 0 50%;
+  transform: rotate(var(--fly-angle)) scaleX(0);
+  animation: fly-trail 520ms var(--ease-out) forwards;
+}
+/* Inside a normal pill (overflow: hidden) the full Ask flight would be chopped by the top edge mid-air. A shorter
+   flight fades out before it reaches the edge, so it reads as sent, not swallowed. Ask's .fly-btn keeps the full one. */
+.btn:not(.fly-btn) .act--send {
+  --fly-x: 18px;
+  --fly-y: -16px;
+}
+.btn:not(.fly-btn) .act__trail {
+  width: 22px;
+}
+
+.act--keep {
+  --act-anim: act-keep;
+  --act-dur: var(--act-mid);
+  --act-ease: var(--ease-spring);
+}
+@keyframes act-keep {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: translateY(-6px) scale(1.28);
+  }
+}
+
+.act--add {
+  --act-anim: act-add;
+  --act-dur: var(--act-short);
+  --act-ease: var(--ease-spring);
+}
+@keyframes act-add {
+  0% {
+    transform: none;
+  }
+  50% {
+    transform: rotate(45deg) scale(1.25);
+  }
+  100% {
+    transform: rotate(90deg);
+  }
+}
+
+.act--remove {
+  --act-anim: act-remove;
+  --act-dur: 300ms;
+  --act-ease: var(--ease-spring);
+}
+@keyframes act-remove {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: scale(0.6, 1.2);
+  }
+}
+
+.act--delete {
+  --act-anim: act-delete;
+  --act-dur: var(--act-mid);
+}
+@keyframes act-delete {
+  0% {
+    transform: none;
+    opacity: 1;
+  }
+  60% {
+    transform: translateY(6px) rotate(-12deg);
+    opacity: 0.15;
+  }
+  /* A fresh one. */
+  66% {
+    transform: scale(0.8);
+    opacity: 0;
+    animation-timing-function: var(--ease-spring);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.act--throw {
+  --act-anim: act-throw;
+  --act-dur: 520ms;
+}
+@keyframes act-throw {
+  0% {
+    transform: none;
+    opacity: 1;
+  }
+  /* Tossed up and away from the label (out through the pill's left edge, which clips it), never over the words. */
+  33% {
+    transform: translate(-12px, -12px) rotate(-20deg);
+    opacity: 0.8;
+  }
+  64% {
+    transform: translate(-20px, 6px) rotate(-40deg);
+    opacity: 0;
+  }
+  66% {
+    transform: scale(0.8);
+    opacity: 0;
+    animation-timing-function: var(--ease-spring);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.act--clear {
+  --act-anim: act-clear;
+  --act-dur: 300ms;
+}
+@keyframes act-clear {
+  0% {
+    transform: none;
+    opacity: 1;
+  }
+  60% {
+    transform: rotate(90deg) scale(0.3);
+    opacity: 0;
+  }
+  66% {
+    transform: scale(0.8);
+    opacity: 0;
+    animation-timing-function: var(--ease-spring);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.act--save {
+  --act-anim: act-save;
+  --act-dur: var(--act-mid);
+  --act-ease: var(--ease-spring);
+}
+@keyframes act-save {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.4;
+  }
+  55% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.act--tick {
+  --act-anim: act-tick;
+  --act-dur: 300ms;
+  --act-ease: var(--ease-spring);
+}
+@keyframes act-tick {
+  0% {
+    transform: scale(0.6);
+  }
+  55% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+.act--upload {
+  --act-anim: act-upload;
+  --act-dur: var(--act-mid);
+}
+@keyframes act-upload {
+  0% {
+    transform: none;
+    opacity: 1;
+  }
+  55% {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(10px);
+    opacity: 0;
+    animation-timing-function: var(--ease-spring);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.act--download {
+  --act-anim: act-download;
+  --act-dur: var(--act-mid);
+}
+@keyframes act-download {
+  0% {
+    transform: none;
+    opacity: 1;
+  }
+  55% {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(-10px);
+    opacity: 0;
+    animation-timing-function: var(--ease-spring);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.act--copy {
+  --act-anim: act-copy;
+  --act-dur: var(--act-short);
+}
+@keyframes act-copy {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: translate(-2px, 2px);
+  }
+}
+
+.act--paste {
+  --act-anim: act-paste;
+  --act-dur: var(--act-short);
+  --act-ease: var(--ease-spring);
+}
+@keyframes act-paste {
+  0% {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.act--refresh {
+  --act-anim: act-refresh;
+  --act-dur: var(--act-long);
+}
+@keyframes act-refresh {
+  from {
+    transform: none;
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.act--retry {
+  --act-anim: act-retry;
+  --act-dur: 560ms;
+}
+@keyframes act-retry {
+  0% {
+    transform: none;
+  }
+  82% {
+    transform: rotate(-372deg);
+    animation-timing-function: var(--ease-spring);
+  }
+  100% {
+    transform: rotate(-360deg);
+  }
+}
+
+.act--undo {
+  --act-anim: act-undo;
+  --act-dur: 420ms;
+  --act-ease: var(--ease-spring);
+}
+@keyframes act-undo {
+  0%,
+  100% {
+    transform: none;
+  }
+  45% {
+    transform: rotate(-200deg);
+  }
+}
+
+.act--connect {
+  --act-anim: act-connect;
+  --act-dur: var(--act-mid);
+  --act-ease: var(--ease-spring);
+}
+@keyframes act-connect {
+  0%,
+  100% {
+    transform: none;
+  }
+  30% {
+    transform: scale(0.8);
+  }
+  65% {
+    transform: scale(1.15);
+  }
+}
+
+.act--disconnect {
+  --act-anim: act-disconnect;
+  --act-dur: 420ms;
+}
+@keyframes act-disconnect {
+  0%,
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+  45% {
+    transform: translateX(6px);
+    opacity: 0.4;
+  }
+}
+
+.act--check {
+  --act-anim: act-check;
+  --act-dur: var(--act-long);
+}
+@keyframes act-check {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: scale(1.1);
+  }
+}
+
+/* Star: turning on spins and pops with a ring; turning off (the button's aria-pressed is false) only settles. */
+.act--star {
+  --act-anim: act-star;
+  --act-dur: 520ms;
+  --act-ease: var(--ease-spring);
+}
+@keyframes act-star {
+  0% {
+    transform: none;
+  }
+  55% {
+    transform: rotate(144deg) scale(1.35);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+[aria-pressed="false"] > .act--star {
+  --act-anim: act-star-off;
+  --act-dur: var(--act-fade);
+}
+[aria-pressed="false"] > .act--star.is-play .act__item::after {
+  content: none;
+}
+@keyframes act-star-off {
+  from {
+    transform: scale(0.85);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.act--play {
+  --act-anim: act-play;
+  --act-dur: var(--act-mid);
+  --act-ease: var(--ease-spring);
+}
+@keyframes act-play {
+  0%,
+  100% {
+    transform: none;
+  }
+  30% {
+    transform: scale(1.12);
+  }
+}
+
+.act--stop {
+  --act-anim: act-stop;
+  --act-dur: 420ms;
+  --act-ease: var(--ease-spring);
+}
+@keyframes act-stop {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: scale(0.55);
+  }
+}
+
+/* next / prev: out the way the chevron points, a fresh one in from the other side (--act-dir turns the axis). */
+.act--next,
+.act--prev {
+  --act-anim: act-step;
+  --act-dur: var(--act-short);
+}
+.act--prev {
+  --act-dir: var(--act-dir-in, 180deg);
+}
+@keyframes act-step {
+  0% {
+    transform: none;
+    opacity: 1;
+  }
+  45% {
+    transform: rotate(var(--act-dir)) translateX(10px) rotate(calc(-1 * var(--act-dir)));
+    opacity: 0;
+  }
+  50% {
+    transform: rotate(var(--act-dir)) translateX(-10px) rotate(calc(-1 * var(--act-dir)));
+    opacity: 0;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* nudge: "nothing further that way" (the newest week's Later week): 4 px along --act-dir and back, no tint, no
+   sound, no shake. Under reduced motion it does nothing at all (the info toast says why). */
+.act--nudge {
+  --act-anim: act-nudge;
+  --act-dur: var(--act-fade);
+}
+@keyframes act-nudge {
+  0%,
+  100% {
+    transform: none;
+  }
+  45% {
+    transform: rotate(var(--act-dir)) translateX(4px) rotate(calc(-1 * var(--act-dir)));
+  }
+}
+
+/* toggle: the chosen option's label (not a glyph, so it keeps its size and stays readable). */
+.act--toggle {
+  --act-anim: act-bump;
+  --act-dur: var(--act-press);
+  --act-ease: var(--ease-spring);
+}
+.act--text {
+  display: inline-grid;
+  min-width: 0;
+  max-width: 100%;
+  contain: none;
+  pointer-events: none;
+}
+@keyframes act-bump {
+  0%,
+  100% {
+    transform: none;
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.act--blink {
+  --act-anim: act-blink;
+  --act-dur: var(--act-press);
+}
+@keyframes act-blink {
+  0%,
+  100% {
+    transform: none;
+  }
+  50% {
+    transform: scaleY(0.1);
+  }
+}
+
+/* ---------- Stepper number bump (§20.11) ---------- */
+.stepper__num {
+  display: inline-block;
+}
+.stepper__num.is-up {
+  animation: act-num-up var(--act-press) var(--ease-spring);
+}
+.stepper__num.is-down {
+  animation: act-num-down var(--act-press) var(--ease-spring);
+}
+@keyframes act-num-up {
+  50% {
+    transform: scale(1.15);
+  }
+}
+@keyframes act-num-down {
+  50% {
+    transform: scale(0.88);
+  }
+}
+
+/* ---------- State-driven turns (no kind): chevrons and the sidebar collapse icon ---------- */
+.act-turn {
+  /* A plain span cannot rotate: give it a box. */
+  display: inline-grid;
+  place-items: center;
+  transition: transform 240ms var(--ease-out);
+}
+[aria-expanded="true"] > .act-turn,
+[aria-pressed="true"] > .act-turn,
+details[open] > summary > .act-turn,
+.is-open > .act-turn {
+  transform: rotate(var(--act-turn, 90deg));
+}
+
+/* ---------- Undo when the button is gone (§20.7): the item that comes back ---------- */
+.is-returning {
+  animation: act-return var(--act-rewind) var(--ease-spring) both;
+}
+@keyframes act-return {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* ---------- Reduced motion, both sources (§20.6): only the fade, whatever the phase says ----------
+   Higher specificity and !important beat the global 1 ms rule in base.css, so the fade keeps its 240 ms. */
+@media (prefers-reduced-motion: reduce) {
+  .act.is-play .act__item,
+  .act.is-rewind .act__item,
+  .act.is-fade .act__item {
+    will-change: auto;
+    animation: act-fade var(--act-fade) ease-out !important;
+  }
+  .act.is-fail .act__item,
+  .act--nudge.is-fade .act__item {
+    animation: none !important;
+  }
+  .act.is-fade {
+    animation: act-fade-tint var(--act-fade) ease-out !important;
+  }
+  .act--nudge.is-fade {
+    animation: none !important;
+  }
+  .act.is-fail,
+  .act.is-fail-fade {
+    animation: act-tint var(--act-fade) linear !important;
+  }
+  .act__item::before,
+  .act__item::after,
+  .act__trail {
+    display: none;
+  }
+  .stepper__num.is-up,
+  .stepper__num.is-down,
+  .act-turn {
+    animation: none;
+    transition: none;
+  }
+  .is-returning {
+    animation: act-fade-in var(--act-fade) ease-out !important;
+  }
+}
+.reduce-motion .act.is-play .act__item,
+.reduce-motion .act.is-rewind .act__item,
+.reduce-motion .act.is-fade .act__item {
+  will-change: auto;
+  animation: act-fade var(--act-fade) ease-out !important;
+}
+.reduce-motion .act.is-fail .act__item,
+.reduce-motion .act--nudge.is-fade .act__item {
+  animation: none !important;
+}
+.reduce-motion .act.is-fade {
+  animation: act-fade-tint var(--act-fade) ease-out !important;
+}
+.reduce-motion .act--nudge.is-fade {
+  animation: none !important;
+}
+.reduce-motion .act.is-fail,
+.reduce-motion .act.is-fail-fade {
+  animation: act-tint var(--act-fade) linear !important;
+}
+.reduce-motion .act__item::before,
+.reduce-motion .act__item::after,
+.reduce-motion .act__trail {
+  display: none;
+}
+.reduce-motion .stepper__num.is-up,
+.reduce-motion .stepper__num.is-down,
+.reduce-motion .act-turn {
+  animation: none;
+  transition: none;
+}
+.reduce-motion .is-returning {
+  animation: act-fade-in var(--act-fade) ease-out !important;
+}
+@keyframes act-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---------- The mock-only gallery at /__motion (dev/MotionGallery.tsx) ---------- */
+.motion-gallery__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.motion-gallery__panel {
+  display: grid;
+  gap: 16px;
+}

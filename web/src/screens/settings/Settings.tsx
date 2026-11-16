@@ -3,7 +3,8 @@
 // a big Back button; from 1024 px a folder panel on the left shows the whole tree.
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Icon } from "../../components/Icon.tsx";
-import { A, PageHeader } from "../../components/ui.tsx";
+import { A, ActGlyph, PageHeader } from "../../components/ui.tsx";
+import { useAction } from "../../lib/motion.ts";
 import { plural } from "../../lib/format.ts";
 import { prefersReducedMotion, setPrefs, usePrefs } from "../../lib/prefs.ts";
 import { useInstall } from "../../lib/pwa.ts";
@@ -158,6 +159,8 @@ function FindSetting({ installed, compact = false }: { installed: boolean; compa
   const open = typed && hits.length > 0;
   const helpOn = useHelpSwitch() === "on";
   const optionId = (i: number) => `${id}-hit-${i}`;
+  const clearAct = useAction("clear");
+  const askAct = useAction("send");
 
   function go(hit: SearchHit | undefined) {
     if (!hit) return;
@@ -223,12 +226,16 @@ function FindSetting({ installed, compact = false }: { installed: boolean; compa
               type="button"
               className="find__clear"
               aria-label="Clear the search"
+              data-act="clear"
               onClick={() => {
                 setQuery("");
                 setActive(-1);
+                clearAct.play();
               }}
             >
-              <Icon name="x" size={18} />
+              <ActGlyph act={clearAct}>
+                <Icon name="x" size={18} />
+              </ActGlyph>
             </button>
           ) : null}
         </div>
@@ -242,8 +249,18 @@ function FindSetting({ installed, compact = false }: { installed: boolean; compa
           : null}
       </ul>
       {typed && !hits.length && helpOn ? (
-        <button type="button" className="find__ask" onClick={() => openHelp(query.trim())}>
-          <Icon name="sparkle" size={20} />
+        <button
+          type="button"
+          className="find__ask"
+          data-act="send"
+          onClick={() => {
+            openHelp(query.trim());
+            askAct.play();
+          }}
+        >
+          <ActGlyph act={askAct}>
+            <Icon name="sparkle" size={20} />
+          </ActGlyph>
           <span className="find__ask-text">
             <span className="find__ask-name">Ask Clip Factory</span>
             <span className="find__ask-q user-text">{query.trim()}</span>
@@ -445,7 +462,7 @@ function FolderPanel({
                 aria-controls={`${id}-${t.slug}`}
                 onClick={() => setOpen(t.slug, !open)}
               >
-                <Icon name="chevronRight" size={16} className="icon folders__chevron" />
+                <Icon name="chevronRight" size={16} className="icon folders__chevron act-turn" />
                 <Icon name={t.icon} size={20} />
                 <span className="folders__name" title={t.name}>
                   {t.name}

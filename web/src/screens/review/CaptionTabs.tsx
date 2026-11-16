@@ -1,6 +1,7 @@
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import type { Captions } from "../../api/types.ts";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
+import { useAction } from "../../lib/motion.ts";
 
 type Tab = "youtube" | "instagram" | "facebook" | "tiktok" | "x";
 
@@ -41,6 +42,12 @@ export function CaptionTabs({
 }) {
   const id = useId();
   const [tab, setTab] = useState<Tab>("youtube");
+  // The newly chosen tab's name bumps (§20.11 (a) `toggle`), by tap or by arrow key.
+  const bump = useAction("toggle");
+  function choose(key: Tab) {
+    setTab(key);
+    if (key !== tab) bump.play();
+  }
   const refs = useRef<Record<Tab, HTMLButtonElement | null>>({ youtube: null, instagram: null, facebook: null, tiktok: null, x: null });
 
   function onKey(e: KeyboardEvent) {
@@ -53,7 +60,7 @@ export function CaptionTabs({
     else return;
     e.preventDefault();
     const key = TABS[next]!.key;
-    setTab(key);
+    choose(key);
     refs.current[key]?.focus();
   }
 
@@ -111,10 +118,19 @@ export function CaptionTabs({
             title={t.label}
             tabIndex={tab === t.key ? 0 : -1}
             className={`tab${tab === t.key ? " is-on" : ""}`}
-            onClick={() => setTab(t.key)}
+            data-act="toggle"
+            onClick={() => choose(t.key)}
           >
             <PlatformMark platform={t.key} size={18} />
-            <span className="tab__label">{t.label}</span>
+            {tab === t.key ? (
+              <span className={`tab__label act act--toggle act--text is-${bump.phase}`}>
+                <span className="act__item" key={bump.shot}>
+                  {t.label}
+                </span>
+              </span>
+            ) : (
+              <span className="tab__label">{t.label}</span>
+            )}
           </button>
         ))}
       </div>

@@ -7,11 +7,12 @@ import type { Platform, WeekClip, WeekView as Week } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { A, Empty, ErrorPanel, LinkButton, Skeleton } from "../../components/ui.tsx";
+import { A, ActGlyph, Empty, ErrorPanel, LinkButton, Skeleton } from "../../components/ui.tsx";
 import { PLATFORM_LABEL, plural } from "../../lib/format.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { applyWeekEvent } from "../../lib/liveCache.ts";
 import { STATS_ORDER, compact, full } from "../../lib/metrics.ts";
+import { useAction } from "../../lib/motion.ts";
 import { navigate } from "../../lib/router.ts";
 import { compareWeeks, isWeek, isoWeek, shiftWeek, weekLabel, weekRange } from "../../lib/week.ts";
 
@@ -37,6 +38,14 @@ export function WeekView({ week: asked }: { week: string | null }) {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const saving = useRef(false);
   const pending = useRef<string[] | null>(null);
+  // Stars whose save failed (they were put back): their cards shake once per failure (§20.5).
+  const [failed, setFailed] = useState<{ n: number; ids: string[] }>({ n: 0, ids: [] });
+  const earlierAct = useAction("prev");
+  const laterAct = useAction("next");
+  // The newest week's "Later week" tap (§20.11): a 4 px nudge the way the arrow points and back (the `nudge` kind in
+  // motion.css), no shake and no deny; the info toast says why. The glyph shows whichever motion was tapped last.
+  const laterNudge = useAction("nudge");
+  const [nudged, setNudged] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -83,7 +92,10 @@ export function WeekView({ week: asked }: { week: string | null }) {
       toast.success("Saved. Clip Factory will learn from your picks.", { group: "picks" });
     } catch (e) {
       toast.error(`${friendlyMessage(e)} Your stars were put back.`);
-      setPicks(data?.clipIds ?? []);
+      const saved = data?.clipIds ?? [];
+      const changed = [...ids.filter((x) => !saved.includes(x)), ...saved.filter((x) => !ids.includes(x))];
+      setFailed((f) => ({ n: f.n + 1, ids: changed }));
+      setPicks(saved);
     } finally {
       saving.current = false;
       // More taps while that was saving: save the newest picks too.
@@ -104,19 +116,21 @@ export function WeekView({ week: asked }: { week: string | null }) {
     [],
   );
 
-  function toggle(clipId: string) {
+  /** Stars or unstars a clip; false when it could not (the toast says why). */
+  function toggle(clipId: string): boolean {
     // The newest taps first: quick taps can come before the screen has drawn the last one.
     const now = pending.current ?? picks ?? data?.clipIds ?? [];
     const on = !now.includes(clipId);
     if (on && now.length >= MAX_PICKS) {
       toast.error(`You can star up to ${MAX_PICKS} clips a week. Take a star off another clip first.`);
-      return;
+      return false;
     }
     const next = on ? [...now, clipId] : now.filter((id) => id !== clipId);
     setPicks(next);
     pending.current = next;
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
+    return true;
   }
 
   if (!valid) {
@@ -139,8 +153,12 @@ export function WeekView({ week: asked }: { week: string | null }) {
           href={weekHref(earlier, current)}
           className="week__arrow icon-btn glass"
           aria-label="Earlier week"
+          data-act="prev"
+          onClick={() => earlierAct.play()}
         >
-          <Icon name="chevronLeft" size={22} />
+          <ActGlyph act={earlierAct}>
+            <Icon name="chevronLeft" size={22} />
+          </ActGlyph>
         </A>
         <h2 className="week__title display-3" id="week-title">
           {isCurrent ? (
@@ -158,14 +176,24 @@ export function WeekView({ week: asked }: { week: string | null }) {
           className="week__arrow icon-btn glass"
           aria-label="Later week"
           aria-disabled={laterOff || undefined}
+          data-act="next"
           onClick={() => {
-            if (!laterOff) navigate(weekHref(later, current));
+            if (laterOff) {
+              setNudged(true);
+              laterNudge.play();
+              return;
+            }
+            navigate(weekHref(later, current));
+            setNudged(false);
+            laterAct.play();
           }}
           onClickCapture={() => {
             if (laterOff) toast.info("This is the newest week. Tap the left arrow to see earlier weeks.", { group: "week-arrow" });
           }}
         >
-          <Icon name="chevronRight" size={22} />
+          <ActGlyph act={nudged ? laterNudge : laterAct}>
+            <Icon name="chevronRight" size={22} />
+          </ActGlyph>
         </button>
       </div>
 
@@ -195,7 +223,13 @@ export function WeekView({ week: asked }: { week: string | null }) {
           <ol className="week-list">
             {data.clips.map((c, i) => (
               <li key={c.clip.clipId}>
-                <WeekCard item={c} rank={i + 1} on={shown.includes(c.clip.clipId)} onToggle={() => toggle(c.clip.clipId)} />
+                <WeekCard
+                  item={c}
+                  rank={i + 1}
+                  on={shown.includes(c.clip.clipId)}
+                  onToggle={() => toggle(c.clip.clipId)}
+                  failShot={failed.ids.includes(c.clip.clipId) ? failed.n : 0}
+                />
               </li>
             ))}
           </ol>
@@ -250,8 +284,27 @@ export function bestApp(apps: { platform: Platform; views: number | null }[]): P
   return best?.platform ?? null;
 }
 
-function WeekCard({ item, rank, on, onToggle }: { item: WeekClip; rank: number; on: boolean; onToggle: () => void }) {
+function WeekCard({
+  item,
+  rank,
+  on,
+  onToggle,
+  failShot,
+}: {
+  item: WeekClip;
+  rank: number;
+  on: boolean;
+  onToggle: () => boolean;
+  /** Bumps when saving this card's star failed and it was put back. */
+  failShot: number;
+}) {
   const { clip } = item;
+  const star = useAction("star");
+  const { fail } = star;
+  useEffect(() => {
+    // The error toast already played the deny sound.
+    if (failShot > 0) fail({ sound: false });
+  }, [failShot, fail]);
   const id = `wk-${clip.clipId}`;
   const apps = weekApps(item);
   const top = bestApp(apps);
@@ -305,9 +358,15 @@ function WeekCard({ item, rank, on, onToggle }: { item: WeekClip; rank: number; 
         aria-describedby={id}
         data-help="best-star"
         data-help-dodge=""
-        onClick={onToggle}
+        data-act="star"
+        onClick={() => {
+          if (onToggle()) star.play();
+          else star.fail({ sound: false });
+        }}
       >
-        <Icon name="star" size={26} fill={on ? "currentColor" : "none"} />
+        <ActGlyph act={star}>
+          <Icon name="star" size={26} fill={on ? "currentColor" : "none"} />
+        </ActGlyph>
         <span className="star-btn__word" aria-hidden="true">
           Best
         </span>

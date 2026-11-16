@@ -13,8 +13,8 @@ import { shortDate } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { skillPath } from "../../lib/router.ts";
 import { slug, uploadNameTaken } from "../../lib/skillName.ts";
-import { Apple, Panel } from "./parts.tsx";
-import { isNewSkill, markNewSkill, useHiddenSkills } from "./skillDeletes.ts";
+import { Apple, Panel, usePickAction } from "./parts.tsx";
+import { isNewSkill, isReturningSkill, markNewSkill, useHiddenSkills } from "./skillDeletes.ts";
 import { sounds } from "../../lib/sounds.ts";
 
 export const SKILL_FILE_LIMITS = { md: 1024 ** 2, zip: 20 * 1024 ** 2 } as const;
@@ -73,12 +73,17 @@ export function SkillsSection() {
   const input = useRef<HTMLInputElement>(null);
   const uploadButton = useRef<HTMLButtonElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
+  const pick = usePickAction("upload");
   const id = useId();
   const shown = data?.filter((s) => !hidden.has(s.skillId)) ?? null;
 
   async function upload(file: File) {
+    pick.play();
     const check = skillFileProblem(file);
-    if ("problem" in check) return toast.error(check.problem);
+    if ("problem" in check) {
+      pick.fail({ sound: false });
+      return toast.error(check.problem);
+    }
     setProgress(0);
     try {
       const up = await api().createSkillUpload(file.name);
@@ -91,6 +96,7 @@ export function SkillsSection() {
       toast.success("Your skill is ready. Clip Factory will use it every time.");
       markNewSkill(skill.skillId);
     } catch (e) {
+      pick.fail({ sound: false });
       toast.error(uploadProblem(e, data));
     } finally {
       setProgress(null);
@@ -134,10 +140,10 @@ export function SkillsSection() {
             }}
           />
           <div className="skill-add">
-            <LinkButton href={skillPath(null)} variant="primary" size="lg" icon="edit">
+            <LinkButton href={skillPath(null)} variant="primary" size="lg" act="add">
               Write a skill
             </LinkButton>
-            <Button ref={uploadButton} size="lg" icon="upload" loading={progress !== null} onClick={() => input.current?.click()}>
+            <Button ref={uploadButton} size="lg" icon="upload" act={pick} playOnClick={false} loading={progress !== null} onClick={() => input.current?.click()}>
               Upload a file
             </Button>
           </div>
@@ -151,8 +157,10 @@ export function SkillsSection() {
 /** One skill as a glass row; the whole row opens its page. */
 function SkillRow({ skill }: { skill: Skill }) {
   const [pop] = useState(() => isNewSkill(skill.skillId));
+  // Back from Undo (§20.7): the mirror of its leaving.
+  const [back] = useState(() => isReturningSkill(skill.skillId));
   return (
-    <A href={skillPath(skill.skillId)} className={`skill-row${pop ? " is-new" : ""}`}>
+    <A href={skillPath(skill.skillId)} className={`skill-row${pop ? " is-new" : ""}${back ? " is-returning" : ""}`}>
       <span className="skill-row__icon" aria-hidden="true">
         <Icon name={skill.format === "zip" ? "layers" : "file"} />
       </span>
