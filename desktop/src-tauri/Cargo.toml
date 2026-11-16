@@ -12,9 +12,14 @@ tauri-build = { version = "2", features = [] }
 url = "2"
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# macos-private-api: a transparent web view on macOS, so the window glass shows through (docs/CONTRACTS.md §22).
+tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-window-state = "2"
+
+# Which Windows build this is, to pick the window glass it can draw smoothly (already used by tauri itself).
+[target.'cfg(windows)'.dependencies]
+windows-version = "0.1"
 
 [profile.release]
 codegen-units = 1
@@ -22,8 +27,11 @@ lto = true
 opt-level = "s"
 strip = true
 
+# No unsafe code, with one exception that is allowed where it stands: main.rs reads AppKit's version number, a
+# constant the system exports, to tell macOS Liquid Glass from the older vibrancy (docs/CONTRACTS.md §22.2).
+# ("deny", not "forbid", because a forbidden lint cannot be allowed anywhere.)
 [lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

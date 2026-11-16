@@ -6,6 +6,7 @@ import { auth } from "../lib/auth.ts";
 import { config } from "../lib/config.ts";
 import { startLive, stopLive, useLiveEvents, useLivePoll, type SocketLike } from "../lib/live.ts";
 import { getPrefs, setPrefs, type Prefs } from "../lib/prefs.ts";
+import { isBackgroundMode, isGlassStrength, normaliseColours } from "../lib/background.ts";
 import { DEFAULT_CLICK_SOUND, DEFAULT_ERROR_SOUND, isSoundId } from "../lib/soundCatalog.ts";
 import { useToast } from "../components/Toasts.tsx";
 
@@ -41,6 +42,9 @@ function devicePrefs(patch: Partial<Settings>): Partial<Prefs> {
   if (patch.reduceMotion !== undefined) out.reduceMotion = patch.reduceMotion;
   if (isSoundId(patch.clickSound)) out.clickSound = patch.clickSound;
   if (isSoundId(patch.errorSound)) out.errorSound = patch.errorSound;
+  if (isBackgroundMode(patch.backgroundMode)) out.backgroundMode = patch.backgroundMode;
+  if (patch.backgroundColours !== undefined) out.backgroundColours = normaliseColours(patch.backgroundColours);
+  if (isGlassStrength(patch.glassStrength)) out.glassStrength = patch.glassStrength;
   return out;
 }
 

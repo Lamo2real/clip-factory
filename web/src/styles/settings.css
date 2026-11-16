@@ -2,12 +2,6 @@
    pages (glass panels of apples with their leaves), the breadcrumb and phone Back button, the 1024px+ folder panel,
    and the Sounds picker. */
 
-/* Small sage text on a sage tint (the apple tag, the sound number tiles). Deeper than --sage-deep (#4f6340), which
-   measured only 4.2-4.6:1 on the tint over the glass; this one measures 5.7-6.2:1 there (WCAG AA needs 4.5:1). */
-:root {
-  --sage-text: #3d4f31;
-}
-
 /* ---------- Layout: folder panel + content ---------- */
 .settings-layout {
   display: grid;
@@ -1387,7 +1381,7 @@ ol.md__list {
 .money__rule .icon {
   flex: none;
   margin-top: 2px;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .money__usual {
   font-size: var(--fs-small);

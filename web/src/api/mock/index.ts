@@ -9,6 +9,7 @@ import { statsApi, type StatsFaults } from "./stats.ts";
 import { skillsApi, type MockSkillControls } from "./skills.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { MAX_RATE } from "../../lib/earnings.ts";
+import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
 
 const STEP_MS = 3500;
 const clone = <T>(v: T): T => structuredClone(v);
@@ -68,6 +69,29 @@ function saveSkipped(list: Settings["setupSkipped"]) {
   }
 }
 
+// The look settings (§22) survive a reload of the mock, like the real server, so persistence can be tested.
+const LOOK_KEY = "cf-mock-look";
+const LOOK_FIELDS = ["backgroundMode", "backgroundColours", "glassStrength"] as const;
+function saveMockLook(s: Settings) {
+  try {
+    sessionStorage.setItem(LOOK_KEY, JSON.stringify(Object.fromEntries(LOOK_FIELDS.map((k) => [k, s[k]]))));
+  } catch {
+    /* no storage: the look resets on reload */
+  }
+}
+function loadMockLook(): Partial<Settings> {
+  try {
+    const raw = JSON.parse(sessionStorage.getItem(LOOK_KEY) ?? "{}") as Partial<Settings>;
+    const out: Partial<Settings> = {};
+    if (isBackgroundMode(raw.backgroundMode)) out.backgroundMode = raw.backgroundMode;
+    if (isGlassStrength(raw.glassStrength)) out.glassStrength = raw.glassStrength;
+    if (Array.isArray(raw.backgroundColours) && raw.backgroundColours.every(isHexColour)) out.backgroundColours = raw.backgroundColours;
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsAfterSave: 0, resumeAfterMs: 60_000 }): Api {
   const calls: MockCalls = {};
   const skipped = loadSkipped();
@@ -75,6 +99,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   if (typeof window !== "undefined") {
     (window as unknown as { __cfMockFaults?: MockFaults }).__cfMockFaults = faults;
     (window as unknown as { __cfMockCalls?: MockCalls }).__cfMockCalls = calls;
+    store.settings = { ...store.settings, ...loadMockLook() };
   }
 
   // Live events carry the same public shapes as the HTTP API, minus the presigned media links (§14.2).
@@ -469,7 +494,15 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         next.setupSkipped = PLATFORMS.filter((p) => next.setupSkipped!.includes(p));
         saveSkipped(next.setupSkipped);
       }
+      if (next.backgroundMode !== undefined && !isBackgroundMode(next.backgroundMode)) throw bad("Pick See-through, Picture or Colours.");
+      if (next.glassStrength !== undefined && !isGlassStrength(next.glassStrength)) throw bad("Pick Clear or Frosted.");
+      if (next.backgroundColours !== undefined) {
+        const c = next.backgroundColours;
+        if (!Array.isArray(c) || c.length < 1 || c.length > MAX_COLOURS || !c.every(isHexColour)) throw bad("Pick 1 to 3 colours.");
+        next.backgroundColours = c.map((x) => x.toLowerCase());
+      }
       store.settings = next;
+      saveMockLook(next);
       return clone(next);
     },
     async createCookiesUpload(_filename) {

@@ -90,3 +90,30 @@ export async function recordAct(button: Locator, ms: number): Promise<string[]> 
     return seen;
   }, ms);
 }
+
+/**
+ * Taps an `act` button from inside the page and waits there until its `.act` wrapper shows `phase` (for example
+ * "is-fail"). True as soon as it shows, false after `timeout`. A short phase can come and go between two polls of a
+ * polling assertion on a busy machine; a MutationObserver cannot miss it.
+ */
+export async function tapUntilPhase(button: Locator, phase: string, timeout = 5000): Promise<boolean> {
+  return button.evaluate(
+    (el: HTMLElement, [want, ms]: [string, number]) =>
+      new Promise<boolean>((done) => {
+        const hit = () => el.querySelector(".act")?.classList.contains(want) ?? false;
+        const finish = (ok: boolean) => {
+          obs.disconnect();
+          clearTimeout(timer);
+          done(ok);
+        };
+        const obs = new MutationObserver(() => {
+          if (hit()) finish(true);
+        });
+        obs.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
+        const timer = setTimeout(() => finish(false), ms);
+        el.click();
+        if (hit()) finish(true);
+      }),
+    [phase, timeout] as [string, number],
+  );
+}

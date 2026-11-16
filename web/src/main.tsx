@@ -25,10 +25,14 @@ import { installClickSounds } from "./lib/sound.ts";
 import { sounds } from "./lib/sounds.ts";
 import { initPwa } from "./lib/pwa.ts";
 import { startUpdateChecks } from "./lib/update.ts";
+import { applyLookNow } from "./lib/look.ts";
 
 // Refraction inside backdrop-filter only works in Chromium; elsewhere the glass falls back to blur and saturation.
 const brands = (navigator as Navigator & { userAgentData?: { brands?: { brand: string }[] } }).userAgentData?.brands;
 if (brands?.some((b) => b.brand === "Chromium")) document.documentElement.classList.add("refract");
+
+// See-through in the desktop app: the page goes transparent before anything is drawn (§22.3).
+applyLookNow();
 
 installClickSounds(sounds);
 initPwa();

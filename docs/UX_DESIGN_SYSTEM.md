@@ -14,14 +14,17 @@ this file is the full reference. The code lives in `web/`; tokens are CSS custom
 
 ## Colour tokens
 
-The tables below are the values in `web/src/styles/tokens.css` (and `--sage-text` in `settings.css`).
+The tables below are the values in `web/src/styles/tokens.css`.
 `web/test/designTokens.test.ts` fails if a row here and the CSS disagree, if a colour or radius token in
 `tokens.css` is missing from these tables, or if this doc names a custom property the CSS doesn't define.
+`web/test/background.test.ts` fails if a stylesheet writes words in a colour that is not one of the six text
+colours (`--ink`, `--ink-2`, `--ink-3`, `--tomato-ink`, `--sage-ink`, `--sage-text`) or a named exception.
 
 | Token | Value | Use |
 |---|---|---|
 | `--sage` | `#9caf88` | Hero cards, active navigation, success, the backdrop |
-| `--sage-deep` | `#4f6340` | Text and icons on light glass that must read as sage (about 6:1 on off-white; the old `#6F8560` failed AA) |
+| `--sage-deep` | `#4f6340` | Deep sage for fills, rings and lines (the done step, the progress fill, chart lines). Never for words: those use `--sage-ink` |
+| `--sage-ink` | `#4f6340` | Words and icons on light glass that must read as sage: saved, ready, passed (about 6:1 on off-white; the old `#6F8560` failed AA). Its own token because it goes deeper in the window look (below) while the fills stay |
 | `--sage-mist` | `#c9d4bd` | Pale sage fills (tracks, quiet chips) |
 | `--sage-text` | `#3d4f31` | Small sage text on a sage tint (see Contrast below) |
 | `--offwhite` | `#f7f5ef` | Base of most glass tints, light text on sage |
@@ -34,6 +37,18 @@ The tables below are the values in `web/src/styles/tokens.css` (and `--sage-text
 
 `--sage-rgb`, `--offwhite-rgb`, `--tomato-rgb` and `--ink-rgb` hold the same colours as space-separated channels so
 CSS can add alpha: `rgb(var(--ink-rgb) / 0.08)`.
+
+**The window look has four deeper text colours.** In the desktop app's see-through window (`html.see-through`) the
+panels carry much less tint, so the desktop shows through them; the four lightest text colours go deeper there to
+stay easy to read on the darkest the window glass can be. Each is still clearly its own colour (grey-green, tomato,
+sage) and has a relative luminance of 0.047 or less. `--ink` and `--ink-2` are dark enough as they are.
+
+| Token | Everywhere else | In the see-through window |
+|---|---|---|
+| `--ink-3` | `#46523f` | `#344031` |
+| `--tomato-ink` | `#962414` | `#74190e` |
+| `--sage-ink` | `#4f6340` | `#2c421c` |
+| `--sage-text` | `#3d4f31` | `#2c421c` |
 
 Glass tints are not tokens: each glass variant sets its own `--glass-tint` gradient (in `web/src/styles/glass.css`),
 and a component may override it.
@@ -49,9 +64,9 @@ and a component may override it.
 
 Contrast: body text is `--ink` on glass over the default backdrop (≥ 7:1). White text on tomato CTAs is ≥ 4.5:1 at
 14 px semibold and up. Small sage text on a sage tint (Settings tags such as "Set up posting", the Sounds number
-tiles) uses the deeper `--sage-text` (about 5.7–6.2:1 measured on the tint over the glass), not `--sage-deep`, which
+tiles) uses the deeper `--sage-text` (about 5.7–6.2:1 measured on the tint over the glass), not `--sage-ink`, which
 measures only 4.2–4.6:1 there. Never put text directly on the moving backdrop. `web/e2e/contrast.spec.ts` checks the
-rendered contrast and text size of every screen (see [TESTING.md](TESTING.md)).
+rendered contrast and text size of every screen, in every look (see [TESTING.md](TESTING.md)).
 
 ## The liquid glass recipe
 
@@ -85,13 +100,53 @@ Variants: `.glass--sage` (hero, active nav), `.glass--strong` (dialogs and sheet
 easy to read), `.glass--tomato`, `.glass--clear`. In Chromium, `.glass--refract` also bends the backdrop through the
 `#cf-refract` SVG filter.
 
-**The backdrop.** A fixed layer behind the app with three large blurred blobs (sage, off-white, a little tomato) that
-drift slowly (60-second loop, paused with reduced motion). The owner can choose a background image in Settings; it
-replaces the blobs and the glass shows it through.
+**What is behind the glass (Settings › Look & feel › Background, [CONTRACTS.md §22](CONTRACTS.md#22-background-modes-and-see-through-glass-owner-request-2026-11-16)).**
+Three choices, picked from three preview tiles with one sliding highlight:
 
-**About the phone's wallpaper.** The owner asked to see the phone's background through the app. Browsers and
-installed PWAs cannot see the operating system's wallpaper, so the glass shows the app backdrop or the owner's chosen
-image instead. Choosing the same photo as the phone's wallpaper gives the same effect.
+* **See-through (the default).** In the Mac and Windows app the page itself is transparent and the window's own
+  glass shows what is behind it, blurred by the system: macOS Liquid Glass (26+) or the under-window vibrancy
+  material, Windows 11 acrylic, Windows 10 blur. You can guess the shapes (the edges of a car on the wallpaper), never
+  read them. In a browser, an installed web app or on a phone nothing can look behind the page, so see-through shows
+  the **frosted Clip Factory colours**: the drifting blobs behind a pane of frost, with two soft highlights slowly
+  moving through it like light in glass. The Background page says why in one plain sentence and links to Get the app.
+* **Picture.** The owner's own photo (kept on the device), under a light off-white veil.
+* **Colours.** 1 to 3 colours from ten named swatches or the owner's own, drifting as a soft mesh.
+
+**Glass strength** (see-through): Clear (default) shows more of what is behind, Frosted less. In a browser or on a
+phone it thickens the frost over the Clip Factory colours, so it always does something.
+
+**The tint keeps text readable on every background.** Its strength is worked out, not guessed (`lib/background.ts`):
+the smallest off-white at which every text colour that can sit on it reaches 4.5:1 on the darkest thing behind.
+
+**In see-through the tint sits on the panels, not on the window.** Between panels the desktop shows through the
+window's own glass untouched (Clear) or lightly frosted (Frosted, 0.30), so the car on the wallpaper stays guessable.
+Every glass panel, and every piece of text that sits straight on the window (page title and its line, breadcrumbs,
+headings and lines between panels), carries the panel tint; loose text gets it as a soft scrim hugging the words.
+The panel tint is worked out for the window look's deeper text colours (above), which is why it can be so light.
+
+| Backdrop | Darkest thing behind | Tint |
+|---|---|---|
+| See-through, macOS 26+ Liquid Glass (measured on a real window, 2026-11-16) | rgb(118, 118, 118): another app in use, black behind the window. Planned a tenth darker, rgb(106, 106, 106). In use over black it is a khaki rgb(180, 171, 148) | Panels: **Clear 0.44; Frosted 0.59** over the 0.30 window frost |
+| See-through, Windows 10 blur (the app's tint is used; worked out, not measured) | The app's off-white tint over black, ≈ rgb(136, 135, 131) | Panels: Clear 0.35 (the least a panel carries; contrast alone would need 0.29); Frosted 0.50 over the 0.30 window frost |
+| See-through, Windows 11 acrylic, macOS 15 and older (the system's own material, not measured), or a dark setting | Black | Panels: Clear 0.68; Frosted 0.83 over the 0.30 window frost |
+| Colours | Each colour, and every half-and-half blend of two | 0 (light colours) up to 0.75 (Night), over the whole backdrop; the previews in Settings wear it too |
+| Picture | (unchanged) | 0.18, plus the panels' own tint |
+| Reduce transparency (system) | – | 0.94 everywhere |
+
+**Glass panels in see-through.** Same recipe (blur, saturation, the lit 1 px rim, the inner top highlight, the
+shadow, refraction in Chromium); the tint is the panel tint above, so the panel holds the contrast and the gaps stay
+clear. Sage and tomato glass turn off-white there. Four rules keep every word readable on a panel that light
+(`styles/glass.css`, the window look section; the numbers are checked in `web/test/background.test.ts`):
+
+* **Floating surfaces keep their own denser tint** (toasts, sheets, the Ask panel, the update bar, a starred star):
+  they sit over the page's own words and pictures, not only over the desktop.
+* **Nothing that holds words is weaker than the panel tint**: the tab bar, glass, ghost and danger buttons, the
+  Library tabs and the brand mark carry at least that much, wherever they sit.
+* **Pick-one tracks** (segmented bars, tab rows, the Background tiles) lay their shade of ink (0.08) over 0.10 more
+  tint than a panel has.
+* **Tinted chips on a panel** (the tomato "Didn't work" pill, the sound tags, "If you need it") get a wash of white
+  (0.20) over their tint, so over the darkest glass an ink or tomato chip is never darker than its panel and its
+  words keep AA. Placeholders use `--ink-3` there.
 
 ## Typography
 
@@ -190,7 +245,7 @@ Settings                                   /settings
 ├── Look & feel                            /settings/look-and-feel
 │   ├── Sounds         Sounds on/off, Click sound, Error sound, Try it
 │   ├── Motion         Reduce motion
-│   └── Background     Background picture (this device only)
+│   └── Background     What's behind the glass (See-through, Picture, Colours), Glass strength, Background picture (this device only), Background colours
 └── App & account                          /settings/app
     ├── Get the app    the install card for this device
     ├── Updates        this version, Check for updates
@@ -1007,7 +1062,7 @@ Contract: docs/CONTRACTS.md §21. Money is always a **best guess**, so it never 
   app's "Who gets paid" words (`kidRules`). TikTok (Sweden is not eligible, and the clips are under 60 s) and Instagram
   (invite-only) start off: they show $0 with "Turn this on in Settings › Money if TikTok pays you." A switched-off app
   with views says what it would be ("If YouTube paid you, this would be about $0.42.").
-- **Look.** A `coin` icon in `--sage-deep`, numbers in `tabular-nums`, a small sage "Best guess" tag that is visible
+- **Look.** A `coin` icon in `--sage-ink`, numbers in `tabular-nums`, a small sage "Best guess" tag that is visible
   wherever an amount above $0 shows (clip page, Library card, This week card and week total). Money lines sit
   on a light sage tint inside the glass card; no tomato (money is not the main action), no green "profit" colour.
 - **Explain on demand.** "How is this worked out?" is a text button with `aria-expanded`; it opens the amount used

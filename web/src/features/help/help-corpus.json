@@ -1,5 +1,5 @@
 {
-  "version": "09a1044cc894",
+  "version": "70c5897a3332",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -1581,7 +1581,7 @@
       "route": "/settings/look-and-feel/motion",
       "hash": "reduce-motion",
       "where": "Settings › Look & feel",
-      "title": "Make it calmer: Reduce motion and Background picture",
+      "title": "Make it calmer: Reduce motion and Background",
       "keywords": [
         "calmer",
         "calm",
@@ -1590,18 +1590,14 @@
         "animation",
         "dizzy",
         "confetti",
-        "dark",
-        "background",
-        "wallpaper",
-        "picture",
-        "change background"
+        "dark"
       ],
-      "answer": "Turn on **Reduce motion** to stop confetti, page moves and the moving background. You can also put your own **Background picture** behind the glass.",
+      "answer": "Turn on **Reduce motion** to stop confetti, page moves and the moving background. In **Background** you can pick plain **Colours** instead of the glass or a picture.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Look & feel**.",
         "Tap **Motion** and turn on **Reduce motion**.",
-        "Or tap **Background** to pick your own picture."
+        "Or tap **Background** and pick **Colours** or **Picture**."
       ],
       "actions": [
         {
@@ -1615,9 +1611,64 @@
         {
           "id": "motion-and-background:background",
           "label": "Open Background",
-          "to": "/settings/look-and-feel/background#background-picture",
+          "to": "/settings/look-and-feel/background#background-kind",
           "highlight": [
-            "background-picture"
+            "background-kind"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "background-see-through",
+      "kind": "guide",
+      "route": "/settings/look-and-feel/background",
+      "hash": "background-kind",
+      "where": "Settings › Look & feel › Background",
+      "title": "See through the app, or pick a picture or colours",
+      "keywords": [
+        "see-through",
+        "see through",
+        "transparent",
+        "glass",
+        "liquid glass",
+        "behind",
+        "desktop",
+        "computer background",
+        "wallpaper",
+        "background",
+        "picture",
+        "colours",
+        "colors",
+        "frosted",
+        "clear",
+        "blur",
+        "change background",
+        "background colour",
+        "background color"
+      ],
+      "answer": "In **Background** pick **See-through**, **Picture** or **Colours**. See-through lets what is behind the window peek through the glass in the Mac and Windows app. Browsers and phones can't look behind the app, so there you get the Clip Factory colours.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Look & feel**.",
+        "Tap **Background**.",
+        "Tap **See-through**, **Picture** or **Colours**.",
+        "For See-through, pick **Clear** or **Frosted** glass."
+      ],
+      "actions": [
+        {
+          "id": "background-see-through:kind",
+          "label": "Open Background",
+          "to": "/settings/look-and-feel/background#background-kind",
+          "highlight": [
+            "background-kind"
+          ]
+        },
+        {
+          "id": "background-see-through:colours",
+          "label": "Pick colours",
+          "to": "/settings/look-and-feel/background#background-colours",
+          "highlight": [
+            "background-colours"
           ]
         }
       ]
@@ -3222,9 +3273,12 @@
       "where": "Settings › Look & feel › Background",
       "title": "Background",
       "keywords": [
-        "Background picture"
+        "What's behind the glass",
+        "Glass strength",
+        "Background picture",
+        "Background colours"
       ],
-      "answer": "Your own picture behind the glass.",
+      "answer": "See-through glass, your picture or your colours.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Look & feel**, then **Background**."
@@ -3238,6 +3292,81 @@
       ]
     },
     {
+      "id": "apple-background-kind",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/background",
+      "hash": "background-kind",
+      "where": "Settings › Look & feel › Background",
+      "title": "What's behind the glass",
+      "keywords": [
+        "see-through",
+        "see through",
+        "transparent",
+        "liquid glass",
+        "glass",
+        "behind",
+        "desktop",
+        "computer background",
+        "mode"
+      ],
+      "answer": "Pick See-through, Picture or Colours.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Look & feel**, then **Background**.",
+        "Find **What's behind the glass**."
+      ],
+      "actions": [
+        {
+          "id": "apple-background-kind:open",
+          "label": "Open Background",
+          "to": "/settings/look-and-feel/background#background-kind",
+          "highlight": [
+            "background-kind"
+          ]
+        }
+      ],
+      "highlight": [
+        "background-kind"
+      ]
+    },
+    {
+      "id": "apple-glass-strength",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/background",
+      "hash": "glass-strength",
+      "where": "Settings › Look & feel › Background",
+      "title": "Glass strength",
+      "keywords": [
+        "see-through",
+        "see through",
+        "transparent",
+        "blur",
+        "blurry",
+        "frosted",
+        "clear",
+        "strength"
+      ],
+      "answer": "Clear shows more of what's behind. Frosted shows less.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Look & feel**, then **Background**.",
+        "Find **Glass strength**."
+      ],
+      "actions": [
+        {
+          "id": "apple-glass-strength:open",
+          "label": "Open Background",
+          "to": "/settings/look-and-feel/background#glass-strength",
+          "highlight": [
+            "glass-strength"
+          ]
+        }
+      ],
+      "highlight": [
+        "glass-strength"
+      ]
+    },
+    {
       "id": "apple-background-picture",
       "kind": "apple",
       "route": "/settings/look-and-feel/background",
@@ -3247,8 +3376,6 @@
       "keywords": [
         "wallpaper",
         "photo",
-        "colours",
-        "colors",
         "image"
       ],
       "answer": "Use your own picture behind the glass. It stays on this device.",
@@ -3269,6 +3396,43 @@
       ],
       "highlight": [
         "background-picture"
+      ]
+    },
+    {
+      "id": "apple-background-colours",
+      "kind": "apple",
+      "route": "/settings/look-and-feel/background",
+      "hash": "background-colours",
+      "where": "Settings › Look & feel › Background",
+      "title": "Background colours",
+      "keywords": [
+        "colours",
+        "colors",
+        "colour",
+        "color",
+        "gradient",
+        "rainbow",
+        "paint",
+        "swatch"
+      ],
+      "answer": "Mix up to 3 colours behind the glass.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Look & feel**, then **Background**.",
+        "Find **Background colours**."
+      ],
+      "actions": [
+        {
+          "id": "apple-background-colours:open",
+          "label": "Open Background",
+          "to": "/settings/look-and-feel/background#background-colours",
+          "highlight": [
+            "background-colours"
+          ]
+        }
+      ],
+      "highlight": [
+        "background-colours"
       ]
     },
     {

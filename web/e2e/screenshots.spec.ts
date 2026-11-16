@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "@playwright/test";
+import { ACTIVE_SCENE, asDesktop, INACTIVE_FLOOR, paintGlass } from "./glass.ts";
 import { CLIPS, openClip, openTodo, settle } from "./helpers.ts";
 import { GALLERY, pauseActs, tapAct } from "./motionHelpers.ts";
 
@@ -368,4 +369,51 @@ for (const width of [375, 1440] as const) {
       });
     });
   }
+}
+
+// Background modes and see-through glass (§22): the Background page in each mode, phone and desktop, light and dark;
+// and the see-through desktop window, simulated. The real glass is drawn by the operating system outside the page,
+// so stand-ins for it (e2e/glass.ts) are painted behind the transparent page: a busy picture the way macOS Liquid
+// Glass shows it while the window is in use, and the darkest the glass was measured (another app in use, pure black
+// behind). Clear and Frosted each.
+for (const size of SIZES) {
+  for (const scheme of ["light", "dark"] as const) {
+    test.describe(`background ${size.name} ${size.width}x${size.height} ${scheme}`, () => {
+      test.use({
+        viewport: { width: size.width, height: size.height },
+        deviceScaleFactor: size.scale,
+        hasTouch: size.touch,
+        isMobile: size.touch,
+        colorScheme: scheme,
+      });
+      const suffix = `${scheme === "dark" ? "-dark" : ""}-${size.width}x${size.height}`;
+      test(`screenshot settings-background ${scheme}`, async ({ page }) => {
+        await page.goto("/settings/look-and-feel/background");
+        await settle(page);
+        await page.waitForTimeout(600);
+        await page.screenshot({ path: join(dir, `settings-background${suffix}.png`) });
+        await page.getByRole("radio", { name: "Colours" }).check();
+        await page.waitForTimeout(900);
+        await page.screenshot({ path: join(dir, `settings-background-colours${suffix}.png`) });
+      });
+    });
+  }
+  test.describe(`see-through ${size.name} ${size.width}x${size.height}`, () => {
+    test.use({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, hasTouch: size.touch, isMobile: size.touch });
+    for (const strength of ["clear", "frosted"] as const) {
+      test(`screenshot see-through ${strength}`, async ({ page }) => {
+        await asDesktop(page, "liquid", strength);
+        await page.goto("/");
+        await settle(page);
+        for (const [name, paint] of [
+          ["scene", ACTIVE_SCENE],
+          ["floor", INACTIVE_FLOOR],
+        ] as const) {
+          await paintGlass(page, paint);
+          await page.waitForTimeout(400);
+          await page.screenshot({ path: join(dir, `see-through-${name}-${strength}-${size.width}x${size.height}.png`) });
+        }
+      });
+    }
+  });
 }

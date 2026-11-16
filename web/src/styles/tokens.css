@@ -3,6 +3,10 @@
   --sage: #9caf88;
   --sage-rgb: 156 175 136;
   --sage-deep: #4f6340;
+  --sage-ink: #4f6340; /* sage for words and icons on light glass (sage-deep is for fills, rings and lines) */
+  /* Small sage text on a sage tint (the apple tag, the sound number tiles). Deeper than --sage-ink, which measured
+     only 4.2-4.6:1 on the tint over the glass; this one measures 5.7-6.2:1 there (WCAG AA needs 4.5:1). */
+  --sage-text: #3d4f31;
   --sage-mist: #c9d4bd;
   --offwhite: #f7f5ef;
   --offwhite-rgb: 247 245 239;
@@ -57,4 +61,16 @@
   --shadow-1: 0 1px 2px rgb(var(--ink-rgb) / 0.08), 0 8px 24px -14px rgb(var(--ink-rgb) / 0.35);
   --shadow-2: 0 2px 6px rgb(var(--ink-rgb) / 0.08), 0 22px 48px -24px rgb(var(--ink-rgb) / 0.45);
   --focus: 0 0 0 3px rgb(var(--offwhite-rgb) / 0.95), 0 0 0 5.5px var(--tomato-deep);
+}
+
+/* The window look (see-through in the desktop app, docs/CONTRACTS.md §22.3). The panels carry much less tint there,
+   so more of the desktop shows through them; the four lightest text colours go deeper to stay easy to read on the
+   darkest the window glass can be (each has a relative luminance of 0.047 or less). Each is still clearly its own
+   colour: grey-green, tomato, sage. --ink and --ink-2 are dark enough as they are.
+   Keep in step with WINDOW_TEXT_TOKENS in lib/background.ts (test/background.test.ts reads this file). */
+html.see-through {
+  --ink-3: #344031;
+  --tomato-ink: #74190e;
+  --sage-ink: #2c421c;
+  --sage-text: #2c421c;
 }

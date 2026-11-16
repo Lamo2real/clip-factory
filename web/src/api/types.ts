@@ -1,4 +1,5 @@
 // Shapes from docs/CONTRACTS.md §5. Keep in step with the contract, never the other way round.
+import type { BackgroundMode, GlassStrength } from "../lib/background.ts";
 
 export type JobStatus = "queued" | "running" | "ready" | "failed" | "canceled";
 export type StepKey =
@@ -169,6 +170,12 @@ export interface Settings {
    * hides their row; posting still follows `platforms` and the connected accounts. Absent on old servers: none.
    */
   setupSkipped?: Platform[];
+  /** What sits behind the glass (§22). Absent until the owner saves one: then this device decides (§22.1). */
+  backgroundMode?: BackgroundMode;
+  /** 1 to 3 `#rrggbb` colours for the colours backdrop. Absent on old servers: the Clip Factory colours. */
+  backgroundColours?: string[];
+  /** See-through glass: "clear" (default) or "frosted". */
+  glassStrength?: GlassStrength;
 }
 
 export type YoutubePrivacy = "public" | "unlisted" | "private";

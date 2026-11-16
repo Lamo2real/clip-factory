@@ -1,24 +1,58 @@
-import { usePrefs } from "../lib/prefs.ts";
+import { useLayoutEffect, type CSSProperties } from "react";
+import { applyLook, useLook } from "../lib/look.ts";
 
 /**
- * What the glass refracts: a slow sage, off-white and tomato mesh, or the owner's own picture.
+ * What the glass refracts (§22): the desktop behind the window (see-through in the desktop app), frosted Clip
+ * Factory colours that slowly move (see-through anywhere else), the owner's own picture, or their 1 to 3 colours.
  * Glass needs something varied behind it; over a flat colour it would read as a grey sheet.
  */
 export function Backdrop() {
-  const { background } = usePrefs();
+  const look = useLook();
+  useLayoutEffect(() => applyLook(look), [look]);
+
+  if (look.kind === "window") {
+    // The page is transparent. The veil here is empty for Clear and a light frost for Frosted; the tint that keeps
+    // text readable sits on the panels (glass.css), so the desktop stays guessable between them.
+    return (
+      <div className="backdrop backdrop--window" aria-hidden="true">
+        <span className="backdrop__veil" />
+      </div>
+    );
+  }
+  if (look.kind === "picture") {
+    return (
+      <div className="backdrop has-image" aria-hidden="true">
+        <div className="backdrop__image" style={{ backgroundImage: `url("${look.url}")` }} />
+      </div>
+    );
+  }
+  if (look.kind === "colours") {
+    const [c1, c2 = c1, c3 = c2] = look.colours;
+    const style = { "--c1": c1, "--c2": c2, "--c3": c3 } as CSSProperties;
+    return (
+      <div className="backdrop backdrop--colours" style={style} aria-hidden="true" data-colours={look.colours.join(" ")}>
+        <span className="blob blob--a" />
+        <span className="blob blob--b" />
+        <span className="blob blob--c" />
+        <span className="blob blob--d" />
+        <span className="backdrop__veil" />
+      </div>
+    );
+  }
   return (
-    <div className={`backdrop${background ? " has-image" : ""}`} aria-hidden="true">
-      {background ? (
-        <div className="backdrop__image" style={{ backgroundImage: `url("${background}")` }} />
-      ) : (
+    <div className={`backdrop${look.kind === "frosted" ? " backdrop--frosted" : ""}`} aria-hidden="true">
+      <span className="blob blob--a" />
+      <span className="blob blob--b" />
+      <span className="blob blob--c" />
+      <span className="blob blob--d" />
+      {look.kind === "frosted" ? (
         <>
-          <span className="blob blob--a" />
-          <span className="blob blob--b" />
-          <span className="blob blob--c" />
-          <span className="blob blob--d" />
-          <span className="backdrop__grain" />
+          <span className="backdrop__frost" />
+          <span className="backdrop__caustic backdrop__caustic--a" />
+          <span className="backdrop__caustic backdrop__caustic--b" />
         </>
-      )}
+      ) : null}
+      <span className="backdrop__grain" />
     </div>
   );
 }

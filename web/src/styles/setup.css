@@ -41,7 +41,7 @@
   font-variant-numeric: tabular-nums;
 }
 .ring.is-full .ring__text {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 
 /* Bigger tap targets everywhere in the setup (kid-proof, §12.4). */
@@ -155,7 +155,7 @@
   color: var(--ink-2);
 }
 .setup-card.is-ready .setup-card__state {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .setup-card__time {
   font-size: var(--fs-xs);
@@ -236,7 +236,7 @@
   gap: 6px;
   font-size: var(--fs-small);
   font-weight: 600;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .setup-skel {
   display: block;
@@ -328,7 +328,7 @@
   height: 40px;
   border-radius: var(--r-sm);
   background: rgb(var(--sage-rgb) / 0.3);
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .gstep__title {
   flex: 1;
@@ -431,7 +431,7 @@
 .gstep__hint .icon {
   flex: none;
   margin-top: 2px;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .gstep__hint > span {
   min-width: 0;
@@ -465,7 +465,7 @@
   color: var(--ink-2);
 }
 .gstep__note.is-ok {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .gstep__picker {
   display: grid;
@@ -512,7 +512,7 @@
   margin-top: 2px;
 }
 .gate-line.is-ok .icon {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .gate-line.is-action {
   color: var(--tomato-ink);
@@ -677,7 +677,7 @@
   margin-top: 2px;
 }
 .check-it__result.is-ok {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .check-it__result.is-bad {
   color: var(--tomato-ink);
@@ -700,7 +700,7 @@
   border: 2px dashed rgb(var(--sage-rgb) / 0.95);
   background: rgb(255 255 255 / 0.4);
   text-align: center;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .upload-box__zone.is-over {
   background: rgb(var(--sage-rgb) / 0.25);
@@ -724,7 +724,7 @@
   padding: 4px 4px 4px 12px;
   border-radius: var(--r-md);
   background: rgb(var(--sage-rgb) / 0.25);
-  color: var(--sage-deep);
+  color: var(--sage-ink);
   min-width: 0;
 }
 .upload-box__name {
@@ -758,7 +758,7 @@
 }
 .result-card > .icon {
   flex: none;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .result-card--ok {
   box-shadow:
@@ -881,7 +881,7 @@
 }
 .done-panel__state {
   font-weight: 600;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .done-panel__state.is-bad {
   color: var(--tomato-ink);

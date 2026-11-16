@@ -213,7 +213,11 @@ test("Library and This week: the usual switches show a Best guess; every app off
 
   await page.getByRole("link", { name: "This week" }).click();
   await settle(page);
-  const before = await page.locator(".week-card__hook").allTextContents();
+  // The cards come after the week's numbers load; on a slow runner settle() alone returned before they were drawn.
+  const hooks = page.locator(".week-card__hook");
+  await expect(hooks.first()).toBeVisible();
+  const before = await hooks.allTextContents();
+  expect(before.length).toBeGreaterThan(1);
   const week = page.locator('[data-earned="week"]');
   await expect(week).toContainText(/This week earned (about \$[\d,]+\.\d{2}|less than 1¢)/);
   await expect(week.locator(".earned-guess")).toBeVisible();
@@ -237,9 +241,8 @@ test("Library and This week: the usual switches show a Best guess; every app off
   await expect(week).toContainText("This week earned $0.00");
   await expect(week).toContainText("These apps are switched off in Settings › Money.");
   await expect(weekCard).toContainText("These apps are switched off");
-  // The order (most views first) is the same with or without money.
-  expect(before.length).toBeGreaterThan(1);
-  expect(await page.locator(".week-card__hook").allTextContents()).toEqual(before);
+  // The order (most views first) is the same with or without money. (Retries until every card is drawn again.)
+  await expect.poll(() => hooks.allTextContents()).toEqual(before);
 });
 
 for (const width of [320, 375, 768, 1440, 1920]) {
@@ -247,11 +250,17 @@ for (const width of [320, 375, 768, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await openClip(page, CLIPS.all);
     await page.getByRole("button", { name: "How is this worked out?" }).click();
+    // Measure only once the opened box is drawn (a measure straight after the click could see the page before it).
+    await expect(page.locator("#perf-money-how")).toBeVisible();
     await expectNoOverflow(page, `clip ${width}`);
 
     await page.goto(MONEY);
     await settle(page);
-    for (const p of ["youtube", "x"]) await page.locator(`[data-money-sources="${p}"]`).getByRole("button").click();
+    for (const p of ["youtube", "x"]) {
+      const sources = page.locator(`[data-money-sources="${p}"]`);
+      await sources.getByRole("button").click();
+      await expect(sources.locator(".money__link").first()).toBeVisible();
+    }
     // Every source link is a full 44 px tap target at every width.
     const heights = await page.locator(".money__link").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
     expect(heights.length).toBeGreaterThan(0);
@@ -264,10 +273,12 @@ for (const width of [320, 375, 768, 1440, 1920]) {
 
     await page.goto("/library");
     await settle(page);
+    await expect(page.locator(".lib-card").first()).toBeVisible();
     await expectNoOverflow(page, `library ${width}`);
 
     await page.goto("/library?view=week");
     await settle(page);
+    await expect(page.locator(".week-card").first()).toBeVisible();
     await expectNoOverflow(page, `week ${width}`);
   });
 }

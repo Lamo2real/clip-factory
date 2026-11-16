@@ -273,7 +273,7 @@
 }
 .help-steps li::marker {
   font-weight: 700;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .help-actions,
 .help-confirm__row {

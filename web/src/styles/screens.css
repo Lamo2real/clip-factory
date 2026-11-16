@@ -831,7 +831,7 @@
   color: var(--ink-2);
 }
 .save-state.is-saved {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
   font-weight: 600;
 }
 .save-state.is-failed {
@@ -864,7 +864,7 @@
   color: var(--tomato-ink);
 }
 .checklist__score.is-ok {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .checklist__chev {
   transition: transform var(--dur-2) var(--ease-out);
@@ -887,7 +887,7 @@
   font-size: 0.93rem;
 }
 .checklist__items .is-pass > .icon {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .checklist__items .is-fail > .icon {
   color: var(--tomato-deep);
@@ -1168,6 +1168,233 @@
 }
 .check-chip:has(input:focus-visible) {
   box-shadow: var(--focus);
+}
+
+/* ---------- Settings › Look & feel › Background (§22.5) ---------- */
+.bg-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  max-width: 460px;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  background: rgb(var(--ink-rgb) / 0.07);
+  box-shadow: inset 0 1px 2px rgb(var(--ink-rgb) / 0.1);
+}
+.bg-mode {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 6px 10px;
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 0.86rem;
+  line-height: 1.2;
+  text-align: center;
+  transition:
+    color 300ms var(--ease-out),
+    background-color var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-spring);
+}
+/* The radio covers the whole tile, above the preview, so a tap anywhere on it picks it. */
+.bg-mode input {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  margin: 0;
+  opacity: 0;
+}
+.bg-mode.is-on {
+  color: var(--ink);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.95), rgb(var(--offwhite-rgb) / 0.85));
+  box-shadow:
+    0 2px 8px -2px rgb(var(--ink-rgb) / 0.25),
+    inset 0 1px 0 #fff;
+}
+.bg-mode:not(.is-on):hover {
+  color: var(--ink);
+  background: rgb(255 255 255 / 0.4);
+}
+.bg-mode:active {
+  transform: scale(0.96);
+}
+.bg-mode:has(input:focus-visible) {
+  box-shadow: var(--focus);
+}
+/* One line, like the other two names: "See-through" must not split at its hyphen on a phone. Never under the
+   smallest text size (--fs-xs). */
+.bg-mode__name {
+  max-width: 100%;
+  white-space: nowrap;
+  font-size: clamp(var(--fs-xs), 2.9vw, 0.86rem);
+}
+@media (max-width: 400px) {
+  .bg-modes {
+    gap: 4px;
+  }
+  .bg-mode {
+    padding-inline: 2px;
+  }
+}
+/* The narrowest phones: a little less air around the tiles, so "See-through" still fits at the smallest text size. */
+@media (max-width: 340px) {
+  .bg-modes {
+    gap: 2px;
+    padding: 4px;
+  }
+  .bg-mode {
+    padding-inline: 1px;
+  }
+  .bg-mode__name {
+    letter-spacing: -0.01em;
+  }
+}
+.bg-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  max-width: 120px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: calc(var(--r-md) - 4px);
+  color: var(--ink-2);
+  background:
+    radial-gradient(circle at 20% 15%, rgb(var(--sage-rgb)) 0, transparent 60%),
+    radial-gradient(circle at 85% 55%, rgb(var(--tomato-rgb) / 0.55) 0, transparent 55%),
+    linear-gradient(160deg, #eef1e7, #dfe6d5);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.7),
+    var(--shadow-1);
+}
+.bg-tile img,
+.bg-tile__scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* The car behind frosted glass: soft edges you can guess, never a sharp picture. */
+.bg-tile__scene {
+  filter: blur(2.5px) saturate(1.1);
+}
+.bg-tile__frost {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(140deg, rgb(255 255 255 / 0.5), rgb(var(--offwhite-rgb) / 0.3));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9);
+}
+.bg-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 60ch;
+  margin: 12px 0 0;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+.bg-note .icon {
+  flex: none;
+  margin-top: 1px;
+}
+.bg-note__link {
+  min-height: 0;
+  display: inline;
+}
+
+.bg-colours {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+/* The colour previews wear the backdrop's veil, so Night alone looks as soft here as it will behind the glass. */
+.bg-tile--colours::after,
+.bg-colours__mix::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgb(var(--offwhite-rgb) / var(--preview-veil, 0));
+}
+.bg-colours__mix {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-width: 320px;
+  height: 44px;
+  border-radius: var(--r-pill);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.7),
+    var(--shadow-1);
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.swatch {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--swatch, #fff);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--ink-rgb) / 0.18),
+    inset 0 2px 0 rgb(255 255 255 / 0.45),
+    var(--shadow-1);
+  transition:
+    transform var(--dur-2) var(--ease-spring),
+    box-shadow var(--dur-2) var(--ease-out);
+}
+.swatch.is-light {
+  color: var(--ink);
+}
+.swatch:hover {
+  transform: scale(1.08);
+}
+.swatch:active {
+  transform: scale(0.92);
+}
+.swatch.is-on {
+  box-shadow:
+    0 0 0 3px rgb(255 255 255 / 0.95),
+    0 0 0 5.5px var(--ink),
+    var(--shadow-1);
+}
+.swatch:focus-visible,
+.swatch--own:has(input:focus-visible) {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.swatch--own {
+  color: var(--ink);
+  background: conic-gradient(from 0deg, #e8412c, #f6c945, #7fd8be, #7cc4f2, #8e6cc9, #f49ac1, #e8412c);
+}
+.swatch--own .icon {
+  padding: 3px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.9);
+}
+.swatch--own input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
 }
 
 .bg-picker {

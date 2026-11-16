@@ -415,8 +415,9 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
               {label}
             </Button>
             {/* Not a live region: the clock re-renders it every minute. New numbers are announced by the toast. */}
+            {/* The span is what the window look tints (see-through, glass.css), so the tint hugs the words. */}
             <p className="perf__updated">
-              {perf.totals.updatedAt ? `Updated ${ago(perf.totals.updatedAt, now)}` : "No numbers yet"}
+              <span>{perf.totals.updatedAt ? `Updated ${ago(perf.totals.updatedAt, now)}` : "No numbers yet"}</span>
             </p>
           </div>
         </div>

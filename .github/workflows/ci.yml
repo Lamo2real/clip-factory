@@ -21,7 +21,7 @@ jobs:
   web:
     runs-on: ubuntu-24.04
     # Over 300 Playwright tests at many widths; 4 workers on the 4-CPU runner keep it near 15 minutes.
-    timeout-minutes: 40
+    timeout-minutes: 75
     defaults:
       run:
         working-directory: web

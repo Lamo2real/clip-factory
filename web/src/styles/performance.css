@@ -275,7 +275,7 @@
     0 6px 16px -12px rgb(var(--ink-rgb) / 0.45);
 }
 .btn.perf__refresh.is-waiting .icon {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 
 /* The "Best this week" star: sage glass, never tomato (the one tomato button is Refresh). */
@@ -295,7 +295,7 @@
     background-color var(--dur-2) var(--ease-out);
 }
 .star-btn .icon {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
   transition: transform var(--dur-3) var(--ease-spring);
 }
 .star-btn.is-on {
@@ -430,7 +430,7 @@
 }
 .pstack__row .icon {
   margin-top: 1px;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .pstack__label {
   min-width: 0;
@@ -460,7 +460,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
   font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -766,7 +766,7 @@
   text-align: center;
 }
 .week__learn .icon {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .week__learn.is-failed,
 .week__learn.is-failed .icon {
@@ -964,7 +964,7 @@
   font-weight: 700;
 }
 .kept-now__title .icon {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .kept-now__list {
   display: grid;
@@ -1008,7 +1008,7 @@
   overflow-wrap: anywhere;
 }
 .perf__earned .icon {
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .perf__earned-num {
   font-size: 1.15rem;
@@ -1101,7 +1101,7 @@
 }
 .pstack__earned-line .icon {
   flex: none;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .pstack__earned-num {
   font-variant-numeric: tabular-nums;
@@ -1131,7 +1131,7 @@
 }
 .earned-chip .icon {
   flex: none;
-  color: var(--sage-deep);
+  color: var(--sage-ink);
 }
 .earned-chip.is-none,
 .earned-chip__why {

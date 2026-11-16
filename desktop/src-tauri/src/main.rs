@@ -4,7 +4,8 @@
 //! Clip Factory desktop: one native window that shows the deployed web app (docs/CONTRACTS.md §12.3).
 //! It bundles no web UI: updates come from the website itself, so this wrapper rarely changes.
 
-use tauri::{Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
+use tauri::{Theme, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
 /// The deployed app, baked in by build.rs from `CF_APP_URL`.
@@ -18,6 +19,136 @@ const TITLE: &str = "Clip Factory";
 const MIN_SIZE: (f64, f64) = (380.0, 600.0);
 const START_SIZE: (f64, f64) = (1200.0, 820.0);
 
+/// The light tint laid into the native glass (Clip Factory off-white, a little over half strength).
+/// - macOS 26 and newer (Liquid Glass) honours it while the window is in use: measured on macOS 27.2 on
+///   2026-11-16, the glass then behaves like this colour at roughly 62-73% over the blurred desktop. While
+///   another app is in use the system drops the tint for a neutral light grey.
+/// - The Windows `Blur` path honours it (worked out, not measured).
+/// - Windows 11 22H2+ acrylic drops the colour (window-vibrancy sets only the system backdrop type there) and the
+///   vibrancy material of macOS 15 and older takes none.
+///
+/// The web page plans for the darkest each glass can be (web/src/lib/background.ts `glassFloor`, §22.3): the
+/// measured inactive Liquid Glass, this tint over black for `blur` (from these same numbers, `GLASS_TINT_ALPHA`),
+/// black for the rest. Keep the two in step.
+const GLASS_TINT: Color = Color(247, 245, 239, 140);
+
+/// The AppKit version from which macOS draws Liquid Glass (macOS 26.0). It is the number window-vibrancy 0.8
+/// checks before it applies the effect (its `MIN_APPKIT_VERSION_LIQUID_GLASS`); on anything older Tauri falls back
+/// to the next effect in the list, the under-window vibrancy material. A test pins the window-vibrancy version, so
+/// an update asks for a fresh look at this number.
+const MIN_APPKIT_VERSION_LIQUID_GLASS: f64 = 2685.0;
+
+/// The native see-through material behind the page (docs/CONTRACTS.md §22). The web app reads its name from
+/// `window.__CF_GLASS__` and turns its own background transparent only when it is not `none`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Glass {
+    /// macOS 26 and newer: Liquid Glass.
+    Liquid,
+    /// macOS 15 and older: the under-window vibrancy material.
+    Vibrancy,
+    /// Windows 11 22H2 and newer: blurred acrylic, shows soft shapes of what is behind.
+    Acrylic,
+    /// Windows 10 1809 to Windows 11 21H2: blur behind, smooth there (acrylic lags while dragging on those builds).
+    Blur,
+    /// Anything else (Linux, older Windows): a normal window; the web app draws its own background.
+    None,
+}
+
+impl Glass {
+    /// What this computer can draw: AppKit's version number on macOS (None anywhere else), or the Windows build
+    /// number (None off Windows).
+    fn for_os(appkit_version: Option<f64>, windows_build: Option<u32>) -> Glass {
+        match (appkit_version, windows_build) {
+            (Some(version), _) => Glass::for_appkit(version),
+            (None, Some(build)) if build >= 22621 => Glass::Acrylic,
+            (None, Some(build)) if build >= 17763 => Glass::Blur,
+            _ => Glass::None,
+        }
+    }
+
+    /// Which glass macOS draws for the effects below. The same test window-vibrancy makes: an AppKit older than
+    /// `MIN_APPKIT_VERSION_LIQUID_GLASS` has no Liquid Glass, so the vibrancy material is used.
+    fn for_appkit(version: f64) -> Glass {
+        if version < MIN_APPKIT_VERSION_LIQUID_GLASS {
+            Glass::Vibrancy
+        } else {
+            Glass::Liquid
+        }
+    }
+
+    fn here() -> Glass {
+        Glass::for_os(appkit_version(), windows_build())
+    }
+
+    /// The value of `window.__CF_GLASS__`.
+    fn name(self) -> &'static str {
+        match self {
+            Glass::Liquid => "liquid",
+            Glass::Vibrancy => "vibrancy",
+            Glass::Acrylic => "acrylic",
+            Glass::Blur => "blur",
+            Glass::None => "none",
+        }
+    }
+
+    /// The native effects for the window; None keeps an ordinary opaque window.
+    fn effects(self) -> Option<EffectsBuilder> {
+        let effects: &[Effect] = match self {
+            // One list for every Mac: Tauri tries Liquid Glass first and falls back to the vibrancy material on
+            // macOS 15 and older. `for_appkit` only tells the page which of the two it got.
+            Glass::Liquid | Glass::Vibrancy => {
+                &[Effect::LiquidGlassRegular, Effect::UnderWindowBackground]
+            }
+            Glass::Acrylic => &[Effect::Acrylic],
+            Glass::Blur => &[Effect::Blur],
+            Glass::None => return None,
+        };
+        Some(
+            EffectsBuilder::new()
+                .effects(effects.iter().copied())
+                // The vibrancy material stays glassy when another app is in front, instead of turning flat grey.
+                // (Liquid Glass has no such switch: it stays glass, but drops the tint then, §22.3.)
+                .state(EffectState::Active)
+                .color(GLASS_TINT),
+        )
+    }
+}
+
+/// AppKit's own version number: what Tauri and window-vibrancy go by when they choose between Liquid Glass and
+/// the older vibrancy material.
+#[cfg(target_os = "macos")]
+fn appkit_version() -> Option<f64> {
+    // The one `unsafe` item in this crate (Cargo.toml denies the rest). AppKit exports this constant `double`
+    // (NSApplication.h). The app always links AppKit, because its window is an AppKit window, and nothing ever
+    // writes to the constant, so reading it is sound.
+    #[allow(unsafe_code)]
+    #[link(name = "AppKit", kind = "framework")]
+    unsafe extern "C" {
+        safe static NSAppKitVersionNumber: f64;
+    }
+    Some(NSAppKitVersionNumber)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn appkit_version() -> Option<f64> {
+    None
+}
+
+#[cfg(windows)]
+fn windows_build() -> Option<u32> {
+    Some(windows_version::OsVersion::current().build)
+}
+
+#[cfg(not(windows))]
+fn windows_build() -> Option<u32> {
+    None
+}
+
+/// The injected script, led by the glass this window has.
+fn init_script(glass: Glass) -> String {
+    format!("window.__CF_GLASS__ = \"{}\";\n{INIT_SCRIPT}", glass.name())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -27,14 +158,22 @@ fn main() {
             let app_url = Url::parse(APP_URL)?;
             let handle = app.handle().clone();
             let home = app_url.clone();
+            let glass = Glass::here();
 
-            WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::External(app_url))
-                .title(TITLE)
-                .inner_size(START_SIZE.0, START_SIZE.1)
-                .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
-                .center()
-                .user_agent(&user_agent())
-                .initialization_script(INIT_SCRIPT)
+            let mut window =
+                WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::External(app_url))
+                    .title(TITLE)
+                    .inner_size(START_SIZE.0, START_SIZE.1)
+                    .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
+                    .center()
+                    // The web app is drawn light, so the glass behind it is the light material too (§22.3).
+                    .theme(Some(Theme::Light))
+                    .user_agent(&user_agent())
+                    .initialization_script(init_script(glass));
+            if let Some(effects) = glass.effects() {
+                window = window.transparent(true).effects(effects.build());
+            }
+            window
                 .on_navigation(move |url| {
                     if stays_inside(&home, url) {
                         return true;
@@ -107,6 +246,91 @@ mod tests {
         assert!(opens_outside(&url("mailto:a@example.com")));
         assert!(!opens_outside(&url("file:///etc/passwd")));
         assert!(!opens_outside(&url("ms-settings:privacy")));
+    }
+
+    #[test]
+    fn glass_follows_what_the_computer_can_draw() {
+        assert_eq!(Glass::for_os(None, Some(26100)), Glass::Acrylic);
+        assert_eq!(Glass::for_os(None, Some(22621)), Glass::Acrylic);
+        assert_eq!(Glass::for_os(None, Some(22000)), Glass::Blur);
+        assert_eq!(Glass::for_os(None, Some(19045)), Glass::Blur);
+        assert_eq!(Glass::for_os(None, Some(17134)), Glass::None);
+        assert_eq!(Glass::for_os(None, None), Glass::None);
+        // A Mac is a Mac whatever else is claimed.
+        assert_eq!(Glass::for_os(Some(2685.0), Some(26100)), Glass::Liquid);
+        assert!(Glass::None.effects().is_none());
+        assert!(Glass::Acrylic.effects().is_some());
+        assert!(Glass::Blur.effects().is_some());
+    }
+
+    #[test]
+    fn a_mac_reports_liquid_glass_from_macos_26_and_vibrancy_before() {
+        // AppKit 2685 is macOS 26.0: the first with Liquid Glass (window-vibrancy's own threshold).
+        assert_eq!(Glass::for_appkit(2685.0), Glass::Liquid);
+        assert_eq!(Glass::for_appkit(2685.1), Glass::Liquid);
+        assert_eq!(Glass::for_appkit(2800.0), Glass::Liquid);
+        assert_eq!(Glass::for_appkit(2684.9), Glass::Vibrancy);
+        // macOS 15 (AppKit 2575), 14 (2487) and 11 (2022).
+        for older in [2575.7, 2487.2, 2022.0] {
+            assert_eq!(Glass::for_appkit(older), Glass::Vibrancy);
+            assert_eq!(Glass::for_os(Some(older), None), Glass::Vibrancy);
+        }
+        assert_eq!(Glass::for_os(Some(2685.0), None), Glass::Liquid);
+        // Both ask Tauri for the same effects; only the name the page reads differs.
+        assert!(Glass::Liquid.effects().is_some());
+        assert!(Glass::Vibrancy.effects().is_some());
+        assert_eq!(Glass::Liquid.name(), "liquid");
+        assert_eq!(Glass::Vibrancy.name(), "vibrancy");
+    }
+
+    #[test]
+    fn the_liquid_glass_threshold_is_the_one_of_the_window_vibrancy_in_use() {
+        // The number is copied from window-vibrancy 0.8 (src/macos/liquid_glass.rs). If this fails after an
+        // update, read `MIN_APPKIT_VERSION_LIQUID_GLASS` in the new version and bring both in step.
+        assert_eq!(MIN_APPKIT_VERSION_LIQUID_GLASS, 2685.0);
+        let lock = include_str!("../Cargo.lock");
+        // Line by line, so a checkout with Windows line endings reads the same.
+        let mut lines = lock.lines().map(str::trim);
+        assert!(
+            lines.any(|line| line == "name = \"window-vibrancy\""),
+            "window-vibrancy is in Cargo.lock"
+        );
+        let version = lines.next().expect("a version line after the name");
+        assert!(
+            version.starts_with("version = \"0.8."),
+            "window-vibrancy {version}"
+        );
+    }
+
+    #[test]
+    fn this_computer_reports_a_glass_that_fits_it() {
+        let glass = Glass::here();
+        if cfg!(target_os = "macos") {
+            let version = appkit_version().expect("AppKit's version on a Mac");
+            assert!(version > 1000.0, "AppKit version {version}");
+            assert_eq!(glass, Glass::for_appkit(version));
+        } else {
+            assert_eq!(appkit_version(), None);
+            assert!(!matches!(glass, Glass::Liquid | Glass::Vibrancy));
+        }
+        if !cfg!(windows) {
+            assert!(!matches!(glass, Glass::Acrylic | Glass::Blur));
+        }
+    }
+
+    #[test]
+    fn the_script_names_the_glass_first() {
+        for (glass, name) in [
+            (Glass::Liquid, "liquid"),
+            (Glass::Vibrancy, "vibrancy"),
+            (Glass::Acrylic, "acrylic"),
+            (Glass::Blur, "blur"),
+            (Glass::None, "none"),
+        ] {
+            let script = init_script(glass);
+            assert!(script.starts_with(&format!("window.__CF_GLASS__ = \"{name}\";\n")));
+            assert!(script.contains("window.__CF_DESKTOP__ = true"));
+        }
     }
 
     #[test]

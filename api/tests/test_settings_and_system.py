@@ -21,6 +21,8 @@ DEFAULTS = {
     "earningsRates": {},
     "earningsPaid": {},
     "setupSkipped": [],
+    "backgroundColours": ["#9caf88", "#f7f5ef", "#e8412c"],
+    "glassStrength": "clear",
 }
 
 
@@ -380,3 +382,73 @@ def test_setup_skipped_bad_stored_value_falls_back_to_none_skipped() -> None:
     assert settings.with_defaults({"setupSkipped": ["myspace"]})["setupSkipped"] == []
     assert settings.with_defaults({"setupSkipped": "x"})["setupSkipped"] == []
     assert settings.with_defaults({"setupSkipped": ["x", "youtube"]})["setupSkipped"] == ["youtube", "x"]
+
+
+# ---------- Background modes (§22) ----------
+
+
+def test_background_mode_has_no_server_default() -> None:
+    # Absent until saved, so the device decides (§22.1): a picture already on it keeps showing after the upgrade.
+    out = settings.with_defaults(None)
+    assert "backgroundMode" not in out
+    assert out["glassStrength"] == "clear"
+    assert out["backgroundColours"] == ["#9caf88", "#f7f5ef", "#e8412c"]
+    # A fresh list each time, so one owner's colours can never leak into the shared defaults.
+    out["backgroundColours"].append("#000000")
+    assert settings.with_defaults(None)["backgroundColours"] == ["#9caf88", "#f7f5ef", "#e8412c"]
+
+
+def test_background_choice_saved(call: Call) -> None:
+    status, body = call(
+        "PUT",
+        "/v1/settings",
+        {
+            "backgroundMode": "colours",
+            "backgroundColours": ["#F6C945", "#2b6cb0", "#f6c945"],
+            "glassStrength": "frosted",
+        },
+    )
+    assert status == 200
+    got = body["settings"]
+    assert (got["backgroundMode"], got["glassStrength"]) == ("colours", "frosted")
+    assert got["backgroundColours"] == ["#f6c945", "#2b6cb0"]  # lower case, repeats dropped
+    assert call("GET", "/v1/settings")[1] == body
+
+
+@pytest.mark.parametrize(
+    ("patch", "message"),
+    [
+        ({"backgroundMode": "window"}, "See-through, Picture or Colours"),
+        ({"backgroundMode": None}, "See-through, Picture or Colours"),
+        ({"glassStrength": "solid"}, "Clear or Frosted"),
+        ({"backgroundColours": []}, "1 to 3 colours"),
+        ({"backgroundColours": ["#111111", "#222222", "#333333", "#444444"]}, "1 to 3 colours"),
+        ({"backgroundColours": ["red"]}, "#9caf88"),
+        ({"backgroundColours": "#9caf88"}, "#9caf88"),
+        ({"backgroundColours": ["#12345"]}, "#9caf88"),
+    ],
+)
+def test_background_choice_is_checked(call: Call, patch: dict[str, object], message: str) -> None:
+    status, body = call("PUT", "/v1/settings", patch)
+    assert status == 400
+    assert message in body["error"]["message"]
+
+
+def test_background_mode_stays_absent_until_saved(call: Call) -> None:
+    status, body = call("PUT", "/v1/settings", {"glassStrength": "frosted"})
+    assert status == 200
+    assert "backgroundMode" not in body["settings"]
+    status, body = call("PUT", "/v1/settings", {"backgroundMode": "picture"})
+    assert status == 200
+    assert body["settings"]["backgroundMode"] == "picture"
+    assert call("GET", "/v1/settings")[1]["settings"]["backgroundMode"] == "picture"
+    # A later save of something else keeps it.
+    status, body = call("PUT", "/v1/settings", {"soundEnabled": False})
+    assert body["settings"]["backgroundMode"] == "picture"
+
+
+def test_bad_stored_background_falls_back_to_defaults() -> None:
+    out = settings.with_defaults({"backgroundMode": "nope", "backgroundColours": ["x"], "glassStrength": 3})
+    assert "backgroundMode" not in out
+    assert out["glassStrength"] == "clear"
+    assert out["backgroundColours"] == ["#9caf88", "#f7f5ef", "#e8412c"]
