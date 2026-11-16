@@ -30,6 +30,8 @@ variables {
   clip_flow_alias_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
   job_flow_arn_prefix  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-job-flow"
   clip_flow_arn_prefix = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow"
+  stats_function_arn   = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stats"
+  learn_function_arn   = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-learn"
   vector_bucket        = "cf-test-vectors-123456789012"
   vector_index         = "clips"
   vector_index_arn     = "arn:aws:s3vectors:eu-north-1:123456789012:bucket/cf-test-vectors-123456789012/index/clips"
@@ -54,18 +56,30 @@ run "environment_names_the_flow_aliases" {
 
   assert {
     condition = one(aws_lambda_function.fn["api"].environment).variables == tomap({
-      TABLE_NAME        = "cf-test-data"
-      MEDIA_BUCKET      = "cf-test-media"
-      AGENT_RUNTIME_ARN = "arn:aws:bedrock-agentcore:eu-north-1:123456789012:runtime/cf_test_clip_agent-abc"
-      JOB_FLOW_ARN      = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-job-flow:live"
-      CLIP_FLOW_ARN     = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
-      VECTOR_BUCKET     = "cf-test-vectors-123456789012"
-      VECTOR_INDEX      = "clips"
-      APP_URL           = "https://app.example.test"
-      VERSION           = "test"
+      TABLE_NAME         = "cf-test-data"
+      MEDIA_BUCKET       = "cf-test-media"
+      AGENT_RUNTIME_ARN  = "arn:aws:bedrock-agentcore:eu-north-1:123456789012:runtime/cf_test_clip_agent-abc"
+      JOB_FLOW_ARN       = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-job-flow:live"
+      CLIP_FLOW_ARN      = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
+      VECTOR_BUCKET      = "cf-test-vectors-123456789012"
+      VECTOR_INDEX       = "clips"
+      APP_URL            = "https://app.example.test"
+      VERSION            = "test"
+      STATS_FUNCTION_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stats"
+      LEARN_FUNCTION_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-learn"
     })
-    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9 (no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
+    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9 and §16.9 (STATS_FUNCTION_ARN, LEARN_FUNCTION_ARN; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
   }
+}
+
+run "stats_arns_must_be_unqualified" {
+  command = plan
+
+  variables {
+    stats_function_arn = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stats:live"
+  }
+
+  expect_failures = [var.stats_function_arn]
 }
 
 run "permissions" {
@@ -80,6 +94,29 @@ run "permissions" {
       ]
     ])
     error_message = "The API may invoke only the two flows (any qualifier, so the live alias)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement :
+      s.Sid == "StatsAndLearn" && s.Action == ["lambda:InvokeFunction"] && s.Resource == [
+        "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stats",
+        "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-learn",
+      ]
+    ])
+    error_message = "The API may invoke cf-prod-stats (manual refresh) and cf-prod-learn (weekly best), unqualified."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Resource if contains(s.Action, "lambda:InvokeFunction")
+      ])) == toset([
+      "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-job-flow:*",
+      "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:*",
+      "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stats",
+      "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-learn",
+    ])
+    error_message = "lambda:InvokeFunction covers exactly the two flows, cf-prod-stats and cf-prod-learn."
   }
 
   assert {

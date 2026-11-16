@@ -1,5 +1,8 @@
-# The single DynamoDB table (docs/CONTRACTS.md §6): on demand, point-in-time recovery, TTL, one GSI, and a stream
+# The single DynamoDB table (docs/CONTRACTS.md §6): on demand, point-in-time recovery, TTL, two GSIs, and a stream
 # (new and old images) that feeds the live-update broadcaster (§14.2).
+#   gsi1  posts of a clip and other lookups (§6).
+#   gsi2  posts whose numbers are due: gsi2pk "STATS", gsi2sk "{statsDueAt}#{postId}" (§16.3). Sparse: only posts
+#         inside their 30-day window carry the keys. Added online; existing items need no migration.
 terraform {
   required_version = ">= 1.11.0"
   required_providers {
@@ -32,6 +35,14 @@ resource "aws_dynamodb_table" "this" {
     name = "gsi1sk"
     type = "S"
   }
+  attribute {
+    name = "gsi2pk"
+    type = "S"
+  }
+  attribute {
+    name = "gsi2sk"
+    type = "S"
+  }
 
   global_secondary_index {
     name            = "gsi1"
@@ -42,6 +53,19 @@ resource "aws_dynamodb_table" "this" {
     }
     key_schema {
       attribute_name = "gsi1sk"
+      key_type       = "RANGE"
+    }
+  }
+
+  global_secondary_index {
+    name            = "gsi2"
+    projection_type = "ALL"
+    key_schema {
+      attribute_name = "gsi2pk"
+      key_type       = "HASH"
+    }
+    key_schema {
+      attribute_name = "gsi2sk"
       key_type       = "RANGE"
     }
   }

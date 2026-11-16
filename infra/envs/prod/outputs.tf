@@ -19,3 +19,9 @@ output "vector_index" { value = module.vectors.vector_index }
 output "job_flow_alias_arn" { value = module.flows.job_flow_alias_arn }
 output "clip_flow_alias_arn" { value = module.flows.clip_flow_alias_arn }
 output "hooks_verify_token_parameter" { value = module.hooks.verify_token_parameter }
+
+# docs/CONTRACTS.md §16.9.
+output "stats_function_name" { value = module.stats.function_names["stats"] }
+output "learn_function_name" { value = module.stats.function_names["learn"] }
+output "stats_rule_name" { value = module.stats.stats_rule_name }
+output "stats_tick_minutes" { value = module.stats.stats_tick_minutes } # lowest minIntervalMinutes in config/platforms.json

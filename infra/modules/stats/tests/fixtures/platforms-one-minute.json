@@ -1,0 +1,11 @@
+{
+  "$comment": "Test override: the lowest interval is 1 minute, so the tick must be rate(1 minute) (singular).",
+  "order": ["youtube", "tiktok", "instagram", "facebook", "x"],
+  "platforms": {
+    "youtube": { "minIntervalMinutes": 1 },
+    "tiktok": { "minIntervalMinutes": 15 },
+    "instagram": { "minIntervalMinutes": 30 },
+    "facebook": { "minIntervalMinutes": 30 },
+    "x": { "minIntervalMinutes": 15 }
+  }
+}

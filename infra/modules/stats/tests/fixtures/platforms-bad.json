@@ -1,0 +1,11 @@
+{
+  "$comment": "Test override: X is missing from order and YouTube's interval is not whole minutes; the plan must fail.",
+  "order": ["youtube", "tiktok", "instagram", "facebook"],
+  "platforms": {
+    "youtube": { "minIntervalMinutes": 7.5 },
+    "tiktok": { "minIntervalMinutes": 15 },
+    "instagram": { "minIntervalMinutes": 30 },
+    "facebook": { "minIntervalMinutes": 30 },
+    "x": { "minIntervalMinutes": 15 }
+  }
+}
