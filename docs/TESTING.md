@@ -96,6 +96,34 @@ cd api && uv run pytest -q tests/test_help*.py
 | Playwright, mock mode (`e2e/help.spec.ts`, 375 × 812 and 1440 × 900) | Launcher name and place (not over the tab bar or update bar, above the update bar on desktop); three suggestions; "Where do I change my click sound?" → steps, tomato **Open Sounds**, navigation to `/settings/look-and-feel/sounds`, the Click sound row gets the ring (panel closed on 375, open on 1440); the best-clip question shows the mock number; a refusal; `#429` notice with Ask disabled; `#503` → local answer and the copy-code link; `#off` → launcher gone; Escape returns focus; the Ask field spans the panel with a 44 px icon-only **Send** paper plane inside it (off when empty, Shift+Enter adds a line, four lines then scroll), the plane flies with its trail on send and the question bubble shows at once, the tap sound plays on click only; reduced motion → no animations, the plane only fades; each posting and skills guide opens its real page (`/settings/posting/setup/{platform}`, `/settings/clip-making/skills…`) and lights up its control (`setup-connect`/`setup-progress`, `skill-form`, `skill-edit`, `skill-delete`); dodge on scroll; no launcher over **Keep** on Review before any scroll (375 and 1440); after an answer button the spotlit control is the element at its centre (`elementFromPoint`), so nothing covers it; the conversation is still there after Close and reopen; Tab stays inside the phone sheet; the settled phone launcher covers no control at 320, 375, 390 and 430 px, with and without `?update=1`. `overflow.spec.ts` adds the open panel at 320, 375, 768, 1024, 1440 and 1920 px, with a five-line question and the field's width; `screenshots.spec.ts` adds it at 375 and 1440 px, plus `help-review-launcher-*`, `help-spotlight-keep-*`, `help-panel-reopened-*`, `help-ask-box-*` and `help-plane-flying-*`. Port 4179 by default, `CF_E2E_PORT` for another ([Web](#web)). |
 | Infrastructure (`terraform test`) | `HELP_*` env on `cf-prod-api` (enabled in prod, off by module default); statement `HelpModel` has only `bedrock:InvokeModel` on the EU profile ARN and the six foundation-model ARNs; the model id comes from `config/models.json` (`eu.` for help, Fable still `global.`); CORS exposes `retry-after`; the metric filter and the alarm exist; `models.json` parses and `helpModel` names a model. |
 
+## Action motion
+
+The action animations on buttons ([CONTRACTS.md §20](CONTRACTS.md#20-action-animations-owner-request-2026-11-16),
+[UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#action-motion-every-action-button-acts-out-what-it-does)) are tested like
+everything else, offline against the mock app.
+
+**The gallery.** `/__motion` is a test page that exists only in the mock build (`npm run dev:mock`, and the Playwright
+server): one Button per kind, a "Make them fail" switch, a stepper and a segmented control. Use it to look at any
+motion by hand, light and dark, with Reduce motion on and off.
+
+```bash
+cd web
+npx vitest run test/motion.test.tsx
+CF_E2E_PORT=4185 npx playwright test e2e/motion.spec.ts e2e/motion-*.spec.ts --workers=4
+```
+
+| Suite | Must show |
+|---|---|
+| Vitest (`test/motion.test.tsx`) | `nextAct` state machine; tokens in `motion.css` equal `ACT_TOKENS` and every duration is 180–760 ms; every kind has its rules in `motion.css`; `useAction` returns to idle after `ACT_MS`, reads Reduce motion at each play, clears its timer on unmount, plays one deny on `fail()`; Button calls the handler once and before the play, does not play when `aria-disabled` or `loading`, ends in `is-fail` on a rejected or `false` promise, does not play over a handler that failed its own handle (a refused Keep), honours `playOnClick={false}`, holds the spinner back until the motion ends; Stepper, Segmented and ErrorPanel mappings; the 300 ms sound de-duplication; `paperPlane.test.tsx` unchanged. |
+| Playwright `e2e/motion.spec.ts` (CORE, the gallery) | Every kind: the handler fired while `is-play` is on, then back to `is-idle` within `ACT_MS + 200`; failing actions shake with one deny and no success; the stepper and segmented bumps; reduced motion from the OS and from the Settings switch: every kind gets `is-fade` and no `.act__item` has a transform at 25 / 50 / 75 %; at 320, 375, 430, 768, 1440 and 1920 px nothing scrolls sideways and no button changes width mid-animation. |
+| Playwright `e2e/motion-home-jobs-review.spec.ts` | Make clips flies and the job starts before the flight ends; a disabled Make clips does not play; Paste (and its failure), Clear, the dropzone (plays on the file, shakes on a wrong one); the stepper and Exactly bumps; Stop job then Undo rewinds; Try again on a failed job; Keep pops the heart with its confetti; a refused Keep only shakes (never `is-play`); a Keep that does not finish shakes Try again; Throw away then Undo returns the card (`.is-returning`); caption tabs bump; the checks chevron turns; reduced motion; no overflow mid-animation. |
+| Playwright `e2e/motion-library-clip-help.spec.ts` | Library Try again; This week: arrows slide, the newest week's Later week plays `nudge` (not a shake), the star spins on and settles off; Refresh numbers; the clip star; Ask's chips launch the plane, Start over, Copy the help code (and its failure); reduced motion; no overflow at six widths. |
+| Playwright `e2e/motion-settings.spec.ts` | Every Settings, setup and skill control's kind, the pickers playing on the file, the Undo rewinds, the failure paths, reduced motion and no overflow. |
+| Playwright `e2e/motion-shell.spec.ts` | The sidebar turn, Get the app chips / Download / Copy the link (and a blocked clipboard), Reload; sign in: Sign in snaps its link, a wrong password shakes it with one deny, the eye blinks, Start again turns. |
+| Playwright `e2e/sound.spec.ts` | A touch swipe that starts on Review's Keep fires no click, plays no sound and leaves every `.act` at `is-idle`. |
+| Playwright `e2e/overflow.spec.ts` (through `findOverflow` in `e2e/helpers.ts`) | Glyphs inside `.act:not(.is-idle)` are skipped while they play (like the flying plane); an idle `.act` is measured, so a glyph that overflows at rest fails. |
+| Playwright `e2e/screenshots.spec.ts` | `screenshots/motion-mid-{light,dark}-{375,1440}.png`: send, keep, delete, refresh, save and copy paused at 50 % in the gallery. |
+
 ## What the tests must cover
 
 ### Web (Playwright, mock mode)
