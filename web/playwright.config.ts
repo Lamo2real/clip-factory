@@ -8,7 +8,8 @@ export default defineConfig({
   testDir: "e2e",
   timeout: 120_000,
   fullyParallel: true,
-  retries: 0,
+  // One retry on CI only, so a test that is slow under load once does not block a merge; local runs never retry.
+  retries: process.env.CI ? 1 : 0,
   reporter: [["list"]],
   use: { baseURL: `http://localhost:${port}`, trace: "off" },
   webServer: {

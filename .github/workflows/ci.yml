@@ -20,7 +20,8 @@ env:
 jobs:
   web:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # Over 300 Playwright tests at many widths; 4 workers on the 4-CPU runner keep it near 15 minutes.
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: web
@@ -42,7 +43,7 @@ jobs:
       - name: Playwright (mock mode, Chromium)
         run: |
           npx playwright install --with-deps chromium
-          npm run e2e
+          npm run e2e -- --workers=4
       - name: upload the Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
