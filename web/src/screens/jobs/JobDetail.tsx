@@ -6,7 +6,7 @@ import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { JobStatusPill, jobTitle, sourceMeta, SourceThumb, StepTimeline } from "../../components/JobBits.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { A, Button, ErrorPanel, LinkButton, Pill, Progress, Skeleton, type Tone } from "../../components/ui.tsx";
+import { A, Button, Empty, ErrorPanel, LinkButton, Pill, Progress, Skeleton, type Tone } from "../../components/ui.tsx";
 import { burst } from "../../lib/confetti.ts";
 import { MOMENT_LABEL, plural, relative, timecode } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
@@ -28,7 +28,7 @@ export function ClipStatusPill({ status }: { status: ClipStatus }) {
 }
 
 export function JobDetail({ jobId }: { jobId: string }) {
-  const { data, error, reload, setData } = useLoad(() => api().getJob(jobId), jobId);
+  const { data, error, missing, reload, setData } = useLoad(() => api().getJob(jobId), jobId);
   const { refresh } = useSession();
   const toast = useToast();
   const [busy, setBusy] = useState<"cancel" | "retry" | null>(null);
@@ -105,6 +105,24 @@ export function JobDetail({ jobId }: { jobId: string }) {
     });
   }
 
+  if (error && !data && missing) {
+    return (
+      <div className="page">
+        <BackLink />
+        <Empty
+          icon="info"
+          title="This job is gone"
+          action={
+            <LinkButton href="/jobs" variant="primary" icon="chevronLeft">
+              See all jobs
+            </LinkButton>
+          }
+        >
+          It may have been removed. Tap See all jobs to pick another one.
+        </Empty>
+      </div>
+    );
+  }
   if (error && !data) {
     return (
       <div className="page">
