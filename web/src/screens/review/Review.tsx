@@ -147,9 +147,9 @@ export function Review({ jobId }: { jobId: string | null }) {
             {plural(data.length, "clip")} waiting
           </p>
           <ol className="review-list">
-            {data.map((c) => (
+            {data.map((c, i) => (
               <li key={c.clipId} id={`clip-${c.clipId}`} className="review-list__item">
-                <ReviewCard clip={c} onDone={remove} onThrowAway={throwAway} onSettling={settle} />
+                <ReviewCard clip={c} next={i === 0} onDone={remove} onThrowAway={throwAway} onSettling={settle} />
               </li>
             ))}
           </ol>
@@ -163,11 +163,14 @@ type SaveState = "idle" | "saving" | "saved" | "failed";
 
 function ReviewCard({
   clip,
+  next,
   onDone,
   onThrowAway,
   onSettling,
 }: {
   clip: Clip;
+  /** The top card: its Keep is the screen's one tomato button; the cards below get a quiet Keep. */
+  next: boolean;
   onDone: (clipId: string) => void;
   onThrowAway: (clip: Clip) => void;
   /** Tells the list this card is leaving (or, after a failed Keep, staying after all). */
@@ -419,7 +422,7 @@ function ReviewCard({
             Throw away
           </Button>
           <Button
-            variant="primary"
+            variant={next ? "primary" : "glass"}
             size="lg"
             icon={keepFailed ? "retry" : "check"}
             loading={busy === "confirm"}
