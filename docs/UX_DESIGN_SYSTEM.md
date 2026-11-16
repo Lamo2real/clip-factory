@@ -232,6 +232,9 @@ unless its name already says it all.
 | Platform stack | Glass card per platform on the clip page: mark, status chip, big number, only that platform's metric rows, sparkline, "Open on …". See [A platform stack](#a-platform-stack). |
 | Performance lines | Decorative SVG Béziers from the preview to each stack, drawn in once. See [The lines](#the-lines). |
 | Star toggle | "Best this week": sage glass toggle, star icon + words, ≥ 48 px, `aria-pressed`. Never tomato. |
+| Ask launcher | Sage glass pill "Ask" with a sparkle (desktop) or a 56 px icon-only circle (phones). Never tomato. See [Ask Clip Factory](#ask-clip-factory). |
+| Ask panel | Glass, non-modal dialog; answers with numbered steps and up to two buttons. See [Ask Clip Factory](#ask-clip-factory). |
+| Spotlight ring | Sage ring with a soft tomato glow around the control a help button points at; fades over 2.4 s; a still ring with reduced motion. |
 
 ## Sounds
 
@@ -754,6 +757,51 @@ xychart-beta
 Why it works: the first 0.8 s shows most of the progress, so the press feels instant; the slow creep hides the
 unknown wait without ever freezing; the quick finish and sparkle land the reward.
 
+## Ask Clip Factory
+
+The help assistant ([BR-24](BUSINESS_REQUIREMENTS.md#br-24-ask-clip-factory-answers-that-take-you-there),
+[UX-18](BUSINESS_REQUIREMENTS.md#ux-18-ask-clip-factory-looks-and-behaves-like-the-rest-of-the-app),
+[CONTRACTS.md §19.8](CONTRACTS.md#198-web-websrcfeatureshelp), [HELP_ASSISTANT.md](HELP_ASSISTANT.md)). It is on every
+signed-in page and follows every rule on this page.
+
+```
+ Desktop (≥ 768 px)                                  Phone (< 768 px)
+ ┌──────────────────────────────┐                    ┌───────────────────────┐
+ │ Ask Clip Factory  Start over ×│                    │ Ask Clip Factory    × │  full-screen sheet,
+ │ Hi! What do you want to do?  │                    │ Hi! What do you want  │  safe-area padding
+ │ (How do I make clips…?)      │  3 suggestion      │ to do?                │
+ │ (What does Keep do?)         │  chips             │ (chips)               │
+ │ (How many views…?)           │                    │                       │
+ │ [Ask me how to do something] (✦ Ask)              │ [textarea]   (✦ Ask)  │
+ └──────────────────────────────┘ 400 px             └───────────────────────┘
+                     (✦ Ask)  pill, 24 px from the right,       (✦) 56 px circle above
+   [ update bar ]             12 px above the update bar        the tab bar and update bar
+```
+
+| Part | Spec |
+|---|---|
+| Launcher, desktop | Sage glass pill, sparkle icon + "Ask", fixed bottom right (`right: 24px`), 12 px above the update bar when it shows (the bar publishes its height as `--update-bar-h`). |
+| Launcher, phone | 56 px icon-only glass circle, `aria-label="Ask Clip Factory"`, `right: max(16px, safe-area-inset-right)`, bottom = tab bar + safe area + 18 px + `--update-bar-h` (+ 10 px when the bar shows). Never covers the tab bar or the update bar. |
+| Dodge | Hides (fade + 12 px slide) while scrolling down more than 8 px; back on scroll up or 600 ms after scrolling stops; stays while it or the panel has focus; lifts above the Review action bar (`data-help-dodge`). No slide with reduced motion. |
+| Panel, desktop | Non-modal dialog, 400 px wide, `max-height: min(640px, 100dvh - 140px)`, anchored above the launcher, `.glass--strong`. |
+| Panel, phone | Full-screen sheet with safe-area padding; covers the tab bar while open; Close brings it back. |
+| Header | "Ask Clip Factory" in Times italic, **Start over** (quiet), Close (×, 48 px). |
+| Empty state | "Hi! What do you want to do?" and three suggestion chips chosen by page and device. Default: "How do I make clips from a Twitch link?", "What does Keep do?", "How many views did my best clip get this week?" (Settings pages swap the second for the sounds question; clip pages show "Why is my clip private on TikTok?"). |
+| Input | Textarea, 16 px, placeholder "Ask me how to do something", 300 letters (counter from 250), Enter sends, Shift+Enter new line; **Ask** button with icon + word. |
+| Thinking | Three bouncing sage dots; "Still looking…" after 6 s; still dots with reduced motion. |
+| Answer | One or two sentences (button names in bold), numbered steps (`<ol>`, ≤ 6), up to two buttons with icon + word. Only the **first button of the newest answer is tomato**; older answers' buttons and the Ask button turn sage, so the screen keeps one tomato. Whether the model helped is never shown. |
+| Live number | A soft shimmer where the number goes, then the number in the app's compact format ("1.2K"). |
+| Unknown or refused | The fixed sentence and the three chips again; unknown also offers **Go Home**. |
+| Unsaved change | Inline, inside the panel: "You have a change that isn't saved yet. Leave anyway?" with **Stay** and **Leave** (both sage). No browser dialog. |
+| Spotlight | Waits up to 4 s for the control, scrolls it to the centre (smooth unless reduced motion), draws a sage ring with a soft tomato glow that fades over 2.4 s, says "Here it is: {label}" politely, never moves focus. |
+| Notices | 429: "Let's take a short break. You can ask again in {n} seconds." with a countdown and Ask disabled. Off: "Ask Clip Factory is turned off right now." Under a 503, local fallback or failed number: a small link "Something went wrong? Copy the help code" that copies the request id and toasts "Copied. Send this code to whoever helps you with Clip Factory." |
+| Sounds | The click sound on taps (Ask, chips, buttons); the error sound with the 429, 503 and failed-number notices; nothing when an answer arrives. |
+| Keyboard and screen readers | Focus goes to the textarea on open; Tab stays natural (non-modal); Escape closes and returns focus to whatever opened it; the log is `aria-live="polite"`. |
+
+**Writing answers and guides.** Same voice as the screens: words a child knows, one idea per step, the button's exact
+name in bold, no em or en dashes, no emojis, no jargon (never "job ID", "token", "API"). Steps start with a verb:
+"Tap **Make clips**."
+
 ## Kid-proof checklist
 
 The owner's bar: "even a 6-year-old should be able to use it, or an 8-year-old"
@@ -789,6 +837,7 @@ changes one is checked against this list.
 - [ ] Every screen has a way forward and a way back.
 - [ ] Empty states name the exact button to tap: "Nothing here yet. Tap **Make clips** to start."
 - [ ] Every error says what to do next, with the button to do it.
+- [ ] Every button and setting a guide names has a `data-help` anchor (or is an apple), so **Ask** can point at it.
 
 **Mistakes are cheap**
 - [ ] No "Are you sure?" dialogs. Throwing away shows a toast with **Undo** for 8 s; nothing is deleted until it ends.

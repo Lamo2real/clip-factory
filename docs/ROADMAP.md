@@ -19,6 +19,10 @@ soon as phase 2 connects the platforms.
 Added by the owner's skills request ([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16)):
 skills can be written, read, changed and deleted in Settings › Clip making › Skills; the on/off switch is gone, and
 every AI call (agent and API, Agent SDK and Bedrock Converse) gets every skill.
+Added by the owner's help request ([CONTRACTS.md §19](CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16)):
+**Ask Clip Factory**, an in-app helper that answers from knowledge built from the app's code, takes the owner to the
+right page and lights up the control, with Claude Haiku 5.5 (EU profile) as an optional rewriter
+([HELP_ASSISTANT.md](HELP_ASSISTANT.md)).
 See the [README](../README.md#status) for status.
 
 ## Phase 2: social integrations

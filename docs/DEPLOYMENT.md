@@ -207,6 +207,14 @@ Two one-time steps per AWS account, both in `eu-north-1`:
 Without these, the agent's first model call (and the clip flow's `distil` step) fails with an access or
 `ValidationException` error, and the job shows a plain failure.
 
+3. **Claude Haiku 5.5 for Ask Clip Factory (optional).** The help assistant calls Haiku 5.5 through the EU inference
+   profile `eu.anthropic.claude-haiku-5-5` ([HELP_ASSISTANT.md](HELP_ASSISTANT.md)). Like Fable, it is billed through
+   AWS Marketplace, and on an account that has never used it the first call can fail until the subscription exists.
+   Open the Bedrock console in `eu-north-1` → Model catalog → Claude Haiku 5.5, submit the use-case form if asked, and
+   send one message in the playground. Nothing breaks before you do this: Ask Clip Factory answers from search only
+   (log outcome `kb_model_error`) until the model works. The first answer after a deploy that changed the answer
+   schema can also fall back once while Bedrock compiles the schema (about 90 s, then cached for 24 hours).
+
 ### 5. API Gateway logging role (one per account and Region)
 
 The REST API's execution and access logs and the WebSocket API's logs need API Gateway's account-level CloudWatch
@@ -258,12 +266,16 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    because API Gateway allows one deployment every 5 seconds per account), the nine Lambdas (the two durable ones
    publish a new version and move their `live` alias; running executions stay on their old version), the stream
    trigger, the EventBridge rule `cf-prod-stats` (every 15 minutes, read from `config/platforms.json`), the vector
-   bucket and index, the SSM parameter, the Connect state-key secret and the alarms. No extra deploy job is needed for them:
+   bucket and index, the SSM parameter, the Connect state-key secret and the alarms (including `cf-prod-help-model-failures` and its log metric
+   filter). `cf-prod-api` gets the `HELP_*` settings (`HELP_ENABLED = "true"`, the EU Haiku profile from
+   `config/models.json`, the cap and rate limits) and permission to call only that model. No extra deploy job is needed for them:
    they all come from the same Lambda zip and the same `terraform apply`.
 6. **Web**: [scripts/write-web-config.sh](../scripts/write-web-config.sh) writes `config.json` from the Terraform
    outputs, including `wsUrl` from `ws_url` and `oauthCallbackBase` from `oauth_callback_base` (both required; the
    script stops if one is missing); the build is synced to the web bucket (the sync never deletes TikTok's
-   `tiktok*.txt` verification files, which the app uploads) and CloudFront is invalidated.
+   `tiktok*.txt` verification files, which the app uploads) and CloudFront is invalidated. The build includes the help
+   corpus as `/assets/help-corpus.<hash>.json` and names it in `index.html`; `cf-prod-api` picks up the new corpus
+   within 10 minutes (the Lambda zip carries the same file as its fallback).
 7. **What's new**: `scripts/release-areas.sh <prev-sha> <new-sha>` turns the commits since the live version into up to
    three area labels ([how to write them](GIT_WORKFLOW.md#area-lines-what-the-update-bar-says)), and the deploy writes
    `/version.json` last, never cached. Open apps show the update bar within 5 minutes
@@ -363,6 +375,36 @@ part of the X setup ([SETUP_POSTING.md](SETUP_POSTING.md#x)):
    (`x.budget.monthlyUsd` in `config/platforms.json`); a post over the cap fails with "Clip Factory stopped X at your
    $10 limit this month." To change the cap, change that value (and the matching shared constant in the web app) and
    push. The X console's spending limit stays as a second fence.
+
+## Ask Clip Factory kill switch
+
+The help assistant is on in prod (`HELP_ENABLED = "true"`). To change it without a deploy, write the switch item
+(signed in to the account, `eu-north-1`); `cf-prod-api` reads it at most every 60 seconds:
+
+```bash
+# Off: the launcher disappears and nothing answers (open apps notice within 5 minutes)
+aws dynamodb put-item --table-name cf-prod-data --region eu-north-1 \
+  --item '{"pk":{"S":"HELP"},"sk":{"S":"SWITCH"},"enabled":{"BOOL":false},"model":{"BOOL":true}}'
+
+# On, but without the model (answers from search only)
+aws dynamodb put-item --table-name cf-prod-data --region eu-north-1 \
+  --item '{"pk":{"S":"HELP"},"sk":{"S":"SWITCH"},"enabled":{"BOOL":true},"model":{"BOOL":false}}'
+
+# Back to normal
+aws dynamodb delete-item --table-name cf-prod-data --region eu-north-1 \
+  --key '{"pk":{"S":"HELP"},"sk":{"S":"SWITCH"}}'
+```
+
+Terraform does not manage this item. To turn help off for good, set the Terraform variable `help_enabled = false`
+(for example `TF_VAR_help_enabled: "false"` in the `terraform plan` step of the deploy workflow) and deploy. The model
+answers are capped at 2,000 per 30 days (`HELP_MONTHLY_CAP`, Terraform variable `help_monthly_cap`, a whole number);
+past the cap help keeps answering from search.
+
+**Alarm `cf-prod-help-model-failures`** (10 or more `kb_model_error` or `kb_model_timeout` answers in an hour) means
+the Haiku calls are failing. The owner still gets plain answers. The usual cause on a new account is the Marketplace
+first-call step: open Claude Haiku 5.5 once in the Bedrock console playground in `eu-north-1`
+([step 4](#4-bedrock-model-access-and-data-retention)). If it keeps firing, turn the model off with the second command
+above until it is fixed.
 
 ## First sign-in
 
