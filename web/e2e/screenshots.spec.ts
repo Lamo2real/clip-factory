@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { test } from "@playwright/test";
 import { CLIPS, openClip, openTodo, settle } from "./helpers.ts";
 import { GLASS_TINT_ALPHA } from "../src/lib/background.ts";
+import { ACTIVE_SCENE, asDesktop, INACTIVE_FLOOR, paintGlass } from "./glass.ts";
 import { CLIPS, openClip, settle } from "./helpers.ts";
 import { GALLERY, pauseActs, tapAct } from "./motionHelpers.ts";
 
@@ -373,14 +374,10 @@ for (const width of [375, 1440] as const) {
 }
 
 // Background modes and see-through glass (§22): the Background page in each mode, phone and desktop, light and dark;
-// and a simulated see-through desktop. The real native blur is drawn by the operating system outside the page, so
-// here a car picture blurred the way the system would, under the app's own off-white tint (GLASS_TINT in
-// desktop/src-tauri/src/main.rs, as on the Windows blur path), stands in for the wallpaper behind the window.
-const WALLPAPER =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 90' preserveAspectRatio='xMidYMid slice'><rect width='160' height='90' fill='#7cc4f2'/><circle cx='130' cy='18' r='10' fill='#f6c945'/><rect y='60' width='160' height='30' fill='#3f5a33'/><path d='M30 64c2-10 8-15 18-16l12-11c4-3 8-4 13-4h26c6 0 11 2 14 7l8 9c10 1 17 6 18 15z' fill='#e8412c'/><circle cx='53' cy='66' r='9' fill='#1e2a1b'/><circle cx='109' cy='66' r='9' fill='#1e2a1b'/></svg>`,
-  );
+// and the see-through desktop window, simulated. The real glass is drawn by the operating system outside the page,
+// so stand-ins for it (e2e/glass.ts) are painted behind the transparent page: a busy picture the way macOS Liquid
+// Glass shows it while the window is in use, and the darkest the glass was measured (another app in use, pure black
+// behind). Clear and Frosted each.
 for (const size of SIZES) {
   for (const scheme of ["light", "dark"] as const) {
     test.describe(`background ${size.name} ${size.width}x${size.height} ${scheme}`, () => {
@@ -401,28 +398,24 @@ for (const size of SIZES) {
         await page.waitForTimeout(900);
         await page.screenshot({ path: join(dir, `settings-background-colours${suffix}.png`) });
       });
-      test(`screenshot see-through simulated ${scheme}`, async ({ page }) => {
-        await page.addInitScript(() => {
-          (window as unknown as Record<string, unknown>).__CF_GLASS__ = "blur";
-          (window as unknown as Record<string, unknown>).__CF_DESKTOP__ = true;
-        });
-        await page.goto("/");
-        await settle(page);
-        // The stand-in for the system's glass: the wallpaper, blurred, then the app's tint, under the transparent page.
-        await page.evaluate(
-          ({ src, tint }) => {
-            const el = document.createElement("div");
-            el.style.cssText = `position:fixed;inset:-40px;z-index:-10;background:url("${src}") center/cover;filter:blur(22px) saturate(1.2)`;
-            const glass = document.createElement("div");
-            glass.style.cssText = `position:fixed;inset:0;z-index:-9;background:rgb(247 245 239 / ${tint})`;
-            document.body.prepend(glass);
-            document.body.prepend(el);
-          },
-          { src: WALLPAPER, tint: GLASS_TINT_ALPHA },
-        );
-        await page.waitForTimeout(600);
-        await page.screenshot({ path: join(dir, `see-through-simulated${suffix}.png`) });
-      });
     });
   }
+  test.describe(`see-through ${size.name} ${size.width}x${size.height}`, () => {
+    test.use({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, hasTouch: size.touch, isMobile: size.touch });
+    for (const strength of ["clear", "frosted"] as const) {
+      test(`screenshot see-through ${strength}`, async ({ page }) => {
+        await asDesktop(page, "liquid", strength);
+        await page.goto("/");
+        await settle(page);
+        for (const [name, paint] of [
+          ["scene", ACTIVE_SCENE],
+          ["floor", INACTIVE_FLOOR],
+        ] as const) {
+          await paintGlass(page, paint);
+          await page.waitForTimeout(400);
+          await page.screenshot({ path: join(dir, `see-through-${name}-${strength}-${size.width}x${size.height}.png`) });
+        }
+      });
+    }
+  });
 }

@@ -257,8 +257,12 @@ function contrastKit() {
    * gradients of translucent colours) over the backdrop, with the glass's backdrop saturate() and any ancestor
    * opacity applied. Also its font size.
    */
-  /** The visible text runs, found before the backdrop photo touches the page: [text node, its element]. */
-  let targets: [Text, HTMLElement][] = [];
+  /**
+   * The visible text runs, found before the backdrop photo touches the page: [text node, its element], or
+   * [null, a field] for what is typed in an input or textarea (its placeholder while it is empty).
+   */
+  let targets: [Text | null, HTMLElement][] = [];
+  const offScreen = (rect: DOMRect) => rect.width < 2 || rect.height < 2 || rect.right <= 0 || rect.left >= document.documentElement.scrollWidth;
   function collect(skip: string): number {
     targets = [];
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -274,9 +278,18 @@ function contrastKit() {
       range.selectNodeContents(n);
       const rect = range.getBoundingClientRect();
       // Off-canvas, or a 1 px clip (visually hidden): nothing on screen to read.
-      if (rect.width < 2 || rect.height < 2 || rect.right <= 0 || rect.left >= document.documentElement.scrollWidth) continue;
+      if (offScreen(rect)) continue;
       done.add(el);
       targets.push([n as Text, el]);
+    }
+    // Fields hold words too, but not in a text node: the typed value, or the placeholder while there is none.
+    for (const el of Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input, textarea"))) {
+      if (el instanceof HTMLInputElement && /^(hidden|checkbox|radio|range|color|file|button|submit|reset|image)$/.test(el.type)) continue;
+      if (!(el.value || el.placeholder).trim()) continue;
+      if (el.closest(".sr-only") || (skip && el.closest(skip))) continue;
+      if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+      if (offScreen(el.getBoundingClientRect())) continue;
+      targets.push([null, el]);
     }
     return targets.length;
   }
@@ -288,17 +301,23 @@ function contrastKit() {
     let pictures = 0;
     const hasBackdrop = !!document.querySelector(".backdrop");
     for (const [n, el] of targets) {
-      const text = (n.textContent ?? "").trim();
-      const range = document.createRange();
-      range.selectNodeContents(n);
-      const rect = range.getBoundingClientRect();
+      const field = n ? null : (el as HTMLInputElement | HTMLTextAreaElement);
+      // An empty field shows its placeholder, in the placeholder's own colour (and opacity).
+      const placeholder = !!field && !field.value;
+      const text = (n ? (n.textContent ?? "") : field!.value || field!.placeholder).trim();
+      let rect = el.getBoundingClientRect();
+      if (n) {
+        const range = document.createRange();
+        range.selectNodeContents(n);
+        rect = range.getBoundingClientRect();
+      }
       // WCAG 1.4.3 exempts inactive controls.
       if (el.closest(':disabled, [aria-disabled="true"]')) continue;
       checked++;
       const s = getComputedStyle(el);
       const size = parseFloat(s.fontSize);
       const weight = Number(s.fontWeight) || 400;
-      const label = text.replace(/\s+/g, " ").slice(0, 50);
+      const label = (field ? (placeholder ? "(placeholder) " : "(typed) ") : "") + text.replace(/\s+/g, " ").slice(0, 50);
       if (size < 12) tiny.push({ selector: describe(el), text: label, fontSize: size });
 
       // Text painted on a picture can't be worked out from styles (axe marks it "needs review" too).
@@ -310,7 +329,8 @@ function contrastKit() {
         }
       const chain: Element[] = [];
       for (let a: Element | null = el; a; a = a.parentElement) chain.unshift(a);
-      if (chain.some((a) => getComputedStyle(a).backgroundImage.includes("url("))) pictured = true;
+      // (A picture on <html> or <body> is in the backdrop photo already, like their colours below.)
+      if (chain.some((a) => !(hasBackdrop && (a === document.documentElement || a === document.body)) && getComputedStyle(a).backgroundImage.includes("url("))) pictured = true;
       if (pictured) {
         pictures++;
         continue;
@@ -356,8 +376,10 @@ function contrastKit() {
           }
         }
       }
-      const fg = colours(el instanceof SVGElement ? s.fill : s.color)[0];
+      const shown = placeholder ? getComputedStyle(el, "::placeholder") : s;
+      const fg = colours(el instanceof SVGElement ? s.fill : shown.color)[0];
       if (!fg) continue;
+      if (placeholder) fg[3] *= Number(shown.opacity) || 1;
       let worst = Infinity;
       let worstPair: [C, C] = [fg, fg];
       for (const st of states) {
@@ -404,8 +426,9 @@ export async function whiteContrastOnGradient(el: Locator): Promise<number> {
 }
 
 /**
- * Checks every visible text run on the page (see `contrastKit().scan`): contrast at least 4.5:1 (3:1 for text of
- * 24 px, or 18.66 px bold, and up) against every background it can sit on, and a font size of at least 12 px.
+ * Checks every visible text run on the page, and what each field shows (its typed words, or its placeholder while it
+ * is empty) (see `contrastKit().scan`): contrast at least 4.5:1 (3:1 for text of 24 px, or 18.66 px bold, and up)
+ * against every background it can sit on, and a font size of at least 12 px.
  * `skip` is a selector of decorative text left out on purpose.
  */
 export async function scanText(page: Page, skip = ""): Promise<TextScan> {
@@ -500,10 +523,15 @@ export async function mixedSetup(page: Page) {
 /**
  * See-through (§22.3): every visible piece of text must sit on a tinted surface (a glass panel, a scrim, a button),
  * never straight on the transparent window. Returns the text that does not, as "selector: text".
- * A surface counts when its own colour or gradient is at least `minAlpha` opaque.
+ * A surface counts when its own colour or gradient is at least `minAlpha` opaque. Left out, that is the look's own
+ * panel tint (`--panel-veil` on <html>): the least anything that holds words may carry there (0.5 on a page
+ * without one).
  */
-export async function looseText(page: Page, minAlpha = 0.5): Promise<string[]> {
-  return page.evaluate((min) => {
+export async function looseText(page: Page, minAlpha?: number): Promise<string[]> {
+  return page.evaluate((given) => {
+    const veil = Number(getComputedStyle(document.documentElement).getPropertyValue("--panel-veil"));
+    // A hair under the tint itself, so rounding in a computed style never counts against a panel.
+    const min = given ?? (veil > 0 ? veil - 0.005 : 0.5);
     const alphaOf = (css: string): number => {
       if (!css || css === "none") return 0;
       let best = 0;

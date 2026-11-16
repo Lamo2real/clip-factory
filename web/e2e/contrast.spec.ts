@@ -3,15 +3,22 @@ import { expect, test, type Page } from "@playwright/test";
 import { TODO_CELEBRATE_MS } from "../src/lib/setupTodo.ts";
 import { GUIDES, SETUP_ORDER } from "../src/setup/index.ts";
 import { animationsDone, MIXED_SETUP, mixedSetup, resolveRoute, ROUTES, scanText, settle } from "./helpers.ts";
+import { asDesktop, paintGlass, WINDOW_EXTRA_ROUTES, WINDOW_LOOKS, type GlassPaint } from "./glass.ts";
+import { animationsDone, CLIPS, openClip, resolveRoute, ROUTES, scanText, settle, whiteContrastOnGradient } from "./helpers.ts";
 
 // Every screen's text is readable (audit F081, WCAG 2.1 AA 1.4.3; docs/TESTING.md "Contrast and text size"):
 // at 320, 375 and 1440 px, with the browser asking for light and for dark (the app is light-only, so dark must
 // look the same), on every route in ROUTES:
 //   1. axe-core's color-contrast rule finds no violation;
-//   2. every visible text run reaches 4.5:1 (3:1 for 24 px, or 18.66 px bold, and up) against every background it
-//      can sit on: its ancestors' colours and glass gradients composited over the backdrop it can scroll across;
+//   2. every visible text run, and what a field shows (typed words, or its placeholder), reaches 4.5:1 (3:1 for
+//      24 px, or 18.66 px bold, and up) against every background it can sit on: its ancestors' colours and glass
+//      gradients composited over the backdrop it can scroll across;
 //   3. no visible text is smaller than 12 px.
 // Reduced motion parks the drifting backdrop and finishes entrance fades, so every run measures the same picture.
+//
+// The window look (see-through in the desktop app, docs/CONTRACTS.md §22.3) is held to the same bar: the page is
+// transparent there, so each stand-in for the real window glass (e2e/glass.ts) is painted behind it and the same
+// scan runs again, for every glass that has its own tints.
 
 const WIDTHS = [320, 375, 1440] as const;
 const SCHEMES = ["light", "dark"] as const;
@@ -38,6 +45,21 @@ async function readable(page: Page, at: string, failures: string[]): Promise<num
     failures.push(`${at} contrast: ${f.selector} "${f.text}" ${f.ratio}:1 < ${f.need}:1 (${f.color} on ${f.background}, ${f.fontSize}px)`);
   for (const f of scan.tiny) failures.push(`${at} size: ${f.selector} "${f.text}" is ${f.fontSize}px (< 12px)`);
   return scan.checked;
+/** The axe color-contrast rule's violations on the page as it is, one line each. */
+async function axeContrast(page: Page, at: string): Promise<string[]> {
+  const axe = await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze();
+  return axe.violations.flatMap((v) => v.nodes.map((n) => `${at} axe: ${n.target.join(" ")}: ${n.any.map((c) => c.message).join("; ")}`));
+}
+
+/** The rendered-contrast and text-size scan (`scanText`) on the page as it is, one line per failure. */
+async function scanFailures(page: Page, at: string): Promise<string[]> {
+  const scan = await scanText(page, DECORATIVE);
+  expect(scan.checked, `${at}: found no text to check`).toBeGreaterThan(0);
+  test.info().annotations.push({ type: "text runs", description: `${at}: ${scan.checked} checked, ${scan.pictures} on a picture (axe only)` });
+  return [
+    ...scan.contrast.map((f) => `${at} contrast: ${f.selector} "${f.text}" ${f.ratio}:1 < ${f.need}:1 (${f.color} on ${f.background}, ${f.fontSize}px)`),
+    ...scan.tiny.map((f) => `${at} size: ${f.selector} "${f.text}" is ${f.fontSize}px (< 12px)`),
+  ];
 }
 
 for (const route of ROUTES) {
@@ -53,6 +75,8 @@ for (const route of ROUTES) {
         await settle(page);
         await animationsDone(page);
         await readable(page, `${path} @${width} ${scheme}`, failures);
+        const at = `${path} @${width} ${scheme}`;
+        failures.push(...(await axeContrast(page, at)), ...(await scanFailures(page, at)));
       }
     }
     expect(failures).toEqual([]);
@@ -167,6 +191,38 @@ for (const scheme of SCHEMES) {
       await expect(page.locator("[data-skipped='tiktok']")).toBeVisible();
       await animationsDone(page);
       await readable(page, `Settings cards @${width} ${scheme}`, failures);
+// ---------- The window look ----------
+
+/** Paints each stand-in behind the transparent page and scans the text over it. axe runs once, on the darkest. */
+async function scanOverGlass(page: Page, paints: readonly GlassPaint[], at: string): Promise<string[]> {
+  const failures: string[] = [];
+  for (const [i, paint] of paints.entries()) {
+    await paintGlass(page, paint);
+    if (i === 0) failures.push(...(await axeContrast(page, `${at} over ${paint.name}`)));
+    failures.push(...(await scanFailures(page, `${at} over ${paint.name}`)));
+  }
+  return failures;
+}
+
+// The static pages (about, legal) are their own opaque pages, never see-through. The window look also covers the
+// addresses the route list leaves out (This week, the skill pages).
+const WINDOW_ROUTES = [...ROUTES.filter((r) => !r.endsWith(".html")), ...WINDOW_EXTRA_ROUTES];
+
+for (const { glass, paints } of WINDOW_LOOKS) {
+  for (const route of WINDOW_ROUTES) {
+    test(`window look (${glass}): text on ${route} is readable over every stand-in for the glass, at 320, 375 and 1440 px`, async ({ page }) => {
+      test.setTimeout(180_000);
+      await asDesktop(page, glass);
+      const path = await resolveRoute(page, route);
+      const failures: string[] = [];
+      for (const width of WIDTHS) {
+        await page.setViewportSize({ width, height: width < 768 ? 812 : 900 });
+        await page.goto(path);
+        await settle(page);
+        await animationsDone(page);
+        await expect(page.locator("html"), `${path}: not in the window look`).toHaveClass(/see-through/);
+        failures.push(...(await scanOverGlass(page, paints, `${path} @${width} ${glass}`)));
+      }
       expect(failures).toEqual([]);
     });
   }
@@ -202,6 +258,86 @@ for (const scheme of SCHEMES) {
       await expect(done).toHaveAttribute("data-mode", width < 768 ? "pill" : "rail");
       await readableList(page, `All set! @${width} ${scheme}`, failures);
       await expect(done, "the card left before it was read").toBeVisible();
+  // What ROUTES cannot reach by address, or shows only after a tap: surfaces that float over the page (the Ask
+  // panel, a sheet, a toast) keep their own denser tint in the window look, and a starred star keeps its deep sage.
+  test(`window look (${glass}): the screens behind a tap are readable too (Frosted, sign-in, a clip, This week, Ask, a sheet, a toast)`, async ({ page, browser }) => {
+    test.setTimeout(240_000);
+    await asDesktop(page, glass);
+    const failures: string[] = [];
+    const scan = async (at: string) => failures.push(...(await scanOverGlass(page, paints, `${at} ${glass}`)));
+    for (const width of [375, 1440]) {
+      await page.setViewportSize({ width, height: width < 768 ? 812 : 900 });
+
+      // The clip page, with its star on: white words on deep sage.
+      await openClip(page, CLIPS.all);
+      const star = page.getByRole("button", { name: /Best this week/ });
+      if ((await star.getAttribute("aria-pressed")) !== "true") await star.click();
+      await expect(star).toHaveAttribute("aria-pressed", "true");
+      await animationsDone(page);
+      expect(await whiteContrastOnGradient(star), `the starred star @${width} ${glass}`).toBeGreaterThanOrEqual(4.5);
+      await scan(`a clip page @${width}`);
+
+      // This week, with a starred card.
+      await page.goto("/library?view=week");
+      await settle(page);
+      await expect(page.locator(".week-card").first()).toBeVisible();
+      const cardStar = page.locator(".star-btn--card").first();
+      if ((await cardStar.getAttribute("aria-pressed")) !== "true") await cardStar.click();
+      await expect(cardStar).toHaveAttribute("aria-pressed", "true");
+      await animationsDone(page);
+      expect(await whiteContrastOnGradient(cardStar), `a starred card @${width} ${glass}`).toBeGreaterThanOrEqual(4.5);
+      await scan(`This week @${width}`);
+
+      // A sheet over the page.
+      await page.goto("/settings/clip-making/skills/01JZ8S00000000000000000001");
+      await settle(page);
+      await page.getByRole("button", { name: "Delete" }).click();
+      await page.getByRole("dialog").waitFor();
+      await animationsDone(page);
+      await scan(`the delete sheet @${width}`);
+
+      // A toast: saving an amount in Settings › Money.
+      await page.goto("/settings/posting/money");
+      await settle(page);
+      await page.getByLabel("Your amount for 1,000 views on YouTube").fill("2,5");
+      await page.locator('[data-money-rate="youtube"]').getByRole("button", { name: "Save" }).click();
+      await expect(page.getByText("Saved. YouTube now uses $2.50 for 1,000 views.")).toBeVisible();
+      await animationsDone(page);
+      await scan(`a toast @${width}`);
+
+      // The Ask panel with an answer.
+      await page.goto("/");
+      await settle(page);
+      await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+      const panel = page.getByRole("dialog", { name: "Ask Clip Factory" });
+      const box = panel.getByLabel("Your question");
+      await box.fill("Where do I change my click sound?");
+      await box.press("Enter");
+      await panel.locator(".help-actions").last().waitFor();
+      await animationsDone(page);
+      await scan(`the Ask panel @${width}`);
+    }
+
+    // Frosted, and the sign-in card (a fresh browser each, so nothing saved above comes along).
+    for (const [name, prepare, path] of [
+      ["Frosted Home", (p: Page) => asDesktop(p, glass, "frosted"), "/"],
+      ["Frosted Review", (p: Page) => asDesktop(p, glass, "frosted"), "/review"],
+      ["sign in", async (p: Page) => (await asDesktop(p, glass), await p.addInitScript(() => sessionStorage.setItem("cf.mockSignedOut", "1"))), "/"],
+    ] as const) {
+      const context = await browser.newContext({ reducedMotion: "reduce" });
+      const other = await context.newPage();
+      await prepare(other);
+      for (const width of [375, 1440]) {
+        await other.setViewportSize({ width, height: width < 768 ? 812 : 900 });
+        await other.goto(path);
+        if (name === "sign in") await other.getByRole("button", { name: "Sign in" }).waitFor();
+        await settle(other);
+        await animationsDone(other);
+        await expect(other.locator("html")).toHaveClass(/see-through/);
+        if (name.startsWith("Frosted")) await expect(other.locator("html")).toHaveAttribute("data-strength", "frosted");
+        failures.push(...(await scanOverGlass(other, paints, `${name} @${width} ${glass}`)));
+      }
+      await context.close();
     }
     expect(failures).toEqual([]);
   });

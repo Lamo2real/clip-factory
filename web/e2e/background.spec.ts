@@ -1,6 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
-import { coloursVeil, contrast, hexToRgb, mix, seeThroughVeils, seeThroughWorstBackground, VEIL, type Rgb } from "../src/lib/background.ts";
-import { findOverflow, looseText, resolveRoute, ROUTES, settle } from "./helpers.ts";
+import {
+  coloursVeil,
+  contrast,
+  hexToRgb,
+  mix,
+  seeThroughVeils,
+  seeThroughWorstBackground,
+  TEXT_TOKENS,
+  VEIL,
+  WINDOW_TEXT_TOKENS,
+  type NativeGlass,
+  type Rgb,
+} from "../src/lib/background.ts";
+import { ACTIVE_FLOOR, ACTIVE_SCENE, asDesktop, INACTIVE_FLOOR, INACTIVE_SCENE, paintGlass, plannedFloor, WHITE, WINDOW_EXTRA_ROUTES } from "./glass.ts";
+import { animationsDone, CLIPS, findOverflow, looseText, openClip, resolveRoute, ROUTES, scanText, settle } from "./helpers.ts";
 
 // Background modes and see-through glass (docs/CONTRACTS.md §22).
 
@@ -17,14 +30,6 @@ const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 async function open(page: Page, path = PAGE) {
   await page.goto(path);
   await settle(page);
-}
-
-/** Pretends to be the desktop app with real window glass, the way desktop/src-tauri/src/init.js does. */
-async function asDesktop(page: Page, glass = "vibrancy") {
-  await page.addInitScript((g) => {
-    (window as unknown as Record<string, unknown>).__CF_GLASS__ = g;
-    (window as unknown as Record<string, unknown>).__CF_DESKTOP__ = true;
-  }, glass);
 }
 
 /** Waits until the (mock) server has the change, so a reload does not race the save. */
@@ -48,6 +53,19 @@ function rgbOf(css: string): Rgb {
   const [r, g, b] = css.match(/[\d.]+/g)!.map(Number);
   return [r!, g!, b!];
 }
+/** The colour a word written in `token` is drawn in, inside a panel of the page. */
+const drawnIn = (page: Page, token: string) =>
+  page.locator(".apple-panel").first().evaluate((panel, t) => {
+    const word = document.createElement("span");
+    word.style.color = `var(${t})`;
+    panel.append(word);
+    const [r, g, b] = getComputedStyle(word).color.match(/[\d.]+/g)!.map(Number);
+    word.remove();
+    return [r, g, b];
+  }, token);
+/** The text colour tokens as <html> has them right now, `{ "--ink-3": "#344031", ... }`. */
+const textTokens = (page: Page) =>
+  page.evaluate((names) => Object.fromEntries(names.map((n) => [n, getComputedStyle(document.documentElement).getPropertyValue(n).trim()])), Object.keys(TEXT_TOKENS));
 
 /** The text colours of everything that sits straight on the backdrop or on a nearly clear panel. */
 async function textColours(page: Page): Promise<string[]> {
@@ -183,10 +201,11 @@ test.describe("background modes", () => {
 });
 
 test.describe("see-through in the desktop app (simulated)", () => {
-  test("the page is transparent, the gaps stay clear, and the panels carry just enough tint for AA", async ({ page }) => {
-    await asDesktop(page);
+  test("macOS Liquid Glass: the page is transparent, the gaps stay clear, the panels carry just enough tint and the lightest words go deeper", async ({ page }) => {
+    await asDesktop(page, "liquid");
     await open(page);
     await expect(page.locator("html")).toHaveClass(/see-through/);
+    await expect(page.locator("html")).toHaveAttribute("data-glass", "liquid");
     expect(await backdrop(page)).toBe("window");
     await expect(page.locator(".bg-note")).toHaveCount(0);
     await expect(page.locator(".backdrop--window .blob")).toHaveCount(0);
@@ -194,65 +213,126 @@ test.describe("see-through in the desktop app (simulated)", () => {
     const bg = await page.evaluate(() => [getComputedStyle(document.documentElement).backgroundColor, getComputedStyle(document.body).backgroundColor]);
     expect(bg).toEqual(["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]);
 
-    // Clear: nothing over the window's own glass between the panels, so the wallpaper's shapes stay guessable.
-    const clear = seeThroughVeils("vibrancy", "light", "clear");
+    // Clear: nothing over the window's own glass between the panels, so the shapes behind stay guessable.
+    const clear = seeThroughVeils("liquid", "light", "clear");
     expect(await veil(page)).toBe(clear.page);
     expect(await surfaceAlpha(page, ".backdrop__veil")).toBe(0);
-    // The panels carry the tint, and only as much as the darkest glass needs.
+    // The panels carry the tint, only as much as the darkest Liquid Glass needs: far less than half solid.
     expect(await panelVeil(page)).toBeCloseTo(clear.panel, 5);
+    expect(clear.panel).toBeLessThan(0.5);
     expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(clear.panel, 2);
-    const behind = seeThroughWorstBackground("vibrancy", "light", "clear");
+
+    // The window look's own text colours: the four lightest are deeper here, the rest as everywhere.
+    expect(await textTokens(page)).toEqual(WINDOW_TEXT_TOKENS);
+    // And words written in them are drawn in them: the meta line of a panel, tomato text, sage text.
+    for (const token of ["--ink-3", "--tomato-ink", "--sage-ink", "--sage-text"] as const) expect(await drawnIn(page, token), token).toEqual(hexToRgb(WINDOW_TEXT_TOKENS[token]));
+    const behind = seeThroughWorstBackground("liquid", "light", "clear");
     for (const c of await textColours(page)) expect(contrast(rgbOf(c), behind), c).toBeGreaterThanOrEqual(4.5);
 
-    // Frosted: a light frost over the gaps too.
+    // Frosted: a light frost over the gaps too, and heavier panels, so it shows less.
     await page.getByRole("radio", { name: "Frosted" }).check();
-    const frosted = seeThroughVeils("vibrancy", "light", "frosted");
+    const frosted = seeThroughVeils("liquid", "light", "frosted");
     await expect.poll(() => veil(page)).toBeCloseTo(frosted.page, 5);
     expect(await panelVeil(page)).toBeCloseTo(frosted.panel, 5);
-    for (const c of await textColours(page)) expect(contrast(rgbOf(c), seeThroughWorstBackground("vibrancy", "light", "frosted")), c).toBeGreaterThanOrEqual(4.5);
+    expect(frosted.panel).toBeGreaterThan(clear.panel);
+    expect(await surfaceAlpha(page, ".backdrop__veil")).toBeCloseTo(frosted.page, 2);
+    for (const c of await textColours(page)) expect(contrast(rgbOf(c), seeThroughWorstBackground("liquid", "light", "frosted")), c).toBeGreaterThanOrEqual(4.5);
 
-    // Colours and Picture still work inside the app: the page is drawn again.
+    // Colours and Picture still work inside the app: the page is drawn again, with the usual text colours.
     await page.getByRole("radio", { name: "Colours" }).check();
     await expect(page.locator("html")).not.toHaveClass(/see-through/);
     expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe("rgba(0, 0, 0, 0)");
+    expect(await textTokens(page)).toEqual(TEXT_TOKENS);
   });
 
-  test("Windows blur keeps the app's tint, so its panels can be clearer", async ({ page }) => {
+  // The glasses nobody has measured yet keep their careful numbers; each still gets its own panel tint.
+  for (const glass of ["vibrancy", "acrylic", "mica", "blur"] as const) {
+    test(`${glass} keeps working: its own panel tint, the deeper text colours, AA on its darkest`, async ({ page }) => {
+      await asDesktop(page, glass);
+      await open(page);
+      await expect(page.locator("html")).toHaveClass(/see-through/);
+      await expect(page.locator("html")).toHaveAttribute("data-glass", glass);
+      const clear = seeThroughVeils(glass, "light", "clear");
+      expect(await panelVeil(page)).toBeCloseTo(clear.panel, 5);
+      expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(clear.panel, 2);
+      expect(await textTokens(page)).toEqual(WINDOW_TEXT_TOKENS);
+      const behind = seeThroughWorstBackground(glass, "light", "clear");
+      for (const c of await textColours(page)) expect(contrast(rgbOf(c), behind), c).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
+  test("measured Liquid Glass and Windows blur let more through than the glasses that are assumed black", async ({ page }) => {
+    const black = seeThroughVeils("vibrancy", "light", "clear").panel;
+    for (const glass of ["acrylic", "mica"] as const) expect(seeThroughVeils(glass, "light", "clear").panel).toBe(black);
+    expect(seeThroughVeils("liquid", "light", "clear").panel).toBeLessThan(black);
+    expect(seeThroughVeils("blur", "light", "clear").panel).toBeLessThan(black);
     await asDesktop(page, "blur");
     await open(page);
-    expect(await panelVeil(page)).toBeCloseTo(seeThroughVeils("blur", "light", "clear").panel, 5);
-    expect(await panelVeil(page)).toBeLessThan(seeThroughVeils("acrylic", "light", "clear").panel);
-    const behind = seeThroughWorstBackground("blur", "light", "clear");
-    for (const c of await textColours(page)) expect(contrast(rgbOf(c), behind), c).toBeGreaterThanOrEqual(4.5);
+    expect(await panelVeil(page)).toBeLessThan(black);
   });
 
-  test("dark system setting: the panel tint assumes the darkest glass", async ({ page }) => {
+  test("dark system setting: the panel tint assumes the darkest glass, whatever the glass", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
-    await asDesktop(page, "acrylic");
+    await asDesktop(page, "liquid");
     await open(page);
-    await expect.poll(() => panelVeil(page)).toBeCloseTo(seeThroughVeils("acrylic", "dark", "clear").panel, 5);
-    const behind = seeThroughWorstBackground("acrylic", "dark", "clear");
+    const dark = seeThroughVeils("liquid", "dark", "clear");
+    expect(dark).toEqual(seeThroughVeils("acrylic", "dark", "clear"));
+    await expect.poll(() => panelVeil(page)).toBeCloseTo(dark.panel, 5);
+    const behind = seeThroughWorstBackground("liquid", "dark", "clear");
     for (const c of await textColours(page)) expect(contrast(rgbOf(c), behind), c).toBeGreaterThanOrEqual(4.5);
   });
 
-  // No text may sit straight on the transparent window: it would be unreadable over a dark wallpaper.
+  // The real glass, stood in for: what was measured behind the real window is painted behind the transparent page
+  // (e2e/glass.ts) and every piece of text on the Background page is read against it, Clear and Frosted.
   for (const width of [375, 1440]) {
-    test(`every piece of text sits on a tint, on every screen, at ${width}px`, async ({ page }) => {
-      test.setTimeout(240_000);
+    test(`over the measured glass every word on the Background page is readable, Clear and Frosted, at ${width}px`, async ({ page }) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
       await page.setViewportSize({ width, height: 900 });
-      await asDesktop(page);
-      const paths: string[] = [];
-      // The static pages (about, legal) are their own opaque pages, never see-through.
-      for (const r of ROUTES.filter((r) => !r.endsWith(".html"))) paths.push(await resolveRoute(page, r));
+      await asDesktop(page, "liquid");
+      await open(page);
       const failures: string[] = [];
-      for (const path of paths) {
-        await page.goto(path);
-        await settle(page);
-        if (!(await page.evaluate(() => document.documentElement.classList.contains("see-through")))) continue;
-        for (const t of await looseText(page)) failures.push(`${path}: ${t}`);
+      for (const strength of ["Clear", "Frosted"]) {
+        await page.getByRole("radio", { name: strength }).check();
+        await expect(page.locator("html")).toHaveAttribute("data-strength", strength.toLowerCase());
+        // The chosen label fades to its new colour: read the page once that is over.
+        await animationsDone(page);
+        for (const paint of [INACTIVE_FLOOR, ACTIVE_FLOOR, INACTIVE_SCENE, ACTIVE_SCENE, plannedFloor("liquid"), WHITE]) {
+          await paintGlass(page, paint);
+          const scan = await scanText(page);
+          expect(scan.checked).toBeGreaterThan(10);
+          for (const f of [...scan.contrast, ...scan.tiny])
+            failures.push(`${strength} over ${paint.name}: ${f.selector} "${f.text}" ${f.ratio ?? `${f.fontSize}px`} (${f.color ?? ""} on ${f.background ?? ""})`);
+        }
       }
       expect(failures).toEqual([]);
     });
+  }
+
+  // No text may sit straight on the transparent window: it would be unreadable over a dark desktop. Every surface
+  // that holds words is at least as strong as the look's own panel tint (liquid 0.44, vibrancy 0.68).
+  for (const glass of ["liquid", "vibrancy"] as const satisfies readonly NativeGlass[]) {
+    for (const width of [375, 1440]) {
+      test(`${glass}: every piece of text sits on a tint, on every screen, at ${width}px`, async ({ page }) => {
+        test.setTimeout(240_000);
+        await page.setViewportSize({ width, height: 900 });
+        await asDesktop(page, glass);
+        const paths: string[] = [];
+        // The static pages (about, legal) are their own opaque pages, never see-through.
+        for (const r of ROUTES.filter((r) => !r.endsWith(".html"))) paths.push(await resolveRoute(page, r));
+        paths.push(...WINDOW_EXTRA_ROUTES);
+        const failures: string[] = [];
+        for (const path of paths) {
+          await page.goto(path);
+          await settle(page);
+          await expect(page.locator("html"), path).toHaveClass(/see-through/);
+          for (const t of await looseText(page)) failures.push(`${path}: ${t}`);
+        }
+        // A clip's page has no fixed address (the mock makes new ids on every load): opened from the Library.
+        await openClip(page, CLIPS.all);
+        for (const t of await looseText(page)) failures.push(`a clip page: ${t}`);
+        expect(failures).toEqual([]);
+      });
+    }
   }
 
   test("a desktop app with no glass keeps an ordinary page and says so", async ({ page }) => {
@@ -262,6 +342,15 @@ test.describe("see-through in the desktop app (simulated)", () => {
     await expect(page.locator(".bg-note")).toContainText("This computer can't show see-through");
     await expect(page.locator(".bg-note").getByRole("link")).toHaveCount(0);
   });
+
+  test("a glass name this page does not know (a newer desktop app) falls back to an ordinary page", async ({ page }) => {
+    await asDesktop(page, "crystal");
+    await open(page);
+    await expect(page.locator("html")).not.toHaveClass(/see-through/);
+    expect(await backdrop(page)).toBe("frosted");
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe("rgba(0, 0, 0, 0)");
+    expect(await textTokens(page)).toEqual(TEXT_TOKENS);
+  });
 });
 
 // Readable and inside the screen at every size, light and dark, in every mode.
@@ -270,7 +359,7 @@ for (const scheme of ["light", "dark"] as const) {
     test(`background page at ${width}px ${scheme}: no overflow, readable text`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.setViewportSize({ width, height: 900 });
-      await asDesktop(page);
+      await asDesktop(page, "liquid");
       await open(page);
       for (const mode of ["See-through", "Colours", "Picture"]) {
         await page.getByRole("radio", { name: mode }).check();
