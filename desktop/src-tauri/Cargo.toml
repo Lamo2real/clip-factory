@@ -27,8 +27,11 @@ lto = true
 opt-level = "s"
 strip = true
 
+# No unsafe code, with one exception that is allowed where it stands: main.rs reads AppKit's version number, a
+# constant the system exports, to tell macOS Liquid Glass from the older vibrancy (docs/CONTRACTS.md §22.2).
+# ("deny", not "forbid", because a forbidden lint cannot be allowed anywhere.)
 [lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

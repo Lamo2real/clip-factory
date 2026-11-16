@@ -1,7 +1,8 @@
 // Injected by the Clip Factory desktop wrapper before the page's own scripts (docs/CONTRACTS.md §12.3).
 // 1. Tells the web app it runs inside the wrapper, so it hides "Get the app".
-// 2. Says which native see-through glass is behind the page (window.__CF_GLASS__: "vibrancy", "acrylic", "blur"
-//    or "none"; set just above this script by main.rs, §22). The web app goes transparent only when it is not "none".
+// 2. Says which native see-through glass is behind the page (window.__CF_GLASS__: "liquid", "vibrancy", "acrylic",
+//    "blur" or "none"; set just above this script by main.rs, §22). The web app goes transparent only when it is
+//    not "none", and tints its panels for the glass it is told.
 // 3. Links to other sites (and window.open) become a plain navigation, which the wrapper catches and opens
 //    in the system browser. The page itself never leaves the app. Same-site links open in this window.
 (function () {
