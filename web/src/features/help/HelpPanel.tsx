@@ -1,8 +1,9 @@
 // The Ask Clip Factory panel (docs/CONTRACTS.md §19.8): a non-modal glass dialog above the launcher on wide
 // screens, a full-screen sheet on phones. Short answers, numbered steps and up to two buttons that take you there.
-import { Fragment, useCallback, useEffect, useId, useRef, useState, type Dispatch, type FormEvent, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type FormEvent, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
 import { api } from "../../api/index.ts";
 import { Icon, type IconName } from "../../components/Icon.tsx";
+import { PaperPlaneButton, useLaunch } from "../../components/PaperPlane.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button } from "../../components/ui.tsx";
 import { useMedia } from "../../lib/hooks.ts";
@@ -119,6 +120,34 @@ export function HelpPanel({
   const self = useRef<HTMLElement>(null);
   // Narrow screens: Start over shows its icon only, so the title keeps its room.
   const narrow = useMedia("(max-width: 479px)");
+  // The paper plane on the send button (components/PaperPlane.tsx).
+  const flight = useLaunch();
+
+  // The field grows with the question, up to four lines (CSS max-height), then scrolls.
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    el.style.height = "auto";
+    if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+  }, [text]);
+
+  // Phones: the sheet follows the visible part of the screen, so the field and the plane stay above the keyboard.
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    const el = self.current;
+    if (!phone || !vv || !el) return;
+    const fit = () => {
+      el.style.setProperty("--help-vh", `${Math.round(vv.height)}px`);
+      el.style.setProperty("--help-vtop", `${Math.round(vv.offsetTop)}px`);
+    };
+    fit();
+    vv.addEventListener("resize", fit);
+    vv.addEventListener("scroll", fit);
+    return () => {
+      vv.removeEventListener("resize", fit);
+      vv.removeEventListener("scroll", fit);
+    };
+  }, [phone]);
 
   // The corpus arrives with the panel, so a local answer is ready if the server is not.
   useEffect(() => {
@@ -238,6 +267,8 @@ export function HelpPanel({
 
   function submit(e?: FormEvent) {
     e?.preventDefault();
+    // The plane flies only when the question really goes; the bubble does not wait for it.
+    if (!askOff && helpSwitch() !== "off") flight.launch();
     void ask(text);
   }
 
@@ -460,33 +491,34 @@ export function HelpPanel({
         <label className="sr-only" htmlFor={inputId}>
           Your question
         </label>
-        <textarea
-          id={inputId}
-          ref={input}
-          className="input help-panel__input"
-          rows={2}
-          maxLength={QUESTION_MAX}
-          placeholder="Ask me how to do something"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={keys}
-          aria-describedby={text.length >= COUNTER_FROM ? `${inputId}-count` : undefined}
-        />
+        <div className="help-panel__field">
+          <textarea
+            id={inputId}
+            ref={input}
+            className="input help-panel__input"
+            rows={1}
+            maxLength={QUESTION_MAX}
+            placeholder="Ask me how to do something"
+            enterKeyHint="send"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={keys}
+            aria-describedby={text.length >= COUNTER_FROM ? `${inputId}-count` : undefined}
+          />
+          <PaperPlaneButton
+            type="submit"
+            flight={flight}
+            tone={tomatoTaken ? "sage" : "primary"}
+            className={`help-panel__ask${tomatoTaken ? " help-sage" : ""}`}
+            disabled={askOff}
+            aria-label={blocked ? `Send, available in ${left} seconds` : "Send"}
+          />
+        </div>
         {text.length >= COUNTER_FROM ? (
           <span className="help-panel__count" id={`${inputId}-count`}>
             {text.length}/{QUESTION_MAX}
           </span>
         ) : null}
-        <Button
-          type="submit"
-          variant={tomatoTaken ? "glass" : "primary"}
-          className={`help-panel__ask${tomatoTaken ? " help-sage" : ""}`}
-          icon="sparkle"
-          disabled={askOff}
-          aria-label={blocked ? `Ask, available in ${left} seconds` : undefined}
-        >
-          Ask
-        </Button>
       </form>
     </section>
   );

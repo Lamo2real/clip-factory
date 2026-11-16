@@ -368,54 +368,65 @@
       ]
     },
     {
-      "id": "settings-posting-accounts",
+      "id": "settings-posting-setup",
       "kind": "page",
-      "route": "/settings/posting/accounts",
-      "where": "Settings › Posting › Accounts",
-      "title": "Accounts",
+      "route": "/settings/posting/setup",
+      "where": "Settings › Posting › Set up posting",
+      "title": "Set up posting",
       "keywords": [
-        "Connected accounts"
+        "Set up posting",
+        "Who can see your YouTube clips",
+        "What X costs"
       ],
-      "answer": "The accounts your clips are posted to.",
-      "steps": [],
+      "answer": "Connect YouTube, TikTok, Instagram, Facebook and X.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**."
+      ],
       "actions": [
         {
-          "id": "settings-posting-accounts-open",
-          "label": "Open Accounts",
-          "to": "/settings/posting/accounts"
+          "id": "settings-posting-setup:open",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup"
         }
       ]
     },
     {
-      "id": "settings-accounts",
+      "id": "apple-setup-posting",
       "kind": "apple",
-      "route": "/settings/posting/accounts",
-      "hash": "accounts",
-      "where": "Settings › Posting › Accounts",
-      "title": "Connected accounts",
+      "route": "/settings/posting/setup",
+      "hash": "setup-posting",
+      "where": "Settings › Posting › Set up posting",
+      "title": "Set up posting",
       "keywords": [
         "YouTube",
         "Instagram",
         "Facebook",
         "TikTok",
-        "X",
         "connect",
-        "login"
+        "login",
+        "accounts",
+        "keys",
+        "steps"
       ],
-      "answer": "Connecting an account lets Clip Factory post your kept clips there. Coming in a later update.",
-      "steps": [],
+      "answer": "Do each one once. After that Clip Factory posts by itself.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Find **Set up posting**."
+      ],
       "actions": [
         {
-          "id": "settings-accounts-open",
-          "label": "Open Accounts",
-          "to": "/settings/posting/accounts#accounts",
+          "id": "apple-setup-posting:open",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup#setup-posting",
           "highlight": [
-            "accounts"
+            "setup-posting"
           ]
         }
       ],
       "highlight": [
-        "accounts"
+        "setup-posting"
       ]
     },
     {
@@ -1315,38 +1326,42 @@
     {
       "id": "tiktok-private",
       "kind": "guide",
-      "route": "/settings/posting/accounts",
-      "where": "Settings › Posting › Accounts",
-      "title": "Why my TikTok clip is private",
+      "route": "/settings/posting/setup/tiktok",
+      "where": "Settings › Posting › Set up posting › TikTok",
+      "title": "Why my clip is private on TikTok",
       "keywords": [
         "tiktok",
         "private",
         "only me",
         "hidden",
         "not public",
-        "nobody sees"
+        "nobody sees",
+        "tiktok private",
+        "posted privately",
+        "nobody can see"
       ],
-      "answer": "TikTok shows posts privately until TikTok approves the app. The numbers come after that.",
+      "answer": "TikTok shows posts from Clip Factory privately until Clip Factory's TikTok app is approved. Your clip is posted, only you can see it for now, and its numbers come after.",
       "steps": [
-        "Open **Accounts**.",
-        "Look at the TikTok row."
+        "Open the clip in **Library**.",
+        "TikTok says **Posted privately**. That is normal for now."
       ],
       "actions": [
         {
-          "id": "tiktok-private-accounts",
-          "label": "Open Accounts",
-          "to": "/settings/posting/accounts",
+          "id": "tiktok-private:library",
+          "label": "Open Library",
+          "to": "/library",
           "highlight": [
-            "account-tiktok"
+            "nav-library"
           ]
         }
-      ]
+      ],
+      "suggest": true
     },
     {
       "id": "posting-setup-youtube",
       "kind": "guide",
-      "route": "/settings/posting/accounts",
-      "where": "Settings › Posting › Accounts",
+      "route": "/settings/posting/setup/youtube",
+      "where": "Settings › Posting › Set up posting › YouTube",
       "title": "Connect YouTube",
       "keywords": [
         "connect",
@@ -1357,21 +1372,34 @@
         "add account",
         "youtube",
         "yt",
-        "channel"
+        "channel",
+        "connect youtube",
+        "youtube account",
+        "link youtube",
+        "post to youtube",
+        "shorts"
       ],
-      "answer": "Connecting YouTube is coming in a later update. It will be in Settings › Posting › Accounts.",
+      "answer": "Open **Set up posting** and tap **YouTube**. Follow its steps one by one: make your key, paste it, then tap **Connect YouTube**. You do it once, then Clip Factory posts there by itself.",
       "steps": [
-        "Open **Accounts**.",
-        "Find the YouTube row."
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **YouTube**.",
+        "Do each step in order.",
+        "Tap **Connect YouTube**."
       ],
       "actions": [
         {
-          "id": "posting-setup-youtube-accounts",
-          "label": "Open Accounts",
-          "to": "/settings/posting/accounts",
+          "id": "posting-setup-youtube:list",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup",
           "highlight": [
-            "account-youtube"
+            "setup-youtube"
           ]
+        },
+        {
+          "id": "posting-setup-youtube:page",
+          "label": "Set up YouTube",
+          "to": "/settings/posting/setup/youtube"
         }
       ],
       "extends": "§17"
@@ -1379,8 +1407,8 @@
     {
       "id": "posting-setup-instagram",
       "kind": "guide",
-      "route": "/settings/posting/accounts",
-      "where": "Settings › Posting › Accounts",
+      "route": "/settings/posting/setup/instagram",
+      "where": "Settings › Posting › Set up posting › Instagram",
       "title": "Connect Instagram",
       "keywords": [
         "connect",
@@ -1392,21 +1420,33 @@
         "instagram",
         "insta",
         "ig",
-        "reels"
+        "reels",
+        "connect instagram",
+        "instagram account",
+        "link instagram",
+        "post to instagram"
       ],
-      "answer": "Connecting Instagram is coming in a later update. It will be in Settings › Posting › Accounts.",
+      "answer": "Open **Set up posting** and tap **Instagram**. Follow its steps one by one: make your key, paste it, then tap **Connect Instagram**. You do it once, then Clip Factory posts there by itself.",
       "steps": [
-        "Open **Accounts**.",
-        "Find the Instagram row."
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **Instagram**.",
+        "Do each step in order.",
+        "Tap **Connect Instagram**."
       ],
       "actions": [
         {
-          "id": "posting-setup-instagram-accounts",
-          "label": "Open Accounts",
-          "to": "/settings/posting/accounts",
+          "id": "posting-setup-instagram:list",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup",
           "highlight": [
-            "account-instagram"
+            "setup-instagram"
           ]
+        },
+        {
+          "id": "posting-setup-instagram:page",
+          "label": "Set up Instagram",
+          "to": "/settings/posting/setup/instagram"
         }
       ],
       "extends": "§17"
@@ -1414,8 +1454,8 @@
     {
       "id": "posting-setup-facebook",
       "kind": "guide",
-      "route": "/settings/posting/accounts",
-      "where": "Settings › Posting › Accounts",
+      "route": "/settings/posting/setup/facebook",
+      "where": "Settings › Posting › Set up posting › Facebook",
       "title": "Connect Facebook",
       "keywords": [
         "connect",
@@ -1426,21 +1466,33 @@
         "add account",
         "facebook",
         "fb",
-        "page"
+        "page",
+        "connect facebook",
+        "facebook page",
+        "link facebook",
+        "post to facebook"
       ],
-      "answer": "Connecting Facebook is coming in a later update. It will be in Settings › Posting › Accounts.",
+      "answer": "Open **Set up posting** and tap **Facebook**. Follow its steps one by one: make your key, paste it, then tap **Connect Facebook**. You do it once, then Clip Factory posts there by itself.",
       "steps": [
-        "Open **Accounts**.",
-        "Find the Facebook row."
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **Facebook**.",
+        "Do each step in order.",
+        "Tap **Connect Facebook**."
       ],
       "actions": [
         {
-          "id": "posting-setup-facebook-accounts",
-          "label": "Open Accounts",
-          "to": "/settings/posting/accounts",
+          "id": "posting-setup-facebook:list",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup",
           "highlight": [
-            "account-facebook"
+            "setup-facebook"
           ]
+        },
+        {
+          "id": "posting-setup-facebook:page",
+          "label": "Set up Facebook",
+          "to": "/settings/posting/setup/facebook"
         }
       ],
       "extends": "§17"
@@ -1448,8 +1500,8 @@
     {
       "id": "posting-setup-tiktok",
       "kind": "guide",
-      "route": "/settings/posting/accounts",
-      "where": "Settings › Posting › Accounts",
+      "route": "/settings/posting/setup/tiktok",
+      "where": "Settings › Posting › Set up posting › TikTok",
       "title": "Connect TikTok",
       "keywords": [
         "connect",
@@ -1459,21 +1511,33 @@
         "link account",
         "add account",
         "tiktok",
-        "tik tok"
+        "tik tok",
+        "connect tiktok",
+        "tiktok account",
+        "link tiktok",
+        "post to tiktok"
       ],
-      "answer": "Connecting TikTok is coming in a later update. It will be in Settings › Posting › Accounts.",
+      "answer": "Open **Set up posting** and tap **TikTok**. Follow its steps one by one: make your key, paste it, then tap **Connect TikTok**. You do it once, then Clip Factory posts there by itself.",
       "steps": [
-        "Open **Accounts**.",
-        "Find the TikTok row."
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **TikTok**.",
+        "Do each step in order.",
+        "Tap **Connect TikTok**."
       ],
       "actions": [
         {
-          "id": "posting-setup-tiktok-accounts",
-          "label": "Open Accounts",
-          "to": "/settings/posting/accounts",
+          "id": "posting-setup-tiktok:list",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup",
           "highlight": [
-            "account-tiktok"
+            "setup-tiktok"
           ]
+        },
+        {
+          "id": "posting-setup-tiktok:page",
+          "label": "Set up TikTok",
+          "to": "/settings/posting/setup/tiktok"
         }
       ],
       "extends": "§17"
@@ -1481,8 +1545,8 @@
     {
       "id": "posting-setup-x",
       "kind": "guide",
-      "route": "/settings/posting/accounts",
-      "where": "Settings › Posting › Accounts",
+      "route": "/settings/posting/setup/x",
+      "where": "Settings › Posting › Set up posting › X",
       "title": "Connect X",
       "keywords": [
         "connect",
@@ -1494,21 +1558,32 @@
         "x",
         "twitter",
         "post to x",
-        "tweet"
+        "tweet",
+        "connect x",
+        "x account",
+        "link x"
       ],
-      "answer": "Connecting X is coming in a later update. It will be in Settings › Posting › Accounts.",
+      "answer": "Open **Set up posting** and tap **X**. Follow its steps one by one: make your key, paste it, then tap **Connect X**. You do it once, then Clip Factory posts there by itself.",
       "steps": [
-        "Open **Accounts**.",
-        "Find the X row."
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **X**.",
+        "Do each step in order.",
+        "Tap **Connect X**."
       ],
       "actions": [
         {
-          "id": "posting-setup-x-accounts",
-          "label": "Open Accounts",
-          "to": "/settings/posting/accounts",
+          "id": "posting-setup-x:list",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup",
           "highlight": [
-            "account-x"
+            "setup-x"
           ]
+        },
+        {
+          "id": "posting-setup-x:page",
+          "label": "Set up X",
+          "to": "/settings/posting/setup/x"
         }
       ],
       "extends": "§17"
@@ -1546,9 +1621,10 @@
     {
       "id": "x-costs",
       "kind": "guide",
-      "route": "/settings/posting/accounts",
-      "where": "Settings › Posting › Accounts",
-      "title": "Does X cost money",
+      "route": "/settings/posting/setup/x",
+      "hash": "x-cost",
+      "where": "Settings › Posting › Set up posting › X",
+      "title": "What X charges for numbers",
       "keywords": [
         "cost",
         "money",
@@ -1558,20 +1634,27 @@
         "dollars",
         "x",
         "twitter",
-        "expensive"
+        "expensive",
+        "x cost",
+        "charges",
+        "x charges",
+        "x price",
+        "does x cost money",
+        "x money"
       ],
-      "answer": "X charges a little each time Clip Factory checks a post's numbers. Clip Factory stops at $10 a month.",
+      "answer": "X charges a little for every number check. The checks stop at $10 a month, so X never costs more.",
       "steps": [
-        "Open **Accounts**.",
-        "Look at the X row."
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **X** and read **What X costs**."
       ],
       "actions": [
         {
-          "id": "x-costs-accounts",
-          "label": "Open Accounts",
-          "to": "/settings/posting/accounts",
+          "id": "x-costs:setup",
+          "label": "Open X setup",
+          "to": "/settings/posting/setup/x#x-cost",
           "highlight": [
-            "account-x"
+            "x-cost"
           ]
         }
       ]

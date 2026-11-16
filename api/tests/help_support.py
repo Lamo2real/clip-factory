@@ -39,6 +39,10 @@ def eval_cases(path: Path) -> list[dict[str, Any]]:
     data = json.loads(path.read_text())
     cases = data["cases"] if isinstance(data, dict) else data
     assert isinstance(cases, list)
+    # Like web/test/helpRetrieve.test.ts: a case without its own context runs with the file's defaultContext.
+    default = data.get("defaultContext") if isinstance(data, dict) else None
+    if default:
+        cases = [c if c.get("context") else {**c, "context": dict(default)} for c in cases]
     return cases
 
 

@@ -246,6 +246,20 @@ for (const size of [
       await page.waitForTimeout(500);
       await page.screenshot({ path: join(dir, `help-panel-${size.width}x${size.height}.png`) });
     });
+    // The Ask box: a two-line question with the paper plane inside the field, then the plane mid-flight.
+    test(`screenshot help ask box ${size.width}x${size.height}`, async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+      const panel = page.getByRole("dialog", { name: "Ask Clip Factory" });
+      const box = panel.getByLabel("Your question");
+      await box.fill("How do I connect YouTube?\nAnd does it post by itself?");
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: join(dir, `help-ask-box-${size.width}x${size.height}.png`) });
+      await panel.getByRole("button", { name: "Send", exact: true }).click();
+      await page.waitForTimeout(220);
+      await page.screenshot({ path: join(dir, `help-plane-flying-${size.width}x${size.height}.png`) });
+    });
     // Review with the launcher clear of Keep, then the answer button lighting Keep up (the panel steps away when it
     // would cover it), and the panel opened again with the same answer.
     test(`screenshot help spotlight on Review ${size.width}x${size.height}`, async ({ page }) => {

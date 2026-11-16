@@ -26,11 +26,15 @@ class Config:
 
 
 def model_from_models_json(path: Path) -> str | None:
-    """``global.anthropic.claude-…`` from config/models.json, for when CF_MODEL_ID is not set."""
+    """``global.anthropic.claude-…`` from config/models.json, for when CF_MODEL_ID is not set.
+
+    A model's own ``profilePrefix`` wins over the top-level one (docs/CONTRACTS.md §19.5).
+    """
     try:
         data = json.loads(path.read_text("utf-8"))
-        model = data["models"][data["agentModel"]]["modelId"]
-        prefix = data.get("profilePrefix")
+        entry = data["models"][data["agentModel"]]
+        model = entry["modelId"]
+        prefix = entry.get("profilePrefix") or data.get("profilePrefix")
         return f"{prefix}.{model}" if prefix else str(model)
     except (OSError, ValueError, KeyError, TypeError):
         return None

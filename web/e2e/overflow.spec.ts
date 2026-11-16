@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { CLIPS, findOverflow, openClip, resolveRoute, ROUTES, settle, SETUP_ROUTES, WIDTHS } from "./helpers.ts";
+import { animationsDone, CLIPS, findOverflow, openClip, resolveRoute, ROUTES, settle, SETUP_ROUTES, WIDTHS } from "./helpers.ts";
 
 const SKILL_PAGES = { written: "01JZ8S00000000000000000001", zip: "01JZ8S00000000000000000002", tricky: "01JZ8S00000000000000000003" };
 
@@ -129,6 +129,8 @@ for (const width of [320, 375, 600, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     const failures: string[] = [];
     const check = async (label: string) => {
+      // The panel's entrance and the paper plane's flight are over first (the plane flies out of its box on purpose).
+      await animationsDone(page);
       const result = await findOverflow(page);
       if (result.page > result.viewport) failures.push(`${label}: page scrolls sideways (${result.page}px > ${result.viewport}px)`);
       for (const o of result.items) failures.push(`${label}: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);
@@ -293,6 +295,16 @@ for (const width of [320, 375, 768, 1024, 1440, 1920]) {
     await panel.locator(".help-actions").last().waitFor();
     await box.fill("x".repeat(260));
     await check("answer and a long question");
+    // Five lines: the field stops at four and scrolls; the paper plane stays inside its right end.
+    await box.fill("one\ntwo\nthree\nfour\nfive");
+    await check("a five-line question");
+    await animationsDone(page);
+    const field = (await box.boundingBox())!;
+    const plane = (await panel.getByRole("button", { name: "Send", exact: true }).boundingBox())!;
+    const whole = (await panel.boundingBox())!;
+    if (field.width < whole.width - 24) failures.push(`the field is not full width (${field.width} of ${whole.width})`);
+    if (plane.x + plane.width > field.x + field.width || plane.y + plane.height > field.y + field.height)
+      failures.push("the paper plane leaves the field");
     expect(failures, failures.join("\n")).toEqual([]);
   });
 }

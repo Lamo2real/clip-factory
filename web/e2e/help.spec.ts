@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { findOverflow, settle } from "./helpers.ts";
+import { animationsDone, findOverflow, settle } from "./helpers.ts";
 
 /** The launcher's box when it is shown (not stepped aside), else null. */
 async function shownLauncher(page: Page) {
@@ -168,6 +168,68 @@ for (const size of SIZES) {
       else await expect.poll(() => spotlitIsReachable(page), { timeout: 2000 }).toBe("ok");
     });
 
+    test("the Ask box spans the panel and sends with a paper plane", async ({ page }) => {
+      await open(page);
+      const p = panel(page);
+      const box = p.getByLabel("Your question");
+      const send = p.getByRole("button", { name: "Send", exact: true });
+      await expect(box).toHaveAttribute("enterkeyhint", "send");
+      await animationsDone(page);
+      // Edge to edge: the field takes the panel's width less the form's small padding.
+      const pb = (await p.boundingBox())!;
+      const fb = (await box.boundingBox())!;
+      expect(fb.width, "field width").toBeGreaterThanOrEqual(pb.width - 24);
+      expect(fb.x - pb.x).toBeLessThanOrEqual(12);
+      // The plane: no words, a 44 px target, inside the right end of the field, off while the field is empty.
+      expect(((await send.textContent()) ?? "").trim()).toBe("");
+      await expect(send.locator("svg.paper-plane")).toHaveCount(1);
+      const sb = (await send.boundingBox())!;
+      expect(Math.round(sb.width)).toBe(44);
+      expect(Math.round(sb.height)).toBe(44);
+      expect(sb.x).toBeGreaterThan(fb.x + fb.width / 2);
+      expect(sb.x + sb.width).toBeLessThanOrEqual(fb.x + fb.width);
+      expect(sb.y).toBeGreaterThanOrEqual(fb.y);
+      expect(sb.y + sb.height).toBeLessThanOrEqual(fb.y + fb.height);
+      await expect(send).toHaveAttribute("aria-disabled", "true");
+      // Nothing (the tab bar on phones, the launcher on desktop) sits on the plane.
+      const onTop = await send.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return !!top && el.contains(top);
+      });
+      expect(onTop).toBe(true);
+      if (size.phone) expect(sb.y + sb.height).toBeLessThanOrEqual(size.height);
+
+      // Shift+Enter adds a line; the field grows up to four lines, then scrolls.
+      await box.fill("one");
+      const oneLine = (await box.boundingBox())!.height;
+      await box.press("Shift+Enter");
+      await box.pressSequentially("two");
+      await expect(box).toHaveValue("one\ntwo");
+      await expect(p.locator(".help-msg--me")).toHaveCount(0);
+      expect((await box.boundingBox())!.height).toBeGreaterThan(oneLine);
+      await box.fill("1\n2\n3\n4\n5\n6\n7");
+      const tall = (await box.boundingBox())!.height;
+      await box.fill("1\n2\n3\n4");
+      expect((await box.boundingBox())!.height).toBeCloseTo(tall, 0);
+      expect(tall).toBeLessThan(oneLine * 3);
+      await noOverflow(page, "Ask box (four lines)");
+
+      // Tap the plane: it flies, and the question shows straight away (it does not wait for the flight).
+      await box.fill("What does Keep do?");
+      await expect(send).not.toHaveAttribute("aria-disabled", "true");
+      await send.click();
+      await expect(send.locator(".fly")).toHaveClass(/is-flying/);
+      await expect(send.locator(".fly__trail")).toHaveCount(1);
+      await expect(p.locator(".help-msg--me")).toHaveText(["What does Keep do?"]);
+      await expect(box).toHaveValue("");
+      await expect(send.locator(".fly")).not.toHaveClass(/is-flying/, { timeout: 2000 });
+      await expect(p.locator(".help-msg--bot").last().locator(".help-steps li")).toHaveCount(3);
+      // The tap played the click sound.
+      const log = await page.evaluate(() => (window.__cfSoundLog ?? []).map((e) => e.kind));
+      expect(log).toContain("tap");
+    });
+
     test("fills the best clip's views from the owner's own data", async ({ page }) => {
       await open(page, "/library");
       await ask(page, "How many views did my best clip get this week?");
@@ -246,7 +308,15 @@ for (const size of SIZES) {
     test("with reduced motion nothing in the panel animates", async ({ page }) => {
       await page.emulateMedia({ reducedMotion: "reduce" });
       await open(page);
-      await ask(page, "What does Keep do?");
+      // The plane only fades: no flight, no trail.
+      const box = panel(page).getByLabel("Your question");
+      await box.fill("What does Keep do?");
+      const send = panel(page).getByRole("button", { name: "Send", exact: true });
+      await send.click();
+      await expect(send.locator(".fly")).toHaveClass(/is-fading/);
+      await expect(send.locator(".fly__trail")).toHaveCount(0);
+      const names = await send.evaluate((el) => el.getAnimations({ subtree: true }).map((a) => (a as CSSAnimation).animationName ?? ""));
+      expect(names.every((n) => n === "fly-fade" || n === ""), names.join(", ")).toBe(true);
       await expect(panel(page).locator(".help-msg--bot")).toHaveCount(1);
       // Nothing keeps moving: no entrance, no bouncing dots, no shimmer (1 ms leftovers of a tap settle at once).
       await expect
@@ -271,6 +341,26 @@ for (const size of SIZES) {
     });
   });
 }
+
+// The posting and skills guides take you to the real pages (§17, §18) and light up a control that is there.
+test.describe("Ask Clip Factory guides for posting setup and skills", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  for (const c of [
+    // The mock model keeps one button; #503 answers from the local notes, which keep both.
+    { q: "#503 connect youtube", button: "Set up YouTube", url: /\/settings\/posting\/setup\/youtube$/, lit: /setup-(connect|progress)/ },
+    { q: "connect tiktok", button: "Open Set up posting", url: /\/settings\/posting\/setup$/, lit: /setup-tiktok/ },
+    { q: "write a skill", button: "Write a skill", url: /\/settings\/clip-making\/skills\/new$/, lit: /skill-form/ },
+    { q: "delete a skill", button: "Open Skills", url: /\/settings\/clip-making\/skills#your-skills$/, lit: /your-skills/ },
+  ]) {
+    test(`"${c.q}" opens ${c.button} and lights it up`, async ({ page }) => {
+      await open(page);
+      await ask(page, c.q);
+      await panel(page).locator(".help-msg--bot").last().getByRole("button", { name: c.button }).click();
+      await expect(page).toHaveURL(c.url);
+      await expect(page.locator("[data-help-spotlit]")).toHaveAttribute("data-help", c.lit);
+    });
+  }
+});
 
 // The circle on phones never sits on a real control once it settles: it lifts over the marked ones or steps aside.
 const PHONES = [320, 375, 390, 430] as const;

@@ -113,7 +113,11 @@
 }
 .help-panel.is-sheet {
   --glass-tint: linear-gradient(160deg, rgb(255 255 255 / 0.94), rgb(var(--offwhite-rgb) / 0.96));
-  inset: 0;
+  /* The visible part of the screen (HelpPanel sets these from visualViewport), so the phone keyboard never hides
+     the field and the plane. It sits above the tab bar too. */
+  inset: auto 0;
+  top: var(--help-vtop, 0px);
+  height: var(--help-vh, 100dvh);
   z-index: 90;
   width: auto;
   max-height: none;
@@ -351,30 +355,44 @@
   }
 }
 
+/* The Ask box: the field spans the panel edge to edge, the paper plane sits inside its right end. */
 .help-panel__form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 8px;
-  padding: 10px 12px 12px;
+  gap: 4px;
+  padding: 10px 10px 12px;
   border-top: 1px solid rgb(var(--ink-rgb) / 0.08);
 }
+.help-panel__field {
+  position: relative;
+  min-width: 0;
+}
 .help-panel__input {
-  min-height: 48px;
-  max-height: 140px;
+  display: block;
+  width: 100%;
+  /* One line to start (a 44 px plane plus 4 px around it), growing to four lines, then it scrolls. */
+  min-height: 52px;
+  max-height: calc(5.6em + 28px);
+  padding: 13px 58px 13px 16px;
+  border-radius: 26px;
   resize: none;
   line-height: 1.4;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.help-panel__input:focus-visible {
+  border-radius: 26px;
+}
+.help-panel__ask {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
 }
 .help-panel__count {
-  grid-column: 1 / -1;
-  grid-row: 2;
   justify-self: end;
+  padding-right: 8px;
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   color: var(--ink-2);
-}
-.help-panel__ask {
-  min-height: 48px;
 }
 
 /* ---------- Spotlight ---------- */

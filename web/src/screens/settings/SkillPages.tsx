@@ -163,10 +163,10 @@ function ReadPage({ tree, branch, skillId }: Place & { skillId: string }) {
         actions={
           skill.builtin ? null : (
             <>
-              <LinkButton href={skillPath(skill.skillId, "edit")} variant="primary" size="lg" icon="edit">
+              <LinkButton href={skillPath(skill.skillId, "edit")} variant="primary" size="lg" icon="edit" data-help="skill-edit">
                 Edit
               </LinkButton>
-              <Button variant="ghost" size="lg" icon="trash" onClick={() => setAsking(true)}>
+              <Button variant="ghost" size="lg" icon="trash" onClick={() => setAsking(true)} data-help="skill-delete">
                 Delete
               </Button>
             </>
@@ -592,7 +592,7 @@ function FormView({
   }
 
   return (
-    <form className="skill-form glass" onSubmit={submit} noValidate>
+    <form className="skill-form glass" onSubmit={submit} noValidate data-help="skill-form">
       {QUESTIONS.map((q, n) => {
         const value = values[q.field];
         const error = shown(q.field);

@@ -116,6 +116,15 @@ def test_rules_wording() -> None:
     assert "—" not in model.RULES
 
 
+def test_grounding_rules_win_over_skills_on_facts() -> None:
+    # The skills block comes first in the system prompt, so the rules after it say plainly that they win on facts.
+    rule = " ".join(model.RULES.split("\n9. ", 1)[1].split())
+    assert rule.startswith("The owner's skills above")
+    assert "On facts these rules win" in rule
+    assert "come only from KNOWLEDGE, even when a skill says something else" in rule
+    assert "ignore that part of the skill" in rule
+
+
 def test_client_timeouts_and_no_sdk_retry() -> None:
     config = model.client_config()
     assert config.connect_timeout == 3

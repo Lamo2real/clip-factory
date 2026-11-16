@@ -238,7 +238,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
     if (step.upload) out.push(<VerificationUpload key="upload" setup={setup} onChange={(s) => stayOpen(step.id, s)} reload={reload} />);
     if (step.auto === "connected")
       out.push(
-        <div className="gstep__connect" key="connect">
+        <div className="gstep__connect" key="connect" data-help="setup-connect">
           <Button
             variant={primary ? "primary" : "glass"}
             size="lg"
@@ -319,7 +319,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
 
   return (
     <div className="setup-page">
-      <header className="setup-head glass">
+      <header className="setup-head glass" data-help="setup-progress">
         <span className={`setup-head__mark is-${platform}`}>
           <PlatformMark platform={platform} size={34} />
         </span>

@@ -1,5 +1,5 @@
 {
-  "version": "fc90c7464b71",
+  "version": "2f2b1b67ebb8",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -861,7 +861,8 @@
         "youtube account",
         "link youtube",
         "post to youtube",
-        "shorts"
+        "shorts",
+        "set up youtube"
       ],
       "answer": "Open **Set up posting** and tap **YouTube**. Follow its steps one by one: make your key, paste it, then tap **Connect YouTube**. You do it once, then Clip Factory posts there by itself.",
       "steps": [
@@ -883,7 +884,11 @@
         {
           "id": "posting-setup-youtube:page",
           "label": "Set up YouTube",
-          "to": "/settings/posting/setup/youtube"
+          "to": "/settings/posting/setup/youtube",
+          "highlight": [
+            "setup-connect",
+            "setup-progress"
+          ]
         }
       ],
       "extends": "§17"
@@ -900,7 +905,8 @@
         "instagram account",
         "link instagram",
         "post to instagram",
-        "reels"
+        "reels",
+        "set up instagram"
       ],
       "answer": "Open **Set up posting** and tap **Instagram**. Follow its steps one by one: make your key, paste it, then tap **Connect Instagram**. You do it once, then Clip Factory posts there by itself.",
       "steps": [
@@ -922,7 +928,11 @@
         {
           "id": "posting-setup-instagram:page",
           "label": "Set up Instagram",
-          "to": "/settings/posting/setup/instagram"
+          "to": "/settings/posting/setup/instagram",
+          "highlight": [
+            "setup-connect",
+            "setup-progress"
+          ]
         }
       ],
       "extends": "§17"
@@ -938,7 +948,8 @@
         "facebook",
         "facebook page",
         "link facebook",
-        "post to facebook"
+        "post to facebook",
+        "set up facebook"
       ],
       "answer": "Open **Set up posting** and tap **Facebook**. Follow its steps one by one: make your key, paste it, then tap **Connect Facebook**. You do it once, then Clip Factory posts there by itself.",
       "steps": [
@@ -960,7 +971,11 @@
         {
           "id": "posting-setup-facebook:page",
           "label": "Set up Facebook",
-          "to": "/settings/posting/setup/facebook"
+          "to": "/settings/posting/setup/facebook",
+          "highlight": [
+            "setup-connect",
+            "setup-progress"
+          ]
         }
       ],
       "extends": "§17"
@@ -976,7 +991,8 @@
         "tiktok",
         "tiktok account",
         "link tiktok",
-        "post to tiktok"
+        "post to tiktok",
+        "set up tiktok"
       ],
       "answer": "Open **Set up posting** and tap **TikTok**. Follow its steps one by one: make your key, paste it, then tap **Connect TikTok**. You do it once, then Clip Factory posts there by itself.",
       "steps": [
@@ -998,7 +1014,11 @@
         {
           "id": "posting-setup-tiktok:page",
           "label": "Set up TikTok",
-          "to": "/settings/posting/setup/tiktok"
+          "to": "/settings/posting/setup/tiktok",
+          "highlight": [
+            "setup-connect",
+            "setup-progress"
+          ]
         }
       ],
       "extends": "§17"
@@ -1015,7 +1035,8 @@
         "x account",
         "link x",
         "post to x",
-        "tweet"
+        "tweet",
+        "set up x"
       ],
       "answer": "Open **Set up posting** and tap **X**. Follow its steps one by one: make your key, paste it, then tap **Connect X**. You do it once, then Clip Factory posts there by itself.",
       "steps": [
@@ -1037,7 +1058,11 @@
         {
           "id": "posting-setup-x:page",
           "label": "Set up X",
-          "to": "/settings/posting/setup/x"
+          "to": "/settings/posting/setup/x",
+          "highlight": [
+            "setup-connect",
+            "setup-progress"
+          ]
         }
       ],
       "extends": "§17"
@@ -1171,6 +1196,14 @@
           "highlight": [
             "add-skill"
           ]
+        },
+        {
+          "id": "skills-add:write",
+          "label": "Write a skill",
+          "to": "/settings/clip-making/skills/new",
+          "highlight": [
+            "skill-form"
+          ]
         }
       ]
     },
@@ -1214,6 +1247,96 @@
         "metric": "skills_on",
         "text": "Skills Clip Factory uses right now: {value}."
       }
+    },
+    {
+      "id": "skills-write",
+      "kind": "guide",
+      "route": "/settings/clip-making/skills/new",
+      "where": "Settings › Clip making › Skills › Write a skill",
+      "title": "Make your own skill",
+      "keywords": [
+        "make a skill",
+        "create a skill",
+        "three questions"
+      ],
+      "answer": "Tap **Write a skill**. Answer the three questions: a name, when to use it, and what Clip Factory should do. Tap **Use the example** if you are stuck. Then tap **Save skill**.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **Skills**.",
+        "Tap **Write a skill**.",
+        "Answer the three questions.",
+        "Tap **Save skill**."
+      ],
+      "actions": [
+        {
+          "id": "skills-write:new",
+          "label": "Write a skill",
+          "to": "/settings/clip-making/skills/new",
+          "highlight": [
+            "skill-form"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "skills-edit",
+      "kind": "guide",
+      "route": "/settings/clip-making/skills",
+      "hash": "your-skills",
+      "where": "Settings › Clip making › Skills",
+      "title": "Edit a skill",
+      "keywords": [
+        "edit a skill",
+        "edit my skill"
+      ],
+      "answer": "Open **Skills** and tap the skill. Tap **Edit**, change the words, then tap **Save changes**. Built-in skills can be read, not changed.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **Skills**.",
+        "Tap the skill.",
+        "Tap **Edit**.",
+        "Tap **Save changes**."
+      ],
+      "actions": [
+        {
+          "id": "skills-edit:skills",
+          "label": "Open Skills",
+          "to": "/settings/clip-making/skills#your-skills",
+          "highlight": [
+            "your-skills"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "skills-delete",
+      "kind": "guide",
+      "route": "/settings/clip-making/skills",
+      "hash": "your-skills",
+      "where": "Settings › Clip making › Skills",
+      "title": "Delete a skill",
+      "keywords": [
+        "delete a skill",
+        "delete my skill",
+        "remove a skill"
+      ],
+      "answer": "To throw away a skill, open **Skills** and tap the skill. Tap **Delete**, then **Delete** again. Changed your mind? Tap **Undo** at the bottom. Built-in skills cannot be deleted.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **Skills**.",
+        "Tap the skill.",
+        "Tap **Delete**, then **Delete** again."
+      ],
+      "actions": [
+        {
+          "id": "skills-delete:skills",
+          "label": "Open Skills",
+          "to": "/settings/clip-making/skills#your-skills",
+          "highlight": [
+            "your-skills"
+          ]
+        }
+      ]
     },
     {
       "id": "sounds-click",

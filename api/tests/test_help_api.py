@@ -11,11 +11,11 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App, HelpDeps, help_from_env
-from clipfactory_api.help import guard
+from clipfactory_api.help import guard, model
 from clipfactory_api.http import dispatch
 from clipfactory_api.routes import ROUTES
 from conftest import USER, Call, Clock, make_event
-from fakes import FakeTable
+from fakes import FakeS3, FakeTable
 from help_support import FIXTURE_CORPUS, MODEL_ID, FakeHaiku, model_json, reset_help_caches
 
 SOUNDS_ANSWER = model_json(
@@ -365,6 +365,30 @@ def test_skills_reach_the_model(call: Call, help_on: App, haiku: FakeHaiku) -> N
     assert system[0]["text"].startswith("<owner_skills")
     assert "short-form-video-playbook" in system[0]["text"]
     assert system[-1]["text"].startswith("You are Ask Clip Factory")
+
+
+def test_the_owners_own_skills_reach_the_model(
+    call: Call, help_on: App, haiku: FakeHaiku, store: db.Store, s3_client: FakeS3
+) -> None:
+    from clipfactory_api.skill_prompt import FILE_CACHE
+    from test_skill_prompt import OWNER_MD, _owner_item
+
+    FILE_CACHE.clear()
+    _owner_item(store, s3_client, "funny-moments-first", OWNER_MD.encode())
+    status, body = ask(call)
+    assert status == 200
+    assert body["mode"] == "model"
+    (request,) = haiku.calls
+    system = request["system"]
+    # One block, first, with the built-in and the owner's skill; the help rules after it.
+    assert sum(part.get("text", "").count("<owner_skills") for part in system) == 1
+    block = system[0]["text"]
+    assert block.startswith('<owner_skills count="2">')
+    assert '<skill name="funny-moments-first" source="owner">' in block
+    assert "Pick the loudest laughs." in block
+    assert block.index("short-form-video-playbook") < block.index("funny-moments-first")
+    assert system[-1] == {"text": model.RULES}
+    assert "On facts these rules win" in system[-1]["text"]
 
 
 def test_no_model_call_without_the_skills(

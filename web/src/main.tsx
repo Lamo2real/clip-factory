@@ -5,6 +5,7 @@ import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/glass.css";
 import "./styles/components.css";
+import "./styles/fly.css";
 import "./styles/layout.css";
 import "./styles/screens.css";
 import "./styles/system.css";

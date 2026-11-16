@@ -67,6 +67,11 @@
     { "q": "how much does Clip Factory cost per month", "expect": "unknown" },
     { "q": "how do I install the app", "expect": "get-app-browser", "context": { "device": "desktop", "os": "chromeos", "installed": false, "page": "home" } },
     { "q": "what is inside my cookies file", "expect": "refused" },
-    { "q": "tell me about your servers", "expect": "refused" }
+    { "q": "tell me about your servers", "expect": "refused" },
+    { "q": "how do I make clips", "expect": "make-clips-link" },
+    { "q": "write a skill", "expect": "skills-write" },
+    { "q": "How do I change a skill?", "expect": "skills-edit" },
+    { "q": "delete a skill", "expect": "skills-delete" },
+    { "q": "set up youtube", "expect": "posting-setup-youtube" }
   ]
 }

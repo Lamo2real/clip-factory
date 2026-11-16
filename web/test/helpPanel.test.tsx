@@ -271,6 +271,39 @@ describe("Ask Clip Factory panel", () => {
     expect(launcher()!.hasAttribute("inert")).toBe(false);
   });
 
+  it("sends with the paper plane: Enter sends, Shift+Enter is a new line, the question shows at once", async () => {
+    let release: (r: AskResult) => void = () => undefined;
+    const client = {
+      status: vi.fn(async (): Promise<StatusResult> => ({ kind: "ok", status: { enabled: true, mode: "model", corpusVersion: "v" } })),
+      ask: vi.fn((_body: AskBody) => new Promise<AskResult>((r) => (release = r))),
+    } satisfies HelpClient;
+    await mount(client);
+    await act(async () => launcher()!.click());
+    const ta = $<HTMLTextAreaElement>(".help-panel__input")!;
+    const send = $<HTMLButtonElement>(".help-panel__ask")!;
+    expect(ta.getAttribute("enterkeyhint")).toBe("send");
+    expect(send.getAttribute("aria-label")).toBe("Send");
+    expect(send.textContent?.trim()).toBe("");
+    expect(send.getAttribute("aria-disabled")).toBe("true");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(ta, "What does Keep do?");
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(send.getAttribute("aria-disabled")).toBeNull();
+    // Shift+Enter is left to the browser (a new line): nothing is sent.
+    const shift = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true });
+    await act(async () => ta.dispatchEvent(shift));
+    expect(shift.defaultPrevented).toBe(false);
+    expect(client.ask).not.toHaveBeenCalled();
+    await act(async () => send.click());
+    // The question bubble and the plane's flight start together; the answer is still on its way.
+    expect($(".help-msg--me")?.textContent).toBe("What does Keep do?");
+    expect($(".help-panel__ask .fly")!.className).toContain("is-flying");
+    expect(client.ask).toHaveBeenCalledTimes(1);
+    await act(async () => release({ kind: "answer", answer: keepAnswer, mode: "model", requestId: "r" }));
+    await until(() => !!$(".help-steps"));
+  });
+
   it("opens from anywhere with a question", async () => {
     const client = fakeClient([]);
     await mount(client);
