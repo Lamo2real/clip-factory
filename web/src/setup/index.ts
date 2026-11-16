@@ -147,8 +147,12 @@ export function resultStep(platform: Platform, code: ConnectResult): string | nu
     case "wrong_account_type":
     case "no_pages":
       return g.fix.account[0] ?? null;
-    default:
+    case "connected":
+    case "choose":
       return null;
+    default:
+      // "Press Connect again": the Connect step is far down the page, so the card takes the owner there.
+      return "connect";
   }
 }
 
