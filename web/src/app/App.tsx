@@ -33,6 +33,7 @@ const TITLES: Record<Route["name"], string> = {
   library: "Library",
   clip: "Clip numbers",
   settings: "Settings",
+  skill: "Skill",
   get_app: "Get the app",
   not_found: "Not found",
 };
@@ -44,6 +45,7 @@ export function titleFor(route: Route): string {
     const branch = tree && route.branch ? findBranch(tree, route.branch) : undefined;
     return `${branch?.name ?? tree?.name ?? "Settings"} · Settings`;
   }
+  if (route.name === "skill") return `${route.mode === "new" ? "Write a skill" : route.mode === "edit" ? "Change a skill" : "Skill"} · Settings`;
   if (route.name === "library" && route.view === "week") return "This week · Library";
   return TITLES[route.name];
 }
@@ -180,6 +182,8 @@ function Screen({ route }: { route: Route }) {
       return <ClipPerformance key={route.clipId} clipId={route.clipId} />;
     case "settings":
       return <Settings tree={route.tree} branch={route.branch} />;
+    case "skill":
+      return <Settings skill={{ mode: route.mode, skillId: route.skillId }} />;
     case "get_app":
       return (
         <div className="page page--narrow">

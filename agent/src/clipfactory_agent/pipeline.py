@@ -6,6 +6,7 @@ are reused, which is what makes Retry cheap."""
 from __future__ import annotations
 
 import asyncio
+import functools
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,7 +34,7 @@ from .config import Config
 from .jobs import StepDone, StepFn, Tracker
 from .moments import Moment, length_target
 from .render import render_clip
-from .skills import SkillDoc, prepare_skills, skills_prompt
+from .skills import SkillsBlock, SkillSet, prepare_skills, skills_block
 from .store import Fence, Store, clip_prefix, cookies_key, source_prefix
 from .transcribe import PART_SECONDS, Transcriber, job_name, language_of, parse_items
 from .util import JobCanceled, JobSuperseded, TransientError, UserFacingError, gather_all, hms, log, now_iso, ulid
@@ -54,7 +55,8 @@ class JobState:
     cookies: Path | None = None
     words: list[list[Any]] = field(default_factory=list)
     loud: list[float] = field(default_factory=list)
-    skills: list[SkillDoc] = field(default_factory=list)
+    skills: SkillSet = field(default_factory=lambda: SkillSet([]))
+    skills_block: SkillsBlock | None = None  # built once in analyze; every model call gets it (§18.6)
     learnings: list[str] = field(default_factory=list)
     week_learnings: list[str] = field(default_factory=list)
     similar: list[vectors_mod.Hit] = field(default_factory=list)
@@ -86,6 +88,14 @@ class JobState:
 
     def key(self, name: str) -> str:
         return source_prefix(self.job_id) + name
+
+    @property
+    def block(self) -> SkillsBlock:
+        """The skills block for a model call. ``analyze`` always runs first, so a job never calls a model without
+        the owner's skills."""
+        if self.skills_block is None:
+            raise RuntimeError("the skills block is built in analyze, before any model call")
+        return self.skills_block
 
     @property
     def fence(self) -> Fence | None:
@@ -348,15 +358,20 @@ class Pipeline:
             st.loud = await loudness.measure(await self._local_audio(st), st.workdir)
             await self.store.put_json(st.key("loudness.json"), st.loud)
         tr.report(0.6)
+        # A failure to read the skill rows fails the step (and its normal retry runs): never a job without them.
         st.skills = await prepare_skills(
             st.workdir, self.cfg.skills_dir, await self.store.skill_rows(st.user_id), self.store.get_bytes
         )
+        st.skills_block = skills_block(st.skills.docs, where="agent.job")
         taught = await learnings.load(self.store, st.user_id)
         st.week_learnings, st.learnings = taught.week, taught.other
         st.similar = await self._similar(st)
         spikes = len(loudness.spikes(st.loud, limit=10_000))
         similar = f" and {len(st.similar)} similar past clip(s)" if st.similar else ""
-        return f"Found {spikes} loud moments; using {len(st.skills)} skill(s), {len(taught)} learning(s){similar}."
+        used = f"using {len(st.skills.docs)} skill(s)"
+        if st.skills.skipped:
+            used += f"; {len(st.skills.skipped)} could not be read"
+        return f"Found {spikes} loud moments; {used}, {len(taught)} learning(s){similar}."
 
     async def _similar(self, st: JobState) -> list[vectors_mod.Hit]:
         """The owner's past clips most like this video, for "What worked before" (never fails the job)."""
@@ -396,7 +411,6 @@ class Pipeline:
             words=st.words,
             loud=st.loud,
             heatmap=list(st.meta.get("heatmap") or []),
-            skills_text=skills_prompt(st.skills),
             learnings=st.learnings,
             week_learnings=st.week_learnings,
             language=st.meta.get("language"),
@@ -410,7 +424,8 @@ class Pipeline:
             model_id=self.cfg.model_id,
             region=self.cfg.region,
             workdir=st.workdir,
-            skill_names=[s.name for s in st.skills],
+            skill_names=[s.name for s in st.skills.docs],
+            skills=st.block,
             on_progress=tr.report,
         )
         kinds = ", ".join(sorted({m.moment_type.replace("_", " ") for m in st.chosen}))
@@ -467,7 +482,7 @@ class Pipeline:
             words=st.words,
             workdir=workdir,
             fetch_section=fetch,
-            detect_layout=self.bedrock.detect_layout,
+            detect_layout=functools.partial(self.bedrock.detect_layout, skills=st.block),
             known_layout=layout,
         )
         return Candidate(m, r, index=index)
@@ -519,8 +534,8 @@ class Pipeline:
     async def _review(self, st: JobState, c: Candidate) -> dict[str, Any]:
         try:
             return await self.bedrock.structured(
-                system="You review short vertical clips before they are posted, strictly but fairly.\n\n"
-                + skills_prompt(st.skills),
+                system="You review short vertical clips before they are posted, strictly but fairly.",
+                skills=st.block,
                 content=[{"text": review_prompt(c.moment, c.render, st.notes)}],
                 tool="submit_review",
                 description="Submit the checklist review of this clip.",
@@ -620,10 +635,11 @@ class Pipeline:
             self.bedrock,
             texts,
             notes=st.notes,
-            skills_text=skills_prompt(st.skills),
-            system="You write social captions for short clips.\n\n" + skills_prompt(st.skills),
+            skills=st.block,
+            skills_text=st.skills.full_text,
+            system="You write social captions for short clips.",
         )
-        required = captions_mod.required_tags(st.notes, skills_prompt(st.skills))
+        required = captions_mod.required_tags(st.notes, st.skills.full_text)
         for c in st.candidates:
             title = st.captions[st.clip_ids[id(c)]]["youtubeTitle"]
             c.items = [i for i in c.items if i.key not in ("tags", "title")]

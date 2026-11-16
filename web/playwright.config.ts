@@ -1,16 +1,19 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // Runs the mock build (in-memory API, fake signed-in owner) with `vite preview`. Nothing leaves the machine.
+// CF_E2E_PORT picks another port when 4179 is taken (another checkout's preview), so tests never reuse its server.
+const port = Number(process.env.CF_E2E_PORT || 4179);
+
 export default defineConfig({
   testDir: "e2e",
   timeout: 120_000,
   fullyParallel: true,
   retries: 0,
   reporter: [["list"]],
-  use: { baseURL: "http://localhost:4179", trace: "off" },
+  use: { baseURL: `http://localhost:${port}`, trace: "off" },
   webServer: {
-    command: "npm run build:mock && npm run preview:mock",
-    port: 4179,
+    command: `npm run build:mock && npx vite preview --outDir dist-mock --port ${port} --strictPort`,
+    port,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     cwd: import.meta.dirname,

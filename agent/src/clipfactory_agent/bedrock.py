@@ -2,7 +2,12 @@
 
 Claude Fable 5.1 rejects a forced ``toolChoice`` (it always thinks), so the first refusal of a forced choice switches
 this client to ``auto`` with the tool named in the prompt; the answer is then validated and, if it is wrong, sent back
-once with the exact problems."""
+once with the exact problems.
+
+Every call gets the owner's skills block first in its ``system`` (docs/CONTRACTS.md §18.6): ``structured`` takes it
+as a required keyword, and ``_converse`` is the only place in this package that calls ``converse``. A cache point
+follows a long block; if Bedrock refuses cache points, they are switched off for this client and the call is sent
+again without one."""
 
 from __future__ import annotations
 
@@ -13,6 +18,7 @@ from typing import Any
 
 from .retry import retry
 from .schema import check
+from .skills import SkillsBlock, compose_system
 from .util import TransientError, UserFacingError, log
 
 
@@ -86,6 +92,7 @@ class Bedrock:
             )
         self.client = client
         self.forced_tool_choice = True
+        self.cache_points = True
 
     def _converse(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         r: dict[str, Any] = self.client.converse(**kwargs)
@@ -98,13 +105,15 @@ class Bedrock:
         self,
         *,
         system: str,
+        skills: SkillsBlock,
         content: list[dict[str, Any]],
         tool: str,
         description: str,
         schema: dict[str, Any],
         max_tokens: int = 16000,
     ) -> dict[str, Any]:
-        """The model's answer as a dict that fits ``schema``, delivered through the tool ``tool``."""
+        """The model's answer as a dict that fits ``schema``, delivered through the tool ``tool``. ``skills`` goes
+        first in the system prompt, then ``system``."""
         from botocore.exceptions import ClientError
 
         nudge = f"\n\nAnswer only by calling the {tool} tool once, with every required field."
@@ -112,11 +121,13 @@ class Bedrock:
         tool_config: dict[str, Any] = {
             "tools": [{"toolSpec": {"name": tool, "description": description, "inputSchema": {"json": schema}}}]
         }
-        for attempt in range(3):
+        attempt = -1
+        while attempt < 2:
+            attempt += 1
             tool_config["toolChoice"] = {"tool": {"name": tool}} if self.forced_tool_choice else {"auto": {}}
             kwargs = {
                 "modelId": self.model_id,
-                "system": [{"text": system}],
+                "system": compose_system(skills, system, cache_point=self.cache_points),
                 "messages": messages,
                 "toolConfig": tool_config,
                 "inferenceConfig": {"maxTokens": max_tokens},
@@ -125,13 +136,26 @@ class Bedrock:
                 r = await self._call(kwargs)
             except ClientError as e:
                 msg = str(e).lower()
+                invalid = e.response.get("Error", {}).get("Code") == "ValidationException"
+                # A configuration the model refuses is switched off and the same request sent again; it does not
+                # use up one of the three answers.
                 if (
-                    self.forced_tool_choice
-                    and e.response.get("Error", {}).get("Code") == "ValidationException"
+                    invalid
+                    and self.cache_points
+                    and any(w in msg for w in ("cachepoint", "cache point", "cache_point"))
+                ):
+                    log("info", "bedrock.cache_point_off", model=self.model_id)
+                    self.cache_points = False
+                    attempt -= 1
+                    continue
+                if (
+                    invalid
+                    and self.forced_tool_choice
                     and ("tool_choice" in msg or "toolchoice" in msg or "tool choice" in msg)
                 ):
                     log("info", "bedrock.forced_tool_choice_off", model=self.model_id)
                     self.forced_tool_choice = False
+                    attempt -= 1
                     continue
                 raise
             stop = r.get("stopReason")
@@ -178,10 +202,11 @@ class Bedrock:
                 raise TransientError("The model ran out of room for its answer.")
         raise ModelError(f"The model's answer did not fit the expected shape ({'; '.join(problems[:3])}).")
 
-    async def detect_layout(self, jpeg: bytes, width: int, height: int) -> FrameLayout:
+    async def detect_layout(self, jpeg: bytes, width: int, height: int, *, skills: SkillsBlock) -> FrameLayout:
         """Where the facecam is in a frame from a stream, if there is one."""
         r = await self.structured(
             system="You look at frames from livestreams and describe their layout precisely.",
+            skills=skills,
             content=[
                 {"image": {"format": "jpeg", "source": {"bytes": jpeg}}},
                 {

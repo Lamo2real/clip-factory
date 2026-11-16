@@ -6,7 +6,8 @@ the owner's request for a fully serverless Python and Terraform stack with WebSo
 and S3 Vectors (NFR-02 AC3 and AC4, NFR-13 to NFR-16, BR-11 AC5, BR-18), and the owner's request to organise
 Settings like a field of apple trees and to choose the click and error sounds (BR-13 AC3 to AC5, UX-09 update, UX-14,
 UX-15), and the owner's request to see how every clip performs on each platform, refresh those numbers by itself
-and pick the best clips of each week (BR-19 to BR-21, NFR-17, UX-16).
+and pick the best clips of each week (BR-19 to BR-21, NFR-17, UX-16), and the owner's request to create, read,
+change and delete skills in Settings and to have every AI call use every skill (BR-05 and BR-06 update, BR-22).
 Every requirement below traces back to one of them. Where
 the brief was open or unclear, the interpretation we chose is stated in [Interpretations and open questions](#interpretations-and-open-questions).
 
@@ -55,17 +56,34 @@ An AI agent on Amazon Bedrock AgentCore, running Claude Fable 5.1, processes eac
 "Clip them up into viral segments with the best practices based on the skill that I'm going to give you."
 - AC1: Every clip is vertical 1080×1920, 20–45 seconds unless a skill says otherwise, with a 6–8 word text hook,
   burned-in captions and a cover image.
-- AC2: Each clip runs the pre-post checklist from the enabled skills (section D of the built-in playbook) and shows
+- AC2: Each clip runs the pre-post checklist from the skills (section D of the built-in playbook) and shows
   every item as pass or fail. A failing clip gets one fix pass or is replaced by a spare moment.
 - AC3: Each clip has a caption for every platform: YouTube title and description, Instagram, Facebook, TikTok and X.
 
-### BR-06 Attach skills in Settings
-"I should be able to attach skills in the settings of this application."
-- AC1: The owner can upload a `SKILL.md` file (≤ 1 MB) or a `.zip` that contains one `SKILL.md` (≤ 20 MB).
-- AC2: The skill's name and description are read from its frontmatter and listed in Settings › Clip making › Skills.
-- AC3: Each skill can be turned on and off; owner skills can be deleted; built-in skills can only be turned off.
-- AC4: The next job uses every enabled skill, with no redeploy.
-- AC5: The owner can read any skill's content in the app.
+### BR-06 Skills in Settings: add, read, change, delete
+"I should be able to attach skills in the settings of this application." Updated by the owner on 2026-11-16: "I want
+to be able to create, read, update, delete skills in Settings, following the trees, branches, apples, leaves
+structure." ([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16),
+[the skill pages](UX_DESIGN_SYSTEM.md#skill-pages))
+- AC1: **Create.** In Settings › Clip making › Skills the owner can **write** a skill by answering three questions
+  ("What is the skill called?", "When should Clip Factory use it?", "What should it do?"), or **upload** a `SKILL.md`
+  (≤ 1 MB) or a `.zip` that contains one `SKILL.md` (≤ 20 MB). Two skills cannot have the same name; the app says so
+  under the first question.
+- AC2: **Read.** Every skill (built-in and the owner's) is listed with its title, when it is used, an **Always used**
+  badge, a **Built in** badge where it applies, its size and the date it last changed. Tapping a skill opens its own
+  page, which shows the whole skill as formatted text (and, for a `.zip`, the other files in it). Nothing in a skill
+  can run code in the app.
+- AC3: **Update.** The owner can change any of their own skills with the same three questions, or replace its whole
+  file with a new upload. If the skill was changed somewhere else in the meantime, the app says so and offers "Use the
+  newest" or "Save mine anyway". Leaving with unsaved changes asks first.
+- AC4: **Delete.** The owner can delete any of their own skills: a small confirm sheet, then the usual 8-second
+  **Undo** toast; nothing is deleted until the toast ends.
+- AC5: **Built-in skills** can be read but never changed or deleted, and are always used.
+- AC6: **No on/off switch.** Every skill in the list is always used (BR-22). The old switch is gone.
+- AC7: **Trees, branches, apples, leaves** (UX-14): the Skills branch has two apples, **Your skills** and **Add a
+  skill**, each with a leaf; writing, reading and editing a skill each have their own address under the branch, with a
+  breadcrumb, a big Back on phones, and deep links and reloads that work.
+- AC8: A change counts from the next AI call that loads skills (for a clip job, the next job); nothing is redeployed.
 
 ### BR-07 Review clips in the app
 "Send me those clips in the app. So the app will showcase the clips."
@@ -247,6 +265,27 @@ that week, so that it knows how to edit better in the future."
 - AC7: An empty week says "No clips this week yet. Make clips on Home." with a link.
 
 ---
+
+### BR-22 Every AI call uses every skill
+"The whole AI system should use all of these skills by default, no matter what, as long as I add them: whatever AI
+service we use (Bedrock, AgentCore, whatever), when it is generating stuff or reading stuff."
+([CONTRACTS.md §18.6](CONTRACTS.md#186-every-ai-call-uses-every-skill-one-shared-rule),
+[ADR-32](DECISIONS.md#adr-32-every-ai-call-gets-every-skill-through-one-shared-skills-block))
+- AC1: Every call that asks Claude to write, pick, judge, describe or read something gets **every** skill: the
+  built-in ones and every skill the owner added. That covers the clip agent on AgentCore (moment picking with the
+  Claude Agent SDK and its Bedrock fallback, the facecam check, the checklist with its hook rewrite, the captions) and
+  the API's Bedrock calls (the 48-hour learning and the weekly best learning).
+- AC2: There is no way to switch a skill off, and no call may skip the skills: a test in each code package fails the
+  build if a model call does not go through the shared helpers that add them.
+- AC3: The skills always come first in the instructions, in the same order (built-in ones, then the owner's by name),
+  so every call sees the same thing.
+- AC4: If the skills together are too long for one call, each is kept up to 40,000 characters and all together up to
+  120,000; a skill that does not fit is shortened or, if too little room is left, left out and named in the logs.
+  Built-in skills are never left out.
+- AC5: A skill that cannot be read is retried, then skipped and reported (the job step says "1 could not be read");
+  if the list of skills itself cannot be read, the step fails and retries instead of running without skills.
+- AC6: Turning text into search vectors (Titan embeddings) is not writing or reading by Claude, so it does not get
+  skills.
 
 ## Non-functional requirements
 
@@ -468,7 +507,8 @@ it's slow in and slow out, but in the middle, it's really quick ... so that the 
 - AC5: Empty screens say exactly what to tap ("Nothing here yet. Tap **Make clips** to start.").
 - AC6: No dead ends: every screen has a way forward or back, and every error says what to do next.
 - AC7: Throwing something away shows a toast with **Undo** for 8 seconds instead of an "Are you sure?" dialog; the
-  action is only carried out when the 8 seconds pass.
+  action is only carried out when the 8 seconds pass. One deliberate exception: deleting a skill first shows a small
+  glass sheet, because a skill can hold a lot of typing (BR-06 AC4); the Undo toast still follows.
 - AC8: Forms cannot be filled in wrong: a Paste button next to the link box, the link checked as it is typed, hints
   right under the field, and the main button only active when the input is valid (a click on it before then plays the
   deny sound and points at what is missing).
@@ -571,6 +611,8 @@ So maybe 5 lines ... for both the phone resolution and the normal laptop's resol
 | I-27 | "So that it knows how to edit better in the future" | The picks shape **which moments are chosen and how they are hooked and captioned** (a "Best of week" learning and "best" clips first in "What worked before"). Editing itself (cuts, layout) follows the skills; a clip editor is on the [roadmap](ROADMAP.md#later). | Does the owner want the picks to change editing style directly? |
 | I-28 | Real numbers on TikTok | TikTok shows posts from unaudited apps only privately and gives them no numbers, so TikTok reads "Posted privately. TikTok shows numbers after the app is approved." until the app passes TikTok's audit ([ROADMAP.md](ROADMAP.md#phase-2-social-integrations)). | Waiting for TikTok's audit. |
 | I-29 | X numbers cost money | X has no free tier for reading posts; reads are paid per post. The app caps its own spend at $10 a month and says so in Settings (NFR-17 AC5, [DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)). | Is $10 a month the right cap? |
+| I-30 | "Create, read, update, delete skills in Settings, following the trees, branches, apples, leaves" | Skills stay one branch (Clip making › Skills) with two apples, **Your skills** and **Add a skill**; each skill gets its own page, and writing and editing get their own pages under the branch, so the tree stays four trees deep at most. Writing a skill is three plain questions, so a child can do it without knowing the `SKILL.md` format (BR-06). | No. |
+| I-31 | "The whole AI system should use all of these skills by default, no matter what ... Bedrock, AgentCore, whatever ... generating stuff or reading stuff" | Every Claude call, on AgentCore (Agent SDK) and on Bedrock directly, in the agent and in the API, gets every skill first in its instructions, and the per-skill on/off switch is removed. Titan embeddings are not "generating or reading" by Claude and get none. Very long skills are shortened to fit (BR-22, [ADR-32](DECISIONS.md#adr-32-every-ai-call-gets-every-skill-through-one-shared-skills-block)). | Are 40,000 characters per skill and 120,000 in total enough? |
 
 ## Out of scope for this phase
 

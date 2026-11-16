@@ -14,6 +14,7 @@ from clipfactory_agent.agent import MomentTools, sdk_options, sdk_timeout, syste
 from clipfactory_agent.checklist import Candidate
 from clipfactory_agent.jobs import STEPS, Tracker, run_job
 from clipfactory_agent.pipeline import JobState, Pipeline
+from clipfactory_agent.skills import SkillDoc, skills_block
 from clipfactory_agent.util import JobCanceled, TransientError, UserFacingError, gather_all
 
 from .conftest import make_moment, raw_moment
@@ -147,10 +148,12 @@ async def test_audio_download_never_falls_back_to_the_best_video(
 
 async def test_system_prompt_goes_through_a_file(tmp_path: Path) -> None:
     b = brief()
-    b.skills_text = "x" * 300_000  # well past Linux's 128 KiB limit for one argument
-    opts = sdk_options(b, MomentTools(b), model_id="m", region="r", workdir=tmp_path, skill_names=[])
+    big = skills_block([SkillDoc("big", "", "x" * 300_000, False)])  # past Linux's 128 KiB limit for one argument
+    opts = sdk_options(b, MomentTools(b), model_id="m", region="r", workdir=tmp_path, skill_names=[], skills=big)
     assert opts.system_prompt["type"] == "file"
-    assert Path(opts.system_prompt["path"]).read_text(encoding="utf-8") == system_prompt(b)
+    text = Path(opts.system_prompt["path"]).read_text(encoding="utf-8")
+    assert text == big.text + "\n\n" + system_prompt(b)
+    assert text.startswith("<owner_skills") and text.count("<owner_skills") == 1
     assert opts.effort == "high"
 
 
@@ -185,9 +188,9 @@ async def test_timed_out_agent_hands_the_unread_windows_to_converse(
     windows_seen: list[Any] = []
     real = agent_mod.find_with_converse
 
-    async def converse(b: Any, bedrock: Any, on_progress: Any = None, windows: Any = None) -> list[Any]:
+    async def converse(b: Any, bedrock: Any, on_progress: Any = None, windows: Any = None, *, skills: Any) -> list[Any]:
         windows_seen.append(windows)
-        return await real(b, bedrock, on_progress, windows)
+        return await real(b, bedrock, on_progress, windows, skills=skills)
 
     monkeypatch.setattr(agent_mod, "find_with_converse", converse)
     chosen, _ = await agent_mod.find_moments(
@@ -197,6 +200,7 @@ async def test_timed_out_agent_hands_the_unread_windows_to_converse(
         region="r",
         workdir=tmp_path,
         skill_names=[],
+        skills=skills_block([]),
         on_progress=lambda f: None,
     )
     assert len(chosen) == 3

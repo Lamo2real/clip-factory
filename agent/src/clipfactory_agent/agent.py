@@ -1,7 +1,7 @@
 """The clip agent: finds the moments worth clipping.
 
-Main path: the Claude Agent SDK on Bedrock (``CLAUDE_CODE_USE_BEDROCK=1``), with the skills in
-``<workdir>/.claude/skills`` and in-process tools to read the transcript window by window, see the loudness spikes,
+Main path: the Claude Agent SDK on Bedrock (``CLAUDE_CODE_USE_BEDROCK=1``), with the skills block first in its system
+prompt file (docs/CONTRACTS.md §18.6), every skill in ``<workdir>/.claude/skills`` and in-process tools to read the transcript window by window, see the loudness spikes,
 read the brief and submit validated moments. Fallback, when the SDK path fails or finds too little: direct Bedrock
 Converse over each transcript window with a strict tool schema."""
 
@@ -20,6 +20,7 @@ from .bedrock import Bedrock, ModelError
 from .learnings import Learnings
 from .learnings import prompt_section as learnings_section
 from .moments import CANDIDATES_SCHEMA, MOMENT_SCHEMA, MOMENT_TYPES, Moment, choose, dedupe, spare_count, validate
+from .skills import SkillsBlock, compose_system_text
 from .util import UserFacingError, hms, log
 from .vectors import Hit, prompt_section
 
@@ -44,7 +45,6 @@ class Brief:
     words: list[list[Any]]
     loud: list[float]
     heatmap: list[dict[str, float]] = field(default_factory=list)
-    skills_text: str = ""
     learnings: list[str] = field(default_factory=list)  # the latest ten other learnings (§16.7)
     language: str | None = None
     similar: list[Hit] = field(default_factory=list)  # "what worked before" (S3 Vectors, §14.6)
@@ -56,13 +56,13 @@ class Brief:
 
 
 def system_prompt(b: Brief) -> str:
-    """Stable text first (rules, skills), then the owner's learnings and similar past clips, so prompt caching can
-    reuse the prefix."""
+    """The task's own system prompt: stable rules first, then the owner's learnings and similar past clips, so prompt
+    caching can reuse the prefix. The skills block is not in here: every call puts it first (§18.6)."""
     taught = learnings_section(Learnings(week=b.week_learnings, other=b.learnings))
     similar = prompt_section(b.similar)
     return f"""You are the clip finder of Clip Factory. You read the transcript of one long video (a stream or a video)
 and pick the moments that will make the best vertical short clips (TikTok, Reels, Shorts). Follow the owner's skills
-below; the short-form video playbook is the core: section A2 (self-sufficient, built on a feeling, pays off), the six
+above; the short-form video playbook is the core: section A2 (self-sufficient, built on a feeling, pays off), the six
 moment types in A3, the hook rules in A5 and the editing rules in A6.
 
 Rules for every moment:
@@ -77,11 +77,9 @@ Rules for every moment:
 - score 1–10: how likely it is to do well. Be honest; most moments are 4–6, only the best are 8+.
 - Respect the owner's notes and skills (required tags, banned topics, brand rules). Never pick content they rule out.
 - Times are seconds from the start of the video. Transcript lines are stamped [h:mm:ss].
-Loudness spikes (shouting, laughing) and YouTube's "most replayed" peaks are strong hints, not proof.
-
-<owner_skills>
-{b.skills_text or "(none)"}
-</owner_skills>""" + "".join(f"\n\n{part}" for part in (taught, similar) if part)
+Loudness spikes (shouting, laughing) and YouTube's "most replayed" peaks are strong hints, not proof.""" + "".join(
+        f"\n\n{part}" for part in (taught, similar) if part
+    )
 
 
 def brief_json(b: Brief) -> dict[str, Any]:
@@ -253,9 +251,11 @@ def sdk_options(
     region: str,
     workdir: Path,
     skill_names: list[str],
+    skills: SkillsBlock,
     on_stderr: Callable[[str], None] | None = None,
 ) -> Any:
-    """The Agent SDK options: our four tools in-process, the skills from ``<workdir>/.claude/skills``, nothing else."""
+    """The Agent SDK options: our four tools in-process, the skills block first in the system prompt, the skills
+    from ``<workdir>/.claude/skills``, nothing else."""
     from claude_agent_sdk import (
         ClaudeAgentOptions,
         PermissionResultAllow,
@@ -289,7 +289,7 @@ def sdk_options(
     # The prompt holds every skill in full and can pass Linux's 128 KiB limit for one argument, so the CLI reads
     # it from a file instead of from argv.
     prompt_file = workdir / "system-prompt.md"
-    prompt_file.write_text(system_prompt(b), encoding="utf-8")
+    prompt_file.write_text(compose_system_text(skills, system_prompt(b)), encoding="utf-8")
     env = {
         **os.environ,
         "CLAUDE_CODE_USE_BEDROCK": "1",
@@ -331,6 +331,7 @@ async def find_with_sdk(
     region: str,
     workdir: Path,
     skill_names: list[str],
+    skills: SkillsBlock,
 ) -> list[Moment]:
     from claude_agent_sdk import ResultMessage, query
 
@@ -341,7 +342,14 @@ async def find_with_sdk(
         del stderr_tail[:-20]
 
     options = sdk_options(
-        b, tools, model_id=model_id, region=region, workdir=workdir, skill_names=skill_names, on_stderr=on_stderr
+        b,
+        tools,
+        model_id=model_id,
+        region=region,
+        workdir=workdir,
+        skill_names=skill_names,
+        skills=skills,
+        on_stderr=on_stderr,
     )
 
     # can_use_tool needs streaming input: the prompt goes in as one user message on a stream.
@@ -363,6 +371,8 @@ async def find_with_converse(
     bedrock: Bedrock,
     on_progress: Callable[[float], None] | None = None,
     windows: list[tuple[float, float]] | None = None,
+    *,
+    skills: SkillsBlock,
 ) -> list[Moment]:
     """The fallback: one strict structured call per transcript window (all of them, or just ``windows``), a few at
     a time."""
@@ -388,6 +398,7 @@ async def find_with_converse(
                 try:
                     r = await bedrock.structured(
                         system=system,
+                        skills=skills,
                         content=[{"text": prompt}],
                         tool="submit_moments",
                         description="Submit the best clip moments in this part of the video.",
@@ -416,6 +427,7 @@ async def find_moments(
     region: str,
     workdir: Path,
     skill_names: list[str],
+    skills: SkillsBlock,
     on_progress: Callable[[float], None],
     use_sdk: bool = True,
 ) -> tuple[list[Moment], list[Moment]]:
@@ -429,7 +441,15 @@ async def find_moments(
         unread: list[tuple[float, float]] = []
         try:
             moments = await asyncio.wait_for(
-                find_with_sdk(b, tools, model_id=model_id, region=region, workdir=workdir, skill_names=skill_names),
+                find_with_sdk(
+                    b,
+                    tools,
+                    model_id=model_id,
+                    region=region,
+                    workdir=workdir,
+                    skill_names=skill_names,
+                    skills=skills,
+                ),
                 sdk_timeout(b),
             )
         except (Exception, TimeoutError) as e:
@@ -439,11 +459,15 @@ async def find_moments(
         if unread:
             # A run cut off partway never leaves the rest of the video unseen: those windows go through Converse.
             log("info", "agent.converse_unread", windows=len(unread), of=len(wins), have=len(moments))
-            moments += await find_with_converse(b, bedrock, on_progress=lambda f: on_progress(0.9 * f), windows=unread)
+            moments += await find_with_converse(
+                b, bedrock, on_progress=lambda f: on_progress(0.9 * f), windows=unread, skills=skills
+            )
         todo = [w for w in wins if w not in unread]
     if len(dedupe(moments)) < b.clip_min and todo:
         log("info", "agent.converse_fallback", have=len(moments))
-        moments += await find_with_converse(b, bedrock, on_progress=lambda f: on_progress(0.9 * f), windows=todo)
+        moments += await find_with_converse(
+            b, bedrock, on_progress=lambda f: on_progress(0.9 * f), windows=todo, skills=skills
+        )
     chosen, spares = choose(moments, b.clip_min, b.clip_max)
     if not chosen:
         raise UserFacingError(

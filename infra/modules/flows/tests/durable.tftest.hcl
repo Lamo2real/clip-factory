@@ -161,6 +161,51 @@ run "roles_allow_exactly_what_the_code_calls" {
   }
 }
 
+# docs/CONTRACTS.md §18.6 and §18.8: the distil step loads the owner's skills, so clip-flow reads skills/* (keys come
+# from the table) and nothing wider: no list, no write, no other prefix.
+run "clip_flow_reads_skills_and_nothing_wider" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["clip-flow"].policy).Statement :
+      s.Sid == "Skills" && s.Effect == "Allow" && s.Action == ["s3:GetObject"] && s.Resource == ["arn:aws:s3:::cf-test-media/skills/*"]
+    ])
+    error_message = "clip-flow needs { Sid = Skills, Action = [s3:GetObject], Resource = [<media>/skills/*] }."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["clip-flow"].policy).Statement :
+      s.Sid == "ClipFiles" && s.Action == ["s3:GetObject"] && s.Resource == ["arn:aws:s3:::cf-test-media/jobs/*"]
+    ])
+    error_message = "ClipFiles stays s3:GetObject on jobs/* only."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for s in jsondecode(aws_iam_role_policy.fn["clip-flow"].policy).Statement : s.Resource if anytrue([for a in s.Action : startswith(a, "s3:")])
+    ])) == toset(["arn:aws:s3:::cf-test-media/jobs/*", "arn:aws:s3:::cf-test-media/skills/*"])
+    error_message = "clip-flow's S3 access is exactly jobs/* and skills/*."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for k, p in aws_iam_role_policy.fn : [
+        for s in jsondecode(p.policy).Statement : [for a in s.Action : a != "s3:ListBucket" && a != "s3:PutObject" && a != "s3:DeleteObject"]
+      ]
+    ]))
+    error_message = "Neither flow may list, write or delete S3 objects."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.fn["job-flow"].policy).Statement : alltrue([for a in s.Action : !startswith(a, "s3:")])
+    ])
+    error_message = "job-flow gets no S3 access (the agent reads skills itself)."
+  }
+}
+
 run "alias_arns_are_the_outputs" {
   command = plan
 

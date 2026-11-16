@@ -286,6 +286,8 @@ def cover_time(segs: Sequence[Segment], peak: float, tease: bool, total: float) 
 
 
 SectionFetcher = Callable[[float, float, Path], Awaitable[Path]]
+# (jpeg, width, height) -> layout. The pipeline binds the job's skills block into it
+# (``functools.partial(bedrock.detect_layout, skills=...)``, docs/CONTRACTS.md §18.6), so the vision call gets it too.
 LayoutDetector = Callable[[bytes, int, int], Awaitable[FrameLayout]]
 
 

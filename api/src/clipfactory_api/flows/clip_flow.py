@@ -10,7 +10,8 @@ Started by Confirm (``clip-{clipId}-{flowRun}`` on the alias ``live``) with ``{"
    ``confirmed`` (nothing was queued). Nothing posted → ``upsert-vector`` (``confirmed``), outcome ``not_posted``.
 4. ``wait-48h``: a durable wait, no compute and no schedule.
 5. ``metrics`` (``stats.refresh.refresh_posts``, the poller's code path and rate budget; a blocked or failing
-   platform keeps the numbers the poller stored) → 6. ``distil`` (one Learning) → 7. ``upsert-vector``
+   platform keeps the numbers the poller stored) → 6. ``distil`` (one Learning; the owner's skills block goes
+   first in its system prompt, §18.6) → 7. ``upsert-vector``
    (``performed`` + the summed performance).
 
 Steps are at-least-once: a publish step reads the post first and never sends a post that is no longer ``queued``,
@@ -22,14 +23,14 @@ from __future__ import annotations
 import contextlib
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from aws_durable_execution_sdk_python import DurableContext, StepError, durable_execution
 from aws_durable_execution_sdk_python.config import Duration, StepSemantics
 
-from .. import db, learn, posts, settings
+from .. import db, learn, posts, s3, settings
 from ..clock import Clock, iso, utcnow
 from ..log import log
 from ..platforms import (
@@ -41,6 +42,7 @@ from ..platforms import (
     label,
 )
 from ..platforms.base import HttpClient, urllib_client
+from ..skills import BuiltinSkill, load_builtins
 from ..stats.refresh import StatsDeps, refresh_posts
 from ..vectors import Vectors
 from . import TransientError, error_message, retrying, transient
@@ -58,11 +60,13 @@ class ClipFlowDeps:
     bedrock: Any
     model_id: str
     vectors: Vectors | None
+    media: s3.Media  # the owner's skills for the distil call (§18.6)
     adapters: Callable[[str], PlatformAdapter] = field(default=adapter_for)
     clock: Clock = field(default=utcnow)
     sleep: Callable[[float], None] = field(default=time.sleep)
     http: HttpClient = field(default=urllib_client)
     accounts: Callable[[db.Store, str, str], Item | None] = field(default=posts.connected_account)
+    builtins: Callable[[], Sequence[BuiltinSkill]] = field(default=load_builtins)
 
 
 @dataclass(frozen=True)
@@ -339,7 +343,16 @@ def read_metrics(deps: ClipFlowDeps, target: Target) -> dict[str, Any]:
 
 def distil(deps: ClipFlowDeps, target: Target) -> dict[str, Any]:
     outcome, learning_id = _guard(
-        lambda: learn.distil_learning(deps.store, deps.bedrock, deps.model_id, target.user_id, clock=deps.clock)
+        lambda: learn.distil_learning(
+            deps.store,
+            deps.bedrock,
+            deps.model_id,
+            target.user_id,
+            media=deps.media,
+            clock=deps.clock,
+            builtins=deps.builtins,
+            sleep=deps.sleep,
+        )
     )
     out: dict[str, Any] = {"outcome": outcome}
     if learning_id:
@@ -401,6 +414,7 @@ def _from_env() -> ClipFlowDeps:
         bedrock=bedrock,
         model_id=env["MODEL_ID"],
         vectors=vector_store,
+        media=s3.Media(s3.make_client(reg), env["MEDIA_BUCKET"]),
     )
 
 

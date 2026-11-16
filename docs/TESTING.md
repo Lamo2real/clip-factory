@@ -29,7 +29,11 @@ npm run dev:mock          # the app on http://localhost:5173 with the mock API
 npm test                  # unit and component tests
 npx playwright install    # once, downloads the test browsers
 npx playwright test       # end-to-end and layout tests (start the mock server themselves)
+CF_E2E_PORT=4233 npx playwright test   # same, on another port
 ```
+
+Playwright serves the mock app on port 4179 and reuses a server already on that port. If another checkout's preview
+server holds 4179, set `CF_E2E_PORT` to a free port, or the tests run against the other checkout's build.
 
 ### API and agent
 
@@ -71,7 +75,32 @@ in `docs/` and `README.md` points at a file that exists.
   Confirm → celebration → the clip leaves Review and the badge counts down. Decline removes a clip.
 - **Upload**: pick a file → progress → job created from the upload.
 - **Link validation**: YouTube, Twitch and Kick are accepted; any other link is refused before a job is created.
-- **Skills**: upload a `.md`, toggle on and off, view content; built-in skills cannot be deleted.
+- **Skills** (`e2e/skills.spec.ts`, every test at 375×812 and 1440×900,
+  [CONTRACTS.md §18.9](CONTRACTS.md#189-mock-mode-and-tests-offline-fakes-only)):
+  - *Create*: Write a skill → answer the three questions → Save skill → confetti → the skill's page → Back → the row
+    with **Always used**. A duplicate name shows the hint under the first question. Uploading a `.md` still works.
+  - *Read*: open the fixture skill: its heading is rendered, `<script>alert(1)</script>` is visible as text and never
+    runs, the `javascript:` link is not a link; there is no `role="switch"` on the Skills branch or any skill page
+    (Sounds and Motion keep their own switches); a built-in has no Edit or Delete. The page shows no slug and no
+    "About this skill" box, a first heading that repeats the title is left out, and rows and pages say where a skill
+    came from in words, never ".md", ".zip" or "KB".
+  - *Update*: Edit → change → Save changes → the new text shows; the description box grows to show every saved word. After `window.__cfMock.bumpSkillVersion(id)`, Save
+    shows the conflict sheet; **Use the newest** reloads the form, **Save mine anyway** saves. A zip's **Replace the
+    whole file** works. Reloading `/edit` by its address works; Back goes up one level; leaving with changes asks
+    "Leave without saving?".
+  - *Delete*: the sheet is near-solid (its white tint and the 0.4 ink scrim are checked) → Delete → the row is gone →
+    Undo → the row is back and no request was sent; Delete again → after 8 s the mock `DELETE` ran. Back during the
+    Undo shows "You just deleted this skill", and Undo brings it back.
+  - *Upload clash*: uploading a file whose name is already used shows the upload words ("… To change it, open it and
+    tap Replace the whole file." or, for a built-in, "… Change the name inside your file, then upload it again.").
+  - `overflow.spec.ts` covers `/settings/clip-making/skills`, `/new`, `/{id}` and `/{id}/edit` at 320, 375, 600, 768,
+    1024, 1440 and 1920 px; `settings-tree.spec.ts` finds "write a skill" under Add a skill; `screenshots.spec.ts`
+    takes the skill pages (`settings-skill`, `settings-skill-written`, `settings-skill-new`, `settings-skill-edit`,
+    `settings-skill-edit-zip`) and the `settings-skill-delete-sheet` at 375 and 1440 px, light and dark.
+  - Vitest: `markdown.ts` (HTML shown as text, `javascript:` not a link, images not loaded, and a crafted heading line
+    with 8,000-space runs parses in under 50 ms),
+    `skillName.ts` (same examples as the API's `slug` and `humanize`), the router for the three skill pages and bad
+    ids, and a grep that fails if anything in `web/src` uses `dangerouslySetInnerHTML`.
 - **Settings**: clip range limits (1–10, min ≤ max), sound and reduce motion switches persist.
 - **Settings tree** ([UX-14](BUSINESS_REQUIREMENTS.md#ux-14-settings-organised-like-a-field-of-apple-trees)):
   - `/settings` shows the four trees with their apple counts; each tree page shows its branches; every branch of
@@ -191,7 +220,34 @@ in `docs/` and `README.md` points at a file that exists.
   similarity, and returns `[]` on any vector error.
 - The vendored boto3 exposes `invoke(..., DurableExecutionName=...)`, the `send_durable_execution_callback_*` calls and
   the `s3vectors` client; `vectors.embed_text` matches the shared fixture the agent also tests.
-- Skill upload: frontmatter is parsed; a zip without exactly one `SKILL.md` is refused.
+- Skill upload: frontmatter is parsed; a zip without exactly one `SKILL.md` is refused, and so is a zip with a
+  password-locked member or a member packed with anything but stored or deflate (`400`, on upload and on edit, so the
+  API and the agent accept the same zips).
+- Skills CRUD ([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16)):
+  `slug` and `humanize` examples (accents, emoji only, an 80-character title); the written `SKILL.md` reads back with
+  the same name, description and form; the limits (title 0 and 61, description 2 and 1025, instructions 50,001, a body
+  over 256 KB and a file over 1 MB → `413`); a form edit of a `.zip` answers `413` only for a size limit and `400` for
+  any other zip problem (a stored locked zip → `400`, never `500`); a name used by a built-in or another skill → `409`
+  with `field: "title"` and the web's words (the form says "Pick another name."; an upload says "To change it, open it
+  and tap Replace the whole file." or, for a built-in, "Change the name inside your file, then upload it again."),
+  renaming a skill to itself is fine; editing an `.md` keeps its other frontmatter, editing a `.zip` keeps every other file byte for byte;
+  replacing with another skill's upload key → `400`, `.md` → `.zip` is allowed; a stale `version` → `409`, the new
+  file deleted and the old one kept; an old item without `version` saves as version 1; built-in `PUT`/`DELETE` →
+  `409`; `PATCH` → `400` "Skills are always used now, so there is no switch."; the list has no `enabled`, puts
+  built-ins first then the owner's by name, and deletes old choice items; `DELETE` removes every saved file; the
+  detail has `form`, `formBlocked` and `files`.
+- Every AI call uses every skill: `skills_block` order, the 40,000-character cut, the 120,000 budget cut (only when
+  ≥ 2,000 characters are left), the list of skills left out, the empty block, the `skills.block` counts log, and the
+  shared golden file `tests/fixtures/skills_block_golden.txt` byte for byte; `load_skills` reads each file once (a
+  second call reads S3 zero times), skips oversize, missing and denied files, and raises after 3 retries;
+  `distil_learning` and `ask_week` send the block as `system[0]` (a built-in and an owner skill, legacy
+  `enabled: false` items included) and the task prompt last, with a cache point only from 8,000 characters;
+  `test_skills_everywhere.py` fails on any `.converse(` outside `learn.converse_text`, any `converse_text(` without
+  `skills=`, an alias of `.converse` or `.invoke_model` (used without calling it), a model method named in a string
+  (`getattr(b, "converse")`), `getattr` / `attrgetter` / `methodcaller` with a computed name, `converse_text` used
+  without calling it, an `invoke_model` that is not the Titan call (`modelId=self.embed_model_id`) in
+  `vectors.py`, and any `converse_stream`, with a failing sample for each; the build zip contains
+  `builtin_skills/*/SKILL.md`.
 - Settings sounds ([CONTRACTS.md §15.4](CONTRACTS.md#154-api)): `PUT /v1/settings` accepts `clickSound` and
   `errorSound` from 1 to 30 and refuses 0, 31, 2.5, `"6"`, `true` and `null` with `400 bad_request` and a plain message;
   `GET /v1/settings` on settings stored without them returns 6 and 5.
@@ -264,7 +320,21 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
   `cancel` and `health`.
 - Each pipeline step with stubbed yt-dlp, ffmpeg, Transcribe and Bedrock: step statuses, progress and heartbeats are
   written; failures produce a plain message.
-- Skills are written to `.claude/skills/<name>/SKILL.md` (zips extracted); only enabled ones.
+- Skills are written to `.claude/skills/<name>/SKILL.md` (zips extracted): every built-in and every owner skill, also
+  rows with `enabled: false`; old choice items are ignored; built-ins first, then the owner's by name.
+- Every AI call uses every skill: each fake Converse request from the moment fallback, the facecam check, the
+  checklist and the captions has `system[0].text` starting with `<owner_skills`, and exactly one `<owner_skills` per
+  request; the Agent SDK prompt file starts with the block; after a cache-point `ValidationException` the call is
+  retried without it and cache points stay off; a skipped skill is counted in the `analyze` message; the shared golden
+  file matches byte for byte; `test_skills_everywhere.py` fails on any model call that goes around `Bedrock`'s helpers
+  or `sdk_options(..., skills=)` (only the Titan `invoke_model` in `vectors.py` is allowed), and is as strict as the
+  API's scan: a model method named in a string, `getattr` / `attrgetter` / `methodcaller` with a computed name, and an
+  alias of `.converse`, `.structured`, `.detect_layout`, `sdk_options` or the SDK's `query` (used without calling it;
+  `functools.partial(..., skills=)` is allowed) all fail, with a failing sample for each.
+- Skill zips: `extract_zip` uses the API's rules on every member (`__MACOSX` included): over 20 MB, over 500 entries
+  (folders count), unsafe names (`..`, absolute, backslash, drive letter), links, password-locked members, packing
+  other than stored or deflate, over 50 MB unzipped, not exactly one `SKILL.md`, a `SKILL.md` more than one folder deep
+  or over 1 MB are all refused; one 30 MB member in a zip under 20 MB is accepted, as in the API.
 - Moment selection respects `clipTarget`; spares replace clips that fail the checklist.
 - Required tags from the owner's notes always appear in the captions.
 - Callbacks: with a `callbackId` the agent heartbeats at most every 5 minutes, sends success after the job is `ready`,
@@ -293,6 +363,9 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
   `cf-prod-learn` retries 1; the IAM statements are exactly those of §16.9 (no Bedrock or S3 Vectors on stats); the API
   has `STATS_FUNCTION_ARN`, `LEARN_FUNCTION_ARN` and may invoke both; `gsi2` exists with projection ALL; alarms exist for
   both functions.
+- Skills ([CONTRACTS.md §18.8](CONTRACTS.md#188-infra-infra)): `cf-prod-clip-flow` and `cf-prod-learn` each have
+  exactly the `Skills` statement (`s3:GetObject` on `skills/*`, no wider S3 access, no `s3:ListBucket`);
+  `cf-prod-learn` has `MEDIA_BUCKET`; `cf-prod-stats` still has no S3 access at all.
 - The outputs in [CONTRACTS.md §10](CONTRACTS.md#10-terraform-outputs-read-by-deployyml) exist with those names,
   including `ws_url`, `hooks_url`, `vector_bucket`, `vector_index`, `job_flow_alias_arn`, `clip_flow_alias_arn`,
   `stats_function_name`, `learn_function_name`, `stats_rule_name`, `stats_tick_minutes`.
@@ -310,7 +383,9 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
 6. Install the app on a phone and on a desktop; scroll a long list on the phone and confirm there is no sound.
    Open Settings › Look & feel › Sounds, pick another click sound on the phone, and check the desktop plays it too
    after its next settings load. Find a setting by typing "sound".
-7. Upload a skill in Settings, start another job and check that the clips follow it.
+7. Write a skill in Settings › Clip making › Skills (for example "Every caption ends with GG"), start another job and
+   check that the clips, hooks and captions follow it. In CloudWatch Logs, the agent's `skills.block` line counts it.
+   Edit it, read it back, delete it and Undo, then delete it for good.
 8. Open **Get the app** on a Mac and on Windows; download, follow the first-open hint, and check that Get the app is
    gone inside the desktop app. On an iPhone, follow the three steps.
 9. Keep a clip and open it from Library: five stacks read "Waiting for connection" with a link to Accounts; Refresh

@@ -70,3 +70,11 @@ export function bytes(n: number): string {
 export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
+
+/** "16 Nov" this year, "16 Nov 2025" another year (for "Updated 16 Nov"). */
+export function shortDate(isoTime: string, now = new Date()): string {
+  const d = new Date(isoTime);
+  if (Number.isNaN(d.getTime())) return "";
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return new Intl.DateTimeFormat("en-GB", sameYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }).format(d);
+}

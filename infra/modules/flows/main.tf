@@ -66,6 +66,8 @@ locals {
       },
       # Platform adapters upload the finished clip (phase 2).
       { Sid = "ClipFiles", Action = ["s3:GetObject"], Resource = ["${var.media_bucket_arn}/jobs/*"] },
+      # Step distil reads the owner's skills (§18.6): keys come from the table, so no s3:ListBucket.
+      { Sid = "Skills", Action = ["s3:GetObject"], Resource = ["${var.media_bucket_arn}/skills/*"] },
       # Step distil (Converse with Claude Fable through the global profile) and the clip text embedding (Titan).
       { Sid = "Models", Action = ["bedrock:InvokeModel"], Resource = concat(var.model_invoke_arns, [var.embed_model_arn]) },
       # Step upsert-vector: read the clip's vector and metadata, write it back with the measured performance.

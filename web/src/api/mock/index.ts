@@ -1,9 +1,10 @@
 // The whole HTTP API in memory, with fake latency, so the UI runs with no backend (npm run dev:mock, Playwright).
 import { ApiError, networkError } from "../errors.ts";
-import type { Api, Clip, Job, Post, Settings, SimilarClip, Skill } from "../types.ts";
+import type { Api, Clip, Job, Post, Settings, SimilarClip } from "../types.ts";
 import { MOMENTS, PLATFORMS, STEP_KEYS, coverArt, seed, stepsAt, thumbArt, ulid, type Store } from "./fixtures.ts";
 import { installMockLiveControls, mockLive } from "./live.ts";
 import { statsApi, type StatsFaults } from "./stats.ts";
+import { skillsApi, type MockSkillControls } from "./skills.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 
 const STEP_MS = 3500;
@@ -156,13 +157,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     if (!c) throw notFound("clip");
     return c;
   };
-  const skill = (skillId: string) => {
-    const s = store.skills.find((x) => x.skillId === skillId);
-    if (!s) throw notFound("skill");
-    return s;
-  };
-  const publicSkill = ({ content: _content, ...s }: Skill & { content: string }): Skill => s;
-  const pendingSkills = new Map<string, string>();
+  const skills = skillsApi(store, delay);
+  if (typeof window !== "undefined") (window as unknown as { __cfMock?: MockSkillControls }).__cfMock = skills.controls;
 
   const api: Api = {
     async health() {
@@ -330,53 +326,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       publishClip(c);
       return clone(c);
     },
-    async listSkills() {
-      await delay();
-      return store.skills.map(publicSkill);
-    },
-    async createSkillUpload(filename) {
-      await delay();
-      if (!/\.(md|zip)$/i.test(filename)) throw bad("Skills are a SKILL.md file or a .zip that contains one.");
-      const skillId = ulid();
-      pendingSkills.set(skillId, filename);
-      return { skillId, key: `skills/mock-owner/${skillId}/${filename}`, uploadUrl: "mock://upload", headers: {} };
-    },
-    async createSkill({ skillId }) {
-      await delay();
-      const filename = pendingSkills.get(skillId);
-      if (!filename) throw bad("Upload the file first, then add the skill.");
-      pendingSkills.delete(skillId);
-      const name = filename.replace(/\.(md|zip)$/i, "").replace(/[^a-z0-9-]+/gi, "-").toLowerCase() || "new-skill";
-      const s: Skill & { content: string } = {
-        skillId,
-        name: name === "skill" ? `skill-${skillId.slice(-4).toLowerCase()}` : name,
-        description: "Uploaded from this device. The agent reads it on the next job.",
-        enabled: true,
-        builtin: false,
-        format: filename.toLowerCase().endsWith(".zip") ? "zip" : "md",
-        size: 1024,
-        createdAt: new Date().toISOString(),
-        content: `---\nname: ${name}\ndescription: Uploaded skill.\n---\n\n# ${name}\n`,
-      };
-      store.skills.push(s);
-      return publicSkill(s);
-    },
-    async setSkillEnabled(skillId, enabled) {
-      await delay(100, 220);
-      const s = skill(skillId);
-      s.enabled = enabled;
-      return publicSkill(s);
-    },
-    async deleteSkill(skillId) {
-      await delay();
-      const s = skill(skillId);
-      if (s.builtin) throw bad("Built-in skills can be turned off, not deleted.");
-      store.skills = store.skills.filter((x) => x.skillId !== skillId);
-    },
-    async skillContent(skillId) {
-      await delay();
-      return skill(skillId).content;
-    },
+    ...skills.api,
     async getSettings() {
       await delay();
       return clone(store.settings);

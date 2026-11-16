@@ -7,7 +7,8 @@ Clip Factory Cloud is a serverless application in one AWS account and one enviro
 The diagram is [architecture/aws-architecture.drawio](architecture/aws-architecture.drawio) (a PNG copy is
 [architecture/aws-architecture.png](architecture/aws-architecture.png)). Names, routes, shapes and keys are defined in
 [CONTRACTS.md](CONTRACTS.md), especially [§14](CONTRACTS.md#14-serverless-expansion-websocket-api-rest-api-durable-functions-s3-vectors)
-and [§16](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16) (clip numbers and the weekly best);
+and [§16](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16) (clip numbers and the weekly best)
+and [§18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16) (skills, and every AI call using every skill);
 this document explains how the pieces work together and why.
 
 ![Clip Factory Cloud on AWS](architecture/aws-architecture.png)
@@ -74,9 +75,9 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | Amazon API Gateway, HTTP API | `/v1` routes | The app's API. Cheapest type, with a built-in JWT authorizer. CORS for the app and `localhost:5173`. |
 | Amazon API Gateway, WebSocket API | `cf-prod-ws`, stage `live` | Pushes job, clip, post and learning changes to open apps, so screens update without waiting for a poll. See [ADR-23](DECISIONS.md#adr-23-live-updates-over-a-websocket-api-polling-only-as-the-fallback). |
 | Amazon API Gateway, REST API | `cf-prod-hooks`, stage `v1` | The one public, unauthenticated surface: platform webhooks and OAuth callbacks (phase 2), with per-method throttling, a usage plan, request validation and X-Ray. See [ADR-24](DECISIONS.md#adr-24-a-separate-rest-api-for-public-platform-webhooks). |
-| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`). |
+| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, skills (write, upload, read, change, delete), starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`). |
 | AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
-| AWS Lambda | `cf-prod-learn` | The weekly best ([flow 14](#14-best-of-the-week)): marks the starred clips' vectors `best`, asks Claude Fable 5.1 for one "Best of week" learning. See [ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal). |
+| AWS Lambda | `cf-prod-learn` | The weekly best ([flow 14](#14-best-of-the-week)): marks the starred clips' vectors `best`, asks Claude Fable 5.1 (with the skills block) for one "Best of week" learning. See [ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal). |
 | Amazon EventBridge | rule `cf-prod-stats`, `rate(15 minutes)` | The only schedule in the system: one tick for the stats poller, its rate taken from the smallest interval in `config/platforms.json`. A few thousand invocations a month. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda, durable function | `cf-prod-job-flow` (alias `live`) | Starts the agent for a job and waits (no compute) for its callback; fails the job if heartbeats stop. Replaces the watchdog. See [ADR-22](DECISIONS.md#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows). |
 | AWS Lambda, durable function | `cf-prod-clip-flow` (alias `live`) | After Keep: makes the posts, publishes (phase 2), waits 48 hours (no compute), reads metrics, writes a learning, updates the clip's vector. Replaces the publish queue, the publisher, the scheduler and perf-check. |
@@ -87,7 +88,7 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | Amazon DynamoDB | `cf-prod-data` + stream | Single table for all entities including WebSocket connections, webhook events, stats snapshots (`STAT#`, 90-day TTL), the weekly picks (`WEEK#`) and the per-platform rate budgets (`RATE#`); a sparse `gsi2` holds only the posts due for a stats poll. On-demand, point-in-time recovery, TTL, stream `NEW_AND_OLD_IMAGES` feeding `cf-prod-broadcast`. See [ADR-05](DECISIONS.md#adr-05-one-dynamodb-table-single-table-design). |
 | AWS Systems Manager Parameter Store | `/cf-prod/hooks/verify-token` (SecureString) | The Meta webhook verify token. Generated by Terraform as a write-only value, so it never enters the Terraform state. |
 | Amazon Bedrock AgentCore Runtime | `cf_prod_clip_agent` | Runs the agent container for as long as a job needs, one isolated session per job. See [ADR-03](DECISIONS.md#adr-03-amazon-bedrock-agentcore-runtime--claude-agent-sdk-for-the-agent). |
-| Amazon Bedrock | Claude Fable 5.1 (global profile), Titan Text Embeddings V2 (in-Region) | Fable: moment selection, facecam detection, checklist judgement, captions, learnings. Titan: 1024-number embeddings of clip text for S3 Vectors. |
+| Amazon Bedrock | Claude Fable 5.1 (global profile), Titan Text Embeddings V2 (in-Region) | Fable: moment selection, facecam detection, checklist judgement, captions, learnings. Every Fable call, through the Agent SDK or Converse, gets the owner's skills block first ([flow 15](#15-skills-every-ai-call-gets-every-skill)). Titan: 1024-number embeddings of clip text for S3 Vectors (no skills: not text generation). |
 | Amazon Transcribe | batch jobs | Word-level timestamps and language detection. |
 | Amazon ECR | agent repository | The ARM64 agent image, tagged by a hash of its sources. |
 | Amazon CloudWatch | logs, alarms | JSON logs for every function and the agent; access logs for the WebSocket and REST APIs (never the query string); alarms on Lambda errors, failed or timed-out durable executions, stream lag and REST 5xx. |
@@ -254,7 +255,8 @@ sequenceDiagram
   participant T as Transcribe
   participant B as Bedrock (Fable 5.1, Titan V2)
   participant V as S3 Vectors
-  R->>D: job running, load settings, enabled skills, latest 10 learnings
+  R->>D: job running, load settings, every skill (no switch), latest 10 learnings
+  R->>S: read each skill's file, build the skills block once for the job
   R->>Y: resolve: metadata (title, channel, duration) or S3 head for uploads
   R->>Y: download: audio only, capped at maxSourceHours
   R->>S: audio.m4a
@@ -264,7 +266,7 @@ sequenceDiagram
   R->>B: Titan: embed title, channel, notes, transcript start
   R->>V: QueryVectors top 8, this owner, status performed
   V-->>R: similar past clips with performance ("What worked before")
-  R->>B: select: transcript windows + loudness + skills + learnings + what worked before
+  R->>B: select: skills block + transcript windows + loudness + learnings + what worked before
   B-->>R: ranked moments (+ spares) with hooks and moment types
   loop each moment
     R->>Y: download only that section of video
@@ -376,7 +378,7 @@ flowchart TD
   settle -- "nothing posted" --> uv1["step upsert-vector (status confirmed)"] --> np([outcome not_posted])
   settle -- "at least one posted" --> w48["wait-48h: Duration 48 h, no compute"]
   w48 --> met["step metrics: views, likes, comments, shares per post"]
-  met --> dis["step distil: Claude Fable 5.1 writes one short Learning"]
+  met --> dis["step distil: Claude Fable 5.1, skills block first, writes one short Learning"]
   dis --> uv2["step upsert-vector (status performed + performance)"] --> done([outcome done])
 ```
 
@@ -398,7 +400,8 @@ sequenceDiagram
   Note over C: wait-48h: checkpoint, no compute, no schedule
   C->>X: step metrics: read views, likes, comments, shares
   C->>D: metrics on each post
-  C->>B: step distil: Converse, effort low, one sentence
+  C->>D: step distil: read the owner's skill items
+  C->>B: Converse with the skills block first, effort low, one sentence
   C->>D: Learning item (used by the next jobs, shown on Insights)
   C->>V: step upsert-vector: GetVectors, merge metadata, PutVectors (performed)
 ```
@@ -724,7 +727,8 @@ sequenceDiagram
     L->>D: GetItem WEEK: revision still the same? (else superseded, no write)
     L->>V: picked: metadata best = true, unpicked: best = false (errors logged only)
     L->>D: rows for every clip of the week (picked, hook, moment type, length, captions, numbers)
-    L->>B: Converse, maxTokens 4000, effort low: one 1-3 sentence learning
+    L->>D: Query SKILL# items; files from S3 skills/ (cached by key): the skills block
+    L->>B: Converse, skills block first, maxTokens 4000, effort low: one 1-3 sentence learning
     B-->>L: end_turn + text
     L->>D: same revision? Put Learning (kind week, "Best of week 2026-W46"), WEEK learnState done
   end
@@ -735,6 +739,68 @@ sequenceDiagram
 An empty set of picks deletes that week's learning and ends `skipped`. A model answer that is cut off, refused or
 filtered ends `failed` ("Could not learn this time. Change a pick to try again."), and Bedrock errors are retried
 twice. Because every write checks `revision`, a quick second save always wins over a slower first one.
+
+### 15. Skills: every AI call gets every skill
+
+The owner's rule: *"The whole AI system should use all of these skills by default, no matter what, as long as I add
+them."* ([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16),
+[ADR-32](DECISIONS.md#adr-32-every-ai-call-gets-every-skill-through-one-shared-skills-block)).
+
+**Create, read, update, delete.** Skills live in Settings › Clip making › Skills. The owner writes one by answering
+three questions (`POST /v1/skills`, the API builds the `SKILL.md`), uploads a `.md` or `.zip` (presigned PUT, then
+`POST /v1/skills`), reads any skill (`GET /v1/skills`, `GET /v1/skills/{skillId}`), changes their own
+(`PUT /v1/skills/{skillId}`, with a `version` check so two screens cannot overwrite each other silently) and deletes
+their own (`DELETE /v1/skills/{skillId}`, sent when the 8-second Undo ends). Built-in skills ship with the code and can
+only be read. There is no on/off switch: `PATCH /v1/skills/{skillId}` only answers "Skills are always used now".
+
+Every save writes a **new object** `skills/{userId}/{skillId}/{revisionId}/SKILL.md` (or `skill.zip`) and then moves
+the DynamoDB item's `key` to it, so an object never changes after it is written: a running job keeps reading the file
+it started with, and readers can cache files by key.
+
+```mermaid
+flowchart LR
+  subgraph Settings["Settings › Clip making › Skills (web)"]
+    W[Write / Upload] --> API
+    R[Read] --> API
+    E[Change] --> API
+    X[Delete + Undo] --> API
+  end
+  API[cf-prod-api] --> D[("DynamoDB SKILL# items")]
+  API --> S[("S3 skills/ revision files")]
+  D --> L1[skills loader]
+  S --> L1
+  B0[built-in skills in the code] --> L1
+  L1 --> BLK["one skills block<br/>built-ins, then the owner's by name"]
+  BLK --> A1[Agent: Agent SDK moment picking]
+  BLK --> A2[Agent: Converse fallback, facecam, checklist and hooks, captions]
+  BLK --> A3[API: clip-flow distil, 48 h]
+  BLK --> A4[API: cf-prod-learn, weekly best]
+  T[Titan embeddings] -.no skills, not text generation.-> V[(S3 Vectors)]
+```
+
+**One rule, two builders.** The agent (`agent/`) and the Lambdas (`api/`) each have the same small builder,
+`skills_block(docs)`, checked against one shared reference file byte for byte. It puts every skill's `SKILL.md` text
+inside `<owner_skills>`, built-ins first, then the owner's by name, at most 40,000 characters per skill and 120,000 in
+total (built-ins are never the ones left out). `compose_system(block, task_system)` makes the block the **first**
+part of every system prompt, followed by a Bedrock prompt-cache point when the block is 8,000 characters or more, so
+the many calls of one job pay for the long, stable part once. If Bedrock refuses the cache point, it is turned off for
+that process and the call is retried without it.
+
+| Where | Model calls | How the skills are loaded |
+|---|---|---|
+| Agent (AgentCore Runtime) | Agent SDK moment picking; Converse: moment fallback, facecam, checklist (with the hook rewrite), captions | once per job at `analyze`; also written to `.claude/skills/` for the SDK |
+| `cf-prod-clip-flow` step `distil` | `learn.converse_text` | `skill_prompt.load_skills` just before the call |
+| `cf-prod-learn` | `learn.converse_text` | `skill_prompt.load_skills` just before the call |
+
+The Lambda loader reads the owner's `SKILL#` items with one Query and each file through a small in-memory cache keyed
+by the S3 key (at most 64 files and 16 MB per container), so a warm Lambda reads S3 only after a skill changes. Both
+`cf-prod-clip-flow` and `cf-prod-learn` may only `GetObject` under `skills/*` (no list); `cf-prod-learn` gets
+`MEDIA_BUCKET`. A skill file that cannot be read is retried, then skipped and logged (`skills.skipped`); a failure to
+read the skill items fails the step, whose normal retry runs, so no call quietly goes without skills.
+
+**No way around it.** Each package has a test that reads its own source code and fails if a Converse, Agent SDK or
+streaming model call is made anywhere except through these helpers, or without the `skills` argument. The only model
+calls without skills are the Titan embeddings in `vectors.py`.
 
 ## Failure handling
 
@@ -755,6 +821,10 @@ twice. Because every write checks `revision`, a quick second save always wins ov
 | The tick has more due posts than fit in 240 s | It stops starting requests at 240 s; the rest stay due and go first on the next tick. |
 | Two ticks or a tick and a Refresh run at once | Budgets are conditional writes, so they cannot overspend together; a post read twice simply gets the newer numbers. |
 | `cf-prod-learn` fails or is superseded | A newer save wins (the `revision` check); a failed invoke or model answer leaves "Could not learn this time. Change a pick to try again."; vector errors are logged and never stop the learning. |
+| A skill file cannot be read (agent or Lambda) | Retried 3 times, then skipped and logged `skills.skipped`; the agent's `analyze` step says "1 could not be read". Reading the skill items themselves failing fails the step, and its normal retry runs. |
+| The skills are too long for one call | Each is cut to 40,000 characters, all together to 120,000; a skill that does not fit is shortened or left out and named (`skills.block` log). Built-ins are never left out. |
+| Bedrock refuses the prompt-cache point | Cache points are turned off for that process (`bedrock.cache_point_off`) and the call is retried without one. |
+| Two screens save the same skill | The second save gets `409` ("This skill was changed somewhere else"); the app offers Use the newest or Save mine anyway. |
 | Distil gets no usable answer (`max_tokens`, `refusal`, `content_filtered`) | Logged; no Learning is written; the vector is still updated. |
 | S3 Vectors or Titan errors | Agent: the "What worked before" section is skipped. `/similar`: returns `[]`. Throw away: logged, the route still succeeds. |
 | A durable execution fails or times out | Alarms `{fn}-durable-failed` and `{fn}-durable-timed-out` email the owner. A failed execution means a bug, because expected outcomes never raise. |
@@ -778,7 +848,7 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 
 | Item | Driver | Rough monthly |
 |---|---|---|
-| Bedrock, Claude Fable 5.1 | Moment selection reads the transcript; checklist, captions, vision and distil are small | the largest line; a few dollars per job, depending on source length |
+| Bedrock, Claude Fable 5.1 | Moment selection reads the transcript; checklist, captions, vision and distil are small. Every call also carries the skills block (up to 120,000 characters); its prompt-cache point makes the repeats within a job much cheaper | the largest line; a few dollars per job, depending on source length and skills |
 | Bedrock, Titan Text Embeddings V2 | A few thousand tokens per job | cents |
 | Amazon Transcribe | $0.024 per audio minute | 10 × 120 min ≈ $29 |
 | AgentCore Runtime | CPU and memory per second while a job runs (30–60 min) | a few dollars |

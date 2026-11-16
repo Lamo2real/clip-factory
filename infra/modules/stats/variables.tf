@@ -14,6 +14,12 @@ variable "lambda_zip_path" {
 variable "table_name" { type = string }
 variable "table_arn" { type = string }
 
+variable "media_bucket" {
+  type        = string
+  description = "Media bucket name; cf-prod-learn reads the owner's skills from skills/* (§18.8)."
+}
+variable "media_bucket_arn" { type = string }
+
 variable "model_id" {
   type        = string
   description = "Inference profile id the weekly learning calls (global.anthropic.claude-fable-5-1)."

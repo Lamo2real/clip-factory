@@ -11,9 +11,12 @@ from clipfactory_agent.agent import Brief, MomentTools, brief_json, find_moments
 from clipfactory_agent.bedrock import Bedrock, Facecam, ModelError, facecam_from_box
 from clipfactory_agent.moments import CANDIDATES_SCHEMA
 from clipfactory_agent.schema import check
+from clipfactory_agent.skills import skills_block
 from clipfactory_agent.util import UserFacingError
 
 from .conftest import raw_moment
+
+NO_SKILLS = skills_block([])
 
 
 def brief(duration: float = 4000, clip_min: int = 2, clip_max: int = 3) -> Brief:
@@ -32,7 +35,6 @@ def brief(duration: float = 4000, clip_min: int = 2, clip_max: int = 3) -> Brief
         words=words,
         loud=loud,
         heatmap=[{"start": 600, "end": 620, "value": 1.0}],
-        skills_text="<skill>rules</skill>",
         learnings=["Rage clips win"],
     )
 
@@ -40,7 +42,8 @@ def brief(duration: float = 4000, clip_min: int = 2, clip_max: int = 3) -> Brief
 def test_prompts_carry_rules_skills_and_learnings() -> None:
     b = brief()
     s = system_prompt(b)
-    assert "<skill>rules</skill>" in s and "Rage clips win" in s and "20–45 seconds" in s
+    assert "<owner_skills" not in s  # the skills block goes first in every call, never inside the task prompt
+    assert "Rage clips win" in s and "20–45 seconds" in s
     assert "3 windows" in task_prompt(b)
     j = brief_json(b)
     assert j["clips"] == {"min": 2, "max": 3, "candidatesWanted": 5}
@@ -109,6 +112,7 @@ async def test_find_moments_falls_back_to_converse(tmp_path: Path, monkeypatch: 
         region="eu-north-1",
         workdir=tmp_path,
         skill_names=[],
+        skills=NO_SKILLS,
         on_progress=progress.append,
     )
     assert [m.start for m in chosen] == [100, 400, 700]
@@ -132,6 +136,7 @@ async def test_find_moments_keeps_sdk_moments(tmp_path: Path, monkeypatch: pytes
         region="r",
         workdir=tmp_path,
         skill_names=["playbook"],
+        skills=NO_SKILLS,
         on_progress=lambda f: None,
     )
     assert len(chosen) == 3 and fake.calls == 0
@@ -146,6 +151,7 @@ async def test_find_moments_none_found(tmp_path: Path) -> None:
             region="r",
             workdir=tmp_path,
             skill_names=[],
+            skills=NO_SKILLS,
             on_progress=lambda f: None,
             use_sdk=False,
         )
@@ -185,7 +191,7 @@ async def test_structured_switches_to_auto_and_corrects_bad_answers() -> None:
     good = {"has_facecam": True, "x": 960, "y": 0, "w": 300, "h": 200, "scene": "gameplay"}
     fake = FakeConverse([tool_answer({"has_facecam": True}), tool_answer(good)])
     b = Bedrock("global.anthropic.claude-fable-5-1", "eu-north-1", client=fake)
-    layout = await b.detect_layout(b"jpeg", 1280, 720)
+    layout = await b.detect_layout(b"jpeg", 1280, 720, skills=NO_SKILLS)
     assert layout.facecam == Facecam(0.75, 0.0, 300 / 1280, 200 / 720)
     assert b.forced_tool_choice is False
     assert len(fake.requests) == 3
@@ -199,7 +205,7 @@ async def test_structured_gives_up_after_three_bad_answers() -> None:
     b = Bedrock("m", "r", client=fake)
     b.forced_tool_choice = False
     with pytest.raises(ModelError):
-        await b.detect_layout(b"jpeg", 1280, 720)
+        await b.detect_layout(b"jpeg", 1280, 720, skills=NO_SKILLS)
 
 
 def test_facecam_from_box_rejects_implausible_boxes() -> None:
@@ -235,6 +241,7 @@ async def test_sdk_options_and_tool_wrappers(tmp_path: Path) -> None:
         region="eu-north-1",
         workdir=tmp_path,
         skill_names=["short-form-video-playbook"],
+        skills=NO_SKILLS,
     )
     assert opts.model == "global.anthropic.claude-fable-5-1"
     assert opts.env["ANTHROPIC_MODEL"] == "global.anthropic.claude-fable-5-1"

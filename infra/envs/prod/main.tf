@@ -140,6 +140,8 @@ module "stats" {
   lambda_zip_path       = var.lambda_zip_path
   table_name            = module.data.table_name
   table_arn             = module.data.table_arn
+  media_bucket          = module.storage.media_bucket
+  media_bucket_arn      = module.storage.media_bucket_arn
   model_id              = local.model_id
   model_invoke_arns     = local.model_invoke_arns
   embed_model_id        = local.embed_model_id

@@ -41,8 +41,39 @@ def clip_prefix(job_id: str, clip_id: str) -> str:
     return f"jobs/{job_id}/clips/{clip_id}/"
 
 
-def skill_key(user_id: str, skill_id: str, fmt: str) -> str:
-    return f"skills/{user_id}/{skill_id}/" + ("skill.zip" if fmt == "zip" else "SKILL.md")
+SKILL_FILES = {"md": "SKILL.md", "zip": "skill.zip"}
+_ULID = r"[0-7][0-9A-HJKMNP-TV-Z]{25}"
+
+
+def skill_prefix(user_id: str, skill_id: str) -> str:
+    """Every saved file of one skill lives under this prefix (§18.1)."""
+    return f"skills/{user_id}/{skill_id}/"
+
+
+def skill_key(user_id: str, skill_id: str, revision_id: str, fmt: str) -> str:
+    """One saved revision: ``skills/{userId}/{skillId}/{revisionId}/SKILL.md|skill.zip``. A key never changes
+    content, so readers may cache by key."""
+    return f"{skill_prefix(user_id, skill_id)}{revision_id}/{SKILL_FILES['zip' if fmt == 'zip' else 'md']}"
+
+
+def legacy_skill_key(user_id: str, skill_id: str, fmt: str) -> str:
+    """The key used before §18 (no revision folder)."""
+    return f"{skill_prefix(user_id, skill_id)}{SKILL_FILES['zip' if fmt == 'zip' else 'md']}"
+
+
+def skill_key_format(key: str, user_id: str, skill_id: str, *, legacy: bool = False) -> str | None:
+    """``"md"``/``"zip"`` when ``key`` is a revision key of this caller's skill (or, with ``legacy``, the old
+    key), else None."""
+    prefix = re.escape(skill_prefix(user_id, skill_id))
+    revision = f"(?:{_ULID}/)" + ("?" if legacy else "")
+    m = re.fullmatch(f"{prefix}{revision}(SKILL\\.md|skill\\.zip)", key)
+    if m is None:
+        return None
+    return "zip" if m.group(1) == "skill.zip" else "md"
+
+
+def is_revision_key(key: str) -> bool:
+    return re.fullmatch(f"skills/[^/]+/[^/]+/{_ULID}/(SKILL\\.md|skill\\.zip)", key) is not None
 
 
 def cookies_key(user_id: str) -> str:
@@ -109,6 +140,9 @@ class Media:
         if len(data) > max_bytes:
             raise ValueError("object is larger than allowed")
         return data
+
+    def put(self, key: str, data: bytes, content_type: str) -> None:
+        self._s3.put_object(Bucket=self.bucket, Key=key, Body=data, ContentType=content_type)
 
     def delete(self, key: str) -> None:
         self._s3.delete_object(Bucket=self.bucket, Key=key)

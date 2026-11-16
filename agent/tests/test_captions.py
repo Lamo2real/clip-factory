@@ -15,6 +15,7 @@ from clipfactory_agent.captions import (
     write_captions,
 )
 from clipfactory_agent.schema import check
+from clipfactory_agent.skills import skills_block
 
 from .conftest import make_moment
 
@@ -79,7 +80,9 @@ async def test_write_captions_uses_claude_and_template_for_missing() -> None:
         ClipText("A", make_moment(), "no way"),
         ClipText("B", make_moment(hook="chat could not believe this one"), ""),
     ]
-    out = await write_captions(fake, clips, notes="#GTA6", skills_text="", system="s")  # type: ignore[arg-type]
+    block = skills_block([])
+    out = await write_captions(fake, clips, notes="#GTA6", skills=block, skills_text="", system="s")  # type: ignore[arg-type]
+    assert fake.calls[0]["skills"] is block
     assert out["A"]["instagram"].startswith("instagram text") and "#GTA6" in out["A"]["instagram"]
     assert out["B"]["youtubeTitle"] == "Chat could not believe this one"
 
@@ -88,6 +91,11 @@ async def test_write_captions_falls_back_on_model_error() -> None:
     from clipfactory_agent.bedrock import ModelError
 
     out = await write_captions(
-        FakeBedrock(ModelError("no")), [ClipText("A", make_moment(), "")], notes="", skills_text="", system="s"
-    )  # type: ignore[arg-type]
+        FakeBedrock(ModelError("no")),  # type: ignore[arg-type]
+        [ClipText("A", make_moment(), "")],
+        notes="",
+        skills=skills_block([]),
+        skills_text="",
+        system="s",
+    )
     assert out["A"]["tiktok"] == "He thought he got away with it"

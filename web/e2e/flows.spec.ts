@@ -103,12 +103,15 @@ test("settings: skills, preferences, appearance", async ({ page }) => {
     mimeType: "text/markdown",
     buffer: Buffer.from("---\nname: hooks\ndescription: test\n---\n# Hooks\n"),
   });
-  await expect(page.getByText("Added hooks.")).toBeVisible();
+  await expect(page.getByText("Your skill is ready. Clip Factory will use it every time.")).toBeVisible();
+  await expect(page.locator(".skill-row", { has: page.getByText("Hooks", { exact: true }) })).toContainText("Always used");
 
-  const builtIn = page.locator(".skill", { hasText: "short-form-video-playbook" });
-  await expect(builtIn.getByRole("button", { name: "Delete" })).toHaveAttribute("aria-disabled", "true");
-  await builtIn.getByRole("switch").click();
-  await expect(builtIn.getByRole("switch")).toHaveAttribute("aria-checked", "false");
+  // Every skill is always used: no switch anywhere on the branch, and a built-in can be read but not changed.
+  await expect(page.getByRole("switch")).toHaveCount(0);
+  await page.locator(".skill-row", { hasText: "Short form video playbook" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Short form video playbook" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Edit" })).toHaveCount(0);
 
   await page.goto("/settings/clip-making/clips");
   await settle(page);

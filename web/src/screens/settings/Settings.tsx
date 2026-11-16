@@ -3,11 +3,11 @@
 // a big Back button; from 1024 px a folder panel on the left shows the whole tree.
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { Icon } from "../../components/Icon.tsx";
-import { A, LinkButton, PageHeader } from "../../components/ui.tsx";
+import { A, PageHeader } from "../../components/ui.tsx";
 import { plural } from "../../lib/format.ts";
 import { prefersReducedMotion, setPrefs, usePrefs } from "../../lib/prefs.ts";
 import { useInstall } from "../../lib/pwa.ts";
-import { navigate, useHash } from "../../lib/router.ts";
+import { navigate, useHash, type Route } from "../../lib/router.ts";
 import {
   appleCount,
   findBranch,
@@ -30,6 +30,8 @@ import {
   WhereBranch,
   YoutubeBranch,
 } from "./branches.tsx";
+import { Trail } from "./parts.tsx";
+import { SkillScreen } from "./SkillPages.tsx";
 import { SkillsSection } from "./SkillsSection.tsx";
 import { SoundsBranch } from "./SoundsBranch.tsx";
 
@@ -53,9 +55,22 @@ const BRANCHES: Record<string, () => ReactNode> = {
 /** Every branch route in the tree, for tests: each must have a page. */
 export const BRANCH_ROUTES = Object.keys(BRANCHES);
 
-export function Settings({ tree: treeSlug = null, branch: branchSlug = null }: { tree?: string | null; branch?: string | null }) {
+export function Settings({
+  tree: treeSlug = null,
+  branch: branchSlug = null,
+  skill = null,
+}: {
+  tree?: string | null;
+  branch?: string | null;
+  /** A page under the Skills branch (§18.7): new, read or edit. */
+  skill?: Omit<Extract<Route, { name: "skill" }>, "name"> | null;
+}) {
   const { installed } = useInstall();
   const trees = useMemo(() => visibleTrees(installed), [installed]);
+  if (skill) {
+    treeSlug = "clip-making";
+    branchSlug = "skills";
+  }
   const tree = treeSlug ? findTree(treeSlug) : undefined;
   const branch = tree && branchSlug ? findBranch(tree, branchSlug) : undefined;
 
@@ -64,7 +79,9 @@ export function Settings({ tree: treeSlug = null, branch: branchSlug = null }: {
       <div className="settings-layout">
         <FolderPanel trees={trees} tree={tree?.slug ?? null} branch={branch?.slug ?? null} installed={installed} />
         <div className="settings-content">
-          {tree && branch ? (
+          {skill && tree && branch ? (
+            <SkillScreen tree={tree} branch={branch} mode={skill.mode} skillId={skill.skillId} />
+          ) : tree && branch ? (
             <BranchPage tree={tree} branch={branch} />
           ) : tree ? (
             <TreePage tree={trees.find((t) => t.slug === tree.slug) ?? tree} />
@@ -316,48 +333,6 @@ function BranchPage({ tree, branch }: { tree: Tree; branch: Branch }) {
         {render?.()}
       </div>
     </>
-  );
-}
-
-// ---------- Breadcrumb, and a big Back button on phones ----------
-
-function Trail({ tree, branch }: { tree: Tree; branch?: Branch }) {
-  const up = branch ? { href: settingsPath(tree.slug), name: tree.name } : { href: settingsPath(), name: "Settings" };
-  return (
-    <div className="trail">
-      <LinkButton href={up.href} size="lg" icon="chevronLeft" className="trail__back" aria-label={`Back to ${up.name}`}>
-        Back
-      </LinkButton>
-      <nav className="crumbs" aria-label="Breadcrumb">
-        <ol className="crumbs__list">
-          <li className="crumbs__item">
-            <A href={settingsPath()} className="crumbs__link">
-              Settings
-            </A>
-          </li>
-          <li className="crumbs__item">
-            <Icon name="chevronRight" size={16} className="icon crumbs__sep" />
-            {branch ? (
-              <A href={settingsPath(tree.slug)} className="crumbs__link">
-                {tree.name}
-              </A>
-            ) : (
-              <span className="crumbs__here" aria-current="page">
-                {tree.name}
-              </span>
-            )}
-          </li>
-          {branch ? (
-            <li className="crumbs__item">
-              <Icon name="chevronRight" size={16} className="icon crumbs__sep" />
-              <span className="crumbs__here" aria-current="page">
-                {branch.name}
-              </span>
-            </li>
-          ) : null}
-        </ol>
-      </nav>
-    </div>
   );
 }
 
