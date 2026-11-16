@@ -337,6 +337,23 @@ function contrastKit() {
           for (const st of next) keep.set(st.bg.map(Math.round).join() + "|" + st.groups.map((g) => g.behind.map(Math.round).join() + g.o).join(), st);
           states = [...keep.values()];
         }
+        // A sliding highlight (<Glide>, §20.14) is a sibling painted under the chosen item, not an ancestor: when it
+        // sits under the text, its fill is part of the background.
+        const glide = a.querySelector(":scope > .glide");
+        if (glide && !chain.includes(glide)) {
+          const gr = glide.getBoundingClientRect();
+          const gs = getComputedStyle(glide);
+          const go = Number(gs.opacity);
+          if (go > 0 && gr.left <= rect.left && gr.right >= rect.right && gr.top <= rect.top && gr.bottom >= rect.bottom) {
+            const layers = [...colours(gs.backgroundColor), ...colours(gs.backgroundImage)].filter((c) => c[3] > 0);
+            if (layers.length) {
+              const next: State[] = [];
+              for (const st of states)
+                for (const c of layers) next.push({ ...st, bg: over([c[0], c[1], c[2], c[3] * go], st.bg) });
+              states = next;
+            }
+          }
+        }
       }
       const fg = colours(el instanceof SVGElement ? s.fill : s.color)[0];
       if (!fg) continue;
