@@ -1,6 +1,6 @@
 import { announceSignedOut, type AuthClient } from "../lib/auth.ts";
 import { ApiError, errorFromResponse, networkError } from "./errors.ts";
-import type { Account, Api, Clip, Job, Post, Settings, SimilarClip, Skill } from "./types.ts";
+import type { Account, Api, Clip, ClipPerformance, Job, Post, RefreshResult, Settings, SimilarClip, Skill, WeekView } from "./types.ts";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -92,5 +92,17 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     insights: () => call("GET", "/insights"),
     similarClips: async (clipId) =>
       (await call<{ clips: SimilarClip[] }>("GET", `/clips/${id(clipId)}/similar`)).clips ?? [],
+    clipPerformance: (clipId) => call<ClipPerformance>("GET", `/clips/${id(clipId)}/performance`),
+    refreshStats: async (clipId, platforms) =>
+      (await call<{ platforms: RefreshResult[] }>("POST", `/clips/${id(clipId)}/stats/refresh`, platforms ? { platforms } : {}))
+        .platforms,
+    getWeek: async (week, from, to) => (await call<{ week: WeekView }>("GET", `/weeks/${id(week)}${q({ from, to })}`)).week,
+    saveWeekBest: async (week, body) => {
+      const out = (await call<{ week: WeekView | string }>("PUT", `/weeks/${id(week)}/best`, body)).week;
+      // "Nothing changed" may answer with just the week id: read the week as it stands.
+      if (typeof out === "string" || !out || !Array.isArray(out.clips))
+        return (await call<{ week: WeekView }>("GET", `/weeks/${id(week)}${q({ from: body.from, to: body.to })}`)).week;
+      return out;
+    },
   };
 }

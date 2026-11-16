@@ -1,0 +1,932 @@
+/* Clip performance page and Library › This week (docs/CONTRACTS.md §16.8). The lines and stacks change shape at
+   620 px and 1060 px of the stage's own width (a container query, so the open sidebar counts), matching
+   layoutFor() in ClipPerformance.tsx and PerfLines' three layouts. */
+
+/* ---------- Page ---------- */
+.perf {
+  --line: rgb(var(--sage-rgb) / 0.7);
+  --line-best: var(--tomato);
+}
+@media (prefers-color-scheme: dark) {
+  .perf {
+    --line: rgb(var(--ink-rgb) / 0.35);
+  }
+}
+.perf__back {
+  display: flex;
+}
+.perf__head {
+  display: grid;
+  gap: 6px;
+  max-width: 34ch;
+  margin-inline: auto;
+  text-align: center;
+}
+.perf__title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: var(--fs-h1);
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+.perf__meta {
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.perf-skel {
+  display: block;
+  height: 70vh;
+  border-radius: var(--r-xl);
+}
+
+/* The stage holds the hero, the stacks and (behind them) the SVG lines. */
+.perf__stage {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  container: perfstage / inline-size;
+}
+.perf-lines {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.perf-line {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.perf-line.is-best {
+  stroke: var(--line-best);
+}
+.perf-dot {
+  fill: var(--line);
+}
+.perf-dot.is-best {
+  fill: var(--line-best);
+}
+.perf-dot--origin {
+  fill: var(--sage-deep);
+}
+
+/* Draw-in, once per visit: each line grows from the video, 80 ms after the one before (§16.8). */
+.perf-lines--draw .perf-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: perf-draw 900ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--i) * 80ms) forwards;
+}
+.perf-lines--draw .perf-dot:not(.perf-dot--origin) {
+  opacity: 0;
+  animation: perf-fade 260ms var(--ease-out) calc(var(--i) * 80ms + 640ms) forwards;
+}
+.perf--draw .pstack__card {
+  /* "backwards", never "both": a kept transform on glass makes Chromium skip painting the page. */
+  animation: perf-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--i) * 80ms + 380ms) backwards;
+}
+@keyframes perf-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes perf-fade {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes perf-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* ---------- Hero: video, total, actions ---------- */
+/* Phones (trunk): the video on top, then the five quick chips (which app did best, on the first screen), the total
+   and the buttons, all 44 px in so the trunk runs down their left side. */
+.perf__hero {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-areas: "preview preview" ". chips" ". total" ". actions";
+  justify-items: center;
+}
+.perf__total {
+  grid-area: total;
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  width: 100%;
+  max-width: 420px;
+  padding: 12px 16px;
+  border-radius: var(--r-lg);
+  text-align: center;
+}
+.perf__views {
+  display: grid;
+  justify-items: center;
+}
+.perf__views-num {
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 2rem + 3vw, 4.2rem);
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.perf__views-label {
+  font-weight: 650;
+}
+.perf__fine {
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+}
+/* "Best on TikTok · 126.4K views": the answer to "which did best", right under the total. */
+.perf__winner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.perf__winner > span:last-child {
+  min-width: 0;
+  text-align: left;
+}
+/* Phones: two short lines ("Best on TikTok" / "126.4K views"); wider stages: one line with a dot between. */
+.perf__winner-views {
+  display: block;
+  white-space: nowrap;
+}
+.perf__winner-dot {
+  display: none;
+}
+.perf__winner-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--tomato-deep);
+  color: #fff;
+  --mark-cut: var(--tomato-deep);
+}
+.perf__chips {
+  grid-area: chips;
+  width: 100%;
+}
+.perf__chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.perf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 14px 6px 10px;
+  border-radius: var(--r-pill);
+  background: rgb(255 255 255 / 0.62);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.12);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.perf-chip.is-none {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.perf-chip.is-best {
+  background: var(--tomato-deep);
+  box-shadow: 0 6px 14px -8px rgb(var(--tomato-rgb) / 0.9);
+  color: #fff;
+  --mark-cut: var(--tomato-deep);
+}
+.perf__actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 12px;
+  width: 100%;
+}
+.perf__updated {
+  flex-basis: 100%;
+  text-align: center;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+}
+.perf__preview {
+  grid-area: preview;
+  position: relative;
+  width: min(180px, 56cqi);
+  aspect-ratio: 9 / 16;
+  /* With the grid gap, room for the trunk's bend (TRUNK_BEND in PerfLines) before the total starts. */
+  margin-bottom: 22px;
+  padding: 6px;
+  border-radius: var(--r-xl);
+}
+.perf__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: calc(var(--r-xl) - 6px);
+  background: rgb(var(--ink-rgb) / 0.85);
+}
+.perf__novideo {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  height: 100%;
+  border-radius: calc(var(--r-xl) - 6px);
+  background: rgb(var(--ink-rgb) / 0.1);
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+/* Waiting for the next allowed check: the button tells the owner when, so it stays fully readable (ink on solid
+   off-white, about 13:1) instead of fading like a button with nothing to say. */
+.btn.perf__refresh.is-waiting[aria-disabled="true"]:not(.is-loading) {
+  opacity: 1;
+  background: var(--offwhite);
+  color: var(--ink);
+  text-shadow: none;
+  box-shadow:
+    inset 0 0 0 1.5px rgb(var(--ink-rgb) / 0.22),
+    0 6px 16px -12px rgb(var(--ink-rgb) / 0.45);
+}
+.btn.perf__refresh.is-waiting .icon {
+  color: var(--sage-deep);
+}
+
+/* The "Best this week" star: sage glass, never tomato (the one tomato button is Refresh). */
+.star-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 54px;
+  min-width: 54px;
+  padding: 8px 20px;
+  border-radius: var(--r-pill);
+  color: var(--ink);
+  font-weight: 650;
+  transition:
+    transform var(--dur-2) var(--ease-spring),
+    background-color var(--dur-2) var(--ease-out);
+}
+.star-btn .icon {
+  color: var(--sage-deep);
+  transition: transform var(--dur-3) var(--ease-spring);
+}
+.star-btn.is-on {
+  --glass-tint: linear-gradient(150deg, rgb(140 162 118 / 0.95), rgb(79 99 64 / 0.9));
+  color: #fff;
+}
+.star-btn.is-on .icon {
+  color: #fff;
+  transform: rotate(-12deg) scale(1.12);
+}
+.star-btn:active {
+  transform: scale(0.95);
+}
+.star-btn[aria-busy="true"] {
+  cursor: progress;
+}
+
+/* ---------- Stacks ---------- */
+.perf__stacks {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 18px;
+  margin-top: 56px;
+  padding-left: 44px;
+}
+.pstack {
+  min-width: 0;
+  container: pstack / inline-size;
+}
+.pstack__card {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 16px;
+  border-radius: var(--r-lg);
+}
+.pstack__card.is-best {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.75),
+    0 0 0 2px rgb(var(--tomato-rgb) / 0.55),
+    var(--shadow-2);
+}
+.pstack__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+}
+.pstack__mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgb(var(--ink-rgb) / 0.88);
+  color: var(--offwhite);
+  --mark-cut: var(--ink);
+}
+/* One line always (ellipsis only if it must), so the pill and the big number start at the same height in every
+   column and the numbers being compared line up. */
+.pstack__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pstack__name:focus {
+  outline: none;
+}
+/* The crown sits on the best card's corner like a badge, so it never squeezes the name. */
+.pstack__crown {
+  position: absolute;
+  top: -14px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--tomato);
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    0 6px 14px -6px rgb(var(--tomato-rgb) / 0.8);
+}
+.pstack__chip .pill {
+  white-space: normal;
+}
+.pstack__chip .pill__text {
+  overflow: visible;
+}
+.pstack__top {
+  display: grid;
+  gap: 0;
+}
+.pstack__big {
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 21cqi, 2.8rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.pstack__toplabel {
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  font-weight: 650;
+}
+.pstack__rows {
+  display: grid;
+  gap: 2px;
+}
+.pstack__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid rgb(var(--ink-rgb) / 0.08);
+  font-size: var(--fs-small);
+}
+.pstack__row .icon {
+  margin-top: 1px;
+  color: var(--sage-deep);
+}
+.pstack__label {
+  min-width: 0;
+  color: var(--ink-2);
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+.pstack__value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pstack__reactions {
+  grid-column: 2 / -1;
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+.pstack__slow {
+  display: grid;
+  gap: 4px;
+  padding: 10px 10px 8px;
+  border-radius: var(--r-md);
+  background: rgb(255 255 255 / 0.4);
+}
+.pstack__note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sage-deep);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.pstack__foot {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.pstack__ago {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.pstack__open {
+  gap: 6px;
+  font-size: var(--fs-small);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.pstack__calm {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+.pstack__calm-text {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.pstack__card.is-failed .pstack__calm-text {
+  color: var(--tomato-ink);
+}
+/* Narrow stacks (should not happen with the stage thresholds, kept as a safety net): each number goes under its
+   label. */
+@container pstack (max-width: 180px) {
+  .pstack__card {
+    gap: 10px;
+    padding: 12px 10px;
+  }
+  .pstack__head {
+    gap: 8px;
+  }
+  .pstack__mark {
+    width: 28px;
+    height: 28px;
+  }
+  .pstack__name {
+    font-size: 0.95rem;
+  }
+  .pstack__row {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 1px;
+    font-size: var(--fs-xs);
+  }
+  .pstack__value {
+    grid-column: 2;
+    font-size: var(--fs-small);
+    white-space: normal;
+  }
+  .pstack__slow {
+    padding: 8px 8px 6px;
+  }
+  .pstack__open {
+    font-size: var(--fs-xs);
+  }
+}
+/* Very narrow (five columns on a 1024 px laptop): the row icons give their room to the words. */
+@container pstack (max-width: 150px) {
+  .pstack__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pstack__row .icon {
+    display: none;
+  }
+  .pstack__value,
+  .pstack__reactions {
+    grid-column: 1;
+  }
+}
+.spinner--sm {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+.spark {
+  display: block;
+  width: 100%;
+  max-width: 120px;
+  height: 32px;
+}
+.spark__line {
+  stroke: var(--sage-deep);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.spark.is-best .spark__line {
+  stroke: var(--tomato-deep);
+}
+
+/* ---------- Stage ≥ 620 px: two rows on a six-track grid; Facebook and X sit in the row-1 gutters ---------- */
+@container perfstage (min-width: 620px) {
+  .perf__hero {
+    grid-template-areas: "total actions" "preview preview";
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+  .perf__total {
+    justify-self: end;
+  }
+  .perf__winner {
+    font-size: 1rem;
+  }
+  .perf__winner-views {
+    display: inline;
+  }
+  .perf__winner-dot {
+    display: inline;
+  }
+  .perf__actions {
+    justify-content: flex-start;
+  }
+  .perf__updated {
+    text-align: left;
+  }
+  /* Capped by height, so on a 900 px tall screen the stacks start on the first screen. */
+  .perf__preview {
+    width: calc(min(400px, 44vh) * 9 / 16);
+    margin-bottom: 0;
+  }
+  .perf__stacks {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    column-gap: 24px;
+    row-gap: 28px;
+    align-items: start;
+    margin-top: 96px;
+    padding-left: 0;
+  }
+  .pstack:nth-child(1) {
+    grid-column: 1 / 3;
+  }
+  .pstack:nth-child(2) {
+    grid-column: 3 / 5;
+  }
+  .pstack:nth-child(3) {
+    grid-column: 5 / 7;
+  }
+  .pstack:nth-child(4) {
+    grid-column: 2 / 4;
+  }
+  .pstack:nth-child(5) {
+    grid-column: 4 / 6;
+  }
+  .pstack__card {
+    padding: 14px;
+  }
+}
+
+/* ---------- Stage ≥ 1060 px: the video in the middle, five columns fanned out below ---------- */
+@container perfstage (min-width: 1060px) {
+  .perf__hero {
+    grid-template-areas: "total preview actions";
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    column-gap: 40px;
+  }
+  .perf__total {
+    justify-items: end;
+    text-align: right;
+    max-width: 340px;
+  }
+  .perf__views {
+    justify-items: end;
+  }
+  .perf__winner {
+    justify-content: flex-end;
+  }
+  .perf__actions {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-self: start;
+  }
+  .perf__stacks {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 88px;
+  }
+  .pstack:nth-child(n) {
+    grid-column: auto;
+  }
+  .pstack__card {
+    padding: 14px 12px;
+  }
+}
+
+/* ---------- Library tabs ---------- */
+.lib-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lib-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px 20px;
+  border-radius: var(--r-pill);
+  background: rgb(255 255 255 / 0.55);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.1);
+  color: var(--ink);
+  font-weight: 650;
+  text-decoration: none;
+  transition: background-color var(--dur-2) var(--ease-out);
+}
+.lib-tab:hover {
+  background: rgb(255 255 255 / 0.8);
+}
+.lib-tab.is-on {
+  background: rgb(var(--ink-rgb) / 0.88);
+  color: var(--offwhite);
+  box-shadow: none;
+}
+.lib-card__link {
+  color: inherit;
+  text-decoration: none;
+}
+.lib-card__link:hover {
+  text-decoration: underline;
+  text-decoration-color: rgb(var(--tomato-rgb) / 0.5);
+  text-underline-offset: 3px;
+}
+.lib-card__see {
+  justify-self: start;
+}
+
+/* ---------- This week ---------- */
+.week {
+  display: grid;
+  gap: 16px;
+}
+.week__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+.week__arrow {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+}
+.week__arrow[aria-disabled="true"] {
+  opacity: 0.45;
+}
+.week__title {
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.week__dates {
+  font-style: italic;
+}
+.week__learn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--ink-2);
+  font-weight: 600;
+  text-align: center;
+}
+.week__learn .icon {
+  color: var(--sage-deep);
+}
+.week__learn.is-failed,
+.week__learn.is-failed .icon {
+  color: var(--tomato-ink);
+}
+.week__quote {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 16px 20px;
+  border-radius: var(--r-lg);
+}
+.week__quote-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-small);
+  font-weight: 700;
+}
+.week__quote-text {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(1.2rem, 1.05rem + 0.6vw, 1.5rem);
+  line-height: 1.25;
+}
+.week__count {
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.week-list {
+  display: grid;
+  gap: 12px;
+}
+.week-card {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--r-lg);
+}
+.week-card.is-best {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.75),
+    0 0 0 2px rgb(var(--sage-rgb) / 0.9),
+    var(--shadow-1);
+}
+.week-card__rank {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-style: italic;
+  color: var(--ink-2);
+}
+.week-card__cover {
+  width: 58px;
+  aspect-ratio: 9 / 14;
+  overflow: hidden;
+  border-radius: var(--r-sm);
+  background: rgb(var(--ink-rgb) / 0.15);
+}
+.week-card__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.week-card__body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.week-card__hook {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.2rem;
+  line-height: 1.12;
+}
+.week-card__link {
+  color: inherit;
+  text-decoration: none;
+}
+.week-card__link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.week-card__views {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.week-card__num {
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.week-card__apps {
+  white-space: nowrap;
+}
+.week-card__marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+/* Each app as a small pill: 16 px mark, 15 px number; the clip's best app in tomato, as on the clip page. */
+.week-card__mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 3px 10px 3px 7px;
+  border-radius: var(--r-pill);
+  background: rgb(255 255 255 / 0.5);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.1);
+  color: var(--ink);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.week-card__mark.is-best {
+  background: var(--tomato-deep);
+  box-shadow: none;
+  color: #fff;
+  --mark-cut: var(--tomato-deep);
+}
+.star-btn--card {
+  flex-direction: column;
+  gap: 2px;
+  min-width: 64px;
+  min-height: 64px;
+  padding: 8px 10px;
+  border-radius: var(--r-lg);
+  font-size: var(--fs-xs);
+}
+@media (max-width: 479px) {
+  .week-card {
+    gap: 8px;
+  }
+  .week-card__rank {
+    width: 18px;
+    font-size: 1.2rem;
+  }
+  .week-card__cover {
+    width: 48px;
+  }
+}
+
+/* ---------- Review: kept just now ---------- */
+.kept-now {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+}
+.kept-now__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.kept-now__title .icon {
+  color: var(--sage-deep);
+}
+.kept-now__list {
+  display: grid;
+  gap: 8px;
+}
+.kept-now__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.kept-now__hook {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.1rem;
+}
+.account-note {
+  margin-top: 12px;
+}

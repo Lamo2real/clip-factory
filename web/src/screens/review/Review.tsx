@@ -77,6 +77,9 @@ export function Review({ jobId }: { jobId: string | null }) {
 
   const toast = useToast();
   const { refresh } = useSession();
+  // Clips kept on this visit: each gets a "See how it does" link once its card has left the list.
+  const [justKept, setJustKept] = useState<Clip[]>([]);
+  const kept = (clip: Clip) => setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
   const order = useRef<string[]>([]);
   if (data) for (const c of data) if (!order.current.includes(c.clipId)) order.current.push(c.clipId);
   const remove = (clipId: string) => setData((d) => (d ? d.filter((c) => c.clipId !== clipId) : d));
@@ -126,6 +129,24 @@ export function Review({ jobId }: { jobId: string | null }) {
           ) : undefined
         }
       />
+      {justKept.length ? (
+        <section className="kept-now glass" aria-labelledby="kept-now-title">
+          <h2 className="kept-now__title" id="kept-now-title">
+            <Icon name="checkCircle" size={20} />
+            Kept just now
+          </h2>
+          <ul className="kept-now__list">
+            {justKept.map((c) => (
+              <li key={c.clipId} className="kept-now__item">
+                <span className="kept-now__hook clamp-2 user-text">{c.hook}</span>
+                <LinkButton href={`/clips/${c.clipId}`} size="sm" icon="chart" iconAfter="chevronRight">
+                  See how it does
+                </LinkButton>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {error && !data ? <ErrorPanel message={error} onRetry={reload} /> : null}
       {!data && !error ? <Skeleton className="review-skel" /> : null}
       {data && data.length === 0 ? (
@@ -149,7 +170,7 @@ export function Review({ jobId }: { jobId: string | null }) {
           <ol className="review-list">
             {data.map((c, i) => (
               <li key={c.clipId} id={`clip-${c.clipId}`} className="review-list__item">
-                <ReviewCard clip={c} next={i === 0} onDone={remove} onThrowAway={throwAway} onSettling={settle} />
+                <ReviewCard clip={c} next={i === 0} onDone={remove} onKept={kept} onThrowAway={throwAway} onSettling={settle} />
               </li>
             ))}
           </ol>
@@ -165,6 +186,7 @@ function ReviewCard({
   clip,
   next,
   onDone,
+  onKept,
   onThrowAway,
   onSettling,
 }: {
@@ -172,6 +194,8 @@ function ReviewCard({
   /** The top card: its Keep is the screen's one tomato button; the cards below get a quiet Keep. */
   next: boolean;
   onDone: (clipId: string) => void;
+  /** Kept: the list offers a link to the clip's numbers. */
+  onKept: (clip: Clip) => void;
   onThrowAway: (clip: Clip) => void;
   /** Tells the list this card is leaving (or, after a failed Keep, staying after all). */
   onSettling: (clipId: string, on: boolean) => void;
@@ -280,6 +304,7 @@ function ReviewCard({
       if (out.kind === "kept") {
         burst(centerOf(confirmRef.current), 120);
         toast.success(keptMessage(out.posts));
+        onKept(out.clip);
         leave();
         return;
       }
