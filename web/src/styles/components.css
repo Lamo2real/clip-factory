@@ -321,7 +321,6 @@
   color: var(--ink);
   font-size: 0.875rem;
   font-weight: 600;
-  cursor: pointer;
 }
 .password__toggle:hover {
   background: rgb(var(--ink-rgb) / 0.06);
@@ -451,7 +450,6 @@
   border-radius: var(--r-md);
   border: 1.5px dashed rgb(var(--ink-rgb) / 0.3);
   background: rgb(255 255 255 / 0.45);
-  cursor: pointer;
   transition: background-color var(--dur-1), border-color var(--dur-1);
 }
 .dropzone:hover {
@@ -574,7 +572,6 @@
   font-weight: 600;
   font-size: 0.9rem;
   color: var(--ink-2);
-  cursor: pointer;
   text-align: center;
   transition:
     background-color var(--dur-2) var(--ease-out),
@@ -586,7 +583,6 @@
   opacity: 0;
   inset: 0;
   margin: 0;
-  cursor: pointer;
 }
 .segmented__opt.is-on {
   color: var(--ink);

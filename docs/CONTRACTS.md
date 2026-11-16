@@ -2423,7 +2423,7 @@ can follow, then **takes you there** and lights up the right button. This sectio
 
 ### 19.1 What the owner gets
 
-* A launcher **"Ask"** (sparkle icon) on every signed-in page. It opens a panel titled **Ask Clip Factory**.
+* A launcher **"Ask"** (the Ask mark, `components/AskMark.tsx`) on every signed-in page. It opens a panel titled **Ask Clip Factory**.
 * Questions it must answer well (all in the shared eval file, §19.11):
   "How do I make clips from a Twitch link?", "Where do I change my click sound?", "Why is my clip private on TikTok?",
   "How do I connect Instagram?", "How many views did my best clip get this week?", "How do I add a skill?",
@@ -2737,7 +2737,7 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   `help_off`. `enabled: false` → the launcher and an open panel disappear (the panel says "Ask Clip Factory is turned
   off right now." once, then closes) and the local corpus is **not** used: the kill switch also stops the local
   fallback.
-* **Launcher**: desktop (≥ 768 px): glass pill "Ask" with sparkle icon, fixed bottom right (`right: 24px`), sitting
+* **Launcher**: desktop (≥ 768 px): glass pill "Ask" with the Ask mark, fixed bottom right (`right: 24px`), sitting
   12 px **above the update bar** when it is shown (UpdateBar sets `--update-bar-h` on `<html>` with a
   `ResizeObserver`; 0 when hidden). Phones: 56 px icon-only glass circle (`aria-label="Ask Clip Factory"`), `right:
   max(16px, safe-area-inset-right)`, bottom = `--tabbar-h` + safe area + 18 px + `--update-bar-h` (+ 10 px), so it
@@ -3298,7 +3298,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 |---|---|---|
 | Settings.tsx:125 tree card, :195 search submit, :261 result, :292 branch card, :431 All settings, :466 folder link; parts.tsx:100 Back, :115 breadcrumb | press | |
 | Settings.tsx:222 Clear the search | `clear` | |
-| Settings.tsx:245 Ask Clip Factory \<query\> | `send` | sparkle flies, the panel opens at the tap |
+| Settings.tsx:245 Ask Clip Factory \<query\> | `send` | the Ask mark flies, the panel opens at the tap |
 | Settings.tsx:441 folder toggle | state | chevron turns 90° |
 | parts.tsx:65 AppleSwitch; branches.tsx:178 Reduce motion; SoundsBranch.tsx:42 Sounds on, :198 Make it fail | none | switch thumb |
 | branches.tsx:34/38/48 steppers | `add` / `remove` | via Stepper |
@@ -3383,3 +3383,42 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 
 Done means: every row of §20.11 behaves as written at 320–1920 px in light and dark, with Reduce motion on and off,
 all gates in §20.10 pass, and Ask › Send looks and behaves exactly as before.
+
+### 20.13 The glide: sliding highlights (owner request, 2026-11-16)
+
+Every bar where you pick one of a few things shows its choice with **one** highlight that slides from the old choice
+to the new one, instead of the old pill vanishing and a new one appearing.
+
+* **Where:** every `Segmented` (Paste a link / Upload a video, Pick for me / Exactly, every other segmented bar), the
+  caption tabs on Review, Library's All clips / This week tabs, the sidebar menu (the glass pill and the tomato bar
+  move together) and the phone tab bar (the glass tile and the tomato dot move together).
+* **How:** `components/Glide.tsx` renders one `aria-hidden` element as the first child of the bar and moves it to the
+  item matching its `active` selector, measured from the bar (which is `position: relative`), so a scrolling tab row
+  carries it along. Styles live in `styles/glide.css`.
+* **Motion:** a 460 ms spring slide (`--ease-spring`) with a short stretch along the way it travels (wider for a
+  sideways move, taller for an up/down move), then it settles. Only a change of choice slides: first paint, a resize
+  or a layout shift moves it instantly.
+* **Fallback:** until it has measured, the bar has no `has-glide` class and the chosen item paints its own highlight,
+  so there is never a moment with no highlight. With `has-glide`, the chosen item drops its own background, its
+  tomato marker and its shadow, and the glide draws them.
+* **Reduced motion:** no slide and no stretch. The highlight jumps to the choice (only a 150 ms opacity fade).
+* **Accessibility:** the chosen state stays on the item itself (`aria-checked`, `aria-selected`, `aria-current`); the
+  glide is decoration only.
+* **Tests:** `e2e/glide.spec.ts` checks that it travels (part-way across before it lands), lands on the choice in
+  every bar, follows a page change in the menu and the tab bar, snaps on resize, and does not slide under reduced motion.
+
+### 20.14 The cursor never changes (owner rule, 2026-11-16)
+
+The pointer is always the plain arrow, everywhere in the app: on buttons, links, tabs, inputs, text, while loading
+and on disabled controls. `styles/base.css` sets `cursor: default !important` on every element; no other stylesheet
+sets `cursor`. What can be pressed shows itself by **hover** instead: every button, link, chip, tab, switch option,
+card and menu item lights up under the pointer. `e2e/glide.spec.ts` checks that no pressable element on any main page
+(or the Ask panel) shows any cursor but the arrow.
+
+### 20.15 The Ask mark
+
+Ask Clip Factory has its own mark instead of a generic sparkle: a chat bubble with a clip's play button inside, and
+the brand's tomato dot on its corner (the same dot as the "C" in the logo). The dot breathes slowly (2.8 s, still
+under reduced motion). It is used on the Ask launcher, the panel's header and Settings' "Ask Clip Factory" search row
+(`components/AskMark.tsx`). The sparkle icon stays for "Clip Factory learned" and update messages.
+

@@ -289,7 +289,6 @@
     transform var(--dur-2) var(--ease-spring);
 }
 .find-hit {
-  cursor: pointer;
 }
 .find-hit:hover,
 .find-hit.is-active {
@@ -1141,7 +1140,6 @@ ol.md__list {
   color: var(--ink);
   font-weight: 650;
   font-size: var(--fs-small);
-  cursor: pointer;
 }
 .skill-form__use:hover {
   background: rgb(var(--sage-rgb) / 0.55);

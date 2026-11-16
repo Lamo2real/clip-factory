@@ -84,13 +84,11 @@ textarea {
   letter-spacing: inherit;
 }
 button {
-  cursor: pointer;
   background: none;
   border: 0;
   padding: 0;
 }
 [aria-disabled="true"] {
-  cursor: not-allowed;
 }
 
 a {
@@ -233,4 +231,12 @@ a {
   animation-duration: 1ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 1ms !important;
+}
+
+/* The cursor is always the plain arrow, everywhere (owner's rule). What can be pressed shows itself on hover
+   instead: buttons, links, chips, tabs and menu items each light up under the pointer. */
+*,
+*::before,
+*::after {
+  cursor: default !important;
 }

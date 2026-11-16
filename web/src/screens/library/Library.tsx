@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../../api/index.ts";
+import { Glide } from "../../components/Glide.tsx";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, Learning, Post, TikTokPostOptions } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
@@ -57,6 +58,7 @@ export function Library({ view = "all", week = null }: { view?: "all" | "week"; 
         }
       />
       <nav className="lib-tabs" aria-label="Library views">
+        <Glide active=".lib-tab.is-on" className="glide--dark" />
         <A href="/library" className={`lib-tab${view === "all" ? " is-on" : ""}`} aria-current={view === "all" ? "page" : undefined}>
           <Icon name="library" size={18} />
           All clips

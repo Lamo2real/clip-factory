@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { ACT_ICON, useAction, watchResult, type ActionHandle, type ActionKind } from "../lib/motion.ts";
+import { Glide } from "./Glide.tsx";
 import { navigate } from "../lib/router.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 
@@ -333,6 +334,7 @@ export function Segmented<T extends string>({
   const bump = useAction("toggle");
   return (
     <div className="segmented" role="radiogroup" aria-label={label} data-help-dodge="">
+      <Glide active=".segmented__opt.is-on" />
       {options.map((o) => (
         <label key={o.value} className={`segmented__opt${o.value === value ? " is-on" : ""}`} data-help={o.help}>
           <input
