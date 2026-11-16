@@ -9,11 +9,12 @@ import { useSession } from "../../app/session.tsx";
 import { GetAppPanel } from "../../components/GetApp.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { Button, Pill, Skeleton, Stepper } from "../../components/ui.tsx";
+import { ActGlyph, Button, Pill, Skeleton, Stepper } from "../../components/ui.tsx";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
+import { useAction } from "../../lib/motion.ts";
 import { setPrefs, shrinkImage, usePrefs } from "../../lib/prefs.ts";
 import { APP_VERSION, checkForUpdate, updateState } from "../../lib/update.ts";
-import { Apple, AppleSwitch, Panel } from "./parts.tsx";
+import { Apple, AppleSwitch, Panel, usePickAction } from "./parts.tsx";
 
 const PLATFORMS: Platform[] = ["youtube", "instagram", "facebook", "tiktok", "x"];
 
@@ -66,10 +67,17 @@ export function YoutubeBranch() {
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const pick = usePickAction("upload");
+  // Kept here, not on the button: the button goes while the Undo is up, and comes back rewinding on Undo.
+  const removeAct = useAction("delete");
   const hasCookies = (me?.settings.hasYoutubeCookies ?? false) && !removing;
 
   async function uploadCookies(f: File) {
-    if (f.size > 1024 ** 2) return toast.error("That file is too big to be cookies.txt. Export cookies.txt again and pick that file.");
+    pick.play();
+    if (f.size > 1024 ** 2) {
+      pick.fail({ sound: false });
+      return toast.error("That file is too big to be cookies.txt. Export cookies.txt again and pick that file.");
+    }
     setBusy(true);
     try {
       const up = await api().createCookiesUpload(f.name);
@@ -77,6 +85,7 @@ export function YoutubeBranch() {
       await refresh();
       toast.success("YouTube cookies saved. Retry any job YouTube blocked.");
     } catch (e) {
+      pick.fail({ sound: false });
       toast.error(friendlyMessage(e));
     } finally {
       setBusy(false);
@@ -87,7 +96,10 @@ export function YoutubeBranch() {
   function removeCookies() {
     setRemoving(true);
     toast.undo("YouTube cookies removed.", {
-      onUndo: () => setRemoving(false),
+      onUndo: () => {
+        setRemoving(false);
+        removeAct.rewind();
+      },
       onCommit: () => {
         api()
           .deleteCookies()
@@ -113,11 +125,11 @@ export function YoutubeBranch() {
               if (f) void uploadCookies(f);
             }}
           />
-          <Button size="sm" icon="upload" loading={busy} onClick={() => file.current?.click()}>
+          <Button size="sm" icon="upload" act={pick} playOnClick={false} loading={busy} onClick={() => file.current?.click()}>
             {hasCookies ? "Replace" : "Add cookies.txt"}
           </Button>
           {hasCookies ? (
-            <Button size="sm" variant="ghost" icon="trash" onClick={removeCookies}>
+            <Button size="sm" variant="ghost" icon="trash" act={removeAct} onClick={removeCookies}>
               Remove
             </Button>
           ) : null}
@@ -145,25 +157,65 @@ export function WhereBranch() {
               const on = s.platforms.includes(p);
               const last = on && s.platforms.length === 1;
               return (
-                <label key={p} className={`check-chip${on ? " is-on" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={on}
-                    aria-disabled={last || undefined}
-                    onChange={() => {
-                      if (last) return toast.info("Keep at least one place. Pick another place first, then turn this one off.");
-                      void saveSettings({ platforms: on ? s.platforms.filter((x) => x !== p) : PLATFORMS.filter((x) => x === p || s.platforms.includes(x)) });
-                    }}
-                  />
-                  <PlatformMark platform={p} size={18} />
-                  <span>{PLATFORM_LABEL[p]}</span>
-                </label>
+                <PostToChip
+                  key={p}
+                  platform={p}
+                  on={on}
+                  onChange={() => {
+                    if (last) {
+                      toast.info("Keep at least one place. Pick another place first, then turn this one off.");
+                      return null;
+                    }
+                    return saveSettings({ platforms: on ? s.platforms.filter((x) => x !== p) : PLATFORMS.filter((x) => x === p || s.platforms.includes(x)) });
+                  }}
+                  last={last}
+                />
               );
             })}
           </div>
         )}
       </Apple>
     </Panel>
+  );
+}
+
+/**
+ * One "Post to" check-chip. Turning a place on ticks its mark (`tick`, §20.11); turning it off is the press only. A
+ * save the server refuses puts the chip back and plays the failure.
+ */
+function PostToChip({
+  platform,
+  on,
+  last,
+  onChange,
+}: {
+  platform: Platform;
+  on: boolean;
+  last: boolean;
+  /** Saves the change: the save (null when it failed), or null when nothing was saved. */
+  onChange: () => Promise<unknown> | null;
+}) {
+  const tick = useAction("tick");
+  return (
+    <label className={`check-chip${on ? " is-on" : ""}`} data-act="tick">
+      <input
+        type="checkbox"
+        checked={on}
+        aria-disabled={last || undefined}
+        onChange={() => {
+          const saving = onChange();
+          if (!saving || on) return;
+          tick.play();
+          void saving.then((saved) => {
+            if (saved === null) tick.fail({ sound: false });
+          });
+        }}
+      />
+      <ActGlyph act={tick}>
+        <PlatformMark platform={platform} size={18} />
+      </ActGlyph>
+      <span>{PLATFORM_LABEL[platform]}</span>
+    </label>
   );
 }
 
@@ -186,15 +238,25 @@ export function BackgroundBranch() {
   const toast = useToast();
   const file = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const pick = usePickAction("upload");
+  // Kept here: "Use the colours" goes with the picture and comes back rewinding on Undo.
+  const colours = useAction("undo");
 
   async function pickBackground(f: File) {
-    if (!f.type.startsWith("image/")) return toast.error("That is not a picture. Tap Choose a picture and pick a JPG or PNG.");
+    pick.play();
+    if (!f.type.startsWith("image/")) {
+      pick.fail({ sound: false });
+      return toast.error("That is not a picture. Tap Choose a picture and pick a JPG or PNG.");
+    }
     setBusy(true);
     try {
       const url = await shrinkImage(f);
-      if (!setPrefs({ background: url })) toast.error("That picture is too big for this device. Pick a smaller one.");
-      else toast.success("Background set on this device.");
+      if (!setPrefs({ background: url })) {
+        pick.fail({ sound: false });
+        toast.error("That picture is too big for this device. Pick a smaller one.");
+      } else toast.success("Background set on this device.");
     } catch {
+      pick.fail({ sound: false });
       toast.error("That picture could not be opened. Pick a JPG or PNG.");
     } finally {
       setBusy(false);
@@ -223,7 +285,7 @@ export function BackgroundBranch() {
                   if (f) void pickBackground(f);
                 }}
               />
-              <Button size="sm" icon="image" loading={busy} onClick={() => file.current?.click()}>
+              <Button size="sm" icon="image" act={pick} playOnClick={false} loading={busy} onClick={() => file.current?.click()}>
                 {prefs.background ? "Change picture" : "Choose a picture"}
               </Button>
               {prefs.background ? (
@@ -231,10 +293,17 @@ export function BackgroundBranch() {
                   size="sm"
                   variant="ghost"
                   icon="x"
+                  act={colours}
                   onClick={() => {
                     const before = prefs.background;
                     setPrefs({ background: null });
-                    toast.undo("Picture removed.", { onUndo: () => setPrefs({ background: before }), onCommit: () => undefined });
+                    toast.undo("Picture removed.", {
+                      onUndo: () => {
+                        setPrefs({ background: before });
+                        colours.rewind();
+                      },
+                      onCommit: () => undefined,
+                    });
                   }}
                 >
                   Use the colours
@@ -268,8 +337,8 @@ export function UpdatesBranch() {
 
   async function check() {
     setChecking(true);
-    // A quick answer still shows the spinner for a moment, so the tap clearly did something.
-    await Promise.all([checkForUpdate(), new Promise((r) => setTimeout(r, 450))]);
+    // The arrow's turn (act="refresh") shows the tap did something; the answer is not held back for it (§20.4).
+    await checkForUpdate();
     if (!alive.current) return;
     setChecking(false);
     if (updateState().available) toast.info("A new version is ready. Tap Reload at the bottom of the screen.");
@@ -284,7 +353,7 @@ export function UpdatesBranch() {
         </Pill>
       </Apple>
       <Apple id="check-updates">
-        <Button size="sm" icon="retry" loading={checking} onClick={() => void check()}>
+        <Button size="sm" icon="retry" act="refresh" loading={checking} onClick={() => void check()}>
           Check for updates
         </Button>
       </Apple>
@@ -300,7 +369,7 @@ export function AccountBranch() {
         <span className="apple__value user-text">{me ? me.user.email : "Checking…"}</span>
       </Apple>
       <Apple id="sign-out">
-        <Button size="sm" variant="ghost" icon="logout" onClick={signOut}>
+        <Button size="sm" variant="ghost" icon="logout" act="disconnect" onClick={signOut}>
           Sign out
         </Button>
       </Apple>

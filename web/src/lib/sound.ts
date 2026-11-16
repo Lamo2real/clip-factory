@@ -76,6 +76,9 @@ export interface SoundChoice {
   deny: number;
 }
 
+/** Same-kind deny / success sounds closer than this are one sound (§20.8). */
+export const DEDUP_MS = 300;
+
 const DEFAULT_CHOICE: SoundChoice = { tap: DEFAULT_CLICK_SOUND, deny: DEFAULT_ERROR_SOUND };
 
 export class SoundEngine {
@@ -127,7 +130,10 @@ export class SoundEngine {
     const now = performance.now();
     // A click on a <label> also clicks its input: one sound per gesture. A deny right after a tap still plays,
     // because that is an error answering the click.
-    if (now - this.lastAt < 60 && kind === this.lastKind) return;
+    // A deny or success that two things ask for at once (a failed action's shake and its error toast,
+    // docs/CONTRACTS.md §20.8) is heard once: 300 ms for those, unless a sound card previews a recipe by number.
+    const gap = kind !== "tap" && recipe === undefined ? DEDUP_MS : 60;
+    if (now - this.lastAt < gap && kind === this.lastKind) return;
     this.lastAt = now;
     this.lastKind = kind;
     const muted = !this.enabled();

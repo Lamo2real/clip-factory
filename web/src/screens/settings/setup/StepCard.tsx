@@ -3,7 +3,8 @@
 // sage tick row; tapping it opens it again.
 import type { ReactNode } from "react";
 import { Icon } from "../../../components/Icon.tsx";
-import { Button } from "../../../components/ui.tsx";
+import { ActGlyph, Button } from "../../../components/ui.tsx";
+import { useAction } from "../../../lib/motion.ts";
 import type { GuideStep } from "../../../setup/index.ts";
 import { CopyChip, Rich } from "./bits.tsx";
 
@@ -32,12 +33,14 @@ export function StepCard({
   /** The text each Copy chip copies (null while loading). */
   copyValue: (value: NonNullable<GuideStep["copy"]>[number]["value"]) => string | null;
   onToggle: () => void;
-  onDone: (done: boolean) => void;
+  /** Marks the step; may resolve to false when the mark could not be saved (the button then plays its failure). */
+  onDone: (done: boolean) => unknown;
   busy?: boolean;
   /** The step's own controls: paste boxes, the upload box, Connect, a picker. */
   children?: ReactNode;
 }) {
   const bodyId = `step-${step.id}-body`;
+  const download = useAction("download");
   return (
     <li
       className={`gstep glass${done ? " is-done" : ""}${current ? " is-current" : ""}${open ? " is-open" : ""}`}
@@ -58,7 +61,7 @@ export function StepCard({
           {done ? <span className="sr-only"> (done)</span> : null}
           {step.optional && !done ? <span className="gstep__optional">If you need it</span> : null}
         </span>
-        <Icon name="chevronRight" size={20} className="icon gstep__chev" />
+        <Icon name="chevronRight" size={20} className="icon gstep__chev act-turn" />
       </button>
       {open ? (
         <div className="gstep__body" id={bodyId}>
@@ -84,8 +87,16 @@ export function StepCard({
                 </a>
               ) : null}
               {step.download ? (
-                <a className="btn btn--glass btn--md" href={step.download.href} download="clip-factory-icon.png">
-                  <Icon name="download" size={20} />
+                <a
+                  className="btn btn--glass btn--md"
+                  href={step.download.href}
+                  download="clip-factory-icon.png"
+                  data-act="download"
+                  onClick={() => download.play()}
+                >
+                  <ActGlyph act={download}>
+                    <Icon name="download" size={20} />
+                  </ActGlyph>
                   <span className="btn__label">{step.download.label}</span>
                 </a>
               ) : null}
@@ -117,11 +128,11 @@ export function StepCard({
           {step.auto ? null : (
             <div className="gstep__done-row">
               {done ? (
-                <Button size="sm" variant="ghost" icon="undo" onClick={() => onDone(false)} loading={busy}>
+                <Button size="sm" variant="ghost" icon="undo" act="undo" onClick={() => onDone(false)} loading={busy}>
                   Not done yet
                 </Button>
               ) : (
-                <Button size="lg" icon="check" className="btn--sage gstep__done" onClick={() => onDone(true)} loading={busy}>
+                <Button size="lg" icon="check" act="tick" className="btn--sage gstep__done" onClick={() => onDone(true)} loading={busy}>
                   I did this
                 </Button>
               )}

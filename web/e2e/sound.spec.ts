@@ -50,6 +50,46 @@ test.describe("on a phone", () => {
     await tab.tap();
     await expect.poll(() => log(page)).toEqual(["tap"]);
   });
+
+  test("a touch scroll that starts on an action button plays neither its motion nor a sound (§20.9)", async ({ page }) => {
+    await page.goto("/review");
+    await settle(page);
+    const keep = page.locator(".review-card").first().getByRole("button", { name: "Keep", exact: true });
+    await expect(keep).toHaveAttribute("data-act", "keep");
+    await keep.scrollIntoViewIfNeeded();
+    const box = (await keep.boundingBox())!;
+    await page.evaluate(() => {
+      const w = window as unknown as { __touches: number; __clicks: number; __played: number };
+      w.__touches = 0;
+      w.__clicks = 0;
+      w.__played = 0;
+      window.__cfSoundLog = [];
+      document.addEventListener("touchstart", () => w.__touches++, { capture: true, passive: true });
+      document.addEventListener("click", () => w.__clicks++, { capture: true });
+      // Any .act leaving rest during the swipe would be a motion played by a scroll.
+      new MutationObserver((list) => {
+        for (const m of list) if (m.target instanceof Element && m.target.matches(".act:not(.is-idle)")) w.__played++;
+      }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"] });
+    });
+    const cdp = await page.context().newCDPSession(page);
+    const x = Math.round(box.x + box.width / 2);
+    const y = Math.round(box.y + box.height / 2);
+    await cdp.send("Input.synthesizeScrollGesture", { x, y, yDistance: -300, gestureSourceType: "touch", speed: 800 });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y - 120 }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y - 260 }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForTimeout(300);
+    const counts = await page.evaluate(() => {
+      const w = window as unknown as { __touches: number; __clicks: number; __played: number };
+      return { touches: w.__touches, clicks: w.__clicks, played: w.__played };
+    });
+    expect(counts.touches).toBeGreaterThan(0);
+    expect(counts.clicks).toBe(0);
+    expect(counts.played).toBe(0);
+    expect(await log(page)).toEqual([]);
+    await expect(keep.locator(".act")).toHaveClass(/is-idle/);
+  });
 });
 
 test("enabled controls tap, switched-off controls deny, errors deny", async ({ page }) => {

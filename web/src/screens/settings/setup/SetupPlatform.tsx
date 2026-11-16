@@ -12,6 +12,7 @@ import { ProgressRing } from "../../../components/ProgressRing.tsx";
 import { useToast } from "../../../components/Toasts.tsx";
 import { Button, ErrorPanel, Segmented, Skeleton } from "../../../components/ui.tsx";
 import { burst } from "../../../lib/confetti.ts";
+import { useAction } from "../../../lib/motion.ts";
 import { config } from "../../../lib/config.ts";
 import { X_MONTHLY_USD } from "../../../lib/metrics.ts";
 import { prefersReducedMotion } from "../../../lib/prefs.ts";
@@ -79,6 +80,8 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
   const celebrated = useRef(false);
   const cancelCheer = useRef<(() => void) | null>(null);
   const scrolledTo = useRef<string | null>(null);
+  // Kept here: Disconnect plays at the tap and rewinds if Undo is tapped (§20.7).
+  const disconnectAct = useAction("disconnect");
 
   const progress = progressOf(guide, setup);
   const reconnect = setup?.account.status === "needs_reconnect";
@@ -181,8 +184,9 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
     put(next);
   }
 
+  /** Marks a step done or not; false when the server refused (the page reloads what it has). */
   async function tick(step: GuideStep, done: boolean) {
-    if (!setup) return;
+    if (!setup) return false;
     setBusyStep(step.id);
     // Optimistic: the step folds and the next one opens straight away.
     put({ ...setup, stepsDone: done ? [...setup.stepsDone, step.id] : setup.stepsDone.filter((s) => s !== step.id) });
@@ -193,18 +197,21 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
     });
     try {
       put(await api().setSetupStep(platform, step.id, done));
+      return true;
     } catch (e) {
       toast.error(friendlyMessage(e));
       void reload();
+      return false;
     } finally {
       setBusyStep(null);
     }
   }
 
+  /** Sends the owner to the platform at once; false when that could not start (the error toast says why). */
   async function connect() {
     if (!setup?.keys.saved) {
       toast.info(`Paste your ${guide.name} keys first (step ${stepNumber(guide, "key-paste")}).`);
-      return;
+      return false;
     }
     setConnecting(true);
     try {
@@ -212,16 +219,21 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
       // Only the platform's own https page (or the mock's pretend page) is ever opened.
       if (!/^https:\/\//.test(authorizeUrl) && !authorizeUrl.startsWith("/mock-oauth/")) throw new Error("bad authorize url");
       location.assign(authorizeUrl);
+      return true;
     } catch (e) {
       toast.error(friendlyMessage(e));
       setConnecting(false);
+      return false;
     }
   }
 
   function disconnect() {
     setLeaving(true);
     toast.undo(`Disconnecting ${guide.name}…`, {
-      onUndo: () => setLeaving(false),
+      onUndo: () => {
+        setLeaving(false);
+        disconnectAct.rewind();
+      },
       onCommit: () => {
         api()
           .disconnectAccount(platform)
@@ -260,9 +272,10 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
             variant={primary ? "primary" : "glass"}
             size="lg"
             icon="link"
+            act="connect"
             loading={connecting}
             disabled={!setup.keys.saved}
-            onClick={() => void connect()}
+            onClick={() => connect()}
           >
             {`Connect ${guide.name}`}
           </Button>
@@ -428,7 +441,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
                     primary={primary}
                     copyValue={(v) => resolveValue(v, platform, values, callbackBase)}
                     onToggle={() => toggle(step)}
-                    onDone={(d) => void tick(step, d)}
+                    onDone={(d) => tick(step, d)}
                     busy={busyStep === step.id}
                   >
                     {extras(step, primary)}
@@ -478,11 +491,11 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
             </p>
           ) : null}
           <div className="done-panel__actions">
-            <Button variant={reconnect ? "primary" : "glass"} icon="retry" loading={connecting} disabled={leaving} onClick={() => void connect()}>
+            <Button variant={reconnect ? "primary" : "glass"} icon="link" act="connect" loading={connecting} disabled={leaving} onClick={() => connect()}>
               Connect again
             </Button>
             <CheckIt platform={platform} check={setup.keys.check} onChecked={put} />
-            <Button variant="ghost" icon="logout" disabled={leaving} onClick={disconnect}>
+            <Button variant="ghost" icon="logout" act={disconnectAct} disabled={leaving} onClick={disconnect}>
               Disconnect
             </Button>
           </div>

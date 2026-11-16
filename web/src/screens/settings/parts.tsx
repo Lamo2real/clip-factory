@@ -2,7 +2,15 @@
 import type { ReactNode } from "react";
 import { Icon } from "../../components/Icon.tsx";
 import { A, LinkButton } from "../../components/ui.tsx";
+import { useAction, type ActionHandle, type ActionKind } from "../../lib/motion.ts";
 import { findApple, settingsPath, type Branch, type Tree } from "../../lib/settingsTree.ts";
+
+/**
+ * The motion for a button that opens a file picker (docs/CONTRACTS.md §20.11): it plays when a file arrives, not on
+ * the tap that opens the picker (a cancelled picker did nothing). Give it to the Button's `act` with
+ * `playOnClick={false}` and call `play()` / `fail()` from the file handler.
+ */
+export const usePickAction = (kind: ActionKind): ActionHandle => useAction(kind);
 
 /** A glass panel holding one or more apples, separated by hairlines. */
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {

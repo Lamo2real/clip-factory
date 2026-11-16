@@ -5,6 +5,8 @@ import { friendlyMessage } from "../../../api/errors.ts";
 import type { AccountChoice, Platform, PlatformSetup } from "../../../api/types.ts";
 import { Icon } from "../../../components/Icon.tsx";
 import { useToast } from "../../../components/Toasts.tsx";
+import { ActGlyph } from "../../../components/ui.tsx";
+import { useAction } from "../../../lib/motion.ts";
 
 export function ChooseAccount({
   platform,
@@ -19,13 +21,15 @@ export function ChooseAccount({
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
-  async function pick(c: AccountChoice) {
-    if (busy) return;
+  /** Connects the account; false when it did not work (the error toast says why). */
+  async function pick(c: AccountChoice): Promise<boolean> {
     setBusy(c.id);
     try {
       onChosen(await api().chooseAccount(platform, c.id), c);
+      return true;
     } catch (e) {
       toast.error(friendlyMessage(e));
+      return false;
     } finally {
       setBusy(null);
     }
@@ -39,14 +43,52 @@ export function ChooseAccount({
       <ul className="choose__list">
         {choices.map((c) => (
           <li key={c.id}>
-            <button type="button" className="choose__card" onClick={() => void pick(c)} aria-busy={busy === c.id || undefined}>
-              {c.avatarUrl ? <img className="choose__avatar" src={c.avatarUrl} alt="" /> : <span className="choose__avatar" aria-hidden="true" />}
-              <span className="choose__name user-text">{c.name}</span>
-              {busy === c.id ? <span className="spinner" aria-hidden="true" /> : <Icon name="chevronRight" size={20} />}
-            </button>
+            <AccountCard choice={c} busy={busy === c.id} locked={busy !== null} onPick={() => pick(c)} />
           </li>
         ))}
       </ul>
     </section>
+  );
+}
+
+/** One account card: the tap connects it (`connect`, §20.11), and the spinner shows once the motion is done. */
+function AccountCard({
+  choice,
+  busy,
+  locked,
+  onPick,
+}: {
+  choice: AccountChoice;
+  busy: boolean;
+  /** Another card (or this one) is connecting: taps do nothing. */
+  locked: boolean;
+  onPick: () => Promise<boolean>;
+}) {
+  const act = useAction("connect");
+  return (
+    <button
+      type="button"
+      className="choose__card"
+      data-act="connect"
+      aria-busy={busy || undefined}
+      onClick={() => {
+        if (locked) return;
+        const picking = onPick();
+        act.play();
+        void picking.then((ok) => {
+          if (!ok) act.fail({ sound: false });
+        });
+      }}
+    >
+      {choice.avatarUrl ? <img className="choose__avatar" src={choice.avatarUrl} alt="" /> : <span className="choose__avatar" aria-hidden="true" />}
+      <span className="choose__name user-text">{choice.name}</span>
+      {busy && act.phase === "idle" ? (
+        <span className="spinner" aria-hidden="true" />
+      ) : (
+        <ActGlyph act={act}>
+          <Icon name={busy ? "link" : "chevronRight"} size={20} />
+        </ActGlyph>
+      )}
+    </button>
   );
 }

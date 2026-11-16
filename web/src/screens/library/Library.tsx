@@ -11,6 +11,7 @@ import { WeekView } from "./WeekView.tsx";
 import { count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
+import { useAction } from "../../lib/motion.ts";
 import { applyClipEvent, applyLearningEvent, applyPostEvent, withMedia } from "../../lib/liveCache.ts";
 import { SimilarClips } from "../../components/SimilarClips.tsx";
 import { keepClip, keptMessage, needsKeepAgain, needsTikTokChoices, STILL_WORKING } from "../../lib/keep.ts";
@@ -318,6 +319,8 @@ export function KeepAgain({ clip, posts, onKept }: { clip: Clip; posts: Post[]; 
   const [note, setNote] = useState("");
   const [sheet, setSheet] = useState(false);
   const failed = clip.status === "failed";
+  // §20: the retry turn plays at the tap; an error (already said by the toast) shakes it, without a second deny.
+  const act = useAction("retry");
 
   function press() {
     if (failed && needsTikTokChoices(posts)) setSheet(true);
@@ -336,8 +339,12 @@ export function KeepAgain({ clip, posts, onKept }: { clip: Clip; posts: Post[]; 
         return;
       }
       if (out.kind === "busy") setNote(STILL_WORKING);
-      else toast.error(out.message);
+      else {
+        act.fail({ sound: false });
+        toast.error(out.message);
+      }
     } catch (e) {
+      act.fail({ sound: false });
       toast.error(friendlyMessage(e));
     } finally {
       setBusy(false);
@@ -350,7 +357,7 @@ export function KeepAgain({ clip, posts, onKept }: { clip: Clip; posts: Post[]; 
         <Icon name="alert" size={18} />
         <span>{failed ? "Posting did not work. Tap Try again." : "This clip has not started posting yet. Tap Try again."}</span>
       </p>
-      <Button variant="primary" icon="retry" loading={busy && !sheet} onClick={press} aria-describedby={`keep-note-${clip.clipId}`}>
+      <Button variant="primary" icon="retry" act={act} loading={busy && !sheet} onClick={press} aria-describedby={`keep-note-${clip.clipId}`}>
         Try again
       </Button>
       <p className="keep-again__note" id={`keep-note-${clip.clipId}`} role="status">

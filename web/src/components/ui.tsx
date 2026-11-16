@@ -1,5 +1,6 @@
 import {
   useId,
+  useState,
   type AnchorHTMLAttributes,
   type Ref,
   type ButtonHTMLAttributes,
@@ -7,6 +8,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { ACT_ICON, useAction, watchResult, type ActionHandle, type ActionKind } from "../lib/motion.ts";
 import { navigate } from "../lib/router.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 
@@ -26,7 +28,86 @@ function ripple(e: MouseEvent<HTMLElement>) {
   el.classList.add("is-rippling");
 }
 
-export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "disabled"> {
+/** A paper plane on the 24 px icon grid, in the same round 1.8 px strokes as Icon (the `send` glyph, §19). */
+export function PaperPlaneIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg
+      className="icon paper-plane"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M20.5 3.5 3.6 10.4c-.6.2-.6 1 0 1.3l6.2 2.5 2.5 6.2c.3.6 1.1.6 1.3 0L20.5 3.5Z" />
+      <path d="M20.5 3.5 9.8 14.2" />
+    </svg>
+  );
+}
+
+/** What ActGlyph needs from a handle (PaperPlane's Flight passes its own). */
+export type ActGlyphState = Pick<ActionHandle, "kind" | "shot" | "phase">;
+
+/**
+ * Wraps a glyph in its action motion (docs/CONTRACTS.md §20.2): aria-hidden and pointer-events: none, so the
+ * button keeps its own name and a second tap still hits the button. The inner element is keyed by `shot`, so a new
+ * play restarts the motion instead of queuing one. `look="fly"` is the paper plane's original DOM (§19).
+ */
+export function ActGlyph({ act, children, look = "act" }: { act: ActGlyphState; children: ReactNode; look?: "act" | "fly" }) {
+  if (look === "fly") {
+    const flying = act.phase === "play";
+    const cls = flying ? " is-flying" : act.phase === "fade" ? " is-fading" : "";
+    return (
+      <span className={`fly${cls}`} aria-hidden="true">
+        <span className="fly__item" key={act.shot}>
+          {children}
+        </span>
+        {flying ? <span className="fly__trail" key={`trail-${act.shot}`} /> : null}
+      </span>
+    );
+  }
+  return (
+    <span className={`act act--${act.kind} is-${act.phase}`} aria-hidden="true">
+      <span className="act__item" key={act.shot}>
+        {children}
+      </span>
+      {act.kind === "send" && act.phase === "play" ? <span className="act__trail" key={`trail-${act.shot}`} /> : null}
+    </span>
+  );
+}
+
+/** The glyph a button with `act` shows: its own icon, else the kind's default (the plane for send). */
+function actGlyph(kind: ActionKind, icon: IconName | undefined, size: number) {
+  const name = icon ?? ACT_ICON[kind];
+  if (name) return <Icon name={name} size={size} />;
+  return kind === "send" ? <PaperPlaneIcon size={size} /> : null;
+}
+
+/**
+ * The label, or for `toggle` (which moves the words, not a glyph, §20.3) the label in its bump wrapper. The words stay
+ * readable to screen readers: this wrapper is not aria-hidden.
+ */
+function actLabel(handle: ActionHandle | null, children: ReactNode) {
+  if (!children) return null;
+  if (handle?.kind !== "toggle") return <span className="btn__label">{children}</span>;
+  return (
+    <span className={`btn__label act act--toggle act--text is-${handle.phase}`}>
+      <span className="act__item" key={handle.shot}>
+        {children}
+      </span>
+    </span>
+  );
+}
+
+/** `act="keep"` (Button makes its own handle) or a handle from useAction when the screen calls fail() / rewind(). */
+export type ActProp = ActionKind | ActionHandle;
+
+export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "disabled" | "onClick"> {
   variant?: Variant;
   size?: Size;
   icon?: IconName;
@@ -36,6 +117,25 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
   disabled?: boolean;
   block?: boolean;
   ref?: Ref<HTMLButtonElement>;
+  /**
+   * The action motion (§20). The handler runs first; the motion starts in the same tick. A handler that returns a
+   * promise which rejects or resolves to false plays the failure instead.
+   */
+  act?: ActProp;
+  /** May return a promise: rejecting or resolving to false plays `act`'s failure (§20.5). */
+  onClick?: (e: MouseEvent<HTMLButtonElement>) => unknown;
+  /**
+   * false: the tap does not play `act` (the screen plays it later, e.g. when a picked file arrives or a keep really
+   * starts). The glyph, `data-act` and the failure on a rejected promise stay.
+   */
+  playOnClick?: boolean;
+}
+
+/** Button's and LinkButton's motion: a handle from `act`, or none. Always calls the hook (hooks never vary). */
+function useActProp(act: ActProp | undefined): ActionHandle | null {
+  const own = useAction(typeof act === "string" ? act : "toggle");
+  if (!act) return null;
+  return typeof act === "string" ? own : act;
 }
 
 export function Button({
@@ -49,29 +149,50 @@ export function Button({
   className = "",
   children,
   onClick,
+  act,
+  playOnClick = true,
   type = "button",
   ...rest
 }: ButtonProps) {
   const off = disabled || loading;
+  const handle = useActProp(act);
+  const px = size === "sm" ? 18 : 20;
+  // The spinner waits for the current motion to end, so a quick request does not cut it off (a picture, not the action).
+  const spin = loading && (!handle || handle.phase === "idle");
+  const glyph = handle ? actGlyph(handle.kind, icon, px) : icon ? <Icon name={icon} size={px} /> : null;
   return (
     <button
       type={type}
       className={`btn btn--${variant} btn--${size}${block ? " btn--block" : ""}${loading ? " is-loading" : ""} ${className}`}
       aria-disabled={off || undefined}
       aria-busy={loading || undefined}
+      data-act={handle?.kind}
       onClick={(e) => {
         if (off) {
           e.preventDefault();
           return;
         }
         ripple(e);
-        onClick?.(e);
+        // §20.4: the action first, synchronously; the motion after it in the same tick; nothing waits.
+        let result: unknown;
+        const before = handle?.events?.();
+        try {
+          result = onClick?.(e);
+        } catch (err) {
+          handle?.fail();
+          throw err;
+        }
+        if (handle) {
+          // A handler that already played, failed or rewound the handle itself wins (a refused Keep only shakes).
+          if (playOnClick && handle.events?.() === before) handle.play();
+          watchResult(result, () => handle.fail());
+        }
       }}
       {...rest}
     >
-      {loading ? <span className="spinner" aria-hidden="true" /> : icon ? <Icon name={icon} size={size === "sm" ? 18 : 20} /> : null}
-      {children ? <span className="btn__label">{children}</span> : null}
-      {iconAfter && !loading ? <Icon name={iconAfter} size={size === "sm" ? 18 : 20} /> : null}
+      {spin ? <span className="spinner" aria-hidden="true" /> : handle && glyph && handle.kind !== "toggle" ? <ActGlyph act={handle}>{glyph}</ActGlyph> : glyph}
+      {actLabel(handle, children)}
+      {iconAfter && !loading ? <Icon name={iconAfter} size={px} /> : null}
     </button>
   );
 }
@@ -103,16 +224,37 @@ export function LinkButton({
   iconAfter,
   children,
   className = "",
+  act,
+  onClick,
   ...rest
-}: { href: string; variant?: Variant; size?: Size; icon?: IconName; iconAfter?: IconName; children?: ReactNode } & Omit<
-  AnchorHTMLAttributes<HTMLAnchorElement>,
-  "href"
->) {
+}: {
+  href: string;
+  variant?: Variant;
+  size?: Size;
+  icon?: IconName;
+  iconAfter?: IconName;
+  children?: ReactNode;
+  /** The action motion (§20), played after the link's own click (which may navigate straight away). */
+  act?: ActProp;
+} & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href">) {
+  const handle = useActProp(act);
+  const px = size === "sm" ? 18 : 20;
+  const glyph = handle ? actGlyph(handle.kind, icon, px) : icon ? <Icon name={icon} size={px} /> : null;
   return (
-    <A href={href} className={`btn btn--${variant} btn--${size} ${className}`} onClick={ripple} {...rest}>
-      {icon ? <Icon name={icon} size={size === "sm" ? 18 : 20} /> : null}
-      {children ? <span className="btn__label">{children}</span> : null}
-      {iconAfter ? <Icon name={iconAfter} size={size === "sm" ? 18 : 20} /> : null}
+    <A
+      href={href}
+      className={`btn btn--${variant} btn--${size} ${className}`}
+      data-act={handle?.kind}
+      onClick={(e) => {
+        ripple(e);
+        onClick?.(e);
+        handle?.play();
+      }}
+      {...rest}
+    >
+      {handle && glyph && handle.kind !== "toggle" ? <ActGlyph act={handle}>{glyph}</ActGlyph> : glyph}
+      {actLabel(handle, children)}
+      {iconAfter ? <Icon name={iconAfter} size={px} /> : null}
     </A>
   );
 }
@@ -187,6 +329,8 @@ export function Segmented<T extends string>({
   label: string;
 }) {
   const name = useId();
+  // §20.11: the newly chosen option's label bumps (`toggle`). The label stays readable: it is not aria-hidden.
+  const bump = useAction("toggle");
   return (
     <div className="segmented" role="radiogroup" aria-label={label} data-help-dodge="">
       {options.map((o) => (
@@ -196,9 +340,20 @@ export function Segmented<T extends string>({
             name={name}
             value={o.value}
             checked={o.value === value}
-            onChange={() => onChange(o.value)}
+            onChange={() => {
+              onChange(o.value);
+              bump.play();
+            }}
           />
-          <span>{o.label}</span>
+          {o.value === value ? (
+            <span className={`act act--toggle act--text is-${bump.phase}`}>
+              <span className="act__item" key={bump.shot}>
+                {o.label}
+              </span>
+            </span>
+          ) : (
+            <span>{o.label}</span>
+          )}
         </label>
       ))}
     </div>
@@ -218,6 +373,17 @@ export function Stepper({
   onChange: (n: number) => void;
   label: string;
 }) {
+  const fewer = useAction("remove");
+  const more = useAction("add");
+  // The number bumps the way it moved (§20.11). A new key restarts the one-shot CSS animation; none on first render.
+  const [bump, setBump] = useState<{ n: number; dir: "up" | "down" } | null>(null);
+  const step = (dir: "up" | "down") => {
+    const atEdge = dir === "up" ? value >= max : value <= min;
+    if (atEdge) return;
+    onChange(dir === "up" ? value + 1 : value - 1);
+    (dir === "up" ? more : fewer).play();
+    setBump((b) => ({ n: (b?.n ?? 0) + 1, dir }));
+  };
   return (
     <div className="stepper" role="group" aria-label={label}>
       <button
@@ -225,21 +391,29 @@ export function Stepper({
         className="stepper__btn"
         aria-label={`Fewer: ${label}`}
         aria-disabled={value <= min || undefined}
-        onClick={() => value > min && onChange(value - 1)}
+        data-act="remove"
+        onClick={() => step("down")}
       >
-        <Icon name="minus" size={18} />
+        <ActGlyph act={fewer}>
+          <Icon name="minus" size={18} />
+        </ActGlyph>
       </button>
       <output className="stepper__value" aria-live="polite">
-        {value}
+        <span className={bump ? `stepper__num is-${bump.dir}` : "stepper__num"} key={bump?.n ?? 0}>
+          {value}
+        </span>
       </output>
       <button
         type="button"
         className="stepper__btn"
         aria-label={`More: ${label}`}
         aria-disabled={value >= max || undefined}
-        onClick={() => value < max && onChange(value + 1)}
+        data-act="add"
+        onClick={() => step("up")}
       >
-        <Icon name="plus" size={18} />
+        <ActGlyph act={more}>
+          <Icon name="plus" size={18} />
+        </ActGlyph>
       </button>
     </div>
   );
@@ -305,7 +479,7 @@ export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: ()
       <Icon name="alert" />
       <p className="error-panel__text">{message}</p>
       {onRetry ? (
-        <Button size="sm" icon="retry" onClick={onRetry}>
+        <Button size="sm" icon="retry" act="retry" onClick={onRetry}>
           Try again
         </Button>
       ) : null}

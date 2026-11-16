@@ -2,6 +2,8 @@
 // clipboard helpers (which work without clipboard permission through a select-and-copy fallback).
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "../../../components/Icon.tsx";
+import { ActGlyph } from "../../../components/ui.tsx";
+import { useAction } from "../../../lib/motion.ts";
 
 /** "Press **Create**." with the platform's button names in bold, exactly as on the platform. */
 export function Rich({ text }: { text: string }): ReactNode {
@@ -52,11 +54,15 @@ export function CopyChip({ label, value }: { label: string; value: string | null
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const valueRef = useRef<HTMLElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const act = useAction("copy");
   useEffect(() => () => clearTimeout(timer.current), []);
 
   async function copy() {
     if (value === null) return;
+    // The ghost copy slides off at the tap; the check and "Copied!" follow only when it worked.
+    act.play();
     const ok = await copyText(value);
+    if (!ok) act.fail();
     if (!ok && valueRef.current) {
       // Last resort: select the words so the owner can copy them by hand.
       const range = document.createRange();
@@ -84,8 +90,11 @@ export function CopyChip({ label, value }: { label: string; value: string | null
         onClick={() => void copy()}
         aria-disabled={value === null || undefined}
         aria-label={state === "copied" ? `${label} copied` : `Copy ${label}`}
+        data-act="copy"
       >
-        <Icon name={state === "copied" ? "check" : "copy"} size={18} />
+        <ActGlyph act={act}>
+          <Icon name={state === "copied" ? "check" : "copy"} size={18} />
+        </ActGlyph>
         <span aria-live="polite">{state === "copied" ? "Copied!" : state === "failed" ? "Selected: copy it" : "Copy"}</span>
       </button>
     </div>

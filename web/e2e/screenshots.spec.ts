@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "@playwright/test";
 import { CLIPS, openClip, settle } from "./helpers.ts";
+import { GALLERY, pauseActs, tapAct } from "./motionHelpers.ts";
 
 const dir = join(import.meta.dirname, "..", "screenshots");
 mkdirSync(dir, { recursive: true });
@@ -284,4 +285,21 @@ for (const size of [
       await page.screenshot({ path: join(dir, `help-panel-reopened-${size.width}x${size.height}.png`) });
     });
   });
+}
+
+// Action motions mid-way (docs/CONTRACTS.md §20.10): in the /__motion gallery, the six main kinds are tapped and
+// paused at 50 % with document.getAnimations(), then the gallery grid is captured, light and dark, 375 and 1440 px.
+for (const width of [375, 1440] as const) {
+  for (const scheme of ["light", "dark"] as const) {
+    test.describe(`motion ${width} ${scheme}`, () => {
+      test.use({ viewport: { width, height: 900 }, colorScheme: scheme });
+      test(`screenshot action motions mid-way ${width} ${scheme}`, async ({ page }) => {
+        await page.goto(GALLERY);
+        await settle(page);
+        for (const kind of ["send", "keep", "delete", "refresh", "save", "copy"]) await tapAct(page.locator(`[data-kind="${kind}"]`));
+        await pauseActs(page, 0.5);
+        await page.locator(".motion-gallery__grid").screenshot({ path: join(dir, `motion-mid-${scheme}-${width}.png`) });
+      });
+    });
+  }
 }

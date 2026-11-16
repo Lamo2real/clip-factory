@@ -5,8 +5,9 @@ import { api } from "../../api/index.ts";
 import { Icon, type IconName } from "../../components/Icon.tsx";
 import { PaperPlaneButton, useLaunch } from "../../components/PaperPlane.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { Button } from "../../components/ui.tsx";
+import { ActGlyph, Button } from "../../components/ui.tsx";
 import { useMedia } from "../../lib/hooks.ts";
+import { useAction, watchResult } from "../../lib/motion.ts";
 import { getPrefs, prefersReducedMotion } from "../../lib/prefs.ts";
 import { navigate, type Route } from "../../lib/router.ts";
 import { sounds } from "../../lib/sounds.ts";
@@ -122,6 +123,8 @@ export function HelpPanel({
   const narrow = useMedia("(max-width: 479px)");
   // The paper plane on the send button (components/PaperPlane.tsx).
   const flight = useLaunch();
+  // §20: Start over turns once (one handle: only one of its two looks is on screen at a time).
+  const restart = useAction("refresh");
 
   // The field grows with the question, up to four lines (CSS max-height), then scrolls.
   useLayoutEffect(() => {
@@ -286,12 +289,15 @@ export function HelpPanel({
     input.current?.focus();
   }
 
-  async function copyCode(code: string) {
+  /** Copies the help code; false when the clipboard said no (the toast then shows the code instead). */
+  async function copyCode(code: string): Promise<boolean> {
     try {
       await navigator.clipboard.writeText(code);
       toast.success(COPIED_TEXT);
+      return true;
     } catch {
       toast.info(`Your help code is ${code}. Send it to whoever helps you with Clip Factory.`);
+      return false;
     }
   }
 
@@ -332,7 +338,16 @@ export function HelpPanel({
     <ul className="help-chips" aria-label="Questions you can ask" key={key}>
       {suggestions.map((s) => (
         <li key={s}>
-          <button type="button" className="help-chip" onClick={() => void ask(s)} disabled={state.thinking || blocked}>
+          <button
+            type="button"
+            className="help-chip"
+            onClick={() => {
+              void ask(s);
+              // The chip asks at once and launches the panel's Send plane, as Send does (§20.11).
+              if (helpSwitch() !== "off") flight.launch();
+            }}
+            disabled={state.thinking || blocked}
+          >
             {s}
           </button>
         </li>
@@ -453,11 +468,22 @@ export function HelpPanel({
           Ask Clip Factory
         </h2>
         {narrow ? (
-          <button type="button" className="icon-btn help-panel__restart" aria-label="Start over" onClick={startOver}>
-            <Icon name="retry" size={20} />
+          <button
+            type="button"
+            className="icon-btn help-panel__restart"
+            aria-label="Start over"
+            data-act="refresh"
+            onClick={() => {
+              startOver();
+              restart.play();
+            }}
+          >
+            <ActGlyph act={restart}>
+              <Icon name="retry" size={20} />
+            </ActGlyph>
           </button>
         ) : (
-          <Button size="sm" variant="ghost" icon="retry" className="help-panel__restart" onClick={startOver}>
+          <Button size="sm" variant="ghost" icon="retry" act={restart} className="help-panel__restart" onClick={startOver}>
             Start over
           </Button>
         )}
@@ -529,9 +555,23 @@ export function overlaps(a: { left: number; right: number; top: number; bottom: 
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
 
-function HelpCode({ code, onCopy }: { code: string; onCopy: (code: string) => void }) {
+function HelpCode({ code, onCopy }: { code: string; onCopy: (code: string) => Promise<boolean> }) {
+  const copy = useAction("copy");
   return (
-    <button type="button" className="help-code text-link" onClick={() => onCopy(code)}>
+    <button
+      type="button"
+      className="help-code text-link"
+      data-act="copy"
+      onClick={() => {
+        const done = onCopy(code);
+        copy.play();
+        // The clipboard said no: no "copied" look; the toast shows the code instead (no deny: nothing went wrong).
+        watchResult(done, () => copy.fail({ sound: false }));
+      }}
+    >
+      <ActGlyph act={copy}>
+        <Icon name="copy" size={16} />
+      </ActGlyph>
       Something went wrong? Copy the help code
     </button>
   );

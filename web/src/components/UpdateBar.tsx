@@ -66,7 +66,7 @@ function Offer({ info, onReload }: { info: VersionInfo; onReload: () => void }) 
         <Button variant="ghost" size="sm" icon="clock" className="update-bar__later" onClick={dismissUpdate}>
           Later
         </Button>
-        <Button variant="primary" size="sm" icon="retry" className="update-bar__reload" onClick={onReload}>
+        <Button variant="primary" size="sm" icon="retry" act="refresh" className="update-bar__reload" onClick={onReload}>
           Reload
         </Button>
       </div>

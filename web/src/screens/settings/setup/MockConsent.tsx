@@ -37,7 +37,7 @@ export function MockConsent({ platform }: { platform: Platform }) {
           <Button variant="ghost" size="lg" loading={busy === "cancel"} disabled={busy !== null} onClick={() => void answer(false)}>
             Cancel
           </Button>
-          <Button variant="primary" size="lg" icon="check" loading={busy === "allow"} disabled={busy !== null} onClick={() => void answer(true)}>
+          <Button variant="primary" size="lg" icon="check" act="connect" loading={busy === "allow"} disabled={busy !== null} onClick={() => void answer(true)}>
             Allow
           </Button>
         </div>

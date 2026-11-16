@@ -8,6 +8,7 @@ import { JobStatusPill, jobTitle, sourceMeta, SourceThumb, StepTimeline } from "
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, Pill, Progress, Skeleton, type Tone } from "../../components/ui.tsx";
 import { burst } from "../../lib/confetti.ts";
+import { useAction } from "../../lib/motion.ts";
 import { MOMENT_LABEL, plural, relative, timecode } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
@@ -34,6 +35,10 @@ export function JobDetail({ jobId }: { jobId: string }) {
   const [busy, setBusy] = useState<"cancel" | "retry" | null>(null);
   const [stopping, setStopping] = useState(false);
   const lastStatus = useRef<Job["status"] | null>(null);
+  // Stop job keeps its handle here, not in the button: the button leaves while the Undo toast is up and comes back
+  // rewinding when Undo is tapped (§20.7). Try again shakes when the server says no.
+  const stopAct = useAction("stop");
+  const retryAct = useAction("retry");
 
   const job = data?.job;
   const working = job?.status === "running" || job?.status === "queued";
@@ -89,6 +94,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
       toast.info(kind === "cancel" ? "Job stopped." : "Starting again from the beginning.");
       void refresh().catch(() => undefined);
     } catch (e) {
+      (kind === "cancel" ? stopAct : retryAct).fail({ sound: false });
       toast.error(friendlyMessage(e));
     } finally {
       setBusy(null);
@@ -100,7 +106,10 @@ export function JobDetail({ jobId }: { jobId: string }) {
   function stop() {
     setStopping(true);
     toast.undo("Stopping this job.", {
-      onUndo: () => setStopping(false),
+      onUndo: () => {
+        setStopping(false);
+        stopAct.rewind();
+      },
       onCommit: () => void act("cancel"),
     });
   }
@@ -192,7 +201,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
           <StepTimeline steps={job.steps} />
           <div className="panel__actions">
             {working && !stopping ? (
-              <Button variant="ghost" icon="stop" loading={busy === "cancel"} onClick={stop}>
+              <Button variant="ghost" icon="stop" act={stopAct} loading={busy === "cancel"} onClick={stop}>
                 Stop job
               </Button>
             ) : null}
@@ -203,7 +212,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
               </p>
             ) : null}
             {job.status === "failed" || job.status === "canceled" ? (
-              <Button variant="primary" icon="retry" data-help="try-again" loading={busy === "retry"} onClick={() => act("retry")}>
+              <Button variant="primary" icon="retry" act={retryAct} data-help="try-again" loading={busy === "retry"} onClick={() => act("retry")}>
                 Try again
               </Button>
             ) : null}

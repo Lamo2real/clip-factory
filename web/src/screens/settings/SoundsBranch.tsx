@@ -5,7 +5,8 @@ import { useId, useRef, useState, type MouseEvent } from "react";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { Button } from "../../components/ui.tsx";
+import { ActGlyph, Button } from "../../components/ui.tsx";
+import { useAction } from "../../lib/motion.ts";
 import { usePrefs } from "../../lib/prefs.ts";
 import type { SoundKind } from "../../lib/sound.ts";
 import { CLICK_SOUNDS, ERROR_SOUNDS, recipeFor, type SoundRecipe } from "../../lib/soundCatalog.ts";
@@ -90,53 +91,76 @@ function SoundGroup({
 }) {
   const toast = useToast();
   const label = kind === "tap" ? "Click sound" : "Error sound";
-  function tap(e: MouseEvent<HTMLButtonElement>, sound: SoundRecipe) {
+  /** Plays and picks the card's sound; false when Sounds is off (nothing was heard, so nothing moves). */
+  function tap(e: MouseEvent<HTMLButtonElement>, sound: SoundRecipe): boolean {
     // With Sounds off a tap cannot be heard, so it does not pick a sound you never heard.
     if (!soundsOn) {
       toast.info("Sounds are off. Turn them on to hear it first.", PRACTICE);
-      return;
+      return false;
     }
     // The card plays its own sound (data-sound="off" keeps the usual click sound out of the way).
     sounds.play(kind, e.currentTarget, sound.id);
     replay(e.currentTarget, "is-playing");
     if (sound.id !== picked) onPick(sound.id);
+    return true;
   }
   return (
     <Panel className={`sound-group is-${kind}`}>
       <Apple id={apple} title={title} wide>
         {!soundsOn ? <SoundsOffNote onTurnOn={onTurnOn} /> : null}
         <ul className="sound-grid" aria-label={`${label}s`} data-help-dodge="">
-          {list.map((sound) => {
-            const chosen = sound.id === picked;
-            return (
-              <li key={sound.id}>
-                <button
-                  type="button"
-                  className={`sound-card${chosen ? " is-picked" : ""}`}
-                  aria-pressed={chosen}
-                  aria-label={`${label} ${sound.id}: ${sound.name}. ${sound.feel}.`}
-                  data-sound="off"
-                  data-sound-id={sound.id}
-                  onClick={(e) => tap(e, sound)}
-                >
-                  <span className="sound-card__num" aria-hidden="true">
-                    {sound.id}
-                  </span>
-                  <span className="sound-card__name">{sound.name}</span>
-                  <span className="sound-card__feel">{sound.feel}</span>
-                  {chosen ? (
-                    <span className="sound-card__badge" aria-hidden="true">
-                      <Icon name="check" size={13} strokeWidth={2.6} />
-                      Pick
-                    </span>
-                  ) : null}
-                </button>
-              </li>
-            );
-          })}
+          {list.map((sound) => (
+            <li key={sound.id}>
+              <SoundCard sound={sound} label={label} chosen={sound.id === picked} onTap={(e) => tap(e, sound)} />
+            </li>
+          ))}
         </ul>
       </Apple>
     </Panel>
+  );
+}
+
+/** One sound card: a tap plays it, and its number sends out sound rings (`play`, §20.11) next to the card's pulse. */
+function SoundCard({
+  sound,
+  label,
+  chosen,
+  onTap,
+}: {
+  sound: SoundRecipe;
+  label: string;
+  chosen: boolean;
+  onTap: (e: MouseEvent<HTMLButtonElement>) => boolean;
+}) {
+  const act = useAction("play");
+  return (
+    <button
+      type="button"
+      className={`sound-card${chosen ? " is-picked" : ""}`}
+      aria-pressed={chosen}
+      aria-label={`${label} ${sound.id}: ${sound.name}. ${sound.feel}.`}
+      data-sound="off"
+      data-sound-id={sound.id}
+      data-act="play"
+      onClick={(e) => {
+        if (onTap(e)) act.play();
+      }}
+    >
+      <span className="sound-card__num" aria-hidden="true">
+        {/* Its own span, so the rings around the number are the glyph's, not the words'. */}
+        <ActGlyph act={act}>
+          <span>{sound.id}</span>
+        </ActGlyph>
+      </span>
+      <span className="sound-card__name">{sound.name}</span>
+      <span className="sound-card__feel">{sound.feel}</span>
+      {chosen ? (
+        <span className="sound-card__badge" aria-hidden="true">
+          <Icon name="check" size={13} strokeWidth={2.6} />
+          Pick
+        </span>
+      ) : null}
+    </button>
   );
 }
 
@@ -148,7 +172,7 @@ function SoundsOffNote({ onTurnOn }: { onTurnOn: (target: HTMLElement) => void }
         <strong>Sounds are off.</strong> Turn them on to hear a sound when you tap it.
       </p>
       {/* data-sound="off": it plays the click sound itself, once sounds are on. */}
-      <Button size="sm" icon="volume" data-sound="off" onClick={(e) => onTurnOn(e.currentTarget)}>
+      <Button size="sm" icon="volume" act="play" data-sound="off" onClick={(e) => onTurnOn(e.currentTarget)}>
         Turn sounds on
       </Button>
     </div>
@@ -170,6 +194,8 @@ function TryIt({
   const [fail, setFail] = useState(false);
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
+  // Played only when the pretend sign-in works: a failed try keeps its own shake and error sound (§20.11).
+  const act = useAction("play");
 
   function tryIt() {
     // Nothing to hear: say why, rather than a silent pretend sign-in.
@@ -183,6 +209,7 @@ function TryIt({
       if (button.current) replay(button.current, "is-shaking");
       toast.error("Wrong password. Try again.", PRACTICE);
     } else {
+      act.play();
       toast.success("Signed in", PRACTICE);
     }
   }
@@ -207,7 +234,7 @@ function TryIt({
               <span className="switch__thumb" />
             </button>
           </div>
-          <Button ref={button} variant="primary" icon="key" data-sound="off" onClick={tryIt}>
+          <Button ref={button} variant="primary" icon="key" act={act} playOnClick={false} data-sound="off" onClick={tryIt}>
             Try it: Sign in
           </Button>
         </div>

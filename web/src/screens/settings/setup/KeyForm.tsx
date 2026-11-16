@@ -8,6 +8,8 @@ import type { KeyCheck, KeyName, Platform, PlatformSetup } from "../../../api/ty
 import { Icon } from "../../../components/Icon.tsx";
 import { useToast } from "../../../components/Toasts.tsx";
 import { Button, Pill } from "../../../components/ui.tsx";
+import { useAction } from "../../../lib/motion.ts";
+import { usePickAction } from "../parts.tsx";
 import { keyNames, keyProblem, keysBody, keysReady, KEY_LABEL, parseGoogleClientJson } from "../../../lib/keyFormats.ts";
 import { readClipboard } from "./bits.tsx";
 
@@ -33,6 +35,9 @@ export function KeyForm({
   const [saving, setSaving] = useState(false);
   const [dragging, setDragging] = useState(false);
   const file = useRef<HTMLInputElement>(null);
+  const pick = usePickAction("upload");
+  // Save keys is a submit button: the tick pops at the tap, and a refused key plays the failure (§20.5).
+  const saveAct = useAction("save");
   const showForm = editing || !setup.keys.saved;
   const ready = keysReady(platform, values);
 
@@ -49,20 +54,27 @@ export function KeyForm({
     setValues((v) => ({ ...v, [name]: raw }));
   }
 
+  /** Pastes into one box; false when the browser would not share what was copied (the owner pastes by hand). */
   async function paste(name: KeyName) {
     const text = await readClipboard();
     if (text === null) {
       toast.info("Tap the box, then paste: hold your finger on it, or press Ctrl+V (Cmd+V on a Mac).");
       document.getElementById(`${id}-${name}`)?.focus();
-      return;
+      return false;
     }
     set(name, text);
+    return true;
   }
 
-  async function readJsonFile(f: File) {
-    if (f.size > 64 * 1024) return toast.error("That file is too big. Pick the client_secret … .json file Google gave you.");
+  async function readJsonFile(f: File, picked = false) {
+    if (picked) pick.play();
+    const failed = (message: string) => {
+      if (picked) pick.fail({ sound: false });
+      toast.error(message);
+    };
+    if (f.size > 64 * 1024) return failed("That file is too big. Pick the client_secret … .json file Google gave you.");
     const json = parseGoogleClientJson(await f.text());
-    if (!json) return toast.error("That is not Google's key file. Pick the client_secret … .json file, or paste the two values.");
+    if (!json) return failed("That is not Google's key file. Pick the client_secret … .json file, or paste the two values.");
     setValues((v) => ({ ...v, ...json }));
     toast.success("Both boxes filled in from Google's file.");
   }
@@ -88,6 +100,7 @@ export function KeyForm({
       toast.success("Keys saved.");
       onSaved(next);
     } catch (e) {
+      saveAct.fail({ sound: false });
       toast.error(friendlyMessage(e));
     } finally {
       setSaving(false);
@@ -162,7 +175,7 @@ export function KeyForm({
                 aria-invalid={problem ? true : undefined}
                 aria-describedby={`${id}-${n}-status`}
               />
-              <Button size="sm" icon="paste" onClick={() => void paste(n)} aria-label={`Paste the ${KEY_LABEL[platform][n]}`}>
+              <Button size="sm" icon="paste" act="paste" onClick={() => paste(n)} aria-label={`Paste the ${KEY_LABEL[platform][n]}`}>
                 Paste
               </Button>
             </div>
@@ -192,17 +205,17 @@ export function KeyForm({
             tabIndex={-1}
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) void readJsonFile(f);
+              if (f) void readJsonFile(f, true);
               e.target.value = "";
             }}
           />
-          <Button size="sm" variant="ghost" icon="file" onClick={() => file.current?.click()}>
+          <Button size="sm" variant="ghost" icon="file" act={pick} playOnClick={false} onClick={() => file.current?.click()}>
             Use the key file from Google
           </Button>
         </div>
       ) : null}
       <div className="key-form__actions">
-        <Button type="submit" variant={primary ? "primary" : "glass"} size="lg" icon="check" loading={saving} disabled={!ready}>
+        <Button type="submit" variant={primary ? "primary" : "glass"} size="lg" icon="check" act={saveAct} loading={saving} disabled={!ready}>
           Save keys
         </Button>
         {setup.keys.saved ? (
@@ -228,6 +241,7 @@ export function CheckIt({
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  /** Asks the platform; false when the keys or the connection do not work (the button plays its failure). */
   async function run() {
     setBusy(true);
     try {
@@ -235,15 +249,17 @@ export function CheckIt({
       if (out.check.ok) toast.success(out.check.message);
       else toast.error(out.check.message);
       onChecked(out.setup);
+      return out.check.ok;
     } catch (e) {
       toast.error(friendlyMessage(e));
+      return false;
     } finally {
       setBusy(false);
     }
   }
   return (
     <div className="check-it">
-      <Button size="sm" icon="shield" loading={busy} onClick={() => void run()}>
+      <Button size="sm" icon="shield" act="check" loading={busy} onClick={() => run()}>
         Check it
       </Button>
       {check ? (

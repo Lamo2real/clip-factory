@@ -617,29 +617,87 @@ when a new skill is saved.
     use it every time.", and the new row pops in with a small bounce on the way back.
   - An update is installed: the Reload progress bar ([the reload curve](#the-reload-curve)) ends in a small sparkle.
 - Reduced motion (system `prefers-reduced-motion` or `reduceMotion` in Settings): no confetti, no drifting backdrop,
-  fades only.
+  fades only (action motions too, see below).
 
-### Action animation (a button acts out what it does)
+### Action motion (every action button acts out what it does)
 
-A reusable pattern: when an icon button does its job, its icon acts it out once. The first user is the paper-plane
-**Send** button of the [Ask field](#ask-clip-factory); other one-icon buttons can adopt the same motion.
+The owner asked for it: "Most buttons in the application should have that: the animation of sending a paper plane
+or adding something." Every button that **does** something plays one small motion on its own glyph that shows what
+just happened: the plane flies, the plus pops, the bin is tossed, the arrow spins. The full contract (API, every
+control in the app and its kind) is [CONTRACTS.md §20](CONTRACTS.md#20-action-animations-owner-request-2026-11-16);
+this is the designer's summary.
 
-| Phase | Time | What moves | Easing |
+**Rules**
+- **Decoration, never a gate.** The action happens at the tap; the motion starts in the same tick. Nothing
+  (navigation, a request, a toast) ever waits for it. If the tap removes the button, the motion is simply cut.
+- **One meaning per motion.** A flying plane always means "sent", a tossed bin always "thrown away". A child learns
+  it once.
+- **Small and inside the button.** Only the glyph moves (transform and opacity). The label never moves or gets
+  covered, the button never changes size, nothing leaves its box at rest. Inside a normal pill a flying glyph fades
+  out before the edge; it never looks swallowed.
+- **Moving around and closing stay quiet.** Links, tabs, back, Close, Cancel, Not now keep the press feedback only.
+- **Failure never looks like success.** A failed action shakes its glyph gently (±4 px, tomato for the first half,
+  320 ms) with the error sound once; no ring, tick, confetti or success sound. A refused action (Keep with a caption
+  that is too long) only shakes.
+- **Undo** plays the motion backwards on the button (360 ms), or, when the button is gone, the item that comes back
+  fades and grows in (`.is-returning`).
+- **Sounds do not change**: the click sound still plays on a click only (never on scroll, a touch scroll that starts
+  on a button plays nothing), success where a real result arrives, the error sound on a failure. No new sounds and
+  no new confetti: confetti stays for wins.
+
+**Tokens** (`web/src/styles/motion.css` `:root`, mirrored in `web/src/lib/motion.ts`; a unit test keeps them equal)
+
+| Token | Value | Use |
+|---|---|---|
+| `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | every "go": fly, drop, slide, spin |
+| `--ease-spring` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | every "pop" with overshoot: plus, tick, star, heart, return |
+| `--act-press` | 180 ms | toggle bump, blink, the stepper number |
+| `--act-short` | 360 ms | add, clear, paste, copy, next / prev |
+| `--act-mid` | 480 ms | keep, save, upload, download, delete, connect, play, the success ring |
+| `--act-long` | 600 ms | refresh, check (retry 560) |
+| `--act-fail` | 320 ms | the failure shake |
+| `--act-rewind` | 360 ms | the Undo rewind and `.is-returning` |
+| `--act-fade` | 240 ms | the reduced-motion stand-in, the nudge |
+
+Send keeps the paper plane's own timings: 520 ms flight with its trail, 240 ms return, 300 ms fade under reduced
+motion.
+
+**The kinds**
+
+| Kind | Glyph | What it does | Used by (examples) |
 |---|---|---|---|
-| Crouch | 0 to ~95 ms | the plane dips and shrinks a little (`scale(0.92)`) | `--ease-out` |
-| Lift and fly | ~95 to 520 ms | it tilts −16° and flies 34 px right and 30 px up, fading out, with a soft trail | `--ease-out` |
-| Return | 520 to 760 ms | a fresh plane fades and grows back in | `--ease-out` |
+| `send` | paper plane or the button's icon | flies off up and right with a trail, a fresh one fades back | Make clips, Ask Send, TikTok Keep, Ask Clip Factory |
+| `keep` | heart | pops and floats up with a sage ring | Review Keep (when the keep really starts) |
+| `add` / `remove` | plus / minus | plus turns 90° and pops; minus squashes | steppers, Write a skill |
+| `delete` | bin | tips and drops, fresh one | Remove, skill Delete |
+| `throw` | bin | tossed up and away from the label, fresh one | Throw away |
+| `clear` | x | turns and shrinks away, fresh one | Clear link, Cancel upload |
+| `save` / `tick` | check | pops in with a ring / pops without one | Save keys, Save skill / I did this, chips |
+| `upload` / `download` | arrows | shoots up / drops, fresh one | file pickers (when the file arrives) / Get the app |
+| `copy` / `paste` | copy / paste | a ghost sheet slides off / drops in | Copy chips / Paste |
+| `refresh` / `retry` / `undo` | arrows | one turn clockwise / one turn back with a spring / a half turn back | Refresh numbers / Try again / Not done yet |
+| `connect` / `disconnect` | link / log out | squeezes and snaps with a ring / slides out and back | Connect, Sign in / Sign out, Disconnect |
+| `check` | check circle | a two-ring radar | Check it |
+| `star` | star | spins and pops on with a ring; settles off | Best this week |
+| `play` / `stop` | volume / stop | sound rings / the square shrinks | sound cards / Stop job |
+| `next` / `prev` | chevrons | slides out the way it points, fresh one in (down for Show older jobs) | week arrows, Show older jobs |
+| `nudge` | chevron | 4 px and back: "nothing further that way" | Later week on the newest week |
+| `toggle` | the chosen label | bumps 1.06 | Segmented, caption tabs, device chips |
+| `blink` | eye | closes and opens | Show / Hide password |
 
-Rules:
-- Transform and opacity only, once per activation, never loops. A new activation restarts it.
-- It never delays the work: the request starts at once, and the result (bubble, answer, toast) does not wait for it.
-- It is decoration, never the only feedback. It plays only when the action really happens; a disabled button neither
-  flies nor makes the click sound.
-- The click sound plays only on a click or tap (not on Enter).
-- Reduced motion (system or Settings): a 300 ms fade only, no flight, no trail.
-- Build it with `useLaunch()` and `<Flight>` from `web/src/components/PaperPlane.tsx` and the `.fly` classes in
-  `web/src/styles/fly.css` (tune `--fly-x`, `--fly-y`, `--fly-tilt`, `--fly-angle`, `--fly-ms`, `--fly-back-ms`); do not
-  hand-roll a new one per button.
+State-driven turns (no kind): expand chevrons turn 90° and the sidebar icon 180°, 240 ms, both ways.
+
+**Reduced motion** (Settings › Look & feel › Motion › Reduce motion, or the system `prefers-reduced-motion`)
+- Every kind becomes a 240 ms fade: the glyph dips to 0.45 opacity and tints sage. No rotate, translate or scale, no
+  rings, ghost or trail. Send keeps its 300 ms fade. The nudge does nothing.
+- A failure is a tomato tint only; Undo is the same fade; chevrons switch angle at once.
+- The switch applies to the very next tap, without a reload.
+
+**Building it**: `act="keep"` on a `Button` or `LinkButton` is enough for most buttons; a screen takes a handle from
+`useAction(kind)` when it must call `fail()` or `rewind()` later, and passes `playOnClick={false}` when the motion
+belongs to a later moment (a file arriving, a keep starting). A raw `<button>` wraps its icon in `<ActGlyph>`. Do not
+hand-roll a new animation per button; add a kind to `motion.css` and `lib/motion.ts` instead. Try every kind at
+`/__motion` in the mock app (`npm run dev:mock`).
 
 ## Overflow rules (never let text leave its box)
 
@@ -812,7 +870,7 @@ signed-in page and follows every rule on this page.
 | Conversation | Kept when the panel closes and reopens, in memory only, until **Start over** (or a reload). |
 | Header | "Ask Clip Factory" in Times italic, **Start over** (quiet), Close (×, 48 px). |
 | Empty state | "Hi! What do you want to do?" and three suggestion chips chosen by page and device. Default: "How do I make clips from a Twitch link?", "What does Keep do?", "How many views did my best clip get this week?" (Settings pages swap the second for the sounds question; clip pages show "Why is my clip private on TikTok?"). |
-| Ask field | One glass field across the **full width** of the panel (10 px from each edge), one line (52 px) growing to four lines then scrolling, radius 26 px, focus ring on the whole field. Textarea 16 px, placeholder "Ask me how to do something", 300 letters (counter from 250, under the field), Enter sends, Shift+Enter new line, the phone keyboard shows "send". At its right end, inside the field: a round 44 px icon-only **Send** button with a paper plane (`aria-label="Send"`). Tomato while it is the one main action, sage once an answer button is tomato, off (`aria-disabled`) when the field is empty, an answer is coming or the 429 countdown runs. Sending plays the [action animation](#action-animation-a-button-acts-out-what-it-does): the plane flies off (520 ms) and a new one fades back (240 ms); the question bubble shows at once. With reduced motion the plane only fades. On phones the sheet follows the visible screen so the keyboard never hides the field. |
+| Ask field | One glass field across the **full width** of the panel (10 px from each edge), one line (52 px) growing to four lines then scrolling, radius 26 px, focus ring on the whole field. Textarea 16 px, placeholder "Ask me how to do something", 300 letters (counter from 250, under the field), Enter sends, Shift+Enter new line, the phone keyboard shows "send". At its right end, inside the field: a round 44 px icon-only **Send** button with a paper plane (`aria-label="Send"`). Tomato while it is the one main action, sage once an answer button is tomato, off (`aria-disabled`) when the field is empty, an answer is coming or the 429 countdown runs. Sending plays the [action animation](#action-motion-every-action-button-acts-out-what-it-does): the plane flies off (520 ms) and a new one fades back (240 ms); the question bubble shows at once. With reduced motion the plane only fades. On phones the sheet follows the visible screen so the keyboard never hides the field. |
 | Thinking | Three bouncing sage dots; "Still looking…" after 6 s; still dots with reduced motion. |
 | Answer | One or two sentences (button names in bold), numbered steps (`<ol>`, ≤ 6), up to two buttons with icon + word. Only the **first button of the newest answer is tomato**; older answers' buttons and the Ask button turn sage, so the screen keeps one tomato. Whether the model helped is never shown. |
 | Live number | A soft shimmer where the number goes, then the number in the app's compact format ("1.2K"). |

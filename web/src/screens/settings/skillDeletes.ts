@@ -52,6 +52,7 @@ export function deleteWithUndo(skill: Skill, toast: Toaster): void {
   undoable.add(skill.skillId);
   changed();
   const restore = () => {
+    returned.set(skill.skillId, Date.now());
     hidden.delete(skill.skillId);
     undoable.delete(skill.skillId);
     changed();
@@ -73,6 +74,22 @@ export function deleteWithUndo(skill: Skill, toast: Toaster): void {
         );
     },
   });
+}
+
+/** When each skill came back (Undo, or a delete that failed), so its row can return with `.is-returning` (§20.7). */
+const returned = new Map<string, number>();
+/** How long after coming back a row that appears still plays its return (the motion itself is 360 ms). */
+const RETURN_WINDOW_MS = 1500;
+
+/** Whether this skill came back a moment ago (asked when its row appears; not used up, so it survives StrictMode). */
+export function isReturningSkill(skillId: string): boolean {
+  const at = returned.get(skillId);
+  if (at === undefined) return false;
+  if (Date.now() - at > RETURN_WINDOW_MS) {
+    returned.delete(skillId);
+    return false;
+  }
+  return true;
 }
 
 let fresh: string | null = null;
