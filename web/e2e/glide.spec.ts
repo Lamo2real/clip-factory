@@ -39,26 +39,28 @@ test.describe("glide", () => {
       const bar = page.locator(".segmented").first();
       await expect(bar).toHaveClass(/has-glide/);
       await landsOn(bar, ".segmented__opt.is-on");
-      // Record the glide's x on every frame from the tap until it settles, inside the page (no round trips).
-      const xs = await bar.evaluate(
+      // It travels instead of jumping: right after the tap a transform transition is running from the old spot to the new
+      // one (exact, unlike sampling frames, which a busy machine may skip), and its stretch animation plays.
+      const run = await bar.evaluate(
         (el) =>
-          new Promise<{ start: number; end: number; seen: number[] }>((done) => {
+          new Promise<{ slide: boolean; stretch: boolean }>((done) => {
             const g = el.querySelector<HTMLElement>(":scope > .glide")!;
             const target = [...el.querySelectorAll<HTMLElement>(".segmented__opt")].find((o) => o.textContent?.includes("Upload a video"))!;
-            const start = g.getBoundingClientRect().x;
-            const seen: number[] = [];
-            const t0 = performance.now();
-            const tick = () => {
-              seen.push(g.getBoundingClientRect().x);
-              if (performance.now() - t0 < 900) requestAnimationFrame(tick);
-              else done({ start, end: target.getBoundingClientRect().x, seen });
-            };
+            const seen = { slide: false, stretch: false };
+            const check = () => seen.slide && seen.stretch && done(seen);
+            g.addEventListener("transitionrun", (e) => {
+              if (e.propertyName === "transform") seen.slide = true;
+              check();
+            });
+            g.addEventListener("animationstart", (e) => {
+              if (e.animationName === "glide-stretch-x") seen.stretch = true;
+              check();
+            });
+            setTimeout(() => done(seen), 5000);
             target.querySelector("input")!.click();
-            requestAnimationFrame(tick);
           }),
       );
-      // It travels: part-way across before it lands (not a jump).
-      expect(xs.seen.some((x) => x > xs.start + 4 && x < xs.end - 4)).toBe(true);
+      expect(run).toEqual({ slide: true, stretch: true });
       await landsOn(bar, ".segmented__opt.is-on");
       // The chosen option no longer paints its own pill; the glide is the pill.
       expect(await bar.locator(".segmented__opt.is-on").evaluate((el) => getComputedStyle(el).backgroundImage)).toBe("none");

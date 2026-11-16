@@ -53,6 +53,12 @@ export function Glide({
       last = key;
       lastOn = on;
       if (!moved) glide.classList.add("is-still");
+      else if (glide.classList.contains("is-still")) {
+        // A layout update just before the tap left it in "no transition" mode: leave it now, from where it stands.
+        cancelAnimationFrame(frame);
+        glide.classList.remove("is-still");
+        void glide.offsetWidth;
+      }
       glide.style.setProperty("--glide-x", `${x}px`);
       glide.style.setProperty("--glide-y", `${y}px`);
       glide.style.width = `${r.width}px`;
