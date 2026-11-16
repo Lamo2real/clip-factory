@@ -121,8 +121,8 @@ describe("status and calm copy", () => {
   it("says one calm line per state, with the right link", () => {
     const base = { platform: "instagram" as const, metrics: null };
     expect(calmCopy({ ...base, status: "waiting_for_connection" })).toEqual({
-      text: "Connect Instagram in Settings › Posting › Accounts.",
-      link: { href: "/settings/posting/accounts", label: "Open Accounts" },
+      text: "Connect Instagram in Settings › Posting › Set up posting.",
+      link: { href: "/settings/posting/setup/instagram", label: "Set up Instagram" },
     });
     expect(calmCopy({ ...base, status: "not_posted" })).toEqual({
       text: "Not posted here. Turn on Instagram in Settings › Posting › Where clips go.",
@@ -135,8 +135,8 @@ describe("status and calm copy", () => {
     expect(calmCopy({ ...base, status: "posted" })?.text).toBe("Numbers are on the way. Check back in a few minutes.");
     expect(calmCopy({ ...base, status: "posted", metrics: m() })).toBeNull();
     expect(calmCopy({ ...base, status: "failed", error: "The video was too long." })).toEqual({
-      text: "Posting failed: The video was too long. Go to Review and press Try again.",
-      link: { href: "/review", label: "Go to Review" },
+      text: "Posting failed: The video was too long. Go to Library and press Try again.",
+      link: { href: "/library", label: "Go to Library" },
     });
   });
 

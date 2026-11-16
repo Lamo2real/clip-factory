@@ -145,20 +145,20 @@ test.describe("on a desktop", () => {
     await expect(posting).toHaveAttribute("aria-expanded", "false");
     await posting.click();
     await expect(posting).toHaveAttribute("aria-expanded", "true");
-    await expect(panel.getByRole("link", { name: "Accounts" })).toBeVisible();
+    await expect(panel.getByRole("link", { name: "Set up posting" })).toBeVisible();
     await posting.click();
     await expect(posting).toHaveAttribute("aria-expanded", "false");
-    await expect(panel.getByRole("link", { name: "Accounts" })).toBeHidden();
+    await expect(panel.getByRole("link", { name: "Set up posting" })).toBeHidden();
 
     // Remembered after a reload.
     await page.reload();
     await settle(page);
     await expect(panel.getByRole("button", { name: "Posting" })).toHaveAttribute("aria-expanded", "false");
-    await expect(panel.getByRole("link", { name: "Accounts" })).toBeHidden();
+    await expect(panel.getByRole("link", { name: "Set up posting" })).toBeHidden();
 
     // Unfold it again.
     await panel.getByRole("button", { name: "Posting" }).click();
-    await expect(panel.getByRole("link", { name: "Accounts" })).toBeVisible();
+    await expect(panel.getByRole("link", { name: "Set up posting" })).toBeVisible();
 
     // Going into a folded tree opens its folder so the current page shows.
     await expect(panel.getByRole("button", { name: "Clip making" })).toHaveAttribute("aria-expanded", "false");
@@ -288,7 +288,10 @@ test.describe("on a desktop", () => {
 test("old one-page Settings links go to the right branch", async ({ page }) => {
   for (const [from, to] of [
     ["/settings#skills", /\/settings\/clip-making\/skills$/],
-    ["/settings#accounts", /\/settings\/posting\/accounts$/],
+    ["/settings#accounts", /\/settings\/posting\/setup$/],
+    ["/settings/posting/accounts", /\/settings\/posting\/setup$/],
+    ["/settings?account=x&status=coming_soon", /\/settings\/posting\/setup\/x$/],
+    ["/settings/posting/accounts?account=tiktok&status=coming_soon", /\/settings\/posting\/setup\/tiktok$/],
     ["/settings#clips", /\/settings\/clip-making\/clips$/],
     ["/settings#appearance", /\/settings\/look-and-feel$/],
     ["/settings#app", /\/settings\/app$/],
@@ -344,13 +347,19 @@ test.describe("Sounds", () => {
     await settle(page);
     expect(await soundLog(page)).toMatchObject([{ kind: "tap", sound: 12 }]);
     await panel.getByRole("button", { name: "Posting" }).click();
-    await panel.getByRole("link", { name: "Accounts" }).click();
-    await expect(page).toHaveURL(/\/accounts$/);
+    await panel.getByRole("link", { name: "Set up posting" }).click();
+    await expect(page).toHaveURL(/\/setup$/);
     await settle(page);
-    // Wait for the accounts to load: "Checking…" changes width, and a forced click at the old spot would miss.
-    await expect(page.getByText("Checking…")).toHaveCount(0);
+    // A platform's Save keys is switched off until the keys look right: it plays the error sound.
+    await page.locator(".setup-card[data-platform='youtube']").click();
+    await expect(page).toHaveURL(/\/setup\/youtube$/);
+    await settle(page);
+    await page.locator("[data-step='key-paste'] .gstep__head").click();
+    const save = page.getByRole("button", { name: "Save keys" });
+    await save.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
     await clearLog(page);
-    await page.getByRole("button", { name: /Connect YouTube/ }).click({ force: true });
+    await save.click({ force: true });
     await expect.poll(async () => (await soundLog(page)).map((e) => [e.kind, e.sound])).toEqual([["deny", 21]]);
   });
 

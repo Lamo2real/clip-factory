@@ -1,8 +1,10 @@
 // The whole HTTP API in memory, with fake latency, so the UI runs with no backend (npm run dev:mock, Playwright).
 import { ApiError, networkError } from "../errors.ts";
-import type { Api, Clip, Job, Post, Settings, SimilarClip } from "../types.ts";
+import type { Api, Clip, Job, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
+import { TIKTOK_PICK_AGAIN } from "../../lib/keep.ts";
 import { MOMENTS, PLATFORMS, STEP_KEYS, coverArt, seed, stepsAt, thumbArt, ulid, type Store } from "./fixtures.ts";
 import { installMockLiveControls, mockLive } from "./live.ts";
+import { setupApi } from "./setup.ts";
 import { statsApi, type StatsFaults } from "./stats.ts";
 import { skillsApi, type MockSkillControls } from "./skills.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
@@ -54,6 +56,54 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   const publishPost = (p: Post) => mockLive.publish({ type: "post", op: "upsert", id: p.postId, item: clone(p) });
   // When each kept clip's posting was last started (stands in for the API's publishState: "pending" timing).
   const claimedAt = new Map<string, number>();
+  // The TikTok sheet's choices stored on each TikTok post (the API's postOptions.tiktok, never returned).
+  const postOptions = new Map<string, TikTokPostOptions>();
+
+  /**
+   * Try again on a failed clip (§14.5): failed posts go back to queued and the clip to confirmed. New TikTok sheet
+   * choices replace the failed TikTok post's postOptions, like the API's _try_again.
+   */
+  function tryAgain(c: Clip, tiktok?: TikTokPostOptions) {
+    const failed = store.posts.filter((p) => p.clipId === c.clipId && p.status === "failed");
+    for (const p of failed) {
+      p.status = "queued";
+      delete p.error;
+      if (tiktok && p.platform === "tiktok") postOptions.set(p.postId, clone(tiktok));
+      publishPost(p);
+    }
+    c.status = "confirmed";
+    publishClip(c);
+    return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === c.clipId)) };
+  }
+
+  /** Test knob (window.__cfMock.posting): a kept clip whose TikTok post failed because its privacy choice is gone. */
+  const posting = {
+    failTikTok(): { clipId: string; postId: string; hook: string } {
+      const c = store.clips.find((x) => x.status === "confirmed" || x.status === "posted" || x.status === "publishing");
+      if (!c) throw new Error("no kept clip");
+      let p = store.posts.find((x) => x.clipId === c.clipId && x.platform === "tiktok");
+      if (!p) {
+        p = { postId: ulid(), clipId: c.clipId, platform: "tiktok", status: "failed" };
+        store.posts.push(p);
+      }
+      for (const x of store.posts) if (x.clipId === c.clipId && x.status !== "posted") x.status = "failed";
+      Object.assign(p, { status: "failed", error: TIKTOK_PICK_AGAIN });
+      delete p.url;
+      delete p.postedAt;
+      delete p.metrics;
+      c.status = "failed";
+      for (const x of store.posts) if (x.clipId === c.clipId) publishPost(x);
+      publishClip(c);
+      return { clipId: c.clipId, postId: p.postId, hook: c.hook };
+    },
+    options(postId: string): TikTokPostOptions | null {
+      return clone(postOptions.get(postId) ?? null);
+    },
+  };
+  if (typeof window !== "undefined") {
+    const w = window as unknown as { __cfMock?: Record<string, unknown> };
+    w.__cfMock = { ...(w.__cfMock ?? {}), posting };
+  }
 
   // When each running job's current step began, to move it along over time.
   const clock = new Map<string, { at: number; done: number }>();
@@ -146,6 +196,12 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   installMockLiveControls(advance);
 
   const stats = statsApi({ store, publish: (ev) => mockLive.publish(ev), faults, automated: frozen });
+  const setup = setupApi({
+    onAccounts: (accounts) => {
+      store.accounts = accounts;
+    },
+    publish: (platform) => mockLive.publish({ type: "setup", op: "upsert", id: platform, partial: true }),
+  });
 
   const job = (jobId: string) => {
     const j = store.jobs.find((x) => x.jobId === jobId);
@@ -158,7 +214,11 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     return c;
   };
   const skills = skillsApi(store, delay);
-  if (typeof window !== "undefined") (window as unknown as { __cfMock?: MockSkillControls }).__cfMock = skills.controls;
+  if (typeof window !== "undefined") {
+    // Merge, never replace: posting (above) and setup (mock/setup.ts) keep their knobs on the same object.
+    const w = window as unknown as { __cfMock?: Record<string, unknown> & Partial<MockSkillControls> };
+    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls);
+  }
 
   const api: Api = {
     async health() {
@@ -284,15 +344,20 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       publishClip(c);
       return clone(c);
     },
-    async confirmClip(clipId, captions) {
+    async confirmClip(clipId, captions, tiktok) {
       await delay();
       const c = clip(clipId);
+      const connected = setup.connected();
+      // TikTok's rules: the owner picks who can see it before anything is posted there (§17.8).
+      if (c.status === "review" && store.settings.platforms.includes("tiktok") && connected.includes("tiktok") && !tiktok?.privacyLevel)
+        throw bad("Pick who can see it on TikTok.");
       const startPosting = () => {
         const have = new Set(store.posts.filter((p) => p.clipId === clipId).map((p) => p.platform));
         const created: Post[] = store.settings.platforms
           .filter((platform) => !have.has(platform))
-          .map((platform) => ({ postId: ulid(), clipId, platform, status: "pending_integration" }));
+          .map((platform) => ({ postId: ulid(), clipId, platform, status: connected.includes(platform) ? "queued" : "pending_integration" }));
         store.posts.push(...created);
+        for (const p of created) if (p.platform === "tiktok" && p.status === "queued" && tiktok) postOptions.set(p.postId, clone(tiktok));
         publishClip(c);
         for (const p of created) publishPost(p);
         return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
@@ -304,6 +369,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         claimedAt.set(clipId, Date.now());
         return startPosting();
       }
+      if (c.status === "failed") return tryAgain(c, tiktok);
       if (c.status !== "review") throw conflict(ALREADY_DECIDED);
       if (captions) c.captions = { ...c.captions, ...captions };
       c.status = "confirmed";
@@ -340,6 +406,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (!next.platforms.every((p) => PLATFORMS.includes(p))) throw bad("Unknown platform.");
       if (!isSoundId(next.clickSound)) throw bad("Pick a click sound from 1 to 30.");
       if (!isSoundId(next.errorSound)) throw bad("Pick an error sound from 1 to 30.");
+      if (next.youtubePrivacy !== undefined && !["public", "unlisted", "private"].includes(next.youtubePrivacy))
+        throw bad("Pick who can see your YouTube clips.");
       store.settings = next;
       return clone(next);
     },
@@ -355,11 +423,59 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     async listAccounts() {
       await delay();
-      return clone(store.accounts);
+      return setup.accounts();
     },
-    async connectAccount() {
+    async connectAccount(platform) {
       await delay();
-      throw new ApiError(501, "not_implemented", "Connecting accounts arrives in the next phase.");
+      return setup.connect(platform);
+    },
+    async chooseAccount(platform, accountId) {
+      await delay();
+      return setup.choose(platform, accountId);
+    },
+    async disconnectAccount(platform) {
+      await delay();
+      setup.disconnect(platform);
+    },
+    async tiktokCreatorInfo() {
+      await delay();
+      return setup.creator();
+    },
+    async getSetup() {
+      await delay();
+      return setup.overview();
+    },
+    async getPlatformSetup(platform) {
+      await delay();
+      return setup.get(platform);
+    },
+    async setSetupStep(platform, step, done) {
+      await delay(80, 180);
+      return setup.setStep(platform, step, done);
+    },
+    async setReviewState(review) {
+      await delay(80, 180);
+      return setup.setReview(review);
+    },
+    async saveSetupKeys(platform, keys) {
+      await delay();
+      return setup.saveKeys(platform, keys);
+    },
+    async deleteSetupKeys(platform) {
+      await delay();
+      setup.deleteKeys(platform);
+    },
+    async checkSetup(platform) {
+      await delay(300, 600);
+      return setup.check(platform);
+    },
+    async uploadVerificationFile(filename, content) {
+      await delay();
+      return setup.uploadFile(filename, content);
+    },
+    async deleteVerificationFile(filename) {
+      await delay();
+      setup.deleteFile(filename);
     },
     async listPosts(clipId) {
       await delay();

@@ -78,7 +78,8 @@ export function statsApi({ store, publish, faults, automated }: Deps) {
   /** Every platform is "connected" once something was posted there; otherwise the stored account decides. */
   function accountOf(platform: Platform): PlatformPerformance["account"] {
     if (store.posts.some((p) => p.platform === platform && p.status === "posted")) return "connected";
-    return store.accounts.find((a) => a.platform === platform)?.status ?? "not_connected";
+    const status = store.accounts.find((a) => a.platform === platform)?.status;
+    return status === "connected" || status === "needs_reconnect" ? status : "not_connected";
   }
 
   function stack(platform: Platform, post: Post | undefined, now: number): PlatformPerformance {

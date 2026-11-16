@@ -22,6 +22,8 @@ import { Review } from "../screens/review/Review.tsx";
 import { Settings } from "../screens/settings/Settings.tsx";
 import { SignIn } from "../screens/SignIn.tsx";
 import { SessionProvider } from "./session.tsx";
+import { MockConsent } from "../screens/settings/setup/MockConsent.tsx";
+import { GUIDES } from "../setup/index.ts";
 
 type Boot = { state: "loading" } | { state: "signed_out"; note: string | null } | { state: "ready" } | { state: "broken" };
 
@@ -35,11 +37,13 @@ const TITLES: Record<Route["name"], string> = {
   settings: "Settings",
   skill: "Skill",
   get_app: "Get the app",
+  mock_oauth: "Pretend sign-in",
   not_found: "Not found",
 };
 
 /** The tab title: deeper Settings pages name where you are ("Sounds · Settings"). */
 export function titleFor(route: Route): string {
+  if (route.name === "settings" && route.platform) return `${GUIDES[route.platform].name} setup · Settings`;
   if (route.name === "settings" && route.tree) {
     const tree = findTree(route.tree);
     const branch = tree && route.branch ? findBranch(tree, route.branch) : undefined;
@@ -139,6 +143,9 @@ function Shell() {
     main.current?.focus({ preventScroll: true });
   }, [page]);
 
+  // Mock mode's pretend consent page stands alone, like the platform's real page would.
+  if (route.name === "mock_oauth") return <MockConsent platform={route.platform} />;
+
   return (
     <div className="app">
       <a className="skip-link" href="#main">
@@ -181,7 +188,7 @@ function Screen({ route }: { route: Route }) {
     case "clip":
       return <ClipPerformance key={route.clipId} clipId={route.clipId} />;
     case "settings":
-      return <Settings tree={route.tree} branch={route.branch} />;
+      return <Settings tree={route.tree} branch={route.branch} platform={route.platform ?? null} />;
     case "skill":
       return <Settings skill={{ mode: route.mode, skillId: route.skillId }} />;
     case "get_app":

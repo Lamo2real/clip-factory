@@ -1,6 +1,22 @@
 import { announceSignedOut, type AuthClient } from "../lib/auth.ts";
 import { ApiError, errorFromResponse, networkError } from "./errors.ts";
-import type { Account, Api, Clip, ClipPerformance, Job, Post, RefreshResult, Settings, SimilarClip, Skill, SkillDetail, WeekView } from "./types.ts";
+import type {
+  Account,
+  Api,
+  Clip,
+  ClipPerformance,
+  Job,
+  KeyCheck,
+  PlatformSetup,
+  Post,
+  RefreshResult,
+  Settings,
+  SimilarClip,
+  Skill,
+  SkillDetail,
+  TikTokCreator,
+  WeekView,
+} from "./types.ts";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -71,8 +87,8 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     getClip: async (clipId) => (await call<{ clip: Clip }>("GET", `/clips/${id(clipId)}`)).clip,
     updateClip: async (clipId, captions) =>
       (await call<{ clip: Clip }>("PATCH", `/clips/${id(clipId)}`, { captions })).clip,
-    confirmClip: (clipId, captions) =>
-      call("POST", `/clips/${id(clipId)}/confirm`, captions ? { captions } : {}),
+    confirmClip: (clipId, captions, tiktok) =>
+      call("POST", `/clips/${id(clipId)}/confirm`, { ...(captions ? { captions } : {}), ...(tiktok ? { tiktok } : {}) }),
     declineClip: async (clipId) => (await call<{ clip: Clip }>("POST", `/clips/${id(clipId)}/decline`)).clip,
     listSkills: async () => (await call<{ skills: Skill[] }>("GET", "/skills")).skills,
     getSkill: (skillId) => call<SkillDetail>("GET", `/skills/${id(skillId)}`),
@@ -88,6 +104,23 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     deleteCookies: () => call("DELETE", "/settings/cookies"),
     listAccounts: async () => (await call<{ accounts: Account[] }>("GET", "/accounts")).accounts,
     connectAccount: (platform) => call("POST", `/accounts/${id(platform)}/connect`),
+    chooseAccount: async (platform, accountId) =>
+      (await call<{ setup: PlatformSetup }>("POST", `/accounts/${id(platform)}/choose`, { accountId })).setup,
+    disconnectAccount: (platform) => call("DELETE", `/accounts/${id(platform)}`),
+    tiktokCreatorInfo: async () => (await call<{ creator: TikTokCreator }>("GET", "/accounts/tiktok/creator-info")).creator,
+    getSetup: () => call("GET", "/setup"),
+    getPlatformSetup: async (platform) => (await call<{ setup: PlatformSetup }>("GET", `/setup/${id(platform)}`)).setup,
+    setSetupStep: async (platform, step, done) =>
+      (await call<{ setup: PlatformSetup }>("PATCH", `/setup/${id(platform)}`, { step, done })).setup,
+    setReviewState: async (state) =>
+      (await call<{ setup: PlatformSetup }>("PATCH", "/setup/tiktok", { gate: "app_review", state })).setup,
+    saveSetupKeys: async (platform, keys) =>
+      (await call<{ setup: PlatformSetup }>("PUT", `/setup/${id(platform)}/keys`, keys)).setup,
+    deleteSetupKeys: (platform) => call("DELETE", `/setup/${id(platform)}/keys`),
+    checkSetup: (platform) => call<{ check: KeyCheck; setup: PlatformSetup }>("POST", `/setup/${id(platform)}/check`),
+    uploadVerificationFile: async (filename, content) =>
+      (await call<{ setup: PlatformSetup }>("POST", "/setup/tiktok/verification-file", { filename, content })).setup,
+    deleteVerificationFile: (filename) => call("DELETE", `/setup/tiktok/verification-file/${id(filename)}`),
     listPosts: async (clipId) => (await call<{ posts: Post[] }>("GET", `/posts${q({ clipId })}`)).posts,
     insights: () => call("GET", "/insights"),
     similarClips: async (clipId) =>

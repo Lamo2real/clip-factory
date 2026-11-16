@@ -7,28 +7,15 @@ import { putFile } from "../../api/upload.ts";
 import type { Platform } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { GetAppPanel } from "../../components/GetApp.tsx";
-import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, Pill, Skeleton, Stepper } from "../../components/ui.tsx";
-import { X_MONTHLY_USD } from "../../lib/metrics.ts";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
-import { useLoad } from "../../lib/hooks.ts";
 import { setPrefs, shrinkImage, usePrefs } from "../../lib/prefs.ts";
 import { APP_VERSION, checkForUpdate, updateState } from "../../lib/update.ts";
 import { Apple, AppleSwitch, Panel } from "./parts.tsx";
 
 const PLATFORMS: Platform[] = ["youtube", "instagram", "facebook", "tiktok", "x"];
-
-/**
- * The platform the owner just came back from connecting (the hooks API sends them to
- * /settings?account={platform}&status=coming_soon until connecting arrives, docs/CONTRACTS.md §14.3), or null.
- */
-export function comingSoonPlatform(search: string): Platform | null {
-  const q = new URLSearchParams(search);
-  const p = q.get("account") as Platform | null;
-  return q.get("status") === "coming_soon" && p && PLATFORMS.includes(p) ? p : null;
-}
 
 // ---------- Clip making ----------
 
@@ -142,59 +129,6 @@ export function YoutubeBranch() {
 }
 
 // ---------- Posting ----------
-
-export function AccountsBranch() {
-  const { data } = useLoad(() => api().listAccounts());
-  const toast = useToast();
-  const [soon] = useState(() => comingSoonPlatform(typeof location === "undefined" ? "" : location.search));
-  return (
-    <Panel>
-      <Apple id="accounts" wide>
-        {soon ? (
-          <p className="callout callout--info" role="status">
-            <Icon name="info" size={18} />
-            <span>Connecting {PLATFORM_LABEL[soon]} arrives soon.</span>
-          </p>
-        ) : null}
-        <ul className="account-grid">
-          {PLATFORMS.map((p) => {
-            const acc = data?.find((a) => a.platform === p);
-            const connected = acc?.status === "connected";
-            return (
-              <li key={p} className="account">
-                <span className={`account__mark is-${p}`}>
-                  <PlatformMark platform={p} size={24} />
-                </span>
-                <span className="account__text">
-                  <span className="account__name">{PLATFORM_LABEL[p]}</span>
-                  <span className="account__status">
-                    {!data ? "Checking…" : connected ? (acc?.handle ?? "Connected") : acc?.status === "needs_reconnect" ? "Needs reconnecting" : "Not connected"}
-                  </span>
-                </span>
-                <Button
-                  size="sm"
-                  disabled
-                  aria-label={`Connect ${PLATFORM_LABEL[p]}: coming soon`}
-                  className="account__btn"
-                  // Switched off, so it plays the "deny" sound; the toast says why.
-                  onClickCapture={() => toast.info("Connecting accounts is coming in a later update. Your kept clips will wait.")}
-                >
-                  Coming soon
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
-        <p className="callout callout--info account-note" id="x-cost">
-          <Icon name="info" size={18} />
-          <span>
-            X charges a little for every number check. Clip Factory stops at ${X_MONTHLY_USD} a month.
-          </span>
-        </p>
-      </Apple>
-    </Panel>
-  );
-}
 
 export function WhereBranch() {
   const { me, saveSettings } = useSession();

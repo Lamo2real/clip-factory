@@ -1,15 +1,18 @@
-// Two kinds of synthesized sound (no audio files): "tap" for clicks on things that work, "deny" for clicks on things
-// that are switched off and for errors. Which of the 30 recipes of each kind plays is the owner's choice
+// Synthesized sounds (no audio files): "tap" for clicks on things that work, "deny" for clicks on things
+// that are switched off and for errors, and "success" (one fixed cheer) when something big worked, played on a tap. Which of the 30 recipes of each kind plays is the owner's choice
 // (Settings > Look & feel > Sounds, docs/CONTRACTS.md §15.3). Sounds are driven ONLY by the `click` event, which
 // browsers fire for a tap but never for a scroll or a swipe, so scrolling on a phone is always silent.
 
 import { isMock } from "./config.ts";
-import { DEFAULT_CLICK_SOUND, DEFAULT_ERROR_SOUND, recipeFor, type SoundRecipe } from "./soundCatalog.ts";
+import { DEFAULT_CLICK_SOUND, DEFAULT_ERROR_SOUND, recipeFor, SUCCESS_SOUND, type SoundRecipe } from "./soundCatalog.ts";
 
+/** The two kinds the owner picks a sound for (Settings > Look & feel > Sounds). */
 export type SoundKind = "tap" | "deny";
+/** Everything the engine can play: the two picked kinds plus the fixed success cheer. */
+export type PlayKind = SoundKind | "success";
 
 export interface SoundLogEntry {
-  kind: SoundKind;
+  kind: PlayKind;
   /** Which recipe (1..30 of that kind) played, or would have played when muted. */
   sound: number;
   muted: boolean;
@@ -80,7 +83,7 @@ export class SoundEngine {
   /** Half a second of white noise, made once per context and shared by every noise voice. */
   private noise: AudioBuffer | null = null;
   private lastAt = 0;
-  private lastKind: SoundKind | null = null;
+  private lastKind: PlayKind | null = null;
 
   constructor(
     private readonly enabled: () => boolean,
@@ -120,7 +123,7 @@ export class SoundEngine {
    * Plays the tap or deny sound. `recipe` picks one of the 30 sounds of that kind (the Sounds settings preview a
    * card this way); without it the owner's chosen sound plays.
    */
-  play(kind: SoundKind, target: EventTarget | null = null, recipe?: number): void {
+  play(kind: PlayKind, target: EventTarget | null = null, recipe?: number): void {
     const now = performance.now();
     // A click on a <label> also clicks its input: one sound per gesture. A deny right after a tap still plays,
     // because that is an error answering the click.
@@ -128,7 +131,7 @@ export class SoundEngine {
     this.lastAt = now;
     this.lastKind = kind;
     const muted = !this.enabled();
-    const sound = recipeFor(kind, recipe ?? this.chosen()[kind]);
+    const sound = kind === "success" ? SUCCESS_SOUND : recipeFor(kind, recipe ?? this.chosen()[kind]);
     if (isMock || import.meta.env.DEV || import.meta.env.MODE === "test") {
       // Test hook only; capped so a long session cannot grow it without limit.
       const log = (window.__cfSoundLog ??= []);
@@ -136,7 +139,7 @@ export class SoundEngine {
       if (log.length > 200) log.splice(0, log.length - 200);
     }
     if (muted) return;
-    if (isAndroid()) navigator.vibrate?.(kind === "tap" ? 8 : [14, 50, 14]);
+    if (isAndroid()) navigator.vibrate?.(kind === "deny" ? [14, 50, 14] : kind === "success" ? [10, 40, 10, 40, 18] : 8);
     const ctx = this.context();
     if (!ctx) return;
     try {
@@ -183,6 +186,19 @@ function envelope(gain: GainNode, at: number, length: number, peak: number) {
   gain.gain.setValueAtTime(0.0001, at);
   gain.gain.exponentialRampToValueAtTime(peak, at + 0.006);
   gain.gain.exponentialRampToValueAtTime(0.0001, at + length);
+}
+
+/**
+ * Plays the success sound on the owner's next tap anywhere on the page (sounds only ever answer a tap, and a page
+ * that just loaded cannot play audio yet). Returns a function that cancels it.
+ */
+export function cheerOnNextTap(engine: SoundEngine, root: Document = document): () => void {
+  const onClick = (e: MouseEvent) => {
+    root.removeEventListener("click", onClick, { capture: true });
+    engine.play("success", e.target);
+  };
+  root.addEventListener("click", onClick, { capture: true });
+  return () => root.removeEventListener("click", onClick, { capture: true });
 }
 
 /** Listens for clicks in the capture phase so a handler that stops propagation cannot silence the sound. */

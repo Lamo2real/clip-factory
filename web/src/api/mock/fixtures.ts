@@ -503,6 +503,7 @@ export function seed(): Store {
       reduceMotion: false,
       hasYoutubeCookies: false,
       platforms: [...PLATFORMS],
+      youtubePrivacy: "public",
     },
     accounts: PLATFORMS.map((platform) => ({ platform, status: "not_connected" })),
   };

@@ -3,7 +3,11 @@
 import { useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { prefersReducedMotion } from "./prefs.ts";
+import type { Platform } from "../api/types.ts";
+import { isMock } from "./config.ts";
 import { findBranch, findTree } from "./settingsTree.ts";
+
+const SETUP_PLATFORMS: readonly Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
 
 export type Route =
   | { name: "home" }
@@ -14,13 +18,18 @@ export type Route =
   | { name: "library"; view: "all" | "week"; week: string | null }
   /** One clip's performance page. */
   | { name: "clip"; clipId: string }
-  /** Settings is a tree (docs/CONTRACTS.md §15.1): the field, a tree, or one of its branches. */
-  | { name: "settings"; tree: string | null; branch: string | null }
+  /**
+   * Settings is a tree (docs/CONTRACTS.md §15.1): the field, a tree, or one of its branches. Posting › Set up
+   * posting has one page per platform (`platform`, §17.1).
+   */
+  | { name: "settings"; tree: string | null; branch: string | null; platform?: Platform }
   /**
    * A skill under Settings › Clip making › Skills (§18.7): writing a new one, reading one, or changing one.
    * `skillId` null with mode "read" is an address that cannot be a skill ("We could not find that skill").
    */
   | { name: "skill"; mode: "new" | "read" | "edit"; skillId: string | null }
+  /** Mock mode only: the pretend consent page Connect goes to (§17.10). */
+  | { name: "mock_oauth"; platform: Platform }
   | { name: "get_app" }
   | { name: "not_found" };
 
@@ -52,6 +61,13 @@ export function match(pathname: string, search = ""): Route {
     if (!findBranch(tree, branchSlug)) return { name: "not_found" };
     return { name: "settings", tree: tree.slug, branch: branchSlug };
   }
+  const setup = /^\/settings\/posting\/setup\/([a-z]{1,20})$/.exec(path);
+  if (setup) {
+    const platform = setup[1] as Platform;
+    return SETUP_PLATFORMS.includes(platform) ? { name: "settings", tree: "posting", branch: "setup", platform } : { name: "not_found" };
+  }
+  const consent = /^\/mock-oauth\/([a-z]{1,20})$/.exec(path);
+  if (consent && isMock && SETUP_PLATFORMS.includes(consent[1] as Platform)) return { name: "mock_oauth", platform: consent[1] as Platform };
   if (path === "/get-app") return { name: "get_app" };
   return { name: "not_found" };
 }
@@ -218,6 +234,8 @@ export function useHash(): string {
 /** The nav section a route belongs to (a job detail page highlights Jobs). */
 export function section(route: Route): "home" | "jobs" | "review" | "library" | "settings" | "get_app" | null {
   switch (route.name) {
+    case "mock_oauth":
+      return null;
     case "job":
       return "jobs";
     case "clip":

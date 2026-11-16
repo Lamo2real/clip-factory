@@ -127,3 +127,101 @@ test("screenshot get-app on an iPhone (picture steps)", async ({ browser }) => {
   await page.screenshot({ path: join(dir, "get-app-iphone-390x844.png") });
   await context.close();
 });
+
+// Posting setup (§17.12): the list and the YouTube page, phone and desktop, light and dark; plus YouTube connected
+// and the pretend consent page.
+for (const size of [
+  { name: "phone", width: 375, height: 812, scale: 2, touch: true },
+  { name: "desktop", width: 1440, height: 900, scale: 1, touch: false },
+]) {
+  for (const scheme of ["light", "dark"] as const) {
+    test.describe(`setup ${size.name} ${size.width}x${size.height} ${scheme}`, () => {
+      test.use({
+        viewport: { width: size.width, height: size.height },
+        deviceScaleFactor: size.scale,
+        hasTouch: size.touch,
+        isMobile: size.touch,
+        colorScheme: scheme,
+      });
+      const suffix = `${scheme === "dark" ? "-dark" : ""}-${size.width}x${size.height}`;
+      test(`screenshot setup ${scheme}`, async ({ page }) => {
+        await page.goto("/settings/posting/setup");
+        await settle(page);
+        await page.waitForTimeout(600);
+        await page.screenshot({ path: join(dir, `setup-list${suffix}.png`) });
+        await page.goto("/settings/posting/setup/youtube");
+        await settle(page);
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.waitForTimeout(600);
+        await page.screenshot({ path: join(dir, `setup-youtube${suffix}.png`) });
+        // Further on: the key step with its Copy chips and paste boxes.
+        await page.locator("[data-step='key-client'] .gstep__head").click();
+        await page.locator("[data-step='key-paste'] .gstep__head").click();
+        await page.locator("[data-step='key-client']").evaluate((el) => el.scrollIntoView({ block: "start" }));
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: join(dir, `setup-youtube-keys${suffix}.png`) });
+      });
+    });
+  }
+}
+
+test("screenshot setup: YouTube connected and the pretend consent page", async ({ browser }) => {
+  for (const size of [
+    { width: 375, height: 812, scale: 2 },
+    { width: 1440, height: 900, scale: 1 },
+  ]) {
+    const context = await browser.newContext({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale });
+    const page = await context.newPage();
+    await page.goto("/");
+    await settle(page);
+    await page.evaluate(() => (window as unknown as { __cfMock: { setup: { finish(p: string): void } } }).__cfMock.setup.finish("youtube"));
+    await page.goto("/settings/posting/setup/youtube?result=connected");
+    await settle(page);
+    await page.waitForTimeout(1900);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: join(dir, `setup-youtube-connected-${size.width}x${size.height}.png`) });
+    await page.goto("/mock-oauth/youtube?state=v1.screenshot");
+    await settle(page);
+    await page.screenshot({ path: join(dir, `setup-consent-${size.width}x${size.height}.png`) });
+    await page.goto("/");
+    await settle(page);
+    await page.screenshot({ path: join(dir, `home-setup-card-${size.width}x${size.height}.png`) });
+    await context.close();
+  }
+});
+
+test("screenshot setup: every platform page fresh, and the pickers on a phone and a tablet", async ({ browser }) => {
+  for (const size of [
+    { width: 375, height: 812, scale: 2, touch: true },
+    { width: 1440, height: 900, scale: 1, touch: false },
+  ]) {
+    const context = await browser.newContext({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, isMobile: size.touch, hasTouch: size.touch });
+    const page = await context.newPage();
+    for (const platform of ["youtube", "tiktok", "instagram", "facebook", "x"]) {
+      await page.goto(`/settings/posting/setup/${platform}`);
+      await settle(page);
+      await page.waitForTimeout(600);
+      await page.screenshot({ path: join(dir, `setup-${platform}-fresh-${size.width}x${size.height}.png`) });
+    }
+    await context.close();
+  }
+  for (const size of [
+    { width: 375, height: 812, scale: 2, touch: true },
+    { width: 768, height: 1024, scale: 2, touch: true },
+  ]) {
+    const context = await browser.newContext({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, isMobile: size.touch, hasTouch: size.touch });
+    const page = await context.newPage();
+    for (const [platform, id] of [
+      ["youtube", "public-privacy"],
+      ["tiktok", "public-review"],
+    ] as const) {
+      await page.goto(`/settings/posting/setup/${platform}`);
+      await settle(page);
+      await page.locator(`[data-step='${id}'] .gstep__head`).click();
+      await page.locator(`[data-step='${id}'] .gstep__picker`).evaluate((el) => el.scrollIntoView({ block: "center" }));
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(dir, `setup-${platform}-picker-${size.width}x${size.height}.png`) });
+    }
+    await context.close();
+  }
+});

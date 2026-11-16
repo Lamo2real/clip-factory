@@ -19,9 +19,10 @@ import {
   type SearchHit,
   type Tree,
 } from "../../lib/settingsTree.ts";
+import type { Platform } from "../../api/types.ts";
+import { GUIDES } from "../../setup/index.ts";
 import {
   AccountBranch,
-  AccountsBranch,
   BackgroundBranch,
   ClipsBranch,
   GetAppBranch,
@@ -34,15 +35,15 @@ import { Trail } from "./parts.tsx";
 import { SkillScreen } from "./SkillPages.tsx";
 import { SkillsSection } from "./SkillsSection.tsx";
 import { SoundsBranch } from "./SoundsBranch.tsx";
-
-export { comingSoonPlatform } from "./branches.tsx";
+import { SetupList } from "./setup/SetupList.tsx";
+import { SetupPlatform } from "./setup/SetupPlatform.tsx";
 
 /** What each branch page shows, by `tree/branch`. */
 const BRANCHES: Record<string, () => ReactNode> = {
   "clip-making/clips": () => <ClipsBranch />,
   "clip-making/skills": () => <SkillsSection />,
   "clip-making/youtube": () => <YoutubeBranch />,
-  "posting/accounts": () => <AccountsBranch />,
+  "posting/setup": () => <SetupList />,
   "posting/where": () => <WhereBranch />,
   "look-and-feel/sounds": () => <SoundsBranch />,
   "look-and-feel/motion": () => <MotionBranch />,
@@ -59,11 +60,14 @@ export function Settings({
   tree: treeSlug = null,
   branch: branchSlug = null,
   skill = null,
+  platform = null,
 }: {
   tree?: string | null;
   branch?: string | null;
   /** A page under the Skills branch (§18.7): new, read or edit. */
   skill?: Omit<Extract<Route, { name: "skill" }>, "name"> | null;
+  /** Posting › Set up posting › one platform's steps (§17.1). */
+  platform?: Platform | null;
 }) {
   const { installed } = useInstall();
   const trees = useMemo(() => visibleTrees(installed), [installed]);
@@ -81,6 +85,11 @@ export function Settings({
         <div className="settings-content">
           {skill && tree && branch ? (
             <SkillScreen tree={tree} branch={branch} mode={skill.mode} skillId={skill.skillId} />
+          ) : tree && branch && platform ? (
+            <>
+              <Trail tree={tree} branch={branch} extra={[{ name: GUIDES[platform].name }]} />
+              <SetupPlatform key={platform} platform={platform} />
+            </>
           ) : tree && branch ? (
             <BranchPage tree={tree} branch={branch} />
           ) : tree ? (

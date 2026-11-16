@@ -4,7 +4,6 @@ import { seed } from "../src/api/mock/fixtures.ts";
 import { similar } from "../src/api/mock/index.ts";
 import { alike } from "../src/components/SimilarClips.tsx";
 import { loadConfig } from "../src/lib/config.ts";
-import { comingSoonPlatform } from "../src/screens/settings/Settings.tsx";
 
 const base = { region: "eu-north-1", userPoolId: "eu-north-1_x", userPoolClientId: "c", apiUrl: "https://api.test/" };
 const fetchJson = (body: unknown) => async () => new Response(JSON.stringify(body));
@@ -62,14 +61,5 @@ describe("alike", () => {
     expect(alike(0.864)).toBe("86% alike");
     expect(alike(1.2)).toBe("100% alike");
     expect(alike(-1)).toBe("0% alike");
-  });
-});
-
-describe("comingSoonPlatform", () => {
-  it("reads the platform the owner came back from", () => {
-    expect(comingSoonPlatform("?account=instagram&status=coming_soon")).toBe("instagram");
-    expect(comingSoonPlatform("?account=instagram")).toBeNull();
-    expect(comingSoonPlatform("?account=myspace&status=coming_soon")).toBeNull();
-    expect(comingSoonPlatform("")).toBeNull();
   });
 });

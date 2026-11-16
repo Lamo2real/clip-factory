@@ -17,7 +17,7 @@ describe("the settings tree", () => {
     expect(TREES.map((t) => t.slug)).toEqual(["clip-making", "posting", "look-and-feel", "app"]);
     expect(TREES.map((t) => t.branches.map((b) => b.slug))).toEqual([
       ["clips", "skills", "youtube"],
-      ["accounts", "where"],
+      ["setup", "where"],
       ["sounds", "motion", "background"],
       ["get-the-app", "updates", "account"],
     ]);
@@ -96,7 +96,7 @@ describe("old links", () => {
     const go = (hash: string, search = "") => legacySettingsRedirect("/settings", search, hash);
     expect(go("#skills")).toBe("/settings/clip-making/skills");
     expect(go("#clips")).toBe("/settings/clip-making/clips");
-    expect(go("#accounts")).toBe("/settings/posting/accounts");
+    expect(go("#accounts")).toBe("/settings/posting/setup");
     expect(go("#appearance")).toBe("/settings/look-and-feel");
     expect(go("#app")).toBe("/settings/app");
     expect(go("#get-app")).toBe("/settings/app/get-the-app");
@@ -106,10 +106,30 @@ describe("old links", () => {
     expect(go("")).toBeNull();
   });
 
-  it("send the hooks API's coming-soon return to Accounts, keeping the query", () => {
-    expect(legacySettingsRedirect("/settings", "?account=instagram&status=coming_soon", "")).toBe(
-      "/settings/posting/accounts?account=instagram&status=coming_soon",
-    );
+  it("send Accounts and the old hooks API returns to Set up posting (§17.1)", () => {
+    expect(legacySettingsRedirect("/settings", "?account=instagram&status=coming_soon", "")).toBe("/settings/posting/setup/instagram");
+    expect(legacySettingsRedirect("/settings/posting/accounts", "?account=x&status=coming_soon", "")).toBe("/settings/posting/setup/x");
+    expect(legacySettingsRedirect("/settings", "?account=myspace&status=coming_soon", "")).toBe("/settings/posting/setup");
+    expect(legacySettingsRedirect("/settings/posting/accounts", "", "")).toBe("/settings/posting/setup");
+    expect(legacySettingsRedirect("/settings/posting/accounts/", "", "#accounts")).toBe("/settings/posting/setup");
+  });
+
+  it("send the setup apples to their platform page", () => {
+    expect(legacySettingsRedirect("/settings", "", "#youtube-privacy")).toBe("/settings/posting/setup/youtube#youtube-privacy");
+    expect(searchSettings("unlisted")[0]!.href).toBe("/settings/posting/setup/youtube#youtube-privacy");
+    expect(searchSettings("credits")[0]!.href).toBe("/settings/posting/setup/x#x-cost");
+    expect(searchSettings("tiktok")[0]!.href).toBe("/settings/posting/setup#setup-posting");
+  });
+
+  it("route each platform's setup page, and nothing else under it", () => {
+    expect(match("/settings/posting/setup/youtube")).toEqual({ name: "settings", tree: "posting", branch: "setup", platform: "youtube" });
+    expect(match("/settings/posting/setup/x/")).toEqual({ name: "settings", tree: "posting", branch: "setup", platform: "x" });
+    expect(match("/settings/posting/setup")).toEqual({ name: "settings", tree: "posting", branch: "setup" });
+    expect(match("/settings/posting/setup/myspace")).toEqual({ name: "not_found" });
+    expect(match("/settings/posting/accounts")).toEqual({ name: "not_found" });
+    expect(titleFor({ name: "settings", tree: "posting", branch: "setup", platform: "tiktok" })).toBe("TikTok setup · Settings");
+    // The pretend consent page exists only in mock builds.
+    expect(match("/mock-oauth/youtube")).toEqual({ name: "not_found" });
   });
 
   it("leave every other page alone", () => {

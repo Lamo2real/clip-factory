@@ -9,6 +9,7 @@ import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { applyClipEvent, applyJobEvent, withMedia } from "../../lib/liveCache.ts";
 import { GetAppBanner } from "../../components/GetApp.tsx";
 import { NewJobForm } from "./NewJobForm.tsx";
+import { SetupCard } from "./SetupCard.tsx";
 
 interface HomeData {
   jobs: Job[];
@@ -78,6 +79,8 @@ export function Home() {
           <CoverStack clips={data?.review ?? []} />
         </div>
       </section>
+
+      <SetupCard />
 
       <section className="home-row" aria-labelledby="ready-title">
         <div className="home-row__intro">

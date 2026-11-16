@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Captions, Clip } from "../../api/types.ts";
+import type { Captions, Clip, TikTokPostOptions } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -14,6 +14,7 @@ import { applyClipEvent, withMedia } from "../../lib/liveCache.ts";
 import { SimilarClips } from "../../components/SimilarClips.tsx";
 import { keepClip, keptMessage, STILL_WORKING } from "../../lib/keep.ts";
 import { CaptionTabs, captionsTooLong } from "./CaptionTabs.tsx";
+import { TikTokSheet } from "./TikTokSheet.tsx";
 
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
 export const MEDIA_FRESH_MS = 50 * 60 * 1000;
@@ -201,8 +202,10 @@ function ReviewCard({
   onSettling: (clipId: string, on: boolean) => void;
 }) {
   const toast = useToast();
-  const { refresh } = useSession();
+  const { me, refresh } = useSession();
   const [captions, setCaptions] = useState<Captions>(clip.captions);
+  // The Post to TikTok sheet (§17.8) is open: Keep waits for its choices.
+  const [sheet, setSheet] = useState(false);
   const [dirty, setDirty] = useState<Partial<Captions>>({});
   const [save, setSave] = useState<SaveState>("idle");
   const [busy, setBusy] = useState<"confirm" | null>(null);
@@ -210,6 +213,8 @@ function ReviewCard({
   // The last Keep did not finish: the button becomes "Try again", which asks the server to finish it.
   const [keepFailed, setKeepFailed] = useState(false);
   const [keepNote, setKeepNote] = useState("");
+  // The TikTok sheet's choices from the Keep that did not finish: Try again sends them again.
+  const lastTikTok = useRef<TikTokPostOptions | undefined>(undefined);
   const confirmRef = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // The latest unsaved edits, and whether the clip was already kept or thrown away (then nothing more is saved).
@@ -294,16 +299,36 @@ function ReviewCard({
       toast.error("One caption is longer than its platform allows. Make the one marked in red shorter, then tap Keep.");
       return;
     }
+    // TikTok connected: its rules say the owner picks who can see the post first (§17.8).
+    if (!keepFailed && me?.settings.platforms.includes("tiktok")) {
+      setBusy("confirm");
+      const tiktok = await api()
+        .listAccounts()
+        .then((all) => all.find((a) => a.platform === "tiktok")?.status === "connected")
+        .catch(() => false);
+      setBusy(null);
+      if (tiktok) {
+        setSheet(true);
+        return;
+      }
+    }
+    await keep(keepFailed ? lastTikTok.current : undefined);
+  }
+
+  async function keep(tiktok?: TikTokPostOptions) {
+    lastTikTok.current = tiktok;
     setBusy("confirm");
     setKeepNote("");
     clearTimeout(timer.current);
     settled.current = true;
     onSettling(clip.clipId, true);
     try {
-      const out = await keepClip(api(), clip.clipId, Object.keys(dirty).length ? captions : undefined);
+      const out = await keepClip(api(), clip.clipId, Object.keys(dirty).length || tiktok ? captions : undefined, tiktok);
       if (out.kind === "kept") {
+        setSheet(false);
         burst(centerOf(confirmRef.current), 120);
         toast.success(keptMessage(out.posts));
+        if (tiktok) toast.info("TikTok can take a few minutes to process your clip.");
         onKept(out.clip);
         leave();
         return;
@@ -457,6 +482,16 @@ function ReviewCard({
             {keepFailed ? "Try again" : "Keep"}
           </Button>
         </div>
+        {sheet ? (
+          <TikTokSheet
+            clip={{ ...clip, videoUrl, coverUrl }}
+            caption={captions.tiktok}
+            onCaption={(text) => edit({ tiktok: text })}
+            onKeep={(options) => void keep(options)}
+            onClose={() => setSheet(false)}
+            busy={busy === "confirm"}
+          />
+        ) : null}
         <A href={`/jobs/${clip.jobId}`} className="text-link small review-card__job">
           See the job this clip came from
         </A>

@@ -259,8 +259,8 @@ export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "m
   switch (p.status) {
     case "waiting_for_connection":
       return {
-        text: `Connect ${name} in Settings › Posting › Accounts.`,
-        link: { href: "/settings/posting/accounts", label: "Open Accounts" },
+        text: `Connect ${name} in Settings › Posting › Set up posting.`,
+        link: { href: `/settings/posting/setup/${p.platform}`, label: `Set up ${name}` },
       };
     case "not_posted":
       return {
@@ -273,7 +273,7 @@ export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "m
       return { text: "Posted privately. TikTok shows numbers after the app is approved." };
     case "failed": {
       const why = (p.error ?? "something went wrong").replace(/[.!\s]+$/, "");
-      return { text: `Posting failed: ${why}. Go to Review and press Try again.`, link: { href: "/review", label: "Go to Review" } };
+      return { text: `Posting failed: ${why}. Go to Library and press Try again.`, link: { href: "/library", label: "Go to Library" } };
     }
     case "posted":
       return p.metrics ? null : { text: "Numbers are on the way. Check back in a few minutes." };

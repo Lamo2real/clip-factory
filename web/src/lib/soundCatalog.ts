@@ -90,6 +90,22 @@ export const ERROR_SOUNDS: readonly SoundRecipe[] = [
   { id: 30, name: "Muted double", feel: "Two padded taps", voices: [["noise", "bandpass", 600, 0, 0.02, 0.5], ["noise", "bandpass", 600, 0.09, 0.02, 0.5], ["sine", 140, 130, 0, 0.04, 0.2, 800]] },
 ];
 
+/**
+ * The success cheer (§17.1: "connected" → success sound): one fixed sound, not one of the owner's 30 picks, so it is
+ * never mistaken for a plain click. Three rising notes and a little shimmer.
+ */
+export const SUCCESS_SOUND: SoundRecipe = {
+  id: 0,
+  name: "Hooray",
+  feel: "Three happy notes up",
+  voices: [
+    ["sine", 1047, 1047, 0, 0.12, 0.16, 8000],
+    ["sine", 1319, 1319, 0.09, 0.12, 0.15, 8000],
+    ["sine", 1568, 1568, 0.18, 0.28, 0.15, 8000],
+    ["triangle", 3136, 3130, 0.18, 0.2, 0.04, 10000],
+  ],
+};
+
 /** True for a whole number from 1 to 30. */
 export function isSoundId(n: unknown): n is number {
   return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= SOUND_COUNT;

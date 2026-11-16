@@ -182,7 +182,8 @@ describe("SoundEngine plays the chosen recipes", () => {
     expect(made.oscillators).toEqual([{ type: "sine", from: 900 }]); // Soft pop
     choice.tap = 9;
     made.oscillators = [];
-    vi.spyOn(performance, "now").mockReturnValue(10_000);
+    // Well after the first tap (relative to now: the worker may have been running for a while).
+    vi.spyOn(performance, "now").mockReturnValue(performance.now() + 10_000);
     engine.play("tap");
     expect(made.oscillators).toEqual([{ type: "sawtooth", from: 660 }]); // Pluck
     expect(window.__cfSoundLog!.map((e) => e.sound)).toEqual([2, 9]);

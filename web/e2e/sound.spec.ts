@@ -71,13 +71,15 @@ test("enabled controls tap, switched-off controls deny, errors deny", async ({ p
   await page.locator(".hero__lede").click();
   expect(await log(page)).toEqual(["deny", "tap"]);
 
-  // A "coming soon" button is switched off: deny, and a note says why.
-  await page.goto("/settings/posting/accounts");
+  // A switched-off button (Save keys before the keys look right) plays deny.
+  await page.goto("/settings/posting/setup/youtube");
   await settle(page);
-  // The accounts load after the page: wait, so the button stops moving before the forced click.
-  await expect(page.getByText("Checking…")).toHaveCount(0);
+  await page.locator("[data-step='key-paste'] .gstep__head").click();
+  const save = page.getByRole("button", { name: "Save keys" });
+  await save.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(400);
   await page.evaluate(() => (window.__cfSoundLog = []));
-  await page.getByRole("button", { name: /Connect YouTube/ }).click({ force: true });
+  await save.click({ force: true });
   await expect.poll(() => log(page)).toEqual(["deny"]);
 
   // An error toast plays the deny sound by itself, right after the tap that caused it.

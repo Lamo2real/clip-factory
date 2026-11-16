@@ -155,12 +155,144 @@ export interface Settings {
   reduceMotion: boolean;
   hasYoutubeCookies: boolean;
   platforms: Platform[];
+  /** Who can see new YouTube clips (docs/CONTRACTS.md §17.6). Absent on old servers: "public". */
+  youtubePrivacy?: YoutubePrivacy;
+}
+
+export type YoutubePrivacy = "public" | "unlisted" | "private";
+
+// ---------- Posting setup (docs/CONTRACTS.md §17.4) ----------
+export type AccountStatus = "not_connected" | "connected" | "needs_reconnect" | "choose_account";
+
+export interface AccountChoice {
+  id: string;
+  name: string;
+  avatarUrl?: string;
 }
 
 export interface Account {
   platform: Platform;
-  status: "not_connected" | "connected" | "needs_reconnect";
+  status: AccountStatus;
+  /** "@name" or the channel title. */
   handle?: string;
+  name?: string;
+  avatarUrl?: string;
+  connectedAt?: string;
+  /** Permissions the owner did not tick. */
+  missing?: string[];
+  reason?: "token_dead" | "missing_permissions" | "keys_changed" | "expires_soon";
+  /** TikTok: connect again before this. */
+  reconnectBy?: string;
+  /** Meta with several Pages or Instagram accounts: pick one. */
+  choices?: AccountChoice[];
+}
+
+export type GateKey = "published_app" | "app_review" | "posting_audit" | "app_live" | "credits";
+export type GateState = "ok" | "limited" | "waiting" | "action" | "unknown";
+export interface Gate {
+  key: GateKey;
+  state: GateState;
+  at?: string;
+}
+/** The TikTok review state the owner picks (PATCH /v1/setup/tiktok). */
+export type ReviewState = "draft" | "in_review" | "live" | "not_approved";
+
+export type KeyName = "clientId" | "clientSecret" | "configId";
+export type CheckCode =
+  | "ok"
+  | "keys_wrong"
+  | "redirect_wrong"
+  | "not_connected"
+  | "token_dead"
+  | "missing_permissions"
+  | "credits_empty"
+  | "platform_down";
+
+export interface KeyCheck {
+  at: string;
+  ok: boolean;
+  code: CheckCode;
+  message: string;
+  account?: "ok" | "dead" | "none";
+}
+
+export interface PlatformSetup {
+  platform: Platform;
+  stepsDone: string[];
+  /** Connected and no gate needs the owner. */
+  ready: boolean;
+  keys: { saved: boolean; hints?: Partial<Record<KeyName, string>>; savedAt?: string; check?: KeyCheck };
+  account: Account;
+  gates: Gate[];
+  /** TikTok verification files online. */
+  files?: string[];
+  updatedAt?: string;
+}
+
+export interface SetupValues {
+  appName: string;
+  websiteUrl: string;
+  websitePrefix: string;
+  privacyUrl: string;
+  termsUrl: string;
+  dataDeletionUrl: string;
+  appDomain: string;
+  hooksDomain: string;
+  redirectUris: Record<Platform, string>;
+  scopes: Record<Platform, string[]>;
+  ownerEmail: string;
+}
+
+export interface SetupOverview {
+  /** Always five, in SETUP_ORDER. */
+  platforms: PlatformSetup[];
+  ready: number;
+  values: SetupValues;
+}
+
+export interface SetupKeys {
+  clientId: string;
+  clientSecret: string;
+  configId?: string;
+}
+
+/** The OAuth result codes the hooks API sends back in `?result=` (§17.5). */
+export type ConnectResult =
+  | "connected"
+  | "choose"
+  | "denied"
+  | "expired"
+  | "keys_wrong"
+  | "redirect_wrong"
+  | "missing_permissions"
+  | "no_channel"
+  | "no_accounts"
+  | "wrong_account_type"
+  | "no_pages"
+  | "platform_down"
+  | "error";
+
+export type TikTokPrivacy = "PUBLIC_TO_EVERYONE" | "MUTUAL_FOLLOW_FRIENDS" | "FOLLOWER_OF_CREATOR" | "SELF_ONLY";
+
+export interface TikTokCreator {
+  nickname: string;
+  username: string;
+  avatarUrl?: string;
+  privacyOptions: string[];
+  commentDisabled: boolean;
+  duetDisabled: boolean;
+  stitchDisabled: boolean;
+  maxDurationSec: number;
+}
+
+/** What the Post to TikTok sheet adds to Keep (§17.8). */
+export interface TikTokPostOptions {
+  privacyLevel: string;
+  disableComment: boolean;
+  disableDuet: boolean;
+  disableStitch: boolean;
+  brandContent: boolean;
+  brandOrganic: boolean;
 }
 
 // ---------- Stats (docs/CONTRACTS.md §16.3) ----------
@@ -344,7 +476,7 @@ export interface SimilarClip {
 }
 
 /** What the live connection pushes (docs/CONTRACTS.md §14.2). One message per changed item. */
-export type LiveItemType = "job" | "clip" | "post" | "learning" | "week";
+export type LiveItemType = "job" | "clip" | "post" | "learning" | "week" | "setup";
 export type LiveEvent =
   | { type: "job"; op: "upsert"; id: string; item: Job; partial?: undefined }
   | { type: "clip"; op: "upsert"; id: string; item: Clip; partial?: undefined }
@@ -387,7 +519,8 @@ export interface Api {
   listClips(query?: { status?: ClipFilter; jobId?: string }): Promise<Clip[]>;
   getClip(clipId: string): Promise<Clip>;
   updateClip(clipId: string, captions: Partial<Captions>): Promise<Clip>;
-  confirmClip(clipId: string, captions?: Partial<Captions>): Promise<{ clip: Clip; posts: Post[] }>;
+  /** `tiktok` carries the Post to TikTok sheet's choices (§17.8). */
+  confirmClip(clipId: string, captions?: Partial<Captions>, tiktok?: TikTokPostOptions): Promise<{ clip: Clip; posts: Post[] }>;
   declineClip(clipId: string): Promise<Clip>;
   /** GET /v1/skills: built-ins first, then the owner's, by name (§18.3). */
   listSkills(): Promise<Skill[]>;
@@ -407,7 +540,24 @@ export interface Api {
   createCookiesUpload(filename: string): Promise<PresignedPut>;
   deleteCookies(): Promise<void>;
   listAccounts(): Promise<Account[]>;
-  connectAccount(platform: Platform): Promise<void>;
+  /** POST /v1/accounts/{platform}/connect: where to send the owner to approve (same tab). */
+  connectAccount(platform: Platform): Promise<{ authorizeUrl: string; expiresAt: string }>;
+  /** POST /v1/accounts/{platform}/choose (Meta with several Pages or Instagram accounts). */
+  chooseAccount(platform: Platform, accountId: string): Promise<PlatformSetup>;
+  /** DELETE /v1/accounts/{platform}: the keys stay. */
+  disconnectAccount(platform: Platform): Promise<void>;
+  /** GET /v1/accounts/tiktok/creator-info, fetched each time the Post to TikTok sheet opens. */
+  tiktokCreatorInfo(): Promise<TikTokCreator>;
+  // Posting setup (§17.4)
+  getSetup(): Promise<SetupOverview>;
+  getPlatformSetup(platform: Platform): Promise<PlatformSetup>;
+  setSetupStep(platform: Platform, step: string, done: boolean): Promise<PlatformSetup>;
+  setReviewState(state: ReviewState): Promise<PlatformSetup>;
+  saveSetupKeys(platform: Platform, keys: SetupKeys): Promise<PlatformSetup>;
+  deleteSetupKeys(platform: Platform): Promise<void>;
+  checkSetup(platform: Platform): Promise<{ check: KeyCheck; setup: PlatformSetup }>;
+  uploadVerificationFile(filename: string, content: string): Promise<PlatformSetup>;
+  deleteVerificationFile(filename: string): Promise<void>;
   listPosts(clipId?: string): Promise<Post[]>;
   insights(): Promise<{ learnings: Learning[]; posts: Post[] }>;
   similarClips(clipId: string): Promise<SimilarClip[]>;
