@@ -524,7 +524,7 @@ class Pipeline:
             if reasons:
                 raise UserFacingError(reasons[0])
             raise UserFacingError(
-                "None of the clips could be cut. Press Retry; if it happens again, try another video."
+                "None of the clips could be cut. Tap Try again; if it happens again, try another video."
             )
         failed = len(st.chosen) - len(st.candidates)
         return f"Cut {len(st.candidates)} clip(s)" + (f"; {failed} could not be cut." if failed else ".")

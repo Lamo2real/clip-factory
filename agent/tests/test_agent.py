@@ -122,6 +122,8 @@ async def test_find_moments_falls_back_to_converse(tmp_path: Path, monkeypatch: 
 
 async def test_find_moments_keeps_sdk_moments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     async def sdk(b: Brief, tools: MomentTools, **kw: Any) -> list[Any]:
+        for s in range(0, int(b.duration), 1800):  # it read the whole video
+            tools.read_transcript({"start": s, "end": min(b.duration, s + 1800)})
         tools.submit_moments(
             {"moments": [raw_moment(start=s, end=s + 30, payoff_at=s + 25, peak_at=s + 20) for s in (100, 500, 900)]}
         )
@@ -140,6 +142,152 @@ async def test_find_moments_keeps_sdk_moments(tmp_path: Path, monkeypatch: pytes
         on_progress=lambda f: None,
     )
     assert len(chosen) == 3 and fake.calls == 0
+
+
+async def test_find_moments_reads_what_a_successful_sdk_run_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F013: an SDK run that ends with success after reading only the first window still gets the rest read."""
+
+    async def sdk(b: Brief, tools: MomentTools, **kw: Any) -> list[Any]:
+        tools.read_transcript({"start": 0, "end": 1800})
+        tools.submit_moments(
+            {"moments": [raw_moment(start=s, end=s + 30, payoff_at=s + 25, peak_at=s + 20) for s in (100, 500, 900)]}
+        )
+        return tools.moments
+
+    monkeypatch.setattr(agent_mod, "find_with_sdk", sdk)
+    later = [raw_moment(start=3000, end=3030, payoff_at=3025, peak_at=3020, score=9)]
+    seen: list[str] = []
+
+    class Spy:
+        calls = 0
+
+        async def structured(self, **kw: Any) -> dict[str, Any]:
+            Spy.calls += 1
+            seen.append(kw["content"][0]["text"])
+            return {"candidates": later}
+
+    b = brief(duration=4000, clip_min=2, clip_max=4)
+    chosen, _ = await find_moments(
+        b,
+        bedrock=Spy(),  # type: ignore[arg-type]
+        model_id="m",
+        region="r",
+        workdir=tmp_path,
+        skill_names=[],
+        skills=NO_SKILLS,
+        on_progress=lambda f: None,
+    )
+    assert Spy.calls == 2  # the two windows the run never read, not the one it did
+    assert all("0:00:00–" not in t for t in seen)
+    assert 3000 in [m.start for m in chosen]
+
+
+async def test_converse_window_failure_of_any_kind_is_skipped() -> None:
+    """F014: max_tokens (TransientError) or throttling (ClientError) in one window loses only that window."""
+    from botocore.exceptions import ClientError
+
+    from clipfactory_agent.agent import find_with_converse
+    from clipfactory_agent.util import TransientError
+
+    good = [raw_moment(start=s, end=s + 30, payoff_at=s + 28, peak_at=s + 20) for s in (100, 400)]
+
+    class Flaky:
+        calls = 0
+
+        async def structured(self, **kw: Any) -> dict[str, Any]:
+            Flaky.calls += 1
+            if Flaky.calls == 1:
+                raise TransientError("The model ran out of room for its answer.")
+            if Flaky.calls == 2:
+                raise ClientError({"Error": {"Code": "ThrottlingException", "Message": "slow down"}}, "Converse")
+            return {"candidates": good}
+
+    found = await find_with_converse(brief(duration=6000), Flaky(), skills=NO_SKILLS)  # type: ignore[arg-type]
+    assert Flaky.calls == 4 and len(found) == 4  # 4 windows: 2 failed and were skipped, 2 answered
+
+
+async def test_converse_cancel_stops_the_other_windows() -> None:
+    """F014: a failure that does escape a window (a cancel) cancels its siblings instead of leaving them running."""
+    import asyncio
+
+    from clipfactory_agent.agent import find_with_converse
+    from clipfactory_agent.util import JobCanceled
+
+    finished: list[int] = []
+
+    class Slow:
+        calls = 0
+
+        async def structured(self, **kw: Any) -> dict[str, Any]:
+            Slow.calls += 1
+            n = Slow.calls
+            if n == 1:
+                raise JobCanceled()
+            await asyncio.sleep(0.2)
+            finished.append(n)
+            return {"candidates": []}
+
+    with pytest.raises(JobCanceled):
+        await find_with_converse(brief(duration=6000), Slow(), skills=NO_SKILLS)  # type: ignore[arg-type]
+    await asyncio.sleep(0.3)
+    assert finished == []
+
+
+async def test_model_down_in_every_window_is_a_busy_service_not_a_dull_video(tmp_path: Path) -> None:
+    """F014 follow-up: when every Converse window fails, the error is raised (the step retries and then says a service
+    was busy) instead of reporting "No clip-worthy moments" for a video nobody read."""
+    from clipfactory_agent.util import TransientError
+
+    class Down:
+        async def structured(self, **kw: Any) -> dict[str, Any]:
+            raise TransientError("The model ran out of room for its answer.")
+
+    with pytest.raises(TransientError):
+        await find_moments(
+            brief(duration=6000),
+            bedrock=Down(),  # type: ignore[arg-type]
+            model_id="m",
+            region="r",
+            workdir=tmp_path,
+            skill_names=[],
+            skills=NO_SKILLS,
+            on_progress=lambda f: None,
+            use_sdk=False,
+        )
+
+
+async def test_model_down_after_a_partial_sdk_run_keeps_its_moments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F013/F014: the SDK run's moments still make clips when Converse for the windows it skipped is down."""
+    from clipfactory_agent.util import TransientError
+
+    async def sdk(b: Brief, tools: MomentTools, **kw: Any) -> list[Any]:
+        tools.read_transcript({"start": 0, "end": 1800})
+        tools.submit_moments(
+            {"moments": [raw_moment(start=s, end=s + 30, payoff_at=s + 25, peak_at=s + 20) for s in (100, 500, 900)]}
+        )
+        return tools.moments
+
+    monkeypatch.setattr(agent_mod, "find_with_sdk", sdk)
+
+    class Down:
+        async def structured(self, **kw: Any) -> dict[str, Any]:
+            raise TransientError("busy")
+
+    chosen, _ = await find_moments(
+        brief(duration=4000, clip_min=2, clip_max=3),
+        bedrock=Down(),  # type: ignore[arg-type]
+        model_id="m",
+        region="r",
+        workdir=tmp_path,
+        skill_names=[],
+        skills=NO_SKILLS,
+        on_progress=lambda f: None,
+    )
+    assert len(chosen) >= 2
 
 
 async def test_find_moments_none_found(tmp_path: Path) -> None:

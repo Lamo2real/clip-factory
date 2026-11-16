@@ -38,7 +38,7 @@ from ..jobs import ACTIVE, START_FAILED
 from ..log import log
 from . import TransientError, error_message, error_type, retrying, transient
 
-STOPPED_MESSAGE = "The agent stopped responding. Press Retry."
+STOPPED_MESSAGE = "Making the clips stopped partway. Tap Try again."
 MAX_ERROR_CHARS = 256
 CALLBACK_TIMEOUT = Duration.from_hours(8)
 HEARTBEAT_TIMEOUT = Duration.from_minutes(15)

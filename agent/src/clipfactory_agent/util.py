@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 from collections.abc import Awaitable
@@ -32,8 +33,19 @@ def hms(seconds: float) -> str:
     return f"{s // 3600}:{s // 60 % 60:02d}:{s % 60:02d}"
 
 
+_AMZ_PARAM = re.compile(r"(X-Amz-[A-Za-z-]+)=[^&\s\"'<>]+", re.IGNORECASE)
+
+
+def redact_urls(text: str) -> str:
+    """``text`` with the value of every ``X-Amz-*`` query parameter blanked, so a presigned S3 URL (its credential,
+    signature and session token) never reaches a log line or a message. Other links (a YouTube ``?v=``) are kept."""
+    return _AMZ_PARAM.sub(r"\1=<redacted>", text)
+
+
 def log(level: str, event: str, **fields: Any) -> None:
-    """One JSON line per event on stdout, which AgentCore ships to CloudWatch."""
+    """One JSON line per event on stdout, which AgentCore ships to CloudWatch. String fields go through
+    ``redact_urls`` first."""
+    fields = {k: redact_urls(v) if isinstance(v, str) else v for k, v in fields.items()}
     line = {"level": level, "event": event, "time": now_iso(), **fields}
     sys.stdout.write(json.dumps(line, default=str) + "\n")
     sys.stdout.flush()

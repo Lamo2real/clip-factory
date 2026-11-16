@@ -225,4 +225,6 @@ class Bedrock:
 
 
 def model_failure(e: Exception) -> UserFacingError:
-    return UserFacingError(f"Claude could not finish this step ({str(e)[:200]}). Press Retry.")
+    """The model's own error goes to the log; the owner gets a plain sentence with the next step."""
+    log("warn", "model.failed", error=type(e).__name__, detail=str(e)[:500])
+    return UserFacingError("Claude could not finish this step. Tap Try again.")

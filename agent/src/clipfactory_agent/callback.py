@@ -33,7 +33,7 @@ SUPERSEDED = "Superseded"
 
 CANCELED_MESSAGE = "The job was canceled."
 SUPERSEDED_MESSAGE = "A newer run of this job took over."
-GENERIC_FAILURE = "Something went wrong while making the clips. Press Retry."
+GENERIC_FAILURE = "Something went wrong while making the clips. Tap Try again."
 
 # Errors that mean the callback can no longer be completed: the flow already ended (success, failure or timeout).
 _CLOSED_CODES = {"ResourceNotFoundException", "CallbackTimeoutException"}

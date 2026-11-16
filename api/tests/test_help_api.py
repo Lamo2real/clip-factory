@@ -348,6 +348,25 @@ def test_follow_up_uses_the_previous_question(call: Call, help_on: App, haiku: F
     assert body["answer"]["sources"] == ["sounds-error"]
 
 
+def test_a_skill_page_is_answered_not_400(call: Call, help_on: App, haiku: FakeHaiku) -> None:
+    # Audit F004: the router calls skill pages "skill"; the API used to reject that page with a 400.
+    status, body = ask(call, context={"device": "desktop", "os": "mac", "installed": False, "page": "skill"})
+    assert status == 200
+    assert body["answer"]["known"] is True
+
+
+def test_a_complete_question_after_another_keeps_its_own_answer(call: Call, help_on: App, haiku: FakeHaiku) -> None:
+    # Audit F005: a short but complete question must not be merged with the previous one and lose its answer.
+    haiku.text = "{"
+    history = [
+        {"role": "user", "text": "How do I make clips from a Twitch link?"},
+        {"role": "assistant", "text": "Paste the link on Home."},
+    ]
+    status, body = ask(call, "What does Keep do?", history=history)
+    assert status == 200
+    assert body["answer"]["sources"] == ["review-keep"]
+
+
 def test_get_the_app_follows_the_device(call: Call, help_on: App, haiku: FakeHaiku) -> None:
     haiku.text = "{"
     mac = {"device": "desktop", "os": "mac", "installed": False, "page": "home"}
