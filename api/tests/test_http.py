@@ -143,6 +143,18 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/clips/X/stats/refresh"),
         ("GET", "/v1/weeks/2026-W46"),
         ("PUT", "/v1/weeks/2026-W46/best"),
+        # §17.4: the posting setup
+        ("GET", "/v1/setup"),
+        ("GET", "/v1/setup/youtube"),
+        ("PATCH", "/v1/setup/youtube"),
+        ("PUT", "/v1/setup/youtube/keys"),
+        ("DELETE", "/v1/setup/youtube/keys"),
+        ("POST", "/v1/setup/youtube/check"),
+        ("POST", "/v1/setup/tiktok/verification-file"),
+        ("DELETE", "/v1/setup/tiktok/verification-file/tiktokAbCd1234.txt"),
+        ("POST", "/v1/accounts/youtube/choose"),
+        ("DELETE", "/v1/accounts/youtube"),
+        ("GET", "/v1/accounts/tiktok/creator-info"),
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)

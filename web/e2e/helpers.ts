@@ -1,13 +1,29 @@
 import type { Page } from "@playwright/test";
 import { settingsPath, TREES } from "../src/lib/settingsTree.ts";
 
-/** Every page of the settings tree (§15.1): the field, each tree, each branch. */
+/** Every page of the settings tree (§15.1), and each platform's setup page (§17.1). */
+export const SETUP_ROUTES: string[] = ["youtube", "tiktok", "instagram", "facebook", "x"].map((p) => `/settings/posting/setup/${p}`);
 export const SETTINGS_ROUTES: string[] = [
   settingsPath(),
   ...TREES.flatMap((t) => [settingsPath(t.slug), ...t.branches.map((b) => settingsPath(t.slug, b.slug))]),
+  ...SETUP_ROUTES,
 ];
 
-export const ROUTES: string[] = ["/", "/jobs", "/jobs/:running", "/jobs/:failed", "/review", "/library", ...SETTINGS_ROUTES, "/get-app", "/nope"];
+export const ROUTES: string[] = [
+  "/",
+  "/jobs",
+  "/jobs/:running",
+  "/jobs/:failed",
+  "/review",
+  "/library",
+  ...SETTINGS_ROUTES,
+  "/get-app",
+  "/mock-oauth/youtube",
+  "/about.html",
+  "/legal/privacy.html",
+  "/legal/terms.html",
+  "/nope",
+];
 export const WIDTHS = [320, 360, 375, 390, 414, 430, 768, 1024, 1280, 1440, 1920] as const;
 
 /** Waits until the screen has its data (no skeletons) and entrance animations have settled. */

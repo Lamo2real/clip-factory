@@ -161,7 +161,10 @@
 .crumbs__here {
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  justify-content: center;
+  /* Every part of the breadcrumb is a real tap target on tablets and desktops too (a short name like "X" as well). */
+  min-height: 44px;
+  min-width: 44px;
   padding: 2px 6px;
   border-radius: 8px;
   overflow-wrap: anywhere;
@@ -171,6 +174,7 @@
   .crumbs__link,
   .crumbs__here {
     min-height: 48px;
+    min-width: 48px;
   }
 }
 .crumbs__item:first-child .crumbs__link {

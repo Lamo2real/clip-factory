@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy · Clip Factory</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/legal/site.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <nav aria-label="Pages">
+        <a class="brand" href="/about.html">Clip Factory</a>
+        <a href="/legal/privacy.html" aria-current="page">Privacy Policy</a>
+        <a href="/legal/terms.html">Terms of Service</a>
+      </nav>
+      <main>
+        <h1>Privacy Policy</h1>
+        <p class="muted">Last updated: 16 November 2026</p>
+        <div class="card">
+          <p>
+            Clip Factory ("the app") is a private app used only by its owner, one creator. It has no other users and
+            no sign-up. This policy explains what the app receives from the platforms the owner connects, how it is
+            used, where it is kept, and how to delete it.
+          </p>
+
+          <h2>What the app receives</h2>
+          <p>
+            When the owner connects an account (YouTube, TikTok, Instagram, Facebook or X) through that platform's own
+            official login, the platform gives the app:
+          </p>
+          <ul>
+            <li>an access token (and, where the platform uses one, a refresh token) that lets the app post the owner's approved clips to that account;</li>
+            <li>basic profile information of the connected account: its id, username or channel name, display name and picture;</li>
+            <li>the views, likes, comments, shares and similar numbers of the posts the app made.</li>
+          </ul>
+
+          <h2>How it is used</h2>
+          <p>
+            This information is used only to show which accounts are connected, to upload clips the owner has watched
+            and approved with Keep, and to show the owner how each clip did. The app does not read private messages,
+            followers or other people's data, and does not use any data for advertising, profiling or selling.
+          </p>
+
+          <h2>YouTube API Services</h2>
+          <p>
+            Clip Factory uses YouTube API Services to upload the owner's clips to their YouTube channel and to read the
+            numbers of those videos. By using Clip Factory with YouTube, you agree to be bound by the
+            <a href="https://www.youtube.com/t/terms" rel="noopener noreferrer">YouTube Terms of Service</a>. Google's
+            handling of data is described in the
+            <a href="http://www.google.com/policies/privacy" rel="noopener noreferrer">Google Privacy Policy</a>.
+            You can take away Clip Factory's access to your Google account at any time on the
+            <a href="https://security.google.com/settings/security/permissions" rel="noopener noreferrer">Google security settings page</a>.
+          </p>
+
+          <h2>Where it is stored</h2>
+          <ul>
+            <li>
+              Access tokens, refresh tokens and the app keys the owner pastes are stored only in AWS Secrets Manager,
+              encrypted, in the owner's own Amazon Web Services account (EU, Stockholm). They are never stored in the
+              database, in logs, in web addresses or in the browser after they are saved.
+            </li>
+            <li>
+              The app's database keeps the post ids, links and numbers of the posts it made, and the connected
+              account's name and picture link.
+            </li>
+            <li>The clips themselves are stored in the owner's own storage until they are posted or thrown away.</li>
+          </ul>
+
+          <h2>Sharing</h2>
+          <p>
+            Data is not sold, shared or given to anyone. The app only talks to the platforms' own official APIs
+            (Google/YouTube, TikTok, Meta/Instagram/Facebook and X) to log in, post clips and read their numbers.
+          </p>
+
+          <h2>Cookies and analytics</h2>
+          <p>These pages use no cookies and no analytics. The app has no analytics or advertising.</p>
+
+          <h2 id="delete">How to delete your data</h2>
+          <ol>
+            <li>
+              In Clip Factory, open Settings › Posting › Set up posting, open the platform and press
+              <strong>Disconnect</strong>. This deletes that platform's stored tokens straight away. For YouTube it
+              also deletes the numbers the app stored about your YouTube videos.
+            </li>
+            <li>
+              You can also take away the app's access on the platform itself: Google at
+              <a href="https://security.google.com/settings/security/permissions" rel="noopener noreferrer">security.google.com/settings/security/permissions</a>;
+              TikTok in Settings and privacy › Security and permissions › Apps and services; Instagram and Facebook in
+              Settings › Apps and websites (Business integrations); X in Settings › Security and account access › Apps and sessions.
+            </li>
+            <li>
+              To have everything deleted (tokens, keys, post ids and numbers), ask through the
+              <a href="https://github.com/Lamo2real/clip-factory-legal/issues" rel="noopener noreferrer">Clip Factory contact page</a>.
+              It is deleted within 30 days.
+            </li>
+          </ol>
+
+          <h2>Children</h2>
+          <p>The app is not offered to the public and is not directed at children.</p>
+
+          <h2>Changes and contact</h2>
+          <p>
+            If this policy changes, the date above is updated. Questions can be sent through the
+            <a href="https://github.com/Lamo2real/clip-factory-legal/issues" rel="noopener noreferrer">Clip Factory contact page</a>.
+          </p>
+        </div>
+      </main>
+      <footer>Clip Factory · <a href="/about.html">About</a> · <a href="/legal/terms.html">Terms of Service</a></footer>
+    </div>
+  </body>
+</html>

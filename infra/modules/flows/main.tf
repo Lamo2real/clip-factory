@@ -1,7 +1,8 @@
 # The two durable Lambda functions of docs/CONTRACTS.md §14.4 and §14.5:
 #   cf-prod-job-flow   starts the agent for one job and waits (no compute) for its callback, up to 8.5 hours. A
 #                      missed heartbeat (15 minutes) fails the job. Replaces the watchdog.
-#   cf-prod-clip-flow  publishes a kept clip, waits 48 hours (no compute), reads metrics, distils a learning and
+#   cf-prod-clip-flow  publishes a kept clip (start/check/finish per platform with the owner's tokens from Secrets
+#                      Manager, §17.6), waits 48 hours (no compute), reads metrics, distils a learning and
 #                      updates the clip's vector. Replaces the publish queue, its DLQ, the publisher, the Scheduler
 #                      group and role, and perf-check.
 #
@@ -35,7 +36,7 @@ locals {
     }
     clip-flow = {
       handler           = "clipfactory_api.flows.clip_flow.handler"
-      memory            = 512
+      memory            = 1024   # §17.9: 8 MB upload chunks and resumable platform uploads
       timeout           = 900    # a replay may publish a video or call Bedrock
       execution_timeout = 259200 # 48 h wait + publish, metrics and distil (3 days)
       env = {
@@ -45,6 +46,7 @@ locals {
         EMBED_MODEL_ID = var.embed_model_id
         VECTOR_BUCKET  = var.vector_bucket
         VECTOR_INDEX   = var.vector_index
+        SECRET_PREFIX  = var.secret_prefix # §17.6: the owner's platform keys and tokens
       }
     }
   }
@@ -72,6 +74,10 @@ locals {
       { Sid = "Models", Action = ["bedrock:InvokeModel"], Resource = concat(var.model_invoke_arns, [var.embed_model_arn]) },
       # Step upsert-vector: read the clip's vector and metadata, write it back with the measured performance.
       { Sid = "Vectors", Action = ["s3vectors:GetVectors", "s3vectors:PutVectors"], Resource = [var.vector_index_arn] },
+      # §17.6: read the app keys and tokens; write a refreshed (rotated) token back, only to {platform}/token.
+      # Never create or delete, never write the app keys or pending choices.
+      { Sid = "PlatformSecretsRead", Action = ["secretsmanager:GetSecretValue"], Resource = [var.platform_secrets_arn] },
+      { Sid = "PlatformTokens", Action = ["secretsmanager:PutSecretValue"], Resource = [var.platform_token_secrets_arn] },
     ]
   }
 }

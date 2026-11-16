@@ -15,10 +15,23 @@ from clipfactory_api.async_invoke import AsyncInvoker
 from clipfactory_api.flow_client import FlowClient
 from clipfactory_api.http import dispatch
 from clipfactory_api.ids import ulid
+from clipfactory_api.oauth import DEFAULT_SCOPES, OAuthEnv
+from clipfactory_api.oauth.secrets import Secrets
 from clipfactory_api.routes import ROUTES
+from clipfactory_api.routes.setup import WebFiles
 from clipfactory_api.skills import load_builtins
 from clipfactory_api.vectors import Vectors
-from fakes import FakeAgentCore, FakeEmbeddings, FakeLambda, FakeS3, FakeS3Vectors, FakeTable
+from fakes import (
+    FakeAgentCore,
+    FakeCloudFront,
+    FakeEmbeddings,
+    FakeHttp,
+    FakeLambda,
+    FakeS3,
+    FakeS3Vectors,
+    FakeSecretsManager,
+    FakeTable,
+)
 
 USER = "11111111-2222-3333-4444-555555555555"
 OTHER = "99999999-8888-7777-6666-555555555555"
@@ -34,6 +47,12 @@ description: Plan, script and hook short clips.
 
 # Playbook
 """
+
+
+APP_URL = "https://d111111abcdef8.cloudfront.net"
+HOOKS_URL = "https://abc123.execute-api.eu-north-1.amazonaws.com/v1"
+STATE_SECRET = "cf-prod/oauth/state-key"
+STATE_KEY = "s" * 64
 
 
 class Clock:
@@ -98,6 +117,42 @@ def store(table: FakeTable) -> db.Store:
 
 
 @pytest.fixture
+def secrets_client() -> FakeSecretsManager:
+    return FakeSecretsManager({STATE_SECRET: STATE_KEY})
+
+
+@pytest.fixture
+def http() -> FakeHttp:
+    """The platform HTTP of the posting setup; tests queue answers with ``http.answers``."""
+    return FakeHttp()
+
+
+@pytest.fixture
+def oauth_env(secrets_client: FakeSecretsManager, http: FakeHttp, clock: Clock) -> OAuthEnv:
+    secrets = Secrets(secrets_client)
+    return OAuthEnv(
+        secrets=secrets,
+        app_url=APP_URL,
+        hooks_url=HOOKS_URL,
+        state_key=lambda: secrets.read_text(STATE_SECRET).encode(),
+        http=http,
+        clock=clock,
+        graph_version="v27.0",
+        scopes=dict(DEFAULT_SCOPES),
+    )
+
+
+@pytest.fixture
+def web_s3() -> FakeS3:
+    return FakeS3()
+
+
+@pytest.fixture
+def cloudfront() -> FakeCloudFront:
+    return FakeCloudFront()
+
+
+@pytest.fixture
 def app(
     store: db.Store,
     s3_client: FakeS3,
@@ -106,6 +161,9 @@ def app(
     vectors: Vectors,
     clock: Clock,
     builtin_dir: Path,
+    oauth_env: OAuthEnv,
+    web_s3: FakeS3,
+    cloudfront: FakeCloudFront,
 ) -> App:
     return App(
         store=store,
@@ -118,6 +176,8 @@ def app(
         clock=clock,
         email_lookup=lambda sub, token: "owner@example.com" if token else None,
         builtins=lambda: load_builtins(builtin_dir),
+        oauth=oauth_env,
+        web_files=WebFiles(web_s3, "cf-prod-web-123", cloudfront, "E1ABCDEF"),
     )
 
 

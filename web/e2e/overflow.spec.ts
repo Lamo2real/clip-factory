@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { CLIPS, findOverflow, openClip, resolveRoute, ROUTES, settle, WIDTHS } from "./helpers.ts";
+import { CLIPS, findOverflow, openClip, resolveRoute, ROUTES, settle, SETUP_ROUTES, WIDTHS } from "./helpers.ts";
 
 const SKILL_PAGES = { written: "01JZ8S00000000000000000001", zip: "01JZ8S00000000000000000002", tricky: "01JZ8S00000000000000000003" };
 
@@ -195,6 +195,77 @@ for (const width of [320, 375, 600, 768, 1024, 1440, 1920]) {
     await page.getByLabel("What should it do?").fill("https://example.com/" + "y".repeat(600));
     await page.getByRole("button", { name: "Save skill" }).click();
     await check(`${base}/new (long words, errors)`);
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+}
+
+// The posting setup (docs/CONTRACTS.md §17.12): every platform page with a step open, a wrong key, the account
+// picker, a connected platform with "When it's done", a result card, and the Post to TikTok sheet.
+type SetupKnobs = { finish(p: string): void; askToChoose(p: string): void; setAudit(a: boolean): void };
+for (const width of WIDTHS) {
+  test(`the posting setup and the TikTok sheet fit at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const failures: string[] = [];
+    const check = async (label: string) => {
+      const result = await findOverflow(page);
+      if (result.page > result.viewport) failures.push(`${label}: page scrolls sideways (${result.page}px > ${result.viewport}px)`);
+      for (const o of result.items) failures.push(`${label}: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);
+    };
+    for (const path of SETUP_ROUTES) {
+      await page.goto(path);
+      await settle(page);
+      // Open every step, so every Copy chip, hint and box is measured.
+      const ids = await page.locator("[data-step]").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.step!));
+      for (const id of ids) {
+        const head = page.locator(`[data-step='${id}'] .gstep__head`);
+        if ((await head.getAttribute("aria-expanded")) === "false") {
+          await head.evaluate((el) => el.scrollIntoView({ block: "center" }));
+          await head.click();
+        }
+      }
+      await check(`${path} (all steps open)`);
+    }
+    await page.goto("/settings/posting/setup/instagram");
+    await settle(page);
+    await page.locator("[data-step='key-paste'] .gstep__head").click();
+    await page.getByLabel("App secret", { exact: true }).fill("not-a-secret-at-all-" + "x".repeat(60));
+    await check("instagram (wrong key)");
+    await page.evaluate(() => {
+      const s = (window as unknown as { __cfMock: { setup: SetupKnobs } }).__cfMock.setup;
+      s.askToChoose("instagram");
+      s.finish("youtube");
+      s.finish("x");
+      s.finish("tiktok");
+      s.setAudit(true);
+    });
+    await page.reload();
+    await settle(page);
+    await page.locator(".choose").waitFor();
+    await check("instagram (pick an account)");
+    for (const path of ["/settings/posting/setup/youtube", "/settings/posting/setup/x#x-cost", "/settings/posting/setup/facebook?result=no_pages"]) {
+      await page.goto(path);
+      await settle(page);
+      await check(`${path} (connected or result)`);
+    }
+    await page.goto("/settings/posting/setup");
+    await settle(page);
+    await check("/settings/posting/setup (3 ready)");
+    await page.goto("/");
+    await settle(page);
+    await check("/ (setup card)");
+
+    await page.goto("/review");
+    await settle(page);
+    const keep = page.locator(".review-card").first().getByRole("button", { name: "Keep", exact: true });
+    await keep.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await keep.click();
+    const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
+    await sheet.getByLabel("Who can see it").waitFor();
+    await sheet.getByRole("switch", { name: "Commercial content" }).click();
+    await sheet.getByRole("checkbox", { name: /^Branded content/ }).check();
+    await check("/review (Post to TikTok sheet)");
+    const box = await sheet.boundingBox();
+    if (box && (box.x < 0 || box.x + box.width > width + 0.5)) failures.push("/review: the TikTok sheet leaves the screen");
     expect(failures, failures.join("\n")).toEqual([]);
   });
 }

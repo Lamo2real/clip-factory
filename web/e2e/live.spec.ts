@@ -118,15 +118,13 @@ test("Review and Library show clips that did well, and hide the strip when there
   await expect(page.getByText("Like clips that did well")).toHaveCount(0);
 });
 
-test("Settings says when connecting a platform arrives", async ({ page }) => {
+test("the hooks API's old return links open that platform's setup", async ({ page }) => {
   await page.goto("/settings?account=instagram&status=coming_soon");
   await settle(page);
-  // The old one-page link lands on the Accounts branch, query kept (§15.1).
-  await expect(page).toHaveURL(/\/settings\/posting\/accounts\?account=instagram&status=coming_soon$/);
-  await expect(page.locator("#accounts").getByRole("status")).toHaveText("Connecting Instagram arrives soon.");
-  await page.goto("/settings");
-  await settle(page);
-  await expect(page.getByText("arrives soon.")).toHaveCount(0);
+  // Accounts became Set up posting (§17.1): the link lands on Instagram's steps, and "coming soon" is gone.
+  await expect(page).toHaveURL(/\/settings\/posting\/setup\/instagram$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Set up Instagram" })).toBeVisible();
+  await expect(page.getByText("arrives soon")).toHaveCount(0);
 });
 
 // Nothing may run out of its box at any width (docs/CONTRACTS.md §11), including the new strip and the Live dot.

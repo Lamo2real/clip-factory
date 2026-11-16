@@ -2,8 +2,8 @@
 #   cd infra/modules/stats && terraform init -backend=false && terraform test
 #
 # docs/CONTRACTS.md §16.4, §16.5, §16.6 and §16.9: cf-prod-stats runs on an EventBridge rule whose rate comes from
-# config/platforms.json (the lowest minIntervalMinutes), never retries, and may only touch the table; cf-prod-learn
-# retries once and may also call Bedrock and the clips vector index.
+# config/platforms.json (the lowest minIntervalMinutes), never retries, and may only touch the table and read/refresh
+# platform tokens (§17.9); cf-prod-learn retries once and may also call Bedrock and the clips vector index.
 
 mock_provider "aws" {
   override_during = plan
@@ -24,19 +24,22 @@ variables {
   region     = "eu-north-1"
   account_id = "123456789012"
   # Any existing file: the module only hashes it.
-  lambda_zip_path       = "main.tf"
-  table_name            = "cf-test-data"
-  table_arn             = "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"
-  media_bucket          = "cf-test-media"
-  media_bucket_arn      = "arn:aws:s3:::cf-test-media"
-  model_id              = "global.anthropic.claude-fable-5-1"
-  model_invoke_arns     = ["arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-fable-5-1", "arn:aws:bedrock:*::foundation-model/anthropic.claude-fable-5-1"]
-  embed_model_id        = "amazon.titan-embed-text-v2:0"
-  embed_model_arn       = "arn:aws:bedrock:eu-north-1::foundation-model/amazon.titan-embed-text-v2:0"
-  vector_bucket         = "cf-test-vectors-123456789012"
-  vector_index          = "clips"
-  vector_index_arn      = "arn:aws:s3vectors:eu-north-1:123456789012:bucket/cf-test-vectors-123456789012/index/clips"
-  platforms_config_path = "../../../config/platforms.json"
+  lambda_zip_path            = "main.tf"
+  table_name                 = "cf-test-data"
+  table_arn                  = "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"
+  media_bucket               = "cf-test-media"
+  media_bucket_arn           = "arn:aws:s3:::cf-test-media"
+  model_id                   = "global.anthropic.claude-fable-5-1"
+  model_invoke_arns          = ["arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-fable-5-1", "arn:aws:bedrock:*::foundation-model/anthropic.claude-fable-5-1"]
+  embed_model_id             = "amazon.titan-embed-text-v2:0"
+  embed_model_arn            = "arn:aws:bedrock:eu-north-1::foundation-model/amazon.titan-embed-text-v2:0"
+  vector_bucket              = "cf-test-vectors-123456789012"
+  vector_index               = "clips"
+  vector_index_arn           = "arn:aws:s3vectors:eu-north-1:123456789012:bucket/cf-test-vectors-123456789012/index/clips"
+  platforms_config_path      = "../../../config/platforms.json"
+  secret_prefix              = "cf-test/platforms/"
+  platform_secrets_arn       = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*"
+  platform_token_secrets_arn = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token-*"
 }
 
 run "tick_comes_from_platforms_json" {
@@ -172,8 +175,9 @@ run "functions_match_the_contract" {
     condition = one(aws_lambda_function.fn["stats"].environment).variables == tomap({
       TABLE_NAME                = "cf-test-data"
       STATS_TIME_BUDGET_SECONDS = "240"
+      SECRET_PREFIX             = "cf-test/platforms/"
     })
-    error_message = "cf-prod-stats gets exactly TABLE_NAME and STATS_TIME_BUDGET_SECONDS = 240."
+    error_message = "cf-prod-stats gets exactly TABLE_NAME, STATS_TIME_BUDGET_SECONDS = 240 and SECRET_PREFIX (§17.9)."
   }
 
   assert {
@@ -216,9 +220,10 @@ run "roles_allow_exactly_what_the_code_calls" {
   assert {
     condition = toset(flatten([for s in jsondecode(aws_iam_role_policy.fn["stats"].policy).Statement : s.Action])) == toset([
       "logs:CreateLogStream", "logs:PutLogEvents", "xray:PutTraceSegments", "xray:PutTelemetryRecords",
-      "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:BatchGetItem",
+      "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem",
+      "secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue",
     ])
-    error_message = "cf-prod-stats may only read/write the table, log and trace (no Bedrock, no S3 Vectors)."
+    error_message = "cf-prod-stats may only read/write the table (DeleteItem for forget), read/refresh platform tokens, log and trace (no Bedrock, no S3 Vectors)."
   }
 
   assert {
@@ -227,6 +232,39 @@ run "roles_allow_exactly_what_the_code_calls" {
       s.Sid == "Data" && s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data", "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data/index/*"]
     ])
     error_message = "cf-prod-stats needs the table and its indexes (gsi2 STATS, gsi1 CLIP#)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["stats"].policy).Statement :
+      s.Sid == "PlatformSecretsRead" && s.Action == ["secretsmanager:GetSecretValue"] &&
+      s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*"]
+    ])
+    error_message = "stats reads app keys and tokens only under <name>/platforms/*."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["stats"].policy).Statement :
+      s.Sid == "PlatformTokens" && s.Action == ["secretsmanager:PutSecretValue"] &&
+      s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token-*"]
+    ])
+    error_message = "stats writes only refreshed tokens (<name>/platforms/*/token-*), never app keys or pending choices."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.fn["stats"].policy).Statement :
+      !contains(s.Action, "secretsmanager:PutSecretValue") || s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token-*"]
+    ])
+    error_message = "stats may not put any secret other than the token secrets."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.fn["learn"].policy).Statement : alltrue([for a in s.Action : !startswith(a, "secretsmanager:")])
+    ])
+    error_message = "cf-prod-learn gets no Secrets Manager access."
   }
 
   assert {

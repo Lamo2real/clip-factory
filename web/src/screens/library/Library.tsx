@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Clip, Learning, Post } from "../../api/types.ts";
+import type { Clip, Learning, Post, TikTokPostOptions } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -13,7 +13,8 @@ import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { applyClipEvent, applyLearningEvent, applyPostEvent, withMedia } from "../../lib/liveCache.ts";
 import { SimilarClips } from "../../components/SimilarClips.tsx";
-import { keepClip, keptMessage, needsKeepAgain, STILL_WORKING } from "../../lib/keep.ts";
+import { keepClip, keptMessage, needsKeepAgain, needsTikTokChoices, STILL_WORKING } from "../../lib/keep.ts";
+import { TikTokSheet } from "../review/TikTokSheet.tsx";
 import { ClipStatusPill } from "../jobs/JobDetail.tsx";
 
 interface LibraryData {
@@ -297,29 +298,40 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
             </li>
           ))}
         </ul>
-      ) : needsKeepAgain(clip, posts) ? (
-        <KeepAgain clip={clip} onKept={onKept} />
-      ) : (
+      ) : needsKeepAgain(clip, posts) ? null : (
         <p className="muted small">No posts yet.</p>
       )}
+      {needsKeepAgain(clip, posts) || clip.status === "failed" ? <KeepAgain clip={clip} posts={posts} onKept={onKept} /> : null}
       <SimilarClips clipId={clip.clipId} />
     </article>
   );
 }
 
-/** A kept clip whose posting never started (the Keep stopped half way): one big button finishes it. */
-export function KeepAgain({ clip, onKept }: { clip: Clip; onKept: (clip: Clip, posts: Post[]) => void }) {
+/**
+ * A kept clip whose posting never started (the Keep stopped half way), or whose posts all failed: one big button
+ * tries again. When TikTok wants its privacy picked again, the Post to TikTok sheet opens first and its choices go
+ * with the Try again (§14.5, §17.8).
+ */
+export function KeepAgain({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKept: (clip: Clip, posts: Post[]) => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [sheet, setSheet] = useState(false);
+  const failed = clip.status === "failed";
 
-  async function tryAgain() {
+  function press() {
+    if (failed && needsTikTokChoices(posts)) setSheet(true);
+    else void tryAgain();
+  }
+
+  async function tryAgain(tiktok?: TikTokPostOptions) {
     setBusy(true);
     setNote("");
     try {
-      const out = await keepClip(api(), clip.clipId);
+      const out = await keepClip(api(), clip.clipId, undefined, tiktok);
       if (out.kind === "kept") {
-        toast.success(keptMessage(out.posts));
+        setSheet(false);
+        toast.success(failed ? "Trying again! Posting now." : keptMessage(out.posts));
         onKept(out.clip, out.posts);
         return;
       }
@@ -336,14 +348,24 @@ export function KeepAgain({ clip, onKept }: { clip: Clip; onKept: (clip: Clip, p
     <div className="keep-again">
       <p className="keep-again__text">
         <Icon name="alert" size={18} />
-        <span>This clip has not started posting yet. Tap Try again.</span>
+        <span>{failed ? "Posting did not work. Tap Try again." : "This clip has not started posting yet. Tap Try again."}</span>
       </p>
-      <Button variant="primary" icon="retry" loading={busy} onClick={tryAgain} aria-describedby={`keep-note-${clip.clipId}`}>
+      <Button variant="primary" icon="retry" loading={busy && !sheet} onClick={press} aria-describedby={`keep-note-${clip.clipId}`}>
         Try again
       </Button>
       <p className="keep-again__note" id={`keep-note-${clip.clipId}`} role="status">
         {note}
       </p>
+      {sheet ? (
+        <TikTokSheet
+          clip={clip}
+          caption={clip.captions.tiktok}
+          action="Try again"
+          onKeep={(options) => void tryAgain(options)}
+          onClose={() => setSheet(false)}
+          busy={busy}
+        />
+      ) : null}
     </div>
   );
 }

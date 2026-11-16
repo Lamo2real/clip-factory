@@ -121,7 +121,7 @@ def snapshots(store: db.Store, post: dict[str, Any]) -> list[dict[str, Any]]:
 def test_config_validates_the_repo_file() -> None:
     assert CFG.order == STATS_ORDER
     assert set(CFG.platforms) == set(STATS_ORDER)
-    assert CFG.graph_api_version == "v25.0"
+    assert CFG.graph_api_version == "v27.0"  # §17.7
     assert (CFG.poll_window_days, CFG.snapshot_ttl_days, CFG.snapshot_every_minutes) == (30, 90, 60)
     assert CFG.age_tier_hours == (48, 168, 720)
     assert CFG.tick_minutes == 15
@@ -144,7 +144,7 @@ def test_config_validates_the_repo_file() -> None:
     assert CFG.platform("youtube").budget == {
         "kind": "daily_units",
         "dailyUnits": 10000,
-        "reserveUnits": 3000,
+        "reserveUnits": 500,  # uploads have their own bucket since 2026-06-01 (§17.7)
         "unitsPerCall": 1,
         "blockOn": ["quotaExceeded", "rateLimitExceeded"],
     }
@@ -153,6 +153,17 @@ def test_config_validates_the_repo_file() -> None:
     assert CFG.platform("facebook").budget["throttleCodes"] == [80001]
     assert CFG.platform("x").budget["monthlyUsd"] == 10
     assert CFG.platform("x").non_public_max_age_days == 30
+    assert CFG.platform("x").budget["usdPerPost"] == 0.015
+    assert {p: CFG.platform(p).publish_settings for p in STATS_ORDER} == config.PUBLISH_DEFAULTS
+    assert CFG.platform("tiktok").scopes == ("user.info.basic", "video.publish", "video.list")
+    assert CFG.platform("instagram").scopes == (
+        "instagram_basic",
+        "instagram_manage_insights",
+        "instagram_content_publish",
+        "pages_show_list",
+        "pages_read_engagement",
+    )
+    assert "business_management" in CFG.platform("facebook").scopes
     assert config.load() == CFG  # the package copy (or the checkout) is the same file
 
 
@@ -174,6 +185,27 @@ def test_config_tick_follows_the_smallest_interval_and_rejects_bad_values() -> N
     bad["platforms"]["tiktok"]["budget"]["kind"] = "meta_buc"
     with pytest.raises(config.ConfigError):
         config.parse(bad)
+    for platform, key, value in (
+        ("youtube", "maxChecks", 0),
+        ("tiktok", "source", "PULL_FROM_URL"),
+        ("instagram", "source", "somewhere"),
+        ("x", "chunkMb", "four"),
+    ):
+        bad = copy.deepcopy(CFG.raw)
+        bad["platforms"][platform]["publish"][key] = value
+        with pytest.raises(config.ConfigError):
+            config.parse(bad)
+    bad = copy.deepcopy(CFG.raw)
+    del bad["platforms"]["facebook"]["publish"]["maxChecks"]
+    with pytest.raises(config.ConfigError):
+        config.parse(bad)
+    bad = copy.deepcopy(CFG.raw)
+    bad["platforms"]["x"]["budget"]["usdPerPost"] = 5
+    with pytest.raises(config.ConfigError):
+        config.parse(bad)
+    fallback = copy.deepcopy(CFG.raw)
+    del fallback["platforms"]["instagram"]["publish"]
+    assert config.parse(fallback).platform("instagram").publish_settings == config.PUBLISH_DEFAULTS["instagram"]
 
 
 @pytest.mark.parametrize(
@@ -199,13 +231,13 @@ def test_interval_for_tiers(platform: str, age: timedelta, minutes: int) -> None
 
 def test_youtube_budget_keeps_the_upload_reserve(store: db.Store) -> None:
     store.put(
-        {"pk": "RATE#youtube", "sk": "BUDGET", "type": "rate", "dayKey": "2026-11-16", "unitsUsed": 6999, "version": 3}
+        {"pk": "RATE#youtube", "sk": "BUDGET", "type": "rate", "dayKey": "2026-11-16", "unitsUsed": 9499, "version": 3}
     )
     assert isinstance(budget.reserve(store, "youtube", 1, NOW, cfg=CFG), budget.Reserved)
     blocked = budget.reserve(store, "youtube", 1, NOW, cfg=CFG)
     assert isinstance(blocked, budget.Blocked)
     assert blocked.next_allowed_at == datetime(2026, 11, 17, 8, 0, tzinfo=UTC)
-    assert store.get("RATE#youtube", "BUDGET")["unitsUsed"] == 7000  # type: ignore[index]
+    assert store.get("RATE#youtube", "BUDGET")["unitsUsed"] == 9500  # type: ignore[index]
 
 
 def test_youtube_day_key_is_pacific_standard() -> None:
@@ -724,3 +756,45 @@ def test_handler_builds_deps_once(monkeypatch: pytest.MonkeyPatch, store: db.Sto
     module.get_deps(factory)
     assert calls == [1]
     monkeypatch.setattr(module, "_deps", None)
+
+
+# --- §17.6: forget YouTube numbers, dead tokens are skipped ----------------------------------------------------------
+
+
+def test_handler_forget_removes_youtube_numbers(store: db.Store, table: FakeTable) -> None:
+    youtube = seed_post(store, "youtube", "vid1", metrics={"views": 5})
+    tiktok = seed_post(store, "tiktok", "7301234567890123456", metrics={"views": 9})
+    store.put({"pk": db.user_pk(USER), "sk": db.stat_sk(youtube["postId"], iso(NOW)), "type": "stat", "views": 5})
+    store.put({"pk": db.user_pk(USER), "sk": db.stat_sk(tiktok["postId"], iso(NOW)), "type": "stat", "views": 9})
+    out = handle({"action": "forget", "userId": USER, "platform": "youtube"}, make_deps(store, FakeHttp()))
+    assert out == {"action": "forget", "posts": 1, "snapshots": 1}
+    item = stored(table, youtube)
+    for gone in ("metrics", "gsi2pk", "gsi2sk", "statsDueAt"):
+        assert gone not in item
+    assert item["status"] == "posted"
+    assert stored(table, tiktok)["metrics"] == {"views": 9}
+    assert store.query_all(db.user_pk(USER), db.stat_prefix(youtube["postId"])) == []
+    assert len(store.query_all(db.user_pk(USER), db.stat_prefix(tiktok["postId"]))) == 1
+
+
+def test_handler_forget_only_youtube(store: db.Store) -> None:
+    assert handle({"action": "forget", "userId": USER, "platform": "x"}, make_deps(store, FakeHttp())) == {
+        "action": "bad_event"
+    }
+
+
+def test_a_dead_token_is_skipped_like_not_connected(store: db.Store) -> None:
+    from clipfactory_api.platforms.base import ReconnectNeededError
+
+    post = seed_post(store, "x", "1880000000000000000")
+
+    def dead(platform: str, account: dict[str, Any]) -> str:
+        raise ReconnectNeededError("Connect X again")
+
+    adapters = make_adapters(tokens=dead)
+    http = FakeHttp()
+    deps = make_deps(store, http)
+    deps.adapters = lambda p: adapters[p]
+    report = refresh_posts(deps, [post], reason="poll", now=NOW)
+    assert report.outcomes == {post["postId"]: "not_connected"}
+    assert http.calls == []

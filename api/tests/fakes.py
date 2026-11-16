@@ -112,7 +112,18 @@ class FakeTable:
 
     def delete_item(self, **kw: Any) -> dict[str, Any]:
         self.calls.append(("delete_item", kw))
-        self.items.pop((kw["Key"]["pk"], kw["Key"]["sk"]), None)
+        key = (kw["Key"]["pk"], kw["Key"]["sk"])
+        condition = kw.get("ConditionExpression")
+        if condition and not evaluate(
+            condition,
+            self.items.get(key),
+            kw.get("ExpressionAttributeNames", {}),
+            kw.get("ExpressionAttributeValues", {}),
+        ):
+            raise client_error("ConditionalCheckFailedException")
+        old = self.items.pop(key, None)
+        if kw.get("ReturnValues") == "ALL_OLD" and old is not None:
+            return {"Attributes": copy.deepcopy(old)}
         return {}
 
     def update_item(self, **kw: Any) -> dict[str, Any]:
@@ -385,6 +396,7 @@ class FakeS3:
         self.reads: list[str] = []
         self.put_types: dict[str, str] = {}
         self.read_errors: dict[str, list[Exception]] = {}  # key -> errors raised by the next get_object calls
+        self.puts: list[dict[str, Any]] = []
 
     def generate_presigned_url(self, op: str, Params: dict[str, Any], ExpiresIn: int) -> str:
         self.presigned.append((op, Params, ExpiresIn))
@@ -395,9 +407,11 @@ class FakeS3:
             raise client_error("404", 404)
         return {"ContentLength": len(self.objects[Key])}
 
-    def put_object(self, Bucket: str, Key: str, Body: bytes, ContentType: str) -> dict[str, Any]:
-        self.objects[Key] = bytes(Body)
-        self.put_types[Key] = ContentType
+    def put_object(self, **kw: Any) -> dict[str, Any]:
+        self.puts.append({k: v for k, v in kw.items() if k != "Body"})
+        self.objects[kw["Key"]] = bytes(kw["Body"])
+        if "ContentType" in kw:
+            self.put_types[kw["Key"]] = kw["ContentType"]
         return {}
 
     def get_object(self, Bucket: str, Key: str) -> dict[str, Any]:
@@ -678,11 +692,14 @@ class FakeSSM:
 
 # --- platform HTTP ---------------------------------------------------------------------------------------------------
 
-STATS_FIXTURES = __import__("pathlib").Path(__file__).parent / "fixtures" / "stats"
+FIXTURES = __import__("pathlib").Path(__file__).parent / "fixtures"
+STATS_FIXTURES = FIXTURES / "stats"
 
 
 def stats_fixture(name: str) -> bytes:
-    return (STATS_FIXTURES / f"{name}.json").read_bytes()
+    """``"youtube_videos_list"`` → fixtures/stats/…; ``"publish/youtube_processed"`` → fixtures/publish/…"""
+    folder = FIXTURES if "/" in name else STATS_FIXTURES
+    return (folder / f"{name}.json").read_bytes()
 
 
 class FakeHttp:
@@ -716,3 +733,75 @@ class FakeHttp:
     @property
     def urls(self) -> list[str]:
         return [c.url for c in self.calls]
+
+
+# --- Secrets Manager, CloudFront ----------------------------------------------------------------------------------
+
+
+class FakeSecretsManager:
+    """``secretsmanager``: GetSecretValue, CreateSecret, PutSecretValue, DeleteSecret (names → strings)."""
+
+    def __init__(self, values: dict[str, str] | None = None) -> None:
+        self.values: dict[str, str] = dict(values or {})
+        self.tags: dict[str, list[dict[str, str]]] = {}
+        self.calls: list[tuple[str, str]] = []
+        self.writes: list[tuple[str, str]] = []  # (op, name) in order
+
+    def json(self, name: str) -> Any:
+        return json.loads(self.values[name]) if name in self.values else None
+
+    def get_secret_value(self, SecretId: str) -> dict[str, Any]:
+        self.calls.append(("get", SecretId))
+        if SecretId not in self.values:
+            raise client_error("ResourceNotFoundException", 400)
+        return {"Name": SecretId, "SecretString": self.values[SecretId]}
+
+    def create_secret(self, Name: str, SecretString: str, Tags: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        self.calls.append(("create", Name))
+        if Name in self.values:
+            raise client_error("ResourceExistsException", 400)
+        self.values[Name] = SecretString
+        self.tags[Name] = list(Tags or [])
+        self.writes.append(("create", Name))
+        return {"Name": Name}
+
+    def put_secret_value(self, SecretId: str, SecretString: str) -> dict[str, Any]:
+        self.calls.append(("put", SecretId))
+        if SecretId not in self.values:
+            raise client_error("ResourceNotFoundException", 400)
+        self.values[SecretId] = SecretString
+        self.writes.append(("put", SecretId))
+        return {"Name": SecretId}
+
+    def delete_secret(self, SecretId: str, ForceDeleteWithoutRecovery: bool = False) -> dict[str, Any]:
+        self.calls.append(("delete", SecretId))
+        assert ForceDeleteWithoutRecovery is True
+        if SecretId not in self.values:
+            raise client_error("ResourceNotFoundException", 400)
+        del self.values[SecretId]
+        self.writes.append(("delete", SecretId))
+        return {"Name": SecretId}
+
+
+class FakeCloudFront:
+    def __init__(self) -> None:
+        self.invalidations: list[dict[str, Any]] = []
+
+    def create_invalidation(self, DistributionId: str, InvalidationBatch: dict[str, Any]) -> dict[str, Any]:
+        self.invalidations.append({"DistributionId": DistributionId, **InvalidationBatch})
+        return {"Invalidation": {"Id": "I1"}}
+
+
+class FakeVideo:
+    """A ``VideoSource`` of ``size`` bytes (byte ``i`` is ``i % 251``) that records every read."""
+
+    def __init__(self, size: int) -> None:
+        self.size = size
+        self.reads: list[tuple[int, int]] = []
+
+    def read(self, start: int, end: int) -> bytes:
+        self.reads.append((start, end))
+        return bytes(i % 251 for i in range(start, min(end, start + 64))) + b"\0" * max(0, end - start - 64)
+
+    def presigned_url(self, seconds: int = 3600) -> str:
+        return "https://cf-prod-media-123.s3.eu-north-1.amazonaws.com/jobs/j/clips/c/clip.mp4?X-Amz-Signature=fake"

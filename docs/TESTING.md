@@ -14,7 +14,7 @@ with `validate` without a backend and `terraform test` against a mock AWS provid
 | API Lambdas | `api/` | pytest, ruff, mypy (uv) | yes | yes |
 | Agent runtime | `agent/` | pytest, ruff, mypy (uv) | yes | yes |
 | Infrastructure | `infra/` | `terraform fmt -check`, `terraform validate`, `terraform test` (mock provider), tflint | yes | plan and apply |
-| Documentation | `docs/`, `README.md` | relative-link check, draw.io XML parse and PNG export (below) | by hand | – |
+| Documentation | `docs/`, `README.md` | relative-link and anchor check, draw.io XML parse and PNG export (below); `docs/SETUP_POSTING.md` is also checked by the web test `setup-docs.test.ts` | by hand (the setup page: yes, through the web tests) | – |
 | Workflows and scripts | `.github/`, `scripts/` | actionlint, shellcheck where available | yes | – |
 
 The exact commands are in each folder's `package.json` or `pyproject.toml` and in `ci.yml`, which are the source of
@@ -121,7 +121,7 @@ in `docs/` and `README.md` points at a file that exists.
     says "You already have the app." with a way back.
   - No overflow at every width from 320 px, at most one tomato button per screen, axe clean, on the field, every tree
     and every branch.
-- **Accounts**: every platform shows "Not connected"; Connect explains it arrives in the next phase.
+- **Set up posting**: covered under [Posting setup](#posting-setup).
 - **Navigation**: below 768 px a bottom tab bar with icons only (no visible text, every item has an `aria-label`);
   from 768 px a sidebar that collapses with the hamburger and remembers the choice.
 - **No overflow**: every screen at 320, 375, 390, 430, 768, 1024 and 1440 px; `/clips/{id}` and
@@ -193,7 +193,8 @@ in `docs/` and `README.md` points at a file that exists.
 - **Performance units** (Vitest): `lib/week.ts` (2026-01-01 is 2026-W01, 2027-01-01 is 2026-W53, weeks start on
   Monday, clock-change weeks are 167 and 169 hours); the Bézier builder `PerfLines.paths(layout, rects)` for the three
   layouts; compact numbers ("1.2K", "–" for null, "1:05"); status → words; live merge of `post` and `week` events.
-- **Settings `coming_soon`**: `/settings?account=youtube&status=coming_soon` shows "Connecting YouTube arrives soon."
+- **Old account links**: `/settings/posting/accounts` and `/settings?account=youtube&status=coming_soon` redirect to
+  Set up posting (`settings-tree.spec.ts`).
 - **Kid-proof** ([UX-13](BUSINESS_REQUIREMENTS.md#ux-13-kid-proof-a-68-year-old-can-use-it)): at most one tomato
   button per screen (plus the update bar's Reload); every button on phones is at least 48 × 48 px; every button except
   the phone tab bar has visible text; Throw away shows Undo and sends nothing until 8 s pass; Undo restores the clip.
@@ -206,7 +207,8 @@ in `docs/` and `README.md` points at a file that exists.
 ### API (pytest)
 - Every route in [CONTRACTS.md §5](CONTRACTS.md#5-http-api-api-gateway-http-api-v2--lambda-cf-prod-api): success
   shape, validation errors (`bad_request`), missing items (`not_found`), wrong state (`conflict`), sizes (`too_large`),
-  `501 not_implemented` for Connect.
+  and the posting setup routes of [§17.4](CONTRACTS.md#174-api-all-jwt-5-errors-routessetuppy-package-clipfactory_apioauth)
+  (Connect without keys is `409 conflict` "Paste your {Platform} keys first.").
 - The user id comes from the JWT claims, never from the body; one user cannot read another's items.
 - Job create and retry invoke the job flow's **alias** ARN with `InvocationType="Event"`, the exact
   `DurableExecutionName` (`job-{jobId}-{run}`) and a deterministic payload; `DurableExecutionAlreadyStartedException`
@@ -311,9 +313,57 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
 - **Broadcast**: coalesces to the last change per item, maps sort-key prefixes to event types, sends deletes from
   `OldImage`, removes a connection on `GoneException`, switches to `partial: true` over 24 KB, and never includes
   internal fields.
-- **Hooks**: Meta challenge (right token 200, wrong 403), YouTube challenge, TikTok and X 501, POST stores a `HOOK#`
-  item with a 14-day TTL, 413 over 256 KB, OAuth callback 302 to `/settings?account=…&status=coming_soon`, unknown
-  platform 404, the query string is never logged.
+- **Hooks**: Meta challenge (right token 200, wrong 403), YouTube challenge, TikTok and X webhooks 501, POST stores a
+  `HOOK#` item with a 14-day TTL, 413 over 256 KB, unknown platform 404, the query string is never logged. The OAuth
+  callback is covered under [Posting setup](#posting-setup).
+
+### Posting setup
+From [CONTRACTS.md §17.12](CONTRACTS.md#1712-tests-offline-fakes-only-no-aws-no-network). Everything offline: a fake
+Secrets Manager, a recorded `HttpClient` with fixtures per platform, a `FakeDurableContext`, and the web mock mode with
+its pretend consent page `/mock-oauth/{platform}`.
+
+- **API, Connect** (pytest): state sign and verify (tampered, wrong platform, expired and reused all end `expired`);
+  the PKCE verifier is deterministic and never stored; key formats (one good and one bad sample per row of §17.4, a
+  Meta Login URL gives the `configId`); responses carry only masked hints, and no secret appears in any response, log
+  line or DynamoDB item (the fakes are scanned); new keys with another `clientId` → `keys_changed`; Connect without keys
+  → 409; the exact authorize URL per platform (PKCE only YouTube and X, no `scope` for Meta, `auth_type=rerequest`
+  after `missing_permissions`); the callback per platform with recorded answers for every result code, several Pages →
+  `choose` and the choose route; `Location` is always the fixed path with a listed code; the query is never logged;
+  Check it per platform; Disconnect deletes the secret, revokes and sends YouTube's `forget`.
+- **API, tokens and posting** (pytest): Google refresh keeps the old refresh token; TikTok and X rotation write the new
+  secret before use, and the lease serialises two refreshers; `invalid_grant` → `needs_reconnect`; TikTok
+  `expires_soon`; publishers against `tests/fixtures/publish/{platform}_*.json` (YouTube resumable and resume after an
+  interruption, TikTok chunk maths for 3, 70 and 200 MB, Instagram resumable headers, Facebook `finish` → `complete`
+  fallback, X 4 MB appends and links removed, caption limits); clip flow step and wait names
+  `publish-/wait-/check-/finish-{platform}-{n}`, a replay with `publishHandle` creates nothing twice, `maxChecks`
+  outcomes, the at-most-once message, `ReconnectNeededError` → failed, private TikTok → no `gsi2`, the TikTok id
+  follow-up; the friendly error table; the X monthly cap; TikTok Keep options required and validated; broadcast
+  `ACCOUNT#` and `SETUP#` → `setup`; `config.load` with the §17.7 values.
+- **Infrastructure** (`terraform test`): the state-key secret uses `secret_string_wo` (no `secret_string`); IAM exactly
+  as §17.9 per role (no secrets access for the job flow, realtime or learn); hooks timeout 28 s; environment variables
+  on api, hooks, flows and stats; seven stream filter prefixes; output `oauth_callback_base` ends in `/oauth`;
+  `test-write-web-config.sh` requires `oauthCallbackBase`.
+- **Web units** (Vitest): every guide file has unique step ids (`^[a-z0-9-]{1,40}$`), `checkedOn` "2026-11-16", https
+  Open links, known `ValueRef`s, the four parts in order and one `connect` step; key format samples (the same as the
+  API's); `setupProgress` (optional steps not counted, auto steps, current step, ready rule); a sentence for every result
+  code on every platform; the key file from Google fills both boxes.
+- **This page and the app agree** (Vitest `setup-docs.test.ts`): it reads [SETUP_POSTING.md](SETUP_POSTING.md) and
+  checks that under each `## {Platform}` heading every step title of that platform's guide appears, with the same
+  number and in the same part (`### Part n: {part title}`, then `#### {number}. {title}`).
+- **Playwright** (mock mode, `e2e/setup.spec.ts`, every journey at 375×812 and 1440×900, for every platform): Home card
+  "0 of 5 ready" → Set up posting → platform page; Get ready ticks; every Open button has the exact `href` and
+  `target=_blank`; Copy puts the value on the clipboard and shows "Copied!"; a bad key shows the friendly error and Save
+  stays disabled; good keys show only masked hints; Check it with working keys and nothing connected says "Your keys work. Now press
+  Connect {Platform}." (the same sentence as the API); TikTok's verification file is listed; Connect →
+  pretend consent → **Allow** → confetti, "Connected as", full ring; Facebook and Instagram choose an account; **Cancel**
+  → the `denied` sentence; a reload resumes at the first unfinished step; TikTok shows "Works now, but your TikTok posts
+  stay private until TikTok says yes."; an expired token shows the tomato **Connect again**; Disconnect → Undo within
+  8 s keeps it, after 8 s it is gone; all five ready → the Home card is gone and "5 of 5 ready".
+  `e2e/tiktok-sheet.spec.ts`: Keep stays disabled until a privacy is chosen; branded content hides "Only me".
+  **Try again** on a failed clip whose TikTok post needs new privacy choices opens the Post to TikTok sheet first and
+  sends `{tiktok: {...}}` in the confirm body; the mock replaces that post's `postOptions`.
+  `overflow.spec.ts` covers the setup list, each platform page, `/mock-oauth/youtube`, `/about.html` and the TikTok
+  sheet from 320 to 1920 px; `screenshots.spec.ts` adds the list and the YouTube page at 375 and 1440, light and dark.
 
 ### Agent (pytest)
 - `/ping` answers `Healthy` when idle and `HealthyBusy` while a job runs; `/invocations` accepts `process_job`,
@@ -351,8 +401,8 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
 - Cognito client: 15-minute access and ID tokens, 30-day refresh token, rotation on, SRP only.
 - Flows: `publish = true`, alias `live`, `durable_config` 30 600 s (job) and 259 200 s (clip) with 14 days retention,
   `timeouts.delete = "60m"`, no destinations.
-- The stream trigger has exactly one filter with the five sort-key prefixes (`JOB#`, `CLIP#`, `POST#`, `LEARNING#`,
-  `WEEK#`).
+- The stream trigger has exactly one filter with the seven sort-key prefixes (`JOB#`, `CLIP#`, `POST#`, `LEARNING#`,
+  `WEEK#`, `ACCOUNT#`, `SETUP#`).
 - The WebSocket authorizer sets no result TTL and no payload format version; WebSocket and REST logs contain no query
   or `requestOverride` and `data_trace_enabled = false`.
 - The vector index is float32, 1024, cosine with the four non-filterable keys.
@@ -376,8 +426,8 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
 2. Add a short public YouTube video; watch the steps; review the clips.
 3. Watch a job from a second device: steps and clips appear on both within a couple of seconds (live updates).
    Turn the network off and on: the app catches up by itself with no error.
-4. Keep one clip; it shows "Waiting for the account connection" on each platform. In the Lambda console, the
-   `cf-prod-clip-flow` durable execution `clip-<clipId>-1` ends with outcome `not_posted`.
+4. Before any platform is set up, keep one clip; it shows "Waiting for the account connection" on each platform. In
+   the Lambda console, the `cf-prod-clip-flow` durable execution `clip-<clipId>-1` ends with outcome `not_posted`.
 5. Open `{hooks_url}/hooks/youtube?hub.mode=subscribe&hub.topic=https://www.youtube.com/xml/feeds/videos.xml%3Fchannel_id%3Dx&hub.challenge=hello`
    in a browser: it answers `hello`.
 6. Install the app on a phone and on a desktop; scroll a long list on the phone and confirm there is no sound.
@@ -388,9 +438,15 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
    Edit it, read it back, delete it and Undo, then delete it for good.
 8. Open **Get the app** on a Mac and on Windows; download, follow the first-open hint, and check that Get the app is
    gone inside the desktop app. On an iPhone, follow the three steps.
-9. Keep a clip and open it from Library: five stacks read "Waiting for connection" with a link to Accounts; Refresh
+9. Keep a clip and open it from Library: five stacks read "Waiting for connection" with a link to Set up posting; Refresh
    numbers answers without calling any platform. In CloudWatch Logs, `/aws/lambda/cf-prod-stats` shows a `stats.tick`
    line every 15 minutes. In Library › This week, star the clip: "Learning from your picks…" turns into a "Best of
    week" learning within a minute or two.
-10. Push a small change with an `Area:` line; within 5 minutes the open app (browser and desktop app) shows the update
+10. Set up posting ([SETUP_POSTING.md](SETUP_POSTING.md)): open `{app_url}/about.html`, `/legal/privacy.html` and
+   `/legal/terms.html` without signing in. Set up YouTube to the end, press **Check it**, then **Connect YouTube**: you
+   come back with confetti and "Connected as …". In Secrets Manager (eu-north-1) you see `cf-prod/platforms/youtube/app`
+   and `…/token`; in DynamoDB the `ACCOUNT#youtube` item has no token. Keep a short clip with **Only me** picked in
+   "Who can see your clips": it appears on the channel as a private Short and the clip page shows its link. Press
+   **Disconnect**, wait 8 s: the token secret is gone. Then the other four platforms the same way (X costs a little).
+11. Push a small change with an `Area:` line; within 5 minutes the open app (browser and desktop app) shows the update
    bar with that label; press Reload and watch it finish.

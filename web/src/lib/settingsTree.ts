@@ -12,6 +12,8 @@ export interface Apple {
   leaf: string;
   /** Other everyday words people might search for. */
   words?: string[];
+  /** Where the apple lives when it is not on its branch page (a platform's setup page). */
+  href?: string;
 }
 
 export interface Branch {
@@ -103,16 +105,30 @@ export const TREES: Tree[] = [
     icon: "share",
     branches: [
       {
-        slug: "accounts",
-        name: "Accounts",
-        line: "The accounts your clips are posted to.",
-        icon: "users",
+        slug: "setup",
+        name: "Set up posting",
+        line: "Connect YouTube, TikTok, Instagram, Facebook and X.",
+        icon: "link",
         apples: [
           {
-            id: "accounts",
-            name: "Connected accounts",
-            leaf: "Connecting an account lets Clip Factory post your kept clips there. Coming in a later update.",
-            words: ["YouTube", "Instagram", "Facebook", "TikTok", "X", "connect", "login"],
+            id: "setup-posting",
+            name: "Set up posting",
+            leaf: "Do each one once. After that Clip Factory posts by itself.",
+            words: ["YouTube", "Instagram", "Facebook", "TikTok", "X", "connect", "login", "accounts", "keys", "steps"],
+          },
+          {
+            id: "youtube-privacy",
+            name: "Who can see your YouTube clips",
+            leaf: "Everyone, only people with the link, or only you.",
+            words: ["YouTube", "public", "unlisted", "private", "privacy"],
+            href: "/settings/posting/setup/youtube#youtube-privacy",
+          },
+          {
+            id: "x-cost",
+            name: "What X costs",
+            leaf: "About 1.5 cents a clip. Clip Factory stops at $10 a month.",
+            words: ["X", "twitter", "money", "price", "credits", "card", "pay"],
+            href: "/settings/posting/setup/x#x-cost",
           },
         ],
       },
@@ -352,7 +368,7 @@ export function searchSettings(query: string, installed = false): SearchHit[] {
           branch,
           apple,
           found: inName > 0 ? "apple" : "leaf",
-          href: settingsPath(tree.slug, branch.slug, apple.id),
+          href: apple.href ?? settingsPath(tree.slug, branch.slug, apple.id),
           score,
           order,
         });
@@ -368,7 +384,7 @@ export function searchSettings(query: string, installed = false): SearchHit[] {
 const LEGACY_ANCHORS: Record<string, string> = {
   "get-app": settingsPath("app", "get-the-app"),
   skills: settingsPath("clip-making", "skills"),
-  accounts: settingsPath("posting", "accounts"),
+  accounts: settingsPath("posting", "setup"),
   clips: settingsPath("clip-making", "clips"),
   appearance: settingsPath("look-and-feel"),
   sounds: settingsPath("look-and-feel", "sounds"),
@@ -376,18 +392,26 @@ const LEGACY_ANCHORS: Record<string, string> = {
   cookies: settingsPath("clip-making", "youtube"),
 };
 
+const SETUP_PLATFORMS = ["youtube", "tiktok", "instagram", "facebook", "x"];
+
 /**
- * Where an old Settings link should go now, or null to stay. `/settings#skills` goes to the Skills branch, and
- * the hooks API's `/settings?account=…&status=coming_soon` (§14.3) goes to Accounts with its query kept.
+ * Where an old Settings link should go now, or null to stay. `/settings#skills` goes to the Skills branch;
+ * Accounts became Set up posting (§17.1), so `/settings/posting/accounts` and the old hooks API links
+ * (`?account=…&status=…`) go there, to the platform's own page when the link names one.
  */
 export function legacySettingsRedirect(pathname: string, search: string, hash: string): string | null {
   const path = pathname.replace(/\/+$/, "") || "/";
-  if (path !== "/settings") return null;
   const query = new URLSearchParams(search);
-  if (query.get("account") && query.get("status")) return `${settingsPath("posting", "accounts")}${search}`;
+  const account = query.get("account");
+  if ((path === "/settings" || path === "/settings/posting/accounts") && account && query.get("status")) {
+    return SETUP_PLATFORMS.includes(account) ? `${settingsPath("posting", "setup")}/${account}` : settingsPath("posting", "setup");
+  }
+  if (path === "/settings/posting/accounts") return settingsPath("posting", "setup") + (hash && hash !== "#accounts" ? hash : "");
+  if (path !== "/settings") return null;
   const anchor = hash.replace(/^#/, "");
   if (!anchor) return null;
   if (anchor in LEGACY_ANCHORS) return `${LEGACY_ANCHORS[anchor]}${search}`;
   const found = findApple(anchor);
-  return found ? `${settingsPath(found.tree.slug, found.branch.slug, anchor)}${search}` : null;
+  if (!found) return null;
+  return found.apple.href ?? `${settingsPath(found.tree.slug, found.branch.slug, anchor)}${search}`;
 }

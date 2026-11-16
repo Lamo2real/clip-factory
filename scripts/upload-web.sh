@@ -13,7 +13,9 @@
 #                                      when the bucket has none yet (deploy.yml's desktop jobs rewrite it)
 #   everything else (icons, ...)       one hour: not hashed, but rarely changes
 # New files go up before the entry points that reference them; stale files are deleted last. The downloads/
-# prefix (desktop installers, built by deploy.yml's desktop jobs) is never deleted here.
+# prefix (desktop installers, built by deploy.yml's desktop jobs) and the TikTok URL-verification files
+# (tiktok*.txt at the bucket root, uploaded from the app's Set up posting, docs/CONTRACTS.md §17.3) are never
+# deleted here.
 set -euo pipefail
 : "${WEB_BUCKET:?WEB_BUCKET must be set}" "${DISTRIBUTION_ID:?DISTRIBUTION_ID must be set}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,6 +36,8 @@ exclude_entry=()
 for f in "${entry_points[@]}" config.json version.json; do exclude_entry+=(--exclude "$f"); done
 # Desktop installers and their manifest are managed by deploy.yml's desktop jobs, never by the web sync.
 keep_downloads=(--exclude "downloads/*")
+# TikTok checks its verification file at {APP_URL}/{filename}; the owner uploads it in the app, not in a build.
+keep_verification=(--exclude "tiktok*.txt")
 
 if [ -d "${DIST_DIR}/assets" ]; then
   aws s3 sync "${DIST_DIR}/assets" "${DEST}/assets" --cache-control "$IMMUTABLE" --only-show-errors
@@ -78,7 +82,7 @@ else
 fi
 
 # Every file was just uploaded, so --size-only finds nothing to copy and only removes stale objects.
-aws s3 sync "$DIST_DIR" "$DEST" --delete --size-only "${keep_downloads[@]}" --only-show-errors
+aws s3 sync "$DIST_DIR" "$DEST" --delete --size-only "${keep_downloads[@]}" "${keep_verification[@]}" --only-show-errors
 
 invalidation_id="$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" \
   --paths "/*" --query Invalidation.Id --output text)"

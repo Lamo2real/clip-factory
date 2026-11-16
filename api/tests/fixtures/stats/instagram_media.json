@@ -33,6 +33,6 @@
   ],
   "paging": {
     "cursors": { "before": "QVFIUmxtbm9fZA", "after": "QVFIUjVuYXVFZA" },
-    "next": "https://graph.facebook.com/v25.0/17841400000000000/media?after=QVFIUjVuYXVFZA&limit=50"
+    "next": "https://graph.facebook.com/v27.0/17841400000000000/media?after=QVFIUjVuYXVFZA&limit=50"
   }
 }

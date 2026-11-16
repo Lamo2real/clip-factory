@@ -35,6 +35,22 @@ BUDGET_FIELDS = {
 }
 
 
+# §17.7: the publish settings each platform gets in platforms.json. Used when the file has no "publish" block yet;
+# a block that is present must hold these keys with values of the same kind.
+PUBLISH_DEFAULTS: dict[str, dict[str, Any]] = {
+    "youtube": {"checkSeconds": 30, "maxChecks": 60, "chunkMb": 8},
+    "tiktok": {"checkSeconds": 15, "maxChecks": 80, "source": "FILE_UPLOAD", "idCheckMinutes": 10, "idMaxChecks": 12},
+    "instagram": {"checkSeconds": 60, "maxChecks": 15, "source": "resumable"},
+    "facebook": {"checkSeconds": 30, "maxChecks": 40, "source": "binary"},
+    "x": {"maxChecks": 20, "chunkMb": 4},
+}
+PUBLISH_SOURCES = {
+    "tiktok": {"FILE_UPLOAD"},
+    "instagram": {"resumable", "video_url"},
+    "facebook": {"binary", "file_url"},
+}
+
+
 class ConfigError(ValueError):
     """``platforms.json`` is missing a value or holds one that would break the limits."""
 
@@ -50,6 +66,12 @@ class PlatformConfig:
     budget: dict[str, Any]
     insights_interval: int | None = None  # minutes (YouTube Analytics only)
     non_public_max_age_days: int | None = None  # X only
+    scopes: tuple[str, ...] = ()
+    publish: dict[str, Any] | None = None  # §17.7
+
+    @property
+    def publish_settings(self) -> dict[str, Any]:
+        return dict(self.publish or PUBLISH_DEFAULTS[self.name])
 
     @property
     def budget_kind(self) -> str:
@@ -124,6 +146,13 @@ def parse(raw: Any) -> PlatformsConfig:
             raise ConfigError(f"{where}.label must be text")
         insights = entry.get("insightsIntervalMinutes")
         non_public = entry.get("nonPublicMaxAgeDays")
+        scopes = entry.get("scopes", [])
+        if not isinstance(scopes, list) or not all(isinstance(s, str) and s for s in scopes):
+            raise ConfigError(f"{where}.scopes must be a list of scope names")
+        if name == "x" and "usdPerPost" in budget:
+            usd = budget["usdPerPost"]
+            if isinstance(usd, bool) or not isinstance(usd, int | float) or not 0 <= usd <= 1:
+                raise ConfigError(f"{where}.budget.usdPerPost must be a small dollar amount")
         platforms[name] = PlatformConfig(
             name=name,
             label=label,
@@ -136,6 +165,8 @@ def parse(raw: Any) -> PlatformsConfig:
             non_public_max_age_days=_int(non_public, f"{where}.nonPublicMaxAgeDays")
             if non_public is not None
             else None,
+            scopes=tuple(scopes),
+            publish=_publish(name, entry.get("publish"), where),
         )
     return PlatformsConfig(
         graph_api_version=version,
@@ -147,6 +178,27 @@ def parse(raw: Any) -> PlatformsConfig:
         platforms=platforms,
         raw=raw,
     )
+
+
+def _publish(name: str, raw: Any, where: str) -> dict[str, Any] | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where}.publish must be an object")
+    expected = PUBLISH_DEFAULTS[name]
+    missing = [k for k in expected if k not in raw]
+    if missing:
+        raise ConfigError(f"{where}.publish is missing {', '.join(missing)}")
+    out: dict[str, Any] = {}
+    for key, default in expected.items():
+        value = raw[key]
+        if isinstance(default, int):
+            out[key] = _int(value, f"{where}.publish.{key}")
+        elif value not in PUBLISH_SOURCES.get(name, {default}):
+            raise ConfigError(f"{where}.publish.{key} must be one of {sorted(PUBLISH_SOURCES.get(name, {default}))}")
+        else:
+            out[key] = value
+    return out
 
 
 def _read_text() -> str:

@@ -9,7 +9,7 @@ import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from . import db, s3
 from .agent_client import AgentClient
@@ -19,6 +19,10 @@ from .flow_client import FlowClient
 from .log import log
 from .skills import BuiltinSkill, load_builtins
 from .vectors import Vectors
+
+if TYPE_CHECKING:
+    from .oauth import OAuthEnv
+    from .routes.setup import WebFiles
 
 
 @dataclass
@@ -34,6 +38,8 @@ class App:
     # (user id, access token) → the owner's email. Cognito access tokens carry no email claim.
     email_lookup: Callable[[str, str], str | None] = lambda _sub, _token: None
     builtins: Callable[[], list[BuiltinSkill]] = load_builtins
+    oauth: OAuthEnv | None = None  # posting setup (§17.4); None until its secrets and URLs are configured
+    web_files: WebFiles | None = None  # TikTok verification files on the web bucket (§17.4)
     _builtin_cache: list[BuiltinSkill] | None = field(default=None, repr=False)
 
     def builtin_skills(self) -> list[BuiltinSkill]:
@@ -106,6 +112,7 @@ def from_env() -> App:
             env["VECTOR_INDEX"],
             env.get("EMBED_MODEL_ID", vectors.DEFAULT_EMBED_MODEL),
         )
+    oauth, web_files = _posting_setup(env, reg)
     return App(
         store=db.Store(table(env["TABLE_NAME"])),
         media=s3.Media(s3.make_client(reg), env["MEDIA_BUCKET"]),
@@ -115,4 +122,40 @@ def from_env() -> App:
         invoker=AsyncInvoker(lambda_client, env.get("STATS_FUNCTION_ARN", ""), env.get("LEARN_FUNCTION_ARN", "")),
         version=env.get("VERSION", "dev"),
         email_lookup=_cognito_email_lookup(boto3.client("cognito-idp", region_name=reg, config=_short_config())),
+        oauth=oauth,
+        web_files=web_files,
     )
+
+
+def _posting_setup(env: Any, reg: str) -> tuple[OAuthEnv | None, WebFiles | None]:
+    """Secrets Manager, the state key and the public URLs of §17.9; both None when any is missing."""
+    import boto3
+
+    from .oauth import OAuthEnv, scopes_from_config
+    from .oauth.secrets import PREFIX, Secrets
+    from .routes.setup import WebFiles
+    from .stats import config
+
+    if not (env.get("OAUTH_STATE_SECRET") and env.get("HOOKS_URL") and env.get("APP_URL")):
+        return None, None
+    secrets = Secrets(
+        boto3.client("secretsmanager", region_name=reg, config=_short_config()), env.get("SECRET_PREFIX") or PREFIX
+    )
+    state_name = env["OAUTH_STATE_SECRET"]
+    oauth = OAuthEnv(
+        secrets=secrets,
+        app_url=env["APP_URL"],
+        hooks_url=env["HOOKS_URL"],
+        state_key=lambda: secrets.read_text(state_name).encode(),
+        graph_version=config.load().graph_api_version,
+        scopes=scopes_from_config(),
+    )
+    web_files = None
+    if env.get("WEB_BUCKET") and env.get("DISTRIBUTION_ID"):
+        web_files = WebFiles(
+            boto3.client("s3", region_name=reg, config=_short_config()),
+            env["WEB_BUCKET"],
+            boto3.client("cloudfront", config=_short_config()),
+            env["DISTRIBUTION_ID"],
+        )
+    return oauth, web_files

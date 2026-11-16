@@ -5,6 +5,11 @@ export interface RuntimeConfig {
   apiUrl: string;
   /** WebSocket API for live updates (docs/CONTRACTS.md §4, §14.2). Absent in old configs: polling only. */
   wsUrl?: string;
+  /**
+   * The hooks API's OAuth base, `https://…/v1/oauth` (docs/CONTRACTS.md §17.9). Optional: the setup pages use it
+   * only until GET /v1/setup answers with the exact return addresses.
+   */
+  oauthCallbackBase?: string;
   version: string;
 }
 
@@ -35,7 +40,11 @@ export async function loadConfig(fetcher: typeof fetch = fetch): Promise<Runtime
   const body = (await res.json()) as Partial<RuntimeConfig>;
   if (!valid(body)) throw new Error("config.json is missing fields");
   const wsUrl = typeof body.wsUrl === "string" && /^wss:\/\/[^\s?#]+$/.test(body.wsUrl) ? body.wsUrl.replace(/\/+$/, "") : undefined;
-  current = { ...body, apiUrl: body.apiUrl.replace(/\/+$/, ""), wsUrl, version: body.version ?? "" };
+  const oauthCallbackBase =
+    typeof body.oauthCallbackBase === "string" && /^https:\/\/[^\s?#]+\/oauth\/?$/.test(body.oauthCallbackBase)
+      ? body.oauthCallbackBase.replace(/\/+$/, "")
+      : undefined;
+  current = { ...body, apiUrl: body.apiUrl.replace(/\/+$/, ""), wsUrl, oauthCallbackBase, version: body.version ?? "" };
   return current;
 }
 

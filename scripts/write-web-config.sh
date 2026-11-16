@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Writes the web app's runtime config (docs/CONTRACTS.md §4) from Terraform's outputs:
-#   { "region", "userPoolId", "userPoolClientId", "apiUrl", "wsUrl", "version" }
-# Every value is required: apiUrl must be an https:// URL and wsUrl (output ws_url, §14.2) a wss:// URL.
+#   { "region", "userPoolId", "userPoolClientId", "apiUrl", "wsUrl", "oauthCallbackBase", "version" }
+# Every value is required: apiUrl must be an https:// URL, wsUrl (output ws_url, §14.2) a wss:// URL and
+# oauthCallbackBase (output oauth_callback_base, §17.9) an https:// URL ending in /oauth.
 # Inputs (all optional):
 #   TF_OUTPUTS_FILE  a saved `terraform output -json`; when unset, the script runs it in TF_DIR
 #   TF_DIR           Terraform root, default <repo>/infra/envs/prod
@@ -34,12 +35,16 @@ config="$(jq -e --arg version "$version" '
   def url($k; $scheme): req($k) | sub("/+$"; "") as $v
     | if ($v | startswith($scheme + "://")) and ($v | length) > ($scheme | length) + 3 then $v
       else error("terraform output \"\($k)\" must start with \($scheme)://, got \"\($v)\"") end;
+  def oauth_base($k): url($k; "https")
+    | if endswith("/oauth") then .
+      else error("terraform output \"\($k)\" must end with /oauth, got \"\(.)\"") end;
   {
     region: req("region"),
     userPoolId: req("user_pool_id"),
     userPoolClientId: req("user_pool_client_id"),
     apiUrl: url("api_url"; "https"),
     wsUrl: url("ws_url"; "wss"),
+    oauthCallbackBase: oauth_base("oauth_callback_base"),
     version: $version
   }' <<<"$outputs")"
 

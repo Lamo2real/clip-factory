@@ -14,9 +14,13 @@ sound choices in ADR-28 were made by the owner. ADR-29 to ADR-31 come from the o
 owner asked for "every 15 minutes or 30 minutes, or whatever the lowest limit is", for a refresh button, and to pick
 the best clips each week; the exact intervals and mechanisms were decided by the build from the platforms' published
 limits. ADR-32 comes from the owner's skills request
-([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16)):
-the owner asked for skills to be created, read, changed and deleted in Settings and for "the whole AI system" to use
-all of them "no matter what"; how that is enforced was decided by the build.
+([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16)),
+where the owner asked for skills to be created, read, changed and deleted in Settings and for "the whole AI system" to
+use all of them "no matter what", and ADR-33 to ADR-37 come from the owner's posting setup request
+([CONTRACTS.md §17](CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16)),
+where the owner asked for one setup per platform that "an 8-year-old should be able to do", with no code, up to date
+with what each platform requires today; how the skills rule is enforced and the posting mechanisms were decided by the
+build, the latter from the platforms' docs as of 2026-11-16.
 
 ---
 
@@ -535,3 +539,101 @@ publisher, scheduler and perf-check are removed.
   to pass the block, or the build fails. The Lambdas `cf-prod-clip-flow` and `cf-prod-learn` gain read access to
   `skills/*` (no list), and `cf-prod-learn` gains `MEDIA_BUCKET`. A change to a skill counts from the next call that
   loads skills (for a clip job, the next job).
+
+## ADR-33 Posting setup: bring your own keys, with a guided list per platform
+
+- **Context.** The owner: "Facebook, Instagram, YouTube, TikTok and X should each be a step to connect to … the user
+  should not have to write code … an 8-year-old should be able to do it." Every platform requires a registered
+  developer app (OAuth client) before anyone can post through its API. A single shared Clip Factory app would need
+  Google verification and a security assessment for `youtube.upload`, TikTok's audit, Meta's App Review and Business
+  Verification, and a paid X plan, all in the name of one legal entity, before the first post.
+- **Decision.** **Bring your own keys.** The owner creates one developer app per platform by following a step list in
+  **Settings › Posting › Set up posting** (four parts: Get ready, Make your key, Connect, Go public). Every step is
+  data (`web/src/setup/{platform}.ts`) with Open buttons to the exact page, Copy buttons for every value, paste boxes
+  that check the key format, "If you see…" hints for anything uncertain, and the date the steps were checked
+  (2026-11-16). The same list is [docs/SETUP_POSTING.md](SETUP_POSTING.md), and a web test keeps the two in step.
+  Clip Factory keeps the owner's app in a state that needs no platform review where the platform allows it
+  (Google: published but unverified, which only shows a warning to its own user; Instagram: Development mode with the
+  owner's own accounts).
+- **Alternatives.** *One shared Clip Factory app per platform* (months of reviews and audits, a company behind it, and
+  a single point of failure; not possible for one private owner on TikTok and X today). *A third-party posting
+  service* (another account, monthly fee, and the owner's tokens held by someone else). *Browser automation of the
+  platforms' upload pages* (against every platform's terms, breaks often, needs the owner's passwords). *Written
+  instructions only* (no Copy buttons, no format checks, no progress: not kid-proof).
+- **Consequences.** About 2 hours of one-time clicking across five sites, guided. Some limits stay with the owner's
+  app: TikTok posts stay "Only me" until TikTok approves the app and its audit, which it may refuse for a tool one
+  person uses; Facebook Reels may stay visible only to the owner if Meta wants App Review before Live; X costs about
+  $0.015 per post. The setup says each of these plainly. When a platform renames a button, only the data file and
+  [SETUP_POSTING.md](SETUP_POSTING.md) change.
+
+## ADR-34 OAuth with a signed single-use state, tokens only in Secrets Manager
+
+- **Context.** Connect sends the owner to the platform and back to the public REST API (`GET
+  /oauth/{platform}/callback`). That endpoint cannot see the owner's Cognito token, must not be usable as an open
+  redirect, and must not let a replayed or forged callback attach someone else's account. The owner's app keys and the
+  account tokens are the most sensitive data the system has.
+- **Decision.** `POST /v1/accounts/{platform}/connect` (JWT) builds the authorize URL with `state = v1.{nonce}.{exp}.{HMAC}`
+  (HMAC-SHA256 with the key in `cf-prod/oauth/state-key`, 10 minutes, bound to the platform) and stores
+  `OAUTH#{nonce}`; the callback checks the signature in constant time and consumes the item with a conditional delete,
+  so a state works once. PKCE (S256) is added where the platform supports it for web clients (YouTube, X); its
+  verifier is derived from the nonce with the same key, so it is never stored. The callback exchanges the code server
+  side with the exact stored redirect URI and always answers `302` to one fixed app path with a code from a fixed list.
+  App keys and tokens live **only** in AWS Secrets Manager (`cf-prod/platforms/{platform}/{app,token,pending}`),
+  created at runtime by the API and the hooks Lambda; DynamoDB keeps masked hints, the public client id and the
+  account's name and picture. TikTok and X refresh tokens rotate, so refreshes take a short DynamoDB lease and write
+  the new secret before the access token is used.
+- **Alternatives.** *Keys and tokens in DynamoDB with KMS* (encrypted, but one table read away from every Lambda that
+  reads posts; harder to audit). *SSM Parameter Store SecureStrings* (cheaper, but no `CreateSecret`-style lifecycle,
+  lower throughput limits, and 4 KB values). *State in a cookie* (the callback is on another domain than the app).
+  *An unsigned random state only in DynamoDB* (works, but a signature lets the callback reject junk without a read).
+- **Consequences.** At most about 16 secrets at $0.40 a month each. Only `cf-prod-api`, `cf-prod-hooks`,
+  `cf-prod-clip-flow` and `cf-prod-stats` may touch the `cf-prod/platforms/*` prefix, and the last two may write only
+  the token secrets (`cf-prod/platforms/*/token-*`) ([SECURITY.md](SECURITY.md#platform-keys-and-tokens)). A lost race on a rotating refresh token cannot strand the
+  account. Rotating the state key ends Connects that are in flight, nothing else.
+
+## ADR-35 Every upload is sent as a file, and posting waits inside the clip flow
+
+- **Context.** Platforms take a video either as a file sent by the app or as a URL they fetch. TikTok's URL pull needs
+  a verified media domain, Instagram and Facebook fetch URLs from Meta's servers, and every platform processes the
+  video for seconds to minutes before it is live. The clip flow is a durable function (ADR-22).
+- **Decision.** Clip Factory always **sends the file** (YouTube resumable upload, TikTok `FILE_UPLOAD` in chunks,
+  Instagram and Facebook `rupload.facebook.com`, X chunked media upload), read from S3 in 8 MB ranges. A presigned S3
+  URL is only a configured fallback for Instagram and Facebook (`publish.source` in `config/platforms.json`). Each
+  platform is a `start → check → finish` publisher; the clip flow runs `publish-{platform}`, then durable
+  `wait-{platform}-{n}` and `check-{platform}-{n}` steps, then `finish-{platform}`. Every platform call that creates
+  something writes a `publishHandle` first, so a replayed step resumes instead of posting twice.
+- **Alternatives.** *URL pull everywhere* (TikTok media-domain verification and another public bucket path; Meta
+  fetches from outside AWS). *Polling inside one long step* (Lambda time spent waiting, and a retry repeats the
+  upload). *A separate publish queue and worker* (the pattern §14 removed).
+- **Consequences.** No media host to verify and no public media. Waiting costs nothing. The clip flow needs 1024 MB
+  memory for the chunked reads. Steps that cannot be made idempotent on the platform side (TikTok init, Instagram
+  publish, X post) are marked at-most-once and, if interrupted, ask the owner to look on the platform before **Try
+  again**.
+
+## ADR-36 Instagram and Facebook get two separate Meta apps
+
+- **Context.** Meta's new app dashboard groups permissions into **use cases**, and some use cases cannot be combined
+  or removed once added. Instagram publishing uses "Manage messaging & content on Instagram" (Instagram API with
+  Facebook Login, a Facebook Login for Business configuration with a user access token and the Page linked to the
+  Instagram account; system-user tokens are for Tech Providers only); Facebook Page Reels use "Manage everything on
+  your Page" (Facebook Login for Business, Page tokens).
+- **Decision.** Two Meta apps: "Clip Factory" for Instagram and "Clip Factory Pages" for Facebook, each with one use
+  case and its own keys and login configuration.
+- **Alternatives.** *One app with both use cases* (some combinations are refused or need App Review; a wrong tick
+  cannot be undone, which is not kid-proof).
+- **Consequences.** A few repeated steps (developer account, Basic settings) and two key sets. Each platform can be
+  disconnected or re-keyed alone.
+
+## ADR-37 About, Privacy and Terms on the app's own domain
+
+- **Context.** TikTok verifies the website by a file at a URL prefix, and Google lists every domain an OAuth app
+  uses; both expect the privacy and terms pages on that domain. The GitHub Pages legal site (ADR-09) is on another
+  domain and must not change.
+- **Decision.** The web app serves static `about.html`, `legal/privacy.html` (with a `#delete` section) and
+  `legal/terms.html` from CloudFront, with the YouTube API Services wording. TikTok's verification file is uploaded in
+  the setup and written to the web bucket root; `upload-web.sh` never deletes `tiktok*.txt`.
+- **Alternatives.** *Point the platforms at GitHub Pages* (a second domain to verify, and TikTok's file cannot be
+  placed there from the app). *A custom domain* (on the roadmap; needs DNS and a certificate).
+- **Consequences.** Every value the platforms ask for comes from `GET /v1/setup` and is one Copy button. If the app
+  moves to a custom domain, every platform's redirect URI and website must be updated (the setup's **Check it** finds
+  a mismatch).

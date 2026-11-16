@@ -25,7 +25,7 @@ from typing import Any
 from .. import db, posts
 from ..clock import Clock, iso, parse, utcnow
 from ..log import log
-from ..platforms import NotConnectedError, StatsBatch, adapter_for, label
+from ..platforms import NotConnectedError, PublishError, StatsBatch, adapter_for, label
 from ..platforms.base import HttpClient, NetworkError, ResponseMeta, stats_id, urllib_client
 from . import STATS_ORDER, budget, config
 
@@ -321,8 +321,8 @@ def _refresh_platform(
     token_check = getattr(adapter, "token", None)  # AdapterBase.token; the §16.5 StatsAdapter may lack it
     try:
         if callable(token_check):
-            token_check(account)  # no token (phase 1, or revoked) → stop before any budget is spent
-    except NotConnectedError:
+            token_check(account)  # no token (not connected, or revoked) → stop before any budget is spent
+    except (NotConnectedError, PublishError):  # ReconnectNeededError, a refresh that could not run: skipped (§17.6)
         _skip(deps, report, rows, "not_connected", now)
         return
     until = budget.blocked_until(budget.get_budget(deps.store, platform), now)
@@ -346,7 +346,7 @@ def _refresh_platform(
             return
         try:
             batch = _fetch(deps, adapter, chunk, account, now, insights=insights)
-        except NotConnectedError:
+        except (NotConnectedError, PublishError):
             _skip(deps, report, [*chunk, *pending], "not_connected", now)
             return
         report.requests += batch.requests

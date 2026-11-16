@@ -39,7 +39,12 @@ function svg({ size, radius, inset }) {
 </svg>`;
 }
 
-const targets = [
+const brand = join(root, "public", "brand");
+mkdirSync(brand, { recursive: true });
+
+const all = [
+  // The square app icon the platforms' developer websites ask for (§17.2): 1024 × 1024, no platform logos.
+  { file: "clip-factory-1024.png", size: 1024, radius: 0, inset: 0.1, dir: brand },
   { file: "icon-192.png", size: 192, radius: 0.22, inset: 0.1 },
   { file: "icon-512.png", size: 512, radius: 0.22, inset: 0.1 },
   { file: "maskable-512.png", size: 512, radius: 0, inset: 0.2 },
@@ -47,13 +52,17 @@ const targets = [
   { file: "favicon-32.png", size: 32, radius: 0.22, inset: 0.04 },
 ];
 
+// `npm run icons -- clip-factory-1024.png` renders just that one.
+const only = process.argv.slice(2);
+const targets = only.length ? all.filter((t) => only.includes(t.file)) : all;
+
 const browser = await chromium.launch();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 for (const t of targets) {
   await page.setViewportSize({ width: t.size, height: t.size });
   await page.setContent(`<html><body style="margin:0;background:transparent">${svg(t)}</body></html>`);
   await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({ path: join(out, t.file), omitBackground: true, clip: { x: 0, y: 0, width: t.size, height: t.size } });
+  await page.screenshot({ path: join(t.dir ?? out, t.file), omitBackground: true, clip: { x: 0, y: 0, width: t.size, height: t.size } });
   console.log("wrote", t.file);
 }
 await browser.close();

@@ -54,7 +54,7 @@ export function backoffDelay(attempt: number, random: () => number = Math.random
   return Math.round(base * (0.8 + 0.4 * random()));
 }
 
-const TYPES: readonly LiveItemType[] = ["job", "clip", "post", "learning", "week"];
+const TYPES: readonly LiveItemType[] = ["job", "clip", "post", "learning", "week", "setup"];
 
 /** Reads one server message. Pongs, errors and anything malformed give null (they change nothing on screen). */
 export function parseLiveMessage(data: unknown): LiveEvent | null {
@@ -350,7 +350,8 @@ export function useLiveEvents(onEvent: (e: LiveEvent) => void, onResync: () => v
   useEffect(() => {
     const fn = (s: LiveSignal) => {
       if (s.kind === "resync") ref.current.onResync();
-      else if (s.event.partial) ref.current.onResync();
+      // A setup change (§17.4) is news only for the setup screens, which refetch GET /v1/setup themselves.
+      else if (s.event.partial && s.event.type !== "setup") ref.current.onResync();
       else ref.current.onEvent(s.event);
     };
     hubSignals.add(fn);

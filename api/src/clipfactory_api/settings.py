@@ -23,7 +23,9 @@ DEFAULTS: dict[str, Any] = {
     "clickSound": 6,  # the owner's pick: "Water drop"
     "errorSound": 5,  # the owner's pick: "Nope nope nope"
     "platforms": list(PLATFORMS),
+    "youtubePrivacy": "public",  # §17.6: who can see the YouTube uploads (YouTube policy wants the owner's choice)
 }
+YOUTUBE_PRIVACY = ("public", "unlisted", "private")
 EDITABLE = frozenset(DEFAULTS)
 READ_ONLY = frozenset({"hasYoutubeCookies"})
 
@@ -51,6 +53,12 @@ def _check_field(field: str, value: Any) -> Any:
             return validate.boolean(value, field)
         case "clickSound" | "errorSound":
             return _sound_number(value, SOUND_LABELS[field])
+        case "youtubePrivacy":
+            if value not in YOUTUBE_PRIVACY:
+                raise bad_request(
+                    "Pick who can see your YouTube clips: everyone, only people with the link, or only you."
+                )
+            return value
         case "platforms":
             if not isinstance(value, list) or not all(isinstance(p, str) for p in value):
                 raise bad_request("platforms must be a list of platform names.")

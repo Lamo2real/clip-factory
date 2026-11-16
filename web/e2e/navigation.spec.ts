@@ -73,15 +73,16 @@ test.describe("a slow page change never blocks taps for long", () => {
     await page.goto("/settings/posting/where");
     await settle(page);
     await page.addStyleTag({ content: slowFade });
-    await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "Accounts" }).click();
-    const btn = page.getByRole("button", { name: /Connect YouTube/ });
-    await expect(btn).toBeVisible();
+    await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "Set up posting" }).click();
+    const card = page.locator(".setup-card[data-platform='youtube']");
+    await expect(card).toBeVisible();
     await page.waitForTimeout(700);
-    const box = (await btn.boundingBox())!;
+    const box = (await card.boundingBox())!;
     expect(await hitTag(page, box.x + box.width / 2, box.y + box.height / 2)).not.toBe("HTML");
     await page.evaluate(() => (window.__cfSoundLog = []));
-    await btn.click({ force: true });
-    await expect.poll(() => page.evaluate(() => (window.__cfSoundLog ?? []).map((e) => e.kind))).toEqual(["deny"]);
+    await card.click();
+    await expect(page).toHaveURL(/\/setup\/youtube$/);
+    await expect.poll(() => page.evaluate(() => (window.__cfSoundLog ?? []).map((e) => e.kind))).toEqual(["tap"]);
   });
 
   test("a tap during the fade ends it at once", async ({ page }) => {

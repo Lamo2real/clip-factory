@@ -47,17 +47,17 @@ test("each calm state says one plain thing and links to the fix", async ({ page 
   await openClip(page, CLIPS.mixed);
   await expect(stack(page, "tiktok")).toContainText("Posted privately. TikTok shows numbers after the app is approved.");
   await expect(stack(page, "tiktok")).toContainText("Posted privately");
-  await expect(stack(page, "instagram")).toContainText("Connect Instagram in Settings › Posting › Accounts.");
-  await expect(stack(page, "instagram").getByRole("link", { name: "Open Accounts" })).toHaveAttribute("href", "/settings/posting/accounts");
-  await expect(stack(page, "facebook")).toContainText("Posting failed: Facebook said the video was too long for a Reel. Go to Review and press Try again.");
-  await expect(stack(page, "facebook").getByRole("link", { name: "Go to Review" })).toHaveAttribute("href", "/review");
+  await expect(stack(page, "instagram")).toContainText("Connect Instagram in Settings › Posting › Set up posting.");
+  await expect(stack(page, "instagram").getByRole("link", { name: "Set up Instagram" })).toHaveAttribute("href", "/settings/posting/setup/instagram");
+  await expect(stack(page, "facebook")).toContainText("Posting failed: Facebook said the video was too long for a Reel. Go to Library and press Try again.");
+  await expect(stack(page, "facebook").getByRole("link", { name: "Go to Library" })).toHaveAttribute("href", "/library");
   await expect(stack(page, "x")).toContainText("Not posted here. Turn on X in Settings › Posting › Where clips go.");
   await expect(stack(page, "x").getByRole("link", { name: "Open Where clips go" })).toHaveAttribute("href", "/settings/posting/where");
   await expect(stack(page, "youtube").locator('[data-metric="top"]')).toBeVisible();
 
-  await stack(page, "instagram").getByRole("link", { name: "Open Accounts" }).click();
-  await expect(page).toHaveURL(/\/settings\/posting\/accounts$/);
-  await expect(page.getByText("X charges a little for every number check. Clip Factory stops at $10 a month.")).toBeVisible();
+  await stack(page, "instagram").getByRole("link", { name: "Set up Instagram" }).click();
+  await expect(page).toHaveURL(/\/settings\/posting\/setup\/instagram$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Set up Instagram" })).toBeVisible();
 
   await openClip(page, CLIPS.fresh);
   await expect(stack(page, "youtube")).toContainText("Posting now…");

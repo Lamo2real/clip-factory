@@ -77,7 +77,8 @@ broadest to narrowest:
   assume the role.
 - What `infra/bootstrap` sets up: `PowerUserAccess` (every service, no IAM) plus IAM limited to roles named
   `cf-prod-*`. Its `iam:PassRole` condition must list `lambda.amazonaws.com`, `bedrock-agentcore.amazonaws.com` and
-  `apigateway.amazonaws.com` (the last one for the API Gateway logging role, section 5).
+  `apigateway.amazonaws.com` (the last one for the API Gateway logging role, section 5). `PowerUserAccess` already
+  covers Secrets Manager, so the Connect state key (`cf-prod/oauth/state-key`) needs no change to `infra/bootstrap`.
 - The policy below, which lists only what the stack uses:
 
 ```json
@@ -131,6 +132,16 @@ broadest to narrowest:
       "Resource": "arn:aws:ssm:*:<ACCOUNT_ID>:parameter/cf-prod/*"
     },
     {
+      "Sid": "OAuthStateKeySecret",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue", "secretsmanager:DeleteSecret", "secretsmanager:TagResource",
+        "secretsmanager:GetResourcePolicy"
+      ],
+      "Resource": "arn:aws:secretsmanager:*:<ACCOUNT_ID>:secret:cf-prod/oauth/*"
+    },
+    {
       "Sid": "OwnRolesOnly",
       "Effect": "Allow",
       "Action": [
@@ -155,7 +166,8 @@ invalidations), Cognito (user pool, client, the owner), Lambda (nine functions; 
 `StopDurableExecution`, which a destroy uses to stop running executions), DynamoDB (table, its stream:
 `DescribeStream`, `ListStreams`), S3 Vectors (bucket `cf-prod-vectors-*` and its index), API Gateway (the HTTP,
 WebSocket and REST APIs, the usage plan and the account-level logging setting), SSM (the webhook verify token under
-`/cf-prod/`), AgentCore (runtime), Bedrock (read model and profile details), ECR (repository, image push), CloudWatch
+`/cf-prod/`), Secrets Manager (only the Connect state key under `cf-prod/oauth/`; the platform keys and tokens under
+`cf-prod/platforms/` are created by the app at runtime, never by the deploy role), AgentCore (runtime), Bedrock (read model and profile details), ECR (repository, image push), CloudWatch
 Logs and alarms, X-Ray, SNS (alarm topic), IAM (the `cf-prod-*` roles, including `cf-prod-apigw-cloudwatch`, which is
 passed to API Gateway), EventBridge (one rule, `cf-prod-stats`, the stats tick, with its Lambda target). SQS and
 EventBridge Scheduler are no longer used.
@@ -209,14 +221,24 @@ role. Terraform creates `cf-prod-apigw-cloudwatch` (trusted by `apigateway.amazo
 
 Destroying this stack does not unset the account setting; it simply stops managing it.
 
-### 6. After the first deploy: webhook details for phase 2
+### 6. After the first deploy: set up posting in the app
 
-Nothing to do today. When a platform app is registered in phase 2, its console needs:
+Nothing to do here. Each platform is set up by the owner inside the app, in **Settings › Posting › Set up posting**,
+following the steps in [SETUP_POSTING.md](SETUP_POSTING.md). Every value a platform asks for (website, privacy and
+terms pages, the exact redirect URI `{hooks_url}/oauth/{platform}/callback`) has a Copy button there, and the keys are
+pasted into the app, which keeps them in Secrets Manager. Nothing goes into GitHub, Terraform or `config.json` except
+the public `oauthCallbackBase`.
+
+What this deploy changes for posting: `cf-prod-hooks` runs up to **28 s** (the code exchange calls the platform),
+`cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **16 secrets** (the
+state key, plus an app, token and short-lived pending secret per platform) at $0.40 each, so about $6 a month at most
+([ARCHITECTURE.md](ARCHITECTURE.md#lambda-functions)).
+
+For webhooks (not built yet), a platform console would need:
 
 | Setting | Value |
 |---|---|
-| Webhook / callback URL | `{hooks_url}/hooks/{platform}` (Terraform output `hooks_url`) |
-| OAuth redirect URL | `{hooks_url}/oauth/{platform}/callback` |
+| Webhook URL | `{hooks_url}/hooks/{platform}` (Terraform output `hooks_url`) |
 | Meta verify token | the SecureString `/cf-prod/hooks/verify-token` in Systems Manager → Parameter Store (eu-north-1) → Show decrypted value. Terraform generates it and never stores it in its state. |
 
 ## What a deploy does
@@ -236,11 +258,12 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    because API Gateway allows one deployment every 5 seconds per account), the nine Lambdas (the two durable ones
    publish a new version and move their `live` alias; running executions stay on their old version), the stream
    trigger, the EventBridge rule `cf-prod-stats` (every 15 minutes, read from `config/platforms.json`), the vector
-   bucket and index, the SSM parameter and the alarms. No extra deploy job is needed for them:
+   bucket and index, the SSM parameter, the Connect state-key secret and the alarms. No extra deploy job is needed for them:
    they all come from the same Lambda zip and the same `terraform apply`.
 6. **Web**: [scripts/write-web-config.sh](../scripts/write-web-config.sh) writes `config.json` from the Terraform
-   outputs, including `wsUrl` from `ws_url` (required; the script stops if it is missing); the build is synced to the
-   web bucket and CloudFront is invalidated.
+   outputs, including `wsUrl` from `ws_url` and `oauthCallbackBase` from `oauth_callback_base` (both required; the
+   script stops if one is missing); the build is synced to the web bucket (the sync never deletes TikTok's
+   `tiktok*.txt` verification files, which the app uploads) and CloudFront is invalidated.
 7. **What's new**: `scripts/release-areas.sh <prev-sha> <new-sha>` turns the commits since the live version into up to
    three area labels ([how to write them](GIT_WORKFLOW.md#area-lines-what-the-update-bar-says)), and the deploy writes
    `/version.json` last, never cached. Open apps show the update bar within 5 minutes
@@ -317,27 +340,29 @@ deployed by the same `terraform apply`: the Lambda `cf-prod-stats`, the Lambda `
 `cf-prod-stats`. Its rate comes from [`config/platforms.json`](../config/platforms.json): the smallest
 `minIntervalMinutes` (15) becomes `rate(15 minutes)`. To change an interval, a batch size or a budget, edit that one
 file and push; Terraform and the code both read it ([ADR-29](DECISIONS.md#adr-29-stats-refresh-intervals-per-platform)).
-Nothing needs setting up today: with no account connected, no platform is called. In phase 2 each platform's app
-needs the read scopes listed in `config/platforms.json` (for example YouTube `youtube.readonly` and
-`yt-analytics.readonly`, Instagram `instagram_basic`, `instagram_manage_insights` and `pages_show_list` (Facebook Login for Business, so the
-token works on `graph.facebook.com`, the host the code calls), Facebook `read_insights`, X `tweet.read`).
+With no account connected, no platform is called. A platform's numbers start once it is connected in Set up posting;
+the scopes the setup asks for (listed in `config/platforms.json`, for example YouTube `youtube.readonly` and
+`yt-analytics.readonly`, Instagram `instagram_manage_insights`, Facebook `read_insights`, X `tweet.read`) cover both
+posting and numbers.
 
 To pause automatic refreshing (for example while testing a platform app), disable the rule in the EventBridge console
 (eu-north-1 → Rules → `cf-prod-stats` → Disable). The next deploy turns it back on. The Refresh button keeps working.
 
 ### X API credits for clip numbers
 
-X has no free way to read post numbers: reads are **pay per use** (about $0.005 per post read; the same post read
-again on the same UTC day is not charged again, which X calls a soft guarantee). Phase 2 needs:
+X has no free tier: posts and reads are **pay per use** ($0.015 per post, about $0.005 per post read;
+the same post read again on the same UTC day is not charged again, which X calls a soft guarantee). What X needs is
+part of the X setup ([SETUP_POSTING.md](SETUP_POSTING.md#x)):
 
-1. A project and app in the X developer console with OAuth 2.0 (PKCE) and the scopes `tweet.read`, `users.read`,
-   `tweet.write`, `media.write`, `offline.access`.
-2. **Credits** on that account. A clip refreshed for its 30 days costs about $0.15 on X; ten clips a week stays near
-   $6 a month.
-3. The app's own guard: it estimates the spend before every read and stops X at **$10 a month**
-   (`x.budget.monthlyUsd` in `config/platforms.json`); Settings › Posting › Accounts says "X charges a little for every
-   number check. Clip Factory stops at $10 a month." To change the cap, change that value (and the matching shared
-   constant in the web app) and push. Set a spend limit in the X developer console as well, as a second fence.
+1. An app in the X Developer Console (console.x.com) with OAuth 2.0 (PKCE), **Read and write**, the exact redirect URI,
+   and the scopes `tweet.read`, `users.read`, `tweet.write`, `media.write`, `offline.access`.
+2. **Credits** on that account (the setup says to buy the smallest amount, set a $10 spending limit and leave
+   auto-recharge off). A clip posted and refreshed for its 30 days costs about $0.17 on X; ten clips a week stays near
+   $7 a month.
+3. The app's own guard: it counts the spend before every post and every read and stops X at **$10 a month**
+   (`x.budget.monthlyUsd` in `config/platforms.json`); a post over the cap fails with "Clip Factory stopped X at your
+   $10 limit this month." To change the cap, change that value (and the matching shared constant in the web app) and
+   push. The X console's spending limit stays as a second fence.
 
 ## First sign-in
 
@@ -381,3 +406,6 @@ repository refuses to go. The vector bucket has `force_destroy = false`: Terrafo
 then the bucket. Deleting the two durable functions stops their running executions first and can take up to an hour
 (Terraform waits up to 60 minutes). The API Gateway account logging setting stays as it was. The Terraform state bucket, the OIDC provider and the deploy role are not managed by this
 Terraform; delete them by hand if you no longer need them. GitHub Pages and the legal pages are not affected.
+The platform secrets under `cf-prod/platforms/` are created by the app, not by Terraform: press **Disconnect** on each
+platform first (which also revokes the tokens), or delete them in the Secrets Manager console (eu-north-1). Remove the
+developer apps on the platforms' websites too if you no longer need them.

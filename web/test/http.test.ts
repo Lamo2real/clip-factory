@@ -72,14 +72,62 @@ describe("httpApi", () => {
 
   it("turns the error envelope into an ApiError with the server's message", async () => {
     const fetcher = vi.fn(async () =>
-      json(501, { error: { code: "not_implemented", message: "Connecting accounts arrives in the next phase." } }),
+      json(409, { error: { code: "conflict", message: "Paste your YouTube keys first." } }),
     );
     const api = httpApi({ baseUrl: "https://api.test", auth: auth(["tok"]), fetcher });
     await expect(api.connectAccount("youtube")).rejects.toMatchObject({
-      code: "not_implemented",
-      status: 501,
-      message: "Connecting accounts arrives in the next phase.",
+      code: "conflict",
+      status: 409,
+      message: "Paste your YouTube keys first.",
     });
+  });
+
+  it("calls the posting setup routes of §17.4 with the right methods and bodies", async () => {
+    const setup = { platform: "x", stepsDone: [], ready: false, keys: { saved: false }, account: { platform: "x", status: "not_connected" }, gates: [] };
+    const fetcher = vi.fn(async (url: RequestInfo | URL, _init?: RequestInit) =>
+      String(url).endsWith("/connect")
+        ? json(200, { authorizeUrl: "https://x.com/i/oauth2/authorize?x=1", expiresAt: "2026-11-16T10:10:00Z" })
+        : String(url).endsWith("/creator-info")
+          ? json(200, { creator: { nickname: "n" } })
+          : String(url).endsWith("/check")
+            ? json(200, { check: { ok: true }, setup })
+            : String(url).endsWith("/v1/setup")
+              ? json(200, { platforms: [setup], ready: 0, values: {} })
+              : json(200, { setup }),
+    );
+    const api = httpApi({ baseUrl: "https://api.test", auth: auth(["tok"]), fetcher });
+    const sent = () => fetcher.mock.calls.map((c) => {
+      const [u, init] = c as unknown as [string, RequestInit];
+      return [init.method, u.replace("https://api.test/v1", ""), init.body ? JSON.parse(String(init.body)) : undefined];
+    });
+    await api.getSetup();
+    await api.getPlatformSetup("x");
+    await api.setSetupStep("x", "ready-card", true);
+    await api.setReviewState("in_review");
+    await api.saveSetupKeys("x", { clientId: "a", clientSecret: "b" });
+    await api.checkSetup("x");
+    await api.uploadVerificationFile("tiktokAbc1.txt", "v");
+    expect(await api.connectAccount("x")).toEqual({ authorizeUrl: "https://x.com/i/oauth2/authorize?x=1", expiresAt: "2026-11-16T10:10:00Z" });
+    await api.chooseAccount("facebook", "123");
+    await api.tiktokCreatorInfo();
+    await api.confirmClip("C1", undefined, { privacyLevel: "SELF_ONLY", disableComment: true, disableDuet: true, disableStitch: true, brandContent: false, brandOrganic: false });
+    expect(sent()).toEqual([
+      ["GET", "/setup", undefined],
+      ["GET", "/setup/x", undefined],
+      ["PATCH", "/setup/x", { step: "ready-card", done: true }],
+      ["PATCH", "/setup/tiktok", { gate: "app_review", state: "in_review" }],
+      ["PUT", "/setup/x/keys", { clientId: "a", clientSecret: "b" }],
+      ["POST", "/setup/x/check", undefined],
+      ["POST", "/setup/tiktok/verification-file", { filename: "tiktokAbc1.txt", content: "v" }],
+      ["POST", "/accounts/x/connect", undefined],
+      ["POST", "/accounts/facebook/choose", { accountId: "123" }],
+      ["GET", "/accounts/tiktok/creator-info", undefined],
+      [
+        "POST",
+        "/clips/C1/confirm",
+        { tiktok: { privacyLevel: "SELF_ONLY", disableComment: true, disableDuet: true, disableStitch: true, brandContent: false, brandOrganic: false } },
+      ],
+    ]);
   });
 
   it("reports a network failure in plain words", async () => {

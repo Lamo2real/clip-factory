@@ -97,20 +97,42 @@ def mark_posted(store: db.Store, post: Mapping[str, Any], published: Any, now: d
     return store.update(str(post["pk"]), str(post["sk"]), fields, remove=["error"], expect_in={"status": ["queued"]})
 
 
+ACCOUNT_FIELDS = ("handle", "name", "avatarUrl", "connectedAt", "missing", "reason", "reconnectBy")
+ACCOUNT_STATUSES = ("connected", "needs_reconnect", "choose_account")
+
+
 def account_items(store: db.Store, user_id: str) -> list[Item]:
     return store.query_all(db.user_pk(user_id), "ACCOUNT#")
 
 
 def connected_account(store: db.Store, user_id: str, platform: str) -> Item | None:
+    """The platform's connected Account item (internal fields included: ``accountId`` for the adapters)."""
     for item in account_items(store, user_id):
         if item.get("platform") == platform and item.get("status") == "connected":
             return item
     return None
 
 
+def public_account(item: Mapping[str, Any]) -> Item:
+    """The Account shape of §17.4: never ``accountId``, ``scopes``, ``refreshLeaseUntil`` or keys."""
+    platform = str(item.get("platform") or "")
+    status = item.get("status")
+    if status not in ACCOUNT_STATUSES:
+        out: Item = {"platform": platform, "status": "not_connected"}
+        if item.get("reason") == "keys_changed":
+            out["reason"] = "keys_changed"
+        return out
+    account: Item = {"platform": platform, "status": status}
+    for key in ACCOUNT_FIELDS:
+        value = item.get(key)
+        if value not in (None, "", []):
+            account[key] = list(value) if isinstance(value, list | tuple | set) else value
+    return account
+
+
 def accounts(store: db.Store, user_id: str) -> list[Item]:
-    """One Account per platform; a connected one wins over a stale one."""
-    rank = {"connected": 0, "needs_reconnect": 1}
+    """One Account per platform (in ``PLATFORMS`` order); a connected one wins over a stale one."""
+    rank = {"connected": 0, "needs_reconnect": 1, "choose_account": 2}
     best: dict[str, Item] = {}
     for item in account_items(store, user_id):
         platform = item.get("platform")
@@ -119,17 +141,25 @@ def accounts(store: db.Store, user_id: str) -> list[Item]:
         current = best.get(platform)
         if current is None or rank.get(item.get("status", ""), 9) < rank.get(current.get("status", ""), 9):
             best[platform] = item
-    out = []
-    for platform in PLATFORMS:
-        found = best.get(platform)
-        if found is None or found.get("status") not in rank:
-            out.append({"platform": platform, "status": "not_connected"})
-            continue
-        account = {"platform": platform, "status": found["status"]}
-        if found.get("handle"):
-            account["handle"] = found["handle"]
-        out.append(account)
-    return out
+    return [public_account(best.get(p) or {"platform": p, "status": "not_connected"}) for p in PLATFORMS]
+
+
+def set_stats_id(store: db.Store, post: Mapping[str, Any], stats_id: str, now: datetime) -> Item:
+    """A public TikTok post's id arrived after posting (§17.6): it joins the poller's ``gsi2``. Conditional on the
+    post being ``posted`` without a ``statsId`` yet, so a replay changes nothing."""
+    from .stats import config
+
+    cfg = config.load()
+    due = iso(now + timedelta(minutes=cfg.platform(str(post["platform"])).min_interval))
+    fields: Item = {
+        "statsId": stats_id,
+        "statsDueAt": due,
+        "gsi2pk": db.STATS_GSI_PK,
+        "gsi2sk": f"{due}#{post['postId']}",
+    }
+    return store.update(
+        str(post["pk"]), str(post["sk"]), fields, expect_in={"status": ["posted"]}, expect_absent=["statsId"]
+    )
 
 
 def create_for_clip(
@@ -141,6 +171,7 @@ def create_for_clip(
     *,
     clip_fields: Mapping[str, Any] | None = None,
     expect_status: Iterable[str] | None = None,
+    post_options: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[Item]:
     """Creates the clip's Posts, one per enabled platform, and returns all its posts (public shape).
 
@@ -148,6 +179,7 @@ def create_for_clip(
     clip, conditional on the flag not being set yet (and on the clip's status being in ``expect_status``), so the
     posts are created exactly once even when Confirm and the clip-flow's ``ensure-posts`` step race or repeat.
     When the flag is already set nothing is written. Raises ``db.ConditionFailed`` if the condition fails.
+    ``post_options`` (per platform) are stored on that platform's post as the internal ``postOptions`` (§17.8).
     """
     clip_id = str(clip["clipId"])
     if clip.get("postsCreated"):
@@ -179,6 +211,7 @@ def create_for_clip(
                 "userId": user_id,
                 "createdAt": now,
                 **post,
+                **({"postOptions": dict(post_options[platform])} if post_options and platform in post_options else {}),
             }
         )
     update = db.update_request(

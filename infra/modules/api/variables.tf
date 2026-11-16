@@ -74,6 +74,58 @@ variable "learn_function_arn" {
   }
 }
 
+# ---------- Set up posting (docs/CONTRACTS.md §17.4, §17.9) ----------
+variable "hooks_url" {
+  type        = string
+  description = "cf-prod-hooks stage URL (HOOKS_URL): redirect URIs are {hooks_url}/oauth/{platform}/callback."
+  validation {
+    condition     = can(regex("^https://[^/]+/[A-Za-z0-9_-]+$", var.hooks_url))
+    error_message = "hooks_url must be the https stage invoke URL with no trailing slash."
+  }
+}
+
+variable "secret_prefix" {
+  type        = string
+  description = "Name prefix of the owner's platform key and token secrets (SECRET_PREFIX, <name>/platforms/)."
+  validation {
+    condition     = endswith(var.secret_prefix, "/platforms/")
+    error_message = "secret_prefix must end with /platforms/."
+  }
+}
+
+variable "platform_secrets_arn" {
+  type        = string
+  description = "ARN pattern arn:aws:secretsmanager:REGION:ACCT:secret:<name>/platforms/* the API may manage."
+  validation {
+    condition     = can(regex("^arn:aws[a-z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9_-]+/platforms/\\*$", var.platform_secrets_arn))
+    error_message = "platform_secrets_arn must be a secretsmanager ARN ending in /platforms/*."
+  }
+}
+
+variable "oauth_state_secret_arn" {
+  type        = string
+  description = "ARN of the OAuth state key secret (read only)."
+}
+
+variable "oauth_state_secret_name" {
+  type        = string
+  description = "Name of the OAuth state key secret (OAUTH_STATE_SECRET, <name>/oauth/state-key)."
+}
+
+variable "web_bucket" {
+  type        = string
+  description = "Web bucket name (WEB_BUCKET): the TikTok verification file is written at its root."
+}
+
+variable "web_bucket_arn" { type = string }
+
+variable "distribution_id" {
+  type        = string
+  description = "CloudFront distribution id (DISTRIBUTION_ID): invalidates /{verification file}."
+}
+
+variable "distribution_arn" { type = string }
+
 variable "vector_bucket" { type = string }
 variable "vector_index" { type = string }
 variable "vector_index_arn" { type = string }

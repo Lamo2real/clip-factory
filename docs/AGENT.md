@@ -143,9 +143,9 @@ Structured outputs use Bedrock Converse with a JSON schema, so the code never pa
 5. The Insights screen shows the learnings and the numbers behind them; Review and Library show "Like clips that did
    well".
 
-Until social integrations exist (phase 2), there are no posts with numbers, so no learnings are created and no
-vector reaches `performed`. The loop is
-in place and starts working as soon as the first clip is posted.
+Until at least one platform is set up in Settings › Posting › Set up posting ([SETUP_POSTING.md](SETUP_POSTING.md)),
+there are no posts with numbers, so no learnings are created and no vector reaches `performed`. The loop starts
+working as soon as the first clip is posted.
 
 ## Best of the week
 

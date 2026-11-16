@@ -37,6 +37,7 @@ locals {
       env = {
         TABLE_NAME                = var.table_name
         STATS_TIME_BUDGET_SECONDS = "240"
+        SECRET_PREFIX             = var.secret_prefix # §17.6: real platform tokens
       }
       # A missed tick is covered by the next one; a manual refresh is pressed again. Never retry (budgets).
       max_retries   = 0
@@ -64,7 +65,12 @@ locals {
   permissions = {
     stats = [
       # Due posts (gsi2 STATS), posts, accounts, STAT# snapshots, rate budgets and the manual refresh claim.
-      { Sid = "Data", Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:BatchGetItem"], Resource = local.table_resources },
+      # §17.6 "forget" (YouTube disconnect) deletes the YouTube posts' STAT# snapshots.
+      { Sid = "Data", Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem"], Resource = local.table_resources },
+      # Read the owner's app keys and tokens; write a refreshed (rotated) token back, only to {platform}/token.
+      # Never create or delete, never write the app keys or pending choices.
+      { Sid = "PlatformSecretsRead", Action = ["secretsmanager:GetSecretValue"], Resource = [var.platform_secrets_arn] },
+      { Sid = "PlatformTokens", Action = ["secretsmanager:PutSecretValue"], Resource = [var.platform_token_secrets_arn] },
     ]
     learn = [
       # The WEEK item, the week's clips and posts, the "Best of week" learning (put, or deleted when no picks).

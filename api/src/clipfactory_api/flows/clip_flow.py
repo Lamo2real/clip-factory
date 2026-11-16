@@ -4,8 +4,10 @@ Started by Confirm (``clip-{clipId}-{flowRun}`` on the alias ``live``) with ``{"
 
 1. ``ensure-posts``: the clip's posts exist (``posts.create_for_clip``, the same function Confirm uses); the clip is
    ``publishing`` while any post is ``queued``.
-2. ``publish-{platform}`` for each ``queued`` post (``pending_integration`` posts get no step); 3 attempts on
-   ``RetryablePublishError``. Exhausted retries → ``post-failed-{platform}`` marks that post ``failed``.
+2. Per ``queued`` post, one platform after another (§17.6): ``publish-{platform}`` (start) → while processing:
+   ``wait-{platform}-{n}`` + ``check-{platform}-{n}`` → ``finish-{platform}`` → done (``posts.mark_posted``).
+   3 attempts on ``RetryablePublishError``/``TransientError``. A failure → ``post-failed-{platform}`` with a plain
+   sentence. A public TikTok post without its id yet → ``wait-tiktok-id-{n}`` + ``tiktok-id-{n}``.
 3. ``settle-clip``: the clip becomes ``posted`` (≥ 1 post posted), ``failed`` (every queued post failed) or stays
    ``confirmed`` (nothing was queued). Nothing posted → ``upsert-vector`` (``confirmed``), outcome ``not_posted``.
 4. ``wait-48h``: a durable wait, no compute and no schedule.
@@ -41,8 +43,11 @@ from ..platforms import (
     adapter_for,
     label,
 )
-from ..platforms.base import HttpClient, urllib_client
+from ..platforms import errors as platform_errors
+from ..platforms.base import HttpClient, Progress, PublishJob, ReconnectNeededError, urllib_client
+from ..platforms.publishers import AdapterPublisher
 from ..skills import BuiltinSkill, load_builtins
+from ..stats import budget, config
 from ..stats.refresh import StatsDeps, refresh_posts
 from ..vectors import Vectors
 from . import TransientError, error_message, retrying, transient
@@ -67,6 +72,23 @@ class ClipFlowDeps:
     http: HttpClient = field(default=urllib_client)
     accounts: Callable[[db.Store, str, str], Item | None] = field(default=posts.connected_account)
     builtins: Callable[[], Sequence[BuiltinSkill]] = field(default=load_builtins)
+    # §17.6: real publishers and tokens in production; None → each adapter's one-call ``publish`` (tests, local runs)
+    publishers: Callable[[str], Any] | None = None
+    tokens: Any = None  # oauth.tokens.SecretsTokenProvider
+    video: Callable[[Item], Any] | None = None  # clip → VideoSource
+    graph_api_version: str = "v27.0"
+    cfg: config.PlatformsConfig | None = None
+
+    def publisher(self, platform: str) -> Any:
+        if self.publishers is None:
+            return AdapterPublisher(self.adapters(platform))
+        return self.publishers(platform)
+
+    @property
+    def config(self) -> config.PlatformsConfig:
+        if self.cfg is None:
+            self.cfg = config.load()
+        return self.cfg
 
 
 @dataclass(frozen=True)
@@ -101,23 +123,7 @@ def run_clip_flow(ctx: Any, event: Any, deps: ClipFlowDeps) -> dict[str, Any]:
     for post in found:
         if post.get("status") != "queued":
             continue  # pending_integration: no account yet, so no step
-        platform = str(post["platform"])
-        post_id = str(post["postId"])
-        idempotent = bool(getattr(deps.adapters(platform), "idempotent", False))
-        semantics = StepSemantics.AT_LEAST_ONCE_PER_RETRY if idempotent else StepSemantics.AT_MOST_ONCE_PER_RETRY
-        try:
-            ctx.step(
-                lambda _sc, post_id=post_id: publish_post(deps, target, post_id),
-                name=f"publish-{platform}",
-                config=retrying(RetryablePublishError, TransientError, semantics=semantics),
-            )
-        except StepError as e:
-            log("warning", "clip_flow.publish_failed", clipId=target.clip_id, platform=platform, error=error_message(e))
-            ctx.step(
-                lambda _sc, post_id=post_id, platform=platform: post_failed(deps, target, post_id, platform),
-                name=f"post-failed-{platform}",
-                config=retrying(),
-            )
+        publish_chain(ctx, deps, target, str(post["platform"]), str(post["postId"]))
     settled = ctx.step(lambda _sc: settle_clip(deps, target), name="settle-clip", config=retrying())
     if settled["status"] in {"missing", "skipped"}:
         return _done(target, settled["status"])
@@ -233,38 +239,264 @@ def ensure_posts(deps: ClipFlowDeps, target: Target) -> list[dict[str, Any]]:
     return [{"postId": p["postId"], "platform": p["platform"], "status": p["status"]} for p in found]
 
 
-def publish_post(deps: ClipFlowDeps, target: Target, post_id: str) -> dict[str, Any]:
-    """Sends one queued post. A post that is no longer ``queued`` (posted by an earlier attempt) is never sent."""
-    pk, sk = target.pk, db.post_sk(post_id)
-    post = _guard(lambda: deps.store.get(pk, sk))
-    if post is None:
-        return {"status": "missing"}
-    if post.get("status") != "queued":
-        return {"status": post.get("status")}
-    clip = _clip(deps, target) or {}
-    platform = str(post["platform"])
-    account = _account(deps, target, platform)
-    try:
-        result = deps.adapters(platform).publish(clip, account, idempotency_key=post_id)
-    except NotConnectedError:
+# --- publishing (§17.6) -----------------------------------------------------------------------------------------
+
+AT_MOST = {"at_most_once": StepSemantics.AT_MOST_ONCE_PER_RETRY}
+ACTIVE = ("processing", "ready_to_finish")
+POSTED_ANYWAY = frozenset({"youtube", "tiktok"})  # the platform finishes processing on its own
+
+
+def _semantics(kind: str) -> StepSemantics:
+    return AT_MOST.get(kind, StepSemantics.AT_LEAST_ONCE_PER_RETRY)
+
+
+def publish_chain(ctx: Any, deps: ClipFlowDeps, target: Target, platform: str, post_id: str) -> None:
+    """``publish-`` → (``wait-``/``check-``)* → ``finish-`` → (``wait-``/``check-``)* for one post."""
+    publisher = deps.publisher(platform)
+    max_checks = int(deps.config.platform(platform).publish_settings.get("maxChecks", 20))
+    start_semantics = _semantics(publisher.start_semantics)
+    finish_semantics = _semantics(publisher.finish_semantics)
+
+    def run(name: str, phase: str, semantics: StepSemantics) -> dict[str, Any] | None:
+        try:
+            result: dict[str, Any] = ctx.step(
+                lambda _sc: publish_step(deps, target, post_id, phase),
+                name=name,
+                config=retrying(RetryablePublishError, TransientError, semantics=semantics),
+            )
+        except StepError as e:
+            text = failure_text(platform, e, at_most_once=semantics == StepSemantics.AT_MOST_ONCE_PER_RETRY)
+            log("warning", "clip_flow.publish_failed", clipId=target.clip_id, platform=platform, step=name)
+            ctx.step(
+                lambda _sc: post_failed(deps, target, post_id, platform, text),
+                name=f"post-failed-{platform}",
+                config=retrying(),
+            )
+            return None
+        return result
+
+    progress = run(f"publish-{platform}", "start", start_semantics)
+    checks = 0
+    finished = False
+    while progress is not None and progress.get("state") in ACTIVE:
+        if progress["state"] == "ready_to_finish" and not finished:
+            finished = True
+            progress = run(f"finish-{platform}", "finish", finish_semantics)
+            continue
+        checks += 1
+        if checks > max_checks:
+            _over_limit(ctx, deps, target, platform, post_id)
+            return
+        wait = max(1, int(progress.get("checkAfter") or 30))
+        ctx.wait(Duration.from_seconds(wait), name=f"wait-{platform}-{checks}")
+        progress = run(f"check-{platform}-{checks}", "check", StepSemantics.AT_LEAST_ONCE_PER_RETRY)
+    if progress is not None and progress.get("state") == "done" and progress.get("needsId"):
+        _tiktok_id(ctx, deps, target, post_id)
+
+
+def _over_limit(ctx: Any, deps: ClipFlowDeps, target: Target, platform: str, post_id: str) -> None:
+    if platform in POSTED_ANYWAY:
+        ctx.step(
+            lambda _sc: publish_step(deps, target, post_id, "anyway"), name=f"posted-{platform}", config=retrying()
+        )
+        return
+    text = f"{label(platform)} could not finish this video. Press Try again."
+    ctx.step(
+        lambda _sc: post_failed(deps, target, post_id, platform, text),
+        name=f"post-failed-{platform}",
+        config=retrying(),
+    )
+
+
+def _tiktok_id(ctx: Any, deps: ClipFlowDeps, target: Target, post_id: str) -> None:
+    settings_ = deps.config.platform("tiktok").publish_settings
+    every = int(settings_.get("idCheckMinutes", 10))
+    for n in range(1, int(settings_.get("idMaxChecks", 12)) + 1):
+        ctx.wait(Duration.from_minutes(every), name=f"wait-tiktok-id-{n}")
+        try:
+            found = ctx.step(
+                lambda _sc: tiktok_id_step(deps, target, post_id), name=f"tiktok-id-{n}", config=retrying()
+            )
+        except StepError:
+            return  # the post is live either way; it just has no numbers
+        if found.get("statsId") or found.get("state") != "waiting":
+            return
+
+
+def failure_text(platform: str, err: BaseException, *, at_most_once: bool) -> str:
+    kind = str(getattr(err, "error_type", "") or "").rsplit(".", 1)[-1]
+    name = label(platform)
+    if kind == "StepInterruptedError" and at_most_once:
+        return f"We are not sure it posted. Look on {name} before you press Try again."
+    if kind in {"ReconnectNeededError", "ReconnectProblem"}:
+        return f"Connect {name} again in Settings › Posting › Set up posting, then press Try again."
+    if kind in {"PublishError", "PlatformProblem"}:
+        message = error_message(err).strip()
+        return message or f"Posting to {name} did not work. Press Try again."
+    return f"Posting to {name} did not work. Press Try again."
+
+
+def _save_handle(deps: ClipFlowDeps, target: Target, post_id: str) -> Callable[[dict[str, Any]], None]:
+    def save(handle: dict[str, Any]) -> None:
         with contextlib.suppress(db.ConditionFailed):
             _guard(
                 lambda: deps.store.update(
-                    pk, sk, {"status": "pending_integration"}, remove=["error"], expect_in={"status": ["queued"]}
+                    target.pk, db.post_sk(post_id), {"publishHandle": handle}, expect_in={"status": ["queued"]}
                 )
             )
-        return {"status": "pending_integration"}
+
+    return save
+
+
+def _pending(deps: ClipFlowDeps, target: Target, post_id: str) -> dict[str, Any]:
+    with contextlib.suppress(db.ConditionFailed):
+        _guard(
+            lambda: deps.store.update(
+                target.pk,
+                db.post_sk(post_id),
+                {"status": "pending_integration"},
+                remove=["error"],
+                expect_in={"status": ["queued"]},
+            )
+        )
+    return {"state": "pending_integration"}
+
+
+def publish_step(deps: ClipFlowDeps, target: Target, post_id: str, phase: str) -> dict[str, Any]:
+    """One publishing step. Reads the post first: one that is no longer ``queued`` is never touched again."""
+    pk, sk = target.pk, db.post_sk(post_id)
+    post = _guard(lambda: deps.store.get(pk, sk))
+    if post is None:
+        return {"state": "missing"}
+    if post.get("status") != "queued":
+        return {"state": str(post.get("status"))}
+    platform = str(post["platform"])
+    clip = _clip(deps, target) or {}
+    account = _account(deps, target, platform)
+    if account is None:
+        return _pending(deps, target, post_id)
+    publisher = deps.publisher(platform)
     try:
-        _guard(lambda: posts.mark_posted(deps.store, post, result, deps.clock()))
+        creds = None
+        if publisher.needs_credentials:
+            if deps.tokens is None:
+                raise NotConnectedError(f"Connect {label(platform)} in Settings › Posting › Set up posting.")
+            creds = deps.tokens.credentials(platform, account)
+        job = PublishJob(
+            post=post,
+            clip=clip,
+            account=account,
+            creds=creds,
+            video=deps.video(clip) if deps.video is not None and publisher.needs_credentials else None,  # type: ignore[arg-type]
+            options=dict(post.get("postOptions") or {}),
+            settings=settings.load(deps.store, target.user_id),
+            http=deps.http,
+            config=deps.config.platform(platform).publish_settings,
+            save=_save_handle(deps, target, post_id),
+            now=deps.clock,
+            graph_api_version=deps.graph_api_version,
+        )
+        progress = _advance(deps, publisher, job, phase)
+    except NotConnectedError:
+        return _pending(deps, target, post_id)
+    except ReconnectNeededError:
+        if deps.tokens is not None:
+            deps.tokens.mark_dead(platform, account)
+        raise
+    except platform_errors.PlatformProblem as e:
+        if e.problem.kind == "credits":
+            _credits(deps, target, "action")
+        raise
+    if progress.state != "done" or progress.published is None:
+        return progress.to_json()
+    try:
+        _guard(lambda: posts.mark_posted(deps.store, post, progress.published, deps.clock()))
     except db.ConditionFailed:
         current = _guard(lambda: deps.store.get(pk, sk)) or {}
-        return {"status": current.get("status")}
+        return {"state": str(current.get("status"))}
+    if platform == "x" and publisher.needs_credentials:
+        _credits(deps, target, "ok")
     log("info", "clip_flow.posted", clipId=target.clip_id, postId=post_id, platform=platform)
-    return {"status": "posted"}
+    published = progress.published
+    needs_id = (
+        platform == "tiktok"
+        and publisher.needs_credentials
+        and published.privacy == "public"
+        and not published.stats_id
+    )
+    return {"state": "done", "needsId": needs_id}
 
 
-def post_failed(deps: ClipFlowDeps, target: Target, post_id: str, platform: str) -> dict[str, str]:
-    text = f"Posting to {label(platform)} did not work. Press Try again."
+def _advance(deps: ClipFlowDeps, publisher: Any, job: PublishJob, phase: str) -> Progress:
+    handle = job.handle
+    first_x = phase == "start" and job.post.get("platform") == "x" and publisher.needs_credentials and not handle
+    if first_x and not _guard(lambda: budget.charge_post(deps.store, deps.clock(), cfg=deps.config)):
+        raise PublishError(budget.X_POST_CAP_TEXT)
+    result: Progress
+    if phase == "start":
+        result = publisher.start(job)
+    elif phase == "finish":
+        result = publisher.finish(job, handle)
+    elif phase == "anyway":
+        result = Progress("done", handle, published=publisher.published(job, handle))
+    else:
+        result = publisher.check(job, handle)
+    return result
+
+
+def _credits(deps: ClipFlowDeps, target: Target, state: str) -> None:
+    from ..oauth import setup
+
+    try:
+        current = setup.item(deps.store, target.user_id, "x").get("gates") or {}
+        if (current.get("credits") or {}).get("state") == state:
+            return
+        setup.set_gate(deps.store, target.user_id, "x", "credits", state=state, now=deps.clock())
+    except Exception as e:  # the gate is a hint on the setup page; posting goes on either way
+        log("warning", "clip_flow.credits_gate_failed", error=type(e).__name__)
+
+
+def tiktok_id_step(deps: ClipFlowDeps, target: Target, post_id: str) -> dict[str, Any]:
+    post = _guard(lambda: deps.store.get(target.pk, db.post_sk(post_id)))
+    if post is None or post.get("status") != "posted":
+        return {"state": "gone"}
+    if post.get("statsId"):
+        return {"state": "done", "statsId": post["statsId"]}
+    account = _account(deps, target, "tiktok")
+    if account is None or deps.tokens is None:
+        return {"state": "gone"}
+    publisher = deps.publisher("tiktok")
+    creds = deps.tokens.credentials("tiktok", account)
+    job = PublishJob(
+        post=post,
+        clip={},
+        account=account,
+        creds=creds,
+        video=None,  # type: ignore[arg-type]
+        options={},
+        settings={},
+        http=deps.http,
+        now=deps.clock,
+    )
+    found = publisher.public_id(job, job.handle)
+    if not found:
+        return {"state": "waiting"}
+    try:
+        _guard(lambda: posts.set_stats_id(deps.store, post, found, deps.clock()))
+    except db.ConditionFailed:
+        return {"state": "done"}
+    username = str(job.handle.get("username") or "")
+    if username:
+        with contextlib.suppress(db.ConditionFailed):
+            url = f"https://www.tiktok.com/@{username}/video/{found}"
+            _guard(lambda: deps.store.update(target.pk, db.post_sk(post_id), {"url": url}))
+    return {"state": "done", "statsId": found}
+
+
+def post_failed(
+    deps: ClipFlowDeps, target: Target, post_id: str, platform: str, text: str | None = None
+) -> dict[str, str]:
+    text = text or f"Posting to {label(platform)} did not work. Press Try again."
     try:
         _guard(
             lambda: deps.store.update(
@@ -409,12 +641,41 @@ def _from_env() -> ClipFlowDeps:
             env["VECTOR_INDEX"],
             env.get("EMBED_MODEL_ID", vectors.DEFAULT_EMBED_MODEL),
         )
+    from .. import s3
+    from ..oauth.tokens import token_provider_from_env
+    from ..platforms import make_adapters
+    from ..platforms.publishers import publisher_for
+    from ..platforms.video import S3Video
+    from ..stats import config
+
+    store = db.Store(table(env["TABLE_NAME"]))
+    cfg = config.load()
+    tokens = token_provider_from_env(store)
+    media_client = s3.make_client(reg)
+    bucket = env.get("MEDIA_BUCKET", "")
+    media = s3.Media(media_client, env["MEDIA_BUCKET"])
+
+    def video(clip: Item) -> S3Video:
+        key = str(clip.get("videoKey") or s3.clip_prefix(str(clip.get("jobId")), str(clip.get("clipId"))) + "clip.mp4")
+        return S3Video(media_client, bucket, key)
+
+    if tokens is None:
+        return ClipFlowDeps(
+            store=store, bedrock=bedrock, model_id=env["MODEL_ID"], vectors=vector_store, media=media, cfg=cfg
+        )
+    adapters = make_adapters(tokens=tokens, graph_api_version=cfg.graph_api_version)
     return ClipFlowDeps(
-        store=db.Store(table(env["TABLE_NAME"])),
+        store=store,
         bedrock=bedrock,
         model_id=env["MODEL_ID"],
         vectors=vector_store,
-        media=s3.Media(s3.make_client(reg), env["MEDIA_BUCKET"]),
+        media=media,
+        adapters=lambda platform: adapters[platform],
+        publishers=publisher_for,
+        tokens=tokens,
+        video=video,
+        graph_api_version=cfg.graph_api_version,
+        cfg=cfg,
     )
 
 

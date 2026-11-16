@@ -5,7 +5,8 @@
   it for its video feed topics. TikTok and X arrive in phase 2 (501).
 * ``POST /hooks/{platform}``: the raw event is stored as a ``HOOK#`` item (14-day ``ttl``) and nothing else runs
   inline. Signatures are checked by ``verify_signature``; phase 1 has no app secrets, so it answers "unverified".
-* ``GET /oauth/{platform}/callback``: redirects to the app's Settings ("arrives soon") until phase 2.
+* ``GET /oauth/{platform}/callback``: the OAuth callback of §17.5 (``oauth.callback``). It always answers ``302`` to
+  ``{APP_URL}/settings/posting/setup/{platform}?result={code}`` (a fixed path and a listed code: no open redirect).
 
 Query strings (OAuth ``code``/``state``, Meta's verify token) and bodies are never logged.
 """
@@ -23,12 +24,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, Literal
-from urllib.parse import quote
 
 from . import db
 from .clock import Clock, iso, utcnow
 from .ids import ulid
 from .log import log
+from .oauth import OAuthEnv
 from .settings import PLATFORMS
 
 MAX_BODY_BYTES = 256 * 1024
@@ -61,6 +62,7 @@ class HooksDeps:
     verify_token: Callable[[], str]
     clock: Clock = field(default=utcnow)
     verify: Callable[[str, Mapping[str, str], bytes], Verdict] = field(default=verify_signature)
+    oauth: OAuthEnv | None = None  # None: the callback answers result=error (secrets not configured)
 
 
 def ssm_token_reader(client: Any, name: str, now: Callable[[], float] = time.time) -> Callable[[], str]:
@@ -125,8 +127,7 @@ def handle(event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
         elif resource == "/hooks/{platform}" and method == "POST":
             out = _receive(platform, event, deps)
         elif resource == "/oauth/{platform}/callback" and method == "GET":
-            location = f"{deps.app_url.rstrip('/')}/settings?account={quote(platform)}&status=coming_soon"
-            out = _response(302, headers={"location": location})
+            out = _oauth_callback(platform, event, deps)
         else:
             out = _error(404, "not_found", "That address does not exist.")
     except Exception as e:
@@ -142,6 +143,20 @@ def handle(event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
         requestId=request_id,
     )
     return out
+
+
+def _oauth_callback(platform: str, event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
+    from .oauth import callback
+
+    result = "error"
+    if deps.oauth is not None:
+        try:
+            result = callback.handle_callback(platform, _query(event), deps.store, deps.oauth)
+        except Exception as e:  # the owner always lands on the setup page with a plain sentence
+            log("error", "hooks.oauth_failed", platform=platform, error=type(e).__name__)
+            result = "error"
+    headers = {"location": callback.location(deps.app_url, platform, result), "referrer-policy": "no-referrer"}
+    return _response(302, headers=headers)
 
 
 def _challenge(query: Mapping[str, str]) -> str | None:
@@ -218,13 +233,33 @@ def _from_env() -> HooksDeps:
     from botocore.config import Config
 
     from .app import region, table
+    from .oauth import scopes_from_config
+    from .oauth.secrets import PREFIX, Secrets
+    from .stats import config
 
     env = os.environ
     ssm = boto3.client("ssm", region_name=region(), config=Config(retries={"mode": "standard"}, read_timeout=3))
+    store = db.Store(table(env["TABLE_NAME"]))
+    oauth = None
+    if env.get("OAUTH_STATE_SECRET"):
+        sm = boto3.client(
+            "secretsmanager", region_name=region(), config=Config(retries={"mode": "standard"}, read_timeout=5)
+        )
+        secrets = Secrets(sm, env.get("SECRET_PREFIX") or PREFIX)
+        state_name = env["OAUTH_STATE_SECRET"]
+        oauth = OAuthEnv(
+            secrets=secrets,
+            app_url=env["APP_URL"],
+            hooks_url=env.get("HOOKS_URL", ""),
+            state_key=lambda: secrets.read_text(state_name).encode(),
+            graph_version=config.load().graph_api_version,
+            scopes=scopes_from_config(),
+        )
     return HooksDeps(
-        store=db.Store(table(env["TABLE_NAME"])),
+        store=store,
         app_url=env["APP_URL"],
         verify_token=ssm_token_reader(ssm, env.get("VERIFY_TOKEN_PARAM", "/cf-prod/hooks/verify-token")),
+        oauth=oauth,
     )
 
 
