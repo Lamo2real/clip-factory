@@ -138,8 +138,10 @@ function JobRow({ job }: { job: Job }) {
       <SourceThumb job={job} className="job-row__thumb" />
       <span className="job-row__body">
         <span className="job-row__title clamp-2 user-text">{jobTitle(job)}</span>
-        <span className="job-row__meta clamp-1">
-          {sourceMeta(job)} · {relative(job.createdAt)}
+        {/* The source may be cut short on a phone; when it started never is. */}
+        <span className="job-row__meta">
+          <span className="job-row__source">{sourceMeta(job)}</span>
+          <span className="job-row__when">· {relative(job.createdAt)}</span>
         </span>
         {working ? (
           <span className="job-row__progress">
@@ -149,7 +151,7 @@ function JobRow({ job }: { job: Job }) {
             </span>
           </span>
         ) : job.status === "failed" && job.error ? (
-          <span className="job-row__error clamp-2">{job.error}</span>
+          <span className="job-row__error user-text">{job.error}</span>
         ) : null}
       </span>
       <span className="job-row__side">

@@ -4,16 +4,17 @@ import { Icon, type IconName } from "./Icon.tsx";
 import { PlatformMark } from "./PlatformMark.tsx";
 import { Pill, type Tone } from "./ui.tsx";
 
-const STATUS: Record<JobStatus, { label: string; tone: Tone; icon: IconName }> = {
+/** The job status pill (UX_DESIGN_SYSTEM.md "Job status pill"): plain words, never "Failed" (§12.4). */
+export const JOB_STATUS: Record<JobStatus, { label: string; tone: Tone; icon: IconName }> = {
   queued: { label: "Waiting", tone: "neutral", icon: "clock" },
   running: { label: "Working", tone: "sage", icon: "bolt" },
   ready: { label: "Ready", tone: "ink", icon: "checkCircle" },
-  failed: { label: "Failed", tone: "tomato", icon: "alert" },
+  failed: { label: "Didn't work", tone: "tomato", icon: "alert" },
   canceled: { label: "Canceled", tone: "neutral", icon: "stop" },
 };
 
 export function JobStatusPill({ status }: { status: JobStatus }) {
-  const s = STATUS[status];
+  const s = JOB_STATUS[status];
   return (
     <Pill tone={s.tone} icon={s.icon}>
       {s.label}

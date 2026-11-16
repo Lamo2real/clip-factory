@@ -36,7 +36,15 @@ export interface MockFaults extends StatsFaults {
   resumeAfterMs: number;
   /** "Like clips that did well" finds nothing (the strip must hide). */
   similarEmpty?: boolean;
+  /** Jobs list pages hold at most this many jobs, whatever limit is asked for (so "Show older jobs" shows). */
+  jobsPageSize?: number;
+  /** The next N "Show older jobs" pages (listJobs with a cursor) fail like a server error. */
+  olderJobsFails?: number;
+  /** The next N Make clips (createJob) fail like a server error. */
+  createJobFails?: number;
 }
+
+const serverDown = () => new ApiError(503, "internal", "Something went wrong on our side. Try again in a moment.");
 
 /** How often each API method was called (window.__cfMockCalls), so tests can tell a poll from a live update. */
 export type MockCalls = Record<string, number>;
@@ -253,6 +261,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     async createJob(body) {
       await delay();
+      if ((faults.createJobFails ?? 0) > 0) {
+        faults.createJobFails!--;
+        throw serverDown();
+      }
       const now = new Date().toISOString();
       const isLink = body.source.type === "link";
       const url = isLink ? (body.source as { url: string }).url : undefined;
@@ -284,6 +296,11 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     async listJobs({ limit = 20, cursor } = {}) {
       await delay();
+      if (cursor && (faults.olderJobsFails ?? 0) > 0) {
+        faults.olderJobsFails!--;
+        throw serverDown();
+      }
+      if (faults.jobsPageSize) limit = Math.min(limit, faults.jobsPageSize);
       tick();
       const sorted = [...store.jobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       const start = cursor ? Number(cursor) : 0;

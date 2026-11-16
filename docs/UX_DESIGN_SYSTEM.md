@@ -14,54 +14,76 @@ this file is the full reference. The code lives in `web/`; tokens are CSS custom
 
 ## Colour tokens
 
+The tables below are the values in `web/src/styles/tokens.css` (and `--sage-text` in `settings.css`).
+`web/test/designTokens.test.ts` fails if a row here and the CSS disagree, if a colour or radius token in
+`tokens.css` is missing from these tables, or if this doc names a custom property the CSS doesn't define.
+
 | Token | Value | Use |
 |---|---|---|
-| `--sage` | `#9CAF88` | Hero cards, active navigation, success, the backdrop |
-| `--sage-deep` | `#6F8560` | Text and icons on light glass that must read as sage |
-| `--offwhite` | `#F7F5EF` | Base of most glass tints, light text on sage |
-| `--tomato` | `#E8412C` | **Every primary CTA**, focus ring accent, the headline swash, the review badge |
-| `--tomato-deep` | `#C7321F` | CTA pressed state |
-| `--ink` | `#1E2A1B` | Body text, icons |
-| `--ink-soft` | `rgba(30, 42, 27, 0.68)` | Secondary text |
-| `--danger` | `#B3261E` | Error text (never used for buttons; destructive buttons are outlined) |
+| `--sage` | `#9caf88` | Hero cards, active navigation, success, the backdrop |
+| `--sage-deep` | `#4f6340` | Text and icons on light glass that must read as sage (about 6:1 on off-white; the old `#6F8560` failed AA) |
+| `--sage-mist` | `#c9d4bd` | Pale sage fills (tracks, quiet chips) |
+| `--sage-text` | `#3d4f31` | Small sage text on a sage tint (see Contrast below) |
+| `--offwhite` | `#f7f5ef` | Base of most glass tints, light text on sage |
+| `--tomato` | `#e8412c` | **Every primary CTA**, focus ring accent, the headline swash, the review badge |
+| `--tomato-deep` | `#c4301e` | CTA pressed state, the focus ring |
+| `--tomato-ink` | `#962414` | Tomato **text** on light glass (text links, the Working now %, the "Didn't work" pill, job and posting errors): at least 5.2:1 even on sage-tinted or tomato-tinted glass, so it passes AA at 12–16 px. Error text uses it too; there is no separate danger colour, and destructive buttons are outlined (`.btn--danger`). |
+| `--ink` | `#1e2a1b` | Body text, icons |
+| `--ink-2` | `#2f3b2c` | Secondary text; at least 4.9:1 even on full sage |
+| `--ink-3` | `#46523f` | Meta text (leaves, hints, timestamps), only on light glass |
 
-Glass tints are these colours at low alpha:
+`--sage-rgb`, `--offwhite-rgb`, `--tomato-rgb` and `--ink-rgb` hold the same colours as space-separated channels so
+CSS can add alpha: `rgb(var(--ink-rgb) / 0.08)`.
 
-| Token | Value |
+Glass tints are not tokens: each glass variant sets its own `--glass-tint` gradient (in `web/src/styles/glass.css`),
+and a component may override it.
+
+| Class | `--glass-tint` |
 |---|---|
-| `--glass-offwhite` | `rgba(247, 245, 239, 0.42)` |
-| `--glass-sage` | `rgba(156, 175, 136, 0.38)` |
-| `--glass-tomato` | `rgba(232, 65, 44, 0.86)` (CTAs stay readable, still slightly translucent) |
-| `--glass-edge` | `rgba(255, 255, 255, 0.55)` |
-| `--glass-shadow` | `0 8px 32px rgba(30, 42, 27, 0.14)` |
+| `.glass` | white 0.66 → off-white 0.48, 140° |
+| `.glass--sage` | light sage 0.78 → `--sage` 0.62 → deeper sage 0.60, 150° |
+| `.glass--tomato` | pale tomato 0.70 → `--tomato` 0.22, 150° |
+| `.glass--clear` | white 0.42 → off-white 0.28, 140° |
+| `.glass--strong` and dialogs | white 0.86–0.95 → off-white 0.74–0.92 (set per component) |
+| No `backdrop-filter`, or `prefers-reduced-transparency` | white 0.90–0.92 → off-white 0.86–0.90; sage 0.94–0.96 |
 
 Contrast: body text is `--ink` on glass over the default backdrop (≥ 7:1). White text on tomato CTAs is ≥ 4.5:1 at
-14 px semibold and up. Never put text directly on the moving backdrop.
+14 px semibold and up. Small sage text on a sage tint (Settings tags such as "Set up posting", the Sounds number
+tiles) uses the deeper `--sage-text` (about 5.7–6.2:1 measured on the tint over the glass), not `--sage-deep`, which
+measures only 4.2–4.6:1 there. Never put text directly on the moving backdrop. `web/e2e/contrast.spec.ts` checks the
+rendered contrast and text size of every screen (see [TESTING.md](TESTING.md)).
 
 ## The liquid glass recipe
 
 ```css
 .glass {
-  background: var(--glass-offwhite);
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
-  backdrop-filter: blur(22px) saturate(160%);
-  border: 1px solid var(--glass-edge);
-  border-radius: var(--radius-l);
-  box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --glass-tint: linear-gradient(140deg, rgb(255 255 255 / 0.66), rgb(var(--offwhite-rgb) / 0.48));
+  --glass-blur: 22px;
+  position: relative;
+  isolation: isolate;
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.7);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.7);
+  border: 1px solid rgb(255 255 255 / 0.5);
+  border-radius: var(--r-lg);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.75), inset 0 -1px 0 rgb(var(--ink-rgb) / 0.05), var(--shadow-1);
 }
-/* Refractive edge: a soft highlight along the top-left, like light catching curved glass. */
+/* The lit rim: a 1px gradient ring that catches light on the top-left and bottom-right edges. */
 .glass::before {
-  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-  background: linear-gradient(135deg, rgba(255,255,255,.45), rgba(255,255,255,0) 40%);
-  mix-blend-mode: soft-light;
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; padding: 1px;
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.95), rgb(255 255 255 / 0.1) 32%,
+    rgb(255 255 255 / 0) 55%, rgb(255 255 255 / 0.55) 100%);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass { background: rgba(247, 245, 239, 0.92); }
+  .glass { --glass-tint: linear-gradient(140deg, rgb(255 255 255 / 0.9), rgb(var(--offwhite-rgb) / 0.86)); }
 }
 ```
 
-Variants: `.glass--sage` (hero, active nav), `.glass--strong` (dialogs and sheets, alpha 0.62 so long text stays
-easy to read), `.glass--cta` (tomato).
+Variants: `.glass--sage` (hero, active nav), `.glass--strong` (dialogs and sheets, a denser tint so long text stays
+easy to read), `.glass--tomato`, `.glass--clear`. In Chromium, `.glass--refract` also bends the backdrop through the
+`#cf-refract` SVG filter.
 
 **The backdrop.** A fixed layer behind the app with three large blurred blobs (sage, off-white, a little tomato) that
 drift slowly (60-second loop, paused with reduced motion). The owner can choose a background image in Settings; it
@@ -73,25 +95,52 @@ image instead. Choosing the same photo as the phone's wallpaper gives the same e
 
 ## Typography
 
-| Role | Font | Size (clamp) | Weight / style |
+Sizes are the tokens in `web/src/styles/tokens.css`; refer to them by name, never by a copied number.
+
+| Role | Font | Size token | Weight / style |
 |---|---|---|---|
-| Display | Times New Roman, Tinos, serif | `clamp(2.25rem, 6vw, 4rem)` | 400 italic, tight leading 1.05 |
-| H1 | Times New Roman | `clamp(1.75rem, 4vw, 2.5rem)` | 400, often italic |
-| H2 | Inter | 1.25rem | 600 |
-| Body | Inter | 1rem (16 px, never smaller on phones, so iOS does not zoom inputs) | 400, leading 1.5 |
-| Small / meta | Inter | 0.8125rem | 500 |
-| Numbers (stats) | Inter, `font-variant-numeric: tabular-nums` | 2rem | 600 |
+| Display (Home hero) | `--font-display`: Times New Roman, Tinos, serif | `--fs-display` = `clamp(2.35rem, 1.55rem + 3.6vw, 4.5rem)` | 400, italic words, tight leading 0.98 |
+| H1 (page titles, `.display-2`) | `--font-display` | `--fs-h1` = `clamp(1.95rem, 1.45rem + 2.1vw, 3.1rem)` | 400, often italic words |
+| H2 (section titles, `.display-3`) | `--font-display` | `--fs-h2` = `clamp(1.45rem, 1.2rem + 1vw, 2.05rem)` | 400, italic words |
+| H3 (subheads, e.g. skill text) | `--font-ui`: Inter | `--fs-h3` = `clamp(1.05rem, 1rem + 0.25vw, 1.2rem)` | 700 |
+| Body | `--font-ui` | `--fs-body` = 1rem (16 px, never smaller on phones, so iOS does not zoom inputs) | 400, leading 1.5 |
+| Small / meta | `--font-ui` | `--fs-small` = 0.875rem | 500–600 |
+| Tiny labels (chips, star word) | `--font-ui` | `--fs-xs` = 0.78rem | 600–700 |
+| Numbers (stats) | `--font-ui`, `font-variant-numeric: tabular-nums` | per component | 600–750 |
+
+Nothing is set smaller than `--fs-xs`, badges and stickers included (the tab bar and sidebar counts, the sound
+**Pick** sticker, the "Like clips that did well" meta line). `web/test/styleFloors.test.ts` fails on any smaller
+`font-size`.
 
 The tomato **swash**: a hand-drawn SVG underline under one or two italic words of a display headline ("Make it
 *viral*"). Used once per screen at most.
 
-Inter loads from Google Fonts with `display=swap`; Tinos is the metric-compatible fallback for Times New Roman where
-it is missing (Android, Linux).
+Both fonts are bundled with the app, never loaded from Google Fonts: `web/src/main.tsx` imports Inter Variable
+(`@fontsource-variable/inter`) and Tinos 400 and 400 italic (`@fontsource/tinos`), so they are built into the app and
+cached for offline use. Tinos is the metric-compatible twin of Times New Roman, used where Times New Roman is missing
+(Android, Linux). The public pages (`about.html`, `legal/*.html`) load no webfonts on purpose; they use the same stacks
+(see [CONTRACTS.md §17.3](CONTRACTS.md)).
+
+Relative times use one style everywhere (`relative()` in `web/src/lib/format.ts`; the clip page's `ago()` uses it):
+"just now", "3 min ago", "2 h ago", "yesterday", "4 days ago", and ahead "in 5 min", "tomorrow", "in 2 days". Durations
+read "6 h 10 min". Neither ever says "60 min" or "24 h".
 
 ## Layout and spacing
 
 - Spacing scale (px): 4, 8, 12, 16, 24, 32, 48, 64. Tokens `--space-1` … `--space-8`.
-- Radii: `--radius-s` 10 px (inputs, chips), `--radius-m` 16 px (cards), `--radius-l` 24 px (panels), pills 999 px.
+- Radii come from the scale below. Every `border-radius` uses a token (or `calc()` on one for the inner corner of a
+  padded box); only hairline bars and tiny thumbs under 8 px, circles (`50%`) and `inherit` stay literal.
+  `web/test/designTokens.test.ts` fails on any other hard-coded radius.
+
+| Token | Value | Use |
+|---|---|---|
+| `--r-xs` | `10px` | Small chips, thumbs and inputs inside rows |
+| `--r-sm` | `12px` | Inputs, buttons inside cards, small tiles |
+| `--r-md` | `18px` | Cards, chat bubbles, list rows |
+| `--r-lg` | `26px` | Panels and glass surfaces (the `.glass` default) |
+| `--r-xl` | `34px` | Hero cards and the clip page's big panels |
+| `--r-pill` | `999px` | Pills, chips and pill buttons |
+
 - Content max width 1200 px, centred. Gutters 16 px on phones, 24 px on tablets, 32 px on desktop.
 - Grid: one column on phones; cards in rows of 2 from 768 px, 3 from 1100 px (`repeat(auto-fill, minmax(min(100%, 300px), 1fr))`).
 - Breakpoints: phone < 768 px, tablet 768–1099 px, desktop ≥ 1100 px.
@@ -107,7 +156,7 @@ The person in the reference image is not used.
 | < 768 px | Bottom glass tab bar, **icons only**, no words. Each icon has an `aria-label` and a tooltip on long-press. Five items: Home, New job, Review (with badge), Insights, Settings. Respects `env(safe-area-inset-bottom)`. Each target ≥ 48 × 48 px. "Get the app" is not a tab: it is the Settings › App & account › Get the app branch and a one-time banner on Home. |
 | ≥ 768 px | Left glass sidebar with icons and names. A hamburger (three stripes) at the top collapses it to icons only; the choice is remembered on that device. Collapsed items show their name as a tooltip. A **Get the app** item (download icon) sits at the bottom of the sidebar, apart from the main items, and disappears once the app is installed. |
 
-The active item uses `--glass-sage` and a small tomato dot. The current page has `aria-current="page"`.
+The active item uses a sage-tinted glass fill and a small tomato dot. The current page has `aria-current="page"`.
 
 ## Settings tree
 
@@ -163,10 +212,12 @@ unless its name already says it all.
 |---|---|
 | **Field** `/settings` | Serif title "Make it *yours*." (the word *yours* in italic) with the lede "How your clips are made, where they go, and how the app looks and sounds.", then a **Find a setting** search box, then the four trees as big glass cards in the card grid: icon, name, one line (for example "How your clips are made."), then how many apples it holds and its branch names ("… settings · Clips, Skills, YouTube help"). |
 | **Tree** | Breadcrumb, the tree's title, its branches as glass cards: icon, name, one line. |
-| **Branch** | Breadcrumb, the branch's title, its apples as rows grouped in glass panels. Each row: the label on the left, the control on the right (below it on narrow phones), the leaf under the label in `--ink-soft` small text. |
+| **Branch** | Breadcrumb, the branch's title, its apples as rows grouped in glass panels. Each row: the label on the left, the control on the right (below it on narrow phones), the leaf under the label in `--ink-2` small text. |
 
 - **Breadcrumb on every level:** `Settings › Look & feel › Sounds`, each part a link, the last one `aria-current="page"`.
-  It truncates from the left on narrow screens, never wraps the page sideways.
+  It truncates from the left on narrow screens, never wraps the page sideways. Below 768 px it is always one row:
+  only the last three levels show, after a "…" when there are more (the Back pill goes up a level), and a name that
+  still does not fit ends in "…", the levels above the current page first. Every shown part stays a 48 px target.
 - **Back:** phones get a big secondary **Back** pill (arrow icon + "Back", 48 px tall) at the top of every tree and
   branch page; it goes one level up, not browser-back, so it never leaves Settings by surprise.
 - **One tomato button per screen at most.** Most branches have none: switches and pickers save by themselves. The
@@ -185,8 +236,9 @@ unless its name already says it all.
 **The folder panel** (≥ 1024 px):
 - Each tree is a folder row (chevron, icon, name). Clicking it opens or closes the folder like a file browser; the
   branches inside are links. Opening a tree's page also opens its folder.
-- The current branch (or tree) uses `--glass-sage` and the small tomato dot, like the app's sidebar, with
-  `aria-current="page"`.
+- The current branch (or tree) uses a sage-tinted glass fill and the small tomato dot, like the app's sidebar, with
+  `aria-current="page"`. On a tree's own page that is the tree's folder row (a button, so it carries
+  `aria-current="page"` itself); exactly one row in the panel is current on every Settings page.
 - Which folders are open is remembered on that device (`localStorage`, wrapped so a private window still works); on a
   first visit only the current tree is open.
 - It is a `nav` labelled "Settings sections"; folders are buttons with `aria-expanded`. Arrow Up and Down move between
@@ -214,19 +266,20 @@ unless its name already says it all.
 | Button (primary) | Tomato glass pill, icon + white text, 48 px tall minimum. One per screen (the update bar's Reload is the only extra). |
 | Button (secondary) | Off-white glass pill, ink text, edge highlight. |
 | Button (quiet) | Text only with an underline on hover. |
-| Card | Glass, `--radius-m`, padding 16–24 px, `min-width: 0` so children can shrink. |
+| Card | Glass, `--r-md`, padding 16–24 px, `min-width: 0` so children can shrink. |
 | Hero card | Sage glass, display headline with swash, primary CTA. |
 | Stat block | Three numbers with labels, tabular figures. |
 | Link input | Large pill input, shows the detected platform icon (YouTube, Twitch, Kick) as you type. |
 | Upload drop zone | Dashed glass area, drag and drop on desktop, tap to pick on phones, progress bar while uploading. |
 | Job progress | The nine steps as a vertical list with status icons; the running step pulses; the overall progress bar on top. |
-| Clip card | 9:16 cover with play, hook, moment-type chip, score, duration, checklist summary. In Library it shows total views when measured and opens the clip's [performance page](#clip-performance-page); in Review a kept clip shows "See how it does". |
-| Clip review | Vertical player, captions per platform in tabs (editable), checklist, Confirm (primary) and Decline (outlined). |
+| Clip card | 9:16 cover with play, hook, moment-type chip, score, duration, checklist summary. In Library it shows total views when measured and its whole top (cover and hook, never just the one-line hook) opens the clip's [performance page](#clip-performance-page); its post rows list the platforms in the one app-wide order and use the clip page's status words ("Posting", "Waiting for connection"); in Review a kept clip shows "See how it does". |
+| Clip review | Vertical player, captions per platform in tabs (editable), checklist, Keep (primary) and Throw away (ghost). All five caption tabs stay in sight: on a narrow card the tabs that are not open show only their platform mark, and a tab whose caption is too long shows a red dot. Two columns only when the card itself is at least 820 px wide; once Throw away and Keep wrap, each fills the row. Overlays opened from a card (Post to TikTok, the small confirm sheet) are drawn on `document.body`, trap Tab and give the focus back on close (CONTRACTS §12.4, §17.8). |
 | Skill row | Glass row that opens the skill's page: icon, title, description (two lines), **Always used** badge (sage, on every row) and **Built in** badge, then where it came from in words (never ".md" or a size): "Written by you · Changed 16 Nov", "From a file · Changed 16 Nov", "From a file with extra files · Changed 16 Nov" (a `.zip`; its page says "From a file with {n} extra files") or "Comes with Clip Factory". No switch, no delete on the row. See [Skill pages](#skill-pages). |
 | Toggle, select, inputs | 16 px text, glass background, tomato focus ring `outline: 2px solid var(--tomato); outline-offset: 2px`. |
 | Toast | Glass, top on desktop, above the tab bar on phones, auto-hides after 4 s, `role="status"`. The Undo toast stays 8 s and shows a shrinking ring around its Undo button. |
 | Empty state | One line of serif italic, one plain sentence that names the button to tap, one action. |
-| Error | Plain sentence, what to do next, and a Retry when possible. |
+| Job status pill | Waiting (neutral), Working (sage), Ready (ink), **Didn't work** (tomato, never "Failed"), Canceled (neutral). The job's own error sentence says how to fix it and is shown in full, in the Jobs list too. |
+| Error | Plain sentence, what to do next, and a Retry when possible. A screen that crashes while drawing shows "Something went wrong on this page" with **Try again** and **Go home** (the app around it stays); never a blank page. |
 | Get the app card | See [Get the app card](#get-the-app-card). |
 | Update bar | See [Update bar](#update-bar). |
 | Platform stack | Glass card per platform on the clip page: mark, status chip, big number, only that platform's metric rows, sparkline, "Open on …". See [A platform stack](#a-platform-stack). |
@@ -343,7 +396,8 @@ reached by tapping any clip in Library, or "See how it does" on a kept clip in R
 ([CONTRACTS.md §16.8](CONTRACTS.md#168-web), [UX-16](BUSINESS_REQUIREMENTS.md#ux-16-the-performance-page-the-video-on-top-smooth-lines-to-five-stacks)).
 
 The order is always **YouTube, TikTok, Instagram, Facebook, X** (`STATS_ORDER`), on every screen size, in the DOM and
-for screen readers.
+for screen readers. Every other screen that lists platforms (Library card rows, Review caption tabs, Settings › Posting
+› Where clips go) uses the same order, from the one constant `PLATFORM_ORDER` in `web/src/lib/format.ts`.
 
 ### Anatomy, top to bottom
 
@@ -372,7 +426,7 @@ One `<svg aria-hidden="true">` sits behind the stacks, sized to the page contain
   `(xi, yi)`: `M x0 y0 C x0 (y0 + 0.55·dy), xi (yi − 0.55·dy), xi yi` with `dy = yi − y0`. The handles leave and
   arrive vertically, so every line starts straight down and lands straight into its card: the "smooth manner" the
   owner asked for.
-- **Stroke.** 2 px, round caps, `--sage` at 70 % (in dark mode ink at 35 %). The best platform's line is `--tomato`.
+- **Stroke.** 2 px, round caps, `--sage` at 70 % (the app is light-only, so the same colour under a dark OS setting). The best platform's line is `--tomato`.
   A 6 px dot at each end.
 - **Draw-in.** `pathLength="1"`, `stroke-dasharray: 1`, `stroke-dashoffset` from 1 to 0 over 900 ms with
   `cubic-bezier(0.22, 1, 0.36, 1)`, 80 ms apart in STATS_ORDER, once per page load. Each stack fades in and rises
@@ -443,7 +497,7 @@ breakpoints stay as they are.
 
 ### A platform stack
 
-A `<section aria-labelledby>` glass card (`--radius-m`, padding 16 px, `min-width: 0`), read top to bottom:
+A `<section aria-labelledby>` glass card (`--r-md`, padding 16 px, `min-width: 0`), read top to bottom:
 
 1. The platform mark and name; on the best platform a small crown with visually hidden "Best".
 2. A status chip: Posted, Posted privately, Waiting for connection, Posting, Failed, Not posted.
@@ -475,7 +529,7 @@ Numbers are compact (`Intl.NumberFormat` with `notation: "compact"`: 1.2K, 3.4M)
 | Posting | "Posting now…" with a small spinner | – |
 | Posted privately (TikTok) | "Posted privately. TikTok shows numbers after the app is approved." | – |
 | Posted, no numbers yet | "Numbers are on the way. Check back in a few minutes." | – |
-| Failed | "Posting failed: {reason}. Go to Library and press Try again." (`--danger` text) | Library |
+| Failed | "Posting failed: {reason}. Go to Library and press Try again." (`--tomato-ink` text) | Library |
 
 **Live.** A `post` event for one of this clip's posts replaces that stack's numbers and adds a sparkline point; a
 `clip` event updates the star; a reconnect or a `partial` event refetches the page. With no live connection the page
@@ -486,13 +540,18 @@ refetches every 60 s.
 - Two pill tabs at the top of Library: **All clips | This week** (`/library`, `/library?view=week`,
   `/library?view=week&week=2026-W45`).
 - Header "This week · 10–16 Nov" (or "Week of 3–9 Nov") with ‹ and › arrow buttons ("Earlier week", "Later week"); ›
-  is `aria-disabled` on the current week.
+  is `aria-disabled` on the current week (a tap only nudges it, with the info toast and no sound). Below 360 px the
+  dates take their own line under "This week" and the "·" is hidden from the eyes (screen readers still hear it), so
+  no dot hangs at a line end; at any wider width a no-break space ties the "·" to the dates, so a wrap moves them
+  together.
 - A status line under the header: "Star the clips that did best this week." → "Learning from your picks…" (spinner)
   → the learning in a sage glass quote labelled "Best of week". On failure: "Could not learn this time. Change a pick to
   try again."
 - One card per clip, sorted by views: rank number, cover, hook (2 lines), total views (or "Not posted yet"), a row of
   five tiny platform marks with their views, and the big **Best this week** star (≥ 48 px, `aria-pressed`). Tapping
-  the card (not the star) opens the clip's performance page.
+  the card (not the star) opens the clip's performance page. Below 380 px the star moves to its own full-width row
+  under the card (still ≥ 48 px tall) so the hook and views get the width; the views number and the word "views"
+  never split over two lines.
 - Starring is instant (optimistic) and saved once, 800 ms after the last tap, with the toast "Saved. Clip Factory will
   learn from your picks." A failed save puts the stars back and says so in plain words. Up to 10 picks a week (the
   API refuses more with "Pick clips from this week only." for clips of another week).
@@ -505,12 +564,14 @@ The setup list and the five platform pages
 ([CONTRACTS.md §17.1](CONTRACTS.md#171-what-the-owner-sees), [UX-17](BUSINESS_REQUIREMENTS.md#ux-17-set-up-posting-that-a-child-can-follow),
 the steps in [SETUP_POSTING.md](SETUP_POSTING.md)).
 
-- **The list** (`/settings/posting/setup`): a big ring "2 of 5 ready" in Times, then five big glass cards in the order
+- **The list** (`/settings/posting/setup`): a big ring "2 of 5 ready" in Times (the ring at the card's right edge at
+  every width, in line with the cards below), then five big glass cards in the order
   YouTube, TikTok, Instagram, Facebook, X: platform mark, name, a small progress ring, one state line ("Ready", "Step
   7 of 23", "Needs you: connect again", "Not started", "Works now, posts stay private"). Leaf: "Do each one once. After
   that Clip Factory posts by itself."
 - **A platform page**: mark, name, ring, "About 20 minutes · Free" (X: "Costs a little"), "Steps checked on 16 Nov
-  2026", then the four parts as glass sections (Get ready, Make your {Platform} key, Connect, Go public). Step numbers
+  2026" (the date never splits across lines). Below 600 px the mark and the ring share the hero's top row (ring on
+  the right) and the words sit under them at full width. Then the four parts as glass sections (Get ready, Make your {Platform} key, Connect, Go public). Step numbers
   run on across the parts. The first unfinished step is open and scrolled into view; finished steps fold into a sage
   tick row that opens again on tap. Below the parts, **When it's done**: the account's picture and name, **Check it**,
   **Connect again**, **Disconnect**, and the platform's own settings (YouTube "Who can see your clips", the X spend note).
@@ -527,7 +588,8 @@ the steps in [SETUP_POSTING.md](SETUP_POSTING.md)).
 - **Mistakes are cheap**: Disconnect is an 8-second "Disconnecting YouTube… Undo" toast, never a dialog. Keys stay
   saved, so **Connect again** is one tap.
 - **Home card** "Set up posting · 2 of 5 ready" with the next platform's name and **Continue** (sage, not the Home
-  tomato), until every platform the owner posts to is ready.
+  tomato), until every platform the owner posts to is ready. Its " · " dots stay with the words before them (a
+  no-break space), so a narrow phone breaks after a dot and never starts a line with one.
 - **Overflow**: long values (redirect URIs, client ids) wrap inside their chip (`overflow-wrap: anywhere`), never
   widen the card; every page fits from 320 to 1920 px.
 
@@ -660,7 +722,8 @@ this is the designer's summary.
 | `--act-fade` | 240 ms | the reduced-motion stand-in, the nudge |
 
 Send keeps the paper plane's own timings: 520 ms flight with its trail, 240 ms return, 300 ms fade under reduced
-motion.
+motion (`--send-fade`, also for a labelled send button). A labelled send flies mostly up (+8 / −16 px, 18 px trail)
+so its glyph fades out before it reaches the button's words; only the icon-only paper plane flies the full +34 / −30 px.
 
 **The kinds**
 
@@ -733,7 +796,7 @@ h1, h2, h3, p, li, dd, td, label, button { overflow-wrap: anywhere; }
 
 - WCAG 2.1 AA: contrast, focus visible on every control, keyboard reachable, labels on icon-only buttons.
 - Live regions for job progress and toasts.
-- Touch targets 48 × 48 px minimum on phones (44 × 44 px is the floor anywhere).
+- Touch targets 48 × 48 px minimum on phones (44 × 44 px is the floor anywhere; text links are 44 px tall at every width and 48 px on phones).
 - Sounds and motion are never the only feedback; every state also has text.
 
 ## Installable app (PWA)
@@ -812,7 +875,7 @@ Shown when `/version.json` reports a version other than the running one ([CONTRA
 | Entrance | Slides up 24 px and fades in over 320 ms, `cubic-bezier(.2,.8,.2,1)`; one soft sparkle twinkle. Reduced motion: fade only. |
 | Sparkle | 20 px tomato four-point star icon. |
 | Title | "New!" in Inter 600. Never a version number. |
-| Pills | Off-white glass chips, 13 px Inter 500, `--radius-s`, single line with ellipsis; on narrow phones they wrap under the title and the bar grows taller rather than overflowing. Labels come from `version.json` `areas`. |
+| Pills | Off-white glass chips, 13 px Inter 500, `--r-pill`, single line with ellipsis; on narrow phones they wrap under the title and the bar grows taller rather than overflowing. Labels come from `version.json` `areas`. |
 | Reload | Tomato pill, refresh icon + "Reload", 48 px tall. It is the one allowed second tomato button on a screen, because it belongs to the app, not to the page. |
 | Later | Quiet text button; hides the bar until the next check (5 minutes, or when the app comes back to the screen). |
 | While reloading | Pills and buttons fade out; the bar's fill becomes the progress bar (below) with "Updating…" and the percentage for screen readers (`role="progressbar"`, `aria-valuenow`). |
@@ -873,13 +936,13 @@ signed-in page and follows every rule on this page.
 |---|---|
 | Launcher, desktop | Sage glass pill, sparkle icon + "Ask", fixed bottom right (`right: 24px`), 12 px above the update bar when it shows (the bar publishes its height as `--update-bar-h`). |
 | Launcher, phone | 56 px icon-only glass circle, `aria-label="Ask Clip Factory"`, `right: max(16px, safe-area-inset-right)`, bottom = tab bar + safe area + 18 px + `--update-bar-h` (+ 10 px when the bar shows). Never covers the tab bar or the update bar. |
-| Dodge | Hides (fade + 12 px slide) while scrolling down more than 8 px; back on scroll up or 600 ms after scrolling stops; stays while it or the panel has focus. Never sits on a control: lifts to the first free spot above every link, button, field, tab, switch or focusable element it would overlap (found on the page by itself), plus blocks marked `data-help-dodge` (the Review action bar, the Home link box, the sound grid, the **Try it** controls). Takes no taps while it slides. If lifting would take it above 40 % of the window height it steps aside (hidden) instead, so at 1440 px on Review it stays hidden until you scroll. No slide with reduced motion. |
+| Dodge | Hides (fade + 12 px slide) while scrolling down more than 8 px; back on scroll up or 600 ms after scrolling stops; stays while it or the panel has focus. Never sits on a control: lifts to the first free spot above every link, button, field, tab, switch or focusable element it would overlap (found on the page by itself), plus blocks marked `data-help-dodge` (the Review action bar, the Home link box, the sound grid, the **Try it** controls). Takes no taps while it slides. If lifting would take it above 40 % of the window height it steps aside (hidden) instead, so at 1440 px on Review it stays hidden until you scroll. It also keeps off words (lines of text) when a spot clear of them is within the same reach; when there is none it may rest on words (never on a control) rather than hide. No slide with reduced motion. |
 | Room on phones | Pages get extra bottom padding under their last control, so the settled launcher never covers a control at 320, 375, 390 or 430 px, with or without the update bar. |
 | Panel, desktop | Non-modal dialog (`aria-modal="false"`), 400 px wide, `max-height: min(640px, 100dvh - 140px)`, anchored above the launcher, `.glass--strong`. If it would cover the control an answer button just lit up, it closes (the chat is kept). |
 | Panel, phone | Modal full-screen sheet (`aria-modal="true"`; the page and the launcher are `inert`; Tab stays in the sheet) with safe-area padding; covers the tab bar while open; Close brings it back. |
 | Conversation | Kept when the panel closes and reopens, in memory only, until **Start over** (or a reload). |
 | Header | "Ask Clip Factory" in Times italic, **Start over** (quiet), Close (×, 48 px). |
-| Empty state | "Hi! What do you want to do?" and three suggestion chips chosen by page and device. Default: "How do I make clips from a Twitch link?", "What does Keep do?", "How many views did my best clip get this week?" (Settings pages swap the second for the sounds question; clip pages show "Why is my clip private on TikTok?"). |
+| Empty state | "Hi! What do you want to do?" and three suggestion chips chosen by page and device. Default: "How do I make clips from a Twitch link?", "What does Keep do?", "How many views did my best clip get this week?" (Settings pages, skill pages included, swap the second for the sounds question; clip pages show "Why is my clip private on TikTok?"). |
 | Ask field | One glass field across the **full width** of the panel (10 px from each edge), one line (52 px) growing to four lines then scrolling, radius 26 px, focus ring on the whole field. Textarea 16 px, placeholder "Ask me how to do something", 300 letters (counter from 250, under the field), Enter sends, Shift+Enter new line, the phone keyboard shows "send". At its right end, inside the field: a round 44 px icon-only **Send** button with a paper plane (`aria-label="Send"`). Tomato while it is the one main action, sage once an answer button is tomato, off (`aria-disabled`) when the field is empty, an answer is coming or the 429 countdown runs. Sending plays the [action animation](#action-motion-every-action-button-acts-out-what-it-does): the plane flies off (520 ms) and a new one fades back (240 ms); the question bubble shows at once. With reduced motion the plane only fades. On phones the sheet follows the visible screen so the keyboard never hides the field. |
 | Thinking | Three bouncing sage dots; "Still looking…" after 6 s; still dots with reduced motion. |
 | Answer | One or two sentences (button names in bold), numbered steps (`<ol>`, ≤ 6), up to two buttons with icon + word. Only the **first button of the newest answer is tomato**; older answers' buttons and the Ask button turn sage, so the screen keeps one tomato. Whether the model helped is never shown. |

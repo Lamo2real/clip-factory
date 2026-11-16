@@ -30,6 +30,12 @@ describe("classifyClick", () => {
     expect(classifyClick(document.getElementById("o"))).toBeNull();
     expect(classifyClick(null)).toBeNull();
   });
+
+  it("stays silent for an aria-disabled button that opts out (the newest week's Later week nudge, §20.11)", () => {
+    html(`<button id="later" aria-disabled="true" data-sound="off"><svg><path id="g"/></svg></button>`);
+    expect(classifyClick(document.getElementById("later"))).toBeNull();
+    expect(classifyClick(document.getElementById("g"))).toBeNull();
+  });
 });
 
 describe("installClickSounds", () => {

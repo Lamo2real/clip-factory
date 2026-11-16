@@ -96,6 +96,28 @@ cd api && uv run pytest -q tests/test_help*.py
 | Playwright, mock mode (`e2e/help.spec.ts`, 375 × 812 and 1440 × 900) | Launcher name and place (not over the tab bar or update bar, above the update bar on desktop); three suggestions; "Where do I change my click sound?" → steps, tomato **Open Sounds**, navigation to `/settings/look-and-feel/sounds`, the Click sound row gets the ring (panel closed on 375, open on 1440); the best-clip question shows the mock number; a refusal; `#429` notice with Ask disabled; `#503` → local answer and the copy-code link; `#off` → launcher gone; Escape returns focus; the Ask field spans the panel with a 44 px icon-only **Send** paper plane inside it (off when empty, Shift+Enter adds a line, four lines then scroll), the plane flies with its trail on send and the question bubble shows at once, the tap sound plays on click only; reduced motion → no animations, the plane only fades; each posting and skills guide opens its real page (`/settings/posting/setup/{platform}`, `/settings/clip-making/skills…`) and lights up its control (`setup-connect`/`setup-progress`, `skill-form`, `skill-edit`, `skill-delete`); dodge on scroll; no launcher over **Keep** on Review before any scroll (375 and 1440); after an answer button the spotlit control is the element at its centre (`elementFromPoint`), so nothing covers it; the conversation is still there after Close and reopen; Tab stays inside the phone sheet; the settled phone launcher covers no control at 320, 375, 390 and 430 px, with and without `?update=1`. `overflow.spec.ts` adds the open panel at 320, 375, 768, 1024, 1440 and 1920 px, with a five-line question and the field's width; `screenshots.spec.ts` adds it at 375 and 1440 px, plus `help-review-launcher-*`, `help-spotlight-keep-*`, `help-panel-reopened-*`, `help-ask-box-*` and `help-plane-flying-*`. Port 4179 by default, `CF_E2E_PORT` for another ([Web](#web)). |
 | Infrastructure (`terraform test`) | `HELP_*` env on `cf-prod-api` (enabled in prod, off by module default); statement `HelpModel` has only `bedrock:InvokeModel` on the EU profile ARN and the six foundation-model ARNs; the model id comes from `config/models.json` (`eu.` for help, Fable still `global.`); CORS exposes `retry-after`; the metric filter and the alarm exist; `models.json` parses and `helpModel` names a model. |
 
+## Contrast and text size
+
+`web/e2e/contrast.spec.ts` (Playwright, mock mode, audit F081) opens every route in `ROUTES` (`web/e2e/helpers.ts`) at
+320, 375 and 1440 px, with the browser asking for a light and then a dark colour scheme (the app is light-only, so dark
+must render the same), with reduced motion so the backdrop's drift is parked and every run measures the same picture.
+On each it fails on:
+
+| Check | Rule |
+|---|---|
+| axe-core (`@axe-core/playwright`) | The `color-contrast` rule reports no violation. axe marks text on glass "needs review" (it can't see through `backdrop-filter`), so the next check covers glass. |
+| Rendered contrast (`scanText` in `helpers.ts`) | Every visible text run reaches 4.5:1, or 3:1 for large text (24 px and up, or 18.66 px bold and up), against every background it can sit on: each ancestor's background colour and every stop of its gradients (the glass tints) composited over the backdrop, with the glass's `saturate()` and any ancestor `opacity` applied. The backdrop is photographed alone; a text run is tested against the darkest, the lightest and the quartile colours of the backdrop columns under it, over every row it can reach by scrolling (only its own rows when it is fixed). |
+| Text size | No visible text is smaller than 12 px (the smallest token, `--fs-xs`, is 12.48 px). |
+
+Not checked by the rendered-contrast pass: text on a picture (an `img`, `video`, `canvas` or `url()` background under
+it), which axe still checks; controls that are switched off (`:disabled`, `aria-disabled="true"`, exempt in WCAG 1.4.3);
+visually hidden text (`.sr-only`). The spec has an allow-list for decorative `aria-hidden` text; it is empty, and every
+entry must say why. `whiteContrastOnGradient()` in `helpers.ts` (white labels on tomato buttons, used by
+`audit-performance.spec.ts`) uses the same browser-side contrast kit.
+
+The unit test `web/test/designTokens.test.ts` keeps [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md)'s colour and radius
+tables equal to `web/src/styles/tokens.css` and fails on a hard-coded `border-radius` outside the `--r-*` scale.
+
 ## Action motion
 
 The action animations on buttons ([CONTRACTS.md §20](CONTRACTS.md#20-action-animations-owner-request-2026-11-16),
@@ -375,8 +397,8 @@ query, Instagram media, Facebook video insights and post views, X posts lookup).
 ### Durable flows (`api/tests/test_flows.py`, pytest)
 A `FakeDurableContext` runs each `step` at once and records its name, records each `wait` and its duration, and hands
 out callbacks whose `result()` returns or raises a preset `CallbackError`.
-- **Job flow**: success → `finish`; timeout or missed heartbeat → `fail` with "The agent stopped responding. Press
-  Retry." and `stop-session`; `JobFailed` → the agent's message; `Canceled` and `Superseded` → no write; a job that is missing,
+- **Job flow**: success → `finish`; timeout or missed heartbeat → `fail` with "Making the clips stopped partway.
+  Tap Try again." and `stop-session`; `JobFailed` → the agent's message; `Canceled` and `Superseded` → no write; a job that is missing,
   has another `sessionId` or is terminal → `start-agent` skips and the flow ends `superseded` (already `running` with
   this `sessionId` → no second invoke, the flow waits); every write is fenced on
   `sessionId`.

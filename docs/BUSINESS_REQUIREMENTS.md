@@ -137,7 +137,7 @@ From "2 days after we've uploaded to the social media on the clips" (see interpr
 - AC1: The owner can cancel a queued or running job.
 - AC2: A failed or cancelled job can be retried from the beginning; an already downloaded source is reused.
 - AC3: A job whose agent stops responding is marked failed within 15 minutes of its last heartbeat with the message
-  "The agent stopped responding. Press Retry." (job-flow callback heartbeat timeout, no scanning watchdog)
+  "Making the clips stopped partway. Tap Try again." (job-flow callback heartbeat timeout, no scanning watchdog)
 
 ### BR-13 Settings
 - AC1: Settings holds clip range, the longest source length to process (`maxSourceHours`, 1–12, default 6), sound

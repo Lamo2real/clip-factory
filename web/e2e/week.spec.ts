@@ -15,7 +15,7 @@ test("This week: the week's clips, most views first", async ({ page }) => {
   await expect(page).toHaveURL(/\/library\?view=week$/);
   await settle(page);
   await expect(page.getByRole("link", { name: "This week" })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("heading", { level: 2, name: /^This week · \d{1,2}( [A-Z][a-z]{2})?–\d{1,2} [A-Z][a-z]{2}$/ })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: /^This week ·\s\d{1,2}( [A-Z][a-z]{2})?–\d{1,2} [A-Z][a-z]{2}$/ })).toBeVisible();
   await expect(page.getByText("Star the clips that did best this week.")).toBeVisible();
   const v = await views(page);
   expect(v.length).toBeGreaterThanOrEqual(3);

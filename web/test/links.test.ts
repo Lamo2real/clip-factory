@@ -36,6 +36,20 @@ describe("checkLink", () => {
     expect(checkLink(url)).toMatchObject({ state: "ok", platform: "kick", kind });
   });
 
+  it.each([
+    ["https://www.twitch.tv/directory", "twitch"],
+    ["https://www.twitch.tv/settings", "twitch"],
+    ["https://www.twitch.tv/videos", "twitch"],
+    ["twitch.tv/Search", "twitch"],
+    ["https://kick.com/categories", "kick"],
+    ["https://kick.com/browse", "kick"],
+    ["https://kick.com/following", "kick"],
+  ])("refuses the site page %s: it is not a live channel", (url, platform) => {
+    const r = checkLink(url);
+    expect(r).toMatchObject({ state: "error", platform });
+    expect(r.state === "error" && r.message).toMatch(/Open the video or the channel and copy its link\.$/);
+  });
+
   it("explains a YouTube link that is not a video", () => {
     expect(checkLink("https://www.youtube.com/@channel")).toMatchObject({ state: "error", platform: "youtube" });
     expect(checkLink("https://youtu.be/short")).toMatchObject({ state: "error", platform: "youtube" });

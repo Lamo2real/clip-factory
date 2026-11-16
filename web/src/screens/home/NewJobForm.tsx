@@ -153,7 +153,7 @@ export function NewJobForm() {
         }}
         options={[
           { value: "link", label: "Paste a link" },
-          { value: "upload", label: "Upload a video", help: "upload-video" },
+          { value: "upload", label: "Pick a video", help: "upload-video" },
         ]}
       />
 

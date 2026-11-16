@@ -1,10 +1,10 @@
 // What each platform's numbers mean and how they read on screen (docs/CONTRACTS.md §16.3, §16.8).
 import type { AnyExtra, PerfStatus, Platform, PlatformPerformance, PostMetrics } from "../api/types.ts";
 import type { IconName } from "../components/Icon.tsx";
-import { PLATFORM_LABEL, timecode } from "./format.ts";
+import { PLATFORM_LABEL, PLATFORM_ORDER, relative, timecode } from "./format.ts";
 
-/** Platform order everywhere on the performance page and in This week. */
-export const STATS_ORDER: readonly Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
+/** Platform order on the performance page and in This week: the app-wide PLATFORM_ORDER. */
+export const STATS_ORDER: readonly Platform[] = PLATFORM_ORDER;
 
 /** Mirrors config/platforms.json `x.budget.monthlyUsd`: X charges for every number check. */
 export const X_MONTHLY_USD = 10;
@@ -42,17 +42,13 @@ export function percent(n: number): string {
   return `${Math.round(n)}%`;
 }
 
-/** "just now", "3 min ago", "2 h ago", "yesterday", "4 days ago". */
+/** "just now", "3 min ago", "2 h ago", "yesterday", "4 days ago": the app's one style (format.ts relative()). */
 export function ago(isoTime: string | undefined, now = Date.now()): string {
   if (!isoTime) return "";
-  const ms = Math.max(0, now - Date.parse(isoTime));
-  const min = Math.floor(ms / 60_000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min} min ago`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h} h ago`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? "yesterday" : `${d} days ago`;
+  const t = Date.parse(isoTime);
+  if (!Number.isFinite(t)) return "";
+  // A time a little ahead of this clock (another machine's) still reads "just now", never "in 1 min".
+  return relative(new Date(Math.min(t, now)).toISOString(), now);
 }
 
 /** Time left until `isoTime`, rounded up: "1 min", "12 min", "1 h 5 min". Empty when it has passed. */
@@ -295,6 +291,14 @@ export function perfStatus(post: { status: string; privacy?: string } | undefine
     default:
       return "not_posted";
   }
+}
+
+/**
+ * The one status word for a post, the same on Library cards and on the clip page: a queued post reads "Posting",
+ * a post waiting for its account "Waiting for connection" (§16.2 mapping, STATUS_LABEL).
+ */
+export function postStatusLabel(post: { status: string; privacy?: string }): string {
+  return STATUS_LABEL[perfStatus(post)];
 }
 
 /** Highest views above 0; a tie goes to the platform earlier in STATS_ORDER. */

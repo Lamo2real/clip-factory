@@ -9,7 +9,7 @@
   --tomato: #e8412c;
   --tomato-rgb: 232 65 44;
   --tomato-deep: #c4301e;
-  --tomato-ink: #a92b1b; /* tomato for text on light glass, 5.5:1 */
+  --tomato-ink: #962414; /* tomato for text on light glass: at least 5.2:1 even on sage-tinted or tomato-tinted glass */
   --ink: #1e2a1b;
   --ink-rgb: 30 42 27;
   --ink-2: #2f3b2c; /* secondary text; at least 4.9:1 even on full sage */
@@ -36,6 +36,7 @@
   --space-8: 64px;
   --gutter: clamp(16px, 3.2vw, 36px);
 
+  --r-xs: 10px; /* small chips, thumbs and inputs inside rows */
   --r-sm: 12px;
   --r-md: 18px;
   --r-lg: 26px;

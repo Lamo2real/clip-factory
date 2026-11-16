@@ -101,7 +101,9 @@ the message under that question (§18.2); every other error leaves it out. `requ
 `error`, on every `cf-prod-api` error since §19.6, and the `error` object may carry extra fields such as `retryAfter`
 on a 429.
 Codes: `bad_request`, `unauthorized`, `forbidden` (REST hooks API only, §14.3), `not_found`, `conflict`, `too_large`,
-`not_implemented`, `unavailable` (503, posting setup not configured on the server, §17.4), `internal`.
+`not_implemented`, `unavailable` (503, posting setup not configured on the server, §17.4), `platform_down` (503, a
+platform such as TikTok did not answer or was busy, also while Clip Factory refreshed its token; the message says to
+try again in a minute, §17.4), `internal`.
 
 | Method & path | Body | 2xx response |
 |---|---|---|
@@ -193,6 +195,11 @@ interface SimilarClip { clipId: string; hook: string; title: string; momentType:
                         coverUrl?: string /* presigned GET, 1 h */ }
 // PostMetrics, ClipPerformance, PlatformPerformance, RefreshResult, WeekView, WeekClip: §16.2–§16.3.
 ```
+Home checks a pasted link as it is typed (`web/src/lib/links.ts` `checkLink`): a one-word Twitch or Kick path is a
+live channel, except the sites' own pages (for example `twitch.tv/directory`, `/settings`, `/videos`, `/search`;
+`kick.com/categories`, `/browse`, `/following`), which are refused on the spot with "That Twitch link goes to a Twitch
+page, not a video, clip or channel. Open the video or the channel and copy its link." (Kick the same).
+
 `Performance` sums treat a `null` metric as 0. Ids are ULIDs (26 chars, time-sortable). Timestamps are ISO-8601 UTC strings.
 
 ## 6. DynamoDB (single table `cf-prod-data`, on-demand, PITR on, Streams `NEW_AND_OLD_IMAGES`)
@@ -205,7 +212,7 @@ Keys: `pk` (S), `sk` (S); GSI `gsi1` on `gsi1pk`/`gsi1sk` (projection ALL); spar
 |---|---|---|---|---|
 | Settings | `USER#{userId}` | `SETTINGS` | – | Settings fields |
 | Job | `USER#{userId}` | `JOB#{jobId}` | – | Job fields + `type="job"`, `userId`, `sessionId` (AgentCore session), `heartbeatAt`, `flowRun`, `flowExecutionArn` (§14.4) |
-| Clip | `USER#{userId}` | `CLIP#{clipId}` | `JOB#{jobId}` / `CLIP#{rank:03d}` | Clip fields (minus URLs, minus computed `totalViews`) + `type="clip"`, `userId`, `videoKey`, `coverKey`, `publishState`, `postsCreated`, `flowRun`, `flowExecutionArn` (§14.5), `best`, `bestWeek` (§16) |
+| Clip | `USER#{userId}` | `CLIP#{clipId}` | `JOB#{jobId}` / `CLIP#{rank:03d}` | Clip fields (minus URLs, minus computed `totalViews`) + `type="clip"`, `userId`, `videoKey`, `coverKey`, `publishState`, `postsCreated`, `postIds` (§14.5), `flowRun`, `flowExecutionArn` (§14.5), `best`, `bestWeek` (§16) |
 | Connection | `USER#{userId}` | `CONN#{connectionId}` | `CONN#{connectionId}` / `CONN` | `type="conn"`, `userId`, `connectionId`, `connectedAt`, `ttl` (§14.2) |
 | Hook event | `HOOK#{platform}` | `HOOK#{hookId}` | – | `type="hook"`, `platform`, `receivedAt`, `headers`, `body`, `bodyEncoding`, `signature`, `ttl` (§14.3) |
 | Skill | `USER#{userId}` | `SKILL#{skillId}` | – | Skill fields + `type="skill"`, `key` (S3, current revision, §18.1); a legacy `enabled` attribute is ignored and removed on the next write |
@@ -258,6 +265,20 @@ and deleted by `GET /v1/skills` when it sees them.)
   section download, facecam detection via Claude vision, 1080×1920, hook, ASS captions, cover) → checklist (skill
   section D, measured + Claude judgement, one fix pass, spares replace failures) → captions (per platform, required
   tags from the owner's notes) → finalize (job `ready`, `clipCount`).
+* Select coverage: after the Claude Agent SDK run ends, whatever its outcome (error, time limit, or a normal
+  `success` result), every transcript window it read less than 90% of goes through the Converse fallback
+  (`agent.find_with_converse`); the whole video goes through Converse when that still leaves fewer than
+  `clipTarget.min` moments. In the fallback a window whose call fails for any reason (bad answer, `max_tokens`,
+  throttling after retries) only loses that window's moments (`moments.window_failed` is logged), and a cancel stops
+  the other windows at once (`util.gather_all`). Only when every window of a pass fails with a service error (not a
+  bad answer: the model is down, not the video) is the error raised: with moments already in hand they still make clips (`agent.converse_failed`), with
+  none the step retries and then fails with "A service was busy…", never "No clip-worthy moments".
+* Failure text: `Job.error` is one plain sentence that says what to do next and names the job page's button exactly
+  ("Tap Try again", §12.4; never "Retry" or "the agent"). Raw tool output (yt-dlp stderr, Amazon Transcribe's
+  `FailureReason`, model errors) is logged and never put in `Job.error`; platform names keep their brand spelling
+  (YouTube, TikTok). Every agent log line and every `CommandError` has the values of `X-Amz-*` query parameters
+  replaced by `<redacted>` (`util.redact_urls`), so a presigned S3 URL that ffmpeg/ffprobe prints never reaches
+  CloudWatch with its credential, signature or session token.
 
 ### Agent environment variables
 `CF_REGION`, `CF_TABLE`, `CF_MEDIA_BUCKET`, `CF_MODEL_ID`, `CF_SKILLS_DIR=/app/skills`, `CLAUDE_CODE_USE_BEDROCK=1`,
@@ -286,8 +307,8 @@ the SQS publish queue and the EventBridge resources: §14.
   ones through the platform adapter (adapters arrive in phase 2; today every platform is `pending_integration`), waits
   48 hours, reads metrics (through the shared stats refresh, §16.5), distils one short Learning and updates the clip's
   vector. Between and after those steps `cf-prod-stats` keeps every posted post's numbers fresh for 30 days (§16).
-* A `running` job whose agent stops sending heartbeats for 15 minutes becomes `failed` ("The agent stopped
-  responding. Press Retry.") through the job-flow callback heartbeat timeout (§14.4), not a scan.
+* A `running` job whose agent stops sending heartbeats for 15 minutes becomes `failed` ("Making the clips
+  stopped partway. Tap Try again.") through the job-flow callback heartbeat timeout (§14.4), not a scan.
 
 ## 10. Terraform outputs (read by deploy.yml)
 
@@ -298,8 +319,12 @@ the SQS publish queue and the EventBridge resources: §14.
 `write-web-config.sh` requires `ws_url` and `oauth_callback_base`.
 
 Terraform input variables (envs/prod): `region`, `owner_email`, `agent_image_tag`, `lambda_zip_path`
-(default `../../../api/dist/lambda.zip`), `alarm_email` (optional), `web_dev_origin` (default `http://localhost:5173`),
-`manage_api_gateway_account` (bool, default `true`, §14.3).
+(default `../../../api/dist/lambda.zip`), `alarm_email` (optional; deploy.yml sets it from the secret
+`CF_ALARM_EMAIL`, else `CF_OWNER_EMAIL`, so prod alarms always email someone), `web_dev_origin` (default `http://localhost:5173`),
+`manage_api_gateway_account` (bool, default `true`, §14.3), `role_permissions_boundary_arn` (default empty; deploy.yml
+sets it from the repository variable `CF_ROLE_BOUNDARY_ARN`, and every `cf-prod-*` IAM role then carries that
+permissions boundary, docs/DEPLOYMENT.md §2). Every log group keeps logs 30 days (`log_retention_days`), including the
+AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, which the apply creates if missing.
 
 ## 11. Design system (summary; details in docs/UX_DESIGN_SYSTEM.md)
 
@@ -316,9 +341,19 @@ Terraform input variables (envs/prod): `region`, `owner_email`, `agent_image_tag
   sound on clicks of disabled ones and on errors. Driven only by the `click` event, so scrolling never makes a sound.
   Off switch in Settings.
 * Nothing may overflow its box at any width from 320 px up (enforced by Playwright tests).
+* Every visible text run reads at WCAG AA: at least 4.5:1 (3:1 for 24 px, or 18.66 px bold, and up) on the glass and
+  backdrop it can sit on, and no text is smaller than 12 px, on every screen at 320, 375 and 1440 px (enforced by
+  `web/e2e/contrast.spec.ts` with axe-core and a rendered-contrast scan; see [TESTING.md](TESTING.md#contrast-and-text-size)).
+  Colour and radius tokens are the tables in UX_DESIGN_SYSTEM.md; corners use the `--r-*` scale.
 * **Library** has two views: "All clips" (every kept clip, newest first, each card shows total views when measured)
   and "This week" (the week's clips sorted by views with a big "Best this week" star each, arrows for earlier weeks,
-  §16.8). Tapping any clip in Library opens its performance page `/clips/{clipId}` (§16.8).
+  §16.8). Tapping any clip in Library opens its performance page `/clips/{clipId}` (§16.8); on an All clips card the
+  whole top (cover and hook) is the tap target, never just the one-line hook. Each post row says its status with the
+  same words as the clip page's chip (`postStatusLabel` in `web/src/lib/metrics.ts`: a queued post reads "Posting",
+  one waiting for its account "Waiting for connection"); posts waiting for accounts share one row "Waiting for
+  connection. Posts once these accounts are connected.". The "Show" filter's empty list says why it is empty: no kept
+  clips at all → "Nothing kept yet" + Go to Review; "Not posted yet" with every kept clip posted → "Everything is
+  posted!" + Show all; "Posted" with kept clips still on their way → "Nothing posted yet" + Show all.
 * Installable PWA (manifest + service worker) on phone and desktop.
 
 ## 12. Get the app, updates, and kid-proof UX (added by the owner after the first build)
@@ -375,11 +410,64 @@ Terraform input variables (envs/prod): `region`, `owner_email`, `agent_image_tag
   (toast with Undo) instead of scary dialogs, forms that can't be submitted wrong (paste button, auto-detect link,
   inline hints), progress always visible, celebrations on success.
 
+### 12.5 Home, Jobs and the job page: rules from the UI audit
+
+* **Home never waits forever.** Jobs and review clips must load; if they do not, the Working now card and the
+  review row each show what went wrong with **Try again** (no endless skeletons). The views total is extra: a failed
+  `GET /v1/insights` only blanks the stat ("Could not get the numbers right now…") and the lists still show.
+* **Stop job survives leaving the page.** A Stop waiting for its 8 s Undo is kept outside the page
+  (`screens/jobs/pendingStops.ts`), so going away and coming back shows "Stopping in a few seconds" again, not a
+  second Stop job button. The cancel is sent once, when the Undo runs out. If the job finished, failed or was
+  stopped elsewhere inside the window, the API's 409 is a quiet no-op (no error toast, no shake).
+* **Clip tiles on the job page** (§16.8): a clip waiting for a look opens `/review#clip-{clipId}`; a kept one
+  (confirmed, publishing, posted, failed) opens `/clips/{clipId}`; a thrown-away one is not a link (it is listed
+  nowhere else) and does not lift on hover like one.
+* **Empty Clips line** follows the job: working "Clips show up here as soon as they are made."; failed "No clips
+  yet. Fix the problem above, then tap Try again."; canceled "No clips yet. This job was stopped. Tap Try again to
+  start it again."; ready with none "This job made no clips. Go back to Home and try a different link."
+* **Words** (§12.4): the job status pill says **Didn't work** (never "Failed"); the Home source switch is
+  **Paste a link / Pick a video** (the help anchor stays `upload-video`).
+* **Jobs list on phones**: when a job started is never cut (the source part shortens with "…" instead), and a failed
+  job's error is shown in full because its last sentence says how to fix it.
+* **No blank pages**: a malformed `#anchor` (`/jobs#100%`) is used as typed instead of throwing, and render errors
+  are caught by an error boundary (per page in the Shell, cleared on the next page; one around the whole app).
+  Every page, including a job or clip page that is loading, missing or failed, has an `h1` (visually hidden when the
+  card shows the words).
+* **Mock knobs** (`window.__cfMockFaults`, for e2e): `jobsPageSize` (jobs list pages hold at most this many, so
+  "Show older jobs" shows), `olderJobsFails` (the next N older pages fail), `createJobFails` (the next N Make clips
+  fail with a server error). Covered by `web/e2e/audit-shell.spec.ts`.
+* **Review screen** (`web/src/screens/review/`):
+  * A refused Keep (a caption too long) opens the first too-long caption tab, scrolls it into view, focuses it and
+    names the platform: "Your X caption is longer than its platform allows. Make it shorter, then tap Keep.". Every
+    tab whose caption is too long carries `.is-over` (a red dot) and ", too long" in its accessible name, so it shows
+    even while another tab is open.
+  * Caption tabs: all five platforms stay in sight. On a narrow card (`.captions` container under 560 px) tabs that
+    are not open show only their mark (the name stays their accessible name and title); under 360 px the open one
+    does too, and the field label names the platform. The chosen tab is scrolled into view.
+  * The card goes two-column (video left) only when the card itself is at least 820 px wide (container query on
+    `.review-list__item`, never a window media query), so the decision column never drops below about 400 px.
+    Throw away and Keep share the row; once they wrap, each fills the row (`flex: 1 1 140px`, at most 260 px), so
+    they line up. The source line's link icon sits inside the link and stays beside its words.
+  * Thrown-away clips are kept in a module-level store (`web/src/lib/throwAways.ts`) while their 8 s Undo runs and
+    after the decline goes through, so leaving Review and coming back inside the 8 s never shows the clip again, and
+    Undo brings it back on whichever Review is on screen. A decline answered 409/404 (already kept or thrown away
+    somewhere else) leaves the clip gone and shows a calm note instead of an error ("This clip was already kept or
+    thrown away somewhere else, so there is nothing more to do."); any other failure brings it back with "… The
+    clip is back in your list.".
+  * Arriving from a clip link (`/review#clip-…`) scrolls to that clip once per arrival; later list changes never
+    jump back to it.
+  * When a card leaves while it holds the focus (Keep, Throw away), the focus moves to the next card's title (or
+    the one before, or the empty state's Make clips); Undo focuses the card that came back (a decline that fails later
+    brings the card back without taking the focus from what the owner is doing).
+  * Filtered to one job (`/review?job=…`): the lede says the clips all come from one job and to tap Show every job
+    for the rest, and the count reads "4 clips from this job waiting (5 in all)" (the total from `me.counts.review`,
+    left out when it is not more).
+
 ## 13. Notes added after the final review
 
 * **Confirm is safe to repeat** (rules in §14.5): starting `cf-prod-clip-flow` is idempotent on its durable execution
   name, so a repeat confirm restarts nothing. The web shows "Try again" for clips with `status: "failed"`. Internal
-  clip fields `publishState`, `postsCreated`, `flowRun` and `flowExecutionArn` are never returned by the API
+  clip fields `publishState`, `postsCreated`, `postIds`, `flowRun` and `flowExecutionArn` are never returned by the API
   (`publishClaimAt` is gone).
 * **No watchdog.** The watchdog and its re-queue of stuck confirms are removed (§14.1); a confirm whose flow did not
   start is retried by the next confirm.
@@ -587,7 +675,7 @@ wrapper around `run_job_flow(ctx, event, deps)` so tests drive it with a fake co
   3. `result = cb.result()` (no compute while waiting). Success → step `finish`: if the Job is not `ready`, set
      `ready` and `clipCount` from the result. Outcome `ready`.
   4. `CallbackError` → step `fail`: if the Job is `queued`/`running` with this `sessionId`, set `failed` with `error` =
-     the agent's `ErrorMessage` when `ErrorType == "JobFailed"`, else "The agent stopped responding. Press Retry."
+     the agent's `ErrorMessage` when `ErrorType == "JobFailed"`, else "Making the clips stopped partway. Tap Try again."
      (timeout or missed heartbeat); then step `stop-session` (`StopRuntimeSession`, errors ignored). `ErrorType`
      `Canceled` / `Superseded` → no write (the API or the newer run already set the state). Outcome `failed` /
      `canceled` / `superseded`.
@@ -628,8 +716,12 @@ Replaces the publish queue, DLQ, publisher, Scheduler group/role and perf-check.
 
 * **Confirm rules** (`POST /v1/clips/{id}/confirm`):
   * `review` → one TransactWriteItems: the Clip becomes `confirmed` (`decidedAt`, `publishState: "pending"`,
-    `postsCreated: true`, `flowRun: 1`, captions applied) **and** one Post per enabled platform, conditional on the
-    clip still being `review` and `attribute_not_exists(postsCreated)`. Then start the flow; on success set
+    `postsCreated: true`, `postIds`, `flowRun: 1`, captions applied) **and** one Post per enabled platform, conditional
+    on the clip still being `review` and `attribute_not_exists(postsCreated)`. `postIds` (internal) lists the clip's
+    post ids, written in the same transaction, so Confirm and the clip-flow read one clip's posts by key (a strongly
+    consistent GetItem + BatchGetItem) and never scan the owner's whole `POST#` range; clips from before `postIds`
+    fall back to a strongly consistent read of every page of the owner's posts. Owner-wide reads (`Store.query_all`:
+    weeks, stats, `/v1/me` counts, YouTube forget) follow every page with no silent item cap. Then start the flow; on success set
     `publishState: "started"` (+ `flowExecutionArn`). Response `{clip, posts}`.
   * `confirmed`/`publishing` with `publishState: "pending"` → start the flow again at once (same name and payload, so it
     is idempotent), 200. With `publishState: "started"` or status `posted` → 200 no-op with the current `{clip, posts}`.
@@ -782,6 +874,16 @@ module.hooks.hooks_url`, `vector_bucket`, `vector_index`, `job_flow_alias_arn`, 
   actions, `ListDurableExecutionsByFunction`, `StopDurableExecution` used during destroy); `iam:PassRole` for
   `cf-prod-apigw-cloudwatch`; `dynamodb:DescribeStream`/`ListStreams`. The Bedrock `aws_review` data-retention opt-in for
   Fable 5.1 is a one-time owner step there too.
+* The deploy role cannot escalate through IAM: it may create `cf-prod-*` roles or grant them permissions
+  (`CreateRole`, `PutRolePolicy`, `AttachRolePolicy`, `PutRolePermissionsBoundary`) only with the permissions boundary
+  `cf-prod-role-boundary` (no IAM, Organizations or account actions), may never delete that boundary, and passes roles
+  only to Lambda, AgentCore and API Gateway (`infra/bootstrap`, tested offline). Every module role sets
+  `permissions_boundary` from `role_permissions_boundary_arn` (repository variable `CF_ROLE_BOUNDARY_ARN`).
+* `deploy.yml`: only jobs that run no npm, cargo or other build tool hold `id-token: write` (the desktop installers are
+  built without it and uploaded by `desktop-upload`); every action is pinned to a full commit SHA with its version in a
+  comment; `scripts/ensure-state-bucket.sh` passes `--expected-bucket-owner <this account>` on every S3 call and stops
+  when the state bucket belongs to another account. `scripts/test-deploy-workflow.sh` and
+  `scripts/test-ensure-state-bucket.sh` (run by CI) check all three.
 * `docs/architecture/aws-architecture.drawio` and `docs/ARCHITECTURE.md` show: CloudFront+S3 web, Cognito, HTTP API →
   `cf-prod-api`, WebSocket API → authorizer / `cf-prod-ws`, DynamoDB stream → `cf-prod-broadcast` → WebSocket, REST API →
   `cf-prod-hooks` (+ SSM), `cf-prod-job-flow` ↔ AgentCore (callback), `cf-prod-clip-flow` (48 h wait) → Bedrock (Fable,
@@ -868,8 +970,11 @@ Branch routes are nested: `/settings/look-and-feel/sounds`. `/get-app` keeps wor
 * A tree page lists its branches as cards (icon, name, one line). A branch page shows its apples as rows grouped in
   glass panels, each with its leaf under it.
 * Breadcrumb on every level: `Settings › Look & feel › Sounds` (each part a link) plus a big Back button on phones.
-* ≥ 1024 px: a left "folder" panel inside Settings shows the whole tree (trees expand/collapse like folders, branches
-  are links, the current one highlighted, state remembered), content on the right. < 1024 px: drill-down pages.
+  Below 768 px it is one row, truncating from the left: the last three levels after a "…", long names ending in "…".
+* ≥ 1024 px: a left "folder" panel (260 px wide) inside Settings shows the whole tree (trees expand/collapse like
+  folders, branches are links, the current one highlighted, state remembered), content on the right. On a tree's own
+  page the tree's folder row is the highlighted one (sage, tomato dot, `aria-current="page"`). < 1024 px: drill-down
+  pages.
 * One tomato CTA per screen at most; plain words; nothing overflows at any width from 320 px.
 
 ### 15.3 Sounds
@@ -900,7 +1005,10 @@ in the future ... the stats ... should be an API call where I can just refresh i
 whatever the lowest limit is for each API."* Where this section and an earlier one disagree, this one wins.
 
 Platform order everywhere in this section (stacks, arrays, tests): **YouTube, TikTok, Instagram, Facebook, X**
-(`["youtube", "tiktok", "instagram", "facebook", "x"]`, constant `STATS_ORDER`).
+(`["youtube", "tiktok", "instagram", "facebook", "x"]`, constant `STATS_ORDER`). The web app uses this same order on
+every screen that lists platforms: it is `PLATFORM_ORDER` in `web/src/lib/format.ts` (`STATS_ORDER` is the same
+array), and the Library card rows (`byPlatformOrder`), the Review caption tabs and Settings › Posting › Where clips go
+all follow it, never the API's row order.
 
 ### 16.1 What the owner gets
 
@@ -1265,7 +1373,7 @@ does" → `/clips/{clipId}`; Back returns to where the owner came from (else `/l
 `ResizeObserver` on the page container; coordinates from `getBoundingClientRect` of the preview and each stack):
 * Each line is one cubic bezier from the preview's bottom centre `(x0, y0)` to the top centre of its stack
   `(xi, yi)`: `M x0 y0 C x0 (y0 + 0.55·dy), xi (yi − 0.55·dy), xi yi` with `dy = yi − y0`. Stroke 2 px, round caps,
-  sage `#9CAF88` at 70 % (ink at 35 % in dark mode); the best platform's line is tomato. A 6 px dot at each end.
+  sage `#9CAF88` at 70 % (always: the app is light-only); the best platform's line is tomato. A 6 px dot at each end.
 * Draw-in: `pathLength="1"`, `stroke-dasharray: 1`, `stroke-dashoffset` 1 → 0 over 900 ms
   `cubic-bezier(0.22, 1, 0.36, 1)`, staggered 80 ms in STATS_ORDER, once per page load; the stacks fade/rise 12 px as
   their line arrives. `prefers-reduced-motion: reduce` or `settings.reduceMotion` → lines drawn at once, no fade.
@@ -1319,12 +1427,16 @@ while disconnected: every 60 s on this page.
 **Library › This week** (`WeekView`): tabs "All clips | This week" (pills); header "This week · 10–16 Nov" (or "Week of
 3–9 Nov") with ‹ › arrow buttons (› disabled on the current week, aria-labels "Earlier week"/"Later week"); list of
 `WeekClip` cards sorted as served: rank number, cover, hook, total views (or "Not posted yet"), a row of five tiny
-platform marks with views, and a big star toggle "Best this week" (≥ 48 px, `aria-pressed`). Toggling is optimistic
+platform marks with views, and a big star toggle "Best this week" (≥ 48 px, `aria-pressed`; below 380 px it sits on
+its own full-width row under the card so the hook keeps the width; below 360 px the header dates drop to their own
+line and the "·" is visually hidden, still read by screen readers). Toggling is optimistic
 and saved by `PUT …/best` 800 ms after the last change (one request); a toast "Saved. Clip Factory will learn from your
 picks." Under the header a status line from `learnState`: learning → "Learning from your picks…" (spinner); done →
 the learning text in a glass quote with "Best of week" label; failed → "Could not learn this time. Change a pick to
 try again."; none/skipped → "Star the clips that did best this week." Empty week: "No clips this week yet. Make clips
-on Home." with a link. `week` events and `learning` upserts (kind `week`) update it live.
+on Home." with a link. `week` events and `learning` upserts (kind `week`) update it live. The browser tab title follows the
+heading: "This week · Library · Clip Factory" for the current week, "Week of 28 Sep–4 Oct · Library · Clip Factory"
+for any other (`weekTitle` in `WeekView.tsx`).
 
 **Settings › Posting › Accounts** (now the X setup page, §17.2) gets a leaf under X: "X charges a little for every number check. Clip Factory stops
 at $10 a month." (value from a shared constant mirroring `platforms.json` `x.budget.monthlyUsd`, served in mock data).
@@ -1671,6 +1783,11 @@ Values (served by `GET /v1/setup`, §17.4): `websiteUrl = {APP_URL}/about.html`,
 `{APP_URL}/{filename}` (§17.4 upload route). `upload-web.sh` never deletes `tiktok*.txt`. Contact on the public pages:
 the GitHub issues page `https://github.com/Lamo2real/clip-factory-legal/issues` (no contact email was given; an email
 would be added to `web/public/about.html` and `web/public/legal/*.html`).
+Look (`web/public/legal/site.css`): the header shows the logo as in the app, regular "Clip" and italic "Factory"
+(`Clip <em>Factory</em>`, weight 400), with the two page links grouped so they wrap together; every header and footer
+link is at least 44 px tall. These pages load no webfonts on purpose (no second copy of the app's fonts in the offline
+cache): they use the app's own stacks, Inter or the system UI font for text and Times New Roman (Tinos's metric twin)
+for headings and the logo.
 
 ### 17.4 API (all JWT, §5 errors; `routes/setup.py`, package `clipfactory_api/oauth/`)
 
@@ -1687,11 +1804,12 @@ would be added to `web/public/about.html` and `web/public/legal/*.html`).
 | POST `/v1/accounts/{platform}/connect` | – | `{ "authorizeUrl", "expiresAt" }` (409 `conflict` "Paste your {Platform} keys first." without keys) |
 | POST `/v1/accounts/{platform}/choose` | `{ "accountId" }` (one of `account.choices`) | `{ "setup" }` |
 | DELETE `/v1/accounts/{platform}` | – | `204` (revoke best effort, delete token secret, Account `not_connected`; YouTube also async `forget`, §17.6) |
-| GET `/v1/accounts/tiktok/creator-info` | – | `{ "creator": { nickname, username, avatarUrl, privacyOptions: string[], commentDisabled, duetDisabled, stitchDisabled, maxDurationSec } }` (409 when not connected; TikTok spam errors → 409 with the friendly sentence) |
+| GET `/v1/accounts/tiktok/creator-info` | – | `{ "creator": { nickname, username, avatarUrl, privacyOptions: string[], commentDisabled, duetDisabled, stitchDisabled, maxDurationSec } }` (409 when not connected; TikTok spam errors → 409 with the friendly sentence; TikTok slow (429 / `rate_limit_exceeded`), down (5xx), unreachable or busy, including while the token is refreshed → 503 `platform_down` "TikTok did not answer. Try again in a minute.") |
 | GET `/v1/accounts` | – | `{ "accounts": Account[] }` (unchanged path, new shape) |
 
-All setup and accounts routes answer 503 `unavailable` ("Posting setup is not switched on for this app yet.") unless
-`OAUTH_STATE_SECRET`, `HOOKS_URL` and `APP_URL` are set; the TikTok verification-file routes also need `WEB_BUCKET` and
+All setup and accounts routes (every `/v1/setup*` and `/v1/accounts*` route above, reads such as GET
+`/v1/setup/{platform}` and GET `/v1/accounts` included) answer 503 `unavailable` ("Posting setup is not switched on for
+this app yet.") unless `OAUTH_STATE_SECRET`, `HOOKS_URL` and `APP_URL` are set; the TikTok verification-file routes also need `WEB_BUCKET` and
 `DISTRIBUTION_ID`.
 
 ```ts
@@ -1729,7 +1847,8 @@ Gates per platform: youtube `published_app` (`ok` when step `key-publish` is tic
 | x | `^[A-Za-z0-9_-]{20,64}$` | `^[A-Za-z0-9_-]{40,80}$` | – |
 TikTok and X patterns are lenient on purpose: **Check it** is the real test. Hints: `clientId` first 6 + "…" + last 4;
 secrets "••••" + last 4; `configId` last 4. Saving keys whose `clientId` differs from the connected one disconnects the
-account (`reason: "keys_changed"`).
+account (`reason: "keys_changed"`); the old token is revoked with the **old** app keys (read before the new ones are
+saved), because a token can only be revoked by the app it was issued to.
 
 **Check it** (`oauth/providers.py`, no user token needed for the keys part; HTTP through `HttpClient`, 10 s timeout):
 youtube: POST `https://oauth2.googleapis.com/token` with `grant_type=authorization_code&code=cf-check` + keys +
@@ -1953,15 +2072,30 @@ caption. Keep stays disabled until a privacy is chosen. Confirm body gains `"tik
 "Pick who can see it on TikTok again, then press Try again." opens this sheet first, then sends `{ "tiktok": {...} }`
 in the confirm body; the API replaces that post's `postOptions` (mock `_try_again` does the same).
 
+The sheet (and the shared confirm `Sheet` in `components/Sheet.tsx`) is drawn with `createPortal` on `document.body`,
+so its backdrop covers the whole screen (tab bar, sidebar and Ask included; toasts stay on top, so a failed Keep's
+error shows) even though the card that opens it is
+glass (`backdrop-filter`); `.main > *` animates `page-in` with `fill-mode: backwards` so a page keeps no transform. It
+is a real modal: focus moves in once on open (typing in the caption never loses the caret), Tab and Shift+Tab wrap
+inside it, Escape closes it, and on close the focus goes back to the Keep that opened it. A clip longer than the
+creator's `maxDurationSec` (a limit of 0 means TikTok did not say: it does not block, the publisher checks again)
+or a creator-info error never leaves a dead end: the callout says what to do next ("… To keep it for your other
+apps, turn TikTok off in Where clips go, tap Keep, then turn TikTok back on.") with a link to `/settings/posting/where`, and the error
+callout also has **Ask TikTok again**, which fetches the creator info again.
+
 ### 17.9 Infra (Terraform + scripts)
 
 * **hooks**: `aws_secretsmanager_secret` `cf-prod/oauth/state-key` + `aws_secretsmanager_secret_version` with
   `secret_string_wo` from `ephemeral "random_password"` (length 64, special false), `secret_string_wo_version = 1`
   (never in state). Lambda timeout 28 s; env + `SECRET_PREFIX = "cf-prod/platforms/"`, `OAUTH_STATE_SECRET =
-  "cf-prod/oauth/state-key"`. IAM + `dynamodb:GetItem`, `UpdateItem`, `DeleteItem` on the table;
-  `secretsmanager:GetSecretValue` on the state-key ARN; `secretsmanager:CreateSecret`, `PutSecretValue`,
-  `GetSecretValue`, `DescribeSecret`, `DeleteSecret`, `TagResource` on `local.platform_secrets_arn =
-  "arn:aws:secretsmanager:${region}:${account_id}:secret:cf-prod/platforms/*"`. Outputs `oauth_state_secret_arn`,
+  "cf-prod/oauth/state-key"`. IAM + `dynamodb:GetItem`, `UpdateItem`, `DeleteItem` on the table, only for the
+  `OAUTH#*` and `USER#*` partitions, and `PutItem` only for `HOOK#*` and `USER#*` (`dynamodb:LeadingKeys`);
+  `secretsmanager:GetSecretValue` on the state-key ARN; on `cf-prod/platforms/*/app*` only `GetSecretValue` and
+  `DescribeSecret` (the public hooks Lambda can never change the owner's app keys); on `cf-prod/platforms/*/token*`
+  `CreateSecret`, `PutSecretValue`, `GetSecretValue`, `DescribeSecret`, `TagResource`; on
+  `cf-prod/platforms/*/pending*` the same plus `DeleteSecret`. These three patterns have no `-` before the `*`: for a
+  secret that does not exist yet Secrets Manager checks the bare name, and the callback needs
+  `ResourceNotFoundException` there to create it. Outputs `oauth_state_secret_arn`,
   `oauth_callback_base = "${invoke_url}/oauth"`, `oauth_state_secret_name`, `secret_prefix`, `platform_secrets_arn`,
   `platform_token_secrets_arn = "arn:aws:secretsmanager:${region}:${account_id}:secret:cf-prod/platforms/*/token-*"`
   (the `{platform}/token` secrets only; `-*` covers the random ARN suffix) (so the secret names are defined once). The
@@ -2332,7 +2466,7 @@ big Back on phones goes one level up):
 |---|---|---|
 | `/settings/clip-making/skills/new` | **Write a skill**: the three questions of §18.2 as big glass fields with their example under each (tap "Use the example" fills it), a live character count, one tomato **Save skill**, a ghost **Cancel**. Errors sit under their field. Success: success sound, confetti, toast "Your skill is ready. Clip Factory will use it every time.", then the new skill's page. | "Clip Factory reads your skill every time it makes clips." |
 | `/settings/clip-making/skills/{skillId}` | **Skill page**: title, badges, "When it is used" (description), the rendered skill (§18.3); zips list their other files. Owner skills: tomato **Edit**, ghost **Delete** (§18.5). Built-ins: no Edit or Delete. | owner: "Always used. Changes count from your next clips." built-in: "This skill comes with Clip Factory. It is always used. You can read it, but not change or delete it." |
-| `/settings/clip-making/skills/{skillId}/edit` | the same form filled from `form`, tomato **Save changes**; for a zip a ghost **Replace the whole file**; `formBlocked "too_long"` shows only the replace option; a built-in id redirects to its page with an info toast. Leaving with unsaved changes asks "Leave without saving?" (**Keep editing** / **Leave**). | "Change the words, then tap Save changes." |
+| `/settings/clip-making/skills/{skillId}/edit` | the same form filled from `form`, tomato **Save changes**; for a zip a ghost **Replace the whole file**; `formBlocked "too_long"` shows only the replace option; a built-in id redirects to its page with an info toast. Leaving with unsaved changes asks "Leave without saving?" (**Keep editing** / **Leave**); when browser Back asked, **Leave** finishes that Back (no extra history entry, so the next Back goes one more step, even when it is pressed at once, while the page change still fades). The description box grows with its words and has no drag grip (it never gets wider than the form). | "Change the words, then tap Save changes." |
 
 
 Router (`web/src/lib/router.ts`): `{ name: "skill", mode: "new" | "read" | "edit", skillId: string | null }`, nav
@@ -2345,7 +2479,8 @@ work at every level. `settingsTree.ts`: the two apples above with words `["new",
 not a word of its own so that Ask Clip Factory does not answer "write my homework" with it, §19.11). The old switch, its
 `.is-off` style and `setSkillEnabled` are deleted. Layout: one column < 1024 px (rows full width, ≥ 48 px targets,
 form fields full width, the instructions box ≥ 10 lines and auto-growing), two columns ≥ 1024 px (folder panel +
-content, form max 720 px wide); nothing overflows from 320 to 1920 px (long names and unbroken words wrap,
+content, form max 720 px wide; on a skill's page the head with Edit/Delete, the meta line and the cards share one
+820 px column, so the buttons end where the cards end); nothing overflows from 320 to 1920 px (long names and unbroken words wrap,
 `user-text`); click sound only on a click; error sound with error toasts.
 
 Web API (`api/types.ts`): `listSkills()`, `getSkill(id): SkillDetail`, `writeSkill(form): Skill`,
@@ -2557,8 +2692,12 @@ on a platform's setup page) becomes a doc on that page, and the element there ca
   guide, the first guide whose route matches the top doc's route (ignoring `#hash`) and whose score is ≥ 0.9 × the top
   score moves to the top. In short: a guide within 10 % of the best generated doc on the same route wins. (A strict
   tie let page and setting docs beat guides on questions like "how do I log out".)
-* Follow-ups: a question with ≤ 4 content words, or starting with "and", "what about", "how about", "and on", "where
-  is that", is merged with the previous **user** question from history before ranking ("and the error sound?").
+* Follow-ups: a question is **ranked on its own first**. It is merged with the previous **user** question from history
+  (that question's words at weight 0.5) only when it starts with "and", "what about", "how about", "and on", "where
+  is that" ("and the error sound?"), or when it has ≤ 4 content words **and** is unknown on its own. So a complete
+  question asked right after another one (a suggestion chip, then "What does Keep do?") keeps its own answer. The
+  shared evals ask the seven owner questions one after another, in every order (§19.11). Same rule in `retrieve.ts`
+  and `retrieve.py`.
 * Refusals (fixed text, no model, no candidates): asks for passwords, keys, tokens, the cookie file's contents, other
   people's accounts or clips, or Clip Factory's own servers (`refused: true`, text "I can't help with that. I only
   know how to use Clip Factory.").
@@ -2659,7 +2798,12 @@ would add a second deploy unit for no gain.
 ```ts
 interface HelpTurn { role: "user" | "assistant"; text: string /* ≤ 300, extra cut */ }
 interface HelpContext { device: "phone" | "tablet" | "desktop"; os: DeviceOs; installed: boolean;
-                        page: Route["name"] }   // enums only; used for `when` and a small boost (+10 %) of docs on that page
+                        page: HelpPage }   // enums only; used for `when` and a small boost (+10 %) of docs on that page
+// HelpPage: "home" | "jobs" | "job" | "review" | "library" | "clip" | "settings" | "skill" | "get_app" | "not_found".
+// The client sends route.name (helpPage in context.ts); the mock-only routes (mock_oauth, motion_gallery) go as
+// "not_found". The API accepts every Route["name"] (routes/help.py PAGES, checked against router.ts by
+// api tests/test_help_pages.py and web test/helpPages.test.ts) and ranks a "skill" page like "settings" (boost and
+// suggestion chips). Any other page is a 400, in the mock transport too.
 interface HelpAnswer { known: boolean; refused?: true; text: string; steps: string[]; actions: HelpAction[];
                        sources: string[]; live?: HelpLiveSpec }
 ```
@@ -2755,7 +2899,10 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   taps (`data-moving`, `pointer-events: none`), so a tap on a control it passes over reaches the control. When lifting
   would push it above 40 % of the window height, it steps aside (hidden, `data-dodge="blocked"`) instead, so on long
   lists of rows (Jobs, Settings on a phone, Review at 1440 px) it shows once the owner scrolls to a free spot or the
-  end. Settled, it never covers a control at any width from 320 to 1920 px, at the top of a page or after scrolling,
+  end. **Words**: it also keeps off lines of text (text nodes in its column, measured with `Range.getClientRects`;
+  text never seen on screen, i.e. hidden, inert, `aria-hidden` or `.sr-only`, does not count) when a spot clear of both controls and words is within the same 40 % reach. When there is none (on a phone, words
+  usually run the full width) it takes the control-only spot and marks itself `data-on-words`; words alone never make
+  it step aside, so Ask is always there to tap. Scrolling moves the words out from under it. Settled, it never covers a control at any width from 320 to 1920 px, at the top of a page or after scrolling,
   with or without the update bar, and with other fonts (`e2e/help.spec.ts`). Every page adds bottom padding under its
   last control so the launcher always has room at the end. Sage glass, never
   tomato.
@@ -2781,10 +2928,12 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   `web/src/styles/fly.css`, tuned per button with `--fly-x`, `--fly-y`, `--fly-tilt`, `--fly-angle`, `--fly-ms`,
   `--fly-back-ms`): it plays only when a question is really sent. Over 520 ms the plane crouches, lifts and tilts, then
   flies up and to the right (34 px, −30 px, −16°) fading out with a soft trail; a fresh plane fades back in over 240 ms.
+  (A labelled `send` button uses the shorter flight of §20.3.)
   Transform and opacity only, never loops; a second send restarts it. It never delays the work: the request starts and
   the question bubble shows at once. The click sound is the existing tap sound and plays only on click or tap, not on
   Enter. **Reduced motion** (system `prefers-reduced-motion` or `reduceMotion` in Settings): a 300 ms fade of the
-  plane only, no flight and no trail.
+  plane only, no flight and no trail. The fade rules in `fly.css` carry `!important` and beat base.css's global 1 ms
+  reduced-motion rule, so the fade really lasts 300 ms.
 * **Empty state**: "Hi! What do you want to do?" and three suggestion chips chosen by page and device from docs with
   `suggest: true` (default set: "How do I make clips from a Twitch link?", "What does Keep do?", "How many views did
   my best clip get this week?"; on Settings pages the sounds question replaces the second; on a clip page "Why is my
@@ -2874,7 +3023,9 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   "download for mac" (desktop) / "add to home screen" (ios), "update the app", "youtube says sign in to confirm",
   "make more clips each time", "what is a skill", "turn off a skill", "sign out", follow-up "and the error sound?"
   after the click-sound question, typo "instagarm connect", plus unknown ("what's the weather", "write my homework")
-  and refused ("what is my password", "show me another user's clips", "give me the api key").
+  and refused ("what is my password", "show me another user's clips", "give me the api key"). **Sequential cases**:
+  each of the seven §19.1 questions asked right after each of the other six (42 cases with `history`), each must
+  still hit its own doc (a complete question is never swallowed by the follow-up merge).
 * **api** (`pytest`, fake Bedrock and fake fetcher): off by default (flag unset → GET off, POST 403); kill switch
   `enabled: false` → 403 and `model: false` → kb, read once per 60 s; rate limit 6/min, 60/h, 429 with `Retry-After`
   and `retryAfter`; cap reached → `kb_cap`, no model call; no model call for unknown/refused; bad bodies (empty,
@@ -2884,11 +3035,13 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   answer with a number instead of `{value}` → kb; malformed JSON / stop reasons / timeout / ClientError → kb; deadline
   skip; skills that cannot be loaded → `kb_skills`, no model call; `test_skills_everywhere.py` passes with help in the package; corpus: meta parse, other-host or bad
   path refused, cache 10 min, fallback to bundled, sensitive filter; questions and answers never appear in any log
-  record (captured logs); `requestId` in every error body; follow-up merge.
+  record (captured logs); `requestId` in every error body; follow-up merge; every route name in `router.ts` is an
+  accepted `context.page` and a skill page answers (`test_help_pages.py`).
 * **web** (Vitest): retriever evals; composer; `when` filter; route check drops a bad action; generator `--check` and
   the sensitive/dash test over the corpus; `helpApi` timeout, no `keepalive`, 401 refresh; 429 → countdown, no retry;
   5xx/network → local answer; status off → hidden and local fallback disabled; live fill and live failure; unsaved
-  guard; dodge math.
+  guard; dodge math, words as obstacles (`helpDodgeText.test.ts`); route names → API pages and the mock's 400 on an
+  unknown page (`helpPages.test.ts`).
   **Playwright (mock mode)** `e2e/help.spec.ts` at **375×812** and **1440×900**: launcher name and position (not over
   the tab bar or the update bar; above the update bar on desktop); open → three suggestions; "Where do I change my click
   sound?" → steps + tomato **Open Sounds** → navigates to `/settings/look-and-feel/sounds` and the Click sound apple
@@ -3063,7 +3216,7 @@ scales in from 0.8 to 1 over the last third of the duration with `--ease-spring`
 
 | Kind | Default glyph | Full motion | Duration |
 |---|---|---|---|
-| `send` | paper plane (or the button's own icon) | the §19 flight: lifts, tilts −16°, flies off with the fading trail, fresh one fades back. Ask's free-flying `.fly-btn` keeps +34 / −30 px and a 38 px trail; inside a normal pill (`overflow: hidden`) it flies +18 / −16 px with a 22 px trail, so it fades out before the pill's edge instead of being cut off | 520 + 240 |
+| `send` | paper plane (or the button's own icon) | the §19 flight: lifts, tilts −16°, flies off with the fading trail, fresh one fades back. Ask's icon-only paper plane (`.fly`, `PaperPlaneButton`) keeps +34 / −30 px and a 38 px trail. Every labelled `send` (`.act--send`: Make clips, the Find a setting "Ask Clip Factory" row, TikTok Keep…) flies mostly up, +8 / −16 px at −63° with an 18 px trail, so the glyph and trail fade out before they reach the label (§20.1 (3)) and before a pill's top edge | 520 + 240 |
 | `keep` | `heart` | pops 1 → 1.28 → 1 (`--ease-spring`) while floating up 6 px and back, with a sage ring that grows 0.6 → 1.8 (`::after`); the ring holds its opacity (0.9 → 0.7) until 45 % and then fades, on `cubic-bezier(0.33, 1, 0.68, 1)`, so a child sees it (the same ring for `save`, `connect`, `star` and the `check` radar) | 480 |
 | `add` | `plus` | turns 90° and pops 1 → 1.25 → 1 | 360 |
 | `remove` | `minus` | squashes `scale(0.6, 1.2)` and springs back | 300 |
@@ -3128,8 +3281,10 @@ When Settings › Look & feel › Motion › Reduce motion is on **or** the OS r
 (`prefersReducedMotion()`, `html.reduce-motion` and the media query, as `fly.css` does today):
 
 * every kind becomes `fade`: the glyph's opacity dips to 0.45 and its colour eases to Sage (`currentColor` swap on the
-  wrapper), then back, 240 ms total (Send keeps its 300 ms fade). **No transform at all**: no rotate, no translate, no
-  scale, no rings, no ghost copy, no trail.
+  wrapper), then back, 240 ms total (Send keeps its 300 ms fade: `--send-fade` in motion.css for the in-button
+  `.act--send`, the `fly-fade` rules in fly.css for the paper plane, both equal to `SEND_FADE_MS`, which is how long
+  `phaseMs("send", "fade")` holds `.is-fade`; `web/test/sendMotion.test.ts` and `e2e/send-fade.spec.ts` keep them in
+  step). **No transform at all**: no rotate, no translate, no scale, no rings, no ghost copy, no trail.
 * `fail` becomes `fail-fade` (tint only), `rewind` becomes `fade`, state-driven chevrons swap angle instantly.
 * The existing press scale on `:active` and the ripple already follow the global reduced-motion rule and are not
   touched here.
@@ -3158,7 +3313,7 @@ the result at once). If Undo is tapped:
   once per click, whatever the kind. Motion adds no extra tap.
 * **Success** plays only where it plays today or where the real result arrives for a Tomato main action (Connect /
   account pick as now; Keep, Save keys and skill save when the server says yes). Never at the tap, never on a guess.
-* **Error / deny** plays on `fail()` (unless `{ sound: false }`) and on a tap on an `aria-disabled` button, as now.
+* **Error / deny** plays on `fail()` (unless `{ sound: false }`) and on a tap on an `aria-disabled` button, as now, unless the button carries `data-sound="off"` (the newest week's Later week nudge, §20.11).
 * CORE adds a 300 ms same-kind de-duplication to `SoundEngine.play` so a failure that both calls `fail()` and shows
   an error toast is heard once.
 * Muted sounds (Settings › Sounds off) change nothing about motion.
@@ -3246,7 +3401,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 |---|---|---|
 | Home.tsx:97 Go to Review, :133 All jobs, :148 working job row, :171 Last finished, :198 Review teaser | press | |
 | SetupCard.tsx:38 Continue | press | |
-| NewJobForm.tsx:128 Paste a link / Upload a video | `toggle` | via Segmented |
+| NewJobForm.tsx:128 Paste a link / Pick a video | `toggle` | via Segmented |
 | NewJobForm.tsx:167 Clear link | `clear` | |
 | NewJobForm.tsx:171 Paste | `paste` | the linkbox mark `pop` stays |
 | NewJobForm.tsx:200 Dropzone (file input) | `upload` | played on `change` with a file, not on the click that opens the picker |
@@ -3257,7 +3412,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | Jobs.tsx:79,98 Make clips (navigate) | press | |
 | Jobs.tsx:117 Show older jobs | `next` | `chevronDown`, steps down (`--act-dir-in: 90deg` on the button) |
 | Jobs.tsx:130 job row; JobDetail.tsx:116 See all jobs, :211 Check these clips, :226 source link, :267 clip tile, :285 All jobs | press | |
-| JobDetail.tsx:195 Stop job | `stop` | handle; the button is swapped for the "Stopping" note at the tap (motion cut, §20.4); the one that comes back on Undo plays `rewind()` (§20.7) |
+| JobDetail.tsx:195 Stop job | `stop` | handle; the button is swapped for the "Stopping" note at the tap (motion cut, §20.4); the one that comes back on Undo plays `rewind()` (§20.7); the pending stop lives in `pendingStops.ts`, so the note stays after leaving and coming back (§12.5) |
 | JobDetail.tsx:206 Try again | `retry` | |
 | Jobs.tsx:30 / JobDetail.tsx:45 confetti on finish | unchanged | not a click |
 | Review.tsx:128 Show every job | `clear` | |
@@ -3280,7 +3435,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | Library.tsx:353 Try again (KeepAgain) | `retry` | `fail()` on error |
 | WeekView.tsx:124 Go back, :182 Make clips, :264/269 week card | press | |
 | WeekView.tsx:138 Earlier week | `prev` | |
-| WeekView.tsx:156 Later week | `next` | when it is already the newest week: the `nudge` kind (4 px and back, no fail, no deny) with the info toast |
+| WeekView.tsx Later week | `next` | when it is already the newest week: the `nudge` kind (4 px and back, no fail, no deny) with the info toast; the button keeps `aria-disabled="true"` for screen readers and carries `data-sound="off"` so no click sound (not even deny) plays |
 | WeekView.tsx:300 Best this week (star) | `star` | on / off variants |
 | ClipPerformance.tsx:159 Go to Library, :309 platform chips, :417 Back | press | |
 | ClipPerformance.tsx:163 Try again | `retry` | |

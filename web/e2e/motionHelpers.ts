@@ -46,9 +46,17 @@ export async function actTransforms(page: Page): Promise<string[]> {
 
 /** Widths of every `[data-act]` button, keyed by its kind and position. */
 export async function actWidths(page: Page): Promise<Record<string, number>> {
-  return page.evaluate(() =>
-    Object.fromEntries(Array.from(document.querySelectorAll<HTMLElement>("[data-act]"), (el, i) => [`${el.dataset.act}#${i}`, el.offsetWidth])),
-  );
+  // Keyed by the element itself (a tag given on first sight), not its place in the page: a card that leaves or an
+  // Undo toast that arrives mid-animation must not make one button's width be compared with another's.
+  return page.evaluate(() => {
+    const w = window as unknown as { __cfActKey?: number };
+    return Object.fromEntries(
+      Array.from(document.querySelectorAll<HTMLElement>("[data-act]"), (el) => {
+        el.dataset.actKey ??= String((w.__cfActKey = (w.__cfActKey ?? 0) + 1));
+        return [`${el.dataset.act}#${el.dataset.actKey}`, el.offsetWidth];
+      }),
+    );
+  });
 }
 
 /** True when the page does not scroll sideways. */

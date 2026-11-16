@@ -7,9 +7,9 @@ import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Segmented, Skeleton } from "../../components/ui.tsx";
-import { compact } from "../../lib/metrics.ts";
+import { compact, postStatusLabel, STATUS_LABEL } from "../../lib/metrics.ts";
 import { WeekView } from "./WeekView.tsx";
-import { count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
+import { byPlatformOrder, count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { useAction } from "../../lib/motion.ts";
@@ -42,7 +42,7 @@ async function loadLibrary(): Promise<LibraryData> {
   };
 }
 
-type Filter = "all" | "waiting" | "posted";
+export type Filter = "all" | "waiting" | "posted";
 
 /** Library: every kept clip, or This week's clips with their "Best this week" stars (§16.8). */
 export function Library({ view = "all", week = null }: { view?: "all" | "week"; week?: string | null }) {
@@ -189,17 +189,7 @@ function AllClips() {
           </div>
 
           {clips.length === 0 ? (
-            <Empty
-              icon="library"
-              title={filter === "posted" ? "Nothing posted yet" : "Nothing kept yet"}
-              action={
-                <LinkButton href="/review" variant="primary" icon="review" iconAfter="chevronRight">
-                  Go to Review
-                </LinkButton>
-              }
-            >
-              Clips you keep show up here. Tap Go to Review and tap Keep on the ones you like.
-            </Empty>
+            <LibraryEmpty filter={filter} anyKept={data.clips.length > 0} onShowAll={() => setFilter("all")} />
           ) : (
             <ul className="library-grid">
               {clips.map((c) => (
@@ -215,19 +205,53 @@ function AllClips() {
   );
 }
 
-const POST_STATUS: Record<Post["status"], string> = {
-  pending_integration: "Waiting for the account",
-  queued: "Queued",
-  posted: "Posted",
-  failed: "Failed",
-};
 
+/**
+ * What an empty list says depends on why it is empty: nothing kept at all (go keep some), every kept clip already
+ * posted ("Not posted yet" is empty), or nothing out yet ("Posted" is empty while kept clips are on their way).
+ */
+export function libraryEmptyCopy(filter: Filter, anyKept: boolean): { title: string; body: string; action: "review" | "all" | null } {
+  if (!anyKept) {
+    return {
+      title: filter === "posted" ? "Nothing posted yet" : "Nothing kept yet",
+      body: "Clips you keep show up here. Tap Go to Review and tap Keep on the ones you like.",
+      action: "review",
+    };
+  }
+  if (filter === "waiting") return { title: "Everything is posted!", body: "Every clip you kept is out. Nice! Tap Show all to see them.", action: "all" };
+  return { title: "Nothing posted yet", body: "Your kept clips show up here once they are posted. Tap Show all to see how they are doing.", action: "all" };
+}
+
+function LibraryEmpty({ filter, anyKept, onShowAll }: { filter: Filter; anyKept: boolean; onShowAll: () => void }) {
+  const copy = libraryEmptyCopy(filter, anyKept);
+  return (
+    <Empty
+      icon="library"
+      title={copy.title}
+      action={
+        copy.action === "review" ? (
+          <LinkButton href="/review" variant="primary" icon="review" iconAfter="chevronRight">
+            Go to Review
+          </LinkButton>
+        ) : copy.action === "all" ? (
+          <Button variant="primary" icon="library" onClick={onShowAll}>
+            Show all
+          </Button>
+        ) : undefined
+      }
+    >
+      {copy.body}
+    </Empty>
+  );
+}
 
 function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKept: (clip: Clip, posts: Post[]) => void }) {
   // Posts still waiting for an account read as one line, not five identical rows.
-  const waiting = posts.filter((p) => p.status === "pending_integration");
+  // Every row and mark follows the one app-wide platform order (YouTube, TikTok, Instagram, Facebook, X).
+  const ordered = byPlatformOrder(posts);
+  const waiting = ordered.filter((p) => p.status === "pending_integration");
   const totalViews = clip.totalViews ?? posts.reduce((n, p) => n + (p.metrics?.views ?? 0), 0);
-  const rest = posts.filter((p) => p.status !== "pending_integration");
+  const rest = ordered.filter((p) => p.status !== "pending_integration");
   const { me } = useSession();
   const views = postViews(posts);
   const earned = Object.keys(views).length ? clipEarnings(views, clip.durationSec, me?.settings) : null;
@@ -265,7 +289,7 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
                   </span>
                 ))}
               </span>
-              <span className="post__status">Posts once these accounts are connected</span>
+              <span className="post__status">{STATUS_LABEL.waiting_for_connection}. Posts once these accounts are connected.</span>
             </li>
           ) : null}
           {rest.map((p) => (
@@ -276,7 +300,7 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
               <span className="post__text">
                 <span className="post__name">{PLATFORM_LABEL[p.platform]}</span>
                 <span className="post__status clamp-2">
-                  {p.status === "failed" && p.error ? p.error : POST_STATUS[p.status]}
+                  {p.status === "failed" && p.error ? p.error : postStatusLabel(p)}
                   {p.status === "posted" && !p.metrics && p.perfCheckAt ? ` · numbers ${relative(p.perfCheckAt)}` : ""}
                 </span>
               </span>

@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { settingsPath, TREES } from "../src/lib/settingsTree.ts";
 
 /** Every page of the settings tree (§15.1), and each platform's setup page (§17.1). */
@@ -73,6 +73,8 @@ export async function findOverflow(page: Page): Promise<{ page: number; viewport
       const s = getComputedStyle(el);
       if (s.display === "inline" || s.display === "none" || s.visibility === "hidden" || s.position === "fixed") continue;
       if (el.clientWidth === 0) continue;
+      // Visually hidden on purpose (the .sr-only recipe without the class: a 1 px clipped box), nothing to see.
+      if (el.clientWidth <= 1 && s.overflow === "hidden" && (s.clipPath.startsWith("inset(50%") || s.clip !== "auto")) continue;
       const hasText = Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent!.trim().length > 0);
       const hasMedia = !!el.querySelector(":scope > img, :scope > svg, :scope > video");
       if (!hasText && !hasMedia) continue;
@@ -130,5 +132,299 @@ export async function animationsDone(page: Page) {
         .every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity),
     undefined,
     { timeout: 15_000 },
+  );
+}
+
+// ---------- Contrast and text size (audit F081, e2e/contrast.spec.ts) ----------
+
+/** One text run that fails a contrast or size floor. */
+export interface TextFailure {
+  selector: string;
+  text: string;
+  /** Worst contrast found against the possible backgrounds (contrast failures only). */
+  ratio?: number;
+  /** What it needed: 4.5, or 3 for large text. */
+  need?: number;
+  fontSize: number;
+  color?: string;
+  background?: string;
+}
+
+/**
+ * The browser-side kit, installed as `window.__cfContrast`. It is one self-contained function because Playwright
+ * sends its source text into the page. WCAG 2.x relative luminance and contrast; colours are [r, g, b, a] with
+ * r, g, b in 0-255 and a in 0-1.
+ */
+function contrastKit() {
+  type C = [number, number, number, number];
+  const lum = (c: C) =>
+    [c[0], c[1], c[2]]
+      .map((v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+      .reduce((n, v, i) => n + v * [0.2126, 0.7152, 0.0722][i]!, 0);
+  const ratio = (a: C, b: C) => {
+    const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p) as [number, number];
+    return (x + 0.05) / (y + 0.05);
+  };
+  /** Every colour in a computed value: rgb()/rgba() and color(srgb ...), in order. */
+  const colours = (s: string): C[] => {
+    const out: C[] = [];
+    for (const m of s.matchAll(/rgba?\(([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\)|color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)/g)) {
+      if (m[1] !== undefined) {
+        const a = m[4] === undefined ? 1 : m[4].endsWith("%") ? parseFloat(m[4]) / 100 : Number(m[4]);
+        out.push([Number(m[1]), Number(m[2]), Number(m[3]), a]);
+      } else out.push([Number(m[5]) * 255, Number(m[6]) * 255, Number(m[7]) * 255, m[8] === undefined ? 1 : Number(m[8])]);
+    }
+    return out;
+  };
+  /** `top` painted over an opaque `under`. */
+  const over = (top: C, under: C): C => [0, 1, 2].map((i) => top[i]! * top[3] + under[i]! * (1 - top[3])).concat(1) as C;
+  /** CSS saturate(s) (Filter Effects spec matrix), as a glass backdrop-filter applies it to what is behind. */
+  const saturate = (c: C, s: number): C => {
+    const [r, g, b] = c;
+    const k = (x: number) => Math.max(0, Math.min(255, x));
+    return [
+      k((0.213 + 0.787 * s) * r + (0.715 - 0.715 * s) * g + (0.072 - 0.072 * s) * b),
+      k((0.213 - 0.213 * s) * r + (0.715 + 0.285 * s) * g + (0.072 - 0.072 * s) * b),
+      k((0.213 - 0.213 * s) * r + (0.715 - 0.715 * s) * g + (0.072 + 0.928 * s) * b),
+      1,
+    ];
+  };
+  const hex = (c: C) => "#" + [c[0], c[1], c[2]].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
+
+  /** WCAG contrast of white on the darkest-to-lightest stops of an element's background gradient (and --glass-tint). */
+  function whiteOnGradient(e: Element): number {
+    const s = getComputedStyle(e);
+    const stops = colours(s.backgroundImage + " " + s.getPropertyValue("--glass-tint"));
+    return Math.min(...stops.map((c) => ratio([255, 255, 255, 1], c)));
+  }
+
+  /** Per-column samples of the fixed backdrop (rows every 4 px), from a screenshot of the backdrop alone. */
+  let backdrop: { cols: C[][]; step: number } | null = null;
+  async function loadBackdrop(png: string | null) {
+    if (!png) return void (backdrop = null);
+    const bytes = Uint8Array.from(atob(png), (ch) => ch.charCodeAt(0));
+    const bmp = await createImageBitmap(new Blob([bytes], { type: "image/png" }));
+    const cv = document.createElement("canvas");
+    cv.width = bmp.width;
+    cv.height = bmp.height;
+    const ctx = cv.getContext("2d")!;
+    ctx.drawImage(bmp, 0, 0);
+    const data = ctx.getImageData(0, 0, bmp.width, bmp.height).data;
+    const step = 4;
+    const cols: C[][] = [];
+    for (let x = 0; x < bmp.width; x += step) {
+      const col: C[] = [];
+      for (let y = 0; y < bmp.height; y += step) {
+        const i = (y * bmp.width + x) * 4;
+        col.push([data[i]!, data[i + 1]!, data[i + 2]!, 1]);
+      }
+      cols.push(col);
+    }
+    backdrop = { cols, step };
+  }
+
+  /**
+   * The backdrop colours a box can sit on: its columns, over every row it can reach by scrolling (or only its own
+   * rows when it is fixed). Returns the darkest, the lightest and three luminance quartiles between them.
+   */
+  function baseUnder(r: DOMRect, fixed: boolean): C[] {
+    if (!backdrop) return [[255, 255, 255, 1]];
+    const { cols, step } = backdrop;
+    const maxScroll = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+    const top = fixed ? r.top : r.top + scrollY - maxScroll;
+    const bottom = fixed ? r.bottom : r.bottom + scrollY;
+    const x0 = Math.max(0, Math.floor(r.left / step));
+    const x1 = Math.min(cols.length - 1, Math.floor((r.right - 1) / step));
+    const rows = cols[0]!.length;
+    const y0 = Math.max(0, Math.floor(top / step));
+    const y1 = Math.min(rows - 1, Math.floor((bottom - 1) / step));
+    const seen: C[] = [];
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) seen.push(cols[x]![y]!);
+    if (!seen.length) return [cols[Math.min(x0, cols.length - 1)]![Math.min(Math.max(y0, 0), rows - 1)]!];
+    seen.sort((a, b) => lum(a) - lum(b));
+    return [0, 0.25, 0.5, 0.75, 1].map((q) => seen[Math.round(q * (seen.length - 1))]!);
+  }
+
+  const describe = (el: Element) => {
+    const cls = typeof el.className === "string" ? el.className.trim().split(/\s+/).slice(0, 2).join(".") : "";
+    return `${el.tagName.toLowerCase()}${cls ? "." + cls : ""}`;
+  };
+
+  /**
+   * Every visible text run on the page: its rendered colour against every background it can have, found by walking
+   * its ancestors from the root down and compositing each background colour and each gradient stop (glass tints are
+   * gradients of translucent colours) over the backdrop, with the glass's backdrop saturate() and any ancestor
+   * opacity applied. Also its font size.
+   */
+  /** The visible text runs, found before the backdrop photo touches the page: [text node, its element]. */
+  let targets: [Text, HTMLElement][] = [];
+  function collect(skip: string): number {
+    targets = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const done = new Set<Element>();
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const text = (n.textContent ?? "").trim();
+      const el = n.parentElement;
+      if (!text || !el || done.has(el)) continue;
+      if (el.closest("script, style, noscript, template, title, option, .sr-only")) continue;
+      if (skip && el.closest(skip)) continue;
+      if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      const rect = range.getBoundingClientRect();
+      // Off-canvas, or a 1 px clip (visually hidden): nothing on screen to read.
+      if (rect.width < 2 || rect.height < 2 || rect.right <= 0 || rect.left >= document.documentElement.scrollWidth) continue;
+      done.add(el);
+      targets.push([n as Text, el]);
+    }
+    return targets.length;
+  }
+
+  function scan() {
+    const contrast: unknown[] = [];
+    const tiny: unknown[] = [];
+    let checked = 0;
+    let pictures = 0;
+    const hasBackdrop = !!document.querySelector(".backdrop");
+    for (const [n, el] of targets) {
+      const text = (n.textContent ?? "").trim();
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      const rect = range.getBoundingClientRect();
+      // WCAG 1.4.3 exempts inactive controls.
+      if (el.closest(':disabled, [aria-disabled="true"]')) continue;
+      checked++;
+      const s = getComputedStyle(el);
+      const size = parseFloat(s.fontSize);
+      const weight = Number(s.fontWeight) || 400;
+      const label = text.replace(/\s+/g, " ").slice(0, 50);
+      if (size < 12) tiny.push({ selector: describe(el), text: label, fontSize: size });
+
+      // Text painted on a picture can't be worked out from styles (axe marks it "needs review" too).
+      let pictured = false;
+      for (let a: Element | null = el, i = 0; a && i < 4 && !pictured; a = a.parentElement, i++)
+        for (const m of Array.from(a.querySelectorAll("img, video, canvas"))) {
+          const mr = m.getBoundingClientRect();
+          if (!m.contains(el) && mr.left < rect.right && mr.right > rect.left && mr.top < rect.bottom && mr.bottom > rect.top) pictured = true;
+        }
+      const chain: Element[] = [];
+      for (let a: Element | null = el; a; a = a.parentElement) chain.unshift(a);
+      if (chain.some((a) => getComputedStyle(a).backgroundImage.includes("url("))) pictured = true;
+      if (pictured) {
+        pictures++;
+        continue;
+      }
+
+      const fixed = chain.some((a) => getComputedStyle(a).position === "fixed");
+      // Each state: the colour so far, and the opacity groups entered (what was behind each, and its opacity).
+      type State = { bg: C; groups: { behind: C; o: number }[] };
+      let states: State[] = baseUnder(rect, fixed).map((bg) => ({ bg, groups: [] }));
+      for (const a of chain) {
+        const cs = getComputedStyle(a);
+        if (hasBackdrop && (a === document.documentElement || a === document.body)) continue;
+        const o = Number(cs.opacity);
+        if (o < 1) states = states.map((st) => ({ bg: st.bg, groups: [...st.groups, { behind: st.bg, o }] }));
+        const sat = /saturate\(([\d.]+)\)/.exec(cs.backdropFilter || cs.getPropertyValue("-webkit-backdrop-filter"));
+        if (sat) states = states.map((st) => ({ ...st, bg: saturate(st.bg, Number(sat[1])) }));
+        const fill = colours(cs.backgroundColor)[0];
+        if (fill && fill[3] > 0) states = states.map((st) => ({ ...st, bg: over(fill, st.bg) }));
+        const stops = colours(cs.backgroundImage).filter((c) => c[3] > 0);
+        if (stops.length) {
+          // A gradient's background-image layers paint over its colour; any stop may be under the text.
+          const next: State[] = [];
+          for (const st of states) for (const stop of stops) next.push({ ...st, bg: over(stop, st.bg) });
+          const keep = new Map<string, State>();
+          for (const st of next) keep.set(st.bg.map(Math.round).join() + "|" + st.groups.map((g) => g.behind.map(Math.round).join() + g.o).join(), st);
+          states = [...keep.values()];
+        }
+      }
+      const fg = colours(el instanceof SVGElement ? s.fill : s.color)[0];
+      if (!fg) continue;
+      let worst = Infinity;
+      let worstPair: [C, C] = [fg, fg];
+      for (const st of states) {
+        let t = over(fg, st.bg);
+        let b = st.bg;
+        for (let g = st.groups.length - 1; g >= 0; g--) {
+          const { behind, o } = st.groups[g]!;
+          t = over([t[0], t[1], t[2], o], behind);
+          b = over([b[0], b[1], b[2], o], behind);
+        }
+        const r = ratio(t, b);
+        if (r < worst) [worst, worstPair] = [r, [t, b]];
+      }
+      const large = size >= 24 || (size >= 18.66 && weight >= 700);
+      const need = large ? 3 : 4.5;
+      if (worst < need - 0.005)
+        contrast.push({ selector: describe(el), text: label, ratio: Math.round(worst * 100) / 100, need, fontSize: size, color: hex(worstPair[0]), background: hex(worstPair[1]) });
+    }
+    return { contrast, tiny, checked, pictures };
+  }
+
+  return { lum, ratio, colours, whiteOnGradient, loadBackdrop, collect, scan };
+}
+
+type ContrastKit = ReturnType<typeof contrastKit>;
+
+/** What `scanText` found: failures, how many text runs it checked, and how many sat on a picture (skipped). */
+export interface TextScan {
+  contrast: TextFailure[];
+  tiny: TextFailure[];
+  checked: number;
+  pictures: number;
+}
+
+async function installContrastKit(page: Page) {
+  const ready = await page.evaluate(() => "__cfContrast" in window);
+  if (!ready) await page.evaluate(`window.__cfContrast = (${contrastKit.toString()})()`);
+}
+
+/** WCAG contrast of white on the darkest-to-lightest stops of an element's background gradient. */
+export async function whiteContrastOnGradient(el: Locator): Promise<number> {
+  await installContrastKit(el.page());
+  return el.evaluate((e) => (window as unknown as { __cfContrast: ContrastKit }).__cfContrast.whiteOnGradient(e));
+}
+
+/**
+ * Checks every visible text run on the page (see `contrastKit().scan`): contrast at least 4.5:1 (3:1 for text of
+ * 24 px, or 18.66 px bold, and up) against every background it can sit on, and a font size of at least 12 px.
+ * `skip` is a selector of decorative text left out on purpose.
+ */
+export async function scanText(page: Page, skip = ""): Promise<TextScan> {
+  await installContrastKit(page);
+  await page.evaluate((sk) => (window as unknown as { __cfContrast: ContrastKit }).__cfContrast.collect(sk), skip);
+  let png: string | null = null;
+  if (await page.locator(".backdrop").count()) {
+    // Photograph the backdrop alone, then put the page back. Everything beside the backdrop's ancestors goes to
+    // opacity 0 (inline, !important, no transition). Not visibility: Chromium can leave an inherited visibility
+    // change stale in getComputedStyle, which would hide the page from the scan. Reduced motion parks the drift.
+    const solo = (on: boolean) =>
+      page.evaluate((show) => {
+        const marked = "data-cf-solo";
+        if (!show) {
+          for (const el of Array.from(document.querySelectorAll<HTMLElement>(`[${marked}]`))) {
+            const [o, t] = JSON.parse(el.getAttribute(marked)!) as [string, string];
+            el.style.setProperty("opacity", o);
+            el.style.setProperty("transition", t);
+            el.removeAttribute(marked);
+          }
+          return;
+        }
+        for (let a: Element | null = document.querySelector(".backdrop"); a && a !== document.documentElement; a = a.parentElement)
+          for (const sib of Array.from(a.parentElement?.children ?? []))
+            if (sib !== a && sib instanceof HTMLElement && !sib.hasAttribute(marked)) {
+              sib.setAttribute(marked, JSON.stringify([sib.style.getPropertyValue("opacity"), sib.style.getPropertyValue("transition")]));
+              sib.style.setProperty("transition", "none", "important");
+              sib.style.setProperty("opacity", "0", "important");
+            }
+      }, on);
+    await solo(true);
+    png = (await page.screenshot({ scale: "css" })).toString("base64");
+    await solo(false);
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  }
+  await page.evaluate((b) => (window as unknown as { __cfContrast: ContrastKit }).__cfContrast.loadBackdrop(b), png);
+  return page.evaluate(
+    () => (window as unknown as { __cfContrast: ContrastKit }).__cfContrast.scan() as TextScan,
   );
 }

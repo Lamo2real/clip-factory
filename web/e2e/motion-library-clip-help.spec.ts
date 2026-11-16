@@ -35,7 +35,10 @@ test.describe("motion: library, clip and help (APPLY b)", () => {
     await settle(page);
     const later = page.getByRole("button", { name: "Later week" });
     await expect(later).toHaveAttribute("data-act", "next");
+    await page.evaluate(() => (window.__cfSoundLog = []));
     const nudge = await tapAct(later);
+    // §20.3 / §20.11: the nudge plays no sound at all, and never the deny sound.
+    expect(await page.evaluate(() => (window.__cfSoundLog ?? []).map((e) => e.kind))).toEqual([]);
     // A nudge (CSS keyframes, §20.9), not a shake: no failure, no slide.
     expect(nudge.cls.split(" ")).toEqual(expect.arrayContaining(["act--nudge", "is-play"]));
     expect(nudge.cls).not.toContain("is-fail");

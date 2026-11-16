@@ -113,6 +113,13 @@ a {
   box-shadow: var(--focus);
   border-radius: var(--r-sm);
 }
+/* The page itself takes focus after every route change (App.tsx) so screen readers start at its heading. Rings are
+   for controls: a keyboard route change must not draw one around the whole page. */
+.main:focus-visible,
+main[tabindex="-1"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
 
 /* Scrollbars on the few intentionally scrolling boxes. */
 * {
@@ -171,6 +178,10 @@ a {
   -webkit-line-clamp: 3;
   line-clamp: 3;
 }
+/* Keeps a short phrase (a range like "5–10 clips") on one line: browsers may break after an en dash. */
+.nowrap {
+  white-space: nowrap;
+}
 
 .muted {
   color: var(--ink-2);
@@ -209,7 +220,8 @@ a {
   color: var(--tomato-ink);
   text-decoration: underline;
   text-decoration-color: rgb(var(--tomato-rgb) / 0.4);
-  min-height: 32px;
+  /* 44 x 44 is the floor at every width (UX_DESIGN_SYSTEM.md §Touch targets); phones raise it to 48 (system.css). */
+  min-height: 44px;
 }
 .text-link:hover {
   text-decoration-color: currentColor;

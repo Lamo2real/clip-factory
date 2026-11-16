@@ -45,6 +45,38 @@ test.describe("on a phone", () => {
     await expect(page).toHaveURL(/\/settings$/);
   });
 
+  test("the breadcrumb stays on one row at 320-414 px, truncating from the left", async ({ page }) => {
+    for (const width of [320, 375, 414]) {
+      await page.setViewportSize({ width, height: 844 });
+      for (const path of [
+        "/settings/app/account",
+        "/settings/posting/setup/tiktok",
+        "/settings/posting/setup/instagram",
+        "/settings/clip-making/skills/new",
+        "/settings/clip-making/skills/01JZ8S00000000000000000001/edit",
+      ]) {
+        await page.goto(path);
+        await settle(page);
+        const crumbs = page.getByRole("navigation", { name: "Breadcrumb" });
+        const shown = await crumbs.locator(".crumbs__item").filter({ visible: true }).evaluateAll((els) =>
+          els.map((e) => ({ top: Math.round(e.getBoundingClientRect().top), right: e.getBoundingClientRect().right })),
+        );
+        const list = await crumbs.locator(".crumbs__list").evaluate((el) => ({ h: el.getBoundingClientRect().height, right: el.getBoundingClientRect().right }));
+        // One row: every visible level on the same line, none past the list's right edge.
+        expect(new Set(shown.map((s) => s.top)).size, `${path} at ${width}`).toBe(1);
+        expect(list.h, `${path} at ${width}`).toBeLessThan(60);
+        for (const s of shown) expect(s.right, `${path} at ${width}`).toBeLessThanOrEqual(list.right + 1);
+        // The page you are on is always the last thing shown.
+        await expect(crumbs.locator('[aria-current="page"]')).toBeVisible();
+        for (const link of await crumbs.getByRole("link").all()) {
+          const box = (await link.boundingBox())!;
+          expect(box.height).toBeGreaterThanOrEqual(48);
+          expect(box.width).toBeGreaterThanOrEqual(48);
+        }
+      }
+    }
+  });
+
   test("switches have a 48 px tap area", async ({ page }) => {
     await page.goto("/settings/look-and-feel/sounds");
     await settle(page);
@@ -168,6 +200,24 @@ test.describe("on a desktop", () => {
     await expect(panel.getByRole("link", { name: "Skills" })).toHaveAttribute("aria-current", "page");
   });
 
+  test("on a tree page the folder panel marks that tree: one aria-current, sage and the tomato dot; 260 px wide", async ({ page }) => {
+    await page.goto("/settings/clip-making");
+    await settle(page);
+    const panel = page.getByRole("navigation", { name: "Settings sections" });
+    await expect(panel.locator('[aria-current="page"]')).toHaveCount(1);
+    const row = panel.getByRole("button", { name: "Clip making" });
+    await expect(row).toHaveAttribute("aria-current", "page");
+    await expect(row).toHaveClass(/is-current/);
+    const look = await row.evaluate((el) => ({ bg: getComputedStyle(el).backgroundImage, dot: getComputedStyle(el, "::after").content }));
+    expect(look.bg).toContain("gradient");
+    expect(look.dot).not.toBe("none");
+    expect(Math.round((await panel.boundingBox())!.width)).toBe(260);
+    // On a branch page the branch is current, not its tree.
+    await panel.getByRole("link", { name: "Skills" }).click();
+    await expect(panel.locator('[aria-current="page"]')).toHaveCount(1);
+    await expect(panel.getByRole("link", { name: "Skills" })).toHaveAttribute("aria-current", "page");
+  });
+
   test("a first visit to a branch opens only its tree", async ({ page }) => {
     await page.goto("/settings/posting/where");
     await settle(page);
@@ -282,6 +332,58 @@ test.describe("on a desktop", () => {
     await expect(page.getByText("Nothing found for “zebra”.", { exact: false })).toBeVisible();
     await page.getByRole("button", { name: "Clear the search" }).click();
     await expect(page.getByLabel("Find a setting")).toHaveValue("");
+  });
+});
+
+test.describe("layout details", () => {
+  test("sound cards: deep sage number tiles (4.5:1 on the tint), name and feel kept together when a row stretches", async ({ page }) => {
+    for (const width of [375, 414, 768]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/settings/look-and-feel/sounds");
+      await settle(page);
+      await expect(page.locator(".sound-group.is-tap .sound-card:not(.is-picked) .sound-card__num").first()).toHaveCSS("color", "rgb(61, 79, 49)");
+      const gaps = await page.locator(".sound-card").evaluateAll((cards) =>
+        cards.map((c) => c.querySelector(".sound-card__feel")!.getBoundingClientRect().top - c.querySelector(".sound-card__name")!.getBoundingClientRect().bottom),
+      );
+      expect(Math.max(...gaps) - Math.min(...gaps), `name-to-feel gaps at ${width}: ${gaps.join(", ")}`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  test("tree and branch card lines never leave one word alone on their last line", async ({ page }) => {
+    const lonely = (sel: string) =>
+      page.locator(sel).evaluateAll((els) =>
+        els.flatMap((el) => {
+          const words: { word: string; top: number }[] = [];
+          const text = el.textContent ?? "";
+          const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+          for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+            const own = node.textContent ?? "";
+            const re = /\S+/g;
+            for (let m = re.exec(own); m; m = re.exec(own)) {
+              const r = document.createRange();
+              r.setStart(node, m.index);
+              r.setEnd(node, m.index + m[0].length);
+              words.push({ word: m[0], top: Math.round(r.getBoundingClientRect().top) });
+            }
+          }
+          const lines = new Set(words.map((w) => w.top));
+          if (lines.size < 2) return [];
+          const last = Math.max(...lines);
+          const onLast = words.filter((w) => w.top === last);
+          return onLast.length === 1 && onLast[0]!.word !== "·" ? [`${text} → "${onLast[0]!.word}"`] : [];
+        }),
+      );
+    for (const [width, path] of [
+      [1440, "/settings"],
+      [1920, "/settings/clip-making"],
+    ] as const) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.goto(path);
+      await settle(page);
+      await page.evaluate(() => document.fonts.ready);
+      const found = await lonely(".tree-card__line, .branch-card__line, .tree-card__count, .branch-card__apples");
+      expect(found, `${path} at ${width}`).toEqual([]);
+    }
   });
 });
 

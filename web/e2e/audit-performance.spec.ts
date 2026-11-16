@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { animationsDone, CLIPS, openClip, settle } from "./helpers.ts";
+import { animationsDone, CLIPS, openClip, settle, whiteContrastOnGradient } from "./helpers.ts";
 
 // Findings from the audit of the clip performance page and Library › This week (November 2026), each pinned.
 
@@ -23,17 +23,6 @@ async function tabTo(page: Page, el: Locator) {
     if (await el.evaluate((e) => e === document.activeElement)) return;
   }
   throw new Error("never reached by Tab");
-}
-
-/** WCAG contrast of white on the darkest-to-lightest stops of an element's background gradient. */
-async function whiteContrastOnGradient(el: Locator): Promise<number> {
-  return el.evaluate((e) => {
-    const bg = getComputedStyle(e).backgroundImage + " " + getComputedStyle(e).getPropertyValue("--glass-tint");
-    const stops = [...bg.matchAll(/rgba?\(([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)/g)].map((m) => [Number(m[1]), Number(m[2]), Number(m[3])]);
-    const lum = (c: number[]) =>
-      c.map((v) => (v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((n, v, i) => n + v * [0.2126, 0.7152, 0.0722][i]!, 0);
-    return Math.min(...stops.map((c) => 1.05 / (lum(c) + 0.05)));
-  });
 }
 
 test.describe("clip page, desktop", () => {

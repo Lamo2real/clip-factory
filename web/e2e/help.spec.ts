@@ -480,3 +480,52 @@ for (const v of VARIANTS) {
     });
   });
 }
+
+// Audit F025: the launcher keeps off words too when a spot clear of them is within reach (§19.8). When there is none
+// it may rest on words (never on a control) and says so with data-on-words; it never covers words without knowing.
+async function coveredWords(page: Page) {
+  return page.evaluate(() => {
+    const el = document.querySelector<HTMLElement>(".help-launcher");
+    if (!el || el.classList.contains("is-hidden")) return [];
+    const l = el.getBoundingClientRect();
+    const out: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const p = n.parentElement;
+      // The launcher's own chrome, and words never seen on screen (dodge.ts UNSEEN_WORDS: hidden, inert, sr-only).
+      if (!n.nodeValue?.trim() || !p || p.closest(".help-launcher, .help-panel, .help-ring, .update-bar, .tabbar, .sidebar, [inert], [hidden], [aria-hidden='true'], .sr-only")) continue;
+      const s = getComputedStyle(p);
+      if (s.visibility === "hidden" || Number(s.opacity) === 0) continue;
+      range.selectNodeContents(n);
+      for (const r of Array.from(range.getClientRects())) {
+        const w = Math.min(r.right, l.right) - Math.max(r.left, l.left);
+        const h = Math.min(r.bottom, l.bottom) - Math.max(r.top, l.top);
+        if (w > 1 && h > 1) out.push(`"${n.nodeValue.trim().slice(0, 30)}" ${Math.round(w)}x${Math.round(h)}`);
+      }
+    }
+    return out;
+  });
+}
+
+for (const size of [
+  { width: 320, height: 568 },
+  { width: 375, height: 812 },
+  { width: 1024, height: 768 },
+]) {
+  test.describe(`Ask Clip Factory launcher and words at ${size.width} px`, () => {
+    test.use({ viewport: size });
+    test("covers words only when no spot clear of them is within reach", async ({ page }) => {
+      const fails: string[] = [];
+      for (const route of ["/", "/settings/posting/setup/instagram", "/settings/clip-making/skills/new", "/get-app"]) {
+        await page.goto(route);
+        await settle(page);
+        await launcherSettled(page);
+        const words = await coveredWords(page);
+        const knows = await page.locator(".help-launcher").getAttribute("data-on-words");
+        if (words.length && knows !== "true") fails.push(`${route}: ${words.join(", ")}`);
+      }
+      expect(fails, fails.join("\n")).toEqual([]);
+    });
+  });
+}

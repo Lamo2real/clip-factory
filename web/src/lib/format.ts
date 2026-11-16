@@ -11,6 +11,17 @@ export const PLATFORM_LABEL: Record<Platform | "kick" | "twitch" | "upload", str
   upload: "Upload",
 };
 
+/**
+ * The one platform order every screen uses: YouTube, TikTok, Instagram, Facebook, X (docs/CONTRACTS.md §16.8).
+ * Library cards, the clip page, This week, the Review caption tabs and Settings › Where clips go all follow it.
+ */
+export const PLATFORM_ORDER: readonly Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
+
+/** A copy of `items` sorted into PLATFORM_ORDER (items for the same platform keep their order). */
+export function byPlatformOrder<T extends { platform: Platform }>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => PLATFORM_ORDER.indexOf(a.platform) - PLATFORM_ORDER.indexOf(b.platform));
+}
+
 export const MOMENT_LABEL: Record<MomentType, string> = {
   rage: "Rage",
   chaos: "Chaos",
@@ -29,30 +40,35 @@ export function timecode(totalSec: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
 }
 
-/** 22200 → "6 h 10 min". */
+/** 22200 → "6 h 10 min"; rounds to whole minutes first, so 7190 s is "2 h", never "1 h 60 min". */
 export function duration(totalSec: number): string {
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.round((totalSec % 3600) / 60);
+  const total = Math.round(totalSec / 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
   if (h && m) return `${h} h ${m} min`;
   if (h) return `${h} h`;
   return `${Math.max(1, m)} min`;
 }
 
-const rtf = typeof Intl !== "undefined" ? new Intl.RelativeTimeFormat("en", { numeric: "auto" }) : null;
-
-/** "5 minutes ago", "yesterday", "in 2 days". */
+/**
+ * The one "when" style of the app (lists, Library, the clip page): "just now", "3 min ago", "2 h ago", "yesterday",
+ * "4 days ago"; ahead of now "in 5 min", "in 2 h", "tomorrow", "in 2 days". The unit is picked from whole minutes
+ * (past rounds down, future rounds up), so it never says "60 min ago" or "24 h ago".
+ */
 export function relative(isoTime: string, now = Date.now()): string {
-  const diff = Date.parse(isoTime) - now;
-  const abs = Math.abs(diff);
-  const units: [Intl.RelativeTimeFormatUnit, number][] = [
-    ["day", 86_400_000],
-    ["hour", 3_600_000],
-    ["minute", 60_000],
-  ];
-  for (const [unit, ms] of units) {
-    if (abs >= ms) return rtf ? rtf.format(Math.round(diff / ms), unit) : `${Math.round(abs / ms)} ${unit}s`;
-  }
-  return "just now";
+  const t = Date.parse(isoTime);
+  if (!Number.isFinite(t)) return "";
+  const diff = t - now;
+  const future = diff > 0;
+  const min = future ? Math.ceil(diff / 60_000) : Math.floor(-diff / 60_000);
+  if (min < 1 || (future && diff < 30_000)) return "just now";
+  const say = (n: number, unit: string) => (future ? `in ${n} ${unit}` : `${n} ${unit} ago`);
+  if (min < 60) return say(min, "min");
+  const h = Math.floor(min / 60);
+  if (h < 24) return say(h, "h");
+  const d = Math.floor(h / 24);
+  if (d === 1) return future ? "tomorrow" : "yesterday";
+  return say(d, "days");
 }
 
 const compact = typeof Intl !== "undefined" ? new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }) : null;

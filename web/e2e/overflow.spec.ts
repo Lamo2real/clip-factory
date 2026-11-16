@@ -28,7 +28,7 @@ for (const width of WIDTHS) {
       await radio.evaluate((el) => el.scrollIntoView({ block: "center" }));
       await radio.check({ force: true });
     };
-    await pick("Upload a video");
+    await pick("Pick a video");
     await pick("Exactly");
     let state = await findOverflow(page);
     for (const o of state.items) failures.push(`/ (upload): ${o.selector} "${o.text}"`);

@@ -2,7 +2,7 @@ import { api } from "../../api/index.ts";
 import type { Clip, Job } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
-import { A, LinkButton, Progress, Skeleton, Swash } from "../../components/ui.tsx";
+import { A, Button, ErrorPanel, LinkButton, Progress, Skeleton, Swash } from "../../components/ui.tsx";
 import { count, MOMENT_LABEL, plural, timecode } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
@@ -11,30 +11,39 @@ import { GetAppBanner } from "../../components/GetApp.tsx";
 import { NewJobForm } from "./NewJobForm.tsx";
 import { SetupCard } from "./SetupCard.tsx";
 
-interface HomeData {
+export interface HomeData {
   jobs: Job[];
   review: Clip[];
-  views: number;
+  /** Total views, or null when the numbers could not be loaded (the jobs and clips still show). */
+  views: number | null;
   postsChecked: number;
 }
 
-async function loadHome(): Promise<HomeData> {
+/**
+ * Jobs and clips must load for Home to show; the views total is extra, so a failed numbers call only blanks the
+ * stat instead of hiding the lists that did load.
+ */
+export async function loadHome(): Promise<HomeData> {
   const [jobs, review, insights] = await Promise.all([
     api().listJobs({ limit: 6 }),
     api().listClips({ status: "review" }),
-    api().insights(),
+    api()
+      .insights()
+      .catch(() => null),
   ]);
-  const checked = insights.posts.filter((p) => p.metrics);
+  const checked = insights?.posts.filter((p) => p.metrics) ?? [];
   return {
     jobs: jobs.jobs,
     review,
-    views: checked.reduce((n, p) => n + (p.metrics?.views ?? 0), 0),
+    views: insights ? checked.reduce((n, p) => n + (p.metrics?.views ?? 0), 0) : null,
     postsChecked: checked.length,
   };
 }
 
 export function Home() {
-  const { data, setData, reload } = useLoad(loadHome);
+  const { data, error, setData, reload } = useLoad(loadHome);
+  // Nothing loaded and the last try failed: say so and offer Try again, instead of skeletons forever (§12.4).
+  const failed = !data && error ? error : null;
   const working = data?.jobs.filter((j) => j.status === "running" || j.status === "queued") ?? [];
   const inReview = (c: Clip) => c.status === "review";
   useLiveEvents(
@@ -75,7 +84,7 @@ export function Home() {
           <NewJobForm />
         </div>
         <div className="hero__side">
-          <WorkingCard jobs={data?.jobs ?? null} />
+          <WorkingCard jobs={data?.jobs ?? null} failed={failed !== null} onRetry={() => void reload()} />
           <CoverStack clips={data?.review ?? []} />
         </div>
       </section>
@@ -88,7 +97,9 @@ export function Home() {
             Ready for <em>review</em>.
           </h2>
           <p className="muted">
-            {data
+            {failed
+              ? "Could not check for new clips."
+              : data
               ? data.review.length
                 ? `${plural(data.review.length, "clip")} waiting. Tap Go to Review to keep or throw away each one.`
                 : "Nothing to check yet. Paste a link above and tap Make clips."
@@ -99,7 +110,11 @@ export function Home() {
           </LinkButton>
         </div>
         <div className="home-row__cards">
-          {data ? (
+          {failed ? (
+            <div className="home-row__error">
+              <ErrorPanel message={failed} onRetry={() => void reload()} />
+            </div>
+          ) : data ? (
             data.review.slice(0, 3).map((c) => <ClipTeaser key={c.clipId} clip={c} />)
           ) : (
             <>
@@ -115,13 +130,13 @@ export function Home() {
             </div>
           ) : null}
         </div>
-        <Stat views={data?.views ?? null} posts={data?.postsChecked ?? 0} />
+        <Stat views={data?.views ?? null} posts={data?.postsChecked ?? 0} unavailable={data !== null && data.views === null} />
       </section>
     </div>
   );
 }
 
-function WorkingCard({ jobs }: { jobs: Job[] | null }) {
+function WorkingCard({ jobs, failed, onRetry }: { jobs: Job[] | null; failed: boolean; onRetry: () => void }) {
   const working = jobs?.filter((j) => j.status === "running" || j.status === "queued") ?? [];
   const latest = jobs?.find((j) => j.status === "ready");
   return (
@@ -134,7 +149,14 @@ function WorkingCard({ jobs }: { jobs: Job[] | null }) {
           All jobs
         </A>
       </div>
-      {jobs === null ? (
+      {jobs === null && failed ? (
+        <div className="working__failed">
+          <p className="working__idle">Could not check what is being made.</p>
+          <Button size="sm" icon="retry" act="retry" onClick={onRetry}>
+            Try again
+          </Button>
+        </div>
+      ) : jobs === null ? (
         <>
           <Skeleton className="line-skel" />
           <Skeleton className="line-skel" />
@@ -213,7 +235,7 @@ function ClipTeaser({ clip }: { clip: Clip }) {
   );
 }
 
-function Stat({ views, posts }: { views: number | null; posts: number }) {
+function Stat({ views, posts, unavailable }: { views: number | null; posts: number; unavailable: boolean }) {
   return (
     <div className="stat glass">
       <span className="stat__value">{views === null ? "–" : count(views)}</span>
@@ -223,7 +245,13 @@ function Stat({ views, posts }: { views: number | null; posts: number }) {
         ))}
       </span>
       <span className="stat__label">views after 48 hours</span>
-      <span className="stat__sub">{posts ? `across ${plural(posts, "post")}` : "Shown once clips are posted"}</span>
+      <span className="stat__sub">
+        {unavailable
+          ? "Could not get the numbers right now. Come back to Home later to see them."
+          : posts
+            ? `across ${plural(posts, "post")}`
+            : "Shown once clips are posted"}
+      </span>
     </div>
   );
 }
