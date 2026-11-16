@@ -352,17 +352,17 @@ function colourPreviewStyle(colours: string[]): CSSProperties {
   } as CSSProperties;
 }
 
-/** A car on a sunny wallpaper, softly blurred behind frosted glass: you can guess what it is, not read it. */
+/** A desktop behind frosted glass: a wallpaper of soft hills with a window on it. You can guess shapes, not read them. */
 function SeeThroughArt() {
   return (
     <>
       <svg className="bg-tile__scene" viewBox="0 0 120 90" preserveAspectRatio="xMidYMid slice">
         <rect width="120" height="90" fill="#7cc4f2" />
-        <circle cx="96" cy="20" r="11" fill="#f6c945" />
-        <rect y="62" width="120" height="28" fill="#5c7a4a" />
-        <path d="M18 64c2-9 7-13 16-14l10-9c3-3 7-4 11-4h22c5 0 9 2 12 6l7 8c9 1 15 5 16 13z" fill="#e8412c" />
-        <circle cx="38" cy="66" r="8" fill="#1e2a1b" />
-        <circle cx="86" cy="66" r="8" fill="#1e2a1b" />
+        <circle cx="94" cy="22" r="11" fill="#f6c945" />
+        <path d="M0 62c14-16 28-20 42-8 12-18 30-22 46-6 10-8 22-8 32 2v40H0z" fill="#5c7a4a" />
+        <path d="M0 74c20-10 44-10 64 0 18-8 38-8 56 0v16H0z" fill="#3f5a34" />
+        <rect x="16" y="18" width="46" height="32" rx="5" fill="#f7f5ef" />
+        <rect x="16" y="18" width="46" height="8" rx="4" fill="#1e2a1b" />
       </svg>
       <span className="bg-tile__frost" />
     </>
