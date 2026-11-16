@@ -112,6 +112,10 @@ export interface Settings {
   clipMax: number;
   maxSourceHours: number;
   soundEnabled: boolean;
+  /** Click sound 1..30, default 6 "Water drop" (docs/CONTRACTS.md §15.3). */
+  clickSound: number;
+  /** Error sound 1..30, default 5 "Nope nope nope". */
+  errorSound: number;
   reduceMotion: boolean;
   hasYoutubeCookies: boolean;
   platforms: Platform[];

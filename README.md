@@ -22,11 +22,18 @@ from the browser). It is built so simply that a child could use it.
    posts it (YouTube, Instagram, Facebook, TikTok and X arrive in phase 2; today clips wait as "waiting for the account
    connection"), waits 48 hours without running, reads the numbers, writes a short learning and remembers the clip in
    S3 Vectors, so the next jobs see "what worked before".
-7. **Get the app.** **Get the app** in the sidebar (on a phone: in Settings) offers what fits your device: the Mac
+7. **Get the app.** **Get the app** in the sidebar (on a phone: Settings › App & account) offers what fits your device: the Mac
    `.dmg`, the Windows `.exe`, the Android install button or the iPhone Add to Home Screen steps. Once the app is
    installed it stops asking.
 8. **Always up to date.** After every update a bar at the bottom says what changed in a word or three
    (`Settings · Profile picture`). Press **Reload** and a quick, smooth progress bar brings in the new version.
+9. **Settings, neatly organised.** Settings is laid out like a field of apple trees: four trees (Clip making,
+   Posting, Look & feel, App & account), each with a few branches (Skills, Accounts, Sounds and so on), and on each
+   branch the settings you change, each with a one-line hint. Every branch has its own address, a **Find a setting**
+   box finds anything by name, and on a wide screen a folder panel shows the whole tree. Under **Look & feel ›
+   Sounds** you pick your click sound and your error sound from 30 each and try them on a pretend Sign in button; the
+   defaults are the owner's picks, **Water drop** and **Nope nope nope**
+   ([details](docs/UX_DESIGN_SYSTEM.md#settings-tree)).
 
 ## Architecture
 
@@ -49,7 +56,7 @@ it in draw.io or at app.diagrams.net); [docs/ARCHITECTURE.md](docs/ARCHITECTURE.
 | [Contracts](docs/CONTRACTS.md) | The single source of truth: routes, data shapes, DynamoDB keys, S3 layout, names, outputs |
 | [Architecture](docs/ARCHITECTURE.md) | AWS services and why, the durable job and clip flows, live updates, the learning memory, webhooks, sequence diagrams, failure handling, cost, limits |
 | [Agent](docs/AGENT.md) | How the clip agent behaves: pipeline steps, tools, skills, prompts, the learnings loop |
-| [UX design system](docs/UX_DESIGN_SYSTEM.md) | Colours, liquid glass, type, layout, navigation, sounds, motion, overflow rules, PWA, Get the app card, update bar and reload curve, kid-proof checklist |
+| [UX design system](docs/UX_DESIGN_SYSTEM.md) | Colours, liquid glass, type, layout, navigation, the Settings tree and search, the sound catalog and picker, motion, overflow rules, PWA, Get the app card, update bar and reload curve, kid-proof checklist |
 | [Deployment](docs/DEPLOYMENT.md) | One-time AWS and GitHub setup (deploy role, Bedrock data retention, API Gateway logging role), what a deploy does, desktop downloads and their first open, release labels, first sign-in, rollback, tearing down |
 | [Security](docs/SECURITY.md) | What is protected and how, token lifetimes, the owner's convenience-first stance |
 | [Testing](docs/TESTING.md) | Every test suite, how to run it locally, what CI runs |
@@ -120,6 +127,7 @@ steps are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 | 1 | Desktop app (Tauri v2) built on GitHub's macOS and Windows runners | Added after the first build; unsigned for now |
 | 1 | Update bar with area labels and the smooth Reload | Added after the first build |
 | 1 | Kid-proof screens (one next step, big buttons, Undo instead of "Are you sure?") | Added after the first build |
+| 1 | Settings as a tree with search and a folder panel; pick your click and error sounds (30 each) | Added after the first build ([contracts §15](docs/CONTRACTS.md#15-settings-as-a-tree-and-choosing-your-click-sounds-owner-request-2026-11-16)) |
 | 2 | Connect YouTube, Instagram, Facebook, TikTok, X and post confirmed clips | Planned ([roadmap](docs/ROADMAP.md)) |
 | 2 | Real metrics for the 48-hour check | Planned |
 | Later | Signed and notarized desktop builds | Planned ([roadmap](docs/ROADMAP.md#later)) |

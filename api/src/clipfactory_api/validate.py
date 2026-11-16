@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -47,11 +48,24 @@ def required_string(body: Mapping[str, Any], field: str, *, max_len: int = 1000)
     return value
 
 
+def whole_number(value: Any) -> int | None:
+    """``value`` as an int when it is a JSON whole number (``3`` or ``3.0``), else None.
+
+    bool is an int in Python, but true/false is never a number. NaN, Infinity and ``1e999``
+    (which JSON parsing turns into ``inf``) are floats that ``int()`` cannot convert, so they
+    are refused here instead of crashing into a 500.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
+        return None
+    return int(value)
+
+
 def integer(value: Any, field: str, *, lo: int, hi: int) -> int:
-    # bool is an int in Python; "true" is never a valid count.
-    if isinstance(value, bool) or not isinstance(value, int | float) or int(value) != value:
+    number = whole_number(value)
+    if number is None:
         raise bad_request(f"{field} must be a whole number.")
-    number = int(value)
     if not lo <= number <= hi:
         raise bad_request(f"{field} must be between {lo} and {hi}.")
     return number

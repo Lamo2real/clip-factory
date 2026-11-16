@@ -1,0 +1,831 @@
+/* Settings as a tree (docs/CONTRACTS.md §15): the field (search + tree cards), tree pages (branch cards), branch
+   pages (glass panels of apples with their leaves), the breadcrumb and phone Back button, the 1024px+ folder panel,
+   and the Sounds picker. */
+
+/* ---------- Layout: folder panel + content ---------- */
+.settings-layout {
+  display: grid;
+  gap: clamp(18px, 2.4vw, 28px);
+  align-items: start;
+}
+.settings-content {
+  display: grid;
+  gap: clamp(18px, 2.6vw, 28px);
+  align-content: start;
+  min-width: 0;
+}
+.settings-head {
+  padding-top: 0;
+}
+.folders {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .settings-layout {
+    grid-template-columns: 236px minmax(0, 1fr);
+  }
+  .folders {
+    position: sticky;
+    top: calc(env(safe-area-inset-top) + 28px);
+    display: grid;
+    gap: 6px;
+    align-content: start;
+    max-height: calc(100dvh - 56px);
+    overflow-y: auto;
+    padding: 10px;
+    border-radius: var(--r-xl);
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--ink-rgb) / 0.22) transparent;
+  }
+}
+
+/* ---------- The folder panel ---------- */
+.folders__home,
+.folders__toggle,
+.folders__branch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 8px 12px;
+  border-radius: 14px;
+  color: var(--ink-2);
+  font-weight: 600;
+  font-size: 0.94rem;
+  text-align: left;
+  text-decoration: none;
+  transition:
+    background-color var(--dur-1),
+    color var(--dur-1);
+}
+.folders__home .icon,
+.folders__toggle .icon,
+.folders__branch .icon {
+  flex: none;
+}
+.folders__home:hover,
+.folders__toggle:hover,
+.folders__branch:hover {
+  background: rgb(255 255 255 / 0.5);
+  color: var(--ink);
+}
+.folders__home.is-current,
+.folders__branch.is-current {
+  color: var(--ink);
+  background: linear-gradient(160deg, rgb(255 255 255 / 0.92), rgb(var(--sage-rgb) / 0.5));
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 6px 14px -10px rgb(var(--ink-rgb) / 0.6);
+}
+/* The tomato dot that marks where you are, as in the main menu. */
+.folders__home.is-current::after,
+.folders__branch.is-current::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  width: 4px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 4px;
+  background: var(--tomato);
+}
+.folders__trees {
+  display: grid;
+  gap: 2px;
+  padding-top: 4px;
+  border-top: 1px solid rgb(var(--ink-rgb) / 0.08);
+}
+.folders__name {
+  flex: 1;
+  min-width: 0;
+}
+.folders__tree.is-here > .folders__toggle {
+  color: var(--ink);
+  font-weight: 700;
+}
+.folders__chevron {
+  margin: 0 -4px 0 -4px;
+  color: var(--ink-3);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.folders__tree.is-open > .folders__toggle .folders__chevron {
+  transform: rotate(90deg);
+}
+.folders__branches {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 6px;
+  padding-left: 22px;
+}
+.folders__branches[hidden] {
+  display: none;
+}
+.folders__branch {
+  font-weight: 550;
+  font-size: 0.9rem;
+}
+
+/* ---------- Breadcrumb and Back ---------- */
+.trail {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+.trail__back {
+  padding-inline: 18px 22px;
+}
+@media (min-width: 768px) {
+  .trail__back {
+    display: none;
+  }
+}
+.crumbs__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.crumbs__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.crumbs__link,
+.crumbs__here {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 767px) {
+  /* Each part of the breadcrumb is a full 48 px tap target on phones. */
+  .crumbs__link,
+  .crumbs__here {
+    min-height: 48px;
+  }
+}
+.crumbs__item:first-child .crumbs__link {
+  margin-left: -6px;
+}
+.crumbs__link {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: rgb(var(--ink-rgb) / 0.25);
+  text-underline-offset: 3px;
+}
+.crumbs__link:hover {
+  color: var(--ink);
+  text-decoration-color: var(--tomato);
+}
+.crumbs__here {
+  color: var(--ink);
+}
+.crumbs__sep {
+  flex: none;
+  color: var(--ink-3);
+}
+
+/* ---------- The field: Find a setting ---------- */
+.find {
+  display: grid;
+  gap: 10px;
+  padding: clamp(14px, 2.6vw, 22px);
+  border-radius: var(--r-xl);
+}
+.find__form {
+  display: grid;
+  gap: 8px;
+}
+.find__label {
+  font-weight: 700;
+  font-size: 1.02rem;
+}
+.find__box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 0 6px 0 16px;
+  border-radius: var(--r-pill);
+  background: rgb(255 255 255 / 0.74);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--ink-rgb) / 0.14),
+    inset 0 2px 4px rgb(var(--ink-rgb) / 0.05);
+  color: var(--ink-3);
+  transition: box-shadow var(--dur-1);
+}
+.find__box:focus-within {
+  box-shadow: var(--focus);
+}
+.find__box > .icon {
+  flex: none;
+}
+.find__input {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+.find__input:focus-visible {
+  box-shadow: none;
+}
+.find__input::placeholder {
+  color: var(--ink-3);
+  opacity: 0.85;
+}
+.find__input::-webkit-search-cancel-button {
+  display: none;
+}
+.find__clear {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--ink-2);
+}
+.find__clear:hover {
+  background: rgb(var(--ink-rgb) / 0.07);
+}
+.find__status {
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.find__results {
+  display: grid;
+  gap: 8px;
+}
+.find-hit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--r-md);
+  background: rgb(255 255 255 / 0.55);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.75);
+  text-decoration: none;
+  transition:
+    background-color var(--dur-1),
+    transform var(--dur-2) var(--ease-spring);
+}
+.find-hit {
+  cursor: pointer;
+}
+.find-hit:hover,
+.find-hit.is-active {
+  background: rgb(255 255 255 / 0.85);
+}
+.find-hit.is-active {
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.75),
+    var(--focus);
+}
+.find__results[hidden] {
+  display: none;
+}
+
+/* The folder panel's own search box (wide screens). */
+.find--compact {
+  gap: 8px;
+  padding: 0 0 6px;
+}
+.find--compact .find__box {
+  min-height: 44px;
+  padding-left: 12px;
+}
+.find--compact .find__input {
+  height: 42px;
+  font-size: var(--fs-small);
+}
+.find--compact .find__clear {
+  width: 36px;
+  height: 36px;
+}
+.find--compact .find__status {
+  font-size: var(--fs-xs);
+}
+.find--compact .find__results {
+  gap: 4px;
+}
+.find--compact .find-hit {
+  gap: 8px;
+  padding: 8px;
+}
+.find--compact .find-hit__icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+.find--compact .find-hit__leaf,
+.find--compact .find-hit__go {
+  display: none;
+}
+.find-hit:active {
+  transform: scale(0.98);
+}
+.find-hit__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgb(var(--sage-rgb) / 0.42);
+}
+.find-hit__text {
+  display: grid;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.find-hit__name {
+  font-weight: 700;
+}
+.find-hit__path {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.find-hit__leaf {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.find-hit__leaf.is-match {
+  color: var(--ink);
+}
+.find-hit__name,
+.find-hit__path,
+.find-hit__leaf {
+  overflow-wrap: anywhere;
+}
+.find-hit__go {
+  flex: none;
+  color: var(--ink-3);
+}
+
+/* ---------- Tree cards (the field) and branch cards (a tree) ---------- */
+.tree-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+}
+.branch-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+}
+.tree-card,
+.branch-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 100%;
+  text-decoration: none;
+  transition:
+    transform var(--dur-2) var(--ease-spring),
+    box-shadow var(--dur-2) var(--ease-out);
+}
+.tree-card {
+  padding: clamp(16px, 2.6vw, 24px);
+  border-radius: var(--r-xl);
+}
+.branch-card {
+  padding: 16px 16px 16px 18px;
+  border-radius: var(--r-lg);
+}
+.tree-card:hover,
+.branch-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.75),
+    var(--shadow-2);
+}
+.tree-card:active,
+.branch-card:active {
+  transform: scale(0.98);
+}
+.tree-card:focus-visible {
+  border-radius: var(--r-xl);
+}
+.branch-card:focus-visible {
+  border-radius: var(--r-lg);
+}
+.tree-card__icon,
+.branch-card__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--ink);
+  background: linear-gradient(160deg, rgb(255 255 255 / 0.8), rgb(var(--sage-rgb) / 0.55));
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 6px 14px -10px rgb(var(--ink-rgb) / 0.6);
+}
+.tree-card__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+}
+.branch-card__icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+}
+.tree-card__text,
+.branch-card__text {
+  display: grid;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.tree-card__name {
+  font-family: var(--font-display);
+  font-size: clamp(1.45rem, 1.25rem + 0.8vw, 1.8rem);
+  line-height: 1.08;
+}
+.branch-card__name {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.tree-card__line,
+.branch-card__line {
+  color: var(--ink-2);
+  font-size: 0.95rem;
+}
+.tree-card__count,
+.branch-card__apples {
+  margin-top: 3px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.tree-card__go,
+.branch-card__go {
+  flex: none;
+  color: var(--ink-3);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.tree-card:hover .tree-card__go,
+.branch-card:hover .branch-card__go {
+  transform: translateX(3px);
+  color: var(--ink);
+}
+
+/* ---------- Branch pages: panels of apples ---------- */
+.branch-body {
+  display: grid;
+  gap: 16px;
+}
+.apple-panel {
+  display: grid;
+  padding: 4px clamp(16px, 2.6vw, 24px);
+  border-radius: var(--r-xl);
+}
+.apple {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  padding: 18px 0;
+  border-radius: 14px;
+  scroll-margin: 96px 0;
+  transition:
+    background-color 600ms var(--ease-out),
+    box-shadow 600ms var(--ease-out);
+}
+.apple + .apple {
+  border-top: 1px solid rgb(var(--ink-rgb) / 0.08);
+}
+.apple:focus-visible {
+  border-radius: 14px;
+}
+.apple__text {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 190px;
+  min-width: 0;
+  max-width: 64ch;
+}
+.apple__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.apple__name {
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.apple__tag {
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: rgb(var(--sage-rgb) / 0.35);
+  color: var(--sage-deep);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+.apple__leaf {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.apple__control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+/* Lists, pickers and cards: the control goes under the words, full width. A grid (not a flex column), so the
+   picker's auto-fill grid is measured at its real width. */
+.apple--wide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.apple--wide .apple__control {
+  display: grid;
+  align-items: stretch;
+  gap: 12px;
+}
+.apple__value {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.apple-panel__note {
+  margin-top: -6px;
+  padding-bottom: 16px;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.apple-panel > .progress {
+  margin-bottom: 16px;
+}
+/* Found with "Find a setting": lit up for a few seconds. */
+.apple.is-found,
+.getapp.is-found {
+  background-color: rgb(var(--tomato-rgb) / 0.09);
+  box-shadow: 0 0 0 10px rgb(var(--tomato-rgb) / 0.09), 0 0 0 12px rgb(var(--tomato-rgb) / 0.28);
+  animation: apple-found 900ms var(--ease-out);
+}
+@keyframes apple-found {
+  0% {
+    box-shadow: 0 0 0 2px rgb(var(--tomato-rgb) / 0.1), 0 0 0 4px rgb(var(--tomato-rgb) / 0);
+  }
+  45% {
+    box-shadow: 0 0 0 14px rgb(var(--tomato-rgb) / 0.12), 0 0 0 16px rgb(var(--tomato-rgb) / 0.4);
+  }
+}
+.getapp {
+  scroll-margin: 96px 0;
+}
+
+.stepper-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+.stepper-pair__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.stepper-pair__label {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* ---------- Sounds ---------- */
+.sound-group.is-tap {
+  --kind: var(--sage-deep);
+  --kind-soft: rgb(var(--sage-rgb) / 0.4);
+}
+.sound-group.is-deny {
+  --kind: var(--tomato-ink);
+  --kind-soft: rgb(var(--tomato-rgb) / 0.14);
+}
+.sound-group .apple__tag {
+  background: var(--kind-soft);
+  color: var(--kind);
+}
+.sound-group .apple__name {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.45rem, 1.25rem + 0.8vw, 1.85rem);
+  line-height: 1.1;
+}
+.sound-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 196px), 1fr));
+  gap: 12px 10px;
+  padding: 6px 0;
+}
+.sound-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 12px;
+  width: 100%;
+  height: 100%;
+  min-height: 68px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: rgb(255 255 255 / 0.5);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.75),
+    0 6px 16px -12px rgb(var(--ink-rgb) / 0.55);
+  color: var(--ink);
+  text-align: left;
+  transition:
+    background-color var(--dur-1),
+    box-shadow var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-spring);
+}
+.sound-card:hover {
+  background: rgb(255 255 255 / 0.78);
+}
+.sound-card:active {
+  transform: scale(0.97);
+}
+.sound-card:focus-visible {
+  border-radius: var(--r-md);
+}
+.sound-card.is-picked {
+  background: rgb(255 255 255 / 0.9);
+  box-shadow:
+    inset 0 0 0 2px var(--kind),
+    0 10px 22px -14px rgb(var(--ink-rgb) / 0.7);
+}
+.sound-card__num {
+  display: grid;
+  place-items: center;
+  grid-row: span 2;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--kind-soft);
+  color: var(--kind);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.sound-card.is-picked .sound-card__num {
+  background: var(--kind);
+  color: #fff;
+}
+.sound-card__name {
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.sound-card__feel {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.sound-card__badge {
+  /* Sits on the card's top edge like a sticker, so it never squeezes the name. */
+  position: absolute;
+  top: -9px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px 3px 6px;
+  border-radius: var(--r-pill);
+  background: var(--kind);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 10px -4px rgb(var(--ink-rgb) / 0.5);
+}
+.sound-card.is-playing .sound-card__num {
+  animation: sound-pulse 380ms var(--ease-out);
+}
+/* Phones: two narrower cards per row, so 30 sounds stay a short scroll. */
+@media (max-width: 599px) {
+  .sound-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 146px), 1fr));
+    gap: 12px 8px;
+  }
+  .sound-card {
+    gap: 2px 10px;
+    padding: 10px;
+  }
+  .sound-card__num {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+}
+@keyframes sound-pulse {
+  40% {
+    transform: scale(1.18);
+  }
+}
+.sounds-off {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: rgb(255 255 255 / 0.66);
+  box-shadow: inset 0 0 0 1px rgb(var(--tomato-rgb) / 0.3);
+}
+.sounds-off > .icon {
+  flex: none;
+  color: var(--tomato-ink);
+}
+.sounds-off__text {
+  flex: 1 1 200px;
+  font-size: var(--fs-small);
+}
+.try-it > .sounds-off {
+  margin-bottom: 14px;
+}
+
+.try-it__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+}
+.try-it__fail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.try-it__fail-label {
+  font-weight: 600;
+}
+.try-it__picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: -4px;
+  padding-bottom: 16px;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.try-it__pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.try-it__dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.try-it__pick.is-tap .try-it__dot {
+  background: var(--sage-deep);
+}
+.try-it__pick.is-deny .try-it__dot {
+  background: var(--tomato);
+}
+.btn.is-shaking {
+  animation: try-shake 320ms ease-in-out;
+}
+@keyframes try-shake {
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+/* Accounts sit inside an apple now: light tiles instead of glass cards. */
+.apple .account {
+  background: rgb(255 255 255 / 0.45);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7);
+}

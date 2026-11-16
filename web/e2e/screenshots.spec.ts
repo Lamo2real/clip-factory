@@ -15,6 +15,8 @@ const PAGES = [
   { name: "home-update", path: "/?update=1" },
   { name: "review", path: "/review" },
   { name: "settings", path: "/settings" },
+  { name: "settings-look-and-feel", path: "/settings/look-and-feel" },
+  { name: "settings-look-and-feel-sounds", path: "/settings/look-and-feel/sounds" },
   { name: "get-app", path: "/get-app" },
 ];
 

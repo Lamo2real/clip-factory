@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { settle } from "./helpers.ts";
+import { SETTINGS_ROUTES, settle } from "./helpers.ts";
 
 // "Get the app" (docs/CONTRACTS.md §12.1).
 
@@ -47,7 +47,7 @@ test.describe("in a normal browser on a Mac", () => {
   });
 
   test("Settings has the Get the app card", async ({ page }) => {
-    await page.goto("/settings");
+    await page.goto("/settings/app/get-the-app");
     await settle(page);
     await expect(page.getByRole("heading", { name: /Get the app/ })).toBeVisible();
     await expect(page.getByRole("link", { name: "Download for Mac" })).toBeVisible();
@@ -149,7 +149,7 @@ test.describe("iPhone", () => {
 test.describe("Chrome on iPhone", () => {
   test.use({ userAgent: IPHONE_CHROME, viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   test("says to open the page in Safari first", async ({ page }) => {
-    await page.goto("/settings");
+    await page.goto("/settings/app/get-the-app");
     await settle(page);
     await expect(page.getByText("Open this page in Safari first.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy the link" })).toBeVisible();
@@ -160,7 +160,7 @@ test.describe("big targets on phones", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   test("every button and control is at least 48px tall", async ({ page }) => {
     const small: string[] = [];
-    for (const path of ["/", "/jobs", "/review", "/library", "/settings", "/get-app", "/?update=1"]) {
+    for (const path of ["/", "/jobs", "/review", "/library", ...SETTINGS_ROUTES, "/get-app", "/?update=1"]) {
       await page.goto(path);
       await settle(page);
       const found = await page.evaluate(() => {

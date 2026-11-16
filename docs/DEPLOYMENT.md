@@ -304,7 +304,7 @@ Without `Area:` lines the labels come from the changed folders (`web/areas.json`
    check spam).
 2. Open `app_url` (the `https://dxxxx.cloudfront.net` address from the run summary).
 3. Sign in with your email and the temporary password, then choose your own password.
-4. Install the app: press **Get the app** in the sidebar (on a phone: Settings, or the banner on Home). It offers the
+4. Install the app: press **Get the app** in the sidebar (on a phone: Settings › App & account › Get the app, or the banner on Home). It offers the
    `.dmg` on a Mac, the `.exe` on Windows, the install button on Android and the Add to Home Screen steps on iPhone.
 
 The temporary password is valid for 7 days. If it expires, an AWS admin can reset it: Cognito console → user pool

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { settle } from "./helpers.ts";
+import { SETTINGS_ROUTES, settle } from "./helpers.ts";
 
 test.describe("phones", () => {
   for (const width of [320, 390, 414]) {
@@ -53,7 +53,7 @@ test("the sidebar collapses to icons on desktop and remembers it", async ({ page
 });
 
 test("every screen has one main landmark and a level-one heading", async ({ page }) => {
-  for (const path of ["/", "/jobs", "/review", "/library", "/settings"]) {
+  for (const path of ["/", "/jobs", "/review", "/library", ...SETTINGS_ROUTES]) {
     await page.goto(path);
     await settle(page);
     await expect(page.locator("main")).toHaveCount(1);

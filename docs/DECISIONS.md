@@ -7,6 +7,9 @@ old one (mark the old one "Replaced by ADR-xx").
 All entries: status **Accepted**, November 2026, decided by the build under the owner's "you have full control" brief,
 unless marked **Replaced**. ADR-22 to ADR-26 come from the serverless expansion
 ([CONTRACTS.md §14](CONTRACTS.md#14-serverless-expansion-websocket-api-rest-api-durable-functions-s3-vectors)).
+ADR-27 and ADR-28 come from the owner's Settings tree and sound picker request
+([CONTRACTS.md §15](CONTRACTS.md#15-settings-as-a-tree-and-choosing-your-click-sounds-owner-request-2026-11-16)); the
+sound choices in ADR-28 were made by the owner.
 
 ---
 
@@ -152,6 +155,8 @@ publisher, scheduler and perf-check are removed.
 - **Decision.** Sounds are synthesised with Web Audio (no audio files) and triggered only from `click` events,
   which browsers never fire for scrolls or swipes. Disabled controls are wrapped so their click plays "deny".
 - **Consequences.** No sound on scroll by construction; no extra downloads; one switch in Settings turns them off.
+- **Amended by [ADR-28](#adr-28-owner-chosen-default-sounds-from-a-3030-catalog-kept-as-data).** The rules above
+  stand; which two sounds play is now the owner's choice from a catalog.
 
 ## ADR-15 Uploads go straight to S3 with presigned URLs
 
@@ -342,3 +347,48 @@ publisher, scheduler and perf-check are removed.
 - **Consequences.** One language for the backend and its tests (pytest, ruff, mypy), one tool for infrastructure and
   its tests (`terraform test` with mock providers). Durable functions run on `python3.13`, which the Lambda runtime
   supports.
+
+## ADR-27 Settings as a navigable tree with real routes
+
+- **Context.** Settings grew one flat page at a time: clip range, skills, cookies, accounts, platforms, sound, motion,
+  background, Get the app, updates, sign out, and now 60 sounds. The owner asked for it to be organised "like a
+  folder structure": a field (all of Settings), trees, branches, apples (the settings) and leaves (their help), "so
+  that it is all organized". It must stay kid-proof (UX-13).
+- **Decision.** Settings is a fixed tree of four trees and eleven branches
+  ([CONTRACTS.md §15.1](CONTRACTS.md#15-settings-as-a-tree-and-choosing-your-click-sounds-owner-request-2026-11-16)),
+  described once as data in the web app (each node: id, name, icon, one line, its apples and leaves, extra search
+  words) and drawn from that data by the field page, the tree and branch pages, the breadcrumb, the folder panel and
+  search. Every tree and branch is a **real route** (`/settings/{tree}/{branch}`), not a tab, an accordion or a hash.
+  Below 1024 px you drill down one level at a time with a breadcrumb and a Back button; from 1024 px a folder panel
+  shows the whole tree beside the content. Old addresses redirect.
+- **Alternatives.** *One long page with headings and anchors* (the old way: hard to scan, search scrolls a long page,
+  and a 60-card picker would bury everything below it). *Tabs* (four tabs fit, but branches inside tabs need a second
+  tab row; no deep links without extra work). *Accordions on one page* (state lives in the page, not the address;
+  Back does not close them; deep levels are fiddly on a phone). *A modal or a sheet* (no address, nothing to bookmark).
+- **Consequences.** Links, reloads, bookmarks, browser Back and the OAuth return (`/settings?account=…`) all land on
+  the right place, and Playwright can open any branch directly. Adding a setting means adding an apple to the data
+  under the right branch; the rule "never loose on the field or a tree page" keeps the tree tidy. Search, the panel
+  and the breadcrumb cannot drift apart because they read the same data. The cost is a few more routes and a redirect
+  table for the old anchors, which must stay.
+
+## ADR-28 Owner-chosen default sounds from a 30+30 catalog kept as data
+
+- **Context.** The first build had two fixed synthesised sounds (tap and deny, ADR-14). The owner tried a picker page
+  with 30 click sounds and 30 error sounds, liked its look and feel, asked for it inside Settings so anyone using the
+  app can pick, and chose "Tap sound: 6 Water drop. Error sound: 5 Nope nope nope."
+- **Decision.** The 60 sounds live as data in `web/src/lib/soundCatalog.ts` (`{ id, name, feel, voices }`; tone voices
+  `[wave, startHz, endHz, at, length, peak, lowpassHz]`, noise voices `["noise", filterType, filterHz, at, length,
+  peak]`), played by one Web Audio player. The picks are two account settings, `clickSound` and `errorSound` (whole
+  numbers 1–30), validated by `PUT /v1/settings`, defaulting to the owner's choices **6 "Water drop"** and **5 "Nope
+  nope nope"** for everyone, including settings stored before the fields existed. Ids are frozen: a sound can be
+  retuned but never renumbered or removed. The Sounds branch is the owner's picker page, restyled in the app's glass.
+  With Sounds off, previews stay silent.
+- **Alternatives.** *Audio files* (60 downloads to cache, a heavier app, and nothing to retune without new files).
+  *Sounds as code, one function each* (60 functions that are hard to review and easy to break; data is a table anyone
+  can read and test). *Keep the picks on the device* (the owner wants Settings to follow them across devices, like the
+  Sound switch). *Store the sound's name instead of its number* (names may be reworded; numbers are what the owner
+  sees and said). *Let previews play even with Sounds off* (a surprise noise breaks the "no surprise" kid-proof rule).
+- **Consequences.** No new downloads; the catalog can be unit-tested (60 entries, ids 1–30 per group, every voice
+  well formed, peaks at most 0.5, every sound under half a second). The first build's sounds stay as click 1 "Glass
+  tick" and error 1 "Double thud", so nothing is lost. Removing a sound later would need a mapping for saved picks,
+  which the frozen-ids rule avoids.

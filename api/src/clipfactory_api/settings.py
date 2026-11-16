@@ -10,12 +10,18 @@ from .errors import bad_request
 
 PLATFORMS: tuple[str, ...] = ("youtube", "instagram", "facebook", "tiktok", "x")
 
+# The sound picker (docs/CONTRACTS.md §15.3) offers 30 numbered click sounds and 30 numbered error sounds.
+SOUND_COUNT = 30
+SOUND_LABELS: dict[str, str] = {"clickSound": "click sound", "errorSound": "error sound"}
+
 DEFAULTS: dict[str, Any] = {
     "clipMin": 5,
     "clipMax": 10,
     "maxSourceHours": 6,
     "soundEnabled": True,
     "reduceMotion": False,
+    "clickSound": 6,  # the owner's pick: "Water drop"
+    "errorSound": 5,  # the owner's pick: "Nope nope nope"
     "platforms": list(PLATFORMS),
 }
 EDITABLE = frozenset(DEFAULTS)
@@ -43,6 +49,8 @@ def _check_field(field: str, value: Any) -> Any:
             return validate.integer(value, field, lo=1, hi=12)
         case "soundEnabled" | "reduceMotion":
             return validate.boolean(value, field)
+        case "clickSound" | "errorSound":
+            return _sound_number(value, SOUND_LABELS[field])
         case "platforms":
             if not isinstance(value, list) or not all(isinstance(p, str) for p in value):
                 raise bad_request("platforms must be a list of platform names.")
@@ -52,6 +60,15 @@ def _check_field(field: str, value: Any) -> Any:
             # Keep the canonical order and drop repeats so the UI shows a stable list.
             return [p for p in PLATFORMS if p in value]
     raise bad_request(f"Unknown setting: {field}.")
+
+
+def _sound_number(value: Any, label: str) -> int:
+    number = validate.whole_number(value)
+    if number is None:
+        raise bad_request(f"Pick a {label} by its number, from 1 to {SOUND_COUNT}.")
+    if not 1 <= number <= SOUND_COUNT:
+        raise bad_request(f"There is no {label} number {number}. Pick one from 1 to {SOUND_COUNT}.")
+    return number
 
 
 def merge_update(current: Mapping[str, Any], patch: Mapping[str, Any]) -> dict[str, Any]:

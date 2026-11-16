@@ -5,18 +5,38 @@ import type { Me, Settings } from "../api/types.ts";
 import { auth } from "../lib/auth.ts";
 import { config } from "../lib/config.ts";
 import { startLive, stopLive, useLiveEvents, useLivePoll, type SocketLike } from "../lib/live.ts";
-import { setPrefs } from "../lib/prefs.ts";
+import { getPrefs, setPrefs, type Prefs } from "../lib/prefs.ts";
+import { DEFAULT_CLICK_SOUND, DEFAULT_ERROR_SOUND, isSoundId } from "../lib/soundCatalog.ts";
 import { useToast } from "../components/Toasts.tsx";
 
 interface Session {
   me: Me | null;
   refresh: () => Promise<void>;
-  /** Saves settings on the server; sound and motion also apply on this device straight away. */
+  /** Saves settings on the server; sound (and which sounds) and motion also apply on this device straight away. */
   saveSettings: (patch: Partial<Settings>) => Promise<Settings | null>;
   signOut: () => void;
 }
 
 const Ctx = createContext<Session | null>(null);
+
+/** Settings stored before the click and error sounds existed read as the owner's defaults (§15.4). */
+export function withSoundDefaults(settings: Settings): Settings {
+  return {
+    ...settings,
+    clickSound: isSoundId(settings.clickSound) ? settings.clickSound : DEFAULT_CLICK_SOUND,
+    errorSound: isSoundId(settings.errorSound) ? settings.errorSound : DEFAULT_ERROR_SOUND,
+  };
+}
+
+/** The settings this device keeps a copy of, so they apply before the server answers. */
+function devicePrefs(patch: Partial<Settings>): Partial<Prefs> {
+  const out: Partial<Prefs> = {};
+  if (patch.soundEnabled !== undefined) out.soundEnabled = patch.soundEnabled;
+  if (patch.reduceMotion !== undefined) out.reduceMotion = patch.reduceMotion;
+  if (isSoundId(patch.clickSound)) out.clickSound = patch.clickSound;
+  if (isSoundId(patch.errorSound)) out.errorSound = patch.errorSound;
+  return out;
+}
 
 export function useSession(): Session {
   const s = useContext(Ctx);
@@ -24,21 +44,34 @@ export function useSession(): Session {
   return s;
 }
 
+/** The values `patch` is about to change, as they are now, so a failed save can put them back. */
+function before<T extends object>(now: T, patch: Partial<T>): Partial<T> {
+  const out: Partial<T> = {};
+  for (const key of Object.keys(patch) as (keyof T)[]) out[key] = now[key];
+  return out;
+}
+
 export function SessionProvider({ children, onSignOut }: { children: ReactNode; onSignOut: () => void }) {
   const [me, setMe] = useState<Me | null>(null);
   const toast = useToast();
+  // The settings on screen right now, kept in step synchronously so two quick saves each see the one before.
+  const shown = useRef<Settings | null>(null);
+  useEffect(() => {
+    shown.current = me?.settings ?? null;
+  }, [me]);
 
   // Bumped on every settings change, so a /me response that was already on its way cannot undo it.
   const settingsEdit = useRef(0);
   const refresh = useCallback(async () => {
     const asked = settingsEdit.current;
-    const next = await api().me();
+    const raw = await api().me();
+    const next = { ...raw, settings: withSoundDefaults(raw.settings) };
     if (asked !== settingsEdit.current) {
       setMe((m) => (m ? { ...next, settings: m.settings } : next));
       return;
     }
     setMe(next);
-    setPrefs({ soundEnabled: next.settings.soundEnabled, reduceMotion: next.settings.reduceMotion });
+    setPrefs(devicePrefs(next.settings));
   }, []);
 
   useEffect(() => {
@@ -81,20 +114,33 @@ export function SessionProvider({ children, onSignOut }: { children: ReactNode; 
 
   const saveSettings = useCallback(
     async (patch: Partial<Settings>) => {
-      settingsEdit.current += 1;
-      if ("soundEnabled" in patch || "reduceMotion" in patch) {
-        setPrefs({
-          ...(patch.soundEnabled !== undefined ? { soundEnabled: patch.soundEnabled } : {}),
-          ...(patch.reduceMotion !== undefined ? { reduceMotion: patch.reduceMotion } : {}),
-        });
-      }
+      const edit = (settingsEdit.current += 1);
+      const local = devicePrefs(patch);
+      const oldPrefs = before(getPrefs(), local);
+      const oldSettings = shown.current ? before(shown.current, patch) : null;
+      if (Object.keys(local).length) setPrefs(local);
+      if (shown.current) shown.current = { ...shown.current, ...patch };
       setMe((m) => (m ? { ...m, settings: { ...m.settings, ...patch } } : m));
       try {
-        const settings = await api().putSettings(patch);
-        setMe((m) => (m ? { ...m, settings } : m));
+        const settings = withSoundDefaults(await api().putSettings(patch));
+        // Quick taps send several saves; only the newest answer may replace what is on screen, so an older
+        // answer arriving late cannot flip a choice back.
+        if (edit === settingsEdit.current) {
+          setMe((m) => (m ? { ...m, settings } : m));
+          setPrefs(devicePrefs(settings));
+        }
         return settings;
       } catch (e) {
         toast.error(friendlyMessage(e));
+        // Put the control back straight away, even with no network to ask the server what it has. A newer
+        // change made since is left alone (it has its own save).
+        if (edit === settingsEdit.current) {
+          if (Object.keys(oldPrefs).length) setPrefs(oldPrefs);
+          if (oldSettings) {
+            if (shown.current) shown.current = { ...shown.current, ...oldSettings };
+            setMe((m) => (m ? { ...m, settings: { ...m.settings, ...oldSettings } } : m));
+          }
+        }
         settingsEdit.current += 1;
         await refresh().catch(() => undefined);
         return null;
