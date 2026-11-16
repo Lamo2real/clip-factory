@@ -7,10 +7,13 @@
 //   phrase it belongs to ("tik tok" → tiktok), and for stems of 5+ letters no doc uses, every doc stem of 5+
 //   letters one edit away ("instagarm" → instagram).
 // * Score = Σ over the distinct terms of weight × bm25 (weight 1 for the question, 0.5 for words merged in from the
-//   previous question). +10 % for docs on the page the owner is on. Ties go to guides, then the smaller id, and a
+//   previous question). +10 % for docs on the page the owner is on (a skill page counts as Settings). Ties go to guides, then the smaller id, and a
 //   curated guide within 10 % of a generated doc on the same route (without #hash) wins that near tie (GUIDE_TIE).
 // * Accepted only when score ≥ 2, at least half of the question's groups match, and one of the question's own
 //   terms is in the doc's title or keywords.
+// * Follow-ups: a question is ranked on its own first. It borrows the previous user question's words only when it
+//   starts with a follow-up phrase ("and …", "what about …"), or when it is short (≤ 4 content words) and unknown
+//   on its own. So "What does Keep do?" right after another question still answers Keep.
 import type { HelpContext, HelpDoc, HelpTurn } from "./types.ts";
 
 export const K1 = 1.2;
@@ -135,9 +138,9 @@ export function isRefused(question: string): boolean {
   return REFUSE.some((r) => r.test(q));
 }
 
+/** Short enough (≤ 4 content words) or worded like a follow-up: may borrow the previous question's words. */
 export function isFollowUp(question: string, stop: ReadonlySet<string>): boolean {
-  const lowered = `${tokenize(question).join(" ")} `;
-  return contentWords(question, stop).length <= FOLLOW_UP_MAX_WORDS || FOLLOW_UP_STARTS.some((s) => lowered.startsWith(s));
+  return contentWords(question, stop).length <= FOLLOW_UP_MAX_WORDS || startsFollowUp(question);
 }
 
 function previousUserQuestion(history: readonly HelpTurn[]): string | null {
@@ -285,9 +288,57 @@ function guidesFirst(scored: { score: number; n: number }[], docs: readonly Help
   }
 }
 
+/** The page a doc boost compares against: a skill page is part of Settings (§19.4). */
+export function boostPage(page: HelpContext["page"] | null | undefined): HelpContext["page"] | null {
+  if (!page) return null;
+  return page === "skill" ? "settings" : page;
+}
+
+/** Starts with an explicit follow-up phrase ("and the error sound?", "what about TikTok?"). */
+export function startsFollowUp(question: string): boolean {
+  const lowered = `${tokenize(question).join(" ")} `;
+  return FOLLOW_UP_STARTS.some((s) => lowered.startsWith(s));
+}
+
+function scoreGroups(index: Index, gs: Group[], context: HelpContext | null | undefined, merged: string, followUp: boolean): Ranked {
+  const none: Ranked = { question: merged, known: false, refused: false, followUp, candidates: [] };
+  if (!gs.length) return none;
+  const weights = new Map<string, number>();
+  for (const g of gs) for (const t of g.alternatives) weights.set(t, Math.max(weights.get(t) ?? 0, g.weight));
+  const own = gs.filter((g) => g.own);
+  const ownTerms = new Set(own.flatMap((g) => Array.from(g.alternatives)));
+  const page = boostPage(context?.page);
+
+  const scored: { score: number; guide: number; id: string; n: number }[] = [];
+  index.docs.forEach((doc, n) => {
+    let score = 0;
+    for (const [t, w] of weights) score += w * bm25(index, n, t);
+    if (score <= 0) return;
+    if (page && pageOf(doc.route) === page) score *= PAGE_BOOST;
+    scored.push({ score: Math.round(score * 1e6) / 1e6, guide: doc.kind === "guide" ? 0 : 1, id: doc.id, n });
+  });
+  if (!scored.length) return none;
+  scored.sort((a, b) => b.score - a.score || a.guide - b.guide || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  guidesFirst(scored, index.docs);
+  const best = scored[0]!;
+  const tf = index.tf[best.n]!;
+  const matched = own.filter((g) => Array.from(g.alternatives).some((t) => (tf.get(t) ?? 0) > 0)).length;
+  const titleHit = Array.from(ownTerms).some((t) => index.titleTerms[best.n]!.has(t));
+  if (best.score < MIN_SCORE || matched < MIN_MATCHED * own.length || !titleHit) return none;
+  return {
+    question: merged,
+    known: true,
+    refused: false,
+    followUp,
+    candidates: scored.slice(0, MAX_CANDIDATES).map((s) => ({ doc: index.docs[s.n]!, score: s.score })),
+  };
+}
+
 /**
  * Ranks the docs the owner can see for one question. Refusals and unknowns carry no candidates (and never cost a
- * model call). A follow-up ("and the error sound?") is ranked together with the previous user question.
+ * model call). The question is ranked on its own first. It is merged with the previous user question only when it
+ * starts with a follow-up phrase ("and the error sound?"), or when it is short (≤ 4 content words) and unknown on
+ * its own, so a complete question asked after another one still finds its own answer.
  */
 export function rank(
   docs: readonly HelpDoc[],
@@ -296,49 +347,19 @@ export function rank(
   context: HelpContext | null | undefined,
   words: Words,
 ): Ranked {
-  const none = (q: string, followUp = false): Ranked => ({ question: q, known: false, refused: false, followUp, candidates: [] });
   if (isRefused(question)) return { question, known: false, refused: true, followUp: false, candidates: [] };
   const stop = new Set(words.stopwords.map((w) => w.toLowerCase()));
   const shown = visibleDocs(docs, context);
-  if (!shown.length) return none(question);
+  if (!shown.length) return { question, known: false, refused: false, followUp: false, candidates: [] };
   const index = build(shown, stop);
   const vocab = Array.from(index.df.keys());
-  let gs = groups(question, 1, true, words, stop, vocab);
-  let merged = question;
-  let followUp = false;
+  const gs = groups(question, 1, true, words, stop, vocab);
   const previous = previousUserQuestion(history);
-  if (previous && previous.trim() !== question.trim() && isFollowUp(question, stop)) {
-    gs = gs.concat(groups(previous, FOLLOW_UP_WEIGHT, gs.length === 0, words, stop, vocab));
-    merged = `${previous} ${question}`;
-    followUp = true;
+  if (previous === null || previous.trim() === question.trim()) return scoreGroups(index, gs, context, question, false);
+  if (!startsFollowUp(question)) {
+    const alone = scoreGroups(index, gs, context, question, false);
+    if (alone.known || !isFollowUp(question, stop)) return alone;
   }
-  if (!gs.length) return none(merged, followUp);
-  const weights = new Map<string, number>();
-  for (const g of gs) for (const t of g.alternatives) weights.set(t, Math.max(weights.get(t) ?? 0, g.weight));
-  const own = gs.filter((g) => g.own);
-  const ownTerms = new Set(own.flatMap((g) => Array.from(g.alternatives)));
-
-  const scored: { score: number; guide: number; id: string; n: number }[] = [];
-  index.docs.forEach((doc, n) => {
-    let score = 0;
-    for (const [t, w] of weights) score += w * bm25(index, n, t);
-    if (score <= 0) return;
-    if (context?.page && pageOf(doc.route) === context.page) score *= PAGE_BOOST;
-    scored.push({ score: Math.round(score * 1e6) / 1e6, guide: doc.kind === "guide" ? 0 : 1, id: doc.id, n });
-  });
-  if (!scored.length) return none(merged, followUp);
-  scored.sort((a, b) => b.score - a.score || a.guide - b.guide || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  guidesFirst(scored, index.docs);
-  const best = scored[0]!;
-  const tf = index.tf[best.n]!;
-  const matched = own.filter((g) => Array.from(g.alternatives).some((t) => (tf.get(t) ?? 0) > 0)).length;
-  const titleHit = Array.from(ownTerms).some((t) => index.titleTerms[best.n]!.has(t));
-  if (best.score < MIN_SCORE || matched < MIN_MATCHED * own.length || !titleHit) return none(merged, followUp);
-  return {
-    question: merged,
-    known: true,
-    refused: false,
-    followUp,
-    candidates: scored.slice(0, MAX_CANDIDATES).map((s) => ({ doc: index.docs[s.n]!, score: s.score })),
-  };
+  const merged = gs.concat(groups(previous, FOLLOW_UP_WEIGHT, gs.length === 0, words, stop, vocab));
+  return scoreGroups(index, merged, context, `${previous} ${question}`, true);
 }

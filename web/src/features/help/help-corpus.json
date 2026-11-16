@@ -1,5 +1,5 @@
 {
-  "version": "0ac8b5c78ea5",
+  "version": "b46e5ad34523",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -249,10 +249,10 @@
         "phone video",
         "upload a video"
       ],
-      "answer": "You can make clips from a video file too. Pick **Upload a video** on Home, choose the file and tap **Make clips**.",
+      "answer": "You can make clips from a video file too. Tap **Pick a video** on Home, choose the file and tap **Make clips**.",
       "steps": [
         "Go to **Home**.",
-        "Tap **Upload a video**.",
+        "Tap **Pick a video**.",
         "Tap the box and pick an MP4, MOV or WebM file (up to 5 GB).",
         "Tap **Make clips**."
       ],

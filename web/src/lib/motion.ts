@@ -22,6 +22,7 @@ export type ActEvent = "play" | "fail" | "rewind" | "end";
 /** The send flight (§19), the one grandfathered exception to the token table. Re-exported by PaperPlane.tsx. */
 export const SEND_FLIGHT_MS = 520;
 export const SEND_RETURN_MS = 240;
+/** The reduced-motion send fade: `--send-fade` in styles/motion.css and the fly-fade rules in fly.css (test/sendMotion.test.ts). */
 export const SEND_FADE_MS = 300;
 
 /** The action tokens, mirrored from styles/motion.css `:root` (a unit test keeps them in step). */

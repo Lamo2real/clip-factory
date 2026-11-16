@@ -8,12 +8,13 @@
   doc uses, every doc stem of 5+ letters one edit away ("instagarm" → instagram).
 * A doc's score is the sum over the distinct terms of all groups of ``weight * bm25(term)``; weight is 1 for the
   question's own words and 0.5 for words merged in from the previous question (follow-ups). A doc on the page the
-  owner is on gets +10 %. Ties go to curated guides, then to the smaller id; a guide within 10 % of the best
+  owner is on gets +10 % (a skill page counts as Settings). Ties go to curated guides, then to the smaller id; a guide within 10 % of the best
   generated doc on the same route (path without the hash) counts as a tie.
 * The best doc is accepted only when its score ≥ ``MIN_SCORE``, at least half of the question's content groups
   match it, and at least one of the question's own terms is in its title or keywords.
-* Follow-ups (≤ 4 content words, or starting with "and", "what about", "how about", "where is that") are merged
-  with the previous *user* question from the history.
+* Follow-ups: the question is ranked on its own first. It is merged with the previous *user* question from the
+  history only when it starts with "and", "what about", "how about", "where is that", or when it is short (≤ 4
+  content words) and unknown on its own. So a complete question asked right after another one keeps its answer.
 """
 
 from __future__ import annotations
@@ -252,9 +253,21 @@ def previous_user_question(history: Sequence[Mapping[str, Any]] | None) -> str |
     return None
 
 
+def starts_follow_up(question: str) -> bool:
+    """Starts with an explicit follow-up phrase ("and the error sound?", "what about TikTok?")."""
+    return (" ".join(words(question)) + " ").startswith(FOLLOW_UP_STARTS)
+
+
 def is_follow_up(question: str, stopwords: frozenset[str] = DEFAULT_STOPWORDS) -> bool:
-    lowered = " ".join(words(question)) + " "
-    return len(content_words(question, stopwords)) <= FOLLOW_UP_MAX_WORDS or lowered.startswith(FOLLOW_UP_STARTS)
+    """Short enough (≤ 4 content words) or worded like a follow-up: may borrow the previous question's words."""
+    return len(content_words(question, stopwords)) <= FOLLOW_UP_MAX_WORDS or starts_follow_up(question)
+
+
+def boost_page(page: str | None) -> str | None:
+    """The page a doc boost compares against: a skill page is part of Settings (§19.4)."""
+    if not page:
+        return None
+    return "settings" if page == "skill" else page
 
 
 def _route_path(doc: HelpDoc) -> str:
@@ -275,32 +288,7 @@ def _guides_first(scored: list[tuple[float, int, str, int]], docs: list[HelpDoc]
     return scored
 
 
-def rank(
-    docs: Sequence[HelpDoc],
-    question: str,
-    history: Sequence[Mapping[str, Any]] | None = None,
-    context: HelpContext | None = None,
-    *,
-    synonyms: Mapping[str, str] | None = None,
-    stopwords: frozenset[str] | None = None,
-) -> Ranked:
-    """Ranks the visible docs for a question. Refusals and unknowns carry no candidates (and never cost a model
-    call)."""
-    if refused(question):
-        return Ranked("refused", question=question)
-    synonyms = DEFAULT_SYNONYMS if synonyms is None else synonyms
-    stopwords = DEFAULT_STOPWORDS if stopwords is None else stopwords
-    shown = [d for d in docs if visible(d, context)]
-    if not shown:
-        return Ranked("unknown", question=question)
-    index = _index_for(docs, shown, stopwords)
-    vocab = index.vocab_set
-    groups = _groups(question, 1.0, True, synonyms, stopwords, vocab=vocab)
-    merged = question
-    previous = previous_user_question(history)
-    if previous and previous.strip() != question.strip() and is_follow_up(question, stopwords):
-        groups += _groups(previous, FOLLOW_UP_WEIGHT, not groups, synonyms, stopwords, vocab=vocab)
-        merged = f"{previous} {question}"
+def _score(index: _Index, groups: list[_Group], context: HelpContext | None, merged: str) -> Ranked:
     if not groups:
         return Ranked("unknown", question=merged)
     weights: dict[str, float] = {}
@@ -309,12 +297,13 @@ def rank(
             weights[term] = max(weights.get(term, 0.0), g.weight)
     own = [g for g in groups if g.own]
     own_terms = {t for g in own for t in g.alternatives}
+    page = boost_page(context.page if context is not None else None)
     scored: list[tuple[float, int, str, int]] = []
     for n, doc in enumerate(index.docs):
         score = sum(w * _bm25(index, n, t) for t, w in weights.items())
         if score <= 0:
             continue
-        if context is not None and context.page and page_of(doc["route"]) == context.page:
+        if page and page_of(doc["route"]) == page:
             score *= PAGE_BOOST
         scored.append((-round(score, 6), 0 if doc["kind"] == "guide" else 1, doc["id"], n))
     if not scored:
@@ -334,3 +323,36 @@ def rank(
         best_score,
         merged,
     )
+
+
+def rank(
+    docs: Sequence[HelpDoc],
+    question: str,
+    history: Sequence[Mapping[str, Any]] | None = None,
+    context: HelpContext | None = None,
+    *,
+    synonyms: Mapping[str, str] | None = None,
+    stopwords: frozenset[str] | None = None,
+) -> Ranked:
+    """Ranks the visible docs for a question. Refusals and unknowns carry no candidates (and never cost a model
+    call). The question is ranked on its own first; see the module docstring for when it borrows the previous
+    question's words."""
+    if refused(question):
+        return Ranked("refused", question=question)
+    synonyms = DEFAULT_SYNONYMS if synonyms is None else synonyms
+    stopwords = DEFAULT_STOPWORDS if stopwords is None else stopwords
+    shown = [d for d in docs if visible(d, context)]
+    if not shown:
+        return Ranked("unknown", question=question)
+    index = _index_for(docs, shown, stopwords)
+    vocab = index.vocab_set
+    groups = _groups(question, 1.0, True, synonyms, stopwords, vocab=vocab)
+    previous = previous_user_question(history)
+    if previous is None or previous.strip() == question.strip():
+        return _score(index, groups, context, question)
+    if not starts_follow_up(question):
+        alone = _score(index, groups, context, question)
+        if alone.status == "answer" or not is_follow_up(question, stopwords):
+            return alone
+    groups = groups + _groups(previous, FOLLOW_UP_WEIGHT, not groups, synonyms, stopwords, vocab=vocab)
+    return _score(index, groups, context, f"{previous} {question}")
