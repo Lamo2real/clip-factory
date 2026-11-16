@@ -345,6 +345,7 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
 * Every visible text run reads at WCAG AA: at least 4.5:1 (3:1 for 24 px, or 18.66 px bold, and up) on the glass and
   backdrop it can sit on, and no text is smaller than 12 px, on every screen at 320, 375 and 1440 px (enforced by
   `web/e2e/contrast.spec.ts` with axe-core and a rendered-contrast scan; see [TESTING.md](TESTING.md#contrast-and-text-size)).
+  The desktop app's see-through window (§22.3) is held to the same bar, over stand-ins for the real window glass.
   Colour and radius tokens are the tables in UX_DESIGN_SYSTEM.md; corners use the `--r-*` scale.
 * **Library** has two views: "All clips" (every kept clip, newest first, each card shows total views when measured)
   and "This week" (the week's clips sorted by views with a big "Best this week" star each, arrows for earlier weeks,
@@ -3962,57 +3963,156 @@ everywhere.
 
 ### 22.2 Desktop window glass (`desktop/`, Tauri v2)
 
-* `src-tauri/src/main.rs` picks the glass from the operating system before the window is built:
-  macOS → `vibrancy` (Tauri effects `LiquidGlassRegular` on macOS 26+, falling back to `UnderWindowBackground` on
-  11–15, state `Active`); Windows build ≥ 22621 (11 22H2+) → `acrylic`; Windows 10 1809 (17763) to 11 21H2 → `blur`
-  (acrylic lags while dragging on those builds); anything else (Linux, older Windows) → `none`. Mica is not used: it
-  only shows the wallpaper's colours, never the shapes the owner wants to guess.
+* `src-tauri/src/main.rs` picks the glass from the operating system before the window is built and tells the page
+  its name:
+
+  | Computer | `window.__CF_GLASS__` | What draws it |
+  |---|---|---|
+  | macOS 26 or newer | `liquid` | Liquid Glass (`LiquidGlassRegular`) |
+  | macOS 11 to 15 | `vibrancy` | The under-window vibrancy material (`UnderWindowBackground`, an `NSVisualEffectView`) |
+  | Windows 11 22H2+ (build ≥ 22621) | `acrylic` | Acrylic |
+  | Windows 10 1809 (17763) to Windows 11 21H2 | `blur` | Blur behind (acrylic lags while dragging on those builds) |
+  | Anything else (Linux, older Windows) | `none` | An ordinary opaque window |
+
+  Mica is not used: it only shows the wallpaper's colours, never the shapes the owner wants to guess.
+* Every Mac asks Tauri for the same effects, `[LiquidGlassRegular, UnderWindowBackground]`, state `Active`: Tauri
+  draws Liquid Glass where it exists and falls back to the vibrancy material where it does not. Which of the two the
+  page is told comes from the signal Tauri and window-vibrancy use for that fallback: AppKit's own version number
+  (`NSAppKitVersionNumber`, a constant AppKit exports) against window-vibrancy's
+  `MIN_APPKIT_VERSION_LIQUID_GLASS`, **2685** (macOS 26.0). `Glass::for_appkit(version)` is a pure function of the
+  number, so it is unit-tested; a test pins window-vibrancy to 0.8.x in `Cargo.lock`, so an update asks for a fresh
+  look at the threshold. Reading the constant is the crate's one `unsafe` item: `[lints.rust] unsafe_code` is
+  `"deny"` (not `"forbid"`, which could not be allowed anywhere) and is allowed on that extern block only. No new
+  crates.
 * With glass, the window is `transparent(true)` with those effects and a light off-white tint (`GLASS_TINT`,
-  247/245/239 at 140/255). Only the Windows `blur` path is known to use that tint: on Windows 11 22H2+ acrylic,
-  window-vibrancy sets only the system backdrop type and drops the colour (tauri documents `color` as having no
-  effect on Windows 11), macOS 11–15 vibrancy takes no tint, and the Liquid Glass tint is unproven. The window theme
-  is forced to **Light**, because the web app is drawn light.
+  247/245/239 at 140/255). Who honours the tint: **macOS 26+ Liquid Glass does while the window is in use, and drops
+  it while another app is in use** (measured, §22.3); the Windows `blur` path does (worked out, not measured);
+  Windows 11 22H2+ acrylic drops it (window-vibrancy sets only the system backdrop type; tauri documents `color` as
+  having no effect on Windows 11); the vibrancy material of macOS 15 and older takes none. The window theme is forced
+  to **Light**, because the web app is drawn light.
 * macOS transparency needs `app.macOSPrivateApi: true` (tauri.conf.json) and tauri's `macos-private-api` feature.
   This rules out the Mac App Store, which the app does not use (unsigned `.dmg`, §12.3).
-* The injected script now starts with `window.__CF_GLASS__ = "vibrancy" | "acrylic" | "blur" | "none"`, followed by
-  `init.js` (`__CF_DESKTOP__ = true`, outward links). The remote page still gets **no** Tauri IPC
+* The injected script starts with `window.__CF_GLASS__ = "liquid" | "vibrancy" | "acrylic" | "blur" | "none"`,
+  followed by `init.js` (`__CF_DESKTOP__ = true`, outward links). The remote page still gets **no** Tauri IPC
   (`withGlobalTauri` off, empty capability).
 * `windows-version` (already in the lock file through tauri) reads the Windows build. Unit tests cover the choice
-  per OS and build and the script prefix.
+  per OS, AppKit version and Windows build, the glass this computer reports, and the script prefix for every glass.
 
 ### 22.3 Web: what is drawn (`lib/background.ts`, `lib/look.ts`, `components/Backdrop.tsx`, `styles/glass.css`)
 
 * `readNativeGlass(window)` trusts `__CF_GLASS__` only when `__CF_DESKTOP__ === true` and the value is one of
-  `vibrancy`, `mica`, `acrylic`, `blur`; anything else is `none`. `resolveLook` turns mode + picture + colours +
-  strength + glass + light/dark into one of: `window`, `frosted`, `picture`, `brand`, `colours`.
+  `liquid`, `vibrancy`, `mica`, `acrylic`, `blur`; anything else is `none`. So a desktop app that sends a name this
+  web bundle does not know yet (or the other way round, during a rollout) falls back to an ordinary page.
+  `resolveLook` turns mode + picture + colours + strength + glass + light/dark into one of: `window`, `frosted`,
+  `picture`, `brand`, `colours`.
 * `applyLook` (run in `main.tsx` before the first paint, then by `Backdrop` on every change) sets
-  `html[data-backdrop]`, `html[data-glass]`, the `--backdrop-veil` custom property and, for `window` only,
-  `html.see-through`, which makes `html` and `body` transparent so the native glass shows.
+  `html[data-backdrop]`, `html[data-glass]`, `html[data-strength]`, the `--backdrop-veil` and `--panel-veil` custom
+  properties and, for `window` only, `html.see-through`, which makes `html` and `body` transparent so the native
+  glass shows. **The window look** below means `html.see-through`.
 * **The tint (contrast).** Off-white whose strength is computed, not guessed: `minVeil` is the smallest alpha at
-  which every text colour that can sit on it (ink, ink-2, ink-3, tomato-ink) reaches 4.5:1 against the off-white
-  composited (sRGB, as browsers do) over the **darkest** thing behind it.
-  * See-through (`seeThroughVeils(glass, scheme, strength)`): the tint lives **on the panels and on loose text**, not
-    over the whole window, so the wallpaper stays guessable between them. Two values go on `<html>`:
-    `--backdrop-veil` over the whole window (Clear 0, Frosted 0.30) and `--panel-veil` on every `.glass` panel and
-    on every piece of text that sits straight on the window (page title and its line, breadcrumbs, the phone
-    top-bar name, the headings and lines between panels, back links, review count, setup part titles), as a scrim
-    that hugs the words (`box-shadow` spread, so nothing moves). Pick-one tracks outside panels (`.segmented`,
-    `.tabs`) lay their shade over the same tint.
-  * The darkest glass (`glassFloor`): `blur` in light → `TINTED_FLOOR`, the app's tint over black, worked out from
-    the same numbers as `GLASS_TINT` (`GLASS_TINT_ALPHA` = 140/255, ≈ rgb(135.6, 134.5, 131.2)). `acrylic` and
-    `vibrancy` (the system's own material, no app tint) and any dark setting → **black**: nothing is promised there.
-  * Panel tint: Clear = the minimum over that floor (blur 0.68; acrylic, vibrancy and dark 0.86); Frosted = the
-    minimum over the floor under the 0.30 window frost, + 0.10 (blur 0.64 on top of the frost, others 0.89), so a
-    Frosted panel shows less through than a Clear one.
-  * Colours: each chosen colour and every half-and-half blend of two (an sRGB blend can be darker than both); the
-    darkest decides. Light colours need no veil; Night alone needs 0.83. The Colours tile and the colours strip
-    in Settings wear the same veil (`--preview-veil`), so they look like the result; at 0.5 or more the card adds
-    "Dark colours show soft, so words stay easy to read."
-  * Picture: unchanged (the 0.18 off-white veil and the panels' own tint, §12).
-  * `prefers-reduced-transparency: reduce` raises the veil to 0.94 in every mode.
-* **Panels in see-through.** `.glass` (and `.glass--clear`) keeps the recipe (blur, saturation, lit rim, inner
-  highlight, shadow, refraction in Chromium); its tint is `--panel-veil`. Playwright checks, on every screen at 375
-  and 1440 px, that no visible text sits straight on the transparent window (`looseText` in `e2e/helpers.ts`).
+  which every text colour that can sit on it reaches 4.5:1 against the off-white composited (sRGB, as browsers do)
+  over the **darkest** thing behind it.
+* **What Liquid Glass really draws (measured).** On 2026-11-16, on macOS 27.2 (system in dark mode, the window
+  forced to the light theme, Tauri 2.12.5 / window-vibrancy 0.8.1, `LiquidGlassRegular` with `GLASS_TINT`, page
+  transparent), a helper window put a known picture straight behind the real window and the screen was captured:
+
+  | The window is | Glass over pure black | Glass over pure white | A panel at 0.86 over black |
+  |---|---|---|---|
+  | in use (active) | rgb(180, 171, 148) | rgb(249, 248, 245) | rgb(240, 236, 227) |
+  | showing, another app in use (inactive) | rgb(118, 118, 118) | rgb(225, 225, 225) | rgb(230, 229, 225) |
+
+  * With no page loaded the glass in use is the same khaki over black, so that colour is the system's glass, not
+    the page. In use, the tint is honoured: the glass behaves like the tint colour at roughly 62–73% over the blurred
+    picture. Not in use, the tint is dropped for a neutral light grey at roughly 58%.
+  * The glass blurs strongly: 22 pt black and white stripes come through as soft bands, 75 pt bold text is still
+    guessable, normal text cannot be read.
+  * Panels composite as `mix(VEIL, glass, veil)`, within about ±3 levels of what was measured, so the maths below
+    describes the real window.
+  * **Not measured:** Liquid Glass without the tint, `LiquidGlassClear`, the vibrancy material of macOS 15 and
+    older, and every Windows material. Those keep careful assumptions (below) until someone measures them
+    ([TESTING.md](TESTING.md#background-modes-and-see-through-glass) says how). Also not measured: whether a
+    panel's own `backdrop-filter` (blur, saturation) reaches the glass behind the page. Over the flat black and white
+    that were measured it changes nothing, and the darkest glass is a flat grey either way.
+  * **Also not measured: the system's own settings.** Every number above was read with the system in dark mode.
+    Nobody has read the glass with the system in light appearance, or with macOS's Reduce transparency or Increase
+    contrast switched on. The floor has little room to spare: the scan passes with rgb(106, 106, 106) behind the
+    page and starts to fail at about rgb(96, 96, 96). The hand check in TESTING.md asks for those three readings.
+* **The darkest each glass can be** (`glassFloor(glass, scheme)`), which is what its tint is worked out for:
+
+  | Glass | Floor | Why |
+  |---|---|---|
+  | `liquid`, light | rgb(106.2, 106.2, 106.2) (`LIQUID_FLOOR`) | The darkest measured (inactive, black behind: 118) made a tenth darker (`LIQUID_SAFETY`), for another Mac or another macOS update |
+  | `blur`, light | ≈ rgb(135.6, 134.5, 131.2) (`TINTED_FLOOR`) | The app's tint over black, from the same numbers as `GLASS_TINT` (`GLASS_TINT_ALPHA` = 140/255). Worked out, not measured |
+  | `acrylic`, `mica`, `vibrancy`, light | black | The system's own material, no app tint, not measured: nothing is promised |
+  | any glass, dark | black | The desktop app forces light, so this should never happen; nothing is promised |
+
+  `glassChecks(glass, scheme)` lists everything text is checked against: the floor, white (the lightest any glass
+  can be) and, for `liquid` in light, both measured floors too (in use the glass is khaki, not grey).
+* **The window look's own text colours.** With the usual text colours a panel over the darkest Liquid Glass would
+  need 0.78 of tint (0.88 over black), and a panel that solid does not feel see-through. So in the window look only
+  (`html.see-through` in `tokens.css`) the four lightest text colours go deeper, each still clearly its own colour;
+  each has a relative luminance of 0.047 or less. `--ink` and `--ink-2` stay.
+
+  | Token | Everywhere else | Window look | What it is for |
+  |---|---|---|---|
+  | `--ink-3` | `#46523f` | `#344031` | Meta text (grey-green) |
+  | `--tomato-ink` | `#962414` | `#74190e` | Tomato words: links, errors, "Didn't work" |
+  | `--sage-ink` | `#4f6340` | `#2c421c` | Sage words and icons: saved, ready, passed |
+  | `--sage-text` | `#3d4f31` | `#2c421c` | Small sage words on a sage tint |
+
+  `TEXT_TOKENS` and `WINDOW_TEXT_TOKENS` in `lib/background.ts` hold both sets; `TEXT_COLOURS_WINDOW` is used for
+  every see-through calculation. `--sage-ink` is new: words and icons in sage use it (`--sage-deep`, the same colour
+  outside the window look, stays for fills, rings and lines, which must not change with the look). A unit test reads
+  the stylesheets: `tokens.css` holds exactly these values, and **every** `color:` declaration is one of the six
+  tokens or a named exception that never sits on a bare panel tint (white or off-white on a fill of its own, the
+  warn pill, the blue of the Get the app drawings, glyph blinks) or is covered by a window-look rule (below).
+* **Tints in the window look** (`seeThroughVeils(glass, scheme, strength)`). The tint lives **on the panels and on
+  loose text**, not over the whole window, so the desktop stays guessable between them. Two values go on `<html>`:
+  `--backdrop-veil` over the whole window and `--panel-veil` on every panel.
+  * **Clear:** nothing between the panels (0). A panel carries the least that keeps every text colour of the window
+    look at AA over the floor, and never less than 0.35 (`MIN_PANEL_VEIL`), so it still reads as a pane.
+  * **Frosted:** a light frost over the whole window (0.30) and panels 0.15 heavier than Clear
+    (`FROSTED_EXTRA`, at most 0.95). What shows through a panel is (1 − window frost) × (1 − panel tint), so Frosted
+    always shows less than Clear.
+
+  | Glass | Clear panel | Frosted panel (over the 0.30 frost) | Lowest text contrast on a Clear panel over the floor |
+  |---|---|---|---|
+  | `liquid` (macOS 26+) | **0.44** | 0.59 | 4.55 (`--ink-3`); 4.91 over the measured 118, 6.78 in use over black |
+  | `blur` (Windows 10) | 0.35 (contrast alone would need 0.29) | 0.50 | 4.87 |
+  | `acrylic`, `mica`, `vibrancy`, or any dark setting | 0.68 | 0.83 | 4.52 |
+
+* **What carries the tint** (`styles/glass.css`, the window look section):
+  * Every `.glass` panel (sage and tomato glass turn off-white too: over a dark desktop their own tints would be too
+    dark to read on). The rule is written with `:where(html.see-through)`, so it weighs no more than `.glass`
+    itself: a surface with a **denser tint of its own** keeps it (toasts, sheets, the Ask panel, the update bar, the
+    starred star's deep sage). Those float over the page's own words and pictures, which can be darker than any
+    window glass, so the lighter panels must not thin them.
+  * **Nothing that holds words is weaker than the panel tint.** What can sit straight on the window carries at
+    least that much: the tab bar, glass, ghost and danger buttons (also on hover), the Library tabs, the brand mark.
+  * Every piece of text that sits straight on the window gets the panel tint as a scrim that hugs the words
+    (`box-shadow` spread, so nothing moves): page title and its line, breadcrumbs, the phone top-bar name, the
+    headings and lines between panels, back links, the review count, setup part titles, a clip page's title and
+    "Updated" line, This week's title, its star line and its count and money line, a skill's meta line.
+  * Pick-one tracks (`.segmented`, `.tabs`, the Background tiles) lay their shade of ink (0.08, `TRACK_SHADE`) over
+    0.10 more tint than a panel has (`TRACK_EXTRA_VEIL`), so the labels on the shade stay at AA even when the track
+    sits straight on the window.
+  * Tinted chips on a panel (the tomato "Didn't work" pill, the sound tags, "If you need it", code words, a clip
+    without a video, the fixes list, the lit-up setting) get a wash of white (0.20, `CHIP_LIFT`) over their tint. A
+    tint of ink or tomato dims what is under it; on a panel that is only just light enough, the words on the chip
+    would drop below AA. Over the darkest glass, where it matters, the wash makes up for an ink or tomato tint in
+    full: such a chip is never darker there than the panel it sits on, so its words keep AA. Over a lighter glass a
+    chip can be darker than its panel again; the words then have contrast to spare.
+  * Placeholders (lighter than any text colour) take `--ink-3`; the tomato "not passed" mark takes `--tomato-ink`.
+  * The unit tests work the three numbers (0.08, 0.10, 0.20) through the same contrast maths for every glass and
+    read them back out of `glass.css`.
+* **Colours:** each chosen colour and every half-and-half blend of two (an sRGB blend can be darker than both); the
+  darkest decides. Light colours need no veil; Night alone needs 0.75. The Colours tile and the colours strip
+  in Settings wear the same veil (`--preview-veil`), so they look like the result; at 0.5 or more the card adds
+  "Dark colours show soft, so words stay easy to read."
+* **Picture:** unchanged (the 0.18 off-white veil and the panels' own tint, §12).
+* `prefers-reduced-transparency: reduce` raises the veil to 0.94 in every mode, and panels to 0.90–0.92.
+* **Panels in the window look.** `.glass` keeps the recipe (blur, saturation, lit rim, inner highlight, shadow,
+  refraction in Chromium); its tint is `--panel-veil`.
 * **Frosted fallback** (see-through in a browser, installed PWA, phone, or the desktop app with `none`): the usual
   sage/off-white/tomato blobs (already blurred), a milky frost pane (Clear: white 0.22 → off-white 0.10; Frosted,
   `html[data-strength="frosted"]`: white 0.50 → off-white 0.38, so Glass strength always does something; no full-screen
@@ -4058,23 +4158,47 @@ changes (§20.14); hover lights up the tiles and swatches.
 ### 22.6 Tests
 
 * Vitest `test/background.test.ts`: contrast maths against WCAG reference values; `minVeil` is minimal and reaches AA;
-  `TINTED_FLOOR` is the app tint over black (0.68 needed); the floor per glass (only `blur` in light is tinted);
-  every glass, scheme and strength reaches AA on the panels; Clear leaves the gaps clear and Frosted shows less
-  through; colours validation and veils (each colour and pairwise blend); `resolveLook` for every mode; only the
-  wrapper can claim glass; the notes' exact sentences (computer and phone); prefs defaults and junk; an existing
-  picture with no saved mode starts in Picture; `applyLook` on `<html>`.
+  the measured Liquid Glass numbers and its floor (a tenth darker than the darkest measured); `TINTED_FLOOR` is the
+  app tint over black and equals `GLASS_TINT` in `main.rs`; black for the unmeasured glasses and for dark; the
+  window look's text colours (only four change, luminance ≤ 0.047, same hue, still told apart); Clear is the least
+  that reaches AA, never under 0.35; Frosted is 0.30 plus panels 0.15 heavier and always shows less; **every glass ×
+  light and dark × Clear and Frosted × (floor, white, and for Liquid Glass both measured floors): every text colour
+  of the window look reaches AA on a panel, on a pick-one track and on every tinted chip**; the stylesheets stay in
+  step (`tokens.css` values, `html.see-through` overrides, every `color:` declaration is a token or a named
+  exception, the window-look rules for placeholders and marks exist, the panel rule gives way to denser tints and
+  the tab bar is lifted); colours validation and veils (each colour and pairwise blend); `resolveLook` for every mode
+  and glass; only the wrapper can claim glass, an unknown name is `none`, and every name `main.rs` can send is
+  known; the notes' exact sentences (computer and phone); prefs defaults and junk; an existing picture with no saved
+  mode starts in Picture; `applyLook` on `<html>`.
 * pytest `api/tests/test_settings_and_system.py`: defaults (no `backgroundMode` until saved), saving (lower case,
   repeats dropped), every refusal and its message, malformed stored values.
+* Playwright `e2e/glass.ts`: the stand-ins for the real window glass, shared by the specs below. `asDesktop(page,
+  glass, strength?)` simulates the wrapper (`addInitScript` setting `__CF_DESKTOP__` / `__CF_GLASS__`);
+  `paintGlass` paints what is behind the transparent page: the measured floors rgb(118, 118, 118) and
+  rgb(180, 171, 148), the floor each glass is planned for, white, and a busy picture (sky, sun, cloud, red car,
+  black garage, grass) blurred and mapped to the measured range for a window in use and not in use.
+* Playwright `e2e/contrast.spec.ts`: **the window look is held to the same bar as every other look.** For `liquid`,
+  `vibrancy` (it stands for `acrylic` and `mica`: the same numbers) and `blur`, on every app route plus This week
+  and the skill pages, at 320, 375 and 1440 px, each stand-in is painted and the same axe and rendered-contrast scan
+  runs (4.5:1, 3:1 for large text, nothing under 12 px). A second test per glass covers what an address cannot
+  reach: Frosted, the sign-in card, a clip page and This week with a starred star, the Ask panel with an answer, a
+  delete sheet, a toast.
 * Playwright `e2e/background.spec.ts`: the default and the browser fallback note with its Get the app link; on a
   phone the phone sentence and no link; switching modes, the chosen colours on the backdrop, the fourth-colour
   refusal, your own colour, persistence over a reload; Picture without and with a picture; an existing picture
   survives the upgrade (and a reload); Glass strength picks see-through and changes the frost; Night alone: the
   previews wear the backdrop's veil and the soft-colours line shows; search finds the new apples; a simulated
-  desktop (`addInitScript` setting `__CF_DESKTOP__` / `__CF_GLASS__`) has transparent `html` and `body`, no tint
-  between panels for Clear, panels at `--panel-veil`, every page text colour at AA over the darkest glass (vibrancy,
-  blur, acrylic dark); no text straight on the window on any screen at 375 and 1440 px; `none` glass in the app; no
-  overflow, one-line tile names and AA text at 320, 375, 768, 1440 and 1920 px, light and dark, in every mode.
-* `e2e/screenshots.spec.ts`: the Background page, and a simulated see-through desktop (Windows blur path) over a car
-  picture standing in for the wallpaper, with the app's own tint over it as the system would draw it (the real
-  native blur can only be seen in a built app).
-* desktop: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (CI, Linux).
+  `liquid` desktop has transparent `html` and `body`, no tint between panels for Clear, panels at the computed
+  `--panel-veil` (under 0.5), the four deeper text colours on `<html>` and in drawn words, Frosted's frost and
+  heavier panels, and the usual colours again once Colours is picked; `vibrancy`, `acrylic`, `mica` and `blur` keep
+  working, each with its own tint; a dark setting assumes black; over the measured floors and the busy picture every
+  word on the Background page is readable, Clear and Frosted, at 375 and 1440 px; no text straight on the window
+  (`looseText` in `e2e/helpers.ts`: every surface under words is at least as strong as the look's panel tint) on
+  every screen, This week, the skill pages and a clip page, for `liquid` and `vibrancy`, at 375 and 1440 px; `none`
+  glass in the app, and a glass name the page does not know; no overflow, one-line tile names and AA text at 320,
+  375, 768, 1440 and 1920 px, light and dark, in every mode.
+* `e2e/screenshots.spec.ts`: the Background page, and the simulated see-through window on Home over the busy
+  picture (window in use) and over the darkest measured floor, Clear and Frosted, at 390 and 1440 px:
+  `see-through-{scene,floor}-{clear,frosted}-*.png` (the real glass can only be seen in a built app).
+* desktop: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (CI, Linux; the macOS
+  path is compiled and tested on a Mac).
