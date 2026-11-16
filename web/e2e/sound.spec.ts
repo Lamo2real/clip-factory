@@ -74,6 +74,8 @@ test("enabled controls tap, switched-off controls deny, errors deny", async ({ p
   // A "coming soon" button is switched off: deny, and a note says why.
   await page.goto("/settings/posting/accounts");
   await settle(page);
+  // The accounts load after the page: wait, so the button stops moving before the forced click.
+  await expect(page.getByText("Checking…")).toHaveCount(0);
   await page.evaluate(() => (window.__cfSoundLog = []));
   await page.getByRole("button", { name: /Connect YouTube/ }).click({ force: true });
   await expect.poll(() => log(page)).toEqual(["deny"]);
