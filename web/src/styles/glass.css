@@ -339,7 +339,7 @@ html.see-through :is(.segmented, .tabs, .bg-modes) {
   background-image: linear-gradient(rgb(var(--ink-rgb) / 0.08), rgb(var(--ink-rgb) / 0.08));
 }
 /* Tinted chips on a panel (the tomato "Didn't work" pill, the sound tags, "If you need it", code words, the
-   lit-up setting) get a wash of white (0.2, CHIP_LIFT in lib/background.ts) over their tint. A tint of ink or
+   lit-up setting, the count on the setup list's pill) get a wash of white (0.2, CHIP_LIFT in lib/background.ts) over their tint. A tint of ink or
    tomato dims what is under it; on a panel that is only just light enough, the words on the chip would drop
    below AA. Over the darkest glass, where it matters, an ink or tomato chip with the wash is never darker than
    the panel it sits on, so its words keep AA (over a lighter glass it can be, with contrast to spare). */
@@ -353,7 +353,8 @@ html.see-through
     .perf__novideo,
     .clip-tile__media,
     .checklist__fixes,
-    .apple.is-found
+    .apple.is-found,
+    .setup-todo__pill-count
   ) {
   background-image: linear-gradient(rgb(255 255 255 / 0.2), rgb(255 255 255 / 0.2));
 }

@@ -520,6 +520,8 @@ export async function mixedSetup(page: Page) {
     sessionStorage.setItem("cf-mock-setup", JSON.stringify(state));
     sessionStorage.setItem("cf-mock-setup-skipped", JSON.stringify(["tiktok"]));
   }, step);
+}
+
 /**
  * See-through (§22.3): every visible piece of text must sit on a tinted surface (a glass panel, a scrim, a button),
  * never straight on the transparent window. Returns the text that does not, as "selector: text".

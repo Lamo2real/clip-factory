@@ -1,10 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "@playwright/test";
-import { CLIPS, openClip, openTodo, settle } from "./helpers.ts";
-import { GLASS_TINT_ALPHA } from "../src/lib/background.ts";
 import { ACTIVE_SCENE, asDesktop, INACTIVE_FLOOR, paintGlass } from "./glass.ts";
-import { CLIPS, openClip, settle } from "./helpers.ts";
+import { CLIPS, openClip, openTodo, settle } from "./helpers.ts";
 import { GALLERY, pauseActs, tapAct } from "./motionHelpers.ts";
 
 const dir = join(import.meta.dirname, "..", "screenshots");

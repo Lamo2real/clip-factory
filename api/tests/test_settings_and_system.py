@@ -382,6 +382,8 @@ def test_setup_skipped_bad_stored_value_falls_back_to_none_skipped() -> None:
     assert settings.with_defaults({"setupSkipped": ["myspace"]})["setupSkipped"] == []
     assert settings.with_defaults({"setupSkipped": "x"})["setupSkipped"] == []
     assert settings.with_defaults({"setupSkipped": ["x", "youtube"]})["setupSkipped"] == ["youtube", "x"]
+
+
 # ---------- Background modes (§22) ----------
 
 

@@ -2,9 +2,8 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { TODO_CELEBRATE_MS } from "../src/lib/setupTodo.ts";
 import { GUIDES, SETUP_ORDER } from "../src/setup/index.ts";
-import { animationsDone, MIXED_SETUP, mixedSetup, resolveRoute, ROUTES, scanText, settle } from "./helpers.ts";
 import { asDesktop, paintGlass, WINDOW_EXTRA_ROUTES, WINDOW_LOOKS, type GlassPaint } from "./glass.ts";
-import { animationsDone, CLIPS, openClip, resolveRoute, ROUTES, scanText, settle, whiteContrastOnGradient } from "./helpers.ts";
+import { animationsDone, CLIPS, looseText, MIXED_SETUP, mixedSetup, openClip, resolveRoute, ROUTES, scanText, settle, whiteContrastOnGradient } from "./helpers.ts";
 
 // Every screen's text is readable (audit F081, WCAG 2.1 AA 1.4.3; docs/TESTING.md "Contrast and text size"):
 // at 320, 375 and 1440 px, with the browser asking for light and for dark (the app is light-only, so dark must
@@ -32,34 +31,33 @@ const DECORATIVE = "";
 
 test.use({ reducedMotion: "reduce" });
 
-/** The three checks on what is on screen now; what fails is added to `failures`. Returns how many text runs it read. */
-async function readable(page: Page, at: string, failures: string[]): Promise<number> {
-  const axe = await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze();
-  for (const v of axe.violations)
-    for (const n of v.nodes) failures.push(`${at} axe: ${n.target.join(" ")}: ${n.any.map((c) => c.message).join("; ")}`);
-
-  const scan = await scanText(page, DECORATIVE);
-  expect(scan.checked, `${at}: found no text to check`).toBeGreaterThan(0);
-  test.info().annotations.push({ type: "text runs", description: `${at}: ${scan.checked} checked, ${scan.pictures} on a picture (axe only)` });
-  for (const f of scan.contrast)
-    failures.push(`${at} contrast: ${f.selector} "${f.text}" ${f.ratio}:1 < ${f.need}:1 (${f.color} on ${f.background}, ${f.fontSize}px)`);
-  for (const f of scan.tiny) failures.push(`${at} size: ${f.selector} "${f.text}" is ${f.fontSize}px (< 12px)`);
-  return scan.checked;
 /** The axe color-contrast rule's violations on the page as it is, one line each. */
 async function axeContrast(page: Page, at: string): Promise<string[]> {
   const axe = await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze();
   return axe.violations.flatMap((v) => v.nodes.map((n) => `${at} axe: ${n.target.join(" ")}: ${n.any.map((c) => c.message).join("; ")}`));
 }
 
-/** The rendered-contrast and text-size scan (`scanText`) on the page as it is, one line per failure. */
-async function scanFailures(page: Page, at: string): Promise<string[]> {
+/** The rendered-contrast and text-size scan (`scanText`) on the page as it is: one line per failure, and how many text runs it read. */
+async function scanRuns(page: Page, at: string): Promise<{ failures: string[]; checked: number }> {
   const scan = await scanText(page, DECORATIVE);
   expect(scan.checked, `${at}: found no text to check`).toBeGreaterThan(0);
   test.info().annotations.push({ type: "text runs", description: `${at}: ${scan.checked} checked, ${scan.pictures} on a picture (axe only)` });
-  return [
-    ...scan.contrast.map((f) => `${at} contrast: ${f.selector} "${f.text}" ${f.ratio}:1 < ${f.need}:1 (${f.color} on ${f.background}, ${f.fontSize}px)`),
-    ...scan.tiny.map((f) => `${at} size: ${f.selector} "${f.text}" is ${f.fontSize}px (< 12px)`),
-  ];
+  return {
+    checked: scan.checked,
+    failures: [
+      ...scan.contrast.map((f) => `${at} contrast: ${f.selector} "${f.text}" ${f.ratio}:1 < ${f.need}:1 (${f.color} on ${f.background}, ${f.fontSize}px)`),
+      ...scan.tiny.map((f) => `${at} size: ${f.selector} "${f.text}" is ${f.fontSize}px (< 12px)`),
+    ],
+  };
+}
+
+const scanFailures = async (page: Page, at: string): Promise<string[]> => (await scanRuns(page, at)).failures;
+
+/** The three checks on what is on screen now; what fails is added to `failures`. Returns how many text runs it read. */
+async function readable(page: Page, at: string, failures: string[]): Promise<number> {
+  const scan = await scanRuns(page, at);
+  failures.push(...(await axeContrast(page, at)), ...scan.failures);
+  return scan.checked;
 }
 
 for (const route of ROUTES) {
@@ -75,8 +73,6 @@ for (const route of ROUTES) {
         await settle(page);
         await animationsDone(page);
         await readable(page, `${path} @${width} ${scheme}`, failures);
-        const at = `${path} @${width} ${scheme}`;
-        failures.push(...(await axeContrast(page, at)), ...(await scanFailures(page, at)));
       }
     }
     expect(failures).toEqual([]);
@@ -119,6 +115,38 @@ async function withEveryRow(page: Page, path: string) {
 }
 
 const skipQuestion = (page: Page, platform: (typeof SETUP_ORDER)[number]) => page.getByRole("dialog", { name: `Skip ${GUIDES[platform].name}?` });
+
+/** The "All set!" card says goodbye by itself after a moment; after this that moment never ends, so it can be read. */
+const keepAllSet = (page: Page) =>
+  page.addInitScript((goodbye) => {
+    const real = window.setTimeout;
+    window.setTimeout = ((fn: TimerHandler, ms?: number, ...rest: unknown[]) => real(fn, goodbye.includes(ms ?? 0) ? 3_600_000 : ms, ...rest)) as typeof window.setTimeout;
+  }, [TODO_CELEBRATE_MS, TODO_CELEBRATE_MS / 2]);
+
+/** Ends the list at this width (four ready, then X skipped) and returns the "All set!" card. */
+async function allSet(page: Page, width: number) {
+  await page.setViewportSize({ width, height: width < 768 ? 812 : 900 });
+  await page.goto("/library");
+  await settle(page);
+  // Four ready and X left; skipping X ends the list.
+  await page.evaluate((platforms) => {
+    type MockWindow = Window & { __cfMock: { setup: { reset(): void; finish(p: string): void } } };
+    sessionStorage.removeItem("cf-mock-setup-skipped");
+    const mock = (window as unknown as MockWindow).__cfMock.setup;
+    mock.reset();
+    for (const p of platforms) mock.finish(p);
+  }, SETUP_ORDER.filter((p) => p !== "x"));
+  await page.goto("/library");
+  await settle(page);
+  await expect(page.locator(".setup-todo")).toContainText("4/5");
+  if (width < 768) await page.locator(".setup-todo__pill").click();
+  await page.locator(".setup-todo--rail, .setup-todo-panel").getByRole("button", { name: "Skip X", exact: true }).click();
+  await skipQuestion(page, "x").getByRole("button", { name: "Skip X", exact: true }).click();
+  const done = page.locator(".setup-todo--done");
+  await expect(done).toContainText("All set!");
+  await expect(done).toHaveAttribute("data-mode", width < 768 ? "pill" : "rail");
+  return done;
+}
 
 for (const scheme of SCHEMES) {
   test(`the setup list is readable as the open column, folded and under the skip question at 1440 px (${scheme})`, async ({ page }) => {
@@ -191,6 +219,23 @@ for (const scheme of SCHEMES) {
       await expect(page.locator("[data-skipped='tiktok']")).toBeVisible();
       await animationsDone(page);
       await readable(page, `Settings cards @${width} ${scheme}`, failures);
+      expect(failures).toEqual([]);
+    });
+  }
+
+  test(`"All set!" is readable where the column was and in the pill's strip (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+    await keepAllSet(page);
+    const failures: string[] = [];
+    for (const width of [375, 1440] as const) {
+      const done = await allSet(page, width);
+      await readableList(page, `All set! @${width} ${scheme}`, failures);
+      await expect(done, "the card left before it was read").toBeVisible();
+    }
+    expect(failures).toEqual([]);
+  });
+}
+
 // ---------- The window look ----------
 
 /** Paints each stand-in behind the transparent page and scans the text over it. axe runs once, on the darkest. */
@@ -227,37 +272,70 @@ for (const { glass, paints } of WINDOW_LOOKS) {
     });
   }
 
-  test(`"All set!" is readable where the column was and in the pill's strip (${scheme})`, async ({ page }) => {
-    await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
-    // The card says goodbye by itself after a moment; here that moment never ends, so it can be read.
-    await page.addInitScript((goodbye) => {
-      const real = window.setTimeout;
-      window.setTimeout = ((fn: TimerHandler, ms?: number, ...rest: unknown[]) => real(fn, goodbye.includes(ms ?? 0) ? 3_600_000 : ms, ...rest)) as typeof window.setTimeout;
-    }, [TODO_CELEBRATE_MS, TODO_CELEBRATE_MS / 2]);
+  // The floating setup to-do list (§17.13) in every face: the routes above only carry five "Not started" rows.
+  test(`window look (${glass}): the setup list is readable and on a tint as the pill, the sheet, the column, under the skip question and as "All set!"`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await asDesktop(page, glass);
+    await keepAllSet(page);
     const failures: string[] = [];
+    const scan = async (at: string) => {
+      await animationsDone(page);
+      expect(await listRuns(page), `${at}: the list shows no words`).toBeGreaterThan(0);
+      failures.push(...(await scanOverGlass(page, paints, `${at} ${glass}`)), ...(await looseText(page)).map((t) => `${at} ${glass} straight on the window: ${t}`));
+    };
+
+    // A phone: the pill, the pill on its bar, the sheet, the skip question.
+    await page.setViewportSize({ width: 375, height: 812 });
+    await withEveryRow(page, "/library");
+    await expect(page.locator("html")).toHaveClass(/see-through/);
+    const pill = page.locator(".setup-todo__pill");
+    await expect(pill).toContainText("2/5");
+    await scan("the pill @375");
+    await page.evaluate(() => window.scrollTo(0, 500));
+    await expect(page.locator(".setup-todo-bar")).toHaveClass(/is-scrolled/);
+    await scan("the pill on its bar @375");
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await pill.click();
+    const sheet = page.locator(".setup-todo-panel");
+    await expect(sheet.locator(".todo-row[data-platform='tiktok']")).toHaveAttribute("data-state", "skipped");
+    await scan("the sheet @375");
+    await sheet.getByRole("button", { name: "Skip X", exact: true }).click();
+    await expect(skipQuestion(page, "x")).toBeVisible();
+    await scan("the skip question over the sheet @375");
+    await page.keyboard.press("Escape");
+
+    // A wide screen: the open column, the skip question, then folded to the pill (at rest, under the pointer, on its bar).
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await withEveryRow(page, "/library");
+    const rail = page.locator(".setup-todo--rail");
+    for (const [platform, state] of Object.entries(MIXED_SETUP)) await expect(rail.locator(`.todo-row[data-platform='${platform}']`)).toHaveAttribute("data-state", state);
+    await scan("the open column @1440");
+    await rail.getByRole("button", { name: "Skip X", exact: true }).click();
+    await expect(skipQuestion(page, "x")).toBeVisible();
+    await scan("the skip question over the column @1440");
+    await page.keyboard.press("Escape");
+    await expect(skipQuestion(page, "x")).toHaveCount(0);
+    await page.getByRole("button", { name: "Make the setup list small" }).click();
+    await expect(pill).toBeVisible();
+    await scan("the folded pill @1440");
+    await pill.hover();
+    await scan("the folded pill under the pointer @1440");
+    await page.mouse.move(0, 0);
+    await page.evaluate(() => window.scrollTo(0, 500));
+    await expect(page.locator(".setup-todo-bar")).toHaveClass(/is-scrolled/);
+    await scan("the folded pill on its bar @1440");
+    await pill.click();
+    await expect(rail).toBeVisible();
+
+    // "All set!", in the pill's strip and where the column was.
     for (const width of [375, 1440] as const) {
-      await page.setViewportSize({ width, height: width < 768 ? 812 : 900 });
-      await page.goto("/library");
-      await settle(page);
-      // Four ready and X left; skipping X ends the list.
-      await page.evaluate((platforms) => {
-        type MockWindow = Window & { __cfMock: { setup: { reset(): void; finish(p: string): void } } };
-        sessionStorage.removeItem("cf-mock-setup-skipped");
-        const mock = (window as unknown as MockWindow).__cfMock.setup;
-        mock.reset();
-        for (const p of platforms) mock.finish(p);
-      }, SETUP_ORDER.filter((p) => p !== "x"));
-      await page.goto("/library");
-      await settle(page);
-      await expect(page.locator(".setup-todo")).toContainText("4/5");
-      if (width < 768) await page.locator(".setup-todo__pill").click();
-      await page.locator(".setup-todo--rail, .setup-todo-panel").getByRole("button", { name: "Skip X", exact: true }).click();
-      await skipQuestion(page, "x").getByRole("button", { name: "Skip X", exact: true }).click();
-      const done = page.locator(".setup-todo--done");
-      await expect(done).toContainText("All set!");
-      await expect(done).toHaveAttribute("data-mode", width < 768 ? "pill" : "rail");
-      await readableList(page, `All set! @${width} ${scheme}`, failures);
+      const done = await allSet(page, width);
+      await scan(`All set! @${width}`);
       await expect(done, "the card left before it was read").toBeVisible();
+    }
+    expect(failures).toEqual([]);
+  });
+
   // What ROUTES cannot reach by address, or shows only after a tap: surfaces that float over the page (the Ask
   // panel, a sheet, a toast) keep their own denser tint in the window look, and a starred star keeps its deep sage.
   test(`window look (${glass}): the screens behind a tap are readable too (Frosted, sign-in, a clip, This week, Ask, a sheet, a toast)`, async ({ page, browser }) => {

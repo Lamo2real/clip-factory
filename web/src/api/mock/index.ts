@@ -66,6 +66,9 @@ function saveSkipped(list: Settings["setupSkipped"]) {
     sessionStorage.setItem(SKIPPED_KEY, JSON.stringify(list ?? []));
   } catch {
     /* private mode: kept for this page only */
+  }
+}
+
 // The look settings (§22) survive a reload of the mock, like the real server, so persistence can be tested.
 const LOOK_KEY = "cf-mock-look";
 const LOOK_FIELDS = ["backgroundMode", "backgroundColours", "glassStrength"] as const;
@@ -490,6 +493,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         if (!Array.isArray(next.setupSkipped) || !next.setupSkipped.every((p) => PLATFORMS.includes(p))) throw bad("Unknown platform.");
         next.setupSkipped = PLATFORMS.filter((p) => next.setupSkipped!.includes(p));
         saveSkipped(next.setupSkipped);
+      }
       if (next.backgroundMode !== undefined && !isBackgroundMode(next.backgroundMode)) throw bad("Pick See-through, Picture or Colours.");
       if (next.glassStrength !== undefined && !isGlassStrength(next.glassStrength)) throw bad("Pick Clear or Frosted.");
       if (next.backgroundColours !== undefined) {
