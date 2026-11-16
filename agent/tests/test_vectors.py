@@ -83,11 +83,12 @@ def test_clip_metadata_has_exactly_the_contract_keys() -> None:
         "platforms": ["youtube", "tiktok"],
         "status": "review",
         "scoreBucket": "high",
+        "best": False,
         "hook": "he thought he got away with it",
         "title": "He Almost Got Away",
         "summary": "He loses it",
     }
-    filterable = {k: meta[k] for k in ("userId", "momentType", "platforms", "status", "scoreBucket")}
+    filterable = {k: meta[k] for k in ("userId", "momentType", "platforms", "status", "scoreBucket", "best")}
     assert len(json.dumps(filterable).encode()) < 2048
     assert "performance" not in meta  # added by the clip flow after the 48-hour check
 
@@ -173,33 +174,78 @@ async def test_put_clips_writes_one_put_vectors_with_the_contract_metadata() -> 
     assert all(len(x["data"]["float32"]) == 1024 for x in put["vectors"])
     assert put["vectors"][1]["metadata"]["scoreBucket"] == "low"
     assert all(x["metadata"]["status"] == "review" for x in put["vectors"])
+    assert all(x["metadata"]["best"] is False for x in put["vectors"])  # finalize never stars a clip (§16.7)
     assert [json.loads(c["body"])["inputText"] for c in titan.calls] == [v.embed_text(clip_row("C1"))] * 2
 
 
 # --- reading ------------------------------------------------------------------------------------------------------
 
 
-async def test_query_prefers_performed_clips_of_the_owner() -> None:
+BEST_FILTER = {"$and": [{"userId": {"$eq": "U"}}, {"best": {"$eq": True}}]}
+PERFORMED_FILTER = {"$and": [{"userId": {"$eq": "U"}}, {"status": {"$eq": "performed"}}]}
+
+
+async def test_query_asks_for_the_owners_best_picks_first_then_performed_clips() -> None:
     perf = json.dumps({"views": 12400, "likes": 900, "comments": 3, "shares": 1, "posts": 1, "checkedAt": "x"})
-    s3v = FakeS3Vectors([[row("A", 0.1, performance=perf), row("B", 0.3), row("C", 0.2)]])
+    s3v = FakeS3Vectors([[], [row("A", 0.1, performance=perf), row("B", 0.3), row("C", 0.2)]])
     hits = await v.what_worked_before(make(FakeTitan(), s3v), "U", "brief")
-    assert len(s3v.queries) == 1
-    q = s3v.queries[0]
-    assert q["topK"] == 8 and q["returnMetadata"] is True and q["returnDistance"] is True
-    assert q["filter"] == {"$and": [{"userId": {"$eq": "U"}}, {"status": {"$eq": "performed"}}]}
+    assert [q["filter"] for q in s3v.queries] == [BEST_FILTER, PERFORMED_FILTER]
+    assert [q["topK"] for q in s3v.queries] == [4, 8]
+    assert all(q["returnMetadata"] is True and q["returnDistance"] is True for q in s3v.queries)
+    assert s3v.queries[0]["queryVector"] == s3v.queries[1]["queryVector"]  # embedded once
     assert [h.clip_id for h in hits] == ["A", "C", "B"]
     assert hits[0].similarity == 0.9 and hits[0].performance and hits[0].performance["views"] == 12400
+    assert not any(h.best for h in hits)
 
 
-async def test_fewer_than_three_performed_hits_falls_back_to_all_the_owners_clips() -> None:
-    s3v = FakeS3Vectors([[row("A", 0.1)], [row("A", 0.1), row("R", 0.4, status="review")]])
+async def test_best_hits_come_first_even_when_less_similar_and_are_never_repeated() -> None:
+    best = [row("P", 0.5, best=True), row("Q", 0.3, best=True)]
+    performed = [row("A", 0.05), row("P", 0.5, best=True), row("B", 0.1)]
+    s3v = FakeS3Vectors([best, performed])
     hits = await v.what_worked_before(make(FakeTitan(), s3v), "U", "brief")
-    assert [q["filter"] for q in s3v.queries] == [
-        {"$and": [{"userId": {"$eq": "U"}}, {"status": {"$eq": "performed"}}]},
-        {"userId": {"$eq": "U"}},
-    ]
-    assert s3v.queries[0]["queryVector"] == s3v.queries[1]["queryVector"]  # embedded once
-    assert [h.clip_id for h in hits] == ["A", "R"]
+    assert len(s3v.queries) == 2  # 4 hits: no fallback
+    assert [h.clip_id for h in hits] == ["Q", "P", "A", "B"]
+    assert [h.best for h in hits] == [True, True, False, False]
+
+
+async def test_merged_hits_are_capped_at_eight() -> None:
+    best = [row(f"P{i}", 0.1 * i, best=True) for i in range(4)]
+    performed = [row(f"A{i}", 0.05 * i) for i in range(8)]
+    hits = await v.what_worked_before(make(FakeTitan(), FakeS3Vectors([best, performed])), "U", "brief")
+    assert [h.clip_id for h in hits] == ["P0", "P1", "P2", "P3", "A0", "A1", "A2", "A3"]
+
+
+async def test_fewer_than_three_hits_in_total_fills_up_with_any_of_the_owners_clips() -> None:
+    s3v = FakeS3Vectors(
+        [[row("P", 0.4, best=True)], [row("A", 0.1)], [row("A", 0.1), row("R", 0.2, status="review"), row("P", 0.4)]]
+    )
+    hits = await v.what_worked_before(make(FakeTitan(), s3v), "U", "brief")
+    assert [q["filter"] for q in s3v.queries] == [BEST_FILTER, PERFORMED_FILTER, {"userId": {"$eq": "U"}}]
+    assert s3v.queries[2]["topK"] == 8
+    assert len({json.dumps(q["queryVector"]) for q in s3v.queries}) == 1  # embedded once
+    assert [h.clip_id for h in hits] == ["P", "A", "R"]  # the picks and measured clips keep their place
+    assert hits[0].best
+
+
+async def test_three_hits_from_best_and_performed_need_no_fallback() -> None:
+    s3v = FakeS3Vectors([[row("P", 0.4, best=True)], [row("A", 0.1), row("B", 0.2)]])
+    hits = await v.what_worked_before(make(FakeTitan(), s3v), "U", "brief")
+    assert len(s3v.queries) == 2 and [h.clip_id for h in hits] == ["P", "A", "B"]
+
+
+def test_hit_best_needs_a_real_true() -> None:
+    assert v.hit_from(row("A", 0.1, best=True)).best is True
+    assert v.hit_from(row("A", 0.1, best="true")).best is False
+    assert v.hit_from(row("A", 0.1, best=False)).best is False
+    assert v.hit_from(row("A", 0.1)).best is False
+
+
+def test_merge_keeps_the_first_of_each_clip_in_group_order() -> None:
+    a, b, c = (v.Hit(k, 0.5, "rage", "h", "t", "s", None, "performed") for k in "ABC")
+    a_best = v.Hit("A", 0.5, "rage", "h", "t", "s", None, "performed", best=True)
+    assert v.merge([a_best, b], [a, c]) == [a_best, b, c]
+    assert v.merge([a, b, c], cap=2) == [a, b]
+    assert v.merge() == []
 
 
 @pytest.mark.parametrize("where", ["titan", "s3vectors"])
@@ -229,7 +275,18 @@ def test_prompt_section_lists_each_hit_as_advice() -> None:
     assert "advice" in text and "never a rule" in text
     assert "similarity 0.83" in text and "12,400 views, 900 likes" in text and "funny fail" in text
     assert "not measured yet" in text
+    assert "Owner's pick: best of the week |" not in text.split("\n", 1)[1]
     assert v.prompt_section([]) == ""
+
+
+def test_prompt_section_labels_the_owners_best_picks() -> None:
+    hits = [
+        v.Hit("P", 0.6, "rage", "he lost it", "He Lost It", "s", {"views": 50, "likes": 5}, "performed", best=True),
+        v.Hit("A", 0.9, "funny_fail", "oops", "Oops", "s", None, "performed"),
+    ]
+    lines = v.prompt_section(hits).split("\n")
+    assert lines[1].startswith("- Owner's pick: best of the week | similarity 0.60")
+    assert lines[2].startswith("- similarity 0.90") and "Owner's pick" not in lines[2]
 
 
 def brief(**kw: Any) -> Brief:
@@ -359,6 +416,7 @@ async def test_finalize_puts_the_new_clips_vectors() -> None:
         "platforms": ["youtube", "instagram"],
         "status": "review",
         "scoreBucket": "mid",
+        "best": False,
         "hook": "he thought he got away with it",
         "title": "title 0",
         "summary": "He loses it",
@@ -386,7 +444,7 @@ async def test_a_keep_or_decline_during_finalize_is_not_undone() -> None:
 
 
 async def test_declined_and_missing_clips_never_reach_what_worked_before() -> None:
-    s3v = FakeS3Vectors([[row("A", 0.1), row("B", 0.2), row("C", 0.3), row("D", 0.4)]])
+    s3v = FakeS3Vectors([[], [row("A", 0.1), row("B", 0.2), row("C", 0.3), row("D", 0.4)]])
     store = Store()
     store.clips = {"A": "performed", "B": "declined", "D": "review"}  # C: vector of a clip never written
     p = Pipeline(None, store, None, None, vectors=make(FakeTitan(), s3v))  # type: ignore[arg-type]
@@ -395,7 +453,7 @@ async def test_declined_and_missing_clips_never_reach_what_worked_before() -> No
 
 
 async def test_a_failed_clip_check_skips_what_worked_before(capsys: pytest.CaptureFixture[str]) -> None:
-    s3v = FakeS3Vectors([[row("A", 0.1), row("B", 0.2), row("C", 0.3)]])
+    s3v = FakeS3Vectors([[], [row("A", 0.1), row("B", 0.2), row("C", 0.3)]])
     store = Store()
     store.fail_statuses = True
     p = Pipeline(None, store, None, None, vectors=make(FakeTitan(), s3v))  # type: ignore[arg-type]
@@ -404,7 +462,7 @@ async def test_a_failed_clip_check_skips_what_worked_before(capsys: pytest.Captu
 
 
 async def test_similar_clips_are_looked_up_from_the_brief() -> None:
-    s3v = FakeS3Vectors([[row("A", 0.1), row("B", 0.2), row("C", 0.3)]])
+    s3v = FakeS3Vectors([[], [row("A", 0.1), row("B", 0.2), row("C", 0.3)]])
     titan = FakeTitan()
     store = Store()
     store.clips = {"A": "performed", "B": "performed", "C": "performed"}
@@ -417,3 +475,14 @@ async def test_similar_clips_are_looked_up_from_the_brief() -> None:
     assert [h.clip_id for h in hits] == ["A", "B", "C"]
     assert json.loads(titan.calls[0]["body"])["inputText"] == "Big stream\nSam\nonly funny bits\nhello chat"
     assert await Pipeline(None, None, None, None)._similar(st) == []  # type: ignore[arg-type]
+
+
+async def test_the_owners_best_picks_lead_the_brief_and_are_labelled() -> None:
+    s3v = FakeS3Vectors([[row("P", 0.4, best=True)], [row("A", 0.1), row("B", 0.2), row("P", 0.4, best=True)]])
+    store = Store()
+    store.clips = {"P": "performed", "A": "performed", "B": "performed"}
+    p = Pipeline(None, store, None, None, vectors=make(FakeTitan(), s3v))  # type: ignore[arg-type]
+    hits = await p._similar(JobState(job_id="J", user_id="U", workdir=Path("/tmp/x")))
+    assert [(h.clip_id, h.best) for h in hits] == [("P", True), ("A", False), ("B", False)]
+    prompt = system_prompt(brief(similar=hits))
+    assert "- Owner's pick: best of the week | similarity 0.60" in prompt
