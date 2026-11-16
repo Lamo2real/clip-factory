@@ -83,7 +83,7 @@ def brief(**kw: Any) -> Brief:
 def test_system_prompt_carries_both_groups_in_order() -> None:
     s = system_prompt(brief(learnings=["Rage clips win"], week_learnings=["Picks open on a scream"]))
     assert s.index("Picks open on a scream") < s.index("Rage clips win")
-    assert s.index("</owner_skills>") < s.index("The owner's best-of-week picks taught")
+    assert s.index("Loudness spikes") < s.index("The owner's best-of-week picks taught")
     s = system_prompt(brief())
     assert "best-of-week picks taught" not in s and "Learnings from" not in s
-    assert s.rstrip().endswith("</owner_skills>")
+    assert s.rstrip().endswith("strong hints, not proof.")

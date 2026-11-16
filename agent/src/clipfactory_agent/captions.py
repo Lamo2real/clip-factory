@@ -9,6 +9,7 @@ from typing import Any
 
 from .bedrock import Bedrock, ModelError
 from .moments import Moment
+from .skills import SkillsBlock
 from .util import log
 
 FIELDS = ["youtubeTitle", "youtubeDescription", "instagram", "facebook", "tiktok", "x"]
@@ -155,15 +156,17 @@ tags itself, but you may place them naturally. Write in the language of the clip
 
 
 async def write_captions(
-    bedrock: Bedrock, clips: list[ClipText], *, notes: str, skills_text: str, system: str
+    bedrock: Bedrock, clips: list[ClipText], *, notes: str, skills: SkillsBlock, skills_text: str, system: str
 ) -> dict[str, dict[str, str]]:
-    """Captions per clip id. Clips Claude leaves out (or all, if it fails) get the template."""
+    """Captions per clip id. Clips Claude leaves out (or all, if it fails) get the template. ``skills`` goes first in
+    the system prompt; ``skills_text`` is every skill's full (uncut) text, read for required tags."""
     required = required_tags(notes, skills_text)
     by_id: dict[str, dict[str, Any]] = {}
     if clips:
         try:
             r = await bedrock.structured(
                 system=system,
+                skills=skills,
                 content=[{"text": prompt(clips, notes)}],
                 tool="submit_captions",
                 description="Submit the captions for every clip.",
