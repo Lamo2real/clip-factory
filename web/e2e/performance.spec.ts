@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { CLIPS, findOverflow, openClip, settle } from "./helpers.ts";
+import { animationsDone, CLIPS, findOverflow, openClip, settle } from "./helpers.ts";
 
 // The clip performance page (docs/CONTRACTS.md §16.8), in mock mode.
 type MockWindow = Window & {
@@ -277,6 +277,7 @@ test("the big numbers line up across the columns, so the best is easy to spot", 
   await page.setViewportSize({ width: 1024, height: 768 });
   await expect(page.locator(".perf-lines")).toHaveAttribute("data-layout", "rows");
   await page.waitForTimeout(300);
+  await animationsDone(page);
   const t = await tops(page, '[data-metric="top"]');
   expect(new Set(t.slice(0, 3)).size, "row 1").toBe(1);
   expect(new Set(t.slice(3)).size, "row 2").toBe(1);

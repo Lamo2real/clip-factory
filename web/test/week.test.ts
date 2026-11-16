@@ -32,6 +32,9 @@ describe("isoWeek", () => {
     expect(weeksInYear(2020)).toBe(53);
     expect(isWeek("2026-W53")).toBe(true);
     expect(isWeek("2025-W53")).toBe(false);
+    // Years below 100 would become 19xx in Date(): refused.
+    expect(isWeek("0050-W10")).toBe(false);
+    expect(isWeek("1999-W10")).toBe(false);
     expect(isWeek("2026-W00")).toBe(false);
     expect(isWeek("2026-W54")).toBe(false);
     expect(isWeek("2026-47")).toBe(false);

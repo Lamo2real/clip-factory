@@ -50,7 +50,8 @@
 
 .btn--primary {
   color: #fff;
-  background: linear-gradient(180deg, rgb(238 84 60 / 0.96), rgb(200 50 31 / 0.96));
+  /* Tomato, a shade deeper at the top than #E8412C so the white label stays above 4.5:1 everywhere on it. */
+  background: linear-gradient(180deg, rgb(208 54 34 / 0.97), rgb(186 42 26 / 0.97));
   -webkit-backdrop-filter: blur(10px) saturate(1.6);
   backdrop-filter: blur(10px) saturate(1.6);
   text-shadow: 0 1px 0 rgb(120 20 8 / 0.35);
@@ -335,6 +336,7 @@
   background: rgb(255 255 255 / 0.72);
 }
 .input:focus-visible {
+  outline: none;
   border-color: var(--tomato-deep);
   background: rgb(255 255 255 / 0.84);
   box-shadow: 0 0 0 3px rgb(var(--tomato-rgb) / 0.22);
@@ -436,6 +438,7 @@
   color: #5f6a5a;
 }
 .linkbox__input:focus-visible {
+  outline: none;
   box-shadow: none;
 }
 
@@ -1267,7 +1270,6 @@
   border-radius: var(--r-md);
 }
 .similar__list:focus-visible {
-  outline: none;
   box-shadow: var(--focus);
 }
 .similar__item {

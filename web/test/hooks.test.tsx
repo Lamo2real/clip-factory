@@ -5,8 +5,8 @@ import { usePoll } from "../src/lib/hooks.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-function Poller({ tick }: { tick: () => Promise<unknown> }) {
-  usePoll(tick, true, 1000);
+function Poller({ tick, interval = 1000 }: { tick: () => Promise<unknown>; interval?: number }) {
+  usePoll(tick, true, interval);
   return null;
 }
 
@@ -69,5 +69,19 @@ describe("usePoll", () => {
     await act(async () => release());
     await act(async () => vi.advanceTimersByTimeAsync(5000));
     expect(tick).toHaveBeenCalledTimes(6);
+  });
+
+  it("never checks faster than its interval after a failure (a 60 s poll backs off to 120 s, not 30 s)", async () => {
+    const tick = vi.fn(() => Promise.reject(new Error("offline")));
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    await act(async () => root.render(<Poller tick={tick} interval={60_000} />));
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(tick).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(tick).toHaveBeenCalledTimes(1);
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(tick).toHaveBeenCalledTimes(2);
+    await act(async () => root.unmount());
   });
 });

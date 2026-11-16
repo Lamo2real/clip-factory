@@ -270,19 +270,20 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
                 </span>
               </span>
               {p.metrics ? (
-                <span
-                  className="post__metrics"
-                  aria-label={`${p.metrics.views ?? "no"} views, ${p.metrics.likes ?? "no"} likes, ${p.metrics.comments ?? "no"} comments`}
-                >
-                  <span>
+                <span className="post__metrics">
+                  {/* A plain span cannot carry an aria-label: the numbers are read from this text instead. */}
+                  <span className="sr-only">
+                    {`${p.metrics.views ?? "no"} views, ${p.metrics.likes ?? "no"} likes, ${p.metrics.comments ?? "no"} comments`}
+                  </span>
+                  <span aria-hidden="true">
                     <Icon name="eye" size={15} />
                     {compact(p.metrics.views)}
                   </span>
-                  <span>
+                  <span aria-hidden="true">
                     <Icon name="heart" size={15} />
                     {compact(p.metrics.likes)}
                   </span>
-                  <span>
+                  <span aria-hidden="true">
                     <Icon name="comment" size={15} />
                     {compact(p.metrics.comments)}
                   </span>

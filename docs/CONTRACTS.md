@@ -972,6 +972,7 @@ contains its **anchor** = earliest `postedAt` of its posts, else `decidedAt` (ke
 interface WeekClip { clip: Clip /* coverUrl presigned; no videoUrl */; anchorAt: string; posted: boolean;
                      totals: { views: number; likes: number; comments: number; shares: number };
                      views: Partial<Record<Platform, number | null>>; best: boolean }
+// views: one entry per platform with a `posted` Post that is not private (null = numbers on the way)
 interface WeekSummary { week: string; from: string; to: string; clipIds: string[] /* the picks */; savedAt?: string;
                         learnState: "none" | "learning" | "done" | "skipped" | "failed"; learningId?: string }
 interface WeekView extends WeekSummary { clips: WeekClip[] /* sorted: views desc, then anchorAt desc */;
@@ -1232,7 +1233,8 @@ does" → `/clips/{clipId}`; Back returns to where the owner came from (else `/l
 **Page layout (top to bottom)**
 1. Header row: Back, the hook as the title (serif italic, wraps, never truncated off-screen).
 2. Preview: `<video controls playsinline preload="metadata" poster={coverUrl} src={videoUrl}>`, `aspect-ratio: 9/16`,
-   rounded glass frame, centred; width 280 px (≥ 1024), 240 px (600–1023), `min(100%, 56vh * 9/16)` (< 600). No
+   rounded glass frame, centred; width `min(180px, 56cqi)` in the trunk layout and `min(400px, 44vh) · 9/16`
+   (≤ 225 px) in the rows and fan layouts, so the total and the first stacks stay on the first screen. No
    autoplay. No `videoUrl` → the cover image.
 3. Stat block beside/under the preview: big total views (display serif) with "views across platforms" and a small
    "(each app counts views its own way)"; the **"Best this week" star** toggle (≥ 48 px, `aria-pressed`, sage glass,
@@ -1249,6 +1251,10 @@ does" → `/clips/{clipId}`; Back returns to where the owner came from (else `/l
 * Draw-in: `pathLength="1"`, `stroke-dasharray: 1`, `stroke-dashoffset` 1 → 0 over 900 ms
   `cubic-bezier(0.22, 1, 0.36, 1)`, staggered 80 ms in STATS_ORDER, once per page load; the stacks fade/rise 12 px as
   their line arrives. `prefers-reduced-motion: reduce` or `settings.reduceMotion` → lines drawn at once, no fade.
+* The three layouts follow the width the page content really has (the stage, a CSS container `perfstage`; the
+  desktop sidebar takes part of the window), not the window width: **fan** from a 1060 px stage, **rows** from
+  620 px, **trunk** below. The JS (`layoutFor`) compares the same unrounded width. The ranges below name them by
+  their usual viewport widths.
 * **≥ 1024 px**: five equal columns (`grid-template-columns: repeat(5, minmax(0, 1fr))`, gap 16 px), the lines fan
   out from the preview (≥ 96 px vertical space between preview and stacks).
 * **600–1023 px**: a 6-track grid (`repeat(6, minmax(0, 1fr))`, column gap ≥ 24 px): YouTube/TikTok/Instagram span

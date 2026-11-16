@@ -11,6 +11,9 @@ export function isWeek(week: string | null | undefined): week is string {
   if (!week) return false;
   const m = WEEK_RE.exec(week);
   if (!m) return false;
+  // Years below 100 would turn into 19xx in Date(); no clip is that old or that far ahead.
+  const year = Number(m[1]);
+  if (year < 2000 || year > 2999) return false;
   // W53 only exists in long years.
   return Number(m[2]) <= weeksInYear(Number(m[1]));
 }
