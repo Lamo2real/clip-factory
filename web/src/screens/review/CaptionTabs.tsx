@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import type { Captions } from "../../api/types.ts";
+import { Glide } from "../../components/Glide.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useAction } from "../../lib/motion.ts";
 
@@ -103,6 +104,7 @@ export function CaptionTabs({
   return (
     <div className="captions">
       <div className="tabs" role="tablist" aria-label="Caption per platform" onKeyDown={onKey}>
+        <Glide active=".tab.is-on" />
         {TABS.map((t) => (
           <button
             key={t.key}

@@ -2,6 +2,7 @@
 // branches, and on each branch the apples (settings) with their leaves (help). Phones drill down page by page with
 // a big Back button; from 1024 px a folder panel on the left shows the whole tree.
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { AskMark } from "../../components/AskMark.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { A, ActGlyph, PageHeader } from "../../components/ui.tsx";
 import { useAction } from "../../lib/motion.ts";
@@ -259,7 +260,7 @@ function FindSetting({ installed, compact = false }: { installed: boolean; compa
           }}
         >
           <ActGlyph act={askAct}>
-            <Icon name="sparkle" size={20} />
+            <AskMark size={22} />
           </ActGlyph>
           <span className="find__ask-text">
             <span className="find__ask-name">Ask Clip Factory</span>

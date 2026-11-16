@@ -1,6 +1,7 @@
 // The Ask Clip Factory panel (docs/CONTRACTS.md §19.8): a non-modal glass dialog above the launcher on wide
 // screens, a full-screen sheet on phones. Short answers, numbered steps and up to two buttons that take you there.
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type FormEvent, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
+import { AskMark } from "../../components/AskMark.tsx";
 import { api } from "../../api/index.ts";
 import { Icon, type IconName } from "../../components/Icon.tsx";
 import { PaperPlaneButton, useLaunch } from "../../components/PaperPlane.tsx";
@@ -462,7 +463,7 @@ export function HelpPanel({
     >
       <header className="help-panel__head">
         <span className="help-panel__spark" aria-hidden="true">
-          <Icon name="sparkle" size={20} />
+          <AskMark size={22} />
         </span>
         <h2 className="help-panel__title" id={titleId}>
           Ask Clip Factory

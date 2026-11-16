@@ -1,9 +1,10 @@
 {
-  "version": "2f2b1b67ebb8",
+  "version": "88964f230443",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
     "src/components/GetApp.tsx",
+    "src/components/Glide.tsx",
     "src/components/JobBits.tsx",
     "src/components/Nav.tsx",
     "src/components/PerfLines.tsx",

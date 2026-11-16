@@ -321,7 +321,6 @@
   transform: scale(0.95);
 }
 .star-btn[aria-busy="true"] {
-  cursor: progress;
 }
 
 /* ---------- Stacks ---------- */

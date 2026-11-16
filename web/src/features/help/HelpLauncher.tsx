@@ -2,7 +2,7 @@
 // bottom right on wide screens (above the update bar), a 56 px icon-only circle on phones that never covers the
 // tab bar or the update bar and steps aside while the page scrolls down. Sage glass, never tomato.
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Icon } from "../../components/Icon.tsx";
+import { AskMark } from "../../components/AskMark.tsx";
 import { useMedia } from "../../lib/hooks.ts";
 import { useRoute } from "../../lib/router.ts";
 import { chatReducer, initialChat } from "./chatState.ts";
@@ -118,7 +118,7 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
             setOpen(true);
           }}
         >
-          <Icon name="sparkle" size={phone ? 24 : 20} />
+          <AskMark size={phone ? 24 : 22} />
           <span className="help-launcher__word">Ask</span>
         </button>
       ) : null}

@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { useSession } from "../app/session.tsx";
+import { Glide } from "./Glide.tsx";
 import { setPrefs, usePrefs } from "../lib/prefs.ts";
 import { section, useRoute } from "../lib/router.ts";
 import { plural } from "../lib/format.ts";
@@ -86,6 +87,7 @@ export function Sidebar() {
         </A>
       </div>
       <ul className="sidebar__list" id="sidebar-list">
+        <Glide active=".sidebar__item.is-active" className="glide--menu" as="li" />
         {ITEMS.map((item) => (
           <li key={item.key}>
             <A
@@ -145,6 +147,7 @@ export function TabBar() {
   return (
     <nav className="tabbar glass glass--refract" aria-label="Main">
       <ul className="tabbar__list">
+        <Glide active=".tabbar__item.is-active" className="glide--tabbar" as="li" />
         {ITEMS.map((item) => (
           <li key={item.key} className="tabbar__cell">
             <A

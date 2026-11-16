@@ -699,6 +699,16 @@ belongs to a later moment (a file arriving, a keep starting). A raw `<button>` w
 hand-roll a new animation per button; add a kind to `motion.css` and `lib/motion.ts` instead. Try every kind at
 `/__motion` in the mock app (`npm run dev:mock`).
 
+### Sliding highlights and the cursor
+
+* **Glide.** In every pick-one bar (segmented bars, caption tabs, Library's view tabs, the sidebar, the phone tab
+  bar) the chosen highlight slides to the new choice on a spring and stretches a little on the way (CONTRACTS §20.13).
+  It never slides on resize, and jumps under Reduce motion.
+* **The cursor is always the arrow.** Never `cursor: pointer`, never an I-beam, never a wait or not-allowed cursor.
+  Pressable things show themselves on hover (CONTRACTS §20.14). Every new control needs a visible hover state.
+* **Ask mark.** Ask Clip Factory uses its own mark (chat bubble, play button, tomato dot), never a generic AI sparkle
+  (CONTRACTS §20.15).
+
 ## Overflow rules (never let text leave its box)
 
 These are global rules, not per-component fixes:
