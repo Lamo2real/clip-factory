@@ -478,11 +478,15 @@
 }
 .upload-progress {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
 }
+/* Never squeezed to nothing by Cancel upload when the form is narrow (a small window, or the setup list's column
+   open beside the page, §17.13): the button wraps under the bar instead. */
 .upload-progress .progress {
-  flex: 1;
+  flex: 1 1 120px;
+  min-width: 120px;
 }
 
 /* ---------- Switch, segmented control, stepper ---------- */

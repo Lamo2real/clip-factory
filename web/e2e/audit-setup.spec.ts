@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { Platform } from "../src/api/types.ts";
 import { GUIDES, SETUP_ORDER } from "../src/setup/index.ts";
-import { animationsDone, findOverflow, settle, WIDTHS } from "./helpers.ts";
+import { animationsDone, findOverflow, mixedSetup, settle, WIDTHS } from "./helpers.ts";
 
 // The Set up posting lists (docs/CONTRACTS.md §17.1), audited at every phone width with touch (320–430) and every
 // tablet/desktop width (768–1920): every step open, Copy buttons, paste boxes, Connect, resume after a reload, the
@@ -259,14 +259,47 @@ const lineStarts = (page: Page, selector: string) =>
   });
 
 test.describe("setup layout details", () => {
-  test("Home's setup card never starts a line with a lone ' · ' dot (320-414 px)", async ({ page }) => {
+  // Home's setup card (where a lone " · " once started a line on narrow phones) is replaced by the floating setup
+  // list (§17.13). The same rule holds for the list's words: no line begins with a stray mark.
+  test("the setup list that replaced Home's card never starts a line with a lone mark (320-414 px)", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto("/");
+    await settle(page);
+    await mixedSetup(page);
     for (const width of [320, 360, 375, 390, 400, 414]) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto("/");
       await settle(page);
-      for (const sel of [".setup-home__title", ".setup-home__next"]) expect(await lineStarts(page, sel), `${sel} at ${width}`).not.toContain("·");
-      await expect(page.locator(".setup-home")).toContainText("Set up posting · 0 of 5 ready");
-      await expect(page.locator(".setup-home")).toContainText("Next: YouTube · Not started");
+      await expect(page.locator(".setup-home")).toHaveCount(0);
+      const pill = page.locator(".setup-todo__pill");
+      await expect(pill).toContainText("Set up posting");
+      await expect(pill).toContainText("2/5");
+      // The pill is one line: its words and its count never split.
+      expect(await lineStarts(page, ".setup-todo__pill"), `pill at ${width}`).toEqual(["S"]);
+      await pill.click();
+      const panel = page.locator(".setup-todo-panel");
+      await expect(panel.locator(".todo-row__state")).toHaveText(["Ready", "Skipped", /^In progress: \d+ of \d+$/, "Needs you: connect again", "Not started"]);
+      for (const sel of [".setup-todo-panel .setup-todo__title", ".setup-todo-panel .setup-todo__lede", ".setup-todo-panel .setup-todo__foot"])
+        for (const mark of ["·", ":", "/", "›", ".", ","]) expect(await lineStarts(page, sel), `${sel} at ${width}`).not.toContain(mark);
+      for (const line of await panel.locator(".todo-row__state").all()) {
+        const starts = await line.evaluate((el) => {
+          const out: string[] = [];
+          let lastTop = -Infinity;
+          const text = el.firstChild as Text;
+          for (let i = 0; i < text.length; i++) {
+            if (!text.data[i]!.trim()) continue;
+            const range = document.createRange();
+            range.setStart(text, i);
+            range.setEnd(text, i + 1);
+            const top = Math.round(range.getBoundingClientRect().top);
+            if (top > lastTop + 4) out.push(text.data[i]!);
+            lastTop = Math.max(lastTop, top);
+          }
+          return out;
+        });
+        for (const mark of ["·", ":", "/"]) expect(starts, `"${await line.textContent()}" at ${width}`).not.toContain(mark);
+      }
+      await page.keyboard.press("Escape");
     }
   });
 

@@ -29,6 +29,10 @@ DEFAULTS: dict[str, Any] = {
     # absent uses the default from config/earnings.json (typicalUsdPer1000 / paysPerView), which the web reads.
     "earningsRates": {},
     "earningsPaid": {},
+    # §17.13: platforms the owner chose to skip (and confirmed) on the floating setup to-do list. Skipping only
+    # takes the row off that list; posting is still decided by `platforms` and the connected accounts alone, so a
+    # skipped platform that is not connected is never tried (its post waits as `pending_integration`, §17.6).
+    "setupSkipped": [],
 }
 # Mirrors config/earnings.json `maxUsdPer1000` (a test keeps them equal).
 MAX_USD_PER_1000 = 100
@@ -72,6 +76,13 @@ def _check_field(field: str, value: Any) -> Any:
             return _earnings_map(value, _usd_per_1000)
         case "earningsPaid":
             return _earnings_map(value, _paid)
+        case "setupSkipped":
+            if not isinstance(value, list) or not all(isinstance(p, str) for p in value):
+                raise bad_request("setupSkipped must be a list of platform names.")
+            unknown = [p for p in value if p not in PLATFORMS]
+            if unknown:
+                raise bad_request(f"Unknown platform: {unknown[0]}.")
+            return [p for p in PLATFORMS if p in value]
         case "platforms":
             if not isinstance(value, list) or not all(isinstance(p, str) for p in value):
                 raise bad_request("platforms must be a list of platform names.")

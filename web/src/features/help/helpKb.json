@@ -981,6 +981,47 @@
       "hash": "setup-posting"
     },
     {
+      "id": "setup-list-gone",
+      "extends": "§17",
+      "route": "/settings/posting/setup",
+      "where": "Settings › Posting › Set up posting",
+      "title": "Where did my setup list go?",
+      "keywords": [
+        "setup list",
+        "set up list",
+        "to-do",
+        "todo",
+        "checklist",
+        "list gone",
+        "list disappeared",
+        "where did it go",
+        "skip",
+        "skipped",
+        "un-skip",
+        "unskip",
+        "set up posting pill",
+        "top right"
+      ],
+      "answer": "The **Set up posting** list sits at the top right until each place is set up or skipped. When all five are done or skipped, it says **All set!** and goes away. It comes back by itself if a place you set up needs you again. You can always find every place, skip one, or bring back one you skipped in **Settings › Posting › Set up posting**.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Find the place you skipped. It says **Skipped**.",
+        "Tap **Un-skip** to put it back on the list, or tap its card to set it up now."
+      ],
+      "actions": [
+        {
+          "id": "setup-list-gone:setup",
+          "label": "Open Set up posting",
+          "to": "/settings/posting/setup#setup-todo",
+          "highlight": [
+            "setup-todo"
+          ]
+        }
+      ],
+      "hash": "setup-todo"
+    },
+    {
       "id": "where-clips-go",
       "route": "/settings/posting/where",
       "hash": "post-to",

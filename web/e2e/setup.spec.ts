@@ -3,10 +3,10 @@ import type { Platform } from "../src/api/types.ts";
 import { MOCK_VALUES } from "../src/api/mock/setup.ts";
 import { maskKey } from "../src/lib/keyFormats.ts";
 import { allSteps, GUIDES, resolveValue, resultCopy, SETUP_ORDER, type GuideStep } from "../src/setup/index.ts";
-import { animationsDone, findOverflow, settle } from "./helpers.ts";
+import { animationsDone, findOverflow, openTodo, settle } from "./helpers.ts";
 
 // The posting setup, clicked through for every platform on a phone and on a desktop (docs/CONTRACTS.md §17.12):
-// Home card → Set up posting → the platform's steps → keys → Check it → Connect on the pretend consent page →
+// the floating setup list (§17.13) → Set up posting → the platform's steps → keys → Check it → Connect on the pretend consent page →
 // connected with confetti; Cancel, a dead token, Disconnect with Undo, and a reload that resumes.
 
 type MockWindow = Window & {
@@ -153,11 +153,12 @@ for (const size of SIZES) {
         const failures: string[] = [];
         const steps = allSteps(guide);
 
-        // Home shows the setup card until every platform is ready.
+        // Home shows the floating setup list (§17.13) until every platform is ready or skipped.
         await page.goto("/");
         await settle(page);
-        await expect(page.locator(".setup-home")).toContainText("Set up posting · 0 of 5 ready");
-        await expect(page.locator(".setup-home").getByRole("link", { name: "Continue" })).toHaveAttribute("href", "/settings/posting/setup/youtube");
+        await expect(page.locator(".setup-todo")).toContainText("0/5");
+        const todo = await openTodo(page);
+        await expect(todo.getByRole("link", { name: `Set up ${guide.name}` })).toHaveAttribute("href", `/settings/posting/setup/${platform}`);
 
         // Set up posting → the platform's page.
         await page.goto("/settings/posting/setup");
@@ -303,24 +304,26 @@ for (const size of SIZES) {
       });
     }
 
-    test("all five ready: Home's card leaves and the list says 5 of 5", async ({ page }) => {
+    test("all five ready: the floating setup list leaves and the list says 5 of 5", async ({ page }) => {
       await page.goto("/");
       await settle(page);
-      await expect(page.locator(".setup-home")).toBeVisible();
+      await expect(page.locator(".setup-todo")).toBeVisible();
       await page.evaluate(() => {
         const s = (window as MockWindow).__cfMock!.setup;
         for (const p of ["youtube", "tiktok", "instagram", "facebook"] as const) s.finish(p);
       });
       await page.reload();
       await settle(page);
-      await expect(page.locator(".setup-home")).toContainText("4 of 5 ready");
-      await expect(page.locator(".setup-home")).toContainText("Next: X");
-      await page.locator(".setup-home").getByRole("link", { name: "Continue" }).click();
+      await expect(page.locator(".setup-todo")).toContainText("4/5");
+      const todo = await openTodo(page);
+      await expect(todo.locator(".todo-row[data-state='ready']")).toHaveCount(4);
+      await todo.getByRole("link", { name: "Set up X" }).click();
       await expect(page).toHaveURL(/\/settings\/posting\/setup\/x$/);
       await page.evaluate(() => (window as MockWindow).__cfMock!.setup.finish("x"));
       await page.goto("/");
       await settle(page);
-      await expect(page.locator(".setup-home")).toHaveCount(0);
+      // It celebrates ("All set!"), then slides away.
+      await expect(page.locator(".setup-todo")).toHaveCount(0, { timeout: 10_000 });
       await page.goto("/settings/posting/setup");
       await settle(page);
       await expect(page.getByText("5 of 5 ready")).toBeVisible();

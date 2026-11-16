@@ -164,6 +164,11 @@ export interface Settings {
   earningsRates?: Partial<Record<Platform, number>>;
   /** "Do I get paid here?" per platform; absent uses config/earnings.json `paysPerView`. Absent on old servers: {}. */
   earningsPaid?: Partial<Record<Platform, boolean>>;
+  /**
+   * Platforms the owner skipped (and confirmed) on the floating setup to-do list (docs/CONTRACTS.md §17.13). Only
+   * hides their row; posting still follows `platforms` and the connected accounts. Absent on old servers: none.
+   */
+  setupSkipped?: Platform[];
 }
 
 export type YoutubePrivacy = "public" | "unlisted" | "private";

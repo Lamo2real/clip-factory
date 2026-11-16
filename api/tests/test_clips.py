@@ -148,6 +148,29 @@ def test_confirm_queues_post_for_connected_platform(call: Call, store: db.Store)
     assert by_platform["x"] == "pending_integration"
 
 
+def test_confirm_never_tries_a_skipped_platform_that_is_not_connected(call: Call, store: db.Store) -> None:
+    """§17.13: a skip only takes a platform off the setup to-do list; posting does not change. A platform that is not
+    connected is never tried, skipped or not, and a connected one (skipped while a gate needed the owner) is posted to
+    as before."""
+    store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": "ACCOUNT#youtube#1",
+            "type": "account",
+            "userId": USER,
+            "platform": "youtube",
+            "status": "connected",
+        }
+    )
+    assert call("PUT", "/v1/settings", {"setupSkipped": ["youtube", "tiktok", "x"]})[0] == 200
+    clip = seed_clip(store)
+    _, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm")
+    by_platform = {p["platform"]: p["status"] for p in body["posts"]}
+    assert by_platform["youtube"] == "queued"
+    assert by_platform["tiktok"] == "pending_integration"
+    assert by_platform["x"] == "pending_integration"
+
+
 def test_confirm_again_while_started_is_a_no_op(call: Call, store: db.Store, lambda_client: FakeLambda) -> None:
     clip = seed_clip(store)
     first = call("POST", f"/v1/clips/{clip['clipId']}/confirm")[1]

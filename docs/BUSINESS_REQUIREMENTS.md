@@ -311,8 +311,11 @@ service we use (Bedrock, AgentCore, whatever), when it is generating stuff or re
 - AC4: The app remembers ticked steps and reopens at the first unfinished one, on any device.
 - AC5: The limits are said plainly before the owner starts: TikTok posts may stay "Only me", Facebook Reels may be
   visible only to the owner until the app is Live, X costs about $0.015 per post (stopped at $10 a month).
-- AC6: A Home card "Set up posting · n of 5 ready" with **Continue** shows until every platform the owner posts to is
-  ready.
+- AC6: A floating "Set up posting" to-do list (top right on every signed-in page: an open list on wide screens, a
+  pill that opens it on smaller ones) shows until every platform is ready or skipped and confirmed; then it celebrates
+  and goes away, and comes back if a platform needs the owner again. Any platform that is not ready can be skipped.
+  Settings › Posting › Set up posting always lists every platform, each with **Skip** or, once skipped, **Un-skip**
+  ([CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owner-request-2026-11-16)).
 - AC7: [SETUP_POSTING.md](SETUP_POSTING.md) has the same steps, numbers and titles as the app, checked by a test.
 
 ### BR-24 Ask Clip Factory: answers that take you there

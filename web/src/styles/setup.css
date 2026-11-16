@@ -1,5 +1,5 @@
 /* Posting setup (docs/CONTRACTS.md §17.1): the "2 of 5 ready" ring and platform cards, a platform's big numbered
-   step cards with Copy chips and paste boxes, "When it's done", the Home card, the pretend consent page (mock
+   step cards with Copy chips and paste boxes, "When it's done", the pretend consent page (mock
    mode) and the Post to TikTok sheet. Every target is at least 48px; nothing may overflow from 320px. */
 
 /* ---------- Progress ring ---------- */
@@ -47,7 +47,6 @@
 /* Bigger tap targets everywhere in the setup (kid-proof, §12.4). */
 .setup-page .btn,
 .setup-cards .btn,
-.setup-home .btn,
 .tt-sheet .btn,
 .consent .btn {
   --btn-h: 48px;
@@ -79,6 +78,24 @@
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 12px;
 }
+/* One glass card per platform (the <li>): the link with the mark, name, state and ring, and under a hairline the
+   line that skips it or brings it back (the setup to-do list, §17.13). The link fills what is left, so cards in one
+   row are the same height whether or not they have that line. */
+.setup-card-wrap {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-width: 0;
+  border-radius: var(--r-lg);
+  transition:
+    transform var(--dur-2) var(--ease-spring),
+    box-shadow var(--dur-2) var(--ease-out);
+}
+.setup-card-wrap:has(> .setup-card:hover) {
+  transform: translateY(-2px);
+}
+.setup-card-wrap:has(> .setup-card:active) {
+  transform: scale(0.98);
+}
 .setup-card {
   display: flex;
   align-items: center;
@@ -88,22 +105,27 @@
   padding: 14px 14px 14px 16px;
   border-radius: var(--r-lg);
   text-decoration: none;
-  transition:
-    transform var(--dur-2) var(--ease-spring),
-    box-shadow var(--dur-2) var(--ease-out);
-}
-.setup-card:hover {
-  transform: translateY(-2px);
-}
-.setup-card:active {
-  transform: scale(0.98);
 }
 .setup-card:focus-visible {
   border-radius: var(--r-lg);
 }
+.setup-card__skip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  padding: 8px 10px 10px 16px;
+  border-top: 1px solid rgb(var(--ink-rgb) / 0.08);
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.setup-card__skip > span {
+  flex: 1 1 140px;
+  min-width: 0;
+}
 .setup-card__mark,
-.setup-head__mark,
-.setup-home__mark {
+.setup-head__mark {
   display: grid;
   place-items: center;
   flex: none;
@@ -869,48 +891,6 @@
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 10px;
-}
-
-/* ---------- Home card ---------- */
-.setup-home {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 14px 18px;
-  padding: clamp(16px, 2.6vw, 24px);
-  border-radius: var(--r-xl);
-}
-.setup-home__text {
-  display: grid;
-  gap: 4px;
-  flex: 1 1 220px;
-  min-width: 0;
-}
-.setup-home__title {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(1.35rem, 1.15rem + 0.8vw, 1.7rem);
-  line-height: 1.1;
-}
-.setup-home__next {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  font-weight: 700;
-}
-.setup-home__mark {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-xs);
-}
-.setup-home__state {
-  font-weight: 600;
-  color: var(--ink-2);
-}
-.setup-home__lede {
-  font-size: var(--fs-small);
-  color: var(--ink-2);
 }
 
 /* ---------- Pretend consent page (mock mode) ---------- */

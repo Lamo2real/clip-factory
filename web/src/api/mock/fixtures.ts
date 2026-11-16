@@ -506,6 +506,7 @@ export function seed(): Store {
       youtubePrivacy: "public",
       earningsRates: {},
       earningsPaid: {},
+      setupSkipped: [],
     },
     accounts: PLATFORMS.map((platform) => ({ platform, status: "not_connected" })),
   };

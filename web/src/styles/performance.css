@@ -234,7 +234,9 @@
 .perf__preview {
   grid-area: preview;
   position: relative;
-  width: min(180px, 56cqi);
+  /* Shorter by the room the setup list's strip takes at the top (--todo-top, §17.13), so the first screen still
+     holds the winner and the five chips. */
+  width: calc(min(180px, 56cqi) - var(--todo-top, 0px) * 9 / 16);
   aspect-ratio: 9 / 16;
   /* With the grid gap, room for the trunk's bend (TRUNK_BEND in PerfLines) before the total starts. */
   margin-bottom: 22px;
@@ -591,9 +593,9 @@
   .perf__updated {
     text-align: left;
   }
-  /* Capped by height, so on a 900 px tall screen the stacks start on the first screen. */
+  /* Capped by height, so on a 900 px tall screen the stacks start on the first screen (less the setup list's strip). */
   .perf__preview {
-    width: calc(min(400px, 44vh) * 9 / 16);
+    width: calc((min(400px, 44vh) - var(--todo-top, 0px)) * 9 / 16);
     margin-bottom: 0;
   }
   .perf__stacks {

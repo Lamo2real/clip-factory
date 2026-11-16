@@ -133,7 +133,9 @@ The look and the exact numbers are in [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#
 - **The launcher keeps out of the way**: it never sits on a control. It finds every link, button, field or focusable
   thing on screen by itself (plus blocks marked `data-help-dodge`), lifts to the first free spot above them, steps
   aside when that would take it above 40 % of the window, takes no taps while it slides, and every page keeps extra
-  room under its last control.
+  room under its last control. Only what shows counts: a tab scrolled out of its row or a line cut off by a scroller
+  is no obstacle. The buttons of the setup to-do list count like any other control, so with the list open at the top
+  right the launcher stays in its corner under it.
 - **Spotlight**: a very tall target (over 60 % of the window) rings only its heading, 80 px from the top.
 - **Go Home** is left out of the "I don't know" answer while you are already on Home.
 

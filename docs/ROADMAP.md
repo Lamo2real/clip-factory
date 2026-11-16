@@ -36,7 +36,7 @@ the owner's words: one setup per platform, no code, "an 8-year-old should be abl
 - **Set up posting** (Settings › Posting, replaces Accounts): a setup list of the five platforms with a "2 of 5 ready"
   ring and, per platform, big numbered step cards in four parts (Get ready, Make your key, Connect, Go public), with
   Open and Copy buttons, paste boxes that check the key, "If you see…" hints and the date the steps were checked. The
-  same steps are written out in [SETUP_POSTING.md](SETUP_POSTING.md). A Home card shows until every platform is ready.
+  same steps are written out in [SETUP_POSTING.md](SETUP_POSTING.md). A floating setup to-do list shows on every page until every platform is ready or skipped (§17.13).
 - **Bring your own keys** ([ADR-33](DECISIONS.md#adr-33-posting-setup-bring-your-own-keys-with-a-guided-list-per-platform)):
   the owner makes one developer app per platform (two Meta apps, [ADR-36](DECISIONS.md#adr-36-instagram-and-facebook-get-two-separate-meta-apps)),
   pastes the keys, presses **Check it**, then **Connect**.

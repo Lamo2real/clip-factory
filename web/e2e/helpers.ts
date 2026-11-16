@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { settingsPath, TREES } from "../src/lib/settingsTree.ts";
+import { allSteps, GUIDES } from "../src/setup/index.ts";
 
 /** Every page of the settings tree (§15.1), and each platform's setup page (§17.1). */
 export const SETUP_ROUTES: string[] = ["youtube", "tiktok", "instagram", "facebook", "x"].map((p) => `/settings/posting/setup/${p}`);
@@ -460,4 +461,40 @@ export async function scanText(page: Page, skip = ""): Promise<TextScan> {
   return page.evaluate(
     () => (window as unknown as { __cfContrast: ContrastKit }).__cfContrast.scan() as TextScan,
   );
+}
+
+// ---------- The floating setup to-do list (§17.13, e2e/setup-todo.spec.ts) ----------
+
+/**
+ * Opens the floating setup to-do list (§17.13) the way the owner does: on wide screens it is already open (or the
+ * pill unfolds it), on smaller ones the pill opens the panel. Returns the list's box.
+ */
+export async function openTodo(page: Page) {
+  const list = page.locator(".setup-todo--rail, .setup-todo-panel");
+  if (!(await list.isVisible())) await page.locator(".setup-todo__pill").click();
+  await list.waitFor();
+  return list;
+}
+
+/** The five kinds of row the setup list can show, each on one platform after `mixedSetup`. */
+export const MIXED_SETUP = { youtube: "ready", tiktok: "skipped", instagram: "in_progress", facebook: "needs_you", x: "not_started" } as const;
+
+/**
+ * Gives the setup list one row of every kind (`MIXED_SETUP`): YouTube ready, TikTok skipped, Instagram half done,
+ * Facebook asking for the owner ("connect again"), X untouched. Call on a loaded page; the pretend server keeps it
+ * in sessionStorage (§17.10), so the next page load shows it.
+ */
+export async function mixedSetup(page: Page) {
+  const step = allSteps(GUIDES.instagram).find((s) => !s.auto && !s.optional)!.id;
+  await page.evaluate((firstStep) => {
+    type Setup = { finish(p: string): void; expireToken(p: string): void };
+    const mock = (window as unknown as { __cfMock: { setup: Setup } }).__cfMock.setup;
+    mock.finish("youtube");
+    mock.finish("facebook");
+    mock.expireToken("facebook");
+    const state = JSON.parse(sessionStorage.getItem("cf-mock-setup")!) as Record<string, { stepsDone: string[] }>;
+    state.instagram!.stepsDone = [firstStep];
+    sessionStorage.setItem("cf-mock-setup", JSON.stringify(state));
+    sessionStorage.setItem("cf-mock-setup-skipped", JSON.stringify(["tiktok"]));
+  }, step);
 }

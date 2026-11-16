@@ -285,6 +285,7 @@ unless its name already says it all.
 | Platform stack | Glass card per platform on the clip page: mark, status chip, big number, only that platform's metric rows, sparkline, "Open on …". See [A platform stack](#a-platform-stack). |
 | Performance lines | Decorative SVG Béziers from the preview to each stack, drawn in once. See [The lines](#the-lines). |
 | Star toggle | "Best this week": sage glass toggle, star icon + words, ≥ 48 px, `aria-pressed`. Never tomato. |
+| Setup to-do list | Glass column at the top right from 1440 px, a 48 px glass pill "Set up posting 2/5" on a glass bar below that; a row per platform with **Set up** and **Skip**; gone with "All set!" when each one is ready or skipped. See [Set up posting](#set-up-posting). |
 | Ask launcher | Sage glass pill "Ask" with a sparkle (desktop) or a 56 px icon-only circle (phones). Never tomato. See [Ask Clip Factory](#ask-clip-factory). |
 | Ask panel | Glass, non-modal dialog; answers with numbered steps and up to two buttons. See [Ask Clip Factory](#ask-clip-factory). |
 | Spotlight ring | Sage ring with a soft tomato glow around the control a help button points at; fades over 2.4 s; a still ring with reduced motion. |
@@ -567,8 +568,8 @@ the steps in [SETUP_POSTING.md](SETUP_POSTING.md)).
 - **The list** (`/settings/posting/setup`): a big ring "2 of 5 ready" in Times (the ring at the card's right edge at
   every width, in line with the cards below), then five big glass cards in the order
   YouTube, TikTok, Instagram, Facebook, X: platform mark, name, a small progress ring, one state line ("Ready", "Step
-  7 of 23", "Needs you: connect again", "Not started", "Works now, posts stay private"). Leaf: "Do each one once. After
-  that Clip Factory posts by itself."
+  7 of 23", "Needs you: connect again", "Not started", "Works now, posts stay private", "Skipped"). Leaf: "Do each
+  one once. After that Clip Factory posts by itself."
 - **A platform page**: mark, name, ring, "About 20 minutes · Free" (X: "Costs a little"), "Steps checked on 16 Nov
   2026" (the date never splits across lines). Below 600 px the mark and the ring share the hero's top row (ring on
   the right) and the words sit under them at full width. Then the four parts as glass sections (Get ready, Make your {Platform} key, Connect, Go public). Step numbers
@@ -587,9 +588,43 @@ the steps in [SETUP_POSTING.md](SETUP_POSTING.md)).
   the success sound.
 - **Mistakes are cheap**: Disconnect is an 8-second "Disconnecting YouTube… Undo" toast, never a dialog. Keys stay
   saved, so **Connect again** is one tap.
-- **Home card** "Set up posting · 2 of 5 ready" with the next platform's name and **Continue** (sage, not the Home
-  tomato), until every platform the owner posts to is ready. Its " · " dots stay with the words before them (a
-  no-break space), so a narrow phone breaks after a dot and never starts a line with one.
+- **The floating setup list** ([CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owner-request-2026-11-16))
+  replaces the old Home card, so there is only ever one list. It is on every signed-in page except the setup pages
+  themselves, until each platform is ready or skipped.
+  - **Rows**: one per platform, in the usual order: the mark (with a sage tick once ready), the name, one line
+    ("Ready" / "In progress: 4 of 23" / "Not started" / "Skipped" / "Needs you: connect again") and two buttons,
+    **Set up** (glass) and **Skip** (quiet; **Un-skip** once skipped). A ready row has no buttons. Every row that is
+    not ready can be skipped, so skipping each one always ends the list.
+  - **Skip asks first**, in the small glass question: "Skip TikTok? You won't post there until you set it up. You can
+    do it later in Settings." **Keep it** comes first, has the focus and is the tomato button (the safe answer is the
+    strong one); **Skip TikTok** is plain glass with no motion. Escape and a tap outside mean Keep it.
+  - **From 1440 px** it stays open in a 304 px column of its own at the top right, glass like the sidebar. The page
+    gets narrower instead of being covered, and keeps at least the room it has in a 1100 px window, so no two-column
+    layout is squeezed (that is why the column does not open sooner). **–** folds it to the pill (remembered on this
+    device). On a short window it packs tighter, so all five rows and their buttons show at once: under 900 px tall
+    the head loses its second line, under 820 px the line under the rows goes too. Shorter still (about 690 px), the
+    rows scroll and the bottom fades out to show there is more.
+  - **Below 1440 px, folded, and on a clip's page** (which needs its whole width): a 48 px glass pill, ring + "Set up
+    posting" + "2/5" (the words stay at 320 px too), in a strip the page leaves free at the top (phones: above the
+    brand row; the tab bar stays free). Once the page scrolls, a glass bar sits behind the pill and the page slides
+    under it, so the pill is on screen at every scroll position and never on a control. Tapping it drops the list
+    down as a glass panel over a light scrim (phones: full width, stopping above the tab bar; wider: 380 px at the
+    right). The panel is a real dialog: the page behind it cannot be reached, Tab stays inside, and ×, Escape or a tap
+    outside close it.
+  - **All set!** When every platform is ready or skipped: a sage glass card "**All set!**" with a line that says how
+    it ended ("Every place is ready." / "Done for now. Skipped ones wait in Settings." / "All skipped. Set them up any
+    time in Settings."), confetti and the success sound (no confetti with reduced motion), then it slides off to the
+    right. It comes back by itself when a platform needs you again.
+  - **Glass only**: the column, the pill, the bar, the panel and the "All set!" card are `.glass` surfaces that take
+    their tint from `--glass-tint` like every other panel; none paints a background of its own, so a new glass look
+    reaches the list without touching it. Hover lights the glass up; the cursor never changes.
+  - **Steady**: on a device that has seen the list, its room is kept from the first paint, so the page does not jump
+    when the list arrives a moment later. The Ask pill keeps its corner under the open column (14 px below it) at
+    every scroll position; it never rests on one of the list's buttons.
+  - **Settings › Posting › Set up posting** always has every platform and the line "On your screen: 2 of 5 done" (or
+    "All done: the list is gone"). Inside each card, under a hairline: "Want to do it later?" with **Skip** (the same
+    question), or, once skipped, "You won't post to TikTok until you set it up." with **Un-skip**; the card's state
+    line then says "Skipped". Cards in one row are the same height.
 - **Overflow**: long values (redirect URIs, client ids) wrap inside their chip (`overflow-wrap: anywhere`), never
   widen the card; every page fits from 320 to 1920 px.
 

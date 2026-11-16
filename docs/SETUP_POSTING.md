@@ -24,8 +24,10 @@ remembers where you were and opens the next step for you.
 | 4 | [Facebook](#facebook) | about 25 minutes | Free | A Facebook **Page** you fully control | Reels may be seen only by you until the app is **Live**. |
 | 5 | [X](#x) | about 15 minutes | **Costs a little**: about $1.50 for 100 clips | An X account and a grown-up's card | X charges for every post. Clip Factory stops at $10 a month. |
 
-The ring at the top of Set up posting says how many are ready, for example **2 of 5 ready**. Home shows a **Set up
-posting** card with a **Continue** button until every platform you post to is ready.
+The ring at the top of Set up posting says how many are ready, for example **2 of 5 ready**. A **Set up posting**
+list also stays at the top right of every page (a small pill on phones) with **Set up** and **Skip** for each
+platform. It goes away when each one is ready or skipped, and you can always skip one or bring it back here in
+Settings.
 
 ## How every setup works
 

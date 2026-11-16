@@ -49,8 +49,29 @@ const serverDown = () => new ApiError(503, "internal", "Something went wrong on 
 /** How often each API method was called (window.__cfMockCalls), so tests can tell a poll from a live update. */
 export type MockCalls = Record<string, number>;
 
+/** The setup to-do list's confirmed skips live on the "server", so in mock mode they survive a reload (§17.13). */
+const SKIPPED_KEY = "cf-mock-setup-skipped";
+function loadSkipped(): Settings["setupSkipped"] | null {
+  try {
+    const raw = typeof sessionStorage === "undefined" ? null : sessionStorage.getItem(SKIPPED_KEY);
+    const list: unknown = raw ? JSON.parse(raw) : null;
+    return Array.isArray(list) ? PLATFORMS.filter((p) => list.includes(p)) : null;
+  } catch {
+    return null;
+  }
+}
+function saveSkipped(list: Settings["setupSkipped"]) {
+  try {
+    sessionStorage.setItem(SKIPPED_KEY, JSON.stringify(list ?? []));
+  } catch {
+    /* private mode: kept for this page only */
+  }
+}
+
 export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsAfterSave: 0, resumeAfterMs: 60_000 }): Api {
   const calls: MockCalls = {};
+  const skipped = loadSkipped();
+  if (skipped) store.settings.setupSkipped = skipped;
   if (typeof window !== "undefined") {
     (window as unknown as { __cfMockFaults?: MockFaults }).__cfMockFaults = faults;
     (window as unknown as { __cfMockCalls?: MockCalls }).__cfMockCalls = calls;
@@ -441,6 +462,12 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         }
         // Like the API: the usual platform order, nothing else.
         (next as unknown as Record<string, unknown>)[field] = Object.fromEntries(PLATFORMS.filter((p) => p in map).map((p) => [p, (map as Record<string, unknown>)[p]]));
+      }
+      if (next.setupSkipped !== undefined) {
+        // Same rule as the API (§17.13): known platforms only, kept in canonical order without repeats.
+        if (!Array.isArray(next.setupSkipped) || !next.setupSkipped.every((p) => PLATFORMS.includes(p))) throw bad("Unknown platform.");
+        next.setupSkipped = PLATFORMS.filter((p) => next.setupSkipped!.includes(p));
+        saveSkipped(next.setupSkipped);
       }
       store.settings = next;
       return clone(next);
