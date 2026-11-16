@@ -84,8 +84,13 @@ run "environment_names_the_flow_aliases" {
       OAUTH_STATE_SECRET = "cf-test/oauth/state-key"
       WEB_BUCKET         = "cf-test-web-123456789012"
       DISTRIBUTION_ID    = "E2EXAMPLE"
+      # §19.9 module defaults: help off, no model.
+      HELP_ENABLED         = "false"
+      HELP_MONTHLY_CAP     = "2000"
+      HELP_RATE_PER_MINUTE = "6"
+      HELP_RATE_PER_HOUR   = "60"
     })
-    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9 and §17.9 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
+    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9 and §19.9 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
   }
 }
 
@@ -244,6 +249,118 @@ run "permissions" {
         for a in s.Action : !startswith(a, "sqs:") && !startswith(a, "scheduler:") && !startswith(a, "bedrock:") && a != "iam:PassRole"
       ]
     ]))
-    error_message = "No queue, scheduler, PassRole or Bedrock model permissions remain on the API."
+    error_message = "No queue, scheduler, PassRole or Bedrock model permissions on the API while help has no model."
+  }
+}
+
+# docs/CONTRACTS.md §19.9: Ask Clip Factory on, with Claude Haiku through the EU geo profile.
+run "help_assistant_with_model" {
+  command = plan
+
+  variables {
+    help_enabled  = true
+    help_model_id = "eu.anthropic.claude-haiku-5-5"
+    help_model_invoke_arns = [
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-north-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-south-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-south-2::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-west-3::foundation-model/anthropic.claude-haiku-5-5",
+    ]
+  }
+
+  assert {
+    condition = (
+      one(aws_lambda_function.fn["api"].environment).variables["HELP_ENABLED"] == "true" &&
+      one(aws_lambda_function.fn["api"].environment).variables["HELP_MODEL_ID"] == "eu.anthropic.claude-haiku-5-5" &&
+      one(aws_lambda_function.fn["api"].environment).variables["HELP_MONTHLY_CAP"] == "2000" &&
+      one(aws_lambda_function.fn["api"].environment).variables["HELP_RATE_PER_MINUTE"] == "6" &&
+      one(aws_lambda_function.fn["api"].environment).variables["HELP_RATE_PER_HOUR"] == "60" &&
+      one(aws_lambda_function.fn["api"].environment).variables["APP_URL"] == "https://app.example.test"
+    )
+    error_message = "cf-prod-api gets HELP_ENABLED, HELP_MODEL_ID, HELP_MONTHLY_CAP 2000, 6 per minute, 60 per hour, and APP_URL for the corpus."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement :
+      s.Sid == "HelpModel" && s.Action == ["bedrock:InvokeModel"] && toset(s.Resource) == toset(var.help_model_invoke_arns) && length(s.Resource) == 7
+    ])
+    error_message = "HelpModel allows only bedrock:InvokeModel on the profile and its six destination foundation models."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Action if anytrue([for a in s.Action : startswith(a, "bedrock:")])
+    ])) == toset(["bedrock:InvokeModel"])
+    error_message = "The only Bedrock action on the API is InvokeModel (no streaming, Converse needs nothing else)."
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if anytrue([for a in s.Action : startswith(a, "bedrock:")])]) == 1
+    error_message = "Bedrock appears in exactly one statement, HelpModel."
+  }
+}
+
+run "help_kb_only_without_model" {
+  command = plan
+
+  variables {
+    help_enabled = true
+  }
+
+  assert {
+    condition = (
+      one(aws_lambda_function.fn["api"].environment).variables["HELP_ENABLED"] == "true" &&
+      !contains(keys(one(aws_lambda_function.fn["api"].environment).variables), "HELP_MODEL_ID")
+    )
+    error_message = "Without a model id the help assistant runs on plain answers: no HELP_MODEL_ID."
+  }
+
+  assert {
+    condition     = alltrue([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : try(s.Sid, "") != "HelpModel"])
+    error_message = "No model id, no HelpModel statement."
+  }
+}
+
+run "help_model_needs_its_arns" {
+  command = plan
+
+  variables {
+    help_model_id = "eu.anthropic.claude-haiku-5-5"
+  }
+
+  expect_failures = [var.help_model_invoke_arns]
+}
+
+run "help_cap_is_a_whole_number" {
+  command = plan
+
+  variables {
+    help_monthly_cap = 1.5
+  }
+
+  expect_failures = [var.help_monthly_cap]
+}
+
+# §19.6: a 429 carries Retry-After, which the browser can only read when CORS exposes it.
+run "cors_exposes_retry_after" {
+  command = plan
+
+  assert {
+    condition     = one(aws_apigatewayv2_api.http.cors_configuration).expose_headers == toset(["retry-after"])
+    error_message = "HTTP API CORS must expose retry-after (and nothing else)."
+  }
+
+  assert {
+    condition     = aws_apigatewayv2_route.authorized.route_key == "ANY /v1/{proxy+}"
+    error_message = "Help adds no route: it is served by the single ANY /v1/{proxy+} route."
+  }
+
+  assert {
+    condition     = output.log_group_name == "/aws/lambda/cf-test-api"
+    error_message = "log_group_name is cf-prod-api's log group, for the help model alarm."
   }
 }

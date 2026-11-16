@@ -109,3 +109,42 @@ run "posting_setup_is_wired" {
     error_message = "The OAuth state key is cf-prod/oauth/state-key."
   }
 }
+
+# docs/CONTRACTS.md §19.5 and §19.9: Ask Clip Factory is on in prod, calls Claude Haiku through the EU geo profile
+# (per-model profilePrefix override in config/models.json) and may invoke only that profile and its six EU models.
+run "help_assistant_is_wired" {
+  command = plan
+
+  assert {
+    condition     = local.help_model.modelId == "anthropic.claude-haiku-5-5" && local.models.helpModel == "haiku-5-5" && local.agent_model.modelId == "anthropic.claude-fable-5-1"
+    error_message = "config/models.json parses, helpModel points at the Haiku 5.5 entry and agentModel still at Fable."
+  }
+
+  assert {
+    condition     = local.help_model_id == "eu.anthropic.claude-haiku-5-5" && local.model_id == "global.anthropic.claude-fable-5-1"
+    error_message = "Haiku uses its own eu. profilePrefix; Fable keeps the top-level global. prefix."
+  }
+
+  assert {
+    condition = toset(local.help_model_invoke_arns) == toset([
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-north-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-south-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-south-2::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-west-3::foundation-model/anthropic.claude-haiku-5-5",
+    ]) && length(local.help_model_invoke_arns) == 7
+    error_message = "The help model may be invoked only on the EU profile and the foundation model in its six destination regions."
+  }
+
+  assert {
+    condition     = module.monitoring.help_alarm_name == "cf-prod-help-model-failures"
+    error_message = "The help model failures alarm cf-prod-help-model-failures exists in prod."
+  }
+
+  assert {
+    condition     = var.help_enabled == true && var.help_monthly_cap == 2000
+    error_message = "Ask Clip Factory is on in prod (HELP_ENABLED true) with a 2000-answer model cap per 30 days."
+  }
+}

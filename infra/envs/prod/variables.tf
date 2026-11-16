@@ -54,6 +54,22 @@ variable "web_dev_origin" {
   description = "Local Vite dev server, allowed by the API's and the media bucket's CORS."
 }
 
+variable "help_enabled" {
+  type        = bool
+  default     = true
+  description = "Ask Clip Factory, the in-app help assistant (docs/CONTRACTS.md §19). On in prod; the HELP/SWITCH item in the table turns it (or only its model) off without a deploy."
+}
+
+variable "help_monthly_cap" {
+  type        = number
+  default     = 2000
+  description = "Most model-written help answers per 30-day window (§19.6). Past it, answers are the plain ones from the help knowledge."
+  validation {
+    condition     = var.help_monthly_cap >= 0 && floor(var.help_monthly_cap) == var.help_monthly_cap
+    error_message = "help_monthly_cap must be a whole number, 0 or more."
+  }
+}
+
 variable "manage_api_gateway_account" {
   type        = bool
   default     = true
