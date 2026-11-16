@@ -5,6 +5,7 @@
 #                  which the code enforces per post; the tick only sets the fastest possible pace.
 #   cf-prod-learn  turns the owner's "Best this week" picks into one learning (Bedrock Converse, Fable) and marks
 #                  the picked clips' vectors best = true. cf-prod-api invokes it asynchronously on PUT .../best.
+#                  Like every model call it gets the owner's skills (§18.6), read from skills/* in the media bucket.
 #
 # Both run the shared package (api/dist/lambda.zip). No reserved concurrency: new accounts' limits forbid it, and
 # the rate budgets are conditional DynamoDB writes, so two overlapping runs cannot overspend.
@@ -47,6 +48,7 @@ locals {
       timeout = 300
       env = {
         TABLE_NAME     = var.table_name
+        MEDIA_BUCKET   = var.media_bucket
         MODEL_ID       = var.model_id
         EMBED_MODEL_ID = var.embed_model_id
         VECTOR_BUCKET  = var.vector_bucket
@@ -71,6 +73,8 @@ locals {
       { Sid = "Models", Action = ["bedrock:InvokeModel"], Resource = concat(var.model_invoke_arns, [var.embed_model_arn]) },
       # Merge best = true / false into the picked and unpicked clips' vector metadata.
       { Sid = "Vectors", Action = ["s3vectors:GetVectors", "s3vectors:PutVectors"], Resource = [var.vector_index_arn] },
+      # Read the owner's skills for the weekly learning call (§18.6): keys come from the table, so no s3:ListBucket.
+      { Sid = "Skills", Action = ["s3:GetObject"], Resource = ["${var.media_bucket_arn}/skills/*"] },
     ]
   }
 }

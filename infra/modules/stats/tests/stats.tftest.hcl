@@ -27,6 +27,8 @@ variables {
   lambda_zip_path       = "main.tf"
   table_name            = "cf-test-data"
   table_arn             = "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"
+  media_bucket          = "cf-test-media"
+  media_bucket_arn      = "arn:aws:s3:::cf-test-media"
   model_id              = "global.anthropic.claude-fable-5-1"
   model_invoke_arns     = ["arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-fable-5-1", "arn:aws:bedrock:*::foundation-model/anthropic.claude-fable-5-1"]
   embed_model_id        = "amazon.titan-embed-text-v2:0"
@@ -177,12 +179,13 @@ run "functions_match_the_contract" {
   assert {
     condition = one(aws_lambda_function.fn["learn"].environment).variables == tomap({
       TABLE_NAME     = "cf-test-data"
+      MEDIA_BUCKET   = "cf-test-media"
       MODEL_ID       = "global.anthropic.claude-fable-5-1"
       EMBED_MODEL_ID = "amazon.titan-embed-text-v2:0"
       VECTOR_BUCKET  = "cf-test-vectors-123456789012"
       VECTOR_INDEX   = "clips"
     })
-    error_message = "cf-prod-learn gets exactly TABLE_NAME, MODEL_ID, EMBED_MODEL_ID, VECTOR_BUCKET and VECTOR_INDEX."
+    error_message = "cf-prod-learn gets exactly TABLE_NAME, MEDIA_BUCKET, MODEL_ID, EMBED_MODEL_ID, VECTOR_BUCKET and VECTOR_INDEX."
   }
 }
 
@@ -239,9 +242,24 @@ run "roles_allow_exactly_what_the_code_calls" {
     condition = toset(flatten([for s in jsondecode(aws_iam_role_policy.fn["learn"].policy).Statement : s.Action])) == toset([
       "logs:CreateLogStream", "logs:PutLogEvents", "xray:PutTraceSegments", "xray:PutTelemetryRecords",
       "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem",
-      "bedrock:InvokeModel", "s3vectors:GetVectors", "s3vectors:PutVectors",
+      "bedrock:InvokeModel", "s3vectors:GetVectors", "s3vectors:PutVectors", "s3:GetObject",
     ])
-    error_message = "cf-prod-learn's actions must match docs/CONTRACTS.md §16.9."
+    error_message = "cf-prod-learn's actions must match docs/CONTRACTS.md §16.9 and §18.8."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["learn"].policy).Statement :
+      s.Sid == "Skills" && s.Effect == "Allow" && s.Action == ["s3:GetObject"] && s.Resource == ["arn:aws:s3:::cf-test-media/skills/*"]
+    ])
+    error_message = "cf-prod-learn reads the owner's skills: { Sid = Skills, Action = [s3:GetObject], Resource = [<media>/skills/*] } (§18.8)."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for s in jsondecode(aws_iam_role_policy.fn["learn"].policy).Statement : s.Resource if anytrue([for a in s.Action : startswith(a, "s3:")])
+    ])) == toset(["arn:aws:s3:::cf-test-media/skills/*"])
+    error_message = "cf-prod-learn's only S3 access is skills/* (no list, no other prefix)."
   }
 
   assert {
