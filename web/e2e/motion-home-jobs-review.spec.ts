@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ACT_MS, ACT_REWIND_MS } from "../src/lib/motion.ts";
-import { settle } from "./helpers.ts";
+import { animationsDone, settle } from "./helpers.ts";
 import { actTransforms, actWidths, MOTION_WIDTHS, noSideScroll, pauseActs, recordAct, tapAct, tapUntilPhase } from "./motionHelpers.ts";
 
 // Action motion on Home, Jobs and Review (docs/CONTRACTS.md §20.11 (a)). The handler always fires first; the motion
@@ -232,7 +232,7 @@ test.describe("motion: no overflow while Home and Review animate (APPLY a)", () 
       await page.locator(".segmented__opt", { hasText: "Exactly" }).click();
       await page.locator(".segmented__opt", { hasText: "Pick a video" }).click();
       await expect(page.getByRole("radio", { name: "Exactly" })).toBeChecked();
-      await page.waitForTimeout(250);
+      await animationsDone(page); // the highlights have slid over and the new fields are in
       let widths = await actWidths(page);
       await tapAct(page.getByRole("button", { name: "More: Number of clips" }));
       await page.locator('input[type="file"][accept="video/*"]').setInputFiles({ name: "a.mp4", mimeType: "video/mp4", buffer: Buffer.alloc(16) });
@@ -252,7 +252,7 @@ test.describe("motion: no overflow while Home and Review animate (APPLY a)", () 
       await page.evaluate(() => {
         for (const a of document.getAnimations()) if (a.playState === "paused") a.finish();
       });
-      await page.waitForTimeout(250);
+      await animationsDone(page); // the chosen tab has finished growing to show its name
       widths = await actWidths(page);
       for (const [k, w] of Object.entries(widths)) if (k in midTab) expect(midTab[k], `${k} during the tab bump`).toBe(w);
       await tapAct(card.getByRole("button", { name: "Throw away" }));

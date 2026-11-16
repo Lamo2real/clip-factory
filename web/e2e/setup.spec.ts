@@ -367,6 +367,9 @@ test("on a phone each picker choice is its own full-width row", async ({ page })
   await settle(page);
   await step(page, "public-review").locator(".gstep__head").click();
   const picker = step(page, "public-review").locator(".gstep__picker .segmented");
+  // Measured once the step has unfolded.
+  await expect(picker).toBeVisible();
+  await animationsDone(page);
   const box = (await picker.boundingBox())!;
   const opts = await picker.locator(".segmented__opt").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect));
   expect(opts).toHaveLength(4);
@@ -384,6 +387,7 @@ test("a fresh page stays at the top; a started one reopens at its step", async (
   await settle(page);
   await page.locator(".setup-card[data-platform='youtube']").click();
   await settle(page);
+  // The wait is the test: given time, the page has not scrolled itself anywhere.
   await page.waitForTimeout(700);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   await expect(page.getByRole("heading", { level: 1, name: "Set up YouTube" })).toBeInViewport();

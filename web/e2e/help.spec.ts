@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { animationsDone, findOverflow, settle } from "./helpers.ts";
+import { animationsDone, findOverflow, launcherSettled, settle } from "./helpers.ts";
 
 /** The launcher's box when it is shown (not stepped aside), else null. */
 async function shownLauncher(page: Page) {
@@ -33,27 +33,6 @@ async function coveredControls(page: Page) {
     }
     return out;
   });
-}
-
-/**
- * Waits until the launcher has settled: not stepped aside for a scroll and not moving, for three frames in a row
- * (its measure runs on the frame after a change and its move starts on the next). Frames and events, not time.
- */
-async function launcherSettled(page: Page) {
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        let calm = 0;
-        const tick = () => {
-          const el = document.querySelector<HTMLElement>(".help-launcher");
-          const still = !el || (el.dataset.dodge !== "scroll" && el.getAnimations().every((a) => a.playState !== "running"));
-          calm = still ? calm + 1 : 0;
-          if (calm >= 3) resolve();
-          else requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      }),
-  );
 }
 
 /**
@@ -353,7 +332,8 @@ for (const size of SIZES) {
         // The page and the launcher behind the sheet are inert.
         expect(await page.locator(".shell").getAttribute("inert")).toBe("");
         await panel(page).getByRole("button", { name: "Close" }).click();
-        expect(await page.locator(".shell").getAttribute("inert")).toBeNull();
+        // Given back once the sheet has gone: wait for that, not for the click to return.
+        await expect.poll(() => page.locator(".shell").getAttribute("inert")).toBeNull();
       }
     });
 
@@ -386,30 +366,41 @@ for (const size of SIZES) {
     test("the launcher steps aside while scrolling down and comes back on scroll up", async ({ page }) => {
       await page.goto("/");
       await settle(page);
-      // Waits on events, not time: each scroll here flips the launcher, so wait for its class to change (a 3 s cap
-      // only turns a hang into a clear failure). Smooth scrolling, like a finger or a wheel.
-      const scrollAndRead = async (y: number) =>
-        page.evaluate(async (top) => {
+      // Waits on events, not time. Each smooth scroll (like a finger or a wheel) is read inside the page: was the
+      // launcher hidden when the scroll began, and is it once its class flips (a 3 s cap only turns a hang into a
+      // clear failure). Scrolls given together run back to back, the next one starting in the same turn the flip
+      // was seen, so nothing (the 600 ms settle, a late frame) can change the launcher in between.
+      const scrollAndRead = (...tops: number[]) =>
+        page.evaluate(async (tops) => {
           const el = document.querySelector(".help-launcher")!;
-          const was = el.classList.contains("is-hidden");
-          await new Promise<void>((resolve) => {
-            const seen = new MutationObserver(() => {
-              if (el.classList.contains("is-hidden") === was) return;
-              seen.disconnect();
-              resolve();
+          const hidden = () => el.classList.contains("is-hidden");
+          const out: { was: boolean; now: boolean }[] = [];
+          for (const top of tops) {
+            const was = hidden();
+            const now = await new Promise<boolean>((resolve) => {
+              const done = () => (seen.disconnect(), clearTimeout(cap), resolve(hidden()));
+              const seen = new MutationObserver(() => hidden() !== was && done());
+              seen.observe(el, { attributes: true, attributeFilter: ["class"] });
+              const cap = setTimeout(done, 3000);
+              window.scrollTo({ top, behavior: "smooth" });
             });
-            seen.observe(el, { attributes: true, attributeFilter: ["class"] });
-            setTimeout(() => (seen.disconnect(), resolve()), 3000);
-            window.scrollTo({ top, behavior: "smooth" });
-          });
-          return el.classList.contains("is-hidden");
-        }, y);
+            out.push({ was, now });
+          }
+          return out;
+        }, tops);
+      // Every scroll stays inside the page: one aimed past the end stops short, and may then not move at all.
       expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBeGreaterThan(400);
-      expect(await scrollAndRead(400)).toBe(true);
-      await page.evaluate(() => window.scrollTo({ top: 400, behavior: "instant" })); // let a smooth scroll finish
-      expect(await scrollAndRead(100)).toBe(false);
+      // Down hides it; up, begun while it is still hidden, brings it back.
+      expect(await scrollAndRead(400, 100)).toEqual([
+        { was: false, now: true },
+        { was: true, now: false },
+      ]);
+      // Start the last scroll from rest (the page has stopped at 100 and the launcher is showing), not in the middle
+      // of the one before: a new smooth scroll carries on from wherever the old one is, at its speed.
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(100);
+      await expect(launcher(page)).not.toHaveClass(/is-hidden/);
+      expect(await scrollAndRead(400)).toEqual([{ was: false, now: true }]);
       // And it comes back by itself once scrolling stops.
-      expect(await scrollAndRead(500)).toBe(true);
       await expect(launcher(page)).not.toHaveClass(/is-hidden/, { timeout: 5000 });
     });
   });
