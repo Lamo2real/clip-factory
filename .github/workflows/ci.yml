@@ -32,6 +32,9 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      # The committed help corpus, the docs routes table and CONTRACTS §19.6 must match the app routes.
+      - name: help corpus is up to date
+        run: node scripts/help-corpus.mjs --check
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
