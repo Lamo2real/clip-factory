@@ -33,6 +33,7 @@ INTERNAL_FIELDS = (
     "coverKey",
     "publishState",
     "postsCreated",
+    "postIds",
     "flowRun",
     "flowExecutionArn",
     "publishClaimAt",

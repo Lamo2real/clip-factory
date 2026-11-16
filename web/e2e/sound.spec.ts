@@ -103,7 +103,7 @@ test("enabled controls tap, switched-off controls deny, errors deny", async ({ p
   expect(await log(page)).toEqual(["deny"]);
 
   await page.waitForTimeout(80);
-  await page.getByRole("radio", { name: "Upload a video" }).check({ force: true });
+  await page.getByRole("radio", { name: "Pick a video" }).check({ force: true });
   expect(await log(page)).toEqual(["deny", "tap"]);
 
   // Plain text is not a control: no sound.

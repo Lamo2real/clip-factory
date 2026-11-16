@@ -312,3 +312,48 @@ for (const size of [
     });
   });
 }
+
+test.describe("skill pages on a wide screen", () => {
+  test.use({ viewport: { width: 1280, height: 900 } });
+
+  test("the description box has no drag grip, so it can never be pulled wider than the form", async ({ page }) => {
+    await open(page, `${LIST}/new`);
+    const desc = page.getByLabel("When should Clip Factory use it?");
+    const css = await desc.evaluate((el) => ({ resize: getComputedStyle(el).resize, overflowY: getComputedStyle(el).overflowY }));
+    expect(css).toEqual({ resize: "none", overflowY: "hidden" });
+    const form = (await page.locator(".skill-form").boundingBox())!;
+    const box = (await desc.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(form.x + form.width);
+    await fits(page, "new skill");
+  });
+
+  test("browser Back held by Leave without saving?: Leave goes back, and the next Back goes one more step", async ({ page }) => {
+    await open(page, "/settings");
+    await page.getByRole("link", { name: /^Clip making/ }).first().click();
+    await page.getByRole("link", { name: /^Skills/ }).first().click();
+    await expect(page).toHaveURL(new RegExp(`${LIST}$`));
+    await page.getByRole("link", { name: "Write a skill" }).click();
+    await expect(page).toHaveURL(new RegExp(`${LIST}/new$`));
+    await page.getByLabel("What is the skill called?").fill("Half typed");
+    await page.goBack();
+    const leave = page.getByRole("dialog", { name: "Leave without saving?" });
+    await expect(leave).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`${LIST}/new$`));
+    await leave.getByRole("button", { name: "Leave" }).click();
+    await expect(page).toHaveURL(new RegExp(`${LIST}$`));
+    await page.goBack();
+    await expect(page).toHaveURL(/\/settings\/clip-making$/);
+  });
+
+  for (const width of [1440, 1920]) {
+    test(`Edit and Delete end where the cards end at ${width} px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await open(page, `${LIST}/${WRITTEN}`);
+      const actions = (await page.locator(".skill-head__actions").boundingBox())!;
+      for (const card of [".skill-when", ".md"]) {
+        const b = (await page.locator(card).first().boundingBox())!;
+        expect(Math.abs(actions.x + actions.width - (b.x + b.width)), card).toBeLessThanOrEqual(1);
+      }
+    });
+  }
+});

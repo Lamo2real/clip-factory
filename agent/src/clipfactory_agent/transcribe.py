@@ -9,7 +9,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from .util import TransientError, UserFacingError
+from .util import TransientError, UserFacingError, log
 
 Word = tuple[float, float, str]
 PART_SECONDS = 3 * 3600 + 50 * 60  # Transcribe takes at most 4 hours per file
@@ -85,7 +85,9 @@ class Transcriber:
                 reason = str(job.get("FailureReason") or "")
                 if "throttl" in reason.lower() or "internal" in reason.lower():
                     raise TransientError(reason)
-                raise UserFacingError(f"Amazon Transcribe could not read the audio ({reason[:200]}).")
+                # Transcribe's own reason goes to the log, never to the owner.
+                log("warn", "transcribe.failed", job=name, reason=reason[:500])
+                raise UserFacingError("We couldn't hear the words in this video. Tap Try again, or try another video.")
             elapsed = time.monotonic() - started
             if elapsed > budget:
                 raise TransientError("Transcription is taking far longer than usual.")

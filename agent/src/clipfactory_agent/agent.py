@@ -21,7 +21,7 @@ from .learnings import Learnings
 from .learnings import prompt_section as learnings_section
 from .moments import CANDIDATES_SCHEMA, MOMENT_SCHEMA, MOMENT_TYPES, Moment, choose, dedupe, spare_count, validate
 from .skills import SkillsBlock, compose_system_text
-from .util import UserFacingError, hms, log
+from .util import JobCanceled, UserFacingError, gather_all, hms, log
 from .vectors import Hit, prompt_section
 
 SERVER = "clips"
@@ -383,9 +383,11 @@ async def find_with_converse(
     sem = asyncio.Semaphore(FALLBACK_CONCURRENCY)
     done = 0
     found: list[Moment] = []
+    answered = 0
+    errors: list[Exception] = []
 
     async def one(start: float, end: float) -> None:
-        nonlocal done
+        nonlocal done, answered
         text = transcript.lines(b.words, start, end)
         if len(text) >= 400:
             async with sem:
@@ -395,6 +397,7 @@ async def find_with_converse(
                     f"{hints(b, start, end)}\n\nReturn the best 0–6 moments in this part; quality beats quantity."
                     f"\n\n<transcript>\n{text}\n</transcript>"
                 )
+                r: dict[str, Any] | None = None
                 try:
                     r = await bedrock.structured(
                         system=system,
@@ -404,18 +407,33 @@ async def find_with_converse(
                         description="Submit the best clip moments in this part of the video.",
                         schema=CANDIDATES_SCHEMA,
                     )
+                except JobCanceled:
+                    raise
                 except ModelError as e:
-                    log("warn", "moments.window_failed", start=start, error=str(e)[:200])
+                    # A bad answer is still an answer: this window just has no moments.
+                    log("warn", "moments.window_failed", start=start, error=type(e).__name__, detail=str(e)[:200])
                     r = {"candidates": []}
-                for c in r.get("candidates") or []:
-                    m, _ = validate(c, duration=b.duration, length=b.length)
-                    if m:
-                        found.append(m)
+                except Exception as e:
+                    # A busy or failing service (max_tokens, throttling that outlasted the retries) loses only this
+                    # window; it never stops the other windows or re-runs the whole search on its own.
+                    log("warn", "moments.window_failed", start=start, error=type(e).__name__, detail=str(e)[:200])
+                    errors.append(e)
+                if r is not None:
+                    answered += 1
+                    for c in r.get("candidates") or []:
+                        m, _ = validate(c, duration=b.duration, length=b.length)
+                        if m:
+                            found.append(m)
         done += 1
         if on_progress:
             on_progress(done / len(wins))
 
-    await asyncio.gather(*(one(s, e) for s, e in wins))
+    # Anything that still escapes (a cancel) stops the other windows instead of leaving them running.
+    await gather_all(*(one(s, e) for s, e in wins))
+    if errors and not answered:
+        # Every window failed with a service error: the model is down or busy, not the video. Raising lets the step
+        # retry and then say "a service was busy", instead of blaming the video with "no clip-worthy moments".
+        raise errors[0]
     return found
 
 
@@ -431,14 +449,29 @@ async def find_moments(
     on_progress: Callable[[float], None],
     use_sdk: bool = True,
 ) -> tuple[list[Moment], list[Moment]]:
-    """``(chosen, spares)``. The SDK agent first; Converse covers the windows it did not get to (it failed or ran
-    out of time partway), and the whole video when that still leaves fewer than the minimum."""
+    """``(chosen, spares)``. The SDK agent first; Converse covers the windows it did not read (it failed, ran out of
+    time, or ended early with a success result), and the whole video when that still leaves fewer than the minimum."""
+
+    async def converse_more(have: list[Moment], *, windows: list[tuple[float, float]]) -> list[Moment]:
+        """Converse over ``windows``. When every window fails (the model is down) and moments are already in hand,
+        those still make clips; with none in hand the error is raised so the step retries."""
+        try:
+            return await find_with_converse(
+                b, bedrock, on_progress=lambda f: on_progress(0.9 * f), windows=windows, skills=skills
+            )
+        except JobCanceled:
+            raise
+        except Exception as e:
+            if not have:
+                raise
+            log("warn", "agent.converse_failed", error=type(e).__name__, kept=len(have))
+            return []
+
     moments: list[Moment] = []
     wins = transcript.windows(b.duration)
     todo = wins
     if use_sdk:
         tools = MomentTools(b, on_coverage=lambda c: on_progress(0.9 * c))
-        unread: list[tuple[float, float]] = []
         try:
             moments = await asyncio.wait_for(
                 find_with_sdk(
@@ -455,19 +488,17 @@ async def find_moments(
         except (Exception, TimeoutError) as e:
             moments = list(tools.moments)  # whatever it submitted before failing still counts
             log("warn", "agent.sdk_failed", error=type(e).__name__, detail=str(e)[:800], kept=len(moments))
-            unread = tools.unread(wins)
+        # Whether the run failed, ran out of time or simply decided it was done, the windows it never read are
+        # still to be read.
+        unread = tools.unread(wins)
         if unread:
-            # A run cut off partway never leaves the rest of the video unseen: those windows go through Converse.
+            # A run that stopped partway never leaves the rest of the video unseen: those windows go through Converse.
             log("info", "agent.converse_unread", windows=len(unread), of=len(wins), have=len(moments))
-            moments += await find_with_converse(
-                b, bedrock, on_progress=lambda f: on_progress(0.9 * f), windows=unread, skills=skills
-            )
+            moments += await converse_more(moments, windows=unread)
         todo = [w for w in wins if w not in unread]
     if len(dedupe(moments)) < b.clip_min and todo:
         log("info", "agent.converse_fallback", have=len(moments))
-        moments += await find_with_converse(
-            b, bedrock, on_progress=lambda f: on_progress(0.9 * f), windows=todo, skills=skills
-        )
+        moments += await converse_more(moments, windows=todo)
     chosen, spares = choose(moments, b.clip_min, b.clip_max)
     if not chosen:
         raise UserFacingError(

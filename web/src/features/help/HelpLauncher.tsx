@@ -25,7 +25,7 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
   const [focused, setFocused] = useState(false);
   const launcher = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
-  const { hidden, lift, reason, moving } = useDodge(launcher, open || focused, open);
+  const { hidden, lift, reason, moving, onWords } = useDodge(launcher, open || focused, open);
   // The conversation lives here, in memory only (§19.2, §19.8), so closing the panel (on phones, an answer button
   // closes it) and opening it again shows the last answer. Start over clears it; nothing is ever stored.
   const [chat, dispatch] = useReducer(chatReducer, initialChat);
@@ -109,6 +109,7 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
           data-lift={lift}
           data-dodge={reason ?? undefined}
           data-moving={moving || undefined}
+          data-on-words={onWords || undefined}
           style={lift ? { transform: `translateY(${-lift}px)` } : undefined}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}

@@ -102,7 +102,7 @@ def test_job_flow_timeout_or_missed_heartbeat_fails_the_job(
     stored = table.raw(job["pk"], job["sk"])
     assert stored is not None
     assert stored["status"] == "failed"
-    assert stored["error"] == STOPPED_MESSAGE == "The agent stopped responding. Press Retry."
+    assert stored["error"] == STOPPED_MESSAGE == "Making the clips stopped partway. Tap Try again."
     assert agentcore.stopped == [job["sessionId"]]
 
 

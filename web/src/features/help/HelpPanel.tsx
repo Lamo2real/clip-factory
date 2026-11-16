@@ -14,7 +14,7 @@ import { navigate, type Route } from "../../lib/router.ts";
 import { sounds } from "../../lib/sounds.ts";
 import { entryId, historyOf, newestAnswerId, type ChatEvent, type ChatState, type Entry, type LiveState } from "./chatState.ts";
 import { boldParts, fill, GO_HOME, GREETING, hasPlaceholder, LIVE_FAILED_TEXT, OFF_TEXT, suggestionsFor, withoutLive } from "./compose.ts";
-import { helpContext } from "./context.ts";
+import { helpContext, helpPage } from "./context.ts";
 import type { HelpClient } from "./helpApi.ts";
 import { answerLocally, loadCorpus, routeOk, safeActions } from "./kb.ts";
 import { readLive } from "./live.ts";
@@ -331,7 +331,7 @@ export function HelpPanel({
   // "Go Home" while already on Home would be a dead tap: the suggestion chips are the next step there.
   const shown = (actions: readonly HelpAction[]) => (route.name === "home" ? actions.filter((x) => x.id !== GO_HOME.id) : actions);
   const tomatoTaken = !!newestEntry && newestEntry.role === "assistant" && shown(newestEntry.answer.actions).length > 0;
-  const suggestions = suggestionsFor({ page: route.name });
+  const suggestions = suggestionsFor({ page: helpPage(route.name) });
   const left = Math.max(0, Math.ceil((state.blockedUntil - now) / 1000));
   const askOff = !text.trim() || state.thinking || blocked;
 

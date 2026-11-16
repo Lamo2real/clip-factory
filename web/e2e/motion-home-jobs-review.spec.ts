@@ -67,7 +67,7 @@ test.describe("motion: Home (APPLY a)", () => {
   });
 
   test("the dropzone's arrow rises when a video arrives and shakes on a wrong file", async ({ page }) => {
-    await page.getByRole("radio", { name: "Upload a video" }).check({ force: true });
+    await page.getByRole("radio", { name: "Pick a video" }).check({ force: true });
     const glyph = page.locator(".dropzone .act");
     await expect(glyph).toHaveClass(/act--upload/);
     await expect(glyph).toHaveClass(/is-idle/);
@@ -229,7 +229,7 @@ test.describe("motion: no overflow while Home and Review animate (APPLY a)", () 
       await settle(page);
       // Tapped where a child taps: on the option's words.
       await page.locator(".segmented__opt", { hasText: "Exactly" }).click();
-      await page.locator(".segmented__opt", { hasText: "Upload a video" }).click();
+      await page.locator(".segmented__opt", { hasText: "Pick a video" }).click();
       await expect(page.getByRole("radio", { name: "Exactly" })).toBeChecked();
       await page.waitForTimeout(250);
       let widths = await actWidths(page);
@@ -242,9 +242,18 @@ test.describe("motion: no overflow while Home and Review animate (APPLY a)", () 
 
       await page.goto("/review");
       await settle(page);
-      widths = await actWidths(page);
       const card = page.locator(".review-card").last();
+      // Choosing a caption tab shows its name (the chosen tab is wider on purpose), so the tab bump is compared with
+      // the tabs once it ends, and Throw away with the page after the choice.
       await tapAct(card.getByRole("tab", { name: "TikTok" }));
+      await pauseActs(page, 0.5);
+      const midTab = await actWidths(page);
+      await page.evaluate(() => {
+        for (const a of document.getAnimations()) if (a.playState === "paused") a.finish();
+      });
+      await page.waitForTimeout(250);
+      widths = await actWidths(page);
+      for (const [k, w] of Object.entries(widths)) if (k in midTab) expect(midTab[k], `${k} during the tab bump`).toBe(w);
       await tapAct(card.getByRole("button", { name: "Throw away" }));
       await pauseActs(page, 0.5);
       expect(await noSideScroll(page)).toBe(true);

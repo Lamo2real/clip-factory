@@ -1,12 +1,14 @@
 // The "Post to TikTok" sheet (docs/CONTRACTS.md §17.8, TikTok's Content Sharing Guidelines): opens on Keep when
 // TikTok is connected. Who can see it has no default; Comments, Duet and Stitch start off; Commercial content needs
 // Your brand or Branded content (branded cannot be "Only me"); Keep stays off until a privacy is picked.
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, TikTokCreator, TikTokPostOptions } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
-import { Button, Toggle } from "../../components/ui.tsx";
+import { trapTab } from "../../components/Sheet.tsx";
+import { A, Button, Toggle } from "../../components/ui.tsx";
 import { useAction, type ActionHandle } from "../../lib/motion.ts";
 
 export const PRIVACY_LABEL: Record<string, string> = {
@@ -27,6 +29,14 @@ export function sheetReady(o: { privacy: string; commercial: boolean; yourBrand:
   if (o.commercial && !o.yourBrand && !o.branded) return false;
   if (o.branded && o.privacy === "SELF_ONLY") return false;
   return true;
+}
+
+/**
+ * Whether the clip is longer than TikTok lets this creator post. A limit of 0 (or none) means TikTok did not say,
+ * so it does not block: the publisher checks the length again before it uploads (§17.8).
+ */
+export function tooLongForTikTok(durationSec: number, maxDurationSec: number | null | undefined): boolean {
+  return !!maxDurationSec && maxDurationSec > 0 && durationSec > maxDurationSec;
 }
 
 export function TikTokSheet({
@@ -68,6 +78,7 @@ export function TikTokSheet({
   const [branded, setBranded] = useState(false);
 
   // Fetched every time the sheet opens: TikTok's rules say the creator's current options must be shown.
+  const [asked, setAsked] = useState(0);
   useEffect(() => {
     let alive = true;
     api()
@@ -77,29 +88,48 @@ export function TikTokSheet({
     return () => {
       alive = false;
     };
+  }, [asked]);
+  const askAgain = useCallback(() => {
+    setError(null);
+    setAsked((n) => n + 1);
   }, []);
 
+  // The latest onClose: callers pass a new function on every render (each typed letter in the caption re-renders
+  // the card), and the focus below must run once, or typing would lose the caret after one letter.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // A real modal: focus moves in once on open and goes back to what opened it (the card's Keep) on close.
   useEffect(() => {
+    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.current?.focus();
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    return () => {
+      if (before?.isConnected) before.focus({ preventScroll: true });
     };
-    window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
-  }, [onClose]);
+  }, []);
+
+  function keys(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      onCloseRef.current();
+      return;
+    }
+    trapTab(e, dialog.current);
+  }
 
   const options = creator ? privacyChoices(creator.privacyOptions, branded && commercial) : [];
   const ready = sheetReady({ privacy, commercial, yourBrand: commercial && yourBrand, branded: commercial && branded });
-  const tooLong = !!creator && clip.durationSec > creator.maxDurationSec;
+  const tooLong = !!creator && tooLongForTikTok(clip.durationSec, creator.maxDurationSec);
 
   function setBrandedOn(on: boolean) {
     setBranded(on);
     if (on && privacy === "SELF_ONLY") setPrivacy("");
   }
 
-  return (
+  // Drawn on document.body: inside the glass review card a fixed backdrop would cover only the card (§17.8).
+  return createPortal(
     <div className="tt-sheet-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="tt-sheet glass" role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} tabIndex={-1} ref={dialog}>
+      <div className="tt-sheet glass" role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} tabIndex={-1} ref={dialog} onKeyDown={keys}>
         <header className="tt-sheet__head">
           <h2 className="tt-sheet__title" id={`${id}-title`}>
             Post to TikTok
@@ -109,10 +139,20 @@ export function TikTokSheet({
           </button>
         </header>
         {error ? (
-          <p className="callout callout--bad" role="alert">
-            <Icon name="alert" size={18} />
-            <span>{error}</span>
-          </p>
+          <div className="tt-sheet__stuck">
+            <p className="callout callout--bad" role="alert">
+              <Icon name="alert" size={18} />
+              <span>{error} Tap Ask TikTok again. To keep this clip for your other apps now, turn TikTok off in Where clips go, tap Keep, then turn TikTok back on.</span>
+            </p>
+            <div className="tt-sheet__stuck-actions">
+              <Button icon="retry" act="retry" onClick={askAgain}>
+                Ask TikTok again
+              </Button>
+              <A href="/settings/posting/where" className="text-link">
+                Open Where clips go
+              </A>
+            </div>
+          </div>
         ) : !creator ? (
           <p className="tt-sheet__loading" role="status">
             <span className="spinner" aria-hidden="true" /> Asking TikTok…
@@ -194,10 +234,20 @@ export function TikTokSheet({
               .
             </p>
             {tooLong ? (
-              <p className="callout callout--bad">
-                <Icon name="alert" size={18} />
-                <span>This clip is longer than TikTok allows for you. It cannot go to TikTok.</span>
-              </p>
+              <div className="tt-sheet__stuck">
+                <p className="callout callout--bad" role="alert">
+                  <Icon name="alert" size={18} />
+                  <span>
+                    This clip is longer than TikTok allows for you, so it cannot go to TikTok. To keep it for your other apps, turn TikTok off in
+                    Where clips go, tap Keep, then turn TikTok back on.
+                  </span>
+                </p>
+                <div className="tt-sheet__stuck-actions">
+                  <A href="/settings/posting/where" className="text-link">
+                    Open Where clips go
+                  </A>
+                </div>
+              </div>
             ) : null}
           </div>
         )}
@@ -226,10 +276,11 @@ export function TikTokSheet({
             {action}
           </Button>
         </footer>
-        {!ready && creator ? (
+        {!ready && creator && !tooLong ? (
           <p className="tt-sheet__why">{privacy ? `Pick Your brand or Branded content to turn on ${action}.` : `Pick who can see it to turn on ${action}.`}</p>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

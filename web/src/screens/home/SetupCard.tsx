@@ -23,15 +23,18 @@ export function SetupCard() {
         {data.ready}/5
       </ProgressRing>
       <div className="setup-home__text">
+        {/* The " · " dots hold on to the words before them (a no-break space), so a narrow phone breaks after a dot,
+            never leaving one alone at the start of a line. */}
         <h2 className="setup-home__title" id="setup-home-title">
-          Set up posting · {data.ready} of 5 ready
+          Set up posting{"\u00a0· "}
+          <span className="nowrap">{data.ready} of 5 ready</span>
         </h2>
         <p className="setup-home__next">
           <span className={`setup-home__mark is-${next}`}>
             <PlatformMark platform={next} size={16} />
           </span>
-          Next: {GUIDES[next].name}
-          <span className="setup-home__state"> · {stateLine(GUIDES[next], setup)}</span>
+          <span>Next: {GUIDES[next].name}{"\u00a0· "}</span>
+          <span className="setup-home__state">{stateLine(GUIDES[next], setup)}</span>
         </p>
         <p className="setup-home__lede">Do each one once. After that Clip Factory posts by itself.</p>
       </div>

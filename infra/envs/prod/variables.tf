@@ -75,3 +75,13 @@ variable "manage_api_gateway_account" {
   default     = true
   description = "Set the account's API Gateway CloudWatch logging role (one per account and Region; needed for REST and WebSocket logs). false when the account's setting is managed elsewhere."
 }
+
+variable "role_permissions_boundary_arn" {
+  type        = string
+  default     = ""
+  description = "Permissions boundary every cf-prod-* IAM role carries (infra/bootstrap output role_boundary_arn; deploy.yml passes the repository variable CF_ROLE_BOUNDARY_ARN). Empty: no boundary, only for a deploy role without the boundary rule (docs/DEPLOYMENT.md)."
+  validation {
+    condition     = var.role_permissions_boundary_arn == "" || can(regex("^arn:aws[a-z-]*:iam::[0-9]{12}:policy/[A-Za-z0-9+=,.@_/-]+$", var.role_permissions_boundary_arn))
+    error_message = "role_permissions_boundary_arn must be empty or an IAM policy ARN (arn:aws:iam::<account>:policy/<name>)."
+  }
+}

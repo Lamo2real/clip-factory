@@ -7,11 +7,6 @@
   --line: rgb(var(--sage-rgb) / 0.7);
   --line-best: var(--tomato);
 }
-@media (prefers-color-scheme: dark) {
-  .perf {
-    --line: rgb(var(--ink-rgb) / 0.35);
-  }
-}
 .perf__back {
   display: flex;
 }
@@ -697,6 +692,18 @@
   color: inherit;
   text-decoration: none;
 }
+/* The whole top of the card (cover, hook, kind and pill, at least the 121 px cover tall) opens the clip, so the tap
+   target is never just one 24 px line of hook. The posts and buttons below stay outside this layer. */
+.lib-card__top {
+  position: relative;
+}
+.lib-card__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: var(--r-sm);
+}
 .lib-card__link:hover {
   text-decoration: underline;
   text-decoration-color: rgb(var(--tomato-rgb) / 0.5);
@@ -731,6 +738,21 @@
 }
 .week__dates {
   font-style: italic;
+}
+/* At 320 px "This week · 16–22 Nov" cannot fit one line: the dates take their own line and the dot is hidden from
+   the eyes only (screen readers still hear "This week · 16–22 Nov"), so no "·" is left hanging at a line end. */
+@media (max-width: 359px) {
+  .week__dates {
+    display: block;
+  }
+  .week__sep {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 .week__learn {
   display: flex;
@@ -856,6 +878,7 @@
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
+.week-card__total,
 .week-card__apps {
   white-space: nowrap;
 }
@@ -908,6 +931,19 @@
   }
   .week-card__cover {
     width: 48px;
+  }
+}
+/* 320–379 px: next to rank, cover and a 64 px star the hook got only ~108 px and was cut. The star moves to its own
+   full-width row under the card (still 48 px tall), so the hook and the views get the rest of the width. */
+@media (max-width: 379px) {
+  .week-card {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+  .week-card .star-btn--card {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    gap: 8px;
+    min-height: 48px;
   }
 }
 
@@ -980,7 +1016,7 @@
   padding: 2px 8px;
   border-radius: var(--r-pill);
   background: rgb(var(--sage-rgb) / 0.35);
-  color: var(--sage-deep);
+  color: var(--sage-text); /* --sage-deep is under 4.5:1 on this tint */
   font-size: var(--fs-xs);
   font-weight: 700;
   white-space: nowrap;
@@ -1073,12 +1109,6 @@
   color: var(--ink-2);
   font-weight: 600;
 }
-@media (prefers-color-scheme: dark) {
-  .perf__how-box {
-    background: rgb(var(--ink-rgb) / 0.08);
-  }
-}
-
 /* Library and This week: a clip's money guess (with a visible "Best guess" tag) and the week total. */
 .earned-chip {
   display: inline-grid;
@@ -1112,7 +1142,7 @@
   padding: 1px 8px;
   border-radius: var(--r-pill);
   background: rgb(var(--sage-rgb) / 0.35);
-  color: var(--sage-deep);
+  color: var(--sage-text); /* --sage-deep is only ~3.9:1 on this tint */
   font-size: var(--fs-xs);
   font-weight: 700;
   white-space: nowrap;

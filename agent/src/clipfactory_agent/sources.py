@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from . import proc
-from .util import TransientError, UserFacingError
+from .util import TransientError, UserFacingError, log
 
 _HOSTS: dict[str, re.Pattern[str]] = {
     "youtube": re.compile(r"(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com)$"),
@@ -54,6 +54,20 @@ def check_link(url: str) -> str:
     return platform
 
 
+PLATFORM_NAMES = {
+    "youtube": "YouTube",
+    "twitch": "Twitch",
+    "kick": "Kick",
+    "tiktok": "TikTok",
+    "instagram": "Instagram",
+}
+
+
+def platform_name(platform: str) -> str:
+    """The brand's own spelling of a platform id ("youtube" -> "YouTube"), for messages the owner reads."""
+    return PLATFORM_NAMES.get(platform, platform.title())
+
+
 def explain(e: proc.CommandError, platform: str, has_cookies: bool, *, section: bool = False) -> Exception:
     """yt-dlp's error, turned into something the owner can act on (or a retryable error). With ``section``, the
     failure was one clip's piece of video: a 403 (an expired signed URL), a failed fragment or an ffmpeg merge
@@ -72,14 +86,19 @@ def explain(e: proc.CommandError, platform: str, has_cookies: bool, *, section: 
     if "private video" in t or "members-only" in t or "join this channel" in t:
         return UserFacingError("This video is private or members-only, so it can't be downloaded.")
     if "unavailable" in t or "removed" in t or "does not exist" in t or "404" in t:
-        return UserFacingError(f"This {platform.capitalize()} video is not available. Check the link.")
+        return UserFacingError(f"This {platform_name(platform)} video is not available. Check the link.")
     if "live event will begin" in t or "is live" in t or "premieres in" in t:
         return UserFacingError("This stream is still live or has not started. Try again once it has ended.")
     if any(s in t for s in ("timed out", "http error 5", "connection reset", "temporarily", "429")):
         return TransientError(str(e))
     if section and any(s in t for s in ("http error 403", "forbidden", "fragment", "ffmpeg")):
         return TransientError(str(e))
-    return UserFacingError(f"The video could not be downloaded from {platform.capitalize()} ({e.tail[:200]}).")
+    # yt-dlp's own words go to the log, never to the owner.
+    log("warn", "download.failed", platform=platform, detail=e.tail[:500])
+    return UserFacingError(
+        f"The video could not be downloaded from {platform_name(platform)}. Check the link and tap Try again, "
+        "or upload the video file instead."
+    )
 
 
 def _cookie_args(cookies: Path | None) -> list[str]:

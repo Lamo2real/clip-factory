@@ -42,6 +42,22 @@ function youtube(u: URL): LinkCheck {
   };
 }
 
+/** Twitch's own site pages: one-word paths that are not a channel (twitch.tv/directory is not a live channel). */
+const TWITCH_PAGES = new Set([
+  "directory", "settings", "videos", "search", "downloads", "jobs", "p", "turbo", "subscriptions", "inventory",
+  "wallet", "drops", "friends", "messages", "prime", "store", "login", "signup", "logout", "following", "privacy",
+  "legal", "help", "team", "products", "broadcast", "creatorcamp",
+]);
+
+/** Kick's own site pages, the same idea. */
+const KICK_PAGES = new Set([
+  "categories", "category", "browse", "search", "following", "dashboard", "settings", "terms-of-service",
+  "privacy-policy", "community-guidelines", "dmca-policy", "login", "signup", "subscriptions", "help",
+]);
+
+const sitePage = (name: string) =>
+  `That ${name} link goes to a ${name} page, not a video, clip or channel. Open the video or the channel and copy its link.`;
+
 function twitch(u: URL): LinkCheck {
   const h = host(u);
   const parts = u.pathname.split("/").filter(Boolean);
@@ -49,6 +65,7 @@ function twitch(u: URL): LinkCheck {
   if (parts[0] === "videos" && /^\d+$/.test(parts[1] ?? ""))
     return { state: "ok", platform: "twitch", kind: "video", url: `https://www.twitch.tv/videos/${parts[1]}` };
   if (parts[1] === "clip" && parts[2]) return { state: "ok", platform: "twitch", kind: "clip", url: u.toString() };
+  if (parts.length === 1 && TWITCH_PAGES.has(parts[0]!.toLowerCase())) return { state: "error", platform: "twitch", message: sitePage("Twitch") };
   if (parts.length === 1 && /^\w{3,25}$/.test(parts[0]!))
     return { state: "ok", platform: "twitch", kind: "live", url: `https://www.twitch.tv/${parts[0]!.toLowerCase()}` };
   return {
@@ -63,6 +80,7 @@ function kick(u: URL): LinkCheck {
   if (parts[0] === "video" && parts[1]) return { state: "ok", platform: "kick", kind: "video", url: u.toString() };
   if (parts.length >= 3 && (parts[1] === "videos" || parts[1] === "clips"))
     return { state: "ok", platform: "kick", kind: parts[1] === "clips" ? "clip" : "video", url: u.toString() };
+  if (parts.length === 1 && KICK_PAGES.has(parts[0]!.toLowerCase())) return { state: "error", platform: "kick", message: sitePage("Kick") };
   if (parts.length === 1 && /^[\w-]{2,40}$/.test(parts[0]!))
     return { state: "ok", platform: "kick", kind: "live", url: `https://kick.com/${parts[0]!.toLowerCase()}` };
   return { state: "error", platform: "kick", message: "That Kick link does not point to a video, clip or channel." };

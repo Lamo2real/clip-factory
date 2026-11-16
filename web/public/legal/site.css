@@ -1,4 +1,8 @@
-/* The public pages (about, privacy, terms): plain, readable, in the Clip Factory colours. No scripts. */
+/* The public pages (about, privacy, terms): plain, readable, in the Clip Factory colours. No scripts.
+   Fonts, on purpose: these pages load no webfonts (they stay tiny and do not add a second copy of the app's fonts to
+   the offline cache). The stacks are the app's own (tokens.css --font-ui / --font-display): Inter when the device has
+   it, else the system UI font; headings and the logo in Times New Roman, whose metric twin Tinos is the face the app
+   bundles, so they look the same as in the app. */
 :root {
   color-scheme: light;
   --sage: #9caf88;
@@ -7,6 +11,8 @@
   --tomato: #e8412c;
   --ink: #1e2a1b;
   --ink-2: #2f3b2c;
+  --font-ui: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Times New Roman", "Times New Roman MT", Tinos, Times, serif;
 }
 * {
   box-sizing: border-box;
@@ -19,7 +25,7 @@ body {
   padding: 0 16px 48px;
   background: radial-gradient(120% 80% at 10% 0%, #fff 0%, var(--offwhite) 45%, #e6ecdf 100%) fixed;
   color: var(--ink);
-  font: 17px/1.6 "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 17px/1.6 var(--font-ui);
 }
 .wrap {
   max-width: 720px;
@@ -29,17 +35,49 @@ body {
 nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
-  padding: 20px 0 8px;
+  align-items: center;
+  gap: 0 18px;
+  padding: 12px 0 0;
   font-weight: 600;
 }
+/* The logo as in the app (App.tsx): regular "Clip", italic "Factory", never bold. */
 nav .brand {
+  /* Not flex like the other links: in a flex box the space between "Clip" and <em>Factory</em> would collapse. */
+  display: inline-block;
+  min-height: 44px;
+  line-height: 44px;
   margin-right: auto;
-  font-family: "Times New Roman", Tinos, Times, serif;
-  font-style: italic;
-  font-size: 1.3rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.45rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
   color: var(--ink);
   text-decoration: none;
+}
+nav .brand em {
+  font-style: italic;
+}
+/* The two page links travel together: on a phone they share the second row instead of one hanging alone. */
+nav .links {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0 18px;
+  white-space: nowrap;
+}
+/* On the smallest phones the system font may be wider than Inter: a touch smaller so both still fit one row. */
+@media (max-width: 374px) {
+  nav .links {
+    gap: 0 14px;
+    font-size: 15px;
+  }
+}
+/* Every link in the header and footer is a 44 px tall touch target (kid-proof, docs/UX_DESIGN_SYSTEM.md). */
+nav a,
+footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 a {
   color: var(--sage-deep);
@@ -47,7 +85,7 @@ a {
 }
 h1,
 h2 {
-  font-family: "Times New Roman", Tinos, Times, serif;
+  font-family: var(--font-display);
   font-weight: 400;
   line-height: 1.1;
 }

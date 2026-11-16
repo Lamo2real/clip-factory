@@ -131,11 +131,24 @@ export function setLeaveGuard(g: LeaveGuard): () => void {
 
 const samePage = (a: string, b: string) => a.split("#")[0] === b.split("#")[0];
 
+/** Set while a held browser Back (or Forward) finishes after Leave, so the guard does not ask a second time. */
+let leaving = false;
+
 if (typeof window !== "undefined") {
   window.addEventListener("popstate", () => {
     const to = here();
     const from = href;
-    if (guard && !samePage(to, from) && guard(to, () => navigate(to, { replace: true, force: true }))) {
+    if (leaving) {
+      leaving = false;
+    } else if (guard && !samePage(to, from) && guard(to, () => {
+      // The copy of this page pushed below sits right after `to` in the history (for Back and Forward alike), so
+      // one step back lands on the real entry: no duplicate is left behind for the next Back to stall on.
+      // The owner chose to leave, so the page's guard goes now: a quick second Back can arrive while the page change
+      // still animates (before the page unmounts), and must not be held a second time.
+      guard = null;
+      leaving = true;
+      history.back();
+    })) {
       // Browser Back already moved the address: put this page back while the owner decides.
       history.pushState({ cfDepth: depth() + 1 }, "", from);
       return;
@@ -234,7 +247,16 @@ export function useHash(): string {
     () => "/",
   );
   const at = current.indexOf("#");
-  return at < 0 ? "" : decodeURIComponent(current.slice(at + 1));
+  return at < 0 ? "" : decodeHash(current.slice(at + 1));
+}
+
+/** A hand-edited or cut-off `#anchor` (`#100%`) is not valid percent-encoding: use it as typed instead of crashing. */
+export function decodeHash(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 /** The nav section a route belongs to (a job detail page highlights Jobs). */

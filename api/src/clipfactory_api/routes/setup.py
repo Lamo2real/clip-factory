@@ -20,7 +20,7 @@ from ..oauth import PKCE, SETUP_ORDER, STATE_SECONDS, OAuthEnv, callback, format
 from ..oauth.providers import AppKeys
 from ..oauth.tokens import ReconnectNeededError, SecretsTokenProvider
 from ..platforms import errors as platform_errors
-from ..platforms.base import NotConnectedError, obj
+from ..platforms.base import NotConnectedError, RetryablePublishError, obj
 
 TIKTOK_FILE = re.compile(r"^tiktok[A-Za-z0-9_-]{4,64}\.txt$")
 MAX_FILE_BYTES = 4096
@@ -68,11 +68,13 @@ def get_setup(app: App, req: Request) -> Response:
 
 
 def get_platform(app: App, req: Request) -> Response:
+    _env(app)
     return _setup_body(app, req, _platform(req))
 
 
 def patch_platform(app: App, req: Request) -> Response:
     platform = _platform(req)
+    _env(app)
     body = req.json()
     now = app.clock()
     if "gate" in body:
@@ -124,13 +126,15 @@ def put_keys(app: App, req: Request) -> Response:
     cleaned = {name: formats.check(platform, name, body[name]) for name in needed}
     now = app.clock()
     previous = setup.item(app.store, req.user_id, platform)
+    changed = previous.get("keysClientId") not in (None, cleaned["clientId"])
+    # The old token was issued to the old app: it can only be revoked with the old keys, so read them first.
+    old_keys = _keys(env, platform) if changed else None
     secret: dict[str, Any] = {**cleaned, "userId": req.user_id, "savedAt": iso(now)}
     env.secrets.write(env.secrets.name(platform, "app"), secret, platform=platform)
-    changed = previous.get("keysClientId") not in (None, cleaned["clientId"])
     if changed:
         account = setup.account_item(app.store, req.user_id, platform) or {}
         if account.get("status") not in (None, "not_connected"):
-            _disconnect(app, env, req.user_id, platform, reason="keys_changed")
+            _disconnect(app, env, req.user_id, platform, reason="keys_changed", keys=old_keys)
     setup.record(
         app.store,
         req.user_id,
@@ -224,6 +228,7 @@ def _dead(platform: str) -> dict[str, Any]:
 
 
 def tiktok_file(app: App, req: Request) -> Response:
+    _env(app)
     body = req.json()
     validate.only_keys(body, {"filename", "content"})
     filename = body.get("filename")
@@ -246,6 +251,7 @@ def tiktok_file(app: App, req: Request) -> Response:
 
 
 def delete_tiktok_file(app: App, req: Request) -> Response:
+    _env(app)
     filename = req.params["filename"]
     if not TIKTOK_FILE.match(filename):
         raise not_found("We could not find that file.")
@@ -261,6 +267,7 @@ def delete_tiktok_file(app: App, req: Request) -> Response:
 
 
 def list_accounts(app: App, req: Request) -> Response:
+    _env(app)
     return ok({"accounts": posts.accounts(app.store, req.user_id)})
 
 
@@ -339,13 +346,22 @@ def disconnect(app: App, req: Request) -> Response:
     return no_content()
 
 
-def _disconnect(app: App, env: OAuthEnv, user_id: str, platform: str, *, reason: str | None = None) -> None:
+def _disconnect(
+    app: App,
+    env: OAuthEnv,
+    user_id: str,
+    platform: str,
+    *,
+    reason: str | None = None,
+    keys: AppKeys | None = None,
+) -> None:
     """Revoke (best effort), delete the token and pending secrets, Account ``not_connected``; YouTube data that came
-    from the API is forgotten (YouTube Developer Policies)."""
+    from the API is forgotten (YouTube Developer Policies). ``keys`` are the app keys the token was issued to (the
+    old keys when they were just replaced); by default the saved keys are used."""
     secrets = env.secrets
     token = secrets.read(secrets.name(platform, "token"), fresh=True)
     if token is not None:
-        providers.revoke(env, platform, _keys(env, platform), token)
+        providers.revoke(env, platform, keys or _keys(env, platform), token)
     secrets.delete(secrets.name(platform, "token"))
     secrets.delete(secrets.name(platform, "pending"))
     now = app.clock()
@@ -372,13 +388,18 @@ def creator_info(app: App, req: Request) -> Response:
         raise conflict(str(e)) from e
     except NotConnectedError as e:
         raise conflict("Connect TikTok first.") from e
-    except providers.Fail as e:
-        raise ApiError(502, "platform_down", "TikTok did not answer. Try again in a minute.") from e
+    except (RetryablePublishError, providers.Fail) as e:
+        # TikTok was slow, busy or down (also while refreshing the token): nothing is wrong on our side.
+        log("warning", "setup.creator_info_failed", error=type(e).__name__)
+        raise ApiError(503, "platform_down", "TikTok did not answer. Try again in a minute.") from e
     error = obj(body.get("error"))
     if status != 200 or str(error.get("code") or "ok") != "ok":
         problem = platform_errors.classify("tiktok", status, body)
         if problem.kind == "reconnect":
             tokens.mark_dead("tiktok", account)
+        if problem.retryable:  # TikTok answered with 5xx or "slow down": a try-again, not a conflict
+            log("warning", "setup.creator_info_failed", error=problem.kind)
+            raise ApiError(503, "platform_down", "TikTok did not answer. Try again in a minute.")
         raise conflict(problem.sentence)
     data = obj(body.get("data"))
     options = [str(o) for o in data.get("privacy_level_options") or []]

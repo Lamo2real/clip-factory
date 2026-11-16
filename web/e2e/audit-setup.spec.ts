@@ -236,3 +236,73 @@ for (const size of [
     await ctx.close();
   });
 }
+
+/** The first character of every line a block's text breaks into. */
+const lineStarts = (page: Page, selector: string) =>
+  page.locator(selector).evaluate((el) => {
+    const starts: string[] = [];
+    let lastTop = -Infinity;
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+      const text = node.textContent ?? "";
+      for (let i = 0; i < text.length; i++) {
+        if (!text[i]!.trim()) continue;
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, i + 1);
+        const top = Math.round(range.getBoundingClientRect().top);
+        if (top > lastTop + 4) starts.push(text[i]!);
+        lastTop = Math.max(lastTop, top);
+      }
+    }
+    return starts;
+  });
+
+test.describe("setup layout details", () => {
+  test("Home's setup card never starts a line with a lone ' · ' dot (320-414 px)", async ({ page }) => {
+    for (const width of [320, 360, 375, 390, 400, 414]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/");
+      await settle(page);
+      for (const sel of [".setup-home__title", ".setup-home__next"]) expect(await lineStarts(page, sel), `${sel} at ${width}`).not.toContain("·");
+      await expect(page.locator(".setup-home")).toContainText("Set up posting · 0 of 5 ready");
+      await expect(page.locator(".setup-home")).toContainText("Next: YouTube · Not started");
+    }
+  });
+
+  test("the 0/5 ring on Set up posting sits at the card's right edge at every width", async ({ page }) => {
+    for (const width of [1024, 1280, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/settings/posting/setup");
+      await settle(page);
+      const ring = (await page.locator(".setup-summary__ring").boundingBox())!;
+      const card = (await page.locator(".setup-summary").boundingBox())!;
+      // Only the panel's own padding (at most 24 px) between the ring and the card's edge.
+      expect(card.x + card.width - (ring.x + ring.width), `at ${width}`).toBeLessThanOrEqual(26);
+    }
+  });
+
+  test("the 'Set up posting' tag uses the deep sage text that passes 4.5:1 on its tint", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/settings/posting/setup");
+    await settle(page);
+    await expect(page.locator(".setup-summary .apple__tag")).toHaveCSS("color", "rgb(61, 79, 49)");
+  });
+
+  test("a platform page's ring shares the top row with the mark on phones; the checked date stays whole", async ({ page }) => {
+    for (const width of [320, 375, 430, 599, 1024]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/settings/posting/setup/tiktok");
+      await settle(page);
+      const mark = (await page.locator(".setup-head__mark").boundingBox())!;
+      const ring = (await page.locator(".setup-head > .ring").boundingBox())!;
+      const head = (await page.locator(".setup-head").boundingBox())!;
+      // The ring is never below the mark, and sits at the right of the hero.
+      expect(ring.y, `at ${width}`).toBeLessThan(mark.y + mark.height);
+      expect(head.x + head.width - (ring.x + ring.width), `at ${width}`).toBeLessThanOrEqual(26);
+      const date = page.locator(".setup-head__checked .nowrap");
+      const rects = await date.evaluate((el) => el.getClientRects().length);
+      expect(rects, `date at ${width}`).toBe(1);
+    }
+  });
+});

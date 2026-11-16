@@ -30,7 +30,25 @@ MAX_HISTORY = 4
 BUDGET_S = 24.0  # of the API Lambda's 29 s; the model step needs 14 s of it left (§19.5)
 DEVICES = frozenset({"phone", "tablet", "desktop"})
 OSES = frozenset({"mac", "windows", "linux", "chromeos", "ios", "android", "unknown"})
-PAGES = frozenset({"home", "jobs", "job", "review", "library", "clip", "settings", "get_app", "not_found"})
+# Every route name in web/src/lib/router.ts (HelpContext.page is Route["name"], §19.6; tests/test_help_pages.py checks
+# it). A skill page ranks like Settings (retrieve.boost_page); the two mock-only pages never reach a real API, the
+# client sends them as "not_found", and they are accepted here only so a page name can never be the reason Ask fails.
+PAGES = frozenset(
+    {
+        "home",
+        "jobs",
+        "job",
+        "review",
+        "library",
+        "clip",
+        "settings",
+        "skill",
+        "mock_oauth",
+        "get_app",
+        "motion_gallery",
+        "not_found",
+    }
+)
 
 BAD_REQUEST = "Ask a question with up to 300 letters."
 OFF = "Ask Clip Factory is turned off right now."

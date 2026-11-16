@@ -5,7 +5,7 @@ import { compose } from "../../features/help/compose.ts";
 import type { AskBody, HelpTransport } from "../../features/help/helpApi.ts";
 import { loadCorpus } from "../../features/help/kb.ts";
 import { rank } from "../../features/help/retrieve.ts";
-import type { HelpContext } from "../../features/help/types.ts";
+import { HELP_PAGES, type HelpContext } from "../../features/help/types.ts";
 import { FAKE_MODEL_MS, fakeModel } from "./helpModel.ts";
 
 export interface MockHelpState {
@@ -54,7 +54,10 @@ export function mockHelpTransport(state: MockHelpState = { enabled: true, outcom
     if (!state.enabled) return off();
     const { question, history = [], context } = (body ?? {}) as AskBody;
     const q = typeof question === "string" ? question.trim() : "";
-    if (!q || q.length > 300) {
+    // Like the API's _parse: a page outside the enum is a bad request, so the mock cannot hide a client that sends one.
+    const page = (context as { page?: unknown } | undefined)?.page;
+    const badPage = page !== undefined && !(HELP_PAGES as readonly unknown[]).includes(page);
+    if (!q || q.length > 300 || badPage) {
       state.outcomes.push("bad_request");
       return { status: 400, retryAfter: null, body: { error: { code: "bad_request", message: "Ask a question with up to 300 letters." }, requestId } };
     }

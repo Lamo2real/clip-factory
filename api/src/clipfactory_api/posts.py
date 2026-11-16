@@ -185,7 +185,8 @@ def create_for_clip(
     if clip.get("postsCreated"):
         return [public_post(p) for p in posts_for_clip(store, user_id, clip_id, consistent=True)]
     # Clips confirmed before the flag existed may already have some posts: never create a second one per platform.
-    existing = [public_post(p) for p in posts_for_clip(store, user_id, clip_id, consistent=True)]
+    # Posts are only ever written together with the flag, so any found here are old and gsi1 already has them.
+    existing = [public_post(p) for p in posts_for_clip(store, user_id, clip_id)]
     have = {p["platform"] for p in existing}
     connected = {a["platform"] for a in accounts(store, user_id) if a["status"] == "connected"}
     created: list[Item] = []
@@ -217,7 +218,7 @@ def create_for_clip(
     update = db.update_request(
         db.user_pk(user_id),
         db.clip_sk(clip_id),
-        {"postsCreated": True, **(clip_fields or {})},
+        {"postsCreated": True, "postIds": [p["postId"] for p in existing + created], **(clip_fields or {})},
         expect_in={"status": list(expect_status)} if expect_status is not None else None,
         expect_absent=["postsCreated"],
     )
@@ -226,11 +227,20 @@ def create_for_clip(
 
 
 def posts_for_clip(store: db.Store, user_id: str, clip_id: str, *, consistent: bool = False) -> list[Item]:
-    """A clip's posts. ``consistent`` reads the owner's partition with a strongly consistent query instead of the
-    eventually consistent gsi1, for callers (Confirm, the clip-flow) that must see posts written moments earlier."""
+    """A clip's posts. ``consistent`` is for callers (Confirm, the clip-flow) that must see posts written moments
+    earlier: it reads the clip and then its posts by key (the internal ``postIds`` written in the same transaction as
+    the posts), both strongly consistent, so the cost does not grow with the owner's post count. Clips created before
+    ``postIds`` existed fall back to a strongly consistent read of the owner's whole partition (every page)."""
     if consistent:
-        items = store.query_all(db.user_pk(user_id), "POST#", consistent=True)
-        return [i for i in items if i.get("clipId") == clip_id and i.get("type") == "post"]
+        clip = store.get(db.user_pk(user_id), db.clip_sk(clip_id))
+        ids = clip.get("postIds") if clip else None
+        if isinstance(ids, list):
+            found = store.batch_get((db.user_pk(user_id), db.post_sk(str(i))) for i in ids)
+            order = {str(i): n for n, i in enumerate(ids)}
+            found.sort(key=lambda i: order.get(str(i.get("postId")), len(order)))
+        else:
+            found = store.query_all(db.user_pk(user_id), "POST#", consistent=True)
+        return [i for i in found if i.get("clipId") == clip_id and i.get("type") == "post"]
     # gsi1 is not partitioned by owner, so every result is checked against the caller.
     items = store.query_all(f"CLIP#{clip_id}", "POST#", index="gsi1")
     return [i for i in items if i.get("userId") == user_id and i.get("type") == "post"]

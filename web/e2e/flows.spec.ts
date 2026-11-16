@@ -24,7 +24,7 @@ test("paste a link, see the platform, start a job", async ({ page }) => {
 test("upload a video with progress", async ({ page }) => {
   await page.goto("/");
   await settle(page);
-  await page.getByRole("radio", { name: "Upload a video" }).check({ force: true });
+  await page.getByRole("radio", { name: "Pick a video" }).check({ force: true });
   await page.locator('input[type="file"][accept="video/*"]').setInputFiles({
     name: "stream.mp4",
     mimeType: "video/mp4",

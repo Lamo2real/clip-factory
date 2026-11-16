@@ -103,7 +103,7 @@
     aspect-ratio: 9 / 16;
     margin-left: calc(clamp(120px, 10vw, 160px) / -2);
     overflow: hidden;
-    border-radius: 20px;
+    border-radius: var(--r-md);
     border: 4px solid rgb(255 255 255 / 0.75);
     box-shadow: 0 24px 40px -22px rgb(var(--ink-rgb) / 0.75);
     transform: translateX(calc(var(--n) * clamp(64px, 6vw, 92px))) rotate(calc(var(--n) * 7deg)) translateY(calc(var(--n) * var(--n) * 14px));
@@ -141,6 +141,22 @@
 }
 .newjob .segmented {
   justify-self: start;
+}
+/* Narrow phones: the two options would wrap into a ragged two-row blob, so they become two equal columns that
+   always stay side by side; a long label wraps inside its own half. */
+@media (max-width: 419px) {
+  .newjob .segmented {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-self: stretch;
+    border-radius: var(--r-lg);
+  }
+  .newjob .segmented__opt {
+    padding: 6px 10px;
+    white-space: normal;
+    line-height: 1.2;
+    border-radius: calc(var(--r-lg) - 4px);
+  }
 }
 .field--inline {
   display: grid;
@@ -201,7 +217,7 @@
   flex: none;
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: var(--r-xs);
   background: rgb(var(--sage-rgb) / 0.4);
 }
 .working__text {
@@ -243,6 +259,12 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr));
   gap: 12px;
+}
+/* Three teasers at most: from 600 px they always fill exactly three equal columns, so no empty column is left. */
+@media (min-width: 600px) {
+  .home-row__cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 @media (min-width: 1100px) {
   .home-row {
@@ -333,6 +355,17 @@
   color: var(--ink-2);
   font-weight: 600;
 }
+/* Nothing to review: the one "All done here." card spans the row instead of sitting in a third of it. So does the
+   error with its Try again when Home could not load. */
+.home-row__cards > .teaser--empty:only-child,
+.home-row__error {
+  grid-column: 1 / -1;
+}
+.working__failed {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
 .teaser-skel {
   aspect-ratio: 4 / 6;
   border-radius: var(--r-lg);
@@ -422,8 +455,21 @@
   line-height: 1.3;
 }
 .job-row__meta {
+  display: flex;
+  gap: 0.3em;
+  min-width: 0;
   font-size: var(--fs-small);
   color: var(--ink-3);
+}
+.job-row__source {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.job-row__when {
+  flex: none;
+  white-space: nowrap;
 }
 .job-row__progress {
   display: grid;
@@ -435,6 +481,7 @@
   font-weight: 600;
   color: var(--ink-2);
 }
+/* The whole error shows: its last sentence says how to fix it. */
 .job-row__error {
   margin-top: 4px;
   font-size: var(--fs-small);
@@ -487,7 +534,7 @@
   place-items: center;
   width: 26px;
   height: 26px;
-  border-radius: 8px;
+  border-radius: var(--r-xs);
   background: rgb(var(--offwhite-rgb) / 0.9);
   --mark-cut: #f7f5ef;
 }
@@ -570,6 +617,10 @@
 }
 .clip-tile:hover {
   transform: translateY(-3px);
+}
+/* A thrown-away clip's tile is not a link (it opens nowhere), so it must not lift like one. */
+.clip-tile--static:hover {
+  transform: none;
 }
 .clip-tile:focus-visible {
   border-radius: var(--r-lg);
@@ -666,7 +717,12 @@
 .review-card__body {
   grid-area: body;
 }
-@media (min-width: 900px) {
+/* Two columns only when the card itself is wide enough (the sidebar takes 252px of the window), so the decision
+   column never drops below about 400px. */
+.review-list__item {
+  container: review-card / inline-size;
+}
+@container review-card (min-width: 820px) {
   .review-card {
     grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
     grid-template-rows: auto 1fr;
@@ -734,9 +790,19 @@
 .review-card__source {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
   font-size: var(--fs-small);
+}
+/* The link icon lives inside the link (or this plain line), so it stays beside the words when they wrap. */
+.review-card__source > .text-link,
+.review-card__source-text {
+  min-width: 0;
+}
+.review-card__source-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .review-card__actions {
   display: flex;
@@ -746,6 +812,11 @@
   gap: 10px;
   padding-top: 6px;
   border-top: 1px solid rgb(var(--ink-rgb) / 0.08);
+}
+/* Once the two buttons wrap (narrow cards), each fills the row so they line up instead of a ragged stack. */
+.review-card__actions > .btn {
+  flex: 1 1 140px;
+  max-width: 260px;
 }
 .review-card__actions > .confirm-row {
   flex: 1 1 100%;
@@ -969,7 +1040,7 @@
   flex: none;
   width: 32px;
   height: 32px;
-  border-radius: 10px;
+  border-radius: var(--r-xs);
   background: rgb(var(--sage-rgb) / 0.35);
 }
 .post.is-posted .post__mark {
@@ -1044,7 +1115,7 @@
   flex: none;
   width: 44px;
   height: 44px;
-  border-radius: 14px;
+  border-radius: var(--r-sm);
   background: rgb(var(--sage-rgb) / 0.4);
   --mark-cut: #e3e9db;
 }
@@ -1109,7 +1180,7 @@
   width: 92px;
   aspect-ratio: 9 / 16;
   overflow: hidden;
-  border-radius: 16px;
+  border-radius: var(--r-md);
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7), var(--shadow-1);
 }
 .bg-picker__preview img {

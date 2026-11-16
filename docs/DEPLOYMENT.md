@@ -14,7 +14,9 @@ variable (section 5).
 | `CF_DEPLOY_ROLE_ARN` | GitHub → Settings → Secrets and variables → Actions → **Variables** | yes | ARN of the deploy role below |
 | `CF_OWNER_EMAIL` | same page → **Secrets** | yes | The owner's email: the only login. A secret so it is masked in the logs of this public repository. |
 | `CF_REGION` | Variables | no | Default `eu-north-1` |
-| `CF_STATE_BUCKET` | Variables | no | Default `lamo-labs-state-bucket` (state key `clip-factory/prod/terraform.tfstate`) |
+| `CF_STATE_BUCKET` | Variables | no | Default `lamo-labs-state-bucket` (state key `clip-factory/prod/terraform.tfstate`). It must be in this AWS account: a bucket of that name in another account stops the deploy. |
+| `CF_ROLE_BOUNDARY_ARN` | Variables | recommended | The `role_boundary_arn` output of `infra/bootstrap` (`arn:aws:iam::<ACCOUNT_ID>:policy/cf-prod-role-boundary`). Every `cf-prod-*` role then carries it, so the deploy role cannot give itself more access (section 2). |
+| `CF_ALARM_EMAIL` | Secrets | no | Where alarm emails go. Default: `CF_OWNER_EMAIL`. Confirm the email AWS sends after the first deploy (see [Alarm emails](#alarm-emails)). |
 
 ## One-time setup
 
@@ -76,10 +78,30 @@ broadest to narrowest:
 - `AdministratorAccess`, in line with the owner's convenience-first stance, since only `main` of this repository can
   assume the role.
 - What `infra/bootstrap` sets up: `PowerUserAccess` (every service, no IAM) plus IAM limited to roles named
-  `cf-prod-*`. Its `iam:PassRole` condition must list `lambda.amazonaws.com`, `bedrock-agentcore.amazonaws.com` and
-  `apigateway.amazonaws.com` (the last one for the API Gateway logging role, section 5). `PowerUserAccess` already
-  covers Secrets Manager, so the Connect state key (`cf-prod/oauth/state-key`) needs no change to `infra/bootstrap`.
-- The policy below, which lists only what the stack uses:
+  `cf-prod-*`, and a permissions boundary `cf-prod-role-boundary` (everything except IAM, Organizations and account
+  settings). The deploy role can create a `cf-prod-*` role, or give one more permissions (`CreateRole`,
+  `PutRolePolicy`, `AttachRolePolicy`), only when that role carries the boundary, and it can never remove the
+  boundary or change the boundary policy. Without that rule, IAM on `cf-prod-*` would be as good as administrator:
+  create `cf-prod-x`, attach `AdministratorAccess`, assume it. Its `iam:PassRole` condition must list
+  `lambda.amazonaws.com`, `bedrock-agentcore.amazonaws.com` and `apigateway.amazonaws.com` (the last one for the API
+  Gateway logging role, section 5). `PowerUserAccess` already covers Secrets Manager, so the Connect state key
+  (`cf-prod/oauth/state-key`) needs no change to `infra/bootstrap`. Put its `role_boundary_arn` output in the
+  repository variable `CF_ROLE_BOUNDARY_ARN`: the deploy passes it to Terraform, which sets it on every `cf-prod-*`
+  role.
+- The policy below, which lists only what the stack uses. Create the boundary policy first (IAM → Policies → Create
+  policy, name `cf-prod-role-boundary`), with this document:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Sid": "NoIamOrAccount", "Effect": "Allow", "NotAction": ["iam:*", "organizations:*", "account:*"], "Resource": "*" }
+  ]
+}
+```
+
+  Then the deploy role's policy. Replace `<ACCOUNT_ID>` and set `CF_ROLE_BOUNDARY_ARN` to
+  `arn:aws:iam::<ACCOUNT_ID>:policy/cf-prod-role-boundary`:
 
 ```json
 {
@@ -145,16 +167,44 @@ broadest to narrowest:
       "Sid": "OwnRolesOnly",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:UpdateRole", "iam:TagRole", "iam:UntagRole",
-        "iam:UpdateAssumeRolePolicy", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy",
-        "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:AttachRolePolicy", "iam:DetachRolePolicy",
-        "iam:ListInstanceProfilesForRole", "iam:PassRole",
-        "iam:CreateServiceLinkedRole"
+        "iam:DeleteRole", "iam:GetRole", "iam:UpdateRole", "iam:TagRole", "iam:UntagRole",
+        "iam:UpdateAssumeRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy",
+        "iam:ListRolePolicies", "iam:ListAttachedRolePolicies", "iam:DetachRolePolicy",
+        "iam:ListInstanceProfilesForRole"
       ],
-      "Resource": [
-        "arn:aws:iam::<ACCOUNT_ID>:role/cf-prod-*",
-        "arn:aws:iam::<ACCOUNT_ID>:role/aws-service-role/*"
-      ]
+      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/cf-prod-*"
+    },
+    {
+      "Sid": "GrantOnlyWithinBoundary",
+      "Effect": "Allow",
+      "Action": ["iam:CreateRole", "iam:PutRolePolicy", "iam:AttachRolePolicy", "iam:PutRolePermissionsBoundary"],
+      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/cf-prod-*",
+      "Condition": {
+        "StringEquals": { "iam:PermissionsBoundary": "arn:aws:iam::<ACCOUNT_ID>:policy/cf-prod-role-boundary" }
+      }
+    },
+    {
+      "Sid": "KeepTheBoundary",
+      "Effect": "Deny",
+      "Action": "iam:DeleteRolePermissionsBoundary",
+      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/cf-prod-*"
+    },
+    {
+      "Sid": "PassStackRoles",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/cf-prod-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": ["lambda.amazonaws.com", "bedrock-agentcore.amazonaws.com", "apigateway.amazonaws.com"]
+        }
+      }
+    },
+    {
+      "Sid": "ServiceLinkedRoles",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/aws-service-role/*"
     }
   ]
 }
@@ -174,12 +224,29 @@ EventBridge Scheduler are no longer used.
 
 Copy the role's ARN.
 
+**Adding the boundary to a stack that is already deployed.** Roles created before the boundary existed do not carry
+it yet, and the enforced rule would refuse to change them. Switch over once, in this order:
+
+1. `cd infra/bootstrap && terraform apply -var enforce_role_boundary=false` (creates `cf-prod-role-boundary` and lets
+   the deploy role set it, keeping the old rule for now).
+2. Set the repository variable `CF_ROLE_BOUNDARY_ARN` to the `role_boundary_arn` output, then run the deploy
+   (Actions → deploy → Run workflow). Terraform adds the boundary to every `cf-prod-*` role.
+3. `terraform apply` in `infra/bootstrap` again (without the `-var`): from now on a role without the boundary cannot be
+   given any permissions.
+
+A fresh account needs none of this: run `infra/bootstrap` once and set `CF_ROLE_BOUNDARY_ARN` before the first deploy.
+If the variable is missing, the deploy shows a notice; with the enforced rule, creating a role then fails with
+"not authorized to perform: iam:CreateRole", and setting the variable fixes it.
+
 ### 3. GitHub settings
 
 In `Lamo2real/clip-factory-legal` → Settings → Secrets and variables → Actions:
 1. Variables → New repository variable: `CF_DEPLOY_ROLE_ARN` = the role ARN.
 2. Secrets → New repository secret: `CF_OWNER_EMAIL` = your email.
-3. Optional: `CF_REGION`, `CF_STATE_BUCKET`.
+3. Variables → New repository variable: `CF_ROLE_BOUNDARY_ARN` = the `role_boundary_arn` output of `infra/bootstrap`
+   (recommended, section 2).
+4. Optional: `CF_REGION`, `CF_STATE_BUCKET`, and the secret `CF_ALARM_EMAIL` if alarm emails should go somewhere
+   other than `CF_OWNER_EMAIL`.
 
 Until `CF_DEPLOY_ROLE_ARN` and `CF_OWNER_EMAIL` are set, the deploy workflow stops at its first step and says which
 one is missing. CI keeps running on every push.
@@ -257,7 +324,10 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    package `api/dist/lambda.zip`.
 2. **Assume the role** through OIDC.
 3. **State bucket**: [scripts/ensure-state-bucket.sh](../scripts/ensure-state-bucket.sh) creates the Terraform state
-   bucket if it does not exist (versioned, encrypted, private).
+   bucket if it does not exist (versioned, encrypted, private). Every call checks that the bucket belongs to this
+   AWS account (`--expected-bucket-owner`): if a bucket of that name belongs to someone else, the deploy stops and
+   says to pick another `CF_STATE_BUCKET`, so the state (which holds secrets) is never written to someone else's
+   bucket.
 4. **Agent image**: [scripts/push-image.sh](../scripts/push-image.sh) builds the ARM64 image and pushes it to ECR,
    tagged with a hash of the agent's sources, so unchanged code is not rebuilt.
 5. **Terraform** `init` (S3 backend with lockfile), `plan`, then `apply` of exactly that plan. No manual approval
@@ -267,7 +337,8 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    publish a new version and move their `live` alias; running executions stay on their old version), the stream
    trigger, the EventBridge rule `cf-prod-stats` (every 15 minutes, read from `config/platforms.json`), the vector
    bucket and index, the SSM parameter, the Connect state-key secret and the alarms (including `cf-prod-help-model-failures` and its log metric
-   filter). `cf-prod-api` gets the `HELP_*` settings (`HELP_ENABLED = "true"`, the EU Haiku profile from
+   filter), and the AgentCore runtime's log group `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT` with 30-day
+   retention like every other log group (created if the service has not made it yet). `cf-prod-api` gets the `HELP_*` settings (`HELP_ENABLED = "true"`, the EU Haiku profile from
    `config/models.json`, the cap and rate limits) and permission to call only that model. No extra deploy job is needed for them:
    they all come from the same Lambda zip and the same `terraform apply`.
 6. **Web**: [scripts/write-web-config.sh](../scripts/write-web-config.sh) writes `config.json` from the Terraform
@@ -281,7 +352,7 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    `/version.json` last, never cached. Open apps show the update bar within 5 minutes
    ([ARCHITECTURE.md flow 11](ARCHITECTURE.md#11-updates-versionjson-release-areas-and-the-update-bar)).
 8. **Smoke test**: `GET /v1/health` must answer `{ "ok": true }`.
-9. **Desktop app** (job `desktop`, only when needed): see [Desktop downloads](#desktop-downloads).
+9. **Desktop app** (jobs `desktop` and `desktop-upload`, only when needed): see [Desktop downloads](#desktop-downloads).
 
 The run summary shows `app_url`. The first deploy into an empty account takes about 15–20 minutes (CloudFront and
 the AgentCore runtime are the slow parts); later deploys take a few minutes. A deploy that rebuilds the desktop app
@@ -305,8 +376,10 @@ The Mac `.dmg` and Windows `.exe` offered by **Get the app** are built by the `d
 - the app icon changed,
 - a download is missing from `downloads/` in the web bucket (for example the first deploy).
 
-The app address is read from the Terraform output `app_url` and built into the app. The same deploy role (OIDC) uploads
-the files, then rewrites `downloads/manifest.json`
+The app address is read from the Terraform output `app_url` and built into the app. The build job has no OIDC token
+(npm, cargo and the Tauri CLI run there, and none of them may be able to assume the deploy role); it hands the
+installer to the small `desktop-upload` job, which assumes the role and copies it to the bucket. Then
+`desktop-manifest` rewrites `downloads/manifest.json`
 (`{ "version", "files": { "mac": { "path", "size" }, "windows": { "path", "size" } } }`) with no caching and
 invalidates `/downloads/*` in CloudFront, so nobody gets an old file under the same name.
 
@@ -400,6 +473,15 @@ Terraform does not manage this item. To turn help off for good, set the Terrafor
 answers are capped at 2,000 per 30 days (`HELP_MONTHLY_CAP`, Terraform variable `help_monthly_cap`, a whole number);
 past the cap help keeps answering from search.
 
+### Alarm emails
+
+Every alarm (Lambda errors, failed or timed-out durable executions, live-update lag, webhook 5xx, help model
+failures; [CONTRACTS.md §14.9](CONTRACTS.md)) goes to the SNS topic `cf-prod-alarms`, which emails `CF_ALARM_EMAIL`,
+or `CF_OWNER_EMAIL` when that secret is not set. After the first deploy (and after changing the address) AWS sends
+an email titled "AWS Notification - Subscription Confirmation" from `no-reply@sns.amazonaws.com`: press
+**Confirm subscription** in it (check spam). Until then no alarm email arrives. To check, open SNS in the console
+(eu-north-1) → Topics → `cf-prod-alarms`: the subscription must say Confirmed, not Pending confirmation.
+
 **Alarm `cf-prod-help-model-failures`** (10 or more `kb_model_error` or `kb_model_timeout` answers in an hour) means
 the Haiku calls are failing. The owner still gets plain answers. The usual cause on a new account is the Marketplace
 first-call step: open Claude Haiku 5.5 once in the Bedrock console playground in `eu-north-1`
@@ -446,8 +528,10 @@ terraform destroy -var "owner_email=<email>" -var "agent_image_tag=<any>"
 Empty the media and web buckets first if the destroy stops on "bucket not empty", and delete the ECR images if the
 repository refuses to go. The vector bucket has `force_destroy = false`: Terraform deletes the `clips` index first,
 then the bucket. Deleting the two durable functions stops their running executions first and can take up to an hour
-(Terraform waits up to 60 minutes). The API Gateway account logging setting stays as it was. The Terraform state bucket, the OIDC provider and the deploy role are not managed by this
-Terraform; delete them by hand if you no longer need them. GitHub Pages and the legal pages are not affected.
+(Terraform waits up to 60 minutes). The API Gateway account logging setting stays as it was. The Terraform state bucket, the OIDC provider, the deploy role and its `cf-prod-role-boundary`
+policy are not managed by this Terraform; delete them by hand (or `terraform destroy` in `infra/bootstrap`) if you no
+longer need them. The agent's log group `/aws/bedrock-agentcore/runtimes/...-DEFAULT` stays too (it expires its
+logs after 30 days); delete it in the CloudWatch console if you want it gone. GitHub Pages and the legal pages are not affected.
 The platform secrets under `cf-prod/platforms/` are created by the app, not by Terraform: press **Disconnect** on each
 platform first (which also revokes the tokens), or delete them in the Secrets Manager console (eu-north-1). Remove the
 developer apps on the platforms' websites too if you no longer need them.

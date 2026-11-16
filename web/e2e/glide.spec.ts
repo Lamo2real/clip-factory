@@ -45,7 +45,7 @@ test.describe("glide", () => {
         (el) =>
           new Promise<{ slide: boolean; stretch: boolean }>((done) => {
             const g = el.querySelector<HTMLElement>(":scope > .glide")!;
-            const target = [...el.querySelectorAll<HTMLElement>(".segmented__opt")].find((o) => o.textContent?.includes("Upload a video"))!;
+            const target = [...el.querySelectorAll<HTMLElement>(".segmented__opt")].find((o) => o.textContent?.includes("Pick a video"))!;
             const seen = { slide: false, stretch: false };
             const check = () => seen.slide && seen.stretch && done(seen);
             g.addEventListener("transitionrun", (e) => {
@@ -131,7 +131,7 @@ test.describe("glide", () => {
       await page.goto("/");
       await settle(page);
       const bar = page.locator(".segmented").first();
-      await bar.locator(".segmented__opt", { hasText: "Upload a video" }).click();
+      await bar.locator(".segmented__opt", { hasText: "Pick a video" }).click();
       const glide = bar.locator(".glide");
       expect(await glide.evaluate((el) => getComputedStyle(el).transitionProperty)).toBe("opacity");
       expect(await glide.evaluate((el) => getComputedStyle(el).animationName)).toBe("none");

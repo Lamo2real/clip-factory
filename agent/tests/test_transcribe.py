@@ -102,10 +102,12 @@ async def test_transcriber_failure_is_plain() -> None:
     async def no_cancel() -> None:
         return None
 
-    with pytest.raises(UserFacingError, match="could not read the audio"):
+    with pytest.raises(UserFacingError, match="couldn't hear the words") as info:
         await Transcriber(fake, "b").run(
             "n", "k", "o", expected_seconds=1, check_cancel=no_cancel, on_progress=lambda f: None, poll=0
         )
+    # Transcribe's own words stay in the log; the owner gets the next step.
+    assert "Unsupported media" not in str(info.value) and "Tap Try again" in str(info.value)
 
 
 async def test_transcriber_checks_cancel() -> None:

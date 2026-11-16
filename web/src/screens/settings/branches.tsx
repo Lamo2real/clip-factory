@@ -10,13 +10,13 @@ import { GetAppPanel } from "../../components/GetApp.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { ActGlyph, Button, Pill, Skeleton, Stepper } from "../../components/ui.tsx";
-import { PLATFORM_LABEL } from "../../lib/format.ts";
+import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 import { useAction } from "../../lib/motion.ts";
 import { setPrefs, shrinkImage, usePrefs } from "../../lib/prefs.ts";
 import { APP_VERSION, checkForUpdate, updateState } from "../../lib/update.ts";
 import { Apple, AppleSwitch, Panel, usePickAction } from "./parts.tsx";
 
-const PLATFORMS: Platform[] = ["youtube", "instagram", "facebook", "tiktok", "x"];
+const PLATFORMS: readonly Platform[] = PLATFORM_ORDER;
 
 // ---------- Clip making ----------
 

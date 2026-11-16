@@ -84,8 +84,10 @@
     transform: rotate(var(--fly-angle)) translateX(16px) scaleX(1);
   }
 }
+/* The reduced-motion fade keeps its 300 ms (§20.6): !important and a selector more specific than base.css's global
+   1 ms rule (`*` and `.reduce-motion *`), as motion.css does for .act. */
 .fly.is-fading .fly__item {
-  animation: fly-fade 300ms ease-out backwards;
+  animation: fly-fade 300ms ease-out backwards !important;
 }
 @keyframes fly-fade {
   from {
@@ -94,14 +96,14 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .fly.is-flying .fly__item {
-    animation: fly-fade 300ms ease-out backwards;
+    animation: fly-fade 300ms ease-out backwards !important;
   }
   .fly__trail {
     display: none;
   }
 }
 .reduce-motion .fly.is-flying .fly__item {
-  animation: fly-fade 300ms ease-out backwards;
+  animation: fly-fade 300ms ease-out backwards !important;
 }
 .reduce-motion .fly__trail {
   display: none;

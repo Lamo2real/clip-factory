@@ -457,18 +457,21 @@ export function Empty({
   title,
   children,
   action,
+  heading: Heading = "h3",
 }: {
   icon: IconName;
   title: string;
   children?: ReactNode;
   action?: ReactNode;
+  /** The title's heading level: "h1" when the empty state is the whole page (it is then the page's only h1). */
+  heading?: "h1" | "h2" | "h3";
 }) {
   return (
     <div className="empty glass">
       <span className="empty__icon">
         <Icon name={icon} size={26} />
       </span>
-      <h3 className="empty__title">{title}</h3>
+      <Heading className="empty__title">{title}</Heading>
       {children ? <p className="empty__text">{children}</p> : null}
       {action ? <div className="empty__action">{action}</div> : null}
     </div>

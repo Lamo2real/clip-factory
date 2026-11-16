@@ -26,11 +26,22 @@ export const MAX_PICKS = 10;
 const weekHref = (week: string, current: string) =>
   week === current ? "/library?view=week" : `/library?view=week&week=${encodeURIComponent(week)}`;
 
-export function WeekView({ week: asked }: { week: string | null }) {
-  const current = isoWeek(new Date());
+/** The week a `?week=` asks for (the current week when absent or not a real week), and whether it is the current one. */
+function shownWeek(asked: string | null, now = new Date()): { week: string; current: string; isCurrent: boolean; valid: boolean } {
+  const current = isoWeek(now);
   const valid = asked === null || isWeek(asked);
   const week = asked && valid ? asked : current;
-  const isCurrent = week === current;
+  return { week, current, isCurrent: week === current, valid };
+}
+
+/** What the heading (and the tab title) call the week: "This week", or "Week of 28 Sep–4 Oct" for any other week. */
+export function weekTitle(asked: string | null, now = new Date()): string {
+  const { week, isCurrent } = shownWeek(asked, now);
+  return isCurrent ? "This week" : `Week of ${weekLabel(week)}`;
+}
+
+export function WeekView({ week: asked }: { week: string | null }) {
+  const { week, current, isCurrent, valid } = shownWeek(asked);
   const range = weekRange(week);
   const toast = useToast();
   const { me } = useSession();
@@ -168,7 +179,13 @@ export function WeekView({ week: asked }: { week: string | null }) {
         <h2 className="week__title display-3" id="week-title">
           {isCurrent ? (
             <>
-              This week <span className="week__dates">· {weekLabel(week)}</span>
+              {/* On the narrowest phones the dates drop to their own line and the dot hides (it stays for screen readers).
+                  A no-break space ties the dot to the dates, so at any width a wrap moves "· 16–22 Nov" together. */}
+              This week{" "}
+              <span className="week__dates">
+                <span className="week__sep">{"· "}</span>
+                {weekLabel(week)}
+              </span>
             </>
           ) : (
             <>
@@ -181,6 +198,8 @@ export function WeekView({ week: asked }: { week: string | null }) {
           className="week__arrow icon-btn glass"
           aria-label="Later week"
           aria-disabled={laterOff || undefined}
+          // The newest week's nudge has no sound (§20.3, §20.11): without this, aria-disabled would play the deny sound.
+          data-sound={laterOff ? "off" : undefined}
           data-act="next"
           onClick={() => {
             if (laterOff) {
@@ -353,10 +372,13 @@ function WeekCard({
         <p className="week-card__views">
           {item.posted ? (
             <>
-              <span className="week-card__num" aria-hidden="true">
-                {compact(item.totals.views)}
+              {/* The number and "views" never split over two lines (§16.8). */}
+              <span className="week-card__total">
+                <span className="week-card__num" aria-hidden="true">
+                  {compact(item.totals.views)}
+                </span>
+                <span className="sr-only">{full(item.totals.views)}</span> views
               </span>
-              <span className="sr-only">{full(item.totals.views)}</span> views
               {apps.length ? <span className="week-card__apps"> · on {plural(apps.length, "app")}</span> : null}
             </>
           ) : (

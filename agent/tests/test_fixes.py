@@ -70,7 +70,7 @@ async def test_one_clip_failing_with_a_user_facing_error_is_skipped(monkeypatch:
 
     async def cut(st: JobState, m: Any, index: int, layout: Any = None) -> Candidate:
         if index == 1:
-            raise UserFacingError("The video could not be downloaded from Youtube (HTTP Error 403: Forbidden).")
+            raise UserFacingError("The video could not be downloaded from YouTube. Check the link and tap Try again.")
         return Candidate(m, None, index=index)  # type: ignore[arg-type]
 
     monkeypatch.setattr(p, "_cut", cut)

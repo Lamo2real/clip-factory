@@ -210,7 +210,7 @@ flowchart TD
   sa --> wait["cb.result(): no compute while waiting"]
   wait -- success --> fin["step finish: Job ready + clipCount if not already"] --> ready([outcome ready])
   wait -- "JobFailed" --> fail["step fail: Job failed with the agent's message"]
-  wait -- "timeout or missed heartbeat" --> fail2["step fail: 'The agent stopped responding. Press Retry.'"]
+  wait -- "timeout or missed heartbeat" --> fail2["step fail: 'Making the clips stopped partway. Tap Try again.'"]
   wait -- "Canceled or Superseded" --> nowrite([outcome canceled or superseded, no write])
   fail --> stop["step stop-session: StopRuntimeSession"] --> failed([outcome failed])
   fail2 --> stop
@@ -243,7 +243,7 @@ sequenceDiagram
     F->>R: step stop-session
   else container died (no heartbeat for 15 min)
     L->>F: resume with CallbackError (heartbeat timeout)
-    F->>D: step fail: Job failed, "The agent stopped responding. Press Retry."
+    F->>D: step fail: Job failed, "Making the clips stopped partway. Tap Try again."
     F->>R: step stop-session (errors ignored)
   end
 ```
@@ -963,7 +963,7 @@ sequenceDiagram
 |---|---|
 | A pipeline step (download blocked, Transcribe error, render error) | The step is marked `failed` with a plain message, the job becomes `failed`, the agent sends `JobFailed` to the job-flow callback, the app shows **Try again**. |
 | One clip fails the checklist | One fix pass; if it still fails, a spare moment replaces it. The job finishes with the clips that pass. |
-| The agent container dies or the session ends | Heartbeats to the callback stop; after 15 minutes the job flow's `fail` step marks the job failed ("The agent stopped responding. Press Retry.") and stops the session. No scan, no watchdog. |
+| The agent container dies or the session ends | Heartbeats to the callback stop; after 15 minutes the job flow's `fail` step marks the job failed ("Making the clips stopped partway. Tap Try again.") and stops the session. No scan, no watchdog. |
 | The job flow cannot start the agent | Step `start-agent` retries 3 times with backoff on throttling, 5xx and connection errors; then the execution fails and the `cf-prod-job-flow-durable-failed` alarm fires. |
 | The API cannot start a flow | Job: `failed` with "Could not start. Press Try again." Clip: stays `publishState: pending`; the next Keep starts it again (same name, so never twice). |
 | A job runs longer than 8 hours | The callback times out and the job fails with the same plain message; long sources are capped by `maxSourceHours`. |

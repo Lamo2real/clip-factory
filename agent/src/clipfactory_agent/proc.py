@@ -10,6 +10,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from .util import redact_urls
+
 _INTERESTING = re.compile(r"error|unable|denied|not |fail|forbidden|sign in|private|unavailable", re.IGNORECASE)
 
 
@@ -17,7 +19,8 @@ class CommandError(Exception):
     def __init__(self, cmd: str, code: int | None, tail: str) -> None:
         self.cmd = cmd
         self.code = code
-        self.tail = tail
+        self.tail = redact_urls(tail)  # ffmpeg/ffprobe print the input URL, presigned query string and all
+        tail = self.tail
         super().__init__(f"{cmd} failed (exit {code}). {tail}".strip())
 
 

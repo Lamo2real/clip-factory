@@ -398,13 +398,15 @@ class Store:
         *,
         index: str | None = None,
         newest_first: bool = False,
-        cap: int = 5000,
+        cap: int | None = None,
         consistent: bool = False,
     ) -> list[Item]:
-        """Every matching item, following pages, up to ``cap`` (a safety stop, far above one owner's data)."""
+        """Every matching item, following every page. ``cap`` stops early (after that many items, in the requested
+        order) only when a caller asks for it: there is no silent default limit, so owner-wide reads never drop
+        the newest (or oldest) items once an owner has a lot of data."""
         items: list[Item] = []
         start: Item | None = None
-        while len(items) < cap:
+        while cap is None or len(items) < cap:
             page = self.query_page(
                 pk, sk_prefix, index=index, newest_first=newest_first, start_key=start, consistent=consistent
             )
@@ -412,7 +414,7 @@ class Store:
             if not page.last_key:
                 break
             start = page.last_key
-        return items[:cap]
+        return items if cap is None else items[:cap]
 
     def query_stats_due(self, max_sk: str, *, cap: int = 2000) -> list[Item]:
         """Posts due for a stats poll: sparse gsi2 ``gsi2pk = "STATS" AND gsi2sk <= max_sk``, oldest due first."""

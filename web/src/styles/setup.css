@@ -63,6 +63,14 @@
   font-size: clamp(1.6rem, 1.3rem + 1.2vw, 2.2rem);
   line-height: 1.05;
 }
+/* The ring sits at the card's right edge at every width, in line with the platform cards below: the words column
+   is not capped here (only the leaf keeps a readable length). */
+.setup-summary .apple__text {
+  max-width: none;
+}
+.setup-summary .apple__leaf {
+  max-width: 64ch;
+}
 .setup-summary__ring {
   margin-left: auto;
 }
@@ -101,7 +109,7 @@
   flex: none;
   width: 52px;
   height: 52px;
-  border-radius: 16px;
+  border-radius: var(--r-md);
   color: var(--ink);
   background: linear-gradient(160deg, rgb(255 255 255 / 0.85), rgb(var(--sage-rgb) / 0.55));
   box-shadow:
@@ -159,7 +167,28 @@
 .setup-head__mark {
   width: 64px;
   height: 64px;
-  border-radius: 20px;
+  border-radius: var(--r-md);
+}
+/* Phones: the mark and the ring share the top row (ring on the right), the words take the full width under them,
+   so the ring never wraps onto a lonely row of its own. */
+@media (max-width: 599px) {
+  .setup-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "mark ring"
+      "text text";
+  }
+  .setup-head__mark {
+    grid-area: mark;
+  }
+  .setup-head > .ring {
+    grid-area: ring;
+    justify-self: end;
+  }
+  .setup-head__text {
+    grid-area: text;
+  }
 }
 .setup-head__text {
   display: grid;
@@ -275,7 +304,7 @@
   flex: none;
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--r-sm);
   background: rgb(var(--sage-rgb) / 0.3);
   color: var(--sage-deep);
 }
@@ -873,7 +902,7 @@
 .setup-home__mark {
   width: 28px;
   height: 28px;
-  border-radius: 9px;
+  border-radius: var(--r-xs);
 }
 .setup-home__state {
   font-weight: 600;
@@ -919,10 +948,12 @@
 }
 
 /* ---------- Post to TikTok sheet ---------- */
+/* Drawn on document.body (a portal), above the tab bar (40), Ask (45) and the update bar (55), but under the toasts
+   (60): a Keep that fails from the sheet shows its error toast on top, not hidden behind the sheet. */
 .tt-sheet-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 58;
   display: grid;
   align-items: end;
   justify-items: center;
@@ -979,6 +1010,17 @@
   display: grid;
   gap: 14px;
   min-width: 0;
+}
+/* TikTok cannot take this clip (too long, or its creator info did not load): what to do next, never a dead end. */
+.tt-sheet__stuck {
+  display: grid;
+  gap: 10px;
+}
+.tt-sheet__stuck-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
 }
 .tt-sheet__who {
   display: flex;

@@ -213,6 +213,90 @@
     {
       "q": "how do I make clips",
       "expect": "make-clips-link"
+    },
+    {
+      "q": "What does Keep do?",
+      "expect": "review-keep",
+      "history": [
+        {
+          "role": "user",
+          "text": "How do I make clips from a Twitch link?"
+        },
+        {
+          "role": "assistant",
+          "text": "(the answer)"
+        }
+      ]
+    },
+    {
+      "q": "How do I make clips from a Twitch link?",
+      "expect": "make-clips-link",
+      "history": [
+        {
+          "role": "user",
+          "text": "What does Keep do?"
+        },
+        {
+          "role": "assistant",
+          "text": "(the answer)"
+        }
+      ]
+    },
+    {
+      "q": "How do I add a skill?",
+      "expect": "skills-add",
+      "history": [
+        {
+          "role": "user",
+          "text": "How many views did my best clip get this week?"
+        },
+        {
+          "role": "assistant",
+          "text": "(the answer)"
+        }
+      ]
+    },
+    {
+      "q": "Where do I change my click sound?",
+      "expect": "sounds-click",
+      "history": [
+        {
+          "role": "user",
+          "text": "How do I connect Instagram?"
+        },
+        {
+          "role": "assistant",
+          "text": "(the answer)"
+        }
+      ]
+    },
+    {
+      "q": "Why is my clip private on TikTok?",
+      "expect": "tiktok-private",
+      "history": [
+        {
+          "role": "user",
+          "text": "How do I add a skill?"
+        },
+        {
+          "role": "assistant",
+          "text": "(the answer)"
+        }
+      ]
+    },
+    {
+      "q": "How many views did my best clip get this week?",
+      "expect": "best-clip-week-views",
+      "history": [
+        {
+          "role": "user",
+          "text": "Where do I change my click sound?"
+        },
+        {
+          "role": "assistant",
+          "text": "(the answer)"
+        }
+      ]
     }
   ]
 }

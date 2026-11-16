@@ -358,7 +358,10 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
           <p className="setup-head__meta">{timeLine(guide)}</p>
           <p className="setup-head__checked">
             <Icon name="checkCircle" size={16} />
-            Steps checked on {checkedOnText(guide)}
+            {/* The date never splits across two lines ("16 / Nov 2026"). */}
+            <span>
+              Steps checked on <span className="nowrap">{checkedOnText(guide)}</span>
+            </span>
           </p>
         </div>
         <ProgressRing

@@ -711,13 +711,13 @@
   right: -9px;
   display: grid;
   place-items: center;
-  min-width: 20px;
-  height: 20px;
+  min-width: 22px;
+  height: 22px;
   padding: 0 5px;
   border-radius: var(--r-pill);
   background: var(--tomato-deep);
   color: #fff;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   line-height: 1;
   box-shadow: 0 0 0 2px rgb(var(--offwhite-rgb) / 0.9);
@@ -801,6 +801,10 @@
   color: var(--ink-2);
 }
 .empty__action {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
   margin-top: 6px;
 }
 
@@ -957,6 +961,50 @@
 }
 .tab:focus-visible {
   border-radius: var(--r-pill);
+}
+/* A caption longer than its platform allows: a red dot on its tab, seen even when that tab is not open. */
+.tab {
+  position: relative;
+}
+.tab__over {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tomato);
+  box-shadow: 0 0 0 2px rgb(var(--offwhite-rgb) / 0.95);
+}
+.tab.is-over {
+  color: var(--tomato-ink);
+}
+/* Caption tabs: all five platforms stay in sight on narrow cards. Tabs not open show only their mark (the name is
+   still their accessible name and title); on the narrowest cards the open one does too, and the field label below
+   names the platform. The strip still scrolls as a last resort, and the chosen tab scrolls into view. */
+.captions {
+  container: captions / inline-size;
+}
+@container captions (max-width: 559px) {
+  .captions .tab:not(.is-on) .tab__label {
+    display: none;
+  }
+  .captions .tab:not(.is-on) {
+    flex: 1 1 0;
+    padding-inline: 0;
+  }
+}
+@container captions (max-width: 359px) {
+  .captions .tabs {
+    gap: 2px;
+  }
+  .captions .tab .tab__label {
+    display: none;
+  }
+  .captions .tab {
+    flex: 1 1 0;
+    padding-inline: 0;
+  }
 }
 .tabpanel {
   display: grid;
@@ -1285,7 +1333,7 @@
   width: 40px;
   aspect-ratio: 9 / 16;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: var(--r-xs);
   background: linear-gradient(160deg, rgb(var(--sage-rgb) / 0.55), rgb(var(--sage-rgb) / 0.25));
 }
 .similar__cover img {
@@ -1311,7 +1359,7 @@
   flex-wrap: wrap;
   gap: 2px 8px;
   color: var(--ink-3);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .similar__views {

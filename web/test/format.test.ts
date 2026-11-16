@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { bytes, duration, plural, relative, timecode } from "../src/lib/format.ts";
+import { byPlatformOrder, bytes, duration, PLATFORM_ORDER, plural, relative, timecode } from "../src/lib/format.ts";
+import { ago, STATS_ORDER } from "../src/lib/metrics.ts";
 import { match } from "../src/lib/router.ts";
 
 describe("format", () => {
@@ -17,9 +18,44 @@ describe("format", () => {
   });
   it("formats relative times", () => {
     const now = Date.parse("2026-11-15T12:00:00Z");
-    expect(relative("2026-11-15T11:55:00Z", now)).toBe("5 minutes ago");
+    expect(relative("2026-11-15T11:55:00Z", now)).toBe("5 min ago");
     expect(relative("2026-11-14T12:00:00Z", now)).toBe("yesterday");
     expect(relative("2026-11-15T12:00:20Z", now)).toBe("just now");
+  });
+  it("never says 60 min or 24 h: the unit comes from whole minutes (F084)", () => {
+    expect(duration(7190)).toBe("2 h");
+    expect(duration(3599)).toBe("1 h");
+    expect(duration(3570)).toBe("1 h");
+    expect(duration(3540)).toBe("59 min");
+    const now = Date.parse("2026-11-15T12:00:00Z");
+    expect(relative(new Date(now - 59.6 * 60_000).toISOString(), now)).toBe("59 min ago");
+    expect(relative(new Date(now - 60 * 60_000).toISOString(), now)).toBe("1 h ago");
+    expect(relative(new Date(now - 23.6 * 3_600_000).toISOString(), now)).toBe("23 h ago");
+    expect(relative(new Date(now - 24 * 3_600_000).toISOString(), now)).toBe("yesterday");
+    expect(relative(new Date(now - 3 * 86_400_000).toISOString(), now)).toBe("3 days ago");
+    expect(relative(new Date(now + 2 * 86_400_000 - 5_000).toISOString(), now)).toBe("in 2 days");
+    expect(relative(new Date(now + 4.2 * 60_000).toISOString(), now)).toBe("in 5 min");
+    expect(relative("not a time", now)).toBe("");
+  });
+  it("Library, Jobs and the clip page say \"ago\" the same way", () => {
+    const now = Date.parse("2026-11-15T12:00:00Z");
+    for (const back of [20_000, 3 * 60_000, 2 * 3_600_000, 30 * 3_600_000, 5 * 86_400_000]) {
+      const iso = new Date(now - back).toISOString();
+      expect(ago(iso, now)).toBe(relative(iso, now));
+    }
+    expect(ago(new Date(now + 90_000).toISOString(), now)).toBe("just now");
+  });
+});
+
+describe("platform order (F018)", () => {
+  it("is YouTube, TikTok, Instagram, Facebook, X everywhere", () => {
+    expect(PLATFORM_ORDER).toEqual(["youtube", "tiktok", "instagram", "facebook", "x"]);
+    expect(STATS_ORDER).toBe(PLATFORM_ORDER);
+  });
+  it("sorts posts from the API into that order", () => {
+    const posts = (["x", "facebook", "instagram", "tiktok", "youtube"] as const).map((platform, i) => ({ platform, i }));
+    expect(byPlatformOrder(posts).map((p) => p.platform)).toEqual(PLATFORM_ORDER);
+    expect(posts[0]!.platform).toBe("x");
   });
 });
 

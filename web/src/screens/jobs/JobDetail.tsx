@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, ClipStatus, Job } from "../../api/types.ts";
@@ -13,6 +13,7 @@ import { MOMENT_LABEL, plural, relative, timecode } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { applyClipEvent, byRank, withMedia } from "../../lib/liveCache.ts";
+import { stopWithUndo, useStopping } from "./pendingStops.ts";
 
 const CLIP_STATUS: Record<ClipStatus, { label: string; tone: Tone }> = {
   review: { label: "Needs a look", tone: "tomato" },
@@ -32,8 +33,10 @@ export function JobDetail({ jobId }: { jobId: string }) {
   const { data, error, missing, reload, setData } = useLoad(() => api().getJob(jobId), jobId);
   const { refresh } = useSession();
   const toast = useToast();
-  const [busy, setBusy] = useState<"cancel" | "retry" | null>(null);
-  const [stopping, setStopping] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // A Stop waiting for its Undo lives outside this page (pendingStops.ts), so leaving and coming back keeps it.
+  const stopping = useStopping(jobId);
+  const wasStopping = useRef(stopping);
   const lastStatus = useRef<Job["status"] | null>(null);
   // Stop job keeps its handle here, not in the button: the button leaves while the Undo toast is up and comes back
   // rewinding when Undo is tapped (§20.7). Try again shakes when the server says no.
@@ -86,31 +89,38 @@ export function JobDetail({ jobId }: { jobId: string }) {
   useLivePoll(refetch, working);
   if (job) lastStatus.current = job.status;
 
-  async function act(kind: "cancel" | "retry") {
-    setBusy(kind);
+  // A pending Stop just ended (sent, undone, or the job had already finished): fetch the job as it is now. This also
+  // covers a Stop started before the page was left and come back to, whose result went to the old page.
+  useEffect(() => {
+    if (wasStopping.current && !stopping) void refetch().catch(() => undefined);
+    wasStopping.current = stopping;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stopping]);
+
+  async function retry() {
+    setBusy(true);
     try {
-      const updated = kind === "cancel" ? await api().cancelJob(jobId) : await api().retryJob(jobId);
+      const updated = await api().retryJob(jobId);
       setData((d) => (d ? { ...d, job: updated } : d));
-      toast.info(kind === "cancel" ? "Job stopped." : "Starting again from the beginning.");
+      toast.info("Starting again from the beginning.");
       void refresh().catch(() => undefined);
     } catch (e) {
-      (kind === "cancel" ? stopAct : retryAct).fail({ sound: false });
+      retryAct.fail({ sound: false });
       toast.error(friendlyMessage(e));
     } finally {
-      setBusy(null);
-      setStopping(false);
+      setBusy(false);
     }
   }
 
   /** Stopping waits 8 seconds for an Undo, so a slip of the finger never loses a job. */
   function stop() {
-    setStopping(true);
-    toast.undo("Stopping this job.", {
-      onUndo: () => {
-        setStopping(false);
-        stopAct.rewind();
+    stopWithUndo(jobId, toast, {
+      onUndo: () => stopAct.rewind(),
+      onStopped: (updated) => {
+        setData((d) => (d ? { ...d, job: updated } : d));
+        void refresh().catch(() => undefined);
       },
-      onCommit: () => void act("cancel"),
+      onFail: () => stopAct.fail({ sound: false }),
     });
   }
 
@@ -120,6 +130,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
         <BackLink />
         <Empty
           icon="info"
+          heading="h1"
           title="This job is gone"
           action={
             <LinkButton href="/jobs" variant="primary" icon="chevronLeft">
@@ -135,6 +146,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
   if (error && !data) {
     return (
       <div className="page">
+        <h1 className="sr-only">Could not load this job</h1>
         <BackLink />
         <ErrorPanel message={error} onRetry={reload} />
       </div>
@@ -143,6 +155,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
   if (!job) {
     return (
       <div className="page">
+        <h1 className="sr-only">Loading job</h1>
         <BackLink />
         <Skeleton className="detail-skel" />
       </div>
@@ -162,7 +175,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
             Started {relative(job.createdAt)} · aiming for{" "}
             {job.clipTarget.min === job.clipTarget.max
               ? plural(job.clipTarget.min, "clip")
-              : `${job.clipTarget.min}–${job.clipTarget.max} clips`}
+              : <span className="nowrap">{`${job.clipTarget.min}–${job.clipTarget.max} clips`}</span>}
           </p>
         </div>
         <div className="page-head__actions">
@@ -201,7 +214,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
           <StepTimeline steps={job.steps} />
           <div className="panel__actions">
             {working && !stopping ? (
-              <Button variant="ghost" icon="stop" act={stopAct} loading={busy === "cancel"} onClick={stop}>
+              <Button variant="ghost" icon="stop" act={stopAct} onClick={stop}>
                 Stop job
               </Button>
             ) : null}
@@ -212,7 +225,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
               </p>
             ) : null}
             {job.status === "failed" || job.status === "canceled" ? (
-              <Button variant="primary" icon="retry" act={retryAct} data-help="try-again" loading={busy === "retry"} onClick={() => act("retry")}>
+              <Button variant="primary" icon="retry" act={retryAct} data-help="try-again" loading={busy} onClick={retry}>
                 Try again
               </Button>
             ) : null}
@@ -252,9 +265,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
         </h2>
         {data.clips.length === 0 ? (
           <p className="muted">
-            {working
-              ? "Clips show up here as soon as they are made."
-              : "This job made no clips. Go back to Home and try a different link."}
+            {emptyClipsText(job.status)}
           </p>
         ) : (
           <ul className="clip-grid">
@@ -270,10 +281,35 @@ export function JobDetail({ jobId }: { jobId: string }) {
   );
 }
 
+/** What the Clips section says when it is empty, so it never contradicts the fix shown above it. */
+export function emptyClipsText(status: Job["status"]): string {
+  switch (status) {
+    case "queued":
+    case "running":
+      return "Clips show up here as soon as they are made.";
+    case "failed":
+      return "No clips yet. Fix the problem above, then tap Try again.";
+    case "canceled":
+      return "No clips yet. This job was stopped. Tap Try again to start it again.";
+    case "ready":
+      return "This job made no clips. Go back to Home and try a different link.";
+  }
+}
+
+/**
+ * Where a clip tile goes (§16.8): a clip waiting for a look opens on Review, a kept one opens its own page. A thrown
+ * away clip is not listed anywhere else, so its tile is not a link.
+ */
+export function clipTileHref(clip: Pick<Clip, "clipId" | "status">): string | null {
+  if (clip.status === "review") return `/review#clip-${clip.clipId}`;
+  if (clip.status === "declined") return null;
+  return `/clips/${clip.clipId}`;
+}
+
 function ClipTile({ clip }: { clip: Clip }) {
-  const href = clip.status === "review" ? `/review#clip-${clip.clipId}` : "/library";
-  return (
-    <A href={href} className="clip-tile glass">
+  const href = clipTileHref(clip);
+  const body = (
+    <>
       <span className="clip-tile__media">
         {clip.coverUrl ? <img src={clip.coverUrl} alt="" loading="lazy" /> : <Icon name="review" size={28} />}
         <span className="clip-tile__rank">#{clip.rank}</span>
@@ -285,7 +321,14 @@ function ClipTile({ clip }: { clip: Clip }) {
         </span>
         <ClipStatusPill status={clip.status} />
       </span>
+    </>
+  );
+  return href ? (
+    <A href={href} className="clip-tile glass">
+      {body}
     </A>
+  ) : (
+    <div className="clip-tile clip-tile--static glass">{body}</div>
   );
 }
 

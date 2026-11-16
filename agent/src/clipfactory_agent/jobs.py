@@ -246,8 +246,8 @@ def failure_message(step: str | None, e: BaseException) -> str:
         return str(e)
     what = LABELS.get(step or "", "this step").lower()
     if is_transient(e):
-        return f"A service was busy while trying to {what} and did not recover. Press Retry."
-    return f"Something went wrong while trying to {what}. Press Retry; if it happens again, try another video."
+        return f"A service was busy while trying to {what} and did not recover. Tap Try again."
+    return f"Something went wrong while trying to {what}. Tap Try again; if it happens again, try another video."
 
 
 async def run_job(

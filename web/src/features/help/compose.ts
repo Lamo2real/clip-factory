@@ -1,6 +1,6 @@
 // The answer without a model (docs/CONTRACTS.md §19.4): the best doc's own words, steps and buttons. Mirrors
 // api/src/clipfactory_api/help/compose.py, so a local answer and a server "kb" answer read the same.
-import type { Ranked } from "./retrieve.ts";
+import { boostPage, type Ranked } from "./retrieve.ts";
 import type { HelpAction, HelpAnswer, HelpContext } from "./types.ts";
 
 export const REFUSED_TEXT = "I can't help with that. I only know how to use Clip Factory.";
@@ -71,8 +71,8 @@ export const SUGGESTIONS = {
 
 /** Three questions for the empty state, chosen by the page (§19.8). */
 export function suggestionsFor(context: Pick<HelpContext, "page"> | null): string[] {
-  const second =
-    context?.page === "settings" ? SUGGESTIONS.clickSound : context?.page === "clip" ? SUGGESTIONS.tiktokPrivate : SUGGESTIONS.keep;
+  const page = boostPage(context?.page); // a skill page gets the Settings chips
+  const second = page === "settings" ? SUGGESTIONS.clickSound : page === "clip" ? SUGGESTIONS.tiktokPrivate : SUGGESTIONS.keep;
   return [SUGGESTIONS.twitch, second, SUGGESTIONS.bestViews];
 }
 

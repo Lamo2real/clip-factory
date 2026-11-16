@@ -17,11 +17,13 @@ import { Home } from "../screens/home/Home.tsx";
 import { JobDetail } from "../screens/jobs/JobDetail.tsx";
 import { Jobs } from "../screens/jobs/Jobs.tsx";
 import { Library } from "../screens/library/Library.tsx";
+import { weekTitle } from "../screens/library/WeekView.tsx";
 import { ClipPerformance } from "../screens/clip/ClipPerformance.tsx";
 import { Review } from "../screens/review/Review.tsx";
 import { Settings } from "../screens/settings/Settings.tsx";
 import { SignIn } from "../screens/SignIn.tsx";
 import { SessionProvider } from "./session.tsx";
+import { ErrorBoundary } from "./ErrorBoundary.tsx";
 import { MockConsent } from "../screens/settings/setup/MockConsent.tsx";
 import { GUIDES } from "../setup/index.ts";
 import { AskClipFactory } from "../features/help/HelpLauncher.tsx";
@@ -57,7 +59,7 @@ export function titleFor(route: Route): string {
     return `${branch?.name ?? tree?.name ?? "Settings"} · Settings`;
   }
   if (route.name === "skill") return `${route.mode === "new" ? "Write a skill" : route.mode === "edit" ? "Change a skill" : "Skill"} · Settings`;
-  if (route.name === "library" && route.view === "week") return "This week · Library";
+  if (route.name === "library" && route.view === "week") return `${weekTitle(route.week)} · Library`;
   return TITLES[route.name];
 }
 
@@ -172,7 +174,10 @@ function Shell() {
           <LiveDot />
         </header>
         <main className="main" id="main" ref={main} tabIndex={-1}>
-          <Screen route={route} />
+          {/* One broken screen never blanks the app; moving to another page clears the error. */}
+          <ErrorBoundary resetKey={page} scope="page">
+            <Screen route={route} />
+          </ErrorBoundary>
         </main>
       </div>
       <TabBar />

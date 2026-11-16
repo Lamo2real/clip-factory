@@ -4,7 +4,7 @@
 # docs/CONTRACTS.md §14.3, §14.12, §17.9 and §17.12: three public methods with a path-parameter validator,
 # throttling, a usage plan, logs without the query string or data tracing, the verify token and the OAuth state key
 # kept out of state, and a Lambda that may only store hook events, read the verify token, consume OAuth state items
-# and write the platform token secrets under <name>/platforms/.
+# read the platform app keys and write the token and pending secrets under <name>/platforms/ (never the app keys).
 
 mock_provider "aws" {
   override_during = plan
@@ -170,9 +170,19 @@ run "verify_token_and_lambda" {
     condition = anytrue([
       for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
       s.Sid == "OAuthItems" && toset(s.Action) == toset(["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem"]) &&
-      s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"]
+      s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"] &&
+      s.Condition == { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["OAUTH#*", "USER#*"] } }
     ])
-    error_message = "The callback consumes OAUTH#/STATE (DeleteItem) and updates ACCOUNT#/SETUP# on the table only (no indexes)."
+    error_message = "The callback consumes OAUTH#/STATE (DeleteItem) and updates USER# ACCOUNT#/SETUP# on the table only (no indexes, no other partitions)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "HookEvents" && s.Action == ["dynamodb:PutItem"] &&
+      s.Condition == { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["HOOK#*", "USER#*"] } }
+    ])
+    error_message = "PutItem is limited to hook events (HOOK#) and the owner's Account items (USER#)."
   }
 
   assert {
@@ -187,21 +197,54 @@ run "verify_token_and_lambda" {
   assert {
     condition = anytrue([
       for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
-      s.Sid == "PlatformSecrets" && toset(s.Action) == toset([
+      s.Sid == "PlatformAppKeys" && toset(s.Action) == toset(["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]) &&
+      s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/app*"]
+    ])
+    error_message = "The owner's app keys ({platform}/app) may only be read by cf-prod-hooks (§17.4)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "PlatformTokens" && toset(s.Action) == toset([
+        "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret", "secretsmanager:TagResource",
+      ]) && s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token*"]
+    ])
+    error_message = "The callback writes {platform}/token and never deletes it."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "PlatformPending" && toset(s.Action) == toset([
         "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue",
         "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource",
-      ]) && s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*"]
+      ]) && s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/pending*"]
     ])
-    error_message = "Platform keys and tokens are managed only under <name>/platforms/* (§17.4)."
+    error_message = "The callback writes and deletes {platform}/pending only."
   }
 
   assert {
     condition = alltrue(flatten([
       for s in jsondecode(aws_iam_role_policy.fn.policy).Statement : [
-        for r in flatten([s.Resource]) : startswith(s.Sid == null ? "" : s.Sid, "Tracing") || !strcontains(r, "*") || r == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*" || endswith(r, ":*")
+        for r in flatten([s.Resource]) : !(strcontains(r, "/app") || r == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*") || toset(flatten([s.Action])) == toset(["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"])
       ]
     ]))
-    error_message = "No wildcard resources beyond the platform secrets prefix, the log group streams and X-Ray."
+    error_message = "cf-prod-hooks is public: it must never create, change or delete the owner's app keys."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement : [
+        for r in flatten([s.Resource]) : startswith(s.Sid == null ? "" : s.Sid, "Tracing") || !strcontains(r, "*") || contains([
+          "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/app*",
+          "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token*",
+          "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/pending*",
+        ], r) || endswith(r, ":*")
+      ]
+    ]))
+    error_message = "No wildcard resources beyond the three platform secret kinds, the log group streams and X-Ray."
   }
 
   assert {
@@ -281,5 +324,28 @@ run "account_setting_managed_elsewhere" {
   assert {
     condition     = length(aws_api_gateway_account.this) == 0 && length(aws_iam_role.apigw_cloudwatch) == 0
     error_message = "manage_api_gateway_account = false must leave the account setting alone."
+  }
+}
+
+run "roles_carry_the_permissions_boundary" {
+  command = plan
+
+  variables {
+    permissions_boundary_arn = "arn:aws:iam::123456789012:policy/cf-prod-role-boundary"
+  }
+
+  assert {
+    condition = (aws_iam_role.fn.permissions_boundary == "arn:aws:iam::123456789012:policy/cf-prod-role-boundary" &&
+    aws_iam_role.apigw_cloudwatch[0].permissions_boundary == "arn:aws:iam::123456789012:policy/cf-prod-role-boundary")
+    error_message = "Both cf-prod-hooks roles carry the deploy role's permissions boundary (infra/bootstrap)."
+  }
+}
+
+run "no_boundary_when_none_is_given" {
+  command = plan
+
+  assert {
+    condition     = aws_iam_role.fn.permissions_boundary == null && aws_iam_role.apigw_cloudwatch[0].permissions_boundary == null
+    error_message = "Without permissions_boundary_arn the roles have no boundary (as before)."
   }
 }

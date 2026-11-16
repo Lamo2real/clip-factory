@@ -90,11 +90,19 @@ export interface HelpTurn {
   text: string;
 }
 
+/**
+ * The pages the API knows (docs/CONTRACTS.md §19.6, api routes/help.py PAGES). Every real route name is one; the
+ * mock-only routes (`mock_oauth`, `motion_gallery`) are sent as "not_found" (`helpPage` in context.ts).
+ */
+export const HELP_PAGES = ["home", "jobs", "job", "review", "library", "clip", "settings", "skill", "get_app", "not_found"] as const;
+
+export type HelpPage = (typeof HELP_PAGES)[number] & Route["name"];
+
 export interface HelpContext {
   device: HelpDevice;
   os: DeviceOs;
   installed: boolean;
-  page: Route["name"];
+  page: HelpPage;
 }
 
 export interface HelpAnswer {

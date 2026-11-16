@@ -121,6 +121,9 @@ module "agent" {
   vector_index_arn  = module.vectors.vector_index_arn
   embed_model_id    = local.embed_model_id
   embed_model_arn   = local.embed_model_arn
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
 # Durable functions: cf-prod-job-flow (agent run + callback) and cf-prod-clip-flow (publish, 48 h wait, learn).
@@ -144,6 +147,9 @@ module "flows" {
   secret_prefix              = module.hooks.secret_prefix
   platform_secrets_arn       = module.hooks.platform_secrets_arn
   platform_token_secrets_arn = module.hooks.platform_token_secrets_arn
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
 # Clip numbers (cf-prod-stats on an EventBridge tick from config/platforms.json) and the weekly best learning
@@ -169,6 +175,9 @@ module "stats" {
   secret_prefix              = module.hooks.secret_prefix
   platform_secrets_arn       = module.hooks.platform_secrets_arn
   platform_token_secrets_arn = module.hooks.platform_token_secrets_arn
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
 module "api" {
@@ -209,6 +218,9 @@ module "api" {
   help_model_id          = local.help_model_id
   help_model_invoke_arns = local.help_model_invoke_arns
   help_monthly_cap       = var.help_monthly_cap
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
 # Platform webhooks (REST API), the OAuth callback and its state key and the account's API Gateway logging role, which the WebSocket stage needs too.
@@ -222,6 +234,9 @@ module "hooks" {
   table_arn                  = module.data.table_arn
   app_url                    = module.frontend.app_url
   manage_api_gateway_account = var.manage_api_gateway_account
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
 # Live updates (WebSocket API). After hooks: API Gateway allows one CreateDeployment per 5 s per account, and the
@@ -238,6 +253,9 @@ module "realtime" {
   user_pool_id        = module.auth.user_pool_id
   user_pool_client_id = module.auth.user_pool_client_id
   depends_on          = [module.hooks]
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
 module "monitoring" {

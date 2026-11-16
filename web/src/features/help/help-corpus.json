@@ -1,5 +1,5 @@
 {
-  "version": "0ac8b5c78ea5",
+  "version": "d1469a3c730c",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -10,6 +10,7 @@
     "src/components/Nav.tsx",
     "src/components/PerfLines.tsx",
     "src/components/ProgressRing.tsx",
+    "src/components/Sheet.tsx",
     "src/components/SimilarClips.tsx",
     "src/features/help/helpKb.json",
     "src/lib/router.ts",
@@ -21,6 +22,7 @@
     "src/screens/jobs/JobDetail.tsx",
     "src/screens/jobs/Jobs.tsx",
     "src/screens/jobs/mergeJobs.ts",
+    "src/screens/jobs/pendingStops.ts",
     "src/screens/library/Library.tsx",
     "src/screens/library/WeekView.tsx",
     "src/screens/review/CaptionTabs.tsx",
@@ -249,10 +251,10 @@
         "phone video",
         "upload a video"
       ],
-      "answer": "You can make clips from a video file too. Pick **Upload a video** on Home, choose the file and tap **Make clips**.",
+      "answer": "You can make clips from a video file too. Tap **Pick a video** on Home, choose the file and tap **Make clips**.",
       "steps": [
         "Go to **Home**.",
-        "Tap **Upload a video**.",
+        "Tap **Pick a video**.",
         "Tap the box and pick an MP4, MOV or WebM file (up to 5 GB).",
         "Tap **Make clips**."
       ],
@@ -2042,12 +2044,14 @@
       "keywords": [
         "job steps",
         "job page",
+        "loading",
         "progress",
         "source",
         "stop",
         "check",
         "gone",
-        "stopping"
+        "stopping",
+        "stopped"
       ],
       "answer": "A job's page shows each step as your clips are made. Tap a job in Jobs to open it.",
       "steps": [
@@ -2082,9 +2086,9 @@
         "throw",
         "away",
         "done",
-        "thrown",
         "post",
         "tiktok",
+        "ask",
         "not",
         "close",
         "comments",
@@ -2093,7 +2097,7 @@
         "commercial",
         "content"
       ],
-      "answer": "Watch each clip. Tap Keep to post it, or Throw away if you do not like it. Nothing posts until you tap Keep.",
+      "answer": "These clips all come from one job. Tap Keep to post one, or Throw away if you do not like it. Tap Show every job to see the rest.",
       "steps": [
         "Tap **Review**."
       ],
@@ -2118,8 +2122,8 @@
         "kept clips",
         "posted clips",
         "review",
-        "views",
         "show",
+        "views",
         "make",
         "earlier",
         "week",
@@ -2127,6 +2131,7 @@
         "best",
         "post",
         "tiktok",
+        "ask",
         "not",
         "close",
         "comments",
@@ -2158,6 +2163,7 @@
       "title": "A clip's numbers",
       "keywords": [
         "clip page",
+        "loading",
         "views"
       ],
       "answer": "A clip's page shows how it does on each app. Tap a clip in Library to open it.",

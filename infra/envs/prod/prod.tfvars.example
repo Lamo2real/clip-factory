@@ -1,11 +1,13 @@
 # Only for running Terraform by hand: copy to prod.tfvars (git-ignored) and fill in. No secrets belong here.
-# deploy.yml passes these as TF_VAR_* from the repository's variables and secrets.
+# deploy.yml sets region, owner_email, alarm_email (secret CF_ALARM_EMAIL, else CF_OWNER_EMAIL),
+# agent_image_tag, app_version, lambda_zip_path, manage_api_gateway_account and role_permissions_boundary_arn
+# (variable CF_ROLE_BOUNDARY_ARN) as TF_VAR_*; the rest keep their defaults.
 region          = "eu-north-1"
 owner_email     = "you@example.com"
 agent_image_tag = "set-by-deploy-workflow"
 app_version     = "set-by-deploy-workflow"
 lambda_zip_path = "../../../api/dist/lambda.zip"
-alarm_email     = ""
+alarm_email     = "" # empty: alarms are not emailed to anyone
 web_dev_origin  = "http://localhost:5173"
 # Ask Clip Factory (in-app help). The HELP/SWITCH table item turns it off without a deploy.
 help_enabled     = true

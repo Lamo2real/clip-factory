@@ -170,6 +170,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   if (error && !perf) {
     return (
       <div className="page perf">
+        <h1 className="sr-only">{error.missing ? "No numbers for this clip" : "Could not load the numbers"}</h1>
         <BackRow />
         <Empty
           icon={error.missing ? "chart" : "alert"}
@@ -195,6 +196,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   if (!perf) {
     return (
       <div className="page perf">
+        <h1 className="sr-only">Loading clip numbers</h1>
         <BackRow />
         <Skeleton className="perf-skel" />
       </div>
