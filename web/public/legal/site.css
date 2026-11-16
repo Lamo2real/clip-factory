@@ -61,8 +61,16 @@ nav .brand em {
 /* The two page links travel together: on a phone they share the second row instead of one hanging alone. */
 nav .links {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0 18px;
+  white-space: nowrap;
+}
+/* On the smallest phones the system font may be wider than Inter: a touch smaller so both still fit one row. */
+@media (max-width: 374px) {
+  nav .links {
+    gap: 0 14px;
+    font-size: 15px;
+  }
 }
 /* Every link in the header and footer is a 44 px tall touch target (kid-proof, docs/UX_DESIGN_SYSTEM.md). */
 nav a,

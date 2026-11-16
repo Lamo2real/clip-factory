@@ -430,14 +430,30 @@ export async function scanText(page: Page, skip = ""): Promise<TextScan> {
         for (let a: Element | null = document.querySelector(".backdrop"); a && a !== document.documentElement; a = a.parentElement)
           for (const sib of Array.from(a.parentElement?.children ?? []))
             if (sib !== a && sib instanceof HTMLElement && !sib.hasAttribute(marked)) {
-              sib.setAttribute(marked, JSON.stringify([sib.style.getPropertyValue("opacity"), sib.style.getPropertyValue("transition")]));
+              sib.setAttribute(marked, JSON.stringify([sib.style.getPropertyValue("opacity"), sib.style.getPropertyValue("transition"), getComputedStyle(sib).opacity]));
               sib.style.setProperty("transition", "none", "important");
               sib.style.setProperty("opacity", "0", "important");
             }
       }, on);
     await solo(true);
     png = (await page.screenshot({ scale: "css" })).toString("base64");
+    // Remember what was hidden, then put it back and wait until Chromium's computed styles agree that nothing on
+    // the page is still at opacity 0. On a slow runner two frames were not enough: the scan then read every text run
+    // inside a hidden group and reported "1:1" for the whole page.
+    await page.evaluate(() =>
+      document.querySelectorAll("[data-cf-solo]").forEach((el) => el.setAttribute("data-cf-was-solo", (JSON.parse(el.getAttribute("data-cf-solo")!) as string[])[2] ?? "1")),
+    );
     await solo(false);
+    await page.waitForFunction(
+      () => {
+        const els = Array.from(document.querySelectorAll<HTMLElement>("[data-cf-was-solo]"));
+        void document.body.offsetHeight; // force a style recalc
+        return els.every((el) => getComputedStyle(el).opacity === el.getAttribute("data-cf-was-solo"));
+      },
+      undefined,
+      { timeout: 10_000, polling: 50 },
+    );
+    await page.evaluate(() => document.querySelectorAll("[data-cf-was-solo]").forEach((el) => el.removeAttribute("data-cf-was-solo")));
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   }
   await page.evaluate((b) => (window as unknown as { __cfContrast: ContrastKit }).__cfContrast.loadBackdrop(b), png);
