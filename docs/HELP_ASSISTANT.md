@@ -130,8 +130,10 @@ The look and the exact numbers are in [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#
   the right (520 ms) and a new one fade back in (240 ms); the question bubble does not wait for it. With reduced motion
   the plane only fades. The motion is reusable by any button (`useLaunch` / `<Flight>` in
   `web/src/components/PaperPlane.tsx`, `web/src/styles/fly.css`).
-- **The launcher keeps out of the way**: it lifts over controls marked `data-help-dodge`, steps aside when that would
-  take it above 40 % of the window, and phones keep extra room under the last control of a page.
+- **The launcher keeps out of the way**: it never sits on a control. It finds every link, button, field or focusable
+  thing on screen by itself (plus blocks marked `data-help-dodge`), lifts to the first free spot above them, steps
+  aside when that would take it above 40 % of the window, takes no taps while it slides, and every page keeps extra
+  room under its last control.
 - **Spotlight**: a very tall target (over 60 % of the window) rings only its heading, 80 px from the top.
 - **Go Home** is left out of the "I don't know" answer while you are already on Home.
 

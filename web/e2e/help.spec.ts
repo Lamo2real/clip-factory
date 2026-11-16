@@ -11,24 +11,65 @@ async function shownLauncher(page: Page) {
   });
 }
 
-/** Buttons, inputs and text areas on the page that share area with the launcher. */
+/** Links, buttons, fields and anything focusable on the page that share area with the shown launcher. */
 async function coveredControls(page: Page) {
   return page.evaluate(() => {
     const el = document.querySelector<HTMLElement>(".help-launcher");
     if (!el || el.classList.contains("is-hidden")) return [];
     const l = el.getBoundingClientRect();
+    const sel =
+      'a[href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="switch"], [role="tab"], [tabindex]:not([tabindex="-1"])';
     const out: string[] = [];
-    for (const c of Array.from(document.querySelectorAll<HTMLElement>("button, input, textarea, select, [role=switch]"))) {
-      if (c === el || c.closest(".help-launcher, .help-panel, .update-bar, .tabbar, .toasts")) continue;
+    for (const c of Array.from(document.querySelectorAll<HTMLElement>(sel))) {
+      // Fixed chrome the launcher is placed clear of by CSS, and cards that are links: their own controls count.
+      if (c === el || c.closest(".help-launcher, .help-panel, .update-bar, .tabbar, .sidebar") || c.querySelector(sel)) continue;
       const s = getComputedStyle(c);
-      if (s.visibility === "hidden" || s.display === "none" || (c instanceof HTMLInputElement && c.type === "hidden")) continue;
+      if (s.visibility === "hidden" || s.display === "none") continue;
       const r = c.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0) continue;
+      if (r.width < 1 || r.height < 1) continue;
       const w = Math.min(r.right, l.right) - Math.max(r.left, l.left);
       const h = Math.min(r.bottom, l.bottom) - Math.max(r.top, l.top);
       if (w > 0 && h > 0) out.push(`${c.tagName.toLowerCase()}.${String(c.className).split(" ")[0]} "${(c.getAttribute("aria-label") || c.textContent || "").trim().slice(0, 30)}" ${Math.round(w)}x${Math.round(h)}`);
     }
     return out;
+  });
+}
+
+/**
+ * Waits until the launcher has settled: not stepped aside for a scroll and not moving, for three frames in a row
+ * (its measure runs on the frame after a change and its move starts on the next). Frames and events, not time.
+ */
+async function launcherSettled(page: Page) {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        let calm = 0;
+        const tick = () => {
+          const el = document.querySelector<HTMLElement>(".help-launcher");
+          const still = !el || (el.dataset.dodge !== "scroll" && el.getAnimations().every((a) => a.playState !== "running"));
+          calm = still ? calm + 1 : 0;
+          if (calm >= 3) resolve();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+}
+
+/**
+ * Makes the page fall back to other fonts (no bundled Inter or Tinos, different widths), like a machine whose fonts
+ * differ, so the layout shifts a little: the launcher has to find its spot from the page, not from known pixels.
+ */
+async function fallbackFonts(page: Page) {
+  await page.route(/\.woff2?(\?.*)?$/, (r) => r.abort());
+  await page.addInitScript(() => {
+    const add = () => {
+      const s = document.createElement("style");
+      s.textContent = ":root{--font-ui: Verdana, 'DejaVu Sans', sans-serif !important; --font-display: Georgia, 'DejaVu Serif', serif !important}";
+      document.head.appendChild(s);
+    };
+    if (document.head) add();
+    else document.addEventListener("DOMContentLoaded", add);
   });
 }
 
@@ -82,7 +123,7 @@ for (const size of SIZES) {
       await page.goto("/review");
       await settle(page);
       await page.locator('[data-help~="keep"]').first().waitFor();
-      await page.waitForTimeout(400);
+      await launcherSettled(page);
       const keep = (await page.locator('[data-help~="keep"]').first().boundingBox())!;
       const b = await shownLauncher(page);
       if (b) {
@@ -102,7 +143,10 @@ for (const size of SIZES) {
       await expect(page.locator('[data-help-spotlit][data-help~="keep"]')).toBeVisible();
       await expect.poll(() => spotlitIsReachable(page), { timeout: 3000 }).toBe("ok");
       // Open it again: the question and its steps are still there (memory only).
-      if (await panel(page).count()) await panel(page).getByRole("button", { name: "Close" }).click();
+      // The panel may still step away by itself while the page scrolls Keep in: close it if it is there, then wait for
+      // the one end state (no panel) either way.
+      if (await panel(page).count()) await panel(page).getByRole("button", { name: "Close" }).click({ timeout: 3000 }).catch(() => undefined);
+      await expect(panel(page)).toHaveCount(0);
       await page.mouse.wheel(0, -5);
       await expect(launcher(page)).not.toHaveClass(/is-hidden/, { timeout: 2000 });
       await launcher(page).click();
@@ -118,7 +162,9 @@ for (const size of SIZES) {
       const btn = launcher(page);
       await expect(btn).toBeVisible();
       await expect(btn).not.toHaveClass(/btn--primary/);
-      await page.waitForTimeout(700); // the update bar slides in
+      await expect(page.getByRole("region", { name: "New version" })).toBeVisible();
+      await animationsDone(page); // the update bar slides in
+      await launcherSettled(page);
       const b = (await btn.boundingBox())!;
       const barNow = (await page.getByRole("region", { name: "New version" }).boundingBox())!;
       expect(barNow.height).toBeGreaterThan(0);
@@ -136,12 +182,16 @@ for (const size of SIZES) {
       // Without the update bar it still never covers the tab bar.
       await page.goto("/");
       await settle(page);
+      await launcherSettled(page);
       const plain = (await launcher(page).boundingBox())!;
       if (size.phone) {
         const tabs = (await page.locator("nav.tabbar").boundingBox())!;
         expect(plain.y + plain.height).toBeLessThanOrEqual(tabs.y);
       } else {
-        expect(size.height - (plain.y + plain.height)).toBeCloseTo(24, 0);
+        // Its resting spot is 24 px off the bottom (it may lift from there to stay off a control on the page).
+        const rest = await launcher(page).evaluate((el: HTMLElement) => innerHeight - (el.offsetTop + el.offsetHeight));
+        expect(rest).toBeCloseTo(24, 0);
+        expect(size.height - (plain.y + plain.height)).toBeGreaterThanOrEqual(24 - 0.5);
       }
     });
 
@@ -327,17 +377,31 @@ for (const size of SIZES) {
     test("the launcher steps aside while scrolling down and comes back on scroll up", async ({ page }) => {
       await page.goto("/");
       await settle(page);
-      const hidden = async (y: number) =>
+      // Waits on events, not time: each scroll here flips the launcher, so wait for its class to change (a 3 s cap
+      // only turns a hang into a clear failure). Smooth scrolling, like a finger or a wheel.
+      const scrollAndRead = async (y: number) =>
         page.evaluate(async (top) => {
-          window.scrollTo({ top, behavior: "instant" });
-          await new Promise((r) => setTimeout(r, 120));
-          return document.querySelector(".help-launcher")!.classList.contains("is-hidden");
+          const el = document.querySelector(".help-launcher")!;
+          const was = el.classList.contains("is-hidden");
+          await new Promise<void>((resolve) => {
+            const seen = new MutationObserver(() => {
+              if (el.classList.contains("is-hidden") === was) return;
+              seen.disconnect();
+              resolve();
+            });
+            seen.observe(el, { attributes: true, attributeFilter: ["class"] });
+            setTimeout(() => (seen.disconnect(), resolve()), 3000);
+            window.scrollTo({ top, behavior: "smooth" });
+          });
+          return el.classList.contains("is-hidden");
         }, y);
-      expect(await hidden(400)).toBe(true);
-      expect(await hidden(100)).toBe(false);
+      expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBeGreaterThan(400);
+      expect(await scrollAndRead(400)).toBe(true);
+      await page.evaluate(() => window.scrollTo({ top: 400, behavior: "instant" })); // let a smooth scroll finish
+      expect(await scrollAndRead(100)).toBe(false);
       // And it comes back by itself once scrolling stops.
-      expect(await hidden(500)).toBe(true);
-      await expect(launcher(page)).not.toHaveClass(/is-hidden/, { timeout: 2000 });
+      expect(await scrollAndRead(500)).toBe(true);
+      await expect(launcher(page)).not.toHaveClass(/is-hidden/, { timeout: 5000 });
     });
   });
 }
@@ -362,24 +426,57 @@ test.describe("Ask Clip Factory guides for posting setup and skills", () => {
   }
 });
 
-// The circle on phones never sits on a real control once it settles: it lifts over the marked ones or steps aside.
-const PHONES = [320, 375, 390, 430] as const;
-const PHONE_ROUTES = ["/", "/jobs", "/review", "/library", "/library?view=week", "/settings/clip-making/skills", "/settings/look-and-feel/sounds", "/get-app"];
-for (const width of PHONES) {
-  test.describe(`Ask Clip Factory launcher on a ${width} px phone`, () => {
-    test.use({ viewport: { width, height: 812 } });
-    for (const update of [false, true]) {
-      test(`covers no control on any page${update ? " with the update bar" : ""}`, async ({ page }) => {
-        const fails: string[] = [];
-        for (const route of PHONE_ROUTES) {
-          const sep = route.includes("?") ? "&" : "?";
-          await page.goto(update ? `${route}${sep}update=1` : route);
-          await settle(page);
-          await page.waitForTimeout(update ? 800 : 300);
-          for (const c of await coveredControls(page)) fails.push(`${route}: ${c}`);
+// The launcher never sits on a real control once it settles, at any width, at the top of each page and after
+// scrolling through it (it lifts to a free spot or steps aside), with the update bar too, and with other fonts.
+const WIDTHS = [320, 375, 390, 430, 768, 1024, 1440, 1920] as const;
+const ROUTES = [
+  "/",
+  "/jobs",
+  "/review",
+  "/library",
+  "/library?view=week",
+  "/settings",
+  "/settings/clip-making/skills",
+  "/settings/clip-making/skills/new",
+  "/settings/look-and-feel/sounds",
+  "/get-app",
+];
+const VARIANTS = [
+  ...WIDTHS.map((width) => ({ width, update: false, fonts: false })),
+  ...WIDTHS.map((width) => ({ width, update: true, fonts: false })),
+  ...([320, 430, 1024, 1440] as const).map((width) => ({ width, update: true, fonts: true })),
+];
+for (const v of VARIANTS) {
+  test.describe(`Ask Clip Factory launcher at ${v.width} px`, () => {
+    test.use({ viewport: { width: v.width, height: v.width < 768 ? 812 : 900 } });
+    test(`covers no control on any page${v.update ? " with the update bar" : ""}${v.fonts ? " and other fonts" : ""}`, async ({ page }) => {
+      if (v.fonts) await fallbackFonts(page);
+      const fails: string[] = [];
+      for (const route of ROUTES) {
+        const sep = route.includes("?") ? "&" : "?";
+        await page.goto(v.update ? `${route}${sep}update=1` : route);
+        await settle(page);
+        if (v.update) await expect(page.getByRole("region", { name: "New version" })).toBeVisible();
+        await launcherSettled(page);
+        for (const c of await coveredControls(page)) fails.push(`${route} at the top: ${c}`);
+        // Scroll down through the page and back up a little (the launcher shows again), then check where it stops.
+        const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+        for (const y of [Math.round(max / 3), Math.round((2 * max) / 3), max]) {
+          if (y < 60) continue;
+          await page.evaluate(async (top) => {
+            const scrolled = () => new Promise((r) => window.addEventListener("scroll", r, { once: true }));
+            const down = scrolled();
+            window.scrollTo({ top, behavior: "instant" });
+            await down;
+            const up = scrolled();
+            window.scrollTo({ top: top - 40, behavior: "instant" });
+            await up;
+          }, y);
+          await launcherSettled(page);
+          for (const c of await coveredControls(page)) fails.push(`${route} at ${y}: ${c}`);
         }
-        expect(fails, fails.join("\n")).toEqual([]);
-      });
-    }
+      }
+      expect(fails, fails.join("\n")).toEqual([]);
+    });
   });
 }

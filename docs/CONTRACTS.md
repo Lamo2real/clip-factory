@@ -2743,12 +2743,18 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   max(16px, safe-area-inset-right)`, bottom = `--tabbar-h` + safe area + 18 px + `--update-bar-h` (+ 10 px), so it
   never covers the tab bar or the update bar. **Dodge** (`dodge.ts`): hides (fade + 12 px slide, none with reduced
   motion) while scrolling down more than 8 px, comes back on scroll up or 600 ms after scrolling stops, stays while it
-  or the panel has keyboard focus, and lifts above any element marked `data-help-dodge` when they would overlap.
-  Marked obstacles: the Review action bar, the Home link box, the Link/Upload switch, the **Best this week** stars,
-  every switch, the caption fields, the sound grid, the **Try it** controls and the Get the app chips. When lifting
-  would push it above 40 % of the window height, it steps aside (hidden) instead, so at 1440 px on Review it is hidden
-  until the owner scrolls. Settled, it never covers a control at 320, 375, 390 or 430 px, with or without the update
-  bar. Phones add bottom padding under the last control of a page so the launcher always has room. Sage glass, never
+  or the panel has keyboard focus, and never sits on a control: it lifts to the first free spot above every link,
+  button, field, tab, switch or focusable element it would overlap (read from the page, so no markup is needed; a card
+  that is a link counts through the controls inside it), plus any block marked `data-help-dodge` (the Review action
+  bar, the Home link box, the sound grid, the **Try it** controls…). It measures its resting layout box
+  (`offsetTop`/`offsetLeft`, which no transform changes), so fonts, slow machines and its own slide do not skew it,
+  and measures again on scroll, resize, DOM and size changes and font loads. While it slides to a new spot it takes no
+  taps (`data-moving`, `pointer-events: none`), so a tap on a control it passes over reaches the control. When lifting
+  would push it above 40 % of the window height, it steps aside (hidden, `data-dodge="blocked"`) instead, so on long
+  lists of rows (Jobs, Settings on a phone, Review at 1440 px) it shows once the owner scrolls to a free spot or the
+  end. Settled, it never covers a control at any width from 320 to 1920 px, at the top of a page or after scrolling,
+  with or without the update bar, and with other fonts (`e2e/help.spec.ts`). Every page adds bottom padding under its
+  last control so the launcher always has room at the end. Sage glass, never
   tomato.
 * **Panel**: `role="dialog" aria-labelledby`. Desktop: **non-modal** (`aria-modal="false"`, Tab stays natural), 400 px
   wide, `max-height: min(640px, 100dvh - 140px)`, anchored above the launcher. Phones (< 768 px): a **modal**

@@ -1,8 +1,9 @@
 // The launcher gets out of the way (docs/CONTRACTS.md §19.8): it hides while the page scrolls down, comes back on
-// scroll up or 600 ms after scrolling stops, stays while it has keyboard focus, and lifts above the elements marked
-// data-help-dodge (the Review action row, the Home link box, the Best stars, settings switches…) when they would
-// overlap. It measures again whenever the page changes (route, new content, an obstacle's size), not only on scroll.
-import { useEffect, useState, type RefObject } from "react";
+// scroll up or 600 ms after scrolling stops, stays while it has keyboard focus, and never sits on a control: it lifts
+// to the first free spot above every link, button, field or focusable thing it would overlap (and the blocks marked
+// data-help-dodge), or steps aside when there is none within reach. It measures its resting box (no transforms), so
+// font metrics, slow machines and transitions do not matter, and measures again whenever the page changes.
+import { useEffect, useLayoutEffect, useState, type RefObject } from "react";
 import { useRoute } from "../../lib/router.ts";
 
 export const DODGE_THRESHOLD = 8;
@@ -51,11 +52,64 @@ export function liftFor(base: Box, obstacles: readonly Box[], max: number): numb
   return lift > max ? null : lift;
 }
 
-/** Hidden while scrolling down, and how many pixels to lift; never hidden while `pinned` (focus or open panel). */
-export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolean): { hidden: boolean; lift: number } {
+/** What counts as a control the launcher must never sit on (a link, a button, a field, anything focusable). */
+export const CONTROLS =
+  'a[href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="switch"], [role="tab"], [role="checkbox"], [role="radio"], [role="slider"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
+/** Fixed chrome the launcher is already placed clear of by CSS (and its own panel and spotlight). */
+const CHROME = ".help-launcher, .help-panel, .help-ring, .update-bar, .tabbar, .sidebar";
+
+/**
+ * Every control on screen the launcher could cover, as boxes. A control that holds other controls (a card that is a
+ * link with a star inside) counts through the ones inside; elements marked data-help-dodge (a row of choices, the
+ * Review action row) count as one block. Pure DOM reading, so it works for any page without marking it up.
+ */
+export function controlBoxes(doc: Document = document, viewportHeight = window.innerHeight): Box[] {
+  const out: Box[] = [];
+  const seen = new Set<Element>();
+  const add = (el: Element) => {
+    if (seen.has(el) || el.closest(CHROME)) return;
+    seen.add(el);
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= viewportHeight) return;
+    if (el.closest("[inert], [hidden]")) return;
+    const s = getComputedStyle(el);
+    if (s.visibility === "hidden" || s.pointerEvents === "none") return;
+    out.push({ top: r.top, bottom: r.bottom, left: r.left, right: r.right });
+  };
+  for (const el of Array.from(doc.querySelectorAll("[data-help-dodge]"))) add(el);
+  for (const el of Array.from(doc.querySelectorAll(CONTROLS))) {
+    if (el.querySelector(CONTROLS)) continue;
+    add(el);
+  }
+  return out;
+}
+
+/**
+ * Where the launcher sits before any lift or hiding: its layout box, which no transform, translate or scale (the
+ * lift, the step-aside slide, the press) changes, so a measure in the middle of a transition is still right.
+ */
+export function restingBox(el: HTMLElement): Box {
+  // offsetTop/offsetLeft of a position: fixed element are relative to the viewport and ignore transforms.
+  return { top: el.offsetTop, bottom: el.offsetTop + el.offsetHeight, left: el.offsetLeft, right: el.offsetLeft + el.offsetWidth };
+}
+
+/** Why the launcher is out of the way right now: the page is scrolling down, or no free spot is within reach. */
+export type DodgeReason = "scroll" | "blocked" | null;
+
+/**
+ * Hidden while scrolling down, and how many pixels to lift; never hidden while `pinned` (focus or open panel). With
+ * `home` (the panel is open) it goes back to its resting spot under the panel. Focus alone does not move it: a press
+ * focuses it before the release, and moving then would carry it away from the finger.
+ */
+export function useDodge(
+  launcher: RefObject<HTMLElement | null>,
+  pinned: boolean,
+  home = pinned,
+): { hidden: boolean; lift: number; reason: DodgeReason; moving: boolean } {
   const [hidden, setHidden] = useState(false);
   const [lift, setLift] = useState(0);
   const [blocked, setBlocked] = useState(false);
+  const [moving, setMoving] = useState(false);
   const route = useRoute();
   const page = `${route.name}:${window.location.pathname}${window.location.search}`;
 
@@ -67,47 +121,25 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
       raf = 0;
       const el = launcher.current;
       if (!el) return;
-      // Measure where it sits without the lift (the transform is ours).
-      const r = el.getBoundingClientRect();
-      const current = Number(el.dataset.lift || 0);
-      const base = { top: r.top + current, bottom: r.bottom + current, left: r.left, right: r.right };
-      const obstacles = Array.from(document.querySelectorAll<HTMLElement>("[data-help-dodge]"))
-        .map((o) => o.getBoundingClientRect())
-        .filter((o) => o.width > 0 && o.bottom > 0 && o.top < window.innerHeight);
-      const next = liftFor(base, obstacles, window.innerHeight * 0.4);
+      const next = liftFor(restingBox(el), controlBoxes(), window.innerHeight * 0.4);
       setBlocked(next === null);
-      setLift(next ?? 0);
+      // Whole pixels, so sub-pixel layout noise does not keep nudging it.
+      setLift(next === null ? 0 : Math.ceil(next));
     };
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(measure);
     };
-    // Content that loads later (the Review card after its data) and obstacles that grow or shrink.
+    // Content that loads later (the Review card after its data), controls that grow or shrink, the window itself.
     const resized = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
-    const watched = new Set<Element>();
-    const watch = () => {
-      if (!resized) return;
-      for (const o of Array.from(document.querySelectorAll("[data-help-dodge]"))) {
-        if (watched.has(o)) continue;
-        watched.add(o);
-        resized.observe(o);
-      }
-      for (const o of Array.from(watched)) {
-        if (o.isConnected) continue;
-        watched.delete(o);
-        resized.unobserve(o);
-      }
-    };
-    const changed = typeof MutationObserver !== "undefined" ? new MutationObserver(() => {
-      watch();
-      schedule();
-    }) : null;
-    changed?.observe(document.body, { childList: true, subtree: true });
+    resized?.observe(document.documentElement);
+    if (launcher.current) resized?.observe(launcher.current);
+    const changed = typeof MutationObserver !== "undefined" ? new MutationObserver(schedule) : null;
+    changed?.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden", "aria-expanded"] });
     // The launcher itself moves without new content: the update bar's class and height on <html>, entrances ending.
-    const moved = typeof MutationObserver !== "undefined" ? new MutationObserver(schedule) : null;
-    moved?.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style"] });
+    changed?.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style"] });
     window.addEventListener("transitionend", schedule, true);
     window.addEventListener("animationend", schedule, true);
-    watch();
+    document.fonts?.addEventListener?.("loadingdone", schedule);
     const onScroll = () => {
       state = nextScroll(state, window.scrollY);
       setHidden(state.hidden);
@@ -127,12 +159,29 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
       clearTimeout(settle);
       cancelAnimationFrame(raf);
       changed?.disconnect();
-      moved?.disconnect();
       resized?.disconnect();
       window.removeEventListener("transitionend", schedule, true);
       window.removeEventListener("animationend", schedule, true);
+      document.fonts?.removeEventListener?.("loadingdone", schedule);
     };
   }, [launcher, page]);
 
-  return { hidden: !pinned && (hidden || blocked), lift: pinned ? 0 : lift };
+  const shownLift = home ? 0 : lift;
+  // While it slides to a new spot it passes over the page, so it takes no taps until it has arrived: a tap meant for
+  // a control it is sliding across reaches that control. Watched frame by frame, so reduced motion (no slide) and
+  // slow machines are both right.
+  useLayoutEffect(() => {
+    const el = launcher.current;
+    if (!el) return;
+    setMoving(true);
+    let raf = requestAnimationFrame(function check() {
+      const sliding = el.getAnimations().some((a) => a.playState === "running" && (a as CSSTransition).transitionProperty === "transform");
+      if (sliding) raf = requestAnimationFrame(check);
+      else setMoving(false);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [launcher, shownLift]);
+
+  const reason: DodgeReason = pinned ? null : hidden ? "scroll" : blocked ? "blocked" : null;
+  return { hidden: reason !== null, lift: shownLift, reason, moving };
 }

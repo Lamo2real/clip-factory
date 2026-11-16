@@ -50,6 +50,10 @@
   translate: 0 12px;
   pointer-events: none;
 }
+/* Sliding to a free spot: it passes over the page, so a tap there reaches the page, not the launcher. */
+.help-launcher[data-moving] {
+  pointer-events: none;
+}
 .help-launcher.is-open {
   background: rgb(255 255 255 / 0.82);
 }
@@ -70,6 +74,10 @@
   }
   .help-launcher__word {
     display: inline;
+  }
+  /* Room under the last control so it can scroll clear of the Ask pill (48 px + a 24 px gap). */
+  .app:has(> .help-launcher) .shell {
+    padding-bottom: max(48px, calc(var(--help-bottom) + 48px + 24px));
   }
 }
 
