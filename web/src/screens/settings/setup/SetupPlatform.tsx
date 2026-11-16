@@ -95,6 +95,23 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
     window.scrollTo({ top: 0 });
   }, []);
 
+  // Back from the platform: on a small phone the header fills the first screen, so the answer (the result card or
+  // the account picker) is brought into view instead of waiting below the fold.
+  const shownResult = useRef(false);
+  useEffect(() => {
+    if (!result || !setup || shownResult.current) return;
+    const t = setTimeout(() => {
+      const card = document.querySelector<HTMLElement>(".setup-page .result-card, .setup-page .choose");
+      if (!card) return;
+      shownResult.current = true;
+      // The phone's bottom bar covers the last ~110 px.
+      const r = card.getBoundingClientRect();
+      if (r.top >= 0 && r.top + Math.min(r.height, 220) <= window.innerHeight - 110) return;
+      window.scrollTo({ top: Math.max(0, window.scrollY + r.top - 96), behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [result, setup, choosing]);
+
   // Connected: confetti and a toast (once the account's name is known). The page has just loaded after the
   // platform sent the owner back, so the success sound waits for their first tap (sounds only ever answer a tap).
   useEffect(() => {
@@ -431,7 +448,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
           <div className="done-panel__account">
             {setup.account.avatarUrl ? <img className="done-panel__avatar" src={setup.account.avatarUrl} alt="" /> : <PlatformMark platform={platform} size={30} />}
             <div className="done-panel__who">
-              <span className="done-panel__name user-text">{name ?? guide.name}</span>
+              <span className="done-panel__name user-text" title={name ?? guide.name}>{name ?? guide.name}</span>
               <span className={`done-panel__state${reconnect ? " is-bad" : ""}`}>
                 {leaving ? "Disconnecting…" : reconnect ? `${guide.name} logged Clip Factory out. Press Connect again.` : setup.ready ? "Ready. Clip Factory posts here by itself." : "Connected."}
               </span>
