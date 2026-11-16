@@ -8,12 +8,12 @@ from typing import Any
 
 import pytest
 
-from clipfactory_api import db, learn, weekly, weeks
+from clipfactory_api import db, learn, s3, weekly, weeks
 from clipfactory_api.ids import ulid
 from clipfactory_api.realtime.broadcast import message_for
 from clipfactory_api.vectors import Vectors
 from conftest import LEARN_ARN, OTHER, USER, Call, seed_clip
-from fakes import FakeBedrock, FakeLambda, FakeS3Vectors, FakeTable
+from fakes import FakeBedrock, FakeLambda, FakeS3, FakeS3Vectors, FakeTable
 
 WEEK = "2026-W46"  # Monday 9 Nov 2026
 FROM = "2026-11-08T23:00:00.000Z"  # local Monday 00:00 in UTC+1
@@ -444,6 +444,8 @@ def deps(store: db.Store, bedrock: FakeBedrock | None = None, vectors: Vectors |
         bedrock=bedrock or FakeBedrock("Pick rage hooks under 30 seconds."),
         model_id="global.anthropic.claude-fable-5-1",
         vectors=vectors,
+        media=s3.Media(FakeS3(), "cf-prod-media-123"),
+        builtins=list,
         clock=Clock(),
         sleep=sleeps.append,
     )

@@ -25,6 +25,8 @@ ROUTES: list[Route] = [
     route("GET", "/v1/skills", skills.list_skills),
     route("POST", "/v1/skills/uploads", skills.create_upload),
     route("POST", "/v1/skills", skills.register),
+    route("GET", "/v1/skills/{skillId}", skills.get_skill),
+    route("PUT", "/v1/skills/{skillId}", skills.put_skill),
     route("PATCH", "/v1/skills/{skillId}", skills.patch_skill),
     route("DELETE", "/v1/skills/{skillId}", skills.delete_skill),
     route("GET", "/v1/skills/{skillId}/content", skills.content),

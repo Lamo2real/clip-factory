@@ -9,7 +9,7 @@ import pytest
 from aws_durable_execution_sdk_python import CallbackExternalError, CallbackTimeoutError
 from aws_durable_execution_sdk_python.config import StepSemantics
 
-from clipfactory_api import db, posts
+from clipfactory_api import db, posts, s3
 from clipfactory_api.agent_client import AgentClient
 from clipfactory_api.flows import TransientError, error_type
 from clipfactory_api.flows.clip_flow import ClipFlowDeps, run_clip_flow, summed_performance
@@ -26,7 +26,7 @@ from clipfactory_api.platforms import (
 )
 from clipfactory_api.vectors import Vectors
 from conftest import USER, Clock, seed_clip, seed_job
-from fakes import FakeAgentCore, FakeBedrock, FakeCallback, FakeDurableContext, FakeS3Vectors, FakeTable
+from fakes import FakeAgentCore, FakeBedrock, FakeCallback, FakeDurableContext, FakeS3, FakeS3Vectors, FakeTable
 
 RUNTIME = "arn:aws:bedrock-agentcore:eu-north-1:123:runtime/cf_prod_clip_agent"
 NEWER_SESSION = "cfjob-01JNEWERRUNSESSIONXXXXXXXX-abcdefgh"
@@ -458,6 +458,8 @@ def _clip_deps(
         bedrock=bedrock or FakeBedrock(),
         model_id="global.anthropic.claude-fable-5-1",
         vectors=vectors,
+        media=s3.Media(FakeS3(), "cf-prod-media-123"),
+        builtins=list,
         adapters=lambda p: adapters.get(p) or PendingAdapter(p),
         clock=Clock(),
         sleep=sleeps.append,

@@ -10,20 +10,23 @@ so when the owner changes the picks again while this runs, the older run stops a
 4. Claude Fable 5.1 compares the picks with the rest of the week and answers with one short learning, saved as the
    week's ``Learning`` (``kind: "week"``, its id reused on a re-save). Any stop reason other than a finished answer
    (``max_tokens``, ``refusal``, ``content_filtered``, empty) writes no learning and marks the week ``failed``.
+   The owner's skills block goes first in that call's system prompt (§18.6); when the skills cannot be read the
+   week is marked ``failed`` instead of asking without them.
 """
 
 from __future__ import annotations
 
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import db, learn, weeks
+from . import db, learn, s3, skill_prompt, weeks
 from .clock import Clock, iso, parse, utcnow
 from .ids import ulid
 from .log import log
+from .skills import BuiltinSkill, load_builtins
 from .vectors import Vectors
 
 BEDROCK_DELAYS = (2.0, 8.0)  # two retries
@@ -36,8 +39,10 @@ class WeeklyDeps:
     bedrock: Any
     model_id: str
     vectors: Vectors | None
+    media: s3.Media  # the owner's skills (§18.6)
     clock: Clock = field(default=utcnow)
     sleep: Callable[[float], None] = field(default=time.sleep)
+    builtins: Callable[[], Sequence[BuiltinSkill]] = field(default=load_builtins)
 
 
 def _done(week: str, outcome: str) -> dict[str, str]:
@@ -60,7 +65,14 @@ def learn_week(deps: WeeklyDeps, user_id: str, week: str, revision: int) -> dict
         return _fail(deps, user_id, week, revision)
     entries = weeks.week_entries(deps.store, user_id, start, end)
     rows = learn.week_rows([(clip, clip_posts, str(clip["clipId"]) in picks) for clip, clip_posts, _ in entries])
-    stop_reason, text = _ask(deps, rows)
+    try:
+        block = skill_prompt.load_block(
+            deps.store, deps.media, user_id, where="api.week", builtins=deps.builtins, sleep=deps.sleep
+        )
+    except Exception as e:  # never ask without the owner's skills
+        log("error", "weekly.skills_failed", week=week, error=type(e).__name__)
+        return _fail(deps, user_id, week, revision)
+    stop_reason, text = _ask(deps, rows, block)
     if stop_reason != "end_turn" or not text:
         log("warning", "weekly.model_stopped", week=week, stopReason=stop_reason or "error")
         _fail(deps, user_id, week, revision)
@@ -104,10 +116,10 @@ def learn_week(deps: WeeklyDeps, user_id: str, week: str, revision: int) -> dict
     return _done(week, "learning")
 
 
-def _ask(deps: WeeklyDeps, rows: list[Item]) -> tuple[str, str]:
+def _ask(deps: WeeklyDeps, rows: list[Item], block: skill_prompt.SkillsBlock) -> tuple[str, str]:
     for attempt in range(len(BEDROCK_DELAYS) + 1):
         try:
-            return learn.ask_week(deps.bedrock, deps.model_id, rows)
+            return learn.ask_week(deps.bedrock, deps.model_id, rows, skills=block)
         except Exception as e:
             log("warning", "weekly.bedrock_failed", attempt=attempt + 1, error=type(e).__name__)
             if attempt < len(BEDROCK_DELAYS):
@@ -201,7 +213,11 @@ def _from_env() -> WeeklyDeps:
             env.get("EMBED_MODEL_ID", vectors.DEFAULT_EMBED_MODEL),
         )
     return WeeklyDeps(
-        store=db.Store(table(env["TABLE_NAME"])), bedrock=bedrock, model_id=env["MODEL_ID"], vectors=vector_store
+        store=db.Store(table(env["TABLE_NAME"])),
+        bedrock=bedrock,
+        model_id=env["MODEL_ID"],
+        vectors=vector_store,
+        media=s3.Media(s3.make_client(reg), env["MEDIA_BUCKET"]),
     )
 
 

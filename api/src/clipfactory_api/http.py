@@ -37,10 +37,10 @@ class Request:
     request_id: str
     params: dict[str, str] = field(default_factory=dict)
 
-    def json(self) -> JsonBody:
+    def json(self, max_bytes: int = MAX_BODY_BYTES) -> JsonBody:
         if not self.raw_body.strip():
             return {}
-        if len(self.raw_body) > MAX_BODY_BYTES:
+        if len(self.raw_body) > max_bytes:
             raise too_large("The request is too large.")
         try:
             body = json.loads(self.raw_body)
@@ -91,8 +91,11 @@ def _json_response(status: int, body: JsonBody | None) -> dict[str, Any]:
     }
 
 
-def error_response(status: int, code: str, message: str) -> dict[str, Any]:
-    return _json_response(status, {"error": {"code": code, "message": message}})
+def error_response(status: int, code: str, message: str, field: str | None = None) -> dict[str, Any]:
+    error: dict[str, Any] = {"code": code, "message": message}
+    if field:
+        error["field"] = field
+    return _json_response(status, {"error": error})
 
 
 def _path(event: Mapping[str, Any]) -> str:
@@ -170,7 +173,7 @@ def dispatch(event: Mapping[str, Any], app: App | Callable[[], App], routes: lis
         return _json_response(response.status, response.body)
     except ApiError as e:
         log("info", "http.error", method=method, status=e.status, code=e.code, requestId=request_id)
-        return error_response(e.status, e.code, e.message)
+        return error_response(e.status, e.code, e.message, e.field)
     except Exception as e:
         log("error", "http.internal", method=method, error=type(e).__name__, detail=str(e), requestId=request_id)
         return error_response(500, "internal", "Something went wrong on our side. Please try again.")

@@ -54,3 +54,13 @@ def test_built_zip_contains_the_config_when_present() -> None:
         pytest.skip("the zip on disk predates §16; the build step rebuilds it")
     assert build.PLATFORMS_CONFIG_IN_ZIP in names
     assert "clipfactory_api/weekly.py" in names
+    if "clipfactory_api/skill_prompt.py" not in names:
+        pytest.skip("the zip on disk predates §18; the build step rebuilds it")
+    assert any(n.startswith("clipfactory_api/builtin_skills/") and n.endswith("/SKILL.md") for n in names)
+
+
+def test_built_in_skills_are_copied_into_the_package(tmp_path: Path) -> None:
+    build = _script()
+    count = build._copy_skills(tmp_path / "builtin_skills")
+    assert count >= 1
+    assert sorted(p.name for p in (tmp_path / "builtin_skills").glob("*/SKILL.md")) == ["SKILL.md"] * count

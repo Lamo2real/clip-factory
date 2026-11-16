@@ -157,8 +157,16 @@ def test_safe_filename(name: str, expected: str) -> None:
 
 def test_keys_are_scoped() -> None:
     assert s3.upload_key("u1", "ID", "../x.mp4") == "uploads/u1/ID/x.mp4"
-    assert s3.skill_key("u1", "S", "zip") == "skills/u1/S/skill.zip"
-    assert s3.skill_key("u1", "S", "md") == "skills/u1/S/SKILL.md"
+    rev = "01JABCDEFGHJKMNPQRSTVWXYZ0"
+    assert s3.skill_key("u1", "S", rev, "zip") == f"skills/u1/S/{rev}/skill.zip"
+    assert s3.skill_key("u1", "S", rev, "md") == f"skills/u1/S/{rev}/SKILL.md"
+    assert s3.skill_key_format(f"skills/u1/S/{rev}/skill.zip", "u1", "S") == "zip"
+    assert s3.skill_key_format("skills/u1/S/SKILL.md", "u1", "S") is None
+    assert s3.skill_key_format("skills/u1/S/SKILL.md", "u1", "S", legacy=True) == "md"
+    assert s3.skill_key_format(f"skills/u2/S/{rev}/SKILL.md", "u1", "S") is None
+    assert s3.skill_key_format(f"skills/u1/S/{rev}/../SKILL.md", "u1", "S") is None
+    assert s3.is_revision_key(f"skills/u1/S/{rev}/SKILL.md")
+    assert not s3.is_revision_key("skills/u1/S/SKILL.md")
     assert s3.cookies_key("u1") == "private/u1/youtube-cookies.txt"
     assert s3.clip_prefix("J", "C") == "jobs/J/clips/C/"
     assert not s3.is_safe_key("uploads/u1/../u2/x")

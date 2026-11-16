@@ -382,6 +382,9 @@ class FakeS3:
         self.objects: dict[str, bytes] = {}
         self.presigned: list[tuple[str, dict[str, Any], int]] = []
         self.deleted: list[str] = []
+        self.reads: list[str] = []
+        self.put_types: dict[str, str] = {}
+        self.read_errors: dict[str, list[Exception]] = {}  # key -> errors raised by the next get_object calls
 
     def generate_presigned_url(self, op: str, Params: dict[str, Any], ExpiresIn: int) -> str:
         self.presigned.append((op, Params, ExpiresIn))
@@ -392,7 +395,16 @@ class FakeS3:
             raise client_error("404", 404)
         return {"ContentLength": len(self.objects[Key])}
 
+    def put_object(self, Bucket: str, Key: str, Body: bytes, ContentType: str) -> dict[str, Any]:
+        self.objects[Key] = bytes(Body)
+        self.put_types[Key] = ContentType
+        return {}
+
     def get_object(self, Bucket: str, Key: str) -> dict[str, Any]:
+        self.reads.append(Key)
+        pending = self.read_errors.get(Key)
+        if pending:
+            raise pending.pop(0)
         if Key not in self.objects:
             raise client_error("NoSuchKey", 404)
         return {"Body": io.BytesIO(self.objects[Key])}

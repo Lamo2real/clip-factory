@@ -8,12 +8,14 @@ from typing import Any
 
 import pytest
 
-from clipfactory_api import db, learn, posts, settings
+from clipfactory_api import db, learn, posts, s3, settings
 from clipfactory_api.flow_client import FlowClient, FlowStartError, clip_flow_name, job_flow_name
 from clipfactory_api.platforms import PLATFORMS, NotConnectedError, adapter_for
 from clipfactory_api.vectors import Vectors, clip_metadata, embed_text, parse_performance, score_bucket
 from conftest import CLIP_FLOW_ARN, JOB_FLOW_ARN, USER, Clock, seed_clip
-from fakes import FakeBedrock, FakeEmbeddings, FakeLambda, FakeS3Vectors, FakeTable
+from fakes import FakeBedrock, FakeEmbeddings, FakeLambda, FakeS3, FakeS3Vectors, FakeTable
+
+MEDIA = s3.Media(FakeS3(), "cf-prod-media-123")
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -261,7 +263,7 @@ def test_distil_writes_one_learning(store: db.Store) -> None:
     _measured_post(store, clip["clipId"])
     bedrock = FakeBedrock(text='  "Rage hooks in the first second win."  ')
     outcome, learning_id = learn.distil_learning(
-        store, bedrock, "global.anthropic.claude-fable-5-1", USER, clock=Clock()
+        store, bedrock, "global.anthropic.claude-fable-5-1", USER, media=MEDIA, clock=Clock(), builtins=list
     )
     assert outcome == "learning"
     assert learning_id is not None
@@ -278,7 +280,7 @@ def test_distil_writes_one_learning(store: db.Store) -> None:
 
 
 def test_distil_without_metrics(store: db.Store) -> None:
-    assert learn.distil(store, FakeBedrock(), "m", USER) == "no_metrics"
+    assert learn.distil(store, FakeBedrock(), "m", USER, media=MEDIA, builtins=list) == "no_metrics"
 
 
 @pytest.mark.parametrize(
@@ -294,7 +296,7 @@ def test_distil_without_metrics(store: db.Store) -> None:
 def test_distil_only_learns_from_a_finished_answer(store: db.Store, bedrock: FakeBedrock, outcome: str) -> None:
     clip = seed_clip(store, status="posted")
     _measured_post(store, clip["clipId"])
-    assert learn.distil(store, bedrock, "m", USER) == outcome
+    assert learn.distil(store, bedrock, "m", USER, media=MEDIA, builtins=list) == outcome
     assert store.query_all(db.user_pk(USER), "LEARNING#") == []
 
 
