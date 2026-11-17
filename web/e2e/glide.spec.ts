@@ -80,6 +80,35 @@ test.describe("glide", () => {
       await landsOn(list, ".sidebar__item.is-active");
     });
 
+    test("the folded menu keeps its icons and highlight inside the menu", async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      const list = page.locator(".sidebar__list");
+      // The glide takes no room of its own: the first item sits right at the top of the list.
+      const gap = () => list.evaluate((el) => Math.round(el.querySelector(".sidebar__item")!.getBoundingClientRect().top - el.getBoundingClientRect().top));
+      expect(await list.locator(".glide").evaluate((el) => getComputedStyle(el).position)).toBe("absolute");
+      expect(await gap()).toBe(0);
+      await page.getByRole("button", { name: "Collapse menu" }).click();
+      await expect(page.locator(".sidebar")).toHaveClass(/is-collapsed/);
+      await landsOn(list, ".sidebar__item.is-active");
+      // Nothing in the list reaches past the folded menu's own edges.
+      await expect
+        .poll(() =>
+          page.locator(".sidebar").evaluate((bar) => {
+            const b = bar.getBoundingClientRect();
+            if (Math.round(b.width) !== 80) return "still folding";
+            return [...bar.querySelectorAll(".sidebar__list > li, .sidebar__item, .sidebar__icon")]
+              .map((el) => el.getBoundingClientRect())
+              .filter((r) => r.left < b.left - 0.5 || r.right > b.right + 0.5).length;
+          }),
+        )
+        .toBe(0);
+      await page.locator(".sidebar__item[data-help='nav-jobs']").click();
+      await expect(page).toHaveURL(/\/jobs/);
+      await landsOn(list, ".sidebar__item.is-active");
+      expect(await gap()).toBe(0);
+    });
+
     test("Library's view tabs slide too", async ({ page }) => {
       await page.goto("/library");
       await settle(page);
