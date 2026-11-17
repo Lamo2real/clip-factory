@@ -6,6 +6,9 @@ const SKILL_PAGES = { written: "01JZ8S00000000000000000001", zip: "01JZ8S0000000
 // Nothing may run out of its box, at any width from 320px up, on any screen (docs/CONTRACTS.md §11).
 for (const width of WIDTHS) {
   test(`no overflow on any screen at ${width}px`, async ({ page }) => {
+    // A long walk through many screens: on CI's machines the widest sizes take close to 2 minutes, so the
+    // usual 2-minute limit would cut a passing run short.
+    test.setTimeout(300_000);
     await page.setViewportSize({ width, height: 900 });
     const paths: string[] = [];
     for (const r of ROUTES) paths.push(await resolveRoute(page, r));
@@ -206,6 +209,9 @@ for (const width of [320, 375, 600, 768, 1024, 1440, 1920]) {
 type SetupKnobs = { finish(p: string): void; askToChoose(p: string): void; setAudit(a: boolean): void };
 for (const width of WIDTHS) {
   test(`the posting setup and the TikTok sheet fit at ${width}px`, async ({ page }) => {
+    // A long walk through many screens: on CI's machines the widest sizes take close to 2 minutes, so the
+    // usual 2-minute limit would cut a passing run short.
+    test.setTimeout(300_000);
     await page.setViewportSize({ width, height: 900 });
     const failures: string[] = [];
     const check = async (label: string) => {
