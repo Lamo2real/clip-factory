@@ -71,12 +71,14 @@
   }
 }
 
-/* Items sit above the glide. Once it has measured, the chosen item drops its own highlight. */
+/* Items sit above the glide. Once it has measured, the chosen item drops its own highlight.
+   Not the glide itself (in the menu it is an li too): it must stay out of the flow, or it takes a row of its own
+   and holds a folded menu open at its full width. */
 .segmented__opt,
 .tab,
 .lib-tab,
 .bg-mode,
-.sidebar__list > li,
+.sidebar__list > li:not(.glide),
 .tabbar__cell {
   position: relative;
   z-index: 1;
