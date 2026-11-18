@@ -64,6 +64,11 @@
   --space-7: 48px;
   --space-8: 64px;
   --gutter: clamp(16px, 3.2vw, 36px);
+  /* Where words start inside a panel: its side padding. Panels use it, and words that sit loose on the page (page
+     titles, breadcrumbs, lines between panels) start the same distance in, plus the panel's 1 px rim (--loose-x), so
+     every left edge of text on a page is one line. */
+  --inset: clamp(16px, 2.6vw, 24px);
+  --loose-x: calc(var(--inset) + 1px);
 
   --r-xs: 10px; /* small chips, thumbs and inputs inside rows */
   --r-sm: 12px;

@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { settingsPath, TREES } from "../src/lib/settingsTree.ts";
+import { DODGE_SETTLE_MS } from "../src/features/help/dodge.ts";
 import { allSteps, GUIDES } from "../src/setup/index.ts";
 
 /** Every page of the settings tree (§15.1), and each platform's setup page (§17.1). */
@@ -46,23 +47,27 @@ export async function settle(page: Page) {
 }
 
 /**
- * Waits until the Ask launcher has settled: not stepped aside for a scroll and not moving, for three frames in a row
- * (its measure runs on the frame after a change and its move starts on the next). Frames and events, not time.
+ * Waits until the Ask launcher has settled (docs/CONTRACTS.md §19.8): it looks at its spot again only once the page
+ * has been still for DODGE_SETTLE_MS, so this first lets that much time pass in the page (any scroll before this call
+ * has then been answered), then waits for its fade to end: three frames in a row with nothing running on it.
  */
 export async function launcherSettled(page: Page) {
   await page.evaluate(
-    () =>
+    (quiet) =>
       new Promise<void>((resolve) => {
-        let calm = 0;
-        const tick = () => {
-          const el = document.querySelector<HTMLElement>(".help-launcher");
-          const still = !el || (el.dataset.dodge !== "scroll" && el.getAnimations().every((a) => a.playState !== "running"));
-          calm = still ? calm + 1 : 0;
-          if (calm >= 3) resolve();
-          else requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
+        setTimeout(() => {
+          let calm = 0;
+          const tick = () => {
+            const el = document.querySelector<HTMLElement>(".help-launcher");
+            const still = !el || el.getAnimations().every((a) => a.playState !== "running");
+            calm = still ? calm + 1 : 0;
+            if (calm >= 3) resolve();
+            else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }, quiet);
       }),
+    DODGE_SETTLE_MS + 40,
   );
 }
 

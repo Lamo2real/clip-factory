@@ -132,7 +132,7 @@
 .newjob {
   display: grid;
   gap: 16px;
-  padding: clamp(14px, 2.4vw, 22px);
+  padding: var(--inset);
   border-radius: var(--r-lg);
   background: var(--fill);
   box-shadow:
@@ -560,7 +560,7 @@
 .panel {
   display: grid;
   gap: 12px;
-  padding: clamp(16px, 3vw, 26px);
+  padding: var(--inset);
 }
 .panel__head {
   display: flex;
@@ -691,7 +691,8 @@
 .review-card {
   display: grid;
   gap: clamp(16px, 3vw, 30px);
-  padding: clamp(14px, 2.8vw, 28px);
+  /* --inset from tablets up; 2 px less on phones, where five caption tabs and the decision column need the room. */
+  padding: clamp(14px, 2.6vw, 24px);
   border-radius: var(--r-xl);
   transition:
     opacity 400ms var(--ease-out),
@@ -950,7 +951,7 @@
   display: grid;
   gap: 16px;
   align-content: start;
-  padding: clamp(18px, 3.4vw, 32px);
+  padding: var(--inset);
   border-radius: var(--r-xl);
 }
 .learnings__list {

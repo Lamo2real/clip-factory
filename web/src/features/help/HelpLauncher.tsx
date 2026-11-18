@@ -1,6 +1,8 @@
 // Ask Clip Factory's launcher (docs/CONTRACTS.md §19.8), mounted once in the signed-in shell: a glass "Ask" pill
 // bottom right on wide screens (above the update bar), a 56 px icon-only circle on phones that never covers the
-// tab bar or the update bar and steps aside while the page scrolls down. Green glass, never vermilion.
+// tab bar or the update bar. It keeps that one spot while the page scrolls; once scrolling settles, if it would rest
+// on a control, it glides up a little (at most 96 px) to a clear spot or fades out in place (dodge.ts). Green glass,
+// never vermilion.
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { AskMark } from "../../components/AskMark.tsx";
 import { useMedia } from "../../lib/hooks.ts";
@@ -25,7 +27,7 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
   const [focused, setFocused] = useState(false);
   const launcher = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
-  const { hidden, lift, reason, moving, onWords } = useDodge(launcher, open || focused, open);
+  const { hidden, lift, reason } = useDodge(launcher, open || focused, open);
   // The conversation lives here, in memory only (§19.2, §19.8), so closing the panel (on phones, an answer button
   // closes it) and opening it again shows the last answer. Start over clears it; nothing is ever stored.
   const [chat, dispatch] = useReducer(chatReducer, initialChat);
@@ -106,11 +108,9 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
           aria-label="Ask Clip Factory"
           aria-expanded={open}
           aria-controls={open ? "help-panel" : undefined}
-          data-lift={lift}
           data-dodge={reason ?? undefined}
-          data-moving={moving || undefined}
-          data-on-words={onWords || undefined}
-          style={lift ? { transform: `translateY(${-lift}px)` } : undefined}
+          data-lift={lift}
+          style={lift ? { translate: `0 ${-lift}px` } : undefined}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onClick={() => {

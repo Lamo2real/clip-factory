@@ -342,6 +342,25 @@
   gap: 10px;
   flex: 1 1 420px;
 }
+/* Words that sit loose on the page start where the words inside the panels start (--loose-x: a panel's rim and side
+   padding), in every look and at every size, so the left edge of the text runs as one line down the page. Boxes
+   (panels, buttons, tracks) keep the page edge. Where a look puts a plate behind these words (glass.css), the plate
+   is real padding, so it starts at the page edge like a panel and never hugs or cuts a letter. */
+:is(
+    .page-head__text,
+    .home-row__intro > :is(h2, p),
+    .review-count,
+    .setup-part__title,
+    .setup-part__note,
+    .skill-meta,
+    .week__money
+  ) {
+  padding-inline: var(--loose-x);
+}
+/* A breadcrumb's words sit 6 px inside their own tap target. */
+.crumbs__list {
+  padding-inline: calc(var(--loose-x) - 6px);
+}
 .page-head__title {
   font-family: var(--font-display);
   font-weight: 400;
@@ -371,7 +390,7 @@
   gap: 4px;
   justify-self: start;
   min-height: var(--tap);
-  padding-right: 10px;
+  padding-inline: var(--loose-x) 10px;
   font-weight: 600;
   color: var(--ink-2);
   text-decoration: none;

@@ -106,7 +106,7 @@ async function still(page: Page) {
   await page.waitForFunction(() => {
     const bar = document.querySelector(".setup-todo-bar");
     if (bar && bar.classList.contains("is-scrolled") !== window.scrollY > 0) return false;
-    return Array.from(document.querySelectorAll(".setup-todo-bar, .setup-todo")).every((el) => el.getAnimations().every((a) => a.playState !== "running"));
+    return Array.from(document.querySelectorAll(".setup-todo-bar, .setup-todo-bar__glass, .setup-todo")).every((el) => el.getAnimations().every((a) => a.playState !== "running"));
   });
 }
 
@@ -128,7 +128,9 @@ async function pillState(page: Page) {
     const bar = document.querySelector<HTMLElement>(".setup-todo-bar");
     const p = pill.getBoundingClientRect();
     const b = bar?.getBoundingClientRect();
-    const barStyle = bar ? getComputedStyle(bar) : null;
+    // The bar's glass is its child (it runs on below the strip and melts into the page).
+    const glass = bar?.querySelector<HTMLElement>(".setup-todo-bar__glass");
+    const barStyle = glass ? getComputedStyle(glass) : null;
     return {
       scrollY: window.scrollY,
       shown: Number(getComputedStyle(aside).opacity) === 1 && getComputedStyle(aside).pointerEvents !== "none",
@@ -403,7 +405,7 @@ test.describe("the floating setup list at 1440 px", () => {
     const rows = rail.locator(".setup-todo__scroll");
     const fits = () => rows.evaluate((el) => el.scrollHeight <= el.clientHeight + 1);
     const clearOfAsk = async () => {
-      // The Ask pill finds its place a frame after the window changes and slides there: measure it at rest.
+      // The Ask pill looks at its spot once the window has stopped changing, and may glide a little: measure it after.
       await launcherSettled(page);
       const a = (await rail.boundingBox())!;
       const ask = (await page.locator(".help-launcher").boundingBox())!;
@@ -497,9 +499,8 @@ test.describe("the floating setup list at 1440 px", () => {
 });
 
 // The Ask pill sits under the open list. The list's buttons are controls it must never rest on (§19.8), and nothing
-// of the page shows in that corner, so it keeps its place: it is never lifted onto the list and never steps aside
-// because of what is cut off there (a strip of the page that runs on under the column, rows scrolled out of the
-// column on a short window).
+// of the page shows in that corner, so it keeps its place and shows: it never moves or fades out because of what is cut off
+// there (a strip of the page that runs on under the column, rows scrolled out of the column on a short window).
 test("the Ask pill keeps its corner under the open list at every scroll position", async ({ page }) => {
   test.setTimeout(120_000);
   const settled = () => launcherSettled(page);
@@ -540,8 +541,8 @@ test("the Ask pill keeps its corner under the open list at every scroll position
         return { lift: ask.dataset.lift, dodge: ask.dataset.dodge ?? null, hidden: ask.classList.contains("is-hidden"), on, gap: Math.round(a.top - rail.bottom) };
       });
       const at = `${path} ${width}x${height} at ${y}`;
-      if (state.dodge !== null || state.hidden) failures.push(`${at}: the Ask pill stepped aside (${state.dodge})`);
-      if (state.lift !== "0") failures.push(`${at}: the Ask pill lifted ${state.lift} px`);
+      if (state.dodge !== null || state.hidden) failures.push(`${at}: the Ask pill faded out (${state.dodge})`);
+      if (state.lift !== "0") failures.push(`${at}: the Ask pill moved up ${state.lift} px`);
       if (state.on.length) failures.push(`${at}: the Ask pill is on ${state.on.join(", ")}`);
       if (state.gap < 12) failures.push(`${at}: only ${state.gap} px between the list and the Ask pill`);
     }

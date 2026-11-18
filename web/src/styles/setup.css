@@ -190,7 +190,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 14px 18px;
-  padding: clamp(16px, 2.6vw, 24px);
+  padding: var(--inset);
   border-radius: var(--r-xl);
 }
 .setup-head__mark {
@@ -261,10 +261,8 @@
   font-weight: 400;
   font-size: var(--fs-h2);
   line-height: 1.1;
-  padding-inline: 4px;
 }
 .setup-part__note {
-  padding-inline: 4px;
   font-size: var(--fs-small);
   font-weight: 600;
   color: var(--ink-2);
@@ -758,7 +756,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 14px 18px;
-  padding: clamp(16px, 2.6vw, 24px);
+  padding: var(--inset);
   border-radius: var(--r-xl);
   color: var(--ink);
 }
@@ -806,7 +804,7 @@
 .choose {
   display: grid;
   gap: 10px;
-  padding: clamp(16px, 2.6vw, 24px);
+  padding: var(--inset);
   border-radius: var(--r-xl);
 }
 .choose__title {
@@ -856,7 +854,7 @@
 .done-panel {
   display: grid;
   gap: 14px;
-  padding: clamp(16px, 2.6vw, 24px);
+  padding: var(--inset);
   border-radius: var(--r-xl);
   min-width: 0;
 }

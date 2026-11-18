@@ -136,7 +136,9 @@ behind. The words are light, so a white desktop or a white photo is the hardest 
 **In see-through the tint sits on the panels, not on the window.** Between panels the desktop shows through the
 window's own glass untouched (Clear) or under a green frost (Frosted, 0.30). Every glass panel, and every piece of
 text that sits straight on the window (page title and its line, breadcrumbs, headings and lines between panels),
-carries the panel tint; loose text gets it as a soft scrim hugging the words. The picture look uses the same scrim.
+carries the panel tint; loose text gets it as a plate of real padding behind the words (never a spread shadow, so
+it never hugs or cuts a letter): the plate starts at the page edge like a panel and its words start where a panel's
+words start (`--loose-x`). The picture look uses the same plates.
 
 | Backdrop | Lightest thing behind | Tint |
 |---|---|---|
@@ -206,6 +208,16 @@ read "6 h 10 min". Neither ever says "60 min" or "24 h".
 | `--r-pill` | `999px` | Pills, chips and pill buttons |
 
 - Content max width 1200 px, centred. Gutters 16 px on phones, 24 px on tablets, 32 px on desktop.
+- **One text line down the left of a page.** Panels pad their sides by `--inset`; words that sit loose on the page
+  (the page title and its line, breadcrumbs, back links, headings and lines between panels, the review count, a
+  skill's meta line) start `--loose-x` in (the panel's 1 px rim plus `--inset`), so their first letter lines up with
+  the first letter inside the panels below, in every look and at every width. Boxes (panels, buttons, pick-one tracks,
+  the Back pill) keep the page edge.
+
+| Token | Value | Use |
+|---|---|---|
+| `--inset` | `clamp(16px, 2.6vw, 24px)` | A panel's side padding: where words start inside it |
+| `--loose-x` | `calc(var(--inset) + 1px)` | Where loose words start: a panel's rim plus `--inset` |
 - Grid: one column on phones; cards in rows of 2 from 768 px, 3 from 1100 px (`repeat(auto-fill, minmax(min(100%, 300px), 1fr))`).
 - Breakpoints: phone < 768 px, tablet 768–1099 px, desktop ≥ 1100 px.
 
@@ -318,8 +330,12 @@ unless its name already says it all.
 - It searches every apple and every leaf by name, and also tree and branch names, ignoring case and accents, while
   you type. "sound", "click", "beep" all find the Sounds apples (each apple may carry a few extra everyday words).
 - Results list under the box: the apple's name with its place under it (`Look & feel › Sounds`). Tapping a result
-  opens that branch, scrolls to the apple and highlights it for 2 seconds (a soft bone glow; with reduced motion, a
-  plain outline).
+  opens that branch, scrolls to the apple and highlights it for 2 seconds: a deep-green wash with a vermilion edge
+  and a soft inner glow that swells once and settles, drawn exactly on the panel's own lines. An apple alone in its
+  panel lights the whole panel along its border and corners; in a panel of several, its row lights from the panel's
+  left edge to its right edge between the dividers, taking the panel's top corners when it is the first row and the
+  bottom corners when it is the last. Never a ring outside the panel. The keyboard focus ring of an apple follows the
+  same lines (bone inside vermilion), instead of the page's own ring. With reduced motion the light simply shows.
 - Nothing found: "Nothing found for “<what you typed>”. Try a shorter word, like “sound”." Never an empty box.
 - The list is a `listbox` linked to the box; Up and Down move, Enter opens, Escape clears.
 
@@ -1035,7 +1051,7 @@ signed-in page and follows every rule on this page.
 |---|---|
 | Launcher, desktop | green glass pill, sparkle icon + "Ask", fixed bottom right (`right: 24px`), 12 px above the update bar when it shows (the bar publishes its height as `--update-bar-h`). |
 | Launcher, phone | 56 px icon-only glass circle, `aria-label="Ask Clip Factory"`, `right: max(16px, safe-area-inset-right)`, bottom = tab bar + safe area + 18 px + `--update-bar-h` (+ 10 px when the bar shows). Never covers the tab bar or the update bar. |
-| Dodge | Hides (fade + 12 px slide) while scrolling down more than 8 px; back on scroll up or 600 ms after scrolling stops; stays while it or the panel has focus. Never sits on a control: lifts to the first free spot above every link, button, field, tab, switch or focusable element it would overlap (found on the page by itself), plus blocks marked `data-help-dodge` (the Review action bar, the Home link box, the sound grid, the **Try it** controls). Takes no taps while it slides. If lifting would take it above 40 % of the window height it steps aside (hidden) instead, so at 1440 px on Review it stays hidden until you scroll. It also keeps off words (lines of text) when a spot clear of them is within the same reach; when there is none it may rest on words (never on a control) rather than hide. No slide with reduced motion. |
+| Dodge | One home spot, and nothing changes while the page scrolls (drag, wheel, fling, momentum, rubber-band). Once the page has been still for 260 ms, if it would rest on (or within 8 px of) a link, button, field, tab, switch or focusable element (found on the page by itself) or a part of a block marked `data-help-dodge` (a pick-one row's choices, the Review action bar, the Home link box, the sound cards, the **Try it** controls), it glides straight up to the nearest clear spot when that is at most 96 px above home (420 ms); when it is not, it fades out where it stands (opacity and a slight shrink, 360 ms; taps go through to the control). The next settle that finds home clear brings it back home. Never sideways, never to the middle of the screen. Shown while it has focus; home while its panel is open. Words are no obstacle. No glide or fade with reduced motion (it simply goes). |
 | Room on phones | Pages get extra bottom padding under their last control, so the settled launcher never covers a control at 320, 375, 390 or 430 px, with or without the update bar. |
 | Panel, desktop | Non-modal dialog (`aria-modal="false"`), 400 px wide, `max-height: min(640px, 100dvh - 140px)`, anchored above the launcher, `.glass--strong`. If it would cover the control an answer button just lit up, it closes (the chat is kept). |
 | Panel, phone | Modal full-screen sheet (`aria-modal="true"`; the page and the launcher are `inert`; Tab stays in the sheet) with safe-area padding; covers the tab bar while open; Close brings it back. |

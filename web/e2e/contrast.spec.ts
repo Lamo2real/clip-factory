@@ -386,7 +386,9 @@ for (const { glass, paints } of WINDOW_LOOKS) {
       // The Ask panel with an answer.
       await page.goto("/");
       await settle(page);
-      await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+      // From the keyboard: the launcher may be faded out over a control on this first screen (§19.8), and focus
+      // always shows it.
+      await page.getByRole("button", { name: "Ask Clip Factory" }).press("Enter");
       const panel = page.getByRole("dialog", { name: "Ask Clip Factory" });
       const box = panel.getByLabel("Your question");
       await box.fill("Where do I change my click sound?");

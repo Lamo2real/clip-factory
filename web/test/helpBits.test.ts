@@ -2,42 +2,44 @@ import { describe, expect, it, vi } from "vitest";
 import type { Api, Job, WeekClip } from "../src/api/types.ts";
 import { chatReducer, historyOf, initialChat, newestAnswerId } from "../src/features/help/chatState.ts";
 import { deviceOf } from "../src/features/help/context.ts";
-import { DODGE_GAP, liftFor, nextScroll } from "../src/features/help/dodge.ts";
+import { covers, DODGE_GAP, DODGE_NUDGE_MAX, DODGE_SETTLE_MS, nudgeFor } from "../src/features/help/dodge.ts";
 import { readLive } from "../src/features/help/live.ts";
 import { nameOf, ringTarget } from "../src/features/help/spotlight.ts";
 import { hasUnsaved, registerUnsaved } from "../src/features/help/unsaved.ts";
 import type { HelpAnswer } from "../src/features/help/types.ts";
 
-describe("dodge math", () => {
-  it("hides after more than 8 px down, shows after more than 8 px up, ignores small moves", () => {
-    let s = { anchor: 100, hidden: false };
-    s = nextScroll(s, 105);
-    expect(s).toEqual({ anchor: 100, hidden: false });
-    s = nextScroll(s, 120);
-    expect(s.hidden).toBe(true);
-    s = nextScroll(s, 115);
-    expect(s.hidden).toBe(true);
-    s = nextScroll(s, 100);
-    expect(s.hidden).toBe(false);
-    expect(nextScroll({ anchor: 30, hidden: true }, 0).hidden).toBe(false);
-  });
+describe("the launcher's spot (§19.8)", () => {
+  const base = { top: 700, bottom: 756, left: 300, right: 356 };
 
-  it("lifts above an overlapping bar with a 12 px gap, and gives up past the cap", () => {
-    const base = { top: 700, bottom: 756, left: 300, right: 356 };
-    expect(liftFor(base, [], 300)).toBe(0);
+  it("is on a control when one overlaps it or comes within the 8 px gap, in its own column only", () => {
+    expect(covers(base, [])).toBe(false);
     // A bar to the left does not matter.
-    expect(liftFor(base, [{ top: 720, bottom: 780, left: 0, right: 200 }], 300)).toBe(0);
-    // A bar across the launcher: lift so its bottom sits 12 px above the bar's top.
-    expect(liftFor(base, [{ top: 730, bottom: 790, left: 0, right: 400 }], 300)).toBe(756 - 730 + DODGE_GAP);
-    expect(liftFor(base, [{ top: 300, bottom: 790, left: 0, right: 400 }], 200)).toBeNull();
+    expect(covers(base, [{ top: 720, bottom: 780, left: 0, right: 200 }])).toBe(false);
+    // A bar across the launcher does.
+    expect(covers(base, [{ top: 730, bottom: 790, left: 0, right: 400 }])).toBe(true);
+    // Closer than the gap counts as on it; further does not.
+    expect(covers(base, [{ top: 756 + DODGE_GAP - 1, bottom: 800, left: 0, right: 400 }])).toBe(true);
+    expect(covers(base, [{ top: 756 + DODGE_GAP, bottom: 800, left: 0, right: 400 }])).toBe(false);
+    expect(covers(base, [{ top: 600, bottom: 700 - DODGE_GAP, left: 0, right: 400 }])).toBe(false);
   });
 
-  it("keeps lifting when clearing one control lands it on the next one up", () => {
-    const base = { top: 700, bottom: 756, left: 300, right: 356 };
-    const row = { top: 730, bottom: 790, left: 0, right: 400 };
-    const field = { top: 640, bottom: 715, left: 0, right: 400 };
-    expect(liftFor(base, [field, row], 300)).toBe(756 - 640 + DODGE_GAP);
-    expect(liftFor(base, [field, row], 100)).toBeNull();
+  it("nudges up just clear of a control, through a stack of them, never more than 96 px; else fades (null)", () => {
+    expect(nudgeFor(base, [])).toBe(0);
+    expect(nudgeFor(base, [{ top: 0, bottom: 40, left: 0, right: 400 }])).toBe(0);
+    // A row across its bottom: up so its bottom sits 8 px above the row.
+    expect(nudgeFor(base, [{ top: 740, bottom: 790, left: 0, right: 400 }])).toBe(756 - 740 + DODGE_GAP);
+    // Clearing one lands it on the next one up: it clears both if that is close enough.
+    const row = { top: 740, bottom: 790, left: 0, right: 400 };
+    const field = { top: 680, bottom: 712, left: 0, right: 400 };
+    expect(nudgeFor(base, [field, row])).toBe(756 - 680 + DODGE_GAP);
+    // A tall control: no clear spot within reach.
+    expect(nudgeFor(base, [{ top: 500, bottom: 790, left: 0, right: 400 }])).toBeNull();
+    expect(DODGE_NUDGE_MAX).toBe(96);
+  });
+
+  it("waits for scrolling to settle before it looks again", () => {
+    expect(DODGE_SETTLE_MS).toBeGreaterThanOrEqual(200);
+    expect(DODGE_SETTLE_MS).toBeLessThanOrEqual(400);
   });
 });
 

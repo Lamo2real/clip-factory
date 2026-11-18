@@ -271,9 +271,10 @@ html.see-through .lib-tab:not(.is-on) {
   background: rgb(var(--green-rgb) / var(--panel-veil));
 }
 /* Text that sits straight on the window, the picture or the frosted colours (page titles and their line, breadcrumbs,
-   headings and lines between panels) gets the same tint as a soft scrim hugging it. Frosted needs it for the moving
-   caustics, which lighten the mesh where they cross a blob (test/background.test.ts works out the worst spot). The spread shadow pads it without moving
-   anything. */
+   headings and lines between panels) gets the same tint as a plate behind it. Frosted needs it for the moving
+   caustics, which lighten the mesh where they cross a blob (test/background.test.ts works out the worst spot). The
+   room around the words is real padding, never a spread shadow: a plate starts at the page edge like a panel, its
+   words start where a panel's words start (--loose-x, layout.css), and nothing hugs or cuts a letter. */
 html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
   :is(
     .page-head__text,
@@ -291,16 +292,24 @@ html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
     .week__money,
     .skill-meta
   ) {
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
   background: rgb(var(--green-rgb) / var(--panel-veil));
-  box-shadow: 0 0 0 10px rgb(var(--green-rgb) / var(--panel-veil));
+  padding-block: 8px;
 }
-/* The page title and its line are a plate of their own: real inner space so the words never touch its edge, with the
-   panels' corner. (Doubled class: the shared rule above weighs as much as two classes through :is.) */
+/* The breadcrumb's parts are 48 px tap targets already: room enough above and below its words. */
+html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"]) .crumbs__list.crumbs__list {
+  padding-block: 0;
+}
+/* The ones that are not on the text line (the brand beside its tile, the centred ones) get even room on both sides. */
+html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
+  :is(.topbar .brand__name, .perf__head, .perf__updated > span, .week__title, .week__learn) {
+  padding-inline: 12px;
+}
+/* The page title and its line are a plate of their own, with a panel's corner and more room above and below. (Doubled
+   class: the shared rule above weighs as much as two classes through :is.) */
 html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"]) .page-head__text.page-head__text {
-  padding: clamp(20px, 2.4vw, 30px) clamp(22px, 3vw, 38px);
+  padding-block: clamp(18px, 2.4vw, 28px);
   border-radius: var(--r-lg);
-  box-shadow: none;
 }
 /* Headings and lines between panels hug their words instead of running the full width as a bar. */
 html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
@@ -330,10 +339,6 @@ html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"]) .per
 :is(.segmented, .tabs, .bg-modes, .model-picks) {
   background-color: rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.1));
   background-image: linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08));
-}
-/* The Get the app card is a panel itself: when it is lit up, its ring shows it and its tint stays as it is. */
-html.see-through .getapp.is-found {
-  background-color: transparent;
 }
 
 /* Chromium: bend the backdrop as well as blurring it (see the #cf-refract filter). */

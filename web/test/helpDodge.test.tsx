@@ -1,64 +1,116 @@
-// Audit F025: the Ask launcher keeps off words too (docs/CONTRACTS.md §19.8), not only off controls.
+// What the Ask launcher counts as a control under its spot (docs/CONTRACTS.md §19.8).
+import { act, useRef } from "react";
+import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { controlBoxes, DODGE_GAP, pickLift, reachZone, shownBox, textBoxes } from "../src/features/help/dodge.ts";
+import { controlBoxes, DODGE_SETTLE_MS, shownBox, useDodge } from "../src/features/help/dodge.ts";
 
-const base = { top: 700, bottom: 756, left: 300, right: 356 };
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe("pickLift", () => {
-  it("lifts clear of a line of words when a free spot is within reach", () => {
-    const line = { top: 720, bottom: 740, left: 16, right: 350 };
-    expect(pickLift(base, [], [line], 300)).toEqual({ lift: 756 - 720 + DODGE_GAP, onWords: false });
-  });
+/** Reads `data-box="left,top,right,bottom"` as an element's box, for getBoundingClientRect and the offset* getters. */
+function boxOf(el: Element): [number, number, number, number] {
+  return (el.getAttribute("data-box") ?? "0,0,0,0").split(",").map(Number) as [number, number, number, number];
+}
 
-  it("clears controls and words together", () => {
-    const button = { top: 690, bottom: 740, left: 280, right: 360 };
-    const line = { top: 640, bottom: 660, left: 16, right: 350 };
-    // Over the button lands it on the line, so it goes over both.
-    expect(pickLift(base, [button], [line], 300)).toEqual({ lift: 756 - 640 + DODGE_GAP, onWords: false });
-  });
-
-  it("never hides because of words: with no spot clear of them it keeps the control-only spot", () => {
-    const wall = { top: 300, bottom: 780, left: 16, right: 360 };
-    expect(pickLift(base, [], [wall], 200)).toEqual({ lift: 0, onWords: true });
-    const button = { top: 730, bottom: 780, left: 280, right: 360 };
-    expect(pickLift(base, [button], [wall], 200)).toEqual({ lift: 756 - 730 + DODGE_GAP, onWords: true });
-  });
-
-  it("still steps aside when controls leave no room", () => {
-    const tall = { top: 300, bottom: 790, left: 0, right: 400 };
-    expect(pickLift(base, [tall], [], 200)).toEqual({ lift: null, onWords: false });
-  });
-
-  it("looks only in the launcher's own column, up to its highest lift", () => {
-    expect(reachZone(base, 200)).toEqual({ top: 700 - 200 - DODGE_GAP, bottom: 756 + DODGE_GAP, left: 300, right: 356 });
-  });
-});
-
-describe("textBoxes", () => {
+// The launcher keeps one spot and stays calm while the page scrolls (§19.8): it never changes mid-scroll, and only
+// once the page has been still does it fade out (on a control) or back in (spot clear).
+describe("useDodge: one spot, a fade only once scrolling settles", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     document.body.innerHTML = "";
   });
 
-  it("returns the lines of words in the zone and skips the launcher's own chrome, blank, hidden and screen-reader-only text", () => {
-    document.body.innerHTML = `<p id="lede">Paste a link</p><p id="far">Far away</p><div class="help-panel"><p>Panel</p></div><p> </p><label><span class="sr-only">Only for screen readers</span></label><p hidden>Hidden</p>`;
-    const rect = (top: number) => ({ top, bottom: top + 20, left: 16, right: 340, width: 324, height: 20, x: 16, y: top, toJSON() {} }) as DOMRect;
+  function mount(pinned = false) {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame", "performance"] });
     vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-      return rect(this.id === "far" ? 10 : 720);
+      const [left, top, right, bottom] = boxOf(this);
+      return { left, top, right, bottom, width: right - left, height: bottom - top, x: left, y: top, toJSON() {} } as DOMRect;
     });
-    const proto = Range.prototype as unknown as { getClientRects?: () => DOMRect[] };
-    const original = proto.getClientRects;
-    proto.getClientRects = function (this: Range) {
-      const p = this.startContainer.parentElement;
-      return [rect(p?.id === "far" ? 10 : 720)];
-    };
-    try {
-      const out = textBoxes({ top: 400, bottom: 770, left: 300, right: 356 });
-      expect(out).toEqual([{ top: 720, bottom: 740, left: 16, right: 340 }]);
-    } finally {
-      if (original) proto.getClientRects = original;
-      else delete proto.getClientRects;
+    vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+      return boxOf(this)[1];
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (this: HTMLElement) {
+      return boxOf(this)[0];
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) {
+      const b = boxOf(this);
+      return b[2] - b[0];
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+      const b = boxOf(this);
+      return b[3] - b[1];
+    });
+    const seen: string[] = [];
+    function Launcher() {
+      const ref = useRef<HTMLButtonElement>(null);
+      const { hidden, lift } = useDodge(ref, pinned);
+      seen.push(`${hidden}:${lift}`);
+      return <button ref={ref} className="help-launcher" data-box="300,700,356,756" data-hidden={hidden || undefined} data-lift={lift} />;
     }
+    // A tall control under the spot: no clear spot within reach, so it fades out at home.
+    document.body.innerHTML = `<a id="control" href="/x" data-box="0,500,400,780">A control</a><div id="host"></div>`;
+    const root = createRoot(document.getElementById("host")!);
+    act(() => root.render(<Launcher />));
+    const hidden = () => document.querySelector(".help-launcher")!.hasAttribute("data-hidden");
+    const lift = () => Number(document.querySelector(".help-launcher")!.getAttribute("data-lift"));
+    const control = document.getElementById("control")!;
+    const scroll = () => act(() => void window.dispatchEvent(new Event("scroll")));
+    const wait = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
+    return { hidden, lift, control, scroll, wait, seen, unmount: () => act(() => root.unmount()) };
+  }
+
+  it("fades out at once on a page that opens with a control under its spot", () => {
+    const t = mount();
+    t.wait(20);
+    expect(t.hidden()).toBe(true);
+    t.unmount();
+  });
+
+  it("changes nothing while the page scrolls, however long, and fades back in only once it has settled", () => {
+    const t = mount();
+    t.wait(20);
+    expect(t.hidden()).toBe(true);
+    // The page scrolls the control away: a long fling, then momentum, a scroll event every 16 ms.
+    t.control.setAttribute("data-box", "0,100,400,160");
+    const changes = () => t.seen.filter((h, i) => i > 0 && h !== t.seen[i - 1]).length;
+    const before = changes();
+    for (let i = 0; i < 90; i++) {
+      t.scroll();
+      t.wait(16);
+    }
+    expect(t.hidden()).toBe(true);
+    expect(changes()).toBe(before);
+    t.wait(DODGE_SETTLE_MS + 20);
+    expect(t.hidden()).toBe(false);
+    // Small scrolls back and forth bring a short control under it: still nothing until it settles, then one smooth
+    // nudge up just clear of it (12 px over the bottom of the launcher, 8 px gap), never more than 96 px.
+    t.control.setAttribute("data-box", "0,744,400,790");
+    for (let i = 0; i < 10; i++) {
+      t.scroll();
+      t.wait(60);
+      expect(t.hidden()).toBe(false);
+      expect(t.lift()).toBe(0);
+    }
+    t.wait(DODGE_SETTLE_MS + 20);
+    expect(t.hidden()).toBe(false);
+    expect(t.lift()).toBe(756 - 744 + 8);
+    // Scrolled on so home is clear: back home only once that scroll has settled.
+    t.control.setAttribute("data-box", "0,900,400,950");
+    t.scroll();
+    t.wait(100);
+    expect(t.lift()).toBe(756 - 744 + 8);
+    t.wait(DODGE_SETTLE_MS + 20);
+    expect(t.lift()).toBe(0);
+    t.unmount();
+  });
+
+  it("never fades while it has focus or its panel is open", () => {
+    const t = mount(true);
+    t.wait(20);
+    t.scroll();
+    t.wait(DODGE_SETTLE_MS + 20);
+    expect(t.hidden()).toBe(false);
+    t.unmount();
   });
 });
 
