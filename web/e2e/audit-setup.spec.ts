@@ -319,7 +319,7 @@ test.describe("setup layout details", () => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto("/settings/posting/setup");
     await settle(page);
-    await expect(page.locator(".setup-summary .apple__tag")).toHaveCSS("color", "rgb(214, 235, 200)");
+    await expect(page.locator(".setup-summary .apple__tag")).toHaveCSS("color", "rgb(228, 242, 218)");
   });
 
   test("a platform page's ring shares the top row with the mark on phones; the checked date stays whole", async ({ page }) => {

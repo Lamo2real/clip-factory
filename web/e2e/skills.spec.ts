@@ -251,9 +251,9 @@ for (const size of [
       await page.getByRole("button", { name: "Delete" }).click();
       const sheet = page.getByRole("dialog", { name: "Delete Safety test?" });
       await expect(sheet).toContainText("Clip Factory will stop using it.");
-      // Nearly solid glass: the page behind does not show through the question.
+      // Dense glass (SHEET_VEIL, 0.86, ADR-45) over its scrim: the page behind barely shows through the question.
       const look = await sheet.evaluate((el) => ({ bg: getComputedStyle(el).backgroundImage, scrim: getComputedStyle(el.parentElement!).backgroundColor }));
-      expect(look.bg).toMatch(/0\.95\)/);
+      expect(look.bg).toMatch(/0\.86\)/);
       expect(look.scrim).toMatch(/0\.55\)/);
       await expect(sheet.getByRole("button", { name: "Keep it" })).toBeFocused();
       await fits(page, "delete sheet");

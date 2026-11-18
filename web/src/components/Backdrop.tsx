@@ -2,8 +2,9 @@ import { useLayoutEffect, type CSSProperties } from "react";
 import { applyLook, useLook } from "../lib/look.ts";
 
 /**
- * What the glass refracts (§22): the desktop behind the window (see-through in the desktop app), frosted Clip
- * Factory colours that slowly move (see-through anywhere else), the owner's own picture, or their 1 to 3 colours.
+ * What the glass refracts (§22): the desktop behind the window (see-through in the desktop app), the living Clip
+ * Factory backdrop that slowly moves (see-through anywhere else: deep teal, two vermilion glows, leaf, a breath of
+ * bone and two soft lenses), the owner's own picture, or their 1 to 3 colours.
  * Glass needs something varied behind it; over a flat colour it would read as a grey sheet.
  */
 export function Backdrop() {
@@ -35,6 +36,7 @@ export function Backdrop() {
         <span className="blob blob--b" />
         <span className="blob blob--c" />
         <span className="blob blob--d" />
+        <span className="blob blob--e" />
         <span className="backdrop__veil" />
       </div>
     );
@@ -45,6 +47,7 @@ export function Backdrop() {
       <span className="blob blob--b" />
       <span className="blob blob--c" />
       <span className="blob blob--d" />
+      <span className="blob blob--e" />
       {look.kind === "frosted" ? (
         <>
           <span className="backdrop__frost" />

@@ -535,6 +535,8 @@ for (const v of VARIANTS) {
   test.describe(`Ask Clip Factory launcher at ${v.width} px`, () => {
     test.use({ viewport: { width: v.width, height: v.width < 768 ? 812 : 900 } });
     test(`covers no control on any page${v.update ? " with the update bar" : ""}${v.fonts ? " and other fonts" : ""}`, async ({ page }) => {
+      // It walks every route; at wide sizes a GPU-less runner draws the see-through glass slowly (1.3 min on CI).
+      test.setTimeout(300_000);
       if (v.fonts) await fallbackFonts(page);
       const fails: string[] = [];
       for (const route of ROUTES) {

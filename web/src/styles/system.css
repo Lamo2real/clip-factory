@@ -47,9 +47,7 @@
   color: #fff;
   background: var(--cta);
   text-shadow: 0 1px 0 rgb(90 14 6 / 0.35);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.35),
-    0 4px 10px -6px rgb(var(--vermilion-rgb) / 0.6);
+  box-shadow: 0 4px 10px -6px rgb(var(--vermilion-rgb) / 0.6);
   transition:
     transform var(--dur-2) var(--ease-spring),
     background-color var(--dur-1);
@@ -98,9 +96,7 @@
   font-weight: 700;
   color: var(--ink);
   background: transparent;
-  box-shadow:
-    inset 0 0 0 1.5px rgb(var(--bone-rgb) / 0.85),
-    0 4px 10px -6px rgb(var(--shadow-rgb) / 0.68);
+  box-shadow: 0 4px 10px -6px rgb(var(--shadow-rgb) / 0.68);
   transition: transform var(--dur-2) var(--ease-spring);
 }
 .toast__undo:hover {
@@ -139,7 +135,7 @@
 .sidebar__getapp {
   color: var(--ink);
   background: var(--fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.3);
+  box-shadow: none;
 }
 .sidebar__getapp .sidebar__icon {
   color: var(--green-ink);
@@ -170,6 +166,7 @@
   height: 56px;
   border-radius: var(--r-md);
   color: var(--on-bone);
+  text-shadow: none;
   background: var(--selected);
   box-shadow: 0 8px 18px -10px rgb(var(--shadow-rgb) / 0.83);
 }
@@ -223,7 +220,7 @@ h1.getapp__title {
   padding: 12px 14px;
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.22);
+  box-shadow: none;
   font-size: var(--fs-small);
   color: var(--ink-2);
 }
@@ -242,7 +239,7 @@ h1.getapp__title {
 .getapp__safari {
   color: var(--ink);
   background: var(--fill);
-  box-shadow: inset 0 0 0 1.5px var(--vermilion);
+  box-shadow: none;
 }
 .getapp__safari .icon {
   color: var(--vermilion-ink);
@@ -251,7 +248,7 @@ h1.getapp__title {
   display: grid;
   gap: 8px;
   padding-top: 14px;
-  border-top: 1px solid rgb(var(--line-rgb) / 0.18);
+  border-top: 1px solid transparent;
 }
 .getapp__other-label {
   font-size: var(--fs-small);
@@ -269,6 +266,7 @@ h1.getapp__title {
 }
 .getapp__chip.is-on {
   color: var(--on-bone);
+  text-shadow: none;
   background: var(--selected);
   box-shadow: 0 4px 12px -8px rgb(var(--shadow-rgb) / 0.75);
 }
@@ -288,7 +286,7 @@ h1.getapp__title {
   padding: 12px;
   border-radius: var(--r-lg);
   background: var(--fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.22);
+  box-shadow: none;
 }
 .step__art {
   position: relative;
@@ -312,9 +310,7 @@ h1.getapp__title {
   font-size: 0.9rem;
   color: #fff;
   background: var(--vermilion-deep);
-  box-shadow:
-    0 0 0 1.5px rgb(var(--bone-rgb) / 0.9),
-    0 4px 10px -4px rgb(var(--vermilion-rgb) / 0.8);
+  box-shadow: 0 4px 10px -4px rgb(var(--vermilion-rgb) / 0.8);
 }
 .step__text {
   display: grid;
@@ -341,6 +337,7 @@ h1.getapp__title {
   border-radius: var(--r-sm);
   /* A drawing of Safari: a bone browser card, with Safari's own blue. */
   color: var(--on-bone);
+  text-shadow: none;
   background: #f7f2e8;
   box-shadow: 0 6px 14px -8px rgb(var(--shadow-rgb) / 0.75);
 }
@@ -360,12 +357,12 @@ h1.getapp__title {
   padding: 4px;
   color: #0a64d8;
   background: rgb(10 100 216 / 0.1);
-  box-shadow: 0 0 0 2px rgb(10 100 216 / 0.55);
+  box-shadow: none;
   animation: art-pulse 1.8s var(--ease-out) infinite;
 }
 @keyframes art-pulse {
   50% {
-    box-shadow: 0 0 0 5px rgb(10 100 216 / 0.18);
+    box-shadow: 0 0 12px 3px rgb(10 100 216 / 0.35);
   }
 }
 .art--menu {
@@ -380,6 +377,7 @@ h1.getapp__title {
   padding: 6px;
   border-radius: var(--r-sm);
   color: var(--on-bone);
+  text-shadow: none;
   background: #f7f2e8;
   box-shadow: 0 6px 14px -8px rgb(var(--shadow-rgb) / 0.75);
 }
@@ -398,6 +396,7 @@ h1.getapp__title {
 }
 .art__row.art__hit {
   color: var(--on-bone);
+  text-shadow: none;
   font-size: 0.78rem;
   font-weight: 650;
   background: rgb(10 100 216 / 0.1);
@@ -421,7 +420,7 @@ h1.getapp__title {
   font-size: 0.8rem;
   font-weight: 700;
   color: #0a64d8;
-  box-shadow: 0 0 0 2px rgb(10 100 216 / 0.55);
+  box-shadow: 0 0 10px 1px rgb(10 100 216 / 0.45);
   background: #f7f2e8;
 }
 
@@ -473,10 +472,9 @@ h1.getapp__title {
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 18px);
   padding: 10px 10px 10px 14px;
   border-radius: var(--r-lg);
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.84), rgb(var(--green-rgb) / 0.82));
-  box-shadow:
-    inset 0 1px 0 rgb(var(--bone-rgb) / 0.3),
-    0 22px 48px -22px rgb(var(--shadow-rgb) / 0.85);
+  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  --glass-blur: 28px;
+  box-shadow: 0 22px 48px -22px rgb(var(--shadow-rgb) / 0.85);
   animation: update-in 620ms var(--ease-spring) both;
 }
 @keyframes update-in {
@@ -500,7 +498,7 @@ h1.getapp__title {
   border-radius: var(--r-sm);
   color: var(--vermilion-ink);
   background: var(--tint-vermilion);
-  box-shadow: inset 0 1px 0 rgb(var(--bone-rgb) / 0.3);
+  box-shadow: none;
 }
 .update-bar__spark.is-spinning .icon {
   animation: spark-spin 1.6s var(--ease-out) infinite;
@@ -550,7 +548,7 @@ h1.getapp__title {
   font-weight: 650;
   color: var(--ink);
   background: var(--tint-leaf);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.24);
+  box-shadow: none;
   overflow-wrap: anywhere;
 }
 .update-bar__actions {

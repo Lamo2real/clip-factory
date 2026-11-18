@@ -148,6 +148,7 @@ main[tabindex="-1"]:focus-visible {
   border-radius: var(--r-pill);
   background: var(--selected);
   color: var(--on-bone);
+  text-shadow: none;
   font-weight: 600;
   transition: top var(--dur-2) var(--ease-out);
 }

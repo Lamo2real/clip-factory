@@ -25,9 +25,7 @@
   border-radius: var(--r-pill);
   color: var(--ink);
   font-weight: 650;
-  box-shadow:
-    inset 0 1px 0 rgb(var(--bone-rgb) / 0.28),
-    0 14px 32px -16px rgb(var(--shadow-rgb) / 0.85);
+  box-shadow: 0 14px 32px -16px rgb(var(--shadow-rgb) / 0.85);
   /* It never moves. Once the page is still it may fade out in place (opacity and a slight shrink) when it would make
      a control under it hard to tap, and back in when the spot is clear (dodge.ts). */
   transition:
@@ -35,13 +33,16 @@
     scale 420ms var(--ease-out),
     box-shadow var(--dur-2) var(--ease-out);
 }
+/* It floats over the page, so a white thumbnail can be right under it: the floating layers' tint (FLOAT_VEIL), which
+   plans for white, never a panel's. Three classes, so it wins over `.glass--green` in every look. */
+.help-launcher.glass.glass--green {
+  --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+}
 .has-update-bar .help-launcher {
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 18px + var(--update-bar-h) + 10px);
 }
 .help-launcher:hover {
-  box-shadow:
-    inset 0 1px 0 rgb(var(--bone-rgb) / 0.32),
-    0 18px 36px -16px rgb(var(--shadow-rgb) / 0.85);
+  box-shadow: 0 18px 36px -16px rgb(var(--shadow-rgb) / 0.85);
 }
 .help-launcher:active {
   scale: 0.94;
@@ -105,10 +106,9 @@
   border-radius: var(--r-lg);
   overflow: hidden;
   /* Strong enough to read over any page (and the owner's own background picture). */
-  --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / 0.84), rgb(var(--green-rgb) / 0.82));
-  box-shadow:
-    inset 0 1px 0 rgb(var(--bone-rgb) / 0.3),
-    0 30px 60px -28px rgb(var(--shadow-rgb) / 0.85);
+  --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  --glass-blur: 28px;
+  box-shadow: 0 30px 60px -28px rgb(var(--shadow-rgb) / 0.85);
   animation: help-in 320ms var(--ease-out) both;
 }
 @keyframes help-in {
@@ -118,7 +118,7 @@
   }
 }
 .help-panel.is-sheet {
-  --glass-tint: linear-gradient(160deg, rgb(var(--green-rgb) / 0.82), rgb(var(--green-rgb) / 0.84));
+  --glass-tint: linear-gradient(160deg, rgb(var(--green-rgb) / var(--float-veil)), rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)));
   /* The visible part of the screen (HelpPanel sets these from visualViewport), so the phone keyboard never hides
      the field and the plane. It sits above the tab bar too. */
   inset: auto 0;
@@ -136,7 +136,7 @@
   align-items: center;
   gap: 8px;
   padding: 12px 10px 10px 16px;
-  border-bottom: 1px solid rgb(var(--line-rgb) / 0.18);
+  border-bottom: 1px solid transparent;
 }
 .help-panel__spark {
   display: grid;
@@ -146,6 +146,7 @@
   height: 34px;
   border-radius: 50%;
   color: var(--on-bone);
+  text-shadow: none;
   background: var(--selected);
 }
 .help-panel__title {
@@ -201,16 +202,19 @@
   font-size: 0.92rem;
   line-height: 1.3;
   color: var(--ink);
-  background: transparent;
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.35);
+  /* No ring (ADR-45): the resting fill shows it is something to tap, on a phone with no hover too. */
+  background: var(--fill-control);
+  box-shadow: none;
   overflow-wrap: anywhere;
   transition:
     background-color var(--dur-1),
     transform var(--dur-2) var(--ease-spring);
 }
 .help-chip:hover {
-  background: var(--fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.6);
+  background:
+    linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08)),
+    rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.22));
+  box-shadow: none;
 }
 .help-chip:active {
   transform: scale(0.98);
@@ -232,6 +236,7 @@
   border-radius: var(--r-md) var(--r-md) 6px var(--r-md);
   background: var(--selected);
   color: var(--on-bone);
+  text-shadow: none;
   font-weight: 550;
 }
 .help-msg--bot {
@@ -240,7 +245,7 @@
   padding: 12px 14px;
   border-radius: var(--r-md) var(--r-md) var(--r-md) 6px;
   background: rgb(var(--green-rgb) / 0.5);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.2);
+  box-shadow: none;
 }
 .help-msg--notice {
   display: flex;
@@ -249,7 +254,7 @@
   padding: 12px 14px;
   border-radius: var(--r-md);
   background: rgb(var(--green-rgb) / 0.6);
-  box-shadow: inset 0 0 0 1px rgb(var(--vermilion-rgb) / 0.4);
+  box-shadow: none;
 }
 .help-msg--notice > svg {
   flex: none;
@@ -287,7 +292,7 @@
   padding: 10px 12px;
   border-radius: var(--r-sm);
   background: rgb(var(--green-deep-rgb) / 0.6);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.22);
+  box-shadow: none;
   font-weight: 600;
 }
 .help-code {
@@ -363,7 +368,7 @@
   display: grid;
   gap: 4px;
   padding: 10px 10px 12px;
-  border-top: 1px solid rgb(var(--line-rgb) / 0.18);
+  border-top: 1px solid transparent;
 }
 .help-panel__field {
   position: relative;
@@ -450,7 +455,7 @@
   text-align: left;
   color: var(--ink);
   background: var(--fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.35);
+  box-shadow: none;
 }
 .find__ask > svg {
   flex: none;

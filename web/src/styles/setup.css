@@ -123,7 +123,7 @@
   justify-content: flex-end;
   gap: 8px 12px;
   padding: 8px 10px 10px 16px;
-  border-top: 1px solid rgb(var(--line-rgb) / 0.18);
+  border-top: 1px solid transparent;
   font-size: var(--fs-small);
   color: var(--ink-2);
 }
@@ -141,9 +141,7 @@
   border-radius: var(--r-md);
   color: var(--ink);
   background: var(--fill);
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--bone-rgb) / 0.3),
-    0 6px 14px -10px rgb(var(--shadow-rgb) / 0.85);
+  box-shadow: 0 6px 14px -10px rgb(var(--shadow-rgb) / 0.85);
   --mark-cut: #244d40;
 }
 .setup-card__text {
@@ -283,10 +281,7 @@
   min-width: 0;
 }
 .gstep.is-current {
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--bone-rgb) / 0.2),
-    0 0 0 2px rgb(var(--bone-rgb) / 0.35),
-    var(--shadow-2);
+  box-shadow: var(--glow-bone), var(--shadow-2);
 }
 .gstep__head {
   display: flex;
@@ -309,8 +304,8 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--fill);
-  box-shadow: inset 0 0 0 2px rgb(var(--line-rgb) / 0.5);
+  background: var(--fill-control);
+  box-shadow: none;
   font-weight: 800;
   font-size: 1.05rem;
   font-variant-numeric: tabular-nums;
@@ -318,6 +313,7 @@
 .gstep.is-current .gstep__num {
   background: var(--selected);
   color: var(--on-bone);
+  text-shadow: none;
   box-shadow: none;
 }
 .gstep.is-done .gstep__num {
@@ -429,7 +425,7 @@
   padding: 10px 12px;
   border-radius: var(--r-md);
   background: rgb(var(--green-deep-rgb) / 0.32);
-  box-shadow: inset 0 0 0 1px rgb(var(--green-leaf-rgb) / 0.55);
+  box-shadow: none;
   font-size: 0.95rem;
   overflow-wrap: anywhere;
 }
@@ -498,7 +494,7 @@
   padding: 10px 12px;
   border-radius: var(--r-md);
   background: rgb(var(--green-deep-rgb) / 0.33);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.26);
+  box-shadow: none;
   font-weight: 650;
   font-size: 0.95rem;
 }
@@ -511,7 +507,7 @@
 }
 .gate-line.is-action {
   color: var(--vermilion-ink);
-  box-shadow: inset 0 0 0 1px rgb(var(--vermilion-rgb) / 0.3);
+  box-shadow: none;
 }
 #x-cost {
   scroll-margin: 96px 0;
@@ -526,12 +522,13 @@
   padding: 10px 10px 10px 14px;
   border-radius: var(--r-md);
   background: rgb(var(--green-deep-rgb) / 0.34);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.26);
+  box-shadow: none;
   min-width: 0;
   transition: box-shadow var(--dur-2) var(--ease-out);
 }
 .copy-chip.is-copied {
-  box-shadow: inset 0 0 0 2px var(--green-leaf);
+  background: var(--tint-leaf);
+  box-shadow: var(--glow-leaf);
 }
 .copy-chip__text {
   display: grid;
@@ -567,9 +564,7 @@
   background: var(--cta);
   color: #fff;
   text-shadow: 0 1px 0 rgb(90 14 6 / 0.35);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.35),
-    0 6px 16px -10px rgb(var(--vermilion-rgb) / 0.55);
+  box-shadow: 0 6px 16px -10px rgb(var(--vermilion-rgb) / 0.55);
   font-weight: 700;
   transition:
     transform var(--dur-2) var(--ease-spring),
@@ -595,7 +590,7 @@
   background:
     linear-gradient(rgb(var(--vermilion-rgb) / 0.35), rgb(var(--vermilion-rgb) / 0.35)),
     rgb(var(--green-deep-rgb) / 0.6);
-  box-shadow: inset 0 0 0 1px rgb(var(--vermilion-rgb) / 0.55);
+  box-shadow: none;
 }
 
 /* ---------- Keys ---------- */
@@ -605,11 +600,12 @@
   padding: 12px;
   border-radius: var(--r-md);
   background: rgb(var(--green-deep-rgb) / 0.26);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.18);
+  box-shadow: none;
   min-width: 0;
 }
 .key-form.is-dragging {
-  box-shadow: inset 0 0 0 2px var(--green-leaf);
+  background: var(--tint-leaf);
+  box-shadow: var(--glow-leaf);
 }
 .key-field {
   min-width: 0;
@@ -701,8 +697,8 @@
   gap: 10px 14px;
   padding: 18px 14px;
   border-radius: var(--r-md);
-  border: 2px dashed rgb(var(--bone-rgb) / 0.5);
-  background: rgb(var(--green-deep-rgb) / 0.27);
+  border: 2px dashed transparent;
+  background: var(--fill-control);
   text-align: center;
   color: var(--green-ink);
 }
@@ -765,10 +761,7 @@
   color: var(--green-ink);
 }
 .result-card--ok {
-  box-shadow:
-    inset 0 1px 0 rgb(var(--bone-rgb) / 0.26),
-    0 0 0 2px var(--green-leaf),
-    var(--shadow-2);
+  box-shadow: var(--glow-leaf), var(--shadow-2);
 }
 .result-card__avatar,
 .done-panel__avatar,
@@ -779,7 +772,7 @@
   border-radius: 50%;
   object-fit: cover;
   background: var(--tint-leaf);
-  box-shadow: 0 0 0 3px rgb(var(--bone-rgb) / 0.36);
+  box-shadow: none;
 }
 .result-card__text {
   display: grid;
@@ -833,7 +826,7 @@
   padding: 10px 14px;
   border-radius: var(--r-lg);
   background: rgb(var(--green-deep-rgb) / 0.35);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.26);
+  box-shadow: none;
   text-align: left;
   transition: transform var(--dur-2) var(--ease-spring);
 }
@@ -958,7 +951,8 @@
   /* A tall sheet scrolls with its backdrop, not inside itself: a scrolling .glass would carry its lit rim (an
      absolute ::before) up with the words, drawing a bone curve through the middle. The tint is a floating layer's,
      like the Ask panel and the toasts (bone on it 6.1:1 even over white). */
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.84), rgb(var(--green-rgb) / 0.82));
+  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  --glass-blur: 28px;
   padding: clamp(16px, 3vw, 24px);
   border-radius: var(--r-xl);
 }

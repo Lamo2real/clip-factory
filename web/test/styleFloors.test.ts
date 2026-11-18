@@ -54,15 +54,25 @@ describe("type and target floors", () => {
 describe("vermilion and green words stay AA on tinted glass", () => {
   it("--vermilion-ink and --green-text are at least 4.5:1 on their tints over the lightest panel any look allows", () => {
     const value = (token: string) => new RegExp(`${token}:\\s*(#[0-9a-f]{6})`, "i").exec(css("tokens.css"))![1]!;
-    // The lightest panel outside the window look: the picture look over a white photo (veil 0.35, panel 0.65), rgb 70 101 91.
+    // The lightest panel any look allows: 0.73 green over a white photo or desktop (no page veil since ADR-45).
     const green = [15, 55, 43];
     const deep = [10, 40, 32];
     const over = (top: number[], under: number[], a: number) => top.map((c, i) => c * a + under[i]! * (1 - a));
     const hex = (rgb: number[]) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
-    const panel = over(green, over(green, [255, 255, 255], 0.35), 0.65);
+    const panel = over(green, [255, 255, 255], 0.73);
     const chip = (tint: number[], a: number) => hex(over(tint, over(deep, panel, 0.35), a));
     expect(contrast(value("--vermilion-ink"), chip([232, 57, 43], 0.2))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(value("--green-text"), chip([95, 165, 133], 0.22))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(value("--ink-3"), hex(panel))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("the comfort halo", () => {
+  it("never sits behind dark green words on a bone fill: every rule with --on-bone words drops it", () => {
+    const missing: string[] = [];
+    for (const [file, text] of all)
+      for (const m of text.matchAll(/([^{}]*)\{([^{}]*)\}/g))
+        if (/(^|[\s;])color: var\(--on-bone\);/.test(m[2]!) && !/text-shadow: none;/.test(m[2]!)) missing.push(`${file}: ${m[1]!.trim()}`);
+    expect(missing).toEqual([]);
   });
 });

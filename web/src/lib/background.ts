@@ -117,36 +117,26 @@ export function mix(over: Rgb, under: Rgb, alpha: number): Rgb {
 export const AA = 4.5;
 
 /**
- * The text colour tokens (`:root` in styles/tokens.css): every colour that words are written in on glass. All are
- * light (bone or lighter): the glass is bottle green. test/background.test.ts reads tokens.css and every
- * stylesheet, so this list, the tokens and the `color:` declarations stay in step.
+ * The text colour tokens (`:root` in styles/tokens.css): every colour that words are written in on glass. One set
+ * everywhere (ADR-45), all bone or lighter (relative luminance 0.806 or more): the glass is bottle green and the
+ * hierarchy comes from size, weight and spacing. test/background.test.ts reads tokens.css and every stylesheet, so
+ * this list, the tokens and the `color:` declarations stay in step.
  */
 export const TEXT_TOKENS = {
   "--ink": "#efe7da",
-  "--ink-2": "#e9e0d0",
-  "--ink-3": "#e4dac9",
-  "--vermilion-ink": "#ffd2ca",
-  "--green-ink": "#d2e8c4",
-  "--green-text": "#d6ebc8",
-} as const;
-export type TextToken = keyof typeof TEXT_TOKENS;
-/**
- * The window look (`html.see-through` in tokens.css): the softer ones go to bone or lighter there, so the panels need
- * the least green over the lightest the window can be and more of the desktop shows through them (§22.3). Each has a
- * relative luminance of 0.806 or more.
- */
-export const WINDOW_TEXT_TOKENS: Record<TextToken, string> = {
-  ...TEXT_TOKENS,
   "--ink-2": "#efe7da",
   "--ink-3": "#efe7da",
   "--vermilion-ink": "#ffe2dc",
   "--green-ink": "#e4f2da",
   "--green-text": "#e4f2da",
-};
+} as const;
+export type TextToken = keyof typeof TEXT_TOKENS;
+/** The window look's text colours: the same set since ADR-45 (kept as its own name for the window maths). */
+export const WINDOW_TEXT_TOKENS: Record<TextToken, string> = { ...TEXT_TOKENS };
 
-/** Every text colour that can sit on the glass outside the window look. */
+/** Every text colour that can sit on the glass. */
 export const TEXT_COLOURS: readonly Rgb[] = Object.values(TEXT_TOKENS).map(hexToRgb);
-/** Every text colour of the window look. All see-through maths uses this set. */
+/** Every text colour of the window look (the same set). */
 export const TEXT_COLOURS_WINDOW: readonly Rgb[] = Object.values(WINDOW_TEXT_TOKENS).map(hexToRgb);
 /** The veil and the glass are Clip Factory bottle green. */
 export const VEIL: Rgb = hexToRgb("#0f372b");
@@ -166,6 +156,148 @@ export const GLASS_TINT_ALPHA = 140 / 255;
 export const TINTED_FLOOR: Rgb = mix(VEIL, [0, 0, 0], GLASS_TINT_ALPHA);
 const BLACK: Rgb = [0, 0, 0];
 const WHITE: Rgb = [255, 255, 255];
+
+// ---------- What backdrop-filter does to the backdrop ----------
+
+/** `saturate()` in every glass's backdrop-filter (`--glass-saturate` in tokens.css). */
+export const GLASS_SATURATE = 1.6;
+/** The largest `saturate()` anywhere in the CSS (the refracting panels, `.refract .glass--refract`). */
+export const GLASS_SATURATE_MAX = 1.75;
+/**
+ * Every way the backdrop can be seen under words: as it is (the scrims under loose words have no filter), and through
+ * each `saturate()` the CSS uses (1.4 under the glass buttons). Saturating can lighten one colour and darken another
+ * (a channel clips), so every worst case is the lightest over all of them.
+ */
+export const SATURATIONS: readonly number[] = [1, 1.4, GLASS_SATURATE, GLASS_SATURATE_MAX];
+/** `spot` as seen through each of `SATURATIONS` (or only `s`). */
+function seenAs(spot: Rgb, s?: number): Rgb[] {
+  return (s === undefined ? SATURATIONS : [s]).map((sat) => saturateRgb(spot, sat));
+}
+/** The lightest of some spots. */
+function lightest(spots: readonly Rgb[]): Rgb {
+  return spots.reduce<Rgb>((a, b) => (luminance(b) > luminance(a) ? b : a), [0, 0, 0]);
+}
+/**
+ * The least green veil that keeps AA over every one of these spots. Not simply the lightest spot's: the veil is mixed
+ * in sRGB, so a slightly darker spot of another hue can need a little more.
+ */
+export function minVeilOver(spots: readonly Rgb[]): number {
+  return Math.max(0, ...spots.map((spot) => minVeil(spot)));
+}
+
+function linearChannel(c: number): number {
+  return channel(c);
+}
+function srgbChannel(l: number): number {
+  return 255 * (l <= 0.0031308 ? 12.92 * l : 1.055 * l ** (1 / 2.4) - 0.055);
+}
+/**
+ * CSS `saturate(s)`: the feColorMatrix saturate matrix. Chromium and WebKit apply the filter shorthands in sRGB, the
+ * spec's default for SVG filters is linearRGB; both are worked out and the lighter result is kept, clipped to 0..255.
+ * It can lighten a colour (a green-only spot most), so every worst case is taken after it.
+ */
+export function saturateRgb(c: Rgb, s: number): Rgb {
+  const m = [
+    [0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s],
+    [0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s],
+    [0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s],
+  ] as const;
+  const clip = (v: number, hi: number) => Math.max(0, Math.min(hi, v));
+  const srgb = m.map((r) => clip(r[0] * c[0] + r[1] * c[1] + r[2] * c[2], 255)) as unknown as Rgb;
+  const lin = c.map(linearChannel);
+  const linear = m.map((r) => srgbChannel(clip(r[0] * lin[0]! + r[1] * lin[1]! + r[2] * lin[2]!, 1))) as unknown as Rgb;
+  return luminance(srgb) >= luminance(linear) ? srgb : linear;
+}
+
+/** W3C soft-light of `top` over `bottom`, one channel 0..255. */
+function softLight(bottom: number, top: number): number {
+  const cb = bottom / 255;
+  const cs = top / 255;
+  const d = cb <= 0.25 ? ((16 * cb - 12) * cb + 4) * cb : Math.sqrt(cb);
+  return 255 * (cs <= 0.5 ? cb - (1 - 2 * cs) * cb * (1 - cb) : cb + (2 * cs - 1) * (d - cb));
+}
+/** `top` in soft-light at `alpha` over `under`. */
+export function softLightOver(under: Rgb, top: Rgb, alpha: number): Rgb {
+  return under.map((u, i) => (1 - alpha) * u + alpha * softLight(u, top[i]!)) as unknown as Rgb;
+}
+/** W3C overlay of `top` over `bottom`, one channel 0..255 (hard-light with the layers swapped). */
+function overlay(bottom: number, top: number): number {
+  const cb = bottom / 255;
+  const cs = top / 255;
+  return 255 * (cb <= 0.5 ? 2 * cb * cs : 1 - 2 * (1 - cb) * (1 - cs));
+}
+/** `top` in overlay at `alpha` over `under`. */
+export function overlayOver(under: Rgb, top: Rgb, alpha: number): Rgb {
+  return under.map((u, i) => (1 - alpha) * u + alpha * overlay(u, top[i]!)) as unknown as Rgb;
+}
+
+// ---------- The app's own living backdrop (glass.css .backdrop, Backdrop.tsx) ----------
+
+/**
+ * Every number of the backdrop the page draws when it owns the backdrop (see-through in a browser or on a phone, and
+ * Picture before a picture is chosen). test/background.test.ts reads each one out of glass.css.
+ */
+export const BRAND_MESH = {
+  /** The two ends of the field's gradient (the radial highlight is the lighter one). */
+  field: [hexToRgb("#0f3d31"), hexToRgb("#08221b")] as readonly Rgb[],
+  /** Each blob's colour and peak alpha, at opacity 1: a deep teal, vermilion, leaf, a breath of bone, deep vermilion. */
+  blobs: [
+    { name: "a", colour: [22, 89, 77] as Rgb, alpha: 0.9 },
+    { name: "b", colour: hexToRgb("#e8392b"), alpha: 0.62 },
+    { name: "c", colour: hexToRgb("#5fa585"), alpha: 0.3 },
+    { name: "d", colour: hexToRgb("#efe7da"), alpha: 0.06 },
+    { name: "e", colour: [196, 42, 30] as Rgb, alpha: 0.55 },
+  ],
+  /** The two soft lenses' bone glow at its brightest. */
+  ring: 0.08,
+  /** The Frosted strength's two soft-light bone caustics at their peak. */
+  caustic: 0.06,
+  /**
+   * The grain drawn over everything (`.backdrop__grain`): a fractal noise in this colour (its feColorMatrix), at most
+   * `alpha` solid, laid in overlay at `opacity`. Its peak, `opacity * alpha`, is what the maths takes.
+   */
+  grain: { colour: [0.94 * 255, 0.91 * 255, 0.85 * 255] as Rgb, opacity: 0.1, alpha: 0.55 },
+} as const;
+
+/** One spot of the mesh: the field, then these blobs, a lens glow, both caustics and the grain at its peak on top. */
+function brandSpot(field: Rgb, blobs: readonly { colour: Rgb; alpha: number }[]): Rgb {
+  let spot = field;
+  for (const b of blobs) spot = mix(b.colour, spot, b.alpha);
+  spot = mix(BONE, spot, BRAND_MESH.ring);
+  spot = softLightOver(softLightOver(spot, BONE, BRAND_MESH.caustic), BONE, BRAND_MESH.caustic);
+  const { grain } = BRAND_MESH;
+  return overlayOver(spot, grain.colour, grain.opacity * grain.alpha);
+}
+
+/**
+ * The lightest spot of the living backdrop, as the glass sees it: every subset of the blobs (not only all of them
+ * stacked: `saturate()` lifts a green-only subset more than a stack with vermilion in it) over both field ends, after
+ * `saturate(s)`, or after whichever of `SATURATIONS` makes it lightest.
+ */
+export function brandMeshWorst(s?: number): Rgb {
+  return lightest(brandMeshSpots(s));
+}
+/**
+ * Every corner of the living backdrop as the glass can see it: each subset of the blobs at their peaks over each field
+ * end, through each saturation. Luminance is convex in every blob's alpha, so the lightest spot of the whole drifting
+ * mesh is one of these corners.
+ */
+export function brandMeshSpots(s?: number): Rgb[] {
+  const out: Rgb[] = [];
+  const n = BRAND_MESH.blobs.length;
+  for (const field of BRAND_MESH.field)
+    for (let m = 0; m < 1 << n; m++)
+      out.push(
+        ...seenAs(
+          brandSpot(
+            field,
+            BRAND_MESH.blobs.filter((_, i) => m & (1 << i)),
+          ),
+          s,
+        ),
+      );
+  return out;
+}
 
 /**
  * macOS Liquid Glass as it really draws, measured on 2026-11-16 on macOS 27.2 (system in dark mode, the window
@@ -231,22 +363,32 @@ export function glassChecks(glass: NativeGlass, scheme: Scheme): { name: string;
  * (§22.3). Clear: nothing over the window's own glass in the gaps. Frosted: a green frost over the whole window too.
  */
 const PAGE_VEIL: Record<GlassStrength, number> = { clear: 0, frosted: 0.3 };
-/** A panel never carries less than this: it must still read as a pane. Also the panel tint where the page owns the backdrop. */
-export const PANEL_VEIL_FLOOR = 0.45;
+/**
+ * A panel never carries less than this. A pane reads as glass by its blur, saturation and shadow, not by its tint
+ * (ADR-45; it has no drawn edge either), so the floor only keeps a little green under the words.
+ */
+export const PANEL_VEIL_FLOOR = 0.3;
 /** How much heavier a Frosted panel is than a Clear one. */
 export const FROSTED_EXTRA = 0.15;
 /** A Frosted panel never goes fully solid. */
 export const MAX_FROSTED_PANEL_VEIL = 0.95;
-/** The picture look: a green veil over the owner's picture, and the panels on it (together 1 - 0.65 × 0.35 = 0.7725 over a white photo). */
-export const PICTURE_PAGE_VEIL = 0.35;
-export const PICTURE_PANEL_VEIL = 0.65;
+/**
+ * The picture look: no veil over the owner's picture, so it shows at full strength between the panels; the panels
+ * (and the scrims under loose words) carry what a white photo needs.
+ */
+export const PICTURE_PAGE_VEIL = 0;
+export const PICTURE_PANEL_VEIL = minVeil(WHITE);
 
 // Three numbers styles/glass.css uses; test/background.test.ts reads them out of the CSS and works out the contrast
 // for every glass, so they are not guesses either.
 /** Pick-one tracks (`.segmented`, `.tabs`, the Background tiles) lay this lift of bone over their tint. */
 export const TRACK_LIFT = 0.08;
-/** So a track carries this much more tint than a panel, and the labels on its lift stay at AA. */
-export const TRACK_EXTRA_VEIL = 0.1;
+/**
+ * So a track carries this much more tint than a panel, and the labels on its lift stay at AA over every spot of every
+ * look (the colours grid included). Not the lightest spot's need alone: mixed in sRGB, a darker spot of another hue
+ * (a brown in the living backdrop) can need more.
+ */
+export const TRACK_EXTRA_VEIL = 0.15;
 /**
  * Tinted chips on a panel (the vermilion pill, the success tint, the sound tags: `--tint-vermilion` and `--tint-leaf`
  * in tokens.css) lay this much deep green (`--green-deep`) under their tint, so a vermilion or leaf chip is never
@@ -321,11 +463,55 @@ export function seeThroughSelectedBackground(glass: NativeGlass, scheme: Scheme,
 }
 
 /**
- * The veil over a colours backdrop. With bone text the lightest colour decides; a half-and-half sRGB blend of two
- * colours is never lighter than both of them, so only the colours themselves are checked.
+ * @deprecated Use `coloursVeils`. The combined green over the colours behind a panel, `1 - (1 - page)(1 - panel)`.
  */
 export function coloursVeil(colours: readonly string[]): number {
-  return Math.max(0, ...normaliseColours(colours).map((c) => minVeil(hexToRgb(c))));
+  const v = coloursVeils(colours);
+  return round2(1 - (1 - v.pageVeil) * (1 - v.panelVeil));
+}
+
+/** The panel tint over the app's own living backdrop: the least that keeps AA over its lightest spot, never under the floor. */
+export const BRAND_PANEL_VEIL = Math.max(PANEL_VEIL_FLOOR, minVeilOver(brandMeshSpots()));
+/**
+ * Layers that page content scrolls under (toasts, the update bar, the setup list and pill, the Ask panel and sheet):
+ * a thumbnail can be right under them, so they plan for white.
+ */
+export const FLOAT_VEIL = minVeil(WHITE);
+/** The tab bar holds icons only (WCAG 1.4.11, 3:1), and content scrolls under it too. */
+export const TABBAR_VEIL = minVeil(WHITE, TEXT_COLOURS, VEIL, 3);
+/** The question sheet's tint (`.sheet.glass` in settings.css), over its own scrim. */
+export const SHEET_VEIL = 0.86;
+
+/** The most a colours panel carries; past it the rest goes on the page. */
+export const MAX_COLOURS_PANEL_VEIL = 0.6;
+/** How the colours look draws its blobs (glass.css): the second colour at 30 %, the third at 45 %, opacity 1. */
+export const COLOURS_BLOB_ALPHA = { second: 0.3, third: 0.45 } as const;
+/** The field's gradient end: 78 % of the first colour, 22 % of the third. */
+export const COLOURS_FIELD_END = 0.22;
+
+/** The lightest spot of the colours mesh as drawn (`coloursMeshSpots`), after `saturate(s)` or any of `SATURATIONS`. */
+export function coloursMeshWorst(colours: readonly string[], s?: number): Rgb {
+  return lightest(coloursMeshSpots(colours, s));
+}
+/** Every corner of the colours mesh as drawn (each field end, with and without the blobs), through each saturation. */
+export function coloursMeshSpots(colours: readonly string[], s?: number): Rgb[] {
+  const [c1, c2 = c1, c3 = c2] = normaliseColours(colours).map(hexToRgb) as [Rgb, Rgb?, Rgb?];
+  const out: Rgb[] = [];
+  for (const field of [c1, mix(c3!, c1, COLOURS_FIELD_END)])
+    for (const second of [0, COLOURS_BLOB_ALPHA.second])
+      for (const third of [0, COLOURS_BLOB_ALPHA.third]) out.push(...seenAs(mix(c3!, mix(c2!, field, second), third), s));
+  return out;
+}
+
+/**
+ * The colours look's two tints: the panels carry what the lightest spot needs (never under the floor) and the page
+ * nothing, up to `MAX_COLOURS_PANEL_VEIL`; past that the panels stay there and the page takes the rest, so that
+ * `1 - (1 - page)(1 - panel)` still covers it.
+ */
+export function coloursVeils(colours: readonly string[]): { pageVeil: number; panelVeil: number } {
+  const need = Math.max(PANEL_VEIL_FLOOR, minVeilOver(coloursMeshSpots(colours)));
+  if (need <= MAX_COLOURS_PANEL_VEIL) return { pageVeil: 0, panelVeil: need };
+  return { pageVeil: Math.ceil((1 - (1 - need) / (1 - MAX_COLOURS_PANEL_VEIL)) * 100 - 1e-9) / 100, panelVeil: MAX_COLOURS_PANEL_VEIL };
 }
 
 function round2(n: number): number {
@@ -337,12 +523,12 @@ function round2(n: number): number {
 export type Look =
   /** Desktop app with real window glass: the page is transparent; the panels carry the tint that keeps text readable. */
   | { kind: "window"; glass: NativeGlass; strength: GlassStrength; pageVeil: number; panelVeil: number }
-  /** See-through where the page cannot see behind itself: frosted Clip Factory colours that still move. */
-  | { kind: "frosted"; strength: GlassStrength }
+  /** See-through where the page cannot see behind itself: the living Clip Factory backdrop, frosted or clear. */
+  | { kind: "frosted"; strength: GlassStrength; panelVeil: number }
   | { kind: "picture"; url: string; pageVeil: number; panelVeil: number }
   /** Picture chosen but none on this device yet: the Clip Factory colours. */
-  | { kind: "brand" }
-  | { kind: "colours"; colours: string[]; veil: number };
+  | { kind: "brand"; panelVeil: number }
+  | { kind: "colours"; colours: string[]; pageVeil: number; panelVeil: number };
 
 export interface LookInput {
   mode: BackgroundMode;
@@ -356,16 +542,16 @@ export interface LookInput {
 export function resolveLook(i: LookInput): Look {
   switch (i.mode) {
     case "see-through":
-      if (i.glass === "none") return { kind: "frosted", strength: i.strength };
+      if (i.glass === "none") return { kind: "frosted", strength: i.strength, panelVeil: BRAND_PANEL_VEIL };
       {
         const v = seeThroughVeils(i.glass, i.scheme, i.strength);
         return { kind: "window", glass: i.glass, strength: i.strength, pageVeil: v.page, panelVeil: v.panel };
       }
     case "picture":
-      return i.picture ? { kind: "picture", url: i.picture, pageVeil: PICTURE_PAGE_VEIL, panelVeil: PICTURE_PANEL_VEIL } : { kind: "brand" };
+      return i.picture ? { kind: "picture", url: i.picture, pageVeil: PICTURE_PAGE_VEIL, panelVeil: PICTURE_PANEL_VEIL } : { kind: "brand", panelVeil: BRAND_PANEL_VEIL };
     case "colours": {
       const colours = normaliseColours(i.colours);
-      return { kind: "colours", colours, veil: coloursVeil(colours) };
+      return { kind: "colours", colours, ...coloursVeils(colours) };
     }
   }
 }
@@ -378,6 +564,6 @@ export function seeThroughNote(glass: NativeGlass, desktopApp: boolean, phone = 
   return "See-through works in the Mac and Windows app. Browsers don't let apps look behind them, so here you get the Clip Factory colours.";
 }
 
-/** Above this veil a colour shows clearly softer (greener) than its swatch, so the Colours card says why. */
-export const SOFT_COLOURS_VEIL = 0.5;
+/** A colour shows softer (greener) than its swatch once the page itself needs a veil, so the Colours card says why. */
+export const SOFT_COLOURS_VEIL = 0;
 export const SOFT_COLOURS_NOTE = "Light colours show soft, so words stay easy to read.";

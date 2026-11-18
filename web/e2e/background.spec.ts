@@ -1,7 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
-  coloursVeil,
+  BRAND_PANEL_VEIL,
+  coloursVeils,
   contrast,
+  PICTURE_PANEL_VEIL,
   hexToRgb,
   mix,
   seeThroughVeils,
@@ -97,6 +99,27 @@ test.describe("background modes", () => {
     await expect(page.locator(".bg-modes")).toHaveClass(/has-glide/);
   });
 
+  test("see-through glass over the app's own backdrop: panels 0.30, no page veil; colours and picture follow (ADR-45)", async ({ page }) => {
+    await open(page);
+    expect(await panelVeil(page)).toBeCloseTo(BRAND_PANEL_VEIL, 5);
+    expect(BRAND_PANEL_VEIL).toBe(0.33);
+    expect(await veil(page)).toBe(0);
+    expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(0.37, 2);
+    await expect(page.locator(".backdrop .blob--e")).toHaveCount(1);
+    // The default colours: no page veil, panels 0.30.
+    await page.getByRole("radio", { name: "Colours" }).check();
+    await expect.poll(() => backdrop(page)).toBe("colours");
+    expect(await veil(page)).toBe(0);
+    expect(await panelVeil(page)).toBeCloseTo(0.3, 5);
+    // A picture: no page veil, panels 0.73.
+    await page.getByRole("radio", { name: "Picture" }).check();
+    await page.locator('input[type="file"][accept="image/*"]').setInputFiles({ name: "bg.png", mimeType: "image/png", buffer: PNG });
+    await expect.poll(() => backdrop(page)).toBe("picture");
+    expect(await veil(page)).toBe(0);
+    expect(await panelVeil(page)).toBeCloseTo(PICTURE_PANEL_VEIL, 5);
+    expect(PICTURE_PANEL_VEIL).toBe(0.73);
+  });
+
   test("switching modes changes what is behind the glass, and it stays after a reload", async ({ page }) => {
     await open(page);
     await page.getByRole("radio", { name: "Colours" }).check();
@@ -110,7 +133,8 @@ test.describe("background modes", () => {
     await expect(page.getByRole("button", { name: "Night" })).toHaveAttribute("aria-pressed", "true");
     const want = ["#efe7da", "#e8392b", "#1f2937"];
     await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", want.join(" "));
-    expect(await veil(page)).toBeCloseTo(coloursVeil(want), 5);
+    expect(await veil(page)).toBeCloseTo(coloursVeils(want).pageVeil, 5);
+    expect(await panelVeil(page)).toBeCloseTo(coloursVeils(want).panelVeil, 5);
     const c1 = await page.locator(".backdrop--colours").evaluate((el) => getComputedStyle(el).getPropertyValue("--c1").trim());
     expect(c1).toBe("#efe7da");
 
@@ -185,8 +209,9 @@ test.describe("background modes", () => {
     await page.getByRole("radio", { name: "Colours" }).check();
     for (const name of ["Bottle green", "Vermilion"]) await page.getByRole("button", { name }).click();
     await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", "#efe7da");
-    const want = coloursVeil(["#efe7da"]);
-    expect(want).toBeGreaterThan(0.5);
+    // Bone alone needs more than a panel may carry, so the page takes the rest: the previews show that page veil.
+    const want = coloursVeils(["#efe7da"]).pageVeil;
+    expect(want).toBeGreaterThan(0);
     expect(await veil(page)).toBeCloseTo(want, 5);
     expect(await surfaceAlpha(page, ".bg-colours__mix", "::after")).toBeCloseTo(want, 2);
     expect(await surfaceAlpha(page, ".bg-tile--colours", "::after")).toBeCloseTo(want, 2);
@@ -381,9 +406,11 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", "#efe7da");
       const colours = (await page.locator(".backdrop--colours").getAttribute("data-colours"))!.split(" ");
       const v = await veil(page);
-      expect(v).toBeCloseTo(coloursVeil(colours), 5);
+      const p = await panelVeil(page);
+      expect(v).toBeCloseTo(coloursVeils(colours).pageVeil, 5);
+      expect(p).toBeCloseTo(coloursVeils(colours).panelVeil, 5);
       for (const hex of colours) {
-        const behind = mix(VEIL, hexToRgb(hex), v);
+        const behind = mix(VEIL, mix(VEIL, hexToRgb(hex), v), p);
         for (const c of await textColours(page)) expect(contrast(rgbOf(c), behind), `${c} on ${hex}`).toBeGreaterThanOrEqual(4.5);
       }
     });

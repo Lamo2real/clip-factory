@@ -386,7 +386,7 @@ test.describe("layout details", () => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/settings/look-and-feel/sounds");
       await settle(page);
-      await expect(page.locator(".sound-group.is-tap .sound-card:not(.is-picked) .sound-card__num").first()).toHaveCSS("color", "rgb(214, 235, 200)");
+      await expect(page.locator(".sound-group.is-tap .sound-card:not(.is-picked) .sound-card__num").first()).toHaveCSS("color", "rgb(228, 242, 218)");
       const gaps = await page.locator(".sound-card").evaluateAll((cards) =>
         cards.map((c) => c.querySelector(".sound-card__feel")!.getBoundingClientRect().top - c.querySelector(".sound-card__name")!.getBoundingClientRect().bottom),
       );

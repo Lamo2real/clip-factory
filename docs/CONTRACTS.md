@@ -4293,6 +4293,13 @@ everywhere.
   (`withGlobalTauri` off, empty capability).
 * `windows-version` (already in the lock file through tauri) reads the Windows build. Unit tests cover the choice
   per OS, AppKit version and Windows build, the glass this computer reports, and the script prefix for every glass.
+* **Phase 2 pending measurement (ADR-45).** The window look's panel tint stays 0.73 (planned for white) until the
+  real Mac glass is measured with the bottle-green tint: Liquid Glass Regular and Clear, light and dark window
+  theme, with and without the tint, in use and not, over flat colours on a helper window behind it. The rig, the
+  18-cell matrix and how to pick from it (ceiling = measured over white lifted 15 % toward white; panel =
+  `max(0.30, minVeil(ceiling))`; the cell with the best see-through while **inactive** wins) are in the
+  see-through build spec, §7; nothing changes in `main.rs` and no test window is opened until the owner has been
+  told.
 
 ### 22.3 Web: what is drawn (`lib/background.ts`, `lib/look.ts`, `components/Backdrop.tsx`, `styles/glass.css`)
 
@@ -4346,18 +4353,19 @@ everywhere.
   darker), `blur` light the app's green tint over black (`TINTED_FLOOR`, from the same numbers as `GLASS_TINT`), and
   black for the rest and for dark. `glassChecks(glass, scheme)` lists everything text is checked against: white, the
   floor and, for `liquid` in light, every measured point.
-* **Text colours** (`TEXT_TOKENS`, `WINDOW_TEXT_TOKENS`). All light; hierarchy comes from size, weight and tracking,
-  not from dimmer colour. In the window look (`html.see-through` in `tokens.css`) the softer ones go to bone or
-  lighter, so the panels need the least green over white:
+* **Text colours** (`TEXT_TOKENS`; `WINDOW_TEXT_TOKENS` is the same set since ADR-45). One set in every look, all
+  bone or lighter (relative luminance 0.806 or more), so the panels need the least green; hierarchy comes from size,
+  weight and tracking, not from dimmer colour. A soft green `text-shadow` halo sits behind words on glass, page
+  titles, breadcrumbs and the brand name for comfort; it is **never** counted toward AA.
 
-  | Token | Everywhere else | Window look | What it is for |
-  |---|---|---|---|
-  | `--ink` | `#efe7da` | `#efe7da` | Body text, headings, icons (bone) |
-  | `--ink-2` | `#e9e0d0` | `#efe7da` | Secondary text |
-  | `--ink-3` | `#e4dac9` | `#efe7da` | Meta text, placeholders |
-  | `--vermilion-ink` | `#ffd2ca` | `#ffe2dc` | Error and warning words, always with a vermilion icon or dot |
-  | `--green-ink` | `#d2e8c4` | `#e4f2da` | Success words and icons: saved, ready, passed |
-  | `--green-text` | `#d6ebc8` | `#e4f2da` | Words on the success tint |
+  | Token | Value | What it is for |
+  |---|---|---|
+  | `--ink` | `#efe7da` | Body text, headings, icons (bone) |
+  | `--ink-2` | `#efe7da` | Secondary text |
+  | `--ink-3` | `#efe7da` | Meta text, placeholders |
+  | `--vermilion-ink` | `#ffe2dc` | Error and warning words, always with a vermilion icon or dot |
+  | `--green-ink` | `#e4f2da` | Success words and icons: saved, ready, passed |
+  | `--green-text` | `#e4f2da` | Words on the success tint |
 
   Words on a bone fill use `--on-bone` (`#0f372b`, 10.68:1 on bone); words on a vermilion fill are white. A unit test
   reads the stylesheets: `tokens.css` holds exactly these values, and **every** `color:` declaration is one of the six
@@ -4367,7 +4375,7 @@ everywhere.
   loose text**, not over the whole window, so the desktop stays guessable between them. Two values go on `<html>`:
   `--backdrop-veil` over the whole window and `--panel-veil` on every panel.
   * **Clear:** nothing between the panels (0). A panel carries the least green that keeps every text colour of the
-    window look at AA over white: **0.73** (never less than `PANEL_VEIL_FLOOR`, 0.45). Lowest text contrast 4.61:1
+    window look at AA over white: **0.73** (never less than `PANEL_VEIL_FLOOR`, 0.30). Lowest text contrast 4.61:1
     over white, 6.53 over the measured khaki, 12.77 over black.
   * **Frosted:** a green frost over the whole window (0.30) and panels 0.15 heavier than Clear (`FROSTED_EXTRA`, at
     most 0.95): **0.88**, 8.30:1 or better. What shows through a panel is (1 − window frost) × (1 − panel tint), so
@@ -4388,34 +4396,78 @@ everywhere.
     selected pill is bone 0.92 (`--selected`) with `--on-bone` words, 9.19:1 or better.
   * Fills under words are never lighter than their panel: wells are deep green (`--fill`), and the success and
     vermilion tints lay deep green 0.35 (`CHIP_DEEPEN`) under their colour (`--tint-leaf`, `--tint-vermilion`).
-  * Every vermilion dot or bar on glass carries a bone ring (vermilion on a panel over white is only 1.36:1).
+  * **No edges anywhere (owner, 2026-11-18; ADR-45).** No border, outline, lit rim, inset highlight line, hairline
+    divider or ring is drawn on any box, chip, dot, avatar, input, sheet, bar or toast. A control reads as a control
+    by its fill: buttons without a fill of their own (glass, ghost: Skip, Not now, Back) wear `--fill-control` (the
+    track recipe: bone 0.08 over green `--panel-veil` + 0.10, 4.92:1 or better), the danger button a vermilion
+    tint (0.14) over the same green, fields and the link box a deeper well (`--fill-field`, deep green 0.45) with a
+    blurred inner shade; a chosen, live, best, copied or done thing gets a soft glow (`--glow-*`, 18 px blur) or a
+    tint, never a ring; rows are told apart by spacing. Allowed, because they are not static box edges: the focus
+    ring while `:focus-visible`, the temporary found highlight and Ask's spotlight, progress bars and rings, the
+    switch track, spinners and the running step's pulse, the short action blinks, and text underlines.
+  * Vermilion dots and bars sit beside words that carry their meaning (a count, "Live", a percentage); they no
+    longer carry a bone ring.
   * The unit tests work these numbers through the same contrast maths for every glass and read them back out of
     `glass.css` and `tokens.css`.
-* **Colours:** each chosen colour decides on its own; an sRGB blend of two is never lighter than both, so blends need
-  no check. Dark colours need no veil; the lightest decide: the default (bottle green, bone, vermilion) 0.74 (bone),
-  Cream 0.75, white 0.77. The bone highlight blob is left out over the owner's colours. The Colours tile and the
-  colours strip in Settings wear the same veil (`--preview-veil`), so they look like the result; at 0.5 or more the
-  card adds "Light colours show soft, so words stay easy to read."
-* **Picture:** a green veil of 0.35 over the photo (`PICTURE_PAGE_VEIL`) and panels at 0.65 (`PICTURE_PANEL_VEIL`),
-  together 0.77 over a white photo, with the loose-text scrim of the window look.
-* **Clip Factory colours** (`brand` and `frosted`): the page owns this backdrop and it is dark: a bottle-green
-  gradient, a green-3 blob, a vermilion glow (0.42), a leaf blob (0.22) and a bone highlight capped at 0.12, under a
-  green veil of 0.15; panels sit at `PANEL_VEIL_FLOOR`, 0.45.
+* **Worst spot.** Over a backdrop the page draws itself, the worst spot is **the lightest of every corner of the
+  mesh**: every subset of the blobs at their peaks (not only all of them stacked: `saturate()` lifts a green-only
+  subset more than a stack with vermilion in it) over both field ends, seen bare (the scrims have no filter) and
+  through every `saturate()` the CSS uses (`SATURATIONS`: 1, 1.4, 1.6, 1.75; the largest is `GLASS_SATURATE_MAX`).
+  Luminance is convex in each blob's alpha, so the drifting mesh is never lighter than a corner. The veil is the
+  largest `minVeil` over all corners (`minVeilOver`), because green is mixed in sRGB and a slightly darker corner of
+  another hue can need a little more.
+* **Per-surface tints** (`lib/background.ts`; the worst text contrast is over the worst spot, or over white for what
+  content scrolls under):
+
+  | Surface | Tint | Worst text contrast |
+  |---|---|---|
+  | `.glass` panels, the sidebar, `.glass--clear`, the loose-text scrims (every look: `html:is(.see-through, [data-backdrop])`) | `--panel-veil`: 0.33 over the app's backdrop, its grain included (`BRAND_PANEL_VEIL`) | 4.52 (over every blob subset, field end, `saturate()` and the grain at its peak) |
+  | Nested `.glass` | transparent: the outer panel gives the green | 4.94 |
+  | `.glass--green` (hero, sign-in) | panel + 0.10 | 5.16 |
+  | Pick-one tracks, `--fill-control` (and every control straight on the page, such as the Library tabs) | panel + 0.15 under bone 0.08 (`TRACK_EXTRA_VEIL`, held over every spot of every look) | 4.68 |
+  | Fields (`--fill-field`) | deep green 0.45 over the panel | 7.35 |
+  | Floating layers: toasts, the update bar, the setup pill, list and sheet, the Ask launcher, the Ask panel and phone sheet | `FLOAT_VEIL` 0.73 (hover + 0.07), blur 28 px | 4.61 over white |
+  | The tab bar (icons only) | `TABBAR_VEIL` 0.59, blur 28 px | 3.05:1 over white; the chosen icon on bone 9.91 |
+  | The question sheet | 0.86, over its own scrim | 6.95 over white |
+  | The vermilion CTA | `--cta`, white label | 4.65 over white, 4.86 over a panel |
+
+  The CTA is the one solid saturated surface on the glass. Panels carry no bone sheen (bone 0.06 over the worst
+  panel is 4.48:1, under AA).
+* **Colours** (`coloursMeshSpots`, `coloursVeils`): the mesh as drawn: the field is the first colour (its gradient
+  end 78 % first + 22 % third), the second colour a blob at 30 %, the third at 45 %, opacity 1; the corners are each
+  field end with and without each blob, through every saturation. The panels carry what the corners need (never
+  under 0.30) and the page nothing, up to 0.60; past that the panels stay at 0.60 and the page takes the rest
+  (`page = ceil(1 − (1 − need) / 0.4)`). The default trio: page 0, panels 0.30 (it was a 0.74 page veil); Ocean +
+  Grape 0 / 0.30; the old Sage trio 0.03 / 0.60; Sunny + Bubblegum 0.08 / 0.60; Cream 0.28 / 0.60; white 0.33 /
+  0.60. `applyLook` sets both. The bone and deep-vermilion blobs are left out over the owner's colours. The Colours
+  tile and strip wear the page veil (`--preview-veil`); when it is above 0 the card adds "Light colours show soft,
+  so words stay easy to read." `coloursVeil` (deprecated) returns the combined green.
+* **Picture:** no veil over the photo (`PICTURE_PAGE_VEIL` 0), so it shows at full strength between the panels;
+  panels at `minVeil(white)` = 0.73 (`PICTURE_PANEL_VEIL`), 4.61:1 over a white photo, with the loose-text scrim.
+* **The living backdrop** (`brand` and `frosted`, `BRAND_MESH`): the page owns it. A field from `#0f3d31` to
+  `#08221b`; blobs (blur 56 px, opacity 1, drifting 24–28 s): deep teal `rgb(22 89 77 / 0.9)`, vermilion 0.62, leaf
+  0.30, bone 0.06 and a deep vermilion `rgb(196 42 30 / 0.55)`; two soft lenses (70 and 46 vmax, a blurred bone glow
+  of at most 0.08, never a drawn line, drifting 36 and 44 s). No page veil. Worst corner after saturate 1.75:
+  rgb(252, 62, 38); bare bone on it is under AA, which is why loose words get the scrim. Through a panel the
+  lightest and darkest spots stay at least 2.5:1 apart (2.58 at 1.6, 2.70 at 1.75), so the see-through has range.
 * `prefers-reduced-transparency: reduce` raises the veil to 0.94 in every mode, and panels to 0.92.
 * **Panels in the window look.** `.glass` keeps the recipe (blur, saturation, lit rim, inner highlight, shadow,
   refraction in Chromium); its tint is `--panel-veil`.
-* **Frosted fallback** (see-through in a browser, installed PWA, phone, or the desktop app with `none`): the deep
-  green mesh above (already blurred), a green frost pane (Clear: bone 0.04 → green 0.06; Frosted,
+* **Frosted fallback** (see-through in a browser, installed PWA, phone, or the desktop app with `none`): the living
+  backdrop above (already blurred), a frost pane (Clear: none; Frosted,
   `html[data-strength="frosted"]`: green 0.40 → deep green 0.45, so Glass strength always does something; no full-screen
   `backdrop-filter`, so phones do not repaint it every frame) and two soft caustic highlights drifting over 26 s and
-  34 s (bone, soft-light). Reduced motion stops them like every other loop.
+  34 s (bone, soft-light, peak 0.06). Reduced motion stops them like every other loop.
 * **Colours mesh:** a 160° gradient through the colours plus the drifting blobs in `--c1..--c3` (one or two colours
   repeat the last), then the veil.
 
 ### 22.4 Why phones and browsers cannot see through
 
 Web pages, installed PWAs and phone home-screen apps are drawn on an opaque surface; no browser lets a page see the
-wallpaper or windows behind it. Only the desktop app owns its window. The Background page says so in one sentence
+wallpaper or windows behind it, and iOS gives a home-screen app no way to either. On a phone "see-through" therefore
+means this: every panel, the top bar, the setup pill, the tab bar and sheets are glass over a living backdrop the
+app draws itself (bottle green, deep teal, leaf, two vermilion glows, faint bone light and two soft lenses, drifting
+slowly), which shows through 70 % of every panel and fully between them. Only the desktop app owns its window. The Background page says so in one sentence
 under the choice whenever see-through is picked and there is no native glass:
 
 > See-through works in the Mac and Windows app. Browsers don't let apps look behind them, so here you get the Clip
@@ -4449,10 +4501,20 @@ changes (§20.14); hover lights up the tiles and swatches.
 ### 22.6 Tests
 
 * Vitest `test/background.test.ts`: contrast maths against WCAG reference values; `minVeil` is minimal and reaches AA
-  (0.77 over white for the root text, 0.73 for the window look's); the ceiling is white for every glass; the measured
+  (0.73 over white for the one text set); the ceiling is white for every glass; the measured
   Liquid Glass numbers stay on record; `TINTED_FLOOR` is the app's green tint over black and equals `GLASS_TINT` in
-  `main.rs`; the text colours are all light and the window look only lifts them; Clear is the least that reaches AA
-  over white, never under 0.45; Frosted is 0.30 plus panels 0.15 heavier and always shows less; **every glass × light
+  `main.rs`; one text set, all bone or lighter, and no `html.see-through` text block; Clear is the least that reaches
+  AA over white, never under 0.30; **the living backdrop**: glass.css draws exactly `BRAND_MESH` (field, five blobs,
+  opacity 1, lens glow, caustic peak), Backdrop.tsx draws blob e in both meshes, no green page veil and no Clear frost,
+  every blob subset × field end is enumerated independently and a subset beats the full stack, `BRAND_PANEL_VEIL` is
+  0.30 and covers every corner at every saturation, the bare worst spot is under AA, the see-through range is at
+  least 2.5:1, every `backdrop-filter` `saturate()` is in `SATURATIONS` and at most `GLASS_SATURATE_MAX`, no bone
+  sheen in panels, nested glass is transparent, the scrim and the control fill apply in every look; **floating
+  layers** resolve to at least `FLOAT_VEIL` with a 28 px blur, the sheet to 0.86, the tab bar to `TABBAR_VEIL`;
+  **colours**: blob strengths read from glass.css, the page/panel table, and 44,000+ mixes of 1–3 colours from a
+  6-level grid all reach AA over every corner with panels at most 0.60; **no edges**: no stylesheet draws a border,
+  outline, ring or hard line (a box-shadow layer with 2 px blur or less) outside the allowed selectors, the shared
+  shadows and glows are soft, and `.glass` has no lit rim; Frosted is 0.30 plus panels 0.15 heavier and always shows less; **every glass × light
   and dark × Clear and Frosted × (white, the floor, and for Liquid Glass every measured point): every text colour of
   the window look reaches AA on a panel, on a pick-one track and on the vermilion and success tints, and the green
   words on the selected bone pill reach AA**; the picture look over a white photo; the stylesheets stay in step
@@ -4488,6 +4550,10 @@ changes (§20.14); hover lights up the tiles and swatches.
   every screen, This week, the skill pages and a clip page, for `liquid` and `vibrancy`, at 375 and 1440 px; `none`
   glass in the app, and a glass name the page does not know; no overflow, one-line tile names and AA text at 320,
   375, 768, 1440 and 1920 px, light and dark, in every mode.
+* Playwright `e2e/edges.spec.ts`: on every route, This week, the skill pages, a clip page, Home with the Ask panel
+  open and the Library with the setup list open, at 390 × 844 and 1440 × 900, no element or pseudo-element shows a
+  border, outline or hard ring/line with any opacity, except the allowed ones; a control test draws one and checks
+  the scan finds it.
 * `e2e/screenshots.spec.ts`: the Background page, and the simulated see-through window on Home over the busy
   picture (window in use) and over the darkest measured floor, Clear and Frosted, at 390 and 1440 px:
   `see-through-{scene,floor}-{clear,frosted}-*.png` (the real glass can only be seen in a built app).

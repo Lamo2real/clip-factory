@@ -11,7 +11,7 @@
   --vermilion: #e8392b;
   --vermilion-ink: #ffd2ca;
   --ink: #efe7da;
-  --ink-2: #e9e0d0;
+  --ink-2: #efe7da;
   --font-ui: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-display: "Times New Roman", "Times New Roman MT", Tinos, Times, serif;
 }
@@ -105,7 +105,7 @@ h2 {
   margin-top: 16px;
   border-radius: 26px;
   background: rgb(10 40 32 / 0.55);
-  box-shadow: inset 0 1px 0 rgb(239 231 218 / 0.28), inset 0 0 0 1px rgb(239 231 218 / 0.18), 0 22px 48px -24px rgb(4 20 15 / 0.65);
+  box-shadow: 0 22px 48px -24px rgb(4 20 15 / 0.65); /* no drawn edge (ADR-45) */
 }
 .muted {
   color: var(--ink-2);
