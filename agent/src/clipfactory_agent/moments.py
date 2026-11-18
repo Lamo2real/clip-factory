@@ -41,7 +41,10 @@ MOMENT_SCHEMA: dict[str, Any] = {
         "end": {"type": "number", "description": "Clip end in seconds, right on the payoff."},
         "moment_type": {"type": "string", "enum": MOMENT_TYPES},
         "hook": {"type": "string", "description": "On-screen text hook: 6–8 words that open a question, not a label."},
-        "first_words": {"type": "string", "description": "What the viewer hears in the first second."},
+        "first_words": {
+            "type": "string",
+            "description": "What the viewer hears in the first second: the words, or the sound when nobody talks.",
+        },
         "tease_start": {
             "type": ["number", "null"],
             "description": "Optional payoff tease: 1–2 s of the best line, played first. Seconds in the video, or null.",
@@ -79,6 +82,7 @@ class Moment:
     summary: str
     people: list[str] = field(default_factory=list)
     tease: tuple[float, float] | None = None
+    picked_for: str | None = None  # why it was picked, in a few plain words; built by code (signals.picked_for)
 
     @property
     def length(self) -> float:
@@ -105,6 +109,7 @@ class Moment:
             summary=str(d.get("summary", "")),
             people=[str(p) for p in d.get("people") or []],
             tease=(float(tease[0]), float(tease[1])) if tease else None,
+            picked_for=str(d["picked_for"]) if d.get("picked_for") else None,
         )
 
 

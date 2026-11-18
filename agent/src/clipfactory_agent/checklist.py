@@ -91,7 +91,11 @@ class Candidate:
     index: int = 0  # its folder under clips/; at or past the number of chosen moments means a spare
 
 
-def measured_items(m: Moment, r: RenderResult, x: Measured, length: tuple[float, float]) -> list[Item]:
+def measured_items(
+    m: Moment, r: RenderResult, x: Measured, length: tuple[float, float], *, has_speech: bool = True
+) -> list[Item]:
+    """The measured checks. ``has_speech`` is False when no word of the source lies inside the clip (a moment that
+    is all picture): then there is nothing to caption, and the captions check passes."""
     lo, hi = length
     hook_words = word_count(m.hook)
     length_ok = lo - 3 <= r.duration <= hi + 4
@@ -122,7 +126,7 @@ def measured_items(m: Moment, r: RenderResult, x: Measured, length: tuple[float,
         Item(
             "captions",
             "Captions on",
-            bool(r.captions),
+            bool(r.captions) or not has_speech,
             f"{len(r.captions)} caption lines." if r.captions else "No speech to caption.",
         ),
     ]
@@ -253,9 +257,12 @@ async def measure(video: Path) -> Measured:
     return Measured(parse_mean_volume(r.stderr), frame_difference(await gray(0), await gray(0.4)))
 
 
-def review_prompt(m: Moment, r: RenderResult, notes: str) -> str:
+def review_prompt(m: Moment, r: RenderResult, notes: str, seen: str = "") -> str:
+    """``seen`` is the picture events inside the clip (signals.seen_block); the block is left out when empty."""
+    seen_part = f"\n\nSeen (machine-made picture notes, seconds from the clip's start):\n{seen}" if seen else ""
     said = "\n".join(f"[{c['t0']:.1f}s] {c['text']}" for c in r.captions) or "(no speech)"
-    return f"""Run the pre-post checklist (playbook section D, plus A2 and A5) on this finished clip. You can't watch it;
+    return (
+        f"""Run the pre-post checklist (playbook section D, plus A2 and A5) on this finished clip. You can't watch it;
 judge from the plan and the timed transcript of the edited clip. Be strict but fair: only ask for a fix that clearly
 helps.
 
@@ -274,6 +281,8 @@ payoff at: {m.payoff_at - m.start:.1f} s after the start
 <edited_clip_transcript>
 {said}
 </edited_clip_transcript>"""
+        + seen_part
+    )
 
 
 @dataclass

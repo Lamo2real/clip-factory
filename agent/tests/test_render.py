@@ -209,3 +209,57 @@ async def test_render_clip_end_to_end(tmp_path: Path) -> None:
         check=True,
     ).stdout.strip()
     assert probe == f"{W},{H}"
+
+
+@pytest.mark.parametrize(
+    ("words", "trimmed"),
+    [
+        ([[6.0, 6.4, "no"], [6.4, 6.8, "way"]], True),  # talk: its pauses are cut, as before
+        ([[1.0, 1.4, "before"], [40.0, 40.4, "after"]], False),  # nothing said inside: a picture moment plays whole
+    ],
+)
+async def test_a_moment_without_words_keeps_its_quiet_stretches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, words: list[list[object]], trimmed: bool
+) -> None:
+    from clipfactory_agent import proc
+    from clipfactory_agent import render as render_mod
+
+    asked: list[tuple[float, float]] = []
+    shown: list[list[tuple[float, float]]] = []
+
+    async def probe(src: str) -> proc.MediaInfo:
+        return proc.MediaInfo(30.0, 1280, 720, True, True, 30.0)
+
+    async def detect_silences(section: Path, start: float, end: float) -> list[tuple[float, float]]:
+        asked.append((start, end))
+        return [(10.0, 20.0)]  # a long quiet stretch in the middle
+
+    class Stop(Exception):
+        pass
+
+    def retime(ws: object, segs: list[tuple[float, float]]) -> list[object]:
+        shown.append(segs)
+        raise Stop
+
+    async def fetch(start: float, end: float, dest: Path) -> Path:
+        dest.write_bytes(b"section")
+        return dest
+
+    monkeypatch.setattr(proc, "probe", probe)
+    monkeypatch.setattr(render_mod, "detect_silences", detect_silences)
+    monkeypatch.setattr(render_mod, "retime", retime)
+    m = make_moment(start=5, end=30, payoff_at=29, peak_at=20)
+    with pytest.raises(Stop):
+        await render_clip(
+            m,
+            words=words,
+            workdir=tmp_path / "clip",
+            fetch_section=fetch,
+            detect_layout=None,
+            known_layout=FrameLayout(None, "gameplay"),
+        )
+    if trimmed:
+        assert asked and len(shown[0]) == 2  # cut around the quiet stretch
+    else:
+        assert asked == [] and len(shown[0]) == 1  # one whole segment: nothing cut
+        assert shown[0][0][1] - shown[0][0][0] > 24

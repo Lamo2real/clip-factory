@@ -373,7 +373,10 @@ async def render_clip(
     fc = layout.facecam if layout.scene != "camera_only" else None
 
     end = min(t(m.end), info.duration - 0.05)
-    quiet = await detect_silences(section, t(m.start), end) if info.has_audio else []
+    # Pauses are cut out of talk. A moment with no words in it is all picture (a crash, a chase): cutting its quiet
+    # stretches would cut the moment itself, so it plays whole.
+    speech = any(m.start <= float(w[0]) < m.end for w in words)
+    quiet = await detect_silences(section, t(m.start), end) if info.has_audio and speech else []
     segs: list[Segment] = []
     if tease:
         segs.append((t(tease[0]), min(t(tease[1]), info.duration - 0.05)))

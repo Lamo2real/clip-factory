@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 
@@ -89,3 +90,63 @@ def test_log_redacts_string_fields(capsys: pytest.CaptureFixture[str]) -> None:
     for s in SECRETS:
         assert s not in line["detail"]
     assert line["count"] == 3
+
+
+def test_the_new_step_messages_are_plain() -> None:
+    """ADR-40: what the watch step says is for the owner: short, no service or tool names, no jargon."""
+    from clipfactory_agent import pipeline
+
+    texts = [
+        pipeline.NOT_WATCHED,
+        pipeline.MOTION_ONLY,
+        "Watched all 2:03:10. Saw 41 big things.",
+        "Got 2:03:10 of sound.",
+    ]
+    texts += ["Watched most of the video (44 of 48 parts).", "Used what it saw last time."]
+    banned = ("bedrock", "nova", "fable", "claude", "ffmpeg", "yt-dlp", "frame", "chunk", "model", "signal", "proxy")
+    for t in texts:
+        assert len(t) <= 80 and len(t.split()) <= 15, t
+        assert not any(b in t.lower() for b in banned), t
+    assert pipeline.NOT_WATCHED == "Could not watch the video this time. Picking from the words and the sound."
+    assert pipeline.MOTION_ONLY == "Saw where the picture moves fast. Picking with that, the words and the sound."
+    assert pipeline.ALMOST_NO_SPEECH.startswith("Almost no speech was found in this video")
+
+
+BANNED_IN_STEPS = ("transcri", "audio", "(s)", "skill(s)", "learning(s)", "spare", "render", "bedrock", "nova", "fable")
+
+
+async def test_every_step_message_is_plain(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every message under a step label, on a first run and on a Try again: short, no tool words, no "clip(s)"."""
+    from .test_pipeline import World
+
+    world = World(tmp_path, monkeypatch)
+    seen: list[str] = []
+    for _ in range(2):
+        _status, _st, steps = await world.run()
+        seen += [str(s.get("message") or "") for s in steps.values()]
+    assert any(m.startswith("Wrote down ") for m in seen) and "Used the words from last time." in seen
+    assert "Used the sound from last time." in seen and any(m.startswith("Picked ") for m in seen)
+    for m in seen:
+        assert len(m) <= 100, m
+        assert not any(b in m.lower() for b in BANNED_IN_STEPS), m
+
+
+def test_counts_read_naturally() -> None:
+    from clipfactory_agent.pipeline import count
+
+    assert (count(1, "clip"), count(2, "clip"), count(4812, "word")) == ("1 clip", "2 clips", "4,812 words")
+
+
+def test_picked_for_words_are_plain_and_short() -> None:
+    from clipfactory_agent import signals
+
+    words = {
+        *signals.KIND_WORDS.values(),
+        signals.LOUD_LAUGH,
+        signals.LOUD,
+        signals.FAST,
+        signals.REWATCH,
+        signals.TALK,
+    }
+    for w in words:
+        assert len(w.split()) <= 3 and w[0].isupper() and w.isascii(), w

@@ -128,6 +128,17 @@ class StepSource(Protocol):
     def steps(self, st: JobState, tr: Tracker) -> list[tuple[str, StepFn]]: ...
 
 
+async def close_run(pipeline: StepSource, st: JobState | None) -> None:
+    """Stops whatever the run left working in the background (the picture preparation). Never raises."""
+    close = getattr(pipeline, "close", None)
+    if st is None or close is None:
+        return
+    try:
+        await close(st)
+    except Exception as e:
+        log("warn", "job.close_failed", job=st.job_id, error=type(e).__name__)
+
+
 @dataclass(frozen=True)
 class Settled:
     """A ``process_job`` for a run that must not (re)start: the job already ended, or a newer run owns it."""
@@ -173,6 +184,7 @@ def make_run(
 
     async def run(job_id: str, user_id: str, session_id: str | None, callback_id: str | None) -> str:
         cb = new_callback(callback_id) if callback_id else None
+        st: JobState | None = None
         try:
             job = await store.get_job(user_id, job_id)
             if session_id is None:
@@ -199,6 +211,7 @@ def make_run(
                 await report_outcome(cb, "failed", job_id=job_id, clip_count=0, error=None)
             raise
         finally:
+            await close_run(pipeline, st)
             if cb:
                 await cb.close()
 
@@ -223,8 +236,18 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     )
     if vectors is None:
         log("warn", "vectors.disabled", reason="CF_VECTOR_BUCKET is not set")
+    # The second watcher of the deep analysis runs on its own client: another model id, and no cache points (Nova's
+    # prompt cache is smaller than the skills block).
+    watcher = (
+        Bedrock(cfg.watch_model_id, cfg.region, cache_points=False) if cfg.deep_enabled and cfg.watch_model_id else None
+    )
     pipeline = Pipeline(
-        cfg, store, Bedrock(cfg.model_id, cfg.region), Transcriber(store.transcribe, cfg.bucket), vectors=vectors
+        cfg,
+        store,
+        Bedrock(cfg.model_id, cfg.region),
+        Transcriber(store.transcribe, cfg.bucket),
+        vectors=vectors,
+        watch_bedrock=watcher,
     )
     client: list[Any] = []
 
@@ -233,7 +256,15 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
             client.append(lambda_client(cfg.region))
         return DurableCallback(callback_id, client[0])
 
-    log("info", "runtime.started", model=cfg.model_id, region=cfg.region, vectors=vectors is not None)
+    log(
+        "info",
+        "runtime.started",
+        model=cfg.model_id,
+        region=cfg.region,
+        vectors=vectors is not None,
+        deep=cfg.deep_enabled,
+        watchModel=cfg.watch_model_id if watcher else None,
+    )
     return create_app(JobRunner(make_run(store, pipeline, cfg.work_root, new_callback), cfg.work_root))
 
 

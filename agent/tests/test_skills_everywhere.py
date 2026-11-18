@@ -430,10 +430,10 @@ async def test_analyze_builds_the_block_and_counts_skipped_skills(tmp_path: Path
         def report(self, f: float) -> None:
             pass
 
-    pipe = Pipeline(SimpleNamespace(skills_dir=builtin), Store(), None, None)  # type: ignore[arg-type]
+    pipe = Pipeline(SimpleNamespace(skills_dir=builtin, deep_enabled=True), Store(), None, None)  # type: ignore[arg-type]
     st = JobState(job_id="J", user_id="u", workdir=tmp_path / "work")
     msg = await pipe.analyze(st, Tracker())  # type: ignore[arg-type]
-    assert "using 2 skill(s); 1 could not be read" in msg
+    assert msg.endswith(" 1 skill could not be read.") and "skill(s)" not in msg
     assert st.block.counts["builtin"] == 1 and st.block.counts["owner"] == 1
     assert '<skill name="mine" source="owner">' in st.block.text
 
@@ -447,3 +447,90 @@ async def test_sdk_prompt_file_starts_with_the_block(tmp_path: Path) -> None:
     text = Path(opts.system_prompt["path"]).read_text("utf-8")
     assert text.startswith(block.text + "\n\nYou are the clip finder")
     assert text.count("<owner_skills") == 1
+
+
+# --- the deep analysis (ADR-40): the watcher, Nova and the second look all send the block first -------------------
+
+
+async def test_fable_watch_sends_the_block_first() -> None:
+    from clipfactory_agent import guard, watch
+
+    from .deep_support import FakeFrames, make_picture, no_cancel
+
+    client = RecordingClient()
+    block = owner_block()
+    r = await watch.watch_chunks(
+        watch.plan(300),
+        bedrock=Bedrock("m", "r", client=client),
+        skills=block,
+        frames=FakeFrames(make_picture(300)),
+        words=[],
+        speakers=None,
+        loud=[],
+        motion=[],
+        budget=guard.fable_budget(2),
+        deadline=guard.Deadline(60),
+        check_cancel=no_cancel,
+    )
+    assert not r.done and set(r.failed.values()) == {"bad_answer"}  # no usable answer: the chunks are just missing
+    assert len(client.requests) == 6  # two chunks, three answers each
+    assert_block_first(client.requests, block, "You watch one part of a long video")
+    assert any("image" in c for c in client.requests[0]["messages"][0]["content"])
+
+
+async def test_nova_watch_sends_the_block_first() -> None:
+    from clipfactory_agent import guard, nova
+
+    from .deep_support import make_picture, no_cancel
+
+    client = RecordingClient()
+    block = owner_block(9_000)  # long enough for a cache point, which Nova's client must not send
+
+    async def read(part: Any) -> bytes:
+        return b"mp4"
+
+    r = await nova.watch_parts(
+        make_picture(600).parts,
+        bedrock=Bedrock("eu.amazon.nova-2-lite-v1:0", "r", client=client, cache_points=False),
+        skills=block,
+        read=read,
+        budget=guard.nova_budget(2),
+        deadline=guard.Deadline(60),
+        check_cancel=no_cancel,
+    )
+    assert not r.done and len(client.requests) == 6
+    assert_block_first(client.requests, block, "You watch one part of a long video")
+    assert all(len(q["system"]) == 2 for q in client.requests)  # block, task: no cache point in between
+    assert all("video" in q["messages"][0]["content"][0] for q in client.requests)
+
+
+async def test_second_look_sends_the_block_first() -> None:
+    from clipfactory_agent import verify
+
+    from .deep_support import FakeFrames, make_picture, no_cancel
+
+    client = RecordingClient()
+    block = owner_block()
+    m = make_moment()
+    chosen, _spares, report = await verify.second_look(
+        [m],
+        [],
+        bedrock=Bedrock("m", "r", client=client),
+        skills=block,
+        frames=FakeFrames(make_picture(600)),
+        words=[],
+        speakers=None,
+        duration=600,
+        length=(20, 45),
+        clip_min=1,
+        check_cancel=no_cancel,
+    )
+    assert chosen == [m] and report[0]["result"] == "not checked"  # no usable answer: kept as picked
+    assert_block_first(client.requests, block, "You check one picked clip moment")
+
+
+def test_the_new_modules_are_scanned() -> None:
+    names = {p.name for p in SRC.rglob("*.py")}
+    assert {"watch.py", "nova.py", "verify.py", "signals.py", "picture.py", "guard.py"} <= names
+    for name in ("watch.py", "nova.py", "verify.py"):
+        assert "skills=skills" in (SRC / name).read_text("utf-8")

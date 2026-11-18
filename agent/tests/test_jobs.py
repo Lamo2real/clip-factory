@@ -293,3 +293,56 @@ async def test_own_session_cancel_still_marks_canceled() -> None:
 
     status = await run_job(tracker(store), ok_steps(analyze=owner_cancels), clip_count=lambda: 0)
     assert status == "canceled" and store.last["status"] == "canceled"
+
+
+# --- the ten steps: one list in the agent, the API and the web mock (ADR-40) --------------------------------------
+
+
+def test_step_weights_sum_to_one() -> None:
+    assert len(STEPS) == 10 and [k for k, _, _ in STEPS][4] == "watch"
+    assert abs(sum(w for _, _, w in STEPS) - 1.0) < 1e-9
+    assert all(w > 0 for _, _, w in STEPS)
+
+
+def test_step_keys_and_labels_match_the_api_and_the_web_mock() -> None:
+    import ast
+    import re
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    ours = [(k, label) for k, label, _ in STEPS]
+    assert ours == [
+        ("resolve", "Find the video"),
+        ("download", "Get the video"),
+        ("transcribe", "Write down the words"),
+        ("analyze", "Listen for big moments"),
+        ("watch", "Watch the video"),
+        ("select", "Pick the best moments"),
+        ("render", "Cut the clips"),
+        ("checklist", "Check each clip"),
+        ("captions", "Write the captions"),
+        ("finalize", "Finish up"),
+    ]
+    tree = ast.parse((repo / "api" / "src" / "clipfactory_api" / "jobs.py").read_text("utf-8"))
+    api = next(
+        ast.literal_eval(n.value)
+        for n in tree.body
+        if isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name) and n.target.id == "STEPS" and n.value
+    )
+    assert [tuple(s) for s in api] == ours
+    fixtures = (repo / "web" / "src" / "api" / "mock" / "fixtures.ts").read_text("utf-8")
+    body = re.search(r"STEP_LABELS: Record<StepKey, string> = \{(.*?)\};", fixtures, re.S)
+    assert body
+    assert re.findall(r"(\w+): \"([^\"]+)\"", body.group(1)) == ours
+    types = (repo / "web" / "src" / "api" / "types.ts").read_text("utf-8")
+    union = re.search(r"export type StepKey =(.*?);", types, re.S)
+    assert union and re.findall(r"\"(\w+)\"", union.group(1)) == [k for k, _ in ours]
+
+
+def test_labels_are_short_and_plain() -> None:
+    for _, label, _ in STEPS:
+        assert len(label.split()) <= 4 and len(label) <= 24, label
+        assert not any(w in label.lower() for w in ("transcribe", "analyze", "audio", "render", "checklist")), label
+    assert failure_message("watch", RuntimeError("x")).startswith(
+        "Something went wrong while trying to watch the video."
+    )

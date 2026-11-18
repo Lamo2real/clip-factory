@@ -14,24 +14,52 @@ OVERLAP = 60
 _SENTENCE_END = re.compile(r"[.?!]$")
 
 
-def lines(words: Sequence[Word], start: float, end: float) -> str:
-    """``[0:12:34] words…`` lines of about 8 seconds, broken at sentence ends."""
+def _speaker_at(turns: Sequence[Sequence[Any]], i: int, t: float) -> tuple[int, str | None]:
+    """The speaker talking at ``t``; ``i`` is where the last lookup stopped (words come in time order)."""
+    while i < len(turns) and float(turns[i][1]) <= t:
+        i += 1
+    if i < len(turns) and float(turns[i][0]) <= t + 0.05:
+        return i, str(turns[i][2])
+    return i, None
+
+
+def timed_lines(
+    words: Sequence[Word], start: float, end: float, speakers: Sequence[Sequence[Any]] | None = None
+) -> list[tuple[float, str]]:
+    """``(time, text)`` lines of about 8 seconds, broken at sentence ends. With ``speakers`` (``[start, end, "S1"]``
+    turns) a line also breaks when the speaker changes and starts with ``S1:``."""
     out: list[tuple[float, str]] = []
     cur_t: float | None = None
     cur: list[str] = []
+    cur_who: str | None = None
+    turn = 0
+
+    def flush() -> None:
+        if cur_t is not None:
+            text = " ".join(cur)
+            out.append((cur_t, f"{cur_who}: {text}" if cur_who else text))
+
     for w in words:
         s, text = float(w[0]), str(w[2])
         if s < start or s >= end:
             continue
-        if cur_t is None or s - cur_t > 8 or (cur and _SENTENCE_END.search(cur[-1]) and s - cur_t > 4):
-            if cur_t is not None:
-                out.append((cur_t, " ".join(cur)))
-            cur_t, cur = s, [text]
+        who: str | None = None
+        if speakers:
+            turn, who = _speaker_at(speakers, turn, s)
+            who = who or cur_who
+        changed = bool(speakers) and cur_t is not None and who != cur_who
+        if cur_t is None or changed or s - cur_t > 8 or (cur and _SENTENCE_END.search(cur[-1]) and s - cur_t > 4):
+            flush()
+            cur_t, cur, cur_who = s, [text], who
         else:
             cur.append(text)
-    if cur_t is not None:
-        out.append((cur_t, " ".join(cur)))
-    return "\n".join(f"[{hms(t)}] {text}" for t, text in out)
+    flush()
+    return out
+
+
+def lines(words: Sequence[Word], start: float, end: float, speakers: Sequence[Sequence[Any]] | None = None) -> str:
+    """``[0:12:34] words…`` lines (see ``timed_lines``). Without ``speakers`` the text is what it always was."""
+    return "\n".join(f"[{hms(t)}] {text}" for t, text in timed_lines(words, start, end, speakers))
 
 
 def windows(total: float, size: float = WINDOW, overlap: float = OVERLAP) -> list[tuple[float, float]]:

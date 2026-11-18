@@ -7,12 +7,17 @@ once with the exact problems.
 Every call gets the owner's skills block first in its ``system`` (docs/CONTRACTS.md §18.6): ``structured`` takes it
 as a required keyword, and ``_converse`` is the only place in this package that calls ``converse``. A cache point
 follows a long block; if Bedrock refuses cache points, they are switched off for this client and the call is sent
-again without one."""
+again without one.
+
+Model calls run in their own small thread pool, not asyncio's default one: the deep analysis keeps a dozen long
+calls in flight, and on two CPUs the default pool (six threads) would queue the job's heartbeat writes behind them.
+Every answer's token counts are logged as ``bedrock.usage``, so what a job really costs can be read from the logs."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,6 +25,9 @@ from .retry import retry
 from .schema import check
 from .skills import SkillsBlock, compose_system
 from .util import TransientError, UserFacingError, log
+
+MODEL_THREADS = 16
+_POOL = ThreadPoolExecutor(MODEL_THREADS, thread_name_prefix="cf-model")
 
 
 class ModelError(Exception):
@@ -79,7 +87,7 @@ def facecam_from_box(r: dict[str, Any], width: int, height: int) -> FrameLayout:
 
 
 class Bedrock:
-    def __init__(self, model_id: str, region: str, client: Any = None) -> None:
+    def __init__(self, model_id: str, region: str, client: Any = None, *, cache_points: bool = True) -> None:
         self.model_id = model_id
         if client is None:
             import boto3
@@ -92,14 +100,35 @@ class Bedrock:
             )
         self.client = client
         self.forced_tool_choice = True
-        self.cache_points = True
+        self.cache_points = cache_points  # False for a model whose prompt cache is smaller than the skills block
+        # The most images one request may carry, once the model has refused more (watch.learn_image_limit). None
+        # until then: Bedrock's user guide sets no image count of its own, while the Converse API reference names 20
+        # per message, so the first refusal teaches the real number and every later call is sized to it.
+        self.image_limit: int | None = None
 
     def _converse(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         r: dict[str, Any] = self.client.converse(**kwargs)
         return r
 
     async def _call(self, kwargs: dict[str, Any]) -> dict[str, Any]:
-        return await retry(lambda: asyncio.to_thread(self._converse, kwargs), what="bedrock.converse", attempts=4)
+        loop = asyncio.get_running_loop()
+        return await retry(
+            lambda: loop.run_in_executor(_POOL, self._converse, kwargs), what="bedrock.converse", attempts=4
+        )
+
+    def _log_usage(self, tool: str, r: dict[str, Any]) -> None:
+        usage = r.get("usage") or {}
+        if usage:
+            log(
+                "info",
+                "bedrock.usage",
+                model=self.model_id,
+                tool=tool,
+                inputTokens=int(usage.get("inputTokens") or 0),
+                outputTokens=int(usage.get("outputTokens") or 0),
+                cacheReadInputTokens=int(usage.get("cacheReadInputTokens") or 0),
+                cacheWriteInputTokens=int(usage.get("cacheWriteInputTokens") or 0),
+            )
 
     async def structured(
         self,
@@ -158,6 +187,7 @@ class Bedrock:
                     attempt -= 1
                     continue
                 raise
+            self._log_usage(tool, r)
             stop = r.get("stopReason")
             if stop in ("guardrail_intervened", "content_filtered") or stop == "refusal":
                 raise ModelError("The model declined this request.")

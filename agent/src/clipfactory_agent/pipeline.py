@@ -1,19 +1,28 @@
-"""The nine pipeline steps (docs/CONTRACTS.md §8) wired to S3, DynamoDB, Transcribe, Bedrock, yt-dlp and ffmpeg.
+"""The ten pipeline steps (docs/CONTRACTS.md §8) wired to S3, DynamoDB, Transcribe, Bedrock, yt-dlp and ffmpeg.
 
-Every step is safe to run again: inputs already in S3 from an earlier run of the same job (audio, words, loudness)
-are reused, which is what makes Retry cheap."""
+Every step is safe to run again: inputs already in S3 from an earlier run of the same job (audio, words, loudness,
+the picture parts, what the watchers saw) are reused, which is what makes Retry cheap.
+
+The deep analysis (docs/DECISIONS.md ADR-40) is the picture half: ``download`` starts preparing the picture in the
+background, ``watch`` lets two models watch all of it, ``select`` reads the merged signals and takes a second look
+at each picked moment. Every part of it is optional at run time: whatever fails is logged and the job picks from the
+signals it has, down to exactly what it did before the picture was watched."""
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import functools
 import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from . import captions as captions_mod
-from . import learnings, loudness, proc, sources
+from . import learnings, loudness, nova, proc, sources, verify, watch
+from . import picture as picture_mod
+from . import signals as signals_mod
 from . import vectors as vectors_mod
 from .agent import Brief, find_moments
 from .bedrock import Bedrock, FrameLayout, ModelError
@@ -31,15 +40,39 @@ from .checklist import (
     review_prompt,
 )
 from .config import Config
+from .guard import Deadline, fable_budget, nova_budget
 from .jobs import StepDone, StepFn, Tracker
 from .moments import Moment, length_target
 from .render import render_clip
 from .skills import SkillsBlock, SkillSet, prepare_skills, skills_block
 from .store import Fence, Store, clip_prefix, cookies_key, source_prefix
-from .transcribe import PART_SECONDS, Transcriber, job_name, language_of, parse_items
+from .transcribe import PART_SECONDS, Transcriber, job_name, language_of, parse_items, parse_speakers
 from .util import JobCanceled, JobSuperseded, TransientError, UserFacingError, gather_all, hms, log, now_iso, ulid
 
 RENDER_CONCURRENCY = 2
+FEW_WORDS = 20
+NOT_WATCHED = "Could not watch the video this time. Picking from the words and the sound."
+MOTION_ONLY = "Saw where the picture moves fast. Picking with that, the words and the sound."
+ALMOST_NO_SPEECH = (
+    "Almost no speech was found in this video, so there is nothing to pick moments from. "
+    "Clip Factory needs talking or commentary."
+)
+
+
+def count(n: int, word: str) -> str:
+    """``1 clip``, ``2 clips``, ``4,812 words``: step messages are read by the owner, so no "clip(s)"."""
+    return f"{n:,} {word}{'' if n == 1 else 's'}"
+
+
+def prep_deadline(seconds: float) -> float:
+    """How long the watch step waits for the picture, counted from when its preparation started: the same limit the
+    decode itself has (picture.time_limit), so neither cuts the other short."""
+    return picture_mod.time_limit(seconds)
+
+
+def watch_deadline(seconds: float) -> float:
+    """How long the two watchers get. It grows with the source: a long video is never sampled, it gets more time."""
+    return max(25 * 60.0, 0.2 * seconds)
 
 
 @dataclass
@@ -65,6 +98,14 @@ class JobState:
     candidates: list[Candidate] = field(default_factory=list)
     captions: dict[str, dict[str, str]] = field(default_factory=dict)
     clip_ids: dict[int, str] = field(default_factory=dict)
+    # The deep analysis (ADR-40); every one of these may stay empty and the job still makes its clips.
+    picture_task: asyncio.Task[None] | None = None  # the background picture preparation started by download
+    picture_started: float = 0.0  # loop time the preparation started (the watch step's wait counts from here)
+    picture: picture_mod.Picture | None = None
+    frames: picture_mod.Frames | None = None
+    signals: signals_mod.Signals | None = None
+    speakers: list[list[Any]] | None = None
+    second_look: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def notes(self) -> str:
@@ -111,12 +152,14 @@ class Pipeline:
         transcriber: Transcriber,
         *,
         vectors: vectors_mod.Vectors | None = None,
+        watch_bedrock: Bedrock | None = None,
     ) -> None:
         self.cfg = cfg
         self.store = store
         self.bedrock = bedrock
         self.transcriber = transcriber
         self.vectors = vectors  # None: no clip vectors and no "what worked before"
+        self.watch_bedrock = watch_bedrock  # the second watcher (Nova); None: that track is skipped
 
     def steps(self, st: JobState, tr: Tracker) -> list[tuple[str, StepFn]]:
         def bind(fn: Any) -> StepFn:
@@ -127,6 +170,7 @@ class Pipeline:
             ("download", bind(self.download)),
             ("transcribe", bind(self.transcribe)),
             ("analyze", bind(self.analyze)),
+            ("watch", bind(self.watch)),
             ("select", bind(self.select)),
             ("render", bind(self.render)),
             ("checklist", bind(self.checklist)),
@@ -185,6 +229,19 @@ class Pipeline:
         st.source.update(sources.source_fields(info, platform))
         st.meta["heatmap"] = sources.heatmap(info)
         st.meta["webpageUrl"] = info.get("webpage_url") or url
+        st.meta["picture"] = self._pick_picture(st, info)
+
+    def _pick_picture(self, st: JobState, info: dict[str, Any]) -> dict[str, Any] | None:
+        """Which small rendition the deep analysis will watch (``meta.picture``); None when none fits the disk."""
+        if not self.cfg.deep_enabled:
+            return None
+        try:
+            total = float(st.source.get("durationSec") or 0)
+            seconds = min(total, self._cap(st)) if total else self._cap(st)
+            return sources.picture_format(info, seconds, shutil.disk_usage(st.workdir).free)
+        except Exception as e:
+            log("warn", "picture.format_failed", job=st.job_id, error=type(e).__name__, detail=str(e)[:300])
+            return None
 
     async def _resolve_upload(self, st: JobState) -> None:
         key = str(st.source.get("key") or "")
@@ -201,6 +258,7 @@ class Pipeline:
         st.source.update(platform="upload", durationSec=round(info.duration, 2))
         st.source.setdefault("title", str(st.source.get("filename") or "Uploaded video"))
         st.meta["hasAudio"] = info.has_audio
+        st.meta["picture"] = {"upload": True, "height": info.height, "fps": info.fps} if self.cfg.deep_enabled else None
 
     # --- download --------------------------------------------------------------------------------------------
 
@@ -208,12 +266,19 @@ class Pipeline:
         return float(st.settings.get("maxSourceHours") or 6) * 3600
 
     async def download(self, st: JobState, tr: Tracker) -> StepDone:
+        """The sound first, exactly as before the picture was watched, and it must succeed. Only then does the
+        picture start preparing in the background (``_picture_prep``), so it overlaps the transcription."""
+        done = await self._download_audio(st, tr)
+        await self._start_picture(st)
+        return done
+
+    async def _download_audio(self, st: JobState, tr: Tracker) -> StepDone:
         cap = self._cap(st)
         total = float(st.source.get("durationSec") or 0)
         need = min(total, cap) if total else cap
         audio_key = st.key("audio.m4a")
         if await self.store.exists(audio_key) and float(st.meta.get("audioSeconds") or 0) >= need - 60:
-            return StepDone("Reused the audio downloaded earlier.")
+            return StepDone("Used the sound from last time.")
         local = st.workdir / "source" / "audio.m4a"
         local.parent.mkdir(parents=True, exist_ok=True)
         capped = bool(total and total > cap)
@@ -260,7 +325,130 @@ class Pipeline:
         st.meta["audioSeconds"] = round(info.duration, 2)
         await self.store.put_json(st.key("meta.json"), st.meta)
         note = f" (the first {hms(cap)} of {hms(total)})" if capped else ""
-        return StepDone(f"Downloaded {hms(info.duration)} of audio{note}.")
+        return StepDone(f"Got {hms(info.duration)} of sound{note}.")
+
+    # --- the picture, prepared in the background -------------------------------------------------------------
+
+    def _deep(self, st: JobState, part: str, status: str, reason: str | None = None) -> None:
+        """``meta.deep``: how each optional part of the deep analysis went (ok, partial or skipped, and why)."""
+        st.meta.setdefault("deep", {})[part] = {"status": status, **({"reason": reason} if reason else {})}
+
+    async def _saved_json(self, key: str) -> Any:
+        """A JSON file of an earlier run, or None; a failure to read it is the same as not having it."""
+        try:
+            return await self.store.get_json(key) if await self.store.exists(key) else None
+        except Exception as e:
+            log("warn", "deep.read_failed", key=key, error=type(e).__name__)
+            return None
+
+    async def _start_picture(self, st: JobState) -> None:
+        if st.picture_task is not None and not st.picture_task.done():
+            return
+        if not self.cfg.deep_enabled:
+            self._deep(st, "prep", "skipped", "off")
+            return
+        if not st.meta.get("picture"):
+            self._deep(st, "prep", "skipped", "no picture that fits")
+            return
+        if signals_mod.log_covers(await self._saved_json(st.key("visual_log.json")), st.duration):
+            return  # an earlier run watched it all: the watch step reuses that
+        st.picture_started = asyncio.get_running_loop().time()
+        st.picture_task = asyncio.create_task(self._picture_prep(st), name=f"picture-{st.job_id}")
+
+    async def _picture_prep(self, st: JobState) -> None:
+        """Never raises (but for a cancel): a picture that cannot be prepared only skips the watching."""
+        try:
+            st.picture = await self._prepare_picture(st)
+            self._deep(st, "prep", "ok")
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log("warn", "picture.prep_failed", job=st.job_id, error=type(e).__name__, detail=str(e)[:500])
+            self._deep(st, "prep", "skipped", type(e).__name__)
+
+    async def _prepare_picture(self, st: JobState) -> picture_mod.Picture:
+        seconds = st.duration
+        saved = await self._saved_json(st.key("picture.json"))
+        if saved:
+            pic = picture_mod.Picture.from_json(saved)
+            if pic.parts and pic.seconds >= seconds - 60:
+                return pic  # a retried job: the parts are in S3 already
+        try:
+            return await self._make_picture(st, seconds)
+        except BaseException:
+            # Failed, timed out or canceled: nothing it left behind may sit beside render's downloads.
+            self._drop_picture_files(st)
+            raise
+        finally:
+            for f in (st.workdir / "source").glob("picture.*"):
+                f.unlink(missing_ok=True)  # the downloaded source (and yt-dlp's .part files): the parts are enough
+
+    def _drop_picture_files(self, st: JobState) -> None:
+        shutil.rmtree(st.workdir / "picture", ignore_errors=True)
+        for f in (st.workdir / "source").glob("picture.*"):
+            f.unlink(missing_ok=True)
+
+    async def _make_picture(self, st: JobState, seconds: float) -> picture_mod.Picture:
+        chosen = dict(st.meta.get("picture") or {})
+        cap = self._cap(st)
+        total = float(st.source.get("durationSec") or 0)
+        capped = bool(total and total > cap)
+        local = st.workdir / "picture"
+        if chosen.get("upload"):
+            src = self.store.presign(st.key("video.mp4"), 6 * 3600)
+            keyframes = False
+            if picture_mod.keyframes_only(int(chosen.get("height") or 0), seconds):
+                # A tall, long upload: every frame only when two CPUs can decode it in time (measured, not guessed).
+                speed = await picture_mod.decode_speed(src)
+                keyframes = not picture_mod.full_decode_fits(seconds, speed)
+                log("info", "picture.decode_speed", job=st.job_id, speed=round(speed, 2), keyframes=keyframes)
+        else:
+            est = int(chosen.get("estBytes") or 0)
+            free = shutil.disk_usage(st.workdir).free
+            if est > free - picture_mod.DISK_RESERVE:
+                raise OSError(f"not enough disk for the picture ({est} bytes wanted, {free} free)")
+            downloaded = await sources.download_picture(
+                str(st.meta.get("webpageUrl") or st.source["url"]),
+                str(chosen["formatId"]),
+                st.workdir / "source" / "picture.mp4",
+                est_bytes=est,
+                max_seconds=cap if capped or not total else None,
+                cookies=st.cookies,
+            )
+            src, keyframes = str(downloaded), False
+        files, motion, scene = await picture_mod.prepare(
+            src, local, seconds=seconds, keyframes=keyframes, limit_seconds=cap if capped else None
+        )
+        for f in (st.workdir / "source").glob("picture.*"):
+            f.unlink(missing_ok=True)  # the parts are all the analysis needs
+        if not files:
+            raise ValueError("the picture had no frames")
+        parts: list[picture_mod.Part] = []
+        for i, f in enumerate(files):
+            if f.stat().st_size > picture_mod.PART_MAX_BYTES:
+                await picture_mod.shrink(f)
+            key = st.key(f"picture/part-{i:04d}.mp4")
+            await self.store.upload(f, key, "video/mp4")
+            start = float(i * picture_mod.PART_SECONDS)
+            parts.append(picture_mod.Part(i, start, start + picture_mod.PART_SECONDS, key, f.stat().st_size))
+        last = (await proc.probe(str(files[-1]))).duration
+        parts[-1].end = round(parts[-1].start + (last or picture_mod.PART_SECONDS), 2)
+        pic = picture_mod.Picture(
+            seconds=parts[-1].end, parts=parts, motion=motion, scene=scene, decode="keyframes" if keyframes else "all"
+        )
+        st.meta.setdefault("deep", {})["decode"] = {"status": "ok", "mode": pic.decode}  # every frame, or keyframes
+        await self.store.put_json(st.key("picture.json"), pic.to_json())
+        log("info", "picture.ready", job=st.job_id, parts=len(parts), seconds=pic.seconds, decode=pic.decode)
+        return pic
+
+    async def close(self, st: JobState) -> None:
+        """The run is over, however it ended: the background picture preparation stops (its yt-dlp or ffmpeg is
+        killed by ``proc.run``). Called by the server in its ``finally``."""
+        task = st.picture_task
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
 
     async def _local_audio(self, st: JobState) -> Path:
         local = st.workdir / "source" / "audio.m4a"
@@ -273,7 +461,8 @@ class Pipeline:
     async def transcribe(self, st: JobState, tr: Tracker) -> StepDone:
         if await self.store.exists(st.key("words.json")):
             st.words = await self.store.get_json(st.key("words.json"))
-            return StepDone(f"Reused the transcript from earlier ({len(st.words):,} words).")
+            st.meta["fewWords"] = len(st.words) < FEW_WORDS
+            return StepDone("Used the words from last time.")
         audio = await self._local_audio(st)
         parts: list[tuple[str, float, float]] = []  # (s3 key, offset, seconds)
         if st.duration > PART_SECONDS:
@@ -315,7 +504,7 @@ class Pipeline:
 
         async def one(
             i: int, key: str, offset: float, seconds: float
-        ) -> tuple[list[tuple[float, float, str]], dict[str, Any]]:
+        ) -> tuple[list[tuple[float, float, str]], dict[str, Any], list[tuple[float, float, str]]]:
             # Part outputs carry the attempt, so a job left over from an earlier attempt never writes the key
             # this attempt reads.
             out_key = st.key("transcript.json" if len(parts) == 1 else f"transcript.part{i}.{attempt}.json")
@@ -328,26 +517,29 @@ class Pipeline:
                     expected_seconds=seconds,
                     check_cancel=tr.check_cancel,
                     on_progress=lambda f: progress(i, f),
+                    speakers=self.cfg.deep_enabled,  # CF_DEEP=off: the request exactly as before ADR-40
                 )
             except BaseException:
                 await self.transcriber.stop(name)
                 raise
             await self.store.tag_temporary(out_key)  # Transcribe cannot tag its own output (docs/CONTRACTS.md §7)
-            return parse_items(await self.store.get_json(out_key), offset), job
+            doc = await self.store.get_json(out_key)
+            return parse_items(doc, offset), job, parse_speakers(doc, offset)
 
         # One failed part cancels (and stops) the others before the step is retried or fails.
         results = await gather_all(*(one(i, *p) for i, p in enumerate(parts)))
-        st.words = [list(w) for words, _ in results for w in words]
-        st.meta["language"] = language_of([j for _, j in results])
+        st.words = [list(w) for words, _, _ in results for w in words]
+        st.meta["language"] = language_of([j for _, j, _ in results])
+        # Almost no words is no longer the end here: the picture may still carry clips (select decides).
+        st.meta["fewWords"] = len(st.words) < FEW_WORDS
+        turns = [list(t) for _, _, who in results for t in who] if self.cfg.deep_enabled else []
+        if turns:
+            st.speakers = turns
+            await self.store.put_json(st.key("speakers.json"), turns)
+        self._deep(st, "speakers", "ok" if turns else "skipped", None if turns else "no speaker labels")
         await self.store.put_json(st.key("words.json"), st.words)
         await self.store.put_json(st.key("meta.json"), st.meta)
-        if len(st.words) < 20:
-            raise UserFacingError(
-                "Almost no speech was found in this video, so there is nothing to pick moments from. "
-                "Clip Factory needs talking or commentary."
-            )
-        lang = f" ({st.meta['language']})" if st.meta.get("language") else ""
-        return StepDone(f"Transcribed {len(st.words):,} words{lang}.")
+        return StepDone(f"Wrote down {count(len(st.words), 'word')}.")
 
     # --- analyze ---------------------------------------------------------------------------------------------
 
@@ -357,6 +549,8 @@ class Pipeline:
         else:
             st.loud = await loudness.measure(await self._local_audio(st), st.workdir)
             await self.store.put_json(st.key("loudness.json"), st.loud)
+        if st.speakers is None and self.cfg.deep_enabled:
+            st.speakers = await self._saved_json(st.key("speakers.json")) or None
         tr.report(0.6)
         # A failure to read the skill rows fails the step (and its normal retry runs): never a job without them.
         st.skills = await prepare_skills(
@@ -367,11 +561,18 @@ class Pipeline:
         st.week_learnings, st.learnings = taught.week, taught.other
         st.similar = await self._similar(st)
         spikes = len(loudness.spikes(st.loud, limit=10_000))
-        similar = f" and {len(st.similar)} similar past clip(s)" if st.similar else ""
-        used = f"using {len(st.skills.docs)} skill(s)"
-        if st.skills.skipped:
-            used += f"; {len(st.skills.skipped)} could not be read"
-        return f"Found {spikes} loud moments; {used}, {len(taught)} learning(s){similar}."
+        log(
+            "info",
+            "analyze.used",
+            job=st.job_id,
+            skills=len(st.skills.docs),
+            skipped=len(st.skills.skipped),
+            learnings=len(taught),
+            similar=len(st.similar),
+        )
+        unread = len(st.skills.skipped)
+        note = f" {count(unread, 'skill')} could not be read." if unread else ""
+        return f"Found {count(spikes, 'loud moment')}.{note}"
 
     async def _similar(self, st: JobState) -> list[vectors_mod.Hit]:
         """The owner's past clips most like this video, for "What worked before" (never fails the job)."""
@@ -395,6 +596,178 @@ class Pipeline:
             return []
         return [h for h in hits if statuses.get(h.clip_id, "declined") != "declined"]
 
+    # --- watch -----------------------------------------------------------------------------------------------
+
+    async def watch(self, st: JobState, tr: Tracker) -> StepDone:
+        """Two models watch the whole picture. Never raises but for a cancel (or a newer run taking over): whatever
+        goes wrong, the job goes on with the signals it has, so the job's three step attempts never repeat work."""
+        try:
+            return await self._watch(st, tr)
+        except (JobCanceled, asyncio.CancelledError):
+            raise
+        except Exception as e:
+            log("error", "watch.failed", job=st.job_id, error=type(e).__name__, detail=str(e)[:800])
+            return StepDone(NOT_WATCHED, skipped=True)
+
+    def _build_signals(self, st: JobState, visual_log: dict[str, Any] | None) -> dict[str, Any] | None:
+        """``st.signals`` from everything known; on any failure the finder simply gets what it got before."""
+        try:
+            st.signals = signals_mod.build(
+                duration=st.duration,
+                words=st.words,
+                loud=st.loud,
+                heatmap=list(st.meta.get("heatmap") or []),
+                speakers=st.speakers,
+                visual_log=visual_log,
+                motion=st.picture.motion if st.picture else None,
+            )
+            return st.signals.to_json() if st.signals else None
+        except Exception as e:
+            log("error", "signals.build_failed", job=st.job_id, error=type(e).__name__, detail=str(e)[:500])
+            st.signals = None
+            return None
+
+    async def _await_picture(self, st: JobState, tr: Tracker) -> picture_mod.Picture | None:
+        """Waits for the background preparation, up to its deadline (counted from when it started)."""
+        task = st.picture_task
+        if task is None:
+            return st.picture
+        limit = prep_deadline(st.duration)
+        loop = asyncio.get_running_loop()
+        while not task.done():
+            await tr.check_cancel()
+            waited = loop.time() - st.picture_started
+            if waited > limit:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
+                log("warn", "picture.prep_failed", job=st.job_id, error="deadline", detail=f"over {limit:.0f} s")
+                self._deep(st, "prep", "skipped", "deadline")
+                return None
+            tr.report(0.2 * min(1.0, waited / limit))
+            await asyncio.wait({task}, timeout=min(2.0, max(0.05, limit - waited)))
+        return st.picture
+
+    async def _watch(self, st: JobState, tr: Tracker) -> StepDone:
+        if not self.cfg.deep_enabled:
+            return StepDone(NOT_WATCHED, skipped=True)
+        log_key = st.key("visual_log.json")
+        earlier = await self._saved_json(log_key)
+        if signals_mod.log_covers(earlier, st.duration):
+            saved = await self._saved_json(st.key("picture.json"))
+            st.picture = st.picture or (picture_mod.Picture.from_json(saved) if saved else None)
+            self._use_frames(st)
+            await self._save_signals(st, earlier)
+            return StepDone("Used what it saw last time.")
+
+        pic = await self._await_picture(st, tr)
+        if pic is None or not pic.parts:
+            await self.store.put_json(st.key("meta.json"), st.meta)
+            return StepDone(NOT_WATCHED, skipped=True)
+        tr.report(0.2)
+        frames = self._use_frames(st)
+        assert frames is not None
+        units = watch.plan(pic.seconds)
+        deadline = Deadline(watch_deadline(st.duration))
+        share = {"fable": 0.0, "nova": 0.0}
+
+        def progress(who: str, f: float) -> None:
+            share[who] = f
+            tr.report(0.2 + 0.75 * (0.8 * share["fable"] + 0.2 * share["nova"]))
+
+        def loader(prefix: str) -> Any:
+            async def load(u: watch.Unit) -> dict[str, Any] | None:
+                saved = await self._saved_json(st.key(f"watch/{prefix}-{u.i:04d}.json"))
+                return saved if isinstance(saved, dict) else None
+
+            return load
+
+        def saver(prefix: str) -> Any:
+            async def save(u: watch.Unit, body: dict[str, Any]) -> None:
+                await self.store.put_json(st.key(f"watch/{prefix}-{u.i:04d}.json"), body)
+
+            return save
+
+        async def read_part(part: picture_mod.Part) -> bytes:
+            local = frames.local(part)
+            return local.read_bytes() if local.is_file() else await self.store.get_bytes(part.key)
+
+        fable, second = await gather_all(
+            watch.watch_chunks(
+                units,
+                bedrock=self.bedrock,
+                skills=st.block,
+                frames=frames,
+                words=st.words,
+                speakers=st.speakers,
+                loud=st.loud,
+                motion=pic.motion,
+                budget=fable_budget(len(units)),
+                deadline=deadline,
+                check_cancel=tr.check_cancel,
+                load=loader("chunk"),
+                save=saver("chunk"),
+                on_progress=lambda f: progress("fable", f),
+            ),
+            nova.watch_parts(
+                pic.parts,
+                bedrock=self.watch_bedrock,
+                skills=st.block,
+                read=read_part,
+                budget=nova_budget(len(pic.parts)),
+                deadline=deadline,
+                check_cancel=tr.check_cancel,
+                load=loader("nova"),
+                save=saver("nova"),
+                on_progress=lambda f: progress("nova", f),
+            ),
+        )
+        self._deep(st, "fable", **_status(fable))
+        self._deep(st, "nova", **_status(second))
+        visual_log = signals_mod.make_visual_log(fable.ok, second.ok, fable.failures() + second.failures())
+        # The signals first: a failed write of the reuse file loses only the reuse, never what was seen.
+        await self._save_signals(st, visual_log)
+        try:
+            await self.store.put_json(log_key, visual_log)
+        except Exception as e:
+            log("warn", "watch.log_save_failed", job=st.job_id, error=type(e).__name__)
+        log(
+            "info",
+            "watch.done",
+            job=st.job_id,
+            chunks=len(units),
+            fable=len(fable.done),
+            nova=len(second.done),
+            novaParts=len(second.units),
+            reused=fable.reused + second.reused,
+            events=len(visual_log["events"]),
+        )
+        seen = sum(1 for u in units if signals_mod.covered_span(visual_log["coverage"], u.start, u.end))
+        if seen == len(units):
+            big = sum(1 for e in visual_log["events"] if int(e.get("intensity") or 0) >= signals_mod.STRONG)
+            return StepDone(f"Watched all {hms(pic.seconds)}. Saw {big} big thing{'' if big == 1 else 's'}.")
+        if seen:
+            how = "most" if seen * 2 >= len(units) else "part"
+            return StepDone(f"Watched {how} of the video ({seen} of {len(units)} parts).")
+        if st.signals is not None and any(st.signals.motion):
+            return StepDone(MOTION_ONLY)
+        return StepDone(NOT_WATCHED, skipped=True)
+
+    def _use_frames(self, st: JobState) -> picture_mod.Frames | None:
+        """Frames by time for the watchers and the second look: from the local parts, else from S3."""
+        if st.frames is None and st.picture is not None and st.picture.parts:
+            st.frames = picture_mod.Frames(st.picture, st.workdir / "picture", self.store.download)
+        return st.frames
+
+    async def _save_signals(self, st: JobState, visual_log: dict[str, Any] | None) -> None:
+        body = self._build_signals(st, visual_log)
+        try:
+            if body is not None:
+                await self.store.put_json(st.key("signals.json"), body)
+            await self.store.put_json(st.key("meta.json"), st.meta)
+        except Exception as e:
+            log("warn", "signals.save_failed", job=st.job_id, error=type(e).__name__)
+
     # --- select ----------------------------------------------------------------------------------------------
 
     def _brief(self, st: JobState) -> Brief:
@@ -415,9 +788,17 @@ class Pipeline:
             week_learnings=st.week_learnings,
             language=st.meta.get("language"),
             similar=st.similar,
+            signals=st.signals,
+            speakers=st.speakers,
         )
 
     async def select(self, st: JobState, tr: Tracker) -> str:
+        # The check that used to end the transcribe step: almost no words is only the end when the picture has
+        # nothing strong to offer either.
+        strong = st.signals is not None and any(e.intensity >= signals_mod.STRONG for e in st.signals.events)
+        if (st.meta.get("fewWords") or len(st.words) < FEW_WORDS) and not strong:
+            raise UserFacingError(ALMOST_NO_SPEECH)
+        looking = st.frames is not None
         st.chosen, st.spares = await find_moments(
             self._brief(st),
             bedrock=self.bedrock,
@@ -426,10 +807,76 @@ class Pipeline:
             workdir=st.workdir,
             skill_names=[s.name for s in st.skills.docs],
             skills=st.block,
-            on_progress=tr.report,
+            on_progress=(lambda f: tr.report(0.8 * f)) if looking else tr.report,
         )
-        kinds = ", ".join(sorted({m.moment_type.replace("_", " ") for m in st.chosen}))
-        return f"Picked {len(st.chosen)} moments ({kinds}) and {len(st.spares)} spare(s)."
+        await self._second_look(st, tr)
+        for m in (*st.chosen, *st.spares):
+            m.picked_for = self._picked_for(st, m)
+        await self._after_select(st)
+        log("info", "select.picked", job=st.job_id, chosen=len(st.chosen), spares=len(st.spares))
+        return f"Picked {count(len(st.chosen), 'moment')}."
+
+    async def _second_look(self, st: JobState, tr: Tracker) -> None:
+        """Each picked moment and spare is checked against the picture (verify.py). Any failure keeps the picks."""
+        if st.frames is None:
+            self._deep(st, "secondLook", "skipped", "no picture")
+            return
+        try:
+            st.chosen, st.spares, st.second_look = await verify.second_look(
+                st.chosen,
+                st.spares,
+                bedrock=self.bedrock,
+                skills=st.block,
+                frames=st.frames,
+                words=st.words,
+                speakers=st.speakers,
+                duration=max(st.duration, float(st.words[-1][1]) if st.words else 0),
+                length=st.length,
+                clip_min=st.clip_target[0],
+                check_cancel=tr.check_cancel,
+                on_progress=lambda f: tr.report(0.8 + 0.2 * f),
+            )
+            checked = sum(1 for r in st.second_look if "keep" in r)
+            total = len(st.second_look)
+            self._deep(st, "secondLook", "ok" if checked == total else "partial" if checked else "skipped")
+        except (JobCanceled, asyncio.CancelledError):
+            raise
+        except Exception as e:
+            log("warn", "verify.failed", job=st.job_id, error=type(e).__name__, detail=str(e)[:500])
+            self._deep(st, "secondLook", "skipped", type(e).__name__)
+
+    def _picked_for(self, st: JobState, m: Moment) -> str | None:
+        try:
+            return signals_mod.picked_for(
+                m,
+                signals=st.signals,
+                loud=st.loud,
+                heatmap=list(st.meta.get("heatmap") or []),
+                speakers=st.speakers,
+            )
+        except Exception as e:
+            log("warn", "signals.picked_for_failed", job=st.job_id, error=type(e).__name__)
+            return None
+
+    async def _after_select(self, st: JobState) -> None:
+        """``moments.json`` (for debugging a job afterwards) and the disk back for render. Neither can fail the job."""
+        try:
+            await self.store.put_json(
+                st.key("moments.json"),
+                {
+                    "chosen": [m.to_dict() for m in st.chosen],
+                    "spares": [m.to_dict() for m in st.spares],
+                    "secondLook": st.second_look,
+                },
+            )
+            await self.store.put_json(st.key("meta.json"), st.meta)
+        except Exception as e:
+            log("warn", "moments.save_failed", job=st.job_id, error=type(e).__name__)
+        if st.frames is not None:
+            st.frames.forget_local()
+
+    def _has_speech(self, st: JobState, m: Moment) -> bool:
+        return any(m.start <= float(w[0]) < m.end for w in st.words)
 
     # --- render ----------------------------------------------------------------------------------------------
 
@@ -527,7 +974,7 @@ class Pipeline:
                 "None of the clips could be cut. Tap Try again; if it happens again, try another video."
             )
         failed = len(st.chosen) - len(st.candidates)
-        return f"Cut {len(st.candidates)} clip(s)" + (f"; {failed} could not be cut." if failed else ".")
+        return f"Cut {count(len(st.candidates), 'clip')}" + (f"; {failed} could not be cut." if failed else ".")
 
     # --- checklist -------------------------------------------------------------------------------------------
 
@@ -536,7 +983,16 @@ class Pipeline:
             return await self.bedrock.structured(
                 system="You review short vertical clips before they are posted, strictly but fairly.",
                 skills=st.block,
-                content=[{"text": review_prompt(c.moment, c.render, st.notes)}],
+                content=[
+                    {
+                        "text": review_prompt(
+                            c.moment,
+                            c.render,
+                            st.notes,
+                            seen=signals_mod.seen_block(st.signals, c.moment.start, c.moment.end),
+                        )
+                    }
+                ],
                 tool="submit_review",
                 description="Submit the checklist review of this clip.",
                 schema=REVIEW_SCHEMA,
@@ -561,7 +1017,9 @@ class Pipeline:
 
     async def _check_one(self, st: JobState, c: Candidate, index: int) -> Outcome:
         review = await self._review(st, c)
-        items = measured_items(c.moment, c.render, await measure(c.render.video), st.length) + judged_items(review)
+        items = measured_items(
+            c.moment, c.render, await measure(c.render.video), st.length, has_speech=self._has_speech(st, c.moment)
+        ) + judged_items(review)
         if review.get("verdict") == "drop":
             return Outcome(False, Candidate(c.moment, c.render, items, index=index), "Claude judged it unfixable.")
         fixes: list[str] = []
@@ -571,7 +1029,13 @@ class Pipeline:
             )
             if fixes:
                 c = await self._cut(st, fixed, index, layout=c.render.frame_layout)
-                measured = measured_items(c.moment, c.render, await measure(c.render.video), st.length)
+                measured = measured_items(
+                    c.moment,
+                    c.render,
+                    await measure(c.render.video),
+                    st.length,
+                    has_speech=self._has_speech(st, c.moment),
+                )
                 # Claude's judgement stands, except for what the fix addressed.
                 judged = judged_items(
                     {
@@ -619,8 +1083,8 @@ class Pipeline:
             raise UserFacingError(f"No clip passed the checklist ({reasons}). Try another video or add notes.")
         st.candidates = passed
         replaced = sum(1 for c in passed if c.index >= len(st.chosen))
-        msg = f"{len(passed)} clip(s) passed"
-        return msg + (f", {replaced} replaced by spare moments." if replaced else ".")
+        msg = f"{count(len(passed), 'clip')} passed"
+        return msg + (f"; {replaced} swapped for other moments." if replaced else ".")
 
     # --- captions --------------------------------------------------------------------------------------------
 
@@ -652,7 +1116,7 @@ class Pipeline:
                 )
             )
             c.items.append(Item("title", "Title under 60 characters", len(title) < 60, f"{len(title)} characters."))
-        return f"Captions written for {len(st.candidates)} clip(s)."
+        return f"Wrote captions for {count(len(st.candidates), 'clip')}."
 
     # --- finalize --------------------------------------------------------------------------------------------
 
@@ -681,7 +1145,7 @@ class Pipeline:
                     log("warn", "finalize.cleanup_failed", job=st.job_id, error=type(e).__name__)
                 raise
             tr.report(item["rank"] / len(items))
-        return f"{len(st.candidates)} clip(s) ready for review."
+        return f"{count(len(st.candidates), 'clip')} ready for review."
 
     async def _put_vectors(self, st: JobState, items: list[dict[str, Any]]) -> None:
         """One PutVectors for the new clips (status ``review``), before any of their Clip items exists. A failure is
@@ -695,6 +1159,12 @@ class Pipeline:
             log("info", "vectors.put", job=st.job_id, count=n)
         except Exception as e:
             log("warn", "vectors.put_failed", job=st.job_id, error=type(e).__name__, detail=str(e)[:300])
+
+
+def _status(r: watch.TrackResult) -> dict[str, Any]:
+    """A track's outcome as the keyword arguments of ``Pipeline._deep``."""
+    s = r.status
+    return {"status": str(s["status"]), "reason": s.get("reason")}
 
 
 def clip_item(
@@ -726,6 +1196,8 @@ def clip_item(
         "videoKey": prefix + "clip.mp4",
         "coverKey": prefix + "cover.jpg",
     }
+    if m.picked_for:
+        item["pickedFor"] = m.picked_for[: signals_mod.MAX_PICKED_FOR]
     if url and platform in ("youtube", "twitch", "kick"):
         at = sources.url_at(url, platform, m.start)
         if at:

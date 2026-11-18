@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+import pytest
 from starlette.testclient import TestClient
 
 from clipfactory_agent.callback import DurableCallback
@@ -306,3 +307,100 @@ def test_settled_states() -> None:
     assert failed is not None and (failed.status, failed.error) == ("failed", "Nope.")
     assert settled(queued(), "other").status == "superseded"  # type: ignore[union-attr]
     assert settled(queued(), None) is None  # a local run without a session header
+
+
+# --- the picture preparation is stopped however the run ends (ADR-40) --------------------------------------------
+
+
+class ClosingSteps(Steps):
+    def __init__(self, fn: Any = None) -> None:
+        super().__init__(fn)
+        self.closed: list[str] = []
+
+    async def close(self, st: Any) -> None:
+        self.closed.append(st.job_id)
+
+
+async def test_close_is_called_when_the_job_ends_ready(tmp_path: Path) -> None:
+    store, steps = JobStore(queued()), ClosingSteps()
+    run, _, _ = wiring(store, steps, tmp_path)
+    assert await run("J", "u", SESSION, None) == "ready"
+    assert steps.closed == ["J"]
+
+
+async def test_close_is_called_when_the_job_fails_or_is_canceled(tmp_path: Path) -> None:
+    async def boom(st: Any) -> None:
+        raise RuntimeError("step blew up")
+
+    store, steps = JobStore(queued()), ClosingSteps(boom)
+    run, _, _ = wiring(store, steps, tmp_path)
+    assert await run("J", "u", SESSION, None) == "failed"
+    assert steps.closed == ["J"]
+
+    started = asyncio.Event()
+
+    async def hang(st: Any) -> None:
+        started.set()
+        await asyncio.sleep(60)
+
+    store, steps = JobStore(queued()), ClosingSteps(hang)
+    run, _, _ = wiring(store, steps, tmp_path)
+    task = asyncio.create_task(run("J", "u", SESSION, None))
+    await started.wait()
+    task.cancel()
+    assert await task == "canceled"
+    assert steps.closed == ["J"]
+
+
+async def test_a_run_that_never_started_and_a_failing_close_are_fine(tmp_path: Path) -> None:
+    store, steps = JobStore(queued(status="ready", clipCount=2)), ClosingSteps()
+    run, _, _ = wiring(store, steps, tmp_path)
+    assert await run("J", "u", SESSION, None) == "ready"
+    assert steps.closed == [] and steps.ran == 0  # settled: no state, nothing to close
+
+    class Broken(Steps):
+        async def close(self, st: Any) -> None:
+            raise RuntimeError("close failed")
+
+    run, _, _ = wiring(JobStore(queued()), Broken(), tmp_path)
+    assert await run("J", "u", SESSION, None) == "ready"
+    run, _, _ = wiring(JobStore(queued()), Steps(), tmp_path)  # a pipeline without close()
+    assert await run("J", "u", SESSION, None) == "ready"
+
+
+def test_build_app_gives_the_pipeline_a_second_watcher(monkeypatch: pytest.MonkeyPatch) -> None:
+    import clipfactory_agent.bedrock as bedrock_mod
+    import clipfactory_agent.pipeline as pipeline_mod
+    import clipfactory_agent.store as store_mod
+    from clipfactory_agent.server import build_app
+
+    made: list[tuple[str, bool]] = []
+    pipes: list[Any] = []
+
+    class FakeBedrock:
+        def __init__(self, model_id: str, region: str, client: Any = None, *, cache_points: bool = True) -> None:
+            made.append((model_id, cache_points))
+
+    class FakeStore:
+        transcribe = object()
+
+        def __init__(self, *a: Any, **kw: Any) -> None:
+            pass
+
+    class FakePipeline:
+        def __init__(self, *a: Any, **kw: Any) -> None:
+            pipes.append(kw)
+
+    monkeypatch.setattr(bedrock_mod, "Bedrock", FakeBedrock)
+    monkeypatch.setattr(store_mod, "Store", FakeStore)
+    monkeypatch.setattr(pipeline_mod, "Pipeline", FakePipeline)
+    env = {"CF_REGION": "eu-north-1", "CF_TABLE": "t", "CF_MEDIA_BUCKET": "b", "CF_MODEL_ID": "global.fable"}
+    build_app({**env, "CF_WATCH_MODEL_ID": "eu.amazon.nova-2-lite-v1:0"})
+    assert made == [("eu.amazon.nova-2-lite-v1:0", False), ("global.fable", True)]  # Nova: no cache points
+    assert pipes[0]["watch_bedrock"] is not None
+    made.clear()
+    build_app({**env, "CF_WATCH_MODEL_ID": "eu.amazon.nova-2-lite-v1:0", "CF_DEEP": "off"})
+    assert made == [("global.fable", True)] and pipes[1]["watch_bedrock"] is None
+    made.clear()
+    build_app({**env, "CF_CONFIG_DIR": "/nonexistent"})  # no watch model configured: the track is simply off
+    assert made == [("global.fable", True)] and pipes[2]["watch_bedrock"] is None

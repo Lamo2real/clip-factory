@@ -98,6 +98,16 @@ class MediaInfo:
     height: int
     has_audio: bool
     has_video: bool
+    fps: float = 0.0
+
+
+def _rate(text: object) -> float:
+    """ffprobe's ``30000/1001`` as frames per second; 0 when it is missing or odd."""
+    try:
+        a, _, b = str(text or "").partition("/")
+        return round(float(a) / float(b or 1), 2)
+    except (ValueError, ZeroDivisionError):
+        return 0.0
 
 
 def parse_probe(data: bytes) -> MediaInfo:
@@ -111,6 +121,7 @@ def parse_probe(data: bytes) -> MediaInfo:
         height=int((video or {}).get("height") or 0),
         has_audio=any(s.get("codec_type") == "audio" for s in streams),
         has_video=video is not None,
+        fps=_rate((video or {}).get("avg_frame_rate") or (video or {}).get("r_frame_rate")),
     )
 
 
@@ -121,7 +132,7 @@ async def probe(src: str) -> MediaInfo:
             "-v",
             "error",
             "-show_entries",
-            "format=duration:stream=codec_type,width,height",
+            "format=duration:stream=codec_type,width,height,avg_frame_rate,r_frame_rate",
             "-of",
             "json",
             src,
