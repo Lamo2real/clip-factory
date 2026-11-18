@@ -44,6 +44,7 @@ HANDLERS = (
     "clipfactory_api/hooks.py",  # cf-prod-hooks
     "clipfactory_api/stats/handler.py",  # cf-prod-stats (§16.5)
     "clipfactory_api/weekly.py",  # cf-prod-learn (§16.6)
+    "clipfactory_api/money/handler.py",  # cf-prod-money (§25.6)
 )
 REQUIRED_PACKAGES = ("boto3==", "botocore==", "aws-durable-execution-sdk-python==")
 VENDORED = ("boto3/__init__.py", "botocore/__init__.py", "aws_durable_execution_sdk_python/__init__.py")

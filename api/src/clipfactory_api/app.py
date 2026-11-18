@@ -178,7 +178,12 @@ def from_env() -> App:
         agent=AgentClient(agent_client.make_client(reg), env.get("AGENT_RUNTIME_ARN", "")),
         flows=FlowClient(lambda_client, env.get("JOB_FLOW_ARN", ""), env.get("CLIP_FLOW_ARN", "")),
         vectors=vector_store,
-        invoker=AsyncInvoker(lambda_client, env.get("STATS_FUNCTION_ARN", ""), env.get("LEARN_FUNCTION_ARN", "")),
+        invoker=AsyncInvoker(
+            lambda_client,
+            env.get("STATS_FUNCTION_ARN", ""),
+            env.get("LEARN_FUNCTION_ARN", ""),
+            env.get("MONEY_FUNCTION_ARN", ""),
+        ),
         version=env.get("VERSION", "dev"),
         email_lookup=_cognito_email_lookup(boto3.client("cognito-idp", region_name=reg, config=_short_config())),
         oauth=oauth,

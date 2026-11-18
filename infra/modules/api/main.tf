@@ -50,6 +50,8 @@ locals {
         # §16: "Refresh numbers" and "Best this week" hand off to these (async Invoke, unqualified ARNs).
         STATS_FUNCTION_ARN = var.stats_function_arn
         LEARN_FUNCTION_ARN = var.learn_function_arn
+        # §25.5: "Check now" on Settings › Posting › Money hands off to cf-prod-money (async Invoke, unqualified ARN).
+        MONEY_FUNCTION_ARN = var.money_function_arn
         # §17.4: Set up posting. Redirect URIs are built from HOOKS_URL; keys and tokens live under SECRET_PREFIX;
         # the TikTok verification file goes to the web bucket root and is invalidated on the distribution.
         HOOKS_URL          = var.hooks_url
@@ -75,6 +77,8 @@ locals {
       { Sid = "StartFlows", Action = ["lambda:InvokeFunction"], Resource = ["${var.job_flow_arn_prefix}:*", "${var.clip_flow_arn_prefix}:*"] },
       # POST /v1/clips/{id}/stats/refresh and PUT /v1/weeks/{week}/best (InvocationType=Event, unqualified).
       { Sid = "StatsAndLearn", Action = ["lambda:InvokeFunction"], Resource = [var.stats_function_arn, var.learn_function_arn] },
+      # POST /v1/money/refresh (§25.5, at most once an hour; InvocationType=Event, unqualified).
+      { Sid = "Money", Action = ["lambda:InvokeFunction"], Resource = [var.money_function_arn] },
       # GET /v1/clips/{id}/similar (read the clip's vector, query with filters) and decline (delete the vector).
       { Sid = "Vectors", Action = ["s3vectors:GetVectors", "s3vectors:QueryVectors", "s3vectors:DeleteVectors"], Resource = [var.vector_index_arn] },
       # §17.4: save, check and delete the owner's platform keys; connect, choose and disconnect (token secrets).

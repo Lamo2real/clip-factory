@@ -74,6 +74,15 @@ variable "learn_function_arn" {
   }
 }
 
+variable "money_function_arn" {
+  type        = string
+  description = "Unqualified ARN of cf-prod-money (MONEY_FUNCTION_ARN): \"Check now\" on Settings › Posting › Money (§25.5)."
+  validation {
+    condition     = can(regex("^arn:aws[a-z-]*:lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9_-]+$", var.money_function_arn))
+    error_message = "money_function_arn must be an unqualified Lambda function ARN."
+  }
+}
+
 # ---------- Set up posting (docs/CONTRACTS.md §17.4, §17.9) ----------
 variable "hooks_url" {
   type        = string

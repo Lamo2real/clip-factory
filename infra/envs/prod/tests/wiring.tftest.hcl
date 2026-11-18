@@ -43,7 +43,7 @@ run "whole_stack_plans" {
 
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
-      "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick",
+      "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money",
     ])
     error_message = "Every function except the WebSocket authorizer is watched for errors."
   }
@@ -72,8 +72,8 @@ run "clip_performance_is_wired" {
   }
 
   assert {
-    condition     = toset(keys(module.monitoring.schedule_alarm_names)) == toset(["stats", "follow-tick"])
-    error_message = "The stats and follow-tick rules are watched for failed invocations."
+    condition     = toset(keys(module.monitoring.schedule_alarm_names)) == toset(["stats", "follow-tick", "money"])
+    error_message = "The stats, follow-tick and money rules are watched for failed invocations."
   }
 }
 

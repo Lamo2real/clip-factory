@@ -7,6 +7,8 @@
   the numbers read from YouTube are removed from its posts (``metrics`` and the poll index) and their ``STAT#``
   snapshots deleted (YouTube Developer Policies: delete API data after revocation). Their day-7 numbers go too, and
   every creator lesson learned from YouTube numbers is deleted (no tombstone: the data behind it is gone, §16.12).
+  The money read from YouTube goes as well (§25.6): channel snapshots, reported revenue, the money state and each
+  post's ``revenue``. Nothing is deleted on a token expiry: only an explicit Disconnect sends this.
 * Anything else → log ``stats.bad_event``.
 
 Platform and network problems are handled inside ``refresh_posts`` (they become ``statsError``), so the handler
@@ -19,7 +21,7 @@ import os
 from collections.abc import Callable
 from typing import Any
 
-from .. import db, lessons
+from .. import db, lessons, money
 from ..ids import is_ulid
 from ..log import log
 from .poll import run_tick
@@ -85,6 +87,7 @@ FORGET_FIELDS = [
     "day7State",
     "day7CheckedAt",
     "day7Verdict",  # the winner verdict and the baseline median it was judged against
+    "revenue",  # §25.3: YouTube's estimate for the clip (read with the monetary scope)
 ]
 
 
@@ -105,8 +108,18 @@ def _forget(event: dict[str, Any], deps: StatsDeps) -> dict[str, Any]:
             deps.store.delete(stat["pk"], stat["sk"])
             snapshots += 1
     removed = lessons.forget_platform(deps.store, user_id, platform)
-    log("info", "stats.forget", platform=platform, posts=len(found), snapshots=snapshots, lessons=removed)
-    return {"action": "forget", "posts": len(found), "snapshots": snapshots, "lessons": removed}
+    # §25.6: the channel snapshots, reported money and money state read from YouTube go too.
+    money_items = money.forget_platform(deps.store, user_id, platform)
+    log(
+        "info",
+        "stats.forget",
+        platform=platform,
+        posts=len(found),
+        snapshots=snapshots,
+        lessons=removed,
+        money=money_items,
+    )
+    return {"action": "forget", "posts": len(found), "snapshots": snapshots, "lessons": removed, "money": money_items}
 
 
 _deps: StatsDeps | None = None

@@ -5011,7 +5011,7 @@ interface MoneyGoal { key: string; label: string; kind: "bar" | "tick" | "number
   or?: string; missing?: string; countingDaysLeft?: number; sourceUrl: string }
 ```
 
-No response carries a token, a raw platform body, a paging URL or a scope URL. Existing routes: `GET
+No response carries a token, a raw platform body or a paging URL; the only scope URL is the one the owner copies into Google Cloud (`needsPermission.copy`), as Set up posting already does. Existing routes: `GET
 /v1/clips/{id}/performance` adds `revenue` per platform row only when a platform reported one (YouTube now; Facebook
 once `moneyVerified`); `GET /v1/weeks/{week}` adds `revenueByPlatform` `{ [platform]: { currency, amountMicros, source,
 tag } }` summed from that week's `REVENUE#` days. `paidViews` stays in the weeks answer and is no longer read.

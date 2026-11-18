@@ -26,6 +26,11 @@ Query (never a Scan).
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Any
+
+from .. import db
+from ..clock import iso
 from ..stats import STATS_ORDER
 
 MONEY_ORDER: tuple[str, ...] = STATS_ORDER
@@ -76,3 +81,37 @@ def revenue_prefix(platform: str) -> str:
 
 def owner_sk(user_id: str) -> str:
     return f"USER#{user_id}"
+
+
+def register_owner(store: db.Store, user_id: str, now: datetime) -> None:
+    """Puts the owner on the daily run's list (one Query of ``MONEYOWNERS`` finds them; never a Scan)."""
+    try:
+        store.put(
+            {"pk": OWNERS_PK, "sk": owner_sk(user_id), "type": "moneyowner", "userId": user_id, "since": iso(now)},
+            if_absent=True,
+        )
+    except db.ConditionFailed:
+        return
+
+
+def owners(store: db.Store) -> list[str]:
+    return [str(i["userId"]) for i in store.query_all(OWNERS_PK, "USER#") if isinstance(i.get("userId"), str)]
+
+
+def get_prefs(store: db.Store, user_id: str) -> dict[str, Any]:
+    return store.get(db.user_pk(user_id), PREFS_SK) or {}
+
+
+def forget_platform(store: db.Store, user_id: str, platform: str) -> int:
+    """§25.6 ``forget`` (explicit YouTube Disconnect only): the account snapshots, reported money and money state read
+    from that platform. Run by ``cf-prod-stats``, which also clears each Post's ``revenue``."""
+    pk = db.user_pk(user_id)
+    gone = 0
+    for prefix in (acctstat_prefix(platform), revenue_prefix(platform)):
+        for item in store.query_all(pk, prefix):
+            store.delete(pk, str(item["sk"]))
+            gone += 1
+    if store.get(pk, state_sk(platform)) is not None:
+        store.delete(pk, state_sk(platform))
+        gone += 1
+    return gone
