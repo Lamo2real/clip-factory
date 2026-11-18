@@ -16,7 +16,6 @@ import type {
 import { MANUAL_COOLDOWN_MIN, STATS_ORDER, perfStatus, pickBest } from "../../lib/metrics.ts";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
 import { isWeek, weekBoundsOk } from "../../lib/week.ts";
-import { paidViews as paidViewsOf } from "../../lib/earnings.ts";
 import { metricsFor, grow, type WeekItem } from "./statsData.ts";
 import { ulid, type Store } from "./fixtures.ts";
 
@@ -200,11 +199,9 @@ export function statsApi({ store, publish, faults, automated }: Deps) {
         const sum = (k: "views" | "likes" | "comments" | "shares") => posted.reduce((n, p) => n + (p.metrics?.[k] ?? 0), 0);
         const views: WeekClip["views"] = {};
         // Private posts never get numbers (§16.2): they are left out of the per-app views.
-        const paidViews: WeekClip["views"] = {};
         for (const p of posted) {
           if (p.privacy === "private") continue;
           views[p.platform] = p.metrics?.views ?? null;
-          paidViews[p.platform] = paidViewsOf(p.platform, p.metrics);
         }
         const { videoUrl: _v, ...clip } = clone(withTotal(c));
         return {
@@ -213,7 +210,6 @@ export function statsApi({ store, publish, faults, automated }: Deps) {
           posted: posted.length > 0,
           totals: { views: sum("views"), likes: sum("likes"), comments: sum("comments"), shares: sum("shares") },
           views,
-          paidViews,
           best: c.best === true,
         };
       })

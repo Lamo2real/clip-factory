@@ -118,7 +118,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), helpCorpus(), versionFile(version), serviceWorker(version)],
     define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(version) },
-    // The app imports config/earnings.json from the repo root (docs/CONTRACTS.md §21): let the dev server read it.
+    // The app imports config/monetization.json from the repo root (docs/CONTRACTS.md §25.2): let the dev server read it.
     server: { port: 5173, fs: { allow: [root, join(root, "..", "config")] } },
     build: { outDir: "dist", sourcemap: false, target: "es2022" },
   };

@@ -4704,7 +4704,7 @@ stay the default.
 
 Settings › Clip making › Clips gets the apple **AI model** (`#ai-model`): the five models as rows on a pick-one track
 (radio group, the glide slides to the chosen row), each with its label, its line and "In use" on the chosen one. The
-list, labels and lines come from `config/models.json` (`web/src/lib/models.ts`), like `config/earnings.json`. A tap
+list, labels and lines come from `config/models.json` (`web/src/lib/models.ts`), the way §21 once read its config. A tap
 saves `PUT /v1/settings {clipModel}`. A finished job's detail page says "Made with {label}." and, after a fallback,
 "{wanted} could not be used, so the usual one was." The mock API checks and stores the field and stamps new jobs
 with it.

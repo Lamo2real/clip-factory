@@ -273,31 +273,16 @@ def test_youtube_privacy_is_checked(call: Call, value: object) -> None:
     assert "YouTube" in body["error"]["message"]
 
 
-# ---------- Earnings (§21): the owner's own rate per 1,000 views and "Do I get paid here?" ----------
+# ---------- Retired earnings (§21 → §25): still stored and validated, never read, so nothing is lost ----------
 
 
-def test_earnings_max_matches_config() -> None:
-    import json
+def test_retired_earnings_settings_stay_and_the_guess_config_is_gone() -> None:
     from pathlib import Path
 
-    config = json.loads((Path(__file__).resolve().parents[2] / "config" / "earnings.json").read_text())
-    assert config["maxUsdPer1000"] == settings.MAX_USD_PER_1000
-    assert sorted(config["platforms"]) == sorted(settings.PLATFORMS)
-    # YouTube, Facebook and X start on, so the owner sees a best guess per clip there (it only counts inside each
-    # app's paid program); TikTok (Sweden not eligible, clips under 60 s) and Instagram (invite-only) start off (§21.1).
-    assert {name: p["paysPerView"] for name, p in config["platforms"].items()} == {
-        "youtube": True,
-        "tiktok": False,
-        "instagram": False,
-        "facebook": True,
-        "x": True,
-    }
-    for p in config["platforms"].values():
-        assert 0 <= p["lowUsdPer1000"] <= p["typicalUsdPer1000"] <= p["highUsdPer1000"] <= config["maxUsdPer1000"]
-        assert p["kidRules"]
-        assert p["kidCounts"]
-        assert p["sources"]
-        assert all(s["url"].startswith("https://") and s["date"] for s in p["sources"])
+    assert settings.MAX_USD_PER_1000 == 100
+    assert settings.DEFAULTS["earningsRates"] == {}
+    assert settings.DEFAULTS["earningsPaid"] == {}
+    assert not (Path(__file__).resolve().parents[2] / "config" / "earnings.json").exists()
 
 
 def test_put_earnings_saved_and_kept_in_order(call: Call) -> None:

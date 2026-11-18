@@ -392,26 +392,13 @@ Clip Factory window.
 - **Performance units** (Vitest): `lib/week.ts` (2026-01-01 is 2026-W01, 2027-01-01 is 2026-W53, weeks start on
   Monday, clock-change weeks are 167 and 169 hours); the Bézier builder `PerfLines.paths(layout, rects)` for the three
   layouts; compact numbers ("1.2K", "–" for null, "1:05"); status → words; live merge of `post` and `week` events.
-- **Earnings** (`e2e/earnings.spec.ts`, [CONTRACTS §21](CONTRACTS.md#21-earnings-what-each-clip-probably-made-per-platform-owner-request-2026-11-16)):
-  YouTube, Facebook and X start on, so the clip page first shows "Earned about $X" on those stacks (never "about less
-  than 1¢") and "This clip earned about $Y" with a Best guess tag (equal to the stacks' sum within a few cents), while
-  TikTok shows "Earned $0.00" with "Turn this on in Settings › Money if TikTok pays you."; "How is this worked out?"
-  uses the short app names, says replays are left out, shows "off, so $0" and "clip too short, so $0", puts each mark on
-  a dark round tile (`aria-hidden`, so X never reads "X X"), says "This only counts if you are in {App}'s paid
-  program." with the app's `kidRules` under YouTube, Facebook and X (never under an app that is off), and links to
-  Settings › Posting › Money; with YouTube, Facebook and X switched off the clip page shows "This clip earned $0.00"
-  with "These apps are switched off in Settings › Money.", no Best guess tag, and per stack "YouTube does not pay you
-  for views right now." plus what it would be; the Money edit flow starts with YouTube, Facebook and X on (each with its
-  paid-program line) and TikTok and Instagram off, refuses "abc", "0.055" and "1000" with a plain line, saves "2,5" as
-  $2.50, switches TikTok on (its paid-program line appears and the clip page then says "TikTok only pays for videos 1
-  minute or longer."), shows the sources in plain words with readable dates and 44 px links, and goes back with **Use
-  the usual**; Library and This week show each clip's guess and the week total with a visible Best guess tag by
-  default, then "Earned $0.00" with its reason once everything is off, without changing the order; no overflow at
-  320/375/768/1440/1920 px. Vitest `test/earnings.test.ts` covers every formula and format (rounding, less than 1¢,
-  "about" rules, minimum length incl. exactly 60 s, the on/off defaults and switched-off apps, `paidProgramNote`, custom
-  rate, missing views never adding up to $0, `paidViews`, zero reasons, source dates); pytest covers the
-  `earningsRates` / `earningsPaid` validation, the config defaults (YouTube, Facebook and X on; TikTok and Instagram
-  off) and the week `paidViews`.
+- **No money guesses** ([CONTRACTS §25](CONTRACTS.md#25-real-earnings-paid-programme-progress-and-platform-reported-money-owner-request-2026-11-18)):
+  §21's guesses are gone (the old `e2e/earnings.spec.ts` and `test/earnings.test.ts` with them). Vitest
+  `test/noGuesses.test.ts` is the CI guard: nothing in `web/src` imports `lib/earnings.ts` or `config/earnings.json`,
+  uses `rateFor`, `perThousand`, `moneyPhrase`, `moneyWords`, `earningFor` or `clipEarnings`, or reads `earningsRates` /
+  `earningsPaid` outside the settings types and the mock's validation, and the help guides never offer a rate or a
+  "best guess". Pytest keeps the retired `earningsRates` / `earningsPaid` validation and defaults (nothing stored is
+  lost) and the week `paidViews` (sent, never read).
 - **Old account links**: `/settings/posting/accounts` and `/settings?account=youtube&status=coming_soon` redirect to
   Set up posting (`settings-tree.spec.ts`).
 - **Kid-proof** ([UX-13](BUSINESS_REQUIREMENTS.md#ux-13-kid-proof-a-68-year-old-can-use-it)): at most one vermilion

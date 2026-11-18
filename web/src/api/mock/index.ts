@@ -10,11 +10,12 @@ import { skillsApi, type MockSkillControls } from "./skills.ts";
 import { lessonsApi, type LessonsFault } from "./lessons.ts";
 import { followsApi } from "./follows.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
-import { MAX_RATE } from "../../lib/earnings.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
 import { currentClipModel, isClipModel } from "../../lib/models.ts";
 
 const STEP_MS = 3500;
+/** api settings.MAX_USD_PER_1000: the retired `earningsRates` (§21) are still validated, never read (§25.6). */
+const RETIRED_MAX_RATE = 100;
 const clone = <T>(v: T): T => structuredClone(v);
 
 /** Browser automation (Playwright) freezes job progress so screens and screenshots stay stable. */
@@ -525,6 +526,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (!isSoundId(next.errorSound)) throw bad("Pick an error sound from 1 to 30.");
       if (next.youtubePrivacy !== undefined && !["public", "unlisted", "private"].includes(next.youtubePrivacy))
         throw bad("Pick who can see your YouTube clips.");
+      // Retired by §25 (no screen reads them), still checked like the API so stored values stay valid.
       for (const [field, map] of [["earningsRates", next.earningsRates], ["earningsPaid", next.earningsPaid]] as const) {
         if (map === undefined) continue;
         if (typeof map !== "object" || map === null || Array.isArray(map)) throw bad("Money settings must list each app by name.");
@@ -534,7 +536,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
           if (field === "earningsRates") {
             if (typeof v !== "number" || !Number.isFinite(v)) throw bad(`Type the ${p} amount as a number, like 0.05.`);
             if (v < 0) throw bad(`The ${p} amount cannot be less than 0.`);
-            if (v > MAX_RATE) throw bad(`The ${p} amount can be at most ${MAX_RATE} dollars for 1,000 views.`);
+            if (v > RETIRED_MAX_RATE) throw bad(`The ${p} amount can be at most ${RETIRED_MAX_RATE} dollars for 1,000 views.`);
             if (Math.abs(v * 100 - Math.round(v * 100)) > 1e-6) throw bad(`Use at most 2 numbers after the dot for ${p}, like 0.05.`);
           }
         }

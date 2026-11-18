@@ -208,32 +208,14 @@ export const TREES: Tree[] = [
       {
         slug: "money",
         name: "Money",
-        line: "How much each app pays you for views.",
+        line: "Real money each app reports, and how close you are to getting paid.",
         icon: "coin",
         apples: [
           {
-            id: "money-how",
-            name: "How the money is worked out",
-            leaf: "Each app pays a tiny amount for every 1,000 views. Clip Factory uses it to guess what each clip earned.",
-            words: ["earn", "earnings", "money", "paid", "pay", "income", "revenue", "estimate", "guess", "per 1000", "rpm"],
-          },
-          {
-            id: "money-paid",
-            name: "Do I get paid here?",
-            leaf: "YouTube, Facebook and X start on, the rest start off. Money only counts in that app's paid program.",
-            words: ["earn", "money", "paid", "pay", "monetization", "partner program", "creator rewards", "bonus", "YouTube", "TikTok", "Instagram", "Facebook", "X"],
-          },
-          {
-            id: "money-rate",
-            name: "Money for 1,000 views",
-            leaf: "Type what an app really pays you. Find it on that app's own money page.",
-            words: ["rate", "rpm", "cpm", "per 1000", "dollars", "cents", "usd", "how much", "income", "revenue", "amount"],
-          },
-          {
-            id: "money-sources",
-            name: "Where the numbers come from",
-            leaf: "The usual amounts are guesses from public pages. Each one shows its date.",
-            words: ["sources", "links", "estimate", "guess", "why", "checked"],
+            id: "money-soon",
+            name: "Real money is on its way",
+            leaf: "Clip Factory only shows money an app reports. It never guesses.",
+            words: ["earn", "earnings", "money", "paid", "pay", "income", "revenue", "monetization", "monetized"],
           },
         ],
       },
@@ -499,6 +481,11 @@ const LEGACY_ANCHORS: Record<string, string> = {
   sounds: settingsPath("look-and-feel", "sounds"),
   app: settingsPath("app"),
   cookies: settingsPath("clip-making", "youtube"),
+  // §21's money apples were retired by §25: their old links open the Money branch.
+  "money-how": settingsPath("posting", "money"),
+  "money-paid": settingsPath("posting", "money"),
+  "money-rate": settingsPath("posting", "money"),
+  "money-sources": settingsPath("posting", "money"),
 };
 
 const SETUP_PLATFORMS = ["youtube", "tiktok", "instagram", "facebook", "x"];

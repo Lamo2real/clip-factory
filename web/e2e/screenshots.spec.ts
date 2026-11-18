@@ -60,21 +60,6 @@ for (const size of SIZES) {
         await page.waitForTimeout(400);
         await page.screenshot({ path: join(dir, `clip-performance-stacks${suffix}.png`) });
       });
-      // Earnings (§21): the money guess opened on the clip page, and Settings › Posting › Money with sources open.
-      test(`screenshot clip earnings ${scheme}`, async ({ page }) => {
-        await openClip(page, CLIPS.all);
-        await page.getByRole("button", { name: "How is this worked out?" }).click();
-        await page.locator(".perf__money").scrollIntoViewIfNeeded();
-        await page.waitForTimeout(400);
-        await page.screenshot({ path: join(dir, `clip-earnings${suffix}.png`) });
-      });
-      test(`screenshot settings money ${scheme}`, async ({ page }) => {
-        await page.goto("/settings/posting/money");
-        await settle(page);
-        await page.locator('[data-money-sources="youtube"]').getByRole("button").click();
-        await page.waitForTimeout(600);
-        await page.screenshot({ path: join(dir, `settings-money${suffix}.png`), fullPage: true });
-      });
       test(`screenshot this week ${scheme}`, async ({ page }) => {
         await page.goto("/library?view=week");
         await settle(page);
