@@ -45,7 +45,7 @@ VERIFY_SCHEMA: dict[str, Any] = {
 }
 
 VERIFY_SYSTEM = """You check one picked clip moment against the picture before it is cut, for Clip Factory. Follow the
-owner's skills above (the short-form playbook: a stranger gets it in 2 seconds, it pays off, the hook is honest).
+owner's skills above (the viral clip editing skill: a stranger gets it in 2 seconds, it pays off, the hook is honest).
 
 You get the frames (up to two per second) from 3 seconds before the moment to 3 seconds after it, each after its time
 stamp, then the plan and the words. Decide:

@@ -11,7 +11,7 @@ from typing import Any
 from .schema import check
 
 MOMENT_TYPES = ["rage", "chaos", "interaction", "no_way", "first_reaction", "hot_take"]
-DEFAULT_LENGTH = (20.0, 45.0)  # playbook A6
+DEFAULT_LENGTH = (20.0, 45.0)  # the default length target
 MAX_TEASE = 3.0
 
 MOMENT_SCHEMA: dict[str, Any] = {
@@ -118,7 +118,7 @@ def word_count(text: str) -> int:
 
 
 def length_target(notes: str | None) -> tuple[float, float]:
-    """The clip length to aim for: the playbook's 20–45 s, unless the owner's notes name one ("15-30 seconds",
+    """The clip length to aim for: the default 20–45 s, unless the owner's notes name one ("15-30 seconds",
     "under 60 s")."""
     text = (notes or "").lower()
     unit = r"\s*(?:s|sec|secs|seconds?)\b"
