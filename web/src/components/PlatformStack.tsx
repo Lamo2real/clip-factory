@@ -10,6 +10,7 @@ import { Icon } from "./Icon.tsx";
 import { PlatformMark } from "./PlatformMark.tsx";
 import { Sparkline } from "./Sparkline.tsx";
 import { LinkButton, Pill, type Tone } from "./ui.tsx";
+import { formatMoney } from "../lib/money.ts";
 
 const CHIP_TONE: Record<PlatformPerformance["status"], Tone> = {
   posted: "success",
@@ -126,6 +127,15 @@ export function PlatformStack({
                 {groups.slow.rows.length ? <Rows rows={groups.slow.rows} reactions={reactions} /> : null}
                 {perf.insightsUpdatedAt ? <p className="pstack__ago">{insightsAgo(perf.insightsUpdatedAt, now)}</p> : null}
               </div>
+            ) : null}
+            {perf.revenue ? (
+              // §25.3: only money the platform itself reported, with its estimate tag. Hidden otherwise.
+              <p className="pstack__money" data-reported-money={perf.platform}>
+                <Icon name="coin" size={16} />
+                <span>
+                  {perf.revenue.tag} for this clip: <strong>{formatMoney(perf.revenue.amountMicros, perf.revenue.currency)}</strong>
+                </span>
+              </p>
             ) : null}
             <Sparkline series={series} best={best} />
           </>

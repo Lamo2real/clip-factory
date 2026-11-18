@@ -14,6 +14,7 @@ import { applyWeekEvent } from "../../lib/liveCache.ts";
 import { STATS_ORDER, compact, full } from "../../lib/metrics.ts";
 import { useAction } from "../../lib/motion.ts";
 import { navigate } from "../../lib/router.ts";
+import { formatMoney } from "../../lib/money.ts";
 import { compareWeeks, isWeek, isoWeek, shiftWeek, weekLabel, weekRange } from "../../lib/week.ts";
 
 /** Picks are saved this long after the last star tap, as one request. */
@@ -240,6 +241,14 @@ export function WeekView({ week: asked }: { week: string | null }) {
             <p className="week__count" aria-live="polite">
               {plural(data.clips.length, "clip")} · {shown.length ? `${plural(shown.length, "star")}` : "no stars yet"}
             </p>
+            {Object.values(data.revenueByPlatform ?? {}).map((r) =>
+              r ? (
+                // §25.5: a total the platform reported for the week, never a guess per clip.
+                <p key={r.platform} className="week__reported" data-week-money={r.platform}>
+                  {r.tag} for {isCurrent ? "this" : "that"} week: <strong>{formatMoney(r.amountMicros, r.currency)}</strong>
+                </p>
+              ) : null,
+            )}
           </div>
           <ol className="week-list">
             {data.clips.map((c, i) => (

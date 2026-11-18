@@ -20,6 +20,16 @@ import { metricsFor, grow, type WeekItem } from "./statsData.ts";
 import { ulid, type Store } from "./fixtures.ts";
 
 const clone = <T>(v: T): T => structuredClone(v);
+
+/** Whether the pretend money scenario (mock/money.ts, sessionStorage) is one where YouTube reports money. */
+function moneyScenarioEarns(): boolean {
+  try {
+    const raw = JSON.parse(sessionStorage.getItem("cf-mock-money") ?? "null") as { scenario?: string } | null;
+    return raw?.scenario === "earning" || raw?.scenario === "facebook_verified";
+  } catch {
+    return false;
+  }
+}
 const MIN = 60_000;
 const IN_LIBRARY = new Set<Clip["status"]>(["confirmed", "publishing", "posted", "failed"]);
 
@@ -82,8 +92,23 @@ export function statsApi({ store, publish, faults, automated }: Deps) {
     return status === "connected" || status === "needs_reconnect" ? status : "not_connected";
   }
 
+  /** §25.3 in the pretend app: YouTube's estimate per clip, only when the money scenario is one that earns. */
+  function reportedMoney(platform: Platform, post: Post | undefined): PlatformPerformance["revenue"] | undefined {
+    if (platform !== "youtube" || post?.status !== "posted" || !moneyScenarioEarns()) return undefined;
+    const seedOf = [...post.postId].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) % 1_000_003, 7);
+    return {
+      platform,
+      amountMicros: 40_000 + (seedOf % 900) * 1_000,
+      currency: "USD",
+      source: "youtube.estimatedRevenue",
+      through: new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10),
+      tag: "YouTube's estimate",
+    };
+  }
+
   function stack(platform: Platform, post: Post | undefined, now: number): PlatformPerformance {
     const m = post?.metrics ?? null;
+    const revenue = reportedMoney(platform, post);
     return {
       platform,
       status: perfStatus(post),
@@ -98,6 +123,7 @@ export function statsApi({ store, publish, faults, automated }: Deps) {
       refreshing: post?.refreshing === true,
       final: m?.final === true,
       ...(post?.error ? { error: post.error } : {}),
+      ...(revenue ? { revenue } : {}),
     };
   }
 
@@ -226,9 +252,13 @@ export function statsApi({ store, publish, faults, automated }: Deps) {
     const item = store.weeks[week];
     const clips = weekClips(item?.from ?? from, item?.to ?? to);
     const learning = item?.learningId ? store.learnings.find((l) => l.learningId === item.learningId) : undefined;
+    const money = moneyScenarioEarns()
+      ? { revenueByPlatform: { youtube: { platform: "youtube" as const, amountMicros: 3_100_000, currency: "USD", source: "youtube.estimatedRevenue", tag: "YouTube's estimate" } } }
+      : {};
     return {
       ...(item ? summary(item) : { week, from, to, clipIds: [], learnState: "none" as const }),
       clips,
+      ...money,
       ...(learning && item?.learnState === "done" ? { learning: clone(learning) } : {}),
     };
   }

@@ -496,6 +496,8 @@ export interface PlatformPerformance {
   refreshing: boolean;
   final: boolean;
   error?: string;
+  /** §25.3: what this platform reported this clip made (YouTube's estimate today). Absent when nothing was reported. */
+  revenue?: ReportedMoney;
 }
 
 export interface SeriesPoint {
@@ -548,6 +550,8 @@ export interface WeekSummary {
 export interface WeekView extends WeekSummary {
   clips: WeekClip[];
   learning?: Learning;
+  /** §25.5: each platform's reported money for the week, in its own currency. Absent when nothing was reported. */
+  revenueByPlatform?: Partial<Record<Platform, ReportedMoney>>;
 }
 
 export interface Performance {

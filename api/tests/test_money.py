@@ -832,3 +832,73 @@ def test_youtube_urls_never_carry_the_token() -> None:
     assert not [u for u in http.urls if "SECRET-TOKEN" in u]
     q = parse_qs(urlsplit(http.urls[2]).query)
     assert q["ids"] == ["channel==MINE"]
+
+
+# --- per clip and per week (§25.5) ---------------------------------------------------------------------------------
+
+
+def test_the_clip_page_shows_youtubes_estimate_only_when_reported(call: Call, store: db.Store) -> None:
+    from conftest import seed_clip
+    from test_performance import seed_post
+
+    clip = seed_clip(store, status="posted")
+    seed_post(
+        store,
+        clip,
+        "youtube",
+        revenue={
+            "amountMicros": 420_000,
+            "currency": "USD",
+            "through": "2026-11-17",
+            "source": "youtube.estimatedRevenue",
+        },
+    )
+    seed_post(store, clip, "facebook", revenue={"amountMicros": 9, "currency": "USD", "source": "x"})  # unverified
+    seed_post(store, clip, "tiktok")
+    status, body = call("GET", f"/v1/clips/{clip['clipId']}/performance")
+    assert status == 200
+    rows = {r["platform"]: r for r in body["posts"]}
+    assert rows["youtube"]["revenue"] == {
+        "platform": "youtube",
+        "amountMicros": 420_000,
+        "currency": "USD",
+        "source": "youtube.estimatedRevenue",
+        "through": "2026-11-17",
+        "tag": "YouTube's estimate",
+    }
+    assert "revenue" not in rows["facebook"]
+    assert "revenue" not in rows["tiktok"]
+
+
+def test_this_week_gets_the_reported_total_per_platform(call: Call, store: db.Store) -> None:
+    pk = db.user_pk(USER)
+    for day, amount in (("2026-11-08", 1_000_000), ("2026-11-10", 500_000), ("2026-11-15", 250_000), ("2026-11-16", 9)):
+        store.put(
+            {
+                "pk": pk,
+                "sk": money.revenue_sk("youtube", day),
+                "date": day,
+                "amountMicros": amount,
+                "currency": "USD",
+                "unit": "USD",
+                "source": "youtube.estimatedRevenue",
+            }
+        )
+    query = {"from": "2026-11-08T23:00:00.000Z", "to": "2026-11-15T23:00:00.000Z"}
+    status, body = call("GET", "/v1/weeks/2026-W46", query=query)
+    assert status == 200
+    assert body["week"]["revenueByPlatform"] == {
+        "youtube": {
+            "platform": "youtube",
+            "currency": "USD",
+            "amountMicros": 750_000,  # Monday 9 to Sunday 15, as YouTube counts days
+            "source": "youtube.estimatedRevenue",
+            "tag": "YouTube's estimate",
+        }
+    }
+
+
+def test_a_week_without_reported_money_has_no_money_field(call: Call) -> None:
+    query = {"from": "2026-11-08T23:00:00.000Z", "to": "2026-11-15T23:00:00.000Z"}
+    _, body = call("GET", "/v1/weeks/2026-W46", query=query)
+    assert "revenueByPlatform" not in body["week"]

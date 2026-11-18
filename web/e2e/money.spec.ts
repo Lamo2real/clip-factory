@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { findOverflow, settle } from "./helpers.ts";
+import { CLIPS, findOverflow, openClip, settle } from "./helpers.ts";
 
 // Settings › Posting › Money and Home's money tile (docs/CONTRACTS.md §25.7): every card state from the mock, one
 // vermilion button that does "Allow money reading" end to end, money only with the platform's estimate tag,
@@ -140,6 +140,21 @@ test("the old money anchors open the Money branch", async ({ page }) => {
     await page.goto(`/settings#${old}`);
     await expect(page).toHaveURL(new RegExp(`${PATH}$`));
   }
+});
+
+test("the clip page and This week show only money YouTube reported, with its tag", async ({ page }) => {
+  await scenario(page, "not_yet", "/");
+  await openClip(page, CLIPS.all);
+  await expect(page.locator("[data-reported-money]")).toHaveCount(0);
+  await expect(page.locator(".perf")).not.toContainText("$");
+  await page.evaluate(() => sessionStorage.setItem("cf-mock-money", JSON.stringify({ scenario: "earning", country: "US", seen: ["youtube:first_money"] })));
+  await openClip(page, CLIPS.all);
+  const yt = page.locator("[data-reported-money='youtube']");
+  await expect(yt).toContainText(/YouTube's estimate for this clip: \$\d+\.\d\d/);
+  await expect(page.locator("[data-reported-money]")).toHaveCount(1);
+  await page.goto("/library?view=week");
+  await settle(page);
+  await expect(page.locator("[data-week-money='youtube']")).toHaveText("YouTube's estimate for this week: $3.10");
 });
 
 for (const scheme of ["light", "dark"] as const) {

@@ -999,6 +999,30 @@
 }
 
 /* ---------- This week: the count line and, when a platform reported money, its total (§25.7) ---------- */
+.pstack__money {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--tint-leaf);
+  color: var(--green-text);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.pstack__money .icon {
+  flex: none;
+}
+.week__reported {
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  background: var(--tint-leaf);
+  color: var(--green-text);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
 .week__money {
   display: flex;
   flex-wrap: wrap;

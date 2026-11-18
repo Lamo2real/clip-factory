@@ -371,21 +371,17 @@ def clip_revenue(post: Mapping[str, Any], cfg: rules.Monetization | None = None)
     }
 
 
-def week_revenue(
-    store: db.Store, user_id: str, start: datetime, end: datetime, cfg: rules.Monetization | None = None
-) -> Item:
-    """``revenueByPlatform`` of This week: each platform's reported days in [start, end), one currency each."""
+def week_revenue(store: db.Store, user_id: str, first_day: date, cfg: rules.Monetization | None = None) -> Item:
+    """``revenueByPlatform`` of This week: each platform's reported days from the week's Monday to Sunday (the days as
+    the platform counts them), one currency each; a platform with two currencies that week is left out."""
     cfg = cfg or rules.load()
     out: Item = {}
     pk = db.user_pk(user_id)
+    start, end = first_day.isoformat(), (first_day + timedelta(days=7)).isoformat()
     for platform in MONEY_ORDER:
         if not money_shown(cfg, platform):
             continue
-        rows = [
-            r
-            for r in store.query_all(pk, revenue_prefix(platform))
-            if start.date().isoformat() <= str(r.get("date") or "") < end.date().isoformat()
-        ]
+        rows = [r for r in store.query_all(pk, revenue_prefix(platform)) if start <= str(r.get("date") or "") < end]
         if not rows:
             continue
         currencies = {str(r.get("currency")) for r in rows}
