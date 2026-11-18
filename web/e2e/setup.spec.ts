@@ -54,20 +54,20 @@ async function noOverflow(page: Page, label: string, failures: string[]) {
   for (const o of r.items) failures.push(`${label}: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);
 }
 
-/** The current step is this one, open, with its main action as the one tomato button. */
+/** The current step is this one, open, with its main action as the one main vermilion button. */
 async function expectCurrent(page: Page, s: GuideStep) {
   const card = step(page, s.id);
   await expect(card).toHaveClass(/is-current/);
   await expect(card.locator(".gstep__head")).toHaveAttribute("aria-expanded", "true");
 }
 
-async function checkOpen(page: Page, s: GuideStep, tomato: boolean) {
+async function checkOpen(page: Page, s: GuideStep, vermilion: boolean) {
   if (!s.open) return;
   const link = step(page, s.id).locator("a.gstep__open");
   await expect(link).toHaveAttribute("href", s.open.url);
   await expect(link).toHaveAttribute("target", "_blank");
   await expect(link).toHaveAttribute("rel", /noopener/);
-  if (tomato) await expect(link).toHaveClass(/btn--primary/);
+  if (vermilion) await expect(link).toHaveClass(/btn--primary/);
 }
 
 async function pasteKeys(page: Page, platform: Platform, failures: string[]) {
@@ -185,7 +185,7 @@ for (const size of SIZES) {
           if (s.optional) continue;
           await expectCurrent(page, s);
           await checkOpen(page, s, true);
-          expect(await tomatoes(page).count(), `${s.id}: one tomato`).toBeLessThanOrEqual(1);
+          expect(await tomatoes(page).count(), `${s.id}: one vermilion`).toBeLessThanOrEqual(1);
 
           // Copy puts the exact value on the clipboard (once per journey is enough).
           if (s.copy?.length && !copied) {
@@ -274,7 +274,7 @@ for (const size of SIZES) {
         if (platform === "tiktok")
           await expect(page.locator(".setup-card[data-platform='tiktok']")).toContainText("Works now, posts stay private");
 
-        // The platform logs Clip Factory out: Connect again is the one tomato button, and it works.
+        // The platform logs Clip Factory out: Connect again is the one main vermilion button, and it works.
         await page.evaluate((p) => (window as MockWindow).__cfMock!.setup.expireToken(p), platform);
         await page.goto(`/settings/posting/setup/${platform}`);
         await settle(page);

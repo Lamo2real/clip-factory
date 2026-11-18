@@ -128,7 +128,7 @@ const CHOICES: Partial<Record<Platform, { id: string; name: string }[]>> = {
 /** A small round picture with the first letter, so no network is needed. */
 export function avatar(name: string): string {
   const letter = (name.replace(/^@/, "")[0] ?? "C").toUpperCase();
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C9D4BD"/><stop offset="1" stop-color="#9CAF88"/></linearGradient></defs><rect width="96" height="96" fill="url(#g)"/><text x="48" y="62" font-family="Georgia,serif" font-style="italic" font-size="46" text-anchor="middle" fill="#1E2A1B">${letter}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2A5C4A"/><stop offset="1" stop-color="#0F372B"/></linearGradient></defs><rect width="96" height="96" fill="url(#g)"/><text x="48" y="62" font-family="Georgia,serif" font-style="italic" font-size="46" text-anchor="middle" fill="#EFE7DA">${letter}</text></svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 

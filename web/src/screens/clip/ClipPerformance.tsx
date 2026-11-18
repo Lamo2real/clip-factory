@@ -350,7 +350,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
             </nav>
           ) : null}
 
-          <div className="perf__total glass glass--sage">
+          <div className="perf__total glass glass--green">
             <p className="perf__views">
               <span className="perf__views-num" aria-hidden="true" data-metric="total">
                 {compact(perf.totals.views)}
@@ -384,7 +384,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
           <div className="perf__actions">
             <button
               type="button"
-              className={`star-btn glass glass--sage${perf.bestThisWeek ? " is-on" : ""}`}
+              className={`star-btn glass glass--green${perf.bestThisWeek ? " is-on" : ""}`}
               aria-pressed={perf.bestThisWeek}
               aria-busy={starBusy || undefined}
               data-help="best-star"

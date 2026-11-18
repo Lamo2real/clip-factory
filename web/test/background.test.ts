@@ -3,14 +3,17 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AA,
-  CHIP_LIFT,
+  BONE,
+  CHIP_DEEPEN,
   coloursVeil,
   contrast,
   DEFAULT_COLOURS,
   FROSTED_EXTRA,
   GLASS_TINT_ALPHA,
+  glassCeiling,
   glassChecks,
   glassFloor,
+  GREEN_DEEP,
   hexToRgb,
   isHexColour,
   LIQUID_ACTIVE_FLOOR,
@@ -19,14 +22,19 @@ import {
   LIQUID_SAFETY,
   luminance,
   MAX_FROSTED_PANEL_VEIL,
-  MIN_PANEL_VEIL,
   mix,
   minVeil,
   normaliseColours,
+  ON_BONE,
+  PANEL_VEIL_FLOOR,
+  PICTURE_PAGE_VEIL,
+  PICTURE_PANEL_VEIL,
   readNativeGlass,
   resolveLook,
+  SELECTED_ALPHA,
   seeThroughChipBackground,
   seeThroughNote,
+  seeThroughSelectedBackground,
   seeThroughTrackBackground,
   seeThroughVeils,
   seeThroughWorstBackground,
@@ -36,7 +44,7 @@ import {
   TEXT_TOKENS,
   TINTED_FLOOR,
   TRACK_EXTRA_VEIL,
-  TRACK_SHADE,
+  TRACK_LIFT,
   VEIL,
   WINDOW_TEXT_TOKENS,
   type GlassStrength,
@@ -54,13 +62,15 @@ const rules = (name: string) => css(name).replace(/\/\*[\s\S]*?\*\//g, "");
 
 /** The lowest contrast any text colour gets on `bg`. */
 const worst = (bg: Rgb) => Math.min(...TEXT_COLOURS.map((t) => contrast(t, bg)));
+const WHITE: Rgb = [255, 255, 255];
 
 describe("contrast maths", () => {
   it("matches the WCAG reference values", () => {
     expect(contrast([0, 0, 0], [255, 255, 255])).toBeCloseTo(21, 5);
     expect(contrast(hexToRgb("#777777"), [255, 255, 255])).toBeCloseTo(4.48, 2);
-    // tokens.css says tomato-ink is at least 5.2:1 even on tinted glass; on plain off-white it is well above that.
-    expect(contrast(hexToRgb(TEXT_TOKENS["--tomato-ink"]), VEIL)).toBeGreaterThan(5.5);
+    // Bone on solid bottle green, the reference's pair.
+    expect(contrast(BONE, VEIL)).toBeCloseTo(10.68, 2);
+    expect(contrast(ON_BONE, BONE)).toBeCloseTo(10.68, 2);
   });
 
   it("mixes like a browser composites", () => {
@@ -68,13 +78,16 @@ describe("contrast maths", () => {
     expect(mix([10, 20, 30], [200, 200, 200], 1)).toEqual([10, 20, 30]);
   });
 
-  it("minVeil is the smallest veil that reaches AA for every text colour", () => {
-    for (const under of [[0, 0, 0], [136, 136, 136], hexToRgb("#e8412c"), hexToRgb("#1f2937")] as Rgb[]) {
+  it("minVeil is the smallest green veil that reaches AA for every text colour", () => {
+    for (const under of [[255, 255, 255], [136, 136, 136], hexToRgb("#e8392b"), hexToRgb("#f6c945")] as Rgb[]) {
       const a = minVeil(under);
       expect(worst(mix(VEIL, under, a))).toBeGreaterThanOrEqual(AA);
       if (a > 0) expect(worst(mix(VEIL, under, a - 0.01))).toBeLessThan(AA);
     }
     expect(minVeil(VEIL)).toBe(0);
+    // Pure white is the hardest: 0.77 for the root text set, 0.73 for the window look's.
+    expect(minVeil(WHITE)).toBe(0.77);
+    expect(minVeil(WHITE, TEXT_COLOURS_WINDOW)).toBe(0.73);
   });
 });
 
@@ -88,8 +101,14 @@ const EVERY_LOOK = GLASSES.flatMap((glass) =>
   SCHEMES.flatMap((scheme) => STRENGTHS.flatMap((strength) => glassChecks(glass, scheme).map((check) => ({ glass, scheme, strength, check, at: `${glass} ${scheme} ${strength} over ${check.name}` })))),
 );
 
-describe("the darkest each window glass can be", () => {
-  it("Liquid Glass is planned a tenth darker than the darkest it was measured (another app in use, black behind)", () => {
+describe("what each window glass can be", () => {
+  it("the lightest every glass can be is planned as white: bone text on green panels is hardest there", () => {
+    for (const glass of GLASSES) for (const scheme of SCHEMES) expect(glassCeiling(glass, scheme)).toEqual(WHITE);
+    // The lightest Liquid Glass measured is effectively white, and never lighter.
+    for (const state of ["active", "inactive"] as const) for (const c of LIQUID_MEASURED[state].overWhite) expect(c).toBeLessThanOrEqual(255);
+  });
+
+  it("Liquid Glass measurements stay on record, and the floor is a tenth darker than the darkest measured", () => {
     // Measured on 2026-11-16 on macOS 27.2 (docs/CONTRACTS.md §22.3). These are records, not knobs.
     expect(LIQUID_MEASURED).toEqual({
       active: { overBlack: [180, 171, 148], overWhite: [249, 248, 245] },
@@ -99,107 +118,70 @@ describe("the darkest each window glass can be", () => {
     const floor = glassFloor("liquid", "light");
     expect(floor).toEqual(LIQUID_FLOOR);
     for (const c of floor) expect(c).toBeCloseTo(118 * 0.9, 10);
-    // Darker than anything measured, in use or not.
-    expect(luminance(floor)).toBeLessThan(luminance(LIQUID_MEASURED.inactive.overBlack));
-    expect(luminance(LIQUID_MEASURED.inactive.overBlack)).toBeLessThan(luminance(LIQUID_ACTIVE_FLOOR));
     expect(LIQUID_ACTIVE_FLOOR).toEqual(LIQUID_MEASURED.active.overBlack);
   });
 
-  it("Windows blur is the desktop app's own tint over black, worked out rather than rounded", () => {
-    // desktop/src-tauri/src/main.rs: GLASS_TINT = Color(247, 245, 239, 140).
+  it("Windows blur's floor is the desktop app's own bottle-green tint over black, worked out rather than rounded", () => {
+    // desktop/src-tauri/src/main.rs: GLASS_TINT = Color(15, 55, 43, 140).
     expect(GLASS_TINT_ALPHA).toBeCloseTo(140 / 255, 10);
-    expect(TINTED_FLOOR[0]).toBeCloseTo(135.6, 1);
-    expect(TINTED_FLOOR[1]).toBeCloseTo(134.5, 1);
-    expect(TINTED_FLOOR[2]).toBeCloseTo(131.2, 1);
+    expect(TINTED_FLOOR).toEqual(mix(VEIL, [0, 0, 0], GLASS_TINT_ALPHA));
     expect(glassFloor("blur", "light")).toEqual(TINTED_FLOOR);
     const rust = readFileSync(join(import.meta.dirname, "..", "..", "desktop", "src-tauri", "src", "main.rs"), "utf8");
     const tint = /const GLASS_TINT: Color = Color\((\d+), (\d+), (\d+), (\d+)\);/.exec(rust)!.slice(1).map(Number);
     expect(tint).toEqual([...VEIL, Math.round(GLASS_TINT_ALPHA * 255)]);
   });
 
-  it("the glasses nobody has measured (Windows 11 acrylic, mica, macOS 15 vibrancy) promise nothing: black", () => {
+  it("the glasses nobody has measured and a dark setting have a black floor", () => {
     for (const glass of ["acrylic", "mica", "vibrancy"] as const) expect(glassFloor(glass, "light")).toEqual([0, 0, 0]);
-  });
-
-  it("a dark setting is black for every glass", () => {
     for (const glass of GLASSES) expect(glassFloor(glass, "dark")).toEqual([0, 0, 0]);
   });
 
-  it("Liquid Glass in the light setting is also checked against both measured floors", () => {
-    expect(glassChecks("liquid", "light").map((c) => c.behind)).toEqual([LIQUID_FLOOR, [255, 255, 255], [180, 171, 148], [118, 118, 118]]);
-    expect(glassChecks("liquid", "dark").map((c) => c.behind)).toEqual([[0, 0, 0], [255, 255, 255]]);
-    expect(glassChecks("acrylic", "light").map((c) => c.behind)).toEqual([[0, 0, 0], [255, 255, 255]]);
-    expect(glassChecks("blur", "light").map((c) => c.behind)).toEqual([TINTED_FLOOR, [255, 255, 255]]);
+  it("every glass is checked over white and over its floor; Liquid Glass in the light setting over every measured point too", () => {
+    expect(glassChecks("liquid", "light").map((c) => c.behind)).toEqual([WHITE, LIQUID_FLOOR, [180, 171, 148], [118, 118, 118], [249, 248, 245], [225, 225, 225]]);
+    expect(glassChecks("liquid", "dark").map((c) => c.behind)).toEqual([WHITE, [0, 0, 0]]);
+    expect(glassChecks("acrylic", "light").map((c) => c.behind)).toEqual([WHITE, [0, 0, 0]]);
+    expect(glassChecks("blur", "light").map((c) => c.behind)).toEqual([WHITE, TINTED_FLOOR]);
   });
 });
 
-describe("the window look's text colours", () => {
-  /** Hue in degrees. */
-  const hue = ([r, g, b]: Rgb) => {
-    const [max, min] = [Math.max(r, g, b), Math.min(r, g, b)];
-    const d = max - min || 1;
-    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-    return (h * 60 + 360) % 360;
-  };
-  const DEEPER: TextToken[] = ["--ink-3", "--tomato-ink", "--sage-ink", "--sage-text"];
-
-  it("only the four lightest change; each goes deeper, to a relative luminance of 0.047 or less", () => {
+describe("the text colours", () => {
+  it("every text colour is light (bone or lighter); the window look lifts the softer ones to bone or lighter", () => {
+    for (const c of TEXT_COLOURS) expect(luminance(c)).toBeGreaterThanOrEqual(0.69);
+    for (const c of TEXT_COLOURS_WINDOW) expect(luminance(c)).toBeGreaterThanOrEqual(luminance(BONE) - 1e-9);
     const changed = (Object.keys(TEXT_TOKENS) as TextToken[]).filter((t) => WINDOW_TEXT_TOKENS[t] !== TEXT_TOKENS[t]);
-    expect(changed).toEqual(DEEPER);
-    for (const t of DEEPER) {
-      expect(luminance(hexToRgb(WINDOW_TEXT_TOKENS[t])), t).toBeLessThanOrEqual(0.047);
-      expect(luminance(hexToRgb(WINDOW_TEXT_TOKENS[t])), t).toBeLessThan(luminance(hexToRgb(TEXT_TOKENS[t])));
-    }
-    // Nothing in the set is lighter than that, so one panel tint fits them all.
-    for (const c of TEXT_COLOURS_WINDOW) expect(luminance(c)).toBeLessThanOrEqual(0.047);
+    expect(changed).toEqual(["--ink-2", "--ink-3", "--vermilion-ink", "--green-ink", "--green-text"]);
+    for (const t of changed) expect(luminance(hexToRgb(WINDOW_TEXT_TOKENS[t])), t).toBeGreaterThan(luminance(hexToRgb(TEXT_TOKENS[t])));
     expect(TEXT_COLOURS_WINDOW).toHaveLength(Object.keys(TEXT_TOKENS).length);
+    expect(TEXT_COLOURS).toHaveLength(Object.keys(TEXT_TOKENS).length);
   });
 
-  it("each stays its own colour: grey-green, tomato and sage keep their hue and can be told apart", () => {
-    for (const t of DEEPER) {
-      const turn = Math.abs(hue(hexToRgb(WINDOW_TEXT_TOKENS[t])) - hue(hexToRgb(TEXT_TOKENS[t])));
-      expect(Math.min(turn, 360 - turn), t).toBeLessThanOrEqual(12);
+  it("each stays its own colour: the vermilion words lean red, the green words lean green", () => {
+    for (const set of [TEXT_TOKENS, WINDOW_TEXT_TOKENS]) {
+      const [r, g] = hexToRgb(set["--vermilion-ink"]);
+      expect(r - g).toBeGreaterThan(20);
+      const [gr, gg, gb] = hexToRgb(set["--green-ink"]);
+      expect(gg).toBeGreaterThan(gr);
+      expect(gg).toBeGreaterThan(gb);
     }
-    const [ink3, tomato, sage] = (["--ink-3", "--tomato-ink", "--sage-ink"] as const).map((t) => hexToRgb(WINDOW_TEXT_TOKENS[t]));
-    // Tomato is red (red leads green by a lot); sage is clearly greener than the grey-green meta colour.
-    expect(tomato![0] - tomato![1]).toBeGreaterThan(60);
-    expect(sage![1] - sage![2]).toBeGreaterThan(2 * (ink3![1] - ink3![2]));
   });
 });
 
 describe("see-through veil", () => {
-  it("Clear: nothing between the panels; a panel carries the least that keeps every text colour at AA on the darkest glass", () => {
+  it("Clear: nothing between the panels; a panel carries the least green that keeps every text colour at AA over white", () => {
     for (const glass of GLASSES)
       for (const scheme of SCHEMES) {
         const v = seeThroughVeils(glass, scheme, "clear");
-        const least = minVeil(glassFloor(glass, scheme), TEXT_COLOURS_WINDOW);
+        const least = minVeil(glassCeiling(glass, scheme), TEXT_COLOURS_WINDOW);
         expect(v.page, `${glass} ${scheme}`).toBe(0);
-        expect(v.panel, `${glass} ${scheme}`).toBe(Math.max(MIN_PANEL_VEIL, least));
+        expect(v.panel, `${glass} ${scheme}`).toBe(Math.max(PANEL_VEIL_FLOOR, least));
         // The least really is the least: one step lighter and a text colour drops under AA.
-        if (least > 0) expect(worstInWindow(mix(VEIL, glassFloor(glass, scheme), least - 0.01)), `${glass} ${scheme}`).toBeLessThan(AA);
+        expect(worstInWindow(mix(VEIL, WHITE, least - 0.01)), `${glass} ${scheme}`).toBeLessThan(AA);
       }
+    expect(seeThroughVeils("liquid", "light", "clear").panel).toBe(0.73);
+    expect(PANEL_VEIL_FLOOR).toBe(0.45);
   });
 
-  it("Liquid Glass panels are well under half solid; the unmeasured glasses stay careful; a panel is never less than a pane", () => {
-    const liquid = seeThroughVeils("liquid", "light", "clear").panel;
-    const black = seeThroughVeils("vibrancy", "light", "clear").panel;
-    const blur = seeThroughVeils("blur", "light", "clear").panel;
-    expect(liquid).toBeGreaterThanOrEqual(0.4);
-    expect(liquid).toBeLessThanOrEqual(0.48);
-    expect(black).toBeGreaterThanOrEqual(0.62);
-    expect(black).toBeLessThanOrEqual(0.72);
-    for (const glass of ["acrylic", "mica"] as const) expect(seeThroughVeils(glass, "light", "clear").panel).toBe(black);
-    // Blur's floor is the lightest, so it would need the least; the floor for "still a pane" holds it up.
-    expect(minVeil(TINTED_FLOOR, TEXT_COLOURS_WINDOW)).toBeLessThan(MIN_PANEL_VEIL);
-    expect(blur).toBe(MIN_PANEL_VEIL);
-    expect(MIN_PANEL_VEIL).toBe(0.35);
-    expect(blur).toBeLessThan(liquid);
-    expect(liquid).toBeLessThan(black);
-    // The deeper text colours are what makes this possible: with the usual ones a panel would need far more.
-    expect(minVeil(LIQUID_FLOOR)).toBeGreaterThan(liquid + 0.1);
-  });
-
-  it("Frosted: a light frost everywhere and heavier panels, so it always shows less than Clear", () => {
+  it("Frosted: a green frost everywhere and heavier panels, so it always shows less than Clear", () => {
     expect(FROSTED_EXTRA).toBe(0.15);
     for (const glass of GLASSES)
       for (const scheme of SCHEMES) {
@@ -208,51 +190,55 @@ describe("see-through veil", () => {
         expect(frosted.page, `${glass} ${scheme}`).toBe(0.3);
         expect(frosted.panel, `${glass} ${scheme}`).toBeCloseTo(Math.min(MAX_FROSTED_PANEL_VEIL, clear.panel + FROSTED_EXTRA), 10);
         expect(frosted.panel).toBeLessThanOrEqual(0.95);
-        // What shows through a panel: (1 - page) × (1 - panel). And between the panels: 1 - page.
         expect((1 - frosted.page) * (1 - frosted.panel), `${glass} ${scheme}`).toBeLessThan((1 - clear.page) * (1 - clear.panel));
-        expect(1 - frosted.page).toBeLessThan(1 - clear.page);
       }
   });
 
-  it("every text colour of the window look reaches AA on a panel: every glass, setting and strength, over its floor, over white, and for Liquid Glass over both measured floors", () => {
-    expect(EVERY_LOOK.length).toBe(GLASSES.length * 2 * 2 * 2 + 2 * 2);
+  it("every text colour of the window look reaches AA on a panel: every glass, setting and strength, over white, its floor and every measured point", () => {
+    expect(EVERY_LOOK.length).toBe(GLASSES.length * 2 * 2 * 2 + 4 * 2);
     for (const { glass, scheme, strength, check, at } of EVERY_LOOK) expect(worstInWindow(seeThroughWorstBackground(glass, scheme, strength, check.behind)), at).toBeGreaterThanOrEqual(AA);
   });
 
-  it("a pick-one track's labels reach AA on its shade, even when the track sits straight on the window", () => {
-    for (const { glass, scheme, strength, check, at } of EVERY_LOOK) expect(worstInWindow(seeThroughTrackBackground(glass, scheme, strength, check.behind)), at).toBeGreaterThanOrEqual(AA);
-    // glass.css uses the same two numbers.
-    const track = /html\.see-through :is\(\.segmented, \.tabs, \.bg-modes, \.model-picks\) \{([^}]*)\}/.exec(rules("glass.css"))![1]!;
-    expect(track).toContain(`background-color: rgb(var(--offwhite-rgb) / calc(var(--panel-veil) + ${TRACK_EXTRA_VEIL}))`);
-    expect(track).toContain(`rgb(var(--ink-rgb) / ${TRACK_SHADE})`);
+  it("the selected (bone) pill's green words reach AA wherever the pill sits", () => {
+    expect(SELECTED_ALPHA).toBe(0.92);
+    for (const { glass, scheme, strength, check, at } of EVERY_LOOK) expect(contrast(ON_BONE, seeThroughSelectedBackground(glass, scheme, strength, check.behind)), at).toBeGreaterThanOrEqual(AA);
+    expect(rules("tokens.css")).toContain(`--selected: rgb(var(--bone-rgb) / ${SELECTED_ALPHA});`);
   });
 
-  it("words on a tinted chip reach AA: over the darkest glass an ink or tomato chip is never darker than its panel", () => {
+  it("a pick-one track's labels reach AA on its bone lift, even when the track sits straight on the window", () => {
+    for (const { glass, scheme, strength, check, at } of EVERY_LOOK) expect(worstInWindow(seeThroughTrackBackground(glass, scheme, strength, check.behind)), at).toBeGreaterThanOrEqual(AA);
+    // glass.css uses the same two numbers, in every look.
+    const track = /\n:is\(\.segmented, \.tabs, \.bg-modes, \.model-picks\) \{([^}]*)\}/.exec(rules("glass.css"))![1]!;
+    expect(track).toContain(`background-color: rgb(var(--green-rgb) / calc(var(--panel-veil) + ${TRACK_EXTRA_VEIL}))`);
+    expect(track).toContain(`rgb(var(--bone-rgb) / ${TRACK_LIFT})`);
+  });
+
+  it("words on a tinted chip reach AA: a vermilion or leaf chip lays deep green under its tint", () => {
     const rgb = (token: TextToken) => hexToRgb(WINDOW_TEXT_TOKENS[token]);
-    const [INK, TOMATO, SAGE] = [hexToRgb("#1e2a1b"), hexToRgb("#e8412c"), hexToRgb("#9caf88")];
-    const every = TEXT_COLOURS_WINDOW;
-    /** Each tint the stylesheets lay under words on a panel, with the text colours written on it. */
+    const [VERMILION, LEAF] = [hexToRgb("#e8392b"), hexToRgb("#5fa585")];
     const CHIPS: { name: string; tint: Rgb; alpha: number; texts: readonly Rgb[] }[] = [
-      { name: "the tomato pill and the error sound's tag", tint: TOMATO, alpha: 0.14, texts: [rgb("--tomato-ink")] },
-      { name: "If you need it", tint: INK, alpha: 0.07, texts: [rgb("--ink-3")] },
-      { name: "a code word", tint: INK, alpha: 0.08, texts: [rgb("--ink"), rgb("--ink-2")] },
-      { name: "no video yet", tint: INK, alpha: 0.1, texts: [rgb("--ink-2")] },
-      { name: "a clip tile without a cover", tint: INK, alpha: 0.12, texts: [rgb("--ink-2")] },
-      { name: "the fixes list", tint: TOMATO, alpha: 0.08, texts: every },
-      { name: "the setting that was found", tint: TOMATO, alpha: 0.09, texts: every },
-      { name: "the tap sound's tag", tint: SAGE, alpha: 0.4, texts: [rgb("--sage-text"), rgb("--ink")] },
+      { name: "the vermilion tint (pills, the error sound, callouts)", tint: VERMILION, alpha: 0.2, texts: [rgb("--vermilion-ink"), rgb("--ink")] },
+      { name: "the success tint (pills, the tap sound, guesses)", tint: LEAF, alpha: 0.22, texts: [rgb("--green-text"), rgb("--green-ink"), rgb("--ink")] },
     ];
     for (const { glass, scheme, strength, check, at } of EVERY_LOOK)
       for (const chip of CHIPS) {
         const bg = seeThroughChipBackground(glass, scheme, strength, chip.tint, chip.alpha, check.behind);
         for (const t of chip.texts) expect(contrast(t, bg), `${chip.name}, ${at}`).toBeGreaterThanOrEqual(AA);
       }
-    // On the darkest glass (where it matters) the wash makes up for an ink or tomato tint in full.
+    // Over white, where it matters, the chip is never lighter than its panel.
     for (const glass of GLASSES)
-      for (const chip of CHIPS.filter((c) => c.tint !== SAGE))
-        expect(luminance(seeThroughChipBackground(glass, "light", "clear", chip.tint, chip.alpha)), `${chip.name} ${glass}`).toBeGreaterThanOrEqual(luminance(seeThroughWorstBackground(glass, "light", "clear")));
-    // glass.css uses the same number.
-    expect(rules("glass.css")).toContain(`background-image: linear-gradient(rgb(255 255 255 / ${CHIP_LIFT}), rgb(255 255 255 / ${CHIP_LIFT}));`);
+      for (const chip of CHIPS)
+        expect(luminance(seeThroughChipBackground(glass, "light", "clear", chip.tint, chip.alpha)), `${chip.name} ${glass}`).toBeLessThanOrEqual(luminance(seeThroughWorstBackground(glass, "light", "clear")));
+    // tokens.css uses the same numbers.
+    const tokens = rules("tokens.css");
+    expect(GREEN_DEEP).toEqual(hexToRgb("#0a2820"));
+    expect(tokens).toContain(`--tint-leaf: linear-gradient(rgb(var(--green-leaf-rgb) / 0.22), rgb(var(--green-leaf-rgb) / 0.22)), rgb(var(--green-deep-rgb) / ${CHIP_DEEPEN});`);
+    expect(tokens).toContain(`--tint-vermilion: linear-gradient(rgb(var(--vermilion-rgb) / 0.2), rgb(var(--vermilion-rgb) / 0.2)), rgb(var(--green-deep-rgb) / ${CHIP_DEEPEN});`);
+  });
+
+  it("the picture look: a green veil over the photo and green panels, enough for every text colour over a white photo", () => {
+    expect([PICTURE_PAGE_VEIL, PICTURE_PANEL_VEIL]).toEqual([0.35, 0.65]);
+    expect(worst(mix(VEIL, mix(VEIL, WHITE, PICTURE_PAGE_VEIL), PICTURE_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
   });
 });
 
@@ -268,28 +254,28 @@ describe("the stylesheets and the text colour list stay in step", () => {
     for (const [token, value] of Object.entries(TEXT_TOKENS)) expect(root.get(token), token).toBe(value);
   });
 
-  it("html.see-through in tokens.css changes exactly the window look's deeper colours", () => {
+  it("html.see-through in tokens.css changes exactly the window look's lighter colours", () => {
     const windowLook = declared(block(rules("tokens.css"), "html.see-through"));
-    const deeper = Object.fromEntries((Object.keys(TEXT_TOKENS) as TextToken[]).filter((t) => WINDOW_TEXT_TOKENS[t] !== TEXT_TOKENS[t]).map((t) => [t, WINDOW_TEXT_TOKENS[t]]));
-    expect(Object.fromEntries(windowLook)).toEqual(deeper);
+    const lighter = Object.fromEntries((Object.keys(TEXT_TOKENS) as TextToken[]).filter((t) => WINDOW_TEXT_TOKENS[t] !== TEXT_TOKENS[t]).map((t) => [t, WINDOW_TEXT_TOKENS[t]]));
+    expect(Object.fromEntries(windowLook)).toEqual(lighter);
   });
 
   /**
-   * Text colours that are not in the list, each with the reason it never sits on a bare panel tint (or the rule
-   * that covers it in the window look). A colour that is not a token and not named here fails the test below.
+   * Text colours that are not in the list, each with the reason it never sits on a bare panel tint. A colour that is
+   * not a token and not named here fails the test below.
    */
   const NOT_ON_A_PANEL_TINT: Record<string, string> = {
-    "#fff": "white words on a tomato, deep sage or ink fill of their own",
-    "var(--offwhite)": "off-white words on an ink fill of their own",
-    "#eef1e7": "code on its own ink block",
-    "#7a3b0f": "the warn pill, on its own solid fill",
-    "#0a64d8": "the blue in the Get the app drawings, on their own white",
+    "#fff": "white words on a vermilion CTA, badge or count fill of their own",
+    "var(--on-bone)": "green words on a bone fill of their own (the selected pill, inverted chips, the tooltip)",
+    "var(--green-deep)": "deep green words on a solid leaf fill of their own",
+    "#0a64d8": "Safari's blue in the Get the app drawings, on their own bone card",
+    "#ffeec4": "the warn pill's words, on the fill and amber ring of their own",
     inherit: "takes the colour around it",
-    "var(--kind-text, var(--kind))": "a sound group's own colour: --sage-text or --tomato-ink (checked below)",
-    "var(--tomato-deep)": "a mark, not words; on a panel the window look turns it to --tomato-ink (checked below)",
+    "var(--kind-text)": "a sound group's tint colour: --green-text or --vermilion-ink (checked below)",
+    "var(--kind-on)": "words on a sound group's own solid fill (checked below)",
     "var(--act-tint)": "a button's glyph, for a blink of its action",
-    "var(--sage)": "a button's glyph, for a blink of its action",
-    "#5f6a5a": "placeholders; the window look turns them to --ink-3 (checked below)",
+    "var(--green-leaf)": "a button's glyph, for a blink of its action",
+    "var(--vermilion-light)": "the error toast's icon, a mark rather than words",
   };
 
   it("every text colour in every stylesheet is a token of the list, or a named exception", () => {
@@ -309,34 +295,34 @@ describe("the stylesheets and the text colour list stay in step", () => {
     expect(Object.keys(NOT_ON_A_PANEL_TINT).filter((v) => !used.has(v))).toEqual([]);
   });
 
-  it("the exceptions that can sit on a panel are covered by a rule in the window look", () => {
-    const glass = rules("glass.css");
-    expect(block(glass, "html.see-through ::placeholder")).toMatch(/color:\s*var\(--ink-3\);\s*opacity:\s*1;/);
-    expect(block(glass, "html.see-through .checklist__items .is-fail > .icon")).toMatch(/color:\s*var\(--tomato-ink\);/);
-    // The sound groups' own colours are text colours of the list.
+  it("the sound groups' own colours are text colours of the list, on fills they pass on", () => {
     const settings = rules("settings.css");
-    expect(declared(block(settings, ".sound-group.is-tap")).get("--kind-text")).toBe("var(--sage-text)");
-    expect(declared(block(settings, ".sound-group.is-deny")).get("--kind")).toBe("var(--tomato-ink)");
-    expect(declared(block(settings, ".sound-group.is-deny")).has("--kind-text")).toBe(false);
+    const tap = declared(block(settings, ".sound-group.is-tap"));
+    const deny = declared(block(settings, ".sound-group.is-deny"));
+    expect([tap.get("--kind-text"), deny.get("--kind-text")]).toEqual(["var(--green-text)", "var(--vermilion-ink)"]);
+    expect([tap.get("--kind"), tap.get("--kind-on")]).toEqual(["var(--green-leaf)", "var(--green-deep)"]);
+    expect(contrast(hexToRgb("#0a2820"), hexToRgb("#5fa585"))).toBeGreaterThanOrEqual(AA);
+    expect([deny.get("--kind"), deny.get("--kind-on")]).toEqual(["var(--vermilion-deep)", "#fff"]);
+    expect(contrast(WHITE, hexToRgb("#c42a1e"))).toBeGreaterThanOrEqual(AA);
   });
 
   it("the panel tint of the window look gives way to a surface's own denser tint, and never to a weaker one", () => {
     const glass = rules("glass.css");
     // As light as `.glass` itself (:where), so `.toast`, `.sheet.glass`, `.help-panel` and `.star-btn.is-on` keep theirs.
-    expect(glass).toMatch(/:where\(html\.see-through\) :is\(\.glass, \.glass--clear\) \{\s*--glass-tint: linear-gradient\(140deg, rgb\(255 255 255 \/ var\(--panel-veil\)\), rgb\(var\(--offwhite-rgb\) \/ var\(--panel-veil\)\)\);/);
+    expect(glass).toMatch(/:where\(html\.see-through\) :is\(\.glass, \.glass--clear\) \{\s*--glass-tint: linear-gradient\(140deg, rgb\(var\(--green-rgb\) \/ var\(--panel-veil\)\), rgb\(var\(--green-rgb\) \/ var\(--panel-veil\)\)\);/);
     expect(glass).not.toMatch(/html\.see-through \.glass[\s,{]/);
-    // It comes after the recipes it replaces (same weight, so the later rule wins).
-    expect(glass.indexOf(":where(html.see-through) :is(.glass, .glass--clear)")).toBeGreaterThan(glass.indexOf("\n.glass--clear {"));
-    // Every surface with a tint of its own is at least as strong as the most any glass needs for AA (Clear on a
-    // black floor), or is lifted to the panel tint by its own window-look rule.
+    // Every surface with a green tint of its own is at least as strong as the most any glass needs for AA (Clear over
+    // white), or is lifted to the panel tint by its own window-look rule. Surfaces that take --panel-veil follow it.
     const most = Math.max(...GLASSES.flatMap((g) => SCHEMES.map((sc) => seeThroughVeils(g, sc, "clear").panel)));
     const lifted: string[] = [];
     for (const [file, text] of sheets) {
       if (file === "glass.css") continue;
-      for (const m of text.matchAll(/([^{}]+)\{[^{}]*--glass-tint:\s*linear-gradient\(([^;]+);/g)) {
+      for (const m of text.matchAll(/([^{}]+)\{[^{}]*--glass-tint:\s*([^;]+);/g)) {
         const selector = m[1]!.trim();
+        if (m[2]!.trim() === "var(--cta)") continue;
         const alphas = [...m[2]!.matchAll(/\/\s*([\d.]+)\)/g)].map((a) => Number(a[1]));
         expect(alphas.length, `${file} ${selector}`).toBeGreaterThanOrEqual(2);
+        expect(m[2], `${file} ${selector}: a surface tint is bottle green`).toMatch(/var\(--green-rgb\)/);
         if (Math.min(...alphas) >= most) continue;
         lifted.push(selector);
         expect(glass, `${file} ${selector}: weaker than a panel can need (${most}), so it needs a rule in the window look`).toContain(`html.see-through ${selector} {`);
@@ -352,17 +338,19 @@ describe("colours", () => {
     expect(normaliseColours(["#111111", "#222222", "#333333", "#444444"])).toHaveLength(3);
     expect(normaliseColours(["red", 3, null, "#12345"])).toEqual([...DEFAULT_COLOURS]);
     expect(normaliseColours(undefined)).toEqual([...DEFAULT_COLOURS]);
-    expect(isHexColour("#9caf88")).toBe(true);
-    expect(isHexColour("9caf88")).toBe(false);
+    expect(isHexColour("#0f372b")).toBe(true);
+    expect(isHexColour("0f372b")).toBe(false);
   });
 
   it("every swatch is a valid colour with a name, and the defaults are the Clip Factory colours", () => {
     expect(SWATCHES.every((s) => isHexColour(s.hex) && s.name.length > 0)).toBe(true);
+    expect(DEFAULT_COLOURS).toEqual(["#0f372b", "#efe7da", "#e8392b"]);
+    expect(SWATCHES.slice(0, 3).map((s) => s.name)).toEqual(["Bottle green", "Bone", "Vermilion"]);
     expect(SWATCHES.slice(0, 3).map((s) => s.hex)).toEqual([...DEFAULT_COLOURS]);
   });
 
   it("the veil keeps text at AA on each colour and on the blend between any two", () => {
-    const sets = [[...DEFAULT_COLOURS], ["#1f2937"], ["#ff0000", "#00ff00"], ["#f6c945", "#2b6cb0", "#8e6cc9"], ["#f7f5ef"]];
+    const sets = [[...DEFAULT_COLOURS], ["#1f2937"], ["#ff0000", "#00ff00"], ["#f6c945", "#2b6cb0", "#8e6cc9"], ["#fafafa"], ["#ffffff"]];
     for (const set of sets) {
       const veil = coloursVeil(set);
       const rgbs = set.map(hexToRgb);
@@ -370,10 +358,11 @@ describe("colours", () => {
       for (let i = 0; i < rgbs.length; i++) for (let j = i + 1; j < rgbs.length; j++) samples.push(mix(rgbs[i]!, rgbs[j]!, 0.5));
       for (const s of samples) expect(worst(mix(VEIL, s, veil))).toBeGreaterThanOrEqual(AA);
     }
-    // Light colours need no veil at all; Night needs a lot (0.75 with today's text colours).
-    expect(coloursVeil(["#f7f5ef"])).toBe(0);
-    expect(coloursVeil(["#1f2937"])).toBe(minVeil(hexToRgb("#1f2937")));
-    expect(coloursVeil(["#1f2937"])).toBeGreaterThan(0.7);
+    // Dark colours need no veil at all; light ones need a lot (bone decides the default: 0.74).
+    expect(coloursVeil(["#1f2937"])).toBe(0);
+    expect(coloursVeil(["#0f372b"])).toBe(0);
+    expect(coloursVeil([...DEFAULT_COLOURS])).toBe(0.74);
+    expect(coloursVeil(["#ffffff"])).toBe(minVeil(WHITE));
   });
 });
 
@@ -393,7 +382,12 @@ describe("what is drawn", () => {
 
   it("picture uses the picture on this device, or the Clip Factory colours until there is one", () => {
     expect(resolveLook({ ...base, mode: "picture" })).toEqual({ kind: "brand" });
-    expect(resolveLook({ ...base, mode: "picture", picture: "data:image/jpeg;base64,x", glass: "vibrancy" })).toEqual({ kind: "picture", url: "data:image/jpeg;base64,x" });
+    expect(resolveLook({ ...base, mode: "picture", picture: "data:image/jpeg;base64,x", glass: "vibrancy" })).toEqual({
+      kind: "picture",
+      url: "data:image/jpeg;base64,x",
+      pageVeil: PICTURE_PAGE_VEIL,
+      panelVeil: PICTURE_PANEL_VEIL,
+    });
   });
 
   it("colours draws the chosen colours with their veil, even in the desktop app", () => {
@@ -504,7 +498,13 @@ describe("the page follows the look", () => {
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("");
     expect(root.style.getPropertyValue("--panel-veil")).toBe("");
 
-    applyLook({ kind: "colours", colours: ["#1f2937"], veil: 0.84 }, root);
-    expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.84");
+    applyLook({ kind: "colours", colours: ["#ffffff"], veil: 0.77 }, root);
+    expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.77");
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("");
+
+    // The picture look: a green veil over the photo and its own panel tint.
+    applyLook({ kind: "picture", url: "data:x", pageVeil: PICTURE_PAGE_VEIL, panelVeil: PICTURE_PANEL_VEIL }, root);
+    expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.35");
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.65");
   });
 });

@@ -1,23 +1,48 @@
-/* Design tokens. Palette from the brief: Sage, Off-white, Tomato (every primary CTA), ink. */
+/* Design tokens. Palette (docs/CONTRACTS.md §11, docs/DECISIONS.md ADR-43): Bottle Green is the surface, Bone is
+   the words and the lines, Vermilion is every call to action. The glass is bottle-green glass with bone text. */
 :root {
-  --sage: #9caf88;
-  --sage-rgb: 156 175 136;
-  --sage-deep: #4f6340;
-  --sage-ink: #4f6340; /* sage for words and icons on light glass (sage-deep is for fills, rings and lines) */
-  /* Small sage text on a sage tint (the apple tag, the sound number tiles). Deeper than --sage-ink, which measured
-     only 4.2-4.6:1 on the tint over the glass; this one measures 5.7-6.2:1 there (WCAG AA needs 4.5:1). */
-  --sage-text: #3d4f31;
-  --sage-mist: #c9d4bd;
-  --offwhite: #f7f5ef;
-  --offwhite-rgb: 247 245 239;
-  --tomato: #e8412c;
-  --tomato-rgb: 232 65 44;
-  --tomato-deep: #c4301e;
-  --tomato-ink: #962414; /* tomato for text on light glass: at least 5.2:1 even on sage-tinted or tomato-tinted glass */
-  --ink: #1e2a1b;
-  --ink-rgb: 30 42 27;
-  --ink-2: #2f3b2c; /* secondary text; at least 4.9:1 even on full sage */
-  --ink-3: #46523f; /* meta text, only on light glass */
+  --green: #0f372b;
+  --green-rgb: 15 55 43;
+  --green-deep: #0a2820;
+  --green-deep-rgb: 10 40 32;
+  --green-2: #1b4a3b; /* raised green: avatar and cover placeholders (bone on it 8.19:1) */
+  --green-3: #2a5c4a; /* mesh highlight green: backdrop blobs (bone on it 6.27:1) */
+  --green-leaf: #5fa585; /* success fill: done ticks, ring progress, the success tint */
+  --green-leaf-rgb: 95 165 133;
+  --bone: #efe7da;
+  --bone-rgb: 239 231 218;
+  --bone-deep: #d9cdb8; /* pressed bone fills (green on it 8.35:1) */
+  --vermilion: #e8392b;
+  --vermilion-rgb: 232 57 43;
+  --vermilion-deep: #c42a1e; /* badge and count fill (white on it 5.68:1), the outer focus ring */
+  --vermilion-light: #f07a6c; /* progress gradient end, glow tops */
+  /* The CTA fill is vermilion darkened a touch, so its white label reaches 4.5:1 (white on raw #e8392b is 4.16). */
+  --cta-top: rgb(206 48 36 / 0.97);
+  --cta-bottom: rgb(184 38 28 / 0.97);
+  --cta-hover-top: rgb(216 54 40 / 0.97);
+  --cta-pressed: rgb(170 34 25);
+  --cta: linear-gradient(180deg, var(--cta-top), var(--cta-bottom));
+  --shadow-rgb: 4 20 15; /* every drop shadow */
+  --line-rgb: 239 231 218; /* hairlines, input borders, rings: bone */
+
+  /* Words. All text is light: the hierarchy comes from size, weight and tracking, not from dimmer colour. */
+  --ink: #efe7da;
+  --ink-2: #e9e0d0;
+  --ink-3: #e4dac9;
+  --vermilion-ink: #ffd2ca; /* error and warning words, always with a vermilion icon or dot */
+  --green-ink: #d2e8c4; /* success words and icons */
+  --green-text: #d6ebc8; /* words on the success tint */
+  --on-bone: #0f372b; /* words on a bone fill (10.68:1 on solid bone) */
+
+  /* Fills under words on a panel. None is lighter than the panel under it, so words keep their contrast. */
+  --fill: rgb(var(--green-deep-rgb) / 0.3);
+  --fill-hover: rgb(var(--green-deep-rgb) / 0.42);
+  --tint-leaf: linear-gradient(rgb(var(--green-leaf-rgb) / 0.22), rgb(var(--green-leaf-rgb) / 0.22)), rgb(var(--green-deep-rgb) / 0.35);
+  --tint-vermilion: linear-gradient(rgb(var(--vermilion-rgb) / 0.2), rgb(var(--vermilion-rgb) / 0.2)), rgb(var(--green-deep-rgb) / 0.35);
+  --selected: rgb(var(--bone-rgb) / 0.92); /* the selected pill: bone with --on-bone words */
+
+  /* The panel tint. lib/look.ts sets it for every look; this is the floor where the page owns the backdrop. */
+  --panel-veil: 0.45;
 
   --font-display: "Times New Roman", "Times New Roman MT", Tinos, Times, serif;
   --font-ui: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -58,19 +83,18 @@
   --sidebar-w-collapsed: 80px;
   --tabbar-h: 66px;
 
-  --shadow-1: 0 1px 2px rgb(var(--ink-rgb) / 0.08), 0 8px 24px -14px rgb(var(--ink-rgb) / 0.35);
-  --shadow-2: 0 2px 6px rgb(var(--ink-rgb) / 0.08), 0 22px 48px -24px rgb(var(--ink-rgb) / 0.45);
-  --focus: 0 0 0 3px rgb(var(--offwhite-rgb) / 0.95), 0 0 0 5.5px var(--tomato-deep);
+  --shadow-1: 0 1px 2px rgb(var(--shadow-rgb) / 0.18), 0 8px 24px -14px rgb(var(--shadow-rgb) / 0.55);
+  --shadow-2: 0 2px 6px rgb(var(--shadow-rgb) / 0.2), 0 22px 48px -24px rgb(var(--shadow-rgb) / 0.65);
+  --focus: 0 0 0 3px rgb(var(--bone-rgb) / 0.95), 0 0 0 5.5px var(--vermilion-deep);
 }
 
-/* The window look (see-through in the desktop app, docs/CONTRACTS.md §22.3). The panels carry much less tint there,
-   so more of the desktop shows through them; the four lightest text colours go deeper to stay easy to read on the
-   darkest the window glass can be (each has a relative luminance of 0.047 or less). Each is still clearly its own
-   colour: grey-green, tomato, sage. --ink and --ink-2 are dark enough as they are.
-   Keep in step with WINDOW_TEXT_TOKENS in lib/background.ts (test/background.test.ts reads this file). */
+/* The window look (§22.3). Panels are bottle-green glass at --panel-veil; the text goes to bone or lighter so the
+   panels need the least green over the lightest the window can be (white). Each has a relative luminance of 0.806
+   or more. Keep in step with WINDOW_TEXT_TOKENS in lib/background.ts (test/background.test.ts reads this file). */
 html.see-through {
-  --ink-3: #344031;
-  --tomato-ink: #74190e;
-  --sage-ink: #2c421c;
-  --sage-text: #2c421c;
+  --ink-2: #efe7da;
+  --ink-3: #efe7da;
+  --vermilion-ink: #ffe2dc;
+  --green-ink: #e4f2da;
+  --green-text: #e4f2da;
 }

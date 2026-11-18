@@ -4,13 +4,14 @@
    it, else the system UI font; headings and the logo in Times New Roman, whose metric twin Tinos is the face the app
    bundles, so they look the same as in the app. */
 :root {
-  color-scheme: light;
-  --sage: #9caf88;
-  --sage-deep: #4f6340;
-  --offwhite: #f7f5ef;
-  --tomato: #e8412c;
-  --ink: #1e2a1b;
-  --ink-2: #2f3b2c;
+  color-scheme: dark;
+  --green: #0f372b;
+  --green-deep: #0b2c22;
+  --bone: #efe7da;
+  --vermilion: #e8392b;
+  --vermilion-ink: #ffd2ca;
+  --ink: #efe7da;
+  --ink-2: #e9e0d0;
   --font-ui: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-display: "Times New Roman", "Times New Roman MT", Tinos, Times, serif;
 }
@@ -23,7 +24,7 @@ html {
 body {
   margin: 0;
   padding: 0 16px 48px;
-  background: radial-gradient(120% 80% at 10% 0%, #fff 0%, var(--offwhite) 45%, #e6ecdf 100%) fixed;
+  background: radial-gradient(120% 80% at 10% 0%, #174a3a 0%, var(--green) 45%, var(--green-deep) 100%) fixed;
   color: var(--ink);
   font: 17px/1.6 var(--font-ui);
 }
@@ -80,7 +81,8 @@ footer a {
   min-height: 44px;
 }
 a {
-  color: var(--sage-deep);
+  color: var(--vermilion-ink);
+  text-decoration-color: var(--vermilion);
   text-underline-offset: 3px;
 }
 h1,
@@ -102,8 +104,8 @@ h2 {
   padding: 4px 20px 16px;
   margin-top: 16px;
   border-radius: 26px;
-  background: rgb(255 255 255 / 0.62);
-  box-shadow: inset 0 1px 0 #fff, 0 22px 48px -24px rgb(30 42 27 / 0.35);
+  background: rgb(10 40 32 / 0.55);
+  box-shadow: inset 0 1px 0 rgb(239 231 218 / 0.28), inset 0 0 0 1px rgb(239 231 218 / 0.18), 0 22px 48px -24px rgb(4 20 15 / 0.65);
 }
 .muted {
   color: var(--ink-2);

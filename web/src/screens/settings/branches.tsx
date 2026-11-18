@@ -167,7 +167,7 @@ export function YoutubeBranch() {
 
   return (
     <Panel>
-      <Apple id="youtube-cookies" aside={hasCookies ? <Pill tone="sage" icon="check">Saved</Pill> : null}>
+      <Apple id="youtube-cookies" aside={hasCookies ? <Pill tone="success" icon="check">Saved</Pill> : null}>
         <div className="row-actions">
           <input
             ref={file}
@@ -332,7 +332,7 @@ export function BackgroundBranch() {
         </Apple>
       </Panel>
       <Panel className="bg-options">
-        <Apple id="glass-strength" aside={mode === "see-through" ? <Pill tone="sage">In use</Pill> : null}>
+        <Apple id="glass-strength" aside={mode === "see-through" ? <Pill tone="success">In use</Pill> : null}>
           <Segmented<GlassStrength>
             label="Glass strength"
             value={strength}
@@ -397,8 +397,10 @@ function SeeThroughArt() {
         <circle cx="94" cy="22" r="11" fill="#f6c945" />
         <path d="M0 62c14-16 28-20 42-8 12-18 30-22 46-6 10-8 22-8 32 2v40H0z" fill="#5c7a4a" />
         <path d="M0 74c20-10 44-10 64 0 18-8 38-8 56 0v16H0z" fill="#3f5a34" />
-        <rect x="16" y="18" width="46" height="32" rx="5" fill="#f7f5ef" />
-        <rect x="16" y="18" width="46" height="8" rx="4" fill="#1e2a1b" />
+        <rect x="16" y="18" width="46" height="32" rx="5" fill="#0f372b" fillOpacity="0.73" />
+        <rect x="16" y="18" width="46" height="8" rx="4" fill="#0a2820" />
+        <rect x="21" y="32" width="28" height="3" rx="1.5" fill="#efe7da" />
+        <rect x="21" y="39" width="20" height="3" rx="1.5" fill="#efe7da" />
       </svg>
       <span className="bg-tile__frost" />
     </>
@@ -440,7 +442,7 @@ function PictureApple({ inUse, onPicked }: { inUse: boolean; onPicked: () => voi
   }
 
   return (
-    <Apple id="background-picture" wide aside={inUse ? <Pill tone="sage">In use</Pill> : null}>
+    <Apple id="background-picture" wide aside={inUse ? <Pill tone="success">In use</Pill> : null}>
       <div className="bg-picker">
         <span className="bg-picker__preview" aria-hidden="true">
           {prefs.background ? <img src={prefs.background} alt="" /> : <span className="bg-picker__mesh" />}
@@ -529,7 +531,7 @@ function ColoursApple({ inUse, colours, onChange }: { inUse: boolean; colours: s
 
   const custom = colours.filter((c) => !SWATCHES.some((s) => s.hex === c));
   return (
-    <Apple id="background-colours" wide aside={inUse ? <Pill tone="sage">In use</Pill> : null}>
+    <Apple id="background-colours" wide aside={inUse ? <Pill tone="success">In use</Pill> : null}>
       <div className="bg-colours">
         <span className="bg-colours__mix" aria-hidden="true" style={colourPreviewStyle(colours)} />
         <div className="swatches" role="group" aria-label="Colours">
@@ -595,7 +597,7 @@ export function UpdatesBranch() {
   return (
     <Panel>
       <Apple id="this-version">
-        <Pill tone="sage" icon="check">
+        <Pill tone="success" icon="check">
           {APP_VERSION === "dev" ? "Test version" : `Version ${APP_VERSION}`}
         </Pill>
       </Apple>

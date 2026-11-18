@@ -1,6 +1,6 @@
 // One big numbered step (docs/CONTRACTS.md §17.1): number, icon, title, a few short lines, then only what the step
 // needs (Open, Copy chips, paste boxes, the upload box, "If you see…" hints) and I did this. A done step folds to a
-// sage tick row; tapping it opens it again.
+// leaf tick row; tapping it opens it again.
 import type { ReactNode } from "react";
 import { Icon } from "../../../components/Icon.tsx";
 import { ActGlyph, Button } from "../../../components/ui.tsx";
@@ -28,7 +28,7 @@ export function StepCard({
   open: boolean;
   /** The first step that is not done yet. */
   current: boolean;
-  /** This step's main action is the screen's one tomato button. */
+  /** This step's main action is the screen's one main (vermilion) button. */
   primary: boolean;
   /** The text each Copy chip copies (null while loading). */
   copyValue: (value: NonNullable<GuideStep["copy"]>[number]["value"]) => string | null;
@@ -132,7 +132,7 @@ export function StepCard({
                   Not done yet
                 </Button>
               ) : (
-                <Button size="lg" icon="check" act="tick" className="btn--sage gstep__done" onClick={() => onDone(true)} loading={busy}>
+                <Button size="lg" variant="action" icon="check" act="tick" className="gstep__done" onClick={() => onDone(true)} loading={busy}>
                   I did this
                 </Button>
               )}

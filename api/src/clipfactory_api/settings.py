@@ -35,12 +35,16 @@ DEFAULTS: dict[str, Any] = {
     # skipped platform that is not connected is never tried (its post waits as `pending_integration`, §17.6).
     "setupSkipped": [],
     # §22: what sits behind the glass. The picture itself never leaves the device; only the choices are stored.
-    "backgroundColours": ["#9caf88", "#f7f5ef", "#e8412c"],  # the Clip Factory colours: sage, cream, tomato
+    "backgroundColours": ["#0f372b", "#efe7da", "#e8392b"],  # the Clip Factory colours: bottle green, bone, vermilion
     "glassStrength": "clear",
     # ADR-42: the AI model that makes the clips, a key of clipModels in config/models.json. The default is agentModel,
     # so nothing changes until the owner picks one. A stored key no longer in the list falls back to the default.
     "clipModel": "fable-5-1",
 }
+# The Clip Factory colours before the bottle-green look (ADR-43). An owner who never changed them has exactly this
+# trio stored; it reads back as today's default so the backdrop follows the new look. Read time only: nothing stored
+# is rewritten, and any other choice (a reordering or a subset too) is kept as it is.
+OLD_DEFAULT_COLOURS = ("#9caf88", "#f7f5ef", "#e8412c")
 # Mirrors config/earnings.json `maxUsdPer1000` (a test keeps them equal).
 MAX_USD_PER_1000 = 100
 # Mirrors config/models.json `clipModels` and `agentModel` (a test keeps them equal; the API Lambdas do not ship it).
@@ -68,6 +72,8 @@ def with_defaults(stored: Mapping[str, Any] | None) -> dict[str, Any]:
                 out[field] = _check_field(field, stored[field])
             except Exception:  # noqa: S112 - a bad stored value must never break the app
                 continue
+    if tuple(out["backgroundColours"]) == OLD_DEFAULT_COLOURS:
+        out["backgroundColours"] = list(DEFAULTS["backgroundColours"])
     out["clipMax"] = max(out["clipMax"], out["clipMin"])
     return out
 
@@ -127,7 +133,7 @@ def _check_field(field: str, value: Any) -> Any:
 def _colours(value: Any) -> list[str]:
     """1 to 3 distinct ``#rrggbb`` colours, stored lower case."""
     if not isinstance(value, list) or not all(isinstance(c, str) and HEX_COLOUR.match(c) for c in value):
-        raise bad_request("Colours must be like #9caf88.")
+        raise bad_request("Colours must be like #0f372b.")
     out: list[str] = []
     for c in value:
         if c.lower() not in out:

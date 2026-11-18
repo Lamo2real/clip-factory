@@ -330,7 +330,7 @@ export function HelpPanel({
   const newestEntry = state.entries.find((e) => e.id === newest);
   // "Go Home" while already on Home would be a dead tap: the suggestion chips are the next step there.
   const shown = (actions: readonly HelpAction[]) => (route.name === "home" ? actions.filter((x) => x.id !== GO_HOME.id) : actions);
-  const tomatoTaken = !!newestEntry && newestEntry.role === "assistant" && shown(newestEntry.answer.actions).length > 0;
+  const mainTaken = !!newestEntry && newestEntry.role === "assistant" && shown(newestEntry.answer.actions).length > 0;
   const suggestions = suggestionsFor({ page: helpPage(route.name) });
   const left = Math.max(0, Math.ceil((state.blockedUntil - now) / 1000));
   const askOff = !text.trim() || state.thinking || blocked;
@@ -397,10 +397,10 @@ export function HelpPanel({
           <div className="help-confirm" role="group" aria-label="Leave this page?">
             <p>{UNSAVED_TEXT}</p>
             <div className="help-confirm__row">
-              <Button size="sm" className="help-sage" icon="x" onClick={() => dispatch({ type: "confirm", confirm: null })}>
+              <Button size="sm" icon="x" onClick={() => dispatch({ type: "confirm", confirm: null })}>
                 Stay
               </Button>
-              <Button size="sm" className="help-sage" icon="chevronRight" onClick={() => go(pending)}>
+              <Button size="sm" variant="action" icon="chevronRight" onClick={() => go(pending)}>
                 Leave
               </Button>
             </div>
@@ -411,8 +411,7 @@ export function HelpPanel({
               <Button
                 key={x.id}
                 size="sm"
-                variant={isNewest && i === 0 ? "primary" : "glass"}
-                className={isNewest && i === 0 ? "" : "help-sage"}
+                variant={isNewest && i === 0 ? "primary" : "action"}
                 icon={iconFor(x.to)}
                 iconAfter="chevronRight"
                 onClick={() => choose(e.id, x)}
@@ -535,8 +534,8 @@ export function HelpPanel({
           <PaperPlaneButton
             type="submit"
             flight={flight}
-            tone={tomatoTaken ? "sage" : "primary"}
-            className={`help-panel__ask${tomatoTaken ? " help-sage" : ""}`}
+            tone={mainTaken ? "action" : "primary"}
+            className="help-panel__ask"
             disabled={askOff}
             aria-label={blocked ? `Send, available in ${left} seconds` : "Send"}
           />

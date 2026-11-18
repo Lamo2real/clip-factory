@@ -19,8 +19,8 @@
   --act-anim: none;
   --act-dur: var(--act-short);
   --act-ease: var(--ease-out);
-  /* The fail tint; a lighter one on the tomato button so it still reads. */
-  --act-tint: var(--tomato-deep);
+  /* The fail tint (a light vermilion, so it shows on the green glass); a white one on the vermilion CTA. */
+  --act-tint: var(--vermilion-light);
   /* next / prev / nudge: which way the chevron leaves (0deg right, 180deg left, 90deg down). A screen sets
      --act-dir-in on the button (it inherits; --act-dir itself is set here, so a parent could not override it). */
   --act-dir: var(--act-dir-in, 0deg);
@@ -32,7 +32,7 @@
   /* Nothing around the glyph ever moves; the button's own overflow: hidden clips a glyph that flies off. */
   contain: layout style;
 }
-.btn--primary .act {
+.btn:is(.btn--primary, .btn--action) .act {
   --act-tint: rgb(255 255 255 / 0.62);
 }
 .act__item {
@@ -50,7 +50,7 @@
   animation: var(--act-anim) var(--act-rewind) var(--act-ease) reverse both;
 }
 
-/* ---------- Failure (§20.5): back to rest, a gentle shake, tomato for the first half ---------- */
+/* ---------- Failure (§20.5): back to rest, a gentle shake, vermilion for the first half ---------- */
 .act.is-fail {
   animation: act-tint var(--act-fail) linear;
 }
@@ -88,7 +88,7 @@
   }
 }
 
-/* ---------- Reduced-motion stand-in (§20.6): an opacity dip and a sage tint, no movement ---------- */
+/* ---------- Reduced-motion stand-in (§20.6): an opacity dip and a green tint, no movement ---------- */
 .act.is-fade {
   animation: act-fade-tint var(--act-fade) ease-out;
 }
@@ -112,7 +112,7 @@
 }
 @keyframes act-fade-tint {
   50% {
-    color: var(--sage);
+    color: var(--green-leaf);
   }
 }
 
@@ -133,7 +133,7 @@
 .act--check.is-play .act__item::before,
 .act--check.is-play .act__item::after {
   content: "";
-  border: 2px solid var(--sage);
+  border: 2px solid var(--green-leaf);
   /* A gentler ease than --ease-out, and the opacity holds until 45 %, so a child sees the ring (not a 100 ms flash). */
   animation: act-ring var(--act-mid) cubic-bezier(0.33, 1, 0.68, 1) both;
 }

@@ -203,7 +203,7 @@ export function SetupTodo() {
         {doneMode === "pill" ? bar : null}
         <aside
           ref={card}
-          className={`setup-todo setup-todo--done glass glass--sage${phase === "leaving" ? " is-leaving" : ""}`}
+          className={`setup-todo setup-todo--done glass glass--green${phase === "leaving" ? " is-leaving" : ""}`}
           data-mode={doneMode}
           aria-label="Set up posting"
           role="status"

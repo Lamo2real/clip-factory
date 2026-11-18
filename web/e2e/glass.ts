@@ -46,7 +46,7 @@ export function glassScene(state: keyof typeof LIQUID_MEASURED): string {
     "<rect x='14' y='8' width='44' height='16' rx='8' fill='#fff'/>" +
     "<rect x='-40' y='62' width='240' height='70' fill='#3f5a33'/>" +
     "<rect x='-40' y='22' width='76' height='44' fill='#000'/>" +
-    "<path d='M52 66c2-10 8-15 18-16l12-11c4-3 8-4 13-4h26c6 0 11 2 14 7l8 9c10 1 17 6 18 15z' fill='#e8412c'/>" +
+    "<path d='M52 66c2-10 8-15 18-16l12-11c4-3 8-4 13-4h26c6 0 11 2 14 7l8 9c10 1 17 6 18 15z' fill='#e8392b'/>" +
     "<circle cx='75' cy='68' r='9' fill='#000'/><circle cx='131' cy='68' r='9' fill='#000'/>" +
     "</g></svg>";
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") center / cover no-repeat fixed, ${css(overBlack)}`;

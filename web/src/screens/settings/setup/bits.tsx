@@ -49,7 +49,7 @@ export async function readClipboard(): Promise<string | null> {
   }
 }
 
-/** A label and a value in mono, with one big Copy button. Shows a sage "Copied!" for a moment. */
+/** A label and a value in mono, with one big Copy button. Shows a bone "Copied!" for a moment. */
 export function CopyChip({ label, value }: { label: string; value: string | null }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const valueRef = useRef<HTMLElement>(null);

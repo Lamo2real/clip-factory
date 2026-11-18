@@ -137,8 +137,9 @@ describe("Ask Clip Factory panel", () => {
     const actions = host.querySelectorAll(".help-actions .btn");
     expect(actions).toHaveLength(1);
     expect(actions[0]!.className).toContain("btn--primary");
-    // The tomato moved to the answer: Ask turns sage.
-    expect($(".help-panel__ask")!.className).toContain("help-sage");
+    // The main action moved to the answer: Ask becomes an ordinary action (still the vermilion CTA look).
+    expect($(".help-panel__ask")!.className).toContain("btn--action");
+    expect($(".help-panel__ask")!.className).not.toContain("btn--primary");
   });
 
   it("shows a calm countdown on 429, keeps Ask off, and never retries by itself", async () => {
@@ -238,8 +239,8 @@ describe("Ask Clip Factory panel", () => {
     await ask("i want a dinosaur");
     expect(button("Go Home")).toBeUndefined();
     expect(host.querySelectorAll(".help-msg--bot .help-chip")).toHaveLength(3);
-    // The tomato stays on Ask.
-    expect($(".help-panel__ask")!.className).not.toContain("help-sage");
+    // The main action stays on Ask.
+    expect($(".help-panel__ask")!.className).toContain("btn--primary");
     history.replaceState(null, "", "/jobs");
     await act(async () => window.dispatchEvent(new PopStateEvent("popstate")));
     await ask("i want a dinosaur");

@@ -21,7 +21,7 @@ DEFAULTS = {
     "earningsRates": {},
     "earningsPaid": {},
     "setupSkipped": [],
-    "backgroundColours": ["#9caf88", "#f7f5ef", "#e8412c"],
+    "backgroundColours": ["#0f372b", "#efe7da", "#e8392b"],
     "glassStrength": "clear",
     "clipModel": "fable-5-1",
 }
@@ -388,15 +388,19 @@ def test_setup_skipped_bad_stored_value_falls_back_to_none_skipped() -> None:
 # ---------- Background modes (§22) ----------
 
 
+NEW_DEFAULT = ["#0f372b", "#efe7da", "#e8392b"]  # bottle green, bone, vermilion (ADR-43)
+OLD_DEFAULT = ["#9caf88", "#f7f5ef", "#e8412c"]  # the colours before the bottle-green look
+
+
 def test_background_mode_has_no_server_default() -> None:
     # Absent until saved, so the device decides (§22.1): a picture already on it keeps showing after the upgrade.
     out = settings.with_defaults(None)
     assert "backgroundMode" not in out
     assert out["glassStrength"] == "clear"
-    assert out["backgroundColours"] == ["#9caf88", "#f7f5ef", "#e8412c"]
+    assert out["backgroundColours"] == NEW_DEFAULT
     # A fresh list each time, so one owner's colours can never leak into the shared defaults.
     out["backgroundColours"].append("#000000")
-    assert settings.with_defaults(None)["backgroundColours"] == ["#9caf88", "#f7f5ef", "#e8412c"]
+    assert settings.with_defaults(None)["backgroundColours"] == NEW_DEFAULT
 
 
 def test_background_choice_saved(call: Call) -> None:
@@ -424,9 +428,9 @@ def test_background_choice_saved(call: Call) -> None:
         ({"glassStrength": "solid"}, "Clear or Frosted"),
         ({"backgroundColours": []}, "1 to 3 colours"),
         ({"backgroundColours": ["#111111", "#222222", "#333333", "#444444"]}, "1 to 3 colours"),
-        ({"backgroundColours": ["red"]}, "#9caf88"),
-        ({"backgroundColours": "#9caf88"}, "#9caf88"),
-        ({"backgroundColours": ["#12345"]}, "#9caf88"),
+        ({"backgroundColours": ["red"]}, "#0f372b"),
+        ({"backgroundColours": "#0f372b"}, "#0f372b"),
+        ({"backgroundColours": ["#12345"]}, "#0f372b"),
     ],
 )
 def test_background_choice_is_checked(call: Call, patch: dict[str, object], message: str) -> None:
@@ -452,7 +456,7 @@ def test_bad_stored_background_falls_back_to_defaults() -> None:
     out = settings.with_defaults({"backgroundMode": "nope", "backgroundColours": ["x"], "glassStrength": 3})
     assert "backgroundMode" not in out
     assert out["glassStrength"] == "clear"
-    assert out["backgroundColours"] == ["#9caf88", "#f7f5ef", "#e8412c"]
+    assert out["backgroundColours"] == NEW_DEFAULT
 
 
 # ---------- AI model for clip jobs (ADR-42) ----------
@@ -499,3 +503,28 @@ def test_old_or_bad_stored_clip_model_reads_as_default(call: Call, store: db.Sto
     assert settings.with_defaults({"clipModel": "claude-old-1", "clipMax": 7})["clipModel"] == "fable-5-1"
     assert settings.with_defaults({"clipModel": 3})["clipModel"] == "fable-5-1"
     assert settings.with_defaults({"clipModel": "opus-5-5"})["clipModel"] == "opus-5-5"
+
+
+def test_untouched_old_default_colours_read_as_the_new_default() -> None:
+    # ADR-43: an owner who never changed the colours has the old trio stored; it follows the new look on read.
+    stored = {"backgroundColours": list(OLD_DEFAULT)}
+    assert settings.with_defaults(stored)["backgroundColours"] == NEW_DEFAULT
+    assert (
+        settings.with_defaults({"backgroundColours": [c.upper() for c in OLD_DEFAULT]})["backgroundColours"]
+        == NEW_DEFAULT
+    )
+    # Read time only: what is stored is not touched.
+    assert stored == {"backgroundColours": OLD_DEFAULT}
+
+
+@pytest.mark.parametrize(
+    "chosen",
+    [
+        ["#e8412c", "#f7f5ef", "#9caf88"],  # the old trio reordered
+        ["#9caf88", "#f7f5ef"],  # a subset of it
+        ["#9caf88"],
+        ["#f6c945", "#2b6cb0"],  # an owner's own choice
+    ],
+)
+def test_other_colour_choices_are_kept(chosen: list[str]) -> None:
+    assert settings.with_defaults({"backgroundColours": chosen})["backgroundColours"] == chosen

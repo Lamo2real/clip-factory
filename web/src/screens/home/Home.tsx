@@ -71,7 +71,7 @@ export function Home() {
   return (
     <div className="home">
       <GetAppBanner />
-      <section className="hero glass glass--sage glass--refract" aria-labelledby="hero-title">
+      <section className="hero glass glass--green glass--refract" aria-labelledby="hero-title">
         <div className="hero__main">
           <h1 className="hero__title" id="hero-title">
             Clips worth <Swash>posting</Swash>.

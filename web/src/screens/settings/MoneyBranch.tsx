@@ -40,7 +40,7 @@ export function MoneyBranch() {
       <Panel>
         <Apple id="money-how" wide>
           <p className="money__how">
-            <Pill tone="sage" icon="info">
+            <Pill tone="success" icon="info">
               Best guess
             </Pill>
             <span>Amounts are in US dollars, checked on {dayLabel(EARNINGS.asOf)}.</span>

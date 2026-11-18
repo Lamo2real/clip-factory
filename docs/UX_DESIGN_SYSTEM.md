@@ -5,7 +5,8 @@ this file is the full reference. The code lives in `web/`; tokens are CSS custom
 
 ## Principles
 
-1. **One action stands out.** Each screen has at most one tomato call-to-action. Everything else is quiet.
+1. **Every action is vermilion; one stands out.** Every call to action wears the same vermilion CTA, and each screen
+   has at most one main one (`.btn--primary`). Everything else is quiet bone-outlined glass.
 2. **Glass, never solid.** Every surface lets the backdrop show through.
 3. **Nothing ever overflows.** Text wraps or truncates inside its box at every width from 320 px.
 4. **Delight on the moments that matter.** Confirm, a finished job, a new skill. Not on every click.
@@ -14,91 +15,103 @@ this file is the full reference. The code lives in `web/`; tokens are CSS custom
 
 ## Colour tokens
 
-The tables below are the values in `web/src/styles/tokens.css`.
-`web/test/designTokens.test.ts` fails if a row here and the CSS disagree, if a colour or radius token in
-`tokens.css` is missing from these tables, or if this doc names a custom property the CSS doesn't define.
-`web/test/background.test.ts` fails if a stylesheet writes words in a colour that is not one of the six text
-colours (`--ink`, `--ink-2`, `--ink-3`, `--tomato-ink`, `--sage-ink`, `--sage-text`) or a named exception.
+The palette is the November 2026 bottle-green look ([DECISIONS.md ADR-43](DECISIONS.md#adr-43-bottle-green-glass-bone-words-vermilion-actions)):
+**green is the surface, bone is the words and the lines, vermilion is the action.** The tables below are the values
+in `web/src/styles/tokens.css`. `web/test/designTokens.test.ts` fails if a row here and the CSS disagree, if a
+colour or radius token in `tokens.css` is missing from these tables, or if this doc names a custom property the CSS
+doesn't define. `web/test/background.test.ts` fails if a stylesheet writes words in a colour that is not one of the
+six text colours (`--ink`, `--ink-2`, `--ink-3`, `--vermilion-ink`, `--green-ink`, `--green-text`) or a named
+exception (white on a vermilion fill, `--on-bone` on a bone fill, Safari's blue in the Get the app drawings).
 
 | Token | Value | Use |
 |---|---|---|
-| `--sage` | `#9caf88` | Hero cards, active navigation, success, the backdrop |
-| `--sage-deep` | `#4f6340` | Deep sage for fills, rings and lines (the done step, the progress fill, chart lines). Never for words: those use `--sage-ink` |
-| `--sage-ink` | `#4f6340` | Words and icons on light glass that must read as sage: saved, ready, passed (about 6:1 on off-white; the old `#6F8560` failed AA). Its own token because it goes deeper in the window look (below) while the fills stay |
-| `--sage-mist` | `#c9d4bd` | Pale sage fills (tracks, quiet chips) |
-| `--sage-text` | `#3d4f31` | Small sage text on a sage tint (see Contrast below) |
-| `--offwhite` | `#f7f5ef` | Base of most glass tints, light text on sage |
-| `--tomato` | `#e8412c` | **Every primary CTA**, focus ring accent, the headline swash, the review badge |
-| `--tomato-deep` | `#c4301e` | CTA pressed state, the focus ring |
-| `--tomato-ink` | `#962414` | Tomato **text** on light glass (text links, the Working now %, the "Didn't work" pill, job and posting errors): at least 5.2:1 even on sage-tinted or tomato-tinted glass, so it passes AA at 12–16 px. Error text uses it too; there is no separate danger colour, and destructive buttons are outlined (`.btn--danger`). |
-| `--ink` | `#1e2a1b` | Body text, icons |
-| `--ink-2` | `#2f3b2c` | Secondary text; at least 4.9:1 even on full sage |
-| `--ink-3` | `#46523f` | Meta text (leaves, hints, timestamps), only on light glass |
+| `--green` | `#0f372b` | Bottle green: every glass tint, veil and scrim; words on bone |
+| `--green-deep` | `#0a2820` | Deeper green: code blocks, wells under words, sheet scrims, words on a leaf fill |
+| `--green-2` | `#1b4a3b` | Raised green: cover and avatar placeholders (bone on it 8.19:1) |
+| `--green-3` | `#2a5c4a` | Mesh highlight green: backdrop blobs, placeholders (bone on it 6.27:1) |
+| `--green-leaf` | `#5fa585` | Success fills: done ticks, ring progress, the success tint, the toast timer |
+| `--bone` | `#efe7da` | Bone: the words, hairlines, outlined buttons, the selected pill, the tooltip |
+| `--bone-deep` | `#d9cdb8` | Pressed bone fills |
+| `--vermilion` | `#e8392b` | Accent dots, progress fills, the Ask mark's dot, the Glide bar and dot, the swash, the best chart line |
+| `--vermilion-deep` | `#c42a1e` | Badges and counts (white on it 5.68:1), the outer focus ring |
+| `--vermilion-light` | `#f07a6c` | Progress gradient ends, glow tops, the error toast icon |
+| `--ink` | `#efe7da` | Body text, headings, icons (bone) |
+| `--ink-2` | `#e9e0d0` | Secondary text |
+| `--ink-3` | `#e4dac9` | Meta text (leaves, hints, timestamps, placeholders) |
+| `--vermilion-ink` | `#ffd2ca` | Error and warning **words**, always with a vermilion icon or dot. Vermilion itself is never used for words (3.15:1 on solid green) |
+| `--green-ink` | `#d2e8c4` | Success words and icons (saved, connected, passed) |
+| `--green-text` | `#d6ebc8` | Words on the success tint (the apple tag, the sound number tiles) |
+| `--on-bone` | `#0f372b` | Words on a bone fill: the selected pill, inverted chips, the tooltip (10.68:1 on solid bone) |
 
-`--sage-rgb`, `--offwhite-rgb`, `--tomato-rgb` and `--ink-rgb` hold the same colours as space-separated channels so
-CSS can add alpha: `rgb(var(--ink-rgb) / 0.08)`.
+`--green-rgb`, `--green-deep-rgb`, `--green-leaf-rgb`, `--bone-rgb` and `--vermilion-rgb` hold the same colours as
+space-separated channels so CSS can add alpha: `rgb(var(--green-rgb) / 0.3)`. `--shadow-rgb` is the base of every
+drop shadow and `--line-rgb` (bone) of every hairline and ring. Shared fills: `--cta` (the CTA gradient), `--fill` and
+`--fill-hover` (deep green wells under words), `--tint-leaf` and `--tint-vermilion` (tints laid over deep green, so a
+chip is never lighter than its panel), `--selected` (bone 0.92).
 
-**The window look has four deeper text colours.** In the desktop app's see-through window (`html.see-through`) the
-panels carry much less tint, so the desktop shows through them; the four lightest text colours go deeper there to
-stay easy to read on the darkest the window glass can be. Each is still clearly its own colour (grey-green, tomato,
-sage) and has a relative luminance of 0.047 or less. `--ink` and `--ink-2` are dark enough as they are.
+**The window look lifts five text colours.** In the desktop app's see-through window (`html.see-through`) the panels
+are worked out for the lightest the window can be (white), so the softer text colours go to bone or lighter there.
 
 | Token | Everywhere else | In the see-through window |
 |---|---|---|
-| `--ink-3` | `#46523f` | `#344031` |
-| `--tomato-ink` | `#962414` | `#74190e` |
-| `--sage-ink` | `#4f6340` | `#2c421c` |
-| `--sage-text` | `#3d4f31` | `#2c421c` |
+| `--ink-2` | `#e9e0d0` | `#efe7da` |
+| `--ink-3` | `#e4dac9` | `#efe7da` |
+| `--vermilion-ink` | `#ffd2ca` | `#ffe2dc` |
+| `--green-ink` | `#d2e8c4` | `#e4f2da` |
+| `--green-text` | `#d6ebc8` | `#e4f2da` |
 
 Glass tints are not tokens: each glass variant sets its own `--glass-tint` gradient (in `web/src/styles/glass.css`),
-and a component may override it.
+and a component may override it. Every tint is bottle green; `--panel-veil` is how much.
 
 | Class | `--glass-tint` |
 |---|---|
-| `.glass` | white 0.66 → off-white 0.48, 140° |
-| `.glass--sage` | light sage 0.78 → `--sage` 0.62 → deeper sage 0.60, 150° |
-| `.glass--tomato` | pale tomato 0.70 → `--tomato` 0.22, 150° |
-| `.glass--clear` | white 0.42 → off-white 0.28, 140° |
-| `.glass--strong` and dialogs | white 0.86–0.95 → off-white 0.74–0.92 (set per component) |
-| No `backdrop-filter`, or `prefers-reduced-transparency` | white 0.90–0.92 → off-white 0.86–0.90; sage 0.94–0.96 |
+| `.glass` | green at `--panel-veil` + 0.04 → green at `--panel-veil`, 140° |
+| `.glass--green` | one step deeper: green + 0.10 → deep green + 0.08, 150° (the hero, the Ask launcher, the setup list's card) |
+| `.glass--vermilion` | the panel, a breath of vermilion (0.16 → 0.08), then green 0.20 over it |
+| `.glass--clear` | green 0.40 → 0.36 where the page owns the backdrop; the panel tint in the window and picture looks |
+| Dialogs and floating surfaces | green 0.90–0.95 (toasts, the Ask panel, sheets, the setup list panel, the update bar) |
+| No `backdrop-filter` | green 0.92 → 0.90 |
+| `prefers-reduced-transparency` | green 0.94 → 0.92, and the backdrop veil 0.94 |
 
-Contrast: body text is `--ink` on glass over the default backdrop (≥ 7:1). White text on tomato CTAs is ≥ 4.5:1 at
-14 px semibold and up. Small sage text on a sage tint (Settings tags such as "Set up posting", the Sounds number
-tiles) uses the deeper `--sage-text` (about 5.7–6.2:1 measured on the tint over the glass), not `--sage-ink`, which
-measures only 4.2–4.6:1 there. Never put text directly on the moving backdrop. `web/e2e/contrast.spec.ts` checks the
-rendered contrast and text size of every screen, in every look (see [TESTING.md](TESTING.md)).
+Contrast: body text is `--ink` (bone) on green glass, 10.68:1 on solid green. The CTA's white label is at least
+4.5:1 because the fill is vermilion a shade deeper (`--cta`, 4.96–6.03:1). Every vermilion dot on glass carries a
+bone ring (vermilion on a panel over white is only 1.36:1). Never put text directly on the moving backdrop.
+`web/e2e/contrast.spec.ts` checks the rendered contrast and text size of every screen, in every look (see
+[TESTING.md](TESTING.md)).
 
 ## The liquid glass recipe
 
 ```css
 .glass {
-  --glass-tint: linear-gradient(140deg, rgb(255 255 255 / 0.66), rgb(var(--offwhite-rgb) / 0.48));
+  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.04)), rgb(var(--green-rgb) / var(--panel-veil)));
   --glass-blur: 22px;
   position: relative;
   isolation: isolate;
   background: var(--glass-tint);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.7);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.7);
-  border: 1px solid rgb(255 255 255 / 0.5);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
+  border: 1px solid rgb(var(--line-rgb) / 0.22);
   border-radius: var(--r-lg);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.75), inset 0 -1px 0 rgb(var(--ink-rgb) / 0.05), var(--shadow-1);
+  box-shadow: inset 0 1px 0 rgb(var(--bone-rgb) / 0.28), inset 0 -1px 0 rgb(var(--shadow-rgb) / 0.25), var(--shadow-1);
 }
-/* The lit rim: a 1px gradient ring that catches light on the top-left and bottom-right edges. */
+/* The lit rim: a 1px bone gradient ring that catches light on the top-left and bottom-right edges. */
 .glass::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; padding: 1px;
-  background: linear-gradient(135deg, rgb(255 255 255 / 0.95), rgb(255 255 255 / 0.1) 32%,
-    rgb(255 255 255 / 0) 55%, rgb(255 255 255 / 0.55) 100%);
+  background: linear-gradient(135deg, rgb(var(--bone-rgb) / 0.55), rgb(var(--bone-rgb) / 0.06) 32%,
+    rgb(var(--bone-rgb) / 0) 55%, rgb(var(--bone-rgb) / 0.3) 100%);
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
 }
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass { --glass-tint: linear-gradient(140deg, rgb(255 255 255 / 0.9), rgb(var(--offwhite-rgb) / 0.86)); }
-}
 ```
 
-Variants: `.glass--sage` (hero, active nav), `.glass--strong` (dialogs and sheets, a denser tint so long text stays
-easy to read), `.glass--tomato`, `.glass--clear`. In Chromium, `.glass--refract` also bends the backdrop through the
-`#cf-refract` SVG filter.
+Variants: `.glass--green` (hero, Ask launcher), `.glass--vermilion`, `.glass--clear`. In Chromium, `.glass--refract`
+also bends the backdrop through the `#cf-refract` SVG filter.
+
+**Buttons.** Every action is the vermilion CTA (`.btn--primary` for the screen's one main action, `.btn--action` for
+the rest, the same look). Secondary buttons (`.btn--glass`) are the reference's outlined circle-arrow: no fill of
+their own, a 1.5 px bone ring, bone words. `.btn--ghost` has a fainter ring; `.btn--danger` a vermilion ring with
+`--vermilion-ink` words. Selected things in a pick-one bar (the `<Glide>` pill, the menu, the tab bar) are bone
+with `--on-bone` words, with the vermilion bar or dot riding along on a bone ring.
 
 **What is behind the glass (Settings › Look & feel › Background, [CONTRACTS.md §22](CONTRACTS.md#22-background-modes-and-see-through-glass-owner-request-2026-11-16)).**
 Three choices, picked from three preview tiles with one sliding highlight:
@@ -107,46 +120,42 @@ Three choices, picked from three preview tiles with one sliding highlight:
   glass shows what is behind it, blurred by the system: macOS Liquid Glass (26+) or the under-window vibrancy
   material, Windows 11 acrylic, Windows 10 blur. You can guess the shapes (the edges of a car on the wallpaper), never
   read them. In a browser, an installed web app or on a phone nothing can look behind the page, so see-through shows
-  the **frosted Clip Factory colours**: the drifting blobs behind a pane of frost, with two soft highlights slowly
-  moving through it like light in glass. The Background page says why in one plain sentence and links to Get the app.
-* **Picture.** The owner's own photo (kept on the device), under a light off-white veil.
-* **Colours.** 1 to 3 colours from ten named swatches or the owner's own, drifting as a soft mesh.
+  the **frosted Clip Factory colours**: a deep green mesh with a vermilion glow and a faint bone highlight, behind a
+  green frost, with two soft highlights slowly moving through it like light in glass. The Background page says why
+  in one plain sentence and links to Get the app.
+* **Picture.** The owner's own photo (kept on the device), under a bottle-green veil.
+* **Colours.** 1 to 3 colours from the named swatches or the owner's own, drifting as a soft mesh.
 
 **Glass strength** (see-through): Clear (default) shows more of what is behind, Frosted less. In a browser or on a
 phone it thickens the frost over the Clip Factory colours, so it always does something.
 
 **The tint keeps text readable on every background.** Its strength is worked out, not guessed (`lib/background.ts`):
-the smallest off-white at which every text colour that can sit on it reaches 4.5:1 on the darkest thing behind.
+the smallest bottle green at which every text colour that can sit on it reaches 4.5:1 on the **lightest** thing
+behind. The words are light, so a white desktop or a white photo is the hardest case, not a dark one.
 
 **In see-through the tint sits on the panels, not on the window.** Between panels the desktop shows through the
-window's own glass untouched (Clear) or lightly frosted (Frosted, 0.30), so the car on the wallpaper stays guessable.
-Every glass panel, and every piece of text that sits straight on the window (page title and its line, breadcrumbs,
-headings and lines between panels), carries the panel tint; loose text gets it as a soft scrim hugging the words.
-The panel tint is worked out for the window look's deeper text colours (above), which is why it can be so light.
+window's own glass untouched (Clear) or under a green frost (Frosted, 0.30). Every glass panel, and every piece of
+text that sits straight on the window (page title and its line, breadcrumbs, headings and lines between panels),
+carries the panel tint; loose text gets it as a soft scrim hugging the words. The picture look uses the same scrim.
 
-| Backdrop | Darkest thing behind | Tint |
+| Backdrop | Lightest thing behind | Tint |
 |---|---|---|
-| See-through, macOS 26+ Liquid Glass (measured on a real window, 2026-11-16) | rgb(118, 118, 118): another app in use, black behind the window. Planned a tenth darker, rgb(106, 106, 106). In use over black it is a khaki rgb(180, 171, 148) | Panels: **Clear 0.44; Frosted 0.59** over the 0.30 window frost |
-| See-through, Windows 10 blur (the app's tint is used; worked out, not measured) | The app's off-white tint over black, ≈ rgb(136, 135, 131) | Panels: Clear 0.35 (the least a panel carries; contrast alone would need 0.29); Frosted 0.50 over the 0.30 window frost |
-| See-through, Windows 11 acrylic, macOS 15 and older (the system's own material, not measured), or a dark setting | Black | Panels: Clear 0.68; Frosted 0.83 over the 0.30 window frost |
-| Colours | Each colour, and every half-and-half blend of two | 0 (light colours) up to 0.75 (Night), over the whole backdrop; the previews in Settings wear it too |
-| Picture | (unchanged) | 0.18, plus the panels' own tint |
-| Reduce transparency (system) | – | 0.94 everywhere |
+| See-through, every native glass (Liquid Glass, vibrancy, acrylic, blur), either setting | White (Liquid Glass over white was measured at rgb(249, 248, 245)) | Panels: **Clear 0.73; Frosted 0.88** over the 0.30 window frost |
+| Picture | A white photo | 0.35 over the photo, then panels at 0.65 (together 0.77) |
+| Colours | The lightest colour (a blend of two is never lighter than both) | 0 (dark colours) up to 0.77 (white), over the whole backdrop; the default needs 0.74; the previews in Settings wear it too |
+| See-through in a browser, or Picture with none on the device | The mesh's bone highlight | A green frost of 0.15 everywhere; panels 0.45 |
+| Reduce transparency (system) | – | 0.94 everywhere, panels 0.92 |
 
-**Glass panels in see-through.** Same recipe (blur, saturation, the lit 1 px rim, the inner top highlight, the
-shadow, refraction in Chromium); the tint is the panel tint above, so the panel holds the contrast and the gaps stay
-clear. Sage and tomato glass turn off-white there. Four rules keep every word readable on a panel that light
-(`styles/glass.css`, the window look section; the numbers are checked in `web/test/background.test.ts`):
+**Rules that keep every word readable** (`styles/glass.css`; the numbers are checked in `web/test/background.test.ts`):
 
-* **Floating surfaces keep their own denser tint** (toasts, sheets, the Ask panel, the update bar, a starred star):
-  they sit over the page's own words and pictures, not only over the desktop.
-* **Nothing that holds words is weaker than the panel tint**: the tab bar, glass, ghost and danger buttons, the
-  Library tabs and the brand mark carry at least that much, wherever they sit.
-* **Pick-one tracks** (segmented bars, tab rows, the Background tiles) lay their shade of ink (0.08) over 0.10 more
-  tint than a panel has.
-* **Tinted chips on a panel** (the tomato "Didn't work" pill, the sound tags, "If you need it") get a wash of white
-  (0.20) over their tint, so over the darkest glass an ink or tomato chip is never darker than its panel and its
-  words keep AA. Placeholders use `--ink-3` there.
+* **Floating surfaces keep their own denser tint** (toasts, sheets, the Ask panel, the update bar, a starred star).
+* **Nothing that holds words is weaker than the panel tint**: the tab bar, glass, ghost and danger buttons and the
+  Library tabs carry at least that much, wherever they sit.
+* **Pick-one tracks** (segmented bars, tab rows, the Background tiles, the AI models) carry 0.10 more green than a
+  panel, with a lift of bone (0.08) so the track still shows.
+* **Fills under words are never lighter than their panel.** Wells are deep green (`--fill`); the success and
+  vermilion tints lay deep green (0.35) under their colour (`--tint-leaf`, `--tint-vermilion`). Hover answers with
+  more green and a bone ring, never with a lighter fill.
 
 ## Typography
 
@@ -167,7 +176,7 @@ Nothing is set smaller than `--fs-xs`, badges and stickers included (the tab bar
 **Pick** sticker, the "Like clips that did well" meta line). `web/test/styleFloors.test.ts` fails on any smaller
 `font-size`.
 
-The tomato **swash**: a hand-drawn SVG underline under one or two italic words of a display headline ("Make it
+The vermilion **swash**: a hand-drawn SVG underline under one or two italic words of a display headline ("Make it
 *viral*"). Used once per screen at most.
 
 Both fonts are bundled with the app, never loaded from Google Fonts: `web/src/main.tsx` imports Inter Variable
@@ -200,7 +209,7 @@ read "6 h 10 min". Neither ever says "60 min" or "24 h".
 - Grid: one column on phones; cards in rows of 2 from 768 px, 3 from 1100 px (`repeat(auto-fill, minmax(min(100%, 300px), 1fr))`).
 - Breakpoints: phone < 768 px, tablet 768–1099 px, desktop ≥ 1100 px.
 
-**Layout inspiration** (the "Sorrel" reference): a big serif italic headline on a sage hero card, pill buttons beside
+**Layout inspiration** (the "Sorrel" reference): a big serif italic headline on a green hero card, pill buttons beside
 it, a row of cards below, and a rating-style stat block (for example "8 clips waiting · 3 jobs running · 24 posted").
 The person in the reference image is not used.
 
@@ -211,7 +220,7 @@ The person in the reference image is not used.
 | < 768 px | Bottom glass tab bar, **icons only**, no words. Each icon has an `aria-label` and a tooltip on long-press. Five items: Home, New job, Review (with badge), Insights, Settings. Respects `env(safe-area-inset-bottom)`. Each target ≥ 48 × 48 px. "Get the app" is not a tab: it is the Settings › App & account › Get the app branch and a one-time banner on Home. |
 | ≥ 768 px | Left glass sidebar with icons and names. A hamburger (three stripes) at the top collapses it to icons only; the choice is remembered on that device. Collapsed items show their name as a tooltip. A **Get the app** item (download icon) sits at the bottom of the sidebar, apart from the main items, and disappears once the app is installed. |
 
-The active item uses a sage-tinted glass fill and a small tomato dot. The current page has `aria-current="page"`.
+The active item uses a bone pill and a small vermilion dot. The current page has `aria-current="page"`.
 
 ## Settings tree
 
@@ -275,11 +284,11 @@ unless its name already says it all.
   still does not fit ends in "…", the levels above the current page first. Every shown part stays a 48 px target.
 - **Back:** phones get a big secondary **Back** pill (arrow icon + "Back", 48 px tall) at the top of every tree and
   branch page; it goes one level up, not browser-back, so it never leaves Settings by surprise.
-- **One tomato button per screen at most.** Most branches have none: switches and pickers save by themselves. The
-  Sounds branch's tomato button is "Try it: Sign in".
+- **One main vermilion button per screen at most.** Most branches have none: switches and pickers save by themselves. The
+  Sounds branch's vermilion button is "Try it: Sign in".
 - **Saving:** every apple saves the moment it changes (optimistic, like the Sound switch); a failed save puts the
   control back (it reloads the saved settings), plays the error sound and shows the app's friendly error message for
-  what went wrong (`friendlyMessage`), in a tomato toast. The owner just taps again to retry.
+  what went wrong (`friendlyMessage`), in a vermilion toast. The owner just taps again to retry.
 
 ### Phone and desktop
 
@@ -291,7 +300,7 @@ unless its name already says it all.
 **The folder panel** (≥ 1024 px):
 - Each tree is a folder row (chevron, icon, name). Clicking it opens or closes the folder like a file browser; the
   branches inside are links. Opening a tree's page also opens its folder.
-- The current branch (or tree) uses a sage-tinted glass fill and the small tomato dot, like the app's sidebar, with
+- The current branch (or tree) uses a bone pill and the small vermilion dot, like the app's sidebar, with
   `aria-current="page"`. On a tree's own page that is the tree's folder row (a button, so it carries
   `aria-current="page"` itself); exactly one row in the panel is current on every Settings page.
 - Which folders are open is remembered on that device (`localStorage`, wrapped so a private window still works); on a
@@ -309,7 +318,7 @@ unless its name already says it all.
 - It searches every apple and every leaf by name, and also tree and branch names, ignoring case and accents, while
   you type. "sound", "click", "beep" all find the Sounds apples (each apple may carry a few extra everyday words).
 - Results list under the box: the apple's name with its place under it (`Look & feel › Sounds`). Tapping a result
-  opens that branch, scrolls to the apple and highlights it for 2 seconds (a soft sage glow; with reduced motion, a
+  opens that branch, scrolls to the apple and highlights it for 2 seconds (a soft bone glow; with reduced motion, a
   plain outline).
 - Nothing found: "Nothing found for “<what you typed>”. Try a shorter word, like “sound”." Never an empty box.
 - The list is a `listbox` linked to the box; Up and Down move, Enter opens, Escape clears.
@@ -318,32 +327,32 @@ unless its name already says it all.
 
 | Component | Notes |
 |---|---|
-| Button (primary) | Tomato glass pill, icon + white text, 48 px tall minimum. One per screen (the update bar's Reload is the only extra). |
-| Button (secondary) | Off-white glass pill, ink text, edge highlight. |
+| Button (primary) | Vermilion glass pill, icon + white text, 48 px tall minimum. One per screen (the update bar's Reload is the only extra). |
+| Button (secondary) | Glass pill with a bone outline and bone text (the reference's outlined circle-arrow). |
 | Button (quiet) | Text only with an underline on hover. |
 | Card | Glass, `--r-md`, padding 16–24 px, `min-width: 0` so children can shrink. |
-| Hero card | Sage glass, display headline with swash, primary CTA. |
+| Hero card | green glass, display headline with swash, primary CTA. |
 | Stat block | Three numbers with labels, tabular figures. |
 | Link input | Large pill input, shows the detected platform icon (YouTube, Twitch, Kick) as you type. |
 | Upload drop zone | Dashed glass area, drag and drop on desktop, tap to pick on phones, progress bar while uploading. |
 | Job progress | The ten steps as a vertical list with status icons; the running step pulses; the overall progress bar on top. |
 | Clip card | 9:16 cover with play, hook, moment-type chip, score, duration, checklist summary. In Library it shows total views when measured and its whole top (cover and hook, never just the one-line hook) opens the clip's [performance page](#clip-performance-page); its post rows list the platforms in the one app-wide order and use the clip page's status words ("Posting", "Waiting for connection"); in Review a kept clip shows "See how it does". |
 | Clip review | Vertical player, captions per platform in tabs (editable), checklist, Keep (primary) and Throw away (ghost). All five caption tabs stay in sight: on a narrow card the tabs that are not open show only their platform mark, and a tab whose caption is too long shows a red dot. Two columns only when the card itself is at least 820 px wide; once Throw away and Keep wrap, each fills the row. Overlays opened from a card (Post to TikTok, the small confirm sheet) are drawn on `document.body`, trap Tab and give the focus back on close (CONTRACTS §12.4, §17.8). |
-| Skill row | Glass row that opens the skill's page: icon, title, description (two lines), **Always used** badge (sage, on every row) and **Built in** badge, then where it came from in words (never ".md" or a size): "Written by you · Changed 16 Nov", "From a file · Changed 16 Nov", "From a file with extra files · Changed 16 Nov" (a `.zip`; its page says "From a file with {n} extra files") or "Comes with Clip Factory". No switch, no delete on the row. See [Skill pages](#skill-pages). |
-| Toggle, select, inputs | 16 px text, glass background, tomato focus ring `outline: 2px solid var(--tomato); outline-offset: 2px`. |
+| Skill row | Glass row that opens the skill's page: icon, title, description (two lines), **Always used** badge (green, on every row) and **Built in** badge, then where it came from in words (never ".md" or a size): "Written by you · Changed 16 Nov", "From a file · Changed 16 Nov", "From a file with extra files · Changed 16 Nov" (a `.zip`; its page says "From a file with {n} extra files") or "Comes with Clip Factory". No switch, no delete on the row. See [Skill pages](#skill-pages). |
+| Toggle, select, inputs | 16 px text, glass background, vermilion focus ring `outline: 2px solid var(--vermilion); outline-offset: 2px`. |
 | Toast | Glass, top on desktop, above the tab bar on phones, auto-hides after 4 s, `role="status"`. The Undo toast stays 8 s and shows a shrinking ring around its Undo button. |
 | Empty state | One line of serif italic, one plain sentence that names the button to tap, one action. |
-| Job status pill | Waiting (neutral), Working (sage), Ready (ink), **Didn't work** (tomato, never "Failed"), Canceled (neutral). The job's own error sentence says how to fix it and is shown in full, in the Jobs list too. |
+| Job status pill | Waiting (neutral), Working (green), Ready (ink), **Didn't work** (vermilion, never "Failed"), Canceled (neutral). The job's own error sentence says how to fix it and is shown in full, in the Jobs list too. |
 | Error | Plain sentence, what to do next, and a Retry when possible. A screen that crashes while drawing shows "Something went wrong on this page" with **Try again** and **Go home** (the app around it stays); never a blank page. |
 | Get the app card | See [Get the app card](#get-the-app-card). |
 | Update bar | See [Update bar](#update-bar). |
 | Platform stack | Glass card per platform on the clip page: mark, status chip, big number, only that platform's metric rows, sparkline, "Open on …". See [A platform stack](#a-platform-stack). |
 | Performance lines | Decorative SVG Béziers from the preview to each stack, drawn in once. See [The lines](#the-lines). |
-| Star toggle | "Best this week": sage glass toggle, star icon + words, ≥ 48 px, `aria-pressed`. Never tomato. |
+| Star toggle | "Best this week": green glass toggle, star icon + words, ≥ 48 px, `aria-pressed`. Never vermilion. |
 | Setup to-do list | Glass column at the top right from 1440 px, a 48 px glass pill "Set up posting 2/5" on a glass bar below that; a row per platform with **Set up** and **Skip**; gone with "All set!" when each one is ready or skipped. See [Set up posting](#set-up-posting). |
-| Ask launcher | Sage glass pill "Ask" with a sparkle (desktop) or a 56 px icon-only circle (phones). Never tomato. See [Ask Clip Factory](#ask-clip-factory). |
+| Ask launcher | green glass pill "Ask" with a sparkle (desktop) or a 56 px icon-only circle (phones). Never vermilion. See [Ask Clip Factory](#ask-clip-factory). |
 | Ask panel | Glass, non-modal dialog; answers with numbered steps and up to two buttons. See [Ask Clip Factory](#ask-clip-factory). |
-| Spotlight ring | Sage ring with a soft tomato glow around the control a help button points at; fades over 2.4 s; a still ring with reduced motion. |
+| Spotlight ring | bone ring with a soft vermilion glow around the control a help button points at; fades over 2.4 s; a still ring with reduced motion. |
 
 ## Sounds
 
@@ -413,11 +422,11 @@ The branch is the picker page the owner liked, inside Settings and in the app's 
 1. **Sounds** switch (`soundEnabled`) with its leaf "Sounds only play when you tap, never when you scroll."
 2. **When it works** (click sounds) and **When it can't** (error sounds): two groups of numbered glass cards in the card
    grid. Each card shows its number in a round badge, its name and its feel. Tapping a card plays it and picks it: the
-   card gets a sage edge and a "Pick" badge, and `aria-pressed="true"`; the card that was picked before lets go. The
+   card gets a bone edge and a "Pick" badge, and `aria-pressed="true"`; the card that was picked before lets go. The
    playing card's number pulses once (none with reduced motion).
-3. **Try it**: the tomato button "Try it: Sign in" and a **Make it fail** switch beside it.
-   - Off: plays the click sound and shows a sage toast "Signed in".
-   - On: plays the error sound, the button gives a small shake (none with reduced motion) and a tomato toast says
+3. **Try it**: the vermilion button "Try it: Sign in" and a **Make it fail** switch beside it.
+   - Off: plays the click sound and shows a green toast "Signed in".
+   - On: plays the error sound, the button gives a small shake (none with reduced motion) and a vermilion toast says
      "Wrong password. Try again."
    - It is pretend: nothing is signed in or out.
 4. A line under **Try it** says the picks in words, one coloured dot each: "Click 6: Water drop" and
@@ -461,11 +470,11 @@ for screen readers. Every other screen that lists platforms (Library card rows, 
 |---|---|---|
 | 1 | Header row | Back (secondary pill, arrow + "Back"; returns where the owner came from, else Library) and the clip's hook as the title in serif italic. The title wraps; it is never cut off. |
 | 2 | Preview | `<video controls playsinline preload="metadata">` with the cover as `poster`; `aspect-ratio: 9 / 16`; a rounded `.glass` frame, centred. Never autoplays. Without a video URL: the cover image. Width: 280 px (≥ 1024), 240 px (600–1023), `min(100%, 56vh × 9/16)` (< 600). |
-| 3 | Stat block | Beside the preview from 1024 px, under it below. The **total views** in the display serif with "views across platforms" and a small "(each app counts views its own way)". The **Best this week** star toggle. The one tomato **Refresh numbers** button. "Updated 3 min ago" under it. |
+| 3 | Stat block | Beside the preview from 1024 px, under it below. The **total views** in the display serif with "views across platforms" and a small "(each app counts views its own way)". The **Best this week** star toggle. The one vermilion **Refresh numbers** button. "Updated 3 min ago" under it. |
 | 4 | Lines + stacks | The five lines grow from the preview to the five platform stacks ([below](#the-lines)). |
 
-**Best this week star.** A sage glass toggle, star icon + "Best this week", at least 48 px, `aria-pressed`. Pressed: a
-filled star and a sage edge; never tomato, because the page's one tomato button is Refresh. It is the same pick as the
+**Best this week star.** A green glass toggle, star icon + "Best this week", at least 48 px, `aria-pressed`. Pressed: a
+filled star and a bone edge; never vermilion, because the page's one vermilion button is Refresh. It is the same pick as the
 star in [This week](#this-week-in-library).
 
 **Refresh numbers.** Icon + word. While any platform it started is still `refreshing` it shows a spinner. When every
@@ -482,7 +491,7 @@ One `<svg aria-hidden="true">` sits behind the stacks, sized to the page contain
   `(xi, yi)`: `M x0 y0 C x0 (y0 + 0.55·dy), xi (yi − 0.55·dy), xi yi` with `dy = yi − y0`. The handles leave and
   arrive vertically, so every line starts straight down and lands straight into its card: the "smooth manner" the
   owner asked for.
-- **Stroke.** 2 px, round caps, `--sage` at 70 % (the app is light-only, so the same colour under a dark OS setting). The best platform's line is `--tomato`.
+- **Stroke.** 2 px, round caps, `--green-leaf` at 70 % (the app is dark-only, so the same colour under a dark OS setting). The best platform's line is `--vermilion`.
   A 6 px dot at each end.
 - **Draw-in.** `pathLength="1"`, `stroke-dasharray: 1`, `stroke-dashoffset` from 1 to 0 over 900 ms with
   `cubic-bezier(0.22, 1, 0.36, 1)`, 80 ms apart in STATS_ORDER, once per page load. Each stack fades in and rises
@@ -585,7 +594,7 @@ Numbers are compact (`Intl.NumberFormat` with `notation: "compact"`: 1.2K, 3.4M)
 | Posting | "Posting now…" with a small spinner | – |
 | Posted privately (TikTok) | "Posted privately. TikTok shows numbers after the app is approved." | – |
 | Posted, no numbers yet | "Numbers are on the way. Check back in a few minutes." | – |
-| Failed | "Posting failed: {reason}. Go to Library and press Try again." (`--tomato-ink` text) | Library |
+| Failed | "Posting failed: {reason}. Go to Library and press Try again." (`--vermilion-ink` text) | Library |
 
 **Live.** A `post` event for one of this clip's posts replaces that stack's numbers and adds a sparkline point; a
 `clip` event updates the star; a reconnect or a `partial` event refetches the page. With no live connection the page
@@ -601,7 +610,7 @@ refetches every 60 s.
   no dot hangs at a line end; at any wider width a no-break space ties the "·" to the dates, so a wrap moves them
   together.
 - A status line under the header: "Star the clips that did best this week." → "Learning from your picks…" (spinner)
-  → the learning in a sage glass quote labelled "Best of week". On failure: "Could not learn this time. Change a pick to
+  → the learning in a green glass quote labelled "Best of week". On failure: "Could not learn this time. Change a pick to
   try again."
 - One card per clip, sorted by views: rank number, cover, hook (2 lines), total views (or "Not posted yet"), a row of
   five tiny platform marks with their views, and the big **Best this week** star (≥ 48 px, `aria-pressed`). Tapping
@@ -612,7 +621,7 @@ refetches every 60 s.
   learn from your picks." A failed save puts the stars back and says so in plain words. Up to 10 picks a week (the
   API refuses more with "Pick clips from this week only." for clips of another week).
 - Empty week: "No clips this week yet. Make clips on Home." with a link to Home.
-- No tomato button on This week: starring is the action, and it saves by itself.
+- No vermilion button on This week: starring is the action, and it saves by itself.
 
 ## Set up posting
 
@@ -628,30 +637,30 @@ the steps in [SETUP_POSTING.md](SETUP_POSTING.md)).
 - **A platform page**: mark, name, ring, "About 20 minutes · Free" (X: "Costs a little"), "Steps checked on 16 Nov
   2026" (the date never splits across lines). Below 600 px the mark and the ring share the hero's top row (ring on
   the right) and the words sit under them at full width. Then the four parts as glass sections (Get ready, Make your {Platform} key, Connect, Go public). Step numbers
-  run on across the parts. The first unfinished step is open and scrolled into view; finished steps fold into a sage
+  run on across the parts. The first unfinished step is open and scrolled into view; finished steps fold into a green
   tick row that opens again on tap. Below the parts, **When it's done**: the account's picture and name, **Check it**,
   **Connect again**, **Disconnect**, and the platform's own settings (YouTube "Who can see your clips", the X spend note).
 - **A step card**: number in a circle, an icon, a title (≤ 6 words), 1–4 short sentences, platform button names in
   **bold** exactly as the platform writes them, then only what the step needs: **Open {site}** (new tab), **Copy**
-  chips (label plus the value in a mono font; "Copied!" with a sage tick), paste boxes with **Paste** and a format check
-  under the box, the TikTok upload box, "**If you see** … do …" hints, and **I did this** (sage, ≥ 48 px).
-- **Colour**: one tomato button per screen, the current step's main action (Open, else Save keys, else Connect
-  {Platform}, else Connect again when a token has died). Everything else is sage or glass. Error results never turn the
+  chips (label plus the value in a mono font; "Copied!" with a leaf-green tick), paste boxes with **Paste** and a format check
+  under the box, the TikTok upload box, "**If you see** … do …" hints, and **I did this** (green, ≥ 48 px).
+- **Colour**: one main vermilion button per screen, the current step's main action (Open, else Save keys, else Connect
+  {Platform}, else Connect again when a token has died). Every other action wears the same vermilion; everything else is glass. Error results never turn the
   page red: a calm glass card with one sentence and the step to go back to.
 - **Delight**: Connect comes back with confetti (skipped with reduced motion), the success sound and a big card
-  "Connected as **@name**" with the avatar while the ring fills. Saved keys and a good **Check it** get a sage tick and
+  "Connected as **@name**" with the avatar while the ring fills. Saved keys and a good **Check it** get a leaf-green tick and
   the success sound.
 - **Mistakes are cheap**: Disconnect is an 8-second "Disconnecting YouTube… Undo" toast, never a dialog. Keys stay
   saved, so **Connect again** is one tap.
 - **The floating setup list** ([CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owner-request-2026-11-16))
   replaces the old Home card, so there is only ever one list. It is on every signed-in page except the setup pages
   themselves, until each platform is ready or skipped.
-  - **Rows**: one per platform, in the usual order: the mark (with a sage tick once ready), the name, one line
+  - **Rows**: one per platform, in the usual order: the mark (with a leaf-green tick once ready), the name, one line
     ("Ready" / "In progress: 4 of 23" / "Not started" / "Skipped" / "Needs you: connect again") and two buttons,
     **Set up** (glass) and **Skip** (quiet; **Un-skip** once skipped). A ready row has no buttons. Every row that is
     not ready can be skipped, so skipping each one always ends the list.
   - **Skip asks first**, in the small glass question: "Skip TikTok? You won't post there until you set it up. You can
-    do it later in Settings." **Keep it** comes first, has the focus and is the tomato button (the safe answer is the
+    do it later in Settings." **Keep it** comes first, has the focus and is the vermilion button (the safe answer is the
     strong one); **Skip TikTok** is plain glass with no motion. Escape and a tap outside mean Keep it.
   - **From 1440 px** it stays open in a 304 px column of its own at the top right, glass like the sidebar. The page
     gets narrower instead of being covered, and keeps at least the room it has in a 1100 px window, so no two-column
@@ -666,7 +675,7 @@ the steps in [SETUP_POSTING.md](SETUP_POSTING.md)).
     down as a glass panel over a light scrim (phones: full width, stopping above the tab bar; wider: 380 px at the
     right). The panel is a real dialog: the page behind it cannot be reached, Tab stays inside, and ×, Escape or a tap
     outside close it.
-  - **All set!** When every platform is ready or skipped: a sage glass card "**All set!**" with a line that says how
+  - **All set!** When every platform is ready or skipped: a green glass card "**All set!**" with a line that says how
     it ended ("Every place is ready." / "Done for now. Skipped ones wait in Settings." / "All skipped. Set them up any
     time in Settings."), confetti and the success sound (no confetti with reduced motion), then it slides off to the
     right. It comes back by itself when a platform needs you again.
@@ -695,7 +704,7 @@ switch** anywhere in the Skills branch.
 | Apple | What it shows | Leaf |
 |---|---|---|
 | **Your skills** | every skill as a [skill row](#components), built-ins first, then the owner's by name; the whole row opens the skill's page | "Clip Factory uses every skill here, every time it makes or checks anything." |
-| **Add a skill** | the tomato **Write a skill** (the branch's one main action) and a glass **Upload a file** (.md / .zip) | "Write one by answering three easy questions, or upload a skill file from your computer." |
+| **Add a skill** | the vermilion **Write a skill** (the branch's one main action) and a glass **Upload a file** (.md / .zip) | "Write one by answering three easy questions, or upload a skill file from your computer." |
 
 **Pages under the branch.** Each has its own address, a breadcrumb (`Settings › Clip making › Skills › Funny moments
 first`), the big **Back** on phones (one level up), and the folder panel keeps **Skills** highlighted on desktop. Deep
@@ -706,9 +715,9 @@ words.
 
 | Page | Address | What is on it | Leaf |
 |---|---|---|---|
-| **Write a skill** | `…/skills/new` | Three big glass fields, one question each, with an example under each and a "Use the example" link that fills it: "What is the skill called?", "When should Clip Factory use it?", "What should it do?" (the last at least 10 lines tall and growing as you type). A live character count under each; errors (too long, same name as another skill) sit right under their field. Tomato **Save skill**, ghost **Cancel**. | "Clip Factory reads your skill every time it makes clips." |
-| **Skill page** | `…/skills/{skillId}` | Title, badges and where it came from in words (the same words as the row), "When it is used" (the description), then the skill itself as formatted text: headings, lists, bold, code. The frontmatter is not shown (the title and "When it is used" already say it), and a first heading that only repeats the title is left out. A `.zip` lists "Other files in this skill". Owner skills: tomato **Edit**, ghost **Delete**. Built-ins: no buttons, only reading. | owner: "Always used. Changes count from your next clips." built-in: "This skill comes with Clip Factory. It is always used. You can read it, but not change or delete it." |
-| **Edit** | `…/skills/{skillId}/edit` | Titled "Change this skill": the same three fields, filled in, and tomato **Save changes** (then the toast "Saved {title}. Clip Factory uses it from your next clips."). A `.zip` skill also gets a ghost **Replace the whole file**; a skill too long to edit here shows only that option ("This skill is too long to change here. Upload a new file to replace it."). | "Change the words, then tap Save changes." |
+| **Write a skill** | `…/skills/new` | Three big glass fields, one question each, with an example under each and a "Use the example" link that fills it: "What is the skill called?", "When should Clip Factory use it?", "What should it do?" (the last at least 10 lines tall and growing as you type). A live character count under each; errors (too long, same name as another skill) sit right under their field. Vermilion **Save skill**, ghost **Cancel**. | "Clip Factory reads your skill every time it makes clips." |
+| **Skill page** | `…/skills/{skillId}` | Title, badges and where it came from in words (the same words as the row), "When it is used" (the description), then the skill itself as formatted text: headings, lists, bold, code. The frontmatter is not shown (the title and "When it is used" already say it), and a first heading that only repeats the title is left out. A `.zip` lists "Other files in this skill". Owner skills: vermilion **Edit**, ghost **Delete**. Built-ins: no buttons, only reading. | owner: "Always used. Changes count from your next clips." built-in: "This skill comes with Clip Factory. It is always used. You can read it, but not change or delete it." |
+| **Edit** | `…/skills/{skillId}/edit` | Titled "Change this skill": the same three fields, filled in, and vermilion **Save changes** (then the toast "Saved {title}. Clip Factory uses it from your next clips."). A `.zip` skill also gets a ghost **Replace the whole file**; a skill too long to edit here shows only that option ("This skill is too long to change here. Upload a new file to replace it."). | "Change the words, then tap Save changes." |
 
 **Safe reading.** The skill text is shown with the app's own small markdown renderer, never as HTML: anything that
 looks like HTML (`<script>`, `<img onerror=…>`) is shown as plain text, only `http`, `https` and `mailto` links are
@@ -717,8 +726,8 @@ description" when there is none), never the address. A very long
 skill shows its first 200,000 characters with "This skill is very long; only the start is shown here."
 
 **Sheets.** All three are small glass sheets (the 320 ms sheet motion), centred on desktop and from the bottom on
-phones, with the safe choice focused first and Escape meaning the safe choice. They are near-solid glass (a white 0.95
-to offwhite 0.92 tint over an ink scrim at 0.4), so the page never shows through the question:
+phones, with the safe choice focused first and Escape meaning the safe choice. They are near-solid glass (bottle green 0.95
+to 0.94 over a deep green scrim at 0.55), so the page never shows through the question:
 
 | When | Title | Words | Buttons |
 |---|---|---|---|
@@ -763,7 +772,7 @@ when a new skill is saved.
 - Durations: 120 ms (press), 200 ms (hover, toggle), 320 ms (sheets, page fade). Easing `cubic-bezier(.2,.8,.2,1)`.
 - Buttons press to `scale(0.97)` and spring back.
 - **Delight moments** (the "dopamine hits"), only these:
-  - Confirm a clip: a short burst of tomato and sage confetti from the button, the card slides away, the badge counts down.
+  - Confirm a clip: a short burst of vermilion and green confetti from the button, the card slides away, the badge counts down.
   - A job finishes: the progress ring fills and glows once; a toast "8 clips are ready to review".
   - A skill is added (written or uploaded): success sound, confetti, the toast "Your skill is ready. Clip Factory will
     use it every time.", and the new row pops in with a small bounce on the way back.
@@ -788,7 +797,7 @@ this is the designer's summary.
   covered, the button never changes size, nothing leaves its box at rest. Inside a normal pill a flying glyph fades
   out before the edge; it never looks swallowed.
 - **Moving around and closing stay quiet.** Links, tabs, back, Close, Cancel, Not now keep the press feedback only.
-- **Failure never looks like success.** A failed action shakes its glyph gently (±4 px, tomato for the first half,
+- **Failure never looks like success.** A failed action shakes its glyph gently (±4 px, vermilion for the first half,
   320 ms) with the error sound once; no ring, tick, confetti or success sound. A refused action (Keep with a caption
   that is too long) only shakes.
 - **Undo** plays the motion backwards on the button (360 ms), or, when the button is gone, the item that comes back
@@ -820,7 +829,7 @@ so its glyph fades out before it reaches the button's words; only the icon-only 
 | Kind | Glyph | What it does | Used by (examples) |
 |---|---|---|---|
 | `send` | paper plane or the button's icon | flies off up and right with a trail, a fresh one fades back | Make clips, Ask Send, TikTok Keep, Ask Clip Factory |
-| `keep` | heart | pops and floats up with a sage ring | Review Keep (when the keep really starts) |
+| `keep` | heart | pops and floats up with a bone ring | Review Keep (when the keep really starts) |
 | `add` / `remove` | plus / minus | plus turns 90° and pops; minus squashes | steppers, Write a skill |
 | `delete` | bin | tips and drops, fresh one | Remove, skill Delete |
 | `throw` | bin | tossed up and away from the label, fresh one | Throw away |
@@ -841,9 +850,9 @@ so its glyph fades out before it reaches the button's words; only the icon-only 
 State-driven turns (no kind): expand chevrons turn 90° and the sidebar icon 180°, 240 ms, both ways.
 
 **Reduced motion** (Settings › Look & feel › Motion › Reduce motion, or the system `prefers-reduced-motion`)
-- Every kind becomes a 240 ms fade: the glyph dips to 0.45 opacity and tints sage. No rotate, translate or scale, no
+- Every kind becomes a 240 ms fade: the glyph dips to 0.45 opacity and tints green. No rotate, translate or scale, no
   rings, ghost or trail. Send keeps its 300 ms fade. The nudge does nothing.
-- A failure is a tomato tint only; Undo is the same fade; chevrons switch angle at once.
+- A failure is a vermilion tint only; Undo is the same fade; chevrons switch angle at once.
 - The switch applies to the very next tap, without a reload.
 
 **Building it**: `act="keep"` on a `Button` or `LinkButton` is enough for most buttons; a screen takes a handle from
@@ -859,7 +868,7 @@ hand-roll a new animation per button; add a kind to `motion.css` and `lib/motion
   It never slides on resize, and jumps under Reduce motion.
 * **The cursor is always the arrow.** Never `cursor: pointer`, never an I-beam, never a wait or not-allowed cursor.
   Pressable things show themselves on hover (CONTRACTS §20.14). Every new control needs a visible hover state.
-* **Ask mark.** Ask Clip Factory uses its own mark (chat bubble, play button, tomato dot), never a generic AI sparkle
+* **Ask mark.** Ask Clip Factory uses its own mark (chat bubble, play button, vermilion dot), never a generic AI sparkle
   (CONTRACTS §20.15).
 
 ## Overflow rules (never let text leave its box)
@@ -891,8 +900,8 @@ h1, h2, h3, p, li, dd, td, label, button { overflow-wrap: anywhere; }
 
 ## Installable app (PWA)
 
-- `manifest.webmanifest`: name "Clip Factory", short name "Clips", `display: standalone`, theme colour `#9CAF88`,
-  background `#F7F5EF`, maskable icons 192 and 512 px, and an Apple touch icon.
+- `manifest.webmanifest`: name "Clip Factory", short name "Clips", `display: standalone`, theme colour `#0F372B`,
+  background `#0F372B`, maskable icons 192 and 512 px, and an Apple touch icon.
 - A service worker precaches the app shell for instant start and offline viewing of the shell. It never caches API
   responses, presigned media URLs or `config.json`.
 - Installs from the browser menu on iPhone (Share → Add to Home Screen), Android and desktop Chrome, Edge and Safari,
@@ -913,7 +922,7 @@ Anatomy, top to bottom, inside one `.glass--strong` card:
 1. **Device picture**: a simple line drawing of the detected device (a laptop for Mac, a monitor for Windows, a
    phone). No brand logos.
 2. **Headline** (serif italic): "Get Clip Factory on this Mac" / "... this PC" / "... this phone".
-3. **One big button**, the screen's tomato CTA, with a download or plus icon. The size comes from
+3. **One big button**, the screen's vermilion CTA, with a download or plus icon. The size comes from
    `/downloads/manifest.json` (the sizes below are examples):
 
    | Device | Button | Under the button |
@@ -938,11 +947,11 @@ on screen:
 | Step | Picture | Words |
 |---|---|---|
 | 1 | Share icon, highlighted in the Safari toolbar | "Tap the Share button" |
-| 2 | The share sheet with "Add to Home Screen" ringed in tomato | "Scroll down, tap **Add to Home Screen**" |
-| 3 | The Add button top right ringed in tomato | "Tap **Add**. Done!" |
+| 2 | The share sheet with "Add to Home Screen" ringed in vermilion | "Scroll down, tap **Add to Home Screen**" |
+| 3 | The Add button top right ringed in vermilion | "Tap **Add**. Done!" |
 
 **The Home banner** (phones and desktop, until installed or dismissed): a slim glass strip, download icon, "Get the
-app on this phone", a **secondary** pill "Show me" (so Home keeps one tomato button) and a quiet "Not now", which hides
+app on this phone", a **secondary** pill "Show me" (so Home keeps one vermilion button) and a quiet "Not now", which hides
 it for 30 days. Once installed, the sidebar item, card and banner all disappear ([BR-16](BUSINESS_REQUIREMENTS.md#br-16-never-offer-the-app-once-it-is-installed)).
 
 States: a missing download file (not in `/downloads/manifest.json`) quietly turns the card into the browser-install
@@ -956,17 +965,17 @@ Shown when `/version.json` reports a version other than the running one ([CONTRA
  ┌───────────────────────────────────────────────────────────────┐
  │ ✦  New!  [ Settings ] [ Profile picture ]      Later  (↻ Reload) │
  └───────────────────────────────────────────────────────────────┘
-   sparkle  area pills (1–3 words each, max 3)      quiet   tomato CTA
+   sparkle  area pills (1–3 words each, max 3)      quiet   vermilion CTA
 ```
 
 | Part | Spec |
 |---|---|
 | Container | `.glass--strong` pill bar, fixed at the bottom, centred, max width 640 px, 12 px from the edge; on phones it sits above the tab bar (`bottom: calc(tab-bar height + env(safe-area-inset-bottom) + 8px)`). `role="status"`, `aria-live="polite"`. |
 | Entrance | Slides up 24 px and fades in over 320 ms, `cubic-bezier(.2,.8,.2,1)`; one soft sparkle twinkle. Reduced motion: fade only. |
-| Sparkle | 20 px tomato four-point star icon. |
+| Sparkle | 20 px vermilion four-point star icon. |
 | Title | "New!" in Inter 600. Never a version number. |
-| Pills | Off-white glass chips, 13 px Inter 500, `--r-pill`, single line with ellipsis; on narrow phones they wrap under the title and the bar grows taller rather than overflowing. Labels come from `version.json` `areas`. |
-| Reload | Tomato pill, refresh icon + "Reload", 48 px tall. It is the one allowed second tomato button on a screen, because it belongs to the app, not to the page. |
+| Pills | Bone glass chips, 13 px Inter 500, `--r-pill`, single line with ellipsis; on narrow phones they wrap under the title and the bar grows taller rather than overflowing. Labels come from `version.json` `areas`. |
+| Reload | Vermilion pill, refresh icon + "Reload", 48 px tall. It is the one allowed second vermilion button on a screen, because it belongs to the app, not to the page. |
 | Later | Quiet text button; hides the bar until the next check (5 minutes, or when the app comes back to the screen). |
 | While reloading | Pills and buttons fade out; the bar's fill becomes the progress bar (below) with "Updating…" and the percentage for screen readers (`role="progressbar"`, `aria-valuenow`). |
 
@@ -1024,7 +1033,7 @@ signed-in page and follows every rule on this page.
 
 | Part | Spec |
 |---|---|
-| Launcher, desktop | Sage glass pill, sparkle icon + "Ask", fixed bottom right (`right: 24px`), 12 px above the update bar when it shows (the bar publishes its height as `--update-bar-h`). |
+| Launcher, desktop | green glass pill, sparkle icon + "Ask", fixed bottom right (`right: 24px`), 12 px above the update bar when it shows (the bar publishes its height as `--update-bar-h`). |
 | Launcher, phone | 56 px icon-only glass circle, `aria-label="Ask Clip Factory"`, `right: max(16px, safe-area-inset-right)`, bottom = tab bar + safe area + 18 px + `--update-bar-h` (+ 10 px when the bar shows). Never covers the tab bar or the update bar. |
 | Dodge | Hides (fade + 12 px slide) while scrolling down more than 8 px; back on scroll up or 600 ms after scrolling stops; stays while it or the panel has focus. Never sits on a control: lifts to the first free spot above every link, button, field, tab, switch or focusable element it would overlap (found on the page by itself), plus blocks marked `data-help-dodge` (the Review action bar, the Home link box, the sound grid, the **Try it** controls). Takes no taps while it slides. If lifting would take it above 40 % of the window height it steps aside (hidden) instead, so at 1440 px on Review it stays hidden until you scroll. It also keeps off words (lines of text) when a spot clear of them is within the same reach; when there is none it may rest on words (never on a control) rather than hide. No slide with reduced motion. |
 | Room on phones | Pages get extra bottom padding under their last control, so the settled launcher never covers a control at 320, 375, 390 or 430 px, with or without the update bar. |
@@ -1033,13 +1042,13 @@ signed-in page and follows every rule on this page.
 | Conversation | Kept when the panel closes and reopens, in memory only, until **Start over** (or a reload). |
 | Header | "Ask Clip Factory" in Times italic, **Start over** (quiet), Close (×, 48 px). |
 | Empty state | "Hi! What do you want to do?" and three suggestion chips chosen by page and device. Default: "How do I make clips from a Twitch link?", "What does Keep do?", "How many views did my best clip get this week?" (Settings pages, skill pages included, swap the second for the sounds question; clip pages show "Why is my clip private on TikTok?"). |
-| Ask field | One glass field across the **full width** of the panel (10 px from each edge), one line (52 px) growing to four lines then scrolling, radius 26 px, focus ring on the whole field. Textarea 16 px, placeholder "Ask me how to do something", 300 letters (counter from 250, under the field), Enter sends, Shift+Enter new line, the phone keyboard shows "send". At its right end, inside the field: a round 44 px icon-only **Send** button with a paper plane (`aria-label="Send"`). Tomato while it is the one main action, sage once an answer button is tomato, off (`aria-disabled`) when the field is empty, an answer is coming or the 429 countdown runs. Sending plays the [action animation](#action-motion-every-action-button-acts-out-what-it-does): the plane flies off (520 ms) and a new one fades back (240 ms); the question bubble shows at once. With reduced motion the plane only fades. On phones the sheet follows the visible screen so the keyboard never hides the field. |
-| Thinking | Three bouncing sage dots; "Still looking…" after 6 s; still dots with reduced motion. |
-| Answer | One or two sentences (button names in bold), numbered steps (`<ol>`, ≤ 6), up to two buttons with icon + word. Only the **first button of the newest answer is tomato**; older answers' buttons and the Ask button turn sage, so the screen keeps one tomato. Whether the model helped is never shown. |
+| Ask field | One glass field across the **full width** of the panel (10 px from each edge), one line (52 px) growing to four lines then scrolling, radius 26 px, focus ring on the whole field. Textarea 16 px, placeholder "Ask me how to do something", 300 letters (counter from 250, under the field), Enter sends, Shift+Enter new line, the phone keyboard shows "send". At its right end, inside the field: a round 44 px icon-only **Send** button with a paper plane (`aria-label="Send"`). Vermilion while it is the one main action, green once an answer button is vermilion, off (`aria-disabled`) when the field is empty, an answer is coming or the 429 countdown runs. Sending plays the [action animation](#action-motion-every-action-button-acts-out-what-it-does): the plane flies off (520 ms) and a new one fades back (240 ms); the question bubble shows at once. With reduced motion the plane only fades. On phones the sheet follows the visible screen so the keyboard never hides the field. |
+| Thinking | Three bouncing green dots; "Still looking…" after 6 s; still dots with reduced motion. |
+| Answer | One or two sentences (button names in bold), numbered steps (`<ol>`, ≤ 6), up to two buttons with icon + word. Only the **first button of the newest answer is vermilion**; older answers' buttons and the Ask button turn green, so the screen keeps one vermilion. Whether the model helped is never shown. |
 | Live number | A soft shimmer where the number goes, then the number in the app's compact format ("1.2K"). |
 | Unknown or refused | The fixed sentence and the three chips again; unknown also offers **Go Home**, except while you are on Home. |
-| Unsaved change | Inline, inside the panel: "You have a change that isn't saved yet. Leave anyway?" with **Stay** and **Leave** (both sage). No browser dialog. |
-| Spotlight | Waits up to 4 s for the control, scrolls it to the centre (smooth unless reduced motion), draws a sage ring with a soft tomato glow that fades over 2.4 s, says "Here it is: {label}" politely, never moves focus. A target taller than 60 % of the window rings only its heading, scrolled to 80 px from the top. |
+| Unsaved change | Inline, inside the panel: "You have a change that isn't saved yet. Leave anyway?" with **Stay** and **Leave** (both green). No browser dialog. |
+| Spotlight | Waits up to 4 s for the control, scrolls it to the centre (smooth unless reduced motion), draws a bone ring with a soft vermilion glow that fades over 2.4 s, says "Here it is: {label}" politely, never moves focus. A target taller than 60 % of the window rings only its heading, scrolled to 80 px from the top. |
 | Notices | 429: "Let's take a short break. You can ask again in {n} seconds." with a countdown and Ask disabled. Off: "Ask Clip Factory is turned off right now." Under a 503, local fallback or failed number: a small link "Something went wrong? Copy the help code" that copies the request id and toasts "Copied. Send this code to whoever helps you with Clip Factory." |
 | Sounds | The click sound only on a click or tap (send button, chips, buttons), not when Enter sends; the error sound with the 429, 503 and failed-number notices; nothing when an answer arrives. |
 | Keyboard and screen readers | Focus goes to the textarea on open; on desktop Tab stays natural (non-modal), in the phone sheet it stays inside; Escape closes and returns focus to whatever opened it; the log is `aria-live="polite"`. |
@@ -1062,9 +1071,9 @@ Contract: docs/CONTRACTS.md §21. Money is always a **best guess**, so it never 
   app's "Who gets paid" words (`kidRules`). TikTok (Sweden is not eligible, and the clips are under 60 s) and Instagram
   (invite-only) start off: they show $0 with "Turn this on in Settings › Money if TikTok pays you." A switched-off app
   with views says what it would be ("If YouTube paid you, this would be about $0.42.").
-- **Look.** A `coin` icon in `--sage-ink`, numbers in `tabular-nums`, a small sage "Best guess" tag that is visible
+- **Look.** A `coin` icon in `--green-ink`, numbers in `tabular-nums`, a small green "Best guess" tag that is visible
   wherever an amount above $0 shows (clip page, Library card, This week card and week total). Money lines sit
-  on a light sage tint inside the glass card; no tomato (money is not the main action), no green "profit" colour.
+  on a light green tint inside the glass card; no vermilion (money is not the main action), no green "profit" colour.
 - **Explain on demand.** "How is this worked out?" is a text button with `aria-expanded`; it opens the amount used
   per app (each mark on the same small dark round tile as Settings › Money, hidden from screen readers, so X reads
   "X:" once, never "X X"), the paid-program line under every app that is on, and a link button to Settings › Money. Hover changes the underline only; no cursor CSS.
@@ -1083,7 +1092,7 @@ The owner's bar: "even a 6-year-old should be able to use it, or an 8-year-old"
 changes one is checked against this list.
 
 **One next step**
-- [ ] Exactly one tomato button on the screen, and it is the thing to do next. (Only the update bar may add a second.)
+- [ ] Exactly one vermilion button on the screen, and it is the thing to do next. (Only the update bar may add a second.)
 - [ ] The button says what happens, with an icon and a word: "Make clips", "Keep", "Throw away", "Try again".
 
 **Big and clear**

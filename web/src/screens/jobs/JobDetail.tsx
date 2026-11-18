@@ -17,10 +17,10 @@ import { applyClipEvent, byRank, withMedia } from "../../lib/liveCache.ts";
 import { stopWithUndo, useStopping } from "./pendingStops.ts";
 
 const CLIP_STATUS: Record<ClipStatus, { label: string; tone: Tone }> = {
-  review: { label: "Needs a look", tone: "tomato" },
-  confirmed: { label: "Kept", tone: "sage" },
-  publishing: { label: "Posting", tone: "sage" },
-  posted: { label: "Posted", tone: "ink" },
+  review: { label: "Needs a look", tone: "vermilion" },
+  confirmed: { label: "Kept", tone: "success" },
+  publishing: { label: "Posting", tone: "success" },
+  posted: { label: "Posted", tone: "bone" },
   declined: { label: "Thrown away", tone: "neutral" },
   failed: { label: "Post failed", tone: "warn" },
 };
@@ -194,7 +194,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
               {pct}%
             </span>
           </div>
-          <Progress value={job.progress} label="Job progress" tone={job.status === "failed" ? "tomato" : "sage"} />
+          <Progress value={job.progress} label="Job progress" tone={job.status === "failed" ? "primary" : "success"} />
           <p className="sr-only" aria-live="polite">
             {job.status === "running"
               ? `${pct} percent. ${running?.label ?? "Working"}.`

@@ -19,18 +19,18 @@ const TITLE: &str = "Clip Factory";
 const MIN_SIZE: (f64, f64) = (380.0, 600.0);
 const START_SIZE: (f64, f64) = (1200.0, 820.0);
 
-/// The light tint laid into the native glass (Clip Factory off-white, a little over half strength).
-/// - macOS 26 and newer (Liquid Glass) honours it while the window is in use: measured on macOS 27.2 on
-///   2026-11-16, the glass then behaves like this colour at roughly 62-73% over the blurred desktop. While
-///   another app is in use the system drops the tint for a neutral light grey.
+/// The tint laid into the native glass (Clip Factory bottle green, a little over half strength), so the gaps between
+/// the panels look green while the window is in use.
+/// - macOS 26 and newer (Liquid Glass) honours it while the window is in use (measured on macOS 27.2 on 2026-11-16
+///   with the earlier light tint). While another app is in use the system drops the tint for a neutral light grey.
 /// - The Windows `Blur` path honours it (worked out, not measured).
 /// - Windows 11 22H2+ acrylic drops the colour (window-vibrancy sets only the system backdrop type there) and the
 ///   vibrancy material of macOS 15 and older takes none.
 ///
-/// The web page plans for the darkest each glass can be (web/src/lib/background.ts `glassFloor`, §22.3): the
-/// measured inactive Liquid Glass, this tint over black for `blur` (from these same numbers, `GLASS_TINT_ALPHA`),
-/// black for the rest. Keep the two in step.
-const GLASS_TINT: Color = Color(247, 245, 239, 140);
+/// The web page's text is bone on bottle-green panels, so it plans for the lightest each glass can be: white
+/// (web/src/lib/background.ts `glassCeiling`, §22.3). This tint can only make the glass darker, so readability never
+/// depends on it. `glassFloor` uses this tint over black for `blur` (`GLASS_TINT_ALPHA`). Keep the two in step.
+const GLASS_TINT: Color = Color(15, 55, 43, 140);
 
 /// The AppKit version from which macOS draws Liquid Glass (macOS 26.0). It is the number window-vibrancy 0.8
 /// checks before it applies the effect (its `MIN_APPKIT_VERSION_LIQUID_GLASS`); on anything older Tauri falls back
@@ -166,7 +166,8 @@ fn main() {
                     .inner_size(START_SIZE.0, START_SIZE.1)
                     .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
                     .center()
-                    // The web app is drawn light, so the glass behind it is the light material too (§22.3).
+                    // The light material, as measured (§22.3): the web app's green panels are worked out for the
+                    // lightest glass, so a dark material would only darken them. Not switched without a measurement.
                     .theme(Some(Theme::Light))
                     .user_agent(&user_agent())
                     .initialization_script(init_script(glass));

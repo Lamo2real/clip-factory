@@ -37,7 +37,7 @@
     border-radius: var(--r-xl);
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    scrollbar-color: rgb(var(--ink-rgb) / 0.22) transparent;
+    scrollbar-color: rgb(var(--line-rgb) / 0.48) transparent;
   }
 }
 
@@ -70,19 +70,17 @@
 .folders__home:hover,
 .folders__toggle:hover,
 .folders__branch:hover {
-  background: rgb(255 255 255 / 0.5);
+  background: var(--fill);
   color: var(--ink);
 }
 .folders__home.is-current,
 .folders__toggle.is-current,
 .folders__branch.is-current {
-  color: var(--ink);
-  background: linear-gradient(160deg, rgb(255 255 255 / 0.92), rgb(var(--sage-rgb) / 0.5));
-  box-shadow:
-    inset 0 1px 0 #fff,
-    0 6px 14px -10px rgb(var(--ink-rgb) / 0.6);
+  color: var(--on-bone);
+  background: var(--selected);
+  box-shadow: 0 6px 14px -10px rgb(var(--shadow-rgb) / 0.85);
 }
-/* The tomato dot that marks where you are, as in the main menu. */
+/* The vermilion dot that marks where you are, as in the main menu. */
 .folders__home.is-current::after,
 .folders__toggle.is-current::after,
 .folders__branch.is-current::after {
@@ -94,19 +92,20 @@
   height: 18px;
   margin-top: -9px;
   border-radius: 4px;
-  background: var(--tomato);
+  background: var(--vermilion);
+  box-shadow: 0 0 0 1.5px var(--bone);
 }
 .folders__trees {
   display: grid;
   gap: 2px;
   padding-top: 4px;
-  border-top: 1px solid rgb(var(--ink-rgb) / 0.08);
+  border-top: 1px solid rgb(var(--line-rgb) / 0.18);
 }
 .folders__name {
   flex: 1;
   min-width: 0;
 }
-.folders__tree.is-here > .folders__toggle {
+.folders__tree.is-here > .folders__toggle:not(.is-current) {
   color: var(--ink);
   font-weight: 700;
 }
@@ -230,12 +229,12 @@
 .crumbs__link {
   color: var(--ink-2);
   text-decoration: underline;
-  text-decoration-color: rgb(var(--ink-rgb) / 0.25);
+  text-decoration-color: rgb(var(--line-rgb) / 0.55);
   text-underline-offset: 3px;
 }
 .crumbs__link:hover {
   color: var(--ink);
-  text-decoration-color: var(--tomato);
+  text-decoration-color: var(--vermilion);
 }
 .crumbs__here {
   color: var(--ink);
@@ -267,10 +266,10 @@
   min-height: 56px;
   padding: 0 6px 0 16px;
   border-radius: var(--r-pill);
-  background: rgb(255 255 255 / 0.74);
+  background: rgb(var(--green-deep-rgb) / 0.37);
   box-shadow:
-    inset 0 0 0 1px rgb(var(--ink-rgb) / 0.14),
-    inset 0 2px 4px rgb(var(--ink-rgb) / 0.05);
+    inset 0 0 0 1px rgb(var(--line-rgb) / 0.31),
+    inset 0 2px 4px rgb(var(--shadow-rgb) / 0.08);
   color: var(--ink-3);
   transition: box-shadow var(--dur-1);
 }
@@ -311,7 +310,7 @@
   color: var(--ink-2);
 }
 .find__clear:hover {
-  background: rgb(var(--ink-rgb) / 0.07);
+  background: rgb(var(--green-deep-rgb) / 0.27);
 }
 .find__status {
   font-size: var(--fs-small);
@@ -328,8 +327,8 @@
   gap: 12px;
   padding: 12px 12px 12px 14px;
   border-radius: var(--r-md);
-  background: rgb(255 255 255 / 0.55);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.75);
+  background: rgb(var(--green-deep-rgb) / 0.32);
+  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.3);
   text-decoration: none;
   transition:
     background-color var(--dur-1),
@@ -339,11 +338,11 @@
 }
 .find-hit:hover,
 .find-hit.is-active {
-  background: rgb(255 255 255 / 0.85);
+  background: var(--fill-hover);
 }
 .find-hit.is-active {
   box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.75),
+    inset 0 0 0 1px rgb(var(--bone-rgb) / 0.3),
     var(--focus);
 }
 .find__results[hidden] {
@@ -396,7 +395,7 @@
   width: 40px;
   height: 40px;
   border-radius: var(--r-sm);
-  background: rgb(var(--sage-rgb) / 0.42);
+  background: var(--tint-leaf);
 }
 .find-hit__text {
   display: grid;
@@ -463,7 +462,7 @@
 .branch-card:hover {
   transform: translateY(-2px);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.75),
+    inset 0 1px 0 rgb(var(--bone-rgb) / 0.26),
     var(--shadow-2);
 }
 .tree-card:active,
@@ -481,11 +480,11 @@
   display: grid;
   place-items: center;
   flex: none;
-  color: var(--ink);
-  background: linear-gradient(160deg, rgb(255 255 255 / 0.8), rgb(var(--sage-rgb) / 0.55));
+  color: var(--on-bone);
+  background: var(--selected);
   box-shadow:
-    inset 0 1px 0 #fff,
-    0 6px 14px -10px rgb(var(--ink-rgb) / 0.6);
+    inset 0 1px 0 rgb(var(--bone-rgb) / 0.3),
+    0 6px 14px -10px rgb(var(--shadow-rgb) / 0.85);
 }
 .tree-card__icon {
   width: 56px;
@@ -565,7 +564,7 @@
     box-shadow 600ms var(--ease-out);
 }
 .apple + .apple {
-  border-top: 1px solid rgb(var(--ink-rgb) / 0.08);
+  border-top: 1px solid rgb(var(--line-rgb) / 0.18);
 }
 .apple:focus-visible {
   border-radius: var(--r-sm);
@@ -591,8 +590,8 @@
 .apple__tag {
   padding: 3px 10px;
   border-radius: var(--r-pill);
-  background: rgb(var(--sage-rgb) / 0.35);
-  color: var(--sage-text);
+  background: var(--tint-leaf);
+  color: var(--green-text);
   font-size: var(--fs-xs);
   font-weight: 700;
 }
@@ -634,16 +633,16 @@
 /* Found with "Find a setting": lit up for a few seconds. */
 .apple.is-found,
 .getapp.is-found {
-  background-color: rgb(var(--tomato-rgb) / 0.09);
-  box-shadow: 0 0 0 10px rgb(var(--tomato-rgb) / 0.09), 0 0 0 12px rgb(var(--tomato-rgb) / 0.28);
+  background-color: rgb(var(--green-deep-rgb) / 0.3);
+  box-shadow: 0 0 0 10px rgb(var(--green-deep-rgb) / 0.3), 0 0 0 12px rgb(var(--vermilion-rgb) / 0.6);
   animation: apple-found 900ms var(--ease-out);
 }
 @keyframes apple-found {
   0% {
-    box-shadow: 0 0 0 2px rgb(var(--tomato-rgb) / 0.1), 0 0 0 4px rgb(var(--tomato-rgb) / 0);
+    box-shadow: 0 0 0 2px rgb(var(--vermilion-rgb) / 0.1), 0 0 0 4px rgb(var(--vermilion-rgb) / 0);
   }
   45% {
-    box-shadow: 0 0 0 14px rgb(var(--tomato-rgb) / 0.12), 0 0 0 16px rgb(var(--tomato-rgb) / 0.4);
+    box-shadow: 0 0 0 14px rgb(var(--green-deep-rgb) / 0.3), 0 0 0 16px rgb(var(--vermilion-rgb) / 0.7);
   }
 }
 .getapp {
@@ -666,19 +665,23 @@
 }
 
 /* ---------- Sounds ---------- */
+/* --kind is the group's fill (the picked number, the badge) with --kind-on words on it; --kind-soft its tint, with
+   --kind-text words on it. */
 .sound-group.is-tap {
-  --kind: var(--sage-deep);
-  --kind-soft: rgb(var(--sage-rgb) / 0.4);
-  /* Small text on the sage tint (the tag, the number tiles): a deeper sage keeps it above 4.5:1. */
-  --kind-text: var(--sage-text);
+  --kind: var(--green-leaf);
+  --kind-on: var(--green-deep);
+  --kind-soft: var(--tint-leaf);
+  --kind-text: var(--green-text);
 }
 .sound-group.is-deny {
-  --kind: var(--tomato-ink);
-  --kind-soft: rgb(var(--tomato-rgb) / 0.14);
+  --kind: var(--vermilion-deep);
+  --kind-on: #fff;
+  --kind-soft: var(--tint-vermilion);
+  --kind-text: var(--vermilion-ink);
 }
 .sound-group .apple__tag {
   background: var(--kind-soft);
-  color: var(--kind-text, var(--kind));
+  color: var(--kind-text);
 }
 .sound-group .apple__name {
   font-family: var(--font-display);
@@ -705,10 +708,10 @@
   min-height: 68px;
   padding: 12px;
   border-radius: var(--r-md);
-  background: rgb(255 255 255 / 0.5);
+  background: var(--fill);
   box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.75),
-    0 6px 16px -12px rgb(var(--ink-rgb) / 0.55);
+    inset 0 0 0 1px rgb(var(--bone-rgb) / 0.3),
+    0 6px 16px -12px rgb(var(--shadow-rgb) / 0.83);
   color: var(--ink);
   text-align: left;
   transition:
@@ -717,7 +720,7 @@
     transform var(--dur-2) var(--ease-spring);
 }
 .sound-card:hover {
-  background: rgb(255 255 255 / 0.78);
+  background: var(--fill-hover);
 }
 .sound-card:active {
   transform: scale(0.97);
@@ -726,10 +729,10 @@
   border-radius: var(--r-md);
 }
 .sound-card.is-picked {
-  background: rgb(255 255 255 / 0.9);
+  background: var(--fill-hover);
   box-shadow:
-    inset 0 0 0 2px var(--kind),
-    0 10px 22px -14px rgb(var(--ink-rgb) / 0.7);
+    inset 0 0 0 2px var(--bone),
+    0 10px 22px -14px rgb(var(--shadow-rgb) / 0.85);
 }
 .sound-card__num {
   display: grid;
@@ -739,13 +742,13 @@
   height: 40px;
   border-radius: var(--r-sm);
   background: var(--kind-soft);
-  color: var(--kind-text, var(--kind));
+  color: var(--kind-text);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .sound-card.is-picked .sound-card__num {
   background: var(--kind);
-  color: #fff;
+  color: var(--kind-on);
 }
 .sound-card__name {
   font-weight: 650;
@@ -768,12 +771,12 @@
   padding: 3px 8px 3px 6px;
   border-radius: var(--r-pill);
   background: var(--kind);
-  color: #fff;
+  color: var(--kind-on);
   font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  box-shadow: 0 4px 10px -4px rgb(var(--ink-rgb) / 0.5);
+  box-shadow: 0 4px 10px -4px rgb(var(--shadow-rgb) / 0.75);
 }
 .sound-card.is-playing .sound-card__num {
   animation: sound-pulse 380ms var(--ease-out);
@@ -806,12 +809,12 @@
   gap: 10px 14px;
   padding: 12px 14px;
   border-radius: var(--r-md);
-  background: rgb(255 255 255 / 0.66);
-  box-shadow: inset 0 0 0 1px rgb(var(--tomato-rgb) / 0.3);
+  background: var(--fill);
+  box-shadow: inset 0 0 0 1px rgb(var(--vermilion-rgb) / 0.6);
 }
 .sounds-off > .icon {
   flex: none;
-  color: var(--tomato-ink);
+  color: var(--vermilion-ink);
 }
 .sounds-off__text {
   flex: 1 1 200px;
@@ -859,10 +862,10 @@
   border-radius: 50%;
 }
 .try-it__pick.is-tap .try-it__dot {
-  background: var(--sage-deep);
+  background: var(--green-leaf);
 }
 .try-it__pick.is-deny .try-it__dot {
-  background: var(--tomato);
+  background: var(--vermilion);
 }
 .btn.is-shaking {
   animation: try-shake 320ms ease-in-out;
@@ -884,8 +887,8 @@
 
 /* Accounts sit inside an apple now: light tiles instead of glass cards. */
 .apple .account {
-  background: rgb(255 255 255 / 0.45);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7);
+  background: rgb(var(--green-deep-rgb) / 0.29);
+  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.28);
 }
 
 /* ---------- Skills (docs/CONTRACTS.md §18.7) ---------- */
@@ -900,8 +903,8 @@
   min-height: 72px;
   padding: 14px;
   border-radius: var(--r-lg);
-  background: rgb(255 255 255 / 0.45);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.6);
+  background: rgb(var(--green-deep-rgb) / 0.29);
+  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.24);
   color: inherit;
   text-decoration: none;
   transition:
@@ -909,7 +912,7 @@
     transform var(--dur-1);
 }
 .skill-row:hover {
-  background: rgb(255 255 255 / 0.66);
+  background: rgb(var(--green-deep-rgb) / 0.35);
 }
 .skill-row:active {
   transform: scale(0.99);
@@ -942,7 +945,7 @@
   width: 40px;
   height: 40px;
   border-radius: var(--r-sm);
-  background: rgb(var(--sage-rgb) / 0.42);
+  background: var(--tint-leaf);
 }
 .skill-row__text {
   display: grid;
@@ -1111,13 +1114,13 @@ ol.md__list {
   display: grid;
   gap: 8px;
   padding: 4px 0 4px 14px;
-  border-left: 3px solid var(--sage);
+  border-left: 3px solid var(--green-leaf);
   color: var(--ink-2);
 }
 .md__code {
   padding: 1px 6px;
   border-radius: 6px;
-  background: rgb(var(--ink-rgb) / 0.08);
+  background: var(--fill);
   font: 0.88em ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 .md__pre {
@@ -1126,14 +1129,14 @@ ol.md__list {
   overflow: auto;
   padding: 14px 16px;
   border-radius: var(--r-md);
-  background: rgb(var(--ink-rgb) / 0.86);
-  color: #eef1e7;
+  background: rgb(var(--green-deep-rgb) / 0.86);
+  color: var(--ink);
   font: 0.82rem/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .md__link {
-  color: var(--tomato-ink);
+  color: var(--vermilion-ink);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -1143,7 +1146,7 @@ ol.md__list {
 }
 .md__hr {
   border: 0;
-  border-top: 1px solid rgb(var(--ink-rgb) / 0.14);
+  border-top: 1px solid rgb(var(--line-rgb) / 0.31);
 }
 .md__more {
   font-weight: 600;
@@ -1179,7 +1182,8 @@ ol.md__list {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgb(var(--sage-rgb) / 0.55);
+  color: var(--on-bone);
+  background: var(--selected);
   font-size: 0.85rem;
   font-weight: 800;
 }
@@ -1203,18 +1207,21 @@ ol.md__list {
   align-items: center;
   gap: 4px 10px;
 }
+/* "Use this example" is an action: the vermilion CTA. */
 .skill-form__use {
   min-height: 44px;
   padding: 0 14px;
   border: 0;
   border-radius: var(--r-pill);
-  background: rgb(var(--sage-rgb) / 0.35);
-  color: var(--ink);
+  background: var(--cta);
+  color: #fff;
+  text-shadow: 0 1px 0 rgb(90 14 6 / 0.35);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
   font-weight: 650;
   font-size: var(--fs-small);
 }
 .skill-form__use:hover {
-  background: rgb(var(--sage-rgb) / 0.55);
+  background: linear-gradient(180deg, var(--cta-hover-top), var(--cta-bottom));
 }
 .skill-form__use:focus-visible {
   box-shadow: var(--focus);
@@ -1238,7 +1245,7 @@ ol.md__list {
   display: grid;
   place-items: end center;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
-  background: rgb(var(--ink-rgb) / 0.4);
+  background: rgb(var(--green-deep-rgb) / 0.55);
   animation: sheet-fade 320ms var(--ease-out);
 }
 @media (min-width: 600px) {
@@ -1248,7 +1255,7 @@ ol.md__list {
 }
 /* Glass, but nearly solid: the page behind must never show through the question. --ink-2 on it is about 11:1. */
 .sheet.glass {
-  --glass-tint: linear-gradient(140deg, rgb(255 255 255 / 0.95), rgb(var(--offwhite-rgb) / 0.92));
+  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.95), rgb(var(--green-rgb) / 0.94));
 }
 .sheet {
   display: grid;
@@ -1319,8 +1326,8 @@ ol.md__list {
   min-width: 0;
   padding: 12px 14px;
   border-radius: var(--r-md);
-  background: rgb(255 255 255 / 0.32);
-  border: 1px solid rgb(var(--ink-rgb) / 0.06);
+  background: rgb(var(--green-deep-rgb) / 0.25);
+  border: 1px solid rgb(var(--line-rgb) / 0.13);
 }
 .money__app {
   display: inline-flex;
@@ -1340,9 +1347,9 @@ ol.md__list {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgb(var(--ink-rgb) / 0.88);
-  color: var(--offwhite);
-  --mark-cut: var(--ink);
+  background: var(--selected);
+  color: var(--on-bone);
+  --mark-cut: #efe7da;
 }
 .money__app-name {
   overflow-wrap: anywhere;
@@ -1359,7 +1366,7 @@ ol.md__list {
 .money__paid-word {
   font-size: var(--fs-small);
   font-weight: 700;
-  color: var(--sage-text); /* --sage-deep is only ~4.2:1 on the glass here */
+  color: var(--green-text); /* --green-deep is only ~4.2:1 on the glass here */
 }
 .money__item.is-off .money__paid-word {
   color: var(--ink-2);
@@ -1381,7 +1388,7 @@ ol.md__list {
 .money__rule .icon {
   flex: none;
   margin-top: 2px;
-  color: var(--sage-ink);
+  color: var(--green-ink);
 }
 .money__usual {
   font-size: var(--fs-small);
@@ -1454,9 +1461,9 @@ ol.md__list {
 .money__more-word {
   font-size: var(--fs-small);
   font-weight: 650;
-  color: var(--tomato-ink);
+  color: var(--vermilion-ink);
   text-decoration: underline;
-  text-decoration-color: rgb(var(--tomato-rgb) / 0.4);
+  text-decoration-color: rgb(var(--vermilion-rgb) / 0.6);
 }
 /* Each source link is a full 44 px tap target; its date sits on its own line under it. */
 .money__link {
@@ -1522,8 +1529,8 @@ ol.md__list {
   min-width: 0;
   padding: 14px;
   border-radius: var(--r-lg);
-  background: rgb(255 255 255 / 0.45);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.6);
+  background: rgb(var(--green-deep-rgb) / 0.29);
+  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.24);
 }
 .lesson[data-status="off"] .lesson__text,
 .lesson[data-status="expired"] .lesson__text {
@@ -1552,7 +1559,7 @@ ol.md__list {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
-  color: var(--tomato-ink);
+  color: var(--vermilion-ink);
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 3px;

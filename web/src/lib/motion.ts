@@ -141,7 +141,7 @@ export interface ActionHandle extends ActState {
   kind: ActionKind;
   /** Starts (or restarts) the motion. Never throws. */
   play(): void;
-  /** The shared failure (§20.5): back to rest, a gentle tomato shake, and the deny sound unless `sound: false`. */
+  /** The shared failure (§20.5): back to rest, a gentle vermilion shake, and the deny sound unless `sound: false`. */
   fail(opts?: { sound?: boolean }): void;
   /** Plays the motion backwards (§20.7), for Undo. */
   rewind(): void;

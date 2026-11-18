@@ -12,7 +12,7 @@ const all = readdirSync(STYLES)
   .filter((f) => f.endsWith(".css"))
   .map((f) => [f, css(f)] as const);
 
-/** Custom properties declared on :root in tokens.css (and :root blocks elsewhere, such as --sage-text). */
+/** Custom properties declared on :root in tokens.css (and :root blocks elsewhere, such as --green-text). */
 function rootTokens(): Map<string, string> {
   const out = new Map<string, string>();
   for (const [, text] of all)
@@ -50,7 +50,7 @@ describe("docs/UX_DESIGN_SYSTEM.md matches tokens.css", () => {
 
   it("every colour and radius token in tokens.css is in a doc table", () => {
     const tokensCss = css("tokens.css");
-    const missing = [...tokensCss.matchAll(/(--(?:sage|offwhite|tomato|ink|r)(?:-[a-z0-9]+)*):/g)]
+    const missing = [...tokensCss.matchAll(/(--(?:green|bone|vermilion|ink|on|r)(?:-[a-z0-9]+)*):/g)]
       .map((m) => m[1]!)
       .filter((n) => !n.endsWith("-rgb") && !rows.has(n));
     expect(missing).toEqual([]);
@@ -59,7 +59,7 @@ describe("docs/UX_DESIGN_SYSTEM.md matches tokens.css", () => {
   it("every --token the doc's prose names exists in the CSS", () => {
     const defined = new Set<string>();
     for (const [, text] of all) for (const m of text.matchAll(/(--[a-z0-9-]+)\s*:/g)) defined.add(m[1]!);
-    // `.glass--sage` style modifiers are class names, not tokens.
+    // `.glass--green` style modifiers are class names, not tokens.
     const named = [...DOC.matchAll(/(?<![\w-])`(--[a-z][a-z0-9-]*)`/g)].map((m) => m[1]!);
     expect([...new Set(named)].filter((n) => !defined.has(n))).toEqual([]);
   });

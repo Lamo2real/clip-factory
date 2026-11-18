@@ -13,11 +13,11 @@ import { LinkButton, Pill, type Tone } from "./ui.tsx";
 import { APP_NAME, moneyPhrase, moneyWords, type PlatformEarning } from "../lib/earnings.ts";
 
 const CHIP_TONE: Record<PlatformPerformance["status"], Tone> = {
-  posted: "sage",
+  posted: "success",
   posted_private: "neutral",
   waiting_for_connection: "neutral",
   posting: "neutral",
-  failed: "tomato",
+  failed: "vermilion",
   not_posted: "neutral",
 };
 

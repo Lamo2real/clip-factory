@@ -1,4 +1,4 @@
-// A round progress ring (sage on a pale track) with words in the middle: the posting setup's "2 of 5 ready" and
+// A round progress ring (leaf green on a faint bone track) with words in the middle: the posting setup's "2 of 5 ready" and
 // each platform's progress (docs/CONTRACTS.md §17.1). It fills with a short ease unless motion is reduced (CSS).
 import type { ReactNode } from "react";
 

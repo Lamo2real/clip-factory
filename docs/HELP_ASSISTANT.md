@@ -50,7 +50,7 @@ flowchart LR
    placeholder that the panel fills by reading the same APIs the pages use, with the owner's own token. The assistant
    itself never reads clips, posts or weeks.
 6. **Actions, not just text.** A button navigates (asking first if a caption edit or pasted link is not saved yet) and
-   draws a sage ring around the control for 2.4 seconds.
+   draws a bone ring around the control for 2.4 seconds.
 7. **Private.** Questions and answers are never stored and never logged. Each request logs one outcome line with a
    request id, which the "Copy the help code" link copies when something goes wrong.
 

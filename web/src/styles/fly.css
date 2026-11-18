@@ -132,7 +132,4 @@
   /* The plane's nose points up-right; nudge it so it looks centred in the circle. */
   translate: -1px 1px;
 }
-.btn.fly-btn--sage {
-  color: var(--ink);
-  background: linear-gradient(150deg, rgb(198 212 182 / 0.9), rgb(var(--sage-rgb) / 0.72));
-}
+

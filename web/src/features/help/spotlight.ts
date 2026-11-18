@@ -1,5 +1,5 @@
 // "Takes you there and lights up the button" (docs/CONTRACTS.md §19.8): waits for a [data-help~="id"] element,
-// scrolls it to the middle, draws a sage ring with a soft tomato glow that fades over 2.4 s, and says where it is.
+// scrolls it to the middle, draws a bone ring with a soft vermilion glow that fades over 2.4 s, and says where it is.
 // It never moves the focus. With reduced motion the scroll jumps and the ring stays still.
 
 export const SPOT_WAIT_MS = 4000;

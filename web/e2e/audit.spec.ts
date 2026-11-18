@@ -23,7 +23,7 @@ for (const [name, use] of [
   test.describe(name, () => {
     test.use(use);
 
-    test("each screen has at most one tomato button", async ({ page }) => {
+    test("each screen has at most one main vermilion button", async ({ page }) => {
       const extra: string[] = [];
       for (const path of SCREENS) {
         await page.goto(path);
@@ -41,10 +41,10 @@ for (const [name, use] of [
       await page.goto("/settings/look-and-feel/sounds");
       await settle(page);
       const color = await page.locator(".sound-group.is-tap .apple__tag").first().evaluate((el) => getComputedStyle(el).color);
-      expect(color).toBe("rgb(61, 79, 49)");
+      expect(color).toBe("rgb(214, 235, 200)");
     });
 
-    test("Review: only the top clip's Keep is tomato, and the next one takes over", async ({ page }) => {
+    test("Review: only the top clip's Keep is vermilion, and the next one takes over", async ({ page }) => {
       await page.goto("/review");
       await settle(page);
       const cards = page.locator(".review-card");

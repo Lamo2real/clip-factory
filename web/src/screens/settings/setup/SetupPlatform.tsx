@@ -86,8 +86,8 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
   const progress = progressOf(guide, setup);
   const reconnect = setup?.account.status === "needs_reconnect";
   const choosing = setup?.account.status === "choose_account" && (setup.account.choices?.length ?? 0) > 0;
-  // The step whose main action is the tomato button: the current one, unless the account needs connecting again.
-  const tomatoStep = reconnect || choosing ? null : (progress.current?.id ?? null);
+  // The step whose main action is the vermilion button: the current one, unless the account needs connecting again.
+  const mainStep = reconnect || choosing ? null : (progress.current?.id ?? null);
 
   // ?result= from the platform: read once on arrival.
   useEffect(() => {
@@ -432,7 +432,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
             {part.id === "public" && guide.publicNote ? <p className="setup-part__note">{guide.publicNote}</p> : null}
             <ol className="guide-steps">
               {part.steps.map((step) => {
-                const primary = tomatoStep === step.id;
+                const primary = mainStep === step.id;
                 return (
                   <StepCard
                     key={step.id}

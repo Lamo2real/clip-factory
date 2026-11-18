@@ -61,7 +61,7 @@ export function SignIn({ onDone, note }: { onDone: () => void; note?: string | n
 
   return (
     <main className="signin" id="main">
-      <section className="signin__card glass glass--sage glass--refract" aria-labelledby={`${id}-t`}>
+      <section className="signin__card glass glass--green glass--refract" aria-labelledby={`${id}-t`}>
         <div className="brand brand--large" aria-hidden="true">
           <span className="brand__mark">
             C<span className="brand__dot" />

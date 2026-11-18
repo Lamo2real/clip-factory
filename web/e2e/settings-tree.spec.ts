@@ -200,7 +200,7 @@ test.describe("on a desktop", () => {
     await expect(panel.getByRole("link", { name: "Skills" })).toHaveAttribute("aria-current", "page");
   });
 
-  test("on a tree page the folder panel marks that tree: one aria-current, sage and the tomato dot; 260 px wide", async ({ page }) => {
+  test("on a tree page the folder panel marks that tree: one aria-current, green and the vermilion dot; 260 px wide", async ({ page }) => {
     await page.goto("/settings/clip-making");
     await settle(page);
     const panel = page.getByRole("navigation", { name: "Settings sections" });
@@ -208,8 +208,9 @@ test.describe("on a desktop", () => {
     const row = panel.getByRole("button", { name: "Clip making" });
     await expect(row).toHaveAttribute("aria-current", "page");
     await expect(row).toHaveClass(/is-current/);
-    const look = await row.evaluate((el) => ({ bg: getComputedStyle(el).backgroundImage, dot: getComputedStyle(el, "::after").content }));
-    expect(look.bg).toContain("gradient");
+    const look = await row.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, dot: getComputedStyle(el, "::after").content }));
+    // The bone pill, as in the main menu.
+    expect(look.bg).toContain("239, 231, 218");
     expect(look.dot).not.toBe("none");
     expect(Math.round((await panel.boundingBox())!.width)).toBe(260);
     // On a branch page the branch is current, not its tree.
@@ -336,12 +337,12 @@ test.describe("on a desktop", () => {
 });
 
 test.describe("layout details", () => {
-  test("sound cards: deep sage number tiles (4.5:1 on the tint), name and feel kept together when a row stretches", async ({ page }) => {
+  test("sound cards: green number tiles (4.5:1 on the tint), name and feel kept together when a row stretches", async ({ page }) => {
     for (const width of [375, 414, 768]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/settings/look-and-feel/sounds");
       await settle(page);
-      await expect(page.locator(".sound-group.is-tap .sound-card:not(.is-picked) .sound-card__num").first()).toHaveCSS("color", "rgb(61, 79, 49)");
+      await expect(page.locator(".sound-group.is-tap .sound-card:not(.is-picked) .sound-card__num").first()).toHaveCSS("color", "rgb(214, 235, 200)");
       const gaps = await page.locator(".sound-card").evaluateAll((cards) =>
         cards.map((c) => c.querySelector(".sound-card__feel")!.getBoundingClientRect().top - c.querySelector(".sound-card__name")!.getBoundingClientRect().bottom),
       );
@@ -465,7 +466,7 @@ test.describe("Sounds", () => {
     await expect.poll(async () => (await soundLog(page)).map((e) => [e.kind, e.sound])).toEqual([["deny", 21]]);
   });
 
-  test("Try it: Sign in plays the click sound with a sage toast, or fails with the error sound, a shake and a tomato toast", async ({ page }) => {
+  test("Try it: Sign in plays the click sound with a green toast, or fails with the error sound, a shake and a vermilion toast", async ({ page }) => {
     await page.goto("/settings/look-and-feel/sounds");
     await settle(page);
     const tryIt = page.getByRole("button", { name: "Try it: Sign in" });

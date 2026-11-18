@@ -18,8 +18,8 @@ export const ALL_CREATORS = "*";
 
 const CHIPS: Record<LessonStatus, { text: string; tone: Tone }> = {
   trial: { text: "Trying it", tone: "neutral" },
-  active: { text: "Using it", tone: "sage" },
-  off: { text: "Turned off", tone: "ink" },
+  active: { text: "Using it", tone: "success" },
+  off: { text: "Turned off", tone: "bone" },
   expired: { text: "Too old", tone: "warn" },
 };
 

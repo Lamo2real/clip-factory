@@ -158,7 +158,7 @@ From "2 days after we've uploaded to the social media on the clips" (see interpr
 From "I should be able to see the background of my phone image" (see interpretation I-02).
 - AC1: The owner can pick a background image in Settings; the glass surfaces show it through them. The image stays
   on that device (it is a personal look, not account data).
-- AC2: Without an image the app shows its own soft animated sage, off-white and tomato backdrop.
+- AC2: Without an image the app shows its own soft animated bottle-green backdrop with a vermilion glow and a bone highlight.
 
 ### BR-15 Get the app, matched to the device
 Added after the first build ([CONTRACTS.md §12.1](CONTRACTS.md#121-get-the-app-sidebar-item-on-phones-a-card-in-settings-plus-a-one-time-banner-on-home)).
@@ -201,7 +201,7 @@ be a brief word of the area where a new feature has been modified ... 'settings 
 - AC2: The app compares that version with its own on start, every 5 minutes, when it comes back to the screen, and
   when the service worker finds a new version. When they differ, a glass bar slides up at the bottom of the page
   (above the phone tab bar), in the browser and in installed apps alike.
-- AC3: The bar shows a sparkle, the area labels as small pills (for example `Settings · Profile picture`) and a tomato
+- AC3: The bar shows a sparkle, the area labels as small pills (for example `Settings · Profile picture`) and a vermilion
   **Reload** button. No sentences, no version numbers, no technical words.
 - AC4: Each label is 1–3 words; there are at most 3. They come from the `Area:` lines in the commits since the last
   deploy, else from the folders that changed, else "Improvements"; the very first deploy says "First release"
@@ -246,7 +246,7 @@ should do it every 15 minutes or 30 minutes. Or whatever the lowest limit is for
   then one final reading. The intervals live in one file, `config/platforms.json`.
 - AC2: YouTube's slower insights (watch time, engaged views, shares, new subscribers) are read at most every 6 hours,
   because YouTube needs 2–3 days to process them.
-- AC3: The page has one tomato **Refresh numbers** button that asks every platform at once
+- AC3: The page has one vermilion **Refresh numbers** button that asks every platform at once
   (`POST /v1/clips/{clipId}/stats/refresh`). New numbers appear on screen by themselves within seconds (WebSocket), and
   the button spins while they are on the way.
 - AC4: A refresh never goes over a platform's limit: a platform checked moments ago answers "Next check in 4 min";
@@ -519,8 +519,8 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 ## Design and experience requirements
 
 ### UX-01 Colours
-- AC1: Primary call-to-action buttons are tomato red `#E8412C`, every one of them.
-- AC2: The rest of the palette combines sage `#9CAF88` and off-white `#F7F5EF`, with ink `#1E2A1B` for text.
+- AC1: Call-to-action buttons are vermilion `#E8392B`, every one of them (owner request 2026-11-18).
+- AC2: The rest of the palette is bottle green `#0F372B` (the glass) and bone `#EFE7DA` (the words and the lines).
 
 ### UX-02 Liquid glass everywhere
 "I want them to be liquid glassy so that you can almost see through the application."
@@ -531,7 +531,7 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 
 ### UX-03 Layout inspired by the reference site
 "Take inspiration from that, how it's all placed and in a cohesive manner."
-- AC1: Large serif italic headline on a sage hero card, pill buttons, cards in a row, a stat block.
+- AC1: Large serif italic headline on a green hero card, pill buttons, cards in a row, a stat block.
 - AC2: The person in the reference image is not used; only the layout, colours and feel are.
 
 ### UX-04 Fonts: Inter and Times
@@ -585,7 +585,7 @@ it's slow in and slow out, but in the middle, it's really quick ... so that the 
 ### UX-13 Kid-proof: a 6–8-year-old can use it
 "The entire application should be idiot proof. So even a 6-year-old should be able to use it, or an 8-year-old."
 ([CONTRACTS.md §12.4](CONTRACTS.md#124-kid-proof-ux-a-68-year-old-must-manage-it), [checklist](UX_DESIGN_SYSTEM.md#kid-proof-checklist))
-- AC1: Every screen has one obvious next step: exactly one tomato button (the update bar's Reload is the only extra).
+- AC1: Every screen has one obvious next step: exactly one main vermilion button (the update bar's Reload is the only extra).
 - AC2: Tap targets are at least 48 × 48 px on phones.
 - AC3: Buttons show an icon **and** a word (the phone tab bar is the one icon-only place, UX-06).
 - AC4: Words are short and everyday: "Make clips", "Keep", "Throw away", "Try again". No jargon on screen.
@@ -618,7 +618,7 @@ multiple branches, and each branch has multiple apples, but they also have leave
 - AC5: A **Find a setting** box on the Settings page searches every apple, leaf, tree and branch name while you type.
   Picking a result opens its branch, scrolls to it and highlights it. No match says "No setting called that. Try
   another word."
-- AC6: The tree, the folder panel and search are kid-proof (UX-13): at most one tomato button per screen, 48 px
+- AC6: The tree, the folder panel and search are kid-proof (UX-13): at most one main vermilion button per screen, 48 px
   targets on phones, plain words, nothing overflows from 320 px, and everything works with a keyboard and a screen
   reader.
 
@@ -649,7 +649,7 @@ So maybe 5 lines ... for both the phone resolution and the normal laptop's resol
   plays by itself.
 - AC2: Five smooth curved lines grow out of the bottom of the video, one to the top of each platform stack. They draw
   in once, one after another (80 ms apart, 900 ms each), and the stacks rise in as their line arrives. The best
-  platform's line is tomato, the others sage. With reduce motion (system or app setting) the lines are simply there.
+  platform's line is vermilion, the others green. With reduce motion (system or app setting) the lines are simply there.
 - AC3: Laptops and monitors (≥ 1024 px): five equal columns side by side, the lines fanning out from the video and
   ending exactly at the top centre of each stack.
 - AC4: Tablets and small laptops (600–1023 px): three stacks in the first row, two in the second, the second-row lines
@@ -657,7 +657,7 @@ So maybe 5 lines ... for both the phone resolution and the normal laptop's resol
 - AC5: Phones (< 600 px): one column of full-width cards; one trunk line runs from the video down the left edge, and a
   small curved branch leads into each card.
 - AC6: Nothing overflows at any width from 320 px; numbers never get cut off; labels wrap.
-- AC7: Kid-proof (UX-13): the only tomato button is **Refresh numbers**; the **Best this week** star is a big sage
+- AC7: Kid-proof (UX-13): the only main vermilion button is **Refresh numbers**; the **Best this week** star is a big green
   toggle; every state has words; the page works with a keyboard and a screen reader (the lines are decoration and are
   hidden from screen readers; each stack is a labelled section).
 
@@ -666,9 +666,9 @@ The owner: "It should be really clear on what to do, the steps, essentially idio
 be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 - AC1: A step card has a number, a picture-like icon, a title of 6 words or fewer, 1–4 sentences of 15 words or
   fewer with one action each, and the platform's button names in bold exactly as the platform shows them.
-- AC2: One tomato button per screen: the current step's main action (Open, Save keys, Connect {Platform} or Connect
-  again). **I did this**, Copy and Paste are sage and at least 48 px tall.
-- AC3: Copy shows "Copied!" with a sage tick and works without clipboard permission; a bad key shows what it should
+- AC2: One main vermilion button per screen: the current step's main action (Open, Save keys, Connect {Platform} or Connect
+  again). **I did this**, Copy and Paste are vermilion and at least 48 px tall.
+- AC3: Copy shows "Copied!" with a leaf-green tick and works without clipboard permission; a bad key shows what it should
   look like right under the box, and Save keys stays off until the keys look right.
 - AC4: Connecting celebrates (confetti, the success sound, the account's picture and name); every other result plays
   the error sound and shows one calm sentence and the step to go back to.
@@ -678,12 +678,12 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 
 ### UX-18 Ask Clip Factory looks and behaves like the rest of the app
 ([UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#ask-clip-factory))
-- AC1: Desktop: a sage glass pill **Ask** with a sparkle icon, bottom right, 12 px above the update bar when it shows.
+- AC1: Desktop: a green glass pill **Ask** with a sparkle icon, bottom right, 12 px above the update bar when it shows.
   Phones: a 56 px icon-only glass circle that never covers the tab bar or the update bar and hides while you scroll
   down.
 - AC2: The panel is glass, 400 px wide on desktop and a full-screen sheet on phones; it opens with "Hi! What do you
   want to do?" and three suggested questions that fit the page and the device.
-- AC3: Only the first button of the newest answer is tomato; the launcher is never tomato.
+- AC3: Only the first button of the newest answer is vermilion; the launcher is never vermilion (green glass).
 - AC4: The click sound plays on taps only; a rate-limit or error notice plays the error sound; nothing plays when an
   answer simply arrives.
 - AC5: Leaving a page with an unsaved caption edit or pasted link asks "You have a change that isn't saved yet. Leave

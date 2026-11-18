@@ -1,6 +1,6 @@
 // Ask Clip Factory's launcher (docs/CONTRACTS.md §19.8), mounted once in the signed-in shell: a glass "Ask" pill
 // bottom right on wide screens (above the update bar), a 56 px icon-only circle on phones that never covers the
-// tab bar or the update bar and steps aside while the page scrolls down. Sage glass, never tomato.
+// tab bar or the update bar and steps aside while the page scrolls down. Green glass, never vermilion.
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { AskMark } from "../../components/AskMark.tsx";
 import { useMedia } from "../../lib/hooks.ts";
@@ -102,7 +102,7 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
         <button
           ref={launcher}
           type="button"
-          className={`help-launcher glass glass--sage${hidden ? " is-hidden" : ""}${open ? " is-open" : ""}`}
+          className={`help-launcher glass glass--green${hidden ? " is-hidden" : ""}${open ? " is-open" : ""}`}
           aria-label="Ask Clip Factory"
           aria-expanded={open}
           aria-controls={open ? "help-panel" : undefined}
