@@ -752,6 +752,10 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
   or `requestOverride` and `data_trace_enabled = false`.
 - The vector index is float32, 1024, cosine with the four non-filterable keys.
 - No `aws_sqs_queue` or `aws_scheduler_*` remains; the only `aws_cloudwatch_event_rule` is `cf-prod-stats`.
+- The delete gate: `scripts/test-check-plan-deletes.sh` (a plan that deletes or replaces the table, the user pool, a
+  secret or a bucket fails with the resource named) and `scripts/test-deploy-workflow.sh` (the gate runs between
+  `terraform plan` and `terraform apply`); the table, user pool, owner user, state-key secret, buckets and vector
+  bucket and index carry `prevent_destroy`.
 - Stats ([CONTRACTS.md §16.9](CONTRACTS.md#169-terraform-module-inframodulesstats-wired-in-envsprod)): the rule is
   `rate(15 minutes)`, derived from `config/platforms.json` (a test override with every interval at 30 gives
   `rate(30 minutes)`); its target and the Lambda permission's source ARN; `cf-prod-stats` retries 0 and event age 900 s,

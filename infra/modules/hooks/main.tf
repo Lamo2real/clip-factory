@@ -172,6 +172,12 @@ resource "aws_secretsmanager_secret" "state_key" {
   name        = local.state_key_name
   description = "Signs Clip Factory's OAuth state and PKCE verifier (docs/CONTRACTS.md §17.4)."
   tags        = local.tags
+
+  # Owner rule (2026-11-17): holds the owner's data, so Terraform must never destroy or replace it. The deploy's
+  # delete gate (scripts/check-plan-deletes.sh) checks the plan too.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_secretsmanager_secret_version" "state_key" {
