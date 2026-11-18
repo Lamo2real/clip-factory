@@ -1,11 +1,11 @@
 // Puts the background choice (§22) on the page: which backdrop to draw, and the <html> class and veil strength the
 // CSS reads. Runs once before the first paint (main.tsx) and again whenever the choice or the system scheme changes.
 import { useSyncExternalStore } from "react";
-import { readNativeGlass, resolveLook, type Look, type NativeGlass, type Scheme } from "./background.ts";
+import { isOldDesktopApp, readNativeGlass, resolveLook, type Look, type NativeGlass, type Scheme } from "./background.ts";
 import { getPrefs, usePrefs, type Prefs } from "./prefs.ts";
 
 /** The desktop wrapper sets these before the page loads (desktop/src-tauri/src/init.js). */
-type DesktopWindow = Window & { __CF_DESKTOP__?: unknown; __CF_GLASS__?: unknown };
+type DesktopWindow = Window & { __CF_DESKTOP__?: unknown; __CF_GLASS__?: unknown; __CF_DESKTOP_VERSION__?: unknown };
 
 export function nativeGlass(): NativeGlass {
   return typeof window === "undefined" ? "none" : readNativeGlass(window as DesktopWindow);
@@ -13,6 +13,18 @@ export function nativeGlass(): NativeGlass {
 
 export function inDesktopApp(): boolean {
   return typeof window !== "undefined" && (window as DesktopWindow).__CF_DESKTOP__ === true;
+}
+
+/** A desktop app too old to update itself (§12.6): the page offers the new installer instead. */
+export function oldDesktopApp(): boolean {
+  return typeof window !== "undefined" && isOldDesktopApp(window as DesktopWindow);
+}
+
+/** The desktop app's version (`1.<n>.0`), from apps that update themselves; null in a browser or an older app. */
+export function desktopAppVersion(): string | null {
+  if (typeof window === "undefined") return null;
+  const v = (window as DesktopWindow).__CF_DESKTOP_VERSION__;
+  return typeof v === "string" && /^\d+\.\d+\.\d+([-+][\w.+-]*)?$/.test(v) ? v : null;
 }
 
 const DARK = "(prefers-color-scheme: dark)";

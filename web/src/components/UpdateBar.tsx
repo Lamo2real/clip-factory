@@ -1,15 +1,27 @@
-// The glass bar that says a new version is ready, names what changed, and runs the Reload progress.
+// The glass bar that says a new version is ready, names what changed, and runs the Reload progress. In a desktop app
+// too old to update itself (§12.6) the same bar offers the new app instead, until a web update needs it.
 import { useEffect, useRef, useState } from "react";
 import { burst, centerOf } from "../lib/confetti.ts";
+import { currentOs, oldAppDownloadUrl } from "../lib/device.ts";
+import { oldDesktopApp } from "../lib/look.ts";
 import { prefersReducedMotion } from "../lib/prefs.ts";
 import { dismissUpdate, finishedAt, prepareUpdate, PROGRESS, progressAt, reloadInto, useUpdate, type VersionInfo } from "../lib/update.ts";
 import { Icon } from "./Icon.tsx";
-import { Button } from "./ui.tsx";
+import { Button, LinkButton } from "./ui.tsx";
+
+/** The new installer for an old desktop app, or null (a browser, a phone, or an app that updates itself). */
+function oldAppUpdateUrl(): string | null {
+  return oldDesktopApp() && typeof location !== "undefined" ? oldAppDownloadUrl(currentOs(), location.host) : null;
+}
 
 export function UpdateBar() {
   const { available, dismissed } = useUpdate();
   const [running, setRunning] = useState(false);
-  const show = !!available && (!dismissed || running);
+  const [appUrl] = useState(oldAppUpdateUrl);
+  const [appLater, setAppLater] = useState(false);
+  const web = !!available && (!dismissed || running);
+  const app = !web && !!appUrl && !appLater;
+  const show = web || app;
 
   const bar = useRef<HTMLDivElement>(null);
 
@@ -38,10 +50,39 @@ export function UpdateBar() {
     };
   }, [show]);
 
+  if (app && appUrl) {
+    return (
+      <div ref={bar} className="update-bar glass glass--strong" role="region" aria-label="Update the app">
+        <AppOffer url={appUrl} onLater={() => setAppLater(true)} />
+      </div>
+    );
+  }
   if (!available || !show) return null;
   return (
     <div ref={bar} className="update-bar glass glass--strong" role="region" aria-label="New version">
       {running ? <Updating info={available} /> : <Offer info={available} onReload={() => setRunning(true)} />}
+    </div>
+  );
+}
+
+/** An old desktop app: the short label and one big button that downloads the new app. Later hides it until next time. */
+function AppOffer({ url, onLater }: { url: string; onLater: () => void }) {
+  return (
+    <div className="update-bar__row">
+      <span className="update-bar__spark" aria-hidden="true">
+        <Icon name="download" size={22} />
+      </span>
+      <div className="update-bar__text">
+        <p className="update-bar__title">Update the app</p>
+      </div>
+      <div className="update-bar__actions">
+        <Button variant="ghost" size="sm" icon="clock" className="update-bar__later" onClick={onLater}>
+          Later
+        </Button>
+        <LinkButton href={url} variant="primary" size="sm" icon="download" className="update-bar__get-app">
+          Update
+        </LinkButton>
+      </div>
     </div>
   );
 }

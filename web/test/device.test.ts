@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectOs, isInstalled, isIosSafari, parseManifest, planFor, type InstalledInput } from "../src/lib/device.ts";
+import { detectOs, isInstalled, isIosSafari, oldAppDownloadUrl, parseManifest, planFor, type InstalledInput } from "../src/lib/device.ts";
 
 const UA = {
   mac: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15",
@@ -132,3 +132,32 @@ describe("planFor", () => {
     expect(planFor("android", manifest, false, UA.android)).toEqual({ kind: "android-steps" });
   });
 });
+
+describe("oldAppDownloadUrl (the new app for a desktop app too old to update itself)", () => {
+  const host = "dglrbjmf28m6c.cloudfront.net";
+
+  it("picks the installer for this computer", () => {
+    expect(oldAppDownloadUrl("mac", host)).toBe("https://dglrbjmf28m6c.cloudfront.net./downloads/Clip-Factory.dmg");
+    expect(oldAppDownloadUrl("windows", host)).toBe("https://dglrbjmf28m6c.cloudfront.net./downloads/Clip-Factory-Setup.exe");
+    expect(oldAppDownloadUrl(detectOs({ userAgent: UA.desktopApp }), host)).toMatch(/Clip-Factory\.dmg$/);
+    expect(oldAppDownloadUrl(detectOs({ userAgent: UA.windows }), host)).toMatch(/Clip-Factory-Setup\.exe$/);
+    for (const os of ["linux", "chromeos", "ios", "android", "unknown"] as const) expect(oldAppDownloadUrl(os, host)).toBeNull();
+  });
+
+  it("is another site to the old app, so it goes to the system browser, which can download", () => {
+    // The old app keeps same-site addresses in its own window, which cannot save a file (desktop/src-tauri/src/main.rs
+    // stays_inside compares origins; init.js isOutward does the same).
+    const url = new URL(oldAppDownloadUrl("mac", host)!);
+    expect(url.protocol).toBe("https:");
+    expect(url.origin).not.toBe(`https://${host}`);
+    expect(url.hostname.replace(/\.$/, "")).toBe(host);
+    // Already dotted, or with a port: still exactly one dot, port kept.
+    expect(oldAppDownloadUrl("mac", `${host}.`)).toBe(`https://${host}./downloads/Clip-Factory.dmg`);
+    expect(oldAppDownloadUrl("windows", "localhost:4391")).toBe("https://localhost.:4391/downloads/Clip-Factory-Setup.exe");
+  });
+
+  it("never builds an address from a strange host", () => {
+    for (const bad of ["", "evil.example/path", "a b", "host:port", "user@host", "host:80:81"]) expect(oldAppDownloadUrl("mac", bad)).toBeNull();
+  });
+});
+

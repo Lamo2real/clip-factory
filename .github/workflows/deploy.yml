@@ -22,9 +22,14 @@
 #               the app serves this release's config.json (with wsUrl) and version.json
 #   desktop-plan, desktop, desktop-upload, desktop-manifest - after the web deploy: the Mac (.dmg) and Windows
 #               (.exe) desktop apps (desktop/, Tauri) are rebuilt only when what they are built from changed or the
-#               file is missing. The build job has no OIDC token (it runs npm and cargo); desktop-upload copies the
-#               installer to the web bucket under downloads/, and downloads/manifest.json is rewritten.
+#               file is missing, both together, as version 1.<run number>.0. The build job has no OIDC token (it
+#               runs npm and cargo) and is the only job given the updater signing key; desktop-upload copies the
+#               installer and the signed update bundle to the web bucket under downloads/, and desktop-manifest
+#               rewrites downloads/manifest.json and downloads/latest.json (what installed apps update from, §12.6).
 #               These jobs never fail the deploy: a broken desktop build leaves the previous installers in place.
+# Optional secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD: the updater signing key
+#   (desktop/README.md). Without them the installers are still built, but no update bundle, so installed apps
+#   are not updated.
 name: deploy
 on:
   push:
@@ -415,10 +420,12 @@ jobs:
             echo "Webhook address for platform consoles: ${HOOKS_URL%/}/hooks/{platform}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Decides which desktop installers to rebuild. Each installer in the bucket carries, as S3 metadata, a hash of
+  # Decides whether to rebuild the desktop apps. Each installer in the bucket carries, as S3 metadata, a hash of
   # what it was built from: desktop/ (docs excluded), the app icon, and the app address baked into it. A
   # mismatch means desktop/ or the icon changed (or the address did); no file or no hash means it was never
-  # built or the last build failed. Either way that target is rebuilt; otherwise it is skipped.
+  # built or the last build failed. With the signing key set, a target whose update pointer
+  # (downloads/updates/<target>.json) is missing is stale too. When any target is stale, every target is rebuilt,
+  # so all of them carry the same version (latest.json has one version for every platform); otherwise none is.
   desktop-plan:
     needs: [preflight, infra, web]
     if: needs.preflight.outputs.enabled == 'true'
@@ -431,6 +438,7 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       source_hash: ${{ steps.plan.outputs.source_hash }}
+      version: ${{ steps.plan.outputs.version }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
@@ -443,39 +451,69 @@ jobs:
           WEB_BUCKET: ${{ needs.infra.outputs.web_bucket }}
           APP_URL: ${{ needs.infra.outputs.app_url }}
           SOURCES_HASH: ${{ hashFiles('desktop/**', '!desktop/**/*.md', 'web/public/icons/icon-512.png') }}
+          # Only whether the key is set; the key itself never reaches this job.
+          SIGNING: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
           [ -n "$SOURCES_HASH" ] || { echo "::error::desktop/ not found."; exit 1; }
           source_hash="$(printf '%s %s' "$SOURCES_HASH" "${APP_URL%/}" | sha256sum | cut -c1-32)"
+          # Goes up on every run of this workflow (a re-run keeps its number, so a re-built leg matches the others).
+          # NSIS needs every part at or below 65535.
+          version="1.${RUN_NUMBER}.0"
+          # update: what the build calls the updater bundle (mac) or the signed installer itself (windows), and the
+          # name it gets in the bucket under downloads/updates/<version>/.
           targets='[
             {"target": "mac", "os": "macos-latest", "rust_targets": "aarch64-apple-darwin,x86_64-apple-darwin",
-             "args": "--target universal-apple-darwin --bundles dmg",
+             "args": "--target universal-apple-darwin --bundles app,dmg",
              "bundle": "src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg",
+             "update": "src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz",
+             "update_name": "Clip-Factory.app.tar.gz", "update_type": "application/gzip",
+             "platforms": "darwin-universal darwin-aarch64 darwin-x86_64",
              "key": "downloads/Clip-Factory.dmg", "content_type": "application/x-apple-diskimage"},
             {"target": "windows", "os": "windows-latest", "rust_targets": "",
              "args": "--bundles nsis",
              "bundle": "src-tauri/target/release/bundle/nsis/*-setup.exe",
+             "update": "src-tauri/target/release/bundle/nsis/*-setup.exe",
+             "update_name": "Clip-Factory-Setup.exe", "update_type": "application/vnd.microsoft.portable-executable",
+             "platforms": "windows-x86_64",
              "key": "downloads/Clip-Factory-Setup.exe", "content_type": "application/vnd.microsoft.portable-executable"}
           ]'
-          matrix='[]'
+          stale=false
           summary=()
           for i in 0 1; do
             entry="$(jq -c ".[$i]" <<<"$targets")"
             key="$(jq -r .key <<<"$entry")"
+            target="$(jq -r .target <<<"$entry")"
             live="$(aws s3api head-object --bucket "$WEB_BUCKET" --key "$key" \
               --query 'Metadata."source-hash"' --output text 2>/dev/null || echo missing)"
-            if [ "$live" = "$source_hash" ]; then
-              summary+=("- ${key}: up to date, not rebuilt")
-            else
-              matrix="$(jq -c --argjson e "$entry" '. + [$e]' <<<"$matrix")"
+            if [ "$live" != "$source_hash" ]; then
+              stale=true
               if [ "$live" = "missing" ]; then
-                summary+=("- ${key}: not in the bucket yet, building")
+                summary+=("- ${key}: not in the bucket yet")
               else
-                summary+=("- ${key}: desktop app, icon or address changed, building")
+                summary+=("- ${key}: desktop app, icon or address changed")
               fi
+            elif [ "$SIGNING" = "true" ] \
+              && ! aws s3api head-object --bucket "$WEB_BUCKET" --key "downloads/updates/${target}.json" >/dev/null 2>&1; then
+              stale=true
+              summary+=("- ${key}: no update bundle yet")
+            else
+              summary+=("- ${key}: up to date")
             fi
           done
-          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
-          echo "source_hash=${source_hash}" >> "$GITHUB_OUTPUT"
+          if [ "$stale" = "true" ]; then
+            matrix="$(jq -c . <<<"$targets")"
+            summary+=("" "Building every desktop app as version ${version}.")
+          else
+            matrix='[]'
+            summary+=("" "Nothing to build.")
+          fi
+          [ "$SIGNING" = "true" ] || summary+=("" "No updater signing key (TAURI_SIGNING_PRIVATE_KEY): installers only, installed apps are not updated.")
+          {
+            echo "matrix=${matrix}"
+            echo "source_hash=${source_hash}"
+            echo "version=${version}"
+          } >> "$GITHUB_OUTPUT"
           {
             echo "## Desktop apps"
             echo
@@ -522,34 +560,61 @@ jobs:
       - run: npm ci
       - name: icons from the web app icon
         run: bash scripts/make-icons.sh
-      - name: build the installer
+      # The signing key reaches this step only (never a job that can assume the deploy role). Without it the
+      # installer is still built, just with no update bundle.
+      - name: build the installer and the signed update bundle
         env:
           CF_APP_URL: ${{ needs.infra.outputs.app_url }}
           TAURI_ARGS: ${{ matrix.args }}
+          VERSION: ${{ needs.desktop-plan.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          [[ "$VERSION" =~ ^1\.[0-9]+\.0$ ]] || { echo "::error::Unexpected version '${VERSION}'."; exit 1; }
+          updater=false
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            updater=true
+          else
+            unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+            echo "::warning::No updater signing key: building the installer without an update bundle."
+          fi
+          # A file rather than inline JSON, so no Windows command shim can mangle the quotes.
+          config="${RUNNER_TEMP}/tauri-release.json"
+          jq -n --arg v "$VERSION" --argjson u "$updater" '{version: $v, bundle: {createUpdaterArtifacts: $u}}' >"$config"
           read -ra args <<<"$TAURI_ARGS"
-          npx --no-install tauri build --ci "${args[@]}"
-      - name: find the installer
-        id: file
+          npx --no-install tauri build --ci --config "$config" "${args[@]}"
+      - name: collect the installer and the update bundle
         env:
           BUNDLE_GLOB: ${{ matrix.bundle }}
+          UPDATE_GLOB: ${{ matrix.update }}
+          OUT: ${{ runner.temp }}/desktop-out
         run: |
           # Portable on macOS runners, whose /bin/bash 3.2 has no mapfile.
           files=()
           while IFS= read -r f; do files+=("$f"); done < <(compgen -G "$BUNDLE_GLOB" || true)
           [ "${#files[@]}" -eq 1 ] || { echo "::error::Expected one installer at ${BUNDLE_GLOB}, found ${#files[@]}."; exit 1; }
-          echo "path=${files[0]}" >> "$GITHUB_OUTPUT"
+          mkdir -p "$OUT/installer" "$OUT/update"
+          cp "${files[0]}" "$OUT/installer/"
           echo "Built ${files[0]} ($(wc -c <"${files[0]}" | tr -d ' ') bytes)."
+          updates=()
+          while IFS= read -r f; do updates+=("$f"); done < <(compgen -G "$UPDATE_GLOB" || true)
+          if [ "${#updates[@]}" -eq 1 ] && [ -s "${updates[0]}.sig" ]; then
+            cp "${updates[0]}" "$OUT/update/bundle"
+            cp "${updates[0]}.sig" "$OUT/update/bundle.sig"
+            echo "Update bundle ${updates[0]} ($(wc -c <"${updates[0]}" | tr -d ' ') bytes), signed."
+          else
+            echo "::warning::No signed update bundle at ${UPDATE_GLOB}; installed apps will not get this version."
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-${{ matrix.target }}
-          # upload-artifact paths are relative to the workspace, not to the desktop/ working directory.
-          path: desktop/${{ steps.file.outputs.path }}
+          path: ${{ runner.temp }}/desktop-out
           retention-days: 1
           if-no-files-found: error
 
   # The only desktop job that can assume the deploy role. It runs no code from npm, cargo or the build: it downloads
-  # the installer the build job made and copies it to the web bucket.
+  # what the build job made and copies it to the web bucket. The update bundle and its pointer go first, the
+  # installer (whose source-hash marks the target as built) last.
   desktop-upload:
     name: desktop-upload (${{ matrix.target }})
     needs: [preflight, infra, desktop-plan, desktop]
@@ -573,11 +638,11 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: desktop-${{ matrix.target }}
-          path: ${{ runner.temp }}/installer
+          path: ${{ runner.temp }}/build
       - name: find the installer
         id: file
         env:
-          DIR: ${{ runner.temp }}/installer
+          DIR: ${{ runner.temp }}/build/installer
         run: |
           mapfile -t files < <(find "$DIR" -type f)
           [ "${#files[@]}" -eq 1 ] || { echo "::error::Expected one installer in the build's artifact, found ${#files[@]}."; exit 1; }
@@ -586,7 +651,36 @@ jobs:
         with:
           role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: upload to the web bucket
+      # downloads/updates/<version>/<name> never changes once written; downloads/updates/<target>.json says which
+      # version is the newest for this target, with its signature. desktop-manifest builds latest.json from those.
+      - name: upload the update bundle and its pointer
+        env:
+          DIR: ${{ runner.temp }}/build/update
+          WEB_BUCKET: ${{ needs.infra.outputs.web_bucket }}
+          APP_URL: ${{ needs.infra.outputs.app_url }}
+          VERSION: ${{ needs.desktop-plan.outputs.version }}
+          TARGET: ${{ matrix.target }}
+          UPDATE_NAME: ${{ matrix.update_name }}
+          UPDATE_TYPE: ${{ matrix.update_type }}
+          PLATFORMS: ${{ matrix.platforms }}
+        run: |
+          if [ ! -s "$DIR/bundle" ] || [ ! -s "$DIR/bundle.sig" ]; then
+            echo "::warning::No signed update bundle for ${TARGET}; installed apps keep their version."
+            exit 0
+          fi
+          [[ "$VERSION" =~ ^1\.[0-9]+\.0$ ]] || { echo "::error::Unexpected version '${VERSION}'."; exit 1; }
+          key="downloads/updates/${VERSION}/${UPDATE_NAME}"
+          aws s3 cp "$DIR/bundle" "s3://${WEB_BUCKET}/${key}" \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type "$UPDATE_TYPE" \
+            --only-show-errors
+          pointer="$(jq -n --arg version "$VERSION" --arg url "${APP_URL%/}/${key}" \
+            --rawfile signature "$DIR/bundle.sig" --arg platforms "$PLATFORMS" \
+            '{version: $version, url: $url, signature: ($signature | rtrimstr("\n")), platforms: ($platforms | split(" "))}')"
+          printf '%s\n' "$pointer" | aws s3 cp - "s3://${WEB_BUCKET}/downloads/updates/${TARGET}.json" \
+            --cache-control "no-cache" --content-type "application/json" --only-show-errors
+          echo "Uploaded ${key} and downloads/updates/${TARGET}.json (version ${VERSION})."
+      - name: upload the installer to the web bucket
         env:
           FILE: ${{ steps.file.outputs.path }}
           WEB_BUCKET: ${{ needs.infra.outputs.web_bucket }}
@@ -602,7 +696,9 @@ jobs:
             --only-show-errors
           echo "Uploaded ${KEY}."
 
-  # Lists only the installers that exist in the bucket, so the app never offers a dead link (§12.1).
+  # Lists only the installers that exist in the bucket, so the app never offers a dead link (§12.1), and writes
+  # downloads/latest.json, what installed apps update from (§12.6). It runs after every upload, so latest.json
+  # never names a bundle that is not there yet. Every run rewrites both from what is in the bucket.
   desktop-manifest:
     needs: [preflight, infra, web, desktop-plan, desktop, desktop-upload]
     if: >-
@@ -627,7 +723,30 @@ jobs:
           WEB_BUCKET: ${{ needs.infra.outputs.web_bucket }}
           DISTRIBUTION_ID: ${{ needs.infra.outputs.distribution_id }}
         run: |
-          version="$(jq -r '.version' desktop/src-tauri/tauri.conf.json)"
+          # latest.json: the newest version any target has, with only the targets that have that version (a target
+          # whose build failed this time is left out, so it is never offered another target's version).
+          pointers='[]'
+          for target in mac windows; do
+            if pointer="$(aws s3 cp "s3://${WEB_BUCKET}/downloads/updates/${target}.json" - 2>/dev/null)" \
+              && jq -e '(.version | test("^1\\.[0-9]+\\.0$")) and (.url | type == "string") and (.signature | length > 0)' \
+                <<<"$pointer" >/dev/null; then
+              pointers="$(jq -c --argjson p "$pointer" '. + [$p]' <<<"$pointers")"
+            fi
+          done
+          latest="$(jq -r '[.[].version | split(".") | map(tonumber)] | max // empty | map(tostring) | join(".")' <<<"$pointers")"
+          if [ -n "$latest" ]; then
+            update="$(jq -n --argjson pointers "$pointers" --arg version "$latest" \
+              --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
+                version: $version,
+                notes: "Desktop app",
+                pub_date: $date,
+                platforms: ([$pointers[] | select(.version == $version) | . as $p
+                  | .platforms[] | {key: ., value: {url: $p.url, signature: $p.signature}}] | from_entries)
+              }')"
+            printf '%s\n' "$update" | aws s3 cp - "s3://${WEB_BUCKET}/downloads/latest.json" \
+              --cache-control "no-cache" --content-type "application/json" --only-show-errors
+          fi
+          version="${latest:-$(jq -r '.version' desktop/src-tauri/tauri.conf.json)}"
           manifest="$(jq -n --arg version "$version" '{version: $version, files: {}}')"
           for entry in "mac downloads/Clip-Factory.dmg" "windows downloads/Clip-Factory-Setup.exe"; do
             read -r name key <<<"$entry"
@@ -648,4 +767,10 @@ jobs:
             echo '```json'
             jq . <<<"$manifest"
             echo '```'
+            echo
+            if [ -n "$latest" ]; then
+              echo "Installed apps update to ${latest}: $(jq -r '.platforms | keys | join(", ")' <<<"$update")."
+            else
+              echo "No signed update bundle yet: installed apps are not offered an update."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

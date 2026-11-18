@@ -44,6 +44,8 @@ import {
   PANEL_VEIL_FLOOR,
   PICTURE_PAGE_VEIL,
   PICTURE_PANEL_VEIL,
+  isOldDesktopApp,
+  OLD_APP_NOTE,
   readNativeGlass,
   resolveLook,
   SATURATIONS,
@@ -752,6 +754,41 @@ describe("what is drawn", () => {
       "See-through works in the Mac and Windows app on a computer. Phones don't let apps look behind them, so here you get the Clip Factory colours.",
     );
     expect(seeThroughNote("none", true)).toMatch(/can't show see-through/);
+  });
+
+  it("tells an old desktop app (no __CF_GLASS__ at all) from a computer that truly can't show glass", () => {
+    // Wrappers built before 2026-11-16 16:54 set only __CF_DESKTOP__.
+    expect(isOldDesktopApp({ __CF_DESKTOP__: true })).toBe(true);
+    expect(isOldDesktopApp({ __CF_DESKTOP__: true, __CF_GLASS__: undefined })).toBe(true);
+    // Every newer wrapper names a glass, "none" included (old Windows): that is a real "can't".
+    for (const glass of [...GLASSES, "none", "crystal", ""]) expect(isOldDesktopApp({ __CF_DESKTOP__: true, __CF_GLASS__: glass })).toBe(false);
+    // Browsers and phones are never an old app.
+    expect(isOldDesktopApp(undefined)).toBe(false);
+    expect(isOldDesktopApp({})).toBe(false);
+    expect(isOldDesktopApp({ __CF_DESKTOP__: "true" })).toBe(false);
+    expect(isOldDesktopApp({ __CF_DESKTOP__: false })).toBe(false);
+    // The old app reads as "no glass" for the look, so the page stays an ordinary page.
+    expect(readNativeGlass({ __CF_DESKTOP__: true })).toBe("none");
+  });
+
+  it("asks an old desktop app to update, in a few plain words, and keeps every other note", () => {
+    expect(OLD_APP_NOTE).toBe("Update the app to see through.");
+    expect(seeThroughNote("none", true, false, true)).toBe(OLD_APP_NOTE);
+    expect(OLD_APP_NOTE.split(" ").length).toBeLessThanOrEqual(6);
+    // A real "none" desktop app (old Windows) keeps its own note.
+    expect(seeThroughNote("none", true, false, false)).toBe("This computer can't show see-through, so here you get the Clip Factory colours.");
+    // Browsers and phones keep theirs; "old app" means nothing outside the desktop app.
+    expect(seeThroughNote("none", false, false, true)).toMatch(/^See-through works in the Mac and Windows app\. Browsers/);
+    expect(seeThroughNote("none", false, true, true)).toMatch(/Phones don't let apps look behind them/);
+    // Real glass needs no note at all.
+    for (const glass of GLASSES) expect(seeThroughNote(glass, true, false, true)).toBeNull();
+  });
+
+  it("the desktop app's script names its version, and every newer app names a glass", () => {
+    const init = readFileSync(join(import.meta.dirname, "..", "..", "desktop", "src-tauri", "src", "init.js"), "utf8");
+    expect(init).toContain('if (typeof window.__CF_GLASS__ !== "string") window.__CF_GLASS__ = "none";');
+    const rust = readFileSync(join(import.meta.dirname, "..", "..", "desktop", "src-tauri", "src", "main.rs"), "utf8");
+    expect(rust).toContain("window.__CF_DESKTOP_VERSION__ = ");
   });
 });
 

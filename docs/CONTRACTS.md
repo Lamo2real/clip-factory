@@ -541,13 +541,74 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
 ### 12.3 Desktop wrapper (`desktop/`, Tauri v2)
 * A thin native window that loads `app_url` (no bundled UI), window title "Clip Factory", the app icon, minimum size
   380×600, remembers size/position, external links open in the system browser, user agent suffix `ClipFactoryDesktop`,
-  injects `window.__CF_DESKTOP__ = true` and `window.__CF_GLASS__` (the native see-through glass, §22.2). Updates come from the website itself (the update banner), so the wrapper rarely changes.
+  injects `window.__CF_DESKTOP__ = true`, `window.__CF_GLASS__` (the native see-through glass, §22.2) and
+  `window.__CF_DESKTOP_VERSION__` (this app's version, `1.<n>.0`). The pages update from the website itself (the
+  update banner); the wrapper updates itself from `downloads/latest.json` (§12.6).
 * Built in deploy.yml after the web deploy (job `desktop`, matrix `macos-latest` → universal `.dmg`,
   `windows-latest` → NSIS `.exe`), app URL from terraform output, uploaded to the web bucket as
   `downloads/Clip-Factory.dmg` and `downloads/Clip-Factory-Setup.exe`, then `downloads/manifest.json` rewritten.
   Builds are unsigned (no Apple/Microsoft certificates yet): the Get-the-app card shows a one-line hint for the first
   open (Mac: System Settings → Privacy & Security → Open Anyway; Windows: More info → Run anyway). Signing is a roadmap item.
-* Only rebuilt when `desktop/**` or the app icon changes, or when no file exists yet in the bucket.
+* Only rebuilt when `desktop/**` or the app icon changes, or when no file exists yet in the bucket (or, with the
+  signing key set, no update bundle yet). Then every target is rebuilt, all as version `1.<run number>.0` (§12.6).
+
+### 12.6 The desktop app updates itself (owner request, 2026-11-18, ADR-46)
+
+Why: the owner's Mac app was a copy from before the see-through window. The pages had updated, the native window had
+not, so the page said "This computer can't show see-through" on macOS 27 with Liquid Glass.
+
+* **Version.** deploy.yml builds every desktop app as `1.<run number>.0` (`github.run_number` of deploy.yml: it goes
+  up on every run, a re-run keeps it so a re-built leg matches the others; NSIS needs each part ≤ 65535). The
+  version reaches the build through `tauri build --config` (with `bundle.createUpdaterArtifacts: true`), so
+  tauri.conf.json keeps `1.0.0` for local builds, which make no update bundle. Hand-built copies are `1.0.0`, older
+  than any release, so they are updated too.
+* **Signing.** The bundles are signed with a minisign key made by `tauri signer generate`. The public key is in
+  tauri.conf.json (`plugins.updater.pubkey`); the private key and its password are the repository secrets
+  `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, read only by the build step of the `desktop`
+  job (no OIDC token there; `desktop-plan` only checks whether the key is set). `requireSignedVersion: true`: the
+  signature carries the version it was signed for, so an older bundle can never be passed off as a newer one.
+  Without the secrets the installers are still built, with no update bundle. Backup and a lost key:
+  desktop/README.md.
+* **Files** (web bucket, served by CloudFront under `/downloads/*`, at most 5 minutes at the edge, refreshed on every
+  release):
+  * `downloads/updates/<version>/Clip-Factory.app.tar.gz` (Mac, universal) and
+    `downloads/updates/<version>/Clip-Factory-Setup.exe` (Windows: the signed NSIS installer itself): never
+    overwritten (`immutable`).
+  * `downloads/updates/mac.json`, `downloads/updates/windows.json`: `{version, url, signature, platforms}`, written by
+    `desktop-upload` right after its bundle (no-cache).
+  * `downloads/latest.json`, written by `desktop-manifest` after every upload, from the pointers: Tauri's static
+    format, `{version, notes: "Desktop app", pub_date, platforms: {darwin-universal, darwin-aarch64, darwin-x86_64,
+    windows-x86_64: {url, signature}}}`. `version` is the newest any target has; only targets with that version are
+    listed (a target whose build failed is left out until it builds again, never offered another's version).
+    No-cache.
+  * The installers keep their keys (`downloads/Clip-Factory.dmg`, `downloads/Clip-Factory-Setup.exe`), so Get the
+    app is unchanged.
+* **In the app** (`desktop/src-tauri/src/update.rs`, release builds only): 5 s after start, then every 6 hours, read
+  `https://dglrbjmf28m6c.cloudfront.net/downloads/latest.json`. Only https on that host, for the manifest and the
+  bundle it names. Only a newer version (never a downgrade). Download (and on a Mac install) in the background,
+  verified against the public key. Then one native dialog, asked once per run: title **"Clip Factory updated"**,
+  message **"Restart to use the newest version."**, buttons **Restart now** / **Later**. Later: the Mac already has
+  the new app in place for the next start; Windows runs the installer quietly when the app quits, without reopening
+  it. Nothing asks again in that run. Failures go to stderr only, never an error dialog. The page gets no access to
+  the updater or the dialog (capability still empty).
+* **Old copies** (built before 2026-11-16 16:54) cannot update themselves. They set `__CF_DESKTOP__` but never
+  `__CF_GLASS__` (every newer copy sets it, `"none"` at the least), so the web app tells them apart
+  (`isOldDesktopApp`, lib/background.ts):
+  * Settings › Look & feel › Background, see-through: the note **"Update the app to see through."** and one big
+    vermilion button **Update the app** (the real `none` note, §22.5, and the browser and phone notes are unchanged).
+  * App-wide, the update bar (§12.2) shows the label **Update the app** with **Update** and **Later** (Later hides it
+    until the next start), whenever no web update is waiting.
+  * Both link to the installer for this computer (Mac `.dmg`, Windows `.exe`, from the user agent) at the same
+    server with a **trailing dot** in the host (`https://<host>./downloads/...`, `oldAppDownloadUrl` in
+    lib/device.ts). To the old app that is another site, so it opens the link in the system browser, which
+    downloads it; the plain address would stay in the old window, which cannot save a download. CloudFront answers
+    the dotted host (checked 2026-11-18). Plain http would not do: CSP `upgrade-insecure-requests` and HSTS make it
+    the same site again.
+* **Tests**: cargo (`update.rs`: allowed addresses, the config names the same manifest, a key and
+  `requireSignedVersion`; `main.rs`: the version in the script, the dotted link leaves the old window), vitest
+  (`isOldDesktopApp`, the notes, `oldAppDownloadUrl`), Playwright (`e2e/background.spec.ts`: an old wrapper, Mac
+  user agent, gets the note, the button and the bar; newer wrappers never do), `scripts/test-deploy-workflow.sh`
+  (the key reaches only the desktop build; only desktop-manifest writes latest.json, after desktop-upload).
 
 ### 12.4 Kid-proof UX (a 6–8-year-old must manage it)
 * One obvious next step per screen (one vermilion CTA), big targets (≥ 48 px on phones), icon + word on buttons
@@ -4288,9 +4349,12 @@ everywhere.
   theme stays forced to **Light**, the material that was measured; switching it is for the owner to look at on a Mac.
 * macOS transparency needs `app.macOSPrivateApi: true` (tauri.conf.json) and tauri's `macos-private-api` feature.
   This rules out the Mac App Store, which the app does not use (unsigned `.dmg`, §12.3).
-* The injected script starts with `window.__CF_GLASS__ = "liquid" | "vibrancy" | "acrylic" | "blur" | "none"`,
-  followed by `init.js` (`__CF_DESKTOP__ = true`, outward links). The remote page still gets **no** Tauri IPC
-  (`withGlobalTauri` off, empty capability).
+* The injected script starts with `window.__CF_GLASS__ = "liquid" | "vibrancy" | "acrylic" | "blur" | "none"` and
+  `window.__CF_DESKTOP_VERSION__ = "<version>"`, followed by `init.js` (`__CF_DESKTOP__ = true`, outward links). The
+  remote page still gets **no** Tauri IPC (`withGlobalTauri` off, empty capability).
+* **Note (2026-11-18): a copy built before this glass existed never sets `__CF_GLASS__`.** It is not a computer that
+  can't show glass; it is an old app. The page asks it to update (§12.6) instead of showing the `none` note. New
+  copies update themselves (§12.6), so this cannot happen again.
 * `windows-version` (already in the lock file through tauri) reads the Windows build. Unit tests cover the choice
   per OS, AppKit version and Windows build, the glass this computer reports, and the script prefix for every glass.
 * **Phase 2 pending measurement (ADR-45).** The window look's panel tint stays 0.73 (planned for white) until the
@@ -4482,6 +4546,9 @@ sentence without the link.
 In the desktop app without glass (Linux, old Windows): "This computer can't show see-through, so here you get the
 Clip Factory colours." (no link).
 
+In a desktop app too old to say what glass it has (built before 2026-11-16 16:54, no `__CF_GLASS__`): "Update the
+app to see through." and a big vermilion **Update the app** button that downloads the new app (§12.6).
+
 ### 22.5 Settings › Look & feel › Background (web, `screens/settings/branches.tsx`)
 
 Branch line: "See-through glass, your picture or your colours." Apples (`lib/settingsTree.ts`, each a `data-help`
@@ -4521,7 +4588,8 @@ changes (§20.14); hover lights up the tiles and swatches.
   (`tokens.css` values, `html.see-through` overrides, every `color:` declaration is a token or a named exception, the
   sound groups' colours, the panel rule gives way to denser tints and the tab bar is lifted, every surface tint is
   green); colours validation and veils; `resolveLook` for every mode and glass; only the wrapper can claim glass, an
-  unknown name is `none`, and every name `main.rs` can send is known; the notes' exact sentences (computer and phone);
+  unknown name is `none`, and every name `main.rs` can send is known; the notes' exact sentences (computer, phone and
+an old desktop app, told apart from a real `none` by a missing `__CF_GLASS__`, §12.6);
   prefs defaults and junk; an existing picture with no saved mode starts in Picture; `applyLook` on `<html>`.
 * pytest `api/tests/test_settings_and_system.py`: defaults (no `backgroundMode` until saved), saving (lower case,
   repeats dropped), every refusal and its message, malformed stored values.
@@ -4548,7 +4616,8 @@ changes (§20.14); hover lights up the tiles and swatches.
   word on the Background page is readable, Clear and Frosted, at 375 and 1440 px; no text straight on the window
   (`looseText` in `e2e/helpers.ts`: every surface under words is at least as strong as the look's panel tint) on
   every screen, This week, the skill pages and a clip page, for `liquid` and `vibrancy`, at 375 and 1440 px; `none`
-  glass in the app, and a glass name the page does not know; no overflow, one-line tile names and AA text at 320,
+  glass in the app, an old desktop app (no `__CF_GLASS__`: the update note, button and bar, §12.6), and a glass name
+  the page does not know; no overflow, one-line tile names and AA text at 320,
   375, 768, 1440 and 1920 px, light and dark, in every mode.
 * Playwright `e2e/edges.spec.ts`: on every route, This week, the skill pages, a clip page, Home with the Ask panel
   open and the Library with the setup list open, at 390 × 844 and 1440 × 900, no element or pseudo-element shows a

@@ -1406,6 +1406,10 @@
   min-height: 0;
   display: inline;
 }
+/* An old desktop app: the one big way to the new app, under its note (§12.6). */
+.bg-note__update {
+  margin-top: 14px;
+}
 
 .bg-colours {
   display: grid;

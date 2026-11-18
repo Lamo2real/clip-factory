@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Deliberately empty. The window shows the remote web app, which gets no access to native commands: no files, no shell, no opener. Links are opened from Rust (see src/main.rs), and window size and position are saved by the window-state plugin on the Rust side.",
+  "description": "Deliberately empty. The window shows the remote web app, which gets no access to native commands: no files, no shell, no opener, no updater, no dialogs. Links are opened from Rust (see src/main.rs), window size and position are saved by the window-state plugin on the Rust side, and the update check and its one Restart now / Later question run from Rust too (src/update.rs): plugins called from Rust need no permission here.",
   "windows": ["main"],
   "permissions": []
 }

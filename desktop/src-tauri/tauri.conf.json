@@ -39,5 +39,15 @@
         "displayLanguageSelector": false
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc3NkRCOTc5MEYzOEVCQkEKUldTNjZ6Z1BlYmx0ZDdlS2FEdUxsaXJyaTRMUFlCOGMvUUhJMlZNOEVYSVZOKzlzbzlKU0dHaUcK",
+      "endpoints": ["https://dglrbjmf28m6c.cloudfront.net/downloads/latest.json"],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

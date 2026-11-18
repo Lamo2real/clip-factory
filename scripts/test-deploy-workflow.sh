@@ -4,6 +4,8 @@
 #   - the desktop build job (npm ci, cargo, Tauri) cannot mint the deploy role's OIDC token; only the small
 #     desktop-upload job can, and no other job that runs npm ci has it either.
 #   - every action is pinned to a full commit SHA (with its version in a comment).
+#   - the updater signing key reaches only the desktop build job (which has no OIDC token), and latest.json is
+#     written by desktop-manifest, which runs after desktop-upload (§12.6).
 # Run: bash scripts/test-deploy-workflow.sh   (ci.yml runs it on every push)
 set -euo pipefail
 
@@ -85,6 +87,33 @@ if [ -n "$plan_line" ] && [ -n "$gate_line" ] && [ -n "$apply_line" ] \
   ok "the delete gate checks the saved plan between terraform plan and terraform apply"
 else
   not_ok "deploy.yml must run scripts/check-plan-deletes.sh on terraform show -json prod.tfplan before the apply"
+fi
+
+# 6. The updater signing key (TAURI_SIGNING_PRIVATE_KEY and its password) is read only by the desktop build job, and
+#    desktop-plan, which may only ask whether it is set.
+key_users=()
+while IFS= read -r name; do
+  body="$(job "$name")"
+  if grep -q 'secrets\.TAURI_SIGNING_PRIVATE_KEY' <<<"$body"; then key_users+=("$name"); fi
+done < <(grep -E '^  [A-Za-z0-9_-]+:$' "$deploy" | sed -E 's/^  ([^:]+):$/\1/')
+plan_refs="$(job desktop-plan | grep -o 'secrets\.TAURI_SIGNING_PRIVATE_KEY[^}]*' || true)"
+if [ "${key_users[*]:-}" = "desktop-plan desktop" ] \
+  && [ "$plan_refs" = "secrets.TAURI_SIGNING_PRIVATE_KEY != '' " ] \
+  && [ "$(job desktop | grep -c 'secrets\.TAURI_SIGNING_PRIVATE_KEY')" -eq 2 ]; then
+  ok "the updater signing key reaches only the desktop build job (desktop-plan only checks it is set)"
+else
+  not_ok "secrets.TAURI_SIGNING_PRIVATE_KEY* used outside the desktop build step: ${key_users[*]:-none}; desktop-plan: ${plan_refs:-none}"
+fi
+
+# 7. latest.json is written only by desktop-manifest, after desktop-upload has put the bundles in place.
+writers=()
+while IFS= read -r name; do
+  if job "$name" | grep -q '/downloads/latest\.json" '; then writers+=("$name"); fi
+done < <(grep -E '^  [A-Za-z0-9_-]+:$' "$deploy" | sed -E 's/^  ([^:]+):$/\1/')
+if [ "${writers[*]:-}" = "desktop-manifest" ] && job desktop-manifest | grep -Eq '^    needs: \[.*desktop-upload.*\]$'; then
+  ok "only desktop-manifest writes downloads/latest.json, after desktop-upload"
+else
+  not_ok "downloads/latest.json must be written only by desktop-manifest, which needs desktop-upload (writers: ${writers[*]:-none})"
 fi
 
 echo "${passed} passed, ${failed} failed"

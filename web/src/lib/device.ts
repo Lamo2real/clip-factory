@@ -144,3 +144,20 @@ export function installedHere(): boolean {
     installedFlag: flag,
   });
 }
+
+/**
+ * Where an old desktop app (one that cannot update itself, §12.6) gets the new installer: the Mac or Windows download
+ * for this computer, or null anywhere else.
+ *
+ * The host is written with a trailing dot (`https://example.cloudfront.net./downloads/...`). It is the same server,
+ * but to the old app it is another site, so the app sends the link to the system browser, which downloads the file.
+ * The same address without the dot would stay inside the old app's window, which cannot save a download (it has no
+ * download handler), so nothing would happen. Plain http does not help: the page's CSP (upgrade-insecure-requests)
+ * and HSTS turn it back into https on the same site first.
+ */
+export function oldAppDownloadUrl(os: DeviceOs, host: string): string | null {
+  const file = os === "mac" ? "Clip-Factory.dmg" : os === "windows" ? "Clip-Factory-Setup.exe" : null;
+  if (!file || !/^[a-z0-9.-]+(:\d+)?$/i.test(host)) return null;
+  const [name, port] = host.split(":") as [string, string | undefined];
+  return `https://${name.replace(/\.$/, "")}.${port ? `:${port}` : ""}/downloads/${file}`;
+}

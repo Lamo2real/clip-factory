@@ -17,6 +17,7 @@ variable (section 5).
 | `CF_STATE_BUCKET` | Variables | no | Default `lamo-labs-state-bucket` (state key `clip-factory/prod/terraform.tfstate`). It must be in this AWS account: a bucket of that name in another account stops the deploy. |
 | `CF_ROLE_BOUNDARY_ARN` | Variables | recommended | The `role_boundary_arn` output of `infra/bootstrap` (`arn:aws:iam::<ACCOUNT_ID>:policy/cf-prod-role-boundary`). Every `cf-prod-*` role then carries it, so the deploy role cannot give itself more access (section 2). |
 | `CF_ALARM_EMAIL` | Secrets | no | Where alarm emails go. Default: `CF_OWNER_EMAIL`. Confirm the email AWS sends after the first deploy (see [Alarm emails](#alarm-emails)). |
+| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Secrets | no | The desktop updater signing key and its password ([desktop/README.md](../desktop/README.md#the-signing-key)). Without them the installers are built but installed apps are not updated. |
 
 ## One-time setup
 
@@ -385,7 +386,10 @@ The Mac `.dmg` and Windows `.exe` offered by **Get the app** are built by the `d
 **When it runs.** After the web deploy, only if one of these is true; otherwise the job is skipped in seconds:
 - something under `desktop/` changed,
 - the app icon changed,
-- a download is missing from `downloads/` in the web bucket (for example the first deploy).
+- a download is missing from `downloads/` in the web bucket (for example the first deploy),
+- the signing key is set and an update bundle is missing (the first deploy with the updater).
+
+Then both apps are built, as version `1.<run number>.0`.
 
 The app address is read from the Terraform output `app_url` and built into the app. The build job has no OIDC token
 (npm, cargo and the Tauri CLI run there, and none of them may be able to assume the deploy role); it hands the
@@ -393,6 +397,12 @@ installer to the small `desktop-upload` job, which assumes the role and copies i
 `desktop-manifest` rewrites `downloads/manifest.json`
 (`{ "version", "files": { "mac": { "path", "size" }, "windows": { "path", "size" } } }`) with no caching and
 invalidates `/downloads/*` in CloudFront, so nobody gets an old file under the same name.
+
+**Updates for installed apps** ([CONTRACTS.md §12.6](CONTRACTS.md), [ADR-46](DECISIONS.md)). The build also makes a
+bundle signed with the `TAURI_SIGNING_PRIVATE_KEY` secret (given to the build step only). `desktop-upload` stores it
+under `downloads/updates/<version>/` and writes `downloads/updates/<mac|windows>.json`; `desktop-manifest` then writes
+`downloads/latest.json`, which every installed app reads at start and every 6 hours. The run summary says which
+version installed apps update to.
 
 **Forcing a rebuild** (for example after a custom domain changes `app_url`): delete the two files from `downloads/` in the
 web bucket, then run the deploy by hand (Actions → deploy → Run workflow). Until it finishes, Get the app offers the

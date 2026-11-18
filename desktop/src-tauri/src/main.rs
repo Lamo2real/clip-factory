@@ -2,10 +2,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 //! Clip Factory desktop: one native window that shows the deployed web app (docs/CONTRACTS.md §12.3).
-//! It bundles no web UI: updates come from the website itself, so this wrapper rarely changes.
+//! It bundles no web UI: the pages update from the website itself, and the wrapper updates itself (update.rs).
+
+mod update;
 
 use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
-use tauri::{Theme, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::{RunEvent, Theme, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
 /// The deployed app, baked in by build.rs from `CF_APP_URL`.
@@ -144,21 +146,46 @@ fn windows_build() -> Option<u32> {
     None
 }
 
-/// The injected script, led by the glass this window has.
-fn init_script(glass: Glass) -> String {
-    format!("window.__CF_GLASS__ = \"{}\";\n{INIT_SCRIPT}", glass.name())
+/// The injected script, led by the glass this window has and the version of this app (`window.__CF_DESKTOP_VERSION__`,
+/// so the page can tell copies apart, §12.6).
+fn init_script(glass: Glass, version: &str) -> String {
+    format!(
+        "window.__CF_GLASS__ = \"{}\";\nwindow.__CF_DESKTOP_VERSION__ = \"{}\";\n{INIT_SCRIPT}",
+        glass.name(),
+        safe_version(version)
+    )
+}
+
+/// The app version as it goes into the script: semver characters only, anything else becomes "unknown".
+fn safe_version(version: &str) -> &str {
+    let ok = !version.is_empty()
+        && version.len() <= 64
+        && version
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'));
+    if ok {
+        version
+    } else {
+        "unknown"
+    }
 }
 
 fn main() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         // Saves size, position and maximized state on close and restores them when the window is created.
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        // The update check and its one "Restart now / Later" question run from Rust only (update.rs); the page gets
+        // no access to either (capabilities/main.json stays empty).
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
+        .manage(update::LaterInstall::default())
         .setup(|app| {
             let app_url = Url::parse(APP_URL)?;
             let handle = app.handle().clone();
             let home = app_url.clone();
             let glass = Glass::here();
+            let version = app.package_info().version.to_string();
 
             let mut window =
                 WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::External(app_url))
@@ -169,8 +196,8 @@ fn main() {
                     // The light material, as measured (§22.3): the web app's green panels are worked out for the
                     // lightest glass, so a dark material would only darken them. Not switched without a measurement.
                     .theme(Some(Theme::Light))
-                    .user_agent(&user_agent())
-                    .initialization_script(init_script(glass));
+                    .user_agent(&user_agent(&version))
+                    .initialization_script(init_script(glass, &version));
             if let Some(effects) = glass.effects() {
                 window = window.transparent(true).effects(effects.build());
             }
@@ -187,10 +214,16 @@ fn main() {
                     false
                 })
                 .build()?;
+            update::start(app.handle());
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("Clip Factory could not start");
+    app.run(|app, event| {
+        if let RunEvent::Exit = event {
+            update::install_on_exit(app);
+        }
+    });
 }
 
 /// Pages of the app itself, plus the blank and in-memory pages the web view uses internally.
@@ -205,8 +238,7 @@ fn opens_outside(url: &Url) -> bool {
 
 /// The web app hides "Get the app" when the user agent contains `ClipFactoryDesktop` (§12.1). Web views offer
 /// no "append to the default", so this is a full user agent in the usual shape for the platform's engine.
-fn user_agent() -> String {
-    let version = env!("CARGO_PKG_VERSION");
+fn user_agent(version: &str) -> String {
     let base = if cfg!(target_os = "macos") {
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
     } else if cfg!(target_os = "windows") {
@@ -239,6 +271,12 @@ mod tests {
             &url("https://www.youtube.com/watch?v=1")
         ));
         assert!(!stays_inside(&home, &url("http://d1.cloudfront.net/")));
+        // The page's "Update the app" link for copies too old to update themselves (web/src/lib/device.ts
+        // oldAppDownloadUrl): the same server with a trailing dot is another site, so it opens in the system browser,
+        // which can download it. The rule has not changed since the first wrapper, so old copies do the same.
+        let update = url("https://d1.cloudfront.net./downloads/Clip-Factory.dmg");
+        assert!(!stays_inside(&home, &update));
+        assert!(opens_outside(&update));
     }
 
     #[test]
@@ -328,14 +366,27 @@ mod tests {
             (Glass::Blur, "blur"),
             (Glass::None, "none"),
         ] {
-            let script = init_script(glass);
-            assert!(script.starts_with(&format!("window.__CF_GLASS__ = \"{name}\";\n")));
+            let script = init_script(glass, "1.42.0");
+            assert!(script.starts_with(&format!(
+                "window.__CF_GLASS__ = \"{name}\";\nwindow.__CF_DESKTOP_VERSION__ = \"1.42.0\";\n"
+            )));
             assert!(script.contains("window.__CF_DESKTOP__ = true"));
         }
     }
 
     #[test]
+    fn the_version_in_the_script_is_plain_semver() {
+        assert_eq!(safe_version("1.42.0"), "1.42.0");
+        assert_eq!(safe_version("1.0.0-beta.1+abc"), "1.0.0-beta.1+abc");
+        assert_eq!(safe_version(""), "unknown");
+        assert_eq!(safe_version("1\";alert(1);\""), "unknown");
+        assert_eq!(safe_version("1.0.0\n"), "unknown");
+        let script = init_script(Glass::None, "</script>");
+        assert!(script.contains("window.__CF_DESKTOP_VERSION__ = \"unknown\";"));
+    }
+
+    #[test]
     fn user_agent_names_the_wrapper() {
-        assert!(user_agent().contains(" ClipFactoryDesktop/"));
+        assert!(user_agent("1.42.0").ends_with(" ClipFactoryDesktop/1.42.0"));
     }
 }
