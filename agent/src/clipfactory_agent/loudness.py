@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -88,3 +90,107 @@ def first_loud_second(loud: list[float], t: float, window: float = 3, threshold:
             return max(t, s - 0.2)
         s += 1
     return t
+
+
+# --- the finished clip's loudness: every platform plays clips at about -14 LUFS, so each clip is made that loud ------
+
+TARGET_LUFS = -14.0
+TARGET_TP = -1.5  # loudnorm's ceiling; the AAC encode after it adds a few tenths, so the file stays at or under -1 dBTP
+TARGET_LRA = 11.0
+QUIETEST_LUFS = -45.0  # quieter than this is silence or hum: nothing worth turning up
+_JSON = re.compile(r"\{[^{}]*\"input_i\"[^{}]*\}", re.S)
+
+
+def parse_loudnorm(stderr: str) -> dict[str, float] | None:
+    """The JSON block ``loudnorm=print_format=json`` prints, as numbers, or None when it is missing or not finite."""
+    found = _JSON.findall(stderr)
+    if not found:
+        return None
+    try:
+        raw = json.loads(found[-1])
+        out = {k: float(raw[k]) for k in ("input_i", "input_tp", "input_lra", "input_thresh", "target_offset")}
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not all(math.isfinite(v) for v in out.values()):
+        return None
+    return out
+
+
+def loudnorm_filter(measured: dict[str, float] | None) -> str:
+    """The loudnorm filter: first pass (``measured`` None) only measures, second pass applies the measured values.
+    ``linear=true`` turns the whole clip up or down by one amount; when that would push the peaks over the ceiling,
+    loudnorm limits the loud moments instead of clipping them, so a quiet voice is only turned up without distortion."""
+    base = f"loudnorm=I={TARGET_LUFS}:TP={TARGET_TP}:LRA={TARGET_LRA}"
+    if measured is None:
+        return base + ":print_format=json"
+    return (
+        f"{base}:measured_I={measured['input_i']}:measured_TP={measured['input_tp']}"
+        f":measured_LRA={measured['input_lra']}:measured_thresh={measured['input_thresh']}"
+        f":offset={measured['target_offset']}:linear=true:print_format=json"
+    )
+
+
+async def measure_loudness(media: Path) -> dict[str, float] | None:
+    r = await proc.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-nostats",
+            "-i",
+            str(media),
+            "-vn",
+            "-af",
+            loudnorm_filter(None),
+            "-f",
+            "null",
+            "-",
+        ],
+        time_limit=600,
+    )
+    return parse_loudnorm(r.stderr)
+
+
+async def normalize(video: Path, tmp: Path) -> dict[str, float] | None:
+    """Two-pass loudnorm on ``video`` in place (the picture is copied untouched). Returns the clip's loudness before and
+    after (``before_lufs``, ``lufs``, ``true_peak``), or None when it was left as it was (silence, or ffmpeg failed)."""
+    try:
+        first = await measure_loudness(video)
+        if first is None or first["input_i"] < QUIETEST_LUFS:
+            return None
+        await proc.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-y",
+                "-i",
+                str(video),
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0",
+                "-c:v",
+                "copy",
+                "-af",
+                loudnorm_filter(first) + ",aresample=48000",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "160k",
+                "-ar",
+                "48000",
+                "-movflags",
+                "+faststart",
+                str(tmp),
+            ],
+            time_limit=600,
+        )
+        after = await measure_loudness(tmp)
+        if after is None:
+            tmp.unlink(missing_ok=True)
+            return None
+        tmp.replace(video)
+    except proc.CommandError:
+        tmp.unlink(missing_ok=True)
+        return None
+    return {"before_lufs": first["input_i"], "lufs": after["input_i"], "true_peak": after["input_tp"]}
