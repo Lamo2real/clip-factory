@@ -631,7 +631,6 @@ describe("no visible edges (owner, 2026-11-18)", () => {
   /** A shadow layer with (almost) no blur and a spread or an offset: a ring or a hard line. */
   const edgeLayer = (layer: string) => {
     if (/^var\(--(shadow|glow|shade|focus)/.test(layer)) return false;
-    if (/var\(--panel-veil\)/.test(layer)) return false; // the loose-text scrim spreads its own fill
     const lens = layer
       .replace(/(rgba?|color-mix|var)\((?:[^()]|\([^()]*\))*\)/g, " ")
       .replace(/#[0-9a-f]{3,8}|currentColor|transparent|inset/gi, " ")

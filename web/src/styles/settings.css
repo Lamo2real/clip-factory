@@ -657,10 +657,10 @@
   border-bottom-left-radius: var(--r-xl);
   border-bottom-right-radius: var(--r-xl);
 }
-/* The last of several apples with something after it (a note, a list): a divider closes its row, so the light ends
-   on a line. */
+/* The last of several apples with something after it (a note, a list): its row ends where a divider would be (no
+   line is drawn, ADR-45: the space is kept so the light ends on the row's own edge). */
 .apple-panel:has(> .apple ~ .apple) > .apple:not(:has(~ .apple)):not(:last-child) {
-  border-bottom: 1px solid rgb(var(--line-rgb) / 0.18);
+  border-bottom: 1px solid transparent;
 }
 /* The only apple in its panel, whatever else the panel holds (Try it with its picks, a note): the light is the whole
    panel along its rim and corners. The apple lets the panel place it. */

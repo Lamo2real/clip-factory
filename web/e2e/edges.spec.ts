@@ -159,7 +159,9 @@ for (const path of ["/", "/review", "/settings"]) {
     });
     await page.waitForTimeout(300);
     const bar = (await page.locator(".setup-todo-bar").boundingBox())!;
-    const clip = { x: 0, y: Math.max(0, bar.y + bar.height - 30), width: 390, height: 90 };
+    // Left of the pill: the pill is a pane of its own, so where it ends is its edge, not the bar's.
+    const pill = (await page.locator(".setup-todo").boundingBox())!;
+    const clip = { x: 0, y: Math.max(0, bar.y + bar.height - 30), width: Math.max(60, Math.floor(pill.x) - 24), height: 90 };
     const withBar = rowMeans(await decode(page, await page.screenshot({ clip })));
     await page.addStyleTag({ content: ".setup-todo-bar, .setup-todo-bar * { visibility: hidden !important; }" });
     await page.waitForTimeout(300);
