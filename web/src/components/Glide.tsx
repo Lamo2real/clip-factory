@@ -8,6 +8,33 @@ import { useLayoutEffect, useRef } from "react";
  * own aria state. Until the first measure the container has no `has-glide` class, so the item paints its own static
  * highlight; nothing is lost if this never runs.
  */
+/** The element's layout rectangle relative to `box`'s padding edge, ignoring CSS transforms on it or its parents. */
+function layoutBox(el: HTMLElement, box: HTMLElement) {
+  let x = 0;
+  let y = 0;
+  let node: HTMLElement | null = el;
+  while (node && node !== box) {
+    x += node.offsetLeft;
+    y += node.offsetTop;
+    const parent = node.offsetParent as HTMLElement | null;
+    if (!parent || parent === box || !box.contains(parent)) {
+      if (parent !== box) {
+        // The box is not in the offset chain (not positioned): fall back to the painted offset of what we reached.
+        const b = box.getBoundingClientRect();
+        const p = (parent ?? document.body).getBoundingClientRect();
+        x += p.left - b.left - box.clientLeft + box.scrollLeft;
+        y += p.top - b.top - box.clientTop + box.scrollTop;
+      }
+      break;
+    }
+    x += parent.clientLeft;
+    y += parent.clientTop;
+    node = parent;
+  }
+  // Offsets are already in the box's scrolled coordinates, so a scrolling tab row carries the glide with it.
+  return { x, y, width: el.offsetWidth, height: el.offsetHeight };
+}
+
 export function Glide({
   active,
   className = "",
@@ -40,16 +67,20 @@ export function Glide({
         last = "";
         return;
       }
-      // Offsets inside the container (it is position: relative), so a scrolling tab row carries the glide with it.
-      const b = box.getBoundingClientRect();
-      const r = on.getBoundingClientRect();
-      const x = r.left - b.left + box.scrollLeft - box.clientLeft;
-      const y = r.top - b.top + box.scrollTop - box.clientTop;
+      // The item's layout box inside the container, not its painted one: a tapped item is still shrunk by its press
+      // effect (scale) when this runs, and measuring that made the glide aim small, then jump to the full size a
+      // moment later. Layout offsets ignore transforms, so the target is right from the first frame.
+      const r = layoutBox(on, box);
+      const x = r.x;
+      const y = r.y;
       const key = `${x}|${y}|${r.width}|${r.height}`;
       if (key === last) return;
-      // Slide only when the choice changed. A resize or a layout shift moves it instantly.
-      const moved = last !== "" && ready && on !== lastOn;
+      // Slide when the choice changed. A resize or a layout shift moves it instantly, except while a slide is still
+      // under way: then it re-aims smoothly, so nothing ever skips frames mid-travel.
+      const travelling = glide.classList.contains("is-moving");
+      const moved = last !== "" && ready && (on !== lastOn || travelling);
       const [lx, ly] = last ? last.split("|").map(Number) : [x, y];
+      const lastOnBefore = lastOn;
       last = key;
       lastOn = on;
       if (!moved) glide.classList.add("is-still");
@@ -65,7 +96,7 @@ export function Glide({
       glide.style.height = `${r.height}px`;
       glide.style.opacity = "1";
       if (!box.classList.contains("has-glide")) box.classList.add("has-glide");
-      if (moved) {
+      if (moved && on !== lastOnBefore) {
         // Stretch along the way it travels, then settle (CSS animation, skipped under reduced motion).
         const sideways = Math.abs(x - lx!) >= Math.abs(y - ly!);
         glide.dataset.axis = sideways ? "x" : "y";

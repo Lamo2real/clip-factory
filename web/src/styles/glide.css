@@ -34,40 +34,83 @@
 .glide.is-still {
   transition: none;
 }
-/* The stretch: the pill grows along its path and squeezes across it, then springs back. It runs on an inner
-   scale so it never fights the slide's transform. */
+/* The stretch: the pill grows along its path and squeezes across it, then eases back. It runs on an inner scale so
+   it never fights the slide's transform. The keyframes trace one smooth curve (sampled every 10%, linear between):
+   eased segments made each step land in a frame or two, and the last one showed as a tick at the end of the slide. */
 .glide.is-moving[data-axis="x"] {
-  animation: glide-stretch-x 460ms var(--ease-out);
+  animation: glide-stretch-x 460ms linear;
 }
 .glide.is-moving[data-axis="y"] {
-  animation: glide-stretch-y 460ms var(--ease-out);
+  animation: glide-stretch-y 460ms linear;
 }
 @keyframes glide-stretch-x {
   0% {
-    scale: 1 1;
+    scale: 1.000 1.000;
   }
-  35% {
-    scale: 1.14 0.86;
+  10% {
+    scale: 1.036 0.970;
+  }
+  20% {
+    scale: 1.066 0.945;
+  }
+  30% {
+    scale: 1.087 0.928;
+  }
+  40% {
+    scale: 1.098 0.918;
+  }
+  50% {
+    scale: 1.099 0.917;
+  }
+  60% {
+    scale: 1.090 0.925;
   }
   70% {
-    scale: 0.97 1.03;
+    scale: 1.073 0.939;
+  }
+  80% {
+    scale: 1.051 0.958;
+  }
+  90% {
+    scale: 1.025 0.979;
   }
   100% {
-    scale: 1 1;
+    scale: 1.000 1.000;
   }
 }
 @keyframes glide-stretch-y {
   0% {
-    scale: 1 1;
+    scale: 1.000 1.000;
   }
-  35% {
-    scale: 0.96 1.18;
+  10% {
+    scale: 0.988 1.042;
+  }
+  20% {
+    scale: 0.978 1.077;
+  }
+  30% {
+    scale: 0.971 1.101;
+  }
+  40% {
+    scale: 0.967 1.115;
+  }
+  50% {
+    scale: 0.967 1.115;
+  }
+  60% {
+    scale: 0.970 1.105;
   }
   70% {
-    scale: 1.01 0.97;
+    scale: 0.976 1.086;
+  }
+  80% {
+    scale: 0.983 1.059;
+  }
+  90% {
+    scale: 0.992 1.030;
   }
   100% {
-    scale: 1 1;
+    scale: 1.000 1.000;
   }
 }
 
