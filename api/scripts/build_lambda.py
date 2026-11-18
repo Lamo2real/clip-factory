@@ -5,7 +5,7 @@ too old to know "bedrock-agentcore", durable executions or "s3vectors"), the loc
 ``aws-durable-execution-sdk-python`` (AWS recommends bundling it rather than relying on the runtime's copy) and the
 built-in skills from the repository's ``skills/`` folder as package
 data (``clipfactory_api/builtin_skills/<name>/SKILL.md``) and ``config/platforms.json`` (the stats limits, §16.4) as
-``clipfactory_api/config/platforms.json`` and the help corpus the web build commits
+``clipfactory_api/config/platforms.json``, ``config/monetization.json`` (§25.2) next to it, and the help corpus the web build commits
 (``web/src/features/help/help-corpus.json``, §19.6) as ``clipfactory_api/help/corpus.json``. Every dependency is pure Python, so the same zip runs on
 arm64. The build is deterministic: same inputs, byte-identical zip (sorted entries, fixed timestamps and modes).
 
@@ -28,6 +28,8 @@ PACKAGE = API / "src" / "clipfactory_api"
 SKILLS = ROOT / "skills"
 PLATFORMS_CONFIG = ROOT / "config" / "platforms.json"
 PLATFORMS_CONFIG_IN_ZIP = "clipfactory_api/config/platforms.json"
+MONEY_CONFIG = ROOT / "config" / "monetization.json"
+MONEY_CONFIG_IN_ZIP = "clipfactory_api/config/monetization.json"
 HELP_CORPUS = ROOT / "web" / "src" / "features" / "help" / "help-corpus.json"
 HELP_CORPUS_IN_ZIP = "clipfactory_api/help/corpus.json"
 OUT = API / "dist" / "lambda.zip"
@@ -116,6 +118,20 @@ def _copy_platforms_config(dest: Path) -> None:
     print(f"  platforms config: {len(cfg.platforms)} platforms, tick every {cfg.tick_minutes} minutes")
 
 
+def _copy_money_config(dest: Path) -> None:
+    """``config/monetization.json`` → ``clipfactory_api/config/monetization.json``, validated first: every goal must
+    name its official source (docs/CONTRACTS.md §25.2), so an unsourced number fails the build."""
+    if not MONEY_CONFIG.is_file():
+        raise SystemExit(f"missing {MONEY_CONFIG.relative_to(ROOT)} (docs/CONTRACTS.md §25.2)")
+    sys.path.insert(0, str(API / "src"))
+    from clipfactory_api.money import rules
+
+    cfg = rules.load(MONEY_CONFIG)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(MONEY_CONFIG, dest)
+    print(f"  money config: {len(cfg.platforms)} platforms, checked {cfg.as_of.isoformat()}")
+
+
 def _copy_help_corpus(dest: Path) -> None:
     """``web/src/features/help/help-corpus.json`` → ``clipfactory_api/help/corpus.json``, validated first (the
     bundled fallback of Ask Clip Factory, §19.6). A bad or missing corpus fails the build, never a question."""
@@ -173,9 +189,14 @@ def main() -> int:
         shutil.copytree(PACKAGE, stage / "clipfactory_api", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         skills = _copy_skills(stage / "clipfactory_api" / "builtin_skills")
         _copy_platforms_config(stage / PLATFORMS_CONFIG_IN_ZIP)
+        _copy_money_config(stage / MONEY_CONFIG_IN_ZIP)
         _copy_help_corpus(stage / HELP_CORPUS_IN_ZIP)
         names = _zip(stage, OUT)
-    missing = [h for h in (*HANDLERS, *VENDORED, PLATFORMS_CONFIG_IN_ZIP, HELP_CORPUS_IN_ZIP) if h not in names]
+    missing = [
+        h
+        for h in (*HANDLERS, *VENDORED, PLATFORMS_CONFIG_IN_ZIP, MONEY_CONFIG_IN_ZIP, HELP_CORPUS_IN_ZIP)
+        if h not in names
+    ]
     if missing:
         raise SystemExit(f"missing from the zip: {missing}")
     digest = hashlib.sha256(OUT.read_bytes()).hexdigest()
