@@ -293,7 +293,14 @@ html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
   ) {
   border-radius: var(--r-sm);
   background: rgb(var(--green-rgb) / var(--panel-veil));
-  box-shadow: 0 0 0 6px rgb(var(--green-rgb) / var(--panel-veil));
+  box-shadow: 0 0 0 10px rgb(var(--green-rgb) / var(--panel-veil));
+}
+/* The page title and its line are a plate of their own: real inner space so the words never touch its edge, with the
+   panels' corner. (Doubled class: the shared rule above weighs as much as two classes through :is.) */
+html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"]) .page-head__text.page-head__text {
+  padding: clamp(20px, 2.4vw, 30px) clamp(22px, 3vw, 38px);
+  border-radius: var(--r-lg);
+  box-shadow: none;
 }
 /* Headings and lines between panels hug their words instead of running the full width as a bar. */
 html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
