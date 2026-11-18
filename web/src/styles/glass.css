@@ -334,7 +334,7 @@ html.see-through .perf__updated > span {
 /* Pick-one tracks keep their shade of ink (0.08), laid over a little more tint than a panel has (+0.1), so the
    labels on the shade stay at AA even when the track sits straight on the window. Both numbers are TRACK_SHADE and
    TRACK_EXTRA_VEIL in lib/background.ts, where the contrast is worked out for every glass. */
-html.see-through :is(.segmented, .tabs, .bg-modes) {
+html.see-through :is(.segmented, .tabs, .bg-modes, .model-picks) {
   background-color: rgb(var(--offwhite-rgb) / calc(var(--panel-veil) + 0.1));
   background-image: linear-gradient(rgb(var(--ink-rgb) / 0.08), rgb(var(--ink-rgb) / 0.08));
 }

@@ -231,3 +231,48 @@ run "role_allows_the_watch_model_and_nothing_else_new" {
     error_message = "Speaker labels need no new Transcribe action."
   }
 }
+
+# docs/DECISIONS.md ADR-42: the owner's choice of model for clip jobs. Every clip model joins the existing InvokeFable
+# and ReadProfile statements (same Sids, so the policy changes in place); the environment keeps the default model.
+run "role_allows_every_clip_model" {
+  command = plan
+
+  variables {
+    clip_model_profile_arns = [
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-fable-5-1",
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-opus-5-5",
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.anthropic.claude-haiku-5-5",
+    ]
+    clip_model_invoke_arns = [
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-fable-5-1",
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-opus-5-5",
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-fable-5-1",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-opus-5-5",
+      "arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-haiku-5-5",
+    ]
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+      s.Sid == "InvokeFable" && toset(s.Resource) == toset(concat(var.model_invoke_arns, var.clip_model_invoke_arns)) &&
+      length(s.Resource) == 6 &&
+      toset(s.Action) == toset(["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:Converse*"])
+    ])
+    error_message = "InvokeFable covers the default model and every clip model, without repeats."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+      s.Sid == "ReadProfile" && toset(s.Resource) == toset(var.clip_model_profile_arns) && length(s.Resource) == 3
+    ])
+    error_message = "ReadProfile covers the default profile and every clip model profile, without repeats."
+  }
+
+  assert {
+    condition     = aws_bedrockagentcore_agent_runtime.agent.environment_variables["CF_MODEL_ID"] == "global.anthropic.claude-fable-5-1"
+    error_message = "CF_MODEL_ID stays the default model; the owner's pick travels with each job."
+  }
+}

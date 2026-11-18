@@ -124,13 +124,20 @@ resource "aws_iam_role_policy" "agent" {
         Action   = ["transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob", "transcribe:DeleteTranscriptionJob"]
         Resource = "arn:aws:transcribe:${var.region}:${var.account_id}:transcription-job/*"
       },
+      # The default model and every model the owner may pick for clip jobs (clipModels, docs/DECISIONS.md ADR-42).
+      # The Sid keeps its old name so the policy changes in place.
       {
         Sid      = "InvokeFable"
         Effect   = "Allow"
         Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:Converse*"]
-        Resource = var.model_invoke_arns
+        Resource = distinct(concat(var.model_invoke_arns, var.clip_model_invoke_arns))
       },
-      { Sid = "ReadProfile", Effect = "Allow", Action = ["bedrock:GetInferenceProfile"], Resource = var.model_profile_arn },
+      {
+        Sid      = "ReadProfile"
+        Effect   = "Allow"
+        Action   = ["bedrock:GetInferenceProfile"]
+        Resource = distinct(concat([var.model_profile_arn], var.clip_model_profile_arns))
+      },
       # The second watcher of the deep analysis (docs/DECISIONS.md ADR-40): Amazon Nova 2 Lite through the EU geo
       # profile, called with Converse (authorised as InvokeModel). Exactly the profile in this region and the
       # foundation model in the regions the profile routes to, so the video parts never leave the EU.

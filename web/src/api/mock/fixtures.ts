@@ -212,6 +212,7 @@ export function seed(): Store {
       },
       notes: "#gtarp",
       clipCount: 7,
+      model: "fable-5-1",
     },
     26 * HOUR,
     STEP_KEYS.length,
@@ -514,6 +515,7 @@ export function seed(): Store {
       // No backgroundMode: like the server, absent until saved, so the device decides (§22.1).
       backgroundColours: ["#9caf88", "#f7f5ef", "#e8412c"],
       glassStrength: "clear",
+      clipModel: "fable-5-1",
     },
     accounts: PLATFORMS.map((platform) => ({ platform, status: "not_connected" })),
   };

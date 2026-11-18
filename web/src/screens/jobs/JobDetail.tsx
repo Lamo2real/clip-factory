@@ -8,6 +8,7 @@ import { JobStatusPill, jobTitle, sourceMeta, SourceThumb, StepTimeline } from "
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, Pill, Progress, Skeleton, type Tone } from "../../components/ui.tsx";
 import { burst } from "../../lib/confetti.ts";
+import { clipModelLabel } from "../../lib/models.ts";
 import { useAction } from "../../lib/motion.ts";
 import { MOMENT_LABEL, plural, relative, timecode } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
@@ -212,6 +213,15 @@ export function JobDetail({ jobId }: { jobId: string }) {
             </div>
           ) : null}
           <StepTimeline steps={job.steps} />
+          {job.status === "ready" && job.model ? (
+            <p className="panel__note job-model" data-help="job-model">
+              <Icon name="sparkle" size={18} />
+              <span>
+                {`Made with ${clipModelLabel(job.model)}.`}
+                {job.modelWanted ? ` ${clipModelLabel(job.modelWanted)} could not be used, so the usual one was.` : ""}
+              </span>
+            </p>
+          ) : null}
           <div className="panel__actions">
             {working && !stopping ? (
               <Button variant="ghost" icon="stop" act={stopAct} onClick={stop}>

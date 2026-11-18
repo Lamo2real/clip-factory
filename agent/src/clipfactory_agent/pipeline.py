@@ -15,6 +15,7 @@ import contextlib
 import functools
 import os
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -109,6 +110,13 @@ class JobState:
     signals: signals_mod.Signals | None = None
     speakers: list[list[Any]] | None = None
     second_look: list[dict[str, Any]] = field(default_factory=list)
+    # The model that makes this job's clips (docs/DECISIONS.md ADR-42), picked in resolve from the owner's
+    # ``clipModel`` setting: its key in config/models.json, the id it is called with and its client. ``model_wanted``
+    # is the owner's pick when it could not be used and the default model took over.
+    model_key: str | None = None
+    model_id: str = ""
+    model_wanted: str | None = None
+    bedrock: Bedrock | None = None
 
     @property
     def notes(self) -> str:
@@ -156,10 +164,15 @@ class Pipeline:
         *,
         vectors: vectors_mod.Vectors | None = None,
         watch_bedrock: Bedrock | None = None,
+        new_bedrock: Callable[[str], Bedrock] | None = None,
     ) -> None:
         self.cfg = cfg
         self.store = store
-        self.bedrock = bedrock
+        self.bedrock = bedrock  # the default model (agentModel); every job uses it unless the owner picked another
+        # One client per model id, kept for the container's life, so what a client learns about its model (no forced
+        # tool choice, no cache points, the image limit, that it answers) is learned once.
+        self._clients: dict[str, Bedrock] = {}
+        self._new_bedrock = new_bedrock or (lambda model_id: Bedrock(model_id, self.cfg.region))
         self.transcriber = transcriber
         self.vectors = vectors  # None: no clip vectors and no "what worked before"
         self.watch_bedrock = watch_bedrock  # the second watcher (Nova); None: that track is skipped
@@ -181,6 +194,64 @@ class Pipeline:
             ("finalize", bind(self.finalize)),
         ]
 
+    # --- the model for this job (docs/DECISIONS.md ADR-42) ----------------------------------------------------
+
+    def claude(self, st: JobState) -> Bedrock:
+        """The client for this job's model: the owner's pick, or the default before resolve has picked one."""
+        return st.bedrock or self.bedrock
+
+    def _client(self, model_id: str) -> Bedrock:
+        client = self._clients.get(model_id)
+        if client is None:
+            client = self._clients[model_id] = self._new_bedrock(model_id)
+        return client
+
+    def pick_model(self, st: JobState) -> None:
+        """The model the owner picked in Settings (``clipModel``), when it is one of clipModels; else the default."""
+        default_key = self.cfg.default_model_key
+        wanted = st.settings.get("clipModel")
+        key = wanted if isinstance(wanted, str) and wanted in self.cfg.clip_models else default_key
+        if wanted and key != wanted:
+            log("warn", "model.unknown", job=st.job_id, wanted=str(wanted)[:64], using=default_key)
+        model_id = self.cfg.clip_models[key] if key and key != default_key else self.cfg.model_id
+        st.model_key, st.model_id, st.model_wanted = key, model_id, None
+        st.bedrock = self.bedrock if model_id == self.cfg.model_id else self._client(model_id)
+        log("info", "model.chosen", job=st.job_id, model=st.model_key, modelId=st.model_id)
+
+    async def check_model(self, st: JobState) -> None:
+        """A picked model Bedrock refuses as unavailable on its first call (a small one, once the skills block is
+        built) gives way to the default model for the rest of the job, and the job record says so."""
+        if st.bedrock is None or st.bedrock is self.bedrock:
+            return
+        refused = await st.bedrock.probe(skills=st.block)
+        if refused is None:
+            return
+        log(
+            "warn",
+            "model.fallback",
+            job=st.job_id,
+            wanted=st.model_key,
+            wantedModelId=st.model_id,
+            using=self.cfg.default_model_key,
+            modelId=self.cfg.model_id,
+            error=type(refused).__name__,
+            detail=str(refused)[:300],
+        )
+        st.model_wanted, st.model_key = st.model_key, self.cfg.default_model_key
+        st.model_id, st.bedrock = self.cfg.model_id, self.bedrock
+        fields, drop = self._model_fields(st)
+        await self.store.update_job(
+            st.user_id, st.job_id, fields, unless_canceled=True, session_id=st.session_id, remove=drop
+        )
+
+    def _model_fields(self, st: JobState) -> tuple[dict[str, Any], tuple[str, ...]]:
+        """The job record's ``model`` (the key actually used) and ``modelWanted`` (only when the pick fell back)."""
+        fields: dict[str, Any] = {"model": st.model_key} if st.model_key else {}
+        if st.model_wanted:
+            fields["modelWanted"] = st.model_wanted
+            return fields, ()
+        return fields, ("modelWanted",)
+
     # --- resolve ---------------------------------------------------------------------------------------------
 
     async def resolve(self, st: JobState, tr: Tracker) -> str:
@@ -189,6 +260,7 @@ class Pipeline:
             raise UserFacingError("This job no longer exists.")
         st.job = job
         st.settings = await self.store.get_settings(st.user_id)
+        self.pick_model(st)
         st.source = dict(job.get("source") or {})
         st.workdir.mkdir(parents=True, exist_ok=True)
         await self._clear_previous_clips(st)
@@ -199,12 +271,14 @@ class Pipeline:
         else:
             await self._resolve_link(st, tr)
         await self.store.put_json(st.key("meta.json"), st.meta)
+        model, drop = self._model_fields(st)
         await self.store.update_job(
             st.user_id,
             st.job_id,
-            {"source": st.source, **creator_fields(st.source)},
+            {"source": st.source, **creator_fields(st.source), **model},
             unless_canceled=True,
             session_id=st.session_id,
+            remove=drop,
         )
         title = st.source.get("title") or "the video"
         length = f" ({hms(st.source['durationSec'])})" if st.source.get("durationSec") else ""
@@ -564,6 +638,7 @@ class Pipeline:
             st.workdir, self.cfg.skills_dir, await self.store.skill_rows(st.user_id), self.store.get_bytes
         )
         st.skills_block = skills_block(st.skills.docs, where="agent.job")
+        await self.check_model(st)
         taught = await learnings.load(self.store, st.user_id, creator_keys(st.source), datetime.now(UTC))
         st.week_learnings, st.prior = taught.week, taught.prior
         st.similar = await self._similar(st)
@@ -702,7 +777,7 @@ class Pipeline:
         fable, second = await gather_all(
             watch.watch_chunks(
                 units,
-                bedrock=self.bedrock,
+                bedrock=self.claude(st),
                 skills=st.block,
                 frames=frames,
                 words=st.words,
@@ -808,8 +883,8 @@ class Pipeline:
         looking = st.frames is not None
         st.chosen, st.spares = await find_moments(
             self._brief(st),
-            bedrock=self.bedrock,
-            model_id=self.cfg.model_id,
+            bedrock=self.claude(st),
+            model_id=st.model_id or self.cfg.model_id,
             region=self.cfg.region,
             workdir=st.workdir,
             skill_names=[s.name for s in st.skills.docs],
@@ -832,7 +907,7 @@ class Pipeline:
             st.chosen, st.spares, st.second_look = await verify.second_look(
                 st.chosen,
                 st.spares,
-                bedrock=self.bedrock,
+                bedrock=self.claude(st),
                 skills=st.block,
                 frames=st.frames,
                 words=st.words,
@@ -937,7 +1012,7 @@ class Pipeline:
             words=st.words,
             workdir=workdir,
             fetch_section=fetch,
-            detect_layout=functools.partial(self.bedrock.detect_layout, skills=st.block),
+            detect_layout=functools.partial(self.claude(st).detect_layout, skills=st.block),
             known_layout=layout,
         )
         return Candidate(m, r, index=index)
@@ -988,7 +1063,7 @@ class Pipeline:
 
     async def _review(self, st: JobState, c: Candidate) -> dict[str, Any]:
         try:
-            return await self.bedrock.structured(
+            return await self.claude(st).structured(
                 # The review can write a new hook, so it gets "Prior learnings" too (§16.12).
                 system=learnings.with_prior(
                     st.prior, "You review short vertical clips before they are posted, strictly but fairly."
@@ -1107,7 +1182,7 @@ class Pipeline:
             for c in st.candidates
         ]
         st.captions = await captions_mod.write_captions(
-            self.bedrock,
+            self.claude(st),
             texts,
             notes=st.notes,
             skills=st.block,

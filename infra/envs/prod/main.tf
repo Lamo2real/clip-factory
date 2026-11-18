@@ -39,6 +39,26 @@ locals {
     "arn:aws:bedrock:*::foundation-model/${local.agent_model.modelId}",
   ]
 
+  # The models the owner may pick for clip jobs (Settings › Clip making › AI model, clipModels in config/models.json,
+  # docs/DECISIONS.md ADR-42). The agent may call each one the way it calls the default: its profile here, and the
+  # foundation model in any region for a global profile, or in the listed destination regions for a geo profile.
+  # CF_MODEL_ID stays the default (agentModel); the owner's pick travels with each job's settings.
+  clip_models = { for k in local.models.clipModels : k => local.models.models[k] }
+  clip_model_ids = {
+    for k, m in local.clip_models : k => "${try(m.profilePrefix, local.models.profilePrefix)}.${m.modelId}"
+  }
+  clip_model_profile_arns = sort([
+    for k, id in local.clip_model_ids : "arn:aws:bedrock:${var.region}:${local.account_id}:inference-profile/${id}"
+  ])
+  clip_model_invoke_arns = sort(distinct(concat(
+    local.clip_model_profile_arns,
+    flatten([
+      for k, m in local.clip_models : try(m.profilePrefix, local.models.profilePrefix) == "global"
+      ? ["arn:aws:bedrock:*::foundation-model/${m.modelId}"]
+      : [for r in m.profileRegions : "arn:aws:bedrock:${r}::foundation-model/${m.modelId}"]
+    ]),
+  )))
+
   # Titan Text Embeddings V2 is called in-Region, never through a profile (docs/CONTRACTS.md §1, §14.6).
   embed_model_id   = local.models.embeddingModel.modelId
   embed_dimensions = local.models.embeddingModel.dimensions
@@ -132,6 +152,10 @@ module "agent" {
   vector_index_arn  = module.vectors.vector_index_arn
   embed_model_id    = local.embed_model_id
   embed_model_arn   = local.embed_model_arn
+
+  # The owner's choice of model for clip jobs (ADR-42): every model in clipModels may be called.
+  clip_model_profile_arns = local.clip_model_profile_arns
+  clip_model_invoke_arns  = local.clip_model_invoke_arns
 
   # "Watch the video" (ADR-40): the second watcher. Fable, the main watcher, needs nothing new.
   watch_model_id          = local.watch_model_id

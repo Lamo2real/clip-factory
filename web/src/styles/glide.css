@@ -6,6 +6,7 @@
 .tabs,
 .lib-tabs,
 .bg-modes,
+.model-picks,
 .sidebar__list,
 .tabbar__list {
   position: relative;
@@ -78,12 +79,14 @@
 .tab,
 .lib-tab,
 .bg-mode,
+.model-pick,
 .sidebar__list > li:not(.glide),
 .tabbar__cell {
   position: relative;
   z-index: 1;
 }
 .has-glide > .bg-mode.is-on,
+.has-glide > .model-pick.is-on,
 .has-glide > .segmented__opt.is-on,
 .has-glide > .tab.is-on,
 .has-glide > .lib-tab.is-on,

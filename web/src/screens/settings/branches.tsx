@@ -31,6 +31,7 @@ import {
   type GlassStrength,
 } from "../../lib/background.ts";
 import { currentOs } from "../../lib/device.ts";
+import { CLIP_MODELS, currentClipModel } from "../../lib/models.ts";
 import { inDesktopApp, nativeGlass } from "../../lib/look.ts";
 import { APP_VERSION, checkForUpdate, updateState } from "../../lib/update.ts";
 import { Apple, AppleSwitch, Panel, usePickAction } from "./parts.tsx";
@@ -76,7 +77,42 @@ export function ClipsBranch() {
           </div>
         )}
       </Apple>
+      <Apple id="ai-model" wide>
+        {!s ? (
+          <Skeleton className="line-skel" />
+        ) : (
+          <ModelPicks value={currentClipModel(s.clipModel)} onChange={(key) => void saveSettings({ clipModel: key })} />
+        )}
+      </Apple>
     </Panel>
+  );
+}
+
+/** The AI models from config/models.json, one row each with a plain line; the glide slides to the one in use. */
+function ModelPicks({ value, onChange }: { value: string; onChange: (key: string) => void }) {
+  const name = useId();
+  return (
+    <div className="model-picks" role="radiogroup" aria-labelledby="ai-model-name" data-help-dodge="">
+      <Glide active=".model-pick.is-on" className="glide--tile" />
+      {CLIP_MODELS.map((m) => {
+        const on = m.key === value;
+        return (
+          <label key={m.key} className={`model-pick${on ? " is-on" : ""}`} data-help={`ai-model-${m.key}`}>
+            <input type="radio" name={name} value={m.key} checked={on} onChange={() => onChange(m.key)} />
+            <span className="model-pick__text">
+              <span className="model-pick__name">{m.label}</span>
+              <span className="model-pick__line">{m.line}</span>
+            </span>
+            {on ? (
+              <span className="model-pick__mark">
+                <Icon name="check" size={16} />
+                In use
+              </span>
+            ) : null}
+          </label>
+        );
+      })}
+    </div>
   );
 }
 
