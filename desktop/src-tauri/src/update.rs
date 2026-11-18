@@ -26,6 +26,8 @@ const UPDATE_HOST: &str = "dglrbjmf28m6c.cloudfront.net";
 /// Long enough for the window and the page to settle first.
 const FIRST_CHECK_AFTER: Duration = Duration::from_secs(5);
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
+/// The check plus the whole download: about 1 Mbit/s still fetches the universal Mac bundle.
+const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 pub const DIALOG_TITLE: &str = "Clip Factory updated";
 pub const DIALOG_MESSAGE: &str = "Restart to use the newest version.";
@@ -94,7 +96,9 @@ async fn prepare(app: &AppHandle) -> Result<Option<Ready>, String> {
         .updater_builder()
         .endpoints(vec![manifest])
         .map_err(|e| e.to_string())?
-        .timeout(Duration::from_secs(60))
+        // Covers the check and the whole download (reqwest's timeout runs to the end of the body), so it leaves
+        // room for the universal Mac bundle on a slow connection.
+        .timeout(DOWNLOAD_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())?;
     // `check` only answers with a version newer than this one (allowDowngrades stays off).

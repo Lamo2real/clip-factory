@@ -10,17 +10,19 @@ import { glassFloor, LIQUID_MEASURED, type GlassStrength, type NativeGlass, type
  * the wrapper would report ("liquid", "vibrancy", "acrylic", "blur", "none", or a name this web bundle does not
  * know). With `strength`, Glass strength is already saved, on the device and on the (mock) server.
  */
-export async function asDesktop(page: Page, glass: string, strength?: GlassStrength) {
+export async function asDesktop(page: Page, glass: string, strength?: GlassStrength, version: string | null = "1.42.0") {
   await page.addInitScript(
-    ({ glass, strength }) => {
+    ({ glass, strength, version }) => {
       (window as unknown as Record<string, unknown>).__CF_GLASS__ = glass;
       (window as unknown as Record<string, unknown>).__CF_DESKTOP__ = true;
+      // A current app updates itself and names its version; null plays one built before the updater.
+      if (version) (window as unknown as Record<string, unknown>).__CF_DESKTOP_VERSION__ = version;
       if (!strength) return;
       const look = JSON.stringify({ backgroundMode: "see-through", glassStrength: strength });
       if (!localStorage.getItem("cf.prefs")) localStorage.setItem("cf.prefs", look);
       if (!sessionStorage.getItem("cf-mock-look")) sessionStorage.setItem("cf-mock-look", look);
     },
-    { glass, strength },
+    { glass, strength, version },
   );
 }
 

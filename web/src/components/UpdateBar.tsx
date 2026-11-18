@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { burst, centerOf } from "../lib/confetti.ts";
 import { currentOs, oldAppDownloadUrl } from "../lib/device.ts";
-import { oldDesktopApp } from "../lib/look.ts";
+import { desktopAppCantUpdate } from "../lib/look.ts";
 import { prefersReducedMotion } from "../lib/prefs.ts";
 import { dismissUpdate, finishedAt, prepareUpdate, PROGRESS, progressAt, reloadInto, useUpdate, type VersionInfo } from "../lib/update.ts";
 import { Icon } from "./Icon.tsx";
@@ -11,7 +11,7 @@ import { Button, LinkButton } from "./ui.tsx";
 
 /** The new installer for an old desktop app, or null (a browser, a phone, or an app that updates itself). */
 function oldAppUpdateUrl(): string | null {
-  return oldDesktopApp() && typeof location !== "undefined" ? oldAppDownloadUrl(currentOs(), location.host) : null;
+  return desktopAppCantUpdate() && typeof location !== "undefined" ? oldAppDownloadUrl(currentOs(), location.host) : null;
 }
 
 export function UpdateBar() {

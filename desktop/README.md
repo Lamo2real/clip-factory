@@ -146,12 +146,13 @@ release, so a copy built by hand is updated too.
 ### The signing key
 
 * Made with `npx tauri signer generate` (minisign) on 2026-11-18. The **public** key is committed in
-  `tauri.conf.json`. The **private** key and its password are only in the GitHub Actions secrets
+  `tauri.conf.json`. The **private** key and its password belong only in the GitHub Actions secrets
   `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (set with `gh secret set ... < file`, never
-  pasted), read only by the build step of the `desktop` job.
-* A **backup copy** (the key file, its password file and the public key) was handed to the owner outside the
-  repository. Keep it somewhere private and durable, such as a password manager. It must never be committed,
-  pasted into an issue or pull request, or printed in a log.
+  pasted), read only by the build step of the `desktop` job. Until both are set, every deploy's `desktop-plan` shows
+  an error annotation saying so.
+* Keep a **backup copy** (the key file, its password file and the public key) outside the repository, somewhere
+  private and durable, such as a password manager. It must never be committed, pasted into an issue or pull
+  request, or printed in a log.
 * Without the secrets, deploys still build the installers but no update bundle, so installed apps stay where they
   are until the secrets are back.
 

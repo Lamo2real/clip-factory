@@ -31,7 +31,7 @@ import {
 } from "../../lib/background.ts";
 import { currentOs, oldAppDownloadUrl } from "../../lib/device.ts";
 import { CLIP_MODELS, currentClipModel } from "../../lib/models.ts";
-import { inDesktopApp, nativeGlass, oldDesktopApp } from "../../lib/look.ts";
+import { desktopAppCantUpdate, inDesktopApp, nativeGlass, oldDesktopApp } from "../../lib/look.ts";
 import { APP_VERSION, checkForUpdate, updateState } from "../../lib/update.ts";
 import { Apple, AppleSwitch, Panel, usePickAction } from "./parts.tsx";
 
@@ -304,7 +304,8 @@ export function BackgroundBranch() {
   const desktopApp = inDesktopApp();
   // An app from before the see-through window cannot say what glass it has: it only needs the new one (§12.6).
   const oldApp = oldDesktopApp();
-  const updateUrl = oldApp && typeof location !== "undefined" ? oldAppDownloadUrl(os, location.host) : null;
+  // Any app that can't update itself (no version named) gets the new installer's button under the note.
+  const updateUrl = desktopAppCantUpdate() && typeof location !== "undefined" ? oldAppDownloadUrl(os, location.host) : null;
   const note = mode === "see-through" ? seeThroughNote(glass, desktopApp, os === "ios" || os === "android", oldApp) : null;
   // "Get the app" only where the app can show see-through: a Mac or Windows computer not already in the app.
   const offerApp = !desktopApp && (os === "mac" || os === "windows");

@@ -406,17 +406,36 @@ test.describe("see-through in the desktop app (simulated)", () => {
     await context.close();
   });
 
-  test("a newer desktop app, or a browser, never sees the old-app offer", async ({ page }) => {
+  test("a see-through desktop app with no version (built before the updater) is offered the new app", async ({ browser }) => {
+    const context = await browser.newContext({
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) ClipFactoryDesktop/1.0.0",
+    });
+    const page = await context.newPage();
+    await asDesktop(page, "liquid", undefined, null);
+    await open(page);
+    // Real glass: no see-through note, but the app-wide bar still offers the installer.
+    await expect(page.locator(".bg-note")).toHaveCount(0);
+    const port = new URL(page.url()).port;
+    const bar = page.getByRole("region", { name: "Update the app" });
+    await expect(bar).toBeVisible();
+    await expect(bar.getByRole("link", { name: "Update" })).toHaveAttribute("href", `https://localhost.:${port}/downloads/Clip-Factory.dmg`);
+    await context.close();
+  });
+
+  test("a desktop app that updates itself, or a browser, never sees the old-app offer", async ({ browser }) => {
+    const context = await browser.newContext({
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) ClipFactoryDesktop/1.42.0",
+    });
+    const page = await context.newPage();
     await asDesktop(page, "none");
     await open(page);
+    await expect(page.locator(".bg-note")).toContainText("can't show see-through");
     await expect(page.getByRole("link", { name: "Update the app" })).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Update the app" })).toHaveCount(0);
-    await page.addInitScript(() => {
-      (window as unknown as Record<string, unknown>).__CF_DESKTOP_VERSION__ = "1.42.0";
-    });
     await asDesktop(page, "liquid");
     await open(page);
     await expect(page.getByRole("region", { name: "Update the app" })).toHaveCount(0);
+    await context.close();
   });
 
   test("a glass name this page does not know (a newer desktop app) falls back to an ordinary page", async ({ page }) => {

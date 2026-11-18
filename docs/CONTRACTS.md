@@ -591,12 +591,15 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   the new app in place for the next start; Windows runs the installer quietly when the app quits, without reopening
   it. Nothing asks again in that run. Failures go to stderr only, never an error dialog. The page gets no access to
   the updater or the dialog (capability still empty).
-* **Old copies** (built before 2026-11-16 16:54) cannot update themselves. They set `__CF_DESKTOP__` but never
-  `__CF_GLASS__` (every newer copy sets it, `"none"` at the least), so the web app tells them apart
-  (`isOldDesktopApp`, lib/background.ts):
-  * Settings › Look & feel › Background, see-through: the note **"Update the app to see through."** and one big
-    vermilion button **Update the app** (the real `none` note, §22.5, and the browser and phone notes are unchanged).
-  * App-wide, the update bar (§12.2) shows the label **Update the app** with **Update** and **Later** (Later hides it
+* **Copies that cannot update themselves** are every copy built before the updater: they set `__CF_DESKTOP__` but
+  never `__CF_DESKTOP_VERSION__` (`cantSelfUpdate`, lib/background.ts). That includes copies built from main between
+  2026-11-16 and the updater, which do show see-through. The oldest of them (built before 2026-11-16 16:54) also
+  never set `__CF_GLASS__` (every newer copy sets it, `"none"` at the least), which picks their see-through note
+  (`isOldDesktopApp`):
+  * Settings › Look & feel › Background, see-through: in the oldest copies the note **"Update the app to see
+    through."**; under the note, in any copy that cannot update itself, one big vermilion button **Update the app**
+    (the real `none` note, §22.5, and the browser and phone notes are unchanged).
+  * App-wide, in any copy that cannot update itself, the update bar (§12.2) shows the label **Update the app** with **Update** and **Later** (Later hides it
     until the next start), whenever no web update is waiting.
   * Both link to the installer for this computer (Mac `.dmg`, Windows `.exe`, from the user agent) at the same
     server with a **trailing dot** in the host (`https://<host>./downloads/...`, `oldAppDownloadUrl` in
@@ -606,8 +609,9 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
     the same site again.
 * **Tests**: cargo (`update.rs`: allowed addresses, the config names the same manifest, a key and
   `requireSignedVersion`; `main.rs`: the version in the script, the dotted link leaves the old window), vitest
-  (`isOldDesktopApp`, the notes, `oldAppDownloadUrl`), Playwright (`e2e/background.spec.ts`: an old wrapper, Mac
-  user agent, gets the note, the button and the bar; newer wrappers never do), `scripts/test-deploy-workflow.sh`
+  (`cantSelfUpdate`, `isOldDesktopApp`, the notes, `oldAppDownloadUrl`), Playwright (`e2e/background.spec.ts`: an
+  old wrapper, Mac user agent, gets the note, the button and the bar; a see-through wrapper with no version gets the
+  bar; wrappers that name a version never do), `scripts/test-deploy-workflow.sh`
   (the key reaches only the desktop build; only desktop-manifest writes latest.json, after desktop-upload).
 
 ### 12.4 Kid-proof UX (a 6–8-year-old must manage it)
@@ -4594,7 +4598,8 @@ an old desktop app, told apart from a real `none` by a missing `__CF_GLASS__`, �
 * pytest `api/tests/test_settings_and_system.py`: defaults (no `backgroundMode` until saved), saving (lower case,
   repeats dropped), every refusal and its message, malformed stored values.
 * Playwright `e2e/glass.ts`: the stand-ins for the real window glass, shared by the specs below. `asDesktop(page,
-  glass, strength?)` simulates the wrapper (`addInitScript` setting `__CF_DESKTOP__` / `__CF_GLASS__`);
+  glass, strength?, version?)` simulates the wrapper (`addInitScript` setting `__CF_DESKTOP__` / `__CF_GLASS__`, and
+  `__CF_DESKTOP_VERSION__` "1.42.0" unless `version` is null, a copy from before the updater);
   `paintGlass` paints what is behind the transparent page: the measured floors rgb(118, 118, 118) and
   rgb(180, 171, 148), the floor each glass is planned for, white, and a busy picture (sky, sun, cloud, red car,
   black garage, grass) blurred and mapped to the measured range for a window in use and not in use.

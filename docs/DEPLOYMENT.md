@@ -387,9 +387,14 @@ The Mac `.dmg` and Windows `.exe` offered by **Get the app** are built by the `d
 - something under `desktop/` changed,
 - the app icon changed,
 - a download is missing from `downloads/` in the web bucket (for example the first deploy),
-- the signing key is set and an update bundle is missing (the first deploy with the updater).
+- the signing key is set and an update bundle is missing, and the installer there was built without the key (the
+  first deploy with the updater, or the first after the secrets were set).
 
-Then both apps are built, as version `1.<run number>.0`.
+Then both apps are built, as version `1.<run number>.0`. Each installer records `updater=true|false` (whether the
+key was used) next to its `source-hash`. When an installer was built with the key but its signed bundle is missing,
+the build and `desktop-plan` show an error annotation instead of rebuilding on every deploy (which would give every
+installed app a new version with nothing changed); the next change under `desktop/` tries again. A missing key is
+an error annotation on every deploy too; neither fails the run.
 
 The app address is read from the Terraform output `app_url` and built into the app. The build job has no OIDC token
 (npm, cargo and the Tauri CLI run there, and none of them may be able to assume the deploy role); it hands the

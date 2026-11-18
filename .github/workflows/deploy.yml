@@ -484,8 +484,10 @@ jobs:
             entry="$(jq -c ".[$i]" <<<"$targets")"
             key="$(jq -r .key <<<"$entry")"
             target="$(jq -r .target <<<"$entry")"
-            live="$(aws s3api head-object --bucket "$WEB_BUCKET" --key "$key" \
-              --query 'Metadata."source-hash"' --output text 2>/dev/null || echo missing)"
+            meta="$(aws s3api head-object --bucket "$WEB_BUCKET" --key "$key" --query Metadata --output json 2>/dev/null || echo null)"
+            live="$(jq -r '(. // {})."source-hash" // "missing"' <<<"$meta")"
+            # updater=true: this installer was built with the signing key, so its update bundle was already tried.
+            tried="$(jq -r '(. // {}).updater // "false"' <<<"$meta")"
             if [ "$live" != "$source_hash" ]; then
               stale=true
               if [ "$live" = "missing" ]; then
@@ -495,8 +497,15 @@ jobs:
               fi
             elif [ "$SIGNING" = "true" ] \
               && ! aws s3api head-object --bucket "$WEB_BUCKET" --key "downloads/updates/${target}.json" >/dev/null 2>&1; then
-              stale=true
-              summary+=("- ${key}: no update bundle yet")
+              if [ "$tried" = "true" ]; then
+                # Built with the key and still no bundle: building again would only give every app a new version
+                # with nothing changed, so this says so loudly instead (the next change to desktop/ tries again).
+                echo "::error::${key} was built with the signing key but has no signed update bundle; installed ${target} apps are not updated."
+                summary+=("- ${key}: signing failed last build, not rebuilt")
+              else
+                stale=true
+                summary+=("- ${key}: no update bundle yet")
+              fi
             else
               summary+=("- ${key}: up to date")
             fi
@@ -508,7 +517,10 @@ jobs:
             matrix='[]'
             summary+=("" "Nothing to build.")
           fi
-          [ "$SIGNING" = "true" ] || summary+=("" "No updater signing key (TAURI_SIGNING_PRIVATE_KEY): installers only, installed apps are not updated.")
+          if [ "$SIGNING" != "true" ]; then
+            echo "::error::No updater signing key (TAURI_SIGNING_PRIVATE_KEY): installers only, installed apps are not updated."
+            summary+=("" "No updater signing key (TAURI_SIGNING_PRIVATE_KEY): installers only, installed apps are not updated.")
+          fi
           {
             echo "matrix=${matrix}"
             echo "source_hash=${source_hash}"
@@ -578,6 +590,7 @@ jobs:
             unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
             echo "::warning::No updater signing key: building the installer without an update bundle."
           fi
+          echo "CF_UPDATER=${updater}" >> "$GITHUB_ENV"
           # A file rather than inline JSON, so no Windows command shim can mangle the quotes.
           config="${RUNNER_TEMP}/tauri-release.json"
           jq -n --arg v "$VERSION" --argjson u "$updater" '{version: $v, bundle: {createUpdaterArtifacts: $u}}' >"$config"
@@ -594,6 +607,8 @@ jobs:
           while IFS= read -r f; do files+=("$f"); done < <(compgen -G "$BUNDLE_GLOB" || true)
           [ "${#files[@]}" -eq 1 ] || { echo "::error::Expected one installer at ${BUNDLE_GLOB}, found ${#files[@]}."; exit 1; }
           mkdir -p "$OUT/installer" "$OUT/update"
+          # Whether the key was used; the upload records it on the installer (desktop-plan reads it back).
+          printf '%s\n' "${CF_UPDATER:-false}" >"$OUT/updater"
           cp "${files[0]}" "$OUT/installer/"
           echo "Built ${files[0]} ($(wc -c <"${files[0]}" | tr -d ' ') bytes)."
           updates=()
@@ -602,6 +617,9 @@ jobs:
             cp "${updates[0]}" "$OUT/update/bundle"
             cp "${updates[0]}.sig" "$OUT/update/bundle.sig"
             echo "Update bundle ${updates[0]} ($(wc -c <"${updates[0]}" | tr -d ' ') bytes), signed."
+          elif [ "${CF_UPDATER:-false}" = "true" ]; then
+            # The installer still ships; desktop-plan will not rebuild for this alone (it reads updater=true).
+            echo "::error::Built with the signing key but found no signed update bundle at ${UPDATE_GLOB}; installed apps will not get this version."
           else
             echo "::warning::No signed update bundle at ${UPDATE_GLOB}; installed apps will not get this version."
           fi
@@ -647,6 +665,9 @@ jobs:
           mapfile -t files < <(find "$DIR" -type f)
           [ "${#files[@]}" -eq 1 ] || { echo "::error::Expected one installer in the build's artifact, found ${#files[@]}."; exit 1; }
           echo "path=${files[0]}" >> "$GITHUB_OUTPUT"
+          updater="$(cat "$DIR/../updater" 2>/dev/null || echo false)"
+          [ "$updater" = "true" ] || updater=false
+          echo "updater=${updater}" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
@@ -687,12 +708,13 @@ jobs:
           KEY: ${{ matrix.key }}
           CONTENT_TYPE: ${{ matrix.content_type }}
           SOURCE_HASH: ${{ needs.desktop-plan.outputs.source_hash }}
+          UPDATER: ${{ steps.file.outputs.updater }}
         run: |
           aws s3 cp "$FILE" "s3://${WEB_BUCKET}/${KEY}" \
             --cache-control "no-cache" \
             --content-type "$CONTENT_TYPE" \
             --content-disposition "attachment; filename=\"${KEY##*/}\"" \
-            --metadata "source-hash=${SOURCE_HASH}" \
+            --metadata "source-hash=${SOURCE_HASH},updater=${UPDATER:-false}" \
             --only-show-errors
           echo "Uploaded ${KEY}."
 

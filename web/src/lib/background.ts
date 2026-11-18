@@ -92,6 +92,24 @@ export function isOldDesktopApp(w: { __CF_DESKTOP__?: unknown; __CF_GLASS__?: un
   return !!w && w.__CF_DESKTOP__ === true && w.__CF_GLASS__ === undefined;
 }
 
+const DESKTOP_VERSION = /^\d+\.\d+\.\d+([-+][\w.+-]*)?$/;
+
+/** The version a desktop app names (`1.<n>.0`), only from apps that update themselves; null otherwise. */
+export function readDesktopVersion(w: { __CF_DESKTOP__?: unknown; __CF_DESKTOP_VERSION__?: unknown } | undefined): string | null {
+  if (!w || w.__CF_DESKTOP__ !== true) return null;
+  const v = w.__CF_DESKTOP_VERSION__;
+  return typeof v === "string" && DESKTOP_VERSION.test(v) ? v : null;
+}
+
+/**
+ * A desktop app that cannot update itself: every copy that has the updater names its version
+ * (`__CF_DESKTOP_VERSION__`), so one without it, see-through or not, needs the new installer (docs/CONTRACTS.md §12.6).
+ * Wider than `isOldDesktopApp`, which only picks the see-through note.
+ */
+export function cantSelfUpdate(w: { __CF_DESKTOP__?: unknown; __CF_GLASS__?: unknown; __CF_DESKTOP_VERSION__?: unknown } | undefined): boolean {
+  return !!w && w.__CF_DESKTOP__ === true && readDesktopVersion(w) === null;
+}
+
 /** Only the desktop wrapper can say there is real window glass; anything else (or an unknown value) is "none". */
 export function readNativeGlass(w: { __CF_DESKTOP__?: unknown; __CF_GLASS__?: unknown } | undefined): NativeGlass {
   if (!w || w.__CF_DESKTOP__ !== true) return "none";

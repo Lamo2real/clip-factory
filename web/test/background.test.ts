@@ -44,7 +44,9 @@ import {
   PANEL_VEIL_FLOOR,
   PICTURE_PAGE_VEIL,
   PICTURE_PANEL_VEIL,
+  cantSelfUpdate,
   isOldDesktopApp,
+  readDesktopVersion,
   OLD_APP_NOTE,
   readNativeGlass,
   resolveLook,
@@ -769,6 +771,22 @@ describe("what is drawn", () => {
     expect(isOldDesktopApp({ __CF_DESKTOP__: false })).toBe(false);
     // The old app reads as "no glass" for the look, so the page stays an ordinary page.
     expect(readNativeGlass({ __CF_DESKTOP__: true })).toBe("none");
+  });
+
+  it("offers the new installer to every desktop app that names no version, see-through or not", () => {
+    // Copies built from main between 2026-11-16 and the updater name a glass but no version: they can't update.
+    for (const glass of [undefined, ...GLASSES, "none"]) {
+      expect(cantSelfUpdate({ __CF_DESKTOP__: true, __CF_GLASS__: glass })).toBe(true);
+      expect(cantSelfUpdate({ __CF_DESKTOP__: true, __CF_GLASS__: glass, __CF_DESKTOP_VERSION__: "1.42.0" })).toBe(false);
+    }
+    expect(cantSelfUpdate({ __CF_DESKTOP__: true, __CF_GLASS__: "liquid", __CF_DESKTOP_VERSION__: "nope" })).toBe(true);
+    expect(cantSelfUpdate({ __CF_DESKTOP__: true, __CF_GLASS__: "liquid", __CF_DESKTOP_VERSION__: 142 })).toBe(true);
+    // Browsers and phones never are.
+    expect(cantSelfUpdate(undefined)).toBe(false);
+    expect(cantSelfUpdate({})).toBe(false);
+    expect(cantSelfUpdate({ __CF_DESKTOP__: false, __CF_DESKTOP_VERSION__: undefined })).toBe(false);
+    expect(readDesktopVersion({ __CF_DESKTOP__: true, __CF_DESKTOP_VERSION__: "1.42.0" })).toBe("1.42.0");
+    expect(readDesktopVersion({ __CF_DESKTOP__: false, __CF_DESKTOP_VERSION__: "1.42.0" })).toBeNull();
   });
 
   it("asks an old desktop app to update, in a few plain words, and keeps every other note", () => {

@@ -1074,8 +1074,9 @@ logs its token counts (`bedrock.usage`), and this table is to be corrected from 
   - *Every desktop build is `1.<deploy run number>.0`*, all targets rebuilt together, so `latest.json` has one version
     for every platform. Bundles go under `downloads/updates/<version>/` (immutable), a pointer per target follows,
     and `latest.json` is written from the pointers after every upload.
-  - *Old copies are told apart* from computers that cannot show glass: they set `__CF_DESKTOP__` but never
-    `__CF_GLASS__`. The Background page and the update bar offer the new app with one big button. The link uses the
+  - *Copies that cannot update themselves name no version* (`__CF_DESKTOP_VERSION__`), see-through or not; the
+    Background page and the update bar offer them the new app with one big button. The oldest also never set
+    `__CF_GLASS__`, which tells them apart from computers that cannot show glass. The link uses the
     same host with a trailing dot, which the old app treats as another site and hands to the system browser (the old
     window cannot save a download; plain http is upgraded back to https by the CSP and HSTS).
 - **Alternatives.** *GitHub Releases as the update source*: a second place to publish, and the repository is public
