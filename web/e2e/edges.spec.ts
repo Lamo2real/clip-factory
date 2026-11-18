@@ -214,3 +214,26 @@ test("every button reads as one without a ring: a fill, an underline or an icon,
   failures.push(...(await bare("/ with Ask open")));
   expect([...new Set(failures)]).toEqual([]);
 });
+
+// Opening Ask by a tap or a click puts the caret in its box: that is no keyboard focus, so no ring (a deeper well and a
+// soft glow show it is in use). After Tab the ring is back.
+test("the Ask box wears no ring when Ask is opened by a click, and the ring after Tab", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await settle(page);
+  await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+  const box = page.locator(".help-panel__input");
+  await expect(box).toBeFocused();
+  const ring = () =>
+    box.evaluate((el) => {
+      const s = getComputedStyle(el);
+      const border = parseFloat(s.borderTopWidth) > 0 && !/rgba\([^)]*,\s*0\)|transparent/.test(s.borderTopColor);
+      const solid = s.boxShadow.split(/,(?![^(]*\))/).some((l) => /0px 0px 0px [1-9]/.test(l.trim()));
+      return border || solid;
+    });
+  expect(await ring()).toBe(false);
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(box).toBeFocused();
+  expect(await ring()).toBe(true);
+});

@@ -373,6 +373,7 @@
 /* Tapped or clicked into (lib/inputModality.ts): the field shows it is in use by its deeper fill and a soft glow; the
    ring is for the keyboard. */
 :where(html:not([data-input="keyboard"])) .input:focus-visible:not([aria-invalid="true"]) {
+  border-color: transparent;
   box-shadow: var(--focus-field-soft);
 }
 .input[aria-invalid="true"]:focus-visible {
