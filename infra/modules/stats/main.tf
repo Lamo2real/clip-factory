@@ -5,6 +5,8 @@
 #                  which the code enforces per post; the tick only sets the fastest possible pace.
 #   cf-prod-learn  turns the owner's "Best this week" picks into one learning (Bedrock Converse, Fable) and marks
 #                  the picked clips' vectors best = true. cf-prod-api invokes it asynchronously on PUT .../best.
+#                  Once a day (05:00 UTC, its own EventBridge rule) it also learns from the clips that did far better
+#                  than normal 7 days after posting (§16.12): no new winners, no model call.
 #                  Like every model call it gets the owner's skills (§18.6), read from skills/* in the media bucket.
 #
 # Both run the shared package (api/dist/lambda.zip). No reserved concurrency: new accounts' limits forbid it, and
@@ -46,7 +48,9 @@ locals {
     learn = {
       handler = "clipfactory_api.weekly.handler"
       memory  = 512
-      timeout = 300
+      # The daily run stops starting new work after DAILY_BUDGET_SECONDS (720, api/.../learning_rules.py), so a few
+      # creators' model calls fit. Changed in place (no replace).
+      timeout = 900
       env = {
         TABLE_NAME     = var.table_name
         MEDIA_BUCKET   = var.media_bucket
@@ -55,7 +59,8 @@ locals {
         VECTOR_BUCKET  = var.vector_bucket
         VECTOR_INDEX   = var.vector_index
       }
-      # learn_week is idempotent per WEEK revision (a superseded run writes nothing), so one retry is safe.
+      # learn_week is idempotent per WEEK revision (a superseded run writes nothing) and the daily run is idempotent
+      # (frozen posts, seen winners and fixed lesson ids), so one retry is safe.
       max_retries   = 1
       max_event_age = 3600
     }
@@ -74,6 +79,8 @@ locals {
     ]
     learn = [
       # The WEEK item, the week's clips and posts, the "Best of week" learning (put, or deleted when no picks).
+      # Daily (§16.12): owners through gsi2 STATS (Query, never Scan), posts, STAT# snapshots, clips, jobs, LESSON#
+      # items and the LEARNSTATE item.
       { Sid = "Data", Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem"], Resource = local.table_resources },
       # Converse with Claude Fable through the global profile, and the Titan embedding for a missing vector.
       { Sid = "Models", Action = ["bedrock:InvokeModel"], Resource = concat(var.model_invoke_arns, [var.embed_model_arn]) },
@@ -192,4 +199,32 @@ resource "aws_lambda_permission" "events" {
   function_name = aws_lambda_function.fn["stats"].function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.stats.arn
+}
+
+# ---------- Daily learning from day-7 numbers (§16.12) ----------
+resource "aws_cloudwatch_event_rule" "learn_daily" {
+  name                = "${var.name}-learn-daily"
+  description         = "Once a day: freeze day-7 numbers, find clips that did far better than normal and learn from them."
+  schedule_expression = "cron(0 5 * * ? *)" # 05:00 UTC
+  state               = "ENABLED"
+  tags                = local.tags
+}
+
+resource "aws_cloudwatch_event_target" "learn_daily" {
+  rule      = aws_cloudwatch_event_rule.learn_daily.name
+  target_id = "learn-daily"
+  arn       = aws_lambda_function.fn["learn"].arn # unqualified: always the current code
+  # A run that cannot be delivered within an hour waits for tomorrow's (nothing is lost: posts stay unfrozen).
+  retry_policy {
+    maximum_event_age_in_seconds = 3600
+    maximum_retry_attempts       = 2
+  }
+}
+
+resource "aws_lambda_permission" "learn_daily" {
+  statement_id  = "events-learn-daily"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.fn["learn"].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.learn_daily.arn
 }

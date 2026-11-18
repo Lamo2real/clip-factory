@@ -127,8 +127,9 @@ From "2 days after we've uploaded to the social media on the clips" (see interpr
   checks every post of that clip.
 - AC2: The check stores views, likes, comments and shares on the post through the same stats refresh as BR-20, so it
   never goes over a platform's limit (phase 2 for real numbers).
-- AC3: Claude distils one short learning from the owner's recent posts; the agent receives the latest 10 learnings
-  on every job.
+- AC3: (Changed 2026-11-18, CONTRACTS.md §16.12.) Once a day Clip Factory freezes each post's day-7 views, finds the
+  clips that did much better than that creator's normal on that platform and turns what they share into lessons;
+  active lessons reach every job as "Prior learnings". The one-sentence 48-hour learning is retired.
 - AC4: The Insights screen lists the learnings and the posts with their numbers.
 - AC5: After the check the clip is remembered with its numbers in the learning memory (NFR-14), so later jobs and the
   review screens can find it.
@@ -281,7 +282,7 @@ service we use (Bedrock, AgentCore, whatever), when it is generating stuff or re
 - AC1: Every call that asks Claude to write, pick, judge, describe or read something gets **every** skill: the
   built-in ones and every skill the owner added. That covers the clip agent on AgentCore (moment picking with the
   Claude Agent SDK and its Bedrock fallback, the facecam check, the checklist with its hook rewrite, the captions) and
-  the API's Bedrock calls (the 48-hour learning, the weekly best learning and Ask Clip Factory's optional rewrite,
+  the API's Bedrock calls (the daily creator lessons, the weekly best learning and Ask Clip Factory's optional rewrite,
   [BR-24](#br-24-ask-clip-factory-answers-that-take-you-there)).
 - AC2: There is no way to switch a skill off, and no call may skip the skills: a test in each code package fails the
   build if a model call does not go through the shared helpers that add them.

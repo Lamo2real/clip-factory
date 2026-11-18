@@ -767,7 +767,7 @@ def test_handler_forget_removes_youtube_numbers(store: db.Store, table: FakeTabl
     store.put({"pk": db.user_pk(USER), "sk": db.stat_sk(youtube["postId"], iso(NOW)), "type": "stat", "views": 5})
     store.put({"pk": db.user_pk(USER), "sk": db.stat_sk(tiktok["postId"], iso(NOW)), "type": "stat", "views": 9})
     out = handle({"action": "forget", "userId": USER, "platform": "youtube"}, make_deps(store, FakeHttp()))
-    assert out == {"action": "forget", "posts": 1, "snapshots": 1}
+    assert out == {"action": "forget", "posts": 1, "snapshots": 1, "lessons": 0}
     item = stored(table, youtube)
     for gone in ("metrics", "gsi2pk", "gsi2sk", "statsDueAt"):
         assert gone not in item

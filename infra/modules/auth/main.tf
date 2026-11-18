@@ -54,6 +54,12 @@ resource "aws_cognito_user_pool" "this" {
   }
 
   tags = local.tags
+
+  # Owner rule (2026-11-17): holds the owner's sign-in, so Terraform must never destroy or replace it. The deploy's
+  # delete gate (scripts/check-plan-deletes.sh) checks the plan too.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_cognito_user_pool_client" "web" {
@@ -93,5 +99,7 @@ resource "aws_cognito_user" "owner" {
   }
   lifecycle {
     ignore_changes = [attributes, temporary_password]
+    # The owner's account: never destroyed by a deploy (owner rule, 2026-11-17).
+    prevent_destroy = true
   }
 }

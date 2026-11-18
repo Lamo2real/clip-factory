@@ -5,7 +5,8 @@
   ``refresh_posts(reason="manual")`` on those posts, then ``refreshStartedAt`` is removed from each, always.
 * ``{"action": "forget", "userId", "platform": "youtube"}`` (async Invoke by ``DELETE /v1/accounts/youtube``, §17.6):
   the numbers read from YouTube are removed from its posts (``metrics`` and the poll index) and their ``STAT#``
-  snapshots deleted (YouTube Developer Policies: delete API data after revocation).
+  snapshots deleted (YouTube Developer Policies: delete API data after revocation). Their day-7 numbers go too, and
+  every creator lesson learned from YouTube numbers is deleted (no tombstone: the data behind it is gone, §16.12).
 * Anything else → log ``stats.bad_event``.
 
 Platform and network problems are handled inside ``refresh_posts`` (they become ``statsError``), so the handler
@@ -18,7 +19,7 @@ import os
 from collections.abc import Callable
 from typing import Any
 
-from .. import db
+from .. import db, lessons
 from ..ids import is_ulid
 from ..log import log
 from .poll import run_tick
@@ -69,7 +70,22 @@ def _manual(event: dict[str, Any], deps: StatsDeps) -> dict[str, Any]:
     return {"action": "refresh", "updated": sorted(report.updated), "outcomes": report.outcomes}
 
 
-FORGET_FIELDS = ["metrics", "gsi2pk", "gsi2sk", "statsDueAt", "lastSnapshotAt", "lastSnapshotViews", "insightsDueAt"]
+FORGET_FIELDS = [
+    "metrics",
+    "gsi2pk",
+    "gsi2sk",
+    "statsDueAt",
+    "lastSnapshotAt",
+    "lastSnapshotViews",
+    "insightsDueAt",
+    # The day-7 number is read from the platform too (§16.12): it goes, and so do the lessons built on it.
+    "day7",
+    "day7At",
+    "day7Source",
+    "day7State",
+    "day7CheckedAt",
+    "day7Verdict",  # the winner verdict and the baseline median it was judged against
+]
 
 
 def _forget(event: dict[str, Any], deps: StatsDeps) -> dict[str, Any]:
@@ -88,8 +104,9 @@ def _forget(event: dict[str, Any], deps: StatsDeps) -> dict[str, Any]:
         for stat in deps.store.query_all(pk, db.stat_prefix(str(post["postId"]))):
             deps.store.delete(stat["pk"], stat["sk"])
             snapshots += 1
-    log("info", "stats.forget", platform=platform, posts=len(found), snapshots=snapshots)
-    return {"action": "forget", "posts": len(found), "snapshots": snapshots}
+    removed = lessons.forget_platform(deps.store, user_id, platform)
+    log("info", "stats.forget", platform=platform, posts=len(found), snapshots=snapshots, lessons=removed)
+    return {"action": "forget", "posts": len(found), "snapshots": snapshots, "lessons": removed}
 
 
 _deps: StatsDeps | None = None

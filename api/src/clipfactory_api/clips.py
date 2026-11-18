@@ -37,6 +37,9 @@ INTERNAL_FIELDS = (
     "flowRun",
     "flowExecutionArn",
     "publishClaimAt",
+    # §16.12: what the clip says (for the daily second look) and every key of its creator stay server side.
+    "spokenText",
+    "creatorKeys",
 )
 PUBLISH_PENDING = "pending"
 PUBLISH_STARTED = "started"

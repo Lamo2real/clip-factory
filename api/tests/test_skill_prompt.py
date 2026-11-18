@@ -25,7 +25,7 @@ from clipfactory_api.skill_prompt import (
     skills_block,
 )
 from clipfactory_api.skills import load_builtins
-from conftest import USER, Clock, seed_clip
+from conftest import USER, Clock
 from fakes import FakeBedrock, FakeS3, client_error
 from test_skills import LOCKED
 
@@ -274,23 +274,6 @@ def test_file_cache_bounds() -> None:
 # --- every API model call gets the block ----------------------------------------------------------------------
 
 
-def _measured(store: db.Store) -> None:
-    clip = seed_clip(store, status="posted")
-    store.put(
-        {
-            "pk": db.user_pk(USER),
-            "sk": db.post_sk("P1"),
-            "type": "post",
-            "userId": USER,
-            "postId": "P1",
-            "clipId": clip["clipId"],
-            "platform": "youtube",
-            "status": "posted",
-            "metrics": {"views": 100, "likes": 9, "comments": 1, "shares": 2},
-        }
-    )
-
-
 def _assert_block_first(request: dict[str, Any], task: str) -> None:
     system = request["system"]
     assert system[0]["text"].startswith('<owner_skills count="3">')
@@ -299,20 +282,6 @@ def _assert_block_first(request: dict[str, Any], task: str) -> None:
     assert "Never swear." in system[0]["text"]  # a legacy item turned "off" is used too
     assert system[-1] == {"text": task}
     assert sum(part.get("text", "").count("<owner_skills") for part in system) == 1
-
-
-def test_distil_sends_the_block_first(store: db.Store, s3_client: FakeS3, builtin_dir: Path) -> None:
-    _measured(store)
-    _owner_item(store, s3_client, "funny-moments-first", OWNER_MD.encode())
-    _owner_item(store, s3_client, "old-rules", OLD_MD.encode(), enabled=False)
-    bedrock = FakeBedrock()
-    outcome = learn.distil(
-        store, bedrock, "m", USER, media=_media(s3_client), clock=Clock(), builtins=lambda: load_builtins(builtin_dir)
-    )
-    assert outcome == "learning"
-    (request,) = bedrock.calls
-    _assert_block_first(request, learn.SYSTEM_PROMPT)
-    assert len(request["system"]) == 2  # a short block gets no cache point
 
 
 def test_ask_week_sends_the_block_first(store: db.Store, s3_client: FakeS3, builtin_dir: Path) -> None:

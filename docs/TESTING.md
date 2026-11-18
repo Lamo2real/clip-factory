@@ -418,6 +418,11 @@ Clip Factory window.
   button per screen (plus the update bar's Reload); every button on phones is at least 48 × 48 px; every button except
   the phone tab bar has visible text; Throw away shows Undo and sends nothing until 8 s pass; Undo restores the clip.
 
+- **What it learned** (`e2e/learned.spec.ts`, `test/lessons.test.ts`): lessons grouped by creator with the chip,
+  platform, evidence line and winner links; Turn off / Turn on; Delete only after "Delete this lesson?"; the empty
+  and not-enough states; Find a setting reaches it; Library links to it; no overflow, tap targets ≥ 44 px and axe
+  contrast at 320–1920 px in light and dark; the screenshots spec adds `settings-learned`.
+
 ### Scripts
 - `scripts/release-areas.sh`: `Area:` lines win over the folder map; the folder map uses the longest prefix; no match
   gives `["Improvements"]`; no previous version gives `["First release"]`; at most three labels, duplicates removed,
@@ -464,7 +469,7 @@ Clip Factory window.
   ≥ 2,000 characters are left), the list of skills left out, the empty block, the `skills.block` counts log, and the
   shared golden file `tests/fixtures/skills_block_golden.txt` byte for byte; `load_skills` reads each file once (a
   second call reads S3 zero times), skips oversize, missing and denied files, and raises after 3 retries;
-  `distil_learning` and `ask_week` send the block as `system[0]` (a built-in and an owner skill, legacy
+  `ask_week` and the daily lessons call (`lessons.ask`) send the block as `system[0]` (a built-in and an owner skill, legacy
   `enabled: false` items included) and the task prompt last, with a cache point only from 8,000 characters;
   `test_skills_everywhere.py` fails on any `.converse(` outside `learn.converse_text`, any `converse_text(` without
   `skills=`, an alias of `.converse` or `.invoke_model` (used without calling it), a model method named in a string
@@ -527,8 +532,42 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
   `sessionId`.
 - **Clip flow**: only `pending_integration` posts → outcome `not_posted` with no wait; a queued post is published once
   even when its step is replayed; exhausted retries mark only that post `failed`; the wait is named `wait-48h` and lasts
-  48 hours; distil outcomes (`max_tokens`, `refusal`, `content_filtered`, `no_learning`) write no Learning; the vector is
+  48 hours; the retired `distil` step calls no model and writes no Learning (`{"outcome": "retired"}`); the vector is
   upserted with `performed` and the performance JSON.
+
+### Learn from results (`api/tests/test_learn_results.py`, pytest)
+[CONTRACTS.md §16.12](CONTRACTS.md#1612-learn-from-results-creator-lessons-from-day-7-numbers-owner-request-2026-11-18):
+- **Creator key**: channel id first, normalised names, uploads have none; the agent's `creators.py` is a byte-for-byte
+  copy.
+- **Day 7**: the window edges (6.49 and 8.51 days out, 6.5 and 8.5 in); the reading closest to 7 days wins; nothing
+  outside the window is used; `0` is a number, a snapshot without views is not a reading; old snapshots count only
+  when their views changed; a refresh that did not read views (insights only on YouTube with metrics from before
+  `viewsUpdatedAt`, counts only on Instagram) never stamps the old views as day 7, and an Instagram insights refresh
+  that brings views does; a disconnect between reading the snapshots and writing day 7 keeps the number out; frozen once, missing stays missing; a post is frozen only after 8.5 days.
+- **Winners**: an all-equal baseline names none (the MAD floor); fewer than 20 own posts falls back to "all
+  creators"; too few anywhere names none and says how many more; platforms never mix; the clip under test is left out;
+  a bigger channel's normal clips are not owner-wide winners (each post divided by its creator's median); a baseline
+  of zeros names none (the views and median floors); a post is judged once, so an old post never becomes a winner
+  when the 90-day baseline moves.
+- **Traits**: 3 winners, 2 source videos, a lift of 1.5 (each guard alone), a missing fact counts on neither side, at
+  least 10 other clips with the fact to compare with, "all creators" winners from 2 creators; two jobs of one stream
+  are one source; a name two channels share joins neither.
+- **Words**: an invented number is rejected and retried once; still wrong after the retry is dropped; a fake clip id,
+  three sentences, ids in the text and number words are rejected (teens, tens, compounds, "x10", "x2", multipliers,
+  fractions), number words from the evidence pass; no retry without time for it; the call sends the skills block first and asks for
+  the JSON schema.
+- **Daily run**: freezes, judges and writes a `trial` lesson with code-computed evidence; a second run the same day
+  changes no item and calls no model; a quiet day and one lucky clip call no model; not enough clips gives the
+  "needs" counts; one creator's Bedrock failure leaves the others learned and its winners unseen; the time budget
+  defers the model call; trial → active only after 7 days and a new winner; expiry after 90 days; at most 5 active;
+  off and on; a deleted lesson's tombstone blocks it; old clips get their creator from the job (read only); a name key
+  joins its id key; owners come from gsi2 (Query, no Scan); `weekly.handle` runs the daily mode on `aws.events`; only
+  posts of the last 90 days are joined and kept in `seen`; freezing stops when the budget is spent; a lesson is never
+  written over the owner's delete or a disconnect; the state is not written over a disconnect (`version`).
+- **Forget**: disconnecting YouTube removes every `day7*` field, the YouTube lessons and their state.
+- **Routes**: GET, PATCH off/on (400 for anything else, 404 for a bad or unknown id, 409 when it keeps losing a race;
+  "on" only from off, an expired lesson unchanged), DELETE (204, then 404 and gone from GET); an expired lesson reads
+  `expired`.
 
 ### Live updates and webhooks (pytest)
 - **Authorizer**: accepts a token signed with the fixed test RSA key in `tests/fixtures/jwks.json`; rejects a wrong
@@ -655,6 +694,13 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
   light and dark, and `setup-todo-scrolled` (the pill on its glass bar) at 375 and 1024 px.
 
 ### Agent (pytest)
+- Prior learnings (`tests/test_learnings.py`): the exact heading `Prior learnings`, only active unexpired lessons for
+  this job's creator keys and then "all creators" (trial, off, deleted, expired and other creators' lessons left out),
+  the section left out when empty, and present right after the skills block in the moment-picking SDK prompt file, the
+  Converse fallback, the second look, the checklist review and the captions; the retired 48-hour learnings never reach
+  a prompt.
+  Finalize stores `creatorKey`, `creatorKeys`, `creatorName`, `wordCount`, `firstWordSec` and `spokenText` (absent
+  for an upload without speech).
 - `/ping` answers `Healthy` when idle and `HealthyBusy` while a job runs; `/invocations` accepts `process_job`,
   `cancel` and `health`.
 - Each pipeline step with stubbed yt-dlp, ffmpeg, Transcribe and Bedrock: step statuses, progress and heartbeats are
@@ -751,7 +797,13 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
 - The WebSocket authorizer sets no result TTL and no payload format version; WebSocket and REST logs contain no query
   or `requestOverride` and `data_trace_enabled = false`.
 - The vector index is float32, 1024, cosine with the four non-filterable keys.
-- No `aws_sqs_queue` or `aws_scheduler_*` remains; the only `aws_cloudwatch_event_rule` is `cf-prod-stats`.
+- No `aws_sqs_queue` or `aws_scheduler_*` remains; the only `aws_cloudwatch_event_rule`s are `cf-prod-stats` and
+  `cf-prod-learn-daily` (`cron(0 5 * * ? *)`, targeting the unqualified `cf-prod-learn` with its own
+  `aws_lambda_permission`; the learn role has no `dynamodb:Scan`; learn timeout 900 s).
+- The delete gate: `scripts/test-check-plan-deletes.sh` (a plan that deletes or replaces the table, the user pool, a
+  secret or a bucket fails with the resource named) and `scripts/test-deploy-workflow.sh` (the gate runs between
+  `terraform plan` and `terraform apply`); the table, user pool, owner user, state-key secret, buckets and vector
+  bucket and index carry `prevent_destroy`.
 - Stats ([CONTRACTS.md §16.9](CONTRACTS.md#169-terraform-module-inframodulesstats-wired-in-envsprod)): the rule is
   `rate(15 minutes)`, derived from `config/platforms.json` (a test override with every interval at 30 gives
   `rate(30 minutes)`); its target and the Lambda permission's source ARN; `cf-prod-stats` retries 0 and event age 900 s,

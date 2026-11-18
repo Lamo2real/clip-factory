@@ -229,6 +229,13 @@ jobs:
             echo
             echo "The full plan is in the log of the 'terraform plan' step. It is applied next, without approval."
           } >> "$GITHUB_STEP_SUMMARY"
+      # Owner rule (2026-11-17): a deploy never deletes or replaces the table, the user pool, a secret or a bucket
+      # that holds the owner's data (connected platforms, clips, numbers). The plan is stopped here, before apply.
+      - name: delete gate (nothing that holds the owner's data is deleted or replaced)
+        working-directory: infra/envs/prod
+        run: |
+          terraform show -json prod.tfplan > "${RUNNER_TEMP}/plan.json"
+          bash "${GITHUB_WORKSPACE}/scripts/check-plan-deletes.sh" "${RUNNER_TEMP}/plan.json"
       - name: terraform apply (exactly the saved plan)
         working-directory: infra/envs/prod
         run: terraform apply -input=false -auto-approve prod.tfplan

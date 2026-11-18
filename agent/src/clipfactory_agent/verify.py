@@ -16,6 +16,7 @@ from typing import Any
 from . import picture, transcript
 from .bedrock import Bedrock
 from .guard import Deadline, GuardTripped, second_look_budget
+from .learnings import with_prior
 from .moments import Moment, validate
 from .skills import SkillsBlock
 from .util import JobCanceled, gather_all, hms, log
@@ -210,8 +211,11 @@ async def second_look(
     check_cancel: Callable[[], Awaitable[None]],
     on_progress: Callable[[float], None] | None = None,
     deadline_seconds: float = VERIFY_DEADLINE,
+    prior: Sequence[str] = (),
 ) -> tuple[list[Moment], list[Moment], list[dict[str, Any]]]:
-    """Looks at every chosen moment and spare, a few at a time. Never raises but for a cancel."""
+    """Looks at every chosen moment and spare, a few at a time. Never raises but for a cancel. It keeps, drops or
+    swaps moments and can write a new hook, so it gets "Prior learnings" (``prior``) too (§16.12)."""
+    system = with_prior(list(prior), VERIFY_SYSTEM)
     moments = [*chosen, *spares]
     answers: list[dict[str, Any] | None] = [None] * len(moments)
     budget = second_look_budget(len(moments))
@@ -236,7 +240,7 @@ async def second_look(
                     budget.spend()
                     try:
                         answers[i] = await bedrock.structured(
-                            system=VERIFY_SYSTEM,
+                            system=system,
                             skills=skills,
                             content=[*frame_blocks(shown), {"text": look_text(m, words, speakers, lo, hi)}],
                             tool="check_moment",

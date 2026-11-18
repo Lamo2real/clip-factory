@@ -11,6 +11,7 @@ import { compact, postStatusLabel, STATUS_LABEL } from "../../lib/metrics.ts";
 import { WeekView } from "./WeekView.tsx";
 import { byPlatformOrder, count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
+import { settingsPath } from "../../lib/settingsTree.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { useAction } from "../../lib/motion.ts";
 import { applyClipEvent, applyLearningEvent, applyPostEvent, withMedia } from "../../lib/liveCache.ts";
@@ -141,14 +142,18 @@ function AllClips() {
                     <li key={l.learningId}>
                       <p className="user-text">{l.text}</p>
                       <span className="learnings__meta">
+                        {l.kind === "week" ? "" : "Older note · "}
                         {relative(l.createdAt)} · from {plural(l.postIds.length, "post")}
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="muted">Tips show up here two days after your first clips are posted.</p>
+                <p className="muted">Star your best clips in This week, and Clip Factory learns from them.</p>
               )}
+              <p className="learnings__more">
+                <A href={settingsPath("clip-making", "learned")}>See what it learned from your best clips</A>
+              </p>
             </div>
             <div className="totals">
               <div className="stat glass">

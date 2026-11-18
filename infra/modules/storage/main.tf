@@ -20,6 +20,12 @@ resource "aws_s3_bucket" "this" {
   for_each = local.buckets
   bucket   = each.value
   tags     = local.tags
+
+  # Owner rule (2026-11-17): holds the owner's data, so Terraform must never destroy or replace it. The deploy's
+  # delete gate (scripts/check-plan-deletes.sh) checks the plan too.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_ownership_controls" "this" {

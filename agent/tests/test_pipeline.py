@@ -46,6 +46,31 @@ def test_clip_item_matches_the_contract() -> None:
     assert "sourceUrlAt" not in upload
 
 
+def test_finalize_stores_who_the_clip_is_from_and_its_pacing() -> None:
+    """§16.12: additive fields for the daily second look. Missing facts stay missing."""
+    st = state()
+    st.source = {"platform": "youtube", "channelId": "UC123", "channel": "Big  Streamer"}
+    st.captions = {"01CLIP": dict.fromkeys(FIELDS, "x")}
+    caps = [{"t0": 0.4, "t1": 1.0, "text": "no  way"}, {"t0": 1.0, "t1": 2.0, "text": "he did it"}]
+    r = RenderResult(Path("clip.mp4"), Path("cover.jpg"), 20.0, [(100, 120)], caps, "facecam_top", False)
+    item = clip_item(st, Candidate(make_moment(), r), "01CLIP", 1, "p/", "youtube", "")
+    assert item["creatorKey"] == "youtube:id:UC123"
+    assert item["creatorKeys"] == ["youtube:id:UC123", "youtube:name:big streamer"]
+    assert item["creatorName"] == "Big Streamer"
+    assert (item["wordCount"], item["firstWordSec"], item["spokenText"]) == (5, 0.4, "no way he did it")
+    st.source = {"platform": "upload", "filename": "me.mp4"}
+    silent = RenderResult(Path("clip.mp4"), Path("cover.jpg"), 20.0, [(100, 120)], [], "facecam_top", False)
+    upload = clip_item(st, Candidate(make_moment(), silent), "01CLIP", 1, "p/", "upload", "")
+    for missing in ("creatorKey", "creatorKeys", "creatorName", "wordCount", "firstWordSec", "spokenText"):
+        assert missing not in upload
+
+
+def test_the_agent_copy_of_the_creator_rules_matches_the_api() -> None:
+    root = Path(__file__).resolve().parents[2]
+    api = (root / "api/src/clipfactory_api/creators.py").read_text()
+    assert (root / "agent/src/clipfactory_agent/creators.py").read_text() == api
+
+
 # --- the whole pipeline with fakes: ten steps, and every way the deep analysis can be missing (ADR-40) -----------
 
 import asyncio  # noqa: E402
@@ -104,6 +129,9 @@ class MemStore:
         return []
 
     async def latest_learnings(self, user_id: str, n: int = 10) -> list[dict[str, Any]]:
+        return []
+
+    async def creator_lessons(self, user_id: str) -> list[dict[str, Any]]:
         return []
 
     async def exists(self, key: str) -> bool:

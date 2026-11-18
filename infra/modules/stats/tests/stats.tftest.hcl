@@ -134,6 +134,37 @@ run "rule_targets_the_stats_function" {
   }
 }
 
+run "daily_learning_rule_targets_the_learn_function" {
+  command = plan
+
+  assert {
+    condition = (aws_cloudwatch_event_rule.learn_daily.name == "cf-test-learn-daily" &&
+      aws_cloudwatch_event_rule.learn_daily.schedule_expression == "cron(0 5 * * ? *)" &&
+    aws_cloudwatch_event_rule.learn_daily.state == "ENABLED")
+    error_message = "The rule <name>-learn-daily must run once a day at 05:00 UTC."
+  }
+
+  assert {
+    condition     = aws_cloudwatch_event_target.learn_daily.rule == "cf-test-learn-daily" && aws_cloudwatch_event_target.learn_daily.arn == aws_lambda_function.fn["learn"].arn
+    error_message = "The daily rule's target must be the unqualified learn function."
+  }
+
+  assert {
+    condition = (aws_lambda_permission.learn_daily.principal == "events.amazonaws.com" &&
+      aws_lambda_permission.learn_daily.action == "lambda:InvokeFunction" &&
+      aws_lambda_permission.learn_daily.function_name == "cf-test-learn" &&
+    aws_lambda_permission.learn_daily.source_arn == aws_cloudwatch_event_rule.learn_daily.arn)
+    error_message = "Only the daily rule may invoke cf-test-learn through EventBridge."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.fn["learn"].policy).Statement : !contains(s.Action, "dynamodb:Scan")
+    ])
+    error_message = "cf-prod-learn finds owners through gsi2 (Query); it never gets dynamodb:Scan."
+  }
+}
+
 run "functions_match_the_contract" {
   command = plan
 
@@ -154,8 +185,8 @@ run "functions_match_the_contract" {
 
   assert {
     condition = (aws_lambda_function.fn["stats"].memory_size == 256 && aws_lambda_function.fn["stats"].timeout == 300 &&
-    aws_lambda_function.fn["learn"].memory_size == 512 && aws_lambda_function.fn["learn"].timeout == 300)
-    error_message = "stats is 256 MB / 300 s, learn 512 MB / 300 s."
+    aws_lambda_function.fn["learn"].memory_size == 512 && aws_lambda_function.fn["learn"].timeout == 900)
+    error_message = "stats is 256 MB / 300 s, learn 512 MB / 900 s (the daily run stops new work after 720 s)."
   }
 
   assert {

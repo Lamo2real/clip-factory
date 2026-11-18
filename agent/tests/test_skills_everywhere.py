@@ -426,6 +426,9 @@ async def test_analyze_builds_the_block_and_counts_skipped_skills(tmp_path: Path
         async def latest_learnings(self, user_id: str, n: int = 10) -> list[dict[str, Any]]:
             return []
 
+        async def creator_lessons(self, user_id: str) -> list[dict[str, Any]]:
+            return []
+
     class Tracker:
         def report(self, f: float) -> None:
             pass

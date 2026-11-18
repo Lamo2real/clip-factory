@@ -216,8 +216,10 @@ jobs:
         run: bash scripts/test-write-web-config.sh
       - name: ensure-state-bucket.sh against a fake aws (only this account's bucket is used)
         run: bash scripts/test-ensure-state-bucket.sh
-      - name: deploy.yml checks (alarm email, no OIDC token in the desktop build, actions pinned to SHAs)
+      - name: deploy.yml checks (alarm email, no OIDC token in the desktop build, actions pinned to SHAs, delete gate)
         run: bash scripts/test-deploy-workflow.sh
+      - name: the delete gate refuses plans that delete or replace the owner's data
+        run: bash scripts/test-check-plan-deletes.sh
 
   changes:
     runs-on: ubuntu-24.04

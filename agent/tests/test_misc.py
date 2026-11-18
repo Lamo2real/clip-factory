@@ -153,6 +153,8 @@ def test_source_fields_and_heatmap() -> None:
         "thumbnailUrl": "https://i/x.jpg",
     }
     assert sources.heatmap(info) == [{"start": 0.0, "end": 10.0, "value": 0.5}]
+    # §16.12: the channel id is kept when the site gives one (the creator key prefers it to the name).
+    assert sources.source_fields({**info, "channel_id": "UC1"}, "youtube")["channelId"] == "UC1"
     seen: list[float] = []
     sources.progress_reader(seen.append)("[download]  42.5% of ~ 100.00MiB at 2.00MiB/s ETA 00:30")
     assert seen == [0.425]
@@ -178,7 +180,7 @@ def test_learnings_texts() -> None:
         {"learningId": "01C", "text": ""},
         {"learningId": "01B", "text": "new"},
     ]
-    assert learnings.texts(rows) == ["new", "old one"]
+    assert learnings.texts(rows, 10) == ["new", "old one"]
 
 
 def test_probe_and_tail() -> None:

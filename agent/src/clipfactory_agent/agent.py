@@ -18,7 +18,7 @@ from typing import Any, Final
 from . import loudness, transcript
 from . import signals as signals_mod
 from .bedrock import Bedrock, ModelError
-from .learnings import Learnings
+from .learnings import Learnings, with_prior
 from .learnings import prompt_section as learnings_section
 from .moments import CANDIDATES_SCHEMA, MOMENT_SCHEMA, MOMENT_TYPES, Moment, choose, dedupe, spare_count, validate
 from .skills import SkillsBlock, compose_system_text
@@ -47,7 +47,7 @@ class Brief:
     words: list[list[Any]]
     loud: list[float]
     heatmap: list[dict[str, float]] = field(default_factory=list)
-    learnings: list[str] = field(default_factory=list)  # the latest ten other learnings (§16.7)
+    prior: list[str] = field(default_factory=list)  # "Prior learnings": active creator lessons (§16.12)
     language: str | None = None
     similar: list[Hit] = field(default_factory=list)  # "what worked before" (S3 Vectors, §14.6)
     week_learnings: list[str] = field(default_factory=list)  # the latest four "Best of week" learnings (§16.7)
@@ -78,13 +78,18 @@ in two: use them to see back-and-forth, never as names."""
 
 
 def system_prompt(b: Brief) -> str:
-    """The task's own system prompt: stable rules first, then the owner's learnings and similar past clips, so prompt
-    caching can reuse the prefix. The skills block is not in here: every call puts it first (§18.6). The picture
-    paragraph (and the opening rule that allows a moment without talking) is only there when picture signals are."""
-    taught = learnings_section(Learnings(week=b.week_learnings, other=b.learnings))
+    """The task's own system prompt: "Prior learnings" first (right after the skills block, which every call puts
+    first, §18.6, §16.12), then the stable rules, then the owner's best-of-week learnings and similar past clips, so
+    prompt caching can reuse the prefix. The picture paragraph (and the opening rule that allows a moment without
+    talking) is only there when picture signals are."""
+    taught = learnings_section(Learnings(week=b.week_learnings))
     similar = prompt_section(b.similar)
     seen = PICTURE_RULES if b.signals is not None else ""
     who = SPEAKER_NOTE if b.speakers else ""
+    return with_prior(b.prior, _rules(b) + "".join(f"\n\n{part}" for part in (seen, who, taught, similar) if part))
+
+
+def _rules(b: Brief) -> str:
     return f"""You are the clip finder of Clip Factory. You read the transcript of one long video (a stream or a video)
 and pick the moments that will make the best vertical short clips (TikTok, Reels, Shorts). Follow the owner's skills
 above; the short-form video playbook is the core: section A2 (self-sufficient, built on a feeling, pays off), the six
@@ -102,9 +107,7 @@ Rules for every moment:
 - score 1–10: how likely it is to do well. Be honest; most moments are 4–6, only the best are 8+.
 - Respect the owner's notes and skills (required tags, banned topics, brand rules). Never pick content they rule out.
 - Times are seconds from the start of the video. Transcript lines are stamped [h:mm:ss].
-Loudness spikes (shouting, laughing) and YouTube's "most replayed" peaks are strong hints, not proof.""" + "".join(
-        f"\n\n{part}" for part in (seen, who, taught, similar) if part
-    )
+Loudness spikes (shouting, laughing) and YouTube's "most replayed" peaks are strong hints, not proof."""
 
 
 def brief_json(b: Brief) -> dict[str, Any]:

@@ -74,5 +74,18 @@ else
   not_ok "actions not pinned to a commit SHA (with '# <version>'):"$'\n'"${unpinned}"
 fi
 
+# 5. The delete gate runs on the saved plan after terraform plan and before terraform apply (owner rule 2026-11-17).
+infra="$(job infra)"
+plan_line="$(grep -n 'terraform plan -input=false -out=prod.tfplan' <<<"$infra" | head -1 | cut -d: -f1)"
+gate_line="$(grep -n 'scripts/check-plan-deletes.sh' <<<"$infra" | head -1 | cut -d: -f1)"
+apply_line="$(grep -n 'terraform apply -input=false -auto-approve prod.tfplan' <<<"$infra" | head -1 | cut -d: -f1)"
+if [ -n "$plan_line" ] && [ -n "$gate_line" ] && [ -n "$apply_line" ] \
+  && [ "$plan_line" -lt "$gate_line" ] && [ "$gate_line" -lt "$apply_line" ] \
+  && grep -q 'terraform show -json prod.tfplan' <<<"$infra"; then
+  ok "the delete gate checks the saved plan between terraform plan and terraform apply"
+else
+  not_ok "deploy.yml must run scripts/check-plan-deletes.sh on terraform show -json prod.tfplan before the apply"
+fi
+
 echo "${passed} passed, ${failed} failed"
 [ "$failed" -eq 0 ]

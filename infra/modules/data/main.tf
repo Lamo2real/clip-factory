@@ -84,4 +84,10 @@ resource "aws_dynamodb_table" "this" {
   }
 
   tags = { Component = "data" }
+
+  # Owner rule (2026-11-17): holds the owner's data, so Terraform must never destroy or replace it. The deploy's
+  # delete gate (scripts/check-plan-deletes.sh) checks the plan too.
+  lifecycle {
+    prevent_destroy = true
+  }
 }

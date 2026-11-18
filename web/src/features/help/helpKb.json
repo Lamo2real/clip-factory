@@ -602,6 +602,44 @@
       ]
     },
     {
+      "id": "learn-from-clips",
+      "route": "/settings/clip-making/learned",
+      "where": "Settings › Clip making › What it learned",
+      "title": "How Clip Factory learns from your clips",
+      "keywords": [
+        "learn",
+        "learns",
+        "learned",
+        "learning",
+        "lessons",
+        "prior learnings",
+        "what it learned",
+        "better clips",
+        "smarter",
+        "best clips",
+        "undo a lesson",
+        "turn off a lesson",
+        "bad lesson"
+      ],
+      "answer": "Every day Clip Factory checks your clips 7 days after posting. When some clips did much better than normal for that streamer, it looks at what they share and writes a short lesson. Lessons it is sure about go to your skills as **Prior learnings**. You can turn a lesson off or delete it in **What it learned**.",
+      "steps": [
+        "Open **Settings**.",
+        "Tap **Clip making**.",
+        "Tap **What it learned**.",
+        "Tap **Turn off** or **Delete** on a lesson you do not like."
+      ],
+      "actions": [
+        {
+          "id": "learn-from-clips:open",
+          "label": "Open What it learned",
+          "to": "/settings/clip-making/learned",
+          "highlight": [
+            "what-it-learned"
+          ]
+        }
+      ]
+    },
+    {
       "id": "best-clip-week-views",
       "route": "/library",
       "where": "Library › This week",

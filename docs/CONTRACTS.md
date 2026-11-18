@@ -137,6 +137,9 @@ try again in a minute, §17.4), `internal`.
 | POST `/v1/accounts/{platform}/connect` | – | `{ "authorizeUrl", "expiresAt" }` (§17.4; superseded the phase-1 `501`) |
 | GET `/v1/posts` | query `clipId?` | `{ "posts": Post[] }` |
 | GET `/v1/insights` | – | `{ "learnings": Learning[], "posts": Post[] }` (posts with metrics) |
+| GET `/v1/lessons` | – | `{ "lessons": Lesson[], "creators": LessonCreator[], "checkedAt"? }` (§16.12) |
+| PATCH `/v1/lessons/{lessonId}` | `{ "status": "off" \| "on" }` | `{ "lesson": Lesson }` (§16.12; 404 unknown or deleted) |
+| DELETE `/v1/lessons/{lessonId}` | – | `204` (§16.12: a tombstone stays; 404 unknown) |
 | GET `/v1/clips/{clipId}/performance` | – | `ClipPerformance` (§16.2; 404 if not the caller's or `review`/`declined`) |
 | POST `/v1/clips/{clipId}/stats/refresh` | `{ "platforms"?: Platform[] }` (default: all) | `202 { "platforms": RefreshResult[] }` (§16.2; never bypasses a platform's limits) |
 | GET `/v1/weeks/{week}` | `week` = `yyyy-Www` (ISO week); query `from`, `to` (ISO UTC instants of the owner's local Monday 00:00 and next Monday 00:00) | `{ "week": WeekView }` (§16.2) |
@@ -197,7 +200,8 @@ interface Post { postId: string; clipId: string; platform: Platform; status: "pe
                  refreshing?: boolean /* a stats refresh is running (refreshStartedAt < 5 min ago) */;
                  nextRefreshAt?: string /* earliest manual refresh, §16.5 */; error?: string }
 interface Learning { learningId: string; text: string; createdAt: string; postIds: string[];
-                     kind?: "post" | "week" /* absent = "post" */; week?: string; title?: string /* "Best of week 2026-W46" */;
+                     kind?: "post" | "week" /* absent = "post": the retired 48-hour learning, shown as an older note */;
+                     week?: string; title?: string /* "Best of week 2026-W46" */;
                      clipIds?: string[] /* week learnings: the picked clips */ }
 interface Performance { views: number; likes: number; comments: number; shares: number; posts: number; checkedAt: string }
 interface SimilarClip { clipId: string; hook: string; title: string; momentType: MomentType;
@@ -231,6 +235,8 @@ Keys: `pk` (S), `sk` (S); GSI `gsi1` on `gsi1pk`/`gsi1sk` (projection ALL); spar
 | Week | `USER#{userId}` | `WEEK#{yyyy-Www}` | – | `type="week"`, WeekView fields without `clips` + `revision`, `unpickedClipIds` (§16.3) |
 | Rate budget | `RATE#{platform}` | `BUDGET` | – | `type="rate"`, per-platform counters, `blockedUntil` (§16.4) |
 | Learning | `USER#{userId}` | `LEARNING#{learningId}` | – | Learning fields (incl. `kind`, `week`, `title`, `clipIds`) |
+| Creator lesson | `USER#{userId}` | `LESSON#{lessonId}` | – | `type="learning"`, `kind="creator"`, Lesson fields + `supportPostIds`, `statusBeforeOff?`, `relearnedAt?`, `deletedAt?` (§16.12) |
+| Learn state | `USER#{userId}` | `LEARNSTATE` | – | `type="learnstate"`, `seen` (winner post ids looked at, per `{creatorKey}|{platform}`), `creators` (LessonCreator[]), `checkedAt`, `version` (§16.12) |
 | Account | `USER#{userId}` | `ACCOUNT#{platform}` | – | §17.4 (tokens never here; Secrets Manager `cf-prod/platforms/*`); also `SETUP#{platform}` and `OAUTH#{nonce}`/`STATE` items (§17.4) |
 
 Built-in skills are not items: the API lists `skills/*/SKILL.md` bundled in its package as `builtin: true`.
@@ -268,9 +274,11 @@ and deleted by `GET /v1/skills` when it sees them.)
   structured outputs) use the same model id.
 * Skills (superseded by §18.6): built-in skills from `/app/skills` plus **every** skill the owner added (no on/off
   filter) are written to `<workdir>/.claude/skills/<name>/SKILL.md` (zips extracted) so the Claude Agent SDK loads
-  them; the shared skills block (§18.6) is the first part of the system prompt of **every** model call the agent makes. The agent also receives the owner's latest 4 "Best of week" learnings, the
-  latest 10 other learnings and the top 8 similar past clips from S3 Vectors, the owner's best-of-week picks first
-  ("What worked before", §14.6, §16.7).
+  them; the shared skills block (§18.6) is the first part of the system prompt of **every** model call the agent makes. Right after it, the moment-picking
+  prompt, the second look and every hook-writing call get "Prior learnings" (the active creator lessons, §16.12) when
+  there are any. The moment-picking prompt also gets the owner's latest 4 "Best of week" learnings and the top 8
+  similar past clips from S3 Vectors, the owner's best-of-week picks first ("What worked before", §14.6, §16.7). The
+  retired 48-hour learnings are never sent.
 * Pipeline steps (keys in §5; ten since ADR-40): resolve (yt-dlp metadata / S3 head; picks the small picture
   rendition, `meta.picture`) → download (audio only for links, capped at `maxSourceHours`; then starts the picture
   preparation in the background) → transcribe (Amazon Transcribe, word timestamps, language auto, speaker labels unless `CF_DEEP=off`; a job that
@@ -421,7 +429,7 @@ watcher, `watchModel` in `config/models.json`; unset and absent from the file �
 |---|---|---|---|
 | `cf-prod-api` | `clipfactory_api.http.handler` | HTTP API (all routes) | `TABLE_NAME`, `MEDIA_BUCKET`, `AGENT_RUNTIME_ARN`, `JOB_FLOW_ARN`, `CLIP_FLOW_ARN`, `VECTOR_BUCKET`, `VECTOR_INDEX`, `APP_URL`, `VERSION`, `STATS_FUNCTION_ARN`, `LEARN_FUNCTION_ARN` (§16), `HOOKS_URL`, `SECRET_PREFIX`, `OAUTH_STATE_SECRET`, `WEB_BUCKET`, `DISTRIBUTION_ID` (§17.9) |
 | `cf-prod-stats` | `clipfactory_api.stats.handler.handler` | EventBridge rule `cf-prod-stats` `rate(15 minutes)` + async Invoke by `cf-prod-api` (manual refresh) | `TABLE_NAME`, `STATS_TIME_BUDGET_SECONDS=240` (§16.5), `SECRET_PREFIX` (§17.9) |
-| `cf-prod-learn` | `clipfactory_api.weekly.handler` | async Invoke by `cf-prod-api` on `PUT /v1/weeks/{week}/best` | `TABLE_NAME`, `MODEL_ID`, `EMBED_MODEL_ID`, `VECTOR_BUCKET`, `VECTOR_INDEX` (§16.6), `MEDIA_BUCKET` (the owner's skills, §18.6) |
+| `cf-prod-learn` | `clipfactory_api.weekly.handler` | async Invoke by `cf-prod-api` on `PUT /v1/weeks/{week}/best`; EventBridge rule `cf-prod-learn-daily` `cron(0 5 * * ? *)` (§16.12) | `TABLE_NAME`, `MODEL_ID`, `EMBED_MODEL_ID`, `VECTOR_BUCKET`, `VECTOR_INDEX` (§16.6), `MEDIA_BUCKET` (the owner's skills, §18.6) |
 | `cf-prod-job-flow` (durable, alias `live`) | `clipfactory_api.flows.job_flow.handler` | async Invoke by `cf-prod-api` on the alias | `TABLE_NAME`, `AGENT_RUNTIME_ARN` |
 | `cf-prod-clip-flow` (durable, alias `live`) | `clipfactory_api.flows.clip_flow.handler` | async Invoke by `cf-prod-api` on the alias | `TABLE_NAME`, `MEDIA_BUCKET`, `MODEL_ID`, `EMBED_MODEL_ID`, `VECTOR_BUCKET`, `VECTOR_INDEX`, `SECRET_PREFIX` (§17.9) |
 | `cf-prod-ws-authorizer` | `clipfactory_api.realtime.authorizer.handler` | WebSocket `$connect` REQUEST authorizer | `USER_POOL_ID`, `USER_POOL_CLIENT_ID` |
@@ -435,8 +443,8 @@ the SQS publish queue and the EventBridge resources: §14.
 * Confirm → API writes one `Post` per enabled platform (`pending_integration` while no account is connected for that
   platform, `queued` when connected) and starts the durable `cf-prod-clip-flow` (§14.5), which publishes the `queued`
   ones through the platform adapter (adapters arrive in phase 2; today every platform is `pending_integration`), waits
-  48 hours, reads metrics (through the shared stats refresh, §16.5), distils one short Learning and updates the clip's
-  vector. Between and after those steps `cf-prod-stats` keeps every posted post's numbers fresh for 30 days (§16).
+  48 hours, reads metrics (through the shared stats refresh, §16.5) and updates the clip's vector (the one-sentence
+  48-hour Learning is retired, §16.12). Between and after those steps `cf-prod-stats` keeps every posted post's numbers fresh for 30 days (§16).
 * A `running` job whose agent stops sending heartbeats for 15 minutes becomes `failed` ("Making the clips
   stopped partway. Tap Try again.") through the job-flow callback heartbeat timeout (§14.4), not a scan.
 
@@ -883,12 +891,10 @@ Replaces the publish queue, DLQ, publisher, Scheduler group/role and perf-check.
      poller, so it respects every rate budget and writes `metrics` + a snapshot); a platform that is blocked or fails
      after 3 attempts keeps its latest stored `Post.metrics` (written by the poller), and only a post with no metrics
      at all is skipped.
-  6. `distil`: `learn.distil(user_id)`: Bedrock **Converse** with `MODEL_ID` (`global.anthropic.claude-fable-5-1`),
-     `inferenceConfig={"maxTokens": 4000}` (room for adaptive thinking + one sentence), no `temperature`/`topP`/`topK`,
-     `additionalModelRequestFields={"output_config": {"effort": "low"}}` (as perf-check did). Writes one Learning; outcomes
-     `max_tokens`, `refusal`, `content_filtered`, `no_learning` write nothing (§13).
+  6. `distil`: **retired** (§16.12, ADR-41). The step keeps its name so a running flow replays the same steps, calls no
+     model, writes nothing and returns `{"outcome": "retired"}`. Older 48-hour Learnings stay readable.
   7. `upsert-vector`: §14.6, status `performed`, `performance` = sums over the measured posts.
-  Returns `{"clipId", "outcome": "done" | "not_posted", "learningId"?}`.
+  Returns `{"clipId", "outcome": "done" | "not_posted"}`.
 * **Terraform:** like job-flow, with `durable_config { execution_timeout = 259200, retention_period = 14 }` (48 h wait +
   publish/metrics/distil, 3 days), 512 MB, function timeout 900 s, log group `/aws/lambda/cf-prod-clip-flow`.
 * **IAM (role `cf-prod-fn-clip-flow`):** `AWSLambdaBasicDurableExecutionRolePolicy`; the table read/write set the API uses
@@ -1267,6 +1273,8 @@ broadcast too). Internal fields (`revision`, `unpickedClipIds`, `refreshStartedA
 | `insightsDueAt` | ISO: next slow-insights read (YouTube Analytics only; §16.4 `insightsIntervalMinutes`) |
 | `refreshStartedAt`, `nextRefreshAt` | manual refresh claim and cooldown (§16.2) |
 | `lastSnapshotAt` | ISO of the last STAT# item |
+| `day7`, `day7At`, `day7Source`, `day7State`, `day7CheckedAt` | the frozen day-7 number (§16.12): views, when they were read, `{statKey, viewsReadAt}`, `"frozen"` or `"missing"`, when it was decided. Never public |
+| `day7Verdict` | the winner verdict, judged once (§16.12): `{scope: "creator" \| "all", winner, baseline, median?, judgedAt}`. Never public |
 | `statsError` | last stats error, plain sentence (cleared on success) |
 
 ```ts
@@ -1304,7 +1312,11 @@ interface XExtra         { impressions?: number; reposts?: number; quotes?: numb
 | X | `GET https://api.x.com/2/tweets?ids={≤100}&tweet.fields=public_metrics,non_public_metrics,organic_metrics,created_at&expansions=attachments.media_keys&media.fields=public_metrics,non_public_metrics` (user context); posts ≥ 30 days old: same without `non_public_metrics`/`organic_metrics` (both fields) | attached video media `public_metrics.view_count` (never `impression_count`) | `like_count` | `reply_count` | `retweet_count` | `impressions` = public impression_count, `reposts` = retweet_count, `quotes`, `bookmarks`, `linkClicks` = url_link_clicks, `profileClicks` = user_profile_clicks, `engagements`, `playback0..100` = media non_public playback_{n}_count |
 
 **STAT# snapshot** (`pk USER#{userId}`, `sk STAT#{postId}#{iso}`): `type "stat"`, `postId`, `clipId`, `platform`,
-`at`, `views`, `likes`, `comments`, `shares` (nullable numbers), `final?: true`, `ttl = now + snapshotTtlDays (90) d`.
+`at`, `views`, `likes`, `comments`, `shares` (nullable numbers), `final?: true`, `ttl = now + snapshotTtlDays (90) d`,
+`viewsReadAt` (§16.12: `metrics.viewsUpdatedAt`, when the views in it were really read; snapshots written before it
+existed, or from metrics stored before `viewsUpdatedAt` existed, have none). `PostMetrics.viewsUpdatedAt` (internal,
+never public) is stamped by whichever part of a refresh carried the key `views`: the counts on YouTube, TikTok and X,
+the slow insights on Instagram and Facebook; a refresh that did not read views keeps the old stamp.
 Written after a successful fast read when `lastSnapshotAt` is absent, or ≥ `snapshotEveryMinutes` (60) ago, or the
 views changed by ≥ 1 % since the last snapshot and ≥ 15 min passed, or it is the final read. Totals survive the TTL on
 `Post.metrics`.
@@ -1471,8 +1483,8 @@ WEEK# changes reach the browser over the WebSocket. Shared pure functions live i
 * "What worked before" query: the two-query merge of §14.6 (best first, then performed, ≤ 8, fallback < 3 hits);
   `best` hits are labelled "Owner's pick: best of the week".
 * Learnings brief: Query `begins_with(sk, "LEARNING#")`, newest first, ≤ 50 items; the latest **4** with `kind ==
-  "week"` go first under the heading "The owner's best-of-week picks taught", then the latest **10** others under
-  "Learnings". Both appear in the moment-selection prompt; empty groups are left out.
+  "week"` go under the heading "The owner's best-of-week picks taught" in the moment-selection prompt. Learnings
+  without a kind (the retired 48-hour ones) are not sent (§16.12). "Prior learnings" come first: §16.12.
 * Finalize writes `best: false` in each new vector's metadata.
 
 ### 16.8 Web
@@ -1585,7 +1597,7 @@ at $10 a month." (value from a shared constant mirroring `platforms.json` `x.bud
 * **EventBridge**: `aws_cloudwatch_event_rule` `cf-prod-stats`, `schedule_expression = "rate(${local.stats_tick}
   minutes)"` (15, from platforms.json), `state = "ENABLED"`; `aws_cloudwatch_event_target` → the function (unqualified
   ARN); `aws_lambda_permission` for `events.amazonaws.com` with `source_arn` = the rule ARN.
-* **`cf-prod-learn`**: handler `clipfactory_api.weekly.handler`, 512 MB, timeout 300 s, env `TABLE_NAME`, `MODEL_ID`,
+* **`cf-prod-learn`**: handler `clipfactory_api.weekly.handler`, 512 MB, timeout 900 s (§16.12), also on the daily rule `cf-prod-learn-daily`, env `TABLE_NAME`, `MODEL_ID`,
   `EMBED_MODEL_ID`, `VECTOR_BUCKET`, `VECTOR_INDEX`; event invoke config `maximum_retry_attempts = 1`,
   `maximum_event_age_in_seconds = 3600`. Role `cf-prod-fn-learn`: `dynamodb:GetItem`, `PutItem`, `UpdateItem`,
   `DeleteItem`, `Query`, `BatchGetItem` on the table and `index/*`; `bedrock:InvokeModel` on `model_invoke_arns` and
@@ -1662,6 +1674,127 @@ Shared names: `stats.refresh.refresh_posts(deps, posts, *, reason, now) -> Refre
   the mock `learning` event, empty week copy. `overflow.spec.ts` gains `/clips/{id}`, `/library?view=week` at 320, 375,
   600, 768, 1024, 1440 px (no horizontal scroll, no element outside its box); `screenshots.spec.ts` adds both pages at
   375 and 1440 px, light and dark.
+
+### 16.12 Learn from results: creator lessons from day-7 numbers (owner request, 2026-11-18)
+
+The owner's words: "I want our stream-clipping app to learn from its own results." About 7 days after posting, some
+clips do far better than normal; a daily run notices them, looks at them again, and turns what they share into short
+lessons that reach the clip picker as **Prior learnings**. It learns per creator, never from a handful of clips or
+from luck, and never makes up numbers. Every rule value lives in `api/src/clipfactory_api/learning_rules.py`
+([ADR-41](DECISIONS.md#adr-41-learn-from-day-7-numbers-per-creator-and-per-platform)).
+
+**Creator** (`creators.py`, the ONE place; the agent has a byte-for-byte copy its tests compare). The streamer whose
+stream is clipped: `"{platform}:id:{channelId}"` when yt-dlp gave a channel id (`Source.channelId`, new), else
+`"{platform}:name:{normalised channel}"`; uploads and links without a channel have none (learned only "all
+creators", key `"*"`). Finalize writes `creatorKey`, `creatorKeys` (every key the source answers to) and `creatorName`
+on each Clip and on the Job (additive). Older clips get theirs from their job's `source` at read time (nothing is
+rewritten); a name key joins an id key once one newer clip of that channel carries both.
+
+**Day 7** (`day7.py`). Each post's `day7` is the views of the reading closest to 7 days after `postedAt`, accepted only
+when read between 6.5 and 8.5 days after posting, and only frozen once that window has closed. "Read" means
+`viewsReadAt` on the STAT# snapshot (a refresh that did not read views keeps the old ones, §16.5); a snapshot from before
+`viewsReadAt` existed counts (at its `at`) only when its views differ from the snapshot before it. No reading in the
+window → `day7State "missing"` for good: never interpolated, stretched, copied or set to 0. `0` only when the platform
+said 0. `day7Source {statKey, viewsReadAt}` traces every number. The poller reads posts every 30–360 minutes until day
+30 and keeps snapshots 90 days (§16.4), so the window always has readings while a platform is connected.
+
+**Winner test** (`winners.py`), per creator and per platform (platforms are never compared or added up):
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `BASELINE_DAYS` | 90 | baseline = that creator's posts on that platform with a day-7 number, posted in the last 90 days, the clip under test left out |
+| `MIN_BASELINE` | 20 | fewer → the owner-wide baseline on that platform (scope `"all"`, also ≥ 20); fewer again → no winner, the status says how many more |
+| `WINNER_RATIO` | 2.0 | day-7 views ≥ 2 × the baseline median … |
+| `WINNER_Z` | 2.5 | … and a robust z-score ≥ 2.5 on log(1 + views): (x − median) / (1.4826 × max(MAD, floor)) |
+| `MAD_FLOOR` | 0.2 | on the log scale; with it the z-test alone needs about 2.1 × the median, so an all-equal baseline names no winner |
+| `WINNER_MIN_VIEWS` | 100 | a winner has at least 100 day-7 views … |
+| `BASELINE_MIN_MEDIAN` | 10 | … and its baseline median is at least 10 (a baseline of zeros names no winner) |
+| `POOL_MIN_CREATOR_POSTS` | 5 | owner-wide fallback: each post is divided by its own creator's median on that platform and scaled to the median creator, so a bigger channel's normal clips are not winners; a creator needs ≥ 5 other posts there to be in it |
+| `JUDGE_WITHIN` | 7 days | each post is judged once, in the first run within 7 days of its day-7 number freezing, and the verdict is stored (`Post.day7Verdict`); a later shift of the 90-day baseline never makes an old post a new winner |
+
+**Second look** (`traits.py`). Facts from what is stored only (a missing fact counts on neither side): moment type,
+length, layout, hook word count, words per second (`wordCount` / length) and time to the first word (`firstWordSec`,
+both new at finalize, with `spokenText`, the first 1,000 characters said), score, posting hour (UTC). Each fact gives
+one trait bucket. A trait is a **candidate** when ≥ 3 winners share it, they come from ≥ 2 source videos (the job's
+source link or upload: two jobs of one stream are one source), ≥ 10 other clips have the same kind of fact
+(`TRAIT_MIN_OTHERS`; clips made before pacing was stored have none), and its rate among winners is ≥ 1.5 × its rate
+among those other clips. An "all creators" trait also needs winners from ≥ 2 creators (`TRAIT_MIN_CREATORS_ALL`). Then ONE Converse call per creator and platform with new
+winners (same model and helper as `learn.py`, the skills block first, JSON schema output): the candidate traits with
+their counts, the winners' hooks, transcripts and facts, and up to 8 normal clips (closest to the median). No images
+(the helper sends text only). It answers `{"lessons": [{"trait", "text", "clipIds"}]}`.
+
+**No made-up numbers** (`lessons.check_lesson`). The text is 1–2 short sentences (≤ 240 characters), no ids or JSON;
+every number in it (digits, also glued to letters as in "x10", and number words: units, teens, tens, compounds such as
+"twenty-five", scales, multipliers such as "twice" or "quadruple", fractions such as "half" or "quarter", ordinals
+from "third") must equal a number in the evidence the model was given; every cited clip
+must be a winner. Otherwise one retry with the problems listed, then the lesson is dropped and logged
+(`learn.lesson_dropped`). The evidence stored with a lesson is computed by code only.
+
+**Lesson** (`LESSON#{lessonId}`, `lessonId` = the first 24 hex characters of sha256(`creatorKey|platform|trait`)):
+
+```ts
+interface Lesson { lessonId: string; kind: "creator"; creatorKey: string /* "*" = all creators */; creatorName?: string;
+  scope: "creator" | "all"; platform: Platform; trait: string; traitLabel?: string; text: string;
+  status: "trial" | "active" | "off" | "expired" /* "deleted" items are never listed */;
+  evidence?: { baseline: "creator" | "all"; measured: number; winners: number; medianViews: number | null;
+    winnerViews: { clipId: string; postId: string; views: number }[];
+    trait: { winnersWith; winnersKnown; othersWith; othersKnown; winnerPercent; otherPercent; sources: number };
+    computedAt: string };
+  clipIds: string[]; clips: { clipId: string; hook: string }[] /* GET only: cited clips that still exist */;
+  createdAt: string; confirmedAt?: string; expiresAt?: string; updatedAt?: string }
+interface LessonCreator { creatorKey: string; creatorName: string;
+  platforms: Partial<Record<Platform, { measured: number; needed: number; winners: number }>> }
+```
+
+| Status | When | Given to the picker |
+|---|---|---|
+| `trial` | just written ("Trying it") | no |
+| `active` | a run ≥ 7 days after creation or the last confirmation finds ≥ 1 NEW winner with the same trait ("Using it"); expires 90 days after the last confirmation; at most 5 per creator (most supporting winners win, the rest go back to `trial`) | yes |
+| `expired` | past `expiresAt` (also counted at read time) | no; may be learned again from new evidence |
+| `off` | the owner turned it off (`statusBeforeOff` remembers trial or active; "on" restores it) | no |
+| `deleted` | the owner deleted it: text and evidence removed, the tombstone blocks the same creator + platform + trait for good (no control brings it back, ADR-41) | no |
+
+An expired lesson has no Turn off / Turn on (PATCH returns it unchanged); only Delete.
+
+Disconnecting YouTube (`stats` action `forget`, §17.6) also removes `day7*` from its posts and deletes every lesson
+learned from YouTube numbers (no tombstone) and its entries in `LEARNSTATE` (bumping its `version`). The daily run never
+writes a number back over a disconnect: day 7 is written only while the post still has `metrics`, a verdict only while
+`day7State` is `"frozen"`, a new lesson only when none with its id exists or the one there is expired (so an owner's
+delete or off made during the run stands) and is taken back out when the clips it rests on lost their numbers, and
+`LEARNSTATE` only when its `version` is still the one the run read.
+
+**Daily run** (`daily.py`). EventBridge rule `cf-prod-learn-daily`, `cron(0 5 * * ? *)` → `cf-prod-learn` (the same
+function as §16.6; `weekly.handle` sends `source == "aws.events"` here before the weekly checks). Owners come from the
+poll index (gsi2 `STATS`, Query only; the role has no Scan). Per owner: freeze due posts → judge the posts not judged
+yet and store the verdicts → expire → per group:
+confirm its lessons; when it has winners not in `LEARNSTATE.seen`, ask for lessons for the candidate traits that are
+not already a live, off or deleted lesson (none → no call) → cap → save `LEARNSTATE` only when it changed (`seen` keeps
+only posts of the last 90 days). Only posts of the last 90 days are joined with their clips and jobs. Idempotent (the
+automatic retry changes nothing); one creator's failure is logged and its winners stay unseen for tomorrow. Time:
+freezing stops at `DAILY_BUDGET_SECONDS` (720); a model attempt (the first or the one retry) starts only with
+`MODEL_CALL_SECONDS` (150) left; the daily run's own Bedrock client waits at most 60 s per read and tries twice
+(`BEDROCK_READ_TIMEOUT`, `BEDROCK_MAX_ATTEMPTS`), so the run ends by about 870 s; the function timeout is 900 s. Returns `{"action": "daily", "owners", "frozen", "missing", "modelCalls", "lessonsWritten",
+"confirmed", "expired", "capped", "failed", "deferred"}`.
+
+**Delivery** (agent, `learnings.py`). A section headed exactly `Prior learnings`, a one-line note ("Patterns from
+this creator's past clips … Advice, never a rule …"), then one plain pattern per line: active, unexpired lessons whose
+`creatorKey` is one of the job's creator keys, then active `"*"` lessons (≤ 10, same text once). It goes right after
+the skills block in the moment-picking prompt (SDK prompt file and the Converse fallback), the second look
+(`verify.second_look`: it keeps, swaps or drops moments and can write a new hook), the checklist review (it can write a
+new hook) and the captions; the two watchers, which only report what is seen, get none. No active lessons → no section. The owner's clipper skill (added in Settings)
+reads this input; the 48-hour learnings are not sent any more.
+
+**Routes** (`routes/lessons.py`): GET `/v1/lessons`, PATCH `/v1/lessons/{lessonId}` `{"status": "off" | "on"}`,
+DELETE `/v1/lessons/{lessonId}`; a bad id is 404, any other body 400; 409 "That lesson just changed. Try again." when
+the daily run changed the lesson twice while it was being turned off or on (every toggle write is conditional). Mock parity: `web/src/api/mock/lessons.ts`.
+
+**Web**: Settings › Clip making › **What it learned** (`/settings/clip-making/learned`, apple `what-it-learned`,
+between Skills and YouTube help). The top line: "Every day Clip Factory checks your clips 7 days after posting.
+Lessons it is sure about go to your skills as Prior learnings." Grouped by creator ("All creators" last): each
+lesson's text, a chip (Trying it, Using it, Turned off, Too old), the platform, "4 of 31 clips did much better than
+normal" ("… clips from all your creators …" for the All creators group), Too old lessons say "Too old to use. New clips can teach it again." and have only Delete, the winner clips as links, Turn off / Turn on and Delete (with "Delete this lesson?"). A creator without
+enough clips: "YouTube: Needs 12 more posted clips". Before the first run: "Nothing yet. …". Library's "What's working"
+labels 48-hour learnings "Older note" and links here; it does not repeat the lessons. Help: guide `learn-from-clips`.
 
 ## 17. Posting setup: a setup list per platform, real Connect, real posting (owner request, 2026-11-16)
 
