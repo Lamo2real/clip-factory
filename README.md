@@ -12,8 +12,9 @@ from the browser). It is built so simply that a child could use it.
 1. **Sign in.** One owner account (Amazon Cognito). You stay signed in for as long as you use the app at least once a month.
 2. **Paste a link or upload a file.** A YouTube, Twitch or Kick link, or a video from your device.
 3. **The agent gets to work in the cloud.** An agent on Amazon Bedrock AgentCore, running Claude Fable 5.1, downloads
-   the audio, transcribes it with Amazon Transcribe and finds the most viral moments, guided by your skills and by
-   what worked on earlier posts. In Settings › Clip making › Skills you write a skill by answering three questions
+   the audio, transcribes it with Amazon Transcribe, **watches the whole video** (Claude and Amazon Nova 2 Lite look
+   at the picture, so a crash or a stunt with nobody talking is found too) and finds the most viral moments from the
+   words, the sound and the picture, guided by your skills and by what worked on earlier posts. In Settings › Clip making › Skills you write a skill by answering three questions
    (or upload a `SKILL.md` or `.zip`), read it, change it and delete it. Every skill is always used: every AI call,
    on AgentCore or Bedrock, in the agent or the API, gets all of them first.
    Every step appears on screen within a second or two, pushed over a WebSocket connection.
@@ -154,6 +155,7 @@ steps are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 | 1 | Kid-proof screens (one next step, big buttons, Undo instead of "Are you sure?") | Added after the first build |
 | 1 | Settings as a tree with search and a folder panel; pick your click and error sounds (30 each) | Added after the first build ([contracts §15](docs/CONTRACTS.md#15-settings-as-a-tree-and-choosing-your-click-sounds-owner-request-2026-11-16)) |
 | 1 | Clip performance page (video, five lines, five stacks), numbers refresh every 15–30 min and Refresh numbers, Library › This week with the weekly best | Added ([contracts §16](docs/CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16)); shows real numbers once accounts connect |
+| 1 | Watch the video: before picking, the whole picture is watched by Claude Fable 5.1 and Amazon Nova 2 Lite and merged with the words, the sound and who is talking; silent moments (a crash, a stunt) can be found; each clip says why it was picked | Added ([ADR-40](docs/DECISIONS.md#adr-40-watch-the-whole-video-before-picking), [agent](docs/AGENT.md#watching-the-video)); no cost ceiling, by the owner's decision; real cost and speed to be confirmed on the first deployed jobs |
 | 1 | Ask Clip Factory: in-app help with steps, navigation and spotlight, grounded in the app's own code, Claude Haiku 5.5 optional | Added ([contracts §19](docs/CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16), [help](docs/HELP_ASSISTANT.md)) |
 | 2 | Set up posting: a guided setup list per platform, real Connect (OAuth, tokens in Secrets Manager) and real posting to YouTube, TikTok, Instagram, Facebook and X | Added ([contracts §17](docs/CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16), [steps](docs/SETUP_POSTING.md)); works once the owner sets up each platform |
 | 2 | Real numbers from each platform | Added with the setup; TikTok numbers need TikTok's audit |

@@ -266,6 +266,13 @@ Clip Factory window.
 - **Main flow**: paste a YouTube link → job appears → steps advance → clips appear → open a clip → edit a caption →
   Confirm → celebration → the clip leaves Review and the badge counts down. Decline removes a clip.
 - **Upload**: pick a file → progress → job created from the upload.
+- **Watch the video** (`e2e/deep.spec.ts`, `test/deepSteps.test.tsx`,
+  [ADR-40](DECISIONS.md#adr-40-watch-the-whole-video-before-picking)): a new job shows the ten steps in order with
+  their plain labels, "Watch the video" fifth; a job saved with the old nine steps still shows its nine (the mock's
+  `__cfMock.jobs.oldSteps()` knob makes one); a skipped Watch step shows its message. On Review, a clip with
+  `pickedFor` shows one small "Why: Loud laugh + Fast action" line under the summary and a clip without shows no line
+  at all, at 320, 390 and 1280 px, with no cursor change and no sideways scroll. The mock's step labels equal the
+  API's list.
 - **Link validation**: YouTube, Twitch and Kick are accepted; any other link is refused before a job is created.
 - **Skills** (`e2e/skills.spec.ts`, every test at 375×812 and 1440×900,
   [CONTRACTS.md §18.9](CONTRACTS.md#189-mock-mode-and-tests-offline-fakes-only)):
@@ -422,6 +429,9 @@ Clip Factory window.
   and the posting setup routes of [§17.4](CONTRACTS.md#174-api-all-jwt-5-errors-routessetuppy-package-clipfactory_apioauth)
   (Connect without keys is `409 conflict` "Paste your {Platform} keys first.").
 - The user id comes from the JWT claims, never from the body; one user cannot read another's items.
+- A new or retried job has the ten steps with their plain labels ("Watch the video" fifth); a job saved with the old
+  nine steps is returned exactly as saved; a clip's `pickedFor` passes through when the agent wrote it and is absent
+  otherwise.
 - Job create and retry invoke the job flow's **alias** ARN with `InvocationType="Event"`, the exact
   `DurableExecutionName` (`job-{jobId}-{run}`) and a deterministic payload; `DurableExecutionAlreadyStartedException`
   is a no-op; a failed invoke leaves the job `failed` with "Could not start. Press Try again."
@@ -674,6 +684,62 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
   hits, and labels `best` hits "Owner's pick: best of the week"; a vector error skips the section.
 - Learnings brief: up to 4 week learnings first under "The owner's best-of-week picks taught", then up to 10 others
   under "Learnings"; empty groups are left out.
+- **Watch the video** ([ADR-40](DECISIONS.md#adr-40-watch-the-whole-video-before-picking),
+  [CONTRACTS.md §8](CONTRACTS.md#8-agent-agentcore-runtime-cf_prod_clip_agent)). Nothing here calls AWS: Bedrock,
+  Transcribe, S3, yt-dlp and (except one test) ffmpeg are fakes.
+  - `test_picture.py`: the rendition ladder (tallest H.264 up to 480p, video-only before one with sound, so Twitch and
+    Kick get 480p; then the smallest with a picture) and the disk rule (nothing fits → no picture, no failure); the size estimate's fall-backs; the picture download's
+    arguments; the one ffmpeg command (two outputs from one input, `fps=2`, 768×432, `-g 2`, 300-second parts,
+    `-skip_frame nokey` only for the keyframe plan); score parsing (mean and max per second); motion spikes (2.5 × the
+    median around, merged, a still picture never spikes); frames by time across two parts, from disk or fetched; the
+    smaller re-encode (parts over 18 MB); `prepare` runs ffmpeg under `time_limit`; the decode-speed probe and a
+    failed probe counting as zero; and, when ffmpeg is installed, a real run on a generated video (parts, scores, frames).
+  - `test_watch.py`: the chunk plan (150 s, 6 s lead-in, 12 hours = 288 chunks, never over `MAX_CHUNKS`); which frames
+    are sent (one per 2 s, every frame within 3 s of up to 5 spikes, at most 30 extra); the strict schema; clamping
+    times to the chunk and dropping dull events; the request (a time stamp before every image, then the words with
+    speakers); resume from saved chunks; a busy service tried again with growing pauses (5, 10, 20, 40 s, never past
+    the deadline) up to `MAX_TRIES` and never for a refusal; a rate-limited fake account (two calls at once, the rest
+    throttled) still gets all 48 chunks of a 2-hour source watched; the pacer halving on a throttle, growing back and
+    refunding the budget; a request refused for its images split again and again until accepted, the number named in
+    the error learned and used for later chunks, every chunk refused once still all watched (the budget grows), the
+    other pieces tried when one fails, a single refused frame ending as a failed chunk; the deadline; a cancel
+    stopping the calls in flight; the call budget.
+  - `test_nova.py`: the video block and the part's start time, no cache point; times shifted by the part's start;
+    nothing called without a watch model; a denied or missing model stops the track at once, invalid requests after
+    three; one bad part loses only that part; a busy part tried again up to `MAX_TRIES`; a part over 25 MB is not sent.
+  - `test_verify.py`: time moves only within 5 s; the result validated again; a weak moment swapped for the best
+    spare that passed its own look; never fewer than `clipTarget.min`; any failure keeps the moment as picked; a request refused for its images is
+    thinned evenly (both ends kept) and later looks start thin; a tripped second-look budget keeps the picks.
+  - `test_signals.py`: merging the two watchers; hot spots from any one track alone and from several (they add up,
+    with the agreement bonus); the silent flag from the words; the timeline text with its 120-event and 25-hot-spot
+    caps; every row of the `pickedFor` table, at most 40 characters.
+  - `test_guard.py`: a budget allows its limit then trips, and a tripped guard is not retryable; the deadline; the
+    chunk count never passes 400.
+  - `test_pipeline.py` runs **all ten steps** against in-memory S3 and fake models and ends `ready` for every
+    degradation row: no rendition that fits, a disk too small, a blocked download, a failed ffmpeg pass, a picture
+    that takes too long, some Fable chunks failing, all of them failing, Nova denied, both watchers failing (the
+    motion remains), no speaker labels, `signals.build` throwing, a failed second look, `pickedFor` that cannot be
+    built, `CF_DEEP=off` (no speaker labels asked for either, also on a Try again with a saved log), a storage failure while
+    saving the log (what was seen still reaches the finder), a cancel while the picture is still preparing (nothing
+    left on disk), the disk filling up between resolve and the download, a failed download leaving no files, the
+    second look raising, under half watched ("part of the video"), and a tall long upload decoded fully or at
+    keyframes by its measured speed. Also: Try again reuses everything that was
+    watched (no new model call, no new download) or watches only what is missing; `close` cancels the picture task;
+    few words with strong picture events goes on, few words without them fails with the old sentence.
+  - `test_agent.py`: without signals `system_prompt`, `hints`, `read_transcript`, `transcript.lines`, `brief_json` and
+    the Converse gate are **byte-identical** to the code before ADR-40 (hashes taken from `origin/main` at
+    `0abfbe2`); a window with no words but a strong picture event is read.
+  - `test_transcribe.py`: the speaker-label settings are sent; a refused start is sent once more exactly as before; a
+    job that ends FAILED with speaker labels runs once more without them (`…-p`), and `stop` removes both;
+    `parse_speakers`. `test_render.py`: a moment with no word inside is not pause-trimmed, one with words is. `test_checklist.py`: the "Seen:" block and the captions item for a clip without speech.
+    `test_server.py`: `close` runs when the job ends ready, failed or canceled; the second `Bedrock` client has no
+    cache points. `test_owner_messages.py`: the new step messages are short and name no service, and every step message of a
+    first run and a Try again is plain (no "clip(s)", "transcri", "audio", "spare").
+    `test_agent.py` also checks that speakers without picture signals add the speaker paragraph.
+  - `test_jobs.py`: the step weights sum to 1, and the ten keys and labels equal the ones parsed from
+    `api/src/clipfactory_api/jobs.py`, `web/src/api/mock/fixtures.ts` and `web/src/api/types.ts`.
+  - `test_skills_everywhere.py`: fake-client runs of the Fable watch, the Nova watch and the second look, each with
+    the skills block first in `system`; the scan covers the six new modules.
 
 ### Infrastructure
 - `terraform validate` passes; formatting is clean.
@@ -695,6 +761,12 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
 - Skills ([CONTRACTS.md §18.8](CONTRACTS.md#188-infra-infra)): `cf-prod-clip-flow` and `cf-prod-learn` each have
   exactly the `Skills` statement (`s3:GetObject` on `skills/*`, no wider S3 access, no `s3:ListBucket`);
   `cf-prod-learn` has `MEDIA_BUCKET`; `cf-prod-stats` still has no S3 access at all.
+- Deep analysis ([ADR-40](DECISIONS.md#adr-40-watch-the-whole-video-before-picking)): the agent runtime has
+  `CF_WATCH_MODEL_ID` and `CF_DEEP=on` (`off` with `deep_analysis_enabled = false`); the statement `InvokeWatchModel`
+  is `bedrock:InvokeModel` on exactly `var.watch_model_invoke_arns`, with no wildcard; the role has no
+  `rekognition:`, `comprehend:`, `mediaconvert:`, `states:` or `batch:` action; `InvokeFable` and `Transcribe` are
+  unchanged; in `envs/prod` the watch model comes from `config/models.json` (the EU profile and its six EU foundation
+  models, seven ARNs).
 - The outputs in [CONTRACTS.md §10](CONTRACTS.md#10-terraform-outputs-read-by-deployyml) exist with those names,
   including `ws_url`, `hooks_url`, `vector_bucket`, `vector_index`, `job_flow_alias_arn`, `clip_flow_alias_arn`,
   `stats_function_name`, `learn_function_name`, `stats_rule_name`, `stats_tick_minutes`.
@@ -729,7 +801,16 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
    **Disconnect**, wait 8 s: the token secret is gone. Then the other four platforms the same way (X costs a little).
 11. Push a small change with an `Area:` line; within 5 minutes the open app (browser and desktop app) shows the update
    bar with that label; press Reload and watch it finish.
-11. Open **Ask** on a phone and on a desktop. Ask "Where do I change my click sound?": the steps appear, **Open Sounds**
+12. **Watch the video** ([ADR-40](DECISIONS.md#adr-40-watch-the-whole-video-before-picking)): run a job on a short
+   gaming video with a loud moment and a silent crash or stunt. The job shows ten steps; "Watch the video" ends with
+   "Watched all …. Saw … big things."; at least one clip on Review carries a "Why:" line. In CloudWatch Logs for the
+   agent: one `picture.ready`, one `watch.done` (its `fable` and `nova` counts equal the chunks and parts), `bedrock.usage`
+   lines with token counts for the tools `report_scenes` and `check_moment` (add them up and correct the cost table
+   in ADR-40), and no `deep.guard_tripped`. In S3, `jobs/<jobId>/source/` holds `picture.json`, `visual_log.json`,
+   `signals.json` and `moments.json`. Press **Try again** on a finished copy of the job: Watch says "Used what it saw
+   last time." If Nova's `watch.done` count is 0 with reason `denied` or `not_found`, open Amazon Nova 2 Lite once in
+   the Bedrock console (eu-north-1) and check the EU inference profile is listed.
+13. Open **Ask** on a phone and on a desktop. Ask "Where do I change my click sound?": the steps appear, **Open Sounds**
    goes to Look & feel › Sounds and the Click sound row lights up. Ask "How many views did my best clip get this
    week?" and check the number matches Library › This week. In CloudWatch Logs, `/aws/lambda/cf-prod-api` shows one
    `help.answer` line per question with no question text. If every answer comes back in plain words only, open
