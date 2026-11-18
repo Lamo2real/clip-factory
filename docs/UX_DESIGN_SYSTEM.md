@@ -113,8 +113,8 @@ loose words get a scrim at the panel tint.
 }
 ```
 
-`--panel-veil` is 0.30 over the app's own living backdrop (worked out over every blob subset, both field ends and
-every `saturate()` the CSS uses, `lib/background.ts`), 0.73 over a white desktop or photo, and between the two for
+`--panel-veil` is 0.33 over the app's own living backdrop (worked out over every blob subset, both field ends, every
+`saturate()` the CSS uses and the grain at its peak, `lib/background.ts`), 0.73 over a white desktop or photo, and between the two for
 light owner colours.
 
 Variants: `.glass--green` (hero, Ask launcher), `.glass--vermilion`, `.glass--clear`. In Chromium, `.glass--refract`

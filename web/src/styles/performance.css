@@ -181,6 +181,7 @@
   /* A label, not a button: bone with a green mark (solid vermilion means "press me"). */
   background: var(--selected);
   color: var(--on-bone);
+  text-shadow: none;
   box-shadow: none;
   --mark-cut: var(--bone);
 }
@@ -223,6 +224,7 @@
   background: var(--selected);
   box-shadow: none;
   color: var(--on-bone);
+  text-shadow: none;
   --mark-cut: var(--bone);
 }
 .perf__actions {
@@ -283,6 +285,7 @@
 }
 .btn.perf__refresh.is-waiting .icon {
   color: var(--on-bone);
+  text-shadow: none;
 }
 
 /* The "Best this week" star: green glass; once on, it wears the vermilion CTA fill (an active state). */
@@ -365,6 +368,7 @@
   border-radius: 50%;
   background: var(--selected);
   color: var(--on-bone);
+  text-shadow: none;
   --mark-cut: #efe7da;
 }
 /* One line always (ellipsis only if it must), so the pill and the big number start at the same height in every
@@ -393,6 +397,7 @@
   border-radius: 50%;
   background: var(--selected);
   color: var(--on-bone);
+  text-shadow: none;
   box-shadow: 0 6px 14px -6px rgb(var(--vermilion-rgb) / 0.8);
 }
 .pstack__chip .pill {
@@ -677,19 +682,24 @@
   min-height: 48px;
   padding: 8px 20px;
   border-radius: var(--r-pill);
-  background: rgb(var(--green-deep-rgb) / 0.32);
+  /* The tabs sit straight on the page, outside any panel: the control fill (the pick-one track's recipe, worked out
+     for AA over the lightest spot of every look, a white picture included), never a lighter tint of their own. */
+  background: var(--fill-control);
   box-shadow: none;
   color: var(--ink);
   font-weight: 650;
   text-decoration: none;
   transition: background-color var(--dur-2) var(--ease-out);
 }
-.lib-tab:hover {
-  background: var(--fill-hover);
+.lib-tab:hover:not(.is-on) {
+  background:
+    linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08)),
+    rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.22));
 }
 .lib-tab.is-on {
   background: var(--selected);
   color: var(--on-bone);
+  text-shadow: none;
   box-shadow: none;
 }
 .lib-card__link {
@@ -911,6 +921,7 @@
   background: var(--selected);
   box-shadow: none;
   color: var(--on-bone);
+  text-shadow: none;
   --mark-cut: var(--bone);
 }
 .star-btn--card {

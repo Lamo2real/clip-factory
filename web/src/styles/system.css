@@ -166,6 +166,7 @@
   height: 56px;
   border-radius: var(--r-md);
   color: var(--on-bone);
+  text-shadow: none;
   background: var(--selected);
   box-shadow: 0 8px 18px -10px rgb(var(--shadow-rgb) / 0.83);
 }
@@ -265,6 +266,7 @@ h1.getapp__title {
 }
 .getapp__chip.is-on {
   color: var(--on-bone);
+  text-shadow: none;
   background: var(--selected);
   box-shadow: 0 4px 12px -8px rgb(var(--shadow-rgb) / 0.75);
 }
@@ -335,6 +337,7 @@ h1.getapp__title {
   border-radius: var(--r-sm);
   /* A drawing of Safari: a bone browser card, with Safari's own blue. */
   color: var(--on-bone);
+  text-shadow: none;
   background: #f7f2e8;
   box-shadow: 0 6px 14px -8px rgb(var(--shadow-rgb) / 0.75);
 }
@@ -374,6 +377,7 @@ h1.getapp__title {
   padding: 6px;
   border-radius: var(--r-sm);
   color: var(--on-bone);
+  text-shadow: none;
   background: #f7f2e8;
   box-shadow: 0 6px 14px -8px rgb(var(--shadow-rgb) / 0.75);
 }
@@ -392,6 +396,7 @@ h1.getapp__title {
 }
 .art__row.art__hit {
   color: var(--on-bone);
+  text-shadow: none;
   font-size: 0.78rem;
   font-weight: 650;
   background: rgb(10 100 216 / 0.1);

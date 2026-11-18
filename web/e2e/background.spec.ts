@@ -102,9 +102,9 @@ test.describe("background modes", () => {
   test("see-through glass over the app's own backdrop: panels 0.30, no page veil; colours and picture follow (ADR-45)", async ({ page }) => {
     await open(page);
     expect(await panelVeil(page)).toBeCloseTo(BRAND_PANEL_VEIL, 5);
-    expect(BRAND_PANEL_VEIL).toBe(0.3);
+    expect(BRAND_PANEL_VEIL).toBe(0.33);
     expect(await veil(page)).toBe(0);
-    expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(0.34, 2);
+    expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(0.37, 2);
     await expect(page.locator(".backdrop .blob--e")).toHaveCount(1);
     // The default colours: no page veil, panels 0.30.
     await page.getByRole("radio", { name: "Colours" }).check();

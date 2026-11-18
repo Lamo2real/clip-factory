@@ -220,6 +220,16 @@ function softLight(bottom: number, top: number): number {
 export function softLightOver(under: Rgb, top: Rgb, alpha: number): Rgb {
   return under.map((u, i) => (1 - alpha) * u + alpha * softLight(u, top[i]!)) as unknown as Rgb;
 }
+/** W3C overlay of `top` over `bottom`, one channel 0..255 (hard-light with the layers swapped). */
+function overlay(bottom: number, top: number): number {
+  const cb = bottom / 255;
+  const cs = top / 255;
+  return 255 * (cb <= 0.5 ? 2 * cb * cs : 1 - 2 * (1 - cb) * (1 - cs));
+}
+/** `top` in overlay at `alpha` over `under`. */
+export function overlayOver(under: Rgb, top: Rgb, alpha: number): Rgb {
+  return under.map((u, i) => (1 - alpha) * u + alpha * overlay(u, top[i]!)) as unknown as Rgb;
+}
 
 // ---------- The app's own living backdrop (glass.css .backdrop, Backdrop.tsx) ----------
 
@@ -242,14 +252,21 @@ export const BRAND_MESH = {
   ring: 0.08,
   /** The Frosted strength's two soft-light bone caustics at their peak. */
   caustic: 0.06,
+  /**
+   * The grain drawn over everything (`.backdrop__grain`): a fractal noise in this colour (its feColorMatrix), at most
+   * `alpha` solid, laid in overlay at `opacity`. Its peak, `opacity * alpha`, is what the maths takes.
+   */
+  grain: { colour: [0.94 * 255, 0.91 * 255, 0.85 * 255] as Rgb, opacity: 0.1, alpha: 0.55 },
 } as const;
 
-/** One spot of the mesh: the field, then these blobs, a lens glow and both caustics on top. */
+/** One spot of the mesh: the field, then these blobs, a lens glow, both caustics and the grain at its peak on top. */
 function brandSpot(field: Rgb, blobs: readonly { colour: Rgb; alpha: number }[]): Rgb {
   let spot = field;
   for (const b of blobs) spot = mix(b.colour, spot, b.alpha);
   spot = mix(BONE, spot, BRAND_MESH.ring);
-  return softLightOver(softLightOver(spot, BONE, BRAND_MESH.caustic), BONE, BRAND_MESH.caustic);
+  spot = softLightOver(softLightOver(spot, BONE, BRAND_MESH.caustic), BONE, BRAND_MESH.caustic);
+  const { grain } = BRAND_MESH;
+  return overlayOver(spot, grain.colour, grain.opacity * grain.alpha);
 }
 
 /**
@@ -366,8 +383,12 @@ export const PICTURE_PANEL_VEIL = minVeil(WHITE);
 // for every glass, so they are not guesses either.
 /** Pick-one tracks (`.segmented`, `.tabs`, the Background tiles) lay this lift of bone over their tint. */
 export const TRACK_LIFT = 0.08;
-/** So a track carries this much more tint than a panel, and the labels on its lift stay at AA. */
-export const TRACK_EXTRA_VEIL = 0.1;
+/**
+ * So a track carries this much more tint than a panel, and the labels on its lift stay at AA over every spot of every
+ * look (the colours grid included). Not the lightest spot's need alone: mixed in sRGB, a darker spot of another hue
+ * (a brown in the living backdrop) can need more.
+ */
+export const TRACK_EXTRA_VEIL = 0.15;
 /**
  * Tinted chips on a panel (the vermilion pill, the success tint, the sound tags: `--tint-vermilion` and `--tint-leaf`
  * in tokens.css) lay this much deep green (`--green-deep`) under their tint, so a vermilion or leaf chip is never

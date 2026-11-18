@@ -82,6 +82,7 @@
 .folders__toggle.is-current,
 .folders__branch.is-current {
   color: var(--on-bone);
+  text-shadow: none;
   background: var(--selected);
   box-shadow: 0 6px 14px -10px rgb(var(--shadow-rgb) / 0.85);
 }
@@ -275,6 +276,9 @@
 }
 .find__box:focus-within {
   box-shadow: var(--focus-field);
+}
+:where(html:not([data-input="keyboard"])) .find__box:focus-within {
+  box-shadow: var(--focus-field-soft);
 }
 .find__box > .icon {
   flex: none;
@@ -477,6 +481,7 @@
   place-items: center;
   flex: none;
   color: var(--on-bone);
+  text-shadow: none;
   background: var(--selected);
   box-shadow: 0 6px 14px -10px rgb(var(--shadow-rgb) / 0.85);
 }
@@ -1244,6 +1249,7 @@ ol.md__list {
   height: 28px;
   border-radius: 50%;
   color: var(--on-bone);
+  text-shadow: none;
   background: var(--selected);
   font-size: 0.85rem;
   font-weight: 800;
@@ -1413,6 +1419,7 @@ ol.md__list {
   border-radius: 50%;
   background: var(--selected);
   color: var(--on-bone);
+  text-shadow: none;
   --mark-cut: #efe7da;
 }
 .money__app-name {
@@ -1868,6 +1875,7 @@ ol.md__list {
 .follow-yes.is-on {
   background: var(--selected);
   color: var(--on-bone);
+  text-shadow: none;
 }
 .follow-yes.is-on .follow-yes__box {
   background: var(--green);

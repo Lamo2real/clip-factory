@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { openTodo, CLIPS, openClip, resolveRoute, ROUTES, settle } from "./helpers.ts";
+import { decode, rowMeans } from "./pixels.ts";
 import { WINDOW_EXTRA_ROUTES } from "./glass.ts";
 
 // No visible edges anywhere (owner, 2026-11-18; docs/DECISIONS.md ADR-45): no element on any screen draws a border,
@@ -63,7 +64,6 @@ async function visibleEdges(page: Page): Promise<string[]> {
     };
     const found: string[] = [];
     const check = (el: Element, s: CSSStyleDeclaration, where: string) => {
-      const bg = s.backgroundColor;
       for (const side of ["Top", "Right", "Bottom", "Left"] as const) {
         const w = parseFloat(s.getPropertyValue(`border-${side.toLowerCase()}-width`));
         const style = s.getPropertyValue(`border-${side.toLowerCase()}-style`);
@@ -75,8 +75,6 @@ async function visibleEdges(page: Page): Promise<string[]> {
         for (const layer of layers(s.boxShadow)) {
           const colour = /rgba?\([^)]*\)/.exec(layer)?.[0] ?? "";
           if (alpha(colour) <= 0.02) continue;
-          // A spread in the element's own fill colour pads its fill (the loose-text scrim): not an edge.
-          if (colour === bg) continue;
           const [x = 0, y = 0, blur = 0, spread = 0] = [...layer.replace(/rgba?\([^)]*\)/, "").matchAll(/(-?[\d.]+)px/g)].map((m) => Number(m[1]));
           if (blur <= 2 && (spread !== 0 || x !== 0 || y !== 0)) found.push(`${where}: box-shadow ${layer}`);
         }
@@ -138,4 +136,81 @@ test("the scan does find an edge when one is drawn (so the checks above can fail
   const found = await visibleEdges(page);
   expect(found.some((f) => f.includes("border-top"))).toBe(true);
   expect(found.some((f) => f.includes("box-shadow"))).toBe(true);
+});
+
+// A band of glass can draw an edge with no border at all: where its blur and tint stop. The setup bar the page scrolls
+// under must melt into the page, so across its bottom the change it makes to the picture ramps, never jumps between
+// two pixel rows. Measured as the difference between the screen with the bar and without it (the page under it the
+// same: a flat white page under the bar), row by row.
+for (const path of ["/", "/review", "/settings"]) {
+  test(`the scrolled setup bar has no hard bottom edge on a phone (${path})`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(path);
+    await settle(page);
+    await page.mouse.wheel(0, 400);
+    await expect(page.locator(".setup-todo-bar")).toHaveClass(/is-scrolled/);
+    await page.waitForTimeout(500);
+    // A flat white page under the bar (the worst case, a white thumbnail), so the page's own words and cards cannot
+    // make a step and the bar's tint shows at its strongest.
+    await page.evaluate(() => {
+      const d = document.createElement("div");
+      Object.assign(d.style, { position: "fixed", inset: "0", zIndex: "1", background: "#fff" });
+      document.body.append(d);
+    });
+    await page.waitForTimeout(300);
+    const bar = (await page.locator(".setup-todo-bar").boundingBox())!;
+    const clip = { x: 0, y: Math.max(0, bar.y + bar.height - 30), width: 390, height: 90 };
+    const withBar = rowMeans(await decode(page, await page.screenshot({ clip })));
+    await page.addStyleTag({ content: ".setup-todo-bar, .setup-todo-bar * { visibility: hidden !important; }" });
+    await page.waitForTimeout(300);
+    const without = rowMeans(await decode(page, await page.screenshot({ clip })));
+    const effect = withBar.map((v, i) => v - without[i]!);
+    let jump = 0;
+    for (let i = 1; i < effect.length; i++) jump = Math.max(jump, Math.abs(effect[i]! - effect[i - 1]!));
+    expect(jump, `largest step between two rows of the bar's effect: ${jump.toFixed(2)} (${effect.map((v) => v.toFixed(1)).join(" ")})`).toBeLessThan(6);
+  });
+}
+
+// With no rings, a button has to show it is a button some other way: a fill of its own, an underline or an icon.
+// (Buttons inside a pick-one group are the group's options: the track and the <Glide> pill show them.)
+test("every button reads as one without a ring: a fill, an underline or an icon, phone size", async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const bare = async (where: string) =>
+    (
+      await page.evaluate(() => {
+        const out: string[] = [];
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>("button, [role='button'], a.btn"))) {
+          const r = el.getBoundingClientRect();
+          if (!r.width || !r.height || (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true }))) continue;
+          if (el.closest(".glide, [role='radiogroup'], [role='tablist'], .sr-only, .skip-link, svg")) continue;
+          const s = getComputedStyle(el);
+          const filled = (x: Element) => {
+            const cs = getComputedStyle(x);
+            const m = /rgba?\(([^)]*)\)/.exec(cs.backgroundColor);
+            const a = m ? (m[1]!.split(/[\s,/]+/).filter(Boolean)[3] ?? "1") : "0";
+            return Number(a) > 0.02 || cs.backgroundImage !== "none";
+          };
+          if (filled(el) || ["::before", "::after"].some((p) => getComputedStyle(el, p).content !== "none" && getComputedStyle(el, p).backgroundImage !== "none")) continue;
+          if (s.textDecorationLine.includes("underline") || el.querySelector("svg, img, .icon")) continue;
+          if (Array.from(el.querySelectorAll("*")).some((c) => getComputedStyle(c).textDecorationLine.includes("underline") || filled(c))) continue;
+          out.push(`${el.tagName.toLowerCase()}.${String(el.className).trim().split(/\s+/).slice(0, 2).join(".")} "${(el.textContent ?? "").trim().slice(0, 40)}"`);
+        }
+        return out;
+      })
+    ).map((b) => `${where}: ${b}`);
+  const failures: string[] = [];
+  for (const r of ROUTES) {
+    const path = await resolveRoute(page, r);
+    await page.goto(path);
+    await settle(page);
+    failures.push(...(await bare(path)));
+  }
+  await page.goto("/");
+  await settle(page);
+  await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+  await page.locator(".help-panel").waitFor();
+  await page.waitForTimeout(400);
+  failures.push(...(await bare("/ with Ask open")));
+  expect([...new Set(failures)]).toEqual([]);
 });

@@ -281,9 +281,6 @@ html:where(.see-through, [data-backdrop]) .btn--danger:hover:not([aria-disabled=
     linear-gradient(rgb(var(--vermilion-rgb) / 0.14), rgb(var(--vermilion-rgb) / 0.14)),
     rgb(var(--green-rgb) / var(--panel-veil));
 }
-html.see-through .lib-tab:not(.is-on) {
-  background: rgb(var(--green-rgb) / var(--panel-veil));
-}
 /* Text that sits straight on the window, the picture or the frosted colours (page titles and their line, breadcrumbs,
    headings and lines between panels) gets the same tint as a plate behind it. Frosted needs it for the moving
    caustics, which lighten the mesh where they cross a blob (test/background.test.ts works out the worst spot). The
@@ -351,7 +348,7 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
    the labels on it stay at AA even when the track sits straight on the window. Both numbers are TRACK_LIFT and
    TRACK_EXTRA_VEIL in lib/background.ts, where the contrast is worked out for every glass. */
 :is(.segmented, .tabs, .bg-modes, .model-picks) {
-  background-color: rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.1));
+  background-color: rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.15));
   background-image: linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08));
 }
 
@@ -372,9 +369,11 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
   text-shadow: none;
 }
 
-/* Chromium: bend the backdrop as well as blurring it (see the #cf-refract filter). */
+/* Chromium: bend the backdrop as well as blurring it (see the #cf-refract filter). The blur comes first: with the
+   url() first Chromium leaves what is behind sharp, so words scrolled under the tab bar would read through it
+   (e2e/refract.spec.ts). */
 .refract .glass--refract {
-  backdrop-filter: url(#cf-refract) blur(14px) saturate(1.75);
+  backdrop-filter: blur(14px) url(#cf-refract) saturate(1.75);
 }
 
 /* Browsers without backdrop-filter get a denser tint so text stays readable. */
@@ -395,6 +394,9 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
   :root,
   html.see-through {
     --panel-veil: 0.92 !important;
+    /* The tab bar and the floating layers set their tint from these, so they go almost solid too. */
+    --tabbar-veil: 0.92 !important;
+    --float-veil: 0.92 !important;
   }
   .glass,
   .glass--clear,

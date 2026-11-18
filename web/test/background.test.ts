@@ -57,6 +57,7 @@ import {
   seeThroughWorstBackground,
   SHEET_VEIL,
   softLightOver,
+  overlayOver,
   SWATCHES,
   swatchTickIsDark,
   TABBAR_VEIL,
@@ -477,7 +478,12 @@ describe("colours", () => {
           expect(v.panelVeil).toBeLessThanOrEqual(MAX_COLOURS_PANEL_VEIL);
           expect(v.panelVeil).toBeGreaterThanOrEqual(PANEL_VEIL_FLOOR);
           // The worst spot as seen bare and through every saturate() the CSS uses.
-          for (const spot of coloursMeshSpots(cs)) if (worst(mix(VEIL, mix(VEIL, spot, v.pageVeil), v.panelVeil)) < AA) fails.push(`${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
+          for (const spot of coloursMeshSpots(cs)) {
+            const page = mix(VEIL, spot, v.pageVeil);
+            if (worst(mix(VEIL, page, v.panelVeil)) < AA) fails.push(`${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
+            // A pick-one track or a control fill straight on the page.
+            if (worst(mix(BONE, mix(VEIL, page, Math.min(1, v.panelVeil + TRACK_EXTRA_VEIL)), TRACK_LIFT)) < AA) fails.push(`track: ${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
+          }
         }
     expect(n).toBeGreaterThan(40_000);
     expect(fails).toEqual([]);
@@ -505,6 +511,14 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     // The lenses' bone glow and the caustics' peak.
     expect(num(/0 0 40px 4px rgb\(var\(--bone-rgb\) \/ ([\d.]+)\)/)).toBeLessThanOrEqual(BRAND_MESH.ring);
     expect(num(/\.backdrop__caustic \{[^}]*?radial-gradient\(closest-side, rgb\(var\(--bone-rgb\) \/ ([\d.]+)\)/)).toBe(BRAND_MESH.caustic);
+    // The grain over everything: its noise colour, its alpha and its opacity, in overlay.
+    const grain = block(glass, ".backdrop__grain");
+    expect(grain).toMatch(/mix-blend-mode: overlay;/);
+    expect(num(/\.backdrop__grain \{[^}]*?opacity: ([\d.]+);/)).toBe(BRAND_MESH.grain.opacity);
+    const matrix = /feColorMatrix values='([^']+)'/.exec(grain)![1]!.trim().split(/\s+/).map(Number);
+    expect([matrix[4]! * 255, matrix[9]! * 255, matrix[14]! * 255]).toEqual([...BRAND_MESH.grain.colour]);
+    expect(matrix[18]).toBe(BRAND_MESH.grain.alpha);
+    expect(matrix.filter((_, i) => i !== 4 && i !== 9 && i !== 14 && i !== 18).every((v) => v === 0)).toBe(true);
     // Backdrop.tsx draws the fifth blob in both meshes.
     const tsx = readFileSync(join(import.meta.dirname, "..", "src", "components", "Backdrop.tsx"), "utf8");
     expect(tsx.match(/className="blob blob--e"/g)).toHaveLength(2);
@@ -527,6 +541,7 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
         for (const [i, b] of BRAND_MESH.blobs.entries()) if (m & (1 << i)) spot = mix(b.colour, spot, b.alpha);
         spot = mix(BONE_, spot, BRAND_MESH.ring);
         spot = softLightOver(softLightOver(spot, BONE_, BRAND_MESH.caustic), BONE_, BRAND_MESH.caustic);
+        spot = overlayOver(spot, BRAND_MESH.grain.colour, BRAND_MESH.grain.opacity * BRAND_MESH.grain.alpha);
         const seen = saturateRgb(spot, GLASS_SATURATE_MAX);
         if (luminance(seen) > luminance(worstSpot)) worstSpot = seen;
         if (m === 31 && luminance(seen) > luminance(allStacked)) allStacked = seen;
@@ -535,7 +550,7 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     expect(luminance(brandMeshWorst())).toBeGreaterThanOrEqual(luminance(worstSpot));
     // The stack of every blob is not the worst: a subset is lighter.
     expect(luminance(worstSpot)).toBeGreaterThan(luminance(allStacked));
-    expect(BRAND_PANEL_VEIL).toBe(0.3);
+    expect(BRAND_PANEL_VEIL).toBe(0.33);
     expect(BRAND_PANEL_VEIL).toBe(Math.max(PANEL_VEIL_FLOOR, ...brandMeshSpots().map((spot) => minVeil(spot))));
     for (const spot of brandMeshSpots()) expect(worst(mix(VEIL, spot, BRAND_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
     for (const sat of SATURATIONS) {
@@ -544,12 +559,16 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
       // Bare, that spot is under AA: the reason loose words get the scrim.
       expect(worst(spot)).toBeLessThan(AA);
     }
-    // A pick-one track, the control fill, a field and a tinted chip over that spot.
-    const panel = mix(VEIL, worstSpot, BRAND_PANEL_VEIL);
-    expect(worst(mix(BONE, mix(VEIL, worstSpot, BRAND_PANEL_VEIL + TRACK_EXTRA_VEIL), TRACK_LIFT))).toBeGreaterThanOrEqual(AA);
-    expect(worst(mix(GREEN_DEEP, panel, 0.45))).toBeGreaterThanOrEqual(AA);
-    expect(contrast(hexToRgb(TEXT_TOKENS["--vermilion-ink"]), mix(hexToRgb("#e8392b"), mix(VEIL, worstSpot, BRAND_PANEL_VEIL + 0.1), 0.14))).toBeGreaterThanOrEqual(AA);
-    expect(contrast(hexToRgb("#ffeec4"), mix([246, 201, 69], mix(GREEN_DEEP, panel, CHIP_DEEPEN), 0.16))).toBeGreaterThanOrEqual(AA);
+    // A pick-one track, the control fill, a field, the danger button and a tinted chip over every spot, not only the
+    // lightest: mixed in sRGB, a darker spot of another hue can need more.
+    for (const spot of brandMeshSpots()) {
+      const at = `over rgb(${spot.map(Math.round).join(" ")})`;
+      const panel = mix(VEIL, spot, BRAND_PANEL_VEIL);
+      expect(worst(mix(BONE, mix(VEIL, spot, BRAND_PANEL_VEIL + TRACK_EXTRA_VEIL), TRACK_LIFT)), `track ${at}`).toBeGreaterThanOrEqual(AA);
+      expect(worst(mix(GREEN_DEEP, panel, 0.45)), `field ${at}`).toBeGreaterThanOrEqual(AA);
+      expect(contrast(hexToRgb(TEXT_TOKENS["--vermilion-ink"]), mix(hexToRgb("#e8392b"), mix(VEIL, spot, BRAND_PANEL_VEIL + 0.1), 0.14)), `danger ${at}`).toBeGreaterThanOrEqual(AA);
+      expect(contrast(hexToRgb("#ffeec4"), mix([246, 201, 69], mix(GREEN_DEEP, panel, CHIP_DEEPEN), 0.16)), `amber chip ${at}`).toBeGreaterThanOrEqual(AA);
+    }
   });
 
   it("the see-through has range: the lightest and darkest spots stay told apart through a panel", () => {
@@ -813,7 +832,7 @@ describe("the page follows the look", () => {
     expect(root.dataset.glass).toBeUndefined();
     expect(root.dataset.strength).toBe("frosted");
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("");
-    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.3");
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.33");
 
     applyLook({ kind: "colours", colours: ["#ffffff"], ...coloursVeils(["#ffffff"]) }, root);
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.33");

@@ -66,3 +66,13 @@ describe("vermilion and green words stay AA on tinted glass", () => {
     expect(contrast(value("--ink-3"), hex(panel))).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe("the comfort halo", () => {
+  it("never sits behind dark green words on a bone fill: every rule with --on-bone words drops it", () => {
+    const missing: string[] = [];
+    for (const [file, text] of all)
+      for (const m of text.matchAll(/([^{}]*)\{([^{}]*)\}/g))
+        if (/(^|[\s;])color: var\(--on-bone\);/.test(m[2]!) && !/text-shadow: none;/.test(m[2]!)) missing.push(`${file}: ${m[1]!.trim()}`);
+    expect(missing).toEqual([]);
+  });
+});

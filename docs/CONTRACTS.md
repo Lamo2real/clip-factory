@@ -4421,12 +4421,12 @@ everywhere.
 
   | Surface | Tint | Worst text contrast |
   |---|---|---|
-  | `.glass` panels, the sidebar, `.glass--clear`, the loose-text scrims (every look: `html:is(.see-through, [data-backdrop])`) | `--panel-veil`: 0.30 over the app's backdrop (`BRAND_PANEL_VEIL`) | 4.94 (4.72 under the refracting panels) |
+  | `.glass` panels, the sidebar, `.glass--clear`, the loose-text scrims (every look: `html:is(.see-through, [data-backdrop])`) | `--panel-veil`: 0.33 over the app's backdrop, its grain included (`BRAND_PANEL_VEIL`) | 4.52 (over every blob subset, field end, `saturate()` and the grain at its peak) |
   | Nested `.glass` | transparent: the outer panel gives the green | 4.94 |
-  | `.glass--green` (hero, Ask launcher, sign-in) | panel + 0.10 | 5.74 |
-  | Pick-one tracks, `--fill-control` | panel + 0.10 under bone 0.08 | 4.92 |
-  | Fields (`--fill-field`) | deep green 0.45 over the panel | 8.34 |
-  | Floating layers: toasts, the update bar, the setup pill, list and sheet, the Ask panel and phone sheet | `FLOAT_VEIL` 0.73 (hover + 0.07), blur 28 px | 4.61 over white |
+  | `.glass--green` (hero, sign-in) | panel + 0.10 | 5.16 |
+  | Pick-one tracks, `--fill-control` (and every control straight on the page, such as the Library tabs) | panel + 0.15 under bone 0.08 (`TRACK_EXTRA_VEIL`, held over every spot of every look) | 4.68 |
+  | Fields (`--fill-field`) | deep green 0.45 over the panel | 7.35 |
+  | Floating layers: toasts, the update bar, the setup pill, list and sheet, the Ask launcher, the Ask panel and phone sheet | `FLOAT_VEIL` 0.73 (hover + 0.07), blur 28 px | 4.61 over white |
   | The tab bar (icons only) | `TABBAR_VEIL` 0.59, blur 28 px | 3.05:1 over white; the chosen icon on bone 9.91 |
   | The question sheet | 0.86, over its own scrim | 6.95 over white |
   | The vermilion CTA | `--cta`, white label | 4.65 over white, 4.86 over a panel |

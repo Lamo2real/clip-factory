@@ -45,7 +45,7 @@
   /* No edges (ADR-45): a control shows by its fill. Buttons without a fill of their own get the pick-one track's
      recipe (a bone lift over a step more green, TRACK_LIFT and TRACK_EXTRA_VEIL in lib/background.ts); text fields a
      deeper well with a soft inner shade; a chosen or found thing a soft glow, never a ring. */
-  --fill-control: linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08)), rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.1));
+  --fill-control: linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08)), rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.15));
   --fill-field: rgb(var(--green-deep-rgb) / 0.45);
   --shade-field: inset 0 3px 10px rgb(var(--shadow-rgb) / 0.35);
   --glow-bone: 0 0 18px 2px rgb(var(--bone-rgb) / 0.4);
@@ -53,8 +53,8 @@
   --glow-leaf: 0 0 18px 2px rgb(var(--green-leaf-rgb) / 0.6);
 
   /* The see-through glass (lib/background.ts works out every number; lib/look.ts sets --panel-veil and --backdrop-veil
-     for each look). --panel-veil here is PANEL_VEIL_FLOOR = BRAND_PANEL_VEIL, the tint over the app's own backdrop. */
-  --panel-veil: 0.3;
+     for each look). --panel-veil here is BRAND_PANEL_VEIL, the tint over the app's own backdrop (its grain included). */
+  --panel-veil: 0.33;
   --backdrop-veil: 0;
   --glass-blur: 18px;
   --glass-saturate: 1.6; /* GLASS_SATURATE */
@@ -110,6 +110,9 @@
   --shadow-1: 0 8px 24px -14px rgb(var(--shadow-rgb) / 0.55);
   --shadow-2: 0 6px 18px -6px rgb(var(--shadow-rgb) / 0.22), 0 22px 48px -24px rgb(var(--shadow-rgb) / 0.65);
   --focus: 0 0 0 3px rgb(var(--bone-rgb) / 0.95), 0 0 0 5.5px var(--vermilion-deep);
-  /* Text fields: bone ring (about 11:1 on green) and a faint vermilion glow, never the double ring of a button. */
-  --focus-field: 0 0 0 2px var(--bone), 0 0 0 4px rgb(var(--vermilion-rgb) / 0.25);
+  /* Text fields reached with the keyboard: a bone ring (about 11:1 on green) in a soft bone glow, never the double ring
+     of a button and never vermilion (that is for actions). */
+  --focus-field: 0 0 0 2px var(--bone), 0 0 14px 2px rgb(var(--bone-rgb) / 0.22);
+  /* A field tapped or clicked (Chromium still calls it :focus-visible): no ring, its deeper well and a soft glow. */
+  --focus-field-soft: var(--shade-field), 0 0 16px 1px rgb(var(--bone-rgb) / 0.2);
 }

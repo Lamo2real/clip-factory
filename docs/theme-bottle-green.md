@@ -18,8 +18,8 @@ The reference is the dance-theatre page. It has a deep bottle-green field, big b
 > - **One text set, bone and lighter, everywhere.** `--ink-2` and `--ink-3` are bone `#efe7da`, `--vermilion-ink`
 >   `#ffe2dc`, `--green-ink` and `--green-text` `#e4f2da` in every look (they were the window look's set). Hierarchy
 >   comes from size, weight and spacing, never from a dimmer colour.
-> - **The CTA is the only solid saturated surface.** Panels are 0.30 green over the app's own living backdrop (70 %
->   see-through), so the vermilion pill with its white label is the one solid, saturated thing on the glass.
+> - **The CTA is the only solid saturated surface.** Panels are 0.33 green over the app's own living backdrop, its grain
+>   included (67 % see-through), so the vermilion pill with its white label is the one solid, saturated thing on the glass.
 > - **The halo is comfort only.** A soft green `text-shadow` sits behind words on glass; it is never counted toward
 >   AA. The AA bar is met by the tint alone.
 > - **No edges.** No borders, rings, lit rims, inset lines or hairlines anywhere; the bone "lines" of the reference
@@ -27,7 +27,7 @@ The reference is the dance-theatre page. It has a deep bottle-green field, big b
 >   below that mention borders, rims and rings are history; [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md) and
 >   [CONTRACTS.md §22.3](CONTRACTS.md) hold the current values.
 
-Fonts stay the same: Times New Roman for display, Inter for the UI. All layouts, glass recipes (blur, saturate, lit rim, refraction), `<Glide>` sliding highlights, motion, celebrations and click sounds stay the same. Only colour changes.
+Fonts stay the same: Times New Roman for display, Inter for the UI. All layouts, glass recipes (blur, saturate, refraction; the lit rim is gone since ADR-45), `<Glide>` sliding highlights, motion, celebrations and click sounds stay the same. Only colour changes.
 
 **The polarity flip.** Today the app is light glass with dark text. It becomes dark green glass with light (bone) text. So every contrast check changes direction: the worst backdrop is now the lightest thing that can sit behind a panel (a white window, a white photo), not the darkest. That flip drives most of the maths below.
 
@@ -38,6 +38,14 @@ All ratios in this document were computed with the same sRGB compositing and the
 ## 1. Tokens
 
 ### 1.1 Brand fills (`:root` in `web/src/styles/tokens.css`)
+
+> **Superseded by ADR-45 (see-through glass, no edges).** This section is the record of the bottle-green build before
+> ADR-45. Every border, ring, hairline, inset line and lit rim it lists is gone, and its veils are replaced by: picture
+> 0 page / 0.73 panels; colours 0 / 0.30 for the default trio (worked out per choice, panels up to 0.60); the app's own
+> backdrop 0 / 0.33 (grain included); floating layers 0.73; the tab bar 0.59; the question sheet 0.86; tracks and the
+> control fill panel + 0.15 under bone 0.08. [CONTRACTS.md §22.3](CONTRACTS.md) and
+> [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md) hold the current values.
+
 
 The old sage, off-white and tomato tokens are renamed: `--sage*` becomes `--green*`, `--offwhite*` becomes `--bone*`, and `--tomato*` becomes `--vermilion*`. The `--ink*` names stay, but they are redefined as the **text** tokens (see 1.2), so their roughly 300 call sites keep working.
 
@@ -116,6 +124,14 @@ The shadows are heavier than today because a dark shadow on a dark surface reads
 
 ### 2.1 Core glass recipe (`glass.css`)
 
+> **Superseded by ADR-45 (see-through glass, no edges).** This section is the record of the bottle-green build before
+> ADR-45. Every border, ring, hairline, inset line and lit rim it lists is gone, and its veils are replaced by: picture
+> 0 page / 0.73 panels; colours 0 / 0.30 for the default trio (worked out per choice, panels up to 0.60); the app's own
+> backdrop 0 / 0.33 (grain included); floating layers 0.73; the tab bar 0.59; the question sheet 0.86; tracks and the
+> control fill panel + 0.15 under bone 0.08. [CONTRACTS.md §22.3](CONTRACTS.md) and
+> [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md) hold the current values.
+
+
 | Part | Today | New |
 |---|---|---|
 | `.glass` tint | white 0.66 to off-white 0.48 | `linear-gradient(rgb(green / calc(var(--panel-veil) + 0.04)), rgb(green / calc(var(--panel-veil) - 0.04)))`. `--panel-veil` is now set by `applyLook` for **every** look (see section 3). It is not fixed in CSS. |
@@ -129,6 +145,14 @@ The shadows are heavier than today because a dark shadow on a dark surface reads
 | denser surfaces (toast, help panel, sheet, setup-todo panel, update bar) | white 0.86 to 0.95 | green **0.90** (sheet 0.94) in every look, so bone gets 7.9:1 or better over white |
 
 ### 2.2 Per component family
+
+> **Superseded by ADR-45 (see-through glass, no edges).** This section is the record of the bottle-green build before
+> ADR-45. Every border, ring, hairline, inset line and lit rim it lists is gone, and its veils are replaced by: picture
+> 0 page / 0.73 panels; colours 0 / 0.30 for the default trio (worked out per choice, panels up to 0.60); the app's own
+> backdrop 0 / 0.33 (grain included); floating layers 0.73; the tab bar 0.59; the question sheet 0.86; tracks and the
+> control fill panel + 0.15 under bone 0.08. [CONTRACTS.md §22.3](CONTRACTS.md) and
+> [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md) hold the current values.
+
 
 | Family | Surface | Text / icons | Active / selected | Notes |
 |---|---|---|---|---|
@@ -187,6 +211,14 @@ Fake cutouts must match the surface behind them:
 
 ### 3.1 How the veils are worked out (the new direction)
 
+> **Superseded by ADR-45 (see-through glass, no edges).** This section is the record of the bottle-green build before
+> ADR-45. Every border, ring, hairline, inset line and lit rim it lists is gone, and its veils are replaced by: picture
+> 0 page / 0.73 panels; colours 0 / 0.30 for the default trio (worked out per choice, panels up to 0.60); the app's own
+> backdrop 0 / 0.33 (grain included); floating layers 0.73; the tab bar 0.59; the question sheet 0.86; tracks and the
+> control fill panel + 0.15 under bone 0.08. [CONTRACTS.md §22.3](CONTRACTS.md) and
+> [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md) hold the current values.
+
+
 For bone text, the governing backdrop is the **lightest** one that can be behind a surface:
 
 - In the window look, assume **white** for every native glass (Liquid, vibrancy, acrylic, mica, blur) and for both schemes. The measured lightest Liquid Glass, active over white, is rgb(249,248,245), which is effectively white. Using white needs no new measurement.
@@ -210,6 +242,14 @@ The veils chosen:
 These are the colours-look veils for the existing swatches with the root text set. They are computed, not fixed: Cream `#f7f5ef` 0.75, Sage 0.60, Sunny 0.68, Mint 0.68, Sky 0.66, Ocean 0.16, Grape 0.36, Bubblegum 0.61, Night 0, `#ffffff` 0.77.
 
 ### 3.2 The brand backdrop (default on web, PWA and phones, and the frosted look)
+
+> **Superseded by ADR-45 (see-through glass, no edges).** This section is the record of the bottle-green build before
+> ADR-45. Every border, ring, hairline, inset line and lit rim it lists is gone, and its veils are replaced by: picture
+> 0 page / 0.73 panels; colours 0 / 0.30 for the default trio (worked out per choice, panels up to 0.60); the app's own
+> backdrop 0 / 0.33 (grain included); floating layers 0.73; the tab bar 0.59; the question sheet 0.86; tracks and the
+> control fill panel + 0.15 under bone 0.08. [CONTRACTS.md §22.3](CONTRACTS.md) and
+> [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md) hold the current values.
+
 
 The page owns this backdrop, so it is designed dark. That way panels can stay thin, and more of the moving mesh shows through than today (55% vs today's 34–52%).
 
@@ -246,6 +286,14 @@ None of the three passes for small text, and CTA labels are about 15–16px semi
 The fill still reads as `#E8392B` vermilion, because the gradient, glow and shine use `--vermilion` and `--vermilion-light`. Badges use `--vermilion-deep` `#c42a1e` with white (5.68).
 
 ### 3.4 Text on surfaces, worst cases (WCAG 4.5:1 needed; every cell passes)
+
+> **Superseded by ADR-45 (see-through glass, no edges).** This section is the record of the bottle-green build before
+> ADR-45. Every border, ring, hairline, inset line and lit rim it lists is gone, and its veils are replaced by: picture
+> 0 page / 0.73 panels; colours 0 / 0.30 for the default trio (worked out per choice, panels up to 0.60); the app's own
+> backdrop 0 / 0.33 (grain included); floating layers 0.73; the tab bar 0.59; the question sheet 0.86; tracks and the
+> control fill panel + 0.15 under bone 0.08. [CONTRACTS.md §22.3](CONTRACTS.md) and
+> [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md) hold the current values.
+
 
 The window rows use the window text set. All other rows use the root set.
 
@@ -322,6 +370,14 @@ html.see-through {
 ```
 
 ### 4.2 background.ts
+
+> **Superseded by ADR-45 (see-through glass, no edges).** This section is the record of the bottle-green build before
+> ADR-45. Every border, ring, hairline, inset line and lit rim it lists is gone, and its veils are replaced by: picture
+> 0 page / 0.73 panels; colours 0 / 0.30 for the default trio (worked out per choice, panels up to 0.60); the app's own
+> backdrop 0 / 0.33 (grain included); floating layers 0.73; the tab bar 0.59; the question sheet 0.86; tracks and the
+> control fill panel + 0.15 under bone 0.08. [CONTRACTS.md §22.3](CONTRACTS.md) and
+> [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md) hold the current values.
+
 
 ```ts
 export const TEXT_TOKENS = {

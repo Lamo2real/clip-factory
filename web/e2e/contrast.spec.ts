@@ -443,7 +443,7 @@ test("the tab bar, the setup pill and the Ask sheet hold their words over a whit
       const colours = new Set<string>();
       for (const el of [layer, ...Array.from(layer.querySelectorAll<HTMLElement>("*"))]) {
         const cs = getComputedStyle(el);
-        if (el.closest(".sr-only, .glide, .is-active, [aria-current='page'], .badge, .btn--primary, .btn--action, .help-msg--me, .setup-todo__pill-count") || cs.visibility === "hidden") continue;
+        if (el.closest(".sr-only, .glide, .is-active, [aria-current='page'], .badge, .btn--primary, .btn--action, .help-msg--me, .setup-todo__pill-count") || cs.visibility === "hidden" || el.getClientRects().length === 0) continue;
         if (Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent!.trim()) || el.tagName === "svg") colours.add(cs.color);
       }
       return { min: Math.min(...alphas), colours: [...colours] };
@@ -459,9 +459,62 @@ test("the tab bar, the setup pill and the Ask sheet hold their words over a whit
   };
   await check(".tabbar", TABBAR_VEIL, 3);
   await check(".setup-todo__pill", FLOAT_VEIL, 4.5);
+  // The Ask launcher floats over the page as well (an icon on a phone, 3:1; with its word on wider screens, 4.5:1).
+  await check(".help-launcher", FLOAT_VEIL, 4.5);
   await page.locator(".tabbar").screenshot({ path: test.info().outputPath("tabbar-over-thumbnails.png") });
   await page.getByRole("button", { name: "Ask Clip Factory" }).click();
   await page.locator(".help-panel").waitFor();
   await animationsDone(page);
   await check(".help-panel", FLOAT_VEIL, 4.5);
+});
+
+// ---------- Controls outside a panel, over a white picture (ADR-45) ----------
+// The picture look has no page veil, so a control that sits straight on the page (the Library's tabs) carries its own
+// fill. Over a white picture, every word on it is held to AA, worked out from the fill the browser really draws.
+test("the Library tabs stay readable over a white picture, at 390 and 1440 px", async ({ page }) => {
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: width < 768 ? 844 : 900 });
+    await page.goto("/settings/look-and-feel/background");
+    await settle(page);
+    const white = await page.evaluate(() => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 16;
+      const ctx = c.getContext("2d")!;
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, 16, 16);
+      return c.toDataURL("image/png").split(",")[1]!;
+    });
+    await page.getByRole("radio", { name: "Picture" }).check();
+    await page.locator('input[type="file"][accept="image/*"]').setInputFiles({ name: "white.png", mimeType: "image/png", buffer: Buffer.from(white, "base64") });
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.backdrop)).toBe("picture");
+    await page.goto("/library");
+    await settle(page);
+    const tabs = await page.locator(".lib-tab:not(.is-on)").evaluateAll((els) =>
+      els.map((el) => {
+        const s = getComputedStyle(el);
+        const nums = (css: string) =>
+          [...css.matchAll(/rgba?\(([^)]*)\)/g)].map((m) => {
+            const p = m[1]!.split(/[\s,/]+/).filter(Boolean).map(Number);
+            return [p[0]!, p[1]!, p[2]!, p.length >= 4 ? p[3]! : 1] as [number, number, number, number];
+          });
+        // Every painted ancestor up to the page: a loose control has none, so the white picture is right under it.
+        let painted = false;
+        for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+          const cs = getComputedStyle(a);
+          if (nums(cs.backgroundColor).some((c) => c[3] > 0) || cs.backgroundImage !== "none") painted = true;
+        }
+        return { text: el.textContent!.trim(), color: s.color, base: nums(s.backgroundColor)[0] ?? [0, 0, 0, 0], layers: nums(s.backgroundImage), painted };
+      }),
+    );
+    expect(tabs.length, `unselected tabs @${width}`).toBeGreaterThan(0);
+    for (const t of tabs) {
+      // Over white: the fill colour, then each image layer on top (top-most first in CSS, so reversed).
+      let under: Rgb = [255, 255, 255];
+      under = mix([t.base[0], t.base[1], t.base[2]], under, t.base[3]);
+      for (const l of [...t.layers].reverse()) under = mix([l[0], l[1], l[2]], under, l[3]);
+      const ink = t.color.match(/[\d.]+/g)!.slice(0, 3).map(Number) as unknown as Rgb;
+      expect(contrast(ink, under), `"${t.text}" @${width} (painted ancestor: ${t.painted})`).toBeGreaterThanOrEqual(4.5);
+    }
+    await page.locator(".lib-tabs").screenshot({ path: test.info().outputPath(`lib-tabs-white-picture-${width}.png`) });
+  }
 });

@@ -1042,7 +1042,15 @@ logs its token counts (`bedrock.usage`), and this table is to be corrected from 
   lightest corner is not always the one that needs the most green; the maths takes the largest veil over every corner.
   *Keeping 3:1 field boundaries for inputs by a lighter fill*: impossible with bone words at AA on a dark panel, so
   fields are told by a deeper well, their label and placeholder, and the focus ring.
-- **Consequences.** About 70 % of the backdrop shows through every panel on the web and phones (47 % before), 100 %
+- **Review follow-up (same release).** The grain over the living backdrop (bone noise in overlay, 0.1 × 0.55 at its
+  peak) is in the maths now, so the panel tint there is 0.33, not 0.30. Tracks and the control fill carry panel + 0.15
+  (was + 0.10): held over every spot, not only the lightest, a brown corner of the mesh and some owner colours needed
+  more. Controls that sit straight on the page (the Library tabs) wear the control fill; the Ask launcher wears the
+  floating layers' tint (it can rest on a white thumbnail); the Ask suggestions have a resting fill; refracting glass
+  blurs before it bends (Chromium left the backdrop sharp the other way round); a text field tapped or clicked into
+  shows a deeper well and a soft glow, the ring only after Tab; reduced transparency also raises the tab bar and the
+  floating layers to 0.92; dark green words on bone never carry the halo.
+- **Consequences.** About 67 % of the backdrop shows through every panel on the web and phones (47 % before), 100 %
   between panels (85 %); the default Colours look goes from a 0.74 page veil to 0 / 0.30. Supersedes the 0.45 floor
   of ADR-43. The Mac needs a measurement of the real bottle-green Liquid Glass before the window look's veils can
   change (CONTRACTS §22.2, Phase 2); nothing is stored differently, everything is worked out at read time.

@@ -313,6 +313,7 @@
 .gstep.is-current .gstep__num {
   background: var(--selected);
   color: var(--on-bone);
+  text-shadow: none;
   box-shadow: none;
 }
 .gstep.is-done .gstep__num {

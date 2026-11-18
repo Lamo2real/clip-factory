@@ -65,6 +65,7 @@
   padding-right: 3px;
   /* The app icon in small: a bone tile, a green "C", the vermilion dot. */
   color: var(--on-bone);
+  text-shadow: none;
   background: var(--selected);
   box-shadow: 0 4px 12px -6px rgb(var(--shadow-rgb) / 0.75);
 }
@@ -146,6 +147,7 @@
 }
 .tabbar__item.is-active {
   color: var(--on-bone);
+  text-shadow: none;
   background: var(--selected);
   box-shadow: 0 6px 14px -8px rgb(var(--shadow-rgb) / 0.83);
 }
@@ -252,6 +254,7 @@
 }
 .sidebar__item.is-active {
   color: var(--on-bone);
+  text-shadow: none;
   background: var(--selected);
   box-shadow: 0 8px 18px -12px rgb(var(--shadow-rgb) / 0.85);
 }
