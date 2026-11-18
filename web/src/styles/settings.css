@@ -1374,6 +1374,332 @@ ol.md__list {
   }
 }
 
+/* ---------- Settings › Posting › Money: real earnings (docs/CONTRACTS.md §25.7) ----------
+   One colour meaning each: leaf for progress and good news, bone for "goal reached", warm yellow for "needs your OK"
+   and "couldn't check". Vermilion is only ever the action button. */
+.money-top__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+.money-top__lines {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.money-top__lines li,
+.money-revenue__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+.money-top__lead,
+.money-revenue__lead {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.money-top__num,
+.money-revenue__num {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.money-top__none {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.money-top__rule {
+  margin-top: 10px;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.money-tag {
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  background: var(--tint-leaf);
+  color: var(--green-text);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.money-country {
+  display: block;
+  max-width: 360px;
+}
+.money-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.money-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.money-card__mark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgb(var(--green-deep-rgb) / 0.55);
+  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.3);
+  color: var(--ink);
+}
+.money-card__name {
+  font-size: var(--fs-h3);
+  font-weight: 700;
+}
+.money-card__pill .pill {
+  min-height: 30px;
+  font-size: var(--fs-small);
+}
+.money-card__line {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.money-card__fine,
+.money-card__where {
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+}
+.money-card__where a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+}
+.money-card__soon {
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.25);
+  font-weight: 600;
+}
+.money-card__extras {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+  font-size: var(--fs-small);
+}
+.money-revenue {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--tint-leaf);
+}
+.money-revenue .money-tag {
+  background: rgb(var(--green-deep-rgb) / 0.45);
+}
+.money-spark .spark__line {
+  stroke: var(--green-ink);
+}
+.money-goals {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+.money-goal {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.money-goal__or {
+  justify-self: start;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.money-goal__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.money-goal__text {
+  min-width: 0;
+}
+.money-goal__tick {
+  color: var(--ink-2);
+}
+.money-goal__tick.is-on {
+  color: var(--green-ink);
+}
+.money-goal__missing {
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+}
+.money-bar {
+  position: relative;
+  display: block;
+  height: 12px;
+  border-radius: var(--r-pill);
+  background: rgb(var(--bone-rgb) / 0.14);
+  overflow: hidden;
+}
+.money-bar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green-leaf), #8cc7a8);
+  /* Cased in bone like the Glide bar, so the fill still shows on a light window. */
+  box-shadow: inset 0 0 0 1.5px var(--bone);
+  animation: money-grow 900ms var(--ease-out) both;
+  transform-origin: left center;
+}
+.money-goal.is-reached .money-bar__fill {
+  background: linear-gradient(90deg, var(--green-leaf), var(--bone));
+}
+@keyframes money-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .money-bar__fill {
+    animation: none;
+  }
+}
+.reduce-motion .money-bar__fill {
+  animation: none;
+}
+/* A 44 px target; the small circle the eye sees is drawn inside it. */
+.money-why {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -8px -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  isolation: isolate; /* the circle (z-index -1) stays inside the button, above the card */
+}
+.money-why::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: var(--fill);
+  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.4);
+  z-index: -1;
+}
+.money-why__text {
+  flex-basis: 100%;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  font-weight: 500;
+}
+.money-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 650;
+}
+.money-permission {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.money-permission__go {
+  max-width: 100%;
+}
+.money-permission__steps {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: rgb(var(--green-deep-rgb) / 0.27);
+  font-size: var(--fs-small);
+}
+.money-permission__steps ol {
+  display: grid;
+  gap: 4px;
+  padding-left: 20px;
+}
+.money-payouts {
+  display: grid;
+  gap: 10px;
+}
+.money-payouts__list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+.money-payouts__list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.money-payouts__list .money-card__mark {
+  width: 28px;
+  height: 28px;
+}
+.money-card-skel {
+  display: block;
+  height: 180px;
+  border-radius: var(--r-md);
+}
+
+/* Home › Your money */
+.money-tile__body {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: clamp(14px, 2vw, 22px);
+  border-radius: var(--r-lg);
+  min-width: 0;
+}
+.money-tile__near-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  min-width: 0;
+}
+@media (min-width: 1100px) {
+  .money-tile {
+    grid-template-columns: minmax(200px, 0.9fr) minmax(0, 3.2fr);
+  }
+}
+
 /* ---------- What it learned (docs/CONTRACTS.md §16.12) ---------- */
 .learned__intro {
   color: var(--ink-2);

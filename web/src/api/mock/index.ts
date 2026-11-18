@@ -9,6 +9,7 @@ import { statsApi, type StatsFaults } from "./stats.ts";
 import { skillsApi, type MockSkillControls } from "./skills.ts";
 import { lessonsApi, type LessonsFault } from "./lessons.ts";
 import { followsApi } from "./follows.ts";
+import { mockMoneyGrant, moneyApi } from "./money.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
 import { currentClipModel, isClipModel } from "../../lib/models.ts";
@@ -317,10 +318,11 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   const skills = skillsApi(store, delay);
   const lessons = lessonsApi(() => store.clips, () => faults.lessons, () => delay());
   const follows = followsApi((ev) => mockLive.publish(ev), () => delay());
+  const money = moneyApi(() => delay());
   if (typeof window !== "undefined") {
     // Merge, never replace: posting (above) and setup (mock/setup.ts) keep their knobs on the same object.
     const w = window as unknown as { __cfMock?: Record<string, unknown> & Partial<MockSkillControls> };
-    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { follows: follows.controls });
+    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { follows: follows.controls, money: money.controls });
   }
 
   const api: Api = {
@@ -511,6 +513,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     ...skills.api,
     ...lessons,
     ...follows.api,
+    ...money.api,
     async getSettings() {
       await delay();
       return clone(store.settings);
@@ -580,8 +583,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       await delay();
       return setup.accounts();
     },
-    async connectAccount(platform) {
+    async connectAccount(platform, grant) {
       await delay();
+      // §25.4 "Allow money reading": the pretend platform approves at once and comes back to the Money page.
+      if (grant === "money") return mockMoneyGrant(platform);
       return setup.connect(platform);
     },
     async chooseAccount(platform, accountId) {

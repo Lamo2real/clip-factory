@@ -591,6 +591,44 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
 - **Manual release gate** (before part 2): a real Twitch and Kick webhook round trip from eu-north-1, and the YouTube
   channel page read from AWS (the consent page).
 
+### Real earnings (CONTRACTS §25)
+Offline only: recorded platform answers (`FakeHttp`), a fake token provider, the in-memory table, and the web mock with a
+scenario per state (`window.__cfMock.money.setScenario(name)`, kept in sessionStorage: `start`, `not_connected`,
+`consent_needed`, `not_yet`, `goal_reached`, `in_program`, `earning`, `facebook_verified`, `facebook_unverified`,
+`unsupported`, `error`).
+
+- **pytest, rules** (`api/tests/test_money_rules.py`): every goal names an official source (a blog or plain http is
+  refused), no rate keys, YouTube's 2027-02-01 switch (and the "keep 10M Shorts views" rule for channels already in),
+  TikTok by country (`no_country`, `not_open`, 10K vs 50K), X impressions as a number without a bar, `moneyScopes` only
+  for Allow money reading and the Connect scopes unchanged.
+- **pytest, the grant** (`api/tests/test_money_grant.py`): normal Connect asks for exactly the old scopes; a money grant
+  needs a connection and a platform that shares money; YouTube and TikTok grants merge (every Account field kept, even
+  unknown ones; posts, `STAT#`, settings, lessons and the setup gates untouched); cancel, a missing scope, another
+  channel, a dead code and an account that is no longer connected write nothing; two refreshers rotate TikTok's token
+  once.
+- **pytest, the collector and routes** (`api/tests/test_money.py`): the YouTube state matrix (each 403 reason, 200 with
+  0 and above 0), in the programme never goes down and `detectedAt` is written once, the three-month re-read with
+  `revisedAt`, first money only after a later read, the Shorts split hidden on 400, per-clip money on the Post without
+  touching its numbers, hidden subscribers never 0, uploads stop at the first old video; Facebook hidden while
+  unverified (the stored answer has no token or paging link), Meta's unit and currency kept once verified, a bare number
+  never shown, no fallback after a metric error; Instagram's Gifts goal; TikTok's pagination, counting and clamp; X's
+  budget charge and the refused field; one platform failing never stops the others; `thisMonth` per currency; the
+  routes (owner registry, Check now once an hour and the hour given back on a failed invoke, country, seen, days);
+  `forget` removes only YouTube's money; the daily handler; the run never deletes.
+- **vitest** (`web/test/money.test.tsx`, `web/test/noGuesses.test.ts`): formatting only (no maths), no vermilion pill,
+  every mock state renders with money only next to its source and estimate tag and at most one action button and three
+  bars, celebrations once, Check now once an hour, the result read once, old anchors, official sources in the config;
+  the CI guard against the retired guesses.
+- **Playwright** (`web/e2e/money.spec.ts`): first visit (one vermilion Allow money reading, grown-up steps, More, "?"),
+  the Allow round trip, a refused grant, earning with the first-money party once, two currencies, Home's tile and its
+  celebration, the country pick, Check now, not connected and couldn't check, old anchors, and 375 px light and dark
+  with no sideways scroll and contrast. `e2e/contrast.spec.ts` scans the country toast.
+- **Terraform** (`infra/modules/money/tests/money.tftest.hcl`, `envs/prod/tests/wiring.tftest.hcl`,
+  `modules/api/tests/api.tftest.hcl`): 06:00 UTC, no retries, no DeleteItem or secret create/delete, token writes only
+  to `token-*`, the money function and rule watched by monitoring, and the API may invoke it.
+- **Live checks, not done here** (§25.8): YouTube Analytics with the real monetary scope, Meta's earnings metrics and
+  unit, TikTok's `user.info.stats` review, X's `verified_followers_count`.
+
 ### Posting setup
 From [CONTRACTS.md §17.12](CONTRACTS.md#1712-tests-offline-fakes-only-no-aws-no-network). Everything offline: a fake
 Secrets Manager, a recorded `HttpClient` with fixtures per platform, a `FakeDurableContext`, and the web mock mode with

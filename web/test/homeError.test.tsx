@@ -12,6 +12,7 @@ const fake: Partial<Api> = {};
 vi.mock("../src/api/index.ts", async (orig) => ({ ...(await orig<object>()), api: () => fake as Api }));
 vi.mock("../src/screens/home/NewJobForm.tsx", () => ({ NewJobForm: () => null }));
 vi.mock("../src/components/GetApp.tsx", () => ({ GetAppBanner: () => null }));
+vi.mock("../src/screens/home/MoneyTile.tsx", () => ({ MoneyTile: () => null }));
 vi.mock("../src/lib/live.ts", () => ({ useLiveEvents: () => undefined, useLivePoll: () => undefined }));
 
 const { Home } = await import("../src/screens/home/Home.tsx");

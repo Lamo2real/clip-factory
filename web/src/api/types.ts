@@ -691,6 +691,140 @@ export interface NewJob {
   notes?: string;
 }
 
+// ---------- Real earnings (docs/CONTRACTS.md §25) ----------
+
+/** A platform card's state (§25.1). In the programme and Earning never go down by themselves. */
+export type MoneyState =
+  | "earning"
+  | "in_program"
+  | "goal_reached"
+  | "not_yet"
+  | "counting"
+  | "unknown"
+  | "needs_permission"
+  | "not_available"
+  | "not_connected"
+  | "error";
+
+export interface MoneyWhere {
+  label: string;
+  url?: string;
+}
+
+/** One goal from config/monetization.json measured against the account's real numbers; never money. */
+export interface MoneyGoal {
+  key: string;
+  label: string;
+  kind: "bar" | "tick" | "number";
+  current: number | null;
+  goal: number | null;
+  reached: boolean;
+  approx: boolean;
+  windowDays?: number;
+  note?: string;
+  help?: string;
+  /** The key of the goal this one is an "or" with (watch hours or Shorts views). */
+  or?: string;
+  /** Why there is no number (the platform did not share it, a permission is missing). */
+  missing?: string;
+  countingDaysLeft?: number;
+  sourceUrl: string;
+}
+
+export interface MoneyDay {
+  date: string;
+  amountMicros: number;
+}
+
+/** Money a platform reported, in its own currency (never converted), always tagged as that platform's estimate. */
+export interface MoneyRevenue {
+  platform: Platform;
+  currency: string;
+  unit: string;
+  source: string;
+  /** "YouTube's estimate". */
+  tag: string;
+  note: string;
+  month: string;
+  thisMonthMicros: number;
+  last30: MoneyDay[];
+  months: { month: string; amountMicros: number }[];
+  revised?: boolean;
+}
+
+export interface MoneyPermission {
+  what: "money" | "followers";
+  /** "Allow money reading" or "Allow follower reading". */
+  button: string;
+  steps: string[];
+  copy?: { label: string; value: string }[];
+  open?: { label: string; url: string };
+}
+
+export interface MoneyCard {
+  platform: Platform;
+  state: MoneyState;
+  /** Fixed short text for the state pill. */
+  pill: string;
+  /** One plain sentence. */
+  line: string;
+  programme: string;
+  statusWhere: MoneyWhere;
+  paidWhere: MoneyWhere;
+  goals: MoneyGoal[];
+  more: MoneyGoal[];
+  extras: string[];
+  checkedAt?: string;
+  detectedAt?: string;
+  earningSince?: string;
+  lastError?: string;
+  lagNote?: string;
+  revenue?: MoneyRevenue;
+  approxMonth?: { month: string; amountMicros: number; currency: string; source: string; tag: string; note: string };
+  split?: { month: string; shortsMicros?: number; longMicros?: number; liveMicros?: number };
+  notShared?: string;
+  comingSoon?: string;
+  needsPermission?: MoneyPermission;
+}
+
+export interface MoneyCelebration {
+  key: string;
+  platform: Platform;
+  kind: "goal" | "in_program" | "first_money";
+  text: string;
+}
+
+export interface MoneyView {
+  platforms: MoneyCard[];
+  country: string | null;
+  countries: { code: string; name: string }[];
+  /** Earning platforms only, one line per currency. */
+  thisMonth: { currency: string; amountMicros: number; platforms: Platform[] }[];
+  celebrations: MoneyCelebration[];
+  nextCheckAllowedAt?: string;
+  asOf: string;
+}
+
+/** A Post's money as its platform reported it (only YouTube today), for the clip page. */
+export interface ReportedMoney {
+  platform: Platform;
+  amountMicros: number;
+  currency: string;
+  source: string;
+  through?: string | null;
+  tag: string;
+}
+
+/** The result codes the money grant sends back to /settings/posting/money?result=…&platform=… (§25.4). */
+export type MoneyResult =
+  | "money_allowed"
+  | "money_denied"
+  | "money_missing"
+  | "money_not_connected"
+  | "money_wrong_account"
+  | "money_expired"
+  | "money_error";
+
 /** Everything the screens need from the backend. The HTTP client and the mock both implement it. */
 export interface Api {
   health(): Promise<{ ok: boolean; version: string }>;
@@ -725,8 +859,11 @@ export interface Api {
   createCookiesUpload(filename: string): Promise<PresignedPut>;
   deleteCookies(): Promise<void>;
   listAccounts(): Promise<Account[]>;
-  /** POST /v1/accounts/{platform}/connect: where to send the owner to approve (same tab). */
-  connectAccount(platform: Platform): Promise<{ authorizeUrl: string; expiresAt: string }>;
+  /**
+   * POST /v1/accounts/{platform}/connect: where to send the owner to approve (same tab). `grant: "money"` is "Allow
+   * money reading" (§25.4): YouTube and TikTok only, merged into the existing connection.
+   */
+  connectAccount(platform: Platform, grant?: "money"): Promise<{ authorizeUrl: string; expiresAt: string }>;
   /** POST /v1/accounts/{platform}/choose (Meta with several Pages or Instagram accounts). */
   chooseAccount(platform: Platform, accountId: string): Promise<PlatformSetup>;
   /** DELETE /v1/accounts/{platform}: the keys stay. */
@@ -760,6 +897,15 @@ export interface Api {
   getWeek(week: string, from: string, to: string): Promise<WeekView>;
   /** PUT /v1/weeks/{week}/best: 202 when the picks changed (learning starts), 200 when they did not. */
   saveWeekBest(week: string, body: { from: string; to: string; clipIds: string[] }): Promise<WeekView>;
+  // Real earnings (§25.5)
+  /** GET /v1/money. */
+  getMoney(): Promise<MoneyView>;
+  /** POST /v1/money/refresh: Check now, at most once an hour. */
+  refreshMoney(): Promise<{ started: boolean; nextAllowedAt?: string | null }>;
+  /** POST /v1/money/seen: a celebration was shown (it never plays again). */
+  seenMoney(key: string): Promise<MoneyView>;
+  /** PUT /v1/money/country. */
+  setMoneyCountry(country: string): Promise<MoneyView>;
   // Follow creators (§24.1)
   /** GET /v1/follows: the follows, the key slots and the Kick webhook address. */
   listFollows(): Promise<FollowsView>;

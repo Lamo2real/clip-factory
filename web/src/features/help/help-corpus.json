@@ -1,11 +1,12 @@
 {
-  "version": "3e84affa7e0d",
+  "version": "3412c6995aa1",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
     "src/components/GetApp.tsx",
     "src/components/Glide.tsx",
     "src/components/JobBits.tsx",
+    "src/components/MoneyCard.tsx",
     "src/components/Nav.tsx",
     "src/components/PerfLines.tsx",
     "src/components/Sheet.tsx",
@@ -15,6 +16,7 @@
     "src/lib/settingsTree.ts",
     "src/screens/clip/ClipPerformance.tsx",
     "src/screens/home/Home.tsx",
+    "src/screens/home/MoneyTile.tsx",
     "src/screens/home/NewJobForm.tsx",
     "src/screens/home/StreamersRow.tsx",
     "src/screens/jobs/JobDetail.tsx",
@@ -27,6 +29,7 @@
     "src/screens/review/Review.tsx",
     "src/screens/review/TikTokSheet.tsx",
     "src/screens/settings/FollowBranch.tsx",
+    "src/screens/settings/MoneyBranch.tsx",
     "src/screens/settings/parts.tsx",
     "src/screens/settings/setup/bits.tsx"
   ],
@@ -605,18 +608,16 @@
         "make money",
         "money from my video",
         "money from my clip",
-        "paid",
-        "pay",
         "income",
         "revenue",
         "dollars",
-        "monetization",
-        "monetized"
+        "estimate"
       ],
-      "answer": "Clip Factory only shows money a platform reports. It never guesses from views and you never type money in. Open **Settings › Posting › Money** to see it.",
+      "answer": "Clip Factory only shows money a platform reports. It never guesses from views and you never type money in. Open **Settings › Posting › Money**. YouTube shows its own estimate once you're in the Partner Program and pressed **Allow money reading**. Instagram, TikTok and X don't share money with apps, so their cards show how close you are instead.",
       "steps": [
         "Tap **Settings**.",
-        "Tap **Posting**, then **Money**."
+        "Tap **Posting**, then **Money**.",
+        "Read the money at the top. Each amount says whose estimate it is."
       ],
       "actions": [
         {
@@ -624,7 +625,134 @@
           "label": "Open Money",
           "to": "/settings/posting/money",
           "highlight": [
-            "money-soon"
+            "money-check"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-progress",
+      "kind": "guide",
+      "route": "/settings/posting/money",
+      "hash": "money-youtube",
+      "where": "Settings › Posting › Money",
+      "title": "Am I monetized yet?",
+      "keywords": [
+        "monetized",
+        "monetization",
+        "am i monetized",
+        "partner program",
+        "ypp",
+        "creator rewards",
+        "creativity program",
+        "how close",
+        "goal",
+        "subscribers",
+        "watch hours",
+        "1000 subscribers",
+        "4000 hours",
+        "get paid",
+        "when do i get paid",
+        "eligible",
+        "qualify",
+        "gifts",
+        "revenue sharing",
+        "premium"
+      ],
+      "answer": "Open **Settings › Posting › Money**. Each app's card has a pill: **Earning**, **In the programme**, **Not yet**, **Goal reached** or **Not shared**, and bars like 812 / 1,000 subscribers. Only YouTube tells apps if you're in its paid program. **Goal reached** means you hit the numbers, but the app also checks things Clip Factory can't see.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Money**.",
+        "Look at each app's pill and bars.",
+        "Tap **More** to see the other goals."
+      ],
+      "actions": [
+        {
+          "id": "money-progress:money",
+          "label": "Open Money",
+          "to": "/settings/posting/money#money-youtube",
+          "highlight": [
+            "money-youtube"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-allow",
+      "kind": "guide",
+      "route": "/settings/posting/money",
+      "hash": "money-youtube",
+      "where": "Settings › Posting › Money › YouTube",
+      "title": "Let Clip Factory read your YouTube money",
+      "keywords": [
+        "allow money reading",
+        "allow follower reading",
+        "needs your ok",
+        "permission",
+        "monetary",
+        "yt-analytics-monetary",
+        "unverified app",
+        "google says unverified",
+        "read money",
+        "connect money",
+        "tiktok followers"
+      ],
+      "answer": "On the YouTube card, press **Allow money reading** and say yes on Google's page. A grown-up first adds the money permission in the same Google Cloud project (no new keys) and sets Publishing status to **In production**. Google's \"unverified app\" screen is normal: press **Advanced**, then **Continue**. Your connection and posts stay as they are.",
+      "steps": [
+        "Tap **Settings**, then **Posting**, then **Money**.",
+        "On the YouTube card, tap **First time? Steps for a grown-up** and do the steps.",
+        "Tap **Allow money reading**.",
+        "On Google's page, tap **Allow**."
+      ],
+      "actions": [
+        {
+          "id": "money-allow:money",
+          "label": "Open the YouTube card",
+          "to": "/settings/posting/money#money-youtube",
+          "highlight": [
+            "money-youtube"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-payouts",
+      "kind": "guide",
+      "route": "/settings/posting/money",
+      "hash": "money-payouts",
+      "where": "Settings › Posting › Money › Getting your money out",
+      "title": "Where do I add my bank account to get paid?",
+      "keywords": [
+        "bank",
+        "bank account",
+        "add my bank",
+        "paypal",
+        "payout",
+        "payouts",
+        "withdraw",
+        "cash out",
+        "get my money",
+        "payment details",
+        "stripe",
+        "adsense",
+        "tiktok balance",
+        "meta payouts",
+        "how do i get paid",
+        "where is my money"
+      ],
+      "answer": "Each app pays you itself, so you add your bank account or PayPal inside each app. YouTube: **AdSense for YouTube › Payments**. Facebook and Instagram: Meta's payout settings. TikTok: your TikTok **Balance**. X: **Monetization**, through Stripe. Clip Factory never needs your bank details, and never asks for them.",
+      "steps": [
+        "Tap **Settings**, then **Posting**, then **Money**.",
+        "Scroll to **Getting your money out**.",
+        "Open that app and add your bank or PayPal there."
+      ],
+      "actions": [
+        {
+          "id": "money-payouts:money",
+          "label": "Open payouts help",
+          "to": "/settings/posting/money#money-payouts",
+          "highlight": [
+            "money-payouts"
           ]
         }
       ]
@@ -2136,6 +2264,7 @@
         "ready",
         "review",
         "working",
+        "money",
         "make",
         "new",
         "cancel",
@@ -2157,8 +2286,7 @@
         "check",
         "keep",
         "stop",
-        "automatic",
-        "most"
+        "automatic"
       ],
       "answer": "Paste a link to a stream or a video. Clip Factory finds the best moments and makes short clips. You pick the ones to keep.",
       "steps": [
@@ -3216,9 +3344,15 @@
       "where": "Settings › Posting › Money",
       "title": "Money",
       "keywords": [
-        "Real money is on its way"
+        "Your country",
+        "YouTube",
+        "TikTok",
+        "Instagram",
+        "Facebook",
+        "X",
+        "Getting your money out"
       ],
-      "answer": "Real money each app reports, and how close you are to getting paid.",
+      "answer": "How close you are to getting paid, and real money each app reports.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**."
@@ -3232,41 +3366,263 @@
       ]
     },
     {
-      "id": "apple-money-soon",
+      "id": "apple-money-country",
       "kind": "apple",
       "route": "/settings/posting/money",
-      "hash": "money-soon",
+      "hash": "money-country",
       "where": "Settings › Posting › Money",
-      "title": "Real money is on its way",
+      "title": "Your country",
       "keywords": [
-        "earn",
-        "earnings",
-        "money",
-        "paid",
-        "pay",
-        "income",
-        "revenue",
-        "monetization",
-        "monetized"
+        "country",
+        "where I live",
+        "region",
+        "tiktok",
+        "creator rewards",
+        "rules"
       ],
-      "answer": "Clip Factory only shows money an app reports. It never guesses.",
+      "answer": "Some apps have different goals in each country. Pick yours once.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**.",
-        "Find **Real money is on its way**."
+        "Find **Your country**."
       ],
       "actions": [
         {
-          "id": "apple-money-soon:open",
+          "id": "apple-money-country:open",
           "label": "Open Money",
-          "to": "/settings/posting/money#money-soon",
+          "to": "/settings/posting/money#money-country",
           "highlight": [
-            "money-soon"
+            "money-country"
           ]
         }
       ],
       "highlight": [
-        "money-soon"
+        "money-country"
+      ]
+    },
+    {
+      "id": "apple-money-youtube",
+      "kind": "apple",
+      "route": "/settings/posting/money",
+      "hash": "money-youtube",
+      "where": "Settings › Posting › Money",
+      "title": "YouTube",
+      "keywords": [
+        "youtube",
+        "partner program",
+        "ypp",
+        "monetized",
+        "monetization",
+        "subscribers",
+        "watch hours",
+        "shorts",
+        "earn",
+        "earnings",
+        "money",
+        "revenue",
+        "adsense",
+        "allow money reading"
+      ],
+      "answer": "How close you are to the Partner Program, and what YouTube says you earned.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Money**.",
+        "Find **YouTube**."
+      ],
+      "actions": [
+        {
+          "id": "apple-money-youtube:open",
+          "label": "Open Money",
+          "to": "/settings/posting/money#money-youtube",
+          "highlight": [
+            "money-youtube"
+          ]
+        }
+      ],
+      "highlight": [
+        "money-youtube"
+      ]
+    },
+    {
+      "id": "apple-money-tiktok",
+      "kind": "apple",
+      "route": "/settings/posting/money",
+      "hash": "money-tiktok",
+      "where": "Settings › Posting › Money",
+      "title": "TikTok",
+      "keywords": [
+        "tiktok",
+        "creator rewards",
+        "creativity program",
+        "followers",
+        "views",
+        "monetized",
+        "allow follower reading"
+      ],
+      "answer": "How close you are to Creator Rewards. TikTok doesn't share money with apps.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Money**.",
+        "Find **TikTok**."
+      ],
+      "actions": [
+        {
+          "id": "apple-money-tiktok:open",
+          "label": "Open Money",
+          "to": "/settings/posting/money#money-tiktok",
+          "highlight": [
+            "money-tiktok"
+          ]
+        }
+      ],
+      "highlight": [
+        "money-tiktok"
+      ]
+    },
+    {
+      "id": "apple-money-instagram",
+      "kind": "apple",
+      "route": "/settings/posting/money",
+      "hash": "money-instagram",
+      "where": "Settings › Posting › Money",
+      "title": "Instagram",
+      "keywords": [
+        "instagram",
+        "insta",
+        "gifts",
+        "followers",
+        "monetized",
+        "reels"
+      ],
+      "answer": "Followers against the goal for Gifts. Instagram doesn't share money with apps.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Money**.",
+        "Find **Instagram**."
+      ],
+      "actions": [
+        {
+          "id": "apple-money-instagram:open",
+          "label": "Open Money",
+          "to": "/settings/posting/money#money-instagram",
+          "highlight": [
+            "money-instagram"
+          ]
+        }
+      ],
+      "highlight": [
+        "money-instagram"
+      ]
+    },
+    {
+      "id": "apple-money-facebook",
+      "kind": "apple",
+      "route": "/settings/posting/money",
+      "hash": "money-facebook",
+      "where": "Settings › Posting › Money",
+      "title": "Facebook",
+      "keywords": [
+        "facebook",
+        "meta",
+        "content monetization",
+        "reels",
+        "monetized",
+        "earnings"
+      ],
+      "answer": "Followers, minutes watched and Meta's estimate once it is checked.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Money**.",
+        "Find **Facebook**."
+      ],
+      "actions": [
+        {
+          "id": "apple-money-facebook:open",
+          "label": "Open Money",
+          "to": "/settings/posting/money#money-facebook",
+          "highlight": [
+            "money-facebook"
+          ]
+        }
+      ],
+      "highlight": [
+        "money-facebook"
+      ]
+    },
+    {
+      "id": "apple-money-x",
+      "kind": "apple",
+      "route": "/settings/posting/money",
+      "hash": "money-x",
+      "where": "Settings › Posting › Money",
+      "title": "X",
+      "keywords": [
+        "twitter",
+        "premium",
+        "verified followers",
+        "revenue sharing",
+        "creator revenue"
+      ],
+      "answer": "Premium and verified followers. X doesn't share money with apps.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Money**.",
+        "Find **X**."
+      ],
+      "actions": [
+        {
+          "id": "apple-money-x:open",
+          "label": "Open Money",
+          "to": "/settings/posting/money#money-x",
+          "highlight": [
+            "money-x"
+          ]
+        }
+      ],
+      "highlight": [
+        "money-x"
+      ]
+    },
+    {
+      "id": "apple-money-payouts",
+      "kind": "apple",
+      "route": "/settings/posting/money",
+      "hash": "money-payouts",
+      "where": "Settings › Posting › Money",
+      "title": "Getting your money out",
+      "keywords": [
+        "bank",
+        "bank account",
+        "paypal",
+        "payout",
+        "payouts",
+        "withdraw",
+        "cash out",
+        "get paid",
+        "stripe",
+        "adsense",
+        "balance",
+        "payment",
+        "card"
+      ],
+      "answer": "Each app pays you itself. Add your bank or PayPal inside each app.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Money**.",
+        "Find **Getting your money out**."
+      ],
+      "actions": [
+        {
+          "id": "apple-money-payouts:open",
+          "label": "Open Money",
+          "to": "/settings/posting/money#money-payouts",
+          "highlight": [
+            "money-payouts"
+          ]
+        }
+      ],
+      "highlight": [
+        "money-payouts"
       ]
     },
     {

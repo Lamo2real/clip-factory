@@ -375,6 +375,14 @@ for (const { glass, paints } of WINDOW_LOOKS) {
       await animationsDone(page);
       await scan(`the delete sheet @${width}`);
 
+      // A toast: picking the country in Settings › Posting › Money (§25.7).
+      await page.goto("/settings/posting/money");
+      await settle(page);
+      await page.locator(".money-country__select").selectOption("SE");
+      await expect(page.getByText("Saved. Your country is Sweden.")).toBeVisible();
+      await animationsDone(page);
+      await scan(`a toast @${width}`);
+
       // The Ask panel with an answer.
       await page.goto("/");
       await settle(page);
