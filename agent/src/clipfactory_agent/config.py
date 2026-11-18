@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 DEFAULT_VECTOR_INDEX = "clips"
 DEFAULT_EMBED_MODEL_ID = "amazon.titan-embed-text-v2:0"
@@ -26,6 +27,31 @@ class Config:
     # The second watcher of the deep analysis (Amazon Nova 2 Lite, docs/DECISIONS.md ADR-40). None: that track is off.
     watch_model_id: str | None = None
     deep_enabled: bool = True  # CF_DEEP=off: no picture download, the watch step is skipped
+    # The owner's choice of model for clip jobs (docs/DECISIONS.md ADR-42): the key of the default model (agentModel,
+    # whose profile id is ``model_id``) and every model the owner may pick, key -> profile id, from clipModels.
+    default_model_key: str | None = None
+    clip_models: dict[str, str] = field(default_factory=dict)
+
+
+def _read(path: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def profile_id(data: Mapping[str, Any], model_key: str) -> str | None:
+    """The id to call model ``model_key`` of a parsed config/models.json with: ``<prefix>.<modelId>``, where the
+    model's own ``profilePrefix`` wins over the top-level one (docs/CONTRACTS.md §19.5); no prefix at all, the bare
+    model id. None when the key names no model."""
+    try:
+        entry = data["models"][model_key]
+        model = entry["modelId"]
+        prefix = entry.get("profilePrefix") or data.get("profilePrefix")
+        return f"{prefix}.{model}" if prefix else str(model)
+    except (KeyError, TypeError, AttributeError):
+        return None
 
 
 def model_from_models_json(path: Path, key: str = "agentModel") -> str | None:
@@ -34,14 +60,25 @@ def model_from_models_json(path: Path, key: str = "agentModel") -> str | None:
 
     A model's own ``profilePrefix`` wins over the top-level one (docs/CONTRACTS.md §19.5).
     """
-    try:
-        data = json.loads(path.read_text("utf-8"))
-        entry = data["models"][data[key]]
-        model = entry["modelId"]
-        prefix = entry.get("profilePrefix") or data.get("profilePrefix")
-        return f"{prefix}.{model}" if prefix else str(model)
-    except (OSError, ValueError, KeyError, TypeError):
+    data = _read(path)
+    if data is None:
         return None
+    model_key = data.get(key)
+    return profile_id(data, model_key) if isinstance(model_key, str) else None
+
+
+def clip_models_from_models_json(path: Path) -> dict[str, str]:
+    """Every model the owner may pick for clip jobs (``clipModels``, docs/DECISIONS.md ADR-42), key -> profile id, in
+    the file's order. A key that names no model is left out; no file or no list, none."""
+    data = _read(path)
+    keys = data.get("clipModels") if data else None
+    if data is None or not isinstance(keys, list):
+        return {}
+    out: dict[str, str] = {}
+    for k in keys:
+        if isinstance(k, str) and (pid := profile_id(data, k)):
+            out[k] = pid
+    return out
 
 
 def load_config(env: Mapping[str, str] | None = None) -> Config:
@@ -57,6 +94,7 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
     if missing:
         raise RuntimeError(f"Missing environment variables: {', '.join(missing)}")
     assert region and model
+    default_key = (_read(models_json) or {}).get("agentModel")
     return Config(
         region=region,
         table=e["CF_TABLE"],
@@ -69,4 +107,6 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         embed_model_id=e.get("CF_EMBED_MODEL_ID") or DEFAULT_EMBED_MODEL_ID,
         watch_model_id=e.get("CF_WATCH_MODEL_ID") or model_from_models_json(models_json, "watchModel"),
         deep_enabled=(e.get("CF_DEEP") or "on").strip().lower() != "off",
+        default_model_key=default_key if isinstance(default_key, str) else None,
+        clip_models=clip_models_from_models_json(models_json),
     )

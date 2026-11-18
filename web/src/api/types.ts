@@ -56,6 +56,10 @@ export interface Job {
   clipCount: number;
   notes?: string;
   error?: string;
+  /** The AI model that made the clips, a key of config/models.json (ADR-42). Absent on jobs from before it. */
+  model?: string;
+  /** The model the owner picked when it could not be used and the default model made the clips instead. */
+  modelWanted?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -179,6 +183,11 @@ export interface Settings {
   backgroundColours?: string[];
   /** See-through glass: "clear" (default) or "frosted". */
   glassStrength?: GlassStrength;
+  /**
+   * The AI model that makes the clips (docs/DECISIONS.md ADR-42): a key of `clipModels` in config/models.json.
+   * Absent on old servers: the default (`agentModel`).
+   */
+  clipModel?: string;
 }
 
 export type YoutubePrivacy = "public" | "unlisted" | "private";

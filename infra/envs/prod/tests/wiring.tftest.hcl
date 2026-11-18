@@ -177,3 +177,52 @@ run "deep_analysis_watch_model_is_wired" {
     error_message = "The watch model may be invoked only on the EU profile and the foundation model in its six destination regions."
   }
 }
+
+# docs/DECISIONS.md ADR-42: the owner picks the model for clip jobs from clipModels in config/models.json. The agent
+# may call every one of them (each profile here, the foundation model in any region for a global profile, in the six
+# listed EU regions for Haiku's geo profile); CF_MODEL_ID stays the default, Fable 5.1.
+run "clip_models_are_wired" {
+  command = plan
+
+  assert {
+    condition     = local.models.clipModels == ["fable-5-2", "fable-5-1", "opus-5-5", "sonnet-5-5", "haiku-5-5"] && local.models.agentModel == "fable-5-1"
+    error_message = "clipModels lists the owner's five choices in display order, and the default stays Fable 5.1."
+  }
+
+  assert {
+    condition = local.clip_model_ids == {
+      "fable-5-2"  = "global.anthropic.claude-fable-5-2"
+      "fable-5-1"  = "global.anthropic.claude-fable-5-1"
+      "opus-5-5"   = "global.anthropic.claude-opus-5-5"
+      "sonnet-5-5" = "global.anthropic.claude-sonnet-5-5"
+      "haiku-5-5"  = "eu.anthropic.claude-haiku-5-5"
+    }
+    error_message = "Each clip model goes through its profile: global for Fable, Opus and Sonnet, eu for Haiku."
+  }
+
+  assert {
+    condition = toset(local.clip_model_invoke_arns) == toset([
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-fable-5-2",
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-fable-5-1",
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-opus-5-5",
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-sonnet-5-5",
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-fable-5-2",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-fable-5-1",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-opus-5-5",
+      "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-5-5",
+      "arn:aws:bedrock:eu-central-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-north-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-south-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-south-2::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-haiku-5-5",
+      "arn:aws:bedrock:eu-west-3::foundation-model/anthropic.claude-haiku-5-5",
+    ]) && length(local.clip_model_invoke_arns) == 15
+    error_message = "The agent may call exactly the five clip models' profiles and their foundation models."
+  }
+
+  assert {
+    condition     = length(local.clip_model_profile_arns) == 5 && local.model_id == "global.anthropic.claude-fable-5-1"
+    error_message = "ReadProfile gets the five clip model profiles; CF_MODEL_ID stays the Fable 5.1 default."
+  }
+}

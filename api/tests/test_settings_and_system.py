@@ -23,6 +23,7 @@ DEFAULTS = {
     "setupSkipped": [],
     "backgroundColours": ["#9caf88", "#f7f5ef", "#e8412c"],
     "glassStrength": "clear",
+    "clipModel": "fable-5-1",
 }
 
 
@@ -452,3 +453,49 @@ def test_bad_stored_background_falls_back_to_defaults() -> None:
     assert "backgroundMode" not in out
     assert out["glassStrength"] == "clear"
     assert out["backgroundColours"] == ["#9caf88", "#f7f5ef", "#e8412c"]
+
+
+# ---------- AI model for clip jobs (ADR-42) ----------
+
+
+def test_clip_models_match_config() -> None:
+    import json
+    from pathlib import Path
+
+    config = json.loads((Path(__file__).resolve().parents[2] / "config" / "models.json").read_text())
+    assert list(settings.CLIP_MODELS) == config["clipModels"]
+    assert settings.DEFAULTS["clipModel"] == config["agentModel"]
+    assert config["agentModel"] in config["clipModels"]
+    for key in config["clipModels"]:
+        entry = config["models"][key]
+        assert entry["modelId"].startswith("anthropic.claude-")
+        assert entry["label"].startswith("Claude ")
+        assert 0 < len(entry["line"]) <= 60
+
+
+@pytest.mark.parametrize("value", ["fable-5-2", "fable-5-1", "opus-5-5", "sonnet-5-5", "haiku-5-5"])
+def test_put_clip_model_saved(call: Call, value: str) -> None:
+    status, body = call("PUT", "/v1/settings", {"clipModel": value})
+    assert status == 200
+    assert body["settings"] == {**DEFAULTS, "clipModel": value}
+    assert call("GET", "/v1/settings")[1] == body
+
+
+@pytest.mark.parametrize(
+    "value", ["nova-2-lite", "gpt", "", None, 5, ["fable-5-2"], "global.anthropic.claude-fable-5-2"]
+)
+def test_put_clip_model_is_checked(call: Call, value: object) -> None:
+    status, body = call("PUT", "/v1/settings", {"clipModel": value})
+    assert status == 400
+    assert "AI model" in body["error"]["message"]
+
+
+def test_old_or_bad_stored_clip_model_reads_as_default(call: Call, store: db.Store) -> None:
+    # A settings item saved before the field existed keeps every other choice and reads the default model.
+    store.put({"pk": db.user_pk(USER), "sk": db.SETTINGS_SK, "type": "settings", "userId": USER, "clipMin": 3})
+    got = call("GET", "/v1/settings")[1]["settings"]
+    assert (got["clipMin"], got["clipModel"]) == (3, "fable-5-1")
+    # A key that is no longer offered (or junk) falls back to the default; the rest of the item is kept.
+    assert settings.with_defaults({"clipModel": "claude-old-1", "clipMax": 7})["clipModel"] == "fable-5-1"
+    assert settings.with_defaults({"clipModel": 3})["clipModel"] == "fable-5-1"
+    assert settings.with_defaults({"clipModel": "opus-5-5"})["clipModel"] == "opus-5-5"

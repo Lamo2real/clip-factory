@@ -222,7 +222,7 @@ describe("see-through veil", () => {
   it("a pick-one track's labels reach AA on its shade, even when the track sits straight on the window", () => {
     for (const { glass, scheme, strength, check, at } of EVERY_LOOK) expect(worstInWindow(seeThroughTrackBackground(glass, scheme, strength, check.behind)), at).toBeGreaterThanOrEqual(AA);
     // glass.css uses the same two numbers.
-    const track = /html\.see-through :is\(\.segmented, \.tabs, \.bg-modes\) \{([^}]*)\}/.exec(rules("glass.css"))![1]!;
+    const track = /html\.see-through :is\(\.segmented, \.tabs, \.bg-modes, \.model-picks\) \{([^}]*)\}/.exec(rules("glass.css"))![1]!;
     expect(track).toContain(`background-color: rgb(var(--offwhite-rgb) / calc(var(--panel-veil) + ${TRACK_EXTRA_VEIL}))`);
     expect(track).toContain(`rgb(var(--ink-rgb) / ${TRACK_SHADE})`);
   });

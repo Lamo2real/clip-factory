@@ -11,7 +11,12 @@ again without one.
 
 Model calls run in their own small thread pool, not asyncio's default one: the deep analysis keeps a dozen long
 calls in flight, and on two CPUs the default pool (six threads) would queue the job's heartbeat writes behind them.
-Every answer's token counts are logged as ``bedrock.usage``, so what a job really costs can be read from the logs."""
+Every answer's token counts are logged as ``bedrock.usage``, so what a job really costs can be read from the logs.
+
+No request sets ``thinking``, ``temperature``, ``top_p`` or ``top_k`` (docs/DECISIONS.md ADR-42): every model the
+owner may pick (Fable 5.2 and 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5) refuses a thinking budget, ``thinking: disabled``
+or non-default sampling, and runs adaptive thinking when ``thinking`` is left out. ``probe`` makes one small call
+first, so a model the account cannot call is found before a job depends on it."""
 
 from __future__ import annotations
 
@@ -32,6 +37,49 @@ _POOL = ThreadPoolExecutor(MODEL_THREADS, thread_name_prefix="cf-model")
 
 class ModelError(Exception):
     """The model did not produce a usable answer."""
+
+
+# Bedrock's answers when a model or inference profile cannot be called from this account: no model access, a model
+# or profile not offered here, or not offered on demand. Throttling and outages are not among them (retry.py).
+_UNAVAILABLE_CODES = frozenset({"AccessDeniedException", "ResourceNotFoundException"})
+_UNAVAILABLE_WORDS = (
+    "not available",
+    "isn't available",
+    "unavailable",
+    "not enabled",
+    "isn't enabled",
+    "access denied",
+    "access to the model",
+    "don't have access",
+    "do not have access",
+    "not authorized",
+    "model identifier is invalid",
+    "invalid model",
+    "model id",
+    "inference profile",
+    "on-demand throughput",
+    "not supported",
+    "isn't supported",
+    "end of its life",
+)
+
+
+def model_unavailable(e: BaseException) -> bool:
+    """True when Bedrock refused a call because the model cannot be used here (access, existence or offer), not
+    because the request or the moment was wrong (docs/DECISIONS.md ADR-42)."""
+    response = getattr(e, "response", None)
+    if not isinstance(response, dict):
+        return False
+    err = response.get("Error") or {}
+    code = str(err.get("Code") or "")
+    if code in _UNAVAILABLE_CODES:
+        return True
+    if code != "ValidationException":
+        return False
+    msg = f"{err.get('Message') or ''} {e}".lower()
+    if any(w in msg for w in ("tool", "cache", "image", "token")):
+        return False  # a request setting the model does not take (structured switches those off itself)
+    return ("model" in msg or "profile" in msg) and any(w in msg for w in _UNAVAILABLE_WORDS)
 
 
 @dataclass
@@ -70,6 +118,14 @@ LAYOUT_SCHEMA: dict[str, Any] = {
 }
 
 
+PROBE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["ok"],
+    "properties": {"ok": {"type": "boolean"}},
+}
+
+
 def facecam_from_box(r: dict[str, Any], width: int, height: int) -> FrameLayout:
     """The model's pixel box as fractions of the frame, or no facecam when the box is implausible."""
     scene = str(r.get("scene") or "other")
@@ -105,6 +161,7 @@ class Bedrock:
         # until then: Bedrock's user guide sets no image count of its own, while the Converse API reference names 20
         # per message, so the first refusal teaches the real number and every later call is sized to it.
         self.image_limit: int | None = None
+        self.reachable = False  # set once ``probe`` got an answer
 
     def _converse(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         r: dict[str, Any] = self.client.converse(**kwargs)
@@ -129,6 +186,32 @@ class Bedrock:
                 cacheReadInputTokens=int(usage.get("cacheReadInputTokens") or 0),
                 cacheWriteInputTokens=int(usage.get("cacheWriteInputTokens") or 0),
             )
+
+    async def probe(self, *, skills: SkillsBlock) -> BaseException | None:
+        """One small structured call to see whether this model can be called at all, with the owner's skills first
+        like every call (it also writes them to the prompt cache for the calls that follow). Returns Bedrock's
+        refusal when the model is unavailable (``model_unavailable``), else None: an answer, or any other failure
+        (busy, a timeout, a bad answer), which is not a reason to give up on the model. A model that answered once
+        is not asked again."""
+        if self.reachable:
+            return None
+        try:
+            await self.structured(
+                system="You confirm that you can answer.",
+                skills=skills,
+                content=[{"text": "Set ok to true."}],
+                tool="ready",
+                description="Say that you are ready.",
+                schema=PROBE_SCHEMA,
+                max_tokens=2000,
+            )
+        except Exception as e:
+            if model_unavailable(e):
+                return e
+            log("warn", "model.probe_failed", model=self.model_id, error=type(e).__name__, detail=str(e)[:300])
+            return None
+        self.reachable = True
+        return None
 
     async def structured(
         self,

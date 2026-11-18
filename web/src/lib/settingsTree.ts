@@ -45,7 +45,7 @@ export const TREES: Tree[] = [
       {
         slug: "clips",
         name: "Clips",
-        line: "How many clips, and how long a video can be.",
+        line: "How many clips, how long a video can be, and which AI makes them.",
         icon: "layers",
         apples: [
           {
@@ -59,6 +59,12 @@ export const TREES: Tree[] = [
             name: "Longest video",
             leaf: "For a longer video, only the first part is used.",
             words: ["hours", "stream", "length", "source"],
+          },
+          {
+            id: "ai-model",
+            name: "AI model",
+            leaf: "The AI that finds your moments and writes your captions. Your pick is used for your next clips.",
+            words: ["model", "AI", "Claude", "Fable", "Opus", "Sonnet", "Haiku", "brain", "smart", "smarter", "cheap", "fast", "Bedrock"],
           },
         ],
       },

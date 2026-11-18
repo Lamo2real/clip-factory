@@ -1269,6 +1269,83 @@
     letter-spacing: -0.01em;
   }
 }
+/* ---------- Settings › Clip making › AI model (ADR-42) ----------
+   The models as rows on the same track as the background tiles: a name, one plain line, and "In use" on the chosen
+   one. The glide (glide--tile) slides between rows. */
+.model-picks {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  max-width: 460px;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  background: rgb(var(--ink-rgb) / 0.07);
+  box-shadow: inset 0 1px 2px rgb(var(--ink-rgb) / 0.1);
+}
+.model-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+  transition:
+    color 300ms var(--ease-out),
+    background-color var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-spring);
+}
+/* The radio covers the whole row, so a tap anywhere on it picks it. */
+.model-pick input {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  margin: 0;
+  opacity: 0;
+}
+.model-pick.is-on {
+  color: var(--ink);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.95), rgb(var(--offwhite-rgb) / 0.85));
+  box-shadow:
+    0 2px 8px -2px rgb(var(--ink-rgb) / 0.25),
+    inset 0 1px 0 #fff;
+}
+.model-pick:not(.is-on):hover {
+  color: var(--ink);
+  background: rgb(255 255 255 / 0.4);
+}
+.model-pick:active {
+  transform: scale(0.98);
+}
+.model-pick:has(input:focus-visible) {
+  box-shadow: var(--focus);
+}
+.model-pick__text {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.model-pick__name {
+  font-weight: 650;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+.model-pick__line {
+  font-size: var(--fs-small);
+  line-height: 1.3;
+}
+.model-pick__mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  color: var(--ink);
+  font-weight: 650;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
 .bg-tile {
   position: relative;
   display: grid;

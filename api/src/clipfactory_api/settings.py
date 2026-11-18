@@ -37,9 +37,14 @@ DEFAULTS: dict[str, Any] = {
     # §22: what sits behind the glass. The picture itself never leaves the device; only the choices are stored.
     "backgroundColours": ["#9caf88", "#f7f5ef", "#e8412c"],  # the Clip Factory colours: sage, cream, tomato
     "glassStrength": "clear",
+    # ADR-42: the AI model that makes the clips, a key of clipModels in config/models.json. The default is agentModel,
+    # so nothing changes until the owner picks one. A stored key no longer in the list falls back to the default.
+    "clipModel": "fable-5-1",
 }
 # Mirrors config/earnings.json `maxUsdPer1000` (a test keeps them equal).
 MAX_USD_PER_1000 = 100
+# Mirrors config/models.json `clipModels` and `agentModel` (a test keeps them equal; the API Lambdas do not ship it).
+CLIP_MODELS: tuple[str, ...] = ("fable-5-2", "fable-5-1", "opus-5-5", "sonnet-5-5", "haiku-5-5")
 YOUTUBE_PRIVACY = ("public", "unlisted", "private")
 BACKGROUND_MODES = ("see-through", "picture", "colours")
 GLASS_STRENGTHS = ("clear", "frosted")
@@ -104,6 +109,10 @@ def _check_field(field: str, value: Any) -> Any:
             return value
         case "backgroundColours":
             return _colours(value)
+        case "clipModel":
+            if not isinstance(value, str) or value not in CLIP_MODELS:
+                raise bad_request("Pick one of the AI models in the list.")
+            return value
         case "platforms":
             if not isinstance(value, list) or not all(isinstance(p, str) for p in value):
                 raise bad_request("platforms must be a list of platform names.")

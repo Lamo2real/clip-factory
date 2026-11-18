@@ -260,6 +260,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
         "info",
         "runtime.started",
         model=cfg.model_id,
+        clipModels=list(cfg.clip_models),  # the owner may pick any of these per job (ADR-42)
         region=cfg.region,
         vectors=vectors is not None,
         deep=cfg.deep_enabled,

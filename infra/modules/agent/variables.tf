@@ -31,6 +31,18 @@ variable "model_invoke_arns" {
   description = "Every ARN a Bedrock call through the profile touches: the profile and the foundation model in any region."
 }
 
+variable "clip_model_profile_arns" {
+  type        = list(string)
+  default     = []
+  description = "Inference profile ARNs (this region) of every model the owner may pick for clip jobs (clipModels in config/models.json, docs/DECISIONS.md ADR-42). Added to ReadProfile next to model_profile_arn."
+}
+
+variable "clip_model_invoke_arns" {
+  type        = list(string)
+  default     = []
+  description = "Every ARN a call to one of the owner's clip models touches: each profile, and its foundation model in any region (global profile) or in the profile's listed regions (geo profile). Added to InvokeFable next to model_invoke_arns."
+}
+
 variable "watch_model_id" {
   type        = string
   description = "Inference profile id of the second watcher of the deep analysis (CF_WATCH_MODEL_ID): Amazon Nova 2 Lite through the EU geo profile, <profilePrefix>.<modelId> of watchModel in config/models.json (docs/DECISIONS.md ADR-40)."

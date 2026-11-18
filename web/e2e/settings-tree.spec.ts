@@ -297,7 +297,7 @@ test.describe("on a desktop", () => {
     const trees = page.getByRole("list", { name: "Settings groups" }).getByRole("link");
     await expect(trees).toHaveCount(4);
     await expect(trees.nth(0)).toContainText("Clip making");
-    await expect(trees.nth(0)).toContainText("6 settings");
+    await expect(trees.nth(0)).toContainText("7 settings");
 
     await trees.nth(3).click();
     await expect(page).toHaveURL(/\/settings\/app$/);

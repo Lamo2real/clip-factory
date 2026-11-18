@@ -1,5 +1,5 @@
 {
-  "version": "472a8ab97150",
+  "version": "52ecf3e9f5b5",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -2408,9 +2408,10 @@
       "title": "Clips",
       "keywords": [
         "How many clips",
-        "Longest video"
+        "Longest video",
+        "AI model"
       ],
-      "answer": "How many clips, and how long a video can be.",
+      "answer": "How many clips, how long a video can be, and which AI makes them.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Clip making**, then **Clips**."
@@ -2487,6 +2488,47 @@
       ],
       "highlight": [
         "longest-video"
+      ]
+    },
+    {
+      "id": "apple-ai-model",
+      "kind": "apple",
+      "route": "/settings/clip-making/clips",
+      "hash": "ai-model",
+      "where": "Settings › Clip making › Clips",
+      "title": "AI model",
+      "keywords": [
+        "model",
+        "AI",
+        "Claude",
+        "Fable",
+        "Opus",
+        "Sonnet",
+        "Haiku",
+        "brain",
+        "smart",
+        "smarter",
+        "cheap",
+        "fast"
+      ],
+      "answer": "The AI that finds your moments and writes your captions. Your pick is used for your next clips.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **Clips**.",
+        "Find **AI model**."
+      ],
+      "actions": [
+        {
+          "id": "apple-ai-model:open",
+          "label": "Open Clips",
+          "to": "/settings/clip-making/clips#ai-model",
+          "highlight": [
+            "ai-model"
+          ]
+        }
+      ],
+      "highlight": [
+        "ai-model"
       ]
     },
     {

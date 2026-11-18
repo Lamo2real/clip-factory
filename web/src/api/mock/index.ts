@@ -11,6 +11,7 @@ import { lessonsApi, type LessonsFault } from "./lessons.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { MAX_RATE } from "../../lib/earnings.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
+import { currentClipModel, isClipModel } from "../../lib/models.ts";
 
 const STEP_MS = 3500;
 const clone = <T>(v: T): T => structuredClone(v);
@@ -353,6 +354,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         progress: 0,
         clipCount: 0,
         notes: body.notes,
+        // Like the agent (ADR-42): the job is made with the model picked in Settings at the time.
+        model: currentClipModel(store.settings.clipModel),
         createdAt: now,
         updatedAt: now,
       };
@@ -400,6 +403,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       j.error = undefined;
       j.steps = stepsAt(0, "queued");
       j.progress = 0;
+      j.model = currentClipModel(store.settings.clipModel);
+      j.modelWanted = undefined;
       j.createdAt = new Date().toISOString();
       j.updatedAt = j.createdAt;
       publishJob(j);
@@ -517,6 +522,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       }
       if (next.backgroundMode !== undefined && !isBackgroundMode(next.backgroundMode)) throw bad("Pick See-through, Picture or Colours.");
       if (next.glassStrength !== undefined && !isGlassStrength(next.glassStrength)) throw bad("Pick Clear or Frosted.");
+      if (next.clipModel !== undefined && !isClipModel(next.clipModel)) throw bad("Pick one of the AI models in the list.");
       if (next.backgroundColours !== undefined) {
         const c = next.backgroundColours;
         if (!Array.isArray(c) || c.length < 1 || c.length > MAX_COLOURS || !c.every(isHexColour)) throw bad("Pick 1 to 3 colours.");

@@ -1,16 +1,34 @@
 {
-  "$comment": "The only place model ids live. Everything else reads them from here (Terraform, the agent image). A model's own profilePrefix overrides the top-level one (Haiku for Ask Clip Factory and Nova 2 Lite, the second watcher of the deep analysis, use the EU geo profile, docs/CONTRACTS.md §19.5 and docs/DECISIONS.md ADR-40); profileRegions lists that profile's destination regions, for IAM. embeddingModel.modelId is in-Region and used as is (never prefixed with profilePrefix).",
+  "$comment": "The only place model ids live. Everything else reads them from here (Terraform, the agent image, the web app for the labels). agentModel is the default model for clip jobs; clipModels lists, in display order, the models the owner may pick for clip jobs in Settings › Clip making › AI model (the clipModel setting, docs/CONTRACTS.md §5 and docs/DECISIONS.md ADR-42), each with a label and one plain line for that screen. A model's own profilePrefix overrides the top-level one (Haiku for Ask Clip Factory and Nova 2 Lite, the second watcher of the deep analysis, use the EU geo profile, docs/CONTRACTS.md §19.5 and docs/DECISIONS.md ADR-40); profileRegions lists that profile's destination regions, for IAM. embeddingModel.modelId is in-Region and used as is (never prefixed with profilePrefix).",
   "profilePrefix": "global",
   "agentModel": "fable-5-1",
+  "clipModels": ["fable-5-2", "fable-5-1", "opus-5-5", "sonnet-5-5", "haiku-5-5"],
   "helpModel": "haiku-5-5",
   "watchModel": "nova-2-lite",
   "models": {
+    "fable-5-2": {
+      "label": "Claude Fable 5.2",
+      "line": "Smartest. Best at finding moments.",
+      "modelId": "anthropic.claude-fable-5-2"
+    },
     "fable-5-1": {
       "label": "Claude Fable 5.1",
+      "line": "Very smart. The usual one.",
       "modelId": "anthropic.claude-fable-5-1"
+    },
+    "opus-5-5": {
+      "label": "Claude Opus 5.5",
+      "line": "Smart and quicker.",
+      "modelId": "anthropic.claude-opus-5-5"
+    },
+    "sonnet-5-5": {
+      "label": "Claude Sonnet 5.5",
+      "line": "Good and fast. Costs less.",
+      "modelId": "anthropic.claude-sonnet-5-5"
     },
     "haiku-5-5": {
       "label": "Claude Haiku 5.5",
+      "line": "Cheapest, fastest. Simpler picks.",
       "modelId": "anthropic.claude-haiku-5-5",
       "profilePrefix": "eu",
       "profileRegions": ["eu-central-1", "eu-north-1", "eu-south-1", "eu-south-2", "eu-west-1", "eu-west-3"]

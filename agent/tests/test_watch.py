@@ -419,8 +419,9 @@ async def test_too_many_images_splits_the_chunk_until_the_model_takes_it() -> No
     client = ToolClient({"report_scenes": answer})
     r = await chunks(client, seconds=150)
     # 75 refused: limit 37, three pieces of 25; each refused: limit 12, three pieces each. No limit is named, so
-    # it halves, and splitting goes on as deep as it must (not only once).
-    assert seen[:4] == [75, 25, 25, 25] and sorted(seen[4:]) == [8, 8, 8, 8, 8, 8, 9, 9, 9]
+    # it halves, and splitting goes on as deep as it must (not only once). The pieces run concurrently, so a refused
+    # 25 can split before its siblings are sent: only the first request's place is fixed.
+    assert seen[0] == 75 and sorted(seen[1:]) == [8, 8, 8, 8, 8, 8, 9, 9, 9, 25, 25, 25]
     assert r.status == {"status": "ok"} and len(r.done[0]["events"]) == 9
 
 
