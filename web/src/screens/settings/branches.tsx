@@ -9,7 +9,7 @@ import { useSession } from "../../app/session.tsx";
 import { GetAppPanel } from "../../components/GetApp.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { A, ActGlyph, Button, Pill, Segmented, Skeleton, Stepper } from "../../components/ui.tsx";
+import { A, ActGlyph, Button, LinkButton, Pill, Segmented, Skeleton, Stepper } from "../../components/ui.tsx";
 import { Glide } from "../../components/Glide.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
@@ -29,9 +29,9 @@ import {
   type BackgroundMode,
   type GlassStrength,
 } from "../../lib/background.ts";
-import { currentOs } from "../../lib/device.ts";
+import { currentOs, oldAppDownloadUrl } from "../../lib/device.ts";
 import { CLIP_MODELS, currentClipModel } from "../../lib/models.ts";
-import { inDesktopApp, nativeGlass } from "../../lib/look.ts";
+import { desktopAppCantUpdate, inDesktopApp, nativeGlass, oldDesktopApp } from "../../lib/look.ts";
 import { APP_VERSION, checkForUpdate, updateState } from "../../lib/update.ts";
 import { Apple, AppleSwitch, Panel, usePickAction } from "./parts.tsx";
 
@@ -302,7 +302,11 @@ export function BackgroundBranch() {
   const glass = nativeGlass();
   const os = currentOs();
   const desktopApp = inDesktopApp();
-  const note = mode === "see-through" ? seeThroughNote(glass, desktopApp, os === "ios" || os === "android") : null;
+  // An app from before the see-through window cannot say what glass it has: it only needs the new one (§12.6).
+  const oldApp = oldDesktopApp();
+  // Any app that can't update itself (no version named) gets the new installer's button under the note.
+  const updateUrl = desktopAppCantUpdate() && typeof location !== "undefined" ? oldAppDownloadUrl(os, location.host) : null;
+  const note = mode === "see-through" ? seeThroughNote(glass, desktopApp, os === "ios" || os === "android", oldApp) : null;
   // "Get the app" only where the app can show see-through: a Mac or Windows computer not already in the app.
   const offerApp = !desktopApp && (os === "mac" || os === "windows");
   const choose = (next: BackgroundMode) => (next === mode ? null : saveSettings({ backgroundMode: next }));
@@ -327,6 +331,11 @@ export function BackgroundBranch() {
                 ) : null}
               </span>
             </p>
+          ) : null}
+          {note && updateUrl ? (
+            <LinkButton href={updateUrl} variant="primary" size="lg" icon="download" className="bg-note__update">
+              Update the app
+            </LinkButton>
           ) : null}
         </Apple>
       </Panel>

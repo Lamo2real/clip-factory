@@ -2,8 +2,10 @@
 // 1. Tells the web app it runs inside the wrapper, so it hides "Get the app".
 // 2. Says which native see-through glass is behind the page (window.__CF_GLASS__: "liquid", "vibrancy", "acrylic",
 //    "blur" or "none"; set just above this script by main.rs, §22). The web app goes transparent only when it is
-//    not "none", and tints its panels for the glass it is told.
-// 3. Links to other sites (and window.open) become a plain navigation, which the wrapper catches and opens
+//    not "none", and tints its panels for the glass it is told. Wrappers built before 2026-11-16 16:54 never set it,
+//    which is how the page tells an old copy from a computer that truly cannot show glass.
+// 3. Says which version of the app this is (window.__CF_DESKTOP_VERSION__, set just above by main.rs, §12.6).
+// 4. Links to other sites (and window.open) become a plain navigation, which the wrapper catches and opens
 //    in the system browser. The page itself never leaves the app. Same-site links open in this window.
 (function () {
   "use strict";

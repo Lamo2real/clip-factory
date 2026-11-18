@@ -83,6 +83,33 @@ export function colourName(hex: string): string {
   return SWATCHES.find((s) => s.hex === hex.toLowerCase())?.name ?? "Your colour";
 }
 
+/**
+ * A desktop app from before the see-through window (built before 2026-11-16 16:54): it sets `__CF_DESKTOP__` but never
+ * `__CF_GLASS__`. Every newer copy sets `__CF_GLASS__` (to "none" at the least), so an unset one means "update the
+ * app", not "this computer can't" (docs/CONTRACTS.md §12.6).
+ */
+export function isOldDesktopApp(w: { __CF_DESKTOP__?: unknown; __CF_GLASS__?: unknown } | undefined): boolean {
+  return !!w && w.__CF_DESKTOP__ === true && w.__CF_GLASS__ === undefined;
+}
+
+const DESKTOP_VERSION = /^\d+\.\d+\.\d+([-+][\w.+-]*)?$/;
+
+/** The version a desktop app names (`1.<n>.0`), only from apps that update themselves; null otherwise. */
+export function readDesktopVersion(w: { __CF_DESKTOP__?: unknown; __CF_DESKTOP_VERSION__?: unknown } | undefined): string | null {
+  if (!w || w.__CF_DESKTOP__ !== true) return null;
+  const v = w.__CF_DESKTOP_VERSION__;
+  return typeof v === "string" && DESKTOP_VERSION.test(v) ? v : null;
+}
+
+/**
+ * A desktop app that cannot update itself: every copy that has the updater names its version
+ * (`__CF_DESKTOP_VERSION__`), so one without it, see-through or not, needs the new installer (docs/CONTRACTS.md §12.6).
+ * Wider than `isOldDesktopApp`, which only picks the see-through note.
+ */
+export function cantSelfUpdate(w: { __CF_DESKTOP__?: unknown; __CF_GLASS__?: unknown; __CF_DESKTOP_VERSION__?: unknown } | undefined): boolean {
+  return !!w && w.__CF_DESKTOP__ === true && readDesktopVersion(w) === null;
+}
+
 /** Only the desktop wrapper can say there is real window glass; anything else (or an unknown value) is "none". */
 export function readNativeGlass(w: { __CF_DESKTOP__?: unknown; __CF_GLASS__?: unknown } | undefined): NativeGlass {
   if (!w || w.__CF_DESKTOP__ !== true) return "none";
@@ -556,9 +583,16 @@ export function resolveLook(i: LookInput): Look {
   }
 }
 
-/** The one plain line under the choice, so nobody wonders why see-through looks different here. */
-export function seeThroughNote(glass: NativeGlass, desktopApp: boolean, phone = false): string | null {
+/** The note under see-through in an old desktop app (`isOldDesktopApp`); its button gets the new one. */
+export const OLD_APP_NOTE = "Update the app to see through.";
+
+/**
+ * The one plain line under the choice, so nobody wonders why see-through looks different here. `oldApp`: a desktop
+ * app too old to say what glass it has (`isOldDesktopApp`), which only needs the new one.
+ */
+export function seeThroughNote(glass: NativeGlass, desktopApp: boolean, phone = false, oldApp = false): string | null {
   if (glass !== "none") return null;
+  if (desktopApp && oldApp) return OLD_APP_NOTE;
   if (desktopApp) return "This computer can't show see-through, so here you get the Clip Factory colours.";
   if (phone) return "See-through works in the Mac and Windows app on a computer. Phones don't let apps look behind them, so here you get the Clip Factory colours.";
   return "See-through works in the Mac and Windows app. Browsers don't let apps look behind them, so here you get the Clip Factory colours.";

@@ -369,6 +369,75 @@ test.describe("see-through in the desktop app (simulated)", () => {
     await expect(page.locator(".bg-note").getByRole("link")).toHaveCount(0);
   });
 
+  test("an old desktop app (no __CF_GLASS__, built before the see-through window) is asked to update, not told it can't", async ({ browser }) => {
+    // The user agent of the first wrappers: a Mac, and ClipFactoryDesktop/<version>.
+    const context = await browser.newContext({
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) ClipFactoryDesktop/1.0.0",
+    });
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      (window as unknown as Record<string, unknown>).__CF_DESKTOP__ = true;
+    });
+    await open(page);
+    expect(await backdrop(page)).toBe("frosted");
+    const note = page.locator(".bg-note");
+    await expect(note).toHaveText("Update the app to see through.");
+    await expect(note).not.toContainText("can't");
+    await expect(note.getByRole("link")).toHaveCount(0);
+    // One big vermilion button, to the Mac installer on the same server written as another site (trailing dot), so
+    // the old app sends it to the system browser.
+    const port = new URL(page.url()).port;
+    const button = page.getByRole("link", { name: "Update the app" });
+    await expect(button).toBeVisible();
+    await expect(button).toHaveClass(/btn--primary/);
+    await expect(button).toHaveClass(/btn--lg/);
+    await expect(button).toHaveAttribute("href", `https://localhost.:${port}/downloads/Clip-Factory.dmg`);
+    // The same offer app-wide, in the update bar, with its short label.
+    const bar = page.getByRole("region", { name: "Update the app" });
+    await expect(bar).toBeVisible();
+    await expect(bar.locator(".update-bar__title")).toHaveText("Update the app");
+    await expect(bar.getByRole("link", { name: "Update" })).toHaveAttribute("href", `https://localhost.:${port}/downloads/Clip-Factory.dmg`);
+    await page.goto("/");
+    await settle(page);
+    await expect(page.getByRole("region", { name: "Update the app" })).toBeVisible();
+    // Later hides it for now.
+    await page.getByRole("region", { name: "Update the app" }).getByRole("button", { name: "Later" }).click();
+    await expect(page.getByRole("region", { name: "Update the app" })).toHaveCount(0);
+    await context.close();
+  });
+
+  test("a see-through desktop app with no version (built before the updater) is offered the new app", async ({ browser }) => {
+    const context = await browser.newContext({
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) ClipFactoryDesktop/1.0.0",
+    });
+    const page = await context.newPage();
+    await asDesktop(page, "liquid", undefined, null);
+    await open(page);
+    // Real glass: no see-through note, but the app-wide bar still offers the installer.
+    await expect(page.locator(".bg-note")).toHaveCount(0);
+    const port = new URL(page.url()).port;
+    const bar = page.getByRole("region", { name: "Update the app" });
+    await expect(bar).toBeVisible();
+    await expect(bar.getByRole("link", { name: "Update" })).toHaveAttribute("href", `https://localhost.:${port}/downloads/Clip-Factory.dmg`);
+    await context.close();
+  });
+
+  test("a desktop app that updates itself, or a browser, never sees the old-app offer", async ({ browser }) => {
+    const context = await browser.newContext({
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) ClipFactoryDesktop/1.42.0",
+    });
+    const page = await context.newPage();
+    await asDesktop(page, "none");
+    await open(page);
+    await expect(page.locator(".bg-note")).toContainText("can't show see-through");
+    await expect(page.getByRole("link", { name: "Update the app" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Update the app" })).toHaveCount(0);
+    await asDesktop(page, "liquid");
+    await open(page);
+    await expect(page.getByRole("region", { name: "Update the app" })).toHaveCount(0);
+    await context.close();
+  });
+
   test("a glass name this page does not know (a newer desktop app) falls back to an ordinary page", async ({ page }) => {
     await asDesktop(page, "crystal");
     await open(page);
