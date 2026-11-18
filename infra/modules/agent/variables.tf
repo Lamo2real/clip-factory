@@ -31,6 +31,22 @@ variable "model_invoke_arns" {
   description = "Every ARN a Bedrock call through the profile touches: the profile and the foundation model in any region."
 }
 
+variable "watch_model_id" {
+  type        = string
+  description = "Inference profile id of the second watcher of the deep analysis (CF_WATCH_MODEL_ID): Amazon Nova 2 Lite through the EU geo profile, <profilePrefix>.<modelId> of watchModel in config/models.json (docs/DECISIONS.md ADR-40)."
+}
+
+variable "watch_model_invoke_arns" {
+  type        = list(string)
+  description = "Every ARN a call to the watch model touches: its inference profile in this region and the foundation model in each region the profile routes to (no wildcard)."
+}
+
+variable "deep_analysis_enabled" {
+  type        = bool
+  default     = true
+  description = "CF_DEEP: true (on) watches the whole picture before picking moments; false (off) skips the picture download and the watch step, which is exactly the pipeline before ADR-40."
+}
+
 variable "vector_bucket" {
   type        = string
   description = "S3 Vectors bucket holding one vector per clip (CF_VECTOR_BUCKET)."
