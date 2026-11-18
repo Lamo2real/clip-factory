@@ -18,7 +18,7 @@ test("paste a link, see the platform, start a job", async ({ page }) => {
   await expect(page).toHaveURL(/\/jobs\/[0-9A-Z]{26}$/);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page.getByText("aiming for 7 clips")).toBeVisible();
-  await expect(page.locator(".timeline__step")).toHaveCount(9);
+  await expect(page.locator(".timeline__step")).toHaveCount(10);
 });
 
 test("upload a video with progress", async ({ page }) => {
