@@ -77,7 +77,7 @@ async def test_one_clip_failing_with_a_user_facing_error_is_skipped(monkeypatch:
     st = render_state(3)
     msg = await p.render(st, FakeTracker())  # type: ignore[arg-type]
     assert [c.index for c in st.candidates] == [0, 2]
-    assert msg == "Cut 2 clip(s); 1 could not be cut."
+    assert msg == "Cut 2 clips; 1 could not be cut."
 
 
 async def test_every_clip_failing_shows_the_reason(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -159,7 +159,7 @@ async def test_system_prompt_goes_through_a_file(tmp_path: Path) -> None:
 
 def test_sdk_timeout_scales_with_the_video() -> None:
     assert sdk_timeout(brief(duration=3600)) == 45 * 60
-    assert sdk_timeout(brief(duration=6 * 3600)) == 12 * 6 * 60
+    assert sdk_timeout(brief(duration=6 * 3600)) == 12 * 8 * 60
     assert sdk_timeout(brief(duration=12 * 3600)) > sdk_timeout(brief(duration=6 * 3600))
 
 

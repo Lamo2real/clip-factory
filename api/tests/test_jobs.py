@@ -346,3 +346,60 @@ def test_retry_with_lambda_down_fails_again(call: Call, store: db.Store, lambda_
     _, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
     assert body["job"]["status"] == "failed"
     assert body["job"]["error"] == START_FAILED
+
+
+# --- the ten steps (docs/DECISIONS.md ADR-40) ---------------------------------------------------------------------
+
+TEN_STEPS = [
+    ("resolve", "Find the video"),
+    ("download", "Get the video"),
+    ("transcribe", "Write down the words"),
+    ("analyze", "Listen for big moments"),
+    ("watch", "Watch the video"),
+    ("select", "Pick the best moments"),
+    ("render", "Cut the clips"),
+    ("checklist", "Check each clip"),
+    ("captions", "Write the captions"),
+    ("finalize", "Finish up"),
+]
+
+
+def test_a_new_job_has_the_ten_steps_with_their_plain_labels(call: Call) -> None:
+    assert list(STEPS) == TEN_STEPS
+    status, body = call("POST", "/v1/jobs", {"source": {"type": "link", "url": "https://youtu.be/abc"}})
+    assert status == 201
+    assert [(s["key"], s["label"]) for s in body["job"]["steps"]] == TEN_STEPS
+    assert jobs.new_steps()[4] == {"key": "watch", "label": "Watch the video", "status": "pending"}
+
+
+def test_a_job_saved_with_the_old_nine_steps_still_serialises(call: Call, store: db.Store) -> None:
+    old = [
+        {"key": k, "label": label, "status": "done", "message": f"{k} done"}
+        for k, label in (
+            ("resolve", "Check the source"),
+            ("download", "Download the source"),
+            ("transcribe", "Transcribe the speech"),
+            ("analyze", "Scan for big moments"),
+            ("select", "Pick the best moments"),
+            ("render", "Cut the clips"),
+            ("checklist", "Check each clip"),
+            ("captions", "Write the captions"),
+            ("finalize", "Finish up"),
+        )
+    ]
+    job = seed_job(store, status="ready", steps=old, progress=1, clipCount=6)
+    status, body = call("GET", f"/v1/jobs/{job['jobId']}")
+    assert status == 200
+    assert body["job"]["steps"] == old
+    assert len(body["job"]["steps"]) == 9
+    status, body = call("GET", "/v1/jobs")
+    assert status == 200
+    assert next(j for j in body["jobs"] if j["jobId"] == job["jobId"])["steps"] == old
+
+
+def test_retrying_an_old_nine_step_job_gives_it_the_ten_steps(call: Call, store: db.Store) -> None:
+    old = [{"key": "resolve", "label": "Check the source", "status": "failed"}]
+    job = seed_job(store, status="failed", steps=old, error="Boom", flowRun=1)
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    assert [(s["key"], s["label"]) for s in body["job"]["steps"]] == TEN_STEPS

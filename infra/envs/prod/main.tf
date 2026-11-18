@@ -54,6 +54,17 @@ locals {
     [local.help_model_arn],
     [for r in local.help_model.profileRegions : "arn:aws:bedrock:${r}::foundation-model/${local.help_model.modelId}"],
   )
+
+  # The deep analysis's second watcher (docs/DECISIONS.md ADR-40): Amazon Nova 2 Lite through the EU geo profile, so
+  # the video parts it watches stay in the EU. Same shape as the help model: the profile here plus the foundation
+  # model in each region the profile may route to, listed in config/models.json (no region wildcard).
+  watch_model     = local.models.models[local.models.watchModel]
+  watch_model_id  = "${try(local.watch_model.profilePrefix, local.models.profilePrefix)}.${local.watch_model.modelId}"
+  watch_model_arn = "arn:aws:bedrock:${var.region}:${local.account_id}:inference-profile/${local.watch_model_id}"
+  watch_model_invoke_arns = concat(
+    [local.watch_model_arn],
+    [for r in local.watch_model.profileRegions : "arn:aws:bedrock:${r}::foundation-model/${local.watch_model.modelId}"],
+  )
 }
 
 module "storage" {
@@ -121,6 +132,10 @@ module "agent" {
   vector_index_arn  = module.vectors.vector_index_arn
   embed_model_id    = local.embed_model_id
   embed_model_arn   = local.embed_model_arn
+
+  # "Watch the video" (ADR-40): the second watcher. Fable, the main watcher, needs nothing new.
+  watch_model_id          = local.watch_model_id
+  watch_model_invoke_arns = local.watch_model_invoke_arns
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn

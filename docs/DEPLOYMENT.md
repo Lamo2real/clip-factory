@@ -274,6 +274,17 @@ Two one-time steps per AWS account, both in `eu-north-1`:
 Without these, the agent's first model call (and the clip flow's `distil` step) fails with an access or
 `ValidationException` error, and the job shows a plain failure.
 
+**Amazon Nova 2 Lite** (`eu.amazon.nova-2-lite-v1:0`, the second watcher of the deep analysis,
+[ADR-40](DECISIONS.md#adr-40-watch-the-whole-video-before-picking)) is an Amazon model and needs no form. If the
+account still shows a Model access page, enable it there. It is optional at run time: when it is denied or missing,
+the agent logs `nova.stopped`, the Watch step carries on with Claude alone and the job is not affected. Because the
+deep analysis sends frames of the whole source to Claude Fable 5.1, the `aws_review` retention above now covers far
+more picture data than the one facecam frame per clip it covered before.
+
+**Switching the deep analysis off.** Set the Terraform variable `deep_analysis_enabled = false` on the agent module
+(environment `CF_DEEP=off`) and deploy: no picture is downloaded and the Watch step is skipped, which is the pipeline
+before ADR-40. There is no cost cap to configure; what a job is expected to cost is in ADR-40.
+
 3. **Claude Haiku 5.5 for Ask Clip Factory (optional).** The help assistant calls Haiku 5.5 through the EU inference
    profile `eu.anthropic.claude-haiku-5-5` ([HELP_ASSISTANT.md](HELP_ASSISTANT.md)). Like Fable, it is billed through
    AWS Marketplace, and on an account that has never used it the first call can fail until the subscription exists.

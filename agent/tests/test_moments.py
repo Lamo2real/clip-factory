@@ -95,3 +95,36 @@ def test_transcript_lines_and_windows() -> None:
     assert text.splitlines() == ["[0:00:00] Hello there.", "[0:00:06] Next", "[0:00:20] Later"]
     assert windows(3700) == [(0, 1860), (1800, 3660), (3600, 3700)]
     assert windows(0) == []
+
+
+def test_picked_for_roundtrip_and_schema_note() -> None:
+    from clipfactory_agent.moments import MOMENT_SCHEMA, Moment
+
+    from .conftest import make_moment as mk
+
+    m = mk(picked_for="Loud laugh + Fast action")
+    assert Moment.from_dict(m.to_dict()).picked_for == "Loud laugh + Fast action"
+    assert mk().to_dict()["picked_for"] is None and Moment.from_dict(mk().to_dict()).picked_for is None
+    old = {k: v for k, v in mk().to_dict().items() if k != "picked_for"}  # a moment saved before ADR-40
+    assert Moment.from_dict(old).picked_for is None
+    assert "picked_for" not in MOMENT_SCHEMA["properties"]  # code builds it; the model never writes it
+    assert "sound when nobody talks" in MOMENT_SCHEMA["properties"]["first_words"]["description"]
+
+
+def test_transcript_lines_with_speakers() -> None:
+    from clipfactory_agent import transcript
+
+    words = [
+        [0.0, 0.3, "Go"],
+        [0.5, 0.8, "go"],
+        [1.0, 1.3, "go!"],
+        [2.0, 2.3, "No"],
+        [2.5, 2.8, "way."],
+        [20.0, 20.3, "Ok"],
+    ]
+    plain = transcript.lines(words, 0, 30)
+    assert plain == "[0:00:00] Go go go! No way.\n[0:00:20] Ok"
+    assert transcript.lines(words, 0, 30, None) == plain and transcript.lines(words, 0, 30, []) == plain
+    turns = [[0.0, 1.5, "S1"], [2.0, 3.0, "S2"]]
+    assert transcript.lines(words, 0, 30, turns) == "[0:00:00] S1: Go go go!\n[0:00:02] S2: No way.\n[0:00:20] S2: Ok"
+    assert transcript.timed_lines(words, 0, 1)[0] == (0.0, "Go go")

@@ -32,13 +32,15 @@ export function ulid(time = Date.now()): string {
   return head + tail;
 }
 
+/** The ten steps, with the labels the API and the agent write (docs/CONTRACTS.md §5, §8). Keep the three in step. */
 export const STEP_LABELS: Record<StepKey, string> = {
-  resolve: "Read the link",
-  download: "Download the audio",
-  transcribe: "Transcribe every word",
-  analyze: "Find the loud moments",
+  resolve: "Find the video",
+  download: "Get the video",
+  transcribe: "Write down the words",
+  analyze: "Listen for big moments",
+  watch: "Watch the video",
   select: "Pick the best moments",
-  render: "Cut and edit the clips",
+  render: "Cut the clips",
   checklist: "Check each clip",
   captions: "Write the captions",
   finalize: "Finish up",
@@ -73,11 +75,12 @@ function captions(hook: string, tags: string): Captions {
   };
 }
 
-const MOMENTS: { hook: string; summary: string; type: MomentType; score: number }[] = [
-  { hook: "He did NOT see that coming", summary: "A getaway goes wrong when the police helicopter lands on the roof.", type: "no_way", score: 9 },
-  { hook: "Chat called it before he did", summary: "Chat predicts the betrayal two minutes before it happens.", type: "interaction", score: 8 },
+/** `why` is the clip's `pickedFor` line; a moment without one shows no line (nothing stood out). */
+const MOMENTS: { hook: string; summary: string; type: MomentType; score: number; why?: string }[] = [
+  { hook: "He did NOT see that coming", summary: "A getaway goes wrong when the police helicopter lands on the roof.", type: "no_way", score: 9, why: "Big crash + Big reaction" },
+  { hook: "Chat called it before he did", summary: "Chat predicts the betrayal two minutes before it happens.", type: "interaction", score: 8, why: "Back and forth" },
   { hook: "The calmest rage quit ever", summary: "A whispered meltdown after losing the race on the final corner.", type: "rage", score: 8 },
-  { hook: "Twelve cars, one bridge", summary: "A pile-up on the bridge turns into a full server brawl.", type: "chaos", score: 9 },
+  { hook: "Twelve cars, one bridge", summary: "A pile-up on the bridge turns into a full server brawl.", type: "chaos", score: 9, why: "Loud laugh + Fast action" },
   { hook: "First time seeing the new map", summary: "Genuine first reaction to the new city reveal.", type: "first_reaction", score: 7 },
   { hook: "Speedrunners are not real gamers", summary: "A hot take on speedrunning that splits chat in half.", type: "hot_take", score: 7 },
   { hook: "The getaway driver is twelve", summary: "A kid in voice chat drives the best escape of the night.", type: "interaction", score: 8 },
@@ -148,6 +151,7 @@ function makeClip(job: Job, rank: number, m: (typeof MOMENTS)[number], status: C
     captions: captions(m.hook, tags),
     checklist: checklist(m.score),
     score: m.score,
+    pickedFor: m.why,
     createdAt: iso(ageMs),
     decidedAt: status === "review" ? undefined : iso(ageMs - 20 * MIN),
   };
@@ -183,7 +187,7 @@ export function seed(): Store {
       notes: "#gta6 #ranked",
     },
     12 * MIN,
-    5,
+    STEP_KEYS.indexOf("render"), // by key, never by position: the step list can grow
     "Cutting clip 3 of 7",
   );
   const queued = job(
@@ -210,7 +214,7 @@ export function seed(): Store {
       clipCount: 7,
     },
     26 * HOUR,
-    9,
+    STEP_KEYS.length,
   );
   const kick = job(
     {
@@ -227,7 +231,7 @@ export function seed(): Store {
       clipCount: 5,
     },
     4 * 24 * HOUR,
-    9,
+    STEP_KEYS.length,
   );
   const failed = job(
     {
@@ -243,7 +247,7 @@ export function seed(): Store {
       error: "YouTube blocked the download from the cloud. Add your YouTube cookies in Settings, then press Retry.",
     },
     2 * 24 * HOUR,
-    1,
+    STEP_KEYS.indexOf("download"),
     "YouTube asked for a sign-in.",
   );
   const canceled = job(
@@ -252,7 +256,7 @@ export function seed(): Store {
       source: { type: "link", platform: "twitch", url: "https://www.twitch.tv/lamo", title: "Live channel: lamo", channel: "lamo", thumbnailUrl: thumbArt(4, "Live") },
     },
     5 * 24 * HOUR,
-    2,
+    STEP_KEYS.indexOf("transcribe"),
   );
 
   const clips: Clip[] = [];
@@ -353,7 +357,7 @@ export function seed(): Store {
       clipCount: 4,
     },
     now - monday + 8 * 24 * HOUR,
-    9,
+    STEP_KEYS.length,
   );
   const older: Clip[] = OLDER.map((m, i) => {
     const c = makeClip(highlights, i + 1, m, "posted", 20 + i, "#gtarp", now - monday + 8 * 24 * HOUR - (i + 1) * MIN);

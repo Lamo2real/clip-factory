@@ -788,6 +788,22 @@
 .review-card__summary {
   color: var(--ink-2);
 }
+/* Why this clip was picked: one small glass line under the summary. It wraps on a narrow card, never clips. */
+.review-card__why {
+  justify-self: start;
+  max-width: 100%;
+  padding: 4px 12px;
+  border-radius: var(--r-md);
+  background: rgb(255 255 255 / 0.5);
+  box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.1);
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.review-card__why-label {
+  color: var(--ink-3);
+  font-weight: 650;
+}
 .review-card__source {
   display: flex;
   align-items: center;

@@ -148,3 +148,32 @@ run "help_assistant_is_wired" {
     error_message = "Ask Clip Factory is on in prod (HELP_ENABLED true) with a 2000-answer model cap per 30 days."
   }
 }
+
+# docs/DECISIONS.md ADR-40: the deep analysis's second watcher is Amazon Nova 2 Lite through the EU geo profile, read
+# from config/models.json like the other models, and the agent may invoke only that profile and its six EU models.
+run "deep_analysis_watch_model_is_wired" {
+  command = plan
+
+  assert {
+    condition     = local.models.watchModel == "nova-2-lite" && local.watch_model.modelId == "amazon.nova-2-lite-v1:0"
+    error_message = "config/models.json's watchModel points at the Nova 2 Lite entry."
+  }
+
+  assert {
+    condition     = local.watch_model_id == "eu.amazon.nova-2-lite-v1:0"
+    error_message = "Nova 2 Lite uses its own eu. profilePrefix (it is not callable In-Region from eu-north-1)."
+  }
+
+  assert {
+    condition = toset(local.watch_model_invoke_arns) == toset([
+      "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.amazon.nova-2-lite-v1:0",
+      "arn:aws:bedrock:eu-central-1::foundation-model/amazon.nova-2-lite-v1:0",
+      "arn:aws:bedrock:eu-north-1::foundation-model/amazon.nova-2-lite-v1:0",
+      "arn:aws:bedrock:eu-south-1::foundation-model/amazon.nova-2-lite-v1:0",
+      "arn:aws:bedrock:eu-south-2::foundation-model/amazon.nova-2-lite-v1:0",
+      "arn:aws:bedrock:eu-west-1::foundation-model/amazon.nova-2-lite-v1:0",
+      "arn:aws:bedrock:eu-west-3::foundation-model/amazon.nova-2-lite-v1:0",
+    ]) && length(local.watch_model_invoke_arns) == 7
+    error_message = "The watch model may be invoked only on the EU profile and the foundation model in its six destination regions."
+  }
+}

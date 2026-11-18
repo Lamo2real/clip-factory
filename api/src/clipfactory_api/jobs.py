@@ -13,11 +13,16 @@ from .log import log
 
 Item = dict[str, Any]
 
+# The ten steps and their owner-facing labels (words an 8-year-old can follow). The same list, in the same order, as
+# agent/src/clipfactory_agent/jobs.py and web/src/api/mock/fixtures.ts (docs/CONTRACTS.md §5, §8); the agent's tests
+# compare the three. "watch" is the deep analysis of the picture (docs/DECISIONS.md ADR-40). A job saved before it
+# existed keeps its nine steps and still serialises.
 STEPS: tuple[tuple[str, str], ...] = (
-    ("resolve", "Check the source"),
-    ("download", "Download the source"),
-    ("transcribe", "Transcribe the speech"),
-    ("analyze", "Scan for big moments"),
+    ("resolve", "Find the video"),
+    ("download", "Get the video"),
+    ("transcribe", "Write down the words"),
+    ("analyze", "Listen for big moments"),
+    ("watch", "Watch the video"),
     ("select", "Pick the best moments"),
     ("render", "Cut the clips"),
     ("checklist", "Check each clip"),

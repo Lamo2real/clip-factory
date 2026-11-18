@@ -290,7 +290,7 @@ service we use (Bedrock, AgentCore, whatever), when it is generating stuff or re
 - AC4: If the skills together are too long for one call, each is kept up to 40,000 characters and all together up to
   120,000; a skill that does not fit is shortened or, if too little room is left, left out and named in the logs.
   Built-in skills are never left out.
-- AC5: A skill that cannot be read is retried, then skipped and reported (the job step says "1 could not be read");
+- AC5: A skill that cannot be read is retried, then skipped and reported (the job step says "1 skill could not be read");
   if the list of skills itself cannot be read, the step fails and retries instead of running without skills.
 - AC6: Turning text into search vectors (Titan embeddings) is not writing or reading by Claude, so it does not get
   skills.

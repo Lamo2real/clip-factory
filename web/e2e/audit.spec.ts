@@ -95,7 +95,7 @@ for (const [name, use] of [
       await expect(page.getByText("YouTube video found.")).toBeVisible();
       await page.getByRole("button", { name: "Make clips" }).click();
       await expect(page).toHaveURL(/\/jobs\/[0-9A-Z]{26}$/);
-      await expect(page.locator(".timeline__step")).toHaveCount(9);
+      await expect(page.locator(".timeline__step")).toHaveCount(10);
 
       // Live progress on a running job.
       await nav(page).getByRole("link", { name: "Jobs", exact: true }).click();

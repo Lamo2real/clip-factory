@@ -559,3 +559,17 @@ def test_try_again_without_tiktok_choices_keeps_the_old_ones(call: Call, store: 
     tiktok = table.raw(db.user_pk(USER), db.post_sk("Ptiktok"))
     assert tiktok is not None
     assert (tiktok["status"], tiktok["postOptions"]) == ("queued", TIKTOK)
+
+
+def test_picked_for_passes_through_when_the_agent_wrote_it(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    """docs/CONTRACTS.md §5: ``pickedFor`` is the agent's few plain words on why the moment was picked (ADR-40)."""
+    with_why = seed_clip(store, s3_client, pickedFor="Loud laugh + Fast action")
+    without = seed_clip(store, s3_client)
+    status, body = call("GET", "/v1/clips")
+    assert status == 200
+    by_id = {c["clipId"]: c for c in body["clips"]}
+    assert by_id[with_why["clipId"]]["pickedFor"] == "Loud laugh + Fast action"
+    assert "pickedFor" not in by_id[without["clipId"]]  # an older clip, or nothing stood out: no field at all
+    status, body = call("GET", f"/v1/clips/{with_why['clipId']}")
+    assert status == 200
+    assert body["clip"]["pickedFor"] == "Loud laugh + Fast action"

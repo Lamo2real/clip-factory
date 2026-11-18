@@ -7,11 +7,15 @@ Runtime (`cf_prod_clip_agent`) and thinks with Claude Fable 5.1. The code is in 
 ## What it may and may not do
 
 - It **may** read the job, the owner's settings, every skill and learnings (including the "Best of week" ones); query and write clip vectors in
-  S3 Vectors; download the source; call Transcribe and Bedrock (Claude Fable 5.1, Titan Text Embeddings V2); run
-  ffmpeg; write clips to S3 and Clip items to DynamoDB; update the job's status, steps and progress; and send its job
-  flow callback (heartbeat, success, failure).
+  S3 Vectors; download the source (the sound, a small copy of the picture for watching, and the sections it cuts);
+  call Transcribe and Bedrock (Claude Fable 5.1, Amazon Nova 2 Lite as a second watcher, Titan Text Embeddings V2);
+  send frames and small video parts of the source to those two models so they can watch it; run ffmpeg; write clips
+  to S3 and Clip items to DynamoDB; update the job's status, steps and progress; and send its job flow callback
+  (heartbeat, success, failure).
 - It **never** publishes anything, never changes settings or skills, and never reads the YouTube cookies for anything
   but yt-dlp. Publishing happens only after the owner's Confirm, in the durable `cf-prod-clip-flow`.
+- It **never** calls a service the deep analysis rejected (Rekognition, Comprehend, MediaConvert, Step Functions,
+  Batch): its role has no action for them ([ADR-40](DECISIONS.md#adr-40-watch-the-whole-video-before-picking)).
 
 ## How it is started
 
@@ -35,20 +39,58 @@ nothing is sent.
 
 ## Pipeline
 
-| # | Step (`key`) | What happens | Tools |
-|---|---|---|---|
-| 1 | Resolve (`resolve`) | Detects the platform; reads title, channel, duration and thumbnail (yt-dlp metadata), or checks the uploaded object in S3. Refuses private, deleted or unsupported sources with a plain reason. | yt-dlp, S3 |
-| 2 | Download (`download`) | Links: audio only, cut at `maxSourceHours`. Uploads: extracts the audio from the file in S3. Writes `audio.m4a` (and `meta.json`). | yt-dlp, ffmpeg |
-| 3 | Transcribe (`transcribe`) | Amazon Transcribe batch job, word timestamps, language detected automatically. Writes `transcript.json` and `words.json` (`[start, end, word]`). | Transcribe |
-| 4 | Analyze (`analyze`) | Loudness per second (`loudness.json`) to find shouting and laughing spikes; splits the transcript into windows (about 30 minutes) with their spikes. | ffmpeg |
-| 5 | Select (`select`) | First, "What worked before": the source's title, channel, notes and transcript start are embedded with Titan and up to 8 similar clips of this owner are read from S3 Vectors: the owner's `best` (best-of-the-week) clips first, then `performed` ones (fewer than 3 → any of the owner's clips; an error → skipped). Then Claude reads each window with the skills block, learnings and those examples and proposes moments; a final pass ranks them, keeps `clipTarget.max` plus a few spares, and writes hooks. | Bedrock |
-| 6 | Render (`render`) | Per moment: downloads only that section of video; Claude looks at one frame to find the facecam; ffmpeg builds 1080×1920 (facecam on top, gameplay below, or a blurred fill when there is no facecam), trims dead air, adds the hook and burned-in ASS captions, makes the cover from the peak frame. | yt-dlp, ffmpeg, Bedrock (vision) |
-| 7 | Checklist (`checklist`) | Runs the pre-post checklist from the skills. Measured items (sound and motion in the first second, hook length, clip length, captions present) are computed; judgement items (makes sense with zero context, pays off) are asked of Claude. One fix pass; a clip that still fails is replaced by a spare. | ffmpeg, Bedrock |
-| 8 | Captions (`captions`) | One caption per platform: YouTube title (under 60 characters) and description, Instagram, Facebook, TikTok, X. Required tags from the owner's notes are added by code, so they are never forgotten. | Bedrock |
-| 9 | Finalize (`finalize`) | One vector per new clip (`PutVectors`, status `review`), then job `ready`, `clipCount` set, then the success callback. Clips are in `review`. | Titan, S3 Vectors, DynamoDB, Lambda callback |
+| # | Step (`key`) | The owner sees | What happens | Tools |
+|---|---|---|---|---|
+| 1 | Resolve (`resolve`) | Find the video | Detects the platform; reads title, channel, duration and thumbnail (yt-dlp metadata), or checks the uploaded object in S3. Refuses private, deleted or unsupported sources with a plain reason. Links: also chooses the small rendition the watchers will look at (`meta.picture`: the tallest H.264 up to 480p and 30 fps that fits the disk, video-only before one with sound, so Twitch and Kick get 480p too; else none). | yt-dlp, S3 |
+| 2 | Download (`download`) | Get the video | The sound first, exactly as before, and it must succeed. Links: audio only, cut at `maxSourceHours`. Uploads: extracts the audio from the file in S3. Writes `audio.m4a` (and `meta.json`). Then it starts preparing the picture **in the background** and returns: the small rendition is downloaded (links) or read in place (uploads), one ffmpeg pass cuts it into 2 fps parts of 300 seconds (`picture/part-NNNN.mp4`) and scores how much the picture changes every second (`picture.json`). | yt-dlp, ffmpeg |
+| 3 | Transcribe (`transcribe`) | Write down the words | Amazon Transcribe batch job, word timestamps, language detected automatically, speaker labels (who is talking). Writes `transcript.json`, `words.json` (`[start, end, word]`) and `speakers.json`. Almost no words is no longer the end here (`meta.fewWords`): the picture may still carry clips. | Transcribe |
+| 4 | Analyze (`analyze`) | Listen for big moments | Loudness per second (`loudness.json`) to find shouting and laughing spikes; loads the skills, the learnings and "What worked before". | ffmpeg |
+| 5 | Watch (`watch`) | Watch the video | Waits for the picture, then two models watch **all of it** at the same time. **Fable** gets every 150 seconds as frames (one per 2 seconds, plus every frame around the loudest and fastest seconds) with that part's words. **Nova 2 Lite** gets each 300-second part as real video. Both report what is seen as events (a crash, a stunt, a face, text on screen, how strong, whether anybody is talking). The answers are merged into `visual_log.json`, and with the loudness, the picture-change score, the most-replayed peaks and the speakers into hot spots (`signals.json`). Never fails the job: see [Watching the video](#watching-the-video). | ffmpeg, Bedrock (vision, video) |
+| 6 | Select (`select`) | Pick the best moments | First, "What worked before": the source's title, channel, notes and transcript start are embedded with Titan and up to 8 similar clips of this owner are read from S3 Vectors: the owner's `best` (best-of-the-week) clips first, then `performed` ones (fewer than 3 → any of the owner's clips; an error → skipped). Then Claude reads each window (the words **with the picture notes between them**, the loudness spikes, the fast-picture seconds, the hot spots) with the skills block, learnings and those examples and proposes moments, including ones with nobody talking; a final pass ranks them, keeps `clipTarget.max` plus a few spares, and writes hooks. Then **the second look**: Claude sees every frame of each picked moment and spare with its words, may move the timing by at most 5 seconds or fix the hook, and a moment that does not hold up is swapped for a spare that does. Code then writes each clip's `pickedFor` ("Loud laugh + Fast action"). | Bedrock, Bedrock (vision) |
+| 7 | Render (`render`) | Cut the clips | Per moment: downloads only that section of video; Claude looks at one frame to find the facecam; ffmpeg builds 1080×1920 (facecam on top, gameplay below, or a blurred fill when there is no facecam), trims dead air (never from a moment without words), adds the hook and burned-in ASS captions, makes the cover from the peak frame. | yt-dlp, ffmpeg, Bedrock (vision) |
+| 8 | Checklist (`checklist`) | Check each clip | Runs the pre-post checklist from the skills. Measured items (sound and motion in the first second, hook length, clip length, captions present, or "No speech to caption." for a clip without words) are computed; judgement items (makes sense with zero context, pays off) are asked of Claude, who also gets what was seen inside the clip. One fix pass; a clip that still fails is replaced by a spare. | ffmpeg, Bedrock |
+| 9 | Captions (`captions`) | Write the captions | One caption per platform: YouTube title (under 60 characters) and description, Instagram, Facebook, TikTok, X. Required tags from the owner's notes are added by code, so they are never forgotten. | Bedrock |
+| 10 | Finalize (`finalize`) | Finish up | One vector per new clip (`PutVectors`, status `review`), then job `ready`, `clipCount` set, then the success callback. Clips are in `review`. | Titan, S3 Vectors, DynamoDB, Lambda callback |
 
-A step that does not apply is marked `skipped` (for example `download` from a link when the source was cached by a
-retry).
+A step that does not apply is marked `skipped` (for example `watch` when the picture could not be fetched: "Could not
+watch the video this time. Picking from the words and the sound.").
+
+### Watching the video
+
+The owner asked for the source to be analysed with the words **and** the picture before the clips are chosen
+([ADR-40](DECISIONS.md#adr-40-watch-the-whole-video-before-picking)). Before this, the picture was only looked at
+after a moment was picked (one frame, to find the facecam), so a crash or a stunt with nobody talking could not be
+found.
+
+| Signal | From | What it adds |
+|---|---|---|
+| Words | Amazon Transcribe | What is said, and when (as before). |
+| Who is talking | Transcribe speaker labels | Lines start with `S1:`, `S2:`; a back-and-forth is visible. Every prompt that shows them says the numbers restart in long videos and are not names. Off with `CF_DEEP=off`. |
+| Loudness | ffmpeg | Shouting and laughing (as before). |
+| Picture change | ffmpeg, the same pass that cuts the parts | Where the picture moves fast or cuts. Needs no model, so it is still there when Bedrock is not. |
+| What is seen | Claude Fable 5.1 on frames of the whole source | Events with a kind, a strength 1–10, the streamer's face, text on screen. |
+| What is seen, again | Amazon Nova 2 Lite on the video parts | An independent second opinion; fills the gaps Fable leaves; agreement makes a hot spot stronger. |
+| Most replayed | YouTube | Where viewers rewind (as before). |
+
+**Nothing is sampled away.** Every second of the source is in a chunk; a longer source gets more chunks, more time
+and the same coverage. The only limits are technical ones (below).
+
+**Every signal is optional at run time.** If the small rendition cannot be downloaded, ffmpeg fails, a model is
+throttled, refuses, is not allowed or times out, the failure is logged, nothing is marked failed, and the job picks
+from the signals it has. With no picture data at all, the finder's prompts are byte for byte what they were before
+(tested). What the owner sees on the Watch step:
+
+| What happened | Step message |
+|---|---|
+| Everything was watched | "Watched all 2:03:10. Saw 41 big things." |
+| Some parts were not watched by either model | "Watched most of the video (44 of 48 parts)." ("part of the video" when under half) |
+| No model answered, the picture-change score exists | "Saw where the picture moves fast. Picking with that, the words and the sound." |
+| No picture at all (or `CF_DEEP=off`) | skipped: "Could not watch the video this time. Picking from the words and the sound." |
+| Try again after a full watch | "Used what it saw last time." (Fable is asked again for any chunk it lost to a busy service or the deadline, even when Nova covered it) |
+
+`meta.json` → `deep` records how each part went (`prep`, `decode` with its `mode` "all" or "keyframes", `fable`,
+`nova`, `speakers`, `secondLook`: ok, partial or skipped, with the reason), and every model answer logs its token counts (`bedrock.usage`), so what a job really cost
+can be read from the logs.
 
 ## Skills
 
@@ -76,7 +118,7 @@ At `analyze` the agent loads the skills once for the job (`prepare_skills`): bui
 owner's by name. It writes each to `<workdir>/.claude/skills/<name>/SKILL.md` (zips are extracted next to it), so the
 Claude Agent SDK also discovers them the normal way, and it builds one **skills block**: every skill's `SKILL.md`
 text inside `<owner_skills>`, the same text for the whole job. The `analyze` step says how many skills it uses
-("using 4 skills; 1 could not be read").
+("Found 12 loud moments. 1 skill could not be read.").
 
 The block is the **first** part of the system prompt of every model call the agent makes:
 
@@ -85,6 +127,9 @@ The block is the **first** part of the system prompt of every model call the age
 | Moment picking (Claude Agent SDK on AgentCore) | the SDK's system prompt file starts with the block |
 | Moment picking fallback (Bedrock Converse) | `Bedrock.structured(..., skills=block)` |
 | Facecam check (Bedrock Converse, one frame) | `Bedrock.detect_layout(..., skills=block)` |
+| Watching the picture (Fable, frames of every 150-second chunk) | `Bedrock.structured(..., skills=block)` in `watch.py` |
+| Watching the picture, second watcher (Nova 2 Lite, each 300-second video part) | `Bedrock.structured(..., skills=block)` in `nova.py`, on a second client with no cache point (Nova's prompt cache is smaller than the block) |
+| The second look at each picked moment and spare (Fable, every frame of the moment) | `Bedrock.structured(..., skills=block)` in `verify.py` |
 | Checklist judgement, including the hook check and the new hook it may write | `Bedrock.structured(..., skills=block)` |
 | Captions for every platform | `Bedrock.structured(..., skills=block)` |
 
@@ -120,7 +165,9 @@ The prompts are part of the agent code in `agent/`. What each one is for:
 | System | Who the agent is (a short-form editor for this owner), the rules it may never break (never publish; only clip what the source contains; plain English), and that skills and learnings come first. Every system prompt, in the agent and in the API, starts with the skills block ([above](#how-the-skills-reach-every-call)). | – |
 | What worked before | Per similar past clip: moment type, hook, title, summary, views and likes, similarity; the owner's starred clips first, labelled "Owner's pick: best of the week". Advice, never a rule. | (part of the select prompt) |
 | Learnings brief | The latest 4 "Best of week" learnings under "The owner's best-of-week picks taught", then the latest 10 other learnings under "Learnings"; empty groups left out. | (part of the select prompt) |
-| Window scan | For one transcript window plus its loudness spikes: find every candidate moment that fits one of the six moment types and stands on its own. | Structured list: start, end, moment type, why, draft hook |
+| Watch | For one chunk of frames (or one video part) with its words: report what is seen as events a clip could be built on, strongest first, and say when nobody is talking. Only what the frames show. | `{scene, events[]}`: start, end, kind, what, intensity 1–10, silent, face, text on screen |
+| Window scan | For one transcript window plus its loudness spikes, and, when the picture was watched, the picture notes between the lines, the fast-picture seconds and the hot spots: find every candidate moment that fits one of the six moment types and stands on its own. A moment may have no talking; then `first_words` says what is heard and the hook must match what is seen. Picture notes are machine-made evidence like loudness, not proof. | Structured list: start, end, moment type, why, draft hook |
+| Second look | Every frame of one picked moment with its words: does it hold up, should the start or end move a little, is the hook honest about what is seen? When unsure, keep. | keep, start, end, payoff, peak, hook ok, new hook, picture score, what was seen |
 | Rank and pick | All candidates together: remove overlaps, prefer variety of moment types, pick between `clipTarget.min` and `max`, keep spares. | Ranked moments with a score 1–10 |
 | Facecam | One frame: is there a facecam, and where (box)? | Box or "none" |
 | Checklist judge | Given the measured values and the transcript of the clip, answer the judgement questions honestly and propose one concrete fix. | Pass/fail per item, fixes |
@@ -184,5 +231,37 @@ advice to the agent, not a rule. If the vectors or the learning cannot be read, 
   contain enough good moments; the job says so.
 - Clips are 20–45 seconds unless a skill says otherwise.
 - The source is capped at `maxSourceHours`.
+- **No cost ceiling** (the owner's decision, 2026-11-17): the deep analysis watches the whole source with the best
+  signals and never trades coverage for money. What a job is expected to cost is in
+  [ADR-40](DECISIONS.md#adr-40-watch-the-whole-video-before-picking).
+- **Technical limits of the deep analysis** (never a money limit):
+  - Disk: the picture download must leave 3 GB free, measured before it starts (`shutil.disk_usage`); the downloaded
+    file is deleted once the parts are cut, and the local parts are deleted before render.
+  - Requests: a Fable chunk is 75–108 images, sent whole first. AWS's documents disagree on how many images one
+    request may carry (the Converse API reference says 20 per message; the user guide says Bedrock sets none and the
+    model's own limit applies), so a request refused for its images or size is split, again and again if needed, and
+    the accepted number (`Bedrock.image_limit`) is used for every later chunk and the second look (whose frames are
+    thinned evenly to it). A part sent to Nova is at most 18 MB (Nova takes 25 MB, and boto3 sends it base64-encoded,
+    4/3 larger), and a larger part is encoded smaller once.
+  - Parallel work: 8 Fable chunks, 4 Nova parts, 4 second looks and 2 frame grabs at a time. Model calls run in their
+    own pool of 16 threads, so the heartbeat writes never queue behind them.
+  - Time: the picture gets `max(20 min, a third of the source's length)` to be ready (the same limit its ffmpeg pass
+    has), the two watchers together `max(25 min, a fifth of the source's length)`, the second look 15 minutes. What is
+    done by then is kept. A tall (over 720p), long (over 45 min) upload is decoded at every frame when a 60-second
+    timed probe says it fits in 70% of that limit, else at its keyframes only.
+  - **Busy services**: a chunk or part turned away as busy (after `retry.py`'s own tries) is tried again after a
+    growing pause (5, 10, 20, 40, 60 s), six tries in all, while the deadline allows; each track halves its calls in
+    flight on a throttle (never below one) and adds one back after as many successes in a row. Logged as
+    `fable.try_again`, `nova.try_again` and `deep.slow_down`.
+  - **Runaway guard**: the plan (chunks, parts, moments) is computed before the first call, and each track may make
+    at most about three times that many calls (`3 × chunks + 8`, raised to `3 × chunks × requests per chunk + 8` when
+    a chunk must be split; `3 × parts + 8`; `3 × moments + 4`), with at most 400 chunks. A throttled call is not
+    counted (nothing was done). Passing a bound stops that track, keeps what it has and logs `deep.guard_tripped`.
+    Splitting always ends (each request is smaller than the one it came from), and the watch step never raises a
+    retryable error, so the job's own step retries cannot repeat finished work.
+- `CF_DEEP=off` switches the picture download, the Watch step, the second look and the speaker labels off without a
+  code change; the finder's prompts are then exactly the ones before ADR-40 (tested). Three small changes stay on
+  either way: a clip with no word inside it is not pause-trimmed, the captions check passes a clip with no speech, and
+  a clip can still say why it was picked from the loudness and the most-replayed peaks.
 - The agent never invents content: hooks and captions describe what is in the clip.
 - Only clip content the owner has the rights to, or is in an official campaign for (the playbook's rules).

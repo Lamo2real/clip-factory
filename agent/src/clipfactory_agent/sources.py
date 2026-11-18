@@ -1,4 +1,5 @@
-"""Source videos: yt-dlp metadata, audio-only download (capped), and section downloads up to 1080p."""
+"""Source videos: yt-dlp metadata, audio-only download (capped), the small picture download for the deep analysis,
+and section downloads up to 1080p."""
 
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from . import proc
+from .picture import DISK_RESERVE
 from .util import TransientError, UserFacingError, log
 
 _HOSTS: dict[str, re.Pattern[str]] = {
@@ -209,6 +211,101 @@ async def download_section(url: str, start: float, end: float, dest: Path, cooki
         if f.is_file() and f.stat().st_size > 0:
             return f
     raise TransientError("The video section did not download.")
+
+
+PICTURE_HEIGHTS = (480, 360)  # the ladder for the analysis picture: enough to see what happens, small enough to keep
+PICTURE_MAX_FPS = 30
+PICTURE_DEFAULT_BITRATE = 800_000  # bits per second, when yt-dlp knows neither a size nor a bitrate
+PICTURE_TIME_LIMIT = 2 * 3600
+
+
+def _estimate_bytes(f: dict[str, Any], seconds: float) -> int:
+    """How big one rendition is: its size, its rough size, its bitrate times the length, else 0.8 Mbit/s."""
+    for k in ("filesize", "filesize_approx"):
+        if f.get(k):
+            return int(f[k])
+    tbr = float(f.get("tbr") or f.get("vbr") or 0)  # kbit/s
+    bits = tbr * 1000 if tbr > 0 else PICTURE_DEFAULT_BITRATE
+    return int(bits * max(0.0, seconds) / 8)
+
+
+def _has_video(f: dict[str, Any]) -> bool:
+    return bool(f.get("format_id")) and str(f.get("vcodec") or "none") != "none" and int(f.get("height") or 0) > 0
+
+
+def picture_format(
+    info: dict[str, Any], seconds: float, free_bytes: int, reserve: int = DISK_RESERVE
+) -> dict[str, Any] | None:
+    """The rendition the deep analysis watches, chosen from the ``-J`` output already fetched, or None when none
+    fits the disk. The ladder: every H.264 rendition up to 480p and 30 fps, tallest first, a video-only one before
+    one with sound in it at the same height (Twitch and Kick only have those; the ffmpeg pass drops the sound). Last
+    comes the smallest rendition with a picture. The first whose estimated size leaves ``reserve`` bytes free wins."""
+    formats = [f for f in info.get("formats") or [] if isinstance(f, dict) and _has_video(f)]
+    if not formats:
+        return None
+    fit = [
+        f
+        for f in formats
+        if str(f.get("vcodec") or "").startswith("avc1")
+        and int(f["height"]) <= max(PICTURE_HEIGHTS)
+        and float(f.get("fps") or 0) <= PICTURE_MAX_FPS
+    ]
+    rungs = sorted(
+        fit,
+        key=lambda f: (int(f["height"]), str(f.get("acodec") or "none") == "none", float(f.get("tbr") or 0)),
+        reverse=True,
+    )
+    smallest = min(formats, key=lambda f: (int(f["height"]), _estimate_bytes(f, seconds)))
+    ladder: list[dict[str, Any]] = []
+    for f in (*rungs, smallest):
+        if f is not None and f not in ladder:
+            ladder.append(f)
+    for f in ladder:
+        est = _estimate_bytes(f, seconds)
+        if est <= free_bytes - reserve:
+            return {
+                "formatId": str(f["format_id"]),
+                "height": int(f["height"]),
+                "fps": round(float(f.get("fps") or 0), 2),
+                "estBytes": est,
+            }
+    return None
+
+
+async def download_picture(
+    url: str,
+    format_id: str,
+    dest: Path,
+    *,
+    est_bytes: int,
+    max_seconds: float | None,
+    cookies: Path | None = None,
+) -> Path:
+    """The whole picture in the chosen small rendition (no sound), for the deep analysis. yt-dlp's own downloader
+    with eight fragments at a time; ``--download-sections`` only when the source is capped, as the audio does."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    stem = dest.with_suffix("")
+    args = [
+        "yt-dlp",
+        *_COMMON,
+        *_cookie_args(cookies),
+        "-f",
+        format_id,
+        "--concurrent-fragments",
+        "8",
+        "--force-overwrites",
+        "-o",
+        f"{stem}.%(ext)s",
+    ]
+    if est_bytes > 0:
+        args += ["--max-filesize", str(int(est_bytes * 1.5))]
+    if max_seconds:
+        args += ["--download-sections", f"*0-{int(max_seconds)}"]
+    await proc.run([*args, url], time_limit=PICTURE_TIME_LIMIT)
+    for f in sorted(stem.parent.glob(stem.name + ".*")):
+        if f.suffix not in (".part", ".ytdl") and f.is_file() and f.stat().st_size > 0:
+            return f
+    raise TransientError("The picture did not download.")
 
 
 def url_at(url: str, platform: str, seconds: float) -> str | None:

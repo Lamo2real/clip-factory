@@ -403,3 +403,131 @@ async def test_sdk_options_and_tool_wrappers(tmp_path: Path) -> None:
     assert deny.behavior == "deny"
     allow = await opts.can_use_tool("mcp__clips__submit_moments", {}, None)
     assert allow.behavior == "allow"
+
+
+# --- the deep analysis (ADR-40): nothing changes without signals, and the picture is read when it is there --------
+
+import hashlib  # noqa: E402
+
+from clipfactory_agent import signals as signals_mod  # noqa: E402
+from clipfactory_agent import transcript  # noqa: E402
+from clipfactory_agent.agent import OPEN_RULE, PICTURE_RULES, hints, worth_reading  # noqa: E402
+from clipfactory_agent.signals import Event, HotSpot, Signals  # noqa: E402
+
+from .deep_support import ToolClient  # noqa: E402
+
+# sha256 (first 16 hex) of what the code on origin/main at 0abfbe2 (before ADR-40) produced for ``brief()``.
+BEFORE = {
+    "system": "d46603533822083a",
+    "hints": "efd5468f6b44f116",
+    "read": "a72fac1edde97034",
+    "lines": "d9ed6b299a654c35",
+    "brief": "4744cbf25e319701",
+}
+
+
+def digest(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+
+def test_without_signals_every_prompt_is_byte_identical_to_before() -> None:
+    b = brief()
+    assert b.signals is None and b.speakers is None
+    assert digest(system_prompt(b)) == BEFORE["system"]
+    assert digest(hints(b, 0, 1800)) == BEFORE["hints"]
+    assert digest(MomentTools(b).read_transcript({"start": 0, "end": 1800})[0]) == BEFORE["read"]
+    assert digest(transcript.lines(b.words, 0, 1800)) == BEFORE["lines"]
+    assert digest(json.dumps(brief_json(b), sort_keys=True)) == BEFORE["brief"]
+    assert OPEN_RULE in system_prompt(b) and "Picture notes" not in system_prompt(b)
+    assert "picture" not in brief_json(b)
+
+
+def test_speakers_without_picture_signals_are_explained_to_the_finder() -> None:
+    from clipfactory_agent import verify, watch
+    from clipfactory_agent.agent import SPEAKER_NOTE
+
+    b = brief()
+    b.speakers = [[0.0, 900.0, "S1"], [900.0, 1800.0, "S2"]]
+    s = system_prompt(b)
+    assert SPEAKER_NOTE in s and "restart" in s and "Picture notes" not in s and OPEN_RULE in s
+    read = MomentTools(b).read_transcript({"start": 0, "end": 1800})[0]
+    assert "S1: " in read
+    assert '"S1:"' in watch.WATCH_SYSTEM and '"S1:"' in verify.VERIFY_SYSTEM
+    b.speakers = None
+    assert SPEAKER_NOTE not in system_prompt(b)
+
+
+def test_the_gate_without_signals_is_the_old_400_characters() -> None:
+    b = brief()
+    assert worth_reading(b, 0, 1800, "x" * 400) is True
+    assert worth_reading(b, 0, 1800, "x" * 399) is False
+    assert worth_reading(b, 0, 1800, "") is False
+
+
+def with_picture(b: Brief, events: list[Event] | None = None, hotspots: list[HotSpot] | None = None) -> Brief:
+    motion = [0.01] * int(b.duration)
+    motion[700] = 0.2
+    b.signals = Signals(
+        duration=b.duration,
+        events=events or [],
+        hotspots=hotspots or [],
+        motion=motion,
+        coverage={"picture": 0.8},
+    )
+    return b
+
+
+def test_with_signals_the_prompts_gain_the_picture() -> None:
+    crash = Event(700, 706, "crash", "car flips off the bridge", 9, True, "shocked", "", ["fable", "nova"])
+    spot = HotSpot(700, 6.0, True, ["fable", "motion"], ["seen", "fast picture"])
+    b = with_picture(brief(), [crash], [spot])
+    s = system_prompt(b)
+    assert PICTURE_RULES in s and "machine-made evidence like the loudness spikes, not proof" in s
+    assert "A moment may have no talking at all" in s and "first_words describes the sound heard" in s
+    assert OPEN_RULE not in s and "Never open on a still, quiet picture" in s
+    assert s.index("Picture notes") < s.index("Rage clips win")  # stable rules first, then the learnings
+    assert brief_json(b)["picture"] == {"watched": True, "coveragePercent": 80}
+    h = hints(b, 0, 1800).splitlines()
+    assert h[0].startswith("Loudness spikes:") and h[1].startswith("Most replayed:")  # the two old lines stay
+    assert h[2] == "Fast picture: 0:11:40 (x20)"
+    assert h[3] == "Hot spots: 0:11:40 (seen + fast picture, nobody talking)"
+    text, err = MomentTools(b).read_transcript({"start": 0, "end": 1800})
+    assert not err
+    assert "[0:11:40] (seen) crash 9/10, nobody talking: car flips off the bridge | face: shocked" in text
+    assert text.index("[0:11:30] word690") < text.index("(seen) crash") < text.index("[0:11:40] word700")
+
+
+def test_speakers_prefix_the_lines() -> None:
+    b = brief(duration=600)
+    b.speakers = [[0, 9, "S1"], [9, 30, "S2"]]
+    text = signals_mod.timeline(b, 0, 20)
+    assert text.splitlines()[0].startswith("[0:00:00] S1: word0") and "[0:00:10] S2: word10" in text
+
+
+async def test_a_silent_window_with_a_strong_picture_event_is_read() -> None:
+    def quiet_brief() -> Brief:
+        b = brief(duration=1800)
+        b.words = []  # nobody talks at all
+        return b
+
+    client = ToolClient()
+    found = await agent_mod.find_with_converse(quiet_brief(), Bedrock("m", "r", client=client), skills=NO_SKILLS)
+    assert found == [] and client.requests == []  # today: a window without words is never read
+
+    crash = Event(700, 706, "crash", "car flips off the bridge", 9, True, "none", "", ["fable"])
+    b = with_picture(quiet_brief(), [crash])
+    answer = raw_moment(start=695, end=720, payoff_at=706, peak_at=703, first_words="tyres screeching, then a splash")
+    client = ToolClient({"submit_moments": lambda kw: {"candidates": [answer]}})
+    found = await agent_mod.find_with_converse(b, Bedrock("m", "r", client=client), skills=NO_SKILLS)
+    assert [m.start for m in found] == [695] and found[0].first_words == "tyres screeching, then a splash"
+    prompt = client.requests[-1]["messages"][0]["content"][0]["text"]
+    assert "(seen) crash 9/10, nobody talking: car flips off the bridge" in prompt and "Fast picture:" in prompt
+
+    weak = with_picture(quiet_brief(), [Event(700, 706, "other", "driving", 3, True, "none", "", ["fable"])])
+    weak.signals.motion = []  # type: ignore[union-attr]
+    client = ToolClient()
+    await agent_mod.find_with_converse(weak, Bedrock("m", "r", client=client), skills=NO_SKILLS)
+    assert client.requests == []  # a weak event alone does not make a silent window worth a call
+
+    spot = with_picture(quiet_brief(), hotspots=[HotSpot(900, 2.0, True, ["motion"], ["fast picture"])])
+    assert worth_reading(spot, 0, 1800, "") is True  # a hot spot with nobody talking is read too

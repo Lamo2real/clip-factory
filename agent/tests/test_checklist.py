@@ -139,3 +139,32 @@ async def test_check_all_skips_spares_that_cannot_be_cut() -> None:
     )
     assert [p.moment.start for p in passed] == [1000]
     assert len(failed) == 1
+
+
+def test_review_prompt_gains_a_seen_block_only_when_something_was_seen() -> None:
+    from clipfactory_agent.checklist import review_prompt as rp
+
+    r = RenderResult(
+        Path("c.mp4"), Path("c.jpg"), 30.0, [(100, 130)], [{"t0": 0.0, "t1": 1.0, "text": "no way"}], "full", False
+    )
+    m = make_moment()
+    plain = rp(m, r, "notes")
+    assert rp(m, r, "notes", seen="") == plain and "Seen" not in plain  # byte-identical without picture events
+    seen = rp(m, r, "notes", seen="[5.0s] (seen) stunt 8/10, nobody talking: bike backflip")
+    assert seen.startswith(plain) and seen.endswith("[5.0s] (seen) stunt 8/10, nobody talking: bike backflip")
+    assert "Seen (machine-made picture notes" in seen
+
+
+def test_captions_item_passes_when_the_clip_has_no_speech() -> None:
+    from clipfactory_agent.checklist import Measured as Me
+    from clipfactory_agent.checklist import measured_items as mi
+
+    r = RenderResult(Path("c.mp4"), Path("c.jpg"), 30.0, [(100, 130)], [], "full", False)
+    m = make_moment()
+
+    def item(**kw: bool) -> object:
+        return next(i for i in mi(m, r, Me(-10.0, 5.0), (20, 45), **kw) if i.key == "captions")
+
+    assert item().passed is False and item(has_speech=True).passed is False  # today: speech but no captions fails
+    silent = item(has_speech=False)
+    assert silent.passed is True and silent.note == "No speech to caption."  # type: ignore[attr-defined]

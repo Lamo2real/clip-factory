@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from . import loudness, transcript
+from . import signals as signals_mod
 from .bedrock import Bedrock, ModelError
 from .learnings import Learnings
 from .learnings import prompt_section as learnings_section
@@ -27,7 +28,8 @@ from .vectors import Hit, prompt_section
 SERVER = "clips"
 MAX_READ = 35 * 60
 SDK_TIMEOUT = 45 * 60  # at least this long, however short the video
-SDK_TIMEOUT_PER_WINDOW = 6 * 60  # a read turn and a submit turn per 30-minute window, with a growing context
+# A read turn and a submit turn per 30-minute window, with a growing context; the picture notes make each read longer.
+SDK_TIMEOUT_PER_WINDOW = 8 * 60
 SDK_EFFORT: Final = "high"  # pinned rather than left to the model default; long-horizon tool use wants at least high
 FALLBACK_CONCURRENCY = 3
 
@@ -49,17 +51,40 @@ class Brief:
     language: str | None = None
     similar: list[Hit] = field(default_factory=list)  # "what worked before" (S3 Vectors, §14.6)
     week_learnings: list[str] = field(default_factory=list)  # the latest four "Best of week" learnings (§16.7)
+    # The deep analysis (docs/DECISIONS.md ADR-40). Both are optional: None means that signal is not there, and
+    # with neither every prompt is exactly what it was before the picture was watched.
+    signals: signals_mod.Signals | None = None  # picture events, motion and hot spots
+    speakers: list[list[Any]] | None = None  # [start, end, "S1"] turns from Transcribe's speaker labels
 
     @property
     def wanted(self) -> int:
         return self.clip_max + spare_count(self.clip_max)
 
 
+OPEN_RULE = "- Never open on silence or mumbling: the first words heard must grab attention."
+OPEN_RULE_PICTURE = (
+    "- Never open on a still, quiet picture: the first second must grab attention, by what is heard or what is seen."
+)
+PICTURE_RULES = """Picture notes: lines marked (seen) between the transcript lines say what was seen on screen at that
+time, with how strong it is to watch (1–10); "Fast picture" lists seconds where the picture changes a lot, and "Hot
+spots" are moments where several signals agree. They are machine-made evidence like the loudness spikes, not proof.
+A moment may have no talking at all (a crash, a stunt, a glitch, a chase): pick it when the picture carries it. Then
+first_words describes the sound heard in the first second, and the hook must match what is seen."""
+
+
+SPEAKER_NOTE = """Speakers: a transcript line starting "S1:", "S2:" names who talks, as Transcribe guessed it. The
+numbers restart every few hours in a long video (so a later S1 may be someone else), and one voice is sometimes split
+in two: use them to see back-and-forth, never as names."""
+
+
 def system_prompt(b: Brief) -> str:
     """The task's own system prompt: stable rules first, then the owner's learnings and similar past clips, so prompt
-    caching can reuse the prefix. The skills block is not in here: every call puts it first (§18.6)."""
+    caching can reuse the prefix. The skills block is not in here: every call puts it first (§18.6). The picture
+    paragraph (and the opening rule that allows a moment without talking) is only there when picture signals are."""
     taught = learnings_section(Learnings(week=b.week_learnings, other=b.learnings))
     similar = prompt_section(b.similar)
+    seen = PICTURE_RULES if b.signals is not None else ""
+    who = SPEAKER_NOTE if b.speakers else ""
     return f"""You are the clip finder of Clip Factory. You read the transcript of one long video (a stream or a video)
 and pick the moments that will make the best vertical short clips (TikTok, Reels, Shorts). Follow the owner's skills
 above; the short-form video playbook is the core: section A2 (self-sufficient, built on a feeling, pays off), the six
@@ -73,18 +98,18 @@ Rules for every moment:
 - hook: 6–8 words of on-screen text that open a question ("he thought he got away with it"), never a label
   ("funny moment"). Honest: it must match what happens.
 - Payoff tease (optional): 1–2 seconds of the best line from inside the clip, played first (tease_start/tease_end).
-- Never open on silence or mumbling: the first words heard must grab attention.
+{OPEN_RULE_PICTURE if b.signals is not None else OPEN_RULE}
 - score 1–10: how likely it is to do well. Be honest; most moments are 4–6, only the best are 8+.
 - Respect the owner's notes and skills (required tags, banned topics, brand rules). Never pick content they rule out.
 - Times are seconds from the start of the video. Transcript lines are stamped [h:mm:ss].
 Loudness spikes (shouting, laughing) and YouTube's "most replayed" peaks are strong hints, not proof.""" + "".join(
-        f"\n\n{part}" for part in (taught, similar) if part
+        f"\n\n{part}" for part in (seen, who, taught, similar) if part
     )
 
 
 def brief_json(b: Brief) -> dict[str, Any]:
     wins = transcript.windows(b.duration)
-    return {
+    out: dict[str, Any] = {
         "video": {"title": b.title, "channel": b.channel, "platform": b.platform, "length": hms(b.duration)},
         "language": b.language,
         "ownerNotes": b.notes or "(none)",
@@ -93,6 +118,9 @@ def brief_json(b: Brief) -> dict[str, Any]:
         "transcriptWindows": [{"start": round(s), "end": round(e), "label": f"{hms(s)}–{hms(e)}"} for s, e in wins],
         "wordCount": len(b.words),
     }
+    if b.signals is not None:
+        out["picture"] = {"watched": b.signals.watched, "coveragePercent": b.signals.coverage_percent}
+    return out
 
 
 def hints(b: Brief, start: float, end: float) -> str:
@@ -102,7 +130,14 @@ def hints(b: Brief, start: float, end: float) -> str:
     text = f"Loudness spikes: {spikes}"
     if peaks:
         text += "\nMost replayed: " + ", ".join(f"{hms(h['start'])}–{hms(h['end'])}" for h in peaks)
-    return text
+    more = signals_mod.extra_hints(b, start, end)
+    return f"{text}\n{more}" if more else text
+
+
+def worth_reading(b: Brief, start: float, end: float, text: str) -> bool:
+    """The Converse gate: a window is read when it has enough words, or (new) when the picture alone could carry a
+    clip there: a strong picture event or a hot spot with nobody talking."""
+    return len(text) >= 400 or (b.signals is not None and b.signals.strong_in(start, end))
 
 
 class MomentTools:
@@ -162,7 +197,7 @@ class MomentTools:
         self.read.append(span)
         if self.on_coverage:
             self.on_coverage(self.coverage())
-        text = transcript.lines(self.brief.words, start, end) or "(no speech in this part)"
+        text = signals_mod.timeline(self.brief, start, end) or "(no speech in this part)"
         return f"Transcript {hms(start)}–{hms(end)}\n{hints(self.brief, start, end)}\n\n{text}", False
 
     def list_spikes(self, args: dict[str, Any]) -> tuple[str, bool]:
@@ -388,8 +423,8 @@ async def find_with_converse(
 
     async def one(start: float, end: float) -> None:
         nonlocal done, answered
-        text = transcript.lines(b.words, start, end)
-        if len(text) >= 400:
+        text = signals_mod.timeline(b, start, end)
+        if worth_reading(b, start, end, transcript.lines(b.words, start, end, b.speakers)):
             async with sem:
                 prompt = (
                     f"Video: {b.title!r} by {b.channel or 'unknown'} ({b.platform}). This part covers "

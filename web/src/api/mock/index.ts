@@ -196,6 +196,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         },
         checklist: { items: [{ key: "hook_3s", label: "Hook lands in the first 3 seconds", pass: true }], fixes: [] },
         score: m.score,
+        pickedFor: m.why,
         createdAt: new Date().toISOString(),
       });
     }
@@ -224,7 +225,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         clock.delete(job.jobId);
       } else {
         const within = ((now - c.at) % STEP_MS) / STEP_MS;
-        job.steps = stepsAt(done, "running", done === 5 ? "Cutting the clips" : undefined);
+        job.steps = stepsAt(done, "running", STEP_KEYS[done] === "render" ? "Cutting the clips" : undefined);
         job.progress = Math.min(0.99, (done + within) / STEP_KEYS.length);
       }
       job.updatedAt = new Date().toISOString();
@@ -249,6 +250,21 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   }
   mockLive.tick = tick;
   installMockLiveControls(advance);
+
+  /** Test knob (window.__cfMock.jobs): a finished job as it was saved before the "watch" step existed (nine steps). */
+  const jobKnobs = {
+    oldSteps(): { jobId: string; title: string } | null {
+      const j = store.jobs.find((x) => x.status === "ready");
+      if (!j) return null;
+      j.steps = j.steps.filter((s) => s.key !== "watch");
+      publishJob(j);
+      return { jobId: j.jobId, title: j.source.title ?? "" };
+    },
+  };
+  if (typeof window !== "undefined") {
+    const w = window as unknown as { __cfMock?: Record<string, unknown> };
+    w.__cfMock = { ...(w.__cfMock ?? {}), jobs: jobKnobs };
+  }
 
   const stats = statsApi({ store, publish: (ev) => mockLive.publish(ev), faults, automated: frozen });
   const setup = setupApi({

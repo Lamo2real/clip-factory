@@ -64,6 +64,30 @@ def test_config(tmp_path: Path) -> None:
         load_config({"CF_REGION": "r", "CF_MEDIA_BUCKET": "b", "CF_MODEL_ID": "m"})
 
 
+def test_deep_config(tmp_path: Path) -> None:
+    base = {"CF_REGION": "eu-north-1", "CF_TABLE": "t", "CF_MEDIA_BUCKET": "b", "CF_MODEL_ID": "m"}
+    assert model_from_models_json(REPO / "config" / "models.json", "watchModel") == "eu.amazon.nova-2-lite-v1:0"
+    cfg = load_config({**base, "CF_CONFIG_DIR": str(REPO / "config")})
+    assert cfg.watch_model_id == "eu.amazon.nova-2-lite-v1:0" and cfg.deep_enabled is True  # on by default
+    assert load_config({**base, "CF_WATCH_MODEL_ID": "eu.other"}).watch_model_id == "eu.other"
+    assert load_config({**base, "CF_CONFIG_DIR": str(tmp_path)}).watch_model_id is None  # no file: Nova is off
+    for off in ("off", "OFF", " off "):
+        assert load_config({**base, "CF_DEEP": off}).deep_enabled is False
+    for on in ("on", "", "1", "true"):
+        assert load_config({**base, "CF_DEEP": on}).deep_enabled is True
+    models = json.loads((REPO / "config" / "models.json").read_text("utf-8"))
+    nova = models["models"][models["watchModel"]]
+    assert nova["modelId"] == "amazon.nova-2-lite-v1:0" and nova["profilePrefix"] == "eu"
+    assert nova["profileRegions"] == [
+        "eu-central-1",
+        "eu-north-1",
+        "eu-south-1",
+        "eu-south-2",
+        "eu-west-1",
+        "eu-west-3",
+    ]
+
+
 def test_model_profile_prefix_per_model(tmp_path: Path) -> None:
     def write(models: dict[str, object], top: str | None = "global") -> Path:
         data: dict[str, object] = {"agentModel": "a", "models": models}

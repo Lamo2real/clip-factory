@@ -131,6 +131,10 @@ resource "aws_iam_role_policy" "agent" {
         Resource = var.model_invoke_arns
       },
       { Sid = "ReadProfile", Effect = "Allow", Action = ["bedrock:GetInferenceProfile"], Resource = var.model_profile_arn },
+      # The second watcher of the deep analysis (docs/DECISIONS.md ADR-40): Amazon Nova 2 Lite through the EU geo
+      # profile, called with Converse (authorised as InvokeModel). Exactly the profile in this region and the
+      # foundation model in the regions the profile routes to, so the video parts never leave the EU.
+      { Sid = "InvokeWatchModel", Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = var.watch_model_invoke_arns },
       # Ends the job's durable execution: heartbeats while it runs, then success or failure (§14.4).
       {
         Sid      = "JobFlowCallback"
@@ -183,6 +187,8 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
     CF_VECTOR_BUCKET        = var.vector_bucket
     CF_VECTOR_INDEX         = var.vector_index
     CF_EMBED_MODEL_ID       = var.embed_model_id
+    CF_WATCH_MODEL_ID       = var.watch_model_id
+    CF_DEEP                 = var.deep_analysis_enabled ? "on" : "off"
   }
   tags = local.tags
 }

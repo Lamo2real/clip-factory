@@ -14,16 +14,19 @@ from typing import Any, Protocol
 from .retry import is_transient, retry
 from .util import JobCanceled, JobSuperseded, UserFacingError, log, now_iso
 
+# The ten steps, their owner-facing labels (kid-proof words) and their share of the progress bar. The keys and labels
+# are the same list in api/src/clipfactory_api/jobs.py and web/src/api/mock/fixtures.ts (tests/test_jobs.py checks).
 STEPS: list[tuple[str, str, float]] = [
     ("resolve", "Find the video", 0.02),
-    ("download", "Download the audio", 0.12),
-    ("transcribe", "Transcribe", 0.24),
-    ("analyze", "Analyze", 0.04),
-    ("select", "Pick the moments", 0.16),
-    ("render", "Cut the clips", 0.26),
-    ("checklist", "Run the checklist", 0.11),
-    ("captions", "Write captions", 0.04),
-    ("finalize", "Finish", 0.01),
+    ("download", "Get the video", 0.10),
+    ("transcribe", "Write down the words", 0.18),
+    ("analyze", "Listen for big moments", 0.03),
+    ("watch", "Watch the video", 0.18),
+    ("select", "Pick the best moments", 0.14),
+    ("render", "Cut the clips", 0.21),
+    ("checklist", "Check each clip", 0.09),
+    ("captions", "Write the captions", 0.04),
+    ("finalize", "Finish up", 0.01),
 ]
 LABELS = {k: label for k, label, _ in STEPS}
 HEARTBEAT_SECONDS = 30.0  # the contract asks for at most 60

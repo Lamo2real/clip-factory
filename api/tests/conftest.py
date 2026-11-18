@@ -231,7 +231,7 @@ def seed_job(store: db.Store, user: str = USER, **fields: Any) -> dict[str, Any]
         "status": "running",
         "source": {"type": "link", "platform": "youtube", "url": "https://youtube.com/watch?v=x"},
         "clipTarget": {"min": 5, "max": 10},
-        "steps": [{"key": "resolve", "label": "Check the source", "status": "running"}],
+        "steps": [{"key": "resolve", "label": "Find the video", "status": "running"}],
         "progress": 0.1,
         "clipCount": 0,
         "createdAt": "2026-11-15T11:00:00.000Z",

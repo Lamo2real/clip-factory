@@ -4,7 +4,15 @@ from typing import Any
 
 import pytest
 
+from clipfactory_agent import watch
 from clipfactory_agent.moments import Moment
+
+
+@pytest.fixture(autouse=True)
+def _no_track_pauses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The watchers' growing pauses before trying a busy unit again (5 s, 10 s, ...) are zero in tests; the test
+    of the pauses themselves sets them back."""
+    monkeypatch.setattr(watch, "RETRY_BASE", 0.0)
 
 
 def make_moment(**kw: Any) -> Moment:

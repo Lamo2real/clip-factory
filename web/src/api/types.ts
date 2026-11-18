@@ -7,6 +7,7 @@ export type StepKey =
   | "download"
   | "transcribe"
   | "analyze"
+  | "watch"
   | "select"
   | "render"
   | "checklist"
@@ -99,6 +100,8 @@ export interface Clip {
   best?: boolean;
   /** The ISO week it was starred in, "yyyy-Www". */
   bestWeek?: string;
+  /** Why it was picked, in a few plain words ("Loud laugh + Fast action"). Absent when nothing stood out (§5). */
+  pickedFor?: string;
   /** Sum of the posted posts' views; absent when nothing was measured yet. */
   totalViews?: number;
 }

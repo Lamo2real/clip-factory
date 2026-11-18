@@ -230,6 +230,16 @@ export function Review({ jobId }: { jobId: string | null }) {
   );
 }
 
+/** Why Clip Factory picked this moment, in a few plain words; nothing at all when nothing stood out (§5 pickedFor). */
+export function WhyPicked({ text }: { text: string | undefined }) {
+  if (!text) return null;
+  return (
+    <p className="review-card__why">
+      <span className="review-card__why-label">Why:</span> <span className="user-text">{text}</span>
+    </p>
+  );
+}
+
 /** The count line on a Review filtered to one job: says it is one job, and how many wait in all when that is more. */
 export function reviewCountForJob(here: number, all: number | undefined): string {
   const line = `${plural(here, "clip")} from this job waiting`;
@@ -455,6 +465,7 @@ function ReviewCard({
           {clip.hook}
         </h2>
         <p className="review-card__summary user-text">{clip.summary}</p>
+        <WhyPicked text={clip.pickedFor} />
         <p className="review-card__source">
           {/* The icon sits inside the link (or the plain line), so it never wraps onto a line of its own. */}
           {clip.sourceUrlAt ? (

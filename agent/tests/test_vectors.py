@@ -429,7 +429,7 @@ async def test_finalize_survives_a_vector_failure(capsys: pytest.CaptureFixture[
     store = Store()
     p = Pipeline(None, store, None, None, vectors=make(FakeTitan(), s3v))  # type: ignore[arg-type]
     msg = await p.finalize(state(1), NoTracker())  # type: ignore[arg-type]
-    assert msg == "1 clip(s) ready for review." and len(store.puts) == 1
+    assert msg == "1 clip ready for review." and len(store.puts) == 1
     assert "vectors.put_failed" in capsys.readouterr().out
 
 

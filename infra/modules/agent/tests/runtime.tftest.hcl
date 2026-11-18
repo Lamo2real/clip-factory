@@ -39,6 +39,16 @@ variables {
   vector_index_arn  = "arn:aws:s3vectors:eu-north-1:123456789012:bucket/cf-test-vectors-123456789012/index/clips"
   embed_model_id    = "amazon.titan-embed-text-v2:0"
   embed_model_arn   = "arn:aws:bedrock:eu-north-1::foundation-model/amazon.titan-embed-text-v2:0"
+  watch_model_id    = "eu.amazon.nova-2-lite-v1:0"
+  watch_model_invoke_arns = [
+    "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.amazon.nova-2-lite-v1:0",
+    "arn:aws:bedrock:eu-central-1::foundation-model/amazon.nova-2-lite-v1:0",
+    "arn:aws:bedrock:eu-north-1::foundation-model/amazon.nova-2-lite-v1:0",
+    "arn:aws:bedrock:eu-south-1::foundation-model/amazon.nova-2-lite-v1:0",
+    "arn:aws:bedrock:eu-south-2::foundation-model/amazon.nova-2-lite-v1:0",
+    "arn:aws:bedrock:eu-west-1::foundation-model/amazon.nova-2-lite-v1:0",
+    "arn:aws:bedrock:eu-west-3::foundation-model/amazon.nova-2-lite-v1:0",
+  ]
 }
 
 run "environment_has_vectors_and_embeddings" {
@@ -134,5 +144,90 @@ run "role_carries_the_permissions_boundary" {
   assert {
     condition     = aws_iam_role.agent.permissions_boundary == "arn:aws:iam::123456789012:policy/cf-prod-role-boundary"
     error_message = "The agent role carries the deploy role's permissions boundary (infra/bootstrap)."
+  }
+}
+
+# "Watch the video" (docs/DECISIONS.md ADR-40): the deep analysis is on by default, the second watcher is Nova 2 Lite
+# through the EU profile, and no other AWS service is added.
+run "deep_analysis_environment" {
+  command = plan
+
+  assert {
+    condition     = aws_bedrockagentcore_agent_runtime.agent.environment_variables["CF_WATCH_MODEL_ID"] == "eu.amazon.nova-2-lite-v1:0"
+    error_message = "The agent needs CF_WATCH_MODEL_ID (the second watcher)."
+  }
+
+  assert {
+    condition     = aws_bedrockagentcore_agent_runtime.agent.environment_variables["CF_DEEP"] == "on"
+    error_message = "The deep analysis is on by default (CF_DEEP=on)."
+  }
+}
+
+run "deep_analysis_can_be_switched_off" {
+  command = plan
+
+  variables {
+    deep_analysis_enabled = false
+  }
+
+  assert {
+    condition     = aws_bedrockagentcore_agent_runtime.agent.environment_variables["CF_DEEP"] == "off"
+    error_message = "deep_analysis_enabled = false sets CF_DEEP=off."
+  }
+}
+
+run "role_allows_the_watch_model_and_nothing_else_new" {
+  command = plan
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+      s.Sid == "InvokeWatchModel" && s.Effect == "Allow" && s.Action == ["bedrock:InvokeModel"] &&
+      toset(s.Resource) == toset(var.watch_model_invoke_arns) && length(s.Resource) == length(var.watch_model_invoke_arns)
+    ])
+    error_message = "InvokeWatchModel must allow bedrock:InvokeModel on exactly var.watch_model_invoke_arns."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+      alltrue([for r in flatten([s.Resource]) : !strcontains(r, "*")]) if s.Sid == "InvokeWatchModel"
+    ])
+    error_message = "The watch model's resources carry no wildcard: the profile and the EU regions it routes to, by name."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : [
+        for a in flatten([s.Action]) :
+        !startswith(lower(a), "rekognition:") && !startswith(lower(a), "comprehend:") && !startswith(lower(a), "mediaconvert:")
+      ]
+    ]))
+    error_message = "The deep analysis adds no Rekognition, Comprehend or MediaConvert action (ADR-40: none has an eu-north-1 endpoint or a use here)."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : [
+        for a in flatten([s.Action]) : !startswith(lower(a), "states:") && !startswith(lower(a), "batch:")
+      ]
+    ]))
+    error_message = "The fan-out stays inside the agent: no Step Functions or Batch action."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+      s.Sid == "InvokeFable" && toset(s.Resource) == toset(var.model_invoke_arns)
+    ])
+    error_message = "Fable, the main watcher, keeps exactly its existing statement."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.agent.policy).Statement :
+      s.Sid == "Transcribe" && toset(s.Action) == toset(["transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob", "transcribe:DeleteTranscriptionJob"])
+    ])
+    error_message = "Speaker labels need no new Transcribe action."
   }
 }
