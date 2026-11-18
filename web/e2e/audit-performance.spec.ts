@@ -41,7 +41,7 @@ test.describe("clip page, desktop", () => {
     }
   });
 
-  test("white labels on the tomato button and the starred star read at 4.5:1 or better", async ({ page }) => {
+  test("white labels on the vermilion button and the starred star read at 4.5:1 or better", async ({ page }) => {
     await openClip(page, CLIPS.all);
     expect(await whiteContrastOnGradient(page.getByRole("button", { name: "Refresh numbers" }))).toBeGreaterThanOrEqual(4.5);
     const star = page.getByRole("button", { name: /Best this week/ });

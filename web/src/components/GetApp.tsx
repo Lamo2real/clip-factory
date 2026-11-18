@@ -406,6 +406,7 @@ export function GetAppBanner() {
         <LinkButton
           href="/get-app"
           size="sm"
+          variant="action"
           icon="download"
           onClick={() => snoozeBanner()}
         >

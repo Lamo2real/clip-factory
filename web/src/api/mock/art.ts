@@ -11,11 +11,11 @@ interface Scene {
 }
 
 const SCENES: Scene[] = [
-  { sky: ["#2b3a28", "#7d9468"], glow: "#e8412c", ground: "#1e2a1b" },
+  { sky: ["#0f372b", "#2a5c4a"], glow: "#e8392b", ground: "#0a2820" },
   { sky: ["#3a1f1a", "#c4553e"], glow: "#f7c59f", ground: "#22150f" },
-  { sky: ["#1d2b3a", "#5f7f99"], glow: "#9caf88", ground: "#121a22" },
-  { sky: ["#3b3424", "#b59a5b"], glow: "#e8412c", ground: "#1f1b12" },
-  { sky: ["#2a2333", "#7a6492"], glow: "#f7f5ef", ground: "#18141e" },
+  { sky: ["#1d2b3a", "#5f7f99"], glow: "#5fa585", ground: "#121a22" },
+  { sky: ["#3b3424", "#b59a5b"], glow: "#e8392b", ground: "#1f1b12" },
+  { sky: ["#2a2333", "#7a6492"], glow: "#efe7da", ground: "#18141e" },
   { sky: ["#1f3330", "#5c9a8b"], glow: "#f2a65a", ground: "#122019" },
 ];
 

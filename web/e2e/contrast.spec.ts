@@ -169,7 +169,7 @@ for (const scheme of SCHEMES) {
     await page.getByRole("button", { name: "Make the setup list small" }).click();
     await expect(page.locator(".setup-todo__pill")).toBeVisible();
     await readableList(page, `folded pill ${scheme}`, failures);
-    // Under the pointer it lights up; the tomato count must stay readable on that glass too.
+    // Under the pointer it lights up; the vermilion count must stay readable on that glass too.
     await page.locator(".setup-todo__pill").hover();
     await readableList(page, `folded pill under the pointer ${scheme}`, failures);
     await page.mouse.move(0, 0);
@@ -337,7 +337,7 @@ for (const { glass, paints } of WINDOW_LOOKS) {
   });
 
   // What ROUTES cannot reach by address, or shows only after a tap: surfaces that float over the page (the Ask
-  // panel, a sheet, a toast) keep their own denser tint in the window look, and a starred star keeps its deep sage.
+  // panel, a sheet, a toast) keep their own denser tint in the window look, and a starred star keeps its the vermilion CTA fill.
   test(`window look (${glass}): the screens behind a tap are readable too (Frosted, sign-in, a clip, This week, Ask, a sheet, a toast)`, async ({ page, browser }) => {
     test.setTimeout(240_000);
     await asDesktop(page, glass);
@@ -346,7 +346,7 @@ for (const { glass, paints } of WINDOW_LOOKS) {
     for (const width of [375, 1440]) {
       await page.setViewportSize({ width, height: width < 768 ? 812 : 900 });
 
-      // The clip page, with its star on: white words on deep sage.
+      // The clip page, with its star on: white words on the vermilion CTA fill.
       await openClip(page, CLIPS.all);
       const star = page.getByRole("button", { name: /Best this week/ });
       if ((await star.getAttribute("aria-pressed")) !== "true") await star.click();

@@ -4,8 +4,8 @@
 
 /* ---------- Page ---------- */
 .perf {
-  --line: rgb(var(--sage-rgb) / 0.7);
-  --line-best: var(--tomato);
+  --line: rgb(var(--bone-rgb) / 0.85);
+  --line-best: var(--vermilion);
 }
 .perf__back {
   display: flex;
@@ -58,17 +58,22 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+/* The best line is vermilion, cased in bone so it reads on any glass. */
 .perf-line.is-best {
   stroke: var(--line-best);
+  stroke-width: 3;
+  filter: drop-shadow(0 0 1.5px var(--bone));
 }
 .perf-dot {
   fill: var(--line);
 }
 .perf-dot.is-best {
   fill: var(--line-best);
+  stroke: var(--bone);
+  stroke-width: 1.5;
 }
 .perf-dot--origin {
-  fill: var(--sage-deep);
+  fill: var(--green-leaf);
 }
 
 /* Draw-in, once per visit: each line grows from the video, 80 ms after the one before (§16.8). */
@@ -173,9 +178,11 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--tomato-deep);
-  color: #fff;
-  --mark-cut: var(--tomato-deep);
+  /* A label, not a button: bone with a green mark (solid vermilion means "press me"). */
+  background: var(--selected);
+  color: var(--on-bone);
+  box-shadow: inset 0 0 0 1.5px var(--vermilion);
+  --mark-cut: var(--bone);
 }
 .perf__chips {
   grid-area: chips;
@@ -197,8 +204,9 @@
   min-height: var(--tap);
   padding: 6px 14px 6px 10px;
   border-radius: var(--r-pill);
-  background: rgb(255 255 255 / 0.62);
-  box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.12);
+  /* On a phone the chips sit straight on the window: as much green as a panel, never less. */
+  background: rgb(var(--green-rgb) / max(0.6, var(--panel-veil)));
+  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.35);
   color: var(--ink);
   font-size: 0.95rem;
   font-weight: 750;
@@ -210,11 +218,12 @@
   color: var(--ink-2);
   font-weight: 600;
 }
+/* The best app: the bone (selected) pill with green words and a vermilion edge; a label, so never the CTA fill. */
 .perf-chip.is-best {
-  background: var(--tomato-deep);
-  box-shadow: 0 6px 14px -8px rgb(var(--tomato-rgb) / 0.9);
-  color: #fff;
-  --mark-cut: var(--tomato-deep);
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1.5px var(--vermilion);
+  color: var(--on-bone);
+  --mark-cut: var(--bone);
 }
 .perf__actions {
   grid-area: actions;
@@ -249,7 +258,7 @@
   height: 100%;
   object-fit: cover;
   border-radius: calc(var(--r-xl) - 6px);
-  background: rgb(var(--ink-rgb) / 0.85);
+  background: rgb(var(--green-deep-rgb) / 0.85);
 }
 .perf__novideo {
   display: grid;
@@ -258,27 +267,25 @@
   gap: 6px;
   height: 100%;
   border-radius: calc(var(--r-xl) - 6px);
-  background: rgb(var(--ink-rgb) / 0.1);
+  background: var(--fill);
   color: var(--ink-2);
   font-weight: 600;
 }
 
-/* Waiting for the next allowed check: the button tells the owner when, so it stays fully readable (ink on solid
-   off-white, about 13:1) instead of fading like a button with nothing to say. */
+/* Waiting for the next allowed check: the button tells the owner when, so it stays fully readable (green on solid
+   bone, about 10.7:1) instead of fading like a button with nothing to say. */
 .btn.perf__refresh.is-waiting[aria-disabled="true"]:not(.is-loading) {
   opacity: 1;
-  background: var(--offwhite);
-  color: var(--ink);
+  background: var(--bone);
+  color: var(--on-bone);
   text-shadow: none;
-  box-shadow:
-    inset 0 0 0 1.5px rgb(var(--ink-rgb) / 0.22),
-    0 6px 16px -12px rgb(var(--ink-rgb) / 0.45);
+  box-shadow: 0 6px 16px -12px rgb(var(--shadow-rgb) / 0.68);
 }
 .btn.perf__refresh.is-waiting .icon {
-  color: var(--sage-ink);
+  color: var(--on-bone);
 }
 
-/* The "Best this week" star: sage glass, never tomato (the one tomato button is Refresh). */
+/* The "Best this week" star: green glass; once on, it wears the vermilion CTA fill (an active state). */
 .star-btn {
   display: inline-flex;
   align-items: center;
@@ -295,12 +302,12 @@
     background-color var(--dur-2) var(--ease-out);
 }
 .star-btn .icon {
-  color: var(--sage-ink);
+  color: var(--green-ink);
   transition: transform var(--dur-3) var(--ease-spring);
 }
 .star-btn.is-on {
-  /* Deep sage so the white "Best this week" label stays above 4.5:1 (the lighter sage was about 3.8:1). */
-  --glass-tint: linear-gradient(150deg, rgb(92 113 75 / 0.97), rgb(70 89 57 / 0.97));
+  /* The CTA fill, so the white "Best this week" label stays above 4.5:1. */
+  --glass-tint: var(--cta);
   color: #fff;
 }
 .star-btn.is-on .icon {
@@ -342,8 +349,8 @@
 }
 .pstack__card.is-best {
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.75),
-    0 0 0 2px rgb(var(--tomato-rgb) / 0.55),
+    inset 0 1px 0 rgb(var(--bone-rgb) / 0.26),
+    0 0 0 2px rgb(var(--vermilion-rgb) / 0.55),
     var(--shadow-2);
 }
 .pstack__head {
@@ -359,9 +366,9 @@
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: rgb(var(--ink-rgb) / 0.88);
-  color: var(--offwhite);
-  --mark-cut: var(--ink);
+  background: var(--selected);
+  color: var(--on-bone);
+  --mark-cut: #efe7da;
 }
 /* One line always (ellipsis only if it must), so the pill and the big number start at the same height in every
    column and the numbers being compared line up. */
@@ -387,11 +394,12 @@
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--tomato);
-  color: #fff;
+  background: var(--selected);
+  color: var(--on-bone);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.45),
-    0 6px 14px -6px rgb(var(--tomato-rgb) / 0.8);
+    inset 0 0 0 1.5px var(--vermilion),
+    0 0 0 1.5px rgb(var(--bone-rgb) / 0.9),
+    0 6px 14px -6px rgb(var(--vermilion-rgb) / 0.8);
 }
 .pstack__chip .pill {
   white-space: normal;
@@ -425,12 +433,12 @@
   align-items: start;
   column-gap: 8px;
   padding: 5px 0;
-  border-top: 1px solid rgb(var(--ink-rgb) / 0.08);
+  border-top: 1px solid rgb(var(--line-rgb) / 0.18);
   font-size: var(--fs-small);
 }
 .pstack__row .icon {
   margin-top: 1px;
-  color: var(--sage-ink);
+  color: var(--green-ink);
 }
 .pstack__label {
   min-width: 0;
@@ -454,13 +462,13 @@
   gap: 4px;
   padding: 10px 10px 8px;
   border-radius: var(--r-md);
-  background: rgb(255 255 255 / 0.4);
+  background: rgb(var(--green-deep-rgb) / 0.27);
 }
 .pstack__note {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--sage-ink);
+  color: var(--green-ink);
   font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -498,7 +506,7 @@
   font-weight: 600;
 }
 .pstack__card.is-failed .pstack__calm-text {
-  color: var(--tomato-ink);
+  color: var(--vermilion-ink);
 }
 /* Narrow stacks (should not happen with the stage thresholds, kept as a safety net): each number goes under its
    label. */
@@ -559,13 +567,13 @@
   height: 32px;
 }
 .spark__line {
-  stroke: var(--sage-deep);
+  stroke: var(--bone);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 .spark.is-best .spark__line {
-  stroke: var(--tomato-deep);
+  stroke: var(--vermilion);
 }
 
 /* ---------- Stage ≥ 620 px: two rows on a six-track grid; Facebook and X sit in the row-1 gutters ---------- */
@@ -675,19 +683,19 @@
   min-height: 48px;
   padding: 8px 20px;
   border-radius: var(--r-pill);
-  background: rgb(255 255 255 / 0.55);
-  box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.1);
+  background: rgb(var(--green-deep-rgb) / 0.32);
+  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.22);
   color: var(--ink);
   font-weight: 650;
   text-decoration: none;
   transition: background-color var(--dur-2) var(--ease-out);
 }
 .lib-tab:hover {
-  background: rgb(255 255 255 / 0.8);
+  background: var(--fill-hover);
 }
 .lib-tab.is-on {
-  background: rgb(var(--ink-rgb) / 0.88);
-  color: var(--offwhite);
+  background: var(--selected);
+  color: var(--on-bone);
   box-shadow: none;
 }
 .lib-card__link {
@@ -708,7 +716,7 @@
 }
 .lib-card__link:hover {
   text-decoration: underline;
-  text-decoration-color: rgb(var(--tomato-rgb) / 0.5);
+  text-decoration-color: rgb(var(--vermilion-rgb) / 0.5);
   text-underline-offset: 3px;
 }
 .lib-card__see {
@@ -766,11 +774,11 @@
   text-align: center;
 }
 .week__learn .icon {
-  color: var(--sage-ink);
+  color: var(--green-ink);
 }
 .week__learn.is-failed,
 .week__learn.is-failed .icon {
-  color: var(--tomato-ink);
+  color: var(--vermilion-ink);
 }
 .week__quote {
   display: grid;
@@ -812,8 +820,8 @@
 }
 .week-card.is-best {
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.75),
-    0 0 0 2px rgb(var(--sage-rgb) / 0.9),
+    inset 0 1px 0 rgb(var(--bone-rgb) / 0.26),
+    0 0 0 2px rgb(var(--green-leaf-rgb) / 0.9),
     var(--shadow-1);
 }
 .week-card__rank {
@@ -830,7 +838,7 @@
   aspect-ratio: 9 / 14;
   overflow: hidden;
   border-radius: var(--r-sm);
-  background: rgb(var(--ink-rgb) / 0.15);
+  background: linear-gradient(150deg, var(--green-2), var(--green-3));
 }
 .week-card__cover img {
   width: 100%;
@@ -892,7 +900,7 @@
   padding: 0;
   list-style: none;
 }
-/* Each app as a small pill: 16 px mark, 15 px number; the clip's best app in tomato, as on the clip page. */
+/* Each app as a small pill: 16 px mark, 15 px number; the clip's best app is the bone pill with a vermilion edge, as on the clip page. */
 .week-card__mark {
   display: inline-flex;
   align-items: center;
@@ -900,8 +908,8 @@
   min-height: 30px;
   padding: 3px 10px 3px 7px;
   border-radius: var(--r-pill);
-  background: rgb(255 255 255 / 0.5);
-  box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.1);
+  background: rgb(var(--green-deep-rgb) / 0.3);
+  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.22);
   color: var(--ink);
   font-size: 0.9375rem;
   font-weight: 700;
@@ -909,10 +917,10 @@
   white-space: nowrap;
 }
 .week-card__mark.is-best {
-  background: var(--tomato-deep);
-  box-shadow: none;
-  color: #fff;
-  --mark-cut: var(--tomato-deep);
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1.5px var(--vermilion);
+  color: var(--on-bone);
+  --mark-cut: var(--bone);
 }
 .star-btn--card {
   flex-direction: column;
@@ -964,7 +972,7 @@
   font-weight: 700;
 }
 .kept-now__title .icon {
-  color: var(--sage-ink);
+  color: var(--green-ink);
 }
 .kept-now__list {
   display: grid;
@@ -996,7 +1004,7 @@
   width: 100%;
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgb(var(--ink-rgb) / 0.1);
+  border-top: 1px solid rgb(var(--line-rgb) / 0.22);
 }
 .perf__earned {
   display: flex;
@@ -1008,7 +1016,7 @@
   overflow-wrap: anywhere;
 }
 .perf__earned .icon {
-  color: var(--sage-ink);
+  color: var(--green-ink);
 }
 .perf__earned-num {
   font-size: 1.15rem;
@@ -1017,8 +1025,8 @@
 .perf__guess {
   padding: 2px 8px;
   border-radius: var(--r-pill);
-  background: rgb(var(--sage-rgb) / 0.35);
-  color: var(--sage-text); /* --sage-deep is under 4.5:1 on this tint */
+  background: var(--tint-leaf);
+  color: var(--green-text); /* --green-deep is under 4.5:1 on this tint */
   font-size: var(--fs-xs);
   font-weight: 700;
   white-space: nowrap;
@@ -1046,7 +1054,7 @@
   width: 100%;
   padding: 10px 12px;
   border-radius: var(--r-md);
-  background: rgb(255 255 255 / 0.4);
+  background: rgb(var(--green-deep-rgb) / 0.27);
   font-size: var(--fs-small);
   text-align: left;
   overflow-wrap: anywhere;
@@ -1088,7 +1096,7 @@
   gap: 2px;
   padding: 8px 10px;
   border-radius: var(--r-md);
-  background: rgb(var(--sage-rgb) / 0.16);
+  background: var(--tint-leaf);
   min-width: 0;
 }
 .pstack__earned-line {
@@ -1101,7 +1109,7 @@
 }
 .pstack__earned-line .icon {
   flex: none;
-  color: var(--sage-ink);
+  color: var(--green-ink);
 }
 .pstack__earned-num {
   font-variant-numeric: tabular-nums;
@@ -1131,7 +1139,7 @@
 }
 .earned-chip .icon {
   flex: none;
-  color: var(--sage-ink);
+  color: var(--green-ink);
 }
 .earned-chip.is-none,
 .earned-chip__why {
@@ -1143,8 +1151,8 @@
 .earned-guess {
   padding: 1px 8px;
   border-radius: var(--r-pill);
-  background: rgb(var(--sage-rgb) / 0.35);
-  color: var(--sage-text); /* --sage-deep is only ~3.9:1 on this tint */
+  background: var(--tint-leaf);
+  color: var(--green-text); /* --green-deep is only ~3.9:1 on this tint */
   font-size: var(--fs-xs);
   font-weight: 700;
   white-space: nowrap;

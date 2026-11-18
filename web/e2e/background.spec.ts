@@ -67,11 +67,15 @@ const drawnIn = (page: Page, token: string) =>
 const textTokens = (page: Page) =>
   page.evaluate((names) => Object.fromEntries(names.map((n) => [n, getComputedStyle(document.documentElement).getPropertyValue(n).trim()])), Object.keys(TEXT_TOKENS));
 
-/** The text colours of everything that sits straight on the backdrop or on a nearly clear panel. */
+/**
+ * The text colours of everything that sits straight on the backdrop or on a panel. The Background tiles' names are
+ * left out: the chosen one sits on its own bone pill (green words), and they fade between the two as the pill
+ * slides; contrast.spec.ts reads them once settled.
+ */
 async function textColours(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const out = new Set<string>();
-    for (const el of document.querySelectorAll<HTMLElement>("h1, h2, .apple__leaf, .apple__name, .crumbs a, .crumbs__here, .muted, .bg-note, .bg-mode__name, .page-lede, .text-link")) {
+    for (const el of document.querySelectorAll<HTMLElement>("h1, h2, .apple__leaf, .apple__name, .crumbs a, .crumbs__here, .muted, .bg-note, .page-lede, .text-link")) {
       if (!el.offsetParent || !el.textContent?.trim()) continue;
       out.add(getComputedStyle(el).color);
     }
@@ -99,16 +103,16 @@ test.describe("background modes", () => {
     await expect.poll(() => backdrop(page)).toBe("colours");
     await expect(page.locator(".bg-note")).toHaveCount(0);
 
-    // Sage out, Night in: the backdrop draws exactly the chosen colours, with a veil strong enough for them.
-    await page.getByRole("button", { name: "Sage" }).click();
-    await expect(page.getByRole("button", { name: "Sage" })).toHaveAttribute("aria-pressed", "false");
+    // Bottle green out, Night in: the backdrop draws exactly the chosen colours, with a veil strong enough for them.
+    await page.getByRole("button", { name: "Bottle green" }).click();
+    await expect(page.getByRole("button", { name: "Bottle green" })).toHaveAttribute("aria-pressed", "false");
     await page.getByRole("button", { name: "Night" }).click();
     await expect(page.getByRole("button", { name: "Night" })).toHaveAttribute("aria-pressed", "true");
-    const want = ["#f7f5ef", "#e8412c", "#1f2937"];
+    const want = ["#efe7da", "#e8392b", "#1f2937"];
     await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", want.join(" "));
     expect(await veil(page)).toBeCloseTo(coloursVeil(want), 5);
     const c1 = await page.locator(".backdrop--colours").evaluate((el) => getComputedStyle(el).getPropertyValue("--c1").trim());
-    expect(c1).toBe("#f7f5ef");
+    expect(c1).toBe("#efe7da");
 
     // A fourth colour is refused kindly.
     await page.getByRole("button", { name: "Sunny" }).click();
@@ -117,7 +121,7 @@ test.describe("background modes", () => {
     // Your own colour from the picker.
     await page.getByRole("button", { name: "Night" }).click();
     await page.getByLabel("Your own colour").fill("#123456");
-    await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", "#f7f5ef #e8412c #123456");
+    await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", "#efe7da #e8392b #123456");
     await expect(page.getByRole("button", { name: "Your colour" })).toHaveAttribute("aria-pressed", "true");
 
     await saved(page, "#123456");
@@ -125,7 +129,7 @@ test.describe("background modes", () => {
     await settle(page);
     await expect(page.getByRole("radio", { name: "Colours" })).toBeChecked();
     expect(await backdrop(page)).toBe("colours");
-    await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", "#f7f5ef #e8412c #123456");
+    await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", "#efe7da #e8392b #123456");
 
     // Picture with no picture yet: the Clip Factory colours. Picking one uses it.
     await page.getByRole("radio", { name: "Picture" }).check();
@@ -176,18 +180,17 @@ test.describe("background modes", () => {
     expect(await backdrop(page)).toBe("picture");
   });
 
-  test("a dark colour looks as soft in its previews as it will behind the glass, and says why", async ({ page }) => {
+  test("a light colour looks as soft in its previews as it will behind the glass, and says why", async ({ page }) => {
     await open(page);
     await page.getByRole("radio", { name: "Colours" }).check();
-    for (const name of ["Sage", "Cream"]) await page.getByRole("button", { name }).click();
-    await page.getByRole("button", { name: "Night" }).click();
-    await page.getByRole("button", { name: "Tomato" }).click();
-    await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", "#1f2937");
-    const want = coloursVeil(["#1f2937"]);
+    for (const name of ["Bottle green", "Vermilion"]) await page.getByRole("button", { name }).click();
+    await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", "#efe7da");
+    const want = coloursVeil(["#efe7da"]);
+    expect(want).toBeGreaterThan(0.5);
     expect(await veil(page)).toBeCloseTo(want, 5);
     expect(await surfaceAlpha(page, ".bg-colours__mix", "::after")).toBeCloseTo(want, 2);
     expect(await surfaceAlpha(page, ".bg-tile--colours", "::after")).toBeCloseTo(want, 2);
-    await expect(page.getByText("Dark colours show soft, so words stay easy to read.")).toBeVisible();
+    await expect(page.getByText("Light colours show soft, so words stay easy to read.")).toBeVisible();
   });
 
   test("Ask Clip Factory's words and the search find the new settings", async ({ page }) => {
@@ -201,7 +204,7 @@ test.describe("background modes", () => {
 });
 
 test.describe("see-through in the desktop app (simulated)", () => {
-  test("macOS Liquid Glass: the page is transparent, the gaps stay clear, the panels carry just enough tint and the lightest words go deeper", async ({ page }) => {
+  test("macOS Liquid Glass: the page is transparent, the gaps stay clear, the panels carry just enough green and the softer words go to bone", async ({ page }) => {
     await asDesktop(page, "liquid");
     await open(page);
     await expect(page.locator("html")).toHaveClass(/see-through/);
@@ -217,19 +220,19 @@ test.describe("see-through in the desktop app (simulated)", () => {
     const clear = seeThroughVeils("liquid", "light", "clear");
     expect(await veil(page)).toBe(clear.page);
     expect(await surfaceAlpha(page, ".backdrop__veil")).toBe(0);
-    // The panels carry the tint, only as much as the darkest Liquid Glass needs: far less than half solid.
+    // The panels carry the green, only as much as bone words need over a white desktop.
     expect(await panelVeil(page)).toBeCloseTo(clear.panel, 5);
-    expect(clear.panel).toBeLessThan(0.5);
+    expect(clear.panel).toBeLessThanOrEqual(0.75);
     expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(clear.panel, 2);
 
-    // The window look's own text colours: the four lightest are deeper here, the rest as everywhere.
+    // The window look's own text colours: the softer ones are bone or lighter here, the rest as everywhere.
     expect(await textTokens(page)).toEqual(WINDOW_TEXT_TOKENS);
-    // And words written in them are drawn in them: the meta line of a panel, tomato text, sage text.
-    for (const token of ["--ink-3", "--tomato-ink", "--sage-ink", "--sage-text"] as const) expect(await drawnIn(page, token), token).toEqual(hexToRgb(WINDOW_TEXT_TOKENS[token]));
+    // And words written in them are drawn in them: the meta line of a panel, vermilion words, green words.
+    for (const token of ["--ink-3", "--vermilion-ink", "--green-ink", "--green-text"] as const) expect(await drawnIn(page, token), token).toEqual(hexToRgb(WINDOW_TEXT_TOKENS[token]));
     const behind = seeThroughWorstBackground("liquid", "light", "clear");
     for (const c of await textColours(page)) expect(contrast(rgbOf(c), behind), c).toBeGreaterThanOrEqual(4.5);
 
-    // Frosted: a light frost over the gaps too, and heavier panels, so it shows less.
+    // Frosted: a green frost over the gaps too, and heavier panels, so it shows less.
     await page.getByRole("radio", { name: "Frosted" }).check();
     const frosted = seeThroughVeils("liquid", "light", "frosted");
     await expect.poll(() => veil(page)).toBeCloseTo(frosted.page, 5);
@@ -247,7 +250,7 @@ test.describe("see-through in the desktop app (simulated)", () => {
 
   // The glasses nobody has measured yet keep their careful numbers; each still gets its own panel tint.
   for (const glass of ["vibrancy", "acrylic", "mica", "blur"] as const) {
-    test(`${glass} keeps working: its own panel tint, the deeper text colours, AA on its darkest`, async ({ page }) => {
+    test(`${glass} keeps working: its own panel tint, the window text colours, AA over white`, async ({ page }) => {
       await asDesktop(page, glass);
       await open(page);
       await expect(page.locator("html")).toHaveClass(/see-through/);
@@ -261,17 +264,15 @@ test.describe("see-through in the desktop app (simulated)", () => {
     });
   }
 
-  test("measured Liquid Glass and Windows blur let more through than the glasses that are assumed black", async ({ page }) => {
-    const black = seeThroughVeils("vibrancy", "light", "clear").panel;
-    for (const glass of ["acrylic", "mica"] as const) expect(seeThroughVeils(glass, "light", "clear").panel).toBe(black);
-    expect(seeThroughVeils("liquid", "light", "clear").panel).toBeLessThan(black);
-    expect(seeThroughVeils("blur", "light", "clear").panel).toBeLessThan(black);
+  test("every glass plans for a white desktop, so every glass gets the same panel tint", async ({ page }) => {
+    const liquid = seeThroughVeils("liquid", "light", "clear").panel;
+    for (const glass of ["vibrancy", "acrylic", "mica", "blur"] as const) expect(seeThroughVeils(glass, "light", "clear").panel).toBe(liquid);
     await asDesktop(page, "blur");
     await open(page);
-    expect(await panelVeil(page)).toBeLessThan(black);
+    expect(await panelVeil(page)).toBeCloseTo(liquid, 5);
   });
 
-  test("dark system setting: the panel tint assumes the darkest glass, whatever the glass", async ({ page }) => {
+  test("dark system setting: the panel tint still plans for a white desktop, whatever the glass", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
     await asDesktop(page, "liquid");
     await open(page);
@@ -374,11 +375,10 @@ for (const scheme of ["light", "dark"] as const) {
         els.map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight))),
       );
       expect(lines).toEqual([1, 1, 1]);
-      // Colours at their darkest: Night alone, its veil keeps the text readable.
+      // Colours at their lightest: Bone alone, its veil keeps the text readable.
       await page.getByRole("radio", { name: "Colours" }).check();
-      for (const name of ["Sage", "Cream"]) await page.getByRole("button", { name }).click();
-      await page.getByRole("button", { name: "Night" }).click();
-      await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", /#1f2937/);
+      for (const name of ["Bottle green", "Vermilion"]) await page.getByRole("button", { name }).click();
+      await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", "#efe7da");
       const colours = (await page.locator(".backdrop--colours").getAttribute("data-colours"))!.split(" ");
       const v = await veil(page);
       expect(v).toBeCloseTo(coloursVeil(colours), 5);

@@ -29,7 +29,7 @@ test("a Library card opens the clip's page: five stacks in order, each with its 
   await expect(stack(page, "youtube")).toContainText("Updates daily");
   await expect(stack(page, "instagram")).toContainText("Can take 2 days");
 
-  // TikTok has the most views in the mock: the crown and the tomato line are its.
+  // TikTok has the most views in the mock: the crown and the vermilion line are its.
   await expect(stack(page, "tiktok").locator(".pstack__crown")).toBeVisible();
   await expect(page.locator(".pstack__crown")).toHaveCount(1);
   await expect(stack(page, "tiktok").getByRole("heading", { name: "TikTok, best" })).toBeVisible();
@@ -225,7 +225,7 @@ test("with reduced motion the lines are simply there, nothing animates", async (
   expect(running).toBe(0);
 });
 
-test("phone and desktop: the page fits and the one tomato button is Refresh", async ({ page }) => {
+test("phone and desktop: the page fits and the one main vermilion button is Refresh", async ({ page }) => {
   for (const size of [
     { width: 390, height: 844 },
     { width: 1440, height: 900 },

@@ -203,7 +203,7 @@ export function SetupTodo() {
         {doneMode === "pill" ? bar : null}
         <aside
           ref={card}
-          className={`setup-todo setup-todo--done glass glass--sage${phase === "leaving" ? " is-leaving" : ""}`}
+          className={`setup-todo setup-todo--done glass glass--green${phase === "leaving" ? " is-leaving" : ""}`}
           data-mode={doneMode}
           aria-label="Set up posting"
           role="status"
@@ -405,7 +405,7 @@ function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Pla
             </span>
             {row.state === "ready" ? null : (
               <span className="todo-row__actions">
-                <LinkButton href={`/settings/posting/setup/${row.platform}`} size="sm" variant="glass" className="todo-row__go" aria-label={`Set up ${name}`}>
+                <LinkButton href={`/settings/posting/setup/${row.platform}`} size="sm" variant="action" className="todo-row__go" aria-label={`Set up ${name}`}>
                   Set up
                 </LinkButton>
                 {finished ? (

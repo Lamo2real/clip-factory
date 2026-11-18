@@ -113,7 +113,7 @@ test("This week fits on a phone and on a desktop", async ({ page }) => {
   }
 });
 
-test("each clip's apps show as readable pills: no bare dashes, the best app in tomato", async ({ page }) => {
+test("each clip's apps show as readable pills: no bare dashes, the best app in vermilion", async ({ page }) => {
   for (const size of [
     { width: 375, height: 812 },
     { width: 1440, height: 900 },

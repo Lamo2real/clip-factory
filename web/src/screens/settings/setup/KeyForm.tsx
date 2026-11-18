@@ -23,7 +23,7 @@ export function KeyForm({
 }: {
   platform: Platform;
   setup: PlatformSetup;
-  /** Save keys is this screen's tomato button. */
+  /** Save keys is this screen's vermilion button. */
   primary: boolean;
   onSaved: (setup: PlatformSetup) => void;
 }) {
@@ -111,7 +111,7 @@ export function KeyForm({
     return (
       <div className="key-saved">
         <div className="key-saved__head">
-          <Pill tone="sage" icon="check">
+          <Pill tone="success" icon="check">
             Keys saved
           </Pill>
         </div>
@@ -215,7 +215,7 @@ export function KeyForm({
         </div>
       ) : null}
       <div className="key-form__actions">
-        <Button type="submit" variant={primary ? "primary" : "glass"} size="lg" icon="check" act={saveAct} loading={saving} disabled={!ready}>
+        <Button type="submit" variant={primary ? "primary" : "action"} size="lg" icon="check" act={saveAct} loading={saving} disabled={!ready}>
           Save keys
         </Button>
         {setup.keys.saved ? (

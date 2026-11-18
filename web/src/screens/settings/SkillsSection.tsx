@@ -181,7 +181,7 @@ function SkillRow({ skill }: { skill: Skill }) {
 export function SkillBadges({ skill }: { skill: Skill }) {
   return (
     <>
-      <Pill tone="sage" icon="check">
+      <Pill tone="success" icon="check">
         Always used
       </Pill>
       {skill.builtin ? <Pill tone="neutral">Built in</Pill> : null}

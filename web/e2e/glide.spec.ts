@@ -66,7 +66,7 @@ test.describe("glide", () => {
       expect(await bar.locator(".segmented__opt.is-on").evaluate((el) => getComputedStyle(el).backgroundImage)).toBe("none");
     });
 
-    test("the menu highlight and its tomato bar follow the page", async ({ page }) => {
+    test("the menu highlight and its vermilion bar follow the page", async ({ page }) => {
       await page.goto("/");
       await settle(page);
       const list = page.locator(".sidebar__list");
@@ -74,7 +74,7 @@ test.describe("glide", () => {
       await list.locator(".sidebar__item", { hasText: "Library" }).click();
       await expect(page).toHaveURL(/\/library/);
       await landsOn(list, ".sidebar__item.is-active");
-      expect(await list.locator(".glide").evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe("rgb(232, 65, 44)");
+      expect(await list.locator(".glide").evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe("rgb(232, 57, 43)");
       // A resize moves it instantly (no slide), and it stays on the chosen item.
       await page.setViewportSize({ width: 1024, height: 800 });
       await landsOn(list, ".sidebar__item.is-active");
@@ -129,12 +129,12 @@ test.describe("glide", () => {
       expect(await cursors(page), "Ask panel").toEqual([]);
     });
 
-    test("Ask wears the Clip Factory mark: a chat bubble with a play button and the tomato dot", async ({ page }) => {
+    test("Ask wears the Clip Factory mark: a chat bubble with a play button and the vermilion dot", async ({ page }) => {
       await page.goto("/");
       await settle(page);
       const mark = page.locator(".help-launcher .ask-mark");
       await expect(mark).toBeVisible();
-      expect(await mark.locator(".ask-mark__dot").evaluate((el) => getComputedStyle(el).fill)).toBe("rgb(232, 65, 44)");
+      expect(await mark.locator(".ask-mark__dot").evaluate((el) => getComputedStyle(el).fill)).toBe("rgb(232, 57, 43)");
     });
   });
 

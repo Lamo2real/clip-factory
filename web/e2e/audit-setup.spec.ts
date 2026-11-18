@@ -5,13 +5,13 @@ import { animationsDone, findOverflow, mixedSetup, settle, WIDTHS } from "./help
 
 // The Set up posting lists (docs/CONTRACTS.md §17.1), audited at every phone width with touch (320–430) and every
 // tablet/desktop width (768–1920): every step open, Copy buttons, paste boxes, Connect, resume after a reload, the
-// finished panel, the account picker and a failed Connect. Nothing overflows, targets are big, one tomato at most.
+// finished panel, the account picker and a failed Connect. Nothing overflows, targets are big, one vermilion at most.
 
 type MockSetup = { finish(p: Platform): void; askToChoose(p: Platform): void; reset(): void };
 const mock = (page: Page) => page.evaluateHandle(() => (window as unknown as { __cfMock: { setup: MockSetup } }).__cfMock.setup);
 const step = (page: Page, id: string) => page.locator(`[data-step="${id}"]`);
 
-/** Overflow, small targets, controls off the screen and more than one tomato on what is shown now. */
+/** Overflow, small targets, controls off the screen and more than one vermilion on what is shown now. */
 async function problems(page: Page, label: string, phone: boolean): Promise<string[]> {
   // Measured at rest: mid-slide a 44 px box can read 43.99999 px (a fractional translate).
   await animationsDone(page);
@@ -32,7 +32,7 @@ async function problems(page: Page, label: string, phone: boolean): Promise<stri
       if (b.right > vw + 0.5 || b.left < -0.5) bad.push(`"${name}" is off the screen`);
     }
     const tomatoes = [...document.querySelectorAll<HTMLElement>("main .btn--primary")].filter((e) => e.getBoundingClientRect().height > 0);
-    if (tomatoes.length > 1) bad.push(`${tomatoes.length} tomato buttons: ${tomatoes.map((e) => e.textContent?.trim()).join(" | ")}`);
+    if (tomatoes.length > 1) bad.push(`${tomatoes.length} vermilion buttons: ${tomatoes.map((e) => e.textContent?.trim()).join(" | ")}`);
     return bad;
   }, phone ? 48 : 44);
   return [...out, ...found.map((f) => `${label}: ${f}`)];
@@ -80,18 +80,18 @@ for (const width of WIDTHS) {
 test.describe("Set up posting on the smallest phone", () => {
   test.use({ viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true, permissions: ["clipboard-read", "clipboard-write"] });
 
-  test("Copy is a quiet glass button, and a tap copies the value", async ({ page }) => {
+  test("Copy is the vermilion action button, and a tap copies the value", async ({ page }) => {
     await page.goto("/settings/posting/setup/youtube");
     await settle(page);
     await openEveryStep(page);
     const btn = page.getByRole("button", { name: "Copy App name" });
-    // Glass, not a dark pill: the background is light, the label dark.
+    // Every CTA is vermilion: the CTA gradient with a white label.
     const look = await btn.evaluate((e) => {
       const s = getComputedStyle(e);
       return { bg: s.backgroundImage + s.backgroundColor, color: s.color };
     });
-    expect(look.bg).not.toContain("rgb(30, 42, 27)");
-    expect(look.color).toBe("rgb(30, 42, 27)");
+    expect(look.bg).toContain("rgba(206, 48, 36, 0.97)");
+    expect(look.color).toBe("rgb(255, 255, 255)");
     await btn.scrollIntoViewIfNeeded();
     await btn.tap();
     await expect(page.getByRole("button", { name: "App name copied" })).toBeVisible();
@@ -315,11 +315,11 @@ test.describe("setup layout details", () => {
     }
   });
 
-  test("the 'Set up posting' tag uses the deep sage text that passes 4.5:1 on its tint", async ({ page }) => {
+  test("the 'Set up posting' tag uses the green text that passes 4.5:1 on its tint", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto("/settings/posting/setup");
     await settle(page);
-    await expect(page.locator(".setup-summary .apple__tag")).toHaveCSS("color", "rgb(61, 79, 49)");
+    await expect(page.locator(".setup-summary .apple__tag")).toHaveCSS("color", "rgb(214, 235, 200)");
   });
 
   test("a platform page's ring shares the top row with the mark on phones; the checked date stays whole", async ({ page }) => {

@@ -513,7 +513,7 @@ export function seed(): Store {
       earningsPaid: {},
       setupSkipped: [],
       // No backgroundMode: like the server, absent until saved, so the device decides (§22.1).
-      backgroundColours: ["#9caf88", "#f7f5ef", "#e8412c"],
+      backgroundColours: ["#0f372b", "#efe7da", "#e8392b"],
       glassStrength: "clear",
       clipModel: "fable-5-1",
     },

@@ -13,7 +13,8 @@ import { Glide } from "./Glide.tsx";
 import { navigate } from "../lib/router.ts";
 import { Icon, type IconName } from "./Icon.tsx";
 
-type Variant = "primary" | "glass" | "ghost" | "danger";
+/** `primary` is the screen's one main action; `action` is every other action button. Both wear the vermilion CTA. */
+type Variant = "primary" | "action" | "glass" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
 /** Sets the ripple origin for the CSS ripple and restarts it. Visual only; the sound comes from the click. */
@@ -260,7 +261,7 @@ export function LinkButton({
   );
 }
 
-/** A word with the hand-drawn tomato underline from the brand. */
+/** A word with the hand-drawn vermilion underline from the brand. */
 export function Swash({ children }: { children: ReactNode }) {
   return (
     <span className="swash">
@@ -421,7 +422,7 @@ export function Stepper({
   );
 }
 
-export function Progress({ value, label, tone = "tomato" }: { value: number; label: string; tone?: "tomato" | "sage" }) {
+export function Progress({ value, label, tone = "primary" }: { value: number; label: string; tone?: "primary" | "success" }) {
   const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
   return (
     <div
@@ -437,7 +438,7 @@ export function Progress({ value, label, tone = "tomato" }: { value: number; lab
   );
 }
 
-export type Tone = "neutral" | "sage" | "tomato" | "ink" | "warn";
+export type Tone = "neutral" | "success" | "vermilion" | "bone" | "warn";
 
 export function Pill({ tone = "neutral", icon, children }: { tone?: Tone; icon?: IconName; children: ReactNode }) {
   return (

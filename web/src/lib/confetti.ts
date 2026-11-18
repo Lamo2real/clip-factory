@@ -1,6 +1,11 @@
 import { prefersReducedMotion } from "./prefs.ts";
 
-const COLORS = ["#E8412C", "#9CAF88", "#F7F5EF", "#C9D6BC", "#F2785F"];
+/**
+ * Vermilion, bone and leaf for the green glass, plus one raised green (#1B4A3B) that shows when the glass is light
+ * (see-through over a light desktop), where the bone and cream pieces fade. Each backdrop keeps at least three
+ * colours that show.
+ */
+const COLORS = ["#E8392B", "#EFE7DA", "#F07A6C", "#5FA585", "#FFF8EE", "#1B4A3B"];
 
 interface Piece {
   x: number;
@@ -15,7 +20,7 @@ interface Piece {
 }
 
 /**
- * A short tomato-and-sage burst from a point (a Confirm button, a finished job). Pointer-transparent, removed when
+ * A short vermilion-and-bone burst from a point (a Confirm button, a finished job). Pointer-transparent, removed when
  * done, skipped entirely when motion is reduced.
  */
 export function burst(origin?: { x: number; y: number }, amount = 90): void {

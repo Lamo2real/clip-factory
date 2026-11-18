@@ -107,13 +107,13 @@ cd api && uv run pytest -q tests/test_help*.py
 |---|---|
 | API (pytest) | Off by default (flag unset: GET off, POST 403); kill switch `enabled: false` → 403, `model: false` → kb, read once per 60 s; 6 a minute and 60 an hour → 429 with `Retry-After` and `retryAfter`; cap reached → `kb_cap` and no model call; no model call for unknown or refused; bad bodies → 400; the exact Converse request (model id, `maxTokens` 700, no temperature, thinking disabled, schema with `additionalProperties: false`, the owner's skills block first and the help rules after it, sent through the shared `learn.converse_text` (§18.6), client timeouts, `max_attempts` 1); invented action id dropped; ungrounded bold name, invented digit or a live number written out → kb; malformed JSON, stop reasons, timeout, ClientError → kb; deadline skip; skills that cannot be loaded → `kb_skills` and no model call; `test_skills_everywhere.py` finds no model call outside the helper; corpus meta parse, other host or bad path refused, 10-minute cache, bundled fallback, sensitive filter; questions and answers never in any captured log record (token counts are logged as `usageIn` and `usageOut`); `requestId` in every error body; follow-up merge; exactly two help routes; the zip's `corpus.json` equals the web file (`tests/test_help_corpus.py::test_full_build_puts_the_web_corpus_in_the_zip` runs the whole Lambda build offline, with the dependency install faked, in every pytest run, so it is never skipped in CI); model answers with a link or domain, or a price the owner typed, fall back to the plain answer (`kb_ungrounded`). |
 | Web (Vitest) | Retriever evals; composer; `when` filter; a bad action `to` is dropped; generator `--check`; nothing sensitive and no em or en dashes in the corpus; `helpApi` 27 s timeout, no `keepalive`, one refresh on 401; 429 → countdown and no retry; 5xx or network → local answer; status off → hidden and no local answers; live fill and live failure; unsaved guard; dodge math. |
-| Playwright, mock mode (`e2e/help.spec.ts`, 375 × 812 and 1440 × 900) | Launcher name and place (not over the tab bar or update bar, above the update bar on desktop); three suggestions; "Where do I change my click sound?" → steps, tomato **Open Sounds**, navigation to `/settings/look-and-feel/sounds`, the Click sound row gets the ring (panel closed on 375, open on 1440); the best-clip question shows the mock number; a refusal; `#429` notice with Ask disabled; `#503` → local answer and the copy-code link; `#off` → launcher gone; Escape returns focus; the Ask field spans the panel with a 44 px icon-only **Send** paper plane inside it (off when empty, Shift+Enter adds a line, four lines then scroll), the plane flies with its trail on send and the question bubble shows at once, the tap sound plays on click only; reduced motion → no animations, the plane only fades; each posting and skills guide opens its real page (`/settings/posting/setup/{platform}`, `/settings/clip-making/skills…`) and lights up its control (`setup-connect`/`setup-progress`, `skill-form`, `skill-edit`, `skill-delete`); dodge on scroll; no launcher over **Keep** on Review before any scroll (375 and 1440); after an answer button the spotlit control is the element at its centre (`elementFromPoint`), so nothing covers it; the conversation is still there after Close and reopen; Tab stays inside the phone sheet; the settled phone launcher covers no control at 320, 375, 390 and 430 px, with and without `?update=1`. `overflow.spec.ts` adds the open panel at 320, 375, 768, 1024, 1440 and 1920 px, with a five-line question and the field's width; `screenshots.spec.ts` adds it at 375 and 1440 px, plus `help-review-launcher-*`, `help-spotlight-keep-*`, `help-panel-reopened-*`, `help-ask-box-*` and `help-plane-flying-*`. Port 4179 by default, `CF_E2E_PORT` for another ([Web](#web)). |
+| Playwright, mock mode (`e2e/help.spec.ts`, 375 × 812 and 1440 × 900) | Launcher name and place (not over the tab bar or update bar, above the update bar on desktop); three suggestions; "Where do I change my click sound?" → steps, vermilion **Open Sounds**, navigation to `/settings/look-and-feel/sounds`, the Click sound row gets the ring (panel closed on 375, open on 1440); the best-clip question shows the mock number; a refusal; `#429` notice with Ask disabled; `#503` → local answer and the copy-code link; `#off` → launcher gone; Escape returns focus; the Ask field spans the panel with a 44 px icon-only **Send** paper plane inside it (off when empty, Shift+Enter adds a line, four lines then scroll), the plane flies with its trail on send and the question bubble shows at once, the tap sound plays on click only; reduced motion → no animations, the plane only fades; each posting and skills guide opens its real page (`/settings/posting/setup/{platform}`, `/settings/clip-making/skills…`) and lights up its control (`setup-connect`/`setup-progress`, `skill-form`, `skill-edit`, `skill-delete`); dodge on scroll; no launcher over **Keep** on Review before any scroll (375 and 1440); after an answer button the spotlit control is the element at its centre (`elementFromPoint`), so nothing covers it; the conversation is still there after Close and reopen; Tab stays inside the phone sheet; the settled phone launcher covers no control at 320, 375, 390 and 430 px, with and without `?update=1`. `overflow.spec.ts` adds the open panel at 320, 375, 768, 1024, 1440 and 1920 px, with a five-line question and the field's width; `screenshots.spec.ts` adds it at 375 and 1440 px, plus `help-review-launcher-*`, `help-spotlight-keep-*`, `help-panel-reopened-*`, `help-ask-box-*` and `help-plane-flying-*`. Port 4179 by default, `CF_E2E_PORT` for another ([Web](#web)). |
 | Infrastructure (`terraform test`) | `HELP_*` env on `cf-prod-api` (enabled in prod, off by module default); statement `HelpModel` has only `bedrock:InvokeModel` on the EU profile ARN and the six foundation-model ARNs; the model id comes from `config/models.json` (`eu.` for help, Fable still `global.`); CORS exposes `retry-after`; the metric filter and the alarm exist; `models.json` parses and `helpModel` names a model. |
 
 ## Contrast and text size
 
 `web/e2e/contrast.spec.ts` (Playwright, mock mode, audit F081) opens every route in `ROUTES` (`web/e2e/helpers.ts`) at
-320, 375 and 1440 px, with the browser asking for a light and then a dark colour scheme (the app is light-only, so dark
+320, 375 and 1440 px, with the browser asking for a light and then a dark colour scheme (the app is dark-only, so light
 must render the same), with reduced motion so the backdrop's drift is parked and every run measures the same picture.
 On each it fails on:
 
@@ -144,7 +144,7 @@ Not checked by the rendered-contrast pass: text on a picture (an `img`, `video`,
 it; a picture painted on `<html>` as a stand-in for the glass is part of the backdrop and is checked), which axe
 still checks; controls that are switched off (`:disabled`, `aria-disabled="true"`, exempt in WCAG 1.4.3);
 visually hidden text (`.sr-only`). The spec has an allow-list for decorative `aria-hidden` text; it is empty, and every
-entry must say why. `whiteContrastOnGradient()` in `helpers.ts` (white labels on tomato buttons, used by
+entry must say why. `whiteContrastOnGradient()` in `helpers.ts` (white labels on vermilion buttons, used by
 `audit-performance.spec.ts`) uses the same browser-side contrast kit.
 
 The same three checks read the floating setup list in every face it has (open column, folded pill, glass bar, phone
@@ -234,9 +234,9 @@ Clip Factory window.
       | Window in use | rgb(180, 171, 148) | rgb(249, 248, 245) |
       | Window not in use | rgb(118, 118, 118) | rgb(225, 225, 225) |
 
-      A panel should measure close to `mix(off-white, glass, 0.44)`: about rgb(175, 174, 171) over black when not in
-      use. **If the glass over black is ever darker than rgb(106, 106, 106)**, the floor is too kind: lower
-      `LIQUID_MEASURED` or raise `LIQUID_SAFETY` in `web/src/lib/background.ts` and say so in CONTRACTS.md §22.3.
+      These were measured with the earlier light tint; with the bottle-green tint (ADR-43) the glass in use reads
+      darker and greener. A panel should measure close to `mix(bottle green, glass, 0.73)`. Readability no longer
+      depends on these numbers: the page plans for white behind every glass (`glassCeiling`).
 - [ ] **macOS 26+, the system's own settings.** The numbers above were read with the system in dark mode only.
       Read the glass over the black picture again, in use and not in use, three more times: with the system in
       light appearance, with Reduce transparency switched on, and with Increase contrast switched on (System
@@ -247,11 +247,11 @@ Clip Factory window.
       is clearly never darker than some grey, add the numbers next to `LIQUID_MEASURED`, give `glassFloor` that
       grey (a tenth darker) for that glass, and its panels get clearer. On Windows 10 the blur should be no darker
       than rgb(136, 135, 131).
-- [ ] **Over black, every word is easy to read**, in use and not in use: body text, the grey-green meta lines, tomato
-      links and the "Didn't work" pill (Jobs), sage "Saved" and "Best guess" words, placeholders in empty fields, the
+- [ ] **Over white, every word is easy to read**, in use and not in use: body text, meta lines, vermilion-tinted
+      links and the "Didn't work" pill (Jobs), green "Saved" and "Best guess" words, placeholders in empty fields, the
       labels of segmented bars, a toast, a delete sheet and the Ask panel. That is the case the tints are worked out
-      for.
-- [ ] **Over white, the same words are still easy to read**, and white buttons still look like buttons.
+      for (bone words on bottle-green glass).
+- [ ] **Over black, the same words are still easy to read**, and outlined bone buttons still look like buttons.
 - [ ] **Over the stripes and the big words:** the stripes come through as soft bands, the 75 pt words can be guessed,
       the normal line cannot be read. Through a panel the same, softer.
 - [ ] **Over the car:** its edges are guessable between the panels and softly through them, never sharp.
@@ -318,7 +318,7 @@ Clip Factory window.
     called that. Try another word."; Escape clears; the keyboard can move through results.
   - With the app installed (standalone), Get the app is gone from the tree and search, and `/settings/app/get-the-app`
     says "You already have the app." with a way back.
-  - No overflow at every width from 320 px, at most one tomato button per screen, axe clean, on the field, every tree
+  - No overflow at every width from 320 px, at most one main vermilion button per screen, axe clean, on the field, every tree
     and every branch.
 - **Set up posting**: covered under [Posting setup](#posting-setup).
 - **Navigation**: below 768 px a bottom tab bar with icons only (no visible text, every item has an `aria-label`);
@@ -414,7 +414,7 @@ Clip Factory window.
   off) and the week `paidViews`.
 - **Old account links**: `/settings/posting/accounts` and `/settings?account=youtube&status=coming_soon` redirect to
   Set up posting (`settings-tree.spec.ts`).
-- **Kid-proof** ([UX-13](BUSINESS_REQUIREMENTS.md#ux-13-kid-proof-a-68-year-old-can-use-it)): at most one tomato
+- **Kid-proof** ([UX-13](BUSINESS_REQUIREMENTS.md#ux-13-kid-proof-a-68-year-old-can-use-it)): at most one vermilion
   button per screen (plus the update bar's Reload); every button on phones is at least 48 × 48 px; every button except
   the phone tab bar has visible text; Throw away shows Undo and sends nothing until 8 s pass; Undo restores the clip.
 
@@ -621,7 +621,7 @@ its pretend consent page `/mock-oauth/{platform}`.
   Connect {Platform}." (the same sentence as the API); TikTok's verification file is listed; Connect →
   pretend consent → **Allow** → confetti, "Connected as", full ring; Facebook and Instagram choose an account; **Cancel**
   → the `denied` sentence; a reload resumes at the first unfinished step; TikTok shows "Works now, but your TikTok posts
-  stay private until TikTok says yes."; an expired token shows the tomato **Connect again**; Disconnect → Undo within
+  stay private until TikTok says yes."; an expired token shows the vermilion **Connect again**; Disconnect → Undo within
   8 s keeps it, after 8 s it is gone; all five ready → the floating setup list is gone and "5 of 5 ready".
   `e2e/tiktok-sheet.spec.ts`: Keep stays disabled until a privacy is chosen; branded content hides "Only me".
   **Try again** on a failed clip whose TikTok post needs new privacy choices opens the Post to TikTok sheet first and
@@ -653,7 +653,7 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
   (`test_clips.py`).
 - **Playwright** (`e2e/setup-todo.spec.ts`): on every main page and not on the setup pages; a clip's page shows the
   pill on its glass bar and keeps its five-column fan; **Set up** opens each platform's page; **Skip** needs the
-  confirm (**Keep it** is first, focused and the tomato button; **Keep it**, Escape and a tap outside change nothing),
+  confirm (**Keep it** is first, focused and the main vermilion button; **Keep it**, Escape and a tap outside change nothing),
   lasts after a reload, **Un-skip** from the list; a row that needs the owner (X out of credits) can be skipped,
   skipping every row ends the list, and once X is ready its skip is dropped, so it comes back when it needs the owner
   again; ready + skipped → "All set!" with the line for how it ended, confetti and the success sound, then gone, still

@@ -77,7 +77,7 @@ export function historyOf(entries: readonly Entry[]): HelpTurn[] {
   return turns.slice(-HISTORY_MAX);
 }
 
-/** The newest assistant entry's id: only its first button is tomato. */
+/** The newest assistant entry's id: only its first button is vermilion. */
 export function newestAnswerId(entries: readonly Entry[]): number | null {
   for (let i = entries.length - 1; i >= 0; i--) if (entries[i]!.role === "assistant") return entries[i]!.id;
   return null;

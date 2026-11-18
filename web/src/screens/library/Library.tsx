@@ -132,7 +132,7 @@ function AllClips() {
       {data ? (
         <>
           <section className="insights" aria-labelledby="learn-title">
-            <div className="learnings glass glass--sage">
+            <div className="learnings glass glass--green">
               <h2 className="display-3" id="learn-title">
                 What&rsquo;s <em>working</em>
               </h2>

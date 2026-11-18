@@ -45,8 +45,8 @@ export interface PaperPlaneButtonProps extends Omit<ButtonHTMLAttributes<HTMLBut
   flight: FlightState;
   /** aria-disabled, so it stays focusable and a tap on it plays the "deny" sound. */
   disabled?: boolean;
-  /** Tomato when it is the screen's one main action, sage otherwise. */
-  tone?: "primary" | "sage";
+  /** `primary` when it is the screen's one main action, `action` otherwise. Both are the vermilion CTA. */
+  tone?: "primary" | "action";
   ref?: Ref<HTMLButtonElement>;
 }
 
@@ -57,7 +57,7 @@ export function PaperPlaneButton({ flight, disabled = false, tone = "primary", c
       type={type}
       aria-label="Send"
       {...rest}
-      className={`btn btn--sm fly-btn ${tone === "primary" ? "btn--primary" : "btn--glass fly-btn--sage"} ${className}`}
+      className={`btn btn--sm fly-btn btn--${tone} ${className}`}
       aria-disabled={disabled || undefined}
       onClick={(e) => {
         if (disabled) {

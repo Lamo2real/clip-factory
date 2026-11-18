@@ -277,7 +277,7 @@ function LearnLine({ week, current }: { week: Week; current: boolean }) {
     );
   if (week.learnState === "done" && week.learning)
     return (
-      <figure className="week__quote glass glass--sage" role="status">
+      <figure className="week__quote glass glass--green" role="status">
         <figcaption className="week__quote-label">
           <Icon name="sparkle" size={18} />
           Best of week
@@ -402,7 +402,7 @@ function WeekCard({
       </div>
       <button
         type="button"
-        className={`star-btn star-btn--card glass glass--sage${on ? " is-on" : ""}`}
+        className={`star-btn star-btn--card glass glass--green${on ? " is-on" : ""}`}
         aria-pressed={on}
         aria-label="Best this week"
         aria-describedby={id}

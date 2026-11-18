@@ -7,9 +7,9 @@ import { Pill, type Tone } from "./ui.tsx";
 /** The job status pill (UX_DESIGN_SYSTEM.md "Job status pill"): plain words, never "Failed" (§12.4). */
 export const JOB_STATUS: Record<JobStatus, { label: string; tone: Tone; icon: IconName }> = {
   queued: { label: "Waiting", tone: "neutral", icon: "clock" },
-  running: { label: "Working", tone: "sage", icon: "bolt" },
-  ready: { label: "Ready", tone: "ink", icon: "checkCircle" },
-  failed: { label: "Didn't work", tone: "tomato", icon: "alert" },
+  running: { label: "Working", tone: "success", icon: "bolt" },
+  ready: { label: "Ready", tone: "bone", icon: "checkCircle" },
+  failed: { label: "Didn't work", tone: "vermilion", icon: "alert" },
   canceled: { label: "Canceled", tone: "neutral", icon: "stop" },
 };
 

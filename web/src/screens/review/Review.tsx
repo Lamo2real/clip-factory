@@ -258,7 +258,7 @@ function ReviewCard({
   onSettling,
 }: {
   clip: Clip;
-  /** The top card: its Keep is the screen's one tomato button; the cards below get a quiet Keep. */
+  /** The top card: its Keep is the screen's one main (vermilion) button; the cards below get a quiet Keep. */
   next: boolean;
   /** Just put back by Undo: the card plays its return (§20.7). */
   returning: boolean;
@@ -454,11 +454,11 @@ function ReviewCard({
     <article className={`review-card glass${leaving ? " is-leaving" : returning ? " is-returning" : ""}`} aria-labelledby={`hook-${clip.clipId}`}>
       <div className="review-card__head">
         <div className="review-card__tags">
-          <Pill tone="tomato">{MOMENT_LABEL[clip.momentType]}</Pill>
+          <Pill tone="vermilion">{MOMENT_LABEL[clip.momentType]}</Pill>
           <Pill tone="neutral" icon="clock">
             {timecode(clip.durationSec)}
           </Pill>
-          <Pill tone="sage">Score {clip.score}/10</Pill>
+          <Pill tone="success">Score {clip.score}/10</Pill>
           <Pill tone="neutral">{clip.layout === "facecam_top" ? "Facecam on top" : "Blurred fill"}</Pill>
         </div>
         <h2 className="review-card__hook user-text" id={`hook-${clip.clipId}`} tabIndex={-1}>

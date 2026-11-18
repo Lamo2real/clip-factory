@@ -469,12 +469,14 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
 
 ## 11. Design system (summary; details in docs/UX_DESIGN_SYSTEM.md)
 
-* Colours: **Sage `#9CAF88`**, **Off-white `#F7F5EF`**, **Tomato `#E8412C` (every primary CTA)**, ink `#1E2A1B`.
-  Every surface is **liquid glass**: translucent tints of these colours over a soft animated sage/off-white/tomato
-  backdrop (or the owner's own background image), `backdrop-filter: blur() saturate()`, refractive highlight edges.
-* Type: **Times New Roman** (fallback Tinos, then serif) for display headlines, often italic with a tomato underline
+* Colours (owner request 2026-11-18, ADR-43): **Bottle Green `#0F372B`** (the surface), **Bone `#EFE7DA`** (the
+  words and the lines), **Vermilion `#E8392B` (every call to action)**. Every surface is **liquid glass**: bottle-green
+  tints with bone words over a soft animated deep-green mesh with a vermilion glow (or the owner's own background),
+  `backdrop-filter: blur() saturate()`, refractive bone highlight edges. Every action button wears the vermilion CTA;
+  secondary buttons are bone-outlined glass; selected items in a pick-one bar are bone with green words.
+* Type: **Times New Roman** (fallback Tinos, then serif) for display headlines, often italic with a vermilion underline
   swash; **Inter** for everything else.
-* Layout inspiration: the "Sorrel" restaurant site: big serif italic headline on a sage hero card, pill buttons, cards
+* Layout inspiration: the "Sorrel" restaurant site: big serif italic headline on a green hero card, pill buttons, cards
   in a row, a rating-style stat block.
 * Navigation: phones (< 768 px): bottom glass tab bar, **icons only** (aria-labels). Larger screens: left glass sidebar,
   collapsible with a hamburger (collapsed = icons only).
@@ -528,7 +530,7 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
   (prev-sha read from the live `/version.json` in the web bucket; first deploy → `["First release"]`).
 * The app checks `/version.json` on load, every 5 minutes, on `visibilitychange` to visible, and when the service
   worker finds a waiting worker. If `version` differs from its own: a glass bar slides up at the bottom (above the phone
-  tab bar), showing a sparkle icon, the area labels as small pills (e.g. `Settings · Profile picture`), and a tomato
+  tab bar), showing a sparkle icon, the area labels as small pills (e.g. `Settings · Profile picture`), and a vermilion
   **Reload** button. Visible in the browser and in installed apps. Dismissable ("Later") until the next check.
 * Reload: a progress bar inside the bar animates with an ease-in-out curve: quick to ~75 % in ~0.8 s (slow start,
   fast middle, slow end), holds/creeps while the new service worker installs and activates (`skipWaiting` via
@@ -547,7 +549,7 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
 * Only rebuilt when `desktop/**` or the app icon changes, or when no file exists yet in the bucket.
 
 ### 12.4 Kid-proof UX (a 6–8-year-old must manage it)
-* One obvious next step per screen (one tomato CTA), big targets (≥ 48 px on phones), icon + word on buttons
+* One obvious next step per screen (one vermilion CTA), big targets (≥ 48 px on phones), icon + word on buttons
   (except the phone tab bar), short plain words (no jargon: "Make clips", "Keep", "Throw away"), friendly empty states
   that say exactly what to tap, no dead ends, every error says what to do next, destructive actions undoable for 8 s
   (toast with Undo) instead of scary dialogs, forms that can't be submitted wrong (paste button, auto-detect link,
@@ -1114,9 +1116,9 @@ Branch routes are nested: `/settings/look-and-feel/sounds`. `/get-app` keeps wor
   Below 768 px it is one row, truncating from the left: the last three levels after a "…", long names ending in "…".
 * ≥ 1024 px: a left "folder" panel (260 px wide) inside Settings shows the whole tree (trees expand/collapse like
   folders, branches are links, the current one highlighted, state remembered), content on the right. On a tree's own
-  page the tree's folder row is the highlighted one (sage, tomato dot, `aria-current="page"`). < 1024 px: drill-down
+  page the tree's folder row is the highlighted one (green, vermilion dot, `aria-current="page"`). < 1024 px: drill-down
   pages.
-* One tomato CTA per screen at most; plain words; nothing overflows at any width from 320 px.
+* One vermilion CTA per screen at most; plain words; nothing overflows at any width from 320 px.
 
 ### 15.3 Sounds
 * The 30 click sounds and 30 error sounds are the ones from the owner's sound picker page; their recipes live in
@@ -1125,8 +1127,8 @@ Branch routes are nested: `/settings/look-and-feel/sounds`. `/get-app` keeps wor
 * Defaults (the owner's picks): **click sound 6 "Water drop"**, **error sound 5 "Nope nope nope"**.
 * The Sounds branch is the picker the owner liked: two groups ("When it works" / "When it can't") of numbered glass
   cards (number, name, feel), tapping a card plays it and selects it (a "Pick" badge, `aria-pressed`), plus a
-  "Try it: Sign in" button with a "Make it fail" switch (success plays the click sound with a sage toast "Signed in",
-  fail plays the error sound with a small shake and a tomato toast "Wrong password. Try again."). Choices save
+  "Try it: Sign in" button with a "Make it fail" switch (success plays the click sound with a green toast "Signed in",
+  fail plays the error sound with a small shake and a vermilion toast "Wrong password. Try again."). Choices save
   instantly (optimistic, like `soundEnabled`) and follow the owner to every device.
 * The sound engine plays the chosen recipes everywhere (click on enabled controls, error on disabled controls and error
   toasts, §11). Previewing a card always plays even when Sounds is off? **No**: when Sounds is off the cards show a
@@ -1155,7 +1157,7 @@ all follow it, never the API's row order.
 
 * **Clip performance page** `/clips/{clipId}`: the 9:16 video on top, five smooth lines growing out of it into five
   platform stacks (views, likes, comments, ... whatever that platform really offers), a crown on the best platform, a
-  "Best this week" star, one tomato **Refresh numbers** button. Numbers update live over the WebSocket.
+  "Best this week" star, one vermilion **Refresh numbers** button. Numbers update live over the WebSocket.
 * **Automatic refresh**: an EventBridge tick every 15 minutes; each platform is polled no faster than its own safe
   interval (YouTube, TikTok, X 15 min; Instagram, Facebook 30 min), slower as posts age, for 30 days, then one final
   snapshot.
@@ -1510,8 +1512,8 @@ does" → `/clips/{clipId}`; Back returns to where the owner came from (else `/l
    (≤ 225 px) in the rows and fan layouts, so the total and the first stacks stay on the first screen. No
    autoplay. No `videoUrl` → the cover image.
 3. Stat block beside/under the preview: big total views (display serif) with "views across platforms" and a small
-   "(each app counts views its own way)"; the **"Best this week" star** toggle (≥ 48 px, `aria-pressed`, sage glass,
-   not tomato); the one tomato **Refresh numbers** button (icon + word, spinner while any `started` post is still
+   "(each app counts views its own way)"; the **"Best this week" star** toggle (≥ 48 px, `aria-pressed`, green glass,
+   not vermilion); the one vermilion **Refresh numbers** button (icon + word, spinner while any `started` post is still
    `refreshing`; when every platform is `too_soon`/`blocked` it reads "Next check in 4 min" and a tap plays the deny
    sound with a toast saying when). "Updated 3 min ago" (newest `updatedAt`) under it.
 4. The lines + five stacks (STATS_ORDER).
@@ -1520,7 +1522,8 @@ does" → `/clips/{clipId}`; Back returns to where the owner came from (else `/l
 `ResizeObserver` on the page container; coordinates from `getBoundingClientRect` of the preview and each stack):
 * Each line is one cubic bezier from the preview's bottom centre `(x0, y0)` to the top centre of its stack
   `(xi, yi)`: `M x0 y0 C x0 (y0 + 0.55·dy), xi (yi − 0.55·dy), xi yi` with `dy = yi − y0`. Stroke 2 px, round caps,
-  sage `#9CAF88` at 70 % (always: the app is light-only); the best platform's line is tomato. A 6 px dot at each end.
+  bone at 85 % (always: the app is dark-only); the best platform's line is vermilion, 3 px, cased in bone. A 6 px dot
+  at each end.
 * Draw-in: `pathLength="1"`, `stroke-dasharray: 1`, `stroke-dashoffset` 1 → 0 over 900 ms
   `cubic-bezier(0.22, 1, 0.36, 1)`, staggered 80 ms in STATS_ORDER, once per page load; the stacks fade/rise 12 px as
   their line arrives. `prefers-reduced-motion: reduce` or `settings.reduceMotion` → lines drawn at once, no fade.
@@ -1830,26 +1833,26 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   cards** (numbers run 1…N across all parts):
   1. **Get ready**: account requirements.
   2. **Make your {Platform} key**: one-time developer-website steps.
-  3. **Connect**: one big tomato **Connect {Platform}** button.
+  3. **Connect**: one big vermilion **Connect {Platform}** button.
   4. **Go public**: gates (review, audit, live mode, credits) with a plain status line and what to do.
-  The first not-done step is open and scrolled into view ("resume where you left"); done steps collapse to a sage
+  The first not-done step is open and scrolled into view ("resume where you left"); done steps collapse to a green
   tick row (tap to reopen). Below the parts, a **"When it's done"** panel: account avatar + name, **Check it**,
   **Connect again**, **Disconnect**, plus the platform's apples (YouTube "Who can see your clips"; X spend note).
 * **A step card**: number in a circle, a picture-like icon (`Icon` names in the data file), a title (≤ 6 words), 1–4
   short lines (≤ 26 words each, short sentences), one action per sentence, platform button names in **bold** exactly
   as on the platform,
   then (only what the step needs): **Open {site}** (opens the exact page in a new tab, `rel="noopener noreferrer"`),
-  **Copy** chips (label + value in mono, one tap copies, sage tick "Copied!", works without clipboard permission via a
+  **Copy** chips (label + value in mono, one tap copies, leaf-green tick "Copied!", works without clipboard permission via a
   select-all fallback), **paste boxes** (with a Paste button, format check as you type, friendly error under the box),
   an **upload box** (TikTok verification file), "**If you see** X, do Y" hints (for anything the research marks
-  uncertain), and **I did this** (sage, ≥ 48 px). Auto steps (keys saved, connected, checked) tick themselves.
-* **One tomato button per screen**: the current step's main action (its **Open** button, else **Save keys**, else
-  **Connect {Platform}**, else **Connect again** when `needs_reconnect`). Everything else is sage/glass.
+  uncertain), and **I did this** (green, ≥ 48 px). Auto steps (keys saved, connected, checked) tick themselves.
+* **One main vermilion button per screen**: the current step's main action (its **Open** button, else **Save keys**, else
+  **Connect {Platform}**, else **Connect again** when `needs_reconnect`). Everything else is green/glass.
 * **Connect** runs OAuth **in the same tab**: the page navigates to the platform, the owner approves, the hooks API
   sends them back to `/settings/posting/setup/{platform}?result=…`. `connected` → confetti (§12.4, skipped with reduced
   motion), success sound, a big card "Connected as **@name**" with the avatar, ring fills, toast. Any other result →
   error sound, a calm card with the plain sentence for that result and the step to go back to (§17.5 table), no
-  tomato colour except its one action. The `?result` query is removed with `history.replaceState` after reading.
+  vermilion colour except its one action. The `?result` query is removed with `history.replaceState` after reading.
 * **Choose** (Meta with several Pages / Instagram accounts): a picker of big avatar cards; tapping one connects it.
 * **Disconnect**: tapping shows an 8 s toast "Disconnecting YouTube… Undo"; the `DELETE` is sent only when the toast
   ends (§12.4: undo instead of a scary dialog). **Connect again** keeps the keys.
@@ -1857,7 +1860,7 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   on every signed-in page, so the owner never sees two competing lists. `screens/home/SetupCard.tsx` is removed.
 * **Review › Keep** with TikTok connected: the **Post to TikTok** sheet (§17.8) must be filled before Keep is enabled.
 * Kid-proof everywhere (§12.4): ≥ 48 px targets, nothing overflows from 320 to 1920 px, phone bottom bar / desktop
-  sidebar unchanged, click sound on click only, success/error sounds, glass, Sage/Off-white/Tomato, Inter + Times.
+  sidebar unchanged, click sound on click only, success/error sounds, glass, Green/Bone/Vermilion, Inter + Times.
 
 ### 17.2 Step content: one data file per platform (`web/src/setup/{youtube,tiktok,instagram,facebook,x}.ts`)
 
@@ -1948,7 +1951,7 @@ Connect:
 | `sandbox-user` | Add yourself as a test user | **Sandbox settings** › **Target users** › **Add account**, log in, accept. Can take up to an hour: refresh the page. |
 | `sandbox-verify` | Verify the website in Sandbox too | Same as `key-verify` with Sandbox picked; upload that file too. |
 | `sandbox-keys` | Use the Sandbox keys | If you see a different Client key in the Sandbox, paste those keys here for now. |
-| `connect` | Connect TikTok | Tomato button (`auto: connected`). Log in, check it says Clip Factory, leave every switch on, **Authorize**. |
+| `connect` | Connect TikTok | Vermilion button (`auto: connected`). Log in, check it says Clip Factory, leave every switch on, **Authorize**. |
 Go public (`gate: app_review`, `posting_audit`):
 | id | title | essentials |
 |---|---|---|
@@ -2455,7 +2458,7 @@ Shared names: `oauth.state.sign(key, platform, nonce, exp)`, `oauth.state.verify
   ok; TikTok verification file upload lists the file; **Connect** → mock consent → **Allow** → back with confetti
   canvas, "Connected as", ring complete; Facebook/Instagram choose a page; **Cancel** → `denied` copy; reload resumes at
   the first not-done step; TikTok shows "Works now, but your TikTok posts stay private until TikTok says yes."; expired
-  token → "Connect again" tomato; Disconnect → Undo within 8 s keeps it, after 8 s it is gone; all five ready → the
+  token → "Connect again" vermilion; Disconnect → Undo within 8 s keeps it, after 8 s it is gone; all five ready → the
   floating setup list gone and "5 of 5 ready". `e2e/tiktok-sheet.spec.ts`: Keep disabled until privacy chosen, branded hides "Only
   me"; **Try again** on a failed clip whose TikTok post needs new privacy choices opens the sheet first and sends
   `tiktok` in the confirm body (mock `_try_again` replaces `postOptions`). `overflow.spec.ts` +
@@ -2477,7 +2480,7 @@ Facebook, X (`SETUP_ORDER`), each with its mark, name and one state, checked in 
 
 | State | When | Line | Actions |
 |---|---|---|---|
-| `ready` | `computeReady(setup)` (§17.4); wins over a skip | "Ready" (sage tick on the mark) | none |
+| `ready` | `computeReady(setup)` (§17.4); wins over a skip | "Ready" (leaf-green tick on the mark) | none |
 | `skipped` | in `setupSkipped` and not ready, whatever else it is waiting for | "Skipped" | **Set up**, **Un-skip** |
 | `needs_you` | an account exists but is not ready (`needs_reconnect`, `choose_account`, or connected with a gate in `action`) | "Needs you: connect again" / "Needs you: pick an account" / "Needs you: one more step" | **Set up**, **Skip** |
 | `not_started` | `notStarted(setup)` (§17.1) | "Not started" | **Set up**, **Skip** |
@@ -2491,7 +2494,7 @@ Facebook, X (`SETUP_ORDER`), each with its mark, name and one state, checked in 
   (`components/SkipConfirm.tsx` on `components/Sheet.tsx`): title "Skip {Platform}?", text "You won't post there until
   you set it up. You can do it later in Settings." (a connected platform, which is still posted to: "{Platform} is
   connected but needs one more step. Skip only takes it off this list. You can finish it later in Settings."), buttons
-  **Keep it** (first, focused, the tomato `primary`: the safe answer is the strong one; Escape and a tap outside also
+  **Keep it** (first, focused, the vermilion `primary`: the safe answer is the strong one; Escape and a tap outside also
   mean Keep it) and **Skip {Platform}** (glass, no `act`: opting out is quiet, §20.1). Only the confirmed answer saves
   `setupSkipped` (`withSkip`); asking changes nothing. **Un-skip** (`act="undo"`) saves `withoutSkip`, from the list
   while it shows and from Settings.
@@ -2502,7 +2505,7 @@ Facebook, X (`SETUP_ORDER`), each with its mark, name and one state, checked in 
 * **Visible** (`todoVisible`) while any row is not `ready` or `skipped`, i.e. it goes away when every platform is ready,
   every platform is skipped, or any mix. It is not decided before both `GET /v1/setup` and `/v1/me` have answered.
 * **Celebration**: when the list goes from open to done (in this page, or on an earlier visit on this device:
-  `localStorage["cf-setup-todo-open"]`), the card turns into a sage "**All set!**" with a line that says how it ended
+  `localStorage["cf-setup-todo-open"]`), the card turns into a green "**All set!**" with a line that says how it ended
   (`doneLine`): all ready "Every place is ready.", all skipped "All skipped. Set them up any time in Settings.", a mix
   "Done for now. Skipped ones wait in Settings.". Confetti (§12.4 `burst`, skipped with reduced motion) and the
   `success` sound (§20.8, muted when Sounds is off); it stays 2.6 s (1.3 s with reduced motion), then slides off to the
@@ -2560,7 +2563,7 @@ over the page:
   screen the last time this device looked (`localStorage["cf-setup-todo-open"]`), an empty `.setup-todo--hold` with
   the same `data-mode` keeps its room from the first paint, so the page does not move when the list shows.
 * **Glass only**: the column, the pill, the bar, the panel and the "All set!" card are `.glass` elements (the card
-  `.glass--sage`, the panel with the dense tint of `.sheet.glass`) and take their tint from `--glass-tint`; none sets a
+  `.glass--green`, the panel with the dense tint of `.sheet.glass`) and take their tint from `--glass-tint`; none sets a
   background or a `backdrop-filter` of its own. Rows are light tiles inside that glass, as in other panels. No rule
   sets `cursor` (§20.14): the pill, the rows and the round **–** / × buttons (`.icon-btn`) light up on hover.
 * **Sizes**: every control is at least 44 px (48 px on phones, `--tap`); the pill is 48 px everywhere.
@@ -2895,17 +2898,17 @@ Tree **Clip making** → branch **Skills** (`/settings/clip-making/skills`) → 
 
 | Apple (anchor) | What it shows | Leaf (kid words) |
 |---|---|---|
-| **Your skills** (`#your-skills`) | every skill as a glass row: icon, title, description (2 lines), badges **Always used** (sage, on every row) and **Built in**, and where it came from in words (no ".md", no size): "Written by you · Changed 16 Nov", "From a file · Changed 16 Nov" (.md), "From a file with extra files · Changed 16 Nov" (.zip; the skill page, which knows the count, says "From a file with {n} extra files", "1 extra file"), or "Comes with Clip Factory"; the whole row opens the skill page | "Clip Factory uses every skill here, every time it makes or checks anything." |
-| **Add a skill** (`#add-skill`) | the tomato **Write a skill** (→ `/skills/new`) and a glass **Upload a file** (.md / .zip, as today) | "Write one by answering three easy questions, or upload a skill file from your computer." |
+| **Your skills** (`#your-skills`) | every skill as a glass row: icon, title, description (2 lines), badges **Always used** (green, on every row) and **Built in**, and where it came from in words (no ".md", no size): "Written by you · Changed 16 Nov", "From a file · Changed 16 Nov" (.md), "From a file with extra files · Changed 16 Nov" (.zip; the skill page, which knows the count, says "From a file with {n} extra files", "1 extra file"), or "Comes with Clip Factory"; the whole row opens the skill page | "Clip Factory uses every skill here, every time it makes or checks anything." |
+| **Add a skill** (`#add-skill`) | the vermilion **Write a skill** (→ `/skills/new`) and a glass **Upload a file** (.md / .zip, as today) | "Write one by answering three easy questions, or upload a skill file from your computer." |
 
 Sub-routes (nested under the branch; the left folder panel keeps **Skills** highlighted; breadcrumb on every level;
 big Back on phones goes one level up):
 
 | Route | Page | Leaf |
 |---|---|---|
-| `/settings/clip-making/skills/new` | **Write a skill**: the three questions of §18.2 as big glass fields with their example under each (tap "Use the example" fills it), a live character count, one tomato **Save skill**, a ghost **Cancel**. Errors sit under their field. Success: success sound, confetti, toast "Your skill is ready. Clip Factory will use it every time.", then the new skill's page. | "Clip Factory reads your skill every time it makes clips." |
-| `/settings/clip-making/skills/{skillId}` | **Skill page**: title, badges, "When it is used" (description), the rendered skill (§18.3); zips list their other files. Owner skills: tomato **Edit**, ghost **Delete** (§18.5). Built-ins: no Edit or Delete. | owner: "Always used. Changes count from your next clips." built-in: "This skill comes with Clip Factory. It is always used. You can read it, but not change or delete it." |
-| `/settings/clip-making/skills/{skillId}/edit` | the same form filled from `form`, tomato **Save changes**; for a zip a ghost **Replace the whole file**; `formBlocked "too_long"` shows only the replace option; a built-in id redirects to its page with an info toast. Leaving with unsaved changes asks "Leave without saving?" (**Keep editing** / **Leave**); when browser Back asked, **Leave** finishes that Back (no extra history entry, so the next Back goes one more step, even when it is pressed at once, while the page change still fades). The description box grows with its words and has no drag grip (it never gets wider than the form). | "Change the words, then tap Save changes." |
+| `/settings/clip-making/skills/new` | **Write a skill**: the three questions of §18.2 as big glass fields with their example under each (tap "Use the example" fills it), a live character count, one vermilion **Save skill**, a ghost **Cancel**. Errors sit under their field. Success: success sound, confetti, toast "Your skill is ready. Clip Factory will use it every time.", then the new skill's page. | "Clip Factory reads your skill every time it makes clips." |
+| `/settings/clip-making/skills/{skillId}` | **Skill page**: title, badges, "When it is used" (description), the rendered skill (§18.3); zips list their other files. Owner skills: vermilion **Edit**, ghost **Delete** (§18.5). Built-ins: no Edit or Delete. | owner: "Always used. Changes count from your next clips." built-in: "This skill comes with Clip Factory. It is always used. You can read it, but not change or delete it." |
+| `/settings/clip-making/skills/{skillId}/edit` | the same form filled from `form`, vermilion **Save changes**; for a zip a ghost **Replace the whole file**; `formBlocked "too_long"` shows only the replace option; a built-in id redirects to its page with an info toast. Leaving with unsaved changes asks "Leave without saving?" (**Keep editing** / **Leave**); when browser Back asked, **Leave** finishes that Back (no extra history entry, so the next Back goes one more step, even when it is pressed at once, while the page change still fades). The description box grows with its words and has no drag grip (it never gets wider than the form). | "Change the words, then tap Save changes." |
 
 
 Router (`web/src/lib/router.ts`): `{ name: "skill", mode: "new" | "read" | "edit", skillId: string | null }`, nav
@@ -3351,8 +3354,8 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   usually run the full width) it takes the control-only spot and marks itself `data-on-words`; words alone never make
   it step aside, so Ask is always there to tap. Scrolling moves the words out from under it. Settled, it never covers a control at any width from 320 to 1920 px, at the top of a page or after scrolling,
   with or without the update bar, and with other fonts (`e2e/help.spec.ts`). Every page adds bottom padding under its
-  last control so the launcher always has room at the end. Sage glass, never
-  tomato.
+  last control so the launcher always has room at the end. green glass, never
+  vermilion.
 * **Panel**: `role="dialog" aria-labelledby`. Desktop: **non-modal** (`aria-modal="false"`, Tab stays natural), 400 px
   wide, `max-height: min(640px, 100dvh - 140px)`, anchored above the launcher. Phones (< 768 px): a **modal**
   full-screen sheet (`aria-modal="true"`; the page and the launcher are `inert`; Tab and Shift+Tab go round inside the
@@ -3366,8 +3369,8 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   whole field. The textarea (16 px, placeholder "Ask me how to do something", 300 chars, counter from 250 under the
   field, `enterkeyhint="send"`) starts at one line (52 px), grows to four lines, then scrolls. Enter sends, Shift+Enter
   adds a line. At its right end, inside the field: the round icon-only **send button** (`PaperPlaneButton`, 44 px,
-  paper-plane icon, `aria-label="Send"`, "Send, available in N seconds" during the 429 countdown). It is tomato while it
-  is the screen's one main action (no answer button is tomato yet), sage after that, and `aria-disabled` (no flight,
+  paper-plane icon, `aria-label="Send"`, "Send, available in N seconds" during the 429 countdown). It is vermilion while it
+  is the screen's one main action (no answer button is vermilion yet), green after that, and `aria-disabled` (no flight,
   the "deny" sound on tap) while the field is empty, an answer is coming or the countdown runs. It is the one
   icon-only button besides the tab bar (UX design system, kid-proof checklist), because the placeholder next to it says
   what it does. On phones the sheet follows `visualViewport`, so the field and plane stay above the keyboard.
@@ -3386,15 +3389,15 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   my best clip get this week?"; on Settings pages the sounds question replaces the second; on a clip page "Why is my
   clip private on TikTok?").
 * **Answer**: text (bold button names), numbered steps (`<ol>`), up to two buttons (icon + word). Only the **first
-  button of the newest answer is tomato**; older answers' buttons and the Ask button turn sage then (one tomato per
+  button of the newest answer is vermilion**; older answers' buttons and the Ask button turn green then (one vermilion per
   screen). Unknown and refused answers show the suggestion chips again. The mode (`model` or `kb`) is never shown.
 * **Navigation** (`navigate` from `lib/router.ts`): the action's `to` is checked again with `match()` (not
   `not_found`, else the button is dropped); `unsaved.ts` lets screens register `hasUnsaved()` (Review while a caption
   edit is not yet saved, Home while a pasted link is not yet sent); if one is true, the panel asks inline "You have a
-  change that isn't saved yet. Leave anyway?" (**Stay** sage, **Leave** sage; no scary dialog). Phones close the panel
+  change that isn't saved yet. Leave anyway?" (**Stay** green, **Leave** green; no scary dialog). Phones close the panel
   first; desktop keeps it open.
 * **Spotlight** (`spotlight.ts`): waits up to 4 s for `[data-help~="{id}"]` (apples: `data-help={apple.id}` on the
-  apple row), scrolls it to the centre (smooth unless reduced motion), draws a sage ring with a soft tomato glow that
+  apple row), scrolls it to the centre (smooth unless reduced motion), draws a bone ring with a soft vermilion glow that
   fades over 2.4 s (static ring, no pulse, with reduced motion), announces "Here it is: {label}" politely, and does not
   move focus. A target taller than 60 % of the window rings only its heading, scrolled to 80 px from the top. On wide
   screens the panel closes (the chat is kept) when it would cover the control an answer button just lit up, so the
@@ -3491,7 +3494,7 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   unknown page (`helpPages.test.ts`).
   **Playwright (mock mode)** `e2e/help.spec.ts` at **375×812** and **1440×900**: launcher name and position (not over
   the tab bar or the update bar; above the update bar on desktop); open → three suggestions; "Where do I change my click
-  sound?" → steps + tomato **Open Sounds** → navigates to `/settings/look-and-feel/sounds` and the Click sound apple
+  sound?" → steps + vermilion **Open Sounds** → navigates to `/settings/look-and-feel/sounds` and the Click sound apple
   gets the spotlight ring (panel closed on 375, open on 1440); "How many views did my best clip get this week?" → the
   mock number appears; refused question; `#429` notice and disabled Ask; `#503` → local answer + copy-code link;
   `#off` → launcher gone; Escape returns focus to the launcher; reduced motion → no animations
@@ -3534,7 +3537,7 @@ plane, §19). Every other control has the shared press feedback only (the ripple
 on Keep, Connect and skill save, the leaving card in Review, `skill-pop`, `sound-pulse`, `try-shake`, the UpdateBar
 spark). This section turns the paper plane into **one motion system** that every action button uses, so a tap always
 shows what just happened: the plane flies, the plus pops, the bin tips, the arrow spins. Everything in §12.4 still
-holds (an 8-year-old must manage, liquid glass, Sage / Off-white, Tomato only for the one main action, nothing
+holds (an 8-year-old must manage, liquid glass, Green / Bone, Vermilion only for the one main action, nothing
 overflows from 320 to 1920 px, readable at every size). Where this section and an earlier one disagree, this one wins.
 Only `web/**` and `docs/**` change.
 
@@ -3664,13 +3667,13 @@ scales in from 0.8 to 1 over the last third of the duration with `--ease-spring`
 | Kind | Default glyph | Full motion | Duration |
 |---|---|---|---|
 | `send` | paper plane (or the button's own icon) | the §19 flight: lifts, tilts −16°, flies off with the fading trail, fresh one fades back. Ask's icon-only paper plane (`.fly`, `PaperPlaneButton`) keeps +34 / −30 px and a 38 px trail. Every labelled `send` (`.act--send`: Make clips, the Find a setting "Ask Clip Factory" row, TikTok Keep…) flies mostly up, +8 / −16 px at −63° with an 18 px trail, so the glyph and trail fade out before they reach the label (§20.1 (3)) and before a pill's top edge | 520 + 240 |
-| `keep` | `heart` | pops 1 → 1.28 → 1 (`--ease-spring`) while floating up 6 px and back, with a sage ring that grows 0.6 → 1.8 (`::after`); the ring holds its opacity (0.9 → 0.7) until 45 % and then fades, on `cubic-bezier(0.33, 1, 0.68, 1)`, so a child sees it (the same ring for `save`, `connect`, `star` and the `check` radar) | 480 |
+| `keep` | `heart` | pops 1 → 1.28 → 1 (`--ease-spring`) while floating up 6 px and back, with a bone ring that grows 0.6 → 1.8 (`::after`); the ring holds its opacity (0.9 → 0.7) until 45 % and then fades, on `cubic-bezier(0.33, 1, 0.68, 1)`, so a child sees it (the same ring for `save`, `connect`, `star` and the `check` radar) | 480 |
 | `add` | `plus` | turns 90° and pops 1 → 1.25 → 1 | 360 |
 | `remove` | `minus` | squashes `scale(0.6, 1.2)` and springs back | 300 |
 | `delete` | `trash` | tips −12° and drops 6 px while fading to 0.15, fresh one | 480 |
 | `throw` | `trash` | tossed up and away from the label (to −12 / −12 px, then −20 / +6 px, turning −40°, out through the pill's left edge) while fading, fresh one; it never crosses the words | 520 |
 | `clear` | `x` | turns 90° and shrinks to 0.3 while fading, fresh one | 300 |
-| `save` | `check` | the tick pops in from 0.4 → 1.15 → 1 with a sage ring as in `keep` | 480 |
+| `save` | `check` | the tick pops in from 0.4 → 1.15 → 1 with a bone ring as in `keep` | 480 |
 | `tick` | `check` | the tick pops 0.6 → 1.12 → 1 (no ring), for small "done" marks | 300 |
 | `upload` | `upload` | the arrow shoots up 14 px and fades, fresh one rises in from +10 px | 480 |
 | `download` | `download` | the arrow drops 12 px and fades, fresh one drops in from −10 px | 480 |
@@ -3679,7 +3682,7 @@ scales in from 0.8 to 1 over the last third of the duration with `--ease-spring`
 | `refresh` | `retry` | one full turn clockwise (`--ease-out`) | 600 |
 | `retry` | `retry` | one full turn counter-clockwise ending with a small spring overshoot | 560 |
 | `undo` | `undo` | rewinds: turns −200° and springs back to 0 | 420 |
-| `connect` | `link` | squeezes to 0.8, snaps to 1.15 → 1 with a sage ring as in `keep` | 480 |
+| `connect` | `link` | squeezes to 0.8, snaps to 1.15 → 1 with a bone ring as in `keep` | 480 |
 | `disconnect` | `logout` | slides out 6 px and fades to 0.4, then comes back to rest | 420 |
 | `check` | `checkCircle` | a radar: two rings (`::before`, `::after`, 120 ms apart) grow 0.6 → 1.9 and fade; the glyph bobs 1 → 1.1 → 1 | 600 |
 | `star` | `star` | turning on: spins 144° and pops 1 → 1.35 → 1 with a ring, inside the on-state pose (−12°, 1.12), which sits on the `.act` wrapper (`.star-btn.is-on .act`), never on the icon, so the glyph's box does not overflow at rest; turning off: shrinks 0.85 → 1 | 520 / 240 |
@@ -3693,7 +3696,7 @@ scales in from 0.8 to 1 over the last third of the duration with `--ease-spring`
 State-driven (no kind): expand chevrons turn 90° (a right-pointing chevron then points down), the sidebar collapse
 icon turns 180°, both 240 ms `--ease-out`, both directions.
 
-The **Tomato main actions** get the richest kinds and keep their existing extras: Make clips (`send`), Keep (`keep` +
+The **Vermilion main actions** get the richest kinds and keep their existing extras: Make clips (`send`), Keep (`keep` +
 the existing confetti and leaving card), Refresh numbers (`refresh`), Connect (`connect` + the existing confetti and
 success sound on return), Save keys (`save`), Save / Make the skill (`save` + the existing confetti on create), Reload
 (the existing spark, §20.9 (d)), Ask Send (`send`).
@@ -3716,7 +3719,7 @@ success sound on return), Save keys (`save`), Save / Make the skill (`save` + th
   `act.fail()`. Screens that catch their own errors (and show `toast.error`) call `handle.fail({ sound: false })`
   from a `useAction` handle instead, because the error toast already plays the deny sound.
 * `fail()` cancels whatever is running (the plane does not keep flying, the tick does not stay) and plays the shared
-  failure: the glyph returns to rest and shakes gently, `translateX` ±4 px three times, tinted `--tomato-deep` for the
+  failure: the glyph returns to rest and shakes gently, `translateX` ±4 px three times, tinted `--vermilion-deep` for the
   first 160 ms, 320 ms in all. Under reduced motion: a 240 ms tint only (`fail-fade`).
 * No success visuals on failure, ever: no ring, no tick, no confetti, no success sound, no "Copied!".
 * The existing `try-shake` on Try it: Sign in (SoundsBranch) and the "nope" shake on `aria-disabled` stay; they are
@@ -3727,7 +3730,7 @@ success sound on return), Save keys (`save`), Save / Make the skill (`save` + th
 When Settings › Look & feel › Motion › Reduce motion is on **or** the OS reports `prefers-reduced-motion: reduce`
 (`prefersReducedMotion()`, `html.reduce-motion` and the media query, as `fly.css` does today):
 
-* every kind becomes `fade`: the glyph's opacity dips to 0.45 and its colour eases to Sage (`currentColor` swap on the
+* every kind becomes `fade`: the glyph's opacity dips to 0.45 and its colour eases to Green (`currentColor` swap on the
   wrapper), then back, 240 ms total (Send keeps its 300 ms fade: `--send-fade` in motion.css for the in-button
   `.act--send`, the `fly-fade` rules in fly.css for the paper plane, both equal to `SEND_FADE_MS`, which is how long
   `phaseMs("send", "fade")` holds `.is-fade`; `web/test/sendMotion.test.ts` and `e2e/send-fade.spec.ts` keep them in
@@ -3758,7 +3761,7 @@ the result at once). If Undo is tapped:
 
 * **Tap** stays exactly as today: `installClickSounds` plays it on click only (never on pointerdown, never on scroll),
   once per click, whatever the kind. Motion adds no extra tap.
-* **Success** plays only where it plays today or where the real result arrives for a Tomato main action (Connect /
+* **Success** plays only where it plays today or where the real result arrives for a Vermilion main action (Connect /
   account pick as now; Keep, Save keys and skill save when the server says yes). Never at the tap, never on a guess.
 * **Error / deny** plays on `fail()` (unless `{ sound: false }`) and on a tap on an `aria-disabled` button, as now, unless the button carries `data-sound="off"` (the newest week's Later week nudge, §20.11).
 * CORE adds a 300 ms same-kind de-duplication to `SoundEngine.play` so a failure that both calls `fail()` and shows
@@ -3854,7 +3857,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | NewJobForm.tsx:245 Cancel upload | `clear` | |
 | NewJobForm.tsx:256 Pick for me / Exactly | `toggle` | via Segmented |
 | NewJobForm.tsx:265 clip count stepper | `add` / `remove` | via Stepper (CORE) |
-| NewJobForm.tsx:285 **Make clips** (Tomato) | `send` | its own icon flies; the job is created at the tap; `fail()` if creating it fails |
+| NewJobForm.tsx:285 **Make clips** (Vermilion) | `send` | its own icon flies; the job is created at the tap; `fail()` if creating it fails |
 | Jobs.tsx:79,98 Make clips (navigate) | press | |
 | Jobs.tsx:117 Show older jobs | `next` | `chevronDown`, steps down (`--act-dir-in: 90deg` on the button) |
 | Jobs.tsx:130 job row; JobDetail.tsx:116 See all jobs, :211 Check these clips, :226 source link, :267 clip tile, :285 All jobs | press | |
@@ -3865,7 +3868,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | Review.tsx:144 See how it does, :159 Make clips, :383 source times, :501 See the job | press | |
 | Review.tsx:428 Checks before posting (summary) | state | chevron turns 90° (points down when open) |
 | Review.tsx:476 Throw away | `throw` | the card's leaving motion stays; Undo → `.is-returning` on the card |
-| Review.tsx:479 **Keep** (Tomato) / Try again | `keep` / `retry` | `playOnClick={false}`: plays when a keep really starts, not on the tap that opens the TikTok sheet; a refused Keep (caption too long) only shakes; confetti and leaving card stay; success sound only when the keep succeeds; `fail()` on error |
+| Review.tsx:479 **Keep** (Vermilion) / Try again | `keep` / `retry` | `playOnClick={false}`: plays when a keep really starts, not on the tap that opens the TikTok sheet; a refused Keep (caption too long) only shakes; confetti and leaving card stay; success sound only when the keep succeeds; `fail()` on error |
 | CaptionTabs.tsx:100 caption tabs | `toggle` | label bump |
 | TikTokSheet.tsx:93 backdrop, :99 Close, :197 Not now, :174/181 policy links | press | |
 | TikTokSheet.tsx:136 Who can see it (select), :159/164 checkboxes (native) | none | native controls |
@@ -3886,7 +3889,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | ClipPerformance.tsx:159 Go to Library, :309 platform chips, :417 Back | press | |
 | ClipPerformance.tsx:163 Try again | `retry` | |
 | ClipPerformance.tsx:360 Best this week (star) | `star` | |
-| ClipPerformance.tsx:371 **Refresh numbers** (Tomato) | `refresh` | spinner only after the turn ends; `fail()` on error |
+| ClipPerformance.tsx:371 **Refresh numbers** (Vermilion) | `refresh` | spinner only after the turn ends; `fail()` on error |
 | HelpLauncher.tsx:102 Ask | press | **no transform added**: `dodge.ts` and the inline `translateY` own it |
 | HelpPanel.tsx:335 suggestion chips | press + `send` | the chip asks at once and launches the panel's Send plane (same `launch()`) |
 | HelpPanel.tsx:384 Stay, :464 Close | press | |
@@ -3925,7 +3928,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | SkillPages.tsx:389 Save mine anyway | `save` | |
 | SkillPages.tsx:454 Replace the whole file | `upload` | |
 | SkillPages.tsx:633 Use the example | `paste` | |
-| SkillPages.tsx:650 **Save / Make the skill** (Tomato) | `save` | create keeps confetti 110 and `skill-pop`; `fail()` on error |
+| SkillPages.tsx:650 **Save / Make the skill** (Vermilion) | `save` | create keeps confetti 110 and `skill-pop`; `fail()` on error |
 | setup/SetupList.tsx:41 platform card; StepCard.tsx:73 open link; KeyForm.tsx:116 Change keys, :209 Keep the saved keys; SetupPlatform.tsx:362 Go to step N; MockConsent.tsx:37 Cancel | press | |
 | setup/SetupList.tsx Skip \<Platform\> (opens the question, §17.13) | press | |
 | setup/SetupList.tsx Un-skip \<Platform\> | `undo` | |
@@ -3933,14 +3936,14 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | StepCard.tsx:87 icon download | `download` | |
 | StepCard.tsx:120 Not done yet | `undo` | |
 | StepCard.tsx:124 I did this | `tick` | |
-| bits.tsx:81 Copy \<label\> | `copy` | then the existing check / "Copied!" / sage ring |
+| bits.tsx:81 Copy \<label\> | `copy` | then the existing check / "Copied!" / bone ring |
 | KeyForm.tsx:165 Paste the \<key\> | `paste` | |
 | KeyForm.tsx:187/199 key file from Google | `upload` | |
-| KeyForm.tsx:205 **Save keys** (Tomato) | `save` | `fail()` on a bad key |
+| KeyForm.tsx:205 **Save keys** (Vermilion) | `save` | `fail()` on a bad key |
 | KeyForm.tsx:246, SetupPlatform.tsx:466 Check it | `check` | `fail()` when the check fails |
 | VerificationUpload.tsx:90 Pick the file | `upload` | |
 | VerificationUpload.tsx:101 Remove \<file\> | `delete` | handle; `rewind()` on Undo |
-| SetupPlatform.tsx:242 **Connect \<Platform\>** (Tomato), :464 Connect again | `connect` | OAuth leaves the page at once; confetti + success on return stay |
+| SetupPlatform.tsx:242 **Connect \<Platform\>** (Vermilion), :464 Connect again | `connect` | OAuth leaves the page at once; confetti + success on return stay |
 | SetupPlatform.tsx:450 Who can see (segmented) | `toggle` | via Segmented |
 | SetupPlatform.tsx:468 Disconnect | `disconnect` | handle; `rewind()` on Undo |
 | ChooseAccount.tsx:42 account card | `connect` | spinner after the motion; confetti + success stay |
@@ -3958,7 +3961,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | GetApp.tsx:162 Download for Mac/Windows/Linux, :176 install from this browser, :204 Install app | `download` | |
 | GetApp.tsx:268 Copy the link | `copy` | then the existing check swap |
 | UpdateBar.tsx:66 Later | press | |
-| UpdateBar.tsx:69 **Reload** (Tomato) | existing | the spark spin / pop / confetti stays as the `refresh` motion; its icon gets `act="refresh"` for the tap; nothing new waits |
+| UpdateBar.tsx:69 **Reload** (Vermilion) | existing | the spark spin / pop / confetti stays as the `refresh` motion; its icon gets `act="refresh"` for the tap; nothing new waits |
 | Toasts.tsx:134 Undo | press | the rewind plays on the source control (§20.7) |
 | Toasts.tsx:141 Close message; Sheet.tsx:50 scrim / Escape | press / none | |
 | SetupTodo.tsx the pill, **–** (make it small), × (close), Set up \<Platform\>, Skip \<Platform\> (opens the question) | press | navigation, opening and closing stay quiet (§17.13) |
@@ -3999,8 +4002,8 @@ Every bar where you pick one of a few things shows its choice with **one** highl
 to the new one, instead of the old pill vanishing and a new one appearing.
 
 * **Where:** every `Segmented` (Paste a link / Upload a video, Pick for me / Exactly, every other segmented bar), the
-  caption tabs on Review, Library's All clips / This week tabs, the sidebar menu (the glass pill and the tomato bar
-  move together) and the phone tab bar (the glass tile and the tomato dot move together).
+  caption tabs on Review, Library's All clips / This week tabs, the sidebar menu (the glass pill and the vermilion bar
+  move together) and the phone tab bar (the glass tile and the vermilion dot move together).
 * **How:** `components/Glide.tsx` renders one `aria-hidden` element as the first child of the bar and moves it to the
   item matching its `active` selector, measured from the bar (which is `position: relative`), so a scrolling tab row
   carries it along. Styles live in `styles/glide.css`.
@@ -4009,7 +4012,7 @@ to the new one, instead of the old pill vanishing and a new one appearing.
   or a layout shift moves it instantly.
 * **Fallback:** until it has measured, the bar has no `has-glide` class and the chosen item paints its own highlight,
   so there is never a moment with no highlight. With `has-glide`, the chosen item drops its own background, its
-  tomato marker and its shadow, and the glide draws them.
+  vermilion marker and its shadow, and the glide draws them.
 * **Reduced motion:** no slide and no stretch. The highlight jumps to the choice (only a 150 ms opacity fade).
 * **Accessibility:** the chosen state stays on the item itself (`aria-checked`, `aria-selected`, `aria-current`); the
   glide is decoration only.
@@ -4027,7 +4030,7 @@ card and menu item lights up under the pointer. `e2e/glide.spec.ts` checks that 
 ### 20.15 The Ask mark
 
 Ask Clip Factory has its own mark instead of a generic sparkle: a chat bubble with a clip's play button inside, and
-the brand's tomato dot on its corner (the same dot as the "C" in the logo). The dot breathes slowly (2.8 s, still
+the brand's vermilion dot on its corner (the same dot as the "C" in the logo). The dot breathes slowly (2.8 s, still
 under reduced motion). It is used on the Ask launcher, the panel's header and Settings' "Ask Clip Factory" search row
 (`components/AskMark.tsx`). The sparkle icon stays for "Clip Factory learned" and update messages.
 
@@ -4213,13 +4216,16 @@ Settings › Look & feel › Background; **see-through is the default**.
 
 ```ts
 backgroundMode?: "see-through" | "picture" | "colours"  // no server default: absent until saved
-backgroundColours: string[]   // 1..3 distinct "#rrggbb", stored lower case; default ["#9caf88", "#f7f5ef", "#e8412c"]
+backgroundColours: string[]   // 1..3 distinct "#rrggbb", stored lower case; default ["#0f372b", "#efe7da", "#e8392b"]
 glassStrength: "clear" | "frosted"                       // default "clear"
 ```
 
 Bad values are 400 with a plain message ("Pick what goes behind the glass: See-through, Picture or Colours.",
-"Pick Clear or Frosted glass.", "Pick 1 to 3 colours.", "Colours must be like #9caf88."). A malformed stored value
-reads as the default. The picture itself never leaves the device (`localStorage` `cf.background`). The web keeps a
+"Pick Clear or Frosted glass.", "Pick 1 to 3 colours.", "Colours must be like #0f372b."). A malformed stored value
+reads as the default. A stored value that is exactly the colours before the bottle-green look (`#9caf88`, `#f7f5ef`,
+`#e8412c`, in that order: an owner who never changed them) reads as today's default (ADR-43); read time only (no
+migration job: the mapped value is written only when the owner next saves settings, as every default is), and any
+other choice is kept. The web reads a cached copy of that trio in `cf.prefs` the same way (`currentColours`). The picture itself never leaves the device (`localStorage` `cf.background`). The web keeps a
 copy of the three fields in `cf.prefs` so the look applies before `/v1/me` answers, like sound and motion (§15.4);
 old servers without the fields read as the defaults.
 
@@ -4252,12 +4258,14 @@ everywhere.
   look at the threshold. Reading the constant is the crate's one `unsafe` item: `[lints.rust] unsafe_code` is
   `"deny"` (not `"forbid"`, which could not be allowed anywhere) and is allowed on that extern block only. No new
   crates.
-* With glass, the window is `transparent(true)` with those effects and a light off-white tint (`GLASS_TINT`,
-  247/245/239 at 140/255). Who honours the tint: **macOS 26+ Liquid Glass does while the window is in use, and drops
-  it while another app is in use** (measured, §22.3); the Windows `blur` path does (worked out, not measured);
+* With glass, the window is `transparent(true)` with those effects and a bottle-green tint (`GLASS_TINT`,
+  15/55/43 at 140/255; it was the light 247/245/239 until ADR-43), so the gaps between the panels look green. Who
+  honours the tint: **macOS 26+ Liquid Glass does while the window is in use, and drops it while another app is in
+  use** (measured with the earlier light tint, §22.3); the Windows `blur` path does (worked out, not measured);
   Windows 11 22H2+ acrylic drops it (window-vibrancy sets only the system backdrop type; tauri documents `color` as
-  having no effect on Windows 11); the vibrancy material of macOS 15 and older takes none. The window theme is forced
-  to **Light**, because the web app is drawn light.
+  having no effect on Windows 11); the vibrancy material of macOS 15 and older takes none. Readability never depends
+  on the tint: the page plans for the lightest each glass can be (white), which a tint can only darken. The window
+  theme stays forced to **Light**, the material that was measured; switching it is for the owner to look at on a Mac.
 * macOS transparency needs `app.macOSPrivateApi: true` (tauri.conf.json) and tauri's `macos-private-api` feature.
   This rules out the Mac App Store, which the app does not use (unsigned `.dmg`, §12.3).
 * The injected script starts with `window.__CF_GLASS__ = "liquid" | "vibrancy" | "acrylic" | "blur" | "none"`,
@@ -4277,11 +4285,13 @@ everywhere.
   `html[data-backdrop]`, `html[data-glass]`, `html[data-strength]`, the `--backdrop-veil` and `--panel-veil` custom
   properties and, for `window` only, `html.see-through`, which makes `html` and `body` transparent so the native
   glass shows. **The window look** below means `html.see-through`.
-* **The tint (contrast).** Off-white whose strength is computed, not guessed: `minVeil` is the smallest alpha at
-  which every text colour that can sit on it reaches 4.5:1 against the off-white composited (sRGB, as browsers do)
-  over the **darkest** thing behind it.
-* **What Liquid Glass really draws (measured).** On 2026-11-16, on macOS 27.2 (system in dark mode, the window
-  forced to the light theme, Tauri 2.12.5 / window-vibrancy 0.8.1, `LiquidGlassRegular` with `GLASS_TINT`, page
+* **The tint (contrast).** Bottle green whose strength is computed, not guessed: `minVeil` is the smallest alpha at
+  which every text colour that can sit on it reaches 4.5:1 against the green composited (sRGB, as browsers do) over
+  the **lightest** thing behind it. Every text colour is light (bone or lighter, ADR-43), so a white desktop or a
+  white photo is the hardest case; a dark backdrop only helps.
+* **What Liquid Glass really draws (measured; kept as a record).** On 2026-11-16, on macOS 27.2 (system in dark mode,
+  the window forced to the light theme, Tauri 2.12.5 / window-vibrancy 0.8.1, `LiquidGlassRegular` with the light
+  `GLASS_TINT` of that time, page
   transparent), a helper window put a known picture straight behind the real window and the screen was captured:
 
   | The window is | Glass over pure black | Glass over pure white | A panel at 0.86 over black |
@@ -4294,6 +4304,11 @@ everywhere.
     picture. Not in use, the tint is dropped for a neutral light grey at roughly 58%.
   * The glass blurs strongly: 22 pt black and white stripes come through as soft bands, 75 pt bold text is still
     guessable, normal text cannot be read.
+  * **To re-measure.** The "in use" row was taken with the old light tint. The window now carries the bottle-green
+    `GLASS_TINT` (15/55/43 at 140/255, `desktop/src-tauri/src/main.rs`), so the real glass in use over black will be
+    darker and greener than rgb(180, 171, 148). Readability does not depend on it (the page plans for white, which a
+    tint can only darken), but `LIQUID_MEASURED.active` and the stand-in in `web/e2e/glass.ts` describe a tint that
+    is gone until the owner measures it again on a Mac. Nothing here opens a window to do so.
   * Panels composite as `mix(VEIL, glass, veil)`, within about ±3 levels of what was measured, so the maths below
     describes the real window.
   * **Not measured:** Liquid Glass without the tint, `LiquidGlassClear`, the vibrancy material of macOS 15 and
@@ -4301,91 +4316,78 @@ everywhere.
     ([TESTING.md](TESTING.md#background-modes-and-see-through-glass) says how). Also not measured: whether a
     panel's own `backdrop-filter` (blur, saturation) reaches the glass behind the page. Over the flat black and white
     that were measured it changes nothing, and the darkest glass is a flat grey either way.
-  * **Also not measured: the system's own settings.** Every number above was read with the system in dark mode.
-    Nobody has read the glass with the system in light appearance, or with macOS's Reduce transparency or Increase
-    contrast switched on. The floor has little room to spare: the scan passes with rgb(106, 106, 106) behind the
-    page and starts to fail at about rgb(96, 96, 96). The hand check in TESTING.md asks for those three readings.
-* **The darkest each glass can be** (`glassFloor(glass, scheme)`), which is what its tint is worked out for:
-
-  | Glass | Floor | Why |
-  |---|---|---|
-  | `liquid`, light | rgb(106.2, 106.2, 106.2) (`LIQUID_FLOOR`) | The darkest measured (inactive, black behind: 118) made a tenth darker (`LIQUID_SAFETY`), for another Mac or another macOS update |
-  | `blur`, light | ≈ rgb(135.6, 134.5, 131.2) (`TINTED_FLOOR`) | The app's tint over black, from the same numbers as `GLASS_TINT` (`GLASS_TINT_ALPHA` = 140/255). Worked out, not measured |
-  | `acrylic`, `mica`, `vibrancy`, light | black | The system's own material, no app tint, not measured: nothing is promised |
-  | any glass, dark | black | The desktop app forces light, so this should never happen; nothing is promised |
-
-  `glassChecks(glass, scheme)` lists everything text is checked against: the floor, white (the lightest any glass
-  can be) and, for `liquid` in light, both measured floors too (in use the glass is khaki, not grey).
-* **The window look's own text colours.** With the usual text colours a panel over the darkest Liquid Glass would
-  need 0.78 of tint (0.88 over black), and a panel that solid does not feel see-through. So in the window look only
-  (`html.see-through` in `tokens.css`) the four lightest text colours go deeper, each still clearly its own colour;
-  each has a relative luminance of 0.047 or less. `--ink` and `--ink-2` stay.
+  * **Also not measured: the system's own settings, and the green tint.** Every number above was read with the
+    system in dark mode and the light tint. With bone text none of them decides the tint any more: the page plans
+    for white behind every glass (`glassCeiling`), which no tint or setting can exceed, so no new measurement is
+    needed for readability.
+* **The lightest each glass can be** (`glassCeiling(glass, scheme)`) is **white** for every glass and both
+  settings: it decides the panel tint. **The darkest** (`glassFloor`) is still checked, so words on bone fills are
+  covered at both ends: `liquid` light rgb(106.2, 106.2, 106.2) (`LIQUID_FLOOR`, the darkest measured made a tenth
+  darker), `blur` light the app's green tint over black (`TINTED_FLOOR`, from the same numbers as `GLASS_TINT`), and
+  black for the rest and for dark. `glassChecks(glass, scheme)` lists everything text is checked against: white, the
+  floor and, for `liquid` in light, every measured point.
+* **Text colours** (`TEXT_TOKENS`, `WINDOW_TEXT_TOKENS`). All light; hierarchy comes from size, weight and tracking,
+  not from dimmer colour. In the window look (`html.see-through` in `tokens.css`) the softer ones go to bone or
+  lighter, so the panels need the least green over white:
 
   | Token | Everywhere else | Window look | What it is for |
   |---|---|---|---|
-  | `--ink-3` | `#46523f` | `#344031` | Meta text (grey-green) |
-  | `--tomato-ink` | `#962414` | `#74190e` | Tomato words: links, errors, "Didn't work" |
-  | `--sage-ink` | `#4f6340` | `#2c421c` | Sage words and icons: saved, ready, passed |
-  | `--sage-text` | `#3d4f31` | `#2c421c` | Small sage words on a sage tint |
+  | `--ink` | `#efe7da` | `#efe7da` | Body text, headings, icons (bone) |
+  | `--ink-2` | `#e9e0d0` | `#efe7da` | Secondary text |
+  | `--ink-3` | `#e4dac9` | `#efe7da` | Meta text, placeholders |
+  | `--vermilion-ink` | `#ffd2ca` | `#ffe2dc` | Error and warning words, always with a vermilion icon or dot |
+  | `--green-ink` | `#d2e8c4` | `#e4f2da` | Success words and icons: saved, ready, passed |
+  | `--green-text` | `#d6ebc8` | `#e4f2da` | Words on the success tint |
 
-  `TEXT_TOKENS` and `WINDOW_TEXT_TOKENS` in `lib/background.ts` hold both sets; `TEXT_COLOURS_WINDOW` is used for
-  every see-through calculation. `--sage-ink` is new: words and icons in sage use it (`--sage-deep`, the same colour
-  outside the window look, stays for fills, rings and lines, which must not change with the look). A unit test reads
-  the stylesheets: `tokens.css` holds exactly these values, and **every** `color:` declaration is one of the six
-  tokens or a named exception that never sits on a bare panel tint (white or off-white on a fill of its own, the
-  warn pill, the blue of the Get the app drawings, glyph blinks) or is covered by a window-look rule (below).
+  Words on a bone fill use `--on-bone` (`#0f372b`, 10.68:1 on bone); words on a vermilion fill are white. A unit test
+  reads the stylesheets: `tokens.css` holds exactly these values, and **every** `color:` declaration is one of the six
+  tokens or a named exception that sits on a fill of its own (white on the CTA, `--on-bone` on bone, the blue of the
+  Get the app drawings on their bone card, the warn pill, glyph blinks).
 * **Tints in the window look** (`seeThroughVeils(glass, scheme, strength)`). The tint lives **on the panels and on
   loose text**, not over the whole window, so the desktop stays guessable between them. Two values go on `<html>`:
   `--backdrop-veil` over the whole window and `--panel-veil` on every panel.
-  * **Clear:** nothing between the panels (0). A panel carries the least that keeps every text colour of the window
-    look at AA over the floor, and never less than 0.35 (`MIN_PANEL_VEIL`), so it still reads as a pane.
-  * **Frosted:** a light frost over the whole window (0.30) and panels 0.15 heavier than Clear
-    (`FROSTED_EXTRA`, at most 0.95). What shows through a panel is (1 − window frost) × (1 − panel tint), so Frosted
-    always shows less than Clear.
-
-  | Glass | Clear panel | Frosted panel (over the 0.30 frost) | Lowest text contrast on a Clear panel over the floor |
-  |---|---|---|---|
-  | `liquid` (macOS 26+) | **0.44** | 0.59 | 4.55 (`--ink-3`); 4.91 over the measured 118, 6.78 in use over black |
-  | `blur` (Windows 10) | 0.35 (contrast alone would need 0.29) | 0.50 | 4.87 |
-  | `acrylic`, `mica`, `vibrancy`, or any dark setting | 0.68 | 0.83 | 4.52 |
-
-* **What carries the tint** (`styles/glass.css`, the window look section):
-  * Every `.glass` panel (sage and tomato glass turn off-white too: over a dark desktop their own tints would be too
-    dark to read on). The rule is written with `:where(html.see-through)`, so it weighs no more than `.glass`
-    itself: a surface with a **denser tint of its own** keeps it (toasts, sheets, the Ask panel, the update bar, the
-    starred star's deep sage). Those float over the page's own words and pictures, which can be darker than any
-    window glass, so the lighter panels must not thin them.
-  * **Nothing that holds words is weaker than the panel tint.** What can sit straight on the window carries at
-    least that much: the tab bar, glass, ghost and danger buttons (also on hover), the Library tabs, the brand mark.
-  * Every piece of text that sits straight on the window gets the panel tint as a scrim that hugs the words
-    (`box-shadow` spread, so nothing moves): page title and its line, breadcrumbs, the phone top-bar name, the
-    headings and lines between panels, back links, the review count, setup part titles, a clip page's title and
+  * **Clear:** nothing between the panels (0). A panel carries the least green that keeps every text colour of the
+    window look at AA over white: **0.73** (never less than `PANEL_VEIL_FLOOR`, 0.45). Lowest text contrast 4.61:1
+    over white, 6.53 over the measured khaki, 12.77 over black.
+  * **Frosted:** a green frost over the whole window (0.30) and panels 0.15 heavier than Clear (`FROSTED_EXTRA`, at
+    most 0.95): **0.88**, 8.30:1 or better. What shows through a panel is (1 − window frost) × (1 − panel tint), so
+    Frosted always shows less than Clear.
+* **What carries the tint** (`styles/glass.css`):
+  * Every `.glass` panel (`.glass--green` one step deeper). The window rule is written with `:where(html.see-through)`,
+    so a surface with a **denser tint of its own** keeps it (toasts, sheets, the Ask panel, the update bar at green
+    0.90–0.95, the starred star's vermilion).
+  * **Nothing that holds words is weaker than the panel tint.** What can sit straight on the window carries at least
+    that much: the tab bar, glass, ghost and danger buttons (also on hover), the Library tabs.
+  * Every piece of text that sits straight on the window **or the picture** gets the panel tint as a scrim that hugs
+    the words (`box-shadow` spread, so nothing moves): page title and its line, breadcrumbs, the phone top-bar name,
+    the headings and lines between panels, back links, the review count, setup part titles, a clip page's title and
     "Updated" line, This week's title, its star line and its count and money line, a skill's meta line.
-  * Pick-one tracks (`.segmented`, `.tabs`, the Background tiles) lay their shade of ink (0.08, `TRACK_SHADE`) over
-    0.10 more tint than a panel has (`TRACK_EXTRA_VEIL`), so the labels on the shade stay at AA even when the track
-    sits straight on the window.
-  * Tinted chips on a panel (the tomato "Didn't work" pill, the sound tags, "If you need it", code words, a clip
-    without a video, the fixes list, the lit-up setting) get a wash of white (0.20, `CHIP_LIFT`) over their tint. A
-    tint of ink or tomato dims what is under it; on a panel that is only just light enough, the words on the chip
-    would drop below AA. Over the darkest glass, where it matters, the wash makes up for an ink or tomato tint in
-    full: such a chip is never darker there than the panel it sits on, so its words keep AA. Over a lighter glass a
-    chip can be darker than its panel again; the words then have contrast to spare.
-  * Placeholders (lighter than any text colour) take `--ink-3`; the tomato "not passed" mark takes `--tomato-ink`.
-  * The unit tests work the three numbers (0.08, 0.10, 0.20) through the same contrast maths for every glass and
-    read them back out of `glass.css`.
-* **Colours:** each chosen colour and every half-and-half blend of two (an sRGB blend can be darker than both); the
-  darkest decides. Light colours need no veil; Night alone needs 0.75. The Colours tile and the colours strip
-  in Settings wear the same veil (`--preview-veil`), so they look like the result; at 0.5 or more the card adds
-  "Dark colours show soft, so words stay easy to read."
-* **Picture:** unchanged (the 0.18 off-white veil and the panels' own tint, §12).
-* `prefers-reduced-transparency: reduce` raises the veil to 0.94 in every mode, and panels to 0.90–0.92.
+  * Pick-one tracks (`.segmented`, `.tabs`, the Background tiles, the AI models) carry 0.10 more green than a panel
+    (`TRACK_EXTRA_VEIL`) with a lift of bone (0.08, `TRACK_LIFT`), in every look: 5.27:1 or better over white. The
+    selected pill is bone 0.92 (`--selected`) with `--on-bone` words, 9.19:1 or better.
+  * Fills under words are never lighter than their panel: wells are deep green (`--fill`), and the success and
+    vermilion tints lay deep green 0.35 (`CHIP_DEEPEN`) under their colour (`--tint-leaf`, `--tint-vermilion`).
+  * Every vermilion dot or bar on glass carries a bone ring (vermilion on a panel over white is only 1.36:1).
+  * The unit tests work these numbers through the same contrast maths for every glass and read them back out of
+    `glass.css` and `tokens.css`.
+* **Colours:** each chosen colour decides on its own; an sRGB blend of two is never lighter than both, so blends need
+  no check. Dark colours need no veil; the lightest decide: the default (bottle green, bone, vermilion) 0.74 (bone),
+  Cream 0.75, white 0.77. The bone highlight blob is left out over the owner's colours. The Colours tile and the
+  colours strip in Settings wear the same veil (`--preview-veil`), so they look like the result; at 0.5 or more the
+  card adds "Light colours show soft, so words stay easy to read."
+* **Picture:** a green veil of 0.35 over the photo (`PICTURE_PAGE_VEIL`) and panels at 0.65 (`PICTURE_PANEL_VEIL`),
+  together 0.77 over a white photo, with the loose-text scrim of the window look.
+* **Clip Factory colours** (`brand` and `frosted`): the page owns this backdrop and it is dark: a bottle-green
+  gradient, a green-3 blob, a vermilion glow (0.42), a leaf blob (0.22) and a bone highlight capped at 0.12, under a
+  green veil of 0.15; panels sit at `PANEL_VEIL_FLOOR`, 0.45.
+* `prefers-reduced-transparency: reduce` raises the veil to 0.94 in every mode, and panels to 0.92.
 * **Panels in the window look.** `.glass` keeps the recipe (blur, saturation, lit rim, inner highlight, shadow,
   refraction in Chromium); its tint is `--panel-veil`.
-* **Frosted fallback** (see-through in a browser, installed PWA, phone, or the desktop app with `none`): the usual
-  sage/off-white/tomato blobs (already blurred), a milky frost pane (Clear: white 0.22 → off-white 0.10; Frosted,
-  `html[data-strength="frosted"]`: white 0.50 → off-white 0.38, so Glass strength always does something; no full-screen
+* **Frosted fallback** (see-through in a browser, installed PWA, phone, or the desktop app with `none`): the deep
+  green mesh above (already blurred), a green frost pane (Clear: bone 0.04 → green 0.06; Frosted,
+  `html[data-strength="frosted"]`: green 0.40 → deep green 0.45, so Glass strength always does something; no full-screen
   `backdrop-filter`, so phones do not repaint it every frame) and two soft caustic highlights drifting over 26 s and
-  34 s (soft-light). Reduced motion stops them like every other loop.
+  34 s (bone, soft-light). Reduced motion stops them like every other loop.
 * **Colours mesh:** a 160° gradient through the colours plus the drifting blobs in `--c1..--c3` (one or two colours
   repeat the last), then the veil.
 
@@ -4417,7 +4419,7 @@ anchor for Ask Clip Factory):
 | `background-kind` | What's behind the glass | Pick See-through, Picture or Colours. | A radio group of three preview tiles with one `<Glide>` (`.bg-modes`, `glide--tile`): a blurred car behind frost, your picture (or the picture icon), your colours. The note of §22.4 under it. |
 | `glass-strength` | Glass strength | Clear shows more of what's behind. Frosted shows less. | `Segmented` Clear / Frosted. Choosing one also picks See-through. In the desktop app it sets the window frost and panel tint; elsewhere it thickens the frost over the Clip Factory colours. |
 | `background-picture` | Background picture | Use your own picture behind the glass. It stays on this device. | Choose / Change picture (`upload`), Remove picture (`undo`, rewinds on Undo). A picked picture also picks Picture. |
-| `background-colours` | Background colours | Mix up to 3 colours behind the glass. | A preview strip, ten named swatches (Sage, Cream, Tomato, Sunny, Mint, Sky, Ocean, Grape, Bubblegum, Night; `aria-pressed`) and "Your own colour" (`input type=color`, saved on `change` only). Tapping a colour adds or removes it and picks Colours. A fourth: "You can mix 3 colours. Tap one of yours to take it off first." The last one: "Keep at least one colour. Pick another one first." |
+| `background-colours` | Background colours | Mix up to 3 colours behind the glass. | A preview strip, twelve named swatches (Bottle green, Bone, Vermilion, Green, Cream, Sunny, Mint, Sky, Ocean, Grape, Bubblegum, Night; `aria-pressed`; Green and Cream stay so a colour picked before ADR-43 keeps its name) and "Your own colour" (`input type=color`, saved on `change` only). Tapping a colour adds or removes it and picks Colours. A fourth: "You can mix 3 colours. Tap one of yours to take it off first." The last one: "Keep at least one colour. Pick another one first." |
 
 The apple whose mode is in use shows an "In use" pill. The three tile names stay on one line at every width
 (`white-space: nowrap`, a slightly smaller size on narrow phones), so "See-through" never splits at its hyphen. Every control is reachable by keyboard; the cursor never
@@ -4425,19 +4427,19 @@ changes (§20.14); hover lights up the tiles and swatches.
 
 ### 22.6 Tests
 
-* Vitest `test/background.test.ts`: contrast maths against WCAG reference values; `minVeil` is minimal and reaches AA;
-  the measured Liquid Glass numbers and its floor (a tenth darker than the darkest measured); `TINTED_FLOOR` is the
-  app tint over black and equals `GLASS_TINT` in `main.rs`; black for the unmeasured glasses and for dark; the
-  window look's text colours (only four change, luminance ≤ 0.047, same hue, still told apart); Clear is the least
-  that reaches AA, never under 0.35; Frosted is 0.30 plus panels 0.15 heavier and always shows less; **every glass ×
-  light and dark × Clear and Frosted × (floor, white, and for Liquid Glass both measured floors): every text colour
-  of the window look reaches AA on a panel, on a pick-one track and on every tinted chip**; the stylesheets stay in
-  step (`tokens.css` values, `html.see-through` overrides, every `color:` declaration is a token or a named
-  exception, the window-look rules for placeholders and marks exist, the panel rule gives way to denser tints and
-  the tab bar is lifted); colours validation and veils (each colour and pairwise blend); `resolveLook` for every mode
-  and glass; only the wrapper can claim glass, an unknown name is `none`, and every name `main.rs` can send is
-  known; the notes' exact sentences (computer and phone); prefs defaults and junk; an existing picture with no saved
-  mode starts in Picture; `applyLook` on `<html>`.
+* Vitest `test/background.test.ts`: contrast maths against WCAG reference values; `minVeil` is minimal and reaches AA
+  (0.77 over white for the root text, 0.73 for the window look's); the ceiling is white for every glass; the measured
+  Liquid Glass numbers stay on record; `TINTED_FLOOR` is the app's green tint over black and equals `GLASS_TINT` in
+  `main.rs`; the text colours are all light and the window look only lifts them; Clear is the least that reaches AA
+  over white, never under 0.45; Frosted is 0.30 plus panels 0.15 heavier and always shows less; **every glass × light
+  and dark × Clear and Frosted × (white, the floor, and for Liquid Glass every measured point): every text colour of
+  the window look reaches AA on a panel, on a pick-one track and on the vermilion and success tints, and the green
+  words on the selected bone pill reach AA**; the picture look over a white photo; the stylesheets stay in step
+  (`tokens.css` values, `html.see-through` overrides, every `color:` declaration is a token or a named exception, the
+  sound groups' colours, the panel rule gives way to denser tints and the tab bar is lifted, every surface tint is
+  green); colours validation and veils; `resolveLook` for every mode and glass; only the wrapper can claim glass, an
+  unknown name is `none`, and every name `main.rs` can send is known; the notes' exact sentences (computer and phone);
+  prefs defaults and junk; an existing picture with no saved mode starts in Picture; `applyLook` on `<html>`.
 * pytest `api/tests/test_settings_and_system.py`: defaults (no `backgroundMode` until saved), saving (lower case,
   repeats dropped), every refusal and its message, malformed stored values.
 * Playwright `e2e/glass.ts`: the stand-ins for the real window glass, shared by the specs below. `asDesktop(page,

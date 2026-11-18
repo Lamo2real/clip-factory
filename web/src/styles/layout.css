@@ -63,11 +63,10 @@
   font-size: 1.6rem;
   line-height: 1;
   padding-right: 3px;
-  color: var(--ink);
-  background: linear-gradient(150deg, rgb(255 255 255 / 0.85), rgb(var(--sage-rgb) / 0.55));
-  box-shadow:
-    inset 0 1px 0 #fff,
-    0 4px 12px -6px rgb(var(--ink-rgb) / 0.5);
+  /* The app icon in small: a bone tile, a green "C", the vermilion dot. */
+  color: var(--on-bone);
+  background: var(--selected);
+  box-shadow: 0 4px 12px -6px rgb(var(--shadow-rgb) / 0.75);
 }
 .brand__dot {
   position: absolute;
@@ -76,7 +75,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--tomato);
+  background: var(--vermilion);
 }
 .brand__name {
   font-family: var(--font-display);
@@ -115,10 +114,10 @@
   height: var(--tabbar-h);
   padding: 6px;
   border-radius: var(--r-lg);
-  --glass-tint: linear-gradient(140deg, rgb(255 255 255 / 0.62), rgb(var(--offwhite-rgb) / 0.42));
+  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.66), rgb(var(--green-rgb) / 0.62));
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.85),
-    0 18px 40px -18px rgb(var(--ink-rgb) / 0.55);
+    inset 0 1px 0 rgb(var(--bone-rgb) / 0.3),
+    0 18px 40px -18px rgb(var(--shadow-rgb) / 0.83);
 }
 .tabbar__list {
   display: grid;
@@ -147,13 +146,11 @@
   transform: scale(0.88);
 }
 .tabbar__item.is-active {
-  color: var(--ink);
-  background: linear-gradient(160deg, rgb(255 255 255 / 0.92), rgb(var(--sage-rgb) / 0.5));
-  box-shadow:
-    inset 0 1px 0 #fff,
-    0 6px 14px -8px rgb(var(--ink-rgb) / 0.55);
+  color: var(--on-bone);
+  background: var(--selected);
+  box-shadow: 0 6px 14px -8px rgb(var(--shadow-rgb) / 0.83);
 }
-/* The tomato dot under the active icon. */
+/* The vermilion dot under the active icon. */
 .tabbar__item.is-active::after {
   content: "";
   position: absolute;
@@ -161,7 +158,8 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--tomato);
+  background: var(--vermilion);
+  box-shadow: 0 0 0 1.5px var(--bone);
 }
 .tabbar__item .badge {
   top: 4px;
@@ -248,17 +246,15 @@
 }
 .sidebar__item:hover {
   color: var(--ink);
-  background: rgb(255 255 255 / 0.42);
+  background: var(--fill);
 }
 .sidebar__item:active {
   transform: scale(0.97);
 }
 .sidebar__item.is-active {
-  color: var(--ink);
-  background: linear-gradient(150deg, rgb(255 255 255 / 0.9), rgb(var(--sage-rgb) / 0.48));
-  box-shadow:
-    inset 0 1px 0 #fff,
-    0 8px 18px -12px rgb(var(--ink-rgb) / 0.6);
+  color: var(--on-bone);
+  background: var(--selected);
+  box-shadow: 0 8px 18px -12px rgb(var(--shadow-rgb) / 0.85);
 }
 .sidebar__item.is-active .sidebar__icon::after {
   content: "";
@@ -269,7 +265,8 @@
   height: 18px;
   margin-top: -9px;
   border-radius: 4px;
-  background: var(--tomato);
+  background: var(--vermilion);
+  box-shadow: 0 0 0 1.5px var(--bone);
 }
 .sidebar__icon {
   position: relative;
@@ -289,8 +286,9 @@
   height: 24px;
   padding: 0 7px;
   border-radius: var(--r-pill);
-  background: var(--tomato-deep);
+  background: var(--vermilion-deep);
   color: #fff;
+  box-shadow: 0 0 0 1.5px rgb(var(--bone-rgb) / 0.9);
   font-size: var(--fs-xs);
   font-weight: 700;
 }
@@ -319,7 +317,7 @@
   white-space: nowrap;
 }
 .sidebar__status:hover {
-  background: rgb(255 255 255 / 0.42);
+  background: rgb(var(--green-deep-rgb) / 0.28);
 }
 .sidebar.is-collapsed .sidebar__status {
   justify-content: center;

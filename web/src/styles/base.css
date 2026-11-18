@@ -10,7 +10,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  color-scheme: light;
+  color-scheme: dark;
   scroll-padding-top: 16px;
   -webkit-tap-highlight-color: transparent;
 }
@@ -24,7 +24,7 @@ body {
   line-height: 1.5;
   font-feature-settings: "cv11", "ss03";
   color: var(--ink);
-  background: #e9ede1;
+  background: var(--green);
   overflow-wrap: break-word;
   -webkit-font-smoothing: antialiased;
 }
@@ -98,8 +98,8 @@ a {
 }
 
 ::selection {
-  background: rgb(var(--tomato-rgb) / 0.28);
-  color: var(--ink);
+  background: rgb(var(--vermilion-rgb) / 0.55);
+  color: #fff;
 }
 
 :focus {
@@ -108,7 +108,7 @@ a {
 :focus-visible {
   /* The ring is an outline as well as a shadow: a component's own box-shadow (buttons, glass, chips) replaces the
      shadow ring, but it cannot hide the outline. Both sit in the same 3–5.5 px band, so they read as one ring. */
-  outline: 2.5px solid var(--tomato-deep);
+  outline: 2.5px solid var(--vermilion-deep);
   outline-offset: 3px;
   box-shadow: var(--focus);
   border-radius: var(--r-sm);
@@ -124,7 +124,7 @@ main[tabindex="-1"]:focus-visible {
 /* Scrollbars on the few intentionally scrolling boxes. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--ink-rgb) / 0.28) transparent;
+  scrollbar-color: rgb(var(--bone-rgb) / 0.35) transparent;
 }
 
 .sr-only {
@@ -146,7 +146,8 @@ main[tabindex="-1"]:focus-visible {
   z-index: 100;
   padding: 12px 18px;
   border-radius: var(--r-pill);
-  background: rgb(var(--offwhite-rgb) / 0.92);
+  background: var(--selected);
+  color: var(--on-bone);
   font-weight: 600;
   transition: top var(--dur-2) var(--ease-out);
 }
@@ -217,9 +218,9 @@ main[tabindex="-1"]:focus-visible {
   align-items: center;
   gap: 6px;
   font-weight: 600;
-  color: var(--tomato-ink);
+  color: var(--vermilion-ink);
   text-decoration: underline;
-  text-decoration-color: rgb(var(--tomato-rgb) / 0.4);
+  text-decoration-color: rgb(var(--vermilion-rgb) / 0.4);
   /* 44 x 44 is the floor at every width (UX_DESIGN_SYSTEM.md §Touch targets); phones raise it to 48 (system.css). */
   min-height: 44px;
 }

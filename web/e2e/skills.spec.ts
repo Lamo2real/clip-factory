@@ -254,7 +254,7 @@ for (const size of [
       // Nearly solid glass: the page behind does not show through the question.
       const look = await sheet.evaluate((el) => ({ bg: getComputedStyle(el).backgroundImage, scrim: getComputedStyle(el.parentElement!).backgroundColor }));
       expect(look.bg).toMatch(/0\.95\)/);
-      expect(look.scrim).toMatch(/0\.4\)/);
+      expect(look.scrim).toMatch(/0\.55\)/);
       await expect(sheet.getByRole("button", { name: "Keep it" })).toBeFocused();
       await fits(page, "delete sheet");
       await sheet.getByRole("button", { name: "Keep it" }).click();

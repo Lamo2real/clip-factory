@@ -10,13 +10,13 @@ const SHAPES: Record<Exclude<Mark, "upload">, ReactNode> = {
   youtube: (
     <>
       <rect x="2.5" y="5.5" width="19" height="13" rx="4" fill="currentColor" />
-      <path d="M10 9.2v5.6l4.8-2.8L10 9.2Z" fill="var(--mark-cut, #F7F5EF)" />
+      <path d="M10 9.2v5.6l4.8-2.8L10 9.2Z" fill="var(--mark-cut, #0F372B)" />
     </>
   ),
   twitch: (
     <>
       <path d="M5 3.5 3.5 7v12.5h4.2v2.2h2.4l2.2-2.2h3.4l4.8-4.8V3.5H5Z" fill="currentColor" />
-      <path d="M11 8v4.5M15.5 8v4.5" stroke="var(--mark-cut, #F7F5EF)" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M11 8v4.5M15.5 8v4.5" stroke="var(--mark-cut, #0F372B)" strokeWidth="1.8" strokeLinecap="round" />
     </>
   ),
   kick: (
@@ -37,7 +37,7 @@ const SHAPES: Record<Exclude<Mark, "upload">, ReactNode> = {
       <circle cx="12" cy="12" r="9" fill="currentColor" />
       <path
         d="M13.2 21v-6.6h2.2l.4-2.6h-2.6v-1.6c0-.8.3-1.3 1.4-1.3h1.3V6.6a17 17 0 0 0-2-.1c-2 0-3.3 1.2-3.3 3.4v1.9H8.4v2.6h2.2V21"
-        fill="var(--mark-cut, #F7F5EF)"
+        fill="var(--mark-cut, #0F372B)"
       />
     </>
   ),

@@ -145,7 +145,7 @@ function JobRow({ job }: { job: Job }) {
         </span>
         {working ? (
           <span className="job-row__progress">
-            <Progress value={job.progress} label={`${jobTitle(job)} progress`} tone="sage" />
+            <Progress value={job.progress} label={`${jobTitle(job)} progress`} tone="success" />
             <span className="job-row__step clamp-1">
               {job.status === "queued" ? "Waiting to start" : (step?.label ?? "Working")} · {Math.round(job.progress * 100)}%
             </span>

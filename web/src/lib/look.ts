@@ -53,8 +53,8 @@ export function useLook(): Look {
 /**
  * `html.see-through` makes the page itself transparent so the desktop window's glass shows (§22.3);
  * `data-backdrop` names what is drawn; `--backdrop-veil` is the tint over the whole backdrop (between the panels in
- * see-through); `--panel-veil` is the tint every panel and every piece of loose text gets in see-through, enough for
- * AA on the darkest glass.
+ * see-through); `--panel-veil` is the bottle-green tint every panel gets (and every piece of loose text in the
+ * window and picture looks), enough for AA over the lightest thing behind.
  */
 export function applyLook(look: Look, root: HTMLElement = document.documentElement) {
   root.classList.toggle("see-through", look.kind === "window");
@@ -63,10 +63,11 @@ export function applyLook(look: Look, root: HTMLElement = document.documentEleme
   else delete root.dataset.glass;
   if (look.kind === "window" || look.kind === "frosted") root.dataset.strength = look.strength;
   else delete root.dataset.strength;
-  const veil = look.kind === "window" ? look.pageVeil : look.kind === "colours" ? look.veil : null;
+  const veil = look.kind === "window" || look.kind === "picture" ? look.pageVeil : look.kind === "colours" ? look.veil : null;
   if (veil === null) root.style.removeProperty("--backdrop-veil");
   else root.style.setProperty("--backdrop-veil", String(veil));
-  if (look.kind === "window") root.style.setProperty("--panel-veil", String(look.panelVeil));
+  // Everywhere else the panels keep the floor in tokens.css (PANEL_VEIL_FLOOR): the page owns that backdrop.
+  if (look.kind === "window" || look.kind === "picture") root.style.setProperty("--panel-veil", String(look.panelVeil));
   else root.style.removeProperty("--panel-veil");
 }
 

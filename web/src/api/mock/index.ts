@@ -73,6 +73,15 @@ function saveSkipped(list: Settings["setupSkipped"]) {
   }
 }
 
+const EMPTY_KEY = "cf-mock-empty";
+function emptyAccount(): boolean {
+  try {
+    return typeof sessionStorage !== "undefined" && sessionStorage.getItem(EMPTY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 // The look settings (§22) survive a reload of the mock, like the real server, so persistence can be tested.
 const LOOK_KEY = "cf-mock-look";
 const LOOK_FIELDS = ["backgroundMode", "backgroundColours", "glassStrength"] as const;
@@ -255,8 +264,23 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   mockLive.tick = tick;
   installMockLiveControls(advance);
 
+  // An empty account (window.__cfMock.jobs.clear()) lasts until the tab closes, so a reload shows the empty states.
+  if (emptyAccount()) {
+    store.jobs.length = 0;
+    store.clips.length = 0;
+  }
   /** Test knob (window.__cfMock.jobs): a finished job as it was saved before the "watch" step existed (nine steps). */
   const jobKnobs = {
+    /** No jobs and no clips, as for a new owner, so the empty Home and Jobs can be checked (reload to see them). */
+    clear() {
+      store.jobs.length = 0;
+      store.clips.length = 0;
+      try {
+        sessionStorage.setItem(EMPTY_KEY, "1");
+      } catch {
+        /* no storage: empty for this page only */
+      }
+    },
     oldSteps(): { jobId: string; title: string } | null {
       const j = store.jobs.find((x) => x.status === "ready");
       if (!j) return null;

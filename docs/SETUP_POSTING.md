@@ -52,7 +52,7 @@ Each step is a big numbered card. The numbers run on from one part to the next. 
 Some steps tick themselves (for example when your keys are saved or when you are connected). Steps marked **(only if
 you need it)** are extra and do not count in the ring.
 
-There is always **one** tomato-red button on the screen: it is the next thing to press.
+There is always **one** vermilion-red button on the screen: it is the next thing to press.
 
 **Use a computer.** The developer websites work best on a computer. Use the same browser for every step, and keep
 Clip Factory open in one tab and the platform in another.
@@ -396,7 +396,7 @@ TikTok (there is no default, TikTok's rule), choose the Comments, Duet and Stitc
 promotional. Then Keep. TikTok can take a few minutes to process your clip.
 
 If a clip says "Pick who can see it on TikTok again, then press Try again.", press **Try again** on the clip. The
-**Post to TikTok** sheet opens first. Pick again, then press the tomato-red button on the sheet.
+**Post to TikTok** sheet opens first. Pick again, then press the vermilion-red button on the sheet.
 
 ---
 
