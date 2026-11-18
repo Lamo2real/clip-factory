@@ -129,9 +129,9 @@ run "stream_mapping_has_one_filter_with_seven_prefixes" {
 
   assert {
     condition = jsondecode(one(one(aws_lambda_event_source_mapping.broadcast.filter_criteria).filter).pattern) == {
-      dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }] } } }
+      dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }] } } }
     }
-    error_message = "The filter must pass only JOB#, CLIP#, POST#, LEARNING#, WEEK#, ACCOUNT# and SETUP# items (never STAT#, RATE# or OAUTH#/STATE)."
+    error_message = "The filter must pass only JOB#, CLIP#, POST#, LEARNING#, WEEK#, ACCOUNT#, SETUP# and FOLLOW# items (never STAT#, RATE#, OAUTH#/STATE or FOLLOWKEYS#)."
   }
 
   assert {

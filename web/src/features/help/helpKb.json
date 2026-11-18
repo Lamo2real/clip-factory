@@ -640,6 +640,81 @@
       ]
     },
     {
+      "id": "follow-streamers",
+      "route": "/settings/clip-making/streamers",
+      "where": "Settings › Clip making › Streamers I follow",
+      "title": "Follow streamers and see who is live",
+      "keywords": [
+        "follow",
+        "follow a streamer",
+        "streamers",
+        "youtubers",
+        "twitch streamer",
+        "kick streamer",
+        "who is live",
+        "live",
+        "spectate",
+        "watch a streamer",
+        "unfollow",
+        "stop following",
+        "automatic clips",
+        "by itself",
+        "limit a day"
+      ],
+      "answer": "Open **Streamers I follow** and paste a streamer's link or type their name. If you type a name, tap **YouTube**, **Twitch** or **Kick**. Only follow streamers who said you can clip them: tap **Yes, they said I can**, then **Follow**. You see who is **LIVE** and when a stream ended or a new video came out. Making clips by itself comes in the next update; each video costs the same as one you paste.",
+      "steps": [
+        "Open **Settings**.",
+        "Tap **Clip making**.",
+        "Tap **Streamers I follow**.",
+        "Paste a link or type a name, then tap **Find**.",
+        "Tap **Yes, they said I can**, then **Follow**."
+      ],
+      "actions": [
+        {
+          "id": "follow-streamers:open",
+          "label": "Open Streamers",
+          "to": "/settings/clip-making/streamers",
+          "highlight": [
+            "follow-streamer"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "streamer-keys",
+      "route": "/settings/clip-making/streamers",
+      "where": "Settings › Clip making › Streamers I follow › Twitch and Kick keys",
+      "title": "Twitch and Kick keys for live badges",
+      "keywords": [
+        "twitch keys",
+        "kick keys",
+        "needs keys",
+        "needs a grown-up",
+        "grown-up",
+        "client id",
+        "live badge missing",
+        "webhook",
+        "youtube read key"
+      ],
+      "answer": "YouTube works without keys. To see when Twitch or Kick streamers are live, a grown-up makes a free app on dev.twitch.tv or kick.com once and pastes its two keys in **Twitch and Kick keys**. Until then the streamer shows **Needs a grown-up**, but you can still follow them. Removing keys needs a long press.",
+      "steps": [
+        "Open **Streamers I follow**.",
+        "Find **Twitch and Kick keys**.",
+        "Ask a grown-up to tap **I am the grown-up** and follow the steps.",
+        "Tap **Save keys**, then **Check it**."
+      ],
+      "actions": [
+        {
+          "id": "streamer-keys:open",
+          "label": "Open the keys",
+          "to": "/settings/clip-making/streamers",
+          "highlight": [
+            "streamer-keys"
+          ]
+        }
+      ]
+    },
+    {
       "id": "best-clip-week-views",
       "route": "/library",
       "where": "Library › This week",

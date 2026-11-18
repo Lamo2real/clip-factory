@@ -40,6 +40,12 @@ DEFAULTS: dict[str, Any] = {
     # ADR-42: the AI model that makes the clips, a key of clipModels in config/models.json. The default is agentModel,
     # so nothing changes until the owner picks one. A stored key no longer in the list falls back to the default.
     "clipModel": "fable-5-1",
+    # §24 Follow creators. Making clips by itself arrives with the next part of the feature; these are stored now so
+    # the owner's choices are already in place. followDailyMax 0 means "no limit" (the owner's default, 2026-11-18);
+    # the UI never shows 0: it is the "Limit how many a day" switch turned off.
+    "followPaused": False,
+    "followDailyMax": 0,
+    "followMinMinutes": 30,
 }
 # The Clip Factory colours before the bottle-green look (ADR-43). An owner who never changed them has exactly this
 # trio stored; it reads back as today's default so the backdrop follows the new look. Read time only: no migration
@@ -51,6 +57,9 @@ MAX_USD_PER_1000 = 100
 # Mirrors config/models.json `clipModels` and `agentModel` (a test keeps them equal; the API Lambdas do not ship it).
 CLIP_MODELS: tuple[str, ...] = ("fable-5-2", "fable-5-1", "opus-5-5", "sonnet-5-5", "haiku-5-5")
 YOUTUBE_PRIVACY = ("public", "unlisted", "private")
+# §24: "Limit how many a day" offers 1 to 20 (0, stored, is "no limit"); the shortest video is 10 to 240 minutes.
+FOLLOW_DAILY_MAX = 20
+FOLLOW_MIN_MINUTES = (10, 240)
 BACKGROUND_MODES = ("see-through", "picture", "colours")
 GLASS_STRENGTHS = ("clear", "frosted")
 MAX_COLOURS = 3
@@ -85,7 +94,13 @@ def _check_field(field: str, value: Any) -> Any:
             return validate.integer(value, field, lo=1, hi=10)
         case "maxSourceHours":
             return validate.integer(value, field, lo=1, hi=12)
-        case "soundEnabled" | "reduceMotion":
+        case "followDailyMax":
+            return _follow_number(value, lo=0, hi=FOLLOW_DAILY_MAX, what="How many a day", unit="")
+        case "followMinMinutes":
+            return _follow_number(
+                value, lo=FOLLOW_MIN_MINUTES[0], hi=FOLLOW_MIN_MINUTES[1], what="The shortest video", unit=" minutes"
+            )
+        case "soundEnabled" | "reduceMotion" | "followPaused":
             return validate.boolean(value, field)
         case "clickSound" | "errorSound":
             return _sound_number(value, SOUND_LABELS[field])
@@ -129,6 +144,13 @@ def _check_field(field: str, value: Any) -> Any:
             # Keep the canonical order and drop repeats so the UI shows a stable list.
             return [p for p in PLATFORMS if p in value]
     raise bad_request(f"Unknown setting: {field}.")
+
+
+def _follow_number(value: Any, *, lo: int, hi: int, what: str, unit: str) -> int:
+    number = validate.whole_number(value)
+    if number is None or not lo <= number <= hi:
+        raise bad_request(f"{what} must be a number from {max(lo, 1)} to {hi}{unit}.")
+    return number
 
 
 def _colours(value: Any) -> list[str]:

@@ -159,11 +159,37 @@ run "verify_token_and_lambda" {
     condition = toset(flatten([for s in jsondecode(aws_iam_role_policy.fn.policy).Statement : s.Action])) == toset([
       "logs:CreateLogStream", "logs:PutLogEvents", "xray:PutTraceSegments", "xray:PutTelemetryRecords",
       "dynamodb:PutItem", "ssm:GetParameter",
-      "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem",
+      "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query",
       "secretsmanager:GetSecretValue", "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue",
       "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource",
     ])
-    error_message = "cf-prod-hooks may only store hook events, read the verify token, handle OAuth items and the platform secrets (§17.9)."
+    error_message = "cf-prod-hooks may only store hook events, read the verify token, handle OAuth items and the platform secrets (§17.9), and set followed creators' live state (§24.4)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "FollowItems" && toset(s.Action) == toset(["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"]) &&
+      s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"] &&
+      s.Condition == { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["FOLLOWED", "CREATOR", "WATCH", "USER#*"] } }
+    ])
+    error_message = "§24.4: a Twitch or Kick delivery reads FOLLOWED and sets CREATOR, WATCH and the owner's FOLLOW# items only (no DeleteItem, no Scan, no indexes)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "TwitchEventSubSecret" && s.Action == ["secretsmanager:GetSecretValue"] &&
+      s.Resource == ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/twitch/eventsub*"]
+    ])
+    error_message = "§24.4: the Twitch EventSub secret may only be read."
+  }
+
+  assert {
+    condition = alltrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement : !contains(flatten([s.Action]), "dynamodb:Scan")
+    ])
+    error_message = "cf-prod-hooks never scans the table."
   }
 
   assert {
@@ -241,10 +267,11 @@ run "verify_token_and_lambda" {
           "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/app*",
           "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token*",
           "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/pending*",
+          "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/twitch/eventsub*",
         ], r) || endswith(r, ":*")
       ]
     ]))
-    error_message = "No wildcard resources beyond the three platform secret kinds, the log group streams and X-Ray."
+    error_message = "No wildcard resources beyond the three platform secret kinds, the Twitch EventSub secret, the log group streams and X-Ray."
   }
 
   assert {

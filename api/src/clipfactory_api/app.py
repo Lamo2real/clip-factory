@@ -22,6 +22,7 @@ from .skills import BuiltinSkill, load_builtins
 from .vectors import Vectors
 
 if TYPE_CHECKING:
+    from .follow.platforms import FollowEnv
     from .oauth import OAuthEnv
     from .routes.setup import WebFiles
 
@@ -96,6 +97,8 @@ class App:
     oauth: OAuthEnv | None = None  # posting setup (§17.4); None until its secrets and URLs are configured
     web_files: WebFiles | None = None  # TikTok verification files on the web bucket (§17.4)
     help: HelpDeps = field(default_factory=HelpDeps)
+    # Follow creators (§24): built on first use from ``oauth`` (the same secrets and hooks URL); tests may set it.
+    follow: FollowEnv | None = None
     _builtin_cache: list[BuiltinSkill] | None = field(default=None, repr=False)
 
     def builtin_skills(self) -> list[BuiltinSkill]:

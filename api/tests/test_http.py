@@ -180,6 +180,15 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/accounts/youtube/choose"),
         ("DELETE", "/v1/accounts/youtube"),
         ("GET", "/v1/accounts/tiktok/creator-info"),
+        # §24: Follow creators
+        ("GET", "/v1/follows"),
+        ("POST", "/v1/follows"),
+        ("POST", "/v1/follows/lookup"),
+        ("PUT", "/v1/follows/keys/twitch"),
+        ("DELETE", "/v1/follows/keys/kick"),
+        ("POST", "/v1/follows/keys/youtube-read/check"),
+        ("PATCH", "/v1/follows/twitch/somestreamer"),
+        ("DELETE", "/v1/follows/kick/someone"),
         # §19.6: Ask Clip Factory
         ("GET", "/v1/help"),
         ("POST", "/v1/help/answers"),

@@ -581,6 +581,29 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
   `HOOK#` item with a 14-day TTL, 413 over 256 KB, unknown platform 404, the query string is never logged. The OAuth
   callback is covered under [Posting setup](#posting-setup).
 
+### Follow creators (CONTRACTS §24)
+- **pytest** (`api/tests/test_follows.py`): links and names parse to the right platform and id; other hosts, user
+  info, ports, IP literals, non-channel pages and bad ids are refused, and a lookup never calls anything for them;
+  avatars only from the platforms' picture hosts; viewers round to 2 figures; creator keys match §16.12. Twitch HMAC
+  good, changed body, wrong secret, stale, no secret (401, nothing stored); the verification POST echoes the challenge
+  as text; online then offline updates every follower, notices the stream once (WATCH `waiting`, `autoMaking` false,
+  no `JOB#`), a repeated delivery does nothing and a late online is ignored; revocation marks the creator. Kick RSA
+  with a throwaway key: good, changed, stale, forged (401) and the public key fetched again at most once in 10 minutes.
+  Routes: a name alone asks which site, Twitch without keys is found by name, follow needs `permission: true`, follow
+  again, list, switch, remove (only the owner's items), keys saved to Secrets Manager only with masked hints, the
+  EventSub secret made once, Check it, Remove writes `{"removed": true}` and never deletes. The tick: nothing without
+  keys, names and badges filled in, subscriptions once per creator, no writes when nothing changed, unsubscribe when
+  nobody follows, a finished stream noticed, the lease, YouTube uploads only after the follow, the 1,000-unit meter.
+  The live push maps `FOLLOW#` to its public shape and never pushes `FOLLOWKEYS#`.
+- **vitest** (`web/test/follows.test.ts`): badge and line words, live first, initials, live events, Find a setting,
+  and the mock's rules (keys before and after, Remove, knobs).
+- **Playwright** (`web/e2e/follow.spec.ts`): which-site buttons, Follow stays off until "Yes, they said I can", other
+  sites refused, How do I ask?, a Kick follow before keys then the grown-up's keys (and Hold to remove), live badges
+  change by themselves, Remove with Undo, the switch, Limit how many a day, Home's row only when following, and the page
+  from 320 to 1920 px in light and dark (no overflow, 44 px targets, contrast).
+- **Manual release gate** (before part 2): a real Twitch and Kick webhook round trip from eu-north-1, and the YouTube
+  channel page read from AWS (the consent page).
+
 ### Posting setup
 From [CONTRACTS.md §17.12](CONTRACTS.md#1712-tests-offline-fakes-only-no-aws-no-network). Everything offline: a fake
 Secrets Manager, a recorded `HttpClient` with fixtures per platform, a `FakeDurableContext`, and the web mock mode with

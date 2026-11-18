@@ -1,7 +1,7 @@
 """``cf-prod-broadcast``: DynamoDB Streams on ``cf-prod-data`` → the owner's open WebSockets (docs/CONTRACTS.md §14.2).
 
-The event source mapping only delivers ``JOB#``, ``CLIP#``, ``POST#``, ``LEARNING#``, ``WEEK#``, ``ACCOUNT#`` and
-``SETUP#`` items (the last two become ``{type: "setup", op: "upsert", id: platform, partial: true}``, §17.4). Per batch the last
+The event source mapping only delivers ``JOB#``, ``CLIP#``, ``POST#``, ``LEARNING#``, ``WEEK#``, ``ACCOUNT#``,
+``SETUP#`` and ``FOLLOW#`` (§24) items (the last two become ``{type: "setup", op: "upsert", id: platform, partial: true}``, §17.4). Per batch the last
 record per item wins (job heartbeats coalesce); each becomes one ``LiveEvent``, built by the same public-shape
 functions the HTTP API uses, so internal fields never leave. An event over 24 KB is sent as ``partial: true`` (the
 web refetches). Closed connections (410 Gone) are deleted; other send errors are logged and skipped. Only a
@@ -15,7 +15,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .. import clips, db, jobs, learn, posts, weeks
+from .. import clips, db, follow, jobs, learn, posts, weeks
 from ..log import log
 from . import MAX_EVENT_BYTES, encode, is_gone, management_client
 
@@ -29,10 +29,18 @@ TYPES = {
     "WEEK#": "week",
     "ACCOUNT#": "setup",
     "SETUP#": "setup",
+    "FOLLOW#": "follow",  # §24: a followed creator (name, picture, live badge); FOLLOWKEYS# never matches
 }
 # Setup changes carry no item: the web refetches GET /v1/setup (§17.4), so keys, hints and tokens never ride along.
 PARTIAL_ONLY = frozenset({"setup"})
-ID_FIELDS = {"job": "jobId", "clip": "clipId", "post": "postId", "learning": "learningId", "week": "week"}
+ID_FIELDS = {
+    "job": "jobId",
+    "clip": "clipId",
+    "post": "postId",
+    "learning": "learningId",
+    "week": "week",
+    "follow": "followId",
+}
 
 
 def _public(kind: str, item: Item) -> Item:
@@ -44,6 +52,8 @@ def _public(kind: str, item: Item) -> Item:
         return posts.public_post(item)
     if kind == "week":
         return weeks.public_week(item)
+    if kind == "follow":
+        return follow.public_follow(item)
     return learn.public_learning(item)
 
 
@@ -84,7 +94,9 @@ def _key(record: Mapping[str, Any]) -> tuple[str, str] | None:
 def _kind(sk: str) -> tuple[str, str] | None:
     for prefix, kind in TYPES.items():
         if sk.startswith(prefix):
-            return kind, sk[len(prefix) :]
+            rest = sk[len(prefix) :]
+            # A follow's id is "twitch:somestreamer" everywhere the web sees it (FOLLOW#twitch#somestreamer).
+            return kind, rest.replace("#", ":", 1) if kind == "follow" else rest
     return None
 
 

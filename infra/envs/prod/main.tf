@@ -214,6 +214,8 @@ module "stats" {
   secret_prefix              = module.hooks.secret_prefix
   platform_secrets_arn       = module.hooks.platform_secrets_arn
   platform_token_secrets_arn = module.hooks.platform_token_secrets_arn
+  # §24: the follow tick gives Twitch {hooks_url}/hooks/twitch as the webhook callback.
+  hooks_url = module.hooks.hooks_url
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn

@@ -40,6 +40,7 @@ variables {
   secret_prefix              = "cf-test/platforms/"
   platform_secrets_arn       = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*"
   platform_token_secrets_arn = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/*/token-*"
+  hooks_url                  = "https://rest123.execute-api.eu-north-1.amazonaws.com/v1"
 }
 
 run "tick_comes_from_platforms_json" {
@@ -169,8 +170,8 @@ run "functions_match_the_contract" {
   command = plan
 
   assert {
-    condition     = output.function_names == { stats = "cf-test-stats", learn = "cf-test-learn" }
-    error_message = "function_names must be { stats = <name>-stats, learn = <name>-learn }."
+    condition     = output.function_names == { stats = "cf-test-stats", learn = "cf-test-learn", follow-tick = "cf-test-follow-tick" }
+    error_message = "function_names must be { stats = <name>-stats, learn = <name>-learn, follow-tick = <name>-follow-tick }."
   }
 
   assert {
@@ -361,4 +362,121 @@ run "roles_allow_exactly_what_the_code_calls" {
     ]))
     error_message = "No Scan, PassRole or wildcard actions."
   }
+}
+
+# §24.3 Follow creators: the 5-minute tick. It never retries, never overlaps (a DynamoDB lease, not reserved
+# concurrency), only reads the follow keys and never deletes anything or starts a job.
+run "follow_tick_every_five_minutes_without_retries" {
+  command = plan
+
+  assert {
+    condition = (aws_cloudwatch_event_rule.follow_tick.name == "cf-test-follow-tick" &&
+      aws_cloudwatch_event_rule.follow_tick.schedule_expression == "rate(5 minutes)" &&
+    aws_cloudwatch_event_rule.follow_tick.state == "ENABLED")
+    error_message = "The rule <name>-follow-tick must run every 5 minutes."
+  }
+
+  assert {
+    condition = (aws_cloudwatch_event_target.follow_tick.arn == aws_lambda_function.fn["follow-tick"].arn &&
+      one(aws_cloudwatch_event_target.follow_tick.retry_policy).maximum_retry_attempts == 0 &&
+    one(aws_cloudwatch_event_target.follow_tick.retry_policy).maximum_event_age_in_seconds == 300)
+    error_message = "The follow tick's target is the unqualified function and is never retried (the next tick does the same work)."
+  }
+
+  assert {
+    condition = (aws_lambda_function_event_invoke_config.fn["follow-tick"].maximum_retry_attempts == 0 &&
+    aws_lambda_function_event_invoke_config.fn["follow-tick"].maximum_event_age_in_seconds == 300)
+    error_message = "The follow tick never retries an async invoke either."
+  }
+
+  assert {
+    condition = (aws_lambda_permission.follow_tick.principal == "events.amazonaws.com" &&
+      aws_lambda_permission.follow_tick.function_name == "cf-test-follow-tick" &&
+    aws_lambda_permission.follow_tick.source_arn == aws_cloudwatch_event_rule.follow_tick.arn)
+    error_message = "Only the follow rule may invoke cf-test-follow-tick."
+  }
+
+  assert {
+    condition = (aws_lambda_function.fn["follow-tick"].handler == "clipfactory_api.follow.tick.handler" &&
+      aws_lambda_function.fn["follow-tick"].memory_size == 256 && aws_lambda_function.fn["follow-tick"].timeout == 120 &&
+    (aws_lambda_function.fn["follow-tick"].reserved_concurrent_executions == null || aws_lambda_function.fn["follow-tick"].reserved_concurrent_executions == -1))
+    error_message = "cf-prod-follow-tick is clipfactory_api.follow.tick.handler, 256 MB / 120 s, no reserved concurrency."
+  }
+
+  assert {
+    condition = one(aws_lambda_function.fn["follow-tick"].environment).variables == tomap({
+      TABLE_NAME                 = "cf-test-data"
+      SECRET_PREFIX              = "cf-test/platforms/"
+      HOOKS_URL                  = "https://rest123.execute-api.eu-north-1.amazonaws.com/v1"
+      FOLLOW_TIME_BUDGET_SECONDS = "90"
+    })
+    error_message = "cf-prod-follow-tick gets exactly TABLE_NAME, SECRET_PREFIX, HOOKS_URL and FOLLOW_TIME_BUDGET_SECONDS = 90."
+  }
+
+  assert {
+    condition = toset(flatten([for s in jsondecode(aws_iam_role_policy.fn["follow-tick"].policy).Statement : s.Action])) == toset([
+      "logs:CreateLogStream", "logs:PutLogEvents", "xray:PutTraceSegments", "xray:PutTelemetryRecords",
+      "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query",
+      "secretsmanager:GetSecretValue",
+    ])
+    error_message = "The follow tick may only read and write table items (no DeleteItem, no Scan), read the follow keys, log and trace: no lambda:InvokeFunction (it starts no job in part 1)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["follow-tick"].policy).Statement :
+      s.Sid == "FollowKeysRead" && s.Action == ["secretsmanager:GetSecretValue"] && s.Resource == [
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/twitch/*",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/kick/*",
+        "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/platforms/youtube/readkey*",
+      ]
+    ])
+    error_message = "The follow tick reads only the Twitch, Kick and YouTube read keys (never the posting app keys or tokens)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["follow-tick"].policy).Statement :
+      s.Sid == "Data" && s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"]
+    ])
+    error_message = "The follow tick uses the table itself, never an index."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["follow-tick"].policy).Statement :
+      s.Sid == "Data" && try(s.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"], []) == [
+        "FOLLOWED", "CREATOR", "WATCH", "FOLLOWMETER", "FOLLOWTICK", "USER#*",
+      ]
+    ])
+    error_message = "The follow tick may touch only the FOLLOWED, CREATOR, WATCH, FOLLOWMETER, FOLLOWTICK and USER# partitions (LeadingKeys)."
+  }
+
+  assert {
+    condition     = output.schedule_rule_names == { stats = "cf-test-stats", follow-tick = "cf-test-follow-tick" }
+    error_message = "Both schedules are watched for failed invocations (monitoring)."
+  }
+}
+
+run "follow_tick_without_a_hooks_url" {
+  command = plan
+
+  variables {
+    hooks_url = ""
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["follow-tick"].environment).variables["HOOKS_URL"] == ""
+    error_message = "Without the hooks URL the tick still runs (it polls; no Twitch webhooks)."
+  }
+}
+
+run "hooks_url_must_be_https" {
+  command = plan
+
+  variables {
+    hooks_url = "http://example.test/v1"
+  }
+
+  expect_failures = [var.hooks_url]
 }

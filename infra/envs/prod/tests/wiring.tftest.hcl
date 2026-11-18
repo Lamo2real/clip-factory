@@ -43,7 +43,7 @@ run "whole_stack_plans" {
 
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
-      "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn",
+      "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick",
     ])
     error_message = "Every function except the WebSocket authorizer is watched for errors."
   }
@@ -72,8 +72,8 @@ run "clip_performance_is_wired" {
   }
 
   assert {
-    condition     = toset(keys(module.monitoring.schedule_alarm_names)) == toset(["stats"])
-    error_message = "The stats rule is watched for failed invocations."
+    condition     = toset(keys(module.monitoring.schedule_alarm_names)) == toset(["stats", "follow-tick"])
+    error_message = "The stats and follow-tick rules are watched for failed invocations."
   }
 }
 
@@ -224,5 +224,20 @@ run "clip_models_are_wired" {
   assert {
     condition     = length(local.clip_model_profile_arns) == 5 && local.model_id == "global.anthropic.claude-fable-5-1"
     error_message = "ReadProfile gets the five clip model profiles; CF_MODEL_ID stays the Fable 5.1 default."
+  }
+}
+
+# §24.3 Follow creators: the tick gets the hooks URL (Twitch's webhook callback) and is watched like every function.
+run "follow_creators_is_wired" {
+  command = plan
+
+  assert {
+    condition     = module.stats.follow_tick_function_arn == "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-follow-tick"
+    error_message = "The follow tick is cf-prod-follow-tick."
+  }
+
+  assert {
+    condition     = module.monitoring.schedule_alarm_names["follow-tick"] == "cf-prod-follow-tick-failed-invocations"
+    error_message = "The follow rule is watched for failed invocations."
   }
 }

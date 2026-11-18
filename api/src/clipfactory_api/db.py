@@ -409,9 +409,16 @@ class Store:
         if consistent and index:
             raise ValueError("a global secondary index cannot be read consistently")
         pk_name, sk_name = ("gsi1pk", "gsi1sk") if index else ("pk", "sk")
+        # DynamoDB refuses an empty string in a key condition, so an empty prefix means "the whole partition".
+        if sk_prefix:
+            condition = f"{pk_name} = :pk AND begins_with({sk_name}, :prefix)"
+            values: dict[str, Any] = {":pk": pk, ":prefix": sk_prefix}
+        else:
+            condition = f"{pk_name} = :pk"
+            values = {":pk": pk}
         kwargs: dict[str, Any] = {
-            "KeyConditionExpression": f"{pk_name} = :pk AND begins_with({sk_name}, :prefix)",
-            "ExpressionAttributeValues": {":pk": pk, ":prefix": sk_prefix},
+            "KeyConditionExpression": condition,
+            "ExpressionAttributeValues": values,
             "ScanIndexForward": not newest_first,
         }
         if index:

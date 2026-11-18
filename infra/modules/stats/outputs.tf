@@ -11,4 +11,9 @@ output "stats_tick_minutes" { value = local.stats_tick }
 output "function_names" { value = { for k, f in aws_lambda_function.fn : k => f.function_name } }
 
 # Watched for failed invocations (monitoring).
-output "schedule_rule_names" { value = { stats = aws_cloudwatch_event_rule.stats.name } }
+output "schedule_rule_names" {
+  value = { stats = aws_cloudwatch_event_rule.stats.name, follow-tick = aws_cloudwatch_event_rule.follow_tick.name }
+}
+
+# §24: the follow tick (watched for errors through function_names, and its rule through schedule_rule_names).
+output "follow_tick_function_arn" { value = "${local.arn_prefix}-follow-tick" }

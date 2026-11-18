@@ -8,6 +8,10 @@
 #                  Once a day (05:00 UTC, its own EventBridge rule) it also learns from the clips that did far better
 #                  than normal 7 days after posting (§16.12): no new winners, no model call.
 #                  Like every model call it gets the owner's skills (§18.6), read from skills/* in the media bucket.
+#   cf-prod-follow-tick  Follow creators (§24.3): every 5 minutes it refreshes who is live, fills in creators' names and
+#                  pictures, keeps Twitch/Kick webhook subscriptions right (once per creator) and notices finished
+#                  streams and new uploads (WATCH items). It never starts a job (part 2 does). A DynamoDB lease keeps
+#                  two runs from overlapping; the EventBridge target never retries.
 #
 # Both run the shared package (api/dist/lambda.zip). No reserved concurrency: new accounts' limits forbid it, and
 # the rate budgets are conditional DynamoDB writes, so two overlapping runs cannot overspend.
@@ -30,6 +34,14 @@ locals {
 
   # Unqualified ARNs built from the names, so callers can be wired without waiting on these functions.
   arn_prefix = "arn:aws:lambda:${var.region}:${var.account_id}:function:${var.name}"
+
+  # §24: the follow keys the tick reads (created at runtime by cf-prod-api, under the same prefix as the posting keys).
+  # Read only: the tick never creates, writes or deletes a secret.
+  follow_secret_arns = [
+    "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${var.secret_prefix}twitch/*",
+    "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${var.secret_prefix}kick/*",
+    "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${var.secret_prefix}youtube/readkey*",
+  ]
 
   functions = {
     stats = {
@@ -64,6 +76,20 @@ locals {
       max_retries   = 1
       max_event_age = 3600
     }
+    follow-tick = {
+      handler = "clipfactory_api.follow.tick.handler"
+      memory  = 256
+      timeout = 120 # the run stops starting new work after FOLLOW_TIME_BUDGET_SECONDS (90)
+      env = {
+        TABLE_NAME                 = var.table_name
+        SECRET_PREFIX              = var.secret_prefix
+        HOOKS_URL                  = var.hooks_url # Twitch's webhook callback: {hooks_url}/hooks/twitch
+        FOLLOW_TIME_BUDGET_SECONDS = "90"
+      }
+      # The next tick is 5 minutes away and does the same work: never retry, drop anything older than one interval.
+      max_retries   = 0
+      max_event_age = 300
+    }
   }
 
   # Exactly what the code calls (api/src/clipfactory_api/stats/** and weekly.py), beyond logs and traces.
@@ -88,6 +114,18 @@ locals {
       { Sid = "Vectors", Action = ["s3vectors:GetVectors", "s3vectors:PutVectors"], Resource = [var.vector_index_arn] },
       # Read the owner's skills for the weekly learning call (§18.6): keys come from the table, so no s3:ListBucket.
       { Sid = "Skills", Action = ["s3:GetObject"], Resource = ["${var.media_bucket_arn}/skills/*"] },
+    ]
+    follow-tick = [
+      # FOLLOWED, CREATOR, WATCH, FOLLOWMETER and the FOLLOWTICK lease (Query, never Scan); the owner's FOLLOW# items.
+      # No DeleteItem: the tick never deletes anything. LeadingKeys keeps it off every other owner item (jobs, clips,
+      # settings, posting accounts): USER#* is needed only for the FOLLOW# items under it.
+      {
+        Sid       = "Data"
+        Action    = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"]
+        Resource  = [var.table_arn]
+        Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["FOLLOWED", "CREATOR", "WATCH", "FOLLOWMETER", "FOLLOWTICK", "USER#*"] } }
+      },
+      { Sid = "FollowKeysRead", Action = ["secretsmanager:GetSecretValue"], Resource = local.follow_secret_arns },
     ]
   }
 }
@@ -199,6 +237,34 @@ resource "aws_lambda_permission" "events" {
   function_name = aws_lambda_function.fn["stats"].function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.stats.arn
+}
+
+# ---------- Follow creators: the 5-minute tick (§24.3) ----------
+resource "aws_cloudwatch_event_rule" "follow_tick" {
+  name                = "${var.name}-follow-tick"
+  description         = "Follow creators: who is live, names and pictures, webhook subscriptions, finished streams and new uploads."
+  schedule_expression = "rate(5 minutes)"
+  state               = "ENABLED"
+  tags                = local.tags
+}
+
+resource "aws_cloudwatch_event_target" "follow_tick" {
+  rule      = aws_cloudwatch_event_rule.follow_tick.name
+  target_id = "follow-tick"
+  arn       = aws_lambda_function.fn["follow-tick"].arn # unqualified: always the current code
+  # Never retried: a failed run is followed by the next one 5 minutes later, and two runs must not pile up.
+  retry_policy {
+    maximum_event_age_in_seconds = 300
+    maximum_retry_attempts       = 0
+  }
+}
+
+resource "aws_lambda_permission" "follow_tick" {
+  statement_id  = "events-follow-tick"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.fn["follow-tick"].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.follow_tick.arn
 }
 
 # ---------- Daily learning from day-7 numbers (§16.12) ----------

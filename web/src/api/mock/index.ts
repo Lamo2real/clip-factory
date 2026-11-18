@@ -8,6 +8,7 @@ import { setupApi } from "./setup.ts";
 import { statsApi, type StatsFaults } from "./stats.ts";
 import { skillsApi, type MockSkillControls } from "./skills.ts";
 import { lessonsApi, type LessonsFault } from "./lessons.ts";
+import { followsApi } from "./follows.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { MAX_RATE } from "../../lib/earnings.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
@@ -314,10 +315,11 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   };
   const skills = skillsApi(store, delay);
   const lessons = lessonsApi(() => store.clips, () => faults.lessons, () => delay());
+  const follows = followsApi((ev) => mockLive.publish(ev), () => delay());
   if (typeof window !== "undefined") {
     // Merge, never replace: posting (above) and setup (mock/setup.ts) keep their knobs on the same object.
     const w = window as unknown as { __cfMock?: Record<string, unknown> & Partial<MockSkillControls> };
-    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls);
+    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { follows: follows.controls });
   }
 
   const api: Api = {
@@ -507,6 +509,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     ...skills.api,
     ...lessons,
+    ...follows.api,
     async getSettings() {
       await delay();
       return clone(store.settings);
@@ -547,6 +550,11 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (next.backgroundMode !== undefined && !isBackgroundMode(next.backgroundMode)) throw bad("Pick See-through, Picture or Colours.");
       if (next.glassStrength !== undefined && !isGlassStrength(next.glassStrength)) throw bad("Pick Clear or Frosted.");
       if (next.clipModel !== undefined && !isClipModel(next.clipModel)) throw bad("Pick one of the AI models in the list.");
+      // §24: the same ranges as the API (0 is "no limit").
+      const whole = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
+      if (next.followDailyMax !== undefined && !whole(next.followDailyMax, 0, 20)) throw bad("How many a day must be a number from 1 to 20.");
+      if (next.followMinMinutes !== undefined && !whole(next.followMinMinutes, 10, 240)) throw bad("The shortest video must be a number from 10 to 240 minutes.");
+      if (next.followPaused !== undefined && typeof next.followPaused !== "boolean") throw bad("followPaused must be true or false.");
       if (next.backgroundColours !== undefined) {
         const c = next.backgroundColours;
         if (!Array.isArray(c) || c.length < 1 || c.length > MAX_COLOURS || !c.every(isHexColour)) throw bad("Pick 1 to 3 colours.");

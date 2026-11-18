@@ -205,6 +205,7 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 | settings | `/settings/clip-making/clips` |
 | settings | `/settings/clip-making/skills` |
 | settings | `/settings/clip-making/learned` |
+| settings | `/settings/clip-making/streamers` |
 | settings | `/settings/clip-making/youtube` |
 | settings | `/settings/posting/setup` |
 | settings | `/settings/posting/where` |

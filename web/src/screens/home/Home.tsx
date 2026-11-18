@@ -9,6 +9,7 @@ import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { applyClipEvent, applyJobEvent, withMedia } from "../../lib/liveCache.ts";
 import { GetAppBanner } from "../../components/GetApp.tsx";
 import { NewJobForm } from "./NewJobForm.tsx";
+import { StreamersRow } from "./StreamersRow.tsx";
 
 export interface HomeData {
   jobs: Job[];
@@ -129,6 +130,7 @@ export function Home() {
         </div>
         <Stat views={data?.views ?? null} posts={data?.postsChecked ?? 0} unavailable={data !== null && data.views === null} />
       </section>
+      <StreamersRow />
     </div>
   );
 }
