@@ -130,12 +130,14 @@ The look and the exact numbers are in [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#
   the right (520 ms) and a new one fade back in (240 ms); the question bubble does not wait for it. With reduced motion
   the plane only fades. The motion is reusable by any button (`useLaunch` / `<Flight>` in
   `web/src/components/PaperPlane.tsx`, `web/src/styles/fly.css`).
-- **The launcher keeps out of the way**: it never sits on a control. It finds every link, button, field or focusable
-  thing on screen by itself (plus blocks marked `data-help-dodge`), lifts to the first free spot above them, steps
-  aside when that would take it above 40 % of the window, takes no taps while it slides, and every page keeps extra
-  room under its last control. Only what shows counts: a tab scrolled out of its row or a line cut off by a scroller
-  is no obstacle. The buttons of the setup to-do list count like any other control, so with the list open at the top
-  right the launcher stays in its corner under it.
+- **The launcher stays calm and out of the way**: it has one home spot (phones: above the tab bar at the right; wide
+  screens: bottom right) and never moves; nothing about it changes while the page scrolls or a finger is down. Once
+  the page has been still (260 ms), if it would make a control hard to tap (covering over 30 % of it, or leaving no
+  44 px part of it free; a big card or row link it rests on the edge of does not count) it fades out where it stands,
+  letting taps through; it fades back in only after 700 ms of stillness with its spot clear, and holds each state for
+  at least a second, so it never blinks. Every page keeps extra room under its last control. Only what shows counts: a
+  tab scrolled out of its row or a line cut off by a scroller is no obstacle. The buttons of the setup to-do list
+  count like any other control, so with the list open at the top right the launcher stays in its corner under it.
 - **Spotlight**: a very tall target (over 60 % of the window) rings only its heading, 80 px from the top.
 - **Go Home** is left out of the "I don't know" answer while you are already on Home.
 

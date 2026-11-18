@@ -192,7 +192,13 @@ export function SetupTodo() {
   if (phase === "list" && hiddenHere) return null;
 
   const { finished, total } = todoCount(rows);
-  const bar = <div className={`setup-todo-bar glass${scrolled ? " is-scrolled" : ""}`} aria-hidden="true" />;
+  // The bar is the strip that takes the taps; its glass is a child that runs on a little below it and melts into the
+  // page there, so the soft edge never takes a tap meant for what shows through it.
+  const bar = (
+    <div className={`setup-todo-bar${scrolled ? " is-scrolled" : ""}`} aria-hidden="true">
+      <div className="setup-todo-bar__glass glass" />
+    </div>
+  );
 
   if (phase !== "list") {
     // Where the list was on screen its room stays until the card has left (the page moves once, afterwards); on the

@@ -2,42 +2,40 @@ import { describe, expect, it, vi } from "vitest";
 import type { Api, Job, WeekClip } from "../src/api/types.ts";
 import { chatReducer, historyOf, initialChat, newestAnswerId } from "../src/features/help/chatState.ts";
 import { deviceOf } from "../src/features/help/context.ts";
-import { DODGE_GAP, liftFor, nextScroll } from "../src/features/help/dodge.ts";
+import { blocks, DODGE_COVER, DODGE_HOLD_MS, DODGE_RETURN_MS, DODGE_SETTLE_MS, DODGE_TAP, hardToTap } from "../src/features/help/dodge.ts";
 import { readLive } from "../src/features/help/live.ts";
 import { nameOf, ringTarget } from "../src/features/help/spotlight.ts";
 import { hasUnsaved, registerUnsaved } from "../src/features/help/unsaved.ts";
 import type { HelpAnswer } from "../src/features/help/types.ts";
 
-describe("dodge math", () => {
-  it("hides after more than 8 px down, shows after more than 8 px up, ignores small moves", () => {
-    let s = { anchor: 100, hidden: false };
-    s = nextScroll(s, 105);
-    expect(s).toEqual({ anchor: 100, hidden: false });
-    s = nextScroll(s, 120);
-    expect(s.hidden).toBe(true);
-    s = nextScroll(s, 115);
-    expect(s.hidden).toBe(true);
-    s = nextScroll(s, 100);
-    expect(s.hidden).toBe(false);
-    expect(nextScroll({ anchor: 30, hidden: true }, 0).hidden).toBe(false);
+describe("the launcher's spot (§19.8)", () => {
+  // The phone circle, 56 px, above the tab bar at the right.
+  const base = { top: 700, bottom: 756, left: 300, right: 356 };
+
+  it("makes a control hard to tap only when it covers much of it or leaves no 44 px part free", () => {
+    expect(blocks(base, [])).toBe(false);
+    // Not touching it: never.
+    expect(hardToTap(base, { top: 720, bottom: 780, left: 0, right: 200 })).toBe(false);
+    expect(hardToTap(base, { top: 756, bottom: 800, left: 0, right: 400 })).toBe(false);
+    // A big row link or card it rests on the edge of: most of it is still free to tap.
+    expect(hardToTap(base, { top: 680, bottom: 780, left: 16, right: 374 })).toBe(false);
+    expect(hardToTap(base, { top: 730, bottom: 790, left: 0, right: 400 })).toBe(false);
+    // A switch or a small button under it: covered by more than 30 %.
+    expect(hardToTap(base, { top: 712, bottom: 744, left: 310, right: 362 })).toBe(true);
+    expect(hardToTap(base, { top: 712, bottom: 744, left: 280, right: 340 })).toBe(true);
+    // A button it only nicks, but what is left beside it is under 44 px each way.
+    expect(hardToTap(base, { top: 748, bottom: 792, left: 320, right: 400 })).toBe(false);
+    expect(hardToTap(base, { top: 700, bottom: 744, left: 330, right: 400 })).toBe(true);
+    expect(DODGE_COVER).toBe(0.3);
+    expect(DODGE_TAP).toBe(44);
   });
 
-  it("lifts above an overlapping bar with a 12 px gap, and gives up past the cap", () => {
-    const base = { top: 700, bottom: 756, left: 300, right: 356 };
-    expect(liftFor(base, [], 300)).toBe(0);
-    // A bar to the left does not matter.
-    expect(liftFor(base, [{ top: 720, bottom: 780, left: 0, right: 200 }], 300)).toBe(0);
-    // A bar across the launcher: lift so its bottom sits 12 px above the bar's top.
-    expect(liftFor(base, [{ top: 730, bottom: 790, left: 0, right: 400 }], 300)).toBe(756 - 730 + DODGE_GAP);
-    expect(liftFor(base, [{ top: 300, bottom: 790, left: 0, right: 400 }], 200)).toBeNull();
-  });
-
-  it("keeps lifting when clearing one control lands it on the next one up", () => {
-    const base = { top: 700, bottom: 756, left: 300, right: 356 };
-    const row = { top: 730, bottom: 790, left: 0, right: 400 };
-    const field = { top: 640, bottom: 715, left: 0, right: 400 };
-    expect(liftFor(base, [field, row], 300)).toBe(756 - 640 + DODGE_GAP);
-    expect(liftFor(base, [field, row], 100)).toBeNull();
+  it("fades out sooner than it comes back, and holds each state a while", () => {
+    expect(DODGE_SETTLE_MS).toBeGreaterThanOrEqual(200);
+    expect(DODGE_SETTLE_MS).toBeLessThanOrEqual(400);
+    expect(DODGE_RETURN_MS).toBeGreaterThanOrEqual(600);
+    expect(DODGE_RETURN_MS).toBeLessThanOrEqual(800);
+    expect(DODGE_HOLD_MS).toBeGreaterThanOrEqual(1000);
   });
 });
 

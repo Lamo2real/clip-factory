@@ -150,6 +150,50 @@ test.describe("on a phone", () => {
   });
 });
 
+// The light of "Find a setting" traces the panel's own lines (§15): an apple alone in its panel lights the whole
+// panel, whatever else the panel holds; one of several lights its row from the panel's left edge to its right edge.
+for (const width of [390, 1440]) {
+  test.describe(`the found light at ${width} px`, () => {
+    test.use({ viewport: { width, height: 900 } });
+    for (const c of [
+      { path: "/settings/look-and-feel/sounds#try-sounds", id: "try-sounds", whole: true },
+      { path: "/settings/look-and-feel/sounds#error-sound", id: "error-sound", whole: true },
+      { path: "/settings/look-and-feel/background#glass-strength", id: "glass-strength", whole: false },
+      { path: "/settings/look-and-feel/background#background-picture", id: "background-picture", whole: false },
+    ]) {
+      test(`#${c.id} is lit along the panel's edges`, async ({ page }) => {
+        await page.goto(c.path);
+        await settle(page);
+        const apple = page.locator(`#${c.id}`);
+        await expect(apple).toHaveClass(/is-found/);
+        const m = await apple.evaluate((el) => {
+          const panel = el.closest(".apple-panel")!;
+          const p = panel.getBoundingClientRect();
+          const a = el.getBoundingClientRect();
+          const s = getComputedStyle(el, "::after");
+          return {
+            panel: { w: p.width, h: p.height },
+            apple: { h: a.height },
+            light: { w: parseFloat(s.width), h: parseFloat(s.height), radius: s.borderTopLeftRadius },
+            panelRadius: getComputedStyle(panel).borderTopLeftRadius,
+            outline: getComputedStyle(el).outlineColor,
+            ring: getComputedStyle(el).boxShadow,
+          };
+        });
+        expect(Math.abs(m.light.w - m.panel.w)).toBeLessThanOrEqual(1);
+        if (c.whole) {
+          expect(Math.abs(m.light.h - m.panel.h)).toBeLessThanOrEqual(1);
+          expect(m.light.radius).toBe(m.panelRadius);
+        } else {
+          expect(m.light.h).toBeLessThan(m.panel.h);
+        }
+        // No ring of its own around the apple: only the light on the panel's lines.
+        expect(m.ring).toBe("none");
+      });
+    }
+  });
+}
+
 test.describe("on a desktop", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 

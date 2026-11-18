@@ -46,8 +46,10 @@ export async function settle(page: Page) {
 }
 
 /**
- * Waits until the Ask launcher has settled: not stepped aside for a scroll and not moving, for three frames in a row
- * (its measure runs on the frame after a change and its move starts on the next). Frames and events, not time.
+ * Waits until the Ask launcher has settled (docs/CONTRACTS.md §19.8): it changes only once the page has been still
+ * (and fades back in after a longer stillness, holding each state a while), and carries data-settling while a change
+ * may still come. So: a frame for any scroll before this call to reach it, then three frames in a row with no
+ * data-settling and no fade running.
  */
 export async function launcherSettled(page: Page) {
   await page.evaluate(
@@ -56,12 +58,12 @@ export async function launcherSettled(page: Page) {
         let calm = 0;
         const tick = () => {
           const el = document.querySelector<HTMLElement>(".help-launcher");
-          const still = !el || (el.dataset.dodge !== "scroll" && el.getAnimations().every((a) => a.playState !== "running"));
+          const still = !el || (!el.hasAttribute("data-settling") && el.getAnimations().every((a) => a.playState !== "running"));
           calm = still ? calm + 1 : 0;
           if (calm >= 3) resolve();
           else requestAnimationFrame(tick);
         };
-        requestAnimationFrame(tick);
+        requestAnimationFrame(() => requestAnimationFrame(tick));
       }),
   );
 }

@@ -1110,7 +1110,9 @@ Branch routes are nested: `/settings/look-and-feel/sounds`. `/get-app` keeps wor
 
 ### 15.2 How it looks and moves (kid-proof, §12.4)
 * `/settings` (the field): a short search box "Find a setting" that searches every apple and leaf by name and jumps
-  straight to it (highlights it), then the four trees as big glass cards (icon, name, one line, how many apples).
+  straight to it (highlights it on the panel's own lines for 2 s: the whole panel when the apple is alone in it, else
+  its row from edge to edge between the dividers, with the panel's corners on the first and last row; never an outer
+  ring, and the apple's programmatic focus draws no second ring, `settings.css` `.apple::after`), then the four trees as big glass cards (icon, name, one line, how many apples).
 * A tree page lists its branches as cards (icon, name, one line). A branch page shows its apples as rows grouped in
   glass panels, each with its leaf under it.
 * Breadcrumb on every level: `Settings › Look & feel › Sounds` (each part a link) plus a big Back button on phones.
@@ -2540,10 +2542,16 @@ over the page:
   "Set up posting" + "2/5" (the words show at every width, 320 px too; its name reads "Set up posting: 2 of 5 done").
   The page leaves a strip for it at the top: `--todo-top` (60 px on phones, 58 px from 768 px) on `html`, added to
   `.shell`'s top padding, so at the top of every page nothing is under it (phones: above the brand row and Live dot;
-  the tab bar is at the bottom). Behind the pill is `.setup-todo-bar`, a `.glass` bar over that strip (`--todo-bar-h`:
-  66 / 76 px; from 768 px it starts right of the sidebar): invisible at the top of the page, there (`is-scrolled`, and
-  it takes the taps) as soon as the page scrolls, so the page slides under glass and the pill stays on screen at
-  every scroll position; it never steps aside. `html` gets `scroll-padding-top` below the bar, so Tab, a `#part` link
+  the tab bar is at the bottom). Behind the pill is `.setup-todo-bar`, a band of the panels' liquid glass (the
+  `.glass` tint and blur) over that strip (`--todo-bar-h`: 66 / 76 px; from 768 px it starts right of the sidebar)
+  with **no edges**: no border, rim, hairline, highlight line or shadow; it runs off the top of the screen under the
+  status bar, and its bottom melts into the page over `--todo-feather` (22 px, a `mask-image` fade of the tint and
+  blur together; from 768 px its left side melts in over 24 px too), so no line shows where it ends. The strip
+  itself (`.setup-todo-bar`, `--todo-bar-h` tall) takes the taps; its glass (`.setup-todo-bar__glass`) runs on
+  below it into the fade, which takes no taps. Invisible at the
+  top of the page, there (`is-scrolled`, and it takes the taps) as soon as the page scrolls, so the page slides under
+  glass and the pill stays on screen at every scroll position; it never steps aside. `html` gets `scroll-padding-top`
+  below the bar's fade (`--todo-bar-h` + `--todo-feather` + 8 px), so Tab, a `#part` link
   and `scrollIntoView` stop below it; sticky parts of pages add `--todo-top` (Review's video, Settings' folder panel);
   the clip page's video is shorter by `--todo-top` (`performance.css`), so the stacks (desktop) and the winner and five
   chips (phones) still start on the first screen. Tapping the pill opens the list as a glass panel dropping from the
@@ -2558,8 +2566,8 @@ over the page:
   other, so the launcher can never come to rest on one (only `.setup-todo-bar` and the open panel's
   `.setup-todo-scrim` are in its chrome list, `features/help/dodge.ts`). And because the launcher only keeps clear of
   what shows (§19.8 `shownBox`), a strip of the page that runs on under the column, or rows scrolled out of the column
-  on a short window, never lift it onto the list or make it step aside: with the column open it stays in its corner
-  at every scroll position.
+  on a short window, never make it fade out: with the column open it stays in its corner, shown, at every scroll
+  position.
 * **No jump on load**: the list waits for the setups, so it arrives a moment after the page. Where the list was on
   screen the last time this device looked (`localStorage["cf-setup-todo-open"]`), an empty `.setup-todo--hold` with
   the same `data-mode` keeps its room from the first paint, so the page does not move when the list shows.
@@ -2602,7 +2610,7 @@ unconfirmed skip changes nothing, skip/un-skip order, both skip questions, the s
 lines, hidden pages, no column on a clip's page, and the column's width rule read from the CSS: with it open at
 `TODO_RAIL_MIN` the page keeps the room of every wider layout's starting width; `setup-todo.css` sets no cursor, no
 `backdrop-filter` and no background on a surface), `test/setupTodoList.test.tsx` (the component: its room kept while the setups load and given back when they cannot
-be read, the panel as a dialog with the page behind it `inert`, the skip question), `test/helpDodgeText.test.ts`
+be read, the panel as a dialog with the page behind it `inert`, the skip question), `test/helpDodge.test.tsx`
 (`shownBox`, `controlBoxes` with the
 column's own scroller) and `test/session.test.tsx` (an updater builds on a save still on its way); pytest
 `test_settings_and_system.py` (default, saved in order without repeats, un-skip, validation, bad stored value) and
@@ -2621,8 +2629,8 @@ and below nothing, the page behind the panel is `inert` and messages are not, Ta
 up from the panel lands focus on `<main>`; the pill stays on screen at every scroll position of the main pages on its
 glass bar, and Tab brings a control out from under the bar; the last skip from the panel leaves focus on `<main>`; at
 320 px the pill still says "Set up posting"; the Ask pill keeps its corner under the open column at every scroll
-position (1920 px with the update bar, 1440×900, 1440×600 with rows scrolled out of the column): not lifted, not
-stepped aside, on none of the list's buttons; a reload keeps the list's room from the first paint at 1440 and 375 px;
+position (1920 px with the update bar, 1440×900, 1440×600 with rows scrolled out of the column): not moved, not
+faded out, on none of the list's buttons; a reload keeps the list's room from the first paint at 1440 and 375 px;
 never covers a control at 320/375/768/1024/1280/1440/1920 in light and dark at the top, middle and bottom of each page,
 no overflow with the plain list and with one row of every kind, targets ≥ 44 px (48 px on phones), only the arrow
 cursor); `e2e/contrast.spec.ts` reads every face of the list with the audit's three checks (axe, every text run against
@@ -3334,29 +3342,38 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   12 px **above the update bar** when it is shown (UpdateBar sets `--update-bar-h` on `<html>` with a
   `ResizeObserver`; 0 when hidden). Phones: 56 px icon-only glass circle (`aria-label="Ask Clip Factory"`), `right:
   max(16px, safe-area-inset-right)`, bottom = `--tabbar-h` + safe area + 18 px + `--update-bar-h` (+ 10 px), so it
-  never covers the tab bar or the update bar. **Dodge** (`dodge.ts`): hides (fade + 12 px slide, none with reduced
-  motion) while scrolling down more than 8 px, comes back on scroll up or 600 ms after scrolling stops, stays while it
-  or the panel has keyboard focus, and never sits on a control: it lifts to the first free spot above every link,
-  button, field, tab, switch or focusable element it would overlap (read from the page, so no markup is needed; a card
-  that is a link counts through the controls inside it), plus any block marked `data-help-dodge` (the Review action
-  bar, the Home link box, the sound grid, the **Try it** controls…). It measures its resting layout box
-  (`offsetTop`/`offsetLeft`, which no transform changes), so fonts, slow machines and its own slide do not skew it,
-  and measures again on scroll, resize, DOM and size changes and font loads. While it slides to a new spot it takes no
-  taps (`data-moving`, `pointer-events: none`), so a tap on a control it passes over reaches the control. When lifting
-  would push it above 40 % of the window height, it steps aside (hidden, `data-dodge="blocked"`) instead, so on long
-  lists of rows (Jobs, Settings on a phone, Review at 1440 px) it shows once the owner scrolls to a free spot or the
-  end. **Only what shows counts** (`shownBox`): a control or a line of words is measured by the part of it inside
-  every ancestor that cuts off its content (a scroller, a clamped line, a card with hidden overflow; a fixed box is
-  not cut by what holds it, an absolutely placed one only from the box it is placed against). A tab scrolled out of
-  its row, the third line of a two-line clamp, or a strip that runs on under another panel is not on screen there, so
-  it is no obstacle. The setup list (§17.13) is not chrome: its buttons are controls the launcher keeps off like any
-  other. **Words**: it also keeps off lines of text (text nodes in its column, measured with `Range.getClientRects`;
-  text never seen on screen, i.e. hidden, inert, `aria-hidden` or `.sr-only`, does not count) when a spot clear of both controls and words is within the same 40 % reach. When there is none (on a phone, words
-  usually run the full width) it takes the control-only spot and marks itself `data-on-words`; words alone never make
-  it step aside, so Ask is always there to tap. Scrolling moves the words out from under it. Settled, it never covers a control at any width from 320 to 1920 px, at the top of a page or after scrolling,
-  with or without the update bar, and with other fonts (`e2e/help.spec.ts`). Every page adds bottom padding under its
-  last control so the launcher always has room at the end. green glass, never
-  vermilion.
+  never covers the tab bar or the update bar. **One home spot, calm** (`dodge.ts`): it never moves. No lift, no
+  glide, nothing sideways, never towards the middle of the screen, and nothing changes while the page scrolls or a
+  finger is on the screen, however the page scrolls (a drag, a wheel, a fling and its momentum, an iOS rubber-band
+  bounce, a drag that pauses mid-gesture; a resize counts the same). The only thing it ever does is **fade out where it
+  stands** (opacity 0 and a slight shrink to 0.9 over 420 ms; `is-hidden`, `data-dodge="blocked"`, `pointer-events:
+  none`, so a tap there reaches the control), and only when it would make a control **hard to tap** (`hardToTap`): it
+  covers more than `DODGE_COVER` (30 %) of the control's area, or no part of the control at least `DODGE_TAP` (44 px,
+  or the control's own size when smaller) each way is left free beside it. A big row link or card it rests on the
+  edge of (tree cards, Sounds hits, job rows, a full-width field) stays easy to tap, so it never hides it; a switch, a
+  small button or a choice under it does. **When**: it may fade out once the page and the finger have been still for
+  `DODGE_SETTLE_MS` (260 ms; touchstart / touchend are tracked, so a held finger is not still), fades back in only
+  after `DODGE_RETURN_MS` (700 ms) of stillness with the spot clear, and keeps each state for at least
+  `DODGE_HOLD_MS` (1 s), so short scrolls at reading pace cannot make it blink. While a change may still come it
+  carries `data-settling` (tests wait for it to go). No fade with reduced motion (it simply goes). A page that opens
+  is looked at at once, and a page that changes under a still launcher (content loading in, the update bar) is looked
+  at on the next frame (the same stillness and hold apply). With **keyboard** focus on it (`:focus-visible`) it shows
+  and stays; focus handed back to it after a tap (Close) does not hold it; with its
+  panel open it shows. Controls are
+  every link, button, field, tab, switch or focusable element (read from the page, so no markup is needed; a card
+  that is a link counts through the controls inside it), plus the parts of any block marked `data-help-dodge` (each
+  choice of a pick-one row, the Review action bar's buttons, the Home link box, the sound cards, the **Try it**
+  controls…), so the empty end of a row is no obstacle. It measures its resting layout box
+  (`offsetTop`/`offsetLeft`, which no transform changes), so fonts, slow machines and its own fade do not skew it.
+  **Only what shows counts** (`shownBox`): a control is measured by the part of it inside every ancestor that cuts off
+  its content (a scroller, a card with hidden overflow; a fixed box is not cut by what holds it, an absolutely placed
+  one only from the box it is placed against). A tab scrolled out of its row or a strip that runs on under another
+  panel is not on screen there, so it is no obstacle. The setup list (§17.13) is not chrome: its buttons are controls
+  like any other. Words are not obstacles: a floating button over a line of text is expected, and scrolling moves the
+  words out from under it. Settled, it never rests on a control at any width from 320 to 1920 px, at the top of a page
+  or after scrolling, with or without the update bar, and with other fonts (`e2e/help.spec.ts`). Every page adds
+  bottom padding under its last control so the last control can always be scrolled clear of the spot, and the
+  launcher shows at home at the end. Green glass, never vermilion.
 * **Panel**: `role="dialog" aria-labelledby`. Desktop: **non-modal** (`aria-modal="false"`, Tab stays natural), 400 px
   wide, `max-height: min(640px, 100dvh - 140px)`, anchored above the launcher. Phones (< 768 px): a **modal**
   full-screen sheet (`aria-modal="true"`; the page and the launcher are `inert`; Tab and Shift+Tab go round inside the
@@ -3491,7 +3508,7 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
 * **web** (Vitest): retriever evals; composer; `when` filter; route check drops a bad action; generator `--check` and
   the sensitive/dash test over the corpus; `helpApi` timeout, no `keepalive`, 401 refresh; 429 → countdown, no retry;
   5xx/network → local answer; status off → hidden and local fallback disabled; live fill and live failure; unsaved
-  guard; dodge math, words as obstacles (`helpDodgeText.test.ts`); route names → API pages and the mock's 400 on an
+  guard; the launcher's spot (`hardToTap`, `blocks`) and its calm fade, which changes nothing mid-scroll or under a finger, comes back later than it goes and holds each state (`helpDodge.test.tsx`); route names → API pages and the mock's 400 on an
   unknown page (`helpPages.test.ts`).
   **Playwright (mock mode)** `e2e/help.spec.ts` at **375×812** and **1440×900**: launcher name and position (not over
   the tab bar or the update bar; above the update bar on desktop); open → three suggestions; "Where do I change my click
@@ -4359,8 +4376,9 @@ everywhere.
     0.90–0.95, the starred star's vermilion).
   * **Nothing that holds words is weaker than the panel tint.** What can sit straight on the window carries at least
     that much: the tab bar, glass, ghost and danger buttons (also on hover), the Library tabs.
-  * Every piece of text that sits straight on the window **or the picture** gets the panel tint as a scrim that hugs
-    the words (`box-shadow` spread, so nothing moves): page title and its line, breadcrumbs, the phone top-bar name,
+  * Every piece of text that sits straight on the window **or the picture** gets the panel tint as a plate of real
+    padding (8 px above and below; at the sides the words keep their `--loose-x` start, so the plate starts at the
+    page edge like a panel and never hugs or cuts a letter): page title and its line, breadcrumbs, the phone top-bar name,
     the headings and lines between panels, back links, the review count, setup part titles, a clip page's title and
     "Updated" line, This week's title, its star line and its count and money line, a skill's meta line.
   * Pick-one tracks (`.segmented`, `.tabs`, the Background tiles, the AI models) carry 0.10 more green than a panel

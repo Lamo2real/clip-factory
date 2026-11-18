@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { DODGE_HOLD_MS, DODGE_SETTLE_MS } from "../src/features/help/dodge.ts";
 import { animationsDone, findOverflow, launcherSettled, settle } from "./helpers.ts";
 
 /** The launcher's box when it is shown (not stepped aside), else null. */
@@ -11,7 +12,10 @@ async function shownLauncher(page: Page) {
   });
 }
 
-/** Links, buttons, fields and anything focusable on the page that share area with the shown launcher. */
+/**
+ * Links, buttons, fields and anything focusable on the page that the shown launcher makes hard to tap: it covers more
+ * than 30 % of one, or leaves no part of it 44 px (or its own size, if smaller) each way free beside it (§19.8).
+ */
 async function coveredControls(page: Page) {
   return page.evaluate(() => {
     const el = document.querySelector<HTMLElement>(".help-launcher");
@@ -29,7 +33,16 @@ async function coveredControls(page: Page) {
       if (r.width < 1 || r.height < 1) continue;
       const w = Math.min(r.right, l.right) - Math.max(r.left, l.left);
       const h = Math.min(r.bottom, l.bottom) - Math.max(r.top, l.top);
-      if (w > 0 && h > 0) out.push(`${c.tagName.toLowerCase()}.${String(c.className).split(" ")[0]} "${(c.getAttribute("aria-label") || c.textContent || "").trim().slice(0, 30)}" ${Math.round(w)}x${Math.round(h)}`);
+      if (w <= 0 || h <= 0) continue;
+      const needW = Math.min(44, r.width);
+      const needH = Math.min(44, r.height);
+      const free = [
+        [l.left - r.left, r.height],
+        [r.right - l.right, r.height],
+        [r.width, l.top - r.top],
+        [r.width, r.bottom - l.bottom],
+      ].some(([fw, fh]) => fw! >= needW && fh! >= needH);
+      if ((w * h) / (r.width * r.height) > 0.3 || !free) out.push(`${c.tagName.toLowerCase()}.${String(c.className).split(" ")[0]} "${(c.getAttribute("aria-label") || c.textContent || "").trim().slice(0, 30)}" ${Math.round(w)}x${Math.round(h)}`);
     }
     return out;
   });
@@ -127,17 +140,19 @@ for (const size of SIZES) {
       if (await panel(page).count()) await panel(page).getByRole("button", { name: "Close" }).click({ timeout: 3000 }).catch(() => undefined);
       await expect(panel(page)).toHaveCount(0);
       await page.mouse.wheel(0, -5);
-      // Where controls fill its column the launcher steps aside until the owner scrolls to a free spot (§19.8). Whether
-      // this exact spot is free depends on what is above it on the page: with the setup list's strip at the top
-      // (§17.13) Keep is centred a little lower, and the next card ends under the launcher. So scroll on a little,
-      // like the owner would, until it is back.
+      // Where a control is under its spot and no clear spot is a small nudge away, the launcher fades out until the
+      // owner scrolls to a free spot (§19.8). Whether this exact spot is free depends on what is above it on the page
+      // (the setup list's strip, cards still loading in), so scroll on a little, like the owner would, until it shows,
+      // then tap it.
       await launcherSettled(page);
-      for (let step = 0; step < 20 && (await launcher(page).getAttribute("data-dodge")) === "blocked"; step++) {
-        await page.mouse.wheel(0, 40);
-        await launcherSettled(page);
-      }
-      await expect(launcher(page)).not.toHaveClass(/is-hidden/, { timeout: 2000 });
-      await launcher(page).click();
+      await expect(async () => {
+        if ((await launcher(page).getAttribute("data-dodge")) === "blocked") {
+          await page.mouse.wheel(0, 40);
+          await launcherSettled(page);
+        }
+        await launcher(page).click({ timeout: 1500 });
+        await expect(panel(page)).toBeVisible({ timeout: 1000 });
+      }).toPass({ timeout: 30_000 });
       await expect(panel(page).locator(".help-msg--me")).toHaveText(["What does Keep do?"]);
       await expect(panel(page).locator(".help-steps li")).toHaveCount(3);
       await panel(page).getByRole("button", { name: "Start over" }).click();
@@ -153,7 +168,9 @@ for (const size of SIZES) {
       await expect(page.getByRole("region", { name: "New version" })).toBeVisible();
       await animationsDone(page); // the update bar slides in
       await launcherSettled(page);
-      const b = (await btn.boundingBox())!;
+      // Its spot (it may be faded out there over a control, a little smaller): the layout box.
+      const spot = (el: HTMLElement) => ({ x: el.offsetLeft, y: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight });
+      const b = await btn.evaluate(spot);
       const barNow = (await page.getByRole("region", { name: "New version" }).boundingBox())!;
       expect(barNow.height).toBeGreaterThan(0);
       expect(b.y + b.height).toBeLessThanOrEqual(barNow.y - (size.phone ? 9 : 11));
@@ -171,12 +188,12 @@ for (const size of SIZES) {
       await page.goto("/");
       await settle(page);
       await launcherSettled(page);
-      const plain = (await launcher(page).boundingBox())!;
+      const plain = await launcher(page).evaluate(spot);
       if (size.phone) {
         const tabs = (await page.locator("nav.tabbar").boundingBox())!;
         expect(plain.y + plain.height).toBeLessThanOrEqual(tabs.y);
       } else {
-        // Its resting spot is 24 px off the bottom (it may lift from there to stay off a control on the page).
+        // Its home spot is 24 px off the bottom (it may nudge up a little from there, or fade out, over a control).
         const rest = await launcher(page).evaluate((el: HTMLElement) => innerHeight - (el.offsetTop + el.offsetHeight));
         expect(rest).toBeCloseTo(24, 0);
         expect(size.height - (plain.y + plain.height)).toBeGreaterThanOrEqual(24 - 0.5);
@@ -363,45 +380,113 @@ for (const size of SIZES) {
         .toBe(0);
     });
 
-    test("the launcher steps aside while scrolling down and comes back on scroll up", async ({ page }) => {
+    test("the launcher never moves, and changes only once the page is still, however it scrolls", async ({ page }) => {
       await page.goto("/");
       await settle(page);
-      // Waits on events, not time. Each smooth scroll (like a finger or a wheel) is read inside the page: was the
-      // launcher hidden when the scroll began, and is it once its class flips (a 3 s cap only turns a hang into a
-      // clear failure). Scrolls given together run back to back, the next one starting in the same turn the flip
-      // was seen, so nothing (the 600 ms settle, a late frame) can change the launcher in between.
-      const scrollAndRead = (...tops: number[]) =>
-        page.evaluate(async (tops) => {
-          const el = document.querySelector(".help-launcher")!;
-          const hidden = () => el.classList.contains("is-hidden");
-          const out: { was: boolean; now: boolean }[] = [];
-          for (const top of tops) {
-            const was = hidden();
-            const now = await new Promise<boolean>((resolve) => {
-              const done = () => (seen.disconnect(), clearTimeout(cap), resolve(hidden()));
-              const seen = new MutationObserver(() => hidden() !== was && done());
-              seen.observe(el, { attributes: true, attributeFilter: ["class"] });
-              const cap = setTimeout(done, 3000);
-              window.scrollTo({ top, behavior: "smooth" });
-            });
-            out.push({ was, now });
-          }
-          return out;
-        }, tops);
-      // Every scroll stays inside the page: one aimed past the end stops short, and may then not move at all.
+      await launcherSettled(page);
       expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBeGreaterThan(400);
-      // Down hides it; up, begun while it is still hidden, brings it back.
-      expect(await scrollAndRead(400, 100)).toEqual([
-        { was: false, now: true },
-        { was: true, now: false },
-      ]);
-      // Start the last scroll from rest (the page has stopped at 100 and the launcher is showing), not in the middle
-      // of the one before: a new smooth scroll carries on from wherever the old one is, at its speed.
-      await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(100);
+      // Read inside the page, frame by frame: where the launcher is drawn, and when its fade state flips, against
+      // when the page last scrolled. A long smooth scroll down, one back up, then small wheel nudges both ways
+      // (like a resting thumb, or momentum ending in a bounce).
+      const r = await page.evaluate(async () => {
+        const el = document.querySelector<HTMLElement>(".help-launcher")!;
+        const home = el.getBoundingClientRect();
+        let lastScroll = -Infinity;
+        let moved = 0;
+        let sideways = 0;
+        const flips: { since: number; at: number }[] = [];
+        let hidden = el.classList.contains("is-hidden");
+        const onScroll = () => (lastScroll = performance.now());
+        window.addEventListener("scroll", onScroll, { passive: true });
+        let run = true;
+        const tick = () => {
+          const b = el.getBoundingClientRect();
+          // The fade shrinks it a little around its centre; its centre never moves.
+          sideways = Math.max(sideways, Math.abs(b.left + b.width / 2 - (home.left + home.width / 2)));
+          moved = Math.max(moved, Math.abs(b.top + b.height / 2 - (home.top + home.height / 2)));
+          const now = el.classList.contains("is-hidden");
+          if (now !== hidden) {
+            hidden = now;
+            flips.push({ since: performance.now() - lastScroll, at: performance.now() });
+          }
+          if (run) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+        const until = (cond: () => boolean) =>
+          new Promise<void>((res) => {
+            const t0 = performance.now();
+            const check = () => (cond() || performance.now() - t0 > 4000 ? res() : requestAnimationFrame(check));
+            check();
+          });
+        window.scrollTo({ top: 400, behavior: "smooth" });
+        await until(() => Math.abs(window.scrollY - 400) < 1);
+        window.scrollTo({ top: 100, behavior: "smooth" });
+        await until(() => Math.abs(window.scrollY - 100) < 1);
+        for (let i = 0; i < 24; i++) {
+          window.scrollBy(0, i % 2 ? -10 : 12);
+          await new Promise((res) => setTimeout(res, 40));
+        }
+        await new Promise((res) => setTimeout(res, 1600));
+        run = false;
+        window.removeEventListener("scroll", onScroll);
+        return { moved, sideways, flips };
+      });
+      expect(r.sideways, "the launcher moved sideways").toBeLessThan(1);
+      expect(r.moved, "the launcher moved up or down").toBeLessThan(1);
+      // Every change began only once the page had been still for the settle time (timer slack), each held a while.
+      for (const f of r.flips) expect(f.since).toBeGreaterThanOrEqual(DODGE_SETTLE_MS - 20);
+      for (let i = 1; i < r.flips.length; i++) expect(r.flips[i]!.at - r.flips[i - 1]!.at).toBeGreaterThanOrEqual(DODGE_HOLD_MS - 50);
+    });
+
+    test("over a small control it fades out where it stands once scrolling settles, and back in when the spot is clear", async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      await launcherSettled(page);
+      // Its home spot: the layout box.
+      const home = await launcher(page).evaluate((el: HTMLElement) => ({ x: el.offsetLeft, y: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }));
+      await page.evaluate((spot) => {
+        const b = document.createElement("button");
+        b.id = "under-ask";
+        b.textContent = "Save";
+        // A small button in the page (it scrolls with it), 300 px further down than the spot for now.
+        b.style.cssText = `position:absolute;z-index:1;left:${spot.x - 10}px;width:${spot.width + 20}px;height:44px;top:${window.scrollY + spot.y + 6 + 300}px`;
+        document.body.appendChild(b);
+        // Room to scroll that far on any page.
+        document.body.style.minHeight = `${document.documentElement.scrollHeight + 600}px`;
+        window.scrollBy({ top: 300, behavior: "instant" });
+      }, home);
+      await launcherSettled(page);
+      await expect(launcher(page)).toHaveClass(/is-hidden/);
+      await expect(launcher(page)).toHaveAttribute("data-dodge", "blocked");
+      // Faded where it stands: same spot, and a tap there reaches the control.
+      const faded = (await launcher(page).boundingBox())!;
+      expect(Math.abs(faded.x + faded.width / 2 - (home.x + home.width / 2))).toBeLessThan(1);
+      expect(Math.abs(faded.y + faded.height / 2 - (home.y + home.height / 2))).toBeLessThan(1);
+      expect(await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.id, [home.x + home.width / 2, home.y + home.height / 2 + 6])).toBe("under-ask");
+      // Scrolled on so the spot is clear: it fades back in at the same spot.
+      await page.evaluate(() => document.getElementById("under-ask")!.remove());
+      await page.evaluate(() => window.scrollBy({ top: -300, behavior: "instant" }));
+      await launcherSettled(page);
       await expect(launcher(page)).not.toHaveClass(/is-hidden/);
-      expect(await scrollAndRead(400)).toEqual([{ was: false, now: true }]);
-      // And it comes back by itself once scrolling stops.
-      await expect(launcher(page)).not.toHaveClass(/is-hidden/, { timeout: 5000 });
+      expect(await coveredControls(page)).toEqual([]);
+    });
+
+    test("after its panel closes from a tap it still keeps clear of a control under its spot", async ({ page }) => {
+      await open(page);
+      await panel(page).getByRole("button", { name: /close/i }).first().click();
+      await expect(panel(page)).toHaveCount(0);
+      const home = await launcher(page).evaluate((el: HTMLElement) => ({ x: el.offsetLeft, y: el.offsetTop, width: el.offsetWidth }));
+      await page.evaluate((spot) => {
+        const b = document.createElement("button");
+        b.id = "under-ask";
+        b.textContent = "Save";
+        b.style.cssText = `position:absolute;z-index:1;left:${spot.x - 10}px;width:${spot.width + 20}px;height:44px;top:${window.scrollY + spot.y + 6 + 200}px`;
+        document.body.appendChild(b);
+        document.body.style.minHeight = `${document.documentElement.scrollHeight + 600}px`;
+        window.scrollBy({ top: 200, behavior: "instant" });
+      }, home);
+      await launcherSettled(page);
+      await expect(launcher(page)).toHaveClass(/is-hidden/);
     });
   });
 }
@@ -426,8 +511,8 @@ test.describe("Ask Clip Factory guides for posting setup and skills", () => {
   }
 });
 
-// The launcher never sits on a real control once it settles, at any width, at the top of each page and after
-// scrolling through it (it lifts to a free spot or steps aside), with the update bar too, and with other fonts.
+// The launcher never rests on a real control once the page settles, at any width, at the top of each page and after
+// scrolling through it (it nudges up a little or fades out in place), with the update bar too, and with other fonts.
 const WIDTHS = [320, 375, 390, 430, 768, 1024, 1440, 1920] as const;
 const ROUTES = [
   "/",
@@ -481,51 +566,108 @@ for (const v of VARIANTS) {
   });
 }
 
-// Audit F025: the launcher keeps off words too when a spot clear of them is within reach (§19.8). When there is none
-// it may rest on words (never on a control) and says so with data-on-words; it never covers words without knowing.
-async function coveredWords(page: Page) {
-  return page.evaluate(() => {
-    const el = document.querySelector<HTMLElement>(".help-launcher");
-    if (!el || el.classList.contains("is-hidden")) return [];
-    const l = el.getBoundingClientRect();
-    const out: string[] = [];
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    const range = document.createRange();
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      const p = n.parentElement;
-      // The launcher's own chrome, and words never seen on screen (dodge.ts UNSEEN_WORDS: hidden, inert, sr-only).
-      if (!n.nodeValue?.trim() || !p || p.closest(".help-launcher, .help-panel, .help-ring, .update-bar, .tabbar, .sidebar, [inert], [hidden], [aria-hidden='true'], .sr-only")) continue;
-      const s = getComputedStyle(p);
-      if (s.visibility === "hidden" || Number(s.opacity) === 0) continue;
-      range.selectNodeContents(n);
-      for (const r of Array.from(range.getClientRects())) {
-        const w = Math.min(r.right, l.right) - Math.max(r.left, l.left);
-        const h = Math.min(r.bottom, l.bottom) - Math.max(r.top, l.top);
-        if (w > 1 && h > 1) out.push(`"${n.nodeValue.trim().slice(0, 30)}" ${Math.round(w)}x${Math.round(h)}`);
-      }
-    }
-    return out;
-  });
-}
-
+// The launcher has one home spot (§19.8): at every scroll position of every page it is at that spot, shown or faded
+// out there; never nudged, slid sideways, sent to the middle or hidden by a scroll.
 for (const size of [
   { width: 320, height: 568 },
-  { width: 375, height: 812 },
+  { width: 390, height: 844 },
   { width: 1024, height: 768 },
 ]) {
-  test.describe(`Ask Clip Factory launcher and words at ${size.width} px`, () => {
+  test.describe(`Ask Clip Factory launcher home spot at ${size.width} px`, () => {
     test.use({ viewport: size });
-    test("covers words only when no spot clear of them is within reach", async ({ page }) => {
+    test("is always at its home spot", async ({ page }) => {
       const fails: string[] = [];
-      for (const route of ["/", "/settings/posting/setup/instagram", "/settings/clip-making/skills/new", "/get-app"]) {
+      for (const route of ["/", "/settings/posting/setup/instagram", "/settings/look-and-feel/sounds", "/get-app"]) {
         await page.goto(route);
         await settle(page);
-        await launcherSettled(page);
-        const words = await coveredWords(page);
-        const knows = await page.locator(".help-launcher").getAttribute("data-on-words");
-        if (words.length && knows !== "true") fails.push(`${route}: ${words.join(", ")}`);
+        const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+        for (const y of [0, Math.round(max / 2), max]) {
+          await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), y);
+          await launcherSettled(page);
+          const s = await page.evaluate(() => {
+            const el = document.querySelector<HTMLElement>(".help-launcher")!;
+            const b = el.getBoundingClientRect();
+            return {
+              translate: getComputedStyle(el).translate,
+              up: Math.round(el.offsetTop + el.offsetHeight / 2 - (b.top + b.height / 2)),
+              side: Math.round(el.offsetLeft + el.offsetWidth / 2 - (b.left + b.width / 2)),
+            };
+          });
+          if (s.translate !== "none") fails.push(`${route} at ${y}: moved (${s.translate})`);
+          if (s.up !== 0) fails.push(`${route} at ${y}: ${s.up} px up from home`);
+          if (s.side !== 0) fails.push(`${route} at ${y}: ${s.side} px sideways`);
+        }
       }
       expect(fails, fails.join("\n")).toEqual([]);
     });
   });
 }
+
+// The launcher is there when the owner wants it (§19.8): shown and tappable at the top of the main pages on a phone,
+// and faded out at no more than a fifth of the places a page can be scrolled to and left. The Library is the one
+// exception: every card ends in a 48 px open button right in the launcher's column, and covering that would make it
+// hard to tap, so there it may be faded out at a third of the places.
+test.describe("Ask Clip Factory launcher is mostly there on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  for (const route of ["/", "/jobs", "/settings", "/settings/look-and-feel", "/settings/look-and-feel/sounds", "/library", "/review"]) {
+    test(`on ${route}`, async ({ page }) => {
+      await page.goto(route);
+      await settle(page);
+      await launcherSettled(page);
+      if (["/", "/jobs", "/settings", "/settings/look-and-feel"].includes(route)) {
+        await expect(launcher(page)).not.toHaveClass(/is-hidden/);
+        await launcher(page).click();
+        await expect(panel(page)).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(panel(page)).toHaveCount(0);
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      }
+      const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+      let hidden = 0;
+      let spots = 0;
+      for (let y = 0; y <= max; y += 150) {
+        await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), y);
+        await launcherSettled(page);
+        spots++;
+        if (await launcher(page).evaluate((el) => el.classList.contains("is-hidden"))) hidden++;
+      }
+      const share = route === "/library" ? 0.34 : 0.2;
+      expect(hidden, `faded out at ${hidden} of ${spots} spots`).toBeLessThanOrEqual(Math.max(1, Math.floor(spots * share)));
+    });
+  }
+
+  test("does not blink while the owner scrolls in short steps at reading pace", async ({ page }) => {
+    await page.goto("/settings/look-and-feel/sounds");
+    await settle(page);
+    await launcherSettled(page);
+    const flips = await page.evaluate(async () => {
+      const el = document.querySelector<HTMLElement>(".help-launcher")!;
+      let hidden = el.classList.contains("is-hidden");
+      const at: number[] = [];
+      let run = true;
+      const tick = () => {
+        const now = el.classList.contains("is-hidden");
+        if (now !== hidden) {
+          hidden = now;
+          at.push(performance.now());
+        }
+        if (run) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      const max = document.documentElement.scrollHeight - innerHeight;
+      for (let y = 0; y <= max; y += 140) {
+        window.scrollTo({ top: y, behavior: "instant" });
+        await new Promise((res) => setTimeout(res, 300));
+      }
+      for (let y = max; y >= 0; y -= 140) {
+        window.scrollTo({ top: y, behavior: "instant" });
+        await new Promise((res) => setTimeout(res, 300));
+      }
+      await new Promise((res) => setTimeout(res, 1500));
+      run = false;
+      return at;
+    });
+    // Never a fade in and out (or out and in) within a second.
+    for (let i = 1; i < flips.length; i++) expect(flips[i]! - flips[i - 1]!).toBeGreaterThanOrEqual(DODGE_HOLD_MS - 50);
+  });
+});

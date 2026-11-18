@@ -9,12 +9,13 @@
 
 /* ---------- The room the page leaves ---------- */
 /* The pill's strip. --todo-top is the extra room at the top of the page; sticky parts of pages and the clip page's
-   first screen read it. --todo-bar-h is the glass bar (the pill and a little air under it). Scrolling to a control
-   (Tab, a link to a #part) stops below the bar. */
+   first screen read it. --todo-bar-h is the glass bar (the pill and a little air under it), --todo-feather the soft
+   edge it fades out over below that. Scrolling to a control (Tab, a link to a #part) stops below the fade. */
 html:has(.setup-todo[data-mode="pill"]) {
   --todo-top: 60px;
   --todo-bar-h: 66px;
-  scroll-padding-top: calc(env(safe-area-inset-top) + var(--todo-bar-h) + 16px);
+  --todo-feather: 22px;
+  scroll-padding-top: calc(env(safe-area-inset-top) + var(--todo-bar-h) + var(--todo-feather) + 8px);
 }
 .app:has(> .setup-todo[data-mode="pill"]) .shell {
   padding-top: calc(env(safe-area-inset-top) + 12px + var(--todo-top));
@@ -33,9 +34,13 @@ html:has(.setup-todo[data-mode="pill"]) {
   }
 }
 
-/* The glass bar behind the pill, a pane of the same glass as every panel (`.glass` gives the tint, the blur and the
-   lit rim). Clear at the top of the page (nothing is under it), there once the page scrolls, so the page passes
-   under glass and the pill stays put. Under the sidebar, over the page. */
+/* The glass bar behind the pill: the same tint and blur as every panel (`.glass`), as one smooth band of liquid glass.
+   `.setup-todo-bar` is the strip itself (the pill and a little air under it), which takes the taps once the page has
+   scrolled; its glass (`.setup-todo-bar__glass`) runs on --todo-feather further down and melts into the page there.
+   No rim, no hairline, no highlight lines and no shadow: it runs off the top of the screen (under the status bar) and
+   its bottom fades out (a mask over the tint and the blur together), so it has no edge to see, and the fade takes no
+   taps. Clear at the top of the page (nothing is under it), there once the page scrolls, so the page passes under
+   glass and the pill stays put. Under the sidebar, over the page. */
 .setup-todo-bar {
   position: fixed;
   z-index: 39;
@@ -43,29 +48,53 @@ html:has(.setup-todo[data-mode="pill"]) {
   left: 0;
   right: 0;
   height: calc(env(safe-area-inset-top) + var(--todo-bar-h, 66px));
-  /* It runs off the top and the sides of the screen: only its bottom edge is an edge. */
-  border-width: 0 0 1px;
+  pointer-events: none;
+}
+.setup-todo-bar.is-scrolled {
+  pointer-events: auto;
+}
+.setup-todo-bar__glass.glass {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(100% + var(--todo-feather, 22px));
+  border: 0;
   border-radius: 0;
+  box-shadow: none;
+  --bar-fade: linear-gradient(
+    to bottom,
+    #000 calc(100% - var(--todo-feather, 22px) - 14px),
+    rgb(0 0 0 / 0.72) calc(100% - var(--todo-feather, 22px)),
+    rgb(0 0 0 / 0.28) calc(100% - var(--todo-feather, 22px) / 2),
+    transparent
+  );
+  -webkit-mask-image: var(--bar-fade);
+  mask-image: var(--bar-fade);
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--dur-2) var(--ease-out);
 }
-.setup-todo-bar.is-scrolled {
+.setup-todo-bar__glass.glass::before {
+  display: none;
+}
+.setup-todo-bar.is-scrolled .setup-todo-bar__glass {
   opacity: 1;
-  pointer-events: auto;
 }
 @media (min-width: 768px) {
-  /* Beside the sidebar, which floats on its own. */
+  /* Beside the sidebar, which floats on its own: the glass's left side melts in too. */
   .setup-todo-bar {
     left: calc(max(14px, env(safe-area-inset-left)) + var(--sidebar-w) + 10px);
-    border-left-width: 1px;
-    border-bottom-left-radius: var(--r-lg);
-    transition:
-      opacity var(--dur-2) var(--ease-out),
-      left var(--dur-3) var(--ease-out);
+    transition: left var(--dur-3) var(--ease-out);
   }
   .app:has(.sidebar.is-collapsed) .setup-todo-bar {
     left: calc(max(14px, env(safe-area-inset-left)) + var(--sidebar-w-collapsed) + 10px);
+  }
+  .setup-todo-bar__glass.glass {
+    -webkit-mask-image: var(--bar-fade), linear-gradient(to right, transparent, #000 24px);
+    mask-image: var(--bar-fade), linear-gradient(to right, transparent, #000 24px);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
   }
 }
 
