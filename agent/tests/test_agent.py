@@ -35,7 +35,7 @@ def brief(duration: float = 4000, clip_min: int = 2, clip_max: int = 3) -> Brief
         words=words,
         loud=loud,
         heatmap=[{"start": 600, "end": 620, "value": 1.0}],
-        learnings=["Rage clips win"],
+        week_learnings=["Rage clips win"],
     )
 
 
@@ -417,8 +417,10 @@ from clipfactory_agent.signals import Event, HotSpot, Signals  # noqa: E402
 from .deep_support import ToolClient  # noqa: E402
 
 # sha256 (first 16 hex) of what the code on origin/main at 0abfbe2 (before ADR-40) produced for ``brief()``.
+# "system" is what the learning-from-results code (ADR-41) produced before ADR-40 for the same brief: it sends the
+# best-of-week learnings under their own heading and no 48-hour ones, so its bytes differ from 0abfbe2 on purpose.
 BEFORE = {
-    "system": "d46603533822083a",
+    "system": "51ab340136c0f21c",
     "hints": "efd5468f6b44f116",
     "read": "a72fac1edde97034",
     "lines": "d9ed6b299a654c35",

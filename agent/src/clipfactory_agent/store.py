@@ -251,6 +251,10 @@ class Store:
     async def latest_learnings(self, user_id: str, n: int = 10) -> list[dict[str, Any]]:
         return await self._query_prefix(user_id, "LEARNING#", newest_first=True, limit=n)
 
+    async def creator_lessons(self, user_id: str) -> list[dict[str, Any]]:
+        """Every creator lesson (``LESSON#``, docs/CONTRACTS.md §16.12); the caller keeps only the active ones."""
+        return await self._query_prefix(user_id, "LESSON#")
+
     async def job_clips(self, job_id: str) -> list[dict[str, Any]]:
         from boto3.dynamodb.conditions import Key
 

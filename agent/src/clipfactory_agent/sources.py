@@ -124,6 +124,10 @@ def source_fields(info: dict[str, Any], platform: str) -> dict[str, Any]:
     channel = info.get("channel") or info.get("uploader") or info.get("creator")
     if channel:
         out["channel"] = str(channel)[:200]
+    # The channel's id when the site gives one: the creator key (creators.py) prefers it to the name (§16.12).
+    channel_id = info.get("channel_id") or info.get("uploader_id")
+    if channel_id:
+        out["channelId"] = str(channel_id)[:200]
     if info.get("duration"):
         out["durationSec"] = float(info["duration"])
     if info.get("thumbnail"):

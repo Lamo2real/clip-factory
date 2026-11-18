@@ -16,6 +16,7 @@ import functools
 import os
 import shutil
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,7 @@ from .checklist import (
     review_prompt,
 )
 from .config import Config
+from .creators import creator_keys, creator_name
 from .guard import Deadline, fable_budget, nova_budget
 from .jobs import StepDone, StepFn, Tracker
 from .moments import Moment, length_target
@@ -50,6 +52,7 @@ from .transcribe import PART_SECONDS, Transcriber, job_name, language_of, parse_
 from .util import JobCanceled, JobSuperseded, TransientError, UserFacingError, gather_all, hms, log, now_iso, ulid
 
 RENDER_CONCURRENCY = 2
+SPOKEN_CHARS = 1000  # the start of what a clip says, for the daily second look (§16.12)
 FEW_WORDS = 20
 NOT_WATCHED = "Could not watch the video this time. Picking from the words and the sound."
 MOTION_ONLY = "Saw where the picture moves fast. Picking with that, the words and the sound."
@@ -90,7 +93,7 @@ class JobState:
     loud: list[float] = field(default_factory=list)
     skills: SkillSet = field(default_factory=lambda: SkillSet([]))
     skills_block: SkillsBlock | None = None  # built once in analyze; every model call gets it (§18.6)
-    learnings: list[str] = field(default_factory=list)
+    prior: list[str] = field(default_factory=list)  # "Prior learnings": active creator lessons (§16.12)
     week_learnings: list[str] = field(default_factory=list)
     similar: list[vectors_mod.Hit] = field(default_factory=list)
     chosen: list[Moment] = field(default_factory=list)
@@ -197,7 +200,11 @@ class Pipeline:
             await self._resolve_link(st, tr)
         await self.store.put_json(st.key("meta.json"), st.meta)
         await self.store.update_job(
-            st.user_id, st.job_id, {"source": st.source}, unless_canceled=True, session_id=st.session_id
+            st.user_id,
+            st.job_id,
+            {"source": st.source, **creator_fields(st.source)},
+            unless_canceled=True,
+            session_id=st.session_id,
         )
         title = st.source.get("title") or "the video"
         length = f" ({hms(st.source['durationSec'])})" if st.source.get("durationSec") else ""
@@ -557,8 +564,8 @@ class Pipeline:
             st.workdir, self.cfg.skills_dir, await self.store.skill_rows(st.user_id), self.store.get_bytes
         )
         st.skills_block = skills_block(st.skills.docs, where="agent.job")
-        taught = await learnings.load(self.store, st.user_id)
-        st.week_learnings, st.learnings = taught.week, taught.other
+        taught = await learnings.load(self.store, st.user_id, creator_keys(st.source), datetime.now(UTC))
+        st.week_learnings, st.prior = taught.week, taught.prior
         st.similar = await self._similar(st)
         spikes = len(loudness.spikes(st.loud, limit=10_000))
         log(
@@ -784,7 +791,7 @@ class Pipeline:
             words=st.words,
             loud=st.loud,
             heatmap=list(st.meta.get("heatmap") or []),
-            learnings=st.learnings,
+            prior=st.prior,
             week_learnings=st.week_learnings,
             language=st.meta.get("language"),
             similar=st.similar,
@@ -835,6 +842,7 @@ class Pipeline:
                 clip_min=st.clip_target[0],
                 check_cancel=tr.check_cancel,
                 on_progress=lambda f: tr.report(0.8 + 0.2 * f),
+                prior=st.prior,
             )
             checked = sum(1 for r in st.second_look if "keep" in r)
             total = len(st.second_look)
@@ -981,7 +989,10 @@ class Pipeline:
     async def _review(self, st: JobState, c: Candidate) -> dict[str, Any]:
         try:
             return await self.bedrock.structured(
-                system="You review short vertical clips before they are posted, strictly but fairly.",
+                # The review can write a new hook, so it gets "Prior learnings" too (§16.12).
+                system=learnings.with_prior(
+                    st.prior, "You review short vertical clips before they are posted, strictly but fairly."
+                ),
                 skills=st.block,
                 content=[
                     {
@@ -1101,7 +1112,7 @@ class Pipeline:
             notes=st.notes,
             skills=st.block,
             skills_text=st.skills.full_text,
-            system="You write social captions for short clips.",
+            system=learnings.with_prior(st.prior, "You write social captions for short clips."),
         )
         required = captions_mod.required_tags(st.notes, st.skills.full_text)
         for c in st.candidates:
@@ -1167,6 +1178,29 @@ def _status(r: watch.TrackResult) -> dict[str, Any]:
     return {"status": str(s["status"]), "reason": s.get("reason")}
 
 
+def creator_fields(source: dict[str, Any]) -> dict[str, Any]:
+    """Who the clip is from (§16.12): the creator key, every key it answers to, and the name to show. Empty for an
+    upload or a link without a channel (learned from only owner-wide)."""
+    keys = creator_keys(source)
+    if not keys:
+        return {}
+    return {"creatorKey": keys[0], "creatorKeys": keys, "creatorName": creator_name(source)}
+
+
+def spoken_fields(captions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Pacing facts from the clip's own captions (§16.12): how many words, when the first word starts and the start of
+    what is said. Left out when nothing is said, so a missing fact stays missing."""
+    spoken = [c for c in captions if str(c.get("text") or "").strip()]
+    if not spoken:
+        return {}
+    text = " ".join(" ".join(str(c["text"]).split()) for c in spoken)
+    return {
+        "wordCount": len(text.split()),
+        "firstWordSec": round(max(0.0, float(spoken[0].get("t0") or 0)), 2),
+        "spokenText": text[:SPOKEN_CHARS],
+    }
+
+
 def clip_item(
     st: JobState, c: Candidate, clip_id: str, rank: int, prefix: str, platform: str, url: str
 ) -> dict[str, Any]:
@@ -1195,6 +1229,8 @@ def clip_item(
         "createdAt": now_iso(),
         "videoKey": prefix + "clip.mp4",
         "coverKey": prefix + "cover.jpg",
+        **creator_fields(st.source),
+        **spoken_fields(r.captions),
     }
     if m.picked_for:
         item["pickedFor"] = m.picked_for[: signals_mod.MAX_PICKED_FOR]
