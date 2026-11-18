@@ -2,7 +2,8 @@
 # v1), the cf-prod-hooks Lambda behind it, the Meta verify token in SSM, the OAuth state key in Secrets Manager, and
 # the account-level CloudWatch role API Gateway needs for REST and WebSocket logs.
 #
-# Public on purpose (platforms cannot send a Cognito token), so it is throttled hard. Webhooks are only stored. The
+# Public on purpose (platforms cannot send a Cognito token), so it is throttled hard. Webhooks are only stored, except
+# Twitch and Kick (§24, Follow creators): signed deliveries only, which change a followed creator's live badge. The
 # OAuth callback checks the signed single-use state, exchanges the code and writes the owner's token to Secrets
 # Manager (cf-prod/platforms/*), never to DynamoDB or a log. Callbacks carry code/state in the query string: no log
 # contains it.
@@ -35,6 +36,8 @@ locals {
   platform_token_names_arn     = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${local.secret_prefix}*/token*"
   platform_pending_secrets_arn = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${local.secret_prefix}*/pending*"
   state_key_name               = "${var.name}/oauth/state-key"
+  # §24: Twitch signs Follow creators' webhooks with this secret (made by cf-prod-api when the Twitch keys are saved).
+  twitch_eventsub_secret_arn = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:${local.secret_prefix}twitch/eventsub*"
 
   # The three public methods, keyed for for_each.
   methods = {
@@ -102,6 +105,17 @@ resource "aws_iam_role_policy" "fn" {
         Action   = ["secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:TagResource"]
         Resource = [local.platform_token_names_arn]
       },
+      # §24 Follow creators: a signed Twitch or Kick delivery finds the creator's followers (Query on FOLLOWED), sets the
+      # live state on the CREATOR item and each follower's FOLLOW# item, notices a finished stream (PutItem on WATCH)
+      # and is stored once by message id (HOOK#, above). No DeleteItem, no Scan, no other partition.
+      {
+        Sid       = "FollowItems"
+        Effect    = "Allow"
+        Action    = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"]
+        Resource  = [var.table_arn]
+        Condition = { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["FOLLOWED", "CREATOR", "WATCH", "USER#*"] } }
+      },
+      { Sid = "TwitchEventSubSecret", Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = [local.twitch_eventsub_secret_arn] },
       {
         Sid      = "PlatformPending"
         Effect   = "Allow"

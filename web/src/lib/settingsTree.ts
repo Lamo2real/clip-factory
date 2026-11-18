@@ -104,6 +104,38 @@ export const TREES: Tree[] = [
         ],
       },
       {
+        slug: "streamers",
+        name: "Streamers I follow",
+        line: "Follow YouTube, Twitch and Kick streamers and see who is live.",
+        icon: "users",
+        apples: [
+          {
+            id: "follow-streamer",
+            name: "Follow a streamer",
+            leaf: "Paste their link or type their name. Only follow streamers who said you can make clips.",
+            words: ["follow", "add", "streamer", "youtuber", "creator", "channel", "twitch", "kick", "youtube", "subscribe", "watch", "spectate"],
+          },
+          {
+            id: "streamers-followed",
+            name: "Who you follow",
+            leaf: "Who is live right now, and when a stream ended or a new video came out.",
+            words: ["live", "offline", "streaming", "online", "unfollow", "remove", "stop following", "badge"],
+          },
+          {
+            id: "clips-by-itself",
+            name: "Clips by itself",
+            leaf: "Each video it makes costs the same as one you paste. Coming in the next update.",
+            words: ["automatic", "auto", "by itself", "limit", "how many a day", "pause", "stop all", "shortest", "cost"],
+          },
+          {
+            id: "streamer-keys",
+            name: "Twitch and Kick keys",
+            leaf: "A grown-up does this once. YouTube works without it.",
+            words: ["keys", "client id", "setup", "grown-up", "parent", "webhook", "developer"],
+          },
+        ],
+      },
+      {
         slug: "youtube",
         name: "YouTube help",
         line: "For when YouTube blocks a video.",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..http import Route, route
-from . import clips, help, jobs, lessons, performance, setup, skills, system, weeks
+from . import clips, follows, help, jobs, lessons, performance, setup, skills, system, weeks
 
 ROUTES: list[Route] = [
     route("GET", "/v1/health", system.health, public=True),
@@ -52,6 +52,15 @@ ROUTES: list[Route] = [
     route("GET", "/v1/lessons", lessons.list_lessons),
     route("PATCH", "/v1/lessons/{lessonId}", lessons.patch_lesson),
     route("DELETE", "/v1/lessons/{lessonId}", lessons.delete_lesson),
+    # §24: Follow creators. The key routes come first: "/v1/follows/keys/twitch" must not read as a creator.
+    route("GET", "/v1/follows", follows.list_follows),
+    route("POST", "/v1/follows", follows.create),
+    route("POST", "/v1/follows/lookup", follows.lookup),
+    route("PUT", "/v1/follows/keys/{platform}", follows.put_keys),
+    route("DELETE", "/v1/follows/keys/{platform}", follows.delete_keys),
+    route("POST", "/v1/follows/keys/{platform}/check", follows.check_keys),
+    route("PATCH", "/v1/follows/{platform}/{platformId}", follows.patch),
+    route("DELETE", "/v1/follows/{platform}/{platformId}", follows.delete),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
     # Ask Clip Factory (§19.6): the help package loads only inside these two handlers.

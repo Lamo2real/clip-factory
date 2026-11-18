@@ -5,6 +5,8 @@
   it for its video feed topics. TikTok and X arrive in phase 2 (501).
 * ``POST /hooks/{platform}``: the raw event is stored as a ``HOOK#`` item (14-day ``ttl``) and nothing else runs
   inline. Signatures are checked by ``verify_signature``; phase 1 has no app secrets, so it answers "unverified".
+* ``POST /hooks/twitch`` and ``POST /hooks/kick`` (§24.4, Follow creators): signed deliveries only (401 otherwise),
+  stored once by message id, then the creator's live state changes (``follow.webhooks``).
 * ``GET /oauth/{platform}/callback``: the OAuth callback of §17.5 (``oauth.callback``). It always answers ``302`` to
   ``{APP_URL}/settings/posting/setup/{platform}?result={code}`` (a fixed path and a listed code: no open redirect).
 
@@ -23,7 +25,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from . import db
 from .clock import Clock, iso, utcnow
@@ -32,12 +34,20 @@ from .log import log
 from .oauth import OAuthEnv
 from .settings import PLATFORMS
 
+if TYPE_CHECKING:
+    from .follow.platforms import FollowEnv
+    from .follow.webhooks import KickKeys
+
 MAX_BODY_BYTES = 256 * 1024
 MAX_CHALLENGE_CHARS = 512
 HOOK_TTL = timedelta(days=14)
 TOKEN_CACHE_SECONDS = 300
 YOUTUBE_TOPIC = "https://www.youtube.com/xml/feeds/videos.xml"
 META = frozenset({"instagram", "facebook"})
+# §24: Twitch and Kick send Follow creators' webhooks. They are not posting platforms (never in settings.PLATFORMS),
+# have no OAuth callback, and every delivery must be signed.
+FOLLOW_HOOKS = ("twitch", "kick")
+HOOK_PLATFORMS: tuple[str, ...] = PLATFORMS + FOLLOW_HOOKS
 KEPT_HEADERS = (
     "content-type",
     "user-agent",
@@ -45,6 +55,14 @@ KEPT_HEADERS = (
     "x-hub-signature",
     "x-tiktok-signature",
     "x-twitter-webhooks-signature",
+    "twitch-eventsub-message-id",
+    "twitch-eventsub-message-type",
+    "twitch-eventsub-message-timestamp",
+    "twitch-eventsub-subscription-type",
+    "kick-event-message-id",
+    "kick-event-type",
+    "kick-event-message-timestamp",
+    "kick-event-version",
 )
 Verdict = Literal["valid", "unverified", "invalid"]
 
@@ -63,6 +81,8 @@ class HooksDeps:
     clock: Clock = field(default=utcnow)
     verify: Callable[[str, Mapping[str, str], bytes], Verdict] = field(default=verify_signature)
     oauth: OAuthEnv | None = None  # None: the callback answers result=error (secrets not configured)
+    follow: FollowEnv | None = None  # §24: Twitch's EventSub secret; None: every Twitch delivery is a 401
+    kick_keys: KickKeys | None = None  # §24: Kick's public key; None: every Kick delivery is a 401
 
 
 def ssm_token_reader(client: Any, name: str, now: Callable[[], float] = time.time) -> Callable[[], str]:
@@ -118,11 +138,15 @@ def handle(event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
     params = event.get("pathParameters") or {}
     platform = str(params.get("platform") or "") if isinstance(params, Mapping) else ""
     request_id = str((event.get("requestContext") or {}).get("requestId") or "")
-    if platform not in PLATFORMS:
+    if platform not in HOOK_PLATFORMS or (platform in FOLLOW_HOOKS and resource != "/hooks/{platform}"):
         log("info", "hooks.unknown_platform", method=method, resource=resource, requestId=request_id)
         return _error(404, "not_found", "We do not support that platform.")
     try:
-        if resource == "/hooks/{platform}" and method == "GET":
+        if platform in FOLLOW_HOOKS and method == "POST":
+            out = _follow_hook(platform, event, deps)
+        elif platform in FOLLOW_HOOKS:
+            out = _error(404, "not_found", "That address does not exist.")
+        elif resource == "/hooks/{platform}" and method == "GET":
             out = _verify_subscription(platform, _query(event), deps)
         elif resource == "/hooks/{platform}" and method == "POST":
             out = _receive(platform, event, deps)
@@ -225,6 +249,29 @@ def _receive(platform: str, event: Mapping[str, Any], deps: HooksDeps) -> dict[s
     return _response(200, {"ok": True})
 
 
+def _follow_hook(platform: str, event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
+    """Twitch EventSub and Kick (§24.4): verified first, stored once, then the live state changes."""
+    from .follow import webhooks
+
+    body, stored, _encoding = _raw_body(event)
+    if len(body) > MAX_BODY_BYTES or len(stored) > MAX_BODY_BYTES * 4 // 3 + 4:
+        return _error(413, "too_large", "The event is too large.")
+    headers = _headers(event)
+    now = deps.clock()
+    if platform == "twitch":
+        if deps.follow is None:
+            return _error(401, "unauthorized", "The signature does not match.")
+        outcome = webhooks.twitch(deps.store, deps.follow, headers, body, now)
+    else:
+        if deps.kick_keys is None:
+            return _error(401, "unauthorized", "The signature does not match.")
+        outcome = webhooks.kick(deps.store, deps.kick_keys, headers, body, now)
+    log("info", "hooks.follow", platform=platform, status=outcome.status, outcome=outcome.note)
+    if outcome.text is not None:
+        return _response(outcome.status, text=outcome.text)
+    return _response(outcome.status, outcome.body)
+
+
 _deps: HooksDeps | None = None
 
 
@@ -255,11 +302,22 @@ def _from_env() -> HooksDeps:
             graph_version=config.load().graph_api_version,
             scopes=scopes_from_config(),
         )
+    from .follow.platforms import FollowEnv
+    from .follow.webhooks import KickKeys
+    from .platforms.base import urllib_client
+
+    follow_sm = boto3.client(
+        "secretsmanager", region_name=region(), config=Config(retries={"mode": "standard"}, read_timeout=5)
+    )
     return HooksDeps(
         store=store,
         app_url=env["APP_URL"],
         verify_token=ssm_token_reader(ssm, env.get("VERIFY_TOKEN_PARAM", "/cf-prod/hooks/verify-token")),
         oauth=oauth,
+        follow=FollowEnv(
+            secrets=Secrets(follow_sm, env.get("SECRET_PREFIX") or PREFIX), hooks_url=env.get("HOOKS_URL", "")
+        ),
+        kick_keys=KickKeys(urllib_client),
     )
 
 

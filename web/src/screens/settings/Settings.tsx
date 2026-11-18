@@ -37,6 +37,7 @@ import { Trail } from "./parts.tsx";
 import { SkillScreen } from "./SkillPages.tsx";
 import { SkillsSection } from "./SkillsSection.tsx";
 import { LearnedBranch } from "./LearnedBranch.tsx";
+import { FollowBranch } from "./FollowBranch.tsx";
 import { SoundsBranch } from "./SoundsBranch.tsx";
 import { MoneyBranch } from "./MoneyBranch.tsx";
 import { SetupList } from "./setup/SetupList.tsx";
@@ -49,6 +50,7 @@ const BRANCHES: Record<string, () => ReactNode> = {
   "clip-making/clips": () => <ClipsBranch />,
   "clip-making/skills": () => <SkillsSection />,
   "clip-making/learned": () => <LearnedBranch />,
+  "clip-making/streamers": () => <FollowBranch />,
   "clip-making/youtube": () => <YoutubeBranch />,
   "posting/setup": () => <SetupList />,
   "posting/where": () => <WhereBranch />,

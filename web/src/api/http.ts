@@ -7,6 +7,7 @@ import type {
   ClipPerformance,
   Job,
   KeyCheck,
+  Follow,
   Lesson,
   PlatformSetup,
   Post,
@@ -133,6 +134,16 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     refreshStats: async (clipId, platforms) =>
       (await call<{ platforms: RefreshResult[] }>("POST", `/clips/${id(clipId)}/stats/refresh`, platforms ? { platforms } : {}))
         .platforms,
+    listFollows: () => call("GET", "/follows"),
+    lookupFollow: (text, platform) => call("POST", "/follows/lookup", platform ? { text, platform } : { text }),
+    follow: async (platform, platformId) =>
+      (await call<{ follow: Follow }>("POST", "/follows", { platform, platformId, permission: true })).follow,
+    setFollowAuto: async (platform, platformId, on) =>
+      (await call<{ follow: Follow }>("PATCH", `/follows/${id(platform)}/${id(platformId)}`, { autoClips: on })).follow,
+    unfollow: (platform, platformId) => call("DELETE", `/follows/${id(platform)}/${id(platformId)}`),
+    saveFollowKeys: (platform, keys) => call("PUT", `/follows/keys/${id(platform)}`, keys),
+    deleteFollowKeys: (platform) => call("DELETE", `/follows/keys/${id(platform)}`),
+    checkFollowKeys: (platform) => call("POST", `/follows/keys/${id(platform)}/check`),
     getWeek: async (week, from, to) => (await call<{ week: WeekView }>("GET", `/weeks/${id(week)}${q({ from, to })}`)).week,
     saveWeekBest: async (week, body) => {
       const out = (await call<{ week: WeekView | string }>("PUT", `/weeks/${id(week)}/best`, body)).week;

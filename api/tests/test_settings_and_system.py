@@ -24,6 +24,9 @@ DEFAULTS = {
     "backgroundColours": ["#0f372b", "#efe7da", "#e8392b"],
     "glassStrength": "clear",
     "clipModel": "fable-5-1",
+    "followPaused": False,
+    "followDailyMax": 0,
+    "followMinMinutes": 30,
 }
 
 

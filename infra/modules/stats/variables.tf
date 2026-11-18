@@ -67,6 +67,16 @@ variable "platform_token_secrets_arn" {
   }
 }
 
+variable "hooks_url" {
+  type        = string
+  default     = ""
+  description = "cf-prod-hooks' base URL (https://{id}.execute-api.{region}.amazonaws.com/v1): the follow tick gives Twitch {hooks_url}/hooks/twitch. Empty: no Twitch webhooks (the tick still polls)."
+  validation {
+    condition     = var.hooks_url == "" || can(regex("^https://", var.hooks_url))
+    error_message = "hooks_url must be empty or start with https://."
+  }
+}
+
 variable "platforms_config_path" {
   type        = string
   description = "config/platforms.json (docs/CONTRACTS.md §16.4). The schedule runs at its lowest minIntervalMinutes."

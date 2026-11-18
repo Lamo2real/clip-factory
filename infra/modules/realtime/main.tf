@@ -76,8 +76,10 @@ locals {
   # Only these item types reach the broadcaster; CONN#, HOOK#, SETTINGS, SKILL#, STAT# (stats snapshots), the
   # RATE# budgets and OAuth STATE items never do. WEEK# carries the weekly best picks and learning state (§16.6);
   # ACCOUNT# and SETUP# become { type: "setup" } events for Set up posting (§17.4; they hold no keys or tokens).
+  # FOLLOW# (§24) becomes { type: "follow" }: a followed creator's name, picture and live badge. FOLLOWKEYS# never
+  # matches (its prefix differs after "FOLLOW").
   stream_filter = jsonencode({
-    dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }] } } }
+    dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }] } } }
   })
 }
 

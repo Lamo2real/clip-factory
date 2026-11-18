@@ -188,6 +188,12 @@ export interface Settings {
    * Absent on old servers: the default (`agentModel`).
    */
   clipModel?: string;
+  /** Follow creators (docs/CONTRACTS.md §24.1): "Stop all automatic clips". Absent on old servers: false. */
+  followPaused?: boolean;
+  /** At most this many automatic videos a day; 0 means no limit (the default). The UI never shows 0. */
+  followDailyMax?: number;
+  /** The shortest finished stream or video (minutes, 10 to 240) that counts. Absent on old servers: 30. */
+  followMinMinutes?: number;
 }
 
 export type YoutubePrivacy = "public" | "unlisted" | "private";
@@ -571,14 +577,103 @@ export interface SimilarClip {
   coverUrl?: string;
 }
 
+// ---------- Follow creators (docs/CONTRACTS.md §24) ----------
+
+export type FollowPlatform = "youtube" | "twitch" | "kick";
+/** Where the owner pastes keys for following: Twitch, Kick, and the optional YouTube read key. */
+export type FollowKeyPlatform = "twitch" | "kick" | "youtube-read";
+
+export interface FollowLive {
+  isLive: boolean;
+  title?: string;
+  /** Rounded to 2 figures. */
+  viewers?: number;
+  startedAt?: string;
+  checkedAt?: string;
+}
+
+/** What Clip Factory last noticed: a stream that ended or a new video. */
+export interface FollowLast {
+  state: "noticed";
+  text: string;
+  at: string;
+  videoKey?: string;
+}
+
+export interface Follow {
+  /** "twitch:somestreamer" (the live event id too). */
+  followId: string;
+  platform: FollowPlatform;
+  /** YouTube channel id (UC…), Twitch login or Kick slug. */
+  platformId: string;
+  handle: string;
+  name: string;
+  /** Only from the platforms' picture hosts; "" shows initials. */
+  avatarUrl: string;
+  url: string;
+  /** "Make clips by itself" for this creator (used once that part ships). */
+  autoClips: boolean;
+  permissionAt: string;
+  followedAt: string;
+  /** Absent: not known yet (Twitch or Kick before the keys, YouTube without the read key). */
+  live?: FollowLive;
+  last?: FollowLast;
+  /** false: found by name only; the name and picture fill in once the keys are pasted. */
+  resolved: boolean;
+}
+
+export interface FollowCreator {
+  platform: FollowPlatform;
+  platformId: string;
+  handle: string;
+  name: string;
+  avatarUrl: string;
+  url: string;
+  live?: FollowLive;
+  resolved: boolean;
+  /** Twitch or Kick without keys: following works, the live badge waits for a grown-up's keys. */
+  needsKeys: boolean;
+}
+
+export type FollowLookup = { needsPlatform: true; name: string } | { needsPlatform: false; creator: FollowCreator };
+
+export interface FollowKeyCheck {
+  ok: boolean;
+  code: "ok" | "no_keys" | "keys_rejected" | "platform_down";
+  message: string;
+  at: string;
+}
+
+export interface FollowKeySlot {
+  platform: FollowKeyPlatform;
+  saved: boolean;
+  /** Someone the owner follows is on this platform. */
+  needed: boolean;
+  /** The YouTube read key: nice to have, never needed. */
+  optional: boolean;
+  savedAt?: string;
+  hints?: Record<string, string>;
+  check?: FollowKeyCheck;
+}
+
+export interface FollowsView {
+  follows: Follow[];
+  keys: FollowKeySlot[];
+  /** Kick's app needs this webhook address (Copy chip in the Kick steps). */
+  kickWebhookUrl: string;
+}
+
+export type FollowKeys = { clientId: string; clientSecret: string } | { apiKey: string };
+
 /** What the live connection pushes (docs/CONTRACTS.md §14.2). One message per changed item. */
-export type LiveItemType = "job" | "clip" | "post" | "learning" | "week" | "setup";
+export type LiveItemType = "job" | "clip" | "post" | "learning" | "week" | "setup" | "follow";
 export type LiveEvent =
   | { type: "job"; op: "upsert"; id: string; item: Job; partial?: undefined }
   | { type: "clip"; op: "upsert"; id: string; item: Clip; partial?: undefined }
   | { type: "post"; op: "upsert"; id: string; item: Post; partial?: undefined }
   | { type: "learning"; op: "upsert"; id: string; item: Learning; partial?: undefined }
   | { type: "week"; op: "upsert"; id: string; item: WeekSummary; partial?: undefined }
+  | { type: "follow"; op: "upsert"; id: string; item: Follow; partial?: undefined }
   | { type: LiveItemType; op: "delete"; id: string; item?: undefined; partial?: undefined }
   | { type: LiveItemType; op: "upsert"; id: string; partial: true; item?: undefined };
 
@@ -671,4 +766,21 @@ export interface Api {
   getWeek(week: string, from: string, to: string): Promise<WeekView>;
   /** PUT /v1/weeks/{week}/best: 202 when the picks changed (learning starts), 200 when they did not. */
   saveWeekBest(week: string, body: { from: string; to: string; clipIds: string[] }): Promise<WeekView>;
+  // Follow creators (§24.1)
+  /** GET /v1/follows: the follows, the key slots and the Kick webhook address. */
+  listFollows(): Promise<FollowsView>;
+  /** POST /v1/follows/lookup: a link or a name (with the platform once the owner picked one). */
+  lookupFollow(text: string, platform?: FollowPlatform): Promise<FollowLookup>;
+  /** POST /v1/follows, only after "Yes, they said I can". */
+  follow(platform: FollowPlatform, platformId: string): Promise<Follow>;
+  /** PATCH /v1/follows/{platform}/{platformId} `{ autoClips }`. */
+  setFollowAuto(platform: FollowPlatform, platformId: string, on: boolean): Promise<Follow>;
+  /** DELETE /v1/follows/{platform}/{platformId}: only this follow; noticed streams and jobs stay. */
+  unfollow(platform: FollowPlatform, platformId: string): Promise<void>;
+  /** PUT /v1/follows/keys/{platform}: masked hints come back, never a key. */
+  saveFollowKeys(platform: FollowKeyPlatform, keys: FollowKeys): Promise<FollowsView>;
+  /** DELETE /v1/follows/keys/{platform}. */
+  deleteFollowKeys(platform: FollowKeyPlatform): Promise<void>;
+  /** POST /v1/follows/keys/{platform}/check. */
+  checkFollowKeys(platform: FollowKeyPlatform): Promise<{ check: FollowKeyCheck } & FollowsView>;
 }

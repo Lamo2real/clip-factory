@@ -1587,3 +1587,443 @@ ol.md__list {
 .lesson__actions > .btn {
   min-height: var(--tap);
 }
+
+/* ---------- Streamers I follow (docs/CONTRACTS.md §24.5) ---------- */
+.avatar {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  overflow: hidden;
+  border-radius: 50%;
+  background: linear-gradient(150deg, var(--green-2), var(--green-3));
+  box-shadow: 0 0 0 2px rgb(var(--bone-rgb) / 0.32);
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.avatar__initials {
+  color: var(--ink);
+  font-weight: 750;
+  font-size: 0.95em;
+  letter-spacing: 0.02em;
+}
+/* A live streamer: a vermilion ring that breathes (still under reduced motion). */
+.avatar.is-live {
+  box-shadow:
+    0 0 0 3px var(--vermilion),
+    0 0 0 6px rgb(var(--vermilion-rgb) / 0.28);
+  animation: follow-live-ring 2.6s ease-in-out infinite;
+}
+@keyframes follow-live-ring {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 3px var(--vermilion),
+      0 0 0 5px rgb(var(--vermilion-rgb) / 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px var(--vermilion),
+      0 0 0 9px rgb(var(--vermilion-rgb) / 0.32);
+  }
+}
+.reduce-motion .avatar.is-live {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar.is-live {
+    animation: none;
+  }
+}
+
+.follow-add {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.follow-add__form {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.follow-add__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+.follow-add__input {
+  flex: 1 1 220px;
+  min-width: 0;
+  min-height: 52px;
+  font-size: 1.05rem;
+}
+.follow-add__row > .btn {
+  min-height: 52px;
+}
+
+.follow-which {
+  display: grid;
+  gap: 10px;
+}
+.follow-which__q {
+  font-weight: 650;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+.follow-which__buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
+  gap: 10px;
+}
+/* Three big site buttons a child can hit: the mark on top, the name under it. */
+.follow-which__btn {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-height: 88px;
+  padding: 12px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: rgb(var(--green-deep-rgb) / 0.32);
+  box-shadow: inset 0 0 0 1.5px rgb(var(--bone-rgb) / 0.5);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.05rem;
+  transition:
+    transform var(--dur-2) var(--ease-spring),
+    background var(--dur-2);
+}
+.follow-which__btn:hover:not(:disabled) {
+  background: rgb(var(--bone-rgb) / 0.1);
+  transform: translateY(-2px);
+}
+.follow-which__btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.follow-which__btn:disabled {
+  opacity: 0.6;
+}
+
+.follow-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: var(--r-lg);
+  background: rgb(var(--green-deep-rgb) / 0.32);
+  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.3);
+  animation: rise var(--dur-3) var(--ease-out) both;
+}
+.follow-card__who,
+.follow-row__who {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.follow-card__text,
+.follow-row__text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.follow-card__name {
+  font-size: var(--fs-h3);
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.follow-card__site,
+.follow-row__soon {
+  display: inline-flex;
+  align-items: center;
+}
+.follow-row__site {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+}
+.follow-card__note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.follow-card__note .icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--ink);
+}
+.follow-ask {
+  display: grid;
+  gap: 10px;
+}
+.follow-ask__q {
+  font-weight: 700;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+.follow-ask__more {
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+}
+.follow-ask__buttons,
+.follow-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+/* "Yes, they said I can": a big tick box with words, bone when ticked. */
+.follow-yes {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 18px 8px 10px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: rgb(var(--bone-rgb) / 0.08);
+  box-shadow: inset 0 0 0 1.5px rgb(var(--bone-rgb) / 0.6);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  transition:
+    background var(--dur-2),
+    color var(--dur-2),
+    transform var(--dur-2) var(--ease-spring);
+}
+.follow-yes:active {
+  transform: scale(0.97);
+}
+.follow-yes__box {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px rgb(var(--bone-rgb) / 0.8);
+}
+.follow-yes.is-on {
+  background: var(--selected);
+  color: var(--on-bone);
+}
+.follow-yes.is-on .follow-yes__box {
+  background: var(--green);
+  color: var(--ink);
+  box-shadow: none;
+  animation: pop var(--dur-2) var(--ease-spring) both;
+}
+.follow-card__hint {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+}
+.follow-steps {
+  display: grid;
+  gap: 6px;
+  padding-left: 1.3em;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.follow-message {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: rgb(var(--bone-rgb) / 0.08);
+  box-shadow: inset 3px 0 0 var(--green-leaf);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.follow__empty {
+  font-size: var(--fs-small);
+}
+.follow__list {
+  display: grid;
+  gap: 10px;
+}
+.follow-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--r-lg);
+  background: rgb(var(--green-deep-rgb) / 0.29);
+  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.24);
+}
+.follow-row.is-live {
+  box-shadow: inset 0 0 0 1.5px rgb(var(--vermilion-rgb) / 0.6);
+}
+.follow-row__who {
+  flex: 1 1 240px;
+}
+.follow-row__name {
+  color: var(--ink);
+  font-size: 1.05rem;
+  font-weight: 750;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.follow-row__name:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.follow-row__title,
+.follow-row__line {
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+.follow-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+.follow-row__actions .toggle-row {
+  padding: 4px 0;
+}
+.follow-row__actions > .btn {
+  min-height: var(--tap);
+}
+.follow-live .pill--vermilion {
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.follow-auto {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.follow-auto__soon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.follow-auto__limit {
+  justify-self: start;
+}
+.follow-auto__shortest {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+}
+.follow-auto__note {
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.follow-keys {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.follow-key {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--r-lg);
+  background: rgb(var(--green-deep-rgb) / 0.29);
+  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.24);
+}
+.follow-key__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.follow-key__title {
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.follow-key__hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+.follow-key__ask,
+.follow-key__check {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.follow-key__check.is-ok {
+  color: var(--green-ink);
+}
+.follow-key__check.is-bad {
+  color: var(--vermilion-ink);
+}
+.follow-key__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.follow-key > .btn,
+.follow-key__form > .btn {
+  justify-self: start;
+}
+.follow-key__form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Hold to remove: the bar fills while it is held; letting go early empties it. */
+.hold-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  touch-action: none;
+  user-select: none;
+}
+.hold-btn__fill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: rgb(var(--vermilion-rgb) / 0.55);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 160ms ease-out;
+}
+.hold-btn.is-holding .hold-btn__fill {
+  transform: scaleX(1);
+  transition: transform var(--hold-ms, 1600ms) linear;
+}
+/* How many streamers, beside "Who you follow". */
+.apple__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  background: var(--fill);
+  color: var(--ink);
+  font-size: var(--fs-xs);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}

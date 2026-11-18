@@ -54,7 +54,7 @@ export function backoffDelay(attempt: number, random: () => number = Math.random
   return Math.round(base * (0.8 + 0.4 * random()));
 }
 
-const TYPES: readonly LiveItemType[] = ["job", "clip", "post", "learning", "week", "setup"];
+const TYPES: readonly LiveItemType[] = ["job", "clip", "post", "learning", "week", "setup", "follow"];
 
 /** Reads one server message. Pongs, errors and anything malformed give null (they change nothing on screen). */
 export function parseLiveMessage(data: unknown): LiveEvent | null {

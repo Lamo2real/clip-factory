@@ -516,6 +516,9 @@ export function seed(): Store {
       backgroundColours: ["#0f372b", "#efe7da", "#e8392b"],
       glassStrength: "clear",
       clipModel: "fable-5-1",
+      followPaused: false,
+      followDailyMax: 0,
+      followMinMinutes: 30,
     },
     accounts: PLATFORMS.map((platform) => ({ platform, status: "not_connected" })),
   };

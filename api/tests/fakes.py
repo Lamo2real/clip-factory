@@ -278,6 +278,9 @@ class _Eval:
             self.take(",")
             right = self.operand()
             self.take(")")
+            if right == "":
+                # Real DynamoDB answers ValidationException for an empty key-attribute value.
+                raise client_error("ValidationException", 400)
             return isinstance(left, str) and left.startswith(right)
         left = self.operand()
         op = self.take()
