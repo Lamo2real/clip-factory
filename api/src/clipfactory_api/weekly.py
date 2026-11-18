@@ -1,4 +1,7 @@
-"""Lambda ``cf-prod-learn``: learn from the owner's "Best this week" picks (docs/CONTRACTS.md §16.6).
+"""Lambda ``cf-prod-learn``: learn from the owner's "Best this week" picks (docs/CONTRACTS.md §16.6), and once a
+day from the clips that did far better than normal 7 days after posting (``daily.py``, §16.12).
+
+A scheduled EventBridge event (``source == "aws.events"``) runs the daily learning; anything else is a weekly event.
 
 Input ``{"userId", "week", "revision"}`` from ``PUT /v1/weeks/{week}/best``. Every write is tied to that revision,
 so when the owner changes the picks again while this runs, the older run stops and writes nothing.
@@ -22,9 +25,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import db, learn, s3, skill_prompt, weeks
+from . import daily, db, learn, s3, skill_prompt, weeks
 from .clock import Clock, iso, parse, utcnow
 from .ids import ulid
+from .learning_rules import BEDROCK_MAX_ATTEMPTS, BEDROCK_READ_TIMEOUT
 from .log import log
 from .skills import BuiltinSkill, load_builtins
 from .vectors import Vectors
@@ -43,6 +47,9 @@ class WeeklyDeps:
     clock: Clock = field(default=utcnow)
     sleep: Callable[[float], None] = field(default=time.sleep)
     builtins: Callable[[], Sequence[BuiltinSkill]] = field(default=load_builtins)
+    # The daily run's own Bedrock client with tighter time limits (learning_rules.BEDROCK_READ_TIMEOUT and
+    # BEDROCK_MAX_ATTEMPTS), so one model call can never outlast the run's time budget. None: ``bedrock``.
+    daily_bedrock: Any = None
 
 
 def _done(week: str, outcome: str) -> dict[str, str]:
@@ -169,7 +176,21 @@ def _fail(deps: WeeklyDeps, user_id: str, week: str, revision: int) -> dict[str,
     return _done(week, "failed")
 
 
-def handle(event: Any, deps: WeeklyDeps) -> dict[str, str]:
+def handle(event: Any, deps: WeeklyDeps) -> dict[str, Any]:
+    if isinstance(event, dict) and event.get("source") == "aws.events":
+        # The daily 05:00 UTC rule (§16.12): learn from day-7 numbers. Checked before the weekly fields, which a
+        # scheduled event never has.
+        return daily.run(
+            daily.DailyDeps(
+                store=deps.store,
+                bedrock=deps.daily_bedrock if deps.daily_bedrock is not None else deps.bedrock,
+                model_id=deps.model_id,
+                media=deps.media,
+                clock=deps.clock,
+                sleep=deps.sleep,
+                builtins=deps.builtins,
+            )
+        )
     if not isinstance(event, dict):
         log("error", "weekly.bad_event")
         return {"week": "", "outcome": "bad_event"}
@@ -202,6 +223,14 @@ def _from_env() -> WeeklyDeps:
         region_name=reg,
         config=Config(read_timeout=120, retries={"mode": "adaptive", "max_attempts": 3}),
     )
+    daily_bedrock = boto3.client(
+        "bedrock-runtime",
+        region_name=reg,
+        config=Config(
+            read_timeout=BEDROCK_READ_TIMEOUT,
+            retries={"mode": "standard", "max_attempts": BEDROCK_MAX_ATTEMPTS},
+        ),
+    )
     vector_store = None
     if env.get("VECTOR_BUCKET") and env.get("VECTOR_INDEX"):
         s3v, _ = vectors.make_clients(reg)
@@ -218,6 +247,7 @@ def _from_env() -> WeeklyDeps:
         model_id=env["MODEL_ID"],
         vectors=vector_store,
         media=s3.Media(s3.make_client(reg), env["MEDIA_BUCKET"]),
+        daily_bedrock=daily_bedrock,
     )
 
 
@@ -228,5 +258,5 @@ def get_deps(factory: Callable[[], WeeklyDeps] = _from_env) -> WeeklyDeps:
     return _deps
 
 
-def handler(event: dict[str, Any], _context: Any = None) -> dict[str, str]:
+def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
     return handle(event, get_deps())

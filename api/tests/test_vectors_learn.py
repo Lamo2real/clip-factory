@@ -8,14 +8,12 @@ from typing import Any
 
 import pytest
 
-from clipfactory_api import db, learn, posts, s3, settings
+from clipfactory_api import db, posts, settings
 from clipfactory_api.flow_client import FlowClient, FlowStartError, clip_flow_name, job_flow_name
 from clipfactory_api.platforms import PLATFORMS, NotConnectedError, adapter_for
 from clipfactory_api.vectors import Vectors, clip_metadata, embed_text, parse_performance, score_bucket
-from conftest import CLIP_FLOW_ARN, JOB_FLOW_ARN, USER, Clock, seed_clip
-from fakes import FakeBedrock, FakeEmbeddings, FakeLambda, FakeS3, FakeS3Vectors, FakeTable
-
-MEDIA = s3.Media(FakeS3(), "cf-prod-media-123")
+from conftest import CLIP_FLOW_ARN, JOB_FLOW_ARN, USER, seed_clip
+from fakes import FakeEmbeddings, FakeLambda, FakeS3Vectors, FakeTable
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -237,67 +235,6 @@ def test_batch_get(store: db.Store) -> None:
     found = store.batch_get([(pk, db.clip_sk(a["clipId"])), (pk, db.clip_sk(b["clipId"])), (pk, db.clip_sk("NONE"))])
     assert sorted(c["clipId"] for c in found) == sorted([a["clipId"], b["clipId"]])
     assert store.batch_get([]) == []
-
-
-# --- learn.distil --------------------------------------------------------------------------------------------------
-
-
-def _measured_post(store: db.Store, clip_id: str, post_id: str = "P1") -> None:
-    store.put(
-        {
-            "pk": db.user_pk(USER),
-            "sk": db.post_sk(post_id),
-            "type": "post",
-            "userId": USER,
-            "postId": post_id,
-            "clipId": clip_id,
-            "platform": "youtube",
-            "status": "posted",
-            "metrics": {"views": 100, "likes": 9, "comments": 1, "shares": 2, "checkedAt": "2026-11-17T12:00:00.000Z"},
-        }
-    )
-
-
-def test_distil_writes_one_learning(store: db.Store) -> None:
-    clip = seed_clip(store, status="posted")
-    _measured_post(store, clip["clipId"])
-    bedrock = FakeBedrock(text='  "Rage hooks in the first second win."  ')
-    outcome, learning_id = learn.distil_learning(
-        store, bedrock, "global.anthropic.claude-fable-5-1", USER, media=MEDIA, clock=Clock(), builtins=list
-    )
-    assert outcome == "learning"
-    assert learning_id is not None
-    item = store.get(db.user_pk(USER), db.learning_sk(learning_id))
-    assert item is not None
-    assert learn.public_learning(item) == {
-        "learningId": learning_id,
-        "text": "Rage hooks in the first second win.",
-        "createdAt": "2026-11-15T12:00:00.000Z",
-        "postIds": ["P1"],
-    }
-    prompt = bedrock.calls[0]["messages"][0]["content"][0]["text"]
-    assert "He lost it" in prompt
-
-
-def test_distil_without_metrics(store: db.Store) -> None:
-    assert learn.distil(store, FakeBedrock(), "m", USER, media=MEDIA, builtins=list) == "no_metrics"
-
-
-@pytest.mark.parametrize(
-    ("bedrock", "outcome"),
-    [
-        (FakeBedrock(text=""), "no_learning"),
-        (FakeBedrock(stop_reason="max_tokens"), "max_tokens"),
-        (FakeBedrock(stop_reason="refusal"), "refusal"),
-        (FakeBedrock(stop_reason="content_filtered"), "content_filtered"),
-        (FakeBedrock(stop_reason="guardrail_intervened"), "no_learning"),
-    ],
-)
-def test_distil_only_learns_from_a_finished_answer(store: db.Store, bedrock: FakeBedrock, outcome: str) -> None:
-    clip = seed_clip(store, status="posted")
-    _measured_post(store, clip["clipId"])
-    assert learn.distil(store, bedrock, "m", USER, media=MEDIA, builtins=list) == outcome
-    assert store.query_all(db.user_pk(USER), "LEARNING#") == []
 
 
 # --- platforms -----------------------------------------------------------------------------------------------------

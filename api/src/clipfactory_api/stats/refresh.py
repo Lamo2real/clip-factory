@@ -71,7 +71,11 @@ class RefreshReport:
 
 def merge_metrics(old: Item | None, fast: Item | None, slow: Item | None, now: datetime) -> Item:
     """The new ``Post.metrics``: fast fields + ``metricsUpdatedAt`` when counts were read, slow fields +
-    ``insightsUpdatedAt`` when insights were read; everything not read keeps its stored value."""
+    ``insightsUpdatedAt`` when insights were read; everything not read keeps its stored value.
+
+    ``viewsUpdatedAt`` (additive, §16.12) is when the VIEWS themselves were last read: the part that carried the key
+    ``views`` stamps it, whichever part that is (YouTube, TikTok and X read views with the counts; Instagram and
+    Facebook only with the slow insights). A refresh that did not read views keeps the old stamp."""
     old = dict(old or {})
     out: Item = {k: old.get(k) for k in COMMON}
     extra: Item = dict(old.get("extra") or {})
@@ -84,10 +88,14 @@ def merge_metrics(old: Item | None, fast: Item | None, slow: Item | None, now: d
             if key in part:
                 out[key] = part[key]
         extra.update(part.get("extra") or {})
+        if "views" in part:
+            out["viewsUpdatedAt"] = stamp
         if kind == "fast":
             updated_at = stamp
         else:
             out["insightsUpdatedAt"] = stamp
+    if "viewsUpdatedAt" not in out and old.get("viewsUpdatedAt"):
+        out["viewsUpdatedAt"] = old["viewsUpdatedAt"]
     if "insightsUpdatedAt" not in out and old.get("insightsUpdatedAt"):
         out["insightsUpdatedAt"] = old["insightsUpdatedAt"]
     if updated_at is None:
@@ -176,6 +184,12 @@ def _put_snapshot(deps: StatsDeps, post: Item, metrics: Item, now: datetime, *, 
         "ttl": int((now + timedelta(days=deps.config.snapshot_ttl_days)).timestamp()),
         **{k: metrics.get(k) for k in COMMON},  # None values are left out: "the platform does not say"
     }
+    # When the views were really read (§16.12): a refresh that did not read views (insights only on YouTube, counts
+    # only on Instagram or Facebook) keeps the old views, so ``at`` alone could stamp day-3 views as day 7. Day-7
+    # freezing goes by this time, never by ``at``. Metrics stored before ``viewsUpdatedAt`` existed give no stamp, and
+    # such a snapshot counts only when its views changed (day7.readings).
+    if metrics.get("viewsUpdatedAt"):
+        item["viewsReadAt"] = metrics["viewsUpdatedAt"]
     if final:
         item["final"] = True
     deps.store.put(item)

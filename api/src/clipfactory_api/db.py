@@ -87,6 +87,18 @@ def week_sk(week: str) -> str:
     return f"WEEK#{week}"
 
 
+LESSON_PREFIX = "LESSON#"
+LEARN_STATE_SK = "LEARNSTATE"
+
+
+def lesson_sk(lesson_id: str) -> str:
+    """A creator lesson learned from day-7 numbers (a Learning with ``kind "creator"``, docs/CONTRACTS.md §16.12).
+
+    A prefix of its own (not ``LEARNING#``) so the agent's and Insights' reads of the older learnings never page
+    through lessons and the other way round. Additive: no existing item changes."""
+    return f"{LESSON_PREFIX}{lesson_id}"
+
+
 def rate_pk(platform: str) -> str:
     """The app-wide rate budget of one platform (single-owner app, §16.3)."""
     return f"RATE#{platform}"
@@ -177,9 +189,10 @@ def update_request(
     remove: Iterable[str] = (),
     expect_in: Mapping[str, Iterable[Any]] | None = None,
     expect_absent: Iterable[str] = (),
+    expect_present: Iterable[str] = (),
 ) -> dict[str, Any]:
-    """The UpdateItem parameters (also usable inside a transaction). The item must exist; ``expect_in`` and
-    ``expect_absent`` add conditions."""
+    """The UpdateItem parameters (also usable inside a transaction). The item must exist; ``expect_in``,
+    ``expect_absent`` and ``expect_present`` add conditions."""
     names: dict[str, str] = {}
     values: dict[str, Any] = {}
     sets = []
@@ -209,6 +222,9 @@ def update_request(
     for i, field in enumerate(expect_absent):
         names[f"#a{i}"] = field
         conditions.append(f"attribute_not_exists(#a{i})")
+    for i, field in enumerate(expect_present):
+        names[f"#p{i}"] = field
+        conditions.append(f"attribute_exists(#p{i})")
     kwargs: dict[str, Any] = {
         "Key": {"pk": pk, "sk": sk},
         "UpdateExpression": expression,
@@ -244,6 +260,17 @@ class Store:
             kwargs["ConditionExpression"] = "attribute_not_exists(pk)"
         self._call(self._table.put_item, **kwargs)
 
+    def put_when(
+        self,
+        item: Mapping[str, Any],
+        condition: str,
+        *,
+        names: Mapping[str, str] | None = None,
+        values: Mapping[str, Any] | None = None,
+    ) -> None:
+        """A PutItem with its own condition expression. A failed condition raises ``ConditionFailed``."""
+        self._call(self._table.put_item, **self.put_if(item, condition, names=names, values=values))
+
     def delete(self, pk: str, sk: str) -> None:
         self._table.delete_item(Key={"pk": pk, "sk": sk})
 
@@ -270,13 +297,22 @@ class Store:
         remove: Iterable[str] = (),
         expect_in: Mapping[str, Iterable[Any]] | None = None,
         expect_absent: Iterable[str] = (),
+        expect_present: Iterable[str] = (),
     ) -> Item:
         """Sets and removes top-level fields on an existing item and returns the new item.
 
         ``expect_in`` makes the write conditional: each named field must hold one of the given values.
-        ``expect_absent`` names fields that must not exist yet.
+        ``expect_absent`` names fields that must not exist yet; ``expect_present`` names fields that must exist.
         """
-        kwargs = update_request(pk, sk, set_fields, remove=remove, expect_in=expect_in, expect_absent=expect_absent)
+        kwargs = update_request(
+            pk,
+            sk,
+            set_fields,
+            remove=remove,
+            expect_in=expect_in,
+            expect_absent=expect_absent,
+            expect_present=expect_present,
+        )
         kwargs["ReturnValues"] = "ALL_NEW"
         out = self._call(self._table.update_item, **kwargs)
         return dict(from_dynamo(out.get("Attributes", {})))

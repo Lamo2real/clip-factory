@@ -1,4 +1,4 @@
-"""``cf-prod-clip-flow``: publish a kept clip, wait 48 hours, learn from it (docs/CONTRACTS.md §14.5).
+"""``cf-prod-clip-flow``: publish a kept clip, wait 48 hours, measure it (docs/CONTRACTS.md §14.5).
 
 Started by Confirm (``clip-{clipId}-{flowRun}`` on the alias ``live``) with ``{"clipId", "userId", "run"}``:
 
@@ -12,8 +12,8 @@ Started by Confirm (``clip-{clipId}-{flowRun}`` on the alias ``live``) with ``{"
    ``confirmed`` (nothing was queued). Nothing posted → ``upsert-vector`` (``confirmed``), outcome ``not_posted``.
 4. ``wait-48h``: a durable wait, no compute and no schedule.
 5. ``metrics`` (``stats.refresh.refresh_posts``, the poller's code path and rate budget; a blocked or failing
-   platform keeps the numbers the poller stored) → 6. ``distil`` (one Learning; the owner's skills block goes
-   first in its system prompt, §18.6) → 7. ``upsert-vector``
+   platform keeps the numbers the poller stored) → 6. ``distil`` (retired: no model call, no Learning; the daily
+   day-7 run learns instead, §16.12) → 7. ``upsert-vector``
    (``performed`` + the summed performance).
 
 Steps are at-least-once: a publish step reads the post first and never sends a post that is no longer ``queued``,
@@ -32,7 +32,7 @@ from typing import Any
 from aws_durable_execution_sdk_python import DurableContext, StepError, durable_execution
 from aws_durable_execution_sdk_python.config import Duration, StepSemantics
 
-from .. import db, learn, posts, s3, settings
+from .. import db, posts, s3, settings
 from ..clock import Clock, iso, utcnow
 from ..log import log
 from ..platforms import (
@@ -65,7 +65,7 @@ class ClipFlowDeps:
     bedrock: Any
     model_id: str
     vectors: Vectors | None
-    media: s3.Media  # the owner's skills for the distil call (§18.6)
+    media: s3.Media  # the media bucket (kept for the deps shape; the retired distil step read skills from it)
     adapters: Callable[[str], PlatformAdapter] = field(default=adapter_for)
     clock: Clock = field(default=utcnow)
     sleep: Callable[[float], None] = field(default=time.sleep)
@@ -574,22 +574,12 @@ def read_metrics(deps: ClipFlowDeps, target: Target) -> dict[str, Any]:
 
 
 def distil(deps: ClipFlowDeps, target: Target) -> dict[str, Any]:
-    outcome, learning_id = _guard(
-        lambda: learn.distil_learning(
-            deps.store,
-            deps.bedrock,
-            deps.model_id,
-            target.user_id,
-            media=deps.media,
-            clock=deps.clock,
-            builtins=deps.builtins,
-            sleep=deps.sleep,
-        )
-    )
-    out: dict[str, Any] = {"outcome": outcome}
-    if learning_id:
-        out["learningId"] = learning_id
-    return out
+    """Retired (§16.12, ADR-40): the one-sentence 48-hour learning read too much into a handful of clips, and the
+    clip picker no longer gets it. Clip Factory now learns once a day from day-7 numbers (``daily.py``). The step
+    keeps its name so a flow that was already running replays the same steps; it calls no model and writes
+    nothing."""
+    del deps, target
+    return {"outcome": "retired"}
 
 
 def upsert_vector(

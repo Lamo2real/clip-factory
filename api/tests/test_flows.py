@@ -502,7 +502,7 @@ def test_clip_flow_ensure_posts_is_a_no_op_after_confirm(store: db.Store) -> Non
     assert len(posts.posts_for_clip(store, USER, clip["clipId"], consistent=True)) == 5
 
 
-def test_clip_flow_publishes_waits_measures_distils_and_updates_the_vector(
+def test_clip_flow_publishes_waits_measures_and_updates_the_vector(
     store: db.Store, vectors: Vectors, s3v: FakeS3Vectors, table: FakeTable
 ) -> None:
     _connect(store, "youtube", "tiktok")
@@ -512,7 +512,7 @@ def test_clip_flow_publishes_waits_measures_distils_and_updates_the_vector(
     ctx = FakeDurableContext()
     out = run_clip_flow(ctx, _event(clip), _clip_deps(store, adapters, bedrock, vectors))
     assert out["outcome"] == "done"
-    assert out["learningId"]
+    assert "learningId" not in out  # the 48-hour learning is retired (§16.12)
     assert ctx.steps == [
         "ensure-posts",
         "publish-youtube",
@@ -533,8 +533,8 @@ def test_clip_flow_publishes_waits_measures_distils_and_updates_the_vector(
     assert by_platform["x"]["status"] == "pending_integration"
     assert adapters["youtube"].published == [youtube["postId"]]  # the post id is the idempotency key
     assert table.raw(clip["pk"], clip["sk"])["status"] == "posted"  # type: ignore[index]
-    learning = store.get(db.user_pk(USER), db.learning_sk(out["learningId"]))
-    assert learning is not None
+    assert ctx.results["distil"] == {"outcome": "retired"}
+    assert store.query_all(db.user_pk(USER), "LEARNING#") == []
     vector = s3v.vectors[clip["clipId"]]
     assert vector["metadata"]["status"] == "performed"
     assert sorted(vector["metadata"]["platforms"]) == ["tiktok", "youtube"]
@@ -547,12 +547,7 @@ def test_clip_flow_publishes_waits_measures_distils_and_updates_the_vector(
         "posts": 2,
         "checkedAt": "2026-11-15T12:00:00.000Z",
     }
-    (converse,) = bedrock.calls
-    assert converse["modelId"] == "global.anthropic.claude-fable-5-1"
-    assert converse["inferenceConfig"] == {"maxTokens": 4000}
-    assert converse["additionalModelRequestFields"] == {"output_config": {"effort": "low"}}
-    for banned in ("temperature", "topP", "topK"):
-        assert banned not in converse["inferenceConfig"]
+    assert bedrock.calls == []  # no model call after 48 hours any more
 
 
 def test_clip_flow_sets_publishing_while_posts_are_queued(store: db.Store, table: FakeTable) -> None:
@@ -660,33 +655,24 @@ def test_clip_flow_nothing_measured_keeps_the_vector_confirmed(
     ctx = FakeDurableContext()
     out = run_clip_flow(ctx, _event(clip), _clip_deps(store, {"youtube": youtube}, vectors=vectors))
     assert out["outcome"] == "done"
-    assert ctx.results["distil"] == {"outcome": "no_metrics"}
+    assert ctx.results["distil"] == {"outcome": "retired"}
     assert s3v.vectors[clip["clipId"]]["metadata"]["status"] == "confirmed"
     assert "performance" not in s3v.vectors[clip["clipId"]]["metadata"]
 
 
-@pytest.mark.parametrize("stop", ["max_tokens", "refusal", "content_filtered"])
-def test_clip_flow_distil_outcomes_write_no_learning(store: db.Store, stop: str) -> None:
-    _connect(store, "youtube")
-    clip = _kept_clip(store)
-    ctx = FakeDurableContext()
-    out = run_clip_flow(
-        ctx, _event(clip), _clip_deps(store, {"youtube": FakeAdapter("youtube")}, FakeBedrock(stop_reason=stop))
-    )
-    assert ctx.results["distil"] == {"outcome": stop}
-    assert "learningId" not in out
-    assert store.query_all(db.user_pk(USER), "LEARNING#") == []
-
-
-def test_clip_flow_distil_failure_does_not_fail_the_flow(store: db.Store) -> None:
+def test_clip_flow_distil_is_retired_and_calls_no_model(store: db.Store) -> None:
+    """§16.12: the 48-hour one-sentence learning left the picker; the step stays (replays) but does nothing."""
     _connect(store, "youtube")
     clip = _kept_clip(store)
     bedrock = FakeBedrock()
-    bedrock.fail = True  # throttled every time
+    bedrock.fail = True  # would fail if it were called
     ctx = FakeDurableContext()
     out = run_clip_flow(ctx, _event(clip), _clip_deps(store, {"youtube": FakeAdapter("youtube")}, bedrock))
     assert out["outcome"] == "done"
-    assert ctx.attempts["distil"] == 3
+    assert ctx.results["distil"] == {"outcome": "retired"}
+    assert ctx.attempts["distil"] == 1
+    assert bedrock.calls == []
+    assert store.query_all(db.user_pk(USER), "LEARNING#") == []
     assert "upsert-vector" in ctx.steps
 
 
