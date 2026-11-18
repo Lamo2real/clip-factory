@@ -79,6 +79,8 @@ export async function spotlight(ids: readonly string[], { reduced, waitMs = SPOT
   let target = findTarget(ids);
   while (!target && Date.now() < until) {
     await new Promise((r) => setTimeout(r, 100));
+    // The page can go away while it waits (a test ending, a closing window): then there is nothing to light up.
+    if (typeof document === "undefined") return null;
     target = findTarget(ids);
   }
   if (!target) return null;

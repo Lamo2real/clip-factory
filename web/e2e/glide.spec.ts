@@ -151,6 +151,53 @@ test.describe("glide", () => {
       await landsOn(list, ".tabbar__item.is-active");
       expect(await cursors(page)).toEqual([]);
     });
+
+    test("every tab switch glides end to end: no frame skips, no snap at the end", async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      const list = page.locator(".tabbar__list");
+      await landsOn(list, ".tabbar__item.is-active");
+      // Every pair of tabs, both ways, pressed like a finger (down, hold, up) so the press shrink is in play.
+      const order = [1, 4, 0, 3, 2, 4, 1, 0, 2, 3, 0];
+      for (const to of order) {
+        const item = list.locator(".tabbar__item").nth(to);
+        const b = (await item.boundingBox())!;
+        // Record the glide's painted box on every frame from the press until it has long settled.
+        await page.evaluate(() => {
+          const g = document.querySelector(".tabbar__list > .glide")!;
+          const w = window as unknown as { __frames: number[][] };
+          w.__frames = [];
+          const t0 = performance.now();
+          const tick = () => {
+            const r = g.getBoundingClientRect();
+            w.__frames.push([r.x, r.width, r.height, performance.now()]);
+            if (performance.now() - t0 < 1400) requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        });
+        await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+        await page.mouse.down();
+        await page.waitForTimeout(90);
+        await page.mouse.up();
+        await page.waitForTimeout(1500);
+        const frames = await page.evaluate(() => (window as unknown as { __frames: number[][] }).__frames);
+        await landsOn(list, ".tabbar__item.is-active");
+        const end = frames[frames.length - 1]!;
+        const start = frames[0]!;
+        const travel = Math.abs(end[0]! - start[0]!);
+        // The slide eases: speed is measured per 16.7 ms (so a busy test machine dropping frames does not count), and
+        // never exceeds what the spring curve itself reaches (its launch is about 4.6x the average speed over the 460 ms slide; a skipped stretch of frames shows as more).
+        const perFrame = (i: number, k: number) => (Math.abs(frames[i]![k]! - frames[i - 1]![k]!) * 16.7) / Math.max(16.7, frames[i]![3]! - frames[i - 1]![3]!);
+        let worst = 0;
+        for (let i = 1; i < frames.length; i++) worst = Math.max(worst, perFrame(i, 0));
+        expect(worst, `tab ${to}: fastest step ${worst.toFixed(1)}px a frame over ${travel.toFixed(1)}px`).toBeLessThanOrEqual(Math.max(8, (travel / (460 / 16.7)) * 6));
+        // No sudden change of size from one frame to the next (the old snap at the end grew it ~6px in one frame;
+        // the spring's stretch changes it under 1.5px a frame).
+        let sizeJump = 0;
+        for (let i = 1; i < frames.length; i++) sizeJump = Math.max(sizeJump, perFrame(i, 1), perFrame(i, 2));
+        expect(sizeJump, `tab ${to}: size jumped ${sizeJump.toFixed(1)}px in one frame`).toBeLessThanOrEqual(2);
+      }
+    });
   });
 
   test.describe("reduced motion", () => {

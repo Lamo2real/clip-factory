@@ -4026,8 +4026,10 @@ to the new one, instead of the old pill vanishing and a new one appearing.
   item matching its `active` selector, measured from the bar (which is `position: relative`), so a scrolling tab row
   carries it along. Styles live in `styles/glide.css`.
 * **Motion:** a 460 ms spring slide (`--ease-spring`) with a short stretch along the way it travels (wider for a
-  sideways move, taller for an up/down move), then it settles. Only a change of choice slides: first paint, a resize
-  or a layout shift moves it instantly.
+  sideways move, taller for an up/down move), then it settles. The stretch is one smooth curve (keyframes every 10%,
+  linear between), so no frame jumps. It aims at the item's layout box (offsets, not the painted box), so a tapped
+  item's press shrink never makes it aim small and snap at the end. Only a change of choice slides: first paint, a
+  resize or a layout shift moves it instantly, except while a slide is under way, when it re-aims smoothly.
 * **Fallback:** until it has measured, the bar has no `has-glide` class and the chosen item paints its own highlight,
   so there is never a moment with no highlight. With `has-glide`, the chosen item drops its own background, its
   vermilion marker and its shadow, and the glide draws them.
