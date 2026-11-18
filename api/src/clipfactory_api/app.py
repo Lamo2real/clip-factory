@@ -191,7 +191,7 @@ def _posting_setup(env: Any, reg: str) -> tuple[OAuthEnv | None, WebFiles | None
     """Secrets Manager, the state key and the public URLs of §17.9; both None when any is missing."""
     import boto3
 
-    from .oauth import OAuthEnv, scopes_from_config
+    from .oauth import OAuthEnv, money_scopes_from_config, scopes_from_config
     from .oauth.secrets import PREFIX, Secrets
     from .routes.setup import WebFiles
     from .stats import config
@@ -209,6 +209,7 @@ def _posting_setup(env: Any, reg: str) -> tuple[OAuthEnv | None, WebFiles | None
         state_key=lambda: secrets.read_text(state_name).encode(),
         graph_version=config.load().graph_api_version,
         scopes=scopes_from_config(),
+        money_scopes=money_scopes_from_config(),
     )
     web_files = None
     if env.get("WEB_BUCKET") and env.get("DISTRIBUTION_ID"):

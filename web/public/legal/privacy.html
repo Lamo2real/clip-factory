@@ -18,7 +18,7 @@
       </nav>
       <main>
         <h1>Privacy Policy</h1>
-        <p class="muted">Last updated: 16 November 2026</p>
+        <p class="muted">Last updated: 18 November 2026</p>
         <div class="card">
           <p>
             Clip Factory ("the app") is a private app used only by its owner, one creator. It has no other users and
@@ -34,20 +34,29 @@
           <ul>
             <li>an access token (and, where the platform uses one, a refresh token) that lets the app post the owner's approved clips to that account;</li>
             <li>basic profile information of the connected account: its id, username or channel name, display name and picture;</li>
-            <li>the views, likes, comments, shares and similar numbers of the posts the app made.</li>
+            <li>the views, likes, comments, shares and similar numbers of the posts the app made;</li>
+            <li>
+              only if the owner presses <strong>Allow money reading</strong> or <strong>Allow follower reading</strong>:
+              the account's own totals (subscribers or followers, watch time, views) and the money the platform itself
+              reports for the account (for YouTube, its estimated revenue per day and per video, read with the
+              <code>yt-analytics-monetary.readonly</code> permission). Nothing about money is ever typed in or worked out
+              by the app.
+            </li>
           </ul>
 
           <h2>How it is used</h2>
           <p>
             This information is used only to show which accounts are connected, to upload clips the owner has watched
-            and approved with Keep, and to show the owner how each clip did. The app does not read private messages,
+            and approved with Keep, to show the owner how each clip did, and to show the owner how close they are to each
+            platform's paid programme and what the platform says they earned. The app does not read private messages,
             followers or other people's data, and does not use any data for advertising, profiling or selling.
           </p>
 
           <h2>YouTube API Services</h2>
           <p>
-            Clip Factory uses YouTube API Services to upload the owner's clips to their YouTube channel and to read the
-            numbers of those videos. By using Clip Factory with YouTube, you agree to be bound by the
+            Clip Factory uses YouTube API Services to upload the owner's clips to their YouTube channel, to read the
+            numbers of those videos and the channel's totals, and, once the owner allows it, to read the estimated
+            revenue YouTube reports for the channel. The app never sees or stores bank or payment details. By using Clip Factory with YouTube, you agree to be bound by the
             <a href="https://www.youtube.com/t/terms" rel="noopener noreferrer">YouTube Terms of Service</a>. Google's
             handling of data is described in the
             <a href="http://www.google.com/policies/privacy" rel="noopener noreferrer">Google Privacy Policy</a>.
@@ -83,7 +92,8 @@
             <li>
               In Clip Factory, open Settings › Posting › Set up posting, open the platform and press
               <strong>Disconnect</strong>. This deletes that platform's stored tokens straight away. For YouTube it
-              also deletes the numbers the app stored about your YouTube videos.
+              also deletes the numbers the app stored about your YouTube videos and channel, including the revenue YouTube
+              reported.
             </li>
             <li>
               You can also take away the app's access on the platform itself: Google at

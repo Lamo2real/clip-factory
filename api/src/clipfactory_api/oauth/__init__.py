@@ -55,6 +55,16 @@ DEFAULT_SCOPES: dict[str, tuple[str, ...]] = {
     ),
     "x": ("tweet.read", "users.read", "tweet.write", "media.write", "offline.access"),
 }
+# §25.4: asked for only by "Allow money reading" (grant=money), on top of the Connect scopes. Connect never asks for
+# them, so a normal Connect is exactly what it was. The platforms.json moneyScopes lists win when present.
+DEFAULT_MONEY_SCOPES: dict[str, tuple[str, ...]] = {
+    "youtube": ("https://www.googleapis.com/auth/yt-analytics-monetary.readonly",),
+    "tiktok": ("user.info.stats",),
+    "instagram": (),
+    "facebook": (),
+    "x": (),
+}
+MONEY_GRANT = "money"
 
 
 def label(platform: str) -> str:
@@ -77,6 +87,7 @@ class OAuthEnv:
     clock: Clock = field(default=utcnow)
     graph_version: str = "v27.0"
     scopes: dict[str, tuple[str, ...]] = field(default_factory=lambda: dict(DEFAULT_SCOPES))
+    money_scopes: dict[str, tuple[str, ...]] = field(default_factory=lambda: dict(DEFAULT_MONEY_SCOPES))
 
     def redirect_uri(self, platform: str) -> str:
         """Exact, no trailing slash; the same string goes to the authorize URL and the code exchange."""
@@ -96,3 +107,19 @@ def scopes_from_config() -> dict[str, tuple[str, ...]]:
     except Exception:
         return dict(DEFAULT_SCOPES)
     return {p: cfg.platform(p).scopes or DEFAULT_SCOPES[p] for p in SETUP_ORDER}
+
+
+def money_scopes_from_config() -> dict[str, tuple[str, ...]]:
+    """The platforms.json ``moneyScopes`` lists (§25.4), falling back to ``DEFAULT_MONEY_SCOPES``."""
+    from ..stats import config
+
+    try:
+        cfg = config.load()
+    except Exception:
+        return dict(DEFAULT_MONEY_SCOPES)
+    return {p: cfg.platform(p).money_scopes for p in SETUP_ORDER}
+
+
+def money_capable(env: OAuthEnv, platform: str) -> bool:
+    """Whether "Allow money reading" means anything for this platform (YouTube and TikTok today)."""
+    return bool(env.money_scopes.get(platform))
