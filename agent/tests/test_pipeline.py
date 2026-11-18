@@ -901,7 +901,9 @@ def test_full_decode_rule() -> None:
     assert not picture_mod.full_decode_fits(four_hours, 0.0)  # the probe failed
 
 
-async def test_a_part_over_the_part_limit_is_encoded_smaller_once(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_part_over_the_part_limit_is_encoded_smaller_once(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
     shrunk: list[str] = []
 
     async def prepare(src: str, out: Path, **kw: Any) -> Any:
