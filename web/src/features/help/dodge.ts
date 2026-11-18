@@ -1,22 +1,26 @@
 // The launcher keeps one home spot and stays calm (docs/CONTRACTS.md §19.8): on phones above the tab bar at the right,
-// on wide screens bottom right (above the update bar). It never moves and never hides while the page scrolls. Once
-// scrolling has settled (no scroll event for DODGE_SETTLE_MS, so a fling, momentum or an iOS rubber-band is one
-// scroll), it looks at its spot: if it would rest on a control (a link, button, field, anything focusable, or a part
-// of a block marked data-help-dodge), it glides up a little to the nearest clear spot within DODGE_NUDGE_MAX of home,
-// or, when there is none that close, fades out where it is; the next settle that finds home clear brings it back
-// there. Nothing changes in the middle of a scroll (or a window resize), so small scrolls, momentum and bounces cannot
-// make it flicker or jump. With keyboard focus on it, it stays as it is; with its panel open it is home and shown. It
-// measures its resting box (no transforms), so fonts, slow machines and transitions do not matter, and measures again
-// on the next frame whenever the page changes under it while it is still (content loading in, the update bar).
+// on wide screens bottom right (above the update bar). It never moves: no lift, no slide, nothing sideways. The only
+// thing it ever does is fade out in place, and only when it would make a control hard to tap: one it covers by more
+// than DODGE_COVER of its area, or one with no part of at least DODGE_TAP px (or its full size, if smaller) left
+// free beside it. A big row link or card it rests on the edge of stays easy to tap, so that never hides it.
+// It is calm about when, too. Nothing changes while the page scrolls or a finger is on the screen; it fades out
+// only once the page has been still for DODGE_SETTLE_MS (so a fling, momentum or an iOS rubber-band is one scroll),
+// fades back in only after DODGE_RETURN_MS of stillness, and keeps each state for at least DODGE_HOLD_MS, so short
+// reading-pace scrolls cannot make it blink. With keyboard focus on it, it stays shown; with its panel open it is
+// shown. It measures its resting box (no transforms), and looks again whenever the page changes under it.
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useRoute } from "../../lib/router.ts";
 
-/** How long the page must be still before the launcher looks at its spot again. */
+/** How long the page (and the finger) must be still before the launcher may fade out. */
 export const DODGE_SETTLE_MS = 260;
-/** The room it keeps around a control: closer than this counts as on it. */
-export const DODGE_GAP = 8;
-/** The most it ever moves up from home to clear a control; past that it fades out at home instead. */
-export const DODGE_NUDGE_MAX = 96;
+/** How long the page must be still before it fades back in: longer, so it does not come back between two flicks. */
+export const DODGE_RETURN_MS = 700;
+/** The least time it stays in a state (shown or faded) once it has changed. */
+export const DODGE_HOLD_MS = 1000;
+/** The smallest part of a control, in px each way, that still counts as easy to tap. */
+export const DODGE_TAP = 44;
+/** Covering more than this share of a control's area makes it hard to tap. */
+export const DODGE_COVER = 0.3;
 
 export interface Box {
   top: number;
@@ -25,26 +29,32 @@ export interface Box {
   right: number;
 }
 
-/** True when the launcher at `base` would rest on (or within `gap` px of) any of the controls. */
-export function covers(base: Box, controls: readonly Box[], gap = DODGE_GAP): boolean {
-  return controls.some((o) => o.left < base.right + gap && o.right > base.left - gap && o.top < base.bottom + gap && o.bottom > base.top - gap);
+/**
+ * True when the launcher at `base` makes `control` hard to tap: it covers more than DODGE_COVER of it, or what is
+ * left of it beside the launcher (left, right, above or below) is nowhere DODGE_TAP px (or the control's own size,
+ * if smaller) each way. A control it does not touch is never hard to tap.
+ */
+export function hardToTap(base: Box, control: Box): boolean {
+  const w = Math.min(base.right, control.right) - Math.max(base.left, control.left);
+  const h = Math.min(base.bottom, control.bottom) - Math.max(base.top, control.top);
+  if (w <= 0 || h <= 0) return false;
+  const cw = control.right - control.left;
+  const ch = control.bottom - control.top;
+  if ((w * h) / (cw * ch) > DODGE_COVER) return true;
+  const needW = Math.min(DODGE_TAP, cw);
+  const needH = Math.min(DODGE_TAP, ch);
+  const free = [
+    [base.left - control.left, ch],
+    [control.right - base.right, ch],
+    [cw, base.top - control.top],
+    [cw, control.bottom - base.bottom],
+  ];
+  return !free.some(([fw, fh]) => fw! >= needW && fh! >= needH);
 }
 
-/**
- * How far up from `base` the launcher has to go to clear every control (keeping the gap), or null when that is more
- * than `max`: then it fades out at home instead. 0 when home is clear.
- */
-export function nudgeFor(base: Box, controls: readonly Box[], max = DODGE_NUDGE_MAX, gap = DODGE_GAP): number | null {
-  // Clearing one control can land it on the next one up, so repeat until nothing is under it.
-  let lift = 0;
-  for (let round = 0; round <= controls.length; round++) {
-    const at = { ...base, top: base.top - lift, bottom: base.bottom - lift };
-    const on = controls.filter((o) => covers(at, [o], gap));
-    if (!on.length) return lift;
-    lift = Math.max(...on.map((o) => base.bottom - o.top + gap));
-    if (lift > max) return null;
-  }
-  return null;
+/** True when the launcher at `base` would make any of the controls hard to tap (`hardToTap`). */
+export function blocks(base: Box, controls: readonly Box[]): boolean {
+  return controls.some((c) => hardToTap(base, c));
 }
 
 /** What counts as a control the launcher must never sit on (a link, a button, a field, anything focusable). */
@@ -138,52 +148,78 @@ export function restingBox(el: HTMLElement): Box {
   return { top: el.offsetTop, bottom: el.offsetTop + el.offsetHeight, left: el.offsetLeft, right: el.offsetLeft + el.offsetWidth };
 }
 
-/** Why the launcher is out of the way right now: its spot is on a control and no clear spot is close. */
+/** Why the launcher is out of the way right now: it would make a control under its spot hard to tap. */
 export type DodgeReason = "blocked" | null;
 
 /**
- * Where the launcher shows: `lift` px up from home (0 at home), or faded out at home (`hidden`). A scroll only
- * changes this once the page has been still for DODGE_SETTLE_MS, never mid-scroll. While `pinned` (keyboard focus)
- * it stays as it is and shows; with `home` (its panel is open) it is home and shown.
+ * Whether the launcher shows at its home spot or is faded out there (`hidden`). It changes only once the page and the
+ * finger have been still (DODGE_SETTLE_MS to fade out, DODGE_RETURN_MS to come back) and never sooner than
+ * DODGE_HOLD_MS after its last change. While `pinned` (keyboard focus) it shows and stays; with `home` (its panel is
+ * open) it shows.
  */
-export function useDodge(
-  launcher: RefObject<HTMLElement | null>,
-  pinned: boolean,
-  home = false,
-): { hidden: boolean; lift: number; reason: DodgeReason } {
-  const [spot, setSpot] = useState<{ lift: number; blocked: boolean }>({ lift: 0, blocked: false });
+export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolean, home = false): { hidden: boolean; reason: DodgeReason } {
+  const [blocked, setBlocked] = useState(false);
   const route = useRoute();
   const page = `${route.name}:${window.location.pathname}${window.location.search}`;
   const frozen = useRef(pinned);
   frozen.current = pinned;
+  const shown = useRef(!blocked);
+  shown.current = !blocked;
   const look = useRef<() => void>(() => undefined);
 
   useEffect(() => {
-    let quiet: ReturnType<typeof setTimeout> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let raf = 0;
-    let scrolling = false;
-    const measure = () => {
+    let touching = false;
+    // A page that opens is still and has never changed: it may look, and change, at once.
+    let lastMove = -Infinity;
+    let lastChange = -Infinity;
+    // data-settling on the launcher while it may still change (tests wait for it to go).
+    const settling = (on: boolean) => {
+      const el = launcher.current;
+      if (el) el.toggleAttribute("data-settling", on);
+    };
+    const later = (ms: number) => {
+      clearTimeout(timer);
+      settling(true);
+      timer = setTimeout(schedule, Math.max(0, ms));
+    };
+    const check = () => {
       raf = 0;
       const el = launcher.current;
-      if (!el || scrolling || frozen.current) return;
+      if (!el) return;
+      if (frozen.current) return settling(false);
+      if (touching) return settling(true);
+      const now = performance.now();
+      const still = now - lastMove;
+      if (still < DODGE_SETTLE_MS) return later(DODGE_SETTLE_MS - still);
       const base = restingBox(el);
-      const lift = nudgeFor(base, controlBoxes(document, window.innerHeight, { left: base.left - DODGE_GAP, right: base.right + DODGE_GAP }));
-      // Whole pixels, so sub-pixel layout noise never nudges it.
-      const next = lift === null ? { lift: 0, blocked: true } : { lift: Math.ceil(lift), blocked: false };
-      setSpot((was) => (was.lift === next.lift && was.blocked === next.blocked ? was : next));
+      const want = blocks(base, controlBoxes(document, window.innerHeight, { left: base.left, right: base.right }));
+      if (want === !shown.current) return settling(false);
+      // Back in only after a longer stillness, and never sooner than the hold after the last change.
+      const wait = Math.max(want ? 0 : DODGE_RETURN_MS - still, DODGE_HOLD_MS - (now - lastChange));
+      if (wait > 0) return later(wait);
+      lastChange = now;
+      shown.current = !want;
+      settling(false);
+      setBlocked(want);
     };
-    const schedule = () => {
-      if (!raf) raf = requestAnimationFrame(measure);
-    };
+    function schedule() {
+      if (!raf) raf = requestAnimationFrame(check);
+    }
     look.current = schedule;
-    // A scroll changes nothing until it has settled; then the launcher looks at its spot once.
-    const onScroll = () => {
-      scrolling = true;
-      clearTimeout(quiet);
-      quiet = setTimeout(() => {
-        scrolling = false;
-        schedule();
-      }, DODGE_SETTLE_MS);
+    // Movement (a scroll, a resize, a finger) changes nothing; the launcher looks again once it has settled.
+    const moved = () => {
+      lastMove = performance.now();
+      later(DODGE_SETTLE_MS);
+    };
+    const touchDown = () => {
+      touching = true;
+      moved();
+    };
+    const touchUp = (e: TouchEvent) => {
+      touching = e.touches.length > 0;
+      moved();
     };
     // Content that loads later (the Review card after its data), controls that grow or shrink, the window itself.
     const resized = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
@@ -196,14 +232,21 @@ export function useDodge(
     window.addEventListener("transitionend", schedule, true);
     window.addEventListener("animationend", schedule, true);
     document.fonts?.addEventListener?.("loadingdone", schedule);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    // A page that opens is still: look at once.
-    raf = requestAnimationFrame(measure);
+    window.addEventListener("scroll", moved, { passive: true });
+    window.addEventListener("resize", moved);
+    window.addEventListener("touchstart", touchDown, { passive: true });
+    window.addEventListener("touchmove", moved, { passive: true });
+    window.addEventListener("touchend", touchUp, { passive: true });
+    window.addEventListener("touchcancel", touchUp, { passive: true });
+    raf = requestAnimationFrame(check);
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      clearTimeout(quiet);
+      window.removeEventListener("scroll", moved);
+      window.removeEventListener("resize", moved);
+      window.removeEventListener("touchstart", touchDown);
+      window.removeEventListener("touchmove", moved);
+      window.removeEventListener("touchend", touchUp);
+      window.removeEventListener("touchcancel", touchUp);
+      clearTimeout(timer);
       cancelAnimationFrame(raf);
       changed?.disconnect();
       resized?.disconnect();
@@ -218,7 +261,7 @@ export function useDodge(
     if (!pinned) look.current();
   }, [pinned]);
 
-  if (home) return { hidden: false, lift: 0, reason: null };
-  const reason: DodgeReason = !pinned && spot.blocked ? "blocked" : null;
-  return { hidden: reason !== null, lift: spot.lift, reason };
+  if (home) return { hidden: false, reason: null };
+  const reason: DodgeReason = !pinned && blocked ? "blocked" : null;
+  return { hidden: reason !== null, reason };
 }

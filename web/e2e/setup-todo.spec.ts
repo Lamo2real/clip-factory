@@ -538,11 +538,11 @@ test("the Ask pill keeps its corner under the open list at every scroll position
           const bottom = Math.min(r.bottom, rail.bottom);
           if (bottom - top >= 1 && r.left < a.right && r.right > a.left && top < a.bottom && bottom > a.top) on.push(c.getAttribute("aria-label") ?? "");
         }
-        return { lift: ask.dataset.lift, dodge: ask.dataset.dodge ?? null, hidden: ask.classList.contains("is-hidden"), on, gap: Math.round(a.top - rail.bottom) };
+        return { moved: Math.round(ask.offsetTop - a.top), dodge: ask.dataset.dodge ?? null, hidden: ask.classList.contains("is-hidden"), on, gap: Math.round(a.top - rail.bottom) };
       });
       const at = `${path} ${width}x${height} at ${y}`;
       if (state.dodge !== null || state.hidden) failures.push(`${at}: the Ask pill faded out (${state.dodge})`);
-      if (state.lift !== "0") failures.push(`${at}: the Ask pill moved up ${state.lift} px`);
+      if (state.moved !== 0) failures.push(`${at}: the Ask pill moved up ${state.moved} px`);
       if (state.on.length) failures.push(`${at}: the Ask pill is on ${state.on.join(", ")}`);
       if (state.gap < 12) failures.push(`${at}: only ${state.gap} px between the list and the Ask pill`);
     }

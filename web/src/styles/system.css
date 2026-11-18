@@ -431,7 +431,7 @@ h1.getapp__title {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 12px;
-  padding: 12px 14px;
+  padding: 12px var(--inset);
   border-radius: var(--r-lg);
   animation: rise var(--dur-3) var(--ease-out);
 }

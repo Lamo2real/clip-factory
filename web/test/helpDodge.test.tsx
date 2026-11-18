@@ -2,7 +2,7 @@
 import { act, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { controlBoxes, DODGE_SETTLE_MS, shownBox, useDodge } from "../src/features/help/dodge.ts";
+import { controlBoxes, DODGE_HOLD_MS, DODGE_RETURN_MS, DODGE_SETTLE_MS, shownBox, useDodge } from "../src/features/help/dodge.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -11,9 +11,9 @@ function boxOf(el: Element): [number, number, number, number] {
   return (el.getAttribute("data-box") ?? "0,0,0,0").split(",").map(Number) as [number, number, number, number];
 }
 
-// The launcher keeps one spot and stays calm while the page scrolls (§19.8): it never changes mid-scroll, and only
-// once the page has been still does it fade out (on a control) or back in (spot clear).
-describe("useDodge: one spot, a fade only once scrolling settles", () => {
+// The launcher keeps one spot and stays calm while the page scrolls (§19.8): it never moves, never changes mid-scroll
+// or under a finger, fades out sooner than it comes back, and holds each state a while.
+describe("useDodge: one spot, a calm fade only once the page is still", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -40,23 +40,26 @@ describe("useDodge: one spot, a fade only once scrolling settles", () => {
       const b = boxOf(this);
       return b[3] - b[1];
     });
-    const seen: string[] = [];
+    const seen: boolean[] = [];
     function Launcher() {
       const ref = useRef<HTMLButtonElement>(null);
-      const { hidden, lift } = useDodge(ref, pinned);
-      seen.push(`${hidden}:${lift}`);
-      return <button ref={ref} className="help-launcher" data-box="300,700,356,756" data-hidden={hidden || undefined} data-lift={lift} />;
+      const { hidden } = useDodge(ref, pinned);
+      seen.push(hidden);
+      return <button ref={ref} className="help-launcher" data-box="300,700,356,756" data-hidden={hidden || undefined} />;
     }
-    // A tall control under the spot: no clear spot within reach, so it fades out at home.
-    document.body.innerHTML = `<a id="control" href="/x" data-box="0,500,400,780">A control</a><div id="host"></div>`;
+    // A small button right under the spot: hard to tap with the launcher on it.
+    document.body.innerHTML = `<button id="control" data-box="300,710,356,746">Save</button><div id="host"></div>`;
     const root = createRoot(document.getElementById("host")!);
     act(() => root.render(<Launcher />));
     const hidden = () => document.querySelector(".help-launcher")!.hasAttribute("data-hidden");
-    const lift = () => Number(document.querySelector(".help-launcher")!.getAttribute("data-lift"));
     const control = document.getElementById("control")!;
+    const away = () => control.setAttribute("data-box", "0,100,60,140");
+    const under = () => control.setAttribute("data-box", "300,710,356,746");
     const scroll = () => act(() => void window.dispatchEvent(new Event("scroll")));
+    const touch = (type: string, touches = 0) => act(() => void window.dispatchEvent(Object.assign(new Event(type), { touches: { length: touches } })));
     const wait = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
-    return { hidden, lift, control, scroll, wait, seen, unmount: () => act(() => root.unmount()) };
+    const changes = () => seen.filter((h, i) => i > 0 && h !== seen[i - 1]).length;
+    return { hidden, away, under, scroll, touch, wait, changes, unmount: () => act(() => root.unmount()) };
   }
 
   it("fades out at once on a page that opens with a control under its spot", () => {
@@ -66,49 +69,87 @@ describe("useDodge: one spot, a fade only once scrolling settles", () => {
     t.unmount();
   });
 
-  it("changes nothing while the page scrolls, however long, and fades back in only once it has settled", () => {
+  it("stays shown over a big row link it rests on the edge of", () => {
+    const t = mount();
+    document.getElementById("control")!.remove();
+    document.body.insertAdjacentHTML("afterbegin", `<a href="/x" data-box="16,680,374,780">A big card</a>`);
+    t.wait(20);
+    expect(t.hidden()).toBe(false);
+    t.unmount();
+  });
+
+  it("changes nothing while the page scrolls, however long, and comes back only after a longer stillness", () => {
     const t = mount();
     t.wait(20);
     expect(t.hidden()).toBe(true);
+    const before = t.changes();
     // The page scrolls the control away: a long fling, then momentum, a scroll event every 16 ms.
-    t.control.setAttribute("data-box", "0,100,400,160");
-    const changes = () => t.seen.filter((h, i) => i > 0 && h !== t.seen[i - 1]).length;
-    const before = changes();
+    t.away();
     for (let i = 0; i < 90; i++) {
       t.scroll();
       t.wait(16);
     }
     expect(t.hidden()).toBe(true);
-    expect(changes()).toBe(before);
-    t.wait(DODGE_SETTLE_MS + 20);
+    expect(t.changes()).toBe(before);
+    // Still for the settle time: not yet. Back in only after the return time.
+    t.wait(DODGE_SETTLE_MS + 40);
+    expect(t.hidden()).toBe(true);
+    t.wait(DODGE_RETURN_MS - DODGE_SETTLE_MS);
     expect(t.hidden()).toBe(false);
-    // Small scrolls back and forth bring a short control under it: still nothing until it settles, then one smooth
-    // nudge up just clear of it (12 px over the bottom of the launcher, 8 px gap), never more than 96 px.
-    t.control.setAttribute("data-box", "0,744,400,790");
-    for (let i = 0; i < 10; i++) {
-      t.scroll();
-      t.wait(60);
-      expect(t.hidden()).toBe(false);
-      expect(t.lift()).toBe(0);
-    }
-    t.wait(DODGE_SETTLE_MS + 20);
-    expect(t.hidden()).toBe(false);
-    expect(t.lift()).toBe(756 - 744 + 8);
-    // Scrolled on so home is clear: back home only once that scroll has settled.
-    t.control.setAttribute("data-box", "0,900,400,950");
-    t.scroll();
-    t.wait(100);
-    expect(t.lift()).toBe(756 - 744 + 8);
-    t.wait(DODGE_SETTLE_MS + 20);
-    expect(t.lift()).toBe(0);
     t.unmount();
   });
 
-  it("never fades while it has focus or its panel is open", () => {
+  it("does not blink during short scrolls at reading pace: at most one change per settle, each held a while", () => {
+    const t = mount();
+    t.wait(20);
+    t.away();
+    t.scroll();
+    t.wait(DODGE_HOLD_MS + DODGE_RETURN_MS);
+    expect(t.hidden()).toBe(false);
+    // Scroll 140 px every 300 ms, the control passing under the spot now and then.
+    const flips: number[] = [];
+    let was = t.hidden();
+    for (let i = 0; i < 40; i++) {
+      if (i % 3 === 0) t.under();
+      else t.away();
+      t.scroll();
+      for (let f = 0; f < 300; f += 20) {
+        t.wait(20);
+        if (t.hidden() !== was) {
+          was = t.hidden();
+          flips.push(i * 300 + f);
+        }
+      }
+    }
+    for (let i = 1; i < flips.length; i++) expect(flips[i]! - flips[i - 1]!).toBeGreaterThanOrEqual(DODGE_HOLD_MS);
+    t.unmount();
+  });
+
+  it("waits for the finger to lift: a drag that pauses mid-gesture changes nothing", () => {
+    const t = mount();
+    t.wait(20);
+    t.away();
+    t.scroll();
+    t.wait(DODGE_HOLD_MS + DODGE_RETURN_MS);
+    expect(t.hidden()).toBe(false);
+    t.touch("touchstart", 1);
+    t.under();
+    t.scroll();
+    t.wait(DODGE_HOLD_MS * 2);
+    expect(t.hidden()).toBe(false);
+    t.touch("touchend", 0);
+    t.wait(DODGE_SETTLE_MS - 40);
+    expect(t.hidden()).toBe(false);
+    t.wait(80);
+    expect(t.hidden()).toBe(true);
+    t.unmount();
+  });
+
+  it("never fades while it has keyboard focus or its panel is open", () => {
     const t = mount(true);
     t.wait(20);
     t.scroll();
-    t.wait(DODGE_SETTLE_MS + 20);
+    t.wait(DODGE_HOLD_MS);
     expect(t.hidden()).toBe(false);
     t.unmount();
   });

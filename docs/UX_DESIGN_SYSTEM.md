@@ -211,8 +211,10 @@ read "6 h 10 min". Neither ever says "60 min" or "24 h".
 - **One text line down the left of a page.** Panels pad their sides by `--inset`; words that sit loose on the page
   (the page title and its line, breadcrumbs, back links, headings and lines between panels, the review count, a
   skill's meta line) start `--loose-x` in (the panel's 1 px rim plus `--inset`), so their first letter lines up with
-  the first letter inside the panels below, in every look and at every width. Boxes (panels, buttons, pick-one tracks,
-  the Back pill) keep the page edge.
+  the first letter inside the panels below, in every look and at every width. Cards pad their sides by `--inset` too
+  (branch cards, the Home hero, the Get the app banner, job rows, the views total, Library cards, Review cards), so
+  their icon tile, thumbnail or first word sits on the same line; the breadcrumb's first word too (`e2e/text-line.spec.ts`
+  checks it at 320, 390, 768 and 1440 px). Boxes (panels, buttons, pick-one tracks, the Back pill) keep the page edge.
 
 | Token | Value | Use |
 |---|---|---|
@@ -332,10 +334,11 @@ unless its name already says it all.
 - Results list under the box: the apple's name with its place under it (`Look & feel › Sounds`). Tapping a result
   opens that branch, scrolls to the apple and highlights it for 2 seconds: a deep-green wash with a vermilion edge
   and a soft inner glow that swells once and settles, drawn exactly on the panel's own lines. An apple alone in its
-  panel lights the whole panel along its border and corners; in a panel of several, its row lights from the panel's
+  panel lights the whole panel along its border and corners, whatever else the panel holds (Try it's picks, a note); in a panel of several, its row lights from the panel's
   left edge to its right edge between the dividers, taking the panel's top corners when it is the first row and the
-  bottom corners when it is the last. Never a ring outside the panel. The keyboard focus ring of an apple follows the
-  same lines (bone inside vermilion), instead of the page's own ring. With reduced motion the light simply shows.
+  bottom corners when it is the last (a divider closes the last row when something follows it). Never a ring outside
+  the panel. The keyboard focus ring of an apple follows the same lines (bone inside vermilion), instead of the page's
+  own ring; in forced-colors mode a system-coloured outline shows instead. With reduced motion the light simply shows.
 - Nothing found: "Nothing found for “<what you typed>”. Try a shorter word, like “sound”." Never an empty box.
 - The list is a `listbox` linked to the box; Up and Down move, Enter opens, Escape clears.
 
@@ -1051,7 +1054,7 @@ signed-in page and follows every rule on this page.
 |---|---|
 | Launcher, desktop | green glass pill, sparkle icon + "Ask", fixed bottom right (`right: 24px`), 12 px above the update bar when it shows (the bar publishes its height as `--update-bar-h`). |
 | Launcher, phone | 56 px icon-only glass circle, `aria-label="Ask Clip Factory"`, `right: max(16px, safe-area-inset-right)`, bottom = tab bar + safe area + 18 px + `--update-bar-h` (+ 10 px when the bar shows). Never covers the tab bar or the update bar. |
-| Dodge | One home spot, and nothing changes while the page scrolls (drag, wheel, fling, momentum, rubber-band). Once the page has been still for 260 ms, if it would rest on (or within 8 px of) a link, button, field, tab, switch or focusable element (found on the page by itself) or a part of a block marked `data-help-dodge` (a pick-one row's choices, the Review action bar, the Home link box, the sound cards, the **Try it** controls), it glides straight up to the nearest clear spot when that is at most 96 px above home (420 ms); when it is not, it fades out where it stands (opacity and a slight shrink, 360 ms; taps go through to the control). The next settle that finds home clear brings it back home. Never sideways, never to the middle of the screen. Shown while it has focus; home while its panel is open. Words are no obstacle. No glide or fade with reduced motion (it simply goes). |
+| Dodge | One home spot, and it never moves: no lift, no glide, never sideways or to the middle of the screen. Nothing changes while the page scrolls (drag, wheel, fling, momentum, rubber-band) or a finger is down. Once page and finger have been still for 260 ms, if it would make a control hard to tap (covering over 30 % of a link, button, field, switch or choice, or leaving no 44 px part of it free; a big card or row link it only rests on the edge of does not count), it fades out where it stands (opacity and a slight shrink, 420 ms; taps go through to the control). It fades back in only after 700 ms of stillness with its spot clear, and keeps each state at least 1 s, so it never blinks. Shown while it has keyboard focus or its panel is open. Words are no obstacle. No fade with reduced motion (it simply goes). |
 | Room on phones | Pages get extra bottom padding under their last control, so the settled launcher never covers a control at 320, 375, 390 or 430 px, with or without the update bar. |
 | Panel, desktop | Non-modal dialog (`aria-modal="false"`), 400 px wide, `max-height: min(640px, 100dvh - 140px)`, anchored above the launcher, `.glass--strong`. If it would cover the control an answer button just lit up, it closes (the chat is kept). |
 | Panel, phone | Modal full-screen sheet (`aria-modal="true"`; the page and the launcher are `inert`; Tab stays in the sheet) with safe-area padding; covers the tab bar while open; Close brings it back. |

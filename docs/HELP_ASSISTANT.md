@@ -131,10 +131,11 @@ The look and the exact numbers are in [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#
   the plane only fades. The motion is reusable by any button (`useLaunch` / `<Flight>` in
   `web/src/components/PaperPlane.tsx`, `web/src/styles/fly.css`).
 - **The launcher stays calm and out of the way**: it has one home spot (phones: above the tab bar at the right; wide
-  screens: bottom right) and nothing about it changes while the page scrolls. Once scrolling settles (260 ms still),
-  if it would rest on a link, button, field or focusable thing (found on the page by itself, plus the parts of blocks
-  marked `data-help-dodge`) it glides straight up to a clear spot at most 96 px above home, or, when there is none
-  that close, fades out where it stands, letting taps through to the control; a later settle brings it back home. Every page keeps extra room under its last control. Only what shows counts: a
+  screens: bottom right) and never moves; nothing about it changes while the page scrolls or a finger is down. Once
+  the page has been still (260 ms), if it would make a control hard to tap (covering over 30 % of it, or leaving no
+  44 px part of it free; a big card or row link it rests on the edge of does not count) it fades out where it stands,
+  letting taps through; it fades back in only after 700 ms of stillness with its spot clear, and holds each state for
+  at least a second, so it never blinks. Every page keeps extra room under its last control. Only what shows counts: a
   tab scrolled out of its row or a line cut off by a scroller is no obstacle. The buttons of the setup to-do list
   count like any other control, so with the list open at the top right the launcher stays in its corner under it.
 - **Spotlight**: a very tall target (over 60 % of the window) rings only its heading, 80 px from the top.

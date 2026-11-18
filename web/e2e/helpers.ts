@@ -1,6 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
 import { settingsPath, TREES } from "../src/lib/settingsTree.ts";
-import { DODGE_SETTLE_MS } from "../src/features/help/dodge.ts";
 import { allSteps, GUIDES } from "../src/setup/index.ts";
 
 /** Every page of the settings tree (§15.1), and each platform's setup page (§17.1). */
@@ -47,27 +46,25 @@ export async function settle(page: Page) {
 }
 
 /**
- * Waits until the Ask launcher has settled (docs/CONTRACTS.md §19.8): it looks at its spot again only once the page
- * has been still for DODGE_SETTLE_MS, so this first lets that much time pass in the page (any scroll before this call
- * has then been answered), then waits for its fade to end: three frames in a row with nothing running on it.
+ * Waits until the Ask launcher has settled (docs/CONTRACTS.md §19.8): it changes only once the page has been still
+ * (and fades back in after a longer stillness, holding each state a while), and carries data-settling while a change
+ * may still come. So: a frame for any scroll before this call to reach it, then three frames in a row with no
+ * data-settling and no fade running.
  */
 export async function launcherSettled(page: Page) {
   await page.evaluate(
-    (quiet) =>
+    () =>
       new Promise<void>((resolve) => {
-        setTimeout(() => {
-          let calm = 0;
-          const tick = () => {
-            const el = document.querySelector<HTMLElement>(".help-launcher");
-            const still = !el || el.getAnimations().every((a) => a.playState !== "running");
-            calm = still ? calm + 1 : 0;
-            if (calm >= 3) resolve();
-            else requestAnimationFrame(tick);
-          };
-          requestAnimationFrame(tick);
-        }, quiet);
+        let calm = 0;
+        const tick = () => {
+          const el = document.querySelector<HTMLElement>(".help-launcher");
+          const still = !el || (!el.hasAttribute("data-settling") && el.getAnimations().every((a) => a.playState !== "running"));
+          calm = still ? calm + 1 : 0;
+          if (calm >= 3) resolve();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(() => requestAnimationFrame(tick));
       }),
-    DODGE_SETTLE_MS + 40,
   );
 }
 

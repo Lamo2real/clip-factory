@@ -52,7 +52,8 @@
 .hero {
   display: grid;
   gap: clamp(18px, 3vw, 32px);
-  padding: clamp(20px, 4.4vw, 52px);
+  /* Its words start on the page's text line (--inset), like every panel's; the air goes above and below. */
+  padding: clamp(20px, 4.4vw, 52px) var(--inset);
   border-radius: var(--r-xl);
 }
 .hero__main {
@@ -378,7 +379,7 @@
   align-content: center;
   justify-items: start;
   gap: 6px;
-  padding: 20px 22px;
+  padding: 20px var(--inset);
   border-radius: var(--r-lg);
 }
 .stat__value {
@@ -428,7 +429,7 @@
     "thumb side";
   gap: 10px 14px;
   align-items: start;
-  padding: 10px;
+  padding: 10px var(--inset);
   border-radius: var(--r-lg);
   text-decoration: none;
   transition: transform var(--dur-3) var(--ease-spring), box-shadow var(--dur-3);
@@ -507,7 +508,7 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-areas: "thumb body side";
     align-items: center;
-    padding: 12px 18px 12px 12px;
+    padding: 12px 18px 12px var(--inset);
   }
   .job-row__side {
     flex-direction: column;
@@ -691,7 +692,8 @@
 .review-card {
   display: grid;
   gap: clamp(16px, 3vw, 30px);
-  /* --inset from tablets up; 2 px less on phones, where five caption tabs and the decision column need the room. */
+  /* --inset from tablets up; 2 px less on phones, where five caption tabs and the decision column need the room. The
+     Review page's loose words move with it (below), so they still share its text line. */
   padding: clamp(14px, 2.6vw, 24px);
   border-radius: var(--r-xl);
   transition:
@@ -1010,7 +1012,7 @@
   gap: 14px;
   align-content: start;
   height: 100%;
-  padding: 14px;
+  padding: 14px var(--inset);
 }
 .lib-card__top {
   display: flex;
@@ -1656,4 +1658,9 @@
   margin-top: -4px;
   color: var(--ink-2);
   font-size: var(--fs-xs);
+}
+
+/* The Review page's loose words (its title and line, the count) start where the cards' words start. */
+.page:has(.review-card) {
+  --loose-x: calc(clamp(14px, 2.6vw, 24px) + 1px);
 }

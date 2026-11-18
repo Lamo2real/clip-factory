@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { DODGE_NUDGE_MAX, DODGE_SETTLE_MS } from "../src/features/help/dodge.ts";
+import { DODGE_HOLD_MS, DODGE_SETTLE_MS } from "../src/features/help/dodge.ts";
 import { animationsDone, findOverflow, launcherSettled, settle } from "./helpers.ts";
 
 /** The launcher's box when it is shown (not stepped aside), else null. */
@@ -12,7 +12,10 @@ async function shownLauncher(page: Page) {
   });
 }
 
-/** Links, buttons, fields and anything focusable on the page that share area with the shown launcher. */
+/**
+ * Links, buttons, fields and anything focusable on the page that the shown launcher makes hard to tap: it covers more
+ * than 30 % of one, or leaves no part of it 44 px (or its own size, if smaller) each way free beside it (§19.8).
+ */
 async function coveredControls(page: Page) {
   return page.evaluate(() => {
     const el = document.querySelector<HTMLElement>(".help-launcher");
@@ -30,7 +33,16 @@ async function coveredControls(page: Page) {
       if (r.width < 1 || r.height < 1) continue;
       const w = Math.min(r.right, l.right) - Math.max(r.left, l.left);
       const h = Math.min(r.bottom, l.bottom) - Math.max(r.top, l.top);
-      if (w > 0 && h > 0) out.push(`${c.tagName.toLowerCase()}.${String(c.className).split(" ")[0]} "${(c.getAttribute("aria-label") || c.textContent || "").trim().slice(0, 30)}" ${Math.round(w)}x${Math.round(h)}`);
+      if (w <= 0 || h <= 0) continue;
+      const needW = Math.min(44, r.width);
+      const needH = Math.min(44, r.height);
+      const free = [
+        [l.left - r.left, r.height],
+        [r.right - l.right, r.height],
+        [r.width, l.top - r.top],
+        [r.width, r.bottom - l.bottom],
+      ].some(([fw, fh]) => fw! >= needW && fh! >= needH);
+      if ((w * h) / (r.width * r.height) > 0.3 || !free) out.push(`${c.tagName.toLowerCase()}.${String(c.className).split(" ")[0]} "${(c.getAttribute("aria-label") || c.textContent || "").trim().slice(0, 30)}" ${Math.round(w)}x${Math.round(h)}`);
     }
     return out;
   });
@@ -368,7 +380,7 @@ for (const size of SIZES) {
         .toBe(0);
     });
 
-    test("the launcher never changes while the page scrolls, however it scrolls, and only ever nudges a little", async ({ page }) => {
+    test("the launcher never moves, and changes only once the page is still, however it scrolls", async ({ page }) => {
       await page.goto("/");
       await settle(page);
       await launcherSettled(page);
@@ -382,21 +394,20 @@ for (const size of SIZES) {
         let lastScroll = -Infinity;
         let moved = 0;
         let sideways = 0;
-        const flips: number[] = [];
-        const state = () => `${el.classList.contains("is-hidden")}:${el.dataset.lift ?? ""}`;
-        let hidden = state();
+        const flips: { since: number; at: number }[] = [];
+        let hidden = el.classList.contains("is-hidden");
         const onScroll = () => (lastScroll = performance.now());
         window.addEventListener("scroll", onScroll, { passive: true });
         let run = true;
         const tick = () => {
           const b = el.getBoundingClientRect();
-          // The fade shrinks it a little around its centre; its centre never moves sideways.
+          // The fade shrinks it a little around its centre; its centre never moves.
           sideways = Math.max(sideways, Math.abs(b.left + b.width / 2 - (home.left + home.width / 2)));
           moved = Math.max(moved, Math.abs(b.top + b.height / 2 - (home.top + home.height / 2)));
-          const now = state();
+          const now = el.classList.contains("is-hidden");
           if (now !== hidden) {
             hidden = now;
-            flips.push(performance.now() - lastScroll);
+            flips.push({ since: performance.now() - lastScroll, at: performance.now() });
           }
           if (run) requestAnimationFrame(tick);
         };
@@ -415,31 +426,30 @@ for (const size of SIZES) {
           window.scrollBy(0, i % 2 ? -10 : 12);
           await new Promise((res) => setTimeout(res, 40));
         }
-        await new Promise((res) => setTimeout(res, 800));
+        await new Promise((res) => setTimeout(res, 1600));
         run = false;
         window.removeEventListener("scroll", onScroll);
         return { moved, sideways, flips };
       });
       expect(r.sideways, "the launcher moved sideways").toBeLessThan(1);
-      expect(r.moved, "the launcher went further than a small nudge").toBeLessThanOrEqual(DODGE_NUDGE_MAX + 1);
-      // Every change (a fade, a nudge) began only once the page had been still for the settle time (timer slack).
-      for (const since of r.flips) expect(since).toBeGreaterThanOrEqual(DODGE_SETTLE_MS - 20);
+      expect(r.moved, "the launcher moved up or down").toBeLessThan(1);
+      // Every change began only once the page had been still for the settle time (timer slack), each held a while.
+      for (const f of r.flips) expect(f.since).toBeGreaterThanOrEqual(DODGE_SETTLE_MS - 20);
+      for (let i = 1; i < r.flips.length; i++) expect(r.flips[i]!.at - r.flips[i - 1]!.at).toBeGreaterThanOrEqual(DODGE_HOLD_MS - 50);
     });
 
-    test("over a tall control it fades out where it stands once scrolling settles, and back in when the spot is clear", async ({ page }) => {
+    test("over a small control it fades out where it stands once scrolling settles, and back in when the spot is clear", async ({ page }) => {
       await page.goto("/");
       await settle(page);
       await launcherSettled(page);
-      // A control taller than any nudge, put into the page and scrolled under the launcher's spot.
-      // Its home spot: the layout box (it may be nudged up from there right now).
+      // Its home spot: the layout box.
       const home = await launcher(page).evaluate((el: HTMLElement) => ({ x: el.offsetLeft, y: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }));
       await page.evaluate((spot) => {
         const b = document.createElement("button");
         b.id = "under-ask";
-        b.textContent = "Under Ask";
-        // In the page (it scrolls with it), across the whole width, from 80 px above the spot (more than a nudge clears)
-        // to below it, 300 px further down than the spot for now.
-        b.style.cssText = `position:absolute;left:0;width:100%;height:160px;top:${window.scrollY + spot.y - 80 + 300}px`;
+        b.textContent = "Save";
+        // A small button in the page (it scrolls with it), 300 px further down than the spot for now.
+        b.style.cssText = `position:absolute;z-index:1;left:${spot.x - 10}px;width:${spot.width + 20}px;height:44px;top:${window.scrollY + spot.y + 6 + 300}px`;
         document.body.appendChild(b);
         // Room to scroll that far on any page.
         document.body.style.minHeight = `${document.documentElement.scrollHeight + 600}px`;
@@ -448,18 +458,35 @@ for (const size of SIZES) {
       await launcherSettled(page);
       await expect(launcher(page)).toHaveClass(/is-hidden/);
       await expect(launcher(page)).toHaveAttribute("data-dodge", "blocked");
-      // Faded where it stands (no nudge): same spot, and a tap there reaches the control.
-      await expect(launcher(page)).toHaveAttribute("data-lift", "0");
+      // Faded where it stands: same spot, and a tap there reaches the control.
       const faded = (await launcher(page).boundingBox())!;
       expect(Math.abs(faded.x + faded.width / 2 - (home.x + home.width / 2))).toBeLessThan(1);
       expect(Math.abs(faded.y + faded.height / 2 - (home.y + home.height / 2))).toBeLessThan(1);
-      expect(await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.id, [home.x + home.width / 2, home.y + home.height / 2])).toBe("under-ask");
+      expect(await page.evaluate(([x, y]) => document.elementFromPoint(x!, y!)?.id, [home.x + home.width / 2, home.y + home.height / 2 + 6])).toBe("under-ask");
       // Scrolled on so the spot is clear: it fades back in at the same spot.
       await page.evaluate(() => document.getElementById("under-ask")!.remove());
       await page.evaluate(() => window.scrollBy({ top: -300, behavior: "instant" }));
       await launcherSettled(page);
       await expect(launcher(page)).not.toHaveClass(/is-hidden/);
       expect(await coveredControls(page)).toEqual([]);
+    });
+
+    test("after its panel closes from a tap it still keeps clear of a control under its spot", async ({ page }) => {
+      await open(page);
+      await panel(page).getByRole("button", { name: /close/i }).first().click();
+      await expect(panel(page)).toHaveCount(0);
+      const home = await launcher(page).evaluate((el: HTMLElement) => ({ x: el.offsetLeft, y: el.offsetTop, width: el.offsetWidth }));
+      await page.evaluate((spot) => {
+        const b = document.createElement("button");
+        b.id = "under-ask";
+        b.textContent = "Save";
+        b.style.cssText = `position:absolute;z-index:1;left:${spot.x - 10}px;width:${spot.width + 20}px;height:44px;top:${window.scrollY + spot.y + 6 + 200}px`;
+        document.body.appendChild(b);
+        document.body.style.minHeight = `${document.documentElement.scrollHeight + 600}px`;
+        window.scrollBy({ top: 200, behavior: "instant" });
+      }, home);
+      await launcherSettled(page);
+      await expect(launcher(page)).toHaveClass(/is-hidden/);
     });
   });
 }
@@ -539,9 +566,8 @@ for (const v of VARIANTS) {
   });
 }
 
-// The launcher has one home spot (§19.8): at every scroll position of every page it is at that spot, a small nudge
-// (at most DODGE_NUDGE_MAX) straight above it, or faded out at it; never slid sideways, to the middle or hidden by a
-// scroll.
+// The launcher has one home spot (§19.8): at every scroll position of every page it is at that spot, shown or faded
+// out there; never nudged, slid sideways, sent to the middle or hidden by a scroll.
 for (const size of [
   { width: 320, height: 568 },
   { width: 390, height: 844 },
@@ -549,7 +575,7 @@ for (const size of [
 ]) {
   test.describe(`Ask Clip Factory launcher home spot at ${size.width} px`, () => {
     test.use({ viewport: size });
-    test("is always at its home spot or a small nudge above it", async ({ page }) => {
+    test("is always at its home spot", async ({ page }) => {
       const fails: string[] = [];
       for (const route of ["/", "/settings/posting/setup/instagram", "/settings/look-and-feel/sounds", "/get-app"]) {
         await page.goto(route);
@@ -562,15 +588,13 @@ for (const size of [
             const el = document.querySelector<HTMLElement>(".help-launcher")!;
             const b = el.getBoundingClientRect();
             return {
-              transform: getComputedStyle(el).transform,
-              up: Math.round(el.offsetTop - b.top),
-              side: Math.round(el.offsetLeft - b.left),
-              hidden: el.classList.contains("is-hidden"),
+              translate: getComputedStyle(el).translate,
+              up: Math.round(el.offsetTop + el.offsetHeight / 2 - (b.top + b.height / 2)),
+              side: Math.round(el.offsetLeft + el.offsetWidth / 2 - (b.left + b.width / 2)),
             };
           });
-          if (s.transform !== "none") fails.push(`${route} at ${y}: transformed (${s.transform})`);
-          if (s.hidden) continue;
-          if (s.up < 0 || s.up > DODGE_NUDGE_MAX) fails.push(`${route} at ${y}: ${s.up} px up from home`);
+          if (s.translate !== "none") fails.push(`${route} at ${y}: moved (${s.translate})`);
+          if (s.up !== 0) fails.push(`${route} at ${y}: ${s.up} px up from home`);
           if (s.side !== 0) fails.push(`${route} at ${y}: ${s.side} px sideways`);
         }
       }
@@ -578,3 +602,72 @@ for (const size of [
     });
   });
 }
+
+// The launcher is there when the owner wants it (§19.8): shown and tappable at the top of the main pages on a phone,
+// and faded out at no more than a fifth of the places a page can be scrolled to and left. The Library is the one
+// exception: every card ends in a 48 px open button right in the launcher's column, and covering that would make it
+// hard to tap, so there it may be faded out at a third of the places.
+test.describe("Ask Clip Factory launcher is mostly there on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  for (const route of ["/", "/jobs", "/settings", "/settings/look-and-feel", "/settings/look-and-feel/sounds", "/library", "/review"]) {
+    test(`on ${route}`, async ({ page }) => {
+      await page.goto(route);
+      await settle(page);
+      await launcherSettled(page);
+      if (["/", "/jobs", "/settings", "/settings/look-and-feel"].includes(route)) {
+        await expect(launcher(page)).not.toHaveClass(/is-hidden/);
+        await launcher(page).click();
+        await expect(panel(page)).toBeVisible();
+        await page.keyboard.press("Escape");
+        await expect(panel(page)).toHaveCount(0);
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      }
+      const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+      let hidden = 0;
+      let spots = 0;
+      for (let y = 0; y <= max; y += 150) {
+        await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), y);
+        await launcherSettled(page);
+        spots++;
+        if (await launcher(page).evaluate((el) => el.classList.contains("is-hidden"))) hidden++;
+      }
+      const share = route === "/library" ? 0.34 : 0.2;
+      expect(hidden, `faded out at ${hidden} of ${spots} spots`).toBeLessThanOrEqual(Math.max(1, Math.floor(spots * share)));
+    });
+  }
+
+  test("does not blink while the owner scrolls in short steps at reading pace", async ({ page }) => {
+    await page.goto("/settings/look-and-feel/sounds");
+    await settle(page);
+    await launcherSettled(page);
+    const flips = await page.evaluate(async () => {
+      const el = document.querySelector<HTMLElement>(".help-launcher")!;
+      let hidden = el.classList.contains("is-hidden");
+      const at: number[] = [];
+      let run = true;
+      const tick = () => {
+        const now = el.classList.contains("is-hidden");
+        if (now !== hidden) {
+          hidden = now;
+          at.push(performance.now());
+        }
+        if (run) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      const max = document.documentElement.scrollHeight - innerHeight;
+      for (let y = 0; y <= max; y += 140) {
+        window.scrollTo({ top: y, behavior: "instant" });
+        await new Promise((res) => setTimeout(res, 300));
+      }
+      for (let y = max; y >= 0; y -= 140) {
+        window.scrollTo({ top: y, behavior: "instant" });
+        await new Promise((res) => setTimeout(res, 300));
+      }
+      await new Promise((res) => setTimeout(res, 1500));
+      run = false;
+      return at;
+    });
+    // Never a fade in and out (or out and in) within a second.
+    for (let i = 1; i < flips.length; i++) expect(flips[i]! - flips[i - 1]!).toBeGreaterThanOrEqual(DODGE_HOLD_MS - 50);
+  });
+});

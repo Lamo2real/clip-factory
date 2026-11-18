@@ -284,9 +284,7 @@ for (const width of [320, 375, 768, 1024, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/?update=1");
     await settle(page);
-    // From the keyboard: on a phone the launcher may be faded out over a control on this first screen (§19.8), and
-    // focus always shows it.
-    await page.getByRole("button", { name: "Ask Clip Factory" }).press("Enter");
+    await page.getByRole("button", { name: "Ask Clip Factory" }).click();
     const panel = page.getByRole("dialog", { name: "Ask Clip Factory" });
     const failures: string[] = [];
     const check = async (label: string) => {

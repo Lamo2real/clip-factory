@@ -228,9 +228,6 @@
     overflow-wrap: normal;
   }
 }
-.crumbs__item:first-child .crumbs__link {
-  margin-left: -6px;
-}
 .crumbs__link {
   color: var(--ink-2);
   text-decoration: underline;
@@ -460,7 +457,7 @@
   border-radius: var(--r-xl);
 }
 .branch-card {
-  padding: 16px 16px 16px 18px;
+  padding: 16px var(--inset);
   border-radius: var(--r-lg);
 }
 .tree-card:hover,
@@ -663,6 +660,20 @@
   border-bottom-left-radius: var(--r-xl);
   border-bottom-right-radius: var(--r-xl);
 }
+/* The last of several apples with something after it (a note, a list): a divider closes its row, so the light ends
+   on a line. */
+.apple-panel:has(> .apple ~ .apple) > .apple:not(:has(~ .apple)):not(:last-child) {
+  border-bottom: 1px solid rgb(var(--line-rgb) / 0.18);
+}
+/* The only apple in its panel, whatever else the panel holds (Try it with its picks, a note): the light is the whole
+   panel along its rim and corners. The apple lets the panel place it. */
+.apple-panel:not(:has(> .apple ~ .apple)) > .apple {
+  position: static;
+}
+.apple-panel:not(:has(> .apple ~ .apple)) > .apple::after {
+  inset: -1px;
+  border-radius: var(--r-xl);
+}
 /* The Get the app card is a panel itself: the light is the panel, along its rim. */
 .getapp::after {
   inset: -1px;
@@ -670,7 +681,9 @@
 }
 /* The keyboard ring: on the same lines, drawn inside them, instead of the page's own ring (base.css). */
 .apple:focus-visible {
-  outline: none;
+  /* Transparent, not none: forced-colors mode (which drops box-shadows) paints it in the system colour. */
+  outline: 2px solid transparent;
+  outline-offset: -2px;
   box-shadow: none;
   border-radius: 0;
 }

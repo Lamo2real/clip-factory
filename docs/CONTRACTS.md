@@ -3342,18 +3342,24 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   12 px **above the update bar** when it is shown (UpdateBar sets `--update-bar-h` on `<html>` with a
   `ResizeObserver`; 0 when hidden). Phones: 56 px icon-only glass circle (`aria-label="Ask Clip Factory"`), `right:
   max(16px, safe-area-inset-right)`, bottom = `--tabbar-h` + safe area + 18 px + `--update-bar-h` (+ 10 px), so it
-  never covers the tab bar or the update bar. **One home spot, calm** (`dodge.ts`): it never moves, lifts or hides
-  while the page scrolls, however the page scrolls (a drag, a wheel, a fling and its momentum, an iOS rubber-band
-  bounce): a scroll changes nothing until the page has been still for `DODGE_SETTLE_MS` (260 ms; a resize counts the
-  same). Then it looks at its home spot once. Clear (nothing within `DODGE_GAP`, 8 px): it is there. On a control: it
-  **glides up a little**, straight up, to the nearest spot that clears every control, when that is at most
-  `DODGE_NUDGE_MAX` (96 px) above home (`translate`, 420 ms, `data-lift`); never sideways and never towards the middle of
-  the screen. When no spot that close is clear, it **fades out where it stands** at home (opacity 0 and a slight
-  shrink to 0.9 over 360 ms; `is-hidden`, `data-dodge="blocked"`, `pointer-events: none`, so a tap there reaches the
-  control), and the next settle that finds a spot brings it back. No glide or fade with reduced motion (it simply
-  goes). A page that opens is looked at at once, and a page that changes under a still launcher (content loading in,
-  the update bar) is looked at on the next frame. With keyboard focus on it, it stays as it is and shows; with its
-  panel open it is home and shows. Controls are
+  never covers the tab bar or the update bar. **One home spot, calm** (`dodge.ts`): it never moves. No lift, no
+  glide, nothing sideways, never towards the middle of the screen, and nothing changes while the page scrolls or a
+  finger is on the screen, however the page scrolls (a drag, a wheel, a fling and its momentum, an iOS rubber-band
+  bounce, a drag that pauses mid-gesture; a resize counts the same). The only thing it ever does is **fade out where it
+  stands** (opacity 0 and a slight shrink to 0.9 over 420 ms; `is-hidden`, `data-dodge="blocked"`, `pointer-events:
+  none`, so a tap there reaches the control), and only when it would make a control **hard to tap** (`hardToTap`): it
+  covers more than `DODGE_COVER` (30 %) of the control's area, or no part of the control at least `DODGE_TAP` (44 px,
+  or the control's own size when smaller) each way is left free beside it. A big row link or card it rests on the
+  edge of (tree cards, Sounds hits, job rows, a full-width field) stays easy to tap, so it never hides it; a switch, a
+  small button or a choice under it does. **When**: it may fade out once the page and the finger have been still for
+  `DODGE_SETTLE_MS` (260 ms; touchstart / touchend are tracked, so a held finger is not still), fades back in only
+  after `DODGE_RETURN_MS` (700 ms) of stillness with the spot clear, and keeps each state for at least
+  `DODGE_HOLD_MS` (1 s), so short scrolls at reading pace cannot make it blink. While a change may still come it
+  carries `data-settling` (tests wait for it to go). No fade with reduced motion (it simply goes). A page that opens
+  is looked at at once, and a page that changes under a still launcher (content loading in, the update bar) is looked
+  at on the next frame (the same stillness and hold apply). With **keyboard** focus on it (`:focus-visible`) it shows
+  and stays; focus handed back to it after a tap (Close) does not hold it; with its
+  panel open it shows. Controls are
   every link, button, field, tab, switch or focusable element (read from the page, so no markup is needed; a card
   that is a link counts through the controls inside it), plus the parts of any block marked `data-help-dodge` (each
   choice of a pick-one row, the Review action bar's buttons, the Home link box, the sound cards, the **Try it**
@@ -3502,7 +3508,7 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
 * **web** (Vitest): retriever evals; composer; `when` filter; route check drops a bad action; generator `--check` and
   the sensitive/dash test over the corpus; `helpApi` timeout, no `keepalive`, 401 refresh; 429 → countdown, no retry;
   5xx/network → local answer; status off → hidden and local fallback disabled; live fill and live failure; unsaved
-  guard; the launcher's spot (`covers`, `nudgeFor`) and its calm nudge or fade, which changes nothing mid-scroll (`helpDodge.test.tsx`); route names → API pages and the mock's 400 on an
+  guard; the launcher's spot (`hardToTap`, `blocks`) and its calm fade, which changes nothing mid-scroll or under a finger, comes back later than it goes and holds each state (`helpDodge.test.tsx`); route names → API pages and the mock's 400 on an
   unknown page (`helpPages.test.ts`).
   **Playwright (mock mode)** `e2e/help.spec.ts` at **375×812** and **1440×900**: launcher name and position (not over
   the tab bar or the update bar; above the update bar on desktop); open → three suggestions; "Where do I change my click
