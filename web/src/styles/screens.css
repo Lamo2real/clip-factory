@@ -1483,3 +1483,15 @@
 .keep-again__note:empty {
   margin-top: -10px;
 }
+.learnings__more {
+  font-size: var(--fs-small);
+}
+.learnings__more a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

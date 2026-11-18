@@ -84,6 +84,20 @@ export const TREES: Tree[] = [
         ],
       },
       {
+        slug: "learned",
+        name: "What it learned",
+        line: "Lessons from your clips that did best.",
+        icon: "sparkle",
+        apples: [
+          {
+            id: "what-it-learned",
+            name: "What it learned",
+            leaf: "Lessons from clips that did much better than normal. Turn one off or delete it.",
+            words: ["learn", "learned", "learnings", "lessons", "prior learnings", "best clips", "winners", "patterns", "undo", "what works", "smarter"],
+          },
+        ],
+      },
+      {
         slug: "youtube",
         name: "YouTube help",
         line: "For when YouTube blocks a video.",

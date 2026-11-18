@@ -7,6 +7,7 @@ import { installMockLiveControls, mockLive } from "./live.ts";
 import { setupApi } from "./setup.ts";
 import { statsApi, type StatsFaults } from "./stats.ts";
 import { skillsApi, type MockSkillControls } from "./skills.ts";
+import { lessonsApi, type LessonsFault } from "./lessons.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { MAX_RATE } from "../../lib/earnings.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
@@ -43,6 +44,8 @@ export interface MockFaults extends StatsFaults {
   olderJobsFails?: number;
   /** The next N Make clips (createJob) fail like a server error. */
   createJobFails?: number;
+  /** Settings › What it learned shows the never-checked ("empty") or not-enough-clips ("needs-more") state. */
+  lessons?: LessonsFault;
 }
 
 const serverDown = () => new ApiError(503, "internal", "Something went wrong on our side. Try again in a moment.");
@@ -285,6 +288,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     return c;
   };
   const skills = skillsApi(store, delay);
+  const lessons = lessonsApi(() => store.clips, () => faults.lessons, () => delay());
   if (typeof window !== "undefined") {
     // Merge, never replace: posting (above) and setup (mock/setup.ts) keep their knobs on the same object.
     const w = window as unknown as { __cfMock?: Record<string, unknown> & Partial<MockSkillControls> };
@@ -473,6 +477,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       return clone(c);
     },
     ...skills.api,
+    ...lessons,
     async getSettings() {
       await delay();
       return clone(store.settings);

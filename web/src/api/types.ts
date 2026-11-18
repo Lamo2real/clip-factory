@@ -408,6 +408,66 @@ export interface Learning {
   clipIds?: string[];
 }
 
+/** A lesson the daily run learned from clips that did much better than normal 7 days after posting (§16.12). */
+export type LessonStatus = "trial" | "active" | "off" | "expired";
+
+export interface LessonEvidence {
+  /** "creator": this creator's own clips were the yardstick; "all": every creator's clips on that platform. */
+  baseline: "creator" | "all";
+  /** Posted clips measured 7 days after posting. */
+  measured: number;
+  /** Of those, the ones that did much better than normal. */
+  winners: number;
+  medianViews: number | null;
+  winnerViews: { clipId: string; postId: string; views: number }[];
+  trait: {
+    winnersWith: number;
+    winnersKnown: number;
+    othersWith: number;
+    othersKnown: number;
+    winnerPercent: number;
+    otherPercent: number;
+    sources: number;
+  };
+  computedAt: string;
+}
+
+export interface Lesson {
+  lessonId: string;
+  kind: "creator";
+  /** "*" = all creators. */
+  creatorKey: string;
+  creatorName?: string;
+  scope: "creator" | "all";
+  platform: Platform;
+  trait: string;
+  traitLabel?: string;
+  text: string;
+  status: LessonStatus;
+  evidence?: LessonEvidence;
+  clipIds: string[];
+  /** The winner clips it cites that still exist, with their hooks, for the links. */
+  clips: { clipId: string; hook: string }[];
+  createdAt: string;
+  confirmedAt?: string;
+  expiresAt?: string;
+  updatedAt?: string;
+}
+
+/** Per creator ("*" = all creators) and platform: clips measured, winners, and how many more are needed. */
+export interface LessonCreator {
+  creatorKey: string;
+  creatorName: string;
+  platforms: Partial<Record<Platform, { measured: number; needed: number; winners: number }>>;
+}
+
+export interface LessonsView {
+  lessons: Lesson[];
+  creators: LessonCreator[];
+  /** When the daily check last ran (absent before the first run). */
+  checkedAt?: string;
+}
+
 export type PerfStatus = "posted" | "posted_private" | "waiting_for_connection" | "posting" | "failed" | "not_posted";
 
 export interface PlatformPerformance {
@@ -587,6 +647,12 @@ export interface Api {
   deleteVerificationFile(filename: string): Promise<void>;
   listPosts(clipId?: string): Promise<Post[]>;
   insights(): Promise<{ learnings: Learning[]; posts: Post[] }>;
+  /** GET /v1/lessons: Settings › Clip making › What it learned (§16.12). */
+  listLessons(): Promise<LessonsView>;
+  /** PATCH /v1/lessons/{lessonId} `{ status: "off" | "on" }`. */
+  setLessonStatus(lessonId: string, to: "off" | "on"): Promise<Lesson>;
+  /** DELETE /v1/lessons/{lessonId}. */
+  deleteLesson(lessonId: string): Promise<void>;
   similarClips(clipId: string): Promise<SimilarClip[]>;
   /** GET /v1/clips/{clipId}/performance (§16.2). */
   clipPerformance(clipId: string): Promise<ClipPerformance>;

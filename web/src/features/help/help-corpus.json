@@ -1,5 +1,5 @@
 {
-  "version": "70c5897a3332",
+  "version": "472a8ab97150",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -38,6 +38,7 @@
     "/settings",
     "/settings/clip-making/clips",
     "/settings/clip-making/skills",
+    "/settings/clip-making/learned",
     "/settings/clip-making/youtube",
     "/settings/posting/setup",
     "/settings/posting/where",
@@ -806,6 +807,45 @@
           "to": "/library?view=week",
           "highlight": [
             "best-star"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "learn-from-clips",
+      "kind": "guide",
+      "route": "/settings/clip-making/learned",
+      "where": "Settings › Clip making › What it learned",
+      "title": "How Clip Factory learns from your clips",
+      "keywords": [
+        "learn",
+        "learns",
+        "learned",
+        "learning",
+        "lessons",
+        "prior learnings",
+        "what it learned",
+        "better clips",
+        "smarter",
+        "best clips",
+        "undo a lesson",
+        "turn off a lesson",
+        "bad lesson"
+      ],
+      "answer": "Every day Clip Factory checks your clips 7 days after posting. When some clips did much better than normal for that streamer, it looks at what they share and writes a short lesson. Lessons it is sure about go to your skills as **Prior learnings**. You can turn a lesson off or delete it in **What it learned**.",
+      "steps": [
+        "Open **Settings**.",
+        "Tap **Clip making**.",
+        "Tap **What it learned**.",
+        "Tap **Turn off** or **Delete** on a lesson you do not like."
+      ],
+      "actions": [
+        {
+          "id": "learn-from-clips:open",
+          "label": "Open What it learned",
+          "to": "/settings/clip-making/learned",
+          "highlight": [
+            "what-it-learned"
           ]
         }
       ]
@@ -2344,9 +2384,10 @@
       "keywords": [
         "Clips",
         "Skills",
+        "What it learned",
         "YouTube help"
       ],
-      "answer": "How your clips are made. It has Clips, Skills, YouTube help.",
+      "answer": "How your clips are made. It has Clips, Skills, What it learned, YouTube help.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Clip making**."
@@ -2536,6 +2577,68 @@
       ],
       "highlight": [
         "add-skill"
+      ]
+    },
+    {
+      "id": "settings-clip-making-learned",
+      "kind": "page",
+      "route": "/settings/clip-making/learned",
+      "where": "Settings › Clip making › What it learned",
+      "title": "What it learned",
+      "keywords": [
+        "What it learned"
+      ],
+      "answer": "Lessons from your clips that did best.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **What it learned**."
+      ],
+      "actions": [
+        {
+          "id": "settings-clip-making-learned:open",
+          "label": "Open What it learned",
+          "to": "/settings/clip-making/learned"
+        }
+      ]
+    },
+    {
+      "id": "apple-what-it-learned",
+      "kind": "apple",
+      "route": "/settings/clip-making/learned",
+      "hash": "what-it-learned",
+      "where": "Settings › Clip making › What it learned",
+      "title": "What it learned",
+      "keywords": [
+        "learn",
+        "learned",
+        "learnings",
+        "lessons",
+        "prior learnings",
+        "best clips",
+        "winners",
+        "patterns",
+        "undo",
+        "what works",
+        "smarter"
+      ],
+      "answer": "Lessons from clips that did much better than normal. Turn one off or delete it.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **What it learned**.",
+        "Find **What it learned**."
+      ],
+      "actions": [
+        {
+          "id": "apple-what-it-learned:open",
+          "label": "Open What it learned",
+          "to": "/settings/clip-making/learned#what-it-learned",
+          "highlight": [
+            "what-it-learned"
+          ]
+        }
+      ],
+      "highlight": [
+        "what-it-learned"
       ]
     },
     {

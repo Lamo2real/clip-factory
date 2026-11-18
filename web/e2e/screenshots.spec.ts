@@ -94,6 +94,8 @@ const SKILL_PAGES = [
   { name: "settings-skill-written", path: "/settings/clip-making/skills/01JZ8S00000000000000000001" },
   { name: "settings-skill-edit", path: "/settings/clip-making/skills/01JZ8S00000000000000000001/edit" },
   { name: "settings-skill-edit-zip", path: "/settings/clip-making/skills/01JZ8S00000000000000000002/edit" },
+  // Settings › Clip making › What it learned (§16.12), next to Skills.
+  { name: "settings-learned", path: "/settings/clip-making/learned" },
 ];
 for (const size of [
   { name: "phone", width: 375, height: 812, scale: 2, touch: true },

@@ -7,6 +7,7 @@ import type {
   ClipPerformance,
   Job,
   KeyCheck,
+  Lesson,
   PlatformSetup,
   Post,
   RefreshResult,
@@ -123,6 +124,9 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     deleteVerificationFile: (filename) => call("DELETE", `/setup/tiktok/verification-file/${id(filename)}`),
     listPosts: async (clipId) => (await call<{ posts: Post[] }>("GET", `/posts${q({ clipId })}`)).posts,
     insights: () => call("GET", "/insights"),
+    listLessons: () => call("GET", "/lessons"),
+    setLessonStatus: async (lessonId, to) => (await call<{ lesson: Lesson }>("PATCH", `/lessons/${id(lessonId)}`, { status: to })).lesson,
+    deleteLesson: (lessonId) => call("DELETE", `/lessons/${id(lessonId)}`),
     similarClips: async (clipId) =>
       (await call<{ clips: SimilarClip[] }>("GET", `/clips/${id(clipId)}/similar`)).clips ?? [],
     clipPerformance: (clipId) => call<ClipPerformance>("GET", `/clips/${id(clipId)}/performance`),
