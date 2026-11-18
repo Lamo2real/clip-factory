@@ -183,7 +183,7 @@
   margin-top: -9px;
   border-radius: 4px;
   background: var(--vermilion);
-  box-shadow: 0 0 0 1.5px var(--bone);
+  box-shadow: none;
 }
 .sidebar.is-collapsed .glide--menu::before {
   left: 1px;
@@ -205,7 +205,7 @@
   margin-left: -2.5px;
   border-radius: 50%;
   background: var(--vermilion);
-  box-shadow: 0 0 0 1.5px var(--bone);
+  box-shadow: none;
 }
 
 /* Hover shows what can be pressed (the cursor never changes, see base.css). */

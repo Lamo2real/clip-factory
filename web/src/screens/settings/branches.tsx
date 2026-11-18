@@ -22,7 +22,7 @@ import {
   SOFT_COLOURS_NOTE,
   SOFT_COLOURS_VEIL,
   colourName,
-  coloursVeil,
+  coloursVeils,
   normaliseColours,
   seeThroughNote,
   swatchTickIsDark,
@@ -378,12 +378,12 @@ function BackgroundModes({
   );
 }
 
-/** The colours as they will really look: blended, under the same veil the backdrop gets (`--preview-veil`). */
+/** The colours as they will really look between the panels: blended, under the page veil the backdrop gets (`--preview-veil`). */
 function colourPreviewStyle(colours: string[]): CSSProperties {
   const [c1, c2 = c1, c3 = c2] = colours;
   return {
     background: `radial-gradient(circle at 25% 25%, ${c1} 0, transparent 70%), radial-gradient(circle at 80% 70%, ${c3} 0, transparent 70%), linear-gradient(140deg, ${c1}, ${c2}, ${c3})`,
-    "--preview-veil": String(coloursVeil(colours)),
+    "--preview-veil": String(coloursVeils(colours).pageVeil),
   } as CSSProperties;
 }
 
@@ -558,7 +558,7 @@ function ColoursApple({ inUse, colours, onChange }: { inUse: boolean; colours: s
         </div>
         <span className="muted small">
           {colours.length === 1 ? "1 colour picked." : `${colours.length} colours picked.`} Tap a colour to add it or take it off.
-          {coloursVeil(colours) >= SOFT_COLOURS_VEIL ? <span className="bg-colours__soft"> {SOFT_COLOURS_NOTE}</span> : null}
+          {coloursVeils(colours).pageVeil > SOFT_COLOURS_VEIL ? <span className="bg-colours__soft"> {SOFT_COLOURS_NOTE}</span> : null}
         </span>
       </div>
     </Apple>

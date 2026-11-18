@@ -41,7 +41,7 @@ for (const [name, use] of [
       await page.goto("/settings/look-and-feel/sounds");
       await settle(page);
       const color = await page.locator(".sound-group.is-tap .apple__tag").first().evaluate((el) => getComputedStyle(el).color);
-      expect(color).toBe("rgb(214, 235, 200)");
+      expect(color).toBe("rgb(228, 242, 218)");
     });
 
     test("Review: only the top clip's Keep is vermilion, and the next one takes over", async ({ page }) => {

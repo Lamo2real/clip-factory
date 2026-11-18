@@ -1,6 +1,7 @@
-/* Liquid glass. Every surface is a translucent tint with blur + saturation, a lit rim and, in Chromium, a
-   refraction filter that bends the backdrop. The tint is bottle green under bone words, strong enough to hold
-   WCAG AA over the lightest backdrop each look can show, including a white desktop or the owner's own picture. */
+/* Liquid glass (ADR-45). Every surface is a see-through bottle-green tint with blur + saturation and, in Chromium, a
+   refraction filter that bends the backdrop. No drawn edges anywhere: a pane shows by its blur, tint and shadow.
+   The tint is as light as WCAG AA allows over the lightest spot each look can really show: the app's own living
+   backdrop (worked out over every blob subset, lib/background.ts), a white desktop, or the owner's own picture. */
 
 .backdrop {
   position: fixed;
@@ -8,31 +9,33 @@
   z-index: -1;
   overflow: hidden;
   background:
-    radial-gradient(120% 90% at 10% 0%, #174a3a 0%, transparent 60%),
-    linear-gradient(160deg, var(--green) 0%, #0b2c22 45%, #133f31 100%);
+    radial-gradient(120% 90% at 10% 0%, #0f3d31 0%, transparent 60%),
+    linear-gradient(160deg, #0f3d31 0%, #08221b 50%, #0f3d31 100%);
 }
+/* The living backdrop (BRAND_MESH in lib/background.ts): deep teal, two vermilion glows, leaf and a breath of bone,
+   drifting slowly (24 to 28 s, still under reduced motion). test/background.test.ts reads every number here. */
 .blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.9;
+  filter: blur(56px);
+  opacity: 1;
   will-change: transform;
-  animation: drift 38s var(--ease-out) infinite alternate;
+  animation: drift 24s var(--ease-out) infinite alternate;
 }
 .blob--a {
   width: 62vmax;
   height: 62vmax;
   left: -18vmax;
   top: -14vmax;
-  background: radial-gradient(circle at 40% 40%, rgb(42 92 74 / 0.6), rgb(42 92 74 / 0) 68%);
+  background: radial-gradient(circle at 40% 40%, rgb(22 89 77 / 0.9), rgb(22 89 77 / 0) 68%);
 }
 .blob--b {
   width: 44vmax;
   height: 44vmax;
   right: -12vmax;
   top: 18vh;
-  background: radial-gradient(circle, rgb(var(--vermilion-rgb) / 0.42), rgb(var(--vermilion-rgb) / 0) 66%);
-  animation-duration: 46s;
+  background: radial-gradient(circle, rgb(var(--vermilion-rgb) / 0.62), rgb(var(--vermilion-rgb) / 0) 66%);
+  animation-duration: 26s;
   animation-delay: -12s;
 }
 .blob--c {
@@ -40,8 +43,8 @@
   height: 56vmax;
   left: 20vw;
   bottom: -30vmax;
-  background: radial-gradient(circle, rgb(var(--green-leaf-rgb) / 0.22), rgb(var(--green-leaf-rgb) / 0) 66%);
-  animation-duration: 52s;
+  background: radial-gradient(circle, rgb(var(--green-leaf-rgb) / 0.3), rgb(var(--green-leaf-rgb) / 0) 66%);
+  animation-duration: 28s;
   animation-delay: -20s;
 }
 .blob--d {
@@ -49,8 +52,46 @@
   height: 30vmax;
   left: 46vw;
   top: -8vmax;
-  background: radial-gradient(circle, rgb(var(--bone-rgb) / 0.12), rgb(var(--bone-rgb) / 0) 70%);
-  animation-duration: 30s;
+  background: radial-gradient(circle, rgb(var(--bone-rgb) / 0.06), rgb(var(--bone-rgb) / 0) 70%);
+  animation-duration: 25s;
+}
+.blob--e {
+  width: 34vmax;
+  height: 34vmax;
+  left: -6vmax;
+  bottom: 6vh;
+  background: radial-gradient(circle, rgb(196 42 30 / 0.55), rgb(196 42 30 / 0) 66%);
+  animation-duration: 28s;
+  animation-delay: -6s;
+}
+/* Two lens shapes the glass can bend: soft glowing circles, never a drawn line. */
+.backdrop:not(.backdrop--window, .backdrop--colours, .has-image)::before,
+.backdrop:not(.backdrop--window, .backdrop--colours, .has-image)::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+  pointer-events: none;
+}
+.backdrop:not(.backdrop--window, .backdrop--colours, .has-image)::before {
+  width: 70vmax;
+  height: 70vmax;
+  left: -16vmax;
+  top: 14vh;
+  box-shadow:
+    inset 0 0 40px rgb(var(--vermilion-rgb) / 0.1),
+    0 0 40px 4px rgb(var(--bone-rgb) / 0.08);
+  animation: drift 36s var(--ease-out) infinite alternate;
+}
+.backdrop:not(.backdrop--window, .backdrop--colours, .has-image)::after {
+  width: 46vmax;
+  height: 46vmax;
+  right: -10vmax;
+  top: -12vmax;
+  box-shadow:
+    inset 0 0 40px rgb(95 165 133 / 0.1),
+    0 0 40px 4px rgb(var(--bone-rgb) / 0.08);
+  animation: drift 44s var(--ease-out) infinite alternate;
 }
 .backdrop__grain {
   position: absolute;
@@ -65,14 +106,14 @@
   background-size: cover;
   background-position: center;
 }
-/* A bottle-green veil so the owner's picture never fights the words (PICTURE_PAGE_VEIL in lib/background.ts, set
-   as --backdrop-veil), and the same green over the Clip Factory colours (their bone highlight needs 0.15). */
-.backdrop.has-image::after,
-.backdrop:not(.backdrop--window, .backdrop--colours, .has-image)::after {
+/* A bottle-green veil over the owner's picture (PICTURE_PAGE_VEIL in lib/background.ts, set as --backdrop-veil):
+   0 now, so the photo shows at full strength between the panels; it still goes almost solid for reduced
+   transparency. The app's own backdrop has no page veil at all. */
+.backdrop.has-image::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: rgb(var(--green-rgb) / var(--backdrop-veil, 0.15));
+  background: rgb(var(--green-rgb) / var(--backdrop-veil, 0));
 }
 
 /* ---------- Background modes (docs/CONTRACTS.md §22) ---------- */
@@ -100,11 +141,11 @@ html.see-through body {
 /* See-through anywhere else: browsers and phones cannot look behind the page, so the Clip Factory colours sit
    behind a pane of frost, with slow light catching in it like glass. */
 /* No backdrop-filter here: the blobs are already blurred, and a full-screen filter over moving blobs would cost
-   phones a repaint every frame. A green tint with a faint bone sheen is enough to read as frost. */
+   phones a repaint every frame. Clear has no frost at all, so the colours show at full strength between panels. */
 .backdrop__frost {
   position: absolute;
   inset: 0;
-  background: linear-gradient(160deg, rgb(var(--bone-rgb) / 0.04), rgb(var(--green-rgb) / 0.06));
+  background: none;
 }
 /* Frosted: a thicker pane, so the colours behind read softer. */
 html[data-strength="frosted"] .backdrop__frost {
@@ -115,7 +156,7 @@ html[data-strength="frosted"] .backdrop__frost {
   width: 70vmax;
   height: 70vmax;
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgb(var(--bone-rgb) / 0.1), rgb(var(--bone-rgb) / 0.04) 55%, rgb(var(--bone-rgb) / 0));
+  background: radial-gradient(closest-side, rgb(var(--bone-rgb) / 0.06), rgb(var(--bone-rgb) / 0.03) 55%, rgb(var(--bone-rgb) / 0));
   mix-blend-mode: soft-light;
   will-change: transform;
   animation: caustic 26s var(--ease-out) infinite alternate;
@@ -140,10 +181,9 @@ html[data-strength="frosted"] .backdrop__frost {
 }
 
 /* Colours: the owner's 1 to 3 colours as a slow mesh (the same blobs as the Clip Factory colours). The first colour
-   is the field and covers most of it; the second is a soft highlight and the third a small glow, each mixed into
-   the first at well under half strength, as in the reference: deep green, a breath of bone, a warm vermilion glow.
-   Every mix lies between two of the colours, so it is never lighter than the lightest one, which the veil
-   (coloursVeil) is worked out for. */
+   is the field and covers most of it; the second is a soft highlight (30 %) and the third a glow (45 %), as in the
+   reference: deep green, a breath of bone, a warm vermilion glow. coloursMeshWorst (lib/background.ts) works out the
+   lightest spot of exactly this drawing, and coloursVeils splits the tint between the page and the panels. */
 .backdrop--colours {
   background: linear-gradient(160deg, var(--c1) 0%, var(--c1) 55%, color-mix(in srgb, var(--c1) 78%, var(--c3)) 100%);
 }
@@ -151,13 +191,13 @@ html[data-strength="frosted"] .backdrop__frost {
   background: radial-gradient(circle at 40% 40%, var(--c1), transparent 68%);
 }
 .backdrop--colours .blob--b {
-  background: radial-gradient(circle, color-mix(in srgb, var(--c2) 26%, transparent), transparent 66%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--c2) 30%, transparent), transparent 66%);
 }
 .backdrop--colours .blob--c {
-  background: radial-gradient(circle, color-mix(in srgb, var(--c3) 30%, transparent), transparent 66%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--c3) 45%, transparent), transparent 66%);
 }
-/* No bone highlight over the owner's colours: the veil is worked out from the colours alone. */
-.backdrop--colours .blob--d {
+/* No bone highlight and no second vermilion over the owner's colours: the veil is worked out from them alone. */
+.backdrop--colours :is(.blob--d, .blob--e) {
   display: none;
 }
 
@@ -166,10 +206,10 @@ html[data-strength="frosted"] .backdrop__frost {
     transform: translate3d(0, 0, 0) scale(1);
   }
   50% {
-    transform: translate3d(6vw, 4vh, 0) scale(1.08);
+    transform: translate3d(14vw, 10vh, 0) scale(1.15);
   }
   100% {
-    transform: translate3d(-4vw, 8vh, 0) scale(0.96);
+    transform: translate3d(-10vw, 18vh, 0) scale(0.9);
   }
 }
 
@@ -182,61 +222,27 @@ html[data-strength="frosted"] .backdrop__frost {
 
 .glass {
   --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.04)), rgb(var(--green-rgb) / var(--panel-veil)));
-  --glass-blur: 22px;
   position: relative;
   isolation: isolate;
   background: var(--glass-tint);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
-  border: 1px solid rgb(var(--line-rgb) / 0.22);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid transparent;
   border-radius: var(--r-lg);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--bone-rgb) / 0.28),
-    inset 0 -1px 0 rgb(var(--shadow-rgb) / 0.25),
-    var(--shadow-1);
+  box-shadow: var(--shadow-1);
 }
-/* The lit rim: a 1px gradient ring that catches light on the top-left and bottom-right edges. */
-.glass::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(
-    135deg,
-    rgb(var(--bone-rgb) / 0.55),
-    rgb(var(--bone-rgb) / 0.06) 32%,
-    rgb(var(--bone-rgb) / 0) 55%,
-    rgb(var(--bone-rgb) / 0.3) 100%
-  );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-}
-
 /* One step deeper green: the hero, the Ask launcher, the setup list. */
 .glass--green {
   --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.1)), rgb(var(--green-deep-rgb) / min(0.97, var(--panel-veil) + 0.08)));
-  border-color: rgb(var(--line-rgb) / 0.26);
-}
-/* The lightest veil: lighter than a panel only where the page owns the (dark) backdrop. */
-:where(html:not(.see-through, [data-backdrop="picture"])) .glass--clear {
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.4), rgb(var(--green-rgb) / 0.36));
+  border-color: transparent;
 }
 
 /* ---------- The window look and the picture look: tints (docs/CONTRACTS.md §22.3) ---------- */
 
 /* --panel-veil (lib/background.ts) is the least bottle green that keeps every text colour of this look (tokens.css)
    at WCAG AA over the lightest thing behind (a white desktop, a white photo). `.glass` already uses it; here the
-   surfaces with their own lighter recipes are held to it. Rims, highlights and shadows stay, so a panel still reads
-   as a pane of glass. :where() keeps this rule as light as `.glass` itself, so a surface with a denser tint of its
+   surfaces with their own lighter recipes are held to it. Blur and shadow stay, so a panel still reads as a pane of
+   glass. :where() keeps this rule as light as `.glass` itself, so a surface with a denser tint of its
    own (toasts, sheets, the Ask panel, the update bar) keeps it. */
 :where(html.see-through) :is(.glass, .glass--clear) {
   --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / var(--panel-veil)), rgb(var(--green-rgb) / var(--panel-veil)));
@@ -250,18 +256,26 @@ html.see-through .glass--green {
    that much. The button rules are written `html:where(.see-through)`: just heavier than the plain button, lighter
    than a button with a fill of its own (the vermilion CTA), which keeps it. */
 html.see-through .tabbar {
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / max(0.62, var(--panel-veil))), rgb(var(--green-rgb) / max(0.62, var(--panel-veil))));
+  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / max(var(--tabbar-veil), var(--panel-veil))), rgb(var(--green-rgb) / max(var(--tabbar-veil), var(--panel-veil))));
 }
-html:where(.see-through, [data-backdrop="picture"]) :is(.btn--glass, .btn--ghost, .btn--danger) {
-  background: rgb(var(--green-rgb) / var(--panel-veil));
+/* With no edges, a button without a fill of its own wears the control fill (tokens.css --fill-control: a bone lift
+   over a step more green than a panel, the pick-one track's recipe), in every look. */
+html:where(.see-through, [data-backdrop]) :is(.btn--glass, .btn--ghost) {
+  background: var(--fill-control);
 }
-/* Hover still answers: a step more green, never lighter. */
-html:where(.see-through, [data-backdrop="picture"]) :is(.btn--glass, .btn--ghost):hover:not([aria-disabled="true"]) {
-  background: rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.12));
+/* Hover still answers: a step more green under the same lift, never lighter. */
+html:where(.see-through, [data-backdrop]) :is(.btn--glass, .btn--ghost):hover:not([aria-disabled="true"]) {
+  background:
+    linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08)),
+    rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.22));
 }
-/* The danger button's hover is a vermilion tint: here it lies over the button's green instead of replacing it,
-   with a green deepen so it is never lighter than the panel. */
-html:where(.see-through, [data-backdrop="picture"]) .btn--danger:hover:not([aria-disabled="true"]) {
+/* The danger button: a vermilion tint over a step more green, so it reads as "careful" without a red ring. */
+html:where(.see-through, [data-backdrop]) .btn--danger {
+  background:
+    linear-gradient(rgb(var(--vermilion-rgb) / 0.14), rgb(var(--vermilion-rgb) / 0.14)),
+    rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.1));
+}
+html:where(.see-through, [data-backdrop]) .btn--danger:hover:not([aria-disabled="true"]) {
   background:
     linear-gradient(rgb(var(--green-rgb) / 0.2), rgb(var(--green-rgb) / 0.2)),
     linear-gradient(rgb(var(--vermilion-rgb) / 0.14), rgb(var(--vermilion-rgb) / 0.14)),
@@ -275,7 +289,7 @@ html.see-through .lib-tab:not(.is-on) {
    caustics, which lighten the mesh where they cross a blob (test/background.test.ts works out the worst spot). The
    room around the words is real padding, never a spread shadow: a plate starts at the page edge like a panel, its
    words start where a panel's words start (--loose-x, layout.css), and nothing hugs or cuts a letter. */
-html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
+html:is(.see-through, [data-backdrop])
   :is(
     .page-head__text,
     .crumbs__list,
@@ -297,22 +311,22 @@ html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
   padding-block: 8px;
 }
 /* The breadcrumb's parts are 48 px tap targets already: room enough above and below its words. */
-html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"]) .crumbs__list.crumbs__list {
+html:is(.see-through, [data-backdrop]) .crumbs__list.crumbs__list {
   padding-block: 0;
 }
 /* The ones that are not on the text line (the brand beside its tile, the centred ones) get even room on both sides. */
-html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
+html:is(.see-through, [data-backdrop])
   :is(.topbar .brand__name, .perf__head, .perf__updated > span, .week__title, .week__learn) {
   padding-inline: 12px;
 }
 /* The page title and its line are a plate of their own, with a panel's corner and more room above and below. (Doubled
    class: the shared rule above weighs as much as two classes through :is.) */
-html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"]) .page-head__text.page-head__text {
+html:is(.see-through, [data-backdrop]) .page-head__text.page-head__text {
   padding-block: clamp(18px, 2.4vw, 28px);
   border-radius: var(--r-lg);
 }
 /* Headings and lines between panels hug their words instead of running the full width as a bar. */
-html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
+html:is(.see-through, [data-backdrop])
   :is(
     .home-row__intro > :is(h2, p),
     .review-count,
@@ -327,10 +341,10 @@ html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
   max-width: 100%;
 }
 /* The centred ones stay centred. */
-html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"]) :is(.week__title, .week__learn) {
+html:is(.see-through, [data-backdrop]) :is(.week__title, .week__learn) {
   justify-self: center;
 }
-html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"]) .perf__updated > span {
+html:is(.see-through, [data-backdrop]) .perf__updated > span {
   display: inline-block;
 }
 /* Pick-one tracks: a little more green than a panel (+0.1), with a lift of bone (0.08) so the track still shows, so
@@ -339,6 +353,23 @@ html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"]) .per
 :is(.segmented, .tabs, .bg-modes, .model-picks) {
   background-color: rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.1));
   background-image: linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08));
+}
+
+/* Nested glass carries no tint of its own: the outer panel already gives the words their green (ADR-45), so the
+   backdrop is not dimmed twice. :where() keeps it as light as `.glass`, so a surface with a tint of its own wins. */
+:where(.glass) .glass {
+  --glass-tint: transparent;
+}
+
+/* Comfort only, never counted toward AA: a soft green halo behind words on glass and on the page. Bone and
+   vermilion fills (the CTA, the selected pill, badges) draw their words without it. */
+:where(.glass, .page-head, .crumbs, .brand__name) {
+  text-shadow:
+    0 0 1px rgb(var(--green-deep-rgb) / 0.5),
+    0 1px 12px rgb(var(--green-deep-rgb) / 0.4);
+}
+:where(.btn--primary, .btn--action, .btn--bone, .is-selected, .is-on, [aria-pressed="true"], [aria-checked="true"], .badge) {
+  text-shadow: none;
 }
 
 /* Chromium: bend the backdrop as well as blurring it (see the #cf-refract filter). */

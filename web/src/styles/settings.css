@@ -98,13 +98,13 @@
   margin-top: -9px;
   border-radius: 4px;
   background: var(--vermilion);
-  box-shadow: 0 0 0 1.5px var(--bone);
+  box-shadow: none;
 }
 .folders__trees {
   display: grid;
   gap: 2px;
   padding-top: 4px;
-  border-top: 1px solid rgb(var(--line-rgb) / 0.18);
+  border-top: 1px solid transparent;
 }
 .folders__name {
   flex: 1;
@@ -269,9 +269,7 @@
   padding: 0 6px 0 16px;
   border-radius: var(--r-pill);
   background: rgb(var(--green-deep-rgb) / 0.37);
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--line-rgb) / 0.31),
-    inset 0 2px 4px rgb(var(--shadow-rgb) / 0.08);
+  box-shadow: inset 0 2px 4px rgb(var(--shadow-rgb) / 0.08);
   color: var(--ink-3);
   transition: box-shadow var(--dur-1);
 }
@@ -330,7 +328,7 @@
   padding: 12px 12px 12px 14px;
   border-radius: var(--r-md);
   background: rgb(var(--green-deep-rgb) / 0.32);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.3);
+  box-shadow: none;
   text-decoration: none;
   transition:
     background-color var(--dur-1),
@@ -343,9 +341,7 @@
   background: var(--fill-hover);
 }
 .find-hit.is-active {
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--bone-rgb) / 0.3),
-    var(--focus);
+  box-shadow: var(--focus);
 }
 .find__results[hidden] {
   display: none;
@@ -463,9 +459,7 @@
 .tree-card:hover,
 .branch-card:hover {
   transform: translateY(-2px);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--bone-rgb) / 0.26),
-    var(--shadow-2);
+  box-shadow: var(--shadow-2);
 }
 .tree-card:active,
 .branch-card:active {
@@ -484,9 +478,7 @@
   flex: none;
   color: var(--on-bone);
   background: var(--selected);
-  box-shadow:
-    inset 0 1px 0 rgb(var(--bone-rgb) / 0.3),
-    0 6px 14px -10px rgb(var(--shadow-rgb) / 0.85);
+  box-shadow: 0 6px 14px -10px rgb(var(--shadow-rgb) / 0.85);
 }
 .tree-card__icon {
   width: 56px;
@@ -563,7 +555,7 @@
   scroll-margin: 96px 0;
 }
 .apple + .apple {
-  border-top: 1px solid rgb(var(--line-rgb) / 0.18);
+  border-top: 1px solid transparent;
 }
 .apple__text {
   display: grid;
@@ -781,9 +773,7 @@
   padding: 12px;
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--bone-rgb) / 0.3),
-    0 6px 16px -12px rgb(var(--shadow-rgb) / 0.83);
+  box-shadow: 0 6px 16px -12px rgb(var(--shadow-rgb) / 0.83);
   color: var(--ink);
   text-align: left;
   transition:
@@ -802,9 +792,7 @@
 }
 .sound-card.is-picked {
   background: var(--fill-hover);
-  box-shadow:
-    inset 0 0 0 2px var(--bone),
-    0 10px 22px -14px rgb(var(--shadow-rgb) / 0.85);
+  box-shadow: var(--glow-bone), 0 10px 22px -14px rgb(var(--shadow-rgb) / 0.85);
 }
 .sound-card__num {
   display: grid;
@@ -882,7 +870,7 @@
   padding: 12px 14px;
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--vermilion-rgb) / 0.6);
+  box-shadow: none;
 }
 .sounds-off > .icon {
   flex: none;
@@ -960,7 +948,7 @@
 /* Accounts sit inside an apple now: light tiles instead of glass cards. */
 .apple .account {
   background: rgb(var(--green-deep-rgb) / 0.29);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.28);
+  box-shadow: none;
 }
 
 /* ---------- Skills (docs/CONTRACTS.md §18.7) ---------- */
@@ -976,7 +964,7 @@
   padding: 14px;
   border-radius: var(--r-lg);
   background: rgb(var(--green-deep-rgb) / 0.29);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.24);
+  box-shadow: none;
   color: inherit;
   text-decoration: none;
   transition:
@@ -1185,8 +1173,9 @@ ol.md__list {
 .md__quote {
   display: grid;
   gap: 8px;
-  padding: 4px 0 4px 14px;
-  border-left: 3px solid var(--green-leaf);
+  padding: 8px 14px;
+  border-radius: var(--r-sm);
+  background: var(--tint-leaf);
   color: var(--ink-2);
 }
 .md__code {
@@ -1218,7 +1207,7 @@ ol.md__list {
 }
 .md__hr {
   border: 0;
-  border-top: 1px solid rgb(var(--line-rgb) / 0.31);
+  border-top: 1px solid transparent;
 }
 .md__more {
   font-weight: 600;
@@ -1288,7 +1277,7 @@ ol.md__list {
   background: var(--cta);
   color: #fff;
   text-shadow: 0 1px 0 rgb(90 14 6 / 0.35);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+  box-shadow: none;
   font-weight: 650;
   font-size: var(--fs-small);
 }
@@ -1330,7 +1319,7 @@ ol.md__list {
 }
 /* Glass, but nearly solid: the page behind must never show through the question. --ink-2 on it is about 11:1. */
 .sheet.glass {
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.95), rgb(var(--green-rgb) / 0.94));
+  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.88), rgb(var(--green-rgb) / 0.86));
 }
 .sheet {
   display: grid;
@@ -1402,7 +1391,7 @@ ol.md__list {
   padding: 12px 14px;
   border-radius: var(--r-md);
   background: rgb(var(--green-deep-rgb) / 0.25);
-  border: 1px solid rgb(var(--line-rgb) / 0.13);
+  border: 1px solid transparent;
 }
 .money__app {
   display: inline-flex;
@@ -1605,7 +1594,7 @@ ol.md__list {
   padding: 14px;
   border-radius: var(--r-lg);
   background: rgb(var(--green-deep-rgb) / 0.29);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.24);
+  box-shadow: none;
 }
 .lesson[data-status="off"] .lesson__text,
 .lesson[data-status="expired"] .lesson__text {
@@ -1664,7 +1653,7 @@ ol.md__list {
   overflow: hidden;
   border-radius: 50%;
   background: linear-gradient(150deg, var(--green-2), var(--green-3));
-  box-shadow: 0 0 0 2px rgb(var(--bone-rgb) / 0.32);
+  box-shadow: none;
 }
 .avatar img {
   width: 100%;
@@ -1679,22 +1668,16 @@ ol.md__list {
 }
 /* A live streamer: a vermilion ring that breathes (still under reduced motion). */
 .avatar.is-live {
-  box-shadow:
-    0 0 0 3px var(--vermilion),
-    0 0 0 6px rgb(var(--vermilion-rgb) / 0.28);
+  box-shadow: none;
   animation: follow-live-ring 2.6s ease-in-out infinite;
 }
 @keyframes follow-live-ring {
   0%,
   100% {
-    box-shadow:
-      0 0 0 3px var(--vermilion),
-      0 0 0 5px rgb(var(--vermilion-rgb) / 0.2);
+    box-shadow: 0 0 14px 2px rgb(var(--vermilion-rgb) / 0.55);
   }
   50% {
-    box-shadow:
-      0 0 0 3px var(--vermilion),
-      0 0 0 9px rgb(var(--vermilion-rgb) / 0.32);
+    box-shadow: 0 0 22px 5px rgb(var(--vermilion-rgb) / 0.7);
   }
 }
 .reduce-motion .avatar.is-live {
@@ -1756,7 +1739,7 @@ ol.md__list {
   border: 0;
   border-radius: var(--r-lg);
   background: rgb(var(--green-deep-rgb) / 0.32);
-  box-shadow: inset 0 0 0 1.5px rgb(var(--bone-rgb) / 0.5);
+  box-shadow: none;
   color: var(--ink);
   font: inherit;
   font-weight: 700;
@@ -1783,7 +1766,7 @@ ol.md__list {
   padding: 16px;
   border-radius: var(--r-lg);
   background: rgb(var(--green-deep-rgb) / 0.32);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.3);
+  box-shadow: none;
   animation: rise var(--dur-3) var(--ease-out) both;
 }
 .follow-card__who,
@@ -1861,7 +1844,7 @@ ol.md__list {
   border: 0;
   border-radius: var(--r-pill);
   background: rgb(var(--bone-rgb) / 0.08);
-  box-shadow: inset 0 0 0 1.5px rgb(var(--bone-rgb) / 0.6);
+  box-shadow: none;
   color: var(--ink);
   font: inherit;
   font-weight: 700;
@@ -1879,7 +1862,8 @@ ol.md__list {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 2px rgb(var(--bone-rgb) / 0.8);
+  background: rgb(var(--bone-rgb) / 0.3);
+  box-shadow: none;
 }
 .follow-yes.is-on {
   background: var(--selected);
@@ -1907,8 +1891,8 @@ ol.md__list {
   margin: 12px 0 0;
   padding: 12px 14px;
   border-radius: var(--r-md);
-  background: rgb(var(--bone-rgb) / 0.08);
-  box-shadow: inset 3px 0 0 var(--green-leaf);
+  background: var(--tint-leaf);
+  box-shadow: none;
   font-size: 1rem;
   overflow-wrap: anywhere;
 }
@@ -1930,10 +1914,11 @@ ol.md__list {
   padding: 14px;
   border-radius: var(--r-lg);
   background: rgb(var(--green-deep-rgb) / 0.29);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.24);
+  box-shadow: none;
 }
 .follow-row.is-live {
-  box-shadow: inset 0 0 0 1.5px rgb(var(--vermilion-rgb) / 0.6);
+  background: var(--tint-vermilion);
+  box-shadow: var(--glow-vermilion);
 }
 .follow-row__who {
   flex: 1 1 240px;
@@ -2011,7 +1996,7 @@ ol.md__list {
   padding: 14px;
   border-radius: var(--r-lg);
   background: rgb(var(--green-deep-rgb) / 0.29);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.24);
+  box-shadow: none;
 }
 .follow-key__head {
   display: flex;

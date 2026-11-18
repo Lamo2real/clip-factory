@@ -16,7 +16,9 @@ this file is the full reference. The code lives in `web/`; tokens are CSS custom
 ## Colour tokens
 
 The palette is the November 2026 bottle-green look ([DECISIONS.md ADR-43](DECISIONS.md#adr-43-bottle-green-glass-bone-words-vermilion-actions)):
-**green is the surface, bone is the words and the lines, vermilion is the action.** The tables below are the values
+**green is the surface, bone is the words, vermilion is the action.** Since ADR-45 the glass is see-through and draws
+no edges anywhere (no borders, rings, rims or hairlines): a pane shows by its blur, tint and shadow, a control by its
+fill. The tables below are the values
 in `web/src/styles/tokens.css`. `web/test/designTokens.test.ts` fails if a row here and the CSS disagree, if a
 colour or radius token in `tokens.css` is missing from these tables, or if this doc names a custom property the CSS
 doesn't define. `web/test/background.test.ts` fails if a stylesheet writes words in a colour that is not one of the
@@ -30,35 +32,44 @@ exception (white on a vermilion fill, `--on-bone` on a bone fill, Safari's blue 
 | `--green-2` | `#1b4a3b` | Raised green: cover and avatar placeholders (bone on it 8.19:1) |
 | `--green-3` | `#2a5c4a` | Mesh highlight green: backdrop blobs, placeholders (bone on it 6.27:1) |
 | `--green-leaf` | `#5fa585` | Success fills: done ticks, ring progress, the success tint, the toast timer |
-| `--bone` | `#efe7da` | Bone: the words, hairlines, outlined buttons, the selected pill, the tooltip |
+| `--bone` | `#efe7da` | Bone: the words, the selected pill, the tooltip, the control fill's lift |
 | `--bone-deep` | `#d9cdb8` | Pressed bone fills |
 | `--vermilion` | `#e8392b` | Accent dots, progress fills, the Ask mark's dot, the Glide bar and dot, the swash, the best chart line |
 | `--vermilion-deep` | `#c42a1e` | Badges and counts (white on it 5.68:1), the outer focus ring |
 | `--vermilion-light` | `#f07a6c` | Progress gradient ends, glow tops, the error toast icon |
 | `--ink` | `#efe7da` | Body text, headings, icons (bone) |
-| `--ink-2` | `#e9e0d0` | Secondary text |
-| `--ink-3` | `#e4dac9` | Meta text (leaves, hints, timestamps, placeholders) |
-| `--vermilion-ink` | `#ffd2ca` | Error and warning **words**, always with a vermilion icon or dot. Vermilion itself is never used for words (3.15:1 on solid green) |
-| `--green-ink` | `#d2e8c4` | Success words and icons (saved, connected, passed) |
-| `--green-text` | `#d6ebc8` | Words on the success tint (the apple tag, the sound number tiles) |
+| `--ink-2` | `#efe7da` | Secondary text (bone: the hierarchy is size and weight) |
+| `--ink-3` | `#efe7da` | Meta text (leaves, hints, timestamps, placeholders), bone too |
+| `--vermilion-ink` | `#ffe2dc` | Error and warning **words**, always with a vermilion icon or dot. Vermilion itself is never used for words (3.15:1 on solid green) |
+| `--green-ink` | `#e4f2da` | Success words and icons (saved, connected, passed) |
+| `--green-text` | `#e4f2da` | Words on the success tint (the apple tag, the sound number tiles) |
 | `--on-bone` | `#0f372b` | Words on a bone fill: the selected pill, inverted chips, the tooltip (10.68:1 on solid bone) |
 
 `--green-rgb`, `--green-deep-rgb`, `--green-leaf-rgb`, `--bone-rgb` and `--vermilion-rgb` hold the same colours as
 space-separated channels so CSS can add alpha: `rgb(var(--green-rgb) / 0.3)`. `--shadow-rgb` is the base of every
-drop shadow and `--line-rgb` (bone) of every hairline and ring. Shared fills: `--cta` (the CTA gradient), `--fill` and
-`--fill-hover` (deep green wells under words), `--tint-leaf` and `--tint-vermilion` (tints laid over deep green, so a
-chip is never lighter than its panel), `--selected` (bone 0.92).
+drop shadow and `--line-rgb` (bone) of the few marks that are not box edges (scrollbars, link underlines, ring
+tracks). Shared fills: `--cta` (the CTA gradient), `--fill` and `--fill-hover` (deep green wells under words),
+`--tint-leaf`, `--tint-vermilion` and `--tint-amber` (tints laid over deep green, so a chip is never lighter than its
+panel), `--selected` (bone 0.92).
 
-**The window look lifts five text colours.** In the desktop app's see-through window (`html.see-through`) the panels
-are worked out for the lightest the window can be (white), so the softer text colours go to bone or lighter there.
+**One text set everywhere (ADR-45).** Every text colour is bone or lighter in every look (the window look used to have
+its own lighter set; now all looks use it), so the panels need the least green; the hierarchy comes from size,
+weight and spacing. A soft green halo (`text-shadow`) sits behind words on glass for comfort only: it is never
+counted toward AA.
 
-| Token | Everywhere else | In the see-through window |
-|---|---|---|
-| `--ink-2` | `#e9e0d0` | `#efe7da` |
-| `--ink-3` | `#e4dac9` | `#efe7da` |
-| `--vermilion-ink` | `#ffd2ca` | `#ffe2dc` |
-| `--green-ink` | `#d2e8c4` | `#e4f2da` |
-| `--green-text` | `#d6ebc8` | `#e4f2da` |
+**No edges, and how things still read as controls.** Where an edge carried meaning, a fill or a soft glow does now:
+
+| Token | Use |
+|---|---|
+| `--fill-control` | Buttons without a fill of their own (glass, ghost), drop zones, check chips, step numbers: a bone lift (0.08) over a step more green than a panel (`--panel-veil` + 0.10), the pick-one track's recipe |
+| `--fill-field` | Text fields and the link box: deep green 0.45, a well deeper than the panel |
+| `--shade-field` | The field's soft inner shade (blurred, never a line) |
+| `--glow-bone`, `--glow-vermilion`, `--glow-leaf` | Soft glows (18 px blur) for a chosen, live, best or done thing, instead of a ring |
+
+The only lines left are the allowed ones: the keyboard focus ring while `:focus-visible`, the temporary "found"
+highlight from search and Ask's spotlight, progress bars and rings, the switch track, spinners, and text underlines.
+`web/test/background.test.ts` fails on any other border, ring or hard line in a stylesheet, and
+`web/e2e/edges.spec.ts` on any visible one on any screen.
 
 Glass tints are not tokens: each glass variant sets its own `--glass-tint` gradient (in `web/src/styles/glass.css`),
 and a component may override it. Every tint is bottle green; `--panel-veil` is how much.
@@ -68,14 +79,18 @@ and a component may override it. Every tint is bottle green; `--panel-veil` is h
 | `.glass` | green at `--panel-veil` + 0.04 → green at `--panel-veil`, 140° |
 | `.glass--green` | one step deeper: green + 0.10 → deep green + 0.08, 150° (the hero, the Ask launcher, the setup list's card) |
 | `.glass--vermilion` | the panel, a breath of vermilion (0.16 → 0.08), then green 0.20 over it |
-| `.glass--clear` | green 0.40 → 0.36 where the page owns the backdrop; the panel tint in the window and picture looks |
-| Dialogs and floating surfaces | green 0.90–0.95 (toasts, the Ask panel, sheets, the setup list panel, the update bar) |
+| `.glass--clear` | the panel tint |
+| Nested `.glass` | transparent: the outer panel already gives the words their green |
+| Floating layers | green `--float-veil` (0.73) + 0.02 → 0.73, blur 28 px (toasts, the Ask panel and sheet, the setup list, pill and sheet, the update bar): content scrolls under them, so they plan for white |
+| The tab bar | green `--tabbar-veil` (0.59) + 0.03 → 0.59, blur 28 px (icons only, 3:1 over white) |
+| The question sheet | green 0.88 → 0.86, over its own scrim |
 | No `backdrop-filter` | green 0.92 → 0.90 |
 | `prefers-reduced-transparency` | green 0.94 → 0.92, and the backdrop veil 0.94 |
 
 Contrast: body text is `--ink` (bone) on green glass, 10.68:1 on solid green. The CTA's white label is at least
 4.5:1 because the fill is vermilion a shade deeper (`--cta`, 4.96–6.03:1). Every vermilion dot on glass carries a
-bone ring (vermilion on a panel over white is only 1.36:1). Never put text directly on the moving backdrop.
+soft glow of its own or sits beside words that carry its meaning. Never put text directly on the moving backdrop:
+loose words get a scrim at the panel tint.
 `web/e2e/contrast.spec.ts` checks the rendered contrast and text size of every screen, in every look (see
 [TESTING.md](TESTING.md)).
 
@@ -84,34 +99,32 @@ bone ring (vermilion on a panel over white is only 1.36:1). Never put text direc
 ```css
 .glass {
   --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.04)), rgb(var(--green-rgb) / var(--panel-veil)));
-  --glass-blur: 22px;
   position: relative;
   isolation: isolate;
   background: var(--glass-tint);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
-  backdrop-filter: blur(var(--glass-blur)) saturate(1.4);
-  border: 1px solid rgb(var(--line-rgb) / 0.22);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); /* 18px, 1.6 */
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid transparent; /* keeps the box size; no edge is drawn */
   border-radius: var(--r-lg);
-  box-shadow: inset 0 1px 0 rgb(var(--bone-rgb) / 0.28), inset 0 -1px 0 rgb(var(--shadow-rgb) / 0.25), var(--shadow-1);
+  box-shadow: var(--shadow-1);
 }
-/* The lit rim: a 1px bone gradient ring that catches light on the top-left and bottom-right edges. */
-.glass::before {
-  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; padding: 1px;
-  background: linear-gradient(135deg, rgb(var(--bone-rgb) / 0.55), rgb(var(--bone-rgb) / 0.06) 32%,
-    rgb(var(--bone-rgb) / 0) 55%, rgb(var(--bone-rgb) / 0.3) 100%);
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
+:where(.glass) .glass {
+  --glass-tint: transparent; /* nested glass: the outer panel gives the green */
 }
 ```
+
+`--panel-veil` is 0.30 over the app's own living backdrop (worked out over every blob subset, both field ends and
+every `saturate()` the CSS uses, `lib/background.ts`), 0.73 over a white desktop or photo, and between the two for
+light owner colours.
 
 Variants: `.glass--green` (hero, Ask launcher), `.glass--vermilion`, `.glass--clear`. In Chromium, `.glass--refract`
 also bends the backdrop through the `#cf-refract` SVG filter.
 
 **Buttons.** Every action is the vermilion CTA (`.btn--primary` for the screen's one main action, `.btn--action` for
-the rest, the same look). Secondary buttons (`.btn--glass`) are the reference's outlined circle-arrow: no fill of
-their own, a 1.5 px bone ring, bone words. `.btn--ghost` has a fainter ring; `.btn--danger` a vermilion ring with
+the rest, the same look). Secondary buttons (`.btn--glass`, `.btn--ghost`: Skip, Not now, Back) wear the soft
+control fill (`--fill-control`) with bone words and no ring; `.btn--danger` a vermilion tint over the same green with
 `--vermilion-ink` words. Selected things in a pick-one bar (the `<Glide>` pill, the menu, the tab bar) are bone
-with `--on-bone` words, with the vermilion bar or dot riding along on a bone ring.
+with `--on-bone` words, with the vermilion bar or dot riding along on the bone.
 
 **What is behind the glass (Settings › Look & feel › Background, [CONTRACTS.md §22](CONTRACTS.md#22-background-modes-and-see-through-glass-owner-request-2026-11-16)).**
 Three choices, picked from three preview tiles with one sliding highlight:
@@ -157,7 +170,7 @@ words start (`--loose-x`). The picture look uses the same plates.
   panel, with a lift of bone (0.08) so the track still shows.
 * **Fills under words are never lighter than their panel.** Wells are deep green (`--fill`); the success and
   vermilion tints lay deep green (0.35) under their colour (`--tint-leaf`, `--tint-vermilion`). Hover answers with
-  more green and a bone ring, never with a lighter fill.
+  more green (and a soft glow for a chosen thing), never with a lighter fill and never with a ring.
 
 ## Typography
 
@@ -705,7 +718,7 @@ the steps in [SETUP_POSTING.md](SETUP_POSTING.md)).
     when the list arrives a moment later. The Ask pill keeps its corner under the open column (14 px below it) at
     every scroll position; it never rests on one of the list's buttons.
   - **Settings › Posting › Set up posting** always has every platform and the line "On your screen: 2 of 5 done" (or
-    "All done: the list is gone"). Inside each card, under a hairline: "Want to do it later?" with **Skip** (the same
+    "All done: the list is gone"). Inside each card, below a gap: "Want to do it later?" with **Skip** (the same
     question), or, once skipped, "You won't post to TikTok until you set it up." with **Un-skip**; the card's state
     line then says "Skipped". Cards in one row are the same height.
 - **Overflow**: long values (redirect URIs, client ids) wrap inside their chip (`overflow-wrap: anywhere`), never

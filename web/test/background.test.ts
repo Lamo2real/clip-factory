@@ -4,12 +4,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AA,
   BONE,
+  BRAND_MESH,
+  BRAND_PANEL_VEIL,
+  brandMeshSpots,
+  brandMeshWorst,
   CHIP_DEEPEN,
+  COLOURS_BLOB_ALPHA,
+  COLOURS_FIELD_END,
+  coloursMeshSpots,
+  coloursMeshWorst,
   coloursVeil,
+  coloursVeils,
   contrast,
   currentColours,
   DEFAULT_COLOURS,
+  FLOAT_VEIL,
   FROSTED_EXTRA,
+  GLASS_SATURATE,
+  GLASS_SATURATE_MAX,
   GLASS_TINT_ALPHA,
   glassCeiling,
   glassChecks,
@@ -22,6 +34,7 @@ import {
   LIQUID_MEASURED,
   LIQUID_SAFETY,
   luminance,
+  MAX_COLOURS_PANEL_VEIL,
   MAX_FROSTED_PANEL_VEIL,
   mix,
   minVeil,
@@ -33,6 +46,8 @@ import {
   PICTURE_PANEL_VEIL,
   readNativeGlass,
   resolveLook,
+  SATURATIONS,
+  saturateRgb,
   SELECTED_ALPHA,
   seeThroughChipBackground,
   seeThroughNote,
@@ -40,8 +55,11 @@ import {
   seeThroughTrackBackground,
   seeThroughVeils,
   seeThroughWorstBackground,
+  SHEET_VEIL,
+  softLightOver,
   SWATCHES,
   swatchTickIsDark,
+  TABBAR_VEIL,
   TEXT_COLOURS,
   TEXT_COLOURS_WINDOW,
   TEXT_TOKENS,
@@ -62,6 +80,11 @@ const STYLES = join(import.meta.dirname, "..", "src", "styles");
 const css = (name: string) => readFileSync(join(STYLES, name), "utf8");
 /** Without comments, so a number in a comment never stands in for one in a rule. */
 const rules = (name: string) => css(name).replace(/\/\*[\s\S]*?\*\//g, "");
+
+/** The declarations of the rule whose selector list is exactly `selector`. */
+const block = (text: string, selector: string) => new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(text)?.[1] ?? "";
+/** Custom properties declared in a rule body. */
+const declared = (body: string) => new Map([...body.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]));
 
 /** The lowest contrast any text colour gets on `bg`. */
 const worst = (bg: Rgb) => Math.min(...TEXT_COLOURS.map((t) => contrast(t, bg)));
@@ -88,9 +111,10 @@ describe("contrast maths", () => {
       if (a > 0) expect(worst(mix(VEIL, under, a - 0.01))).toBeLessThan(AA);
     }
     expect(minVeil(VEIL)).toBe(0);
-    // Pure white is the hardest: 0.77 for the root text set, 0.73 for the window look's.
-    expect(minVeil(WHITE)).toBe(0.77);
+    // Pure white is the hardest: 0.73 for the one text set (the old root set needed 0.77).
+    expect(minVeil(WHITE)).toBe(0.73);
     expect(minVeil(WHITE, TEXT_COLOURS_WINDOW)).toBe(0.73);
+    expect(minVeil(WHITE, ["#efe7da", "#e9e0d0", "#e4dac9", "#ffd2ca", "#d2e8c4", "#d6ebc8"].map(hexToRgb))).toBe(0.77);
   });
 });
 
@@ -148,12 +172,10 @@ describe("what each window glass can be", () => {
 });
 
 describe("the text colours", () => {
-  it("every text colour is light (bone or lighter); the window look lifts the softer ones to bone or lighter", () => {
-    for (const c of TEXT_COLOURS) expect(luminance(c)).toBeGreaterThanOrEqual(0.69);
-    for (const c of TEXT_COLOURS_WINDOW) expect(luminance(c)).toBeGreaterThanOrEqual(luminance(BONE) - 1e-9);
-    const changed = (Object.keys(TEXT_TOKENS) as TextToken[]).filter((t) => WINDOW_TEXT_TOKENS[t] !== TEXT_TOKENS[t]);
-    expect(changed).toEqual(["--ink-2", "--ink-3", "--vermilion-ink", "--green-ink", "--green-text"]);
-    for (const t of changed) expect(luminance(hexToRgb(WINDOW_TEXT_TOKENS[t])), t).toBeGreaterThan(luminance(hexToRgb(TEXT_TOKENS[t])));
+  it("one text set everywhere (ADR-45): every text colour is bone or lighter, and the window look uses the same set", () => {
+    for (const c of TEXT_COLOURS) expect(luminance(c)).toBeGreaterThanOrEqual(luminance(BONE) - 1e-9);
+    expect(WINDOW_TEXT_TOKENS).toEqual(TEXT_TOKENS);
+    expect(TEXT_TOKENS).toEqual({ "--ink": "#efe7da", "--ink-2": "#efe7da", "--ink-3": "#efe7da", "--vermilion-ink": "#ffe2dc", "--green-ink": "#e4f2da", "--green-text": "#e4f2da" });
     expect(TEXT_COLOURS_WINDOW).toHaveLength(Object.keys(TEXT_TOKENS).length);
     expect(TEXT_COLOURS).toHaveLength(Object.keys(TEXT_TOKENS).length);
   });
@@ -181,7 +203,7 @@ describe("see-through veil", () => {
         expect(worstInWindow(mix(VEIL, WHITE, least - 0.01)), `${glass} ${scheme}`).toBeLessThan(AA);
       }
     expect(seeThroughVeils("liquid", "light", "clear").panel).toBe(0.73);
-    expect(PANEL_VEIL_FLOOR).toBe(0.45);
+    expect(PANEL_VEIL_FLOOR).toBe(0.3);
   });
 
   it("Frosted: a green frost everywhere and heavier panels, so it always shows less than Clear", () => {
@@ -239,9 +261,12 @@ describe("see-through veil", () => {
     expect(tokens).toContain(`--tint-vermilion: linear-gradient(rgb(var(--vermilion-rgb) / 0.2), rgb(var(--vermilion-rgb) / 0.2)), rgb(var(--green-deep-rgb) / ${CHIP_DEEPEN});`);
   });
 
-  it("the picture look: a green veil over the photo and green panels, enough for every text colour over a white photo", () => {
-    expect([PICTURE_PAGE_VEIL, PICTURE_PANEL_VEIL]).toEqual([0.35, 0.65]);
+  it("the picture look: no veil over the photo, and panels with enough green for every text colour over a white photo", () => {
+    expect([PICTURE_PAGE_VEIL, PICTURE_PANEL_VEIL]).toEqual([0, 0.73]);
+    expect(PICTURE_PANEL_VEIL).toBe(minVeil(WHITE));
     expect(worst(mix(VEIL, mix(VEIL, WHITE, PICTURE_PAGE_VEIL), PICTURE_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
+    // backdrop-filter saturate() cannot lighten white.
+    expect(worst(mix(VEIL, saturateRgb(WHITE, GLASS_SATURATE_MAX), PICTURE_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
   });
 });
 
@@ -249,18 +274,16 @@ describe("the stylesheets and the text colour list stay in step", () => {
   const sheets = readdirSync(STYLES)
     .filter((f) => f.endsWith(".css"))
     .map((f) => [f, rules(f)] as const);
-  const block = (text: string, selector: string) => new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(text)?.[1] ?? "";
-  const declared = (body: string) => new Map([...body.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]));
 
   it("tokens.css has every text colour with the same value", () => {
     const root = declared(block(rules("tokens.css"), ":root"));
     for (const [token, value] of Object.entries(TEXT_TOKENS)) expect(root.get(token), token).toBe(value);
   });
 
-  it("html.see-through in tokens.css changes exactly the window look's lighter colours", () => {
-    const windowLook = declared(block(rules("tokens.css"), "html.see-through"));
-    const lighter = Object.fromEntries((Object.keys(TEXT_TOKENS) as TextToken[]).filter((t) => WINDOW_TEXT_TOKENS[t] !== TEXT_TOKENS[t]).map((t) => [t, WINDOW_TEXT_TOKENS[t]]));
-    expect(Object.fromEntries(windowLook)).toEqual(lighter);
+  it("tokens.css has no text colours of its own for the window look any more: one set everywhere", () => {
+    expect(rules("tokens.css")).not.toMatch(/html\.see-through\s*\{/);
+    const unused: TextToken[] = (Object.keys(TEXT_TOKENS) as TextToken[]).filter((t) => WINDOW_TEXT_TOKENS[t] !== TEXT_TOKENS[t]);
+    expect(unused).toEqual([]);
   });
 
   /**
@@ -322,6 +345,16 @@ describe("the stylesheets and the text colour list stay in step", () => {
     expect(contrast(WHITE, hexToRgb("#c42a1e"))).toBeGreaterThanOrEqual(AA);
   });
 
+  /** A tint's alphas, with the floating-layer and tab-bar tokens and their calc() worked out. */
+  const tokenValue = (name: string) => Number(declared(block(rules("tokens.css"), ":root")).get(name));
+  const tintAlphas = (tint: string) =>
+    [
+      ...tint
+        .replace(/var\((--float-veil|--tabbar-veil)\)/g, (_, t: string) => String(tokenValue(t)))
+        .replace(/calc\(([\d.]+) \+ ([\d.]+)\)/g, (_, a: string, b: string) => String(Number(a) + Number(b)))
+        .matchAll(/\/\s*([\d.]+)\)/g),
+    ].map((a) => Number(a[1]));
+
   it("the panel tint of the window look gives way to a surface's own denser tint, and never to a weaker one", () => {
     const glass = rules("glass.css");
     // As light as `.glass` itself (:where), so `.toast`, `.sheet.glass`, `.help-panel` and `.star-btn.is-on` keep theirs.
@@ -336,15 +369,51 @@ describe("the stylesheets and the text colour list stay in step", () => {
       for (const m of text.matchAll(/([^{}]+)\{[^{}]*--glass-tint:\s*([^;]+);/g)) {
         const selector = m[1]!.trim();
         if (m[2]!.trim() === "var(--cta)") continue;
-        const alphas = [...m[2]!.matchAll(/\/\s*([\d.]+)\)/g)].map((a) => Number(a[1]));
+        const alphas = tintAlphas(m[2]!);
         expect(alphas.length, `${file} ${selector}`).toBeGreaterThanOrEqual(2);
         expect(m[2], `${file} ${selector}: a surface tint is bottle green`).toMatch(/var\(--green-rgb\)/);
-        if (Math.min(...alphas) >= most) continue;
+        if (Math.min(...alphas) >= most - 1e-9) continue;
         lifted.push(selector);
         expect(glass, `${file} ${selector}: weaker than a panel can need (${most}), so it needs a rule in the window look`).toContain(`html.see-through ${selector} {`);
       }
     }
     expect(lifted).toEqual([".tabbar"]);
+  });
+
+  it("layers that content scrolls under plan for white: the floating tint, the tab bar's 3:1 and the question sheet", () => {
+    expect(FLOAT_VEIL).toBe(0.73);
+    expect(TABBAR_VEIL).toBe(0.59);
+    expect(SHEET_VEIL).toBe(0.86);
+    expect(tokenValue("--float-veil")).toBe(FLOAT_VEIL);
+    expect(tokenValue("--tabbar-veil")).toBe(TABBAR_VEIL);
+    expect(worst(mix(VEIL, WHITE, FLOAT_VEIL))).toBeGreaterThanOrEqual(AA);
+    expect(worst(mix(VEIL, WHITE, FLOAT_VEIL - 0.01))).toBeLessThan(AA);
+    expect(Math.min(...TEXT_COLOURS.map((t) => contrast(t, mix(VEIL, WHITE, TABBAR_VEIL))))).toBeGreaterThanOrEqual(3);
+    // The tab bar's chosen icon sits on the bone glide.
+    expect(contrast(ON_BONE, mix(BONE, mix(VEIL, WHITE, TABBAR_VEIL), SELECTED_ALPHA))).toBeGreaterThanOrEqual(AA);
+    const FLOATING: [string, string][] = [
+      ["components.css", ".toast"],
+      ["system.css", ".update-bar"],
+      ["setup-todo.css", ".setup-todo__pill"],
+      ["setup-todo.css", ".setup-todo__pill:hover"],
+      ["setup-todo.css", ".setup-todo--rail"],
+      ["setup-todo.css", ".setup-todo-panel"],
+      ["help.css", ".help-panel"],
+      ["help.css", ".help-panel.is-sheet"],
+      ["setup.css", ".tt-sheet"],
+    ];
+    for (const [file, selector] of FLOATING) {
+      // The rule for this selector that sets the tint (a selector can have more than one rule).
+      const body = [...rules(file).matchAll(/(?:^|\n)([^{}\n][^{}]*)\{([^{}]*)\}/g)].find((m) => m[1]!.trim() === selector && /--glass-tint/.test(m[2]!))?.[2] ?? "";
+      const tint = declared(body).get("--glass-tint");
+      expect(tint, `${file} ${selector}`).toBeDefined();
+      expect(Math.min(...tintAlphas(tint!)), `${file} ${selector}`).toBeGreaterThanOrEqual(FLOAT_VEIL - 1e-9);
+      expect(declared(body).get("--glass-blur") ?? "28px", `${file} ${selector}`).toBe("28px");
+    }
+    const sheet = declared(block(rules("settings.css"), ".sheet.glass")).get("--glass-tint")!;
+    expect(Math.min(...tintAlphas(sheet))).toBeGreaterThanOrEqual(SHEET_VEIL);
+    const tabbar = declared(block(rules("layout.css"), ".tabbar")).get("--glass-tint")!;
+    expect(Math.min(...tintAlphas(tabbar))).toBeGreaterThanOrEqual(TABBAR_VEIL);
   });
 });
 
@@ -365,68 +434,216 @@ describe("colours", () => {
     expect(SWATCHES.slice(0, 3).map((s) => s.hex)).toEqual([...DEFAULT_COLOURS]);
   });
 
-  it("the veil keeps text at AA on each colour and on the blend between any two", () => {
-    const sets = [[...DEFAULT_COLOURS], ["#1f2937"], ["#ff0000", "#00ff00"], ["#f6c945", "#2b6cb0", "#8e6cc9"], ["#fafafa"], ["#ffffff"]];
-    for (const set of sets) {
-      const veil = coloursVeil(set);
-      const rgbs = set.map(hexToRgb);
-      const samples: Rgb[] = [...rgbs];
-      for (let i = 0; i < rgbs.length; i++) for (let j = i + 1; j < rgbs.length; j++) samples.push(mix(rgbs[i]!, rgbs[j]!, 0.5));
-      for (const s of samples) expect(worst(mix(VEIL, s, veil))).toBeGreaterThanOrEqual(AA);
+  it("the colours mesh is worked out as glass.css draws it: the second colour at 30 %, the third at 45 %, opacity 1", () => {
+    const glass = rules("glass.css");
+    expect(COLOURS_BLOB_ALPHA).toEqual({ second: 0.3, third: 0.45 });
+    expect(glass).toContain(`color-mix(in srgb, var(--c2) ${COLOURS_BLOB_ALPHA.second * 100}%, transparent)`);
+    expect(glass).toContain(`color-mix(in srgb, var(--c3) ${COLOURS_BLOB_ALPHA.third * 100}%, transparent)`);
+    expect(glass).toContain(`color-mix(in srgb, var(--c1) ${100 - COLOURS_FIELD_END * 100}%, var(--c3))`);
+    expect(glass).toMatch(/\.backdrop--colours :is\(\.blob--d, \.blob--e\) \{\s*display: none;/);
+    expect(glass).toMatch(/\n\.blob \{[^}]*opacity: 1;/);
+  });
+
+  it("the veils split between page and panels and keep every text colour at AA over the lightest spot", () => {
+    const TABLE: [string[], number, number][] = [
+      [[...DEFAULT_COLOURS], 0, 0.3],
+      [["#2b6cb0", "#8e6cc9"], 0, 0.3],
+      [["#9caf88", "#f7f5ef", "#e8412c"], 0.03, 0.6],
+      [["#f6c945", "#f49ac1"], 0.08, 0.6],
+      [["#f7f5ef"], 0.28, 0.6],
+      [["#ffffff"], 0.33, 0.6],
+    ];
+    for (const [cs, page, panel] of TABLE) {
+      expect(coloursVeils(cs), cs.join(" ")).toEqual({ pageVeil: page, panelVeil: panel });
+      for (const spot of coloursMeshSpots(cs)) expect(worst(mix(VEIL, mix(VEIL, spot, page), panel)), cs.join(" ")).toBeGreaterThanOrEqual(AA);
+      expect(luminance(coloursMeshWorst(cs))).toBe(Math.max(...coloursMeshSpots(cs).map(luminance)));
     }
-    // Dark colours need no veil at all; light ones need a lot (bone decides the default: 0.74).
-    expect(coloursVeil(["#1f2937"])).toBe(0);
-    expect(coloursVeil(["#0f372b"])).toBe(0);
-    expect(coloursVeil([...DEFAULT_COLOURS])).toBe(0.74);
-    expect(coloursVeil(["#ffffff"])).toBe(minVeil(WHITE));
+    expect(coloursVeils(DEFAULT_COLOURS)).toEqual({ pageVeil: 0, panelVeil: 0.3 });
+    // The deprecated single number is the combined green.
+    expect(coloursVeil(["#ffffff"])).toBeCloseTo(1 - (1 - 0.33) * (1 - 0.6), 2);
+  });
+
+  it("every mix of 1 to 3 colours from a grid reaches AA, and a panel never carries more than 0.6", () => {
+    const grid: string[] = [];
+    for (let r = 0; r <= 255; r += 51) for (let g = 0; g <= 255; g += 51) for (let b = 0; b <= 255; b += 51) grid.push(`#${[r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("")}`);
+    let n = 0;
+    const fails: string[] = [];
+    for (let i = 0; i < grid.length; i += 3)
+      for (let j = 0; j < grid.length; j += 7)
+        for (let k = 0; k < grid.length; k += 11) {
+          const cs = [...new Set([grid[i]!, grid[j]!, grid[k]!])];
+          const v = coloursVeils(cs);
+          n++;
+          expect(v.panelVeil).toBeLessThanOrEqual(MAX_COLOURS_PANEL_VEIL);
+          expect(v.panelVeil).toBeGreaterThanOrEqual(PANEL_VEIL_FLOOR);
+          // The worst spot as seen bare and through every saturate() the CSS uses.
+          for (const spot of coloursMeshSpots(cs)) if (worst(mix(VEIL, mix(VEIL, spot, v.pageVeil), v.panelVeil)) < AA) fails.push(`${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
+        }
+    expect(n).toBeGreaterThan(40_000);
+    expect(fails).toEqual([]);
+  }, 120_000);
+});
+
+describe("the living backdrop (the web and phone default): its lightest spot decides the panel tint", () => {
+  const glass = rules("glass.css");
+  const num = (re: RegExp) => Number(re.exec(glass)![1]);
+
+  it("draws exactly the mesh lib/background.ts works out", () => {
+    expect(glass).toContain("radial-gradient(120% 90% at 10% 0%, #0f3d31 0%, transparent 60%)");
+    expect(glass).toContain("linear-gradient(160deg, #0f3d31 0%, #08221b 50%, #0f3d31 100%)");
+    expect(BRAND_MESH.field).toEqual([hexToRgb("#0f3d31"), hexToRgb("#08221b")]);
+    const blob = (name: string) => block(glass, `.blob--${name}`);
+    const peak = (name: string) => /radial-gradient\(circle[^,]*, rgb\(([^/]+)\/ ([\d.]+)\)/.exec(blob(name))!;
+    const VARS: Record<string, string> = { "var(--vermilion-rgb)": "232 57 43", "var(--green-leaf-rgb)": "95 165 133", "var(--bone-rgb)": "239 231 218" };
+    for (const b of BRAND_MESH.blobs) {
+      const [, colour, alpha] = peak(b.name);
+      const rgb = (VARS[colour!.trim()] ?? colour!.trim()).split(/\s+/).map(Number);
+      expect(rgb, `blob ${b.name}`).toEqual([...b.colour]);
+      expect(Number(alpha), `blob ${b.name}`).toBe(b.alpha);
+    }
+    expect(glass).toMatch(/\n\.blob \{[^}]*opacity: 1;/);
+    // The lenses' bone glow and the caustics' peak.
+    expect(num(/0 0 40px 4px rgb\(var\(--bone-rgb\) \/ ([\d.]+)\)/)).toBeLessThanOrEqual(BRAND_MESH.ring);
+    expect(num(/\.backdrop__caustic \{[^}]*?radial-gradient\(closest-side, rgb\(var\(--bone-rgb\) \/ ([\d.]+)\)/)).toBe(BRAND_MESH.caustic);
+    // Backdrop.tsx draws the fifth blob in both meshes.
+    const tsx = readFileSync(join(import.meta.dirname, "..", "src", "components", "Backdrop.tsx"), "utf8");
+    expect(tsx.match(/className="blob blob--e"/g)).toHaveLength(2);
+  });
+
+  it("has no green page veil and no frost for Clear: the colours show at full strength between the panels", () => {
+    expect(glass).not.toMatch(/\.backdrop:not\(\.backdrop--window, \.backdrop--colours, \.has-image\)::after \{[^}]*background: rgb\(var\(--green-rgb\)/);
+    expect(block(glass, ".backdrop__frost")).toMatch(/background: none;/);
+    expect(declared(block(rules("tokens.css"), ":root")).get("--backdrop-veil")).toBe("0");
+  });
+
+  it("the worst spot is the lightest of every blob subset over both field ends after saturate(), and the panel tint covers it", () => {
+    // Enumerate here too, independently of brandMeshWorst.
+    const BONE_ = hexToRgb("#efe7da");
+    let worstSpot: Rgb = [0, 0, 0];
+    let allStacked: Rgb = [0, 0, 0];
+    for (const field of BRAND_MESH.field)
+      for (let m = 0; m < 32; m++) {
+        let spot: Rgb = field;
+        for (const [i, b] of BRAND_MESH.blobs.entries()) if (m & (1 << i)) spot = mix(b.colour, spot, b.alpha);
+        spot = mix(BONE_, spot, BRAND_MESH.ring);
+        spot = softLightOver(softLightOver(spot, BONE_, BRAND_MESH.caustic), BONE_, BRAND_MESH.caustic);
+        const seen = saturateRgb(spot, GLASS_SATURATE_MAX);
+        if (luminance(seen) > luminance(worstSpot)) worstSpot = seen;
+        if (m === 31 && luminance(seen) > luminance(allStacked)) allStacked = seen;
+      }
+    expect(worstSpot).toEqual(brandMeshWorst(GLASS_SATURATE_MAX));
+    expect(luminance(brandMeshWorst())).toBeGreaterThanOrEqual(luminance(worstSpot));
+    // The stack of every blob is not the worst: a subset is lighter.
+    expect(luminance(worstSpot)).toBeGreaterThan(luminance(allStacked));
+    expect(BRAND_PANEL_VEIL).toBe(0.3);
+    expect(BRAND_PANEL_VEIL).toBe(Math.max(PANEL_VEIL_FLOOR, ...brandMeshSpots().map((spot) => minVeil(spot))));
+    for (const spot of brandMeshSpots()) expect(worst(mix(VEIL, spot, BRAND_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
+    for (const sat of SATURATIONS) {
+      const spot = brandMeshWorst(sat);
+      for (const t of TEXT_COLOURS) expect(contrast(t, mix(VEIL, spot, BRAND_PANEL_VEIL)), `saturate ${sat}`).toBeGreaterThanOrEqual(AA);
+      // Bare, that spot is under AA: the reason loose words get the scrim.
+      expect(worst(spot)).toBeLessThan(AA);
+    }
+    // A pick-one track, the control fill, a field and a tinted chip over that spot.
+    const panel = mix(VEIL, worstSpot, BRAND_PANEL_VEIL);
+    expect(worst(mix(BONE, mix(VEIL, worstSpot, BRAND_PANEL_VEIL + TRACK_EXTRA_VEIL), TRACK_LIFT))).toBeGreaterThanOrEqual(AA);
+    expect(worst(mix(GREEN_DEEP, panel, 0.45))).toBeGreaterThanOrEqual(AA);
+    expect(contrast(hexToRgb(TEXT_TOKENS["--vermilion-ink"]), mix(hexToRgb("#e8392b"), mix(VEIL, worstSpot, BRAND_PANEL_VEIL + 0.1), 0.14))).toBeGreaterThanOrEqual(AA);
+    expect(contrast(hexToRgb("#ffeec4"), mix([246, 201, 69], mix(GREEN_DEEP, panel, CHIP_DEEPEN), 0.16))).toBeGreaterThanOrEqual(AA);
+  });
+
+  it("the see-through has range: the lightest and darkest spots stay told apart through a panel", () => {
+    const darkest = BRAND_MESH.field[1]!;
+    for (const sat of [GLASS_SATURATE, GLASS_SATURATE_MAX]) expect(contrast(mix(VEIL, brandMeshWorst(sat), BRAND_PANEL_VEIL), mix(VEIL, darkest, BRAND_PANEL_VEIL))).toBeGreaterThanOrEqual(2.5);
+  });
+
+  it("every saturate() in the CSS is at most GLASS_SATURATE_MAX, and the glass uses GLASS_SATURATE", () => {
+    const sats: number[] = [];
+    // backdrop-filter only: a plain `filter` (the Background tile's little scene) never sits under words.
+    for (const f of readdirSync(STYLES).filter((n) => n.endsWith(".css"))) for (const m of rules(f).matchAll(/backdrop-filter:[^;]*?saturate\(([\d.]+)\)/g)) sats.push(Number(m[1]));
+    expect(sats.length).toBeGreaterThan(0);
+    expect(Math.max(...sats)).toBe(GLASS_SATURATE_MAX);
+    // Every strength used is one the worst cases are worked out for.
+    expect([...new Set(sats)].filter((x) => !SATURATIONS.includes(x))).toEqual([]);
+    expect(declared(block(rules("tokens.css"), ":root")).get("--glass-saturate")).toBe(String(GLASS_SATURATE));
+    expect(block(glass, ".glass")).toContain("backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));");
+  });
+
+  it("panels carry no bone sheen (it fails AA at 4.48:1), and nested glass carries no tint of its own", () => {
+    const tint = declared(block(glass, ".glass")).get("--glass-tint")!;
+    expect(tint).not.toMatch(/bone/);
+    expect(worst(mix(BONE, mix(VEIL, brandMeshWorst(GLASS_SATURATE), BRAND_PANEL_VEIL), 0.06))).toBeLessThan(AA);
+    expect(glass).toMatch(/:where\(\.glass\) \.glass \{\s*--glass-tint: transparent;/);
+  });
+
+  it("loose words get the panel-tint scrim and buttons the control fill in every look", () => {
+    expect(glass).toContain("html:is(.see-through, [data-backdrop])");
+    expect(glass).not.toContain('[data-backdrop="frosted"]');
+    expect(glass).toMatch(/html:where\(\.see-through, \[data-backdrop\]\) :is\(\.btn--glass, \.btn--ghost\) \{\s*background: var\(--fill-control\);/);
+    const fill = declared(block(rules("tokens.css"), ":root")).get("--fill-control")!;
+    expect(fill).toBe(`linear-gradient(rgb(var(--bone-rgb) / ${TRACK_LIFT}), rgb(var(--bone-rgb) / ${TRACK_LIFT})), rgb(var(--green-rgb) / calc(var(--panel-veil) + ${TRACK_EXTRA_VEIL}))`);
   });
 });
 
-/** W3C soft-light of `top` over `bottom` (one channel, 0..255). */
-function softLight(bottom: number, top: number): number {
-  const cb = bottom / 255;
-  const cs = top / 255;
-  const d = cb <= 0.25 ? ((16 * cb - 12) * cb + 4) * cb : Math.sqrt(cb);
-  const b = cs <= 0.5 ? cb - (1 - 2 * cs) * cb * (1 - cb) : cb + (2 * cs - 1) * (d - cb);
-  return b * 255;
-}
-const softLightOver = (under: Rgb, top: Rgb, alpha: number): Rgb =>
-  under.map((u, i) => (1 - alpha) * u + alpha * softLight(u, top[i]!)) as unknown as Rgb;
+/** The decoration a selector may keep: focus rings, the found highlight, progress, the switch, spinners, action blinks. */
+const EDGE_OK = /focus|is-found|help-ring|spinner|switch|progress|\.ring\b|ring__|act__item|is-running \.timeline__node::before|@keyframes/;
 
-describe("the frosted look (the web default): loose text over the moving caustics", () => {
-  const glass = rules("glass.css");
-  // The brand mesh as glass.css draws it; the test fails if the stylesheet moves away from these numbers.
-  const BASE = hexToRgb("#174a3a");
-  const BLOB_OPACITY = 0.9;
-  const A: Rgb = [42, 92, 74];
-  const VERMILION = hexToRgb("#e8392b");
-  const LEAF = hexToRgb("#5fa585");
-  const peak = Number(glass.match(/\.backdrop__caustic \{[^}]*?radial-gradient\(closest-side, rgb\(var\(--bone-rgb\) \/ ([\d.]+)\)/)![1]);
+describe("no visible edges (owner, 2026-11-18)", () => {
+  const sheets = readdirSync(STYLES)
+    .filter((f) => f.endsWith(".css"))
+    .map((f) => [f, rules(f)] as const);
+  /** Every innermost rule as [selector, body]. */
+  const ruleList = (text: string) => [...text.matchAll(/([^{}]*)\{([^{}]*)\}/g)].map((m) => [m[1]!.trim().replace(/\s+/g, " "), m[2]!] as const);
+  const layers = (v: string) => {
+    const out: string[] = [];
+    let depth = 0;
+    let cur = "";
+    for (const ch of v) {
+      if (ch === "(") depth++;
+      if (ch === ")") depth--;
+      if (ch === "," && depth === 0) {
+        out.push(cur.trim());
+        cur = "";
+      } else cur += ch;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  };
+  /** A shadow layer with (almost) no blur and a spread or an offset: a ring or a hard line. */
+  const edgeLayer = (layer: string) => {
+    if (/^var\(--(shadow|glow|shade|focus)/.test(layer)) return false;
+    if (/var\(--panel-veil\)/.test(layer)) return false; // the loose-text scrim spreads its own fill
+    const lens = layer
+      .replace(/(rgba?|color-mix|var)\((?:[^()]|\([^()]*\))*\)/g, " ")
+      .replace(/#[0-9a-f]{3,8}|currentColor|transparent|inset/gi, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((t) => parseFloat(t));
+    if (lens.some((n) => Number.isNaN(n))) return false;
+    const [x = 0, y = 0, blur = 0, spread = 0] = lens;
+    return blur <= 2 && (spread !== 0 || x !== 0 || y !== 0);
+  };
 
-  it("draws the mesh this test works out", () => {
-    expect(glass).toContain("rgb(42 92 74 / 0.6)");
-    expect(glass).toContain("rgb(var(--vermilion-rgb) / 0.42)");
-    expect(glass).toContain("rgb(var(--green-leaf-rgb) / 0.22)");
-    expect(glass).toContain("rgb(var(--bone-rgb) / 0.12)");
-    expect(glass).toMatch(/\.blob \{[^}]*opacity: 0\.9;/);
-    expect(peak).toBeLessThanOrEqual(0.1);
+  it("no stylesheet draws a border, ring or hard line except the allowed ones", () => {
+    const found: string[] = [];
+    for (const [file, text] of sheets)
+      for (const [selector, body] of ruleList(text)) {
+        if (EDGE_OK.test(selector) || /^(\d+%|from|to)(\s|,|$)/.test(selector)) continue;
+        for (const m of body.matchAll(/(?:^|[;\s])(border(?:-(?:top|bottom|left|right|block|inline)(?:-(?:start|end))?)?(?:-color)?|outline(?:-color)?):\s*([^;]+);/g)) {
+          const v = m[2]!.trim();
+          if (/^(none|0|transparent)$/.test(v) || /\btransparent$/.test(v)) continue;
+          found.push(`${file} ${selector} { ${m[1]}: ${v} }`);
+        }
+        for (const m of body.matchAll(/box-shadow:\s*([^;]+);/g)) for (const l of layers(m[1]!)) if (edgeLayer(l)) found.push(`${file} ${selector} { box-shadow: ${l} }`);
+      }
+    expect(found).toEqual([]);
   });
 
-  it("gives loose text the panel-tint scrim, which keeps every text colour at AA on the lightest spot", () => {
-    // Loose text in frosted sits on the same scrim as in the window and picture looks.
-    expect(glass).toContain('html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])');
-    // The worst case: every blob at its centre at once (they never all meet), the bone frost, both caustics at their
-    // peak on the same spot, then the 0.15 green over the mesh.
-    let spot = BASE;
-    for (const [c, a] of [[A, 0.6], [VERMILION, 0.42], [LEAF, 0.22], [BONE, 0.12]] as const) spot = mix(c, spot, a * BLOB_OPACITY);
-    spot = mix(BONE, spot, 0.04);
-    spot = softLightOver(softLightOver(spot, BONE, peak), BONE, peak);
-    spot = mix(VEIL, spot, 0.15);
-    // Under the scrim: the panel floor tint.
-    const scrimmed = mix(VEIL, spot, PANEL_VEIL_FLOOR);
-    expect(worst(scrimmed)).toBeGreaterThanOrEqual(AA);
-    // Without the scrim that spot is under AA: the reason the scrim is there.
-    expect(worst(spot)).toBeLessThan(AA);
+  it("the shared shadows and glows are soft, and the glass has no lit rim", () => {
+    const root = declared(block(rules("tokens.css"), ":root"));
+    for (const t of ["--shadow-1", "--shadow-2", "--glow-bone", "--glow-vermilion", "--glow-leaf", "--shade-field"]) for (const l of layers(root.get(t)!)) expect(edgeLayer(l.replace(/^var/, "x")), `${t}: ${l}`).toBe(false);
+    expect(rules("glass.css")).not.toMatch(/\.glass::before/);
   });
 });
 
@@ -464,8 +681,8 @@ describe("what is drawn", () => {
   const base: LookInput = { mode: "see-through", picture: null, colours: [...DEFAULT_COLOURS], strength: "clear", glass: "none", scheme: "light" };
 
   it("see-through shows the window glass only when the desktop app has it", () => {
-    expect(resolveLook(base)).toEqual({ kind: "frosted", strength: "clear" });
-    expect(resolveLook({ ...base, strength: "frosted" })).toEqual({ kind: "frosted", strength: "frosted" });
+    expect(resolveLook(base)).toEqual({ kind: "frosted", strength: "clear", panelVeil: BRAND_PANEL_VEIL });
+    expect(resolveLook({ ...base, strength: "frosted" })).toEqual({ kind: "frosted", strength: "frosted", panelVeil: BRAND_PANEL_VEIL });
     for (const glass of GLASSES) {
       const v = seeThroughVeils(glass, "light", "clear");
       expect(resolveLook({ ...base, glass })).toEqual({ kind: "window", glass, strength: "clear", pageVeil: v.page, panelVeil: v.panel });
@@ -475,7 +692,7 @@ describe("what is drawn", () => {
   });
 
   it("picture uses the picture on this device, or the Clip Factory colours until there is one", () => {
-    expect(resolveLook({ ...base, mode: "picture" })).toEqual({ kind: "brand" });
+    expect(resolveLook({ ...base, mode: "picture" })).toEqual({ kind: "brand", panelVeil: BRAND_PANEL_VEIL });
     expect(resolveLook({ ...base, mode: "picture", picture: "data:image/jpeg;base64,x", glass: "vibrancy" })).toEqual({
       kind: "picture",
       url: "data:image/jpeg;base64,x",
@@ -485,7 +702,7 @@ describe("what is drawn", () => {
   });
 
   it("colours draws the chosen colours with their veil, even in the desktop app", () => {
-    expect(resolveLook({ ...base, mode: "colours", colours: ["#1F2937"], glass: "acrylic" })).toEqual({ kind: "colours", colours: ["#1f2937"], veil: coloursVeil(["#1f2937"]) });
+    expect(resolveLook({ ...base, mode: "colours", colours: ["#1F2937"], glass: "acrylic" })).toEqual({ kind: "colours", colours: ["#1f2937"], ...coloursVeils(["#1f2937"]) });
   });
 
   it("only the desktop wrapper can claim real glass", () => {
@@ -590,21 +807,21 @@ describe("the page follows the look", () => {
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.3");
     expect(Number(root.style.getPropertyValue("--panel-veil"))).toBeCloseTo(liquid.panel + 0.15, 10);
 
-    applyLook({ kind: "frosted", strength: "frosted" }, root);
+    applyLook({ kind: "frosted", strength: "frosted", panelVeil: BRAND_PANEL_VEIL }, root);
     expect(root.classList.contains("see-through")).toBe(false);
     expect(root.dataset.backdrop).toBe("frosted");
     expect(root.dataset.glass).toBeUndefined();
     expect(root.dataset.strength).toBe("frosted");
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("");
-    expect(root.style.getPropertyValue("--panel-veil")).toBe("");
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.3");
 
-    applyLook({ kind: "colours", colours: ["#ffffff"], veil: 0.77 }, root);
-    expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.77");
-    expect(root.style.getPropertyValue("--panel-veil")).toBe("");
+    applyLook({ kind: "colours", colours: ["#ffffff"], ...coloursVeils(["#ffffff"]) }, root);
+    expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.33");
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.6");
 
-    // The picture look: a green veil over the photo and its own panel tint.
+    // The picture look: no veil over the photo, and its own panel tint.
     applyLook({ kind: "picture", url: "data:x", pageVeil: PICTURE_PAGE_VEIL, panelVeil: PICTURE_PANEL_VEIL }, root);
-    expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.35");
-    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.65");
+    expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0");
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.73");
   });
 });

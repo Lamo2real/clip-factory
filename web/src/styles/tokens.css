@@ -1,5 +1,6 @@
-/* Design tokens. Palette (docs/CONTRACTS.md §11, docs/DECISIONS.md ADR-43): Bottle Green is the surface, Bone is
-   the words and the lines, Vermilion is every call to action. The glass is bottle-green glass with bone text. */
+/* Design tokens. Palette (docs/CONTRACTS.md §11, docs/DECISIONS.md ADR-43, ADR-45): Bottle Green is the surface, Bone
+   is the words, Vermilion is every call to action. The glass is see-through bottle-green glass with bone text and no
+   drawn edges: a pane shows by its blur, tint and shadow, a control by its fill. */
 :root {
   --green: #0f372b;
   --green-rgb: 15 55 43;
@@ -23,15 +24,15 @@
   --cta-pressed: rgb(170 34 25);
   --cta: linear-gradient(180deg, var(--cta-top), var(--cta-bottom));
   --shadow-rgb: 4 20 15; /* every drop shadow */
-  --line-rgb: 239 231 218; /* hairlines, input borders, rings: bone */
+  --line-rgb: 239 231 218; /* bone, for the few marks that are not box edges: scrollbars, link underlines, ring tracks */
 
   /* Words. All text is light: the hierarchy comes from size, weight and tracking, not from dimmer colour. */
   --ink: #efe7da;
-  --ink-2: #e9e0d0;
-  --ink-3: #e4dac9;
-  --vermilion-ink: #ffd2ca; /* error and warning words, always with a vermilion icon or dot */
-  --green-ink: #d2e8c4; /* success words and icons */
-  --green-text: #d6ebc8; /* words on the success tint */
+  --ink-2: #efe7da;
+  --ink-3: #efe7da;
+  --vermilion-ink: #ffe2dc; /* error and warning words, always with a vermilion icon or dot */
+  --green-ink: #e4f2da; /* success words and icons */
+  --green-text: #e4f2da; /* words on the success tint */
   --on-bone: #0f372b; /* words on a bone fill (10.68:1 on solid bone) */
 
   /* Fills under words on a panel. None is lighter than the panel under it, so words keep their contrast. */
@@ -39,10 +40,28 @@
   --fill-hover: rgb(var(--green-deep-rgb) / 0.42);
   --tint-leaf: linear-gradient(rgb(var(--green-leaf-rgb) / 0.22), rgb(var(--green-leaf-rgb) / 0.22)), rgb(var(--green-deep-rgb) / 0.35);
   --tint-vermilion: linear-gradient(rgb(var(--vermilion-rgb) / 0.2), rgb(var(--vermilion-rgb) / 0.2)), rgb(var(--green-deep-rgb) / 0.35);
+  --tint-amber: linear-gradient(rgb(246 201 69 / 0.16), rgb(246 201 69 / 0.16)), rgb(var(--green-deep-rgb) / 0.35);
   --selected: rgb(var(--bone-rgb) / 0.92); /* the selected pill: bone with --on-bone words */
+  /* No edges (ADR-45): a control shows by its fill. Buttons without a fill of their own get the pick-one track's
+     recipe (a bone lift over a step more green, TRACK_LIFT and TRACK_EXTRA_VEIL in lib/background.ts); text fields a
+     deeper well with a soft inner shade; a chosen or found thing a soft glow, never a ring. */
+  --fill-control: linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08)), rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.1));
+  --fill-field: rgb(var(--green-deep-rgb) / 0.45);
+  --shade-field: inset 0 3px 10px rgb(var(--shadow-rgb) / 0.35);
+  --glow-bone: 0 0 18px 2px rgb(var(--bone-rgb) / 0.4);
+  --glow-vermilion: 0 0 18px 2px rgb(var(--vermilion-rgb) / 0.6);
+  --glow-leaf: 0 0 18px 2px rgb(var(--green-leaf-rgb) / 0.6);
 
-  /* The panel tint. lib/look.ts sets it for every look; this is the floor where the page owns the backdrop. */
-  --panel-veil: 0.45;
+  /* The see-through glass (lib/background.ts works out every number; lib/look.ts sets --panel-veil and --backdrop-veil
+     for each look). --panel-veil here is PANEL_VEIL_FLOOR = BRAND_PANEL_VEIL, the tint over the app's own backdrop. */
+  --panel-veil: 0.3;
+  --backdrop-veil: 0;
+  --glass-blur: 18px;
+  --glass-saturate: 1.6; /* GLASS_SATURATE */
+  /* Layers content scrolls under (toasts, the update bar, the setup list and pill, the Ask panel): a thumbnail can
+     sit under them, so they plan for white. FLOAT_VEIL and TABBAR_VEIL (icons only, 3:1). */
+  --float-veil: 0.73;
+  --tabbar-veil: 0.59;
 
   --font-display: "Times New Roman", "Times New Roman MT", Tinos, Times, serif;
   --font-ui: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -88,20 +107,9 @@
   --sidebar-w-collapsed: 80px;
   --tabbar-h: 66px;
 
-  --shadow-1: 0 1px 2px rgb(var(--shadow-rgb) / 0.18), 0 8px 24px -14px rgb(var(--shadow-rgb) / 0.55);
-  --shadow-2: 0 2px 6px rgb(var(--shadow-rgb) / 0.2), 0 22px 48px -24px rgb(var(--shadow-rgb) / 0.65);
+  --shadow-1: 0 8px 24px -14px rgb(var(--shadow-rgb) / 0.55);
+  --shadow-2: 0 6px 18px -6px rgb(var(--shadow-rgb) / 0.22), 0 22px 48px -24px rgb(var(--shadow-rgb) / 0.65);
   --focus: 0 0 0 3px rgb(var(--bone-rgb) / 0.95), 0 0 0 5.5px var(--vermilion-deep);
   /* Text fields: bone ring (about 11:1 on green) and a faint vermilion glow, never the double ring of a button. */
   --focus-field: 0 0 0 2px var(--bone), 0 0 0 4px rgb(var(--vermilion-rgb) / 0.25);
-}
-
-/* The window look (§22.3). Panels are bottle-green glass at --panel-veil; the text goes to bone or lighter so the
-   panels need the least green over the lightest the window can be (white). Each has a relative luminance of 0.806
-   or more. Keep in step with WINDOW_TEXT_TOKENS in lib/background.ts (test/background.test.ts reads this file). */
-html.see-through {
-  --ink-2: #efe7da;
-  --ink-3: #efe7da;
-  --vermilion-ink: #ffe2dc;
-  --green-ink: #e4f2da;
-  --green-text: #e4f2da;
 }

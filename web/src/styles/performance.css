@@ -181,7 +181,7 @@
   /* A label, not a button: bone with a green mark (solid vermilion means "press me"). */
   background: var(--selected);
   color: var(--on-bone);
-  box-shadow: inset 0 0 0 1.5px var(--vermilion);
+  box-shadow: none;
   --mark-cut: var(--bone);
 }
 .perf__chips {
@@ -206,7 +206,7 @@
   border-radius: var(--r-pill);
   /* On a phone the chips sit straight on the window: as much green as a panel, never less. */
   background: rgb(var(--green-rgb) / max(0.6, var(--panel-veil)));
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.35);
+  box-shadow: none;
   color: var(--ink);
   font-size: 0.95rem;
   font-weight: 750;
@@ -221,7 +221,7 @@
 /* The best app: the bone (selected) pill with green words and a vermilion edge; a label, so never the CTA fill. */
 .perf-chip.is-best {
   background: var(--selected);
-  box-shadow: inset 0 0 0 1.5px var(--vermilion);
+  box-shadow: none;
   color: var(--on-bone);
   --mark-cut: var(--bone);
 }
@@ -348,10 +348,7 @@
   border-radius: var(--r-lg);
 }
 .pstack__card.is-best {
-  box-shadow:
-    inset 0 1px 0 rgb(var(--bone-rgb) / 0.26),
-    0 0 0 2px rgb(var(--vermilion-rgb) / 0.55),
-    var(--shadow-2);
+  box-shadow: var(--glow-vermilion), var(--shadow-2);
 }
 .pstack__head {
   display: flex;
@@ -396,10 +393,7 @@
   border-radius: 50%;
   background: var(--selected);
   color: var(--on-bone);
-  box-shadow:
-    inset 0 0 0 1.5px var(--vermilion),
-    0 0 0 1.5px rgb(var(--bone-rgb) / 0.9),
-    0 6px 14px -6px rgb(var(--vermilion-rgb) / 0.8);
+  box-shadow: 0 6px 14px -6px rgb(var(--vermilion-rgb) / 0.8);
 }
 .pstack__chip .pill {
   white-space: normal;
@@ -433,7 +427,7 @@
   align-items: start;
   column-gap: 8px;
   padding: 5px 0;
-  border-top: 1px solid rgb(var(--line-rgb) / 0.18);
+  border-top: 1px solid transparent;
   font-size: var(--fs-small);
 }
 .pstack__row .icon {
@@ -684,7 +678,7 @@
   padding: 8px 20px;
   border-radius: var(--r-pill);
   background: rgb(var(--green-deep-rgb) / 0.32);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.22);
+  box-shadow: none;
   color: var(--ink);
   font-weight: 650;
   text-decoration: none;
@@ -819,10 +813,7 @@
   border-radius: var(--r-lg);
 }
 .week-card.is-best {
-  box-shadow:
-    inset 0 1px 0 rgb(var(--bone-rgb) / 0.26),
-    0 0 0 2px rgb(var(--green-leaf-rgb) / 0.9),
-    var(--shadow-1);
+  box-shadow: var(--glow-leaf), var(--shadow-1);
 }
 .week-card__rank {
   display: grid;
@@ -909,7 +900,7 @@
   padding: 3px 10px 3px 7px;
   border-radius: var(--r-pill);
   background: rgb(var(--green-deep-rgb) / 0.3);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.22);
+  box-shadow: none;
   color: var(--ink);
   font-size: 0.9375rem;
   font-weight: 700;
@@ -918,7 +909,7 @@
 }
 .week-card__mark.is-best {
   background: var(--selected);
-  box-shadow: inset 0 0 0 1.5px var(--vermilion);
+  box-shadow: none;
   color: var(--on-bone);
   --mark-cut: var(--bone);
 }
@@ -1004,7 +995,7 @@
   width: 100%;
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgb(var(--line-rgb) / 0.22);
+  border-top: 1px solid transparent;
 }
 .perf__earned {
   display: flex;

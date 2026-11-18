@@ -57,14 +57,12 @@
   backdrop-filter: blur(10px) saturate(1.4);
   text-shadow: 0 1px 0 rgb(90 14 6 / 0.35);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.35),
     inset 0 -2px 6px rgb(90 14 6 / 0.25),
     0 10px 24px -10px rgb(var(--vermilion-rgb) / 0.55);
 }
 .btn:is(.btn--primary, .btn--action):hover:not([aria-disabled="true"]) {
   background: linear-gradient(180deg, var(--cta-hover-top), var(--cta-bottom));
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.4),
     inset 0 -2px 6px rgb(90 14 6 / 0.25),
     0 14px 30px -10px rgb(240 122 108 / 0.6);
 }
@@ -86,30 +84,26 @@
   background-position: -30% 0;
 }
 
-/* The secondary button is the reference's outlined circle-arrow: no fill of its own, a bone ring, bone words. */
+/* The secondary button: the soft control fill (glass.css, every look) with bone words, and no ring (ADR-45). */
 .btn--glass {
   color: var(--ink);
   background: var(--fill);
   -webkit-backdrop-filter: blur(14px) saturate(1.4);
   backdrop-filter: blur(14px) saturate(1.4);
-  box-shadow:
-    inset 0 0 0 1.5px rgb(var(--bone-rgb) / 0.85),
-    0 6px 16px -10px rgb(var(--shadow-rgb) / 0.68);
+  box-shadow: 0 6px 16px -10px rgb(var(--shadow-rgb) / 0.68);
 }
 .btn--glass:hover:not([aria-disabled="true"]) {
   background: var(--fill-hover);
-  box-shadow:
-    inset 0 0 0 1.5px var(--bone),
-    0 8px 18px -10px rgb(var(--shadow-rgb) / 0.75);
+  box-shadow: 0 8px 18px -10px rgb(var(--shadow-rgb) / 0.75);
 }
 .btn--ghost {
   color: var(--ink);
-  background: transparent;
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.35);
+  background: var(--fill-control);
+  box-shadow: none;
 }
 .btn--ghost:hover:not([aria-disabled="true"]) {
   background: var(--fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.6);
+  box-shadow: none;
 }
 /* Bone: only for a non-action selection or a confirmation, never next to a CTA as a rival. */
 .btn--bone {
@@ -122,10 +116,8 @@
 }
 .btn--danger {
   color: var(--vermilion-ink);
-  background: var(--fill);
-  box-shadow:
-    inset 0 0 0 1.5px var(--vermilion),
-    0 0 0 1px rgb(var(--bone-rgb) / 0.35);
+  background: var(--tint-vermilion);
+  box-shadow: none;
 }
 .btn--danger:hover:not([aria-disabled="true"]) {
   background: var(--tint-vermilion);
@@ -133,7 +125,7 @@
 
 .btn[aria-disabled="true"]:not(.is-loading) {
   opacity: 0.5;
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.31);
+  box-shadow: none;
   text-shadow: none;
 }
 /* A CTA that is off stays on the palette: a thin vermilion over deep green (not a half-faded red, which turned
@@ -144,7 +136,7 @@
   background:
     linear-gradient(rgb(var(--vermilion-rgb) / 0.35), rgb(var(--vermilion-rgb) / 0.35)),
     rgb(var(--green-deep-rgb) / 0.6);
-  box-shadow: inset 0 0 0 1px rgb(var(--vermilion-rgb) / 0.55);
+  box-shadow: none;
 }
 /* A disabled button gives a short "no" shake when pressed. */
 .btn[aria-disabled="true"]:not(.is-loading):active {
@@ -312,9 +304,9 @@
   min-height: 48px;
   padding: 11px 16px;
   border-radius: var(--r-md);
-  border: 1px solid rgb(var(--line-rgb) / 0.7);
-  background: rgb(var(--green-deep-rgb) / 0.3);
-  box-shadow: inset 0 1px 2px rgb(var(--shadow-rgb) / 0.3);
+  border: 1px solid transparent;
+  background: var(--fill-field);
+  box-shadow: var(--shade-field);
   font-size: 1rem; /* 16px: iOS does not zoom into the field */
   transition:
     border-color var(--dur-1),
@@ -373,10 +365,9 @@
 /* A field with an error keeps its bone edge (3:1 on any panel) with vermilion outside it, as vermilion alone is lost
    on a panel over a light window. */
 .input[aria-invalid="true"] {
-  border-color: rgb(var(--line-rgb) / 0.7);
-  box-shadow:
-    inset 0 1px 2px rgb(var(--shadow-rgb) / 0.3),
-    0 0 0 2px var(--vermilion);
+  border-color: transparent;
+  background: var(--tint-vermilion);
+  box-shadow: var(--shade-field), var(--glow-vermilion);
 }
 .input[aria-invalid="true"]:focus-visible {
   border-color: var(--bone);
@@ -405,7 +396,7 @@
   padding: 10px 14px;
   border-radius: var(--r-md);
   background: var(--tint-vermilion);
-  box-shadow: inset 0 0 0 1px rgb(var(--vermilion-rgb) / 0.6);
+  box-shadow: none;
   color: var(--vermilion-ink);
   font-weight: 600;
   font-size: var(--fs-small);
@@ -419,11 +410,9 @@
   min-height: 56px;
   padding: 4px 6px 4px 8px;
   border-radius: var(--r-pill);
-  background: rgb(var(--green-deep-rgb) / 0.3);
-  border: 1px solid rgb(var(--line-rgb) / 0.7);
-  box-shadow:
-    inset 0 1px 2px rgb(var(--shadow-rgb) / 0.3),
-    0 1px 0 rgb(var(--bone-rgb) / 0.12);
+  background: var(--fill-field);
+  border: 1px solid transparent;
+  box-shadow: var(--shade-field);
   transition:
     border-color var(--dur-2),
     box-shadow var(--dur-2);
@@ -433,10 +422,14 @@
   box-shadow: 0 0 0 3px rgb(var(--vermilion-rgb) / 0.3);
 }
 .linkbox.is-ok {
-  border-color: var(--green-leaf);
+  border-color: transparent;
+  background: var(--tint-leaf);
+  box-shadow: var(--shade-field), var(--glow-leaf);
 }
 .linkbox.is-bad {
-  border-color: var(--vermilion);
+  border-color: transparent;
+  background: var(--tint-vermilion);
+  box-shadow: var(--shade-field), var(--glow-vermilion);
 }
 .linkbox__mark {
   display: grid;
@@ -489,8 +482,8 @@
   min-height: 76px;
   padding: 14px 18px;
   border-radius: var(--r-md);
-  border: 1.5px dashed rgb(var(--line-rgb) / 0.7);
-  background: rgb(var(--green-deep-rgb) / 0.3);
+  border: 1.5px dashed transparent;
+  background: var(--fill-control);
   transition: background-color var(--dur-1), border-color var(--dur-1);
 }
 .dropzone:hover {
@@ -502,10 +495,12 @@
 }
 .dropzone.has-file {
   border-style: solid;
-  border-color: var(--green-leaf);
+  border-color: transparent;
+  background: var(--tint-leaf);
 }
 .dropzone.is-bad {
-  border-color: var(--vermilion);
+  border-color: transparent;
+  background: var(--tint-vermilion);
 }
 .dropzone__text {
   display: grid;
@@ -604,7 +599,7 @@
   max-width: 100%;
   padding: 4px;
   border-radius: var(--r-pill);
-  box-shadow: inset 0 1px 2px rgb(var(--shadow-rgb) / 0.3);
+  box-shadow: none;
 }
 .segmented__opt {
   position: relative;
@@ -632,9 +627,7 @@
 .segmented__opt.is-on {
   color: var(--on-bone);
   background: var(--selected);
-  box-shadow:
-    0 2px 8px -2px rgb(var(--shadow-rgb) / 0.38),
-    inset 0 1px 0 rgb(var(--bone-rgb) / 0.3);
+  box-shadow: 0 2px 8px -2px rgb(var(--shadow-rgb) / 0.38);
 }
 .segmented__opt:has(input:focus-visible) {
   box-shadow: var(--focus);
@@ -647,7 +640,7 @@
   padding: 3px;
   border-radius: var(--r-pill);
   background: rgb(var(--green-deep-rgb) / 0.32);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.26);
+  box-shadow: none;
 }
 .stepper__btn {
   display: grid;
@@ -733,7 +726,7 @@
 .pill--neutral {
   background: var(--fill);
   color: var(--ink-2);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.3);
+  box-shadow: none;
 }
 .pill--success {
   background: var(--tint-leaf);
@@ -742,7 +735,7 @@
 .pill--vermilion {
   background: var(--tint-vermilion);
   color: var(--vermilion-ink);
-  box-shadow: inset 0 0 0 1px rgb(var(--vermilion-rgb) / 0.55);
+  box-shadow: none;
 }
 /* Inverted: a bone chip with green words. */
 .pill--bone {
@@ -750,9 +743,9 @@
   color: var(--on-bone);
 }
 .pill--warn {
-  background: var(--fill);
+  background: var(--tint-amber);
   color: #ffeec4;
-  box-shadow: inset 0 0 0 1.5px #f6c945;
+  box-shadow: none;
 }
 
 .badge {
@@ -770,7 +763,7 @@
   font-size: var(--fs-xs);
   font-weight: 700;
   line-height: 1;
-  box-shadow: 0 0 0 2px rgb(var(--bone-rgb) / 0.9);
+  box-shadow: none;
   animation: pop 420ms var(--ease-spring);
 }
 
@@ -781,7 +774,7 @@
   height: 10px;
   border-radius: 50%;
   background: var(--vermilion);
-  box-shadow: 0 0 0 1.5px var(--bone);
+  box-shadow: none;
 }
 .pulse-dot::after {
   content: "";
@@ -840,7 +833,7 @@
   height: 58px;
   border-radius: 50%;
   background: var(--tint-leaf);
-  box-shadow: inset 0 0 0 1px rgb(var(--green-leaf-rgb) / 0.6);
+  box-shadow: none;
 }
 .empty__title {
   font-family: var(--font-display);
@@ -885,7 +878,7 @@
 .callout--bad {
   background: var(--tint-vermilion);
   color: var(--vermilion-ink);
-  box-shadow: inset 0 0 0 1px rgb(var(--vermilion-rgb) / 0.6);
+  box-shadow: none;
 }
 
 .confirm-row {
@@ -896,7 +889,7 @@
   padding: 10px 12px;
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--vermilion-rgb) / 0.6);
+  box-shadow: none;
   animation: rise var(--dur-2) var(--ease-out);
 }
 .confirm-row__text {
@@ -933,8 +926,9 @@
   gap: 10px;
   padding: 12px 8px 12px 16px;
   border-radius: var(--r-md);
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.84), rgb(var(--green-rgb) / 0.82));
-  box-shadow: var(--shadow-2), inset 0 1px 0 rgb(var(--bone-rgb) / 0.3);
+  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  --glass-blur: 28px;
+  box-shadow: var(--shadow-2);
   pointer-events: auto;
   animation: toast-in var(--dur-3) var(--ease-spring);
 }
@@ -1025,7 +1019,7 @@
   height: 9px;
   border-radius: 50%;
   background: var(--vermilion);
-  box-shadow: 0 0 0 2px var(--bone);
+  box-shadow: none;
 }
 .tab.is-over {
   color: var(--vermilion-ink);
@@ -1103,27 +1097,27 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  border: 2px solid rgb(var(--line-rgb) / 0.5);
-  background: var(--fill);
+  border: 2px solid transparent;
+  background: rgb(var(--bone-rgb) / 0.45);
   color: #fff;
   transition: background-color var(--dur-3), border-color var(--dur-3);
 }
 /* A light leaf with a bone edge: the edge holds 3:1 on any panel and the green tick on the fill is 6.77:1. */
 .is-done .timeline__node {
   background: #8cc7a8;
-  border-color: var(--bone);
+  border-color: transparent;
   color: var(--on-bone);
   animation: pop 420ms var(--ease-spring);
 }
 .is-failed .timeline__node {
   background: var(--vermilion-deep);
-  border-color: var(--bone);
+  border-color: transparent;
 }
 .is-skipped .timeline__node {
   color: var(--ink-2);
 }
 .is-running .timeline__node {
-  border-color: var(--vermilion);
+  border-color: transparent;
   background: var(--bone);
 }
 .is-running .timeline__node::after {
@@ -1180,7 +1174,7 @@
   padding: 6px 16px;
   border-radius: var(--r-pill);
   background: var(--fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--bone-rgb) / 0.35), 0 4px 12px -8px rgb(var(--shadow-rgb) / 0.75);
+  box-shadow: 0 4px 12px -8px rgb(var(--shadow-rgb) / 0.75);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   font-weight: 600;
@@ -1279,9 +1273,7 @@
   height: 8px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #fff 0 12%, #8cc7a8 46%, var(--green-leaf) 100%);
-  box-shadow:
-    0 0 0 2px rgb(var(--green-leaf-rgb) / 0.22),
-    0 1px 3px rgb(var(--shadow-rgb) / 0.38);
+  box-shadow: 0 1px 3px rgb(var(--shadow-rgb) / 0.38);
 }
 .live-dot__light::after {
   content: "";
@@ -1376,10 +1368,10 @@
   flex: none;
   width: min(212px, 72vw);
   padding: 7px;
-  border: 1px solid rgb(var(--bone-rgb) / 0.22);
+  border: 1px solid transparent;
   border-radius: var(--r-sm);
   background: var(--fill);
-  box-shadow: inset 0 1px 0 rgb(var(--bone-rgb) / 0.25), 0 4px 14px -10px rgb(var(--shadow-rgb) / 0.6);
+  box-shadow: 0 4px 14px -10px rgb(var(--shadow-rgb) / 0.6);
   scroll-snap-align: start;
 }
 .similar__cover {
@@ -1429,7 +1421,7 @@
 .callout--info {
   background: var(--fill);
   color: var(--ink);
-  box-shadow: inset 0 0 0 1px rgb(var(--green-leaf-rgb) / 0.55);
+  box-shadow: none;
 }
 .callout--info .icon {
   flex: none;

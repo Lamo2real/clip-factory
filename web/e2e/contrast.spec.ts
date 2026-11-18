@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { contrast, FLOAT_VEIL, mix, TABBAR_VEIL, VEIL, type Rgb } from "../src/lib/background.ts";
 import { TODO_CELEBRATE_MS } from "../src/lib/setupTodo.ts";
 import { GUIDES, SETUP_ORDER } from "../src/setup/index.ts";
 import { asDesktop, paintGlass, WINDOW_EXTRA_ROUTES, WINDOW_LOOKS, type GlassPaint } from "./glass.ts";
@@ -420,3 +421,47 @@ for (const { glass, paints } of WINDOW_LOOKS) {
     expect(failures).toEqual([]);
   });
 }
+
+// ---------- What content scrolls under, at phone width (ADR-45) ----------
+// The tab bar, the setup pill and the Ask sheet float over the page, so a white thumbnail can sit right under them.
+// Their tints plan for white (FLOAT_VEIL, TABBAR_VEIL): here the Library is scrolled so clip thumbnails are under the
+// tab bar, the real computed tints are read in the browser, and every text colour inside each layer (icons in the tab
+// bar, 3:1) is held to its bar over white under that tint.
+test("the tab bar, the setup pill and the Ask sheet hold their words over a white thumbnail, at 390 px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/library");
+  await settle(page);
+  await page.mouse.wheel(0, 500);
+  await page.waitForTimeout(400);
+  const read = (selector: string) =>
+    page.locator(selector).first().evaluate((layer) => {
+      const s = getComputedStyle(layer);
+      const alphas = [...s.backgroundImage.matchAll(/rgba?\(([^)]*)\)/g)].map((m) => {
+        const parts = m[1]!.split(/[\s,/]+/).filter(Boolean);
+        return parts.length >= 4 ? Number(parts[3]) : 1;
+      });
+      const colours = new Set<string>();
+      for (const el of [layer, ...Array.from(layer.querySelectorAll<HTMLElement>("*"))]) {
+        const cs = getComputedStyle(el);
+        if (el.closest(".sr-only, .glide, .is-active, [aria-current='page'], .badge, .btn--primary, .btn--action, .help-msg--me, .setup-todo__pill-count") || cs.visibility === "hidden") continue;
+        if (Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent!.trim()) || el.tagName === "svg") colours.add(cs.color);
+      }
+      return { min: Math.min(...alphas), colours: [...colours] };
+    });
+  const rgb = (css: string): Rgb => css.match(/[\d.]+/g)!.slice(0, 3).map(Number) as unknown as Rgb;
+  const check = async (selector: string, floor: number, need: number) => {
+    const { min, colours } = await read(selector);
+    expect(min, `${selector} tint`).toBeGreaterThanOrEqual(floor - 0.005);
+    expect(colours.length, `${selector} has words or icons`).toBeGreaterThan(0);
+    // Green words (--on-bone) and white words sit on bone and vermilion fills of their own, read by the scans above.
+    for (const c of colours.filter((x) => !["rgb(15, 55, 43)", "rgb(255, 255, 255)"].includes(x)))
+      expect(contrast(rgb(c), mix(VEIL, [255, 255, 255], min)), `${selector} ${c}`).toBeGreaterThanOrEqual(need);
+  };
+  await check(".tabbar", TABBAR_VEIL, 3);
+  await check(".setup-todo__pill", FLOAT_VEIL, 4.5);
+  await page.locator(".tabbar").screenshot({ path: test.info().outputPath("tabbar-over-thumbnails.png") });
+  await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+  await page.locator(".help-panel").waitFor();
+  await animationsDone(page);
+  await check(".help-panel", FLOAT_VEIL, 4.5);
+});

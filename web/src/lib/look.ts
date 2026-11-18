@@ -52,9 +52,10 @@ export function useLook(): Look {
 
 /**
  * `html.see-through` makes the page itself transparent so the desktop window's glass shows (§22.3);
- * `data-backdrop` names what is drawn; `--backdrop-veil` is the tint over the whole backdrop (between the panels in
- * see-through); `--panel-veil` is the bottle-green tint every panel gets (and every piece of loose text in the
- * window and picture looks), enough for AA over the lightest thing behind.
+ * `data-backdrop` names what is drawn; `--backdrop-veil` is the tint over the whole backdrop (between the panels);
+ * `--panel-veil` is the bottle-green tint every panel gets (and every piece of loose text, on its scrim), enough for
+ * AA over the lightest thing this look can show. Both are worked out here at read time from what is saved, which is
+ * never rewritten.
  */
 export function applyLook(look: Look, root: HTMLElement = document.documentElement) {
   root.classList.toggle("see-through", look.kind === "window");
@@ -63,12 +64,10 @@ export function applyLook(look: Look, root: HTMLElement = document.documentEleme
   else delete root.dataset.glass;
   if (look.kind === "window" || look.kind === "frosted") root.dataset.strength = look.strength;
   else delete root.dataset.strength;
-  const veil = look.kind === "window" || look.kind === "picture" ? look.pageVeil : look.kind === "colours" ? look.veil : null;
+  const veil = look.kind === "window" || look.kind === "picture" || look.kind === "colours" ? look.pageVeil : null;
   if (veil === null) root.style.removeProperty("--backdrop-veil");
   else root.style.setProperty("--backdrop-veil", String(veil));
-  // Everywhere else the panels keep the floor in tokens.css (PANEL_VEIL_FLOOR): the page owns that backdrop.
-  if (look.kind === "window" || look.kind === "picture") root.style.setProperty("--panel-veil", String(look.panelVeil));
-  else root.style.removeProperty("--panel-veil");
+  root.style.setProperty("--panel-veil", String(look.panelVeil));
 }
 
 /** Before React draws anything, so the desktop window never flashes an opaque page. */

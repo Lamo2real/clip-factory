@@ -12,6 +12,21 @@ The reference is the dance-theatre page. It has a deep bottle-green field, big b
 
 **The rule in one line:** green is the surface, bone is the words and the lines, and vermilion is the action.
 
+> **Update, ADR-45 (see-through glass, 2026-11-18).** The owner asked for the whole app to be liquid, see-through
+> glass while keeping these colours, and for every edge to go. What changed from the record below:
+>
+> - **One text set, bone and lighter, everywhere.** `--ink-2` and `--ink-3` are bone `#efe7da`, `--vermilion-ink`
+>   `#ffe2dc`, `--green-ink` and `--green-text` `#e4f2da` in every look (they were the window look's set). Hierarchy
+>   comes from size, weight and spacing, never from a dimmer colour.
+> - **The CTA is the only solid saturated surface.** Panels are 0.30 green over the app's own living backdrop (70 %
+>   see-through), so the vermilion pill with its white label is the one solid, saturated thing on the glass.
+> - **The halo is comfort only.** A soft green `text-shadow` sits behind words on glass; it is never counted toward
+>   AA. The AA bar is met by the tint alone.
+> - **No edges.** No borders, rings, lit rims, inset lines or hairlines anywhere; the bone "lines" of the reference
+>   are gone. Controls read by their fill (`--fill-control`, `--fill-field`), chosen things by a soft glow. The tables
+>   below that mention borders, rims and rings are history; [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md) and
+>   [CONTRACTS.md §22.3](CONTRACTS.md) hold the current values.
+
 Fonts stay the same: Times New Roman for display, Inter for the UI. All layouts, glass recipes (blur, saturate, lit rim, refraction), `<Glide>` sliding highlights, motion, celebrations and click sounds stay the same. Only colour changes.
 
 **The polarity flip.** Today the app is light glass with dark text. It becomes dark green glass with light (bone) text. So every contrast check changes direction: the worst backdrop is now the lightest thing that can sit behind a panel (a white window, a white photo), not the darkest. That flip drives most of the maths below.
