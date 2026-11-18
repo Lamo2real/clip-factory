@@ -5033,7 +5033,8 @@ Tokens come only through `oauth.tokens.SecretsTokenProvider` (the lease keeps X 
 Each platform runs on its own: one failing never stops the others, and nothing here can block posting.
 
 Daily calls: YouTube `channels.list` (1 unit), `playlistItems` (1–2 units), about 6 Analytics queries; Facebook 2–3,
-Instagram 1, TikTok `user/info` + `ceil(videos/20)` `video/list` pages, X one `users/me` booked against `RATE#x`.
+Instagram 1, TikTok `user/info` + `ceil(videos/20)` `video/list` pages, X one `users/me` a day booked against `RATE#x`
+at the post-read price (`usdPerPostRead`, about $0.15 a month, inside the $10 cap).
 
 `forget` (explicit YouTube Disconnect only, run by `cf-prod-stats`) also deletes the YouTube `ACCTSTAT#`, `REVENUE#`
 and `MONEYSTATE#` items and the Posts' `revenue`. Nothing deletes on token expiry or `invalid_grant`.

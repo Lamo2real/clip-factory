@@ -919,3 +919,26 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
    week?" and check the number matches Library › This week. In CloudWatch Logs, `/aws/lambda/cf-prod-api` shows one
    `help.answer` line per question with no question text. If every answer comes back in plain words only, open
    Claude Haiku 5.5 once in the Bedrock console ([DEPLOYMENT.md](DEPLOYMENT.md#4-bedrock-model-access-and-data-retention)).
+14. **Real earnings** ([CONTRACTS §25.8](CONTRACTS.md#258-not-verified-live-each-failure-becomes-a-not-available-label-never-a-number)):
+   these were not checked against the live platforms when the feature was built. Each failure becomes a "not shared"
+   line, never a number.
+   - In the deploy log, the plan says "0 to destroy" and the delete gate passes; `cf-prod-money` and the
+     `cf-prod-money-daily` rule are new.
+   - Open Settings › Posting › Money, pick your country, press **Check now**. In CloudWatch Logs,
+     `/aws/lambda/cf-prod-money` shows one `money.run` line; every connected card shows real numbers or a plain reason.
+   - YouTube, in this order: Google Cloud › Data access, add `yt-analytics-monetary.readonly` (same project, no new
+     keys); Audience says **In production**; then **Allow money reading** (the "unverified app" screen is expected). You
+     come back to Money with "Done!" and the pill is **Not yet**, **In the programme** or **Earning**. Set up posting
+     still says Connected and a test post still works. Compare one day's amount with YouTube Studio › Analytics ›
+     Revenue (YouTube's number may still change at month end). Note whether the Shorts/long split appears.
+   - Whether `yt-analytics-monetary.readonly` shows as a sensitive scope, and the YouTube API Services policy's limit
+     on how long this data may be kept (until confirmed, only an explicit YouTube Disconnect deletes it).
+   - Facebook: with a Page in content monetization, call `content_monetization_earnings` once (Graph API Explorer)
+     and compare its unit and currency with Meta Business Suite › Monetization. Only when they match, set
+     `facebook.moneyVerified` to `true` in `config/monetization.json` in a pull request.
+   - TikTok: add `user.info.stats` and send the app for review. Check first whether that review pauses the live app's
+     posting. After approval press **Allow follower reading**.
+   - X: check that `verified_followers_count` comes back from `users/me`; if X refuses the field the card says "X didn't
+     share this".
+   - Open the official pages linked in `config/monetization.json` for TikTok, Instagram and X and confirm each number
+     (`verifiedHow: official-snippet` today).
