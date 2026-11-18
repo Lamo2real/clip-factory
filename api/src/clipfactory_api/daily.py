@@ -1,4 +1,4 @@
-"""The daily "learn from results" run of ``cf-prod-learn`` (docs/CONTRACTS.md §16.12, ADR-40).
+"""The daily "learn from results" run of ``cf-prod-learn`` (docs/CONTRACTS.md §16.12, ADR-41).
 
 An EventBridge rule invokes ``cf-prod-learn`` once a day at 05:00 UTC (``source == "aws.events"``). For each owner:
 

@@ -1,4 +1,4 @@
-"""Which posted clips did far better than normal (docs/CONTRACTS.md §16.12, ADR-40).
+"""Which posted clips did far better than normal (docs/CONTRACTS.md §16.12, ADR-41).
 
 Every number here is a frozen day-7 view count (``day7.py``). Platforms are never compared with each other or
 added up: each post is judged against posts on its own platform only.

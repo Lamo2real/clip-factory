@@ -1,4 +1,4 @@
-"""Every rule of "learn from results" in one place (docs/CONTRACTS.md §16.12, ADR-40). Change values here only.
+"""Every rule of "learn from results" in one place (docs/CONTRACTS.md §16.12, ADR-41). Change values here only.
 
 Clip Factory checks each post's views 7 days after posting, finds the clips that did far better than that creator's
 normal on that platform, looks at what those clips share, and turns it into a lesson for the clip picker. These

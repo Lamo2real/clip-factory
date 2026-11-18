@@ -574,7 +574,7 @@ def read_metrics(deps: ClipFlowDeps, target: Target) -> dict[str, Any]:
 
 
 def distil(deps: ClipFlowDeps, target: Target) -> dict[str, Any]:
-    """Retired (§16.12, ADR-40): the one-sentence 48-hour learning read too much into a handful of clips, and the
+    """Retired (§16.12, ADR-41): the one-sentence 48-hour learning read too much into a handful of clips, and the
     clip picker no longer gets it. Clip Factory now learns once a day from day-7 numbers (``daily.py``). The step
     keeps its name so a flow that was already running replays the same steps; it calls no model and writes
     nothing."""

@@ -46,7 +46,7 @@ flowchart LR
   lapi -- "5 Keep, then 6 async invoke" --> clf[["Durable Lambda cf-prod-clip-flow"]]
   clf -- "6 publish: start, wait, check, finish" --> social[Upload hosts: YouTube, TikTok, Instagram, Facebook, X]
   clf -- "tokens, refresh" --> sm[(Secrets Manager cf-prod/platforms/*)]
-  clf -- "wait 48 h, metrics, distil" --> bedrock
+  clf -- "wait 48 h, metrics" --> ddb
   clf -- "6 upsert vector" --> vec
   owner -- "10 Connect: consent page, same tab" --> platforms[Platform consent pages and webhooks]
   platforms -- "10 302 back with code and state" --> rest[API Gateway REST API]
@@ -65,6 +65,7 @@ flowchart LR
   lrn -- "9 Best of week learning" --> bedrock
   lrn -- "9 best true or false" --> vec
   lrn --> ddb
+  evl[EventBridge rule cf-prod-learn-daily, 05:00 UTC] -- "12 daily: day-7 numbers, winners, lessons" --> lrn
   lapi -- "11 help answer, optional" --> haiku[Bedrock: Claude Haiku 5.5, EU profile]
   lapi -- "11 help corpus, cached 10 min" --> cf
   classDef off stroke-dasharray: 5 5
@@ -125,7 +126,7 @@ All nine share one zip (`api/dist/lambda.zip`), Python 3.13, arm64, JSON logs, X
 | `cf-prod-broadcast` | DynamoDB stream (filtered) | 256 MB / 60 s | no |
 | `cf-prod-hooks` | REST API | 256 MB / 28 s (the code exchange calls the platform) | no |
 | `cf-prod-stats` | EventBridge rule `cf-prod-stats` (every 15 min) and `cf-prod-api` (async, Refresh numbers) | 256 MB / 300 s; stops starting requests after 240 s; async retries 0, event age 15 min | no |
-| `cf-prod-learn` | `cf-prod-api`, async invoke on `PUT /v1/weeks/{week}/best` | 512 MB / 300 s; async retries 1, event age 1 h | no |
+| `cf-prod-learn` | `cf-prod-api`, async invoke on `PUT /v1/weeks/{week}/best`; EventBridge `cf-prod-learn-daily` at 05:00 UTC | 512 MB / 900 s; async retries 1, event age 1 h | no |
 
 ### What was removed
 
@@ -419,7 +420,7 @@ flowchart TD
   settle -- "nothing posted" --> uv1["step upsert-vector (status confirmed)"] --> np([outcome not_posted])
   settle -- "at least one posted" --> w48["wait-48h: Duration 48 h, no compute"]
   w48 --> met["step metrics: views, likes, comments, shares per post"]
-  met --> dis["step distil: Claude Fable 5.1, skills block first, writes one short Learning"]
+  met --> dis["step distil: retired, no model call (daily lessons instead)"]
   dis --> uv2["step upsert-vector (status performed + performance)"] --> done([outcome done])
 ```
 
@@ -447,9 +448,7 @@ sequenceDiagram
   Note over C: wait-48h: checkpoint, no compute, no schedule
   C->>X: step metrics: read views, likes, comments, shares
   C->>D: metrics on each post
-  C->>D: step distil: read the owner's skill items
-  C->>B: Converse with the skills block first, effort low, one sentence
-  C->>D: Learning item (used by the next jobs, shown on Insights)
+  Note over C: step distil: retired, no model call (the daily run learns from day-7 numbers)
   C->>V: step upsert-vector: GetVectors, merge metadata, PutVectors (performed)
 ```
 
@@ -824,7 +823,7 @@ flowchart LR
   L1 --> BLK["one skills block<br/>built-ins, then the owner's by name"]
   BLK --> A1[Agent: Agent SDK moment picking]
   BLK --> A2[Agent: Converse fallback, facecam, checklist and hooks, captions]
-  BLK --> A3[API: clip-flow distil, 48 h]
+  BLK --> A3[API: cf-prod-learn, daily lessons from day-7 numbers]
   BLK --> A4[API: cf-prod-learn, weekly best]
   BLK --> A5[API: Ask Clip Factory, Haiku rewrite]
   T[Titan embeddings] -.no skills, not text generation.-> V[(S3 Vectors)]
@@ -841,8 +840,7 @@ that process and the call is retried without it.
 | Where | Model calls | How the skills are loaded |
 |---|---|---|
 | Agent (AgentCore Runtime) | Agent SDK moment picking; Converse: moment fallback, facecam, checklist (with the hook rewrite), captions | once per job at `analyze`; also written to `.claude/skills/` for the SDK |
-| `cf-prod-clip-flow` step `distil` | `learn.converse_text` | `skill_prompt.load_skills` just before the call |
-| `cf-prod-learn` | `learn.converse_text` | `skill_prompt.load_skills` just before the call |
+| `cf-prod-learn` (weekly best, daily lessons) | `learn.converse_text` | `skill_prompt.load_skills` just before the call |
 | `cf-prod-api`, Ask Clip Factory ([flow 17](#17-ask-clip-factory-the-help-assistant)) | `learn.converse_text` (Haiku 5.5, JSON schema) | `skill_prompt.load_block` per answer that reaches the model |
 
 The Lambda loader reads the owner's `SKILL#` items with one Query and each file through a small in-memory cache keyed

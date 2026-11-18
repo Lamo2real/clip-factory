@@ -1,6 +1,6 @@
 """Learnings: the shared model helper and the weekly "Best of week" learning (docs/CONTRACTS.md §13, §16.6).
 
-The one-sentence 48-hour learning (the clip flow's old ``distil``) is retired (§16.12, ADR-40): creator lessons from
+The one-sentence 48-hour learning (the clip flow's old ``distil``) is retired (§16.12, ADR-41): creator lessons from
 day-7 numbers (``lessons.py``, ``daily.py``) took its place. Older 48-hour learnings stay readable on Insights.
 A weekly learning is only written when the model finished its answer (``end_turn``) and there is text.
 

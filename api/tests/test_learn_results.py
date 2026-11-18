@@ -1,4 +1,4 @@
-"""Learn from results (docs/CONTRACTS.md §16.12, ADR-40): day-7 numbers, winners, traits, lessons, the daily run,
+"""Learn from results (docs/CONTRACTS.md §16.12, ADR-41): day-7 numbers, winners, traits, lessons, the daily run,
 the routes and forgetting a platform. Offline: fakes only, no AWS, no real platform numbers."""
 
 from __future__ import annotations

@@ -164,7 +164,8 @@ The prompts are part of the agent code in `agent/`. What each one is for:
 |---|---|---|
 | System | Who the agent is (a short-form editor for this owner), the rules it may never break (never publish; only clip what the source contains; plain English), and that skills and learnings come first. Every system prompt, in the agent and in the API, starts with the skills block ([above](#how-the-skills-reach-every-call)). | – |
 | What worked before | Per similar past clip: moment type, hook, title, summary, views and likes, similarity; the owner's starred clips first, labelled "Owner's pick: best of the week". Advice, never a rule. | (part of the select prompt) |
-| Learnings brief | The latest 4 "Best of week" learnings under "The owner's best-of-week picks taught", then the latest 10 other learnings under "Learnings"; empty groups left out. | (part of the select prompt) |
+| Prior learnings | Right after the skills block, in the select prompt, the second look, the checklist review and the captions: the heading "Prior learnings", a one-line note that these are patterns from this creator's past clips (advice, never a rule), then one plain pattern per line ([below](#prior-learnings)). Left out when there are none. Not in the watch prompts, which only report what is seen. | (part of those prompts) |
+| Learnings brief | The latest 4 "Best of week" learnings under "The owner's best-of-week picks taught"; left out when there are none. | (part of the select prompt) |
 | Watch | For one chunk of frames (or one video part) with its words: report what is seen as events a clip could be built on, strongest first, and say when nobody is talking. Only what the frames show. | `{scene, events[]}`: start, end, kind, what, intensity 1–10, silent, face, text on screen |
 | Window scan | For one transcript window plus its loudness spikes, and, when the picture was watched, the picture notes between the lines, the fast-picture seconds and the hot spots: find every candidate moment that fits one of the six moment types and stands on its own. A moment may have no talking; then `first_words` says what is heard and the hook must match what is seen. Picture notes are machine-made evidence like loudness, not proof. | Structured list: start, end, moment type, why, draft hook |
 | Second look | Every frame of one picked moment with its words: does it hold up, should the start or end move a little, is the hook honest about what is seen? When unsure, keep. | keep, start, end, payoff, peak, hook ok, new hook, picture score, what was seen |
@@ -172,27 +173,58 @@ The prompts are part of the agent code in `agent/`. What each one is for:
 | Facecam | One frame: is there a facecam, and where (box)? | Box or "none" |
 | Checklist judge | Given the measured values and the transcript of the clip, answer the judgement questions honestly and propose one concrete fix. | Pass/fail per item, fixes |
 | Captions | One caption per platform in that platform's style and length, from the hook, summary and the owner's notes. | `Captions` object |
-| Learning (clip flow, step `distil`) | From recent posts and their numbers: one short, specific learning ("Hot takes under 25 s got 3× the views of chaos clips"). | One sentence |
+| Lessons (`cf-prod-learn`, daily) | Look again at one creator's winners on one platform (hooks, transcripts, facts) and the traits code found they share; write one plain lesson per real trait for the clip picker, with no number that is not in the evidence. | `{"lessons": [{"trait", "text", "clipIds"}]}` (JSON schema) |
 | Best of week (`cf-prod-learn`) | Compare the owner's picks with the rest of that week (hooks, moment types, length, captions, numbers) and say what the clip picker should repeat; the picks matter more than raw views. | 1–3 short sentences, at most 500 characters |
 
 Structured outputs use Bedrock Converse with a JSON schema, so the code never parses free text.
 
 ## Learnings loop
 
-1. 48 hours after a clip is posted, the clip flow (after its `wait-48h`) stores the views, likes, comments and shares
-   of each post (step `metrics`).
-2. Claude compares recent posts and writes one short learning (step `distil`), with the owner's skills block first
-   in its instructions, like every other call.
-3. The clip's vector is marked `performed` with its numbers (step `upsert-vector`).
-4. Every new job receives the owner's latest 4 "Best of week" learnings and latest 10 other learnings next to the
-   skills, and the 8 most similar clips as "What worked before", the owner's best-of-week picks first
-   ([below](#best-of-the-week)).
-5. The Insights screen shows the learnings and the numbers behind them; Review and Library show "Like clips that did
-   well".
+Clip Factory learns from its own results once a day, per creator (the streamer whose stream was clipped) and per
+platform ([CONTRACTS.md §16.12](CONTRACTS.md#1612-learn-from-results-creator-lessons-from-day-7-numbers-owner-request-2026-11-18),
+[ADR-41](DECISIONS.md#adr-41-learn-from-day-7-numbers-per-creator-and-per-platform)).
+
+1. The stats poller reads every posted clip's numbers for 30 days and keeps snapshots for 90 days. Each snapshot says
+   when its views were really read.
+2. Every day at 05:00 UTC, `cf-prod-learn` freezes each post's **day-7 number**: the views read closest to 7 days
+   after posting, between 6.5 and 8.5 days. No reading in that window means no number, for good.
+3. It finds the **winners**: clips with at least 2 times the creator's median day-7 views on that platform and a
+   robust z-score of at least 2.5 (at least 20 posts to compare with, else every creator's posts on that platform).
+4. **Second look.** Code lists what the winners share (moment type, length, layout, hook length, talking speed, how
+   fast the first word comes, score, posting hour). A trait needs 3 winners from 2 different videos and must be 1.5
+   times as common among winners. Only then, one Claude call (skills block first) writes a lesson per trait in plain
+   words. Every number in a lesson must come from the evidence; every cited clip must be a real winner.
+5. **Trying, then using.** A new lesson is only tried. A run at least 7 days later that finds a new winner with the
+   same trait makes it active. Active lessons end 90 days after their last confirmation; at most 5 per creator.
+6. **Prior learnings.** Each new job gets the active lessons for its creator, then the active "all creators" ones
+   ([below](#prior-learnings)).
+7. The owner reads, turns off or deletes lessons in Settings › Clip making › What it learned.
+
+The 48-hour clip flow still reads the numbers and marks the clip's vector `performed` (for "What worked before"), but
+it no longer writes a one-sentence learning, and older ones are never sent to the agent: one sentence from a handful
+of clips was too easy to over-learn from. They stay readable in Library as "Older note".
 
 Until at least one platform is set up in Settings › Posting › Set up posting ([SETUP_POSTING.md](SETUP_POSTING.md)),
-there are no posts with numbers, so no learnings are created and no vector reaches `performed`. The loop starts
-working as soon as the first clip is posted.
+there are no posts with numbers, so nothing is learned. Learning is slow on purpose: a creator needs about 21 measured
+posts on a platform, and a lesson needs two runs a week apart before the agent uses it.
+
+### Prior learnings
+
+The owner's clipper skill (added in Settings › Clip making › Skills, not in this repository) accepts an optional input
+headed **Prior learnings**: plain-text patterns about what has worked for a creator. The agent fills it:
+
+- **What:** active, unexpired creator lessons whose creator is this job's creator (by channel id, or by name for
+  older jobs), best supported first, then active "all creators" lessons; at most 10 lines, each pattern once. Trial,
+  turned-off, deleted and expired lessons are never included.
+- **How:** the exact heading `Prior learnings`, one line saying these are patterns from this creator's past clips that
+  did far better than normal, advice and never a rule, then one `- pattern` per line. No ids, no JSON, no numbers
+  table.
+- **Where:** right after the skills block, before everything else in the task prompt, in every call that picks
+  moments or writes hooks: the moment-picking prompt (the Agent SDK prompt file and the Converse fallback), the second
+  look against the picture (it keeps, swaps or drops moments and can write a new hook), the checklist review (it can
+  write a new hook) and the captions. The two watchers (Fable on frames, Nova 2 Lite on video) only report what is
+  seen, so they get none.
+- **When empty:** the section is left out entirely (never an empty heading or "none").
 
 ## Best of the week
 
@@ -214,8 +246,8 @@ Meta numbers settle over two days), so the owner's own stars are the strongest s
    `kind "week"` and the title "Best of week 2026-W46"; saving new picks for that week replaces it, and unstarring
    every clip removes it.
 4. **The next job uses it.** Before choosing moments the agent reads:
-   - the latest 4 week learnings first, under "The owner's best-of-week picks taught", then the latest 10 other
-     learnings under "Learnings";
+   - the latest 4 week learnings, under "The owner's best-of-week picks taught" (after "Prior learnings", when there
+     are any);
    - "What worked before" in two queries merged: clips marked `best` first, then other measured (`performed`) clips,
      up to 8 without duplicates (fewer than 3 hits tops up with any of the owner's clips). A `best` clip is labelled
      "Owner's pick: best of the week".
