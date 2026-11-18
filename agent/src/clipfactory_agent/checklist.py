@@ -1,4 +1,4 @@
-"""The playbook's pre-post checklist (section D) on every clip: measured checks plus Claude's judgement, one
+"""The viral clip editing skill's clip check (section 8) on every clip: measured checks plus Claude's judgement, one
 automatic fix pass, and spare moments replacing clips that still fail."""
 
 from __future__ import annotations
@@ -262,7 +262,7 @@ def review_prompt(m: Moment, r: RenderResult, notes: str, seen: str = "") -> str
     seen_part = f"\n\nSeen (machine-made picture notes, seconds from the clip's start):\n{seen}" if seen else ""
     said = "\n".join(f"[{c['t0']:.1f}s] {c['text']}" for c in r.captions) or "(no speech)"
     return (
-        f"""Run the pre-post checklist (playbook section D, plus A2 and A5) on this finished clip. You can't watch it;
+        f"""Run the clip check (the viral clip editing skill's section 8, plus sections 1 and 3) on this finished clip. You can't watch it;
 judge from the plan and the timed transcript of the edited clip. Be strict but fair: only ask for a fix that clearly
 helps.
 

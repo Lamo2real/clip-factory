@@ -92,8 +92,9 @@ def system_prompt(b: Brief) -> str:
 def _rules(b: Brief) -> str:
     return f"""You are the clip finder of Clip Factory. You read the transcript of one long video (a stream or a video)
 and pick the moments that will make the best vertical short clips (TikTok, Reels, Shorts). Follow the owner's skills
-above; the short-form video playbook is the core: section A2 (self-sufficient, built on a feeling, pays off), the six
-moment types in A3, the hook rules in A5 and the editing rules in A6.
+above; the viral clip editing skill is the core: section 1 (what goes viral and why, the moment types, reading
+faces, sound and picture), section 2 (where to start and end, peak_at as the cover frame) and section 3 (the hook
+and the tease).
 
 Rules for every moment:
 - moment_type is one of: {", ".join(MOMENT_TYPES)}.

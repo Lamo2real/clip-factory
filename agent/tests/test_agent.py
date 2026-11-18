@@ -419,8 +419,10 @@ from .deep_support import ToolClient  # noqa: E402
 # sha256 (first 16 hex) of what the code on origin/main at 0abfbe2 (before ADR-40) produced for ``brief()``.
 # "system" is what the learning-from-results code (ADR-41) produced before ADR-40 for the same brief: it sends the
 # best-of-week learnings under their own heading and no 48-hour ones, so its bytes differ from 0abfbe2 on purpose.
+# On 2026-11-18 the finder's rules started naming the viral-clip-editing skill's sections instead of the old
+# playbook's (A2, A3, A5, A6); "system" was updated for that one sentence on purpose.
 BEFORE = {
-    "system": "51ab340136c0f21c",
+    "system": "430e472471c6b42b",
     "hints": "efd5468f6b44f116",
     "read": "a72fac1edde97034",
     "lines": "d9ed6b299a654c35",

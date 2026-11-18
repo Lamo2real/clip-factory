@@ -192,7 +192,7 @@ def layout_parts(fc: Facecam | None, src_w: int, src_h: int) -> tuple[list[str],
     """Filter chains from ``[vin]`` to ``[lay]``, and the caption box's top edge."""
     blur = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=24:2,eq=brightness=-0.18"
     if fc:
-        # Facecam on top, gameplay below (the playbook's layout), over a blurred copy.
+        # Facecam on top, gameplay below (the layout the skills assume), over a blurred copy.
         game_y = BAND + CAM_H
         game_h = H - game_y
         cx, cy, cw, ch = even(fc.x * src_w), even(fc.y * src_h), even(fc.w * src_w), even(fc.h * src_h)

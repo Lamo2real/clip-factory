@@ -100,9 +100,11 @@ used by every AI call, always**
 ([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16),
 [ADR-32](DECISIONS.md#adr-32-every-ai-call-gets-every-skill-through-one-shared-skills-block)).
 
-- **Built-in skills** live in [`skills/`](../skills/short-form-video-playbook/SKILL.md) in the repository and are
-  bundled into the agent image at `/app/skills`. Today there is one: `short-form-video-playbook` (clipping
-  workflow, six moment types, hooks, editing, packaging, pre-post checklist). The owner can read them in the app but
+- **Built-in skills** live in [`skills/`](../skills/viral-clip-editing/SKILL.md) in the repository and are
+  bundled into the agent image at `/app/skills`. Today there is one: `viral-clip-editing` (which moments go
+  viral and why, reading faces and sound, where to start and end, the hook and tease, the cover frame, post text per
+  platform, a final check). It only asks for what the pipeline can act on (it replaced `short-form-video-playbook`
+  on 2026-11-18). The owner can read them in the app but
   not change or delete them.
 - **Owner skills** are made in Settings › Clip making › Skills: written in the app by answering three questions (the
   API turns the answers into a `SKILL.md`), or uploaded as a `.md` file or a `.zip` containing one `SKILL.md` (with
