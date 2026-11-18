@@ -1,7 +1,11 @@
 import { prefersReducedMotion } from "./prefs.ts";
 
-/** Vermilion, bone and leaf: no bottle green, which would vanish on the green glass. */
-const COLORS = ["#E8392B", "#EFE7DA", "#F07A6C", "#5FA585", "#FFF8EE"];
+/**
+ * Vermilion, bone and leaf for the green glass, plus one raised green (#1B4A3B) that shows when the glass is light
+ * (see-through over a light desktop), where the bone and cream pieces fade. Each backdrop keeps at least three
+ * colours that show.
+ */
+const COLORS = ["#E8392B", "#EFE7DA", "#F07A6C", "#5FA585", "#FFF8EE", "#1B4A3B"];
 
 interface Piece {
   x: number;

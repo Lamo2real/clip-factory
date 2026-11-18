@@ -517,6 +517,27 @@ def test_untouched_old_default_colours_read_as_the_new_default() -> None:
     assert stored == {"backgroundColours": OLD_DEFAULT}
 
 
+def test_old_default_colours_are_saved_as_the_new_default_on_the_next_save(call: Call, store: db.Store) -> None:
+    # No migration job: the mapped trio is written only when the owner next saves any setting, as every default is.
+    store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": db.SETTINGS_SK,
+            "type": "settings",
+            "userId": USER,
+            "backgroundColours": OLD_DEFAULT,
+        }
+    )
+    assert call("GET", "/v1/settings")[1]["settings"]["backgroundColours"] == NEW_DEFAULT
+    item = store.get(db.user_pk(USER), db.SETTINGS_SK)
+    assert item is not None
+    assert item["backgroundColours"] == OLD_DEFAULT  # a read writes nothing
+    assert call("PUT", "/v1/settings", {"soundEnabled": False})[0] == 200
+    item = store.get(db.user_pk(USER), db.SETTINGS_SK)
+    assert item is not None
+    assert item["backgroundColours"] == NEW_DEFAULT
+
+
 @pytest.mark.parametrize(
     "chosen",
     [

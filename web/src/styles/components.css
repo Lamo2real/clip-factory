@@ -136,8 +136,15 @@
   box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.31);
   text-shadow: none;
 }
+/* A CTA that is off stays on the palette: a thin vermilion over deep green (not a half-faded red, which turned
+   brown over the green), with the white label at 0.7. The label is 4.34:1 or more over a panel on white. */
 .btn:is(.btn--primary, .btn--action)[aria-disabled="true"]:not(.is-loading) {
-  background: linear-gradient(180deg, rgb(206 48 36 / 0.7), rgb(184 38 28 / 0.7));
+  opacity: 1;
+  color: rgb(255 255 255 / 0.7);
+  background:
+    linear-gradient(rgb(var(--vermilion-rgb) / 0.35), rgb(var(--vermilion-rgb) / 0.35)),
+    rgb(var(--green-deep-rgb) / 0.6);
+  box-shadow: inset 0 0 0 1px rgb(var(--vermilion-rgb) / 0.55);
 }
 /* A disabled button gives a short "no" shake when pressed. */
 .btn[aria-disabled="true"]:not(.is-loading):active {
@@ -354,17 +361,28 @@
 .input:hover {
   background: rgb(var(--green-deep-rgb) / 0.38);
 }
+/* A field in use: a bone ring with a faint vermilion glow (--focus-field), so a focused field never looks like one
+   with an error. */
 .input:focus-visible {
   outline: none;
-  border-color: var(--vermilion);
+  border-color: var(--bone);
   background: rgb(var(--green-deep-rgb) / 0.42);
-  box-shadow:
-    0 0 0 3px rgb(var(--vermilion-rgb) / 0.3),
-    var(--focus);
+  box-shadow: var(--focus-field);
   border-radius: var(--r-md);
 }
+/* A field with an error keeps its bone edge (3:1 on any panel) with vermilion outside it, as vermilion alone is lost
+   on a panel over a light window. */
 .input[aria-invalid="true"] {
-  border-color: var(--vermilion);
+  border-color: rgb(var(--line-rgb) / 0.7);
+  box-shadow:
+    inset 0 1px 2px rgb(var(--shadow-rgb) / 0.3),
+    0 0 0 2px var(--vermilion);
+}
+.input[aria-invalid="true"]:focus-visible {
+  border-color: var(--bone);
+  box-shadow:
+    0 0 0 2px var(--bone),
+    0 0 0 4.5px var(--vermilion);
 }
 .textarea {
   resize: vertical;
@@ -669,6 +687,9 @@
   inset: 0 auto 0 0;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--vermilion), var(--vermilion-light));
+  /* Cased in bone, like the Glide bar: vermilion and leaf alone are under 3:1 against a panel over a light window
+     (1.36 and 1.94); the bone edge is 4.61:1. */
+  box-shadow: inset 0 0 0 1.5px var(--bone);
   transition: inline-size 700ms var(--ease-out);
 }
 .progress--success .progress__fill {
@@ -912,7 +933,7 @@
   gap: 10px;
   padding: 12px 8px 12px 16px;
   border-radius: var(--r-md);
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.92), rgb(var(--green-rgb) / 0.9));
+  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.84), rgb(var(--green-rgb) / 0.82));
   box-shadow: var(--shadow-2), inset 0 1px 0 rgb(var(--bone-rgb) / 0.3);
   pointer-events: auto;
   animation: toast-in var(--dur-3) var(--ease-spring);
@@ -1070,8 +1091,9 @@
   border-radius: 2px;
   background: rgb(var(--bone-rgb) / 0.2);
 }
+/* Done: solid bone (4.61:1 against a panel over white; leaf was 1.94), the waiting rail stays a faint bone. */
 .timeline__step.is-done:not(:last-child)::before {
-  background: var(--green-leaf);
+  background: var(--bone);
 }
 .timeline__node {
   position: relative;
@@ -1086,15 +1108,16 @@
   color: #fff;
   transition: background-color var(--dur-3), border-color var(--dur-3);
 }
+/* A light leaf with a bone edge: the edge holds 3:1 on any panel and the green tick on the fill is 6.77:1. */
 .is-done .timeline__node {
-  background: var(--green-leaf);
-  border-color: var(--green-leaf);
+  background: #8cc7a8;
+  border-color: var(--bone);
   color: var(--on-bone);
   animation: pop 420ms var(--ease-spring);
 }
 .is-failed .timeline__node {
   background: var(--vermilion-deep);
-  border-color: var(--vermilion-deep);
+  border-color: var(--bone);
 }
 .is-skipped .timeline__node {
   color: var(--ink-2);

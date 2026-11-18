@@ -42,8 +42,9 @@ DEFAULTS: dict[str, Any] = {
     "clipModel": "fable-5-1",
 }
 # The Clip Factory colours before the bottle-green look (ADR-43). An owner who never changed them has exactly this
-# trio stored; it reads back as today's default so the backdrop follows the new look. Read time only: nothing stored
-# is rewritten, and any other choice (a reordering or a subset too) is kept as it is.
+# trio stored; it reads back as today's default so the backdrop follows the new look. Read time only: no migration
+# job; the mapped value is written only when the owner next saves settings, as every default is. Any other choice (a
+# reordering or a subset too) is kept as it is.
 OLD_DEFAULT_COLOURS = ("#9caf88", "#f7f5ef", "#e8412c")
 # Mirrors config/earnings.json `maxUsdPer1000` (a test keeps them equal).
 MAX_USD_PER_1000 = 100

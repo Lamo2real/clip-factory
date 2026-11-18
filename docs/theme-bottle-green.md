@@ -267,9 +267,12 @@ The window rows use the window text set. All other rows use the root set.
 | vermilion vs panel / white | 1.36 | **fails**: so every vermilion indicator on glass carries a 1.5–2px bone ring or sits on a bone pill |
 | bone ring vs panel / white, panel / black | 4.61 / 12.77 | 3 |
 | focus: vermilion-deep outer vs bone inner | 3.39 (vermilion) | 3 |
+| focus inner bone 0.95 vs panel / white | 4.34 | 3 |
+| leaf `#5fa585` / vermilion fill vs panel / white | 1.94 / 1.36 | **fails**: bone casing on every fill (4.61) |
+| done node `#8cc7a8` with bone edge; green tick on it | 4.61 (edge) / 6.77 | 3 / 4.5 |
 | green text on bone pill 0.92, panel / white / black | 9.69 / 9.19 | 4.5 |
 | input border bone 0.7 vs panel / white / black | 3.14 / 6.93 | 3 |
-| outlined button ring (bone) vs panel / white | 4.61 | 3 |
+| outlined button ring (bone 0.85) vs panel / white | 3.83 | 3 |
 | track label bone on a Glide track (panel + 0.1, bone lift 0.08), over white | 5.27 | 4.5 |
 | `--vermilion-ink` (window) on vermilion chip (0.22 + deepen 0.2), over white | 5.69 | 4.5 |
 | `--green-ink` (window) on success chip (`#5fa585` 0.25 + deepen 0.2), over white | 4.96 | 4.5 |
@@ -349,7 +352,8 @@ Tests to rewrite in the same change:
 ## 5. Default behind-the-glass colours
 
 - `api/src/clipfactory_api/settings.py` `DEFAULTS["backgroundColours"] = ["#0f372b", "#efe7da", "#e8392b"]  # bottle green, bone, vermilion`
-- **Read-time migration in `with_defaults`** (nothing in storage is rewritten, and no infra change):
+- **Read-time migration in `with_defaults`** (no migration job and no infra change; the mapped value is written only
+  when the owner next saves settings, as every default is):
 
   ```python
   OLD_DEFAULT_COLOURS = ("#9caf88", "#f7f5ef", "#e8412c")
@@ -412,3 +416,32 @@ Decided while building (ADR-43), each checked by the unit tests and the e2e cont
 - **Sound cards**: the picked card keeps green glass with a 2 px bone ring (not a bone fill); the tap group's solid
   fill is leaf with deep green words (5.37:1), the deny group's vermilion-deep with white (5.68:1).
 - **Cut-outs on bone marks** (`.money__tile`, `.pstack__mark`) are `#efe7da`, the tile's own colour.
+- **No `--on-cta` token** (1.2): the CTA and badge labels use a literal `#fff`; tokens.css never defined it.
+- **`.glass--clear`** (2.1) is a fixed 0.40 to 0.36 green in the brand, frosted and colours looks (where the page owns
+  the dark backdrop), not `max(panel-veil - 0.1, floor)`; in the window and picture looks it is the panel tint.
+- **`--panel-veil`** (2.1, 4.2): `applyLook` sets it only for the window and picture looks and removes it otherwise;
+  every other look uses the 0.45 floor in tokens.css (`PANEL_VEIL_FLOOR`).
+- **Focus and secondary-ring ratios** (1.3, 2.2): the focus ring's inner bone is at 0.95, so it is 4.34:1 against a
+  panel over white (not 4.61); `.btn--glass` has a bone 0.85 ring, 3.83:1 there (not a solid 1.5px bone, 4.61). Both
+  stay above 3:1. Text fields use `--focus-field` (a 2px bone ring and a faint vermilion glow) so a focused field
+  never looks like one with an error; an invalid field keeps its bone edge with 2px of vermilion outside it.
+- **Best marks are labels** (2.2 charts row): the best chip, the "Best on" mark, the week card's best pill and the
+  crown are the bone pill with green words and a vermilion edge, not `--vermilion-deep` + white. Solid vermilion is
+  only for actions (and the star button's ON state).
+- **Every CTA is vermilion** (owner, 2026-11-18): the setup list's Set up, Get the app's Show me, Money's Save (off
+  until the amount changes), Check for updates, Choose a picture, Add cookies.txt, and each setup step's Open,
+  Connect and Save keys are `.btn--action` when they are not the screen's one `.btn--primary`. A CTA that is off is a
+  thin vermilion (0.35) over deep green (0.6) with the label at 0.7 white (4.34:1 or more), not a faded red.
+- **Floating layers** (the Ask panel and sheet, toasts, the update bar, the phone setup list, the TikTok sheet) are
+  0.84 to 0.82 green, not 0.90 to 0.96, so they still read as glass: bone on 0.82 green over pure white is 6.12:1,
+  `--ink-3` 5.42:1. The confirm `.sheet` stays near solid (0.95/0.94).
+- **Frosted** caustics peak at bone 0.10 (not 0.25), and loose text in the frosted look gets the same panel-tint
+  scrim as the window and picture looks: worked out with the caustic's soft-light in test/background.test.ts.
+- **The colours mesh** keeps the first colour as the field; the second (a 26% highlight) and third (a 30% glow) are
+  mixed into it, so the default reads as deep green with a breath of bone and a warm vermilion glow. The stored
+  default and `coloursVeil` are unchanged.
+- **Non-text indicators** (3.5): the progress fill has a 1.5px bone casing, the progress ring a bone casing stroke
+  under its arc, done timeline nodes are a light leaf (`#8cc7a8`, tick 6.77:1) with a bone edge, and the done
+  connector is bone. Leaf vs panel / white was 1.94:1 and vermilion 1.36:1.
+- **Swatch tick**: white or bottle green, whichever has more contrast on that colour (`swatchTickIsDark`), so Sage
+  and any colour near it never get a white tick under 3:1.

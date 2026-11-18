@@ -139,6 +139,7 @@ function RateRow({ platform, settings }: { platform: Platform; settings: Setting
   const inUse = rateFor(platform, settings);
   const name = SHORT[platform];
   const [text, setText] = useState(inUse.yours ? String(inUse.rate) : "");
+  const saved = inUse.yours ? String(inUse.rate) : "";
   const [problem, setProblem] = useState<string | null>(null);
   const save = useAction("save");
   const reset = useAction("undo");
@@ -211,7 +212,9 @@ function RateRow({ platform, settings }: { platform: Platform; settings: Setting
             }}
           />
         </span>
-        <Button type="submit" size="sm" icon="check" act={save} playOnClick={false}>
+        {/* Vermilion like every action, but off until the amount differs from the saved one, so the page does not
+            show five vermilion buttons at rest. Enter in an unchanged box then does nothing, as there is nothing to save. */}
+        <Button type="submit" size="sm" variant="action" icon="check" act={save} playOnClick={false} disabled={text.trim() === saved}>
           Save
         </Button>
         {inUse.yours ? (

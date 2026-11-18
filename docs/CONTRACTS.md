@@ -4223,8 +4223,9 @@ glassStrength: "clear" | "frosted"                       // default "clear"
 Bad values are 400 with a plain message ("Pick what goes behind the glass: See-through, Picture or Colours.",
 "Pick Clear or Frosted glass.", "Pick 1 to 3 colours.", "Colours must be like #0f372b."). A malformed stored value
 reads as the default. A stored value that is exactly the colours before the bottle-green look (`#9caf88`, `#f7f5ef`,
-`#e8412c`, in that order: an owner who never changed them) reads as today's default (ADR-43); read time only, nothing
-stored is rewritten, and any other choice is kept. The picture itself never leaves the device (`localStorage` `cf.background`). The web keeps a
+`#e8412c`, in that order: an owner who never changed them) reads as today's default (ADR-43); read time only (no
+migration job: the mapped value is written only when the owner next saves settings, as every default is), and any
+other choice is kept. The web reads a cached copy of that trio in `cf.prefs` the same way (`currentColours`). The picture itself never leaves the device (`localStorage` `cf.background`). The web keeps a
 copy of the three fields in `cf.prefs` so the look applies before `/v1/me` answers, like sound and motion (§15.4);
 old servers without the fields read as the defaults.
 
@@ -4303,6 +4304,11 @@ everywhere.
     picture. Not in use, the tint is dropped for a neutral light grey at roughly 58%.
   * The glass blurs strongly: 22 pt black and white stripes come through as soft bands, 75 pt bold text is still
     guessable, normal text cannot be read.
+  * **To re-measure.** The "in use" row was taken with the old light tint. The window now carries the bottle-green
+    `GLASS_TINT` (15/55/43 at 140/255, `desktop/src-tauri/src/main.rs`), so the real glass in use over black will be
+    darker and greener than rgb(180, 171, 148). Readability does not depend on it (the page plans for white, which a
+    tint can only darken), but `LIQUID_MEASURED.active` and the stand-in in `web/e2e/glass.ts` describe a tint that
+    is gone until the owner measures it again on a Mac. Nothing here opens a window to do so.
   * Panels composite as `mix(VEIL, glass, veil)`, within about ±3 levels of what was measured, so the maths below
     describes the real window.
   * **Not measured:** Liquid Glass without the tint, `LiquidGlassClear`, the vibrancy material of macOS 15 and

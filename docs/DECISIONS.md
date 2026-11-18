@@ -963,8 +963,9 @@ logs its token counts (`bedrock.usage`), and this table is to be corrected from 
     not depend on it (a tint can only darken a white ceiling), so no new measurement is needed; `Theme::Light` stays
     because the light material is the one that was measured.
   - *Owner data: read-time only.* The default background colours become `["#0f372b", "#efe7da", "#e8392b"]`. A stored
-    value that is exactly the old default trio, in order, reads as the new default; nothing stored is rewritten and
-    every other choice (a reordering or subset too) is kept. The swatches add Bottle green, Bone and Vermilion and
+    value that is exactly the old default trio, in order, reads as the new default (the web's cached `cf.prefs` copy
+    too); there is no migration job, the mapped value is written only when the owner next saves settings, as every
+    default is, and every other choice (a reordering or subset too) is kept. The swatches add Bottle green, Bone and Vermilion and
     keep Sage and Cream, so an old pick keeps its name. Nothing in `infra/` changes.
   - *Icons follow.* The app icon becomes a bone italic "C" with the vermilion dot on bottle-green glass; the PWA
     theme colour and background are `#0F372B` and the page asks for `color-scheme: dark`.

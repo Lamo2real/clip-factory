@@ -4,12 +4,12 @@
 // folder panel's open/closed trees never leave the device.
 import { useSyncExternalStore } from "react";
 import {
+  currentColours,
   DEFAULT_COLOURS,
   DEFAULT_MODE,
   DEFAULT_STRENGTH,
   isBackgroundMode,
   isGlassStrength,
-  normaliseColours,
   type BackgroundMode,
   type GlassStrength,
 } from "./background.ts";
@@ -69,7 +69,7 @@ function read(): Prefs {
       background: picture,
       // No choice saved yet (§22.1): a picture already on this device (from before see-through) keeps showing.
       backgroundMode: isBackgroundMode(raw.backgroundMode) ? raw.backgroundMode : picture ? "picture" : DEFAULTS.backgroundMode,
-      backgroundColours: normaliseColours(raw.backgroundColours),
+      backgroundColours: currentColours(raw.backgroundColours),
       glassStrength: isGlassStrength(raw.glassStrength) ? raw.glassStrength : DEFAULTS.glassStrength,
     };
   } catch {

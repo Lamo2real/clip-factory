@@ -200,7 +200,7 @@ html:has(.setup-todo[data-mode="pill"]) {
   right: max(12px, env(safe-area-inset-right));
   /* Stops above the tab bar, so it is never covered and never covers it. */
   max-height: calc(100dvh - env(safe-area-inset-top) - 10px - var(--tabbar-h) - env(safe-area-inset-bottom) - 24px);
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.95), rgb(var(--green-rgb) / 0.94));
+  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.84), rgb(var(--green-rgb) / 0.82));
   animation: todo-drop 360ms var(--ease-spring);
 }
 @keyframes todo-drop {

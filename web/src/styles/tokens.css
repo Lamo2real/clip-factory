@@ -86,6 +86,8 @@
   --shadow-1: 0 1px 2px rgb(var(--shadow-rgb) / 0.18), 0 8px 24px -14px rgb(var(--shadow-rgb) / 0.55);
   --shadow-2: 0 2px 6px rgb(var(--shadow-rgb) / 0.2), 0 22px 48px -24px rgb(var(--shadow-rgb) / 0.65);
   --focus: 0 0 0 3px rgb(var(--bone-rgb) / 0.95), 0 0 0 5.5px var(--vermilion-deep);
+  /* Text fields: bone ring (about 11:1 on green) and a faint vermilion glow, never the double ring of a button. */
+  --focus-field: 0 0 0 2px var(--bone), 0 0 0 4px rgb(var(--vermilion-rgb) / 0.25);
 }
 
 /* The window look (§22.3). Panels are bottle-green glass at --panel-veil; the text goes to bone or lighter so the

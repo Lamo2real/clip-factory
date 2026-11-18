@@ -269,7 +269,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
       out.push(
         <div className="gstep__connect" key="connect" data-help="setup-connect">
           <Button
-            variant={primary ? "primary" : "glass"}
+            variant={primary ? "primary" : "action"}
             size="lg"
             icon="link"
             act="connect"

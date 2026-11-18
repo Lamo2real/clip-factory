@@ -405,7 +405,7 @@ function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Pla
             </span>
             {row.state === "ready" ? null : (
               <span className="todo-row__actions">
-                <LinkButton href={`/settings/posting/setup/${row.platform}`} size="sm" variant="glass" className="todo-row__go" aria-label={`Set up ${name}`}>
+                <LinkButton href={`/settings/posting/setup/${row.platform}`} size="sm" variant="action" className="todo-row__go" aria-label={`Set up ${name}`}>
                   Set up
                 </LinkButton>
                 {finished ? (

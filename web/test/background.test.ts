@@ -7,6 +7,7 @@ import {
   CHIP_DEEPEN,
   coloursVeil,
   contrast,
+  currentColours,
   DEFAULT_COLOURS,
   FROSTED_EXTRA,
   GLASS_TINT_ALPHA,
@@ -25,6 +26,7 @@ import {
   mix,
   minVeil,
   normaliseColours,
+  OLD_DEFAULT_COLOURS,
   ON_BONE,
   PANEL_VEIL_FLOOR,
   PICTURE_PAGE_VEIL,
@@ -39,6 +41,7 @@ import {
   seeThroughVeils,
   seeThroughWorstBackground,
   SWATCHES,
+  swatchTickIsDark,
   TEXT_COLOURS,
   TEXT_COLOURS_WINDOW,
   TEXT_TOKENS,
@@ -276,7 +279,20 @@ describe("the stylesheets and the text colour list stay in step", () => {
     "var(--act-tint)": "a button's glyph, for a blink of its action",
     "var(--green-leaf)": "a button's glyph, for a blink of its action",
     "var(--vermilion-light)": "the error toast's icon, a mark rather than words",
+    "rgb(255 255 255 / 0.7)": "a CTA that is off: on its own thin vermilion over deep green (checked below)",
   };
+
+  it("a CTA that is off keeps its label above 3:1 on any panel, and is not brown", () => {
+    const off = (panel: Rgb) => mix(hexToRgb("#e8392b"), mix(GREEN_DEEP, panel, 0.6), 0.35);
+    for (const behind of [WHITE, [0, 0, 0] as Rgb]) {
+      const panel = mix(VEIL, behind, PANEL_VEIL_FLOOR);
+      const fill = off(panel);
+      expect(contrast(mix(WHITE, fill, 0.7), fill)).toBeGreaterThanOrEqual(3);
+    }
+    for (const sheet of ["components.css", "setup.css"]) {
+      expect(rules(sheet)).toContain("linear-gradient(rgb(var(--vermilion-rgb) / 0.35), rgb(var(--vermilion-rgb) / 0.35)),\n    rgb(var(--green-deep-rgb) / 0.6)");
+    }
+  });
 
   it("every text colour in every stylesheet is a token of the list, or a named exception", () => {
     const tokens = new Set(Object.keys(TEXT_TOKENS).map((t) => `var(${t})`));
@@ -366,6 +382,84 @@ describe("colours", () => {
   });
 });
 
+/** W3C soft-light of `top` over `bottom` (one channel, 0..255). */
+function softLight(bottom: number, top: number): number {
+  const cb = bottom / 255;
+  const cs = top / 255;
+  const d = cb <= 0.25 ? ((16 * cb - 12) * cb + 4) * cb : Math.sqrt(cb);
+  const b = cs <= 0.5 ? cb - (1 - 2 * cs) * cb * (1 - cb) : cb + (2 * cs - 1) * (d - cb);
+  return b * 255;
+}
+const softLightOver = (under: Rgb, top: Rgb, alpha: number): Rgb =>
+  under.map((u, i) => (1 - alpha) * u + alpha * softLight(u, top[i]!)) as unknown as Rgb;
+
+describe("the frosted look (the web default): loose text over the moving caustics", () => {
+  const glass = rules("glass.css");
+  // The brand mesh as glass.css draws it; the test fails if the stylesheet moves away from these numbers.
+  const BASE = hexToRgb("#174a3a");
+  const BLOB_OPACITY = 0.9;
+  const A: Rgb = [42, 92, 74];
+  const VERMILION = hexToRgb("#e8392b");
+  const LEAF = hexToRgb("#5fa585");
+  const peak = Number(glass.match(/\.backdrop__caustic \{[^}]*?radial-gradient\(closest-side, rgb\(var\(--bone-rgb\) \/ ([\d.]+)\)/)![1]);
+
+  it("draws the mesh this test works out", () => {
+    expect(glass).toContain("rgb(42 92 74 / 0.6)");
+    expect(glass).toContain("rgb(var(--vermilion-rgb) / 0.42)");
+    expect(glass).toContain("rgb(var(--green-leaf-rgb) / 0.22)");
+    expect(glass).toContain("rgb(var(--bone-rgb) / 0.12)");
+    expect(glass).toMatch(/\.blob \{[^}]*opacity: 0\.9;/);
+    expect(peak).toBeLessThanOrEqual(0.1);
+  });
+
+  it("gives loose text the panel-tint scrim, which keeps every text colour at AA on the lightest spot", () => {
+    // Loose text in frosted sits on the same scrim as in the window and picture looks.
+    expect(glass).toContain('html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])');
+    // The worst case: every blob at its centre at once (they never all meet), the bone frost, both caustics at their
+    // peak on the same spot, then the 0.15 green over the mesh.
+    let spot = BASE;
+    for (const [c, a] of [[A, 0.6], [VERMILION, 0.42], [LEAF, 0.22], [BONE, 0.12]] as const) spot = mix(c, spot, a * BLOB_OPACITY);
+    spot = mix(BONE, spot, 0.04);
+    spot = softLightOver(softLightOver(spot, BONE, peak), BONE, peak);
+    spot = mix(VEIL, spot, 0.15);
+    // Under the scrim: the panel floor tint.
+    const scrimmed = mix(VEIL, spot, PANEL_VEIL_FLOOR);
+    expect(worst(scrimmed)).toBeGreaterThanOrEqual(AA);
+    // Without the scrim that spot is under AA: the reason the scrim is there.
+    expect(worst(spot)).toBeLessThan(AA);
+  });
+});
+
+describe("the old default colours", () => {
+  it("read as the new default, as the API does; any other choice stays", () => {
+    expect(OLD_DEFAULT_COLOURS).toEqual(["#9caf88", "#f7f5ef", "#e8412c"]);
+    expect(currentColours(["#9CAF88", "#f7f5ef", "#e8412c"])).toEqual([...DEFAULT_COLOURS]);
+    expect(currentColours(["#f7f5ef", "#9caf88", "#e8412c"])).toEqual(["#f7f5ef", "#9caf88", "#e8412c"]);
+    expect(currentColours(["#9caf88", "#f7f5ef"])).toEqual(["#9caf88", "#f7f5ef"]);
+    expect(currentColours(undefined)).toEqual([...DEFAULT_COLOURS]);
+  });
+
+  it("the API keeps the same trio", () => {
+    const py = readFileSync(join(import.meta.dirname, "..", "..", "api", "src", "clipfactory_api", "settings.py"), "utf8");
+    const m = py.match(/OLD_DEFAULT_COLOURS = \(([^)]*)\)/);
+    expect([...m![1]!.matchAll(/"(#[0-9a-f]{6})"/g)].map((x) => x[1])).toEqual([...OLD_DEFAULT_COLOURS]);
+  });
+});
+
+describe("a picked swatch's tick", () => {
+  it("is white or bottle green, whichever reads better, and always at least 3:1", () => {
+    const samples = [...SWATCHES.map((s) => s.hex), "#808080", "#9a9a9a", "#b0b0b0", "#6b8f71", "#c0392b", "#000000", "#ffffff"];
+    for (const hex of samples) {
+      const rgb = hexToRgb(hex);
+      const tick = swatchTickIsDark(hex) ? ON_BONE : WHITE;
+      expect(contrast(tick, rgb), hex).toBeGreaterThanOrEqual(3);
+    }
+    // Sage (the old default) gets the green tick: white on it is only 2.36:1.
+    expect(swatchTickIsDark("#9caf88")).toBe(true);
+    expect(swatchTickIsDark("#0f372b")).toBe(false);
+  });
+});
+
 describe("what is drawn", () => {
   const base: LookInput = { mode: "see-through", picture: null, colours: [...DEFAULT_COLOURS], strength: "clear", glass: "none", scheme: "light" };
 
@@ -436,6 +530,12 @@ describe("prefs keep the background choice on this device", () => {
   it("defaults to see-through, clear glass and the Clip Factory colours", async () => {
     const { getPrefs } = await import("../src/lib/prefs.ts");
     expect(getPrefs()).toMatchObject({ backgroundMode: "see-through", glassStrength: "clear", backgroundColours: [...DEFAULT_COLOURS] });
+  });
+
+  it("a device that cached the old default colours shows the new ones before /me loads", async () => {
+    localStorage.setItem("cf.prefs", JSON.stringify({ backgroundMode: "colours", backgroundColours: ["#9caf88", "#f7f5ef", "#e8412c"] }));
+    const { getPrefs } = await import("../src/lib/prefs.ts");
+    expect(getPrefs().backgroundColours).toEqual([...DEFAULT_COLOURS]);
   });
 
   it("reads back what was saved, and ignores junk", async () => {

@@ -39,6 +39,18 @@ export const SWATCHES: readonly { hex: string; name: string }[] = [
   { hex: "#1f2937", name: "Night" },
 ];
 export const DEFAULT_COLOURS: readonly string[] = ["#0f372b", "#efe7da", "#e8392b"];
+/**
+ * The Clip Factory colours before the bottle-green look (ADR-43). Exactly this trio reads back as today's default,
+ * as the API does (settings.py OLD_DEFAULT_COLOURS), so a device that cached it does not show the old palette until
+ * /me loads. Any other choice, a reordering or a subset included, is kept as it is.
+ */
+export const OLD_DEFAULT_COLOURS: readonly string[] = ["#9caf88", "#f7f5ef", "#e8412c"];
+
+/** The stored colours, with the old default trio read as the new one. */
+export function currentColours(v: unknown): string[] {
+  const colours = normaliseColours(v);
+  return colours.length === OLD_DEFAULT_COLOURS.length && colours.every((c, i) => c === OLD_DEFAULT_COLOURS[i]) ? [...DEFAULT_COLOURS] : colours;
+}
 
 export function isBackgroundMode(v: unknown): v is BackgroundMode {
   return typeof v === "string" && (BACKGROUND_MODES as readonly string[]).includes(v);
@@ -295,6 +307,12 @@ export function seeThroughTrackBackground(glass: NativeGlass, scheme: Scheme, st
 /** What words on a tinted chip sit on: the panel, the deep green under the tint, then the chip's own tint (`tint` at `alpha`). */
 export function seeThroughChipBackground(glass: NativeGlass, scheme: Scheme, strength: GlassStrength, tint: Rgb, alpha: number, behind: Rgb = glassCeiling(glass, scheme)): Rgb {
   return mix(tint, mix(GREEN_DEEP, seeThroughWorstBackground(glass, scheme, strength, behind), CHIP_DEEPEN), alpha);
+}
+
+/** A picked swatch's tick: bottle green when it reads better than white on that colour, so it is never under 3:1. */
+export function swatchTickIsDark(hex: string): boolean {
+  const rgb = hexToRgb(hex);
+  return contrast(rgb, ON_BONE) > contrast(rgb, WHITE);
 }
 
 /** What words on the selected (bone) pill sit on, on a panel over `behind`. */

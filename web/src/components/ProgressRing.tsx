@@ -36,6 +36,20 @@ export function ProgressRing({
     >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true" focusable="false">
         <circle className="ring__track" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} fill="none" />
+        {v > 0 ? (
+          <circle
+            className="ring__case"
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            strokeWidth={stroke + 3}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={c * (1 - v)}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        ) : null}
         <circle
           className="ring__fill"
           cx={size / 2}

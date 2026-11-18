@@ -115,7 +115,7 @@ html[data-strength="frosted"] .backdrop__frost {
   width: 70vmax;
   height: 70vmax;
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgb(var(--bone-rgb) / 0.25), rgb(var(--bone-rgb) / 0.08) 55%, rgb(var(--bone-rgb) / 0));
+  background: radial-gradient(closest-side, rgb(var(--bone-rgb) / 0.1), rgb(var(--bone-rgb) / 0.04) 55%, rgb(var(--bone-rgb) / 0));
   mix-blend-mode: soft-light;
   will-change: transform;
   animation: caustic 26s var(--ease-out) infinite alternate;
@@ -139,19 +139,22 @@ html[data-strength="frosted"] .backdrop__frost {
   }
 }
 
-/* Colours: the owner's 1 to 3 colours blend as a slow mesh (the same blobs as the Clip Factory colours). */
+/* Colours: the owner's 1 to 3 colours as a slow mesh (the same blobs as the Clip Factory colours). The first colour
+   is the field and covers most of it; the second is a soft highlight and the third a small glow, each mixed into
+   the first at well under half strength, as in the reference: deep green, a breath of bone, a warm vermilion glow.
+   Every mix lies between two of the colours, so it is never lighter than the lightest one, which the veil
+   (coloursVeil) is worked out for. */
 .backdrop--colours {
-  background: linear-gradient(160deg, var(--c1) 0%, var(--c2) 55%, var(--c3) 100%);
+  background: linear-gradient(160deg, var(--c1) 0%, var(--c1) 55%, color-mix(in srgb, var(--c1) 78%, var(--c3)) 100%);
 }
 .backdrop--colours .blob--a {
   background: radial-gradient(circle at 40% 40%, var(--c1), transparent 68%);
 }
 .backdrop--colours .blob--b {
-  background: radial-gradient(circle, var(--c2), transparent 66%);
-  opacity: 1;
+  background: radial-gradient(circle, color-mix(in srgb, var(--c2) 26%, transparent), transparent 66%);
 }
 .backdrop--colours .blob--c {
-  background: radial-gradient(circle, var(--c3), transparent 66%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--c3) 30%, transparent), transparent 66%);
 }
 /* No bone highlight over the owner's colours: the veil is worked out from the colours alone. */
 .backdrop--colours .blob--d {
@@ -223,11 +226,6 @@ html[data-strength="frosted"] .backdrop__frost {
   --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.1)), rgb(var(--green-deep-rgb) / min(0.97, var(--panel-veil) + 0.08)));
   border-color: rgb(var(--line-rgb) / 0.26);
 }
-/* The panel, a breath of vermilion, then a green deepen (CHIP_DEEPEN), so it is never lighter than a panel. */
-.glass--vermilion {
-  --glass-tint: linear-gradient(rgb(var(--green-rgb) / 0.2), rgb(var(--green-rgb) / 0.2)), linear-gradient(150deg, rgb(var(--vermilion-rgb) / 0.16), rgb(var(--vermilion-rgb) / 0.08)),
-    linear-gradient(140deg, rgb(var(--green-rgb) / var(--panel-veil)), rgb(var(--green-rgb) / var(--panel-veil)));
-}
 /* The lightest veil: lighter than a panel only where the page owns the (dark) backdrop. */
 :where(html:not(.see-through, [data-backdrop="picture"])) .glass--clear {
   --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / 0.4), rgb(var(--green-rgb) / 0.36));
@@ -242,6 +240,11 @@ html[data-strength="frosted"] .backdrop__frost {
    own (toasts, sheets, the Ask panel, the update bar) keeps it. */
 :where(html.see-through) :is(.glass, .glass--clear) {
   --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / var(--panel-veil)), rgb(var(--green-rgb) / var(--panel-veil)));
+}
+/* The deeper green surfaces (the hero, the Ask launcher, the sign-in card) stay one step deeper than a panel here
+   too: the rule above is as heavy as `.glass--green` and comes later, so it is restated for them. */
+html.see-through .glass--green {
+  --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.1)), rgb(var(--green-deep-rgb) / min(0.97, var(--panel-veil) + 0.08)));
 }
 /* Nothing that holds words is weaker than the panel tint: what can sit straight on the window carries at least
    that much. The button rules are written `html:where(.see-through)`: just heavier than the plain button, lighter
@@ -267,10 +270,11 @@ html:where(.see-through, [data-backdrop="picture"]) .btn--danger:hover:not([aria
 html.see-through .lib-tab:not(.is-on) {
   background: rgb(var(--green-rgb) / var(--panel-veil));
 }
-/* Text that sits straight on the window or the picture (page titles and their line, breadcrumbs, headings and
-   lines between panels) gets the same tint as a soft scrim hugging it. The spread shadow pads it without moving
+/* Text that sits straight on the window, the picture or the frosted colours (page titles and their line, breadcrumbs,
+   headings and lines between panels) gets the same tint as a soft scrim hugging it. Frosted needs it for the moving
+   caustics, which lighten the mesh where they cross a blob (test/background.test.ts works out the worst spot). The spread shadow pads it without moving
    anything. */
-html:is(.see-through, [data-backdrop="picture"])
+html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
   :is(
     .page-head__text,
     .crumbs__list,
@@ -292,7 +296,7 @@ html:is(.see-through, [data-backdrop="picture"])
   box-shadow: 0 0 0 6px rgb(var(--green-rgb) / var(--panel-veil));
 }
 /* Headings and lines between panels hug their words instead of running the full width as a bar. */
-html:is(.see-through, [data-backdrop="picture"])
+html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"])
   :is(
     .home-row__intro > :is(h2, p),
     .review-count,
@@ -307,10 +311,10 @@ html:is(.see-through, [data-backdrop="picture"])
   max-width: 100%;
 }
 /* The centred ones stay centred. */
-html:is(.see-through, [data-backdrop="picture"]) :is(.week__title, .week__learn) {
+html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"]) :is(.week__title, .week__learn) {
   justify-self: center;
 }
-html:is(.see-through, [data-backdrop="picture"]) .perf__updated > span {
+html:is(.see-through, [data-backdrop="picture"], [data-backdrop="frosted"]) .perf__updated > span {
   display: inline-block;
 }
 /* Pick-one tracks: a little more green than a panel (+0.1), with a lift of bone (0.08) so the track still shows, so

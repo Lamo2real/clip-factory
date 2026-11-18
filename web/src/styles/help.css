@@ -107,7 +107,7 @@
   border-radius: var(--r-lg);
   overflow: hidden;
   /* Strong enough to read over any page (and the owner's own background picture). */
-  --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / 0.92), rgb(var(--green-rgb) / 0.9));
+  --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / 0.84), rgb(var(--green-rgb) / 0.82));
   box-shadow:
     inset 0 1px 0 rgb(var(--bone-rgb) / 0.3),
     0 30px 60px -28px rgb(var(--shadow-rgb) / 0.85);
@@ -120,7 +120,7 @@
   }
 }
 .help-panel.is-sheet {
-  --glass-tint: linear-gradient(160deg, rgb(var(--green-rgb) / 0.94), rgb(var(--green-rgb) / 0.96));
+  --glass-tint: linear-gradient(160deg, rgb(var(--green-rgb) / 0.82), rgb(var(--green-rgb) / 0.84));
   /* The visible part of the screen (HelpPanel sets these from visualViewport), so the phone keyboard never hides
      the field and the plane. It sits above the tab bar too. */
   inset: auto 0;

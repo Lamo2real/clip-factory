@@ -23,10 +23,9 @@ import {
   SOFT_COLOURS_VEIL,
   colourName,
   coloursVeil,
-  hexToRgb,
-  luminance,
   normaliseColours,
   seeThroughNote,
+  swatchTickIsDark,
   type BackgroundMode,
   type GlassStrength,
 } from "../../lib/background.ts";
@@ -180,7 +179,7 @@ export function YoutubeBranch() {
               if (f) void uploadCookies(f);
             }}
           />
-          <Button size="sm" icon="upload" act={pick} playOnClick={false} loading={busy} onClick={() => file.current?.click()}>
+          <Button size="sm" variant="action" icon="upload" act={pick} playOnClick={false} loading={busy} onClick={() => file.current?.click()}>
             {hasCookies ? "Replace" : "Add cookies.txt"}
           </Button>
           {hasCookies ? (
@@ -461,7 +460,7 @@ function PictureApple({ inUse, onPicked }: { inUse: boolean; onPicked: () => voi
                 if (f) void pickBackground(f);
               }}
             />
-            <Button size="sm" icon="image" act={pick} playOnClick={false} loading={busy} onClick={() => file.current?.click()}>
+            <Button size="sm" variant="action" icon="image" act={pick} playOnClick={false} loading={busy} onClick={() => file.current?.click()}>
               {prefs.background ? "Change picture" : "Choose a picture"}
             </Button>
             {prefs.background ? (
@@ -541,7 +540,7 @@ function ColoursApple({ inUse, colours, onChange }: { inUse: boolean; colours: s
               <button
                 key={hex}
                 type="button"
-                className={`swatch${on ? " is-on" : ""}${luminance(hexToRgb(hex)) > 0.4 ? " is-light" : ""}`}
+                className={`swatch${on ? " is-on" : ""}${swatchTickIsDark(hex) ? " is-light" : ""}`}
                 style={{ "--swatch": hex } as CSSProperties}
                 aria-pressed={on}
                 aria-label={colourName(hex)}
@@ -602,7 +601,7 @@ export function UpdatesBranch() {
         </Pill>
       </Apple>
       <Apple id="check-updates">
-        <Button size="sm" icon="retry" act="refresh" loading={checking} onClick={() => void check()}>
+        <Button size="sm" variant="action" icon="retry" act="refresh" loading={checking} onClick={() => void check()}>
           Check for updates
         </Button>
       </Apple>

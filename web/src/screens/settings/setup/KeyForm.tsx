@@ -215,7 +215,7 @@ export function KeyForm({
         </div>
       ) : null}
       <div className="key-form__actions">
-        <Button type="submit" variant={primary ? "primary" : "glass"} size="lg" icon="check" act={saveAct} loading={saving} disabled={!ready}>
+        <Button type="submit" variant={primary ? "primary" : "action"} size="lg" icon="check" act={saveAct} loading={saving} disabled={!ready}>
           Save keys
         </Button>
         {setup.keys.saved ? (

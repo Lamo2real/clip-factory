@@ -76,7 +76,7 @@ export function StepCard({
             <div className="gstep__actions">
               {step.open ? (
                 <a
-                  className={`btn btn--${primary ? "primary" : "glass"} btn--lg gstep__open`}
+                  className={`btn btn--${primary ? "primary" : "action"} btn--lg gstep__open`}
                   href={step.open.url}
                   target="_blank"
                   rel="noopener noreferrer"

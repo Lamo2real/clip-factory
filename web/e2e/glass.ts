@@ -60,7 +60,10 @@ export interface GlassPaint {
 }
 /** Liquid Glass at its darkest, exactly as measured: another app is in use and pure black is behind the window. */
 export const INACTIVE_FLOOR: GlassPaint = { name: "the inactive glass over black, as measured", background: css(LIQUID_MEASURED.inactive.overBlack) };
-/** Liquid Glass over pure black while the window is in use (khaki, from the app's tint). */
+/**
+ * Liquid Glass over pure black while the window is in use, as measured with the old light tint (khaki). The window
+ * now has the bottle-green tint, so the real colour differs until it is measured again on a Mac (CONTRACTS §22.3).
+ */
 export const ACTIVE_FLOOR: GlassPaint = { name: "the glass in use over black, as measured", background: css(LIQUID_MEASURED.active.overBlack) };
 /** The lightest any glass can be. */
 export const WHITE: GlassPaint = { name: "white", background: "rgb(255 255 255)" };
