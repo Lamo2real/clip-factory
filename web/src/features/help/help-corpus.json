@@ -1,5 +1,5 @@
 {
-  "version": "433546c0b2d7",
+  "version": "c108ac9b98a3",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -256,13 +256,17 @@
         "mov",
         "computer",
         "phone video",
-        "upload a video"
+        "upload a video",
+        "drag",
+        "drop",
+        "drag and drop",
+        "finder"
       ],
-      "answer": "You can make clips from a video file too. Tap **Pick a video** on Home, choose the file and tap **Make clips**.",
+      "answer": "You can make clips from a video file too. Tap **Pick a video** on Home, choose the file and tap **Make clips**. On a computer you can also drag the video onto the box.",
       "steps": [
         "Go to **Home**.",
         "Tap **Pick a video**.",
-        "Tap the box and pick an MP4, MOV or WebM file (up to 5 GB).",
+        "Tap the box and pick an MP4, MOV or WebM file (up to 5 GB). On a computer you can also drag the video from your folder and drop it on the box.",
         "Tap **Make clips**."
       ],
       "actions": [

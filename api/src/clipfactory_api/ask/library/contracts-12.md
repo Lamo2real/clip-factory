@@ -147,6 +147,13 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   start it again."; ready with none "This job made no clips. Go back to Home and try a different link."
 * **Words** (§12.4): the job status pill says **Didn't work** (never "Failed"); the Home source switch is
   **Paste a link / Pick a video** (the help anchor stays `upload-video`).
+* **Drag and drop on the new-job card** (`web/src/lib/drops.ts`): a video dragged from Finder (or the desktop)
+  anywhere on the card switches to Pick a video and is picked like the file picker (same checks, words and motion);
+  several files take the first video ("One video per job…"); another file says "That is not a video. Drop an MP4,
+  MOV or WebM video."; a link (a uri-list, or dragged text that is a link) switches to Paste a link and is checked.
+  While dragging, one soft fill over the card says "Drop your video here" / "Drop your link here" (no edges, no
+  animation with less motion); a drop outside the card is still refused by Ask's window guard. The same form serves
+  Use a video file (`/?file=1&from=`). Covered by `web/test/drops.test.ts` and `web/e2e/drop-video.spec.ts`.
 * **Jobs list on phones**: when a job started is never cut (the source part shortens with "…" instead), and a failed
   job's error is shown in full because its last sentence says how to fix it.
 * **No blank pages**: a malformed `#anchor` (`/jobs#100%`) is used as typed instead of throwing, and render errors
