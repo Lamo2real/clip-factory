@@ -644,6 +644,20 @@ scenario per state (`window.__cfMock.money.setScenario(name)`, kept in sessionSt
 - **Live checks, not done here** (§25.8): YouTube Analytics with the real monetary scope, Meta's earnings metrics and
   unit, TikTok's `user.info.stats` review, X's `verified_followers_count`.
 
+### Money dashboard (CONTRACTS §27)
+
+- pytest: `api/tests/test_money_summary.py`, `api/tests/test_money_clips.py`, the §27.6 additions in
+  `api/tests/test_money.py`. The shared golden cases live in `api/tests/fixtures/money_summary_cases.json`; after a
+  deliberate rule change write them again with `uv run python tests/money_cases.py` and read the diff.
+- vitest: `web/test/moneyDash.test.ts` (the mock copy against every golden case, filter, storage, plain dates in three
+  time zones, chip words, chart shape) and the stricter `web/test/noGuesses.test.ts`.
+- Playwright: `web/e2e/money-dashboard.spec.ts` at 320 × 568, 375 × 812, 390 × 844, 430 × 932, 768 × 1024 and
+  1024 × 768 (each with and without touch: a coarse pointer gets the dock), 1280 × 800, 1440 × 900, 1920 × 1080, and
+  the desktop app's 1200 × 820 and 380 × 600, with the clock fixed at 2026-11-19 12:00 UTC. The `screenshots` project
+  saves `money-dashboard-{scenario}-{w}x{h}-{scheme}.png` to `web/test-results/screens/` (`CF_MONEY_SCREEN_DIR`).
+- By hand once: the desktop app at 1200 × 820 and 380 × 600 over a known backdrop (see "Hand check: the real window"):
+  the dock and the cards stay readable on the see-through glass.
+
 ### Posting setup
 From [CONTRACTS.md §17.12](CONTRACTS.md#1712-tests-offline-fakes-only-no-aws-no-network). Everything offline: a fake
 Secrets Manager, a recorded `HttpClient` with fixtures per platform, a `FakeDurableContext`, and the web mock mode with

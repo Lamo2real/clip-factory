@@ -113,6 +113,38 @@ describe("SoundEngine audio context", () => {
     expect(resume).toHaveBeenCalledTimes(1);
   });
 
+  it("builds the context on the press before a click, silently, so the click itself stays cheap", () => {
+    let built = 0;
+    const resume = vi.fn(async () => undefined);
+    class FakeContext {
+      state = "suspended";
+      constructor() {
+        built++;
+      }
+      resume = resume;
+    }
+    (window as { AudioContext?: unknown }).AudioContext = FakeContext;
+    window.__cfSoundLog = [];
+    let on = false;
+    const remove = installClickSounds(new SoundEngine(() => on));
+    try {
+      html(`<button id="b">Go</button><p id="p">text</p>`);
+      const b = document.getElementById("b")!;
+      b.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      expect(built).toBe(0); // muted: nothing built
+      on = true;
+      document.getElementById("p")!.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      b.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+      expect(built).toBe(0); // not a press on a control, or not a key that clicks
+      b.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      b.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      expect(built).toBe(1);
+      expect(window.__cfSoundLog).toEqual([]); // a press makes no sound
+    } finally {
+      remove();
+    }
+  });
+
   it("caps the test sound log", () => {
     window.__cfSoundLog = [];
     const engine = new SoundEngine(() => false);

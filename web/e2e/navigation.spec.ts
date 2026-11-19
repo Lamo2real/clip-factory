@@ -11,7 +11,8 @@ test.describe("phones", () => {
       await expect(bar).toBeVisible();
       await expect(page.locator("nav.sidebar")).toBeHidden();
       const items = bar.locator("a");
-      await expect(items).toHaveCount(5);
+      // Home, Jobs, Review, Library, Money (§27.4), Settings.
+      await expect(items).toHaveCount(6);
       for (const item of await items.all()) {
         // No visible words: only an icon, with the name for screen readers.
         expect((await item.innerText()).replace(/\d+/g, "").trim()).toBe("");
@@ -24,6 +25,9 @@ test.describe("phones", () => {
       await bar.getByRole("link", { name: /^Review/ }).click();
       await expect(page).toHaveURL(/\/review$/);
       await expect(bar.getByRole("link", { name: /^Review/ })).toHaveAttribute("aria-current", "page");
+      await bar.getByRole("link", { name: "Money" }).click();
+      await expect(page).toHaveURL(/\/money$/);
+      await expect(bar.getByRole("link", { name: "Money" })).toHaveAttribute("aria-current", "page");
     });
   }
 });

@@ -819,6 +819,117 @@ export interface ReportedMoney {
   tag: string;
 }
 
+// ---------- Money dashboard (docs/CONTRACTS.md §27) ----------
+
+export type MoneyChart = 7 | 30 | 90 | 365;
+export type MoneyClipPeriod = 7 | 30 | 90 | "all";
+export type MoneyClipSort = "money" | "views";
+
+/** Why an app is left out of the totals (§27.3). Never a number. */
+export interface MoneyExcluded {
+  platform: Platform;
+  /** `behind`: its newest day is over 6 days old while another app is up to date. `error`: its check failed and
+   * nothing is stored yet. */
+  reason: "not_shared" | "coming_soon" | "not_connected" | "needs_permission" | "no_money_yet" | "behind" | "error";
+  text: string;
+  where?: MoneyWhere;
+}
+
+/** The comparison chip's data, worked out on the server: the web only words it. */
+export interface MoneyChange {
+  previousPeriodMicros: number | null;
+  changePct: number | null;
+  direction: "up" | "down" | "same" | "new" | "none";
+}
+
+export interface MoneyChartPoint {
+  start: string;
+  end: string;
+  amountMicros: number;
+  byPlatform: Partial<Record<Platform, number>>;
+  partial?: true;
+}
+
+/** One currency's cards (never converted or added to another currency). */
+export interface MoneyCurrencySummary {
+  currency: string;
+  /** "YouTube's estimate", "Meta's estimate" or "Apps' estimates". */
+  tag: string;
+  platforms: Platform[];
+  /** The days of the last 30 that stored history covers (30 once it reaches that far): Daily and the pace use it. */
+  coveredDays: number;
+  monthly: { amountMicros: number; from: string; to: string } & MoneyChange;
+  weekly: { amountMicros: number; from: string; to: string } & MoneyChange;
+  daily: { averageMicros: number; from: string; to: string; latest: { date: string; amountMicros: number } | null } & MoneyChange;
+  /** `paceMicros` is Monthly × 12 (over the covered days while under 30), always shown as "at this pace";
+   * `last365Micros` a real sum once covered. */
+  yearly: { paceMicros: number; last365Micros: number | null };
+  chart: { period: MoneyChart; bucket: "day" | "week"; from: string; to: string; points: MoneyChartPoint[] };
+}
+
+/** GET /v1/money/summary (§27.5). */
+export interface MoneySummary {
+  platforms: Platform[];
+  included: Platform[];
+  excluded: MoneyExcluded[];
+  /** yyyy-mm-dd: the earliest newest reported day across the counted apps; every period ends here. */
+  through: string | null;
+  throughBy: Partial<Record<Platform, string>>;
+  historyFrom: Partial<Record<Platform, string>>;
+  lagNote?: string;
+  /** Biggest monthly first; empty when nothing can be counted. */
+  currencies: MoneyCurrencySummary[];
+  revised: { days: number; platforms: Platform[] };
+  errors: { platform: Platform; text: string; checkedAt?: string }[];
+  /** Apps whose newest day is over 6 days old (left out while another app is current; all of them when `stale`). */
+  behind: Platform[];
+  stale: boolean;
+  asOf: string;
+}
+
+export interface MoneyClipLine {
+  platform: Platform;
+  postId: string;
+  url?: string;
+  postedAt: string;
+  /** Lifetime views, "so far". */
+  views: number | null;
+  money: { amountMicros: number; currency: string; from: string | null; to: string; tag: string; source: string } | null;
+  /** Only YouTube, only from the same report as the money, only from 1,000 views. */
+  per1000Views: { amountMicros: number; currency: string; views: number; tag: string } | null;
+  moneyState: "reported" | "not_shared" | "coming_soon" | "not_reported_yet" | "needs_permission" | "not_connected";
+}
+
+export interface MoneyClip {
+  clipId: string;
+  title: string;
+  coverUrl?: string;
+  firstPostedAt: string;
+  views: number | null;
+  totals: { currency: string; amountMicros: number }[];
+  platforms: MoneyClipLine[];
+}
+
+/** GET /v1/money/clips (§27.5). */
+export interface MoneyClips {
+  period: MoneyClipPeriod;
+  from: string | null;
+  to: string | null;
+  sort: MoneyClipSort;
+  sortedBy: MoneyClipSort;
+  note?: string;
+  clips: MoneyClip[];
+  nextCursor?: string;
+}
+
+export interface MoneyClipsQuery {
+  platforms: Platform[];
+  period: MoneyClipPeriod;
+  sort: MoneyClipSort;
+  cursor?: string;
+  limit?: number;
+}
+
 /** The result codes the money grant sends back to /settings/posting/money?result=…&platform=… (§25.4). */
 export type MoneyResult =
   | "money_allowed"
@@ -909,6 +1020,10 @@ export interface Api {
   seenMoney(key: string): Promise<MoneyView>;
   /** PUT /v1/money/country. */
   setMoneyCountry(country: string): Promise<MoneyView>;
+  /** GET /v1/money/summary?platforms=&chart= (§27.5): an empty list means every app. */
+  getMoneySummary(platforms: Platform[], chart: MoneyChart): Promise<MoneySummary>;
+  /** GET /v1/money/clips?platforms=&period=&sort=&cursor=&limit= (§27.5). */
+  getMoneyClips(query: MoneyClipsQuery): Promise<MoneyClips>;
   // Follow creators (§24.1)
   /** GET /v1/follows: the follows, the key slots and the Kick webhook address. */
   listFollows(): Promise<FollowsView>;

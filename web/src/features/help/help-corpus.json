@@ -1,5 +1,5 @@
 {
-  "version": "e6f4cdf10a62",
+  "version": "aa97fd9c4e10",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -40,6 +40,7 @@
     "/review",
     "/library",
     "/library?view=week",
+    "/money",
     "/clips/{clipId}",
     "/settings",
     "/settings/clip-making/clips",
@@ -594,8 +595,8 @@
     {
       "id": "real-money",
       "kind": "guide",
-      "route": "/settings/posting/money",
-      "where": "Settings › Posting › Money",
+      "route": "/money",
+      "where": "Money",
       "title": "How much money did I make?",
       "keywords": [
         "earn",
@@ -611,21 +612,76 @@
         "income",
         "revenue",
         "dollars",
-        "estimate"
+        "estimate",
+        "what did each video earn",
+        "each video earned",
+        "each clip earned",
+        "earnings for each video"
       ],
-      "answer": "Clip Factory only shows money a platform reports. It never guesses from views and you never type money in. Open **Settings › Posting › Money**. YouTube shows its own estimate once you're in the Partner Program and pressed **Allow money reading**. Instagram, TikTok and X don't share money with apps, so their cards show how close you are instead.",
+      "answer": "Clip Factory only shows money an app reports. It never guesses from views and you never type money in. Tap **Money** in the menu. The big number at the top is what the apps reported for your last 30 days. The list under it shows each posted clip with what YouTube says it earned, the biggest first. TikTok, Instagram and X don't share money with apps.",
       "steps": [
-        "Tap **Settings**.",
-        "Tap **Posting**, then **Money**.",
-        "Read the money at the top. Each amount says whose estimate it is."
+        "Tap **Money** in the menu.",
+        "Read the big number at the top. Each amount says whose estimate it is.",
+        "Scroll down to see what each clip earned."
       ],
       "actions": [
         {
           "id": "real-money:money",
           "label": "Open Money",
-          "to": "/settings/posting/money",
+          "to": "/money",
           "highlight": [
-            "money-check"
+            "money-dash-monthly"
+          ]
+        },
+        {
+          "id": "real-money:clips",
+          "label": "See each clip",
+          "to": "/money",
+          "highlight": [
+            "money-dash-clips"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-mrr",
+      "kind": "guide",
+      "route": "/money",
+      "where": "Money",
+      "title": "What is MRR on the Money page?",
+      "keywords": [
+        "mrr",
+        "monthly mrr",
+        "weekly mrr",
+        "daily mrr",
+        "yearly mrr",
+        "recurring",
+        "recurring revenue",
+        "money dashboard",
+        "dashboard",
+        "filter by app"
+      ],
+      "answer": "MRR usually means subscriptions. Here it means the money the apps reported for your videos: **Monthly MRR** is the last 30 days, **Weekly MRR** the last 7, **Daily MRR** a normal day lately and **Yearly MRR** the monthly money kept up for a year (**at this pace**). Pick apps with the icons at the bottom right.",
+      "steps": [
+        "Tap **Money** in the menu.",
+        "Tap app icons in the bar at the bottom right to pick apps. **All** shows every app.",
+        "Tap **7 days**, **30 days**, **90 days** or **Year** to change the chart and the clip list."
+      ],
+      "actions": [
+        {
+          "id": "money-mrr:money",
+          "label": "Open Money",
+          "to": "/money",
+          "highlight": [
+            "money-dash-monthly"
+          ]
+        },
+        {
+          "id": "money-mrr:filter",
+          "label": "Pick apps",
+          "to": "/money",
+          "highlight": [
+            "money-dash-filter"
           ]
         }
       ]
@@ -3460,6 +3516,7 @@
       "where": "Settings › Posting › Money",
       "title": "Money",
       "keywords": [
+        "Money dashboard",
         "Your country",
         "YouTube",
         "TikTok",
@@ -3479,6 +3536,43 @@
           "label": "Open Money",
           "to": "/settings/posting/money"
         }
+      ]
+    },
+    {
+      "id": "apple-money-dashboard",
+      "kind": "apple",
+      "route": "/money",
+      "hash": "money-dashboard",
+      "where": "Settings › Posting › Money",
+      "title": "Money dashboard",
+      "keywords": [
+        "revenue",
+        "mrr",
+        "dashboard",
+        "earnings",
+        "earnings per video",
+        "money per video",
+        "money per clip",
+        "income"
+      ],
+      "answer": "The money each app reported, and what each clip earned.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Money**.",
+        "Find **Money dashboard**."
+      ],
+      "actions": [
+        {
+          "id": "apple-money-dashboard:open",
+          "label": "Open Money",
+          "to": "/money",
+          "highlight": [
+            "money-dashboard"
+          ]
+        }
+      ],
+      "highlight": [
+        "money-dashboard"
       ]
     },
     {

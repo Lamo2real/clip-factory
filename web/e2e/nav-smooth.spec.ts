@@ -31,7 +31,11 @@ async function idleGap(page: Page): Promise<number> {
   );
 }
 
-/** Taps `item` (a selector inside `list`) and records the glide's painted box on every frame for 900 ms. */
+/**
+ * Taps `item` (a selector inside `list`) and records the glide's painted box on every frame until 900 ms after the
+ * slide started (at most 5 s after the tap). The slide starts on the first frame drawn after the tap; on a busy CI
+ * runner that frame came up to a second late, and a fixed 900 ms from the tap then ended mid-slide or before it.
+ */
 async function record(page: Page, list: string, item: string) {
   return page.evaluate(
     ({ list, item }) =>
@@ -41,6 +45,7 @@ async function record(page: Page, list: string, item: string) {
         const frames: [number, number, number, number, number][] = [];
         let anims: string[] = [];
         let t0 = 0;
+        let tSlide = -1;
         const tick = (now: number) => {
           const r = g.getBoundingClientRect();
           frames.push([now - t0, r.x, r.y, r.width, r.height]);
@@ -53,17 +58,26 @@ async function record(page: Page, list: string, item: string) {
               return `${a.id || (a as CSSTransition).transitionProperty || "?"}:${props.join("+")}`;
             });
           }
-          if (now - t0 < 900) requestAnimationFrame(tick);
+          if (tSlide < 0 && g.getAnimations().some((a) => !a.pending)) tSlide = now;
+          const from = tSlide < 0 ? t0 : tSlide;
+          if (now - from < 900 && now - t0 < 5000) requestAnimationFrame(tick);
           else {
             const on = box.querySelector<HTMLElement>(item)!.getBoundingClientRect();
             done({ frames, target: [on.x, on.y, on.width, on.height], anims, transitions: getComputedStyle(g).transitionProperty });
           }
         };
-        requestAnimationFrame((now) => {
-          t0 = now;
-          box.querySelector<HTMLElement>(item)!.click();
-          tick(now);
-        });
+        // A real tap presses before it clicks, and the app does its press work then (the first press builds the audio
+        // context for the click sounds, lib/sound.ts). A bare click() skipped that, so on CI the first switch paid
+        // for it inside the click's own frame and the slide started up to two seconds late.
+        const target = box.querySelector<HTMLElement>(item)!;
+        target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, isPrimary: true, pointerType: "mouse" }));
+        requestAnimationFrame(() =>
+          requestAnimationFrame((now) => {
+            t0 = now;
+            target.click();
+            tick(now);
+          }),
+        );
       }),
     { list, item },
   );

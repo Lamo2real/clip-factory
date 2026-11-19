@@ -330,7 +330,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   const skills = skillsApi(store, delay);
   const lessons = lessonsApi(() => store.clips, () => faults.lessons, () => delay());
   const follows = followsApi((ev) => mockLive.publish(ev), () => delay());
-  const money = moneyApi(() => delay());
+  const money = moneyApi(() => delay(), { clips: () => store.clips, posts: () => store.posts });
   if (typeof window !== "undefined") {
     // Merge, never replace: posting (above) and setup (mock/setup.ts) keep their knobs on the same object.
     const w = window as unknown as { __cfMock?: Record<string, unknown> & Partial<MockSkillControls> };

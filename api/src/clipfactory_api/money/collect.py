@@ -239,33 +239,79 @@ def _write_days(deps: MoneyDeps, user_id: str, platform: str, days: list[dict[st
     return written
 
 
+def _set_window(deps: MoneyDeps, pk: str, sk: str, name: str, value: dict[str, Any]) -> None:
+    """``SET revenueWindows.#n = :w`` only (never a put): the map is made first when the Post has none yet, and a Post
+    that is gone is never brought back (§27.6)."""
+    for _ in range(2):
+        try:
+            deps.store.update_expr(
+                pk,
+                sk,
+                "SET #w.#n = :v",
+                condition="attribute_exists(#w)",
+                names={"#w": "revenueWindows", "#n": name},
+                values={":v": value},
+            )
+            return
+        except db.ConditionFailed:
+            try:
+                deps.store.update_expr(
+                    pk,
+                    sk,
+                    "SET #w = :m",
+                    condition="attribute_exists(#pk) AND attribute_not_exists(#w)",
+                    names={"#w": "revenueWindows", "#pk": "pk"},
+                    values={":m": {name: value}},
+                )
+                return
+            except db.ConditionFailed:
+                if deps.store.get(pk, sk) is None:
+                    return  # the post is gone
+                continue  # someone made the map a moment ago: set the key inside it
+
+
 def _write_clip_money(deps: MoneyDeps, user_id: str, reading: sources.Reading, now: datetime) -> None:
-    """YouTube's estimate per Clip Factory video, on its Post (``SET revenue`` only, never through the metrics)."""
-    if not reading.videos:
+    """YouTube's estimate per Clip Factory video, on its Post (``SET revenue`` and ``SET revenueWindows.<n>`` only,
+    never through the metrics)."""
+    if not reading.videos and not reading.windows:
         return
+    if reading.windows_failed:
+        log("warning", "money.windows_failed", periods=",".join(sorted(reading.windows_failed)))
     pk = db.user_pk(user_id)
     for post in deps.store.query_all(pk, "POST#"):
         if post.get("type") != "post" or post.get("platform") != "youtube":
             continue
         vid = post.get("statsId") or post.get("platformPostId")
-        if vid not in reading.videos:
+        if not isinstance(vid, str):
             continue
-        try:
-            deps.store.update(
-                pk,
-                str(post["sk"]),
-                {
-                    "revenue": {
-                        "amountMicros": reading.videos[str(vid)],
-                        "currency": "USD",
-                        "through": reading.videos_through,
-                        "source": "youtube.estimatedRevenue",
-                        "fetchedAt": iso(now),
-                    }
-                },
-            )
-        except db.ConditionFailed:
-            continue
+        if vid in reading.videos:
+            lifetime: dict[str, Any] = {
+                "amountMicros": reading.videos[vid],
+                "currency": "USD",
+                "through": reading.videos_through,
+                "source": "youtube.estimatedRevenue",
+                "fetchedAt": iso(now),
+            }
+            if vid in reading.video_views:
+                lifetime["views"] = reading.video_views[vid]
+            try:
+                deps.store.update(pk, str(post["sk"]), {"revenue": lifetime})
+            except db.ConditionFailed:
+                continue
+        for name, window in reading.windows.items():
+            found = window["videos"].get(vid)
+            if found is None:
+                continue  # a failed chunk: the period keeps its previous value (logged once below)
+            value: dict[str, Any] = {
+                "amountMicros": int(found["amountMicros"]),
+                "views": int(found["views"]),
+                "from": window["from"],
+                "to": window["to"],
+                "currency": "USD",
+                "source": "youtube.estimatedRevenue",
+                "fetchedAt": iso(now),
+            }
+            _set_window(deps, pk, str(post["sk"]), name, value)
 
 
 def _set_once(deps: MoneyDeps, user_id: str, platform: str, name: str, value: str) -> bool:

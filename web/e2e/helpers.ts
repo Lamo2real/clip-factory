@@ -17,6 +17,7 @@ export const ROUTES: string[] = [
   "/jobs/:failed",
   "/review",
   "/library",
+  "/money",
   ...SETTINGS_ROUTES,
   "/get-app",
   "/mock-oauth/youtube",
@@ -114,7 +115,8 @@ export async function findOverflow(page: Page): Promise<{ page: number; viewport
       if (p && !el.closest("[data-tip]")) {
         const ps = getComputedStyle(p);
         const pr = p.getBoundingClientRect();
-        if (!scrollable(ps) && ps.display !== "inline" && r.width > 0 && r.right > pr.right + 1.5 && s.position !== "absolute") {
+        // A `display: contents` parent has no box of its own (its children are laid out in the grandparent).
+        if (!scrollable(ps) && ps.display !== "inline" && ps.display !== "contents" && r.width > 0 && r.right > pr.right + 1.5 && s.position !== "absolute") {
           items.push({ selector: `${describe(el)} > outside ${describe(p)}`, text: (el.textContent ?? "").trim().slice(0, 60), scrollWidth: Math.round(r.right), clientWidth: Math.round(pr.right) });
         }
       }

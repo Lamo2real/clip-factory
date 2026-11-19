@@ -138,6 +138,12 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     refreshMoney: () => call("POST", "/money/refresh"),
     seenMoney: (key) => call("POST", "/money/seen", { key }),
     setMoneyCountry: (country) => call("PUT", "/money/country", { country }),
+    getMoneySummary: (platforms, chart) => call("GET", `/money/summary${q({ platforms: platforms.join(","), chart })}`),
+    getMoneyClips: (query) =>
+      call(
+        "GET",
+        `/money/clips${q({ platforms: query.platforms.join(","), period: query.period, sort: query.sort, cursor: query.cursor, limit: query.limit })}`,
+      ),
     listFollows: () => call("GET", "/follows"),
     lookupFollow: (text, platform) => call("POST", "/follows/lookup", platform ? { text, platform } : { text }),
     follow: async (platform, platformId) =>

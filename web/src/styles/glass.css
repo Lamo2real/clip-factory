@@ -301,7 +301,10 @@ html:is(.see-through, [data-backdrop])
     .week__title,
     .week__learn,
     .week__money,
-    .skill-meta
+    .skill-meta,
+    .dash-head__text,
+    .dash-head__link,
+    :is(.money-dash, .dash-body) > .dash-grey
   ) {
   border-radius: var(--r-md);
   background: rgb(var(--green-rgb) / var(--panel-veil));
@@ -318,7 +321,11 @@ html:is(.see-through, [data-backdrop])
 }
 /* The page title and its line are a plate of their own, with a panel's corner and more room above and below. (Doubled
    class: the shared rule above weighs as much as two classes through :is.) */
-html:is(.see-through, [data-backdrop]) .page-head__text.page-head__text {
+html:is(.see-through, [data-backdrop]) .dash-head__link.dash-head__link {
+  padding-inline: 12px;
+}
+html:is(.see-through, [data-backdrop]) .page-head__text.page-head__text,
+html:is(.see-through, [data-backdrop]) .dash-head__text.dash-head__text {
   padding-block: clamp(18px, 2.4vw, 28px);
   border-radius: var(--r-lg);
 }
@@ -332,7 +339,9 @@ html:is(.see-through, [data-backdrop])
     .week__title,
     .week__learn,
     .week__money,
-    .skill-meta
+    .skill-meta,
+    .dash-head__link,
+    :is(.money-dash, .dash-body) > .dash-grey
   ) {
   width: fit-content;
   max-width: 100%;

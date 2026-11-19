@@ -384,12 +384,13 @@ def test_each_clip_gets_youtubes_estimate_without_touching_its_numbers(
             "metrics": {"views": 1234, "extra": {"engagedViews": 900}},
         }
     )
-    per_video = report(["video", "estimatedRevenue"], [["vidA", 0.42], ["notOurs", 9.99]])
+    per_video = report(["video", "estimatedRevenue", "views"], [["vidA", 0.42, 1234], ["notOurs", 9.99, 5]])
+    windows = [(200, report(["video", "estimatedRevenue", "views"], [["vidA", 0.1 * n, 100 * n]])) for n in (1, 2, 3)]
     fake_http.answers.extend(
-        yt_answers((200, money_days(("2026-11-16", 0.42, 0.4))), extra=[(400, {}), (200, per_video)])
+        yt_answers((200, money_days(("2026-11-16", 0.42, 0.4))), extra=[(400, {}), (200, per_video), *windows])
     )
     collect.run_platform(deps, USER, "youtube", now=NOW, country=None)
-    video_url = unquote(fake_http.urls[-1])
+    video_url = unquote(fake_http.urls[-4])
     assert "dimensions=video" in video_url
     assert "filters=video==vidA" in video_url
     assert "startDate=2026-11-01" in video_url
@@ -818,6 +819,7 @@ def test_forget_deletes_the_youtube_money_only(store: db.Store) -> None:
             "platform": "youtube",
             "status": "posted",
             "revenue": {"amountMicros": 5},
+            "revenueWindows": {"30": {"amountMicros": 5}},
         }
     )
     out = stats_handle({"action": "forget", "userId": USER, "platform": "youtube"}, make_deps(store, FakeHttp()))
@@ -829,6 +831,7 @@ def test_forget_deletes_the_youtube_money_only(store: db.Store) -> None:
     post = store.get(pk, "POST#01JZ0000000000000000000001")
     assert post is not None
     assert "revenue" not in post
+    assert "revenueWindows" not in post  # §27.6
 
 
 # --- the Lambda --------------------------------------------------------------------------------------------------
@@ -934,3 +937,131 @@ def test_a_week_without_reported_money_has_no_money_field(call: Call) -> None:
     query = {"from": "2026-11-08T23:00:00.000Z", "to": "2026-11-15T23:00:00.000Z"}
     _, body = call("GET", "/v1/weeks/2026-W46", query=query)
     assert "revenueByPlatform" not in body["week"]
+
+
+# --- §27.6: per-clip money over the dashboard's periods ---------------------------------------------------------
+
+YT_POST = "POST#01JZ0000000000000000000009"
+
+
+def _yt_post(store: db.Store, **extra: Any) -> None:
+    store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": YT_POST,
+            "type": "post",
+            "postId": "01JZ0000000000000000000009",
+            "clipId": "01JZCLIP000000000000000009",
+            "platform": "youtube",
+            "status": "posted",
+            "statsId": "vidA",
+            "postedAt": "2026-08-01T10:00:00.000Z",
+            "metrics": {"views": 9_999},
+            **extra,
+        }
+    )
+
+
+def _video_report(*rows: tuple[str, float, int]) -> tuple[int, dict[str, Any]]:
+    return 200, report(["video", "estimatedRevenue", "views"], [list(r) for r in rows])
+
+
+def test_period_money_is_anchored_on_youtubes_newest_day_with_the_same_reports_views(
+    deps: MoneyDeps, store: db.Store, fake_http: FakeHttp
+) -> None:
+    connect(store, "youtube", [*YT_SCOPES, MONETARY], account_id="UC1")
+    _yt_post(store, captions={"youtubeTitle": "kept"})
+    days = money_days(("2026-11-14", 0.5, 0.5), ("2026-11-15", 0.6, 0.6))  # YouTube has finished up to the 15th
+    fake_http.answers.extend(
+        yt_answers(
+            (200, days),
+            extra=[
+                (400, {}),
+                _video_report(("vidA", 12.5, 20_000)),
+                _video_report(("vidA", 0.75, 900)),
+                _video_report(("vidA", 2.0, 3_100)),
+                _video_report(),  # 90 days: YouTube left the video out (no money, no views)
+            ],
+        )
+    )
+    collect.run_platform(deps, USER, "youtube", now=NOW, country=None)
+    urls = [unquote(u) for u in fake_http.urls if "dimensions=video" in u]
+    assert len(urls) == 4
+    assert "startDate=2026-08-01&endDate=2026-11-17" in urls[0]  # lifetime: as before, to yesterday
+    assert "metrics=estimatedRevenue,views" in urls[0]
+    assert "startDate=2026-11-09&endDate=2026-11-15" in urls[1]  # 7 days ending on YouTube's newest day
+    assert "startDate=2026-10-17&endDate=2026-11-15" in urls[2]
+    assert "startDate=2026-08-18&endDate=2026-11-15" in urls[3]
+    post = store.get(db.user_pk(USER), YT_POST)
+    assert post is not None
+    assert post["revenue"]["views"] == 20_000
+    windows = post["revenueWindows"]
+    assert windows["7"] == {
+        "amountMicros": 750_000,
+        "views": 900,
+        "from": "2026-11-09",
+        "to": "2026-11-15",
+        "currency": "USD",
+        "source": "youtube.estimatedRevenue",
+        "fetchedAt": "2026-11-18T06:00:00.000Z",
+    }
+    assert windows["30"]["amountMicros"] == 2_000_000
+    assert windows["90"]["amountMicros"] == 0
+    assert windows["90"]["views"] == 0
+    # Every other field of the Post is untouched.
+    assert post["metrics"] == {"views": 9_999}
+    assert post["captions"] == {"youtubeTitle": "kept"}
+
+
+def test_period_money_is_set_key_by_key_and_a_failed_period_keeps_its_old_value(
+    deps: MoneyDeps, store: db.Store, fake_http: FakeHttp, table: FakeTable
+) -> None:
+    connect(store, "youtube", [*YT_SCOPES, MONETARY], account_id="UC1")
+    old = {"amountMicros": 1, "views": 1, "from": "2026-08-01", "to": "2026-10-29", "currency": "USD"}
+    _yt_post(store, revenueWindows={"90": old})
+    fake_http.answers.extend(
+        yt_answers(
+            (200, money_days(("2026-11-15", 0.6, 0.6))),
+            extra=[
+                (400, {}),
+                _video_report(("vidA", 1.0, 1)),
+                _video_report(("vidA", 0.1, 10)),
+                _video_report(("vidA", 0.2, 20)),
+                (500, {"error": {}}),  # 90 days failed today
+            ],
+        )
+    )
+    table.calls.clear()
+    out = collect.run_platform(deps, USER, "youtube", now=NOW, country=None)
+    assert out.state == "earning"
+    assert len(revenue_rows(store, "youtube")) == 1  # the days are written whatever the periods do
+    windows = (store.get(db.user_pk(USER), YT_POST) or {})["revenueWindows"]
+    assert windows["90"] == old
+    assert windows["7"]["amountMicros"] == 100_000
+    post_writes = [
+        kw
+        for name, kw in table.calls
+        if name in {"put_item", "update_item"} and kw.get("Key", kw.get("Item", {})).get("sk") == YT_POST
+    ]
+    assert post_writes
+    assert all(kw.get("UpdateExpression") for kw in post_writes)  # UpdateItem only, never a put
+    window_writes = [
+        kw["UpdateExpression"]
+        for kw in post_writes
+        if "revenueWindows" in kw.get("ExpressionAttributeNames", {}).values()
+    ]
+    assert window_writes == ["SET #w.#n = :v", "SET #w.#n = :v"]
+
+
+def test_period_money_never_brings_a_deleted_post_back(deps: MoneyDeps, store: db.Store) -> None:
+    collect._set_window(deps, db.user_pk(USER), "POST#gone", "7", {"amountMicros": 1})
+    assert store.get(db.user_pk(USER), "POST#gone") is None
+
+
+def test_no_new_day_means_no_period_reads(deps: MoneyDeps, store: db.Store, fake_http: FakeHttp) -> None:
+    connect(store, "youtube", [*YT_SCOPES, MONETARY], account_id="UC1")
+    _yt_post(store)
+    fake_http.answers.extend(yt_answers((200, money_days()), extra=[(400, {}), _video_report()]))
+    collect.run_platform(deps, USER, "youtube", now=NOW, country=None)
+    assert len([u for u in fake_http.urls if "dimensions=video" in u]) == 1  # the lifetime read only
+    assert "revenueWindows" not in (store.get(db.user_pk(USER), YT_POST) or {})

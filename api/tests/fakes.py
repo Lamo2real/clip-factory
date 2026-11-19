@@ -361,7 +361,13 @@ def apply_update(expression: str, item: dict[str, Any], names: dict[str, str], v
         for part in _split_top(body):
             if keyword == "SET":
                 target, expr = part.split("=", 1)
-                item[name(target)] = value(expr)
+                if "." in target:  # a map key: "#w.#n" (DynamoDB needs the map to exist already)
+                    parent, child = target.strip().split(".", 1)
+                    holder = item.get(name(parent))
+                    assert isinstance(holder, dict), f"{parent} is not a map"
+                    holder[name(child)] = value(expr)
+                else:
+                    item[name(target)] = value(expr)
             elif keyword == "REMOVE":
                 item.pop(name(part), None)
             elif keyword == "ADD":

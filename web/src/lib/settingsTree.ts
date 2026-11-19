@@ -212,6 +212,13 @@ export const TREES: Tree[] = [
         icon: "coin",
         apples: [
           {
+            id: "money-dashboard",
+            name: "Money dashboard",
+            leaf: "The money each app reported, and what each clip earned.",
+            words: ["revenue", "mrr", "dashboard", "earnings", "earnings per video", "money per video", "money per clip", "income"],
+            href: "/money",
+          },
+          {
             id: "money-country",
             name: "Your country",
             leaf: "Some apps have different goals in each country. Pick yours once.",

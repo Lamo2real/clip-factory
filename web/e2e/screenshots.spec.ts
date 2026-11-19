@@ -446,3 +446,53 @@ for (const size of SIZES) {
     }
   });
 }
+
+// The money dashboard (§27.9): dash_many at every size the owner uses, light and dark; the other states at a phone and
+// a desktop. Saved to web/test-results/screens/money-dashboard-{scenario}-{w}x{h}-{scheme}.png (CF_MONEY_SCREEN_DIR
+// for another folder). The clock is fixed so every run draws the same days.
+const moneyDir = process.env.CF_MONEY_SCREEN_DIR || join(import.meta.dirname, "..", "test-results", "screens");
+mkdirSync(moneyDir, { recursive: true });
+const MONEY_SIZES: { w: number; h: number; touch: boolean }[] = [
+  { w: 320, h: 568, touch: true },
+  { w: 375, h: 812, touch: true },
+  { w: 390, h: 844, touch: true },
+  { w: 430, h: 932, touch: true },
+  { w: 768, h: 1024, touch: true },
+  { w: 1024, h: 768, touch: false },
+  { w: 1280, h: 800, touch: false },
+  { w: 1440, h: 900, touch: false },
+  { w: 1920, h: 1080, touch: false },
+  { w: 1200, h: 820, touch: false },
+  { w: 380, h: 600, touch: false },
+];
+const MONEY_SHOTS = [
+  ...MONEY_SIZES.map((s) => ({ scenario: "dash_many", ...s })),
+  ...["dash_youtube_only", "dash_nothing", "dash_error", "dash_two_currencies"].flatMap((scenario) => [
+    { scenario, w: 375, h: 812, touch: true },
+    { scenario, w: 1440, h: 900, touch: false },
+  ]),
+];
+for (const shot of MONEY_SHOTS) {
+  for (const scheme of ["light", "dark"] as const) {
+    test(`screenshot money dashboard ${shot.scenario} ${shot.w}x${shot.h} ${scheme}`, async ({ browser }) => {
+      const ctx = await browser.newContext({
+        viewport: { width: shot.w, height: shot.h },
+        hasTouch: shot.touch,
+        isMobile: shot.touch && shot.w < 768,
+        colorScheme: scheme,
+        reducedMotion: "reduce",
+      });
+      const page = await ctx.newPage();
+      await page.clock.setFixedTime(new Date("2026-11-19T12:00:00Z"));
+      await page.goto("/");
+      await page.evaluate((n) => sessionStorage.setItem("cf-mock-money", JSON.stringify({ scenario: n, country: "US", seen: [] })), shot.scenario);
+      await page.goto("/money");
+      await settle(page);
+      await page.waitForTimeout(500);
+      const name = `money-dashboard-${shot.scenario}-${shot.w}x${shot.h}-${scheme}`;
+      await page.screenshot({ path: join(moneyDir, `${name}.png`) });
+      await page.screenshot({ path: join(moneyDir, `${name}-full.png`), fullPage: true });
+      await ctx.close();
+    });
+  }
+}

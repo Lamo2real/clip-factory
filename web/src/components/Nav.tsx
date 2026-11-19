@@ -10,7 +10,7 @@ import { Icon, type IconName } from "./Icon.tsx";
 import { A } from "./ui.tsx";
 
 interface Item {
-  key: "home" | "jobs" | "review" | "library" | "settings";
+  key: "home" | "jobs" | "review" | "library" | "money" | "settings";
   href: string;
   label: string;
   icon: IconName;
@@ -21,6 +21,7 @@ const ITEMS: Item[] = [
   { key: "jobs", href: "/jobs", label: "Jobs", icon: "layers" },
   { key: "review", href: "/review", label: "Review", icon: "review" },
   { key: "library", href: "/library", label: "Library", icon: "library" },
+  { key: "money", href: "/money", label: "Money", icon: "coin" },
   { key: "settings", href: "/settings", label: "Settings", icon: "settings" },
 ];
 

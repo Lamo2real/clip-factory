@@ -112,6 +112,17 @@ export class SoundEngine {
     }
   }
 
+  /**
+   * Builds the audio context ahead of the click, on the press that starts it (pointerdown, or keydown for a key that
+   * clicks). Building one is slow the first time (100 ms in headless Chromium, far more on a busy machine), and done
+   * inside the first click it held that click's frame: the first page change after load drew late and the menu
+   * highlight started its slide late. The click still resumes it (the gesture iOS needs). Nothing when muted.
+   */
+  warm(): void {
+    if (this.ctx || !this.enabled()) return;
+    this.context();
+  }
+
   private noiseBuffer(ctx: AudioContext): AudioBuffer {
     if (!this.noise) {
       const buffer = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.5), ctx.sampleRate);
@@ -207,12 +218,26 @@ export function cheerOnNextTap(engine: SoundEngine, root: Document = document): 
   return () => root.removeEventListener("click", onClick, { capture: true });
 }
 
-/** Listens for clicks in the capture phase so a handler that stops propagation cannot silence the sound. */
+/**
+ * Listens for clicks in the capture phase so a handler that stops propagation cannot silence the sound. The press
+ * before a click (pointerdown, or Enter / Space on a control) builds the audio context first (`warm`), so the click
+ * itself stays cheap; presses make no sound.
+ */
 export function installClickSounds(engine: SoundEngine, root: Document = document): () => void {
   const onClick = (e: MouseEvent) => {
     const kind = classifyClick(e.target);
     if (kind) engine.play(kind, e.target);
   };
+  const onPress = (e: Event) => {
+    if (e instanceof KeyboardEvent && e.key !== "Enter" && e.key !== " ") return;
+    if (classifyClick(e.target)) engine.warm();
+  };
   root.addEventListener("click", onClick, { capture: true });
-  return () => root.removeEventListener("click", onClick, { capture: true });
+  root.addEventListener("pointerdown", onPress, { capture: true, passive: true });
+  root.addEventListener("keydown", onPress, { capture: true, passive: true });
+  return () => {
+    root.removeEventListener("click", onClick, { capture: true });
+    root.removeEventListener("pointerdown", onPress, { capture: true });
+    root.removeEventListener("keydown", onPress, { capture: true });
+  };
 }
