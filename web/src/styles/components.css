@@ -515,6 +515,15 @@
   font-size: var(--fs-small);
   color: var(--ink-2);
 }
+/* Only where a mouse can drag a file in; phones only tap. */
+.dropzone__or-drop {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dropzone__or-drop {
+    display: inline;
+  }
+}
 .dropzone__text strong {
   font-size: 1rem;
   color: var(--ink);

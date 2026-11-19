@@ -138,6 +138,7 @@
   }
 }
 .newjob {
+  position: relative;
   display: grid;
   gap: 16px;
   padding: var(--inset);
@@ -147,6 +148,52 @@
 }
 .newjob .segmented {
   justify-self: start;
+}
+/* A video or a link dragged over the card (§12.4): one soft fill over the whole card with plain words, no edges. */
+.newjob__drop {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  border-radius: inherit;
+  text-align: center;
+  color: var(--ink);
+  background: linear-gradient(rgb(var(--green-leaf-rgb) / 0.2), rgb(var(--green-leaf-rgb) / 0.2)), rgb(var(--green-rgb) / 0.94);
+  pointer-events: none;
+  animation: newjob-drop-in 160ms var(--ease-out) both;
+}
+.newjob__drop > svg {
+  animation: newjob-drop-rise 320ms var(--ease-spring) both;
+}
+.newjob__drop p {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+@keyframes newjob-drop-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes newjob-drop-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .newjob__drop,
+  .newjob__drop > svg {
+    animation: none;
+  }
+}
+.reduce-motion .newjob__drop,
+.reduce-motion .newjob__drop > svg {
+  animation: none;
 }
 /* Narrow phones: the two options would wrap into a ragged two-row blob, so they become two equal columns that
    always stay side by side; a long label wraps inside its own half. */

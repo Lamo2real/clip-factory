@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import { putFile } from "../../api/upload.ts";
@@ -8,6 +8,7 @@ import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { ActGlyph, Button, Progress, Segmented, Stepper } from "../../components/ui.tsx";
+import { classifyDrop, dragKind, dragMayHoldText, isVideoFile, videoType, type Dropped, type DragKind } from "../../lib/drops.ts";
 import { bytes } from "../../lib/format.ts";
 import { checkLink, extractLink, KIND_LABEL, PLATFORM_NAMES } from "../../lib/links.ts";
 import { useAction } from "../../lib/motion.ts";
@@ -17,6 +18,8 @@ import { useUnsaved } from "../../features/help/unsaved.ts";
 const MAX_UPLOAD = 5 * 1024 ** 3;
 
 type Mode = "link" | "upload";
+/** No dragover for this long means the drag left without a dragleave (Escape, a lost event): the highlight goes. */
+const DRAG_IDLE_MS = 1000;
 type Count = "range" | "exact";
 
 /** Use a video file on a failed link job (docs/CONTRACTS.md §29.7) opens Home at `/?file=1&from={jobId}`: the form
@@ -46,6 +49,11 @@ export function NewJobForm() {
   const linkInput = useRef<HTMLInputElement>(null);
   const [nudge, setNudge] = useState(false);
   const mounted = useRef(true);
+  // A video or a link dragged over the card (§12.4): one soft highlight for the whole card, counted so moving over
+  // the fields inside it never makes it flicker.
+  const [over, setOver] = useState<DragKind>(null);
+  const dragDepth = useRef(0);
+  const dragIdle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Action motion (§20.11 (a)): Make clips' scissors fly; Paste drops in; Clear spins away; the dropzone's arrow rises.
   const send = useAction("send");
   const pasteAct = useAction("paste");
@@ -85,6 +93,19 @@ export function NewJobForm() {
     };
   }, [start.from]);
 
+  // A drop anywhere (or the drag ending) clears the highlight, even when the drop landed outside the card.
+  useEffect(() => {
+    if (!over) return;
+    const done = () => endDrag();
+    window.addEventListener("drop", done);
+    window.addEventListener("dragend", done);
+    return () => {
+      window.removeEventListener("drop", done);
+      window.removeEventListener("dragend", done);
+    };
+  }, [over]);
+  useEffect(() => () => clearTimeout(dragIdle.current), []);
+
   const check = useMemo(() => checkLink(link), [link]);
   const min = me?.settings.clipMin ?? 5;
   const max = me?.settings.clipMax ?? 10;
@@ -114,18 +135,92 @@ export function NewJobForm() {
     }
   }
 
-  function pick(f: File | null) {
+  function pick(f: File | null, how: "tap" | "drop" = "tap") {
     setFile(f);
     setFileError(null);
     if (!f) return;
     // Played on the file arriving, not on the tap that opens the picker (§20.11 (a)).
-    if (!f.type.startsWith("video/")) {
-      setFileError("That is not a video. Tap the box and pick an MP4 or MOV file.");
+    if (!isVideoFile(f)) {
+      setFileError(how === "drop" ? "That is not a video. Drop an MP4, MOV or WebM video." : "That is not a video. Tap the box and pick an MP4 or MOV file.");
       uploadAct.fail();
     } else if (f.size > MAX_UPLOAD) {
       setFileError(`That file is ${bytes(f.size)}. Videos can be up to 5 GB. Pick a shorter one.`);
       uploadAct.fail();
     } else uploadAct.play();
+  }
+
+  function endDrag() {
+    dragDepth.current = 0;
+    clearTimeout(dragIdle.current);
+    setOver(null);
+  }
+
+  function keepDrag() {
+    clearTimeout(dragIdle.current);
+    dragIdle.current = setTimeout(endDrag, DRAG_IDLE_MS);
+  }
+
+  /** The card takes files and links; plain text only when it is not going into a text box (it types there). */
+  function takesDrag(e: DragEvent<HTMLElement>): boolean {
+    if (dragKind(e.dataTransfer)) return true;
+    const t = e.target as HTMLElement | null;
+    return dragMayHoldText(e.dataTransfer) && !t?.closest?.("input, textarea");
+  }
+
+  function dragEnter(e: DragEvent<HTMLFormElement>) {
+    const kind = dragKind(e.dataTransfer);
+    if (!kind) return;
+    e.preventDefault();
+    dragDepth.current++;
+    setOver(kind);
+    keepDrag();
+  }
+
+  function dragOver(e: DragEvent<HTMLFormElement>) {
+    if (!takesDrag(e)) return;
+    // Without this the drop would be refused (the window guard) or the file opened instead of picked.
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    const kind = dragKind(e.dataTransfer);
+    if (kind) {
+      if (over !== kind) setOver(kind);
+      keepDrag();
+    }
+  }
+
+  function dragLeave(e: DragEvent<HTMLFormElement>) {
+    if (!dragKind(e.dataTransfer)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) endDrag();
+  }
+
+  function drop(e: DragEvent<HTMLFormElement>) {
+    if (!takesDrag(e)) return;
+    const dropped = classifyDrop(e.dataTransfer);
+    endDrag();
+    if (dropped.kind === "none") return;
+    e.preventDefault();
+    takeDrop(dropped);
+  }
+
+  /** A dropped video is picked like the file picker's; a dropped link is pasted like Paste's. Both switch the bar. */
+  function takeDrop(d: Exclude<Dropped, { kind: "none" }>) {
+    if (progress !== null) {
+      toast.info("The upload is still running. Tap Cancel upload first.");
+      return;
+    }
+    if (busy) return;
+    setNudge(false);
+    if (d.kind === "link") {
+      setMode("link");
+      takeLink(d.url);
+      setTouched(true);
+      pasteAct.play();
+      return;
+    }
+    setMode("upload");
+    pick(d.file, "drop");
+    if (d.kind === "video" && d.others > 0) toast.info(`One video per job. Clip Factory took ${d.file.name}.`);
   }
 
   async function submit(e: FormEvent) {
@@ -139,7 +234,7 @@ export function NewJobForm() {
         source = { type: "link", url: check.url };
       } else {
         const f = file!;
-        const contentType = f.type || "video/mp4";
+        const contentType = videoType(f);
         const up = await api().createUpload({ filename: f.name, contentType, size: f.size });
         abort.current = new AbortController();
         setProgress(0);
@@ -169,7 +264,16 @@ export function NewJobForm() {
   const platform = check.state === "ok" ? check.platform : check.state === "error" ? check.platform : undefined;
 
   return (
-    <form className="newjob" onSubmit={submit} noValidate aria-labelledby={`${id}-h`}>
+    <form
+      className={`newjob${over ? " is-drop" : ""}`}
+      onSubmit={submit}
+      noValidate
+      aria-labelledby={`${id}-h`}
+      onDragEnter={dragEnter}
+      onDragOver={dragOver}
+      onDragLeave={dragLeave}
+      onDrop={drop}
+    >
       <h2 className="sr-only" id={`${id}-h`}>
         Make new clips
       </h2>
@@ -294,7 +398,9 @@ export function NewJobForm() {
               ) : (
                 <>
                   <strong>Tap to choose a video</strong>
-                  <span>MP4, MOV or WebM, up to 5 GB</span>
+                  <span>
+                    <span className="dropzone__or-drop">Or drop it here. </span>MP4, MOV or WebM, up to 5 GB
+                  </span>
                 </>
               )}
             </span>
@@ -374,6 +480,14 @@ export function NewJobForm() {
         </Button>
         <p className="newjob__hint">Nothing gets posted until you tap Keep.</p>
       </div>
+
+      {over ? (
+        // Pointer-only: the file box stays a labelled file input and the link box a labelled text box for keyboards.
+        <div className="newjob__drop" aria-hidden="true">
+          <Icon name={over === "file" ? "upload" : "link"} size={30} />
+          <p>{over === "file" ? "Drop your video here" : "Drop your link here"}</p>
+        </div>
+      ) : null}
     </form>
   );
 }
