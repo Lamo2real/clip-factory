@@ -159,7 +159,7 @@ export function MoneyClipList({ choice, onSort }: { choice: DashChoice; onSort: 
     ? `${period === "all" ? "Since each clip was posted" : range}, up to ${plainShort(data.to)}. YouTube's estimate.`
     : "Only YouTube shares money per video.";
   return (
-    <section className="dash-clips" aria-labelledby="dash-clips-title" data-help="money-dash-clips">
+    <section className="dash-clips glass" aria-labelledby="dash-clips-title" data-help="money-dash-clips">
       <div className="dash-section-head dash-clips__head">
         <div>
           <h2 className="dash-section-title" id="dash-clips-title">

@@ -141,11 +141,13 @@ html[data-titlebar="overlay"] .titlebar-drag {
 }
 .tabbar__list {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   height: 100%;
 }
 .tabbar__cell {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   place-items: center;
 }
 .tabbar__item {
