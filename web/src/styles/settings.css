@@ -1454,7 +1454,6 @@ ol.md__list {
   height: 34px;
   border-radius: 50%;
   background: rgb(var(--green-deep-rgb) / 0.55);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.3);
   color: var(--ink);
 }
 .money-card__name {
@@ -1484,7 +1483,6 @@ ol.md__list {
   padding: 8px 12px;
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.25);
   font-weight: 600;
 }
 .money-card__extras {
@@ -1567,8 +1565,6 @@ ol.md__list {
   inset: 0 auto 0 0;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--green-leaf), #8cc7a8);
-  /* Cased in bone like the Glide bar, so the fill still shows on a light window. */
-  box-shadow: inset 0 0 0 1.5px var(--bone);
   animation: money-grow 900ms var(--ease-out) both;
   transform-origin: left center;
 }
@@ -1614,7 +1610,6 @@ ol.md__list {
   inset: 8px;
   border-radius: 50%;
   background: var(--fill);
-  box-shadow: inset 0 0 0 1px rgb(var(--line-rgb) / 0.4);
   z-index: -1;
 }
 .money-why__text {
