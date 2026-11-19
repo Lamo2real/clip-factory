@@ -1,5 +1,5 @@
 {
- "version": "ef03cf96246d",
+ "version": "05dce021acd7",
  "parts": [
   {
    "id": "app-map",
@@ -57,7 +57,7 @@
    "id": "contracts-5",
    "title": "CONTRACTS: 5. HTTP API (API Gateway HTTP API v2 → Lambda `cf-prod-api`)",
    "line": "Base: ${apiUrl}/v1. JSON in and out, camelCase. Every route requires the JWT except GET /v1/health.",
-   "chars": 12937
+   "chars": 13238
   },
   {
    "id": "contracts-6",
@@ -525,7 +525,7 @@
    "id": "architecture-services-and-why-each-one",
    "title": "ARCHITECTURE: Services and why each one",
    "line": "Only managed, pay-per-use services. Nothing runs while the app is idle except storage. Why each choice was made is in",
-   "chars": 13227
+   "chars": 13333
   },
   {
    "id": "architecture-data-flows",

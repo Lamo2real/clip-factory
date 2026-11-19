@@ -423,7 +423,7 @@ run "ask_assistant_additions" {
   }
 
   assert {
-    condition     = toset([for r in [aws_apigatewayv2_route.authorized, aws_apigatewayv2_route.health] : r.route_key]) == toset(["ANY /v1/{proxy+}", "GET /v1/health"])
+    condition     = toset([for r in [aws_apigatewayv2_route.authorized, aws_apigatewayv2_route.health, aws_apigatewayv2_route.preflight] : r.route_key]) == toset(["ANY /v1/{proxy+}", "GET /v1/health", "OPTIONS /v1/{proxy+}"])
     error_message = "No new HTTP API routes."
   }
 }
@@ -434,5 +434,42 @@ run "ask_off_without_a_worker" {
   assert {
     condition     = one(aws_lambda_function.fn["api"].environment).variables["ASK_ENABLED"] == "false" && !strcontains(aws_iam_role_policy.fn["api"].policy, "AskWorker")
     error_message = "Without the worker the assistant is off and no permission is granted."
+  }
+}
+
+# docs/CONTRACTS.md §5: the browser's CORS preflight carries no token, so it must not hit the JWT authorizer of
+# ANY /v1/{proxy+} (it got 401 and every signed-in call failed in every browser). A public OPTIONS route, with no
+# integration, lets API Gateway's CORS answer it.
+run "browser_preflight_is_public" {
+  command = plan
+
+  assert {
+    condition     = aws_apigatewayv2_route.preflight.route_key == "OPTIONS /v1/{proxy+}"
+    error_message = "The HTTP API needs an OPTIONS /v1/{proxy+} route for the browser's CORS preflight."
+  }
+
+  assert {
+    condition     = aws_apigatewayv2_route.preflight.authorization_type == "NONE"
+    error_message = "The preflight route must be public: browsers send OPTIONS without the Authorization header."
+  }
+
+  assert {
+    condition     = aws_apigatewayv2_route.preflight.target == null
+    error_message = "The preflight route needs no integration: API Gateway's CORS answers it and the Lambda never runs."
+  }
+
+  assert {
+    condition     = contains(one(aws_apigatewayv2_api.http.cors_configuration).allow_origins, "https://app.example.test")
+    error_message = "CORS must allow the app's origin."
+  }
+
+  assert {
+    condition     = contains(one(aws_apigatewayv2_api.http.cors_configuration).allow_headers, "authorization")
+    error_message = "CORS must allow the authorization header, or every signed-in call fails in the browser."
+  }
+
+  assert {
+    condition     = aws_apigatewayv2_route.authorized.authorization_type == "JWT"
+    error_message = "Every other /v1 route still needs the JWT."
   }
 }

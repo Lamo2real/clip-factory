@@ -17,8 +17,8 @@
 #               pushes the agent image (scripts/push-image.sh) once the ECR repository exists.
 #   web       - config.json from Terraform's outputs, version.json ("What's new": scripts/release-areas.sh over
 #               the commits since the live release), upload to S3, CloudFront refresh
-#   smoke     - the HTTP API answers /v1/health, the webhooks REST API refuses a Meta challenge without the
-#               verify token (403), the WebSocket API refuses a connection without a valid token (401), and
+#   smoke     - the HTTP API answers /v1/health and the browser's CORS preflight from the app, the webhooks
+#               REST API refuses a Meta challenge without the verify token (403), the WebSocket API refuses a connection without a valid token (401), and
 #               the app serves this release's config.json (with wsUrl) and version.json
 #   desktop-plan, desktop, desktop-upload, desktop-manifest - after the web deploy: the Mac (.dmg) and Windows
 #               (.exe) desktop apps (desktop/, Tauri) are rebuilt only when what they are built from changed or the
@@ -333,6 +333,31 @@ jobs:
             sleep 10
           done
           echo "::error::${url} did not return ok."
+          exit 1
+      - name: the API lets the app's browsers in (CORS preflight)
+        env:
+          API_URL: ${{ needs.infra.outputs.api_url }}
+          APP_URL: ${{ needs.infra.outputs.app_url }}
+        run: |
+          # What every browser sends before a signed-in call: OPTIONS with no token. It must be 2xx and allow the
+          # app's origin and the authorization header, or the app says it cannot reach Clip Factory (CONTRACTS §5).
+          url="${API_URL%/}/v1/jobs"
+          origin="${APP_URL%/}"
+          headers="${RUNNER_TEMP}/preflight-headers.txt"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            status="$(curl -sS --max-time 15 -o /dev/null -D "$headers" -w '%{http_code}' -X OPTIONS "$url" \
+              -H "Origin: ${origin}" -H "Access-Control-Request-Method: GET" \
+              -H "Access-Control-Request-Headers: authorization" || echo 000)"
+            allow_origin="$(tr -d '\r' < "$headers" | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2}')"
+            allow_headers="$(tr -d '\r' < "$headers" | awk -F': ' 'tolower($1)=="access-control-allow-headers"{print tolower($2)}')"
+            if [[ "$status" == 2?? ]] && [ "$allow_origin" = "$origin" ] && [[ ",${allow_headers// /}," == *",authorization,"* ]]; then
+              echo "CORS preflight passed: ${status}, allow-origin ${allow_origin}, allow-headers ${allow_headers}."
+              exit 0
+            fi
+            echo "Attempt ${attempt}: preflight got ${status}, allow-origin '${allow_origin}', allow-headers '${allow_headers}'; retrying in 10 s."
+            sleep 10
+          done
+          echo "::error::The browser's CORS preflight to ${url} from ${origin} is refused, so the web app cannot sign in in any browser."
           exit 1
       - name: the webhooks REST API refuses a Meta challenge without the verify token
         env:

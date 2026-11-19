@@ -179,7 +179,10 @@ resource "aws_cloudwatch_log_group" "http" {
   tags              = local.tags
 }
 
-# With CORS configured here, API Gateway answers every preflight OPTIONS itself, before routes and the authorizer.
+# With CORS configured here, API Gateway answers preflight OPTIONS itself (204 with the CORS headers), but only when
+# the request does not match a route that needs authorization: ANY /v1/{proxy+} below matches OPTIONS too, so the
+# browser's preflight (it carries no token) got 401 and every signed-in call failed in every browser. The public
+# OPTIONS route further down fixes that.
 resource "aws_apigatewayv2_api" "http" {
   name          = "${var.name}-http"
   protocol_type = "HTTP"
@@ -219,6 +222,15 @@ resource "aws_apigatewayv2_route" "authorized" {
   target             = "integrations/${aws_apigatewayv2_integration.api.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+# Browser preflight (CORS). A more specific method than ANY wins, so OPTIONS never reaches the JWT authorizer; with
+# cors_configuration set, API Gateway answers it itself with 204 and the CORS headers, so it needs no integration and
+# the Lambda never runs. Without it the preflight gets 401 and every signed-in call fails in every browser.
+resource "aws_apigatewayv2_route" "preflight" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "OPTIONS /v1/{proxy+}"
+  authorization_type = "NONE"
 }
 
 # The one public route: it says only whether the API is up and which version runs.
