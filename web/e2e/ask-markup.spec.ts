@@ -6,13 +6,18 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { findOverflow, settle } from "./helpers.ts";
+import { findOverflow, settle, stillBackdrop } from "./helpers.ts";
 
 const FIX = join(import.meta.dirname, "fixtures");
 const SCREENS = process.env.CF_ASK_SCREENS;
 const panel = (page: Page) => page.locator("#help-panel");
 const editor = (page: Page) => page.getByRole("dialog", { name: /Mark picture/ });
 const canvas = (page: Page) => page.locator(".mk__canvas");
+
+// WebKit on Linux paints without a GPU: hold the living backdrop still so frames stay cheap (helpers.ts, stillBackdrop).
+test.beforeEach(async ({ page, browserName }) => {
+  if (browserName === "webkit") await stillBackdrop(page);
+});
 
 async function openWithPicture(page: Page) {
   await page.goto("/");

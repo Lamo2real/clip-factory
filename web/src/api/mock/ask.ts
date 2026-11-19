@@ -3,7 +3,8 @@
 // worker that streams `ask.*` events over the mock WebSocket. Deterministic; nothing leaves the machine.
 //
 // Magic words, for tests only: #nokey (web search not set up), #search (searching and reading statuses), #slow
-// (first words after 9 s, so the panel falls back), #long (a long answer), #cut (an error after some words), #refuse, #gone (the socket
+// (first words after 9 s, so the panel falls back), #long (a long answer), #hold (some words, then it waits for Stop, at
+// most a minute), #cut (an error after some words), #refuse, #gone (the socket
 // drops), #429, #503, #off (assistant off: the §19 answer) and #budget (out of time).
 import { loadCorpus } from "../../features/help/kb.ts";
 import { rank } from "../../features/help/retrieve.ts";
@@ -285,6 +286,11 @@ async function worker(b: AskStartBody, send: (msg: unknown) => void, keyOn: bool
     if (q.includes("#cut") && seq === 3) {
       emit({ type: "ask.error", code: "model", message: "I couldn't think it through this time." });
       return;
+    }
+    // #hold: after a few words the answer waits for Stop, so a test can press it however slow the machine is (a
+    // timed stream can end first on a busy runner, and Stop is gone before the click lands).
+    if (q.includes("#hold") && seq === 3) {
+      for (const end = Date.now() + 60_000; !stopped.has(askId) && Date.now() < end; ) await wait(DELTA_MS);
     }
     await wait(DELTA_MS);
   }
