@@ -1,5 +1,5 @@
 {
-  "version": "c57853d33ec9",
+  "version": "89bfe8a784ec",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -3385,9 +3385,14 @@
       "keywords": [
         "cookies.txt",
         "blocked",
-        "download"
+        "download",
+        "private window",
+        "incognito",
+        "expired",
+        "get cookies.txt locally",
+        "ran out"
       ],
-      "answer": "You can skip this. Add them only if YouTube blocks a video.",
+      "answer": "You can skip this. Add them only if YouTube blocks a video. Export them from a private window, then close it.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Clip making**, then **YouTube help**.",
