@@ -633,6 +633,13 @@ test.describe("Ask Clip Factory launcher is mostly there on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 } });
   for (const route of ["/", "/jobs", "/settings", "/settings/look-and-feel", "/settings/look-and-feel/sounds", "/library", "/review"]) {
     test(`on ${route}`, async ({ page }) => {
+      // The mock's clips and posts are dated from now, so from 22:00 to about 04:00 their labels ("4 days ago") make the
+      // Library 15 px longer and the launcher fades at one spot more (14 of 39 against 13 allowed). Noon keeps the page
+      // the same at any hour; the clock still runs, so the fades keep their real timing.
+      const noon = new Date();
+      noon.setHours(12, 0, 0, 0);
+      await page.clock.install({ time: noon });
+      await page.clock.resume();
       await page.goto(route);
       await settle(page);
       await launcherSettled(page);

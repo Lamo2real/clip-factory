@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { visibleEdges } from "./edges.ts";
-import { animationsDone, findOverflow, settle } from "./helpers.ts";
+import { animationsDone, findOverflow, settle, stillBackdrop } from "./helpers.ts";
 
 // These cover Ask's §19/§26 path (plain answers, pictures inline): the mock's assistant (§28) is turned off here.
 // e2e/ask-assistant.spec.ts and e2e/ask-markup.spec.ts cover the assistant.
@@ -37,6 +37,11 @@ const picButton = (page: Page) => panel(page).getByRole("button", { name: "Add a
 const fileInput = (page: Page) => panel(page).locator('.help-panel__field input[type="file"]');
 const tiles = (page: Page) => panel(page).locator(".help-pic:not(.is-leaving)");
 const note = (page: Page) => panel(page).locator(".help-note");
+
+// WebKit on Linux paints without a GPU: hold the living backdrop still so frames stay cheap (helpers.ts, stillBackdrop).
+test.beforeEach(async ({ page, browserName }) => {
+  if (browserName === "webkit") await stillBackdrop(page);
+});
 
 interface Seen {
   count: number;

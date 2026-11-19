@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { visibleEdges } from "./edges.ts";
-import { findOverflow, settle } from "./helpers.ts";
+import { animationsDone, findOverflow, settle, stillBackdrop } from "./helpers.ts";
 
 const SIZES = [
   { name: "phone-375", width: 375, height: 812 },
@@ -23,6 +23,11 @@ const panel = (page: Page) => page.locator("#help-panel");
 const box = (page: Page) => panel(page).getByLabel("Your question");
 const answers = (page: Page) => panel(page).locator(".ask-msg");
 const tiles = (page: Page) => panel(page).locator(".help-pic:not(.is-leaving)");
+
+// WebKit on Linux paints without a GPU: hold the living backdrop still so frames stay cheap (helpers.ts, stillBackdrop).
+test.beforeEach(async ({ page, browserName }) => {
+  if (browserName === "webkit") await stillBackdrop(page);
+});
 
 async function open(page: Page) {
   await page.goto("/");
@@ -138,7 +143,8 @@ test.describe("Ask as a full assistant", () => {
 
   test("Stop ends the answer", async ({ page }) => {
     await open(page);
-    await ask(page, "How do I write a terraform module? #long");
+    // #hold: the answer waits for Stop, so the click cannot come after the answer has already ended.
+    await ask(page, "How do I write a terraform module? #hold");
     const stop = panel(page).getByRole("button", { name: "Stop answer" });
     await expect(stop).toBeVisible();
     await stop.click();
@@ -285,11 +291,17 @@ for (const size of SIZES) {
       await answered(page);
       const over = await findOverflow(page);
       expect(over.page, JSON.stringify(over.items.slice(0, 3))).toBeLessThanOrEqual(over.viewport);
+      // The paper plane comes back when the answer ends and its shadow eases in: a frame mid-way reads as a thin edge.
+      await animationsDone(page);
       expect(await visibleEdges(page)).toEqual([]);
     });
 
     for (const scheme of ["light", "dark"] as const) {
-      test(`screenshots in ${scheme}`, async ({ page }, info) => {
+      test(`screenshots in ${scheme}`, async ({ page, browserName }, info) => {
+        // Four full-page pictures of 2 to 7 million device pixels (1920 px wide, or the iPhone's 3x at tablet size),
+        // which Linux WebKit paints without a GPU: about 1.3 minutes in CI with the backdrop held still, too close
+        // to the 2-minute limit on a slow runner.
+        test.slow(browserName === "webkit" && size.width >= 768, "large WebKit screenshots paint in software in CI");
         await page.emulateMedia({ colorScheme: scheme });
         await open(page);
         await shot(page, `ask-empty-${size.name}-${scheme}`, info);

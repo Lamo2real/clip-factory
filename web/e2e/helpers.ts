@@ -38,6 +38,26 @@ export async function settle(page: Page) {
 }
 
 /**
+ * Holds the living backdrop still (its blobs, rings and caustics keep their first pose) for checks that are not about
+ * the backdrop. WebKit on Linux (CI) paints without a GPU: those nine full-screen drifts, blurred 56 px and blended,
+ * make every frame repaint the whole page, so a frame costs more the more pixels there are (a 1920 px page, or an
+ * iPhone at 3x). Clicks wait for frames ("stable") and screenshots for a painted frame, so on the 4-CPU runner an
+ * Ask check crawled for minutes and Stop could miss its answer. Call it before the first goto.
+ */
+export async function stillBackdrop(page: Page) {
+  await page.addInitScript(() => {
+    const add = () => {
+      const style = document.createElement("style");
+      style.dataset.e2e = "still-backdrop";
+      style.textContent = ".backdrop, .backdrop *, .backdrop::before, .backdrop::after { animation-play-state: paused !important; }";
+      document.head.append(style);
+    };
+    if (document.head) add();
+    else document.addEventListener("DOMContentLoaded", add, { once: true });
+  });
+}
+
+/**
  * Waits until the Ask launcher has settled (docs/CONTRACTS.md §19.8): it changes only once the page has been still
  * (and fades back in after a longer stillness, holding each state a while), and carries data-settling while a change
  * may still come. So: a frame for any scroll before this call to reach it, then three frames in a row with no

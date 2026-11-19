@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { asMacWindow, TRAFFIC_LIGHTS } from "./desktopWindow.ts";
-import { arrived, settle } from "./helpers.ts";
+import { arrived, settle, stillBackdrop } from "./helpers.ts";
 
 // One top line (docs/CONTRACTS.md §11.1). Scrolled to the top, every column starts on the same horizontal line: the
 // menu, the setup list (open card or pill), the settings folders and the page's first panel or title plate. Each one
@@ -12,6 +12,11 @@ import { arrived, settle } from "./helpers.ts";
 // Run in WebKit too (playwright.config.ts, project "webkit").
 
 const ROUTES = ["/", "/jobs", "/review", "/library", "/settings", "/settings/look-and-feel/background"];
+
+// WebKit on Linux paints without a GPU: hold the living backdrop still so frames stay cheap (helpers.ts, stillBackdrop).
+test.beforeEach(async ({ page, browserName }) => {
+  if (browserName === "webkit") await stillBackdrop(page);
+});
 
 /** The top edge (CSS px) of each visible column, rounded to a tenth. */
 async function tops(page: Page) {
