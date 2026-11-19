@@ -189,6 +189,11 @@ export function Glide({
         const axis = Math.abs(r.x - from.x) >= Math.abs(r.y - from.y) ? "x" : "y";
         glide.dataset.axis = axis;
         const run = glide.animate(slideFrames(from, r, axis, unevenBoxes(from, r)), { duration: GLIDE_MS, easing: "linear", id: GLIDE_ANIMATION_ID });
+        // Start it now, on the page's clock. Left to itself the browser holds a new animation "pending" until the
+        // compositor reports back, which on a busy machine took several frames (CI: past 900 ms) with the glide
+        // parked on the old item; Chromium then drew one frame at the new item before the slide began, so it
+        // looked like it jumped ahead and crept back. With a start time it moves from the next frame on.
+        if (document.timeline?.currentTime != null) run.startTime = document.timeline.currentTime;
         slide = run;
         run.onfinish = () => {
           if (slide === run) slide = null;
