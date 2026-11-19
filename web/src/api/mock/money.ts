@@ -3,9 +3,10 @@
 // through "Allow money reading" keeps it). The numbers are fixtures for the pretend app only: the real app shows
 // only what a platform reported. Only bundled into mock builds.
 import { ApiError } from "../errors.ts";
-import type { Api, MoneyCard, MoneyCelebration, MoneyGoal, MoneyState, MoneyView, Platform } from "../types.ts";
+import type { Api, Clip, MoneyCard, MoneyCelebration, MoneyGoal, MoneyState, MoneyView, MoneyWhere, Platform, Post } from "../types.ts";
+import { addDays, moneyClips, pretendClipPosts, series, summarize, todayUtc, WAVES, type MoneyRow, type MoneyStatus } from "./moneySummary.ts";
 
-export type MoneyApi = Pick<Api, "getMoney" | "refreshMoney" | "seenMoney" | "setMoneyCountry">;
+export type MoneyApi = Pick<Api, "getMoney" | "refreshMoney" | "seenMoney" | "setMoneyCountry" | "getMoneySummary" | "getMoneyClips">;
 
 export const MONEY_SCENARIOS = [
   "start",
@@ -19,6 +20,13 @@ export const MONEY_SCENARIOS = [
   "facebook_unverified",
   "unsupported",
   "error",
+  // The money dashboard (§27.7).
+  "dash_many",
+  "dash_youtube_only",
+  "dash_nothing",
+  "dash_two_currencies",
+  "dash_short_history",
+  "dash_error",
 ] as const;
 export type MoneyScenario = (typeof MONEY_SCENARIOS)[number];
 
@@ -334,8 +342,18 @@ function celebrationsFor(scenario: MoneyScenario): MoneyCelebration[] {
   return [];
 }
 
+/** The dashboard's scenarios show these Settings › Money cards. */
+const CARDS_FOR: Partial<Record<MoneyScenario, MoneyScenario>> = {
+  dash_many: "facebook_verified",
+  dash_youtube_only: "earning",
+  dash_nothing: "in_program",
+  dash_two_currencies: "facebook_verified",
+  dash_short_history: "earning",
+  dash_error: "earning",
+};
+
 export function buildMoneyView(saved: Saved): MoneyView {
-  const s = saved.scenario;
+  const s = CARDS_FOR[saved.scenario] ?? saved.scenario;
   const cards =
     s === "not_connected" ? ORDER.map(notConnected) : [youtubeCard(s), tiktokCard(s), instagramCard(s), facebookCard(s), xCard()];
   if (!saved.country) {
@@ -364,12 +382,80 @@ export function buildMoneyView(saved: Saved): MoneyView {
     country: saved.country,
     countries: COUNTRIES,
     thisMonth: [...totals.values()],
-    celebrations: celebrationsFor(s).filter((c) => !saved.seen.includes(c.key)),
+    celebrations: CARDS_FOR[saved.scenario] ? [] : celebrationsFor(s).filter((c) => !saved.seen.includes(c.key)),
     asOf: "2026-11-18",
   };
   if (saved.lastManualAt && saved.lastManualAt + 3_600_000 > Date.now()) view.nextCheckAllowedAt = new Date(saved.lastManualAt + 3_600_000).toISOString();
   return view;
 }
+
+// ---------- The money dashboard (§27.7) ----------
+
+interface DashData {
+  rows: MoneyRow[];
+  status: Partial<Record<Platform, MoneyStatus>>;
+  facebookVerified: boolean;
+  clips: { extra: number; withMoney: number; money: boolean; failPage2?: boolean };
+}
+
+const OK: MoneyStatus = { connected: true, moneyScope: true, lastError: null };
+const ALL_CONNECTED: Partial<Record<Platform, MoneyStatus>> = { youtube: OK, tiktok: OK, instagram: OK, facebook: OK, x: OK };
+
+/** The pretend owner's stored REVENUE# days and app states for one scenario. Days are counted from today. */
+export function dashData(scenario: MoneyScenario, today = todayUtc()): DashData {
+  const yt = addDays(today, -3); // YouTube finishes a day 2-3 days late
+  const fb = addDays(today, -2);
+  const youtube = (days: number, end = yt) => series("youtube", "USD", end, WAVES.youtube(days));
+  switch (scenario) {
+    case "dash_many": {
+      const rows = [...youtube(400), ...series("facebook", "USD", fb, WAVES.facebook(120))];
+      for (const r of rows) if (r.platform === "youtube" && (r.date === addDays(yt, -9) || r.date === addDays(yt, -21))) r.revisedAt = new Date().toISOString();
+      return { rows, status: ALL_CONNECTED, facebookVerified: true, clips: { extra: 19, withMoney: 18, money: true } };
+    }
+    case "dash_youtube_only":
+      return { rows: youtube(75), status: { youtube: OK }, facebookVerified: true, clips: { extra: 5, withMoney: 12, money: true } };
+    case "dash_nothing":
+      return { rows: [], status: ALL_CONNECTED, facebookVerified: false, clips: { extra: 6, withMoney: 0, money: false } };
+    case "dash_two_currencies":
+      return {
+        rows: [...youtube(200), ...series("facebook", "EUR", fb, WAVES.facebook(120))],
+        status: ALL_CONNECTED,
+        facebookVerified: true,
+        clips: { extra: 8, withMoney: 10, money: true },
+      };
+    case "dash_short_history":
+      return { rows: series("youtube", "USD", yt, WAVES.short(20)), status: ALL_CONNECTED, facebookVerified: false, clips: { extra: 3, withMoney: 6, money: true } };
+    case "dash_error":
+      return {
+        rows: youtube(80, addDays(today, -9)),
+        status: { ...ALL_CONNECTED, youtube: { ...OK, lastError: "YouTube didn't answer. Clip Factory checks again tomorrow.", checkedAt: new Date().toISOString() } },
+        facebookVerified: false,
+        clips: { extra: 19, withMoney: 14, money: true, failPage2: true },
+      };
+    case "earning":
+      return { rows: series("youtube", "USD", fb, YT_DAILY), status: ALL_CONNECTED, facebookVerified: false, clips: { extra: 0, withMoney: 4, money: true } };
+    case "facebook_verified":
+      return {
+        rows: [...series("youtube", "USD", fb, YT_DAILY), ...series("facebook", "EUR", fb, FB_DAILY)],
+        status: ALL_CONNECTED,
+        facebookVerified: true,
+        clips: { extra: 0, withMoney: 4, money: true },
+      };
+    case "not_connected":
+      return { rows: [], status: {}, facebookVerified: false, clips: { extra: 0, withMoney: 0, money: false } };
+    case "start":
+    case "consent_needed":
+    case "unsupported":
+    case "facebook_unverified":
+      return { rows: [], status: { ...ALL_CONNECTED, youtube: { connected: true, moneyScope: false } }, facebookVerified: false, clips: { extra: 0, withMoney: 0, money: false } };
+    case "error":
+      return { rows: [], status: { ...ALL_CONNECTED, youtube: { ...OK, lastError: "Couldn't check." } }, facebookVerified: false, clips: { extra: 0, withMoney: 0, money: false } };
+    default: // not_yet, goal_reached, in_program
+      return { rows: [], status: ALL_CONNECTED, facebookVerified: false, clips: { extra: 0, withMoney: 0, money: false } };
+  }
+}
+
+const WHERE: Partial<Record<Platform, MoneyWhere>> = Object.fromEntries(ORDER.map((p) => [p, base(p, "not_available", "").paidWhere]));
 
 /** "Allow money reading" in the pretend app: approved at once, back on the Money page like the real callback. */
 export function mockMoneyGrant(platform: Platform): { authorizeUrl: string; expiresAt: string } {
@@ -381,7 +467,13 @@ export function mockMoneyGrant(platform: Platform): { authorizeUrl: string; expi
   return { authorizeUrl: `/settings/posting/money?result=money_allowed&platform=${platform}`, expiresAt: new Date(Date.now() + 600_000).toISOString() };
 }
 
-export function moneyApi(wait: () => Promise<void>): { api: MoneyApi; controls: MockMoneyControls } {
+/** The pretend app's posted clips, for money per clip. */
+export interface ClipSource {
+  clips: () => Clip[];
+  posts: () => Post[];
+}
+
+export function moneyApi(wait: () => Promise<void>, source: ClipSource = { clips: () => [], posts: () => [] }): { api: MoneyApi; controls: MockMoneyControls } {
   const controls: MockMoneyControls = {
     setScenario(name) {
       save({ ...load(), scenario: name });
@@ -415,6 +507,30 @@ export function moneyApi(wait: () => Promise<void>): { api: MoneyApi; controls: 
       s.seen = [...s.seen, key];
       save(s);
       return buildMoneyView(s);
+    },
+    async getMoneySummary(platforms, chart) {
+      await wait();
+      if (![7, 30, 90, 365].includes(chart)) throw new ApiError(400, "bad_request", "Pick 7, 30, 90 or 365 days.", "chart");
+      if (platforms.some((p) => !ORDER.includes(p))) throw new ApiError(400, "bad_request", "Pick apps from the list.", "platforms");
+      const data = dashData(load().scenario);
+      return {
+        ...summarize({ today: todayUtc(), platforms, chart, rows: data.rows, status: data.status, facebookVerified: data.facebookVerified, where: WHERE }),
+        asOf: new Date().toISOString(),
+      };
+    },
+    async getMoneyClips(query) {
+      await wait();
+      const data = dashData(load().scenario);
+      if (data.clips.failPage2 && query.cursor) throw new ApiError(500, "internal", "Something went wrong on our side. Try again in a moment.");
+      const summary = summarize({ today: todayUtc(), platforms: ["youtube"], chart: 7, rows: data.rows, status: data.status, facebookVerified: data.facebookVerified, where: WHERE });
+      const { posts, cards } = pretendClipPosts(source.clips(), source.posts(), {
+        extra: data.clips.extra,
+        withMoney: data.clips.withMoney,
+        money: data.clips.money && summary.included.includes("youtube"),
+        end: summary.through,
+        platforms: ORDER,
+      });
+      return moneyClips(posts, cards, query, data.facebookVerified);
     },
     async setMoneyCountry(country) {
       await wait();
