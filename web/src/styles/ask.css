@@ -651,7 +651,7 @@
 .mk.is-phone .mk__dialog {
   width: 100vw;
   height: 100dvh;
-  padding: calc(env(safe-area-inset-top) + 8px) max(12px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 10px) max(12px, env(safe-area-inset-left));
+  padding: calc(var(--top-safe) + 8px) max(12px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 10px) max(12px, env(safe-area-inset-left));
   border-radius: 0;
 }
 .mk.is-phone .mk__hint {
@@ -665,7 +665,7 @@
 /* Cancel (×) top right on phones; in the page it comes after Clear, before Save. */
 .mk.is-phone .mk__close {
   position: absolute;
-  top: calc(env(safe-area-inset-top) + 4px);
+  top: calc(var(--top-safe) + 4px);
   right: max(8px, env(safe-area-inset-right));
   z-index: 1;
 }
