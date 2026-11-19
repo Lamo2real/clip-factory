@@ -1,0 +1,248 @@
+// Builds Ask's always-included app knowledge (docs/CONTRACTS.md §27.2) with no network:
+//   A. the app map: every help-corpus doc compacted to one block (where, route, title, answer, steps, buttons);
+//   B. the owner manual: docs/SETUP_POSTING.md, the user-facing parts of docs/BUSINESS_REQUIREMENTS.md,
+//      config/platforms.json, the model labels of config/models.json (no ids) and the kid-proof words of §12.4;
+//   C. the library: one file per section of CONTRACTS (§0-§27), DECISIONS (ADR-1…) and the other project docs,
+//      read on demand by the read_app_doc tool; the pack carries only its index (id, title, one line).
+// Everything passes the secrets filter (keys, tokens, account ids, ARNs with an account, emails, URLs with a query,
+// Cognito ids) first. Writes api/src/clipfactory_api/ask/knowledge.json and api/src/clipfactory_api/ask/library/*.md.
+//
+//   node scripts/ask-knowledge.mjs           write them
+//   node scripts/ask-knowledge.mjs --check   fail when the committed files are stale or the pack is over its size cap
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
+const web = resolve(import.meta.dirname, "..");
+const repo = resolve(web, "..");
+const CORPUS = join(web, "src/features/help/help-corpus.json");
+const OUT_DIR = join(repo, "api/src/clipfactory_api/ask");
+const OUT = join(OUT_DIR, "knowledge.json");
+const LIBRARY = join(OUT_DIR, "library");
+/** Rough tokens: four characters each. The pack must stay under 110k tokens (CI fails above). */
+export const MAX_TOKENS = 110_000;
+export const charsToTokens = (n) => Math.ceil(n / 4);
+
+/** The same patterns as api/src/clipfactory_api/ask/redact.py (tests check both against one list of samples). */
+export const SECRET_PATTERNS = [
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
+  /arn:aws[a-z-]*:[a-z0-9-]+:[a-z0-9-]*:\d{12}:[^\s"'`)\]]+/g,
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g,
+  /\b(?:sk-(?:ant-)?[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|glpat-[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{30,})/g,
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+  /https?:\/\/[^\s"'`<>)\]]*\?[^\s"'`<>)\]]+/g,
+  /\b(?:eu|us|ap|ca|sa|me|af|il|mx)-[a-z]+-\d_[A-Za-z0-9]{9}\b/g,
+  /\b(?:aws_secret_access_key|secret_access_key|client_secret|api_key|apikey|password|passwd|token)\s*[=:]\s*["']?[A-Za-z0-9_\-./+=]{8,}/gi,
+  /(?<!\d)\d{12}(?!\d)/g,
+];
+const CLIENT_ID = /(client[ _-]?id\W{0,4})[a-z0-9]{26}\b/gi;
+export const HIDDEN = "[hidden]";
+
+export function redact(text) {
+  let out = text;
+  for (const p of SECRET_PATTERNS) out = out.replace(p, HIDDEN);
+  return out.replace(CLIENT_ID, (_m, pre) => pre + HIDDEN);
+}
+
+const read = (p) => readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+const slug = (s) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+
+/** Splits markdown into its `## ` sections: [{heading, text}]. Text before the first heading is "intro". */
+export function sections(md) {
+  const out = [];
+  let current = { heading: "", text: "" };
+  for (const line of md.split("\n")) {
+    if (/^## /.test(line)) {
+      if (current.heading || current.text.trim()) out.push(current);
+      current = { heading: line.slice(3).trim(), text: line + "\n" };
+    } else current.text += line + "\n";
+  }
+  if (current.heading || current.text.trim()) out.push(current);
+  return out;
+}
+
+/** The first plain sentence of a section, for the index line (≤ 160 characters). */
+function firstLine(text) {
+  for (const raw of text.split("\n").slice(1)) {
+    const line = raw.replace(/^[*>\-\s#|]+/, "").replace(/[`*_]/g, "").trim();
+    if (line.length > 20 && !line.startsWith("```") && !/^-{3,}$/.test(line)) return line.slice(0, 160);
+  }
+  return "";
+}
+
+// ---------- A. the app map ----------
+
+export function appMap(corpus) {
+  const actions = [];
+  const blocks = [];
+  for (const d of corpus.docs) {
+    const route = d.route + (d.hash ? `#${d.hash}` : "");
+    const lines = [`### ${d.id} · ${d.where} · ${route} · ${d.title}`, d.answer];
+    if (d.steps?.length) lines.push(...d.steps.map((s, i) => `${i + 1}. ${s}`));
+    if (d.actions?.length) {
+      lines.push("Buttons: " + d.actions.map((a) => `${a.id} (${a.label} → ${a.to})`).join("; "));
+      for (const a of d.actions) {
+        const row = { id: a.id, label: a.label, to: a.to };
+        if (a.highlight?.length) row.highlight = a.highlight;
+        actions.push(row);
+      }
+    }
+    blocks.push(lines.join("\n"));
+  }
+  const text =
+    "Every page, setting and guide of Clip Factory. Each block: id · where · route · title, then the answer, the steps " +
+    "and the buttons (action ids for show_app_buttons).\n\n" +
+    blocks.join("\n\n");
+  return { text, actions };
+}
+
+// ---------- B. the owner manual ----------
+
+function businessParts(md) {
+  const keep = ["Functional requirements", "Non-functional requirements", "Design and experience requirements", "Out of scope"];
+  return sections(md)
+    .filter((s) => keep.some((k) => s.heading.startsWith(k)))
+    .map((s) => s.text.trim())
+    .join("\n\n");
+}
+
+function platformsText(cfg) {
+  const lines = [];
+  for (const id of cfg.order ?? Object.keys(cfg.platforms)) {
+    const p = cfg.platforms[id];
+    if (!p) continue;
+    const bits = [`label ${p.label}`];
+    if (p.slowNote) bits.push(`numbers: ${p.slowNote}`);
+    if (p.minIntervalMinutes) bits.push(`numbers refresh at most every ${p.minIntervalMinutes} min`);
+    if (p.manualCooldownMinutes) bits.push(`manual refresh every ${p.manualCooldownMinutes} min`);
+    if (p.scopes) bits.push(`Connect asks for: ${p.scopes.map((s) => s.replace(/^https:\/\/www\.googleapis\.com\/auth\//, "")).join(", ")}`);
+    lines.push(`- ${id}: ${bits.join("; ")}`);
+  }
+  return lines.join("\n");
+}
+
+function modelsText(models) {
+  return models.clipModels
+    .map((id) => `- ${models.models[id].label}: ${models.models[id].line ?? ""}${id === models.agentModel ? " (the default)" : ""}`)
+    .join("\n");
+}
+
+function kidProof(contracts) {
+  const at = contracts.indexOf("### 12.4");
+  if (at < 0) return "";
+  const end = contracts.indexOf("\n### ", at + 5);
+  return contracts.slice(at, end < 0 ? undefined : end).trim();
+}
+
+// ---------- C. the library ----------
+
+const LIBRARY_DOCS = [
+  ["CONTRACTS.md", "contracts", "§"],
+  ["DECISIONS.md", "adr", "ADR"],
+  ["ARCHITECTURE.md", "architecture", ""],
+  ["DEPLOYMENT.md", "deployment", ""],
+  ["SECURITY.md", "security", ""],
+  ["TESTING.md", "testing", ""],
+  ["UX_DESIGN_SYSTEM.md", "ux", ""],
+  ["HELP_ASSISTANT.md", "help-assistant", ""],
+  ["AGENT.md", "agent", ""],
+  ["SETUP_POSTING.md", "setup-posting", ""],
+  ["BUSINESS_REQUIREMENTS.md", "business", ""],
+];
+
+export function library() {
+  const entries = [];
+  for (const [file, prefix] of LIBRARY_DOCS) {
+    const path = join(repo, "docs", file);
+    if (!existsSync(path)) continue;
+    const seen = new Set();
+    for (const s of sections(read(path))) {
+      if (!s.heading) continue;
+      let id;
+      const num = s.heading.match(/^(\d+)\./);
+      const adr = s.heading.match(/^ADR-(\d+)/);
+      if (prefix === "contracts" && num) id = `contracts-${num[1]}`;
+      else if (prefix === "adr" && adr) id = `adr-${adr[1]}`;
+      else id = `${prefix}-${slug(s.heading)}`;
+      while (seen.has(id)) id += "-2";
+      seen.add(id);
+      const text = redact(s.text.trim()) + "\n";
+      entries.push({ id, title: `${file.replace(/\.md$/, "")}: ${s.heading}`.slice(0, 160), line: redact(firstLine(s.text)), text });
+    }
+  }
+  return entries;
+}
+
+// ---------- the pack ----------
+
+export function build() {
+  const corpus = JSON.parse(read(CORPUS));
+  const contracts = read(join(repo, "docs/CONTRACTS.md"));
+  const map = appMap(corpus);
+  const models = JSON.parse(read(join(repo, "config/models.json")));
+  const platforms = JSON.parse(read(join(repo, "config/platforms.json")));
+  const manual = [
+    "## Setting up posting, per platform (docs/SETUP_POSTING.md)\n\n" + read(join(repo, "docs/SETUP_POSTING.md")).trim(),
+    "## What Clip Factory does (docs/BUSINESS_REQUIREMENTS.md)\n\n" + businessParts(read(join(repo, "docs/BUSINESS_REQUIREMENTS.md"))),
+    "## Platforms\n\n" + platformsText(platforms),
+    "## AI models for clip jobs (Settings › Clip making › Clips › AI model)\n\n" + modelsText(models),
+    "## Kid-proof words\n\n" + kidProof(contracts),
+  ].join("\n\n");
+  const parts = [
+    { id: "app-map", title: "App map: every page, setting and guide", text: redact(map.text) },
+    { id: "owner-manual", title: "Owner manual", text: redact(manual) },
+  ];
+  const lib = library();
+  const body = { parts, library: lib.map(({ id, title, line, text }) => ({ id, title, line, chars: text.length })), actions: map.actions };
+  const hash = createHash("sha256");
+  hash.update(JSON.stringify(body));
+  for (const e of lib) hash.update(e.text);
+  const version = hash.digest("hex").slice(0, 12);
+  const pack = { version, ...body };
+  return { pack, lib };
+}
+
+export function packTokens(pack) {
+  return charsToTokens(pack.parts.reduce((n, p) => n + p.text.length, 0) + pack.library.reduce((n, e) => n + e.id.length + e.title.length + e.line.length + 6, 0));
+}
+
+function main() {
+  const check = process.argv.includes("--check");
+  const { pack, lib } = build();
+  const tokens = packTokens(pack);
+  if (tokens > MAX_TOKENS) {
+    console.error(`ask knowledge is ${tokens} tokens, over the ${MAX_TOKENS} cap (docs/CONTRACTS.md §27.2)`);
+    process.exit(1);
+  }
+  const json = JSON.stringify(pack, null, 1) + "\n";
+  const wanted = new Map(lib.map((e) => [`${e.id}.md`, e.text]));
+  if (check) {
+    const stale = [];
+    if (!existsSync(OUT) || readFileSync(OUT, "utf8") !== json) stale.push("knowledge.json");
+    const have = existsSync(LIBRARY) ? readdirSync(LIBRARY).filter((f) => f.endsWith(".md")) : [];
+    for (const [name, text] of wanted) if (!existsSync(join(LIBRARY, name)) || readFileSync(join(LIBRARY, name), "utf8") !== text) stale.push(`library/${name}`);
+    for (const name of have) if (!wanted.has(name)) stale.push(`library/${name} (extra)`);
+    if (stale.length) {
+      console.error(`Ask knowledge is stale (${stale.slice(0, 5).join(", ")}${stale.length > 5 ? ", …" : ""}). Run: node scripts/ask-knowledge.mjs`);
+      process.exit(1);
+    }
+    console.log(`ask knowledge is up to date: version ${pack.version}, about ${tokens} tokens, ${lib.length} library sections`);
+    return;
+  }
+  mkdirSync(LIBRARY, { recursive: true });
+  for (const name of readdirSync(LIBRARY)) if (name.endsWith(".md") && !wanted.has(name)) rmSync(join(LIBRARY, name));
+  for (const [name, text] of wanted) {
+    const path = join(LIBRARY, name);
+    if (!existsSync(path) || readFileSync(path, "utf8") !== text) writeFileSync(path, text);
+  }
+  if (!existsSync(OUT) || readFileSync(OUT, "utf8") !== json) writeFileSync(OUT, json);
+  console.log(`ask knowledge: version ${pack.version}, about ${tokens} tokens, ${lib.length} library sections, ${pack.actions.length} buttons`);
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();

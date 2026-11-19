@@ -11,6 +11,7 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App, HelpDeps, help_from_env
+from clipfactory_api.ask.files import LIMITS
 from clipfactory_api.help import guard, model
 from clipfactory_api.http import dispatch
 from clipfactory_api.routes import ROUTES
@@ -57,9 +58,11 @@ def _logs(capsys: pytest.CaptureFixture[str]) -> list[dict[str, Any]]:
 # --- routes ---------------------------------------------------------------------------------------------------
 
 
-def test_route_table_has_exactly_the_two_help_routes() -> None:
+def test_route_table_has_exactly_the_help_routes() -> None:
     help_routes = [(r.method, r.pattern.pattern) for r in ROUTES if "/v1/help" in r.pattern.pattern]
-    assert help_routes == [("GET", "^/v1/help$"), ("POST", "^/v1/help/answers$")]
+    assert help_routes[:2] == [("GET", "^/v1/help$"), ("POST", "^/v1/help/answers$")]
+    # §27: the assistant's routes (tests/test_ask_api.py covers them).
+    assert [m for m, _ in help_routes[2:]] == ["POST", "DELETE", "POST", "POST", "PUT", "DELETE"]
     assert all(not r.public for r in ROUTES if "/v1/help" in r.pattern.pattern)
 
 
@@ -85,7 +88,13 @@ def test_off_by_default(call: Call, app: App) -> None:
     assert app.help.enabled is False
     assert call("GET", "/v1/help") == (
         200,
-        {"enabled": False, "mode": "off", "corpusVersion": "", "pictures": False},
+        {
+            "enabled": False,
+            "mode": "off",
+            "corpusVersion": "",
+            "pictures": False,
+            "assistant": {"on": False, "web": "off", "files": False, "limits": LIMITS},
+        },
     )
     status, body = ask(call)
     assert status == 403
@@ -121,7 +130,13 @@ def test_env_flag_must_say_true(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_status_on(call: Call, help_on: App) -> None:
     assert call("GET", "/v1/help") == (
         200,
-        {"enabled": True, "mode": "model", "corpusVersion": "fixture-1", "pictures": True},
+        {
+            "enabled": True,
+            "mode": "model",
+            "corpusVersion": "fixture-1",
+            "pictures": True,
+            "assistant": {"on": False, "web": "off", "files": False, "limits": LIMITS},
+        },
     )
 
 

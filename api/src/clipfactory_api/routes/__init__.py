@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..http import Route, route
-from . import clips, follows, help, jobs, lessons, money, performance, setup, skills, system, weeks
+from . import ask, clips, follows, help, jobs, lessons, money, performance, setup, skills, system, weeks
 
 ROUTES: list[Route] = [
     route("GET", "/v1/health", system.health, public=True),
@@ -72,7 +72,14 @@ ROUTES: list[Route] = [
     route("GET", "/v1/money/{platform}/days", money.get_days),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
-    # Ask Clip Factory (§19.6): the help package loads only inside these two handlers.
+    # Ask Clip Factory (§19.6): the help package loads only inside these handlers.
     route("GET", "/v1/help", help.status),
     route("POST", "/v1/help/answers", help.answer),
+    # Ask as a full assistant (§27): start over HTTP, the answer streams over the WebSocket.
+    route("POST", "/v1/help/files", ask.create_files),
+    route("DELETE", "/v1/help/files/{fileId}", ask.delete_file),
+    route("POST", "/v1/help/asks", ask.start),
+    route("POST", "/v1/help/asks/{askId}/stop", ask.stop),
+    route("PUT", "/v1/help/search-key", ask.put_search_key),
+    route("DELETE", "/v1/help/search-key", ask.delete_search_key),
 ]

@@ -111,12 +111,30 @@ def status(app: App, req: Request) -> Response:
         switch = guard.check_switch(app.store, now, flag_enabled=app.help.enabled)
     except guard.GuardUnavailable:
         raise _unavailable() from None
+    from .ask import assistant_status
+
     if not switch.enabled:
-        return ok({"enabled": False, "mode": "off", "corpusVersion": "", "pictures": False})
+        return ok(
+            {
+                "enabled": False,
+                "mode": "off",
+                "corpusVersion": "",
+                "pictures": False,
+                "assistant": assistant_status(app, switch),
+            }
+        )
     version = _corpus(app).version
     model = switch.model and _model_ready(app) and not guard.cap_full(app.store, now, cap=app.help.monthly_cap)
     pictures = bool(model and switch.pictures and _look_ready(app))
-    return ok({"enabled": True, "mode": "model" if model else "kb", "corpusVersion": version, "pictures": pictures})
+    return ok(
+        {
+            "enabled": True,
+            "mode": "model" if model else "kb",
+            "corpusVersion": version,
+            "pictures": pictures,
+            "assistant": assistant_status(app, switch),
+        }
+    )
 
 
 # --- POST /v1/help/answers ------------------------------------------------------------------------------------

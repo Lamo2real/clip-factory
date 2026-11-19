@@ -49,6 +49,51 @@ class HelpDeps:
     corpus_file: Path | None = None  # tests: a corpus file instead of the bundled one
 
 
+@dataclass
+class AskDeps:
+    """Ask as a full assistant (docs/CONTRACTS.md §27). Off unless ``ASK_ENABLED`` is "true" and the worker's name
+    is set. ``invoke`` starts the worker (async Lambda Invoke); ``secrets`` holds the web search key."""
+
+    enabled: bool = False
+    function_name: str = ""
+    lambda_client: Any = None
+    secrets: Any = None
+    search_secret: str = "cf-prod/ask/search-key"  # noqa: S105 (a secret name, not a secret)
+    asks_per_day: int = 400
+    # (key) → True when one test search with it worked; None skips the test (tests set it).
+    check_key: Callable[[str], bool] | None = None
+
+    @property
+    def ready(self) -> bool:
+        return self.enabled and bool(self.function_name) and self.lambda_client is not None
+
+
+def ask_from_env(reg: str, lambda_client: Any) -> AskDeps:
+    import boto3
+
+    env = os.environ
+    enabled = env.get("ASK_ENABLED", "false").strip().lower() == "true"
+
+    def check_key(key: str) -> bool:
+        from .ask.search import BraveSearch, SearchError
+
+        try:
+            BraveSearch().search(key, "clip factory", None)
+        except SearchError:
+            return False
+        return True
+
+    return AskDeps(
+        enabled=enabled,
+        function_name=env.get("ASK_FUNCTION_NAME", ""),
+        lambda_client=lambda_client,
+        secrets=boto3.client("secretsmanager", region_name=reg, config=_short_config()) if enabled else None,
+        search_secret=env.get("ASK_SEARCH_SECRET", "cf-prod/ask/search-key"),
+        asks_per_day=_int_env("ASK_PER_DAY", 400),
+        check_key=check_key,
+    )
+
+
 def _int_env(name: str, default: int) -> int:
     try:
         return int(os.environ.get(name, "") or default)
@@ -113,6 +158,7 @@ class App:
     oauth: OAuthEnv | None = None  # posting setup (§17.4); None until its secrets and URLs are configured
     web_files: WebFiles | None = None  # TikTok verification files on the web bucket (§17.4)
     help: HelpDeps = field(default_factory=HelpDeps)
+    ask: AskDeps = field(default_factory=AskDeps)
     # Follow creators (§24): built on first use from ``oauth`` (the same secrets and hooks URL); tests may set it.
     follow: FollowEnv | None = None
     _builtin_cache: list[BuiltinSkill] | None = field(default=None, repr=False)
@@ -205,6 +251,7 @@ def from_env() -> App:
         oauth=oauth,
         web_files=web_files,
         help=help_from_env(reg),
+        ask=ask_from_env(reg, lambda_client),
     )
 
 

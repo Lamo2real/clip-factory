@@ -271,6 +271,11 @@ def test_ping_gets_a_pong(ws_deps: ws.WsDeps, management: FakeManagement) -> Non
     assert management.sent == [("conn-1", {"type": "pong", "at": "2026-11-15T12:00:00.000Z"})]
 
 
+def test_whoami_tells_the_connection_id(ws_deps: ws.WsDeps, management: FakeManagement) -> None:
+    assert ws.handle(_ws_event("$default", body='{"action":"whoami"}'), ws_deps) == {"statusCode": 200}
+    assert management.sent == [("conn-1", {"type": "whoami", "connectionId": "conn-1"})]
+
+
 @pytest.mark.parametrize("body", ['{"action":"subscribe"}', "not json", "[]", None, "x" * 5000])
 def test_anything_else_gets_bad_request(ws_deps: ws.WsDeps, management: FakeManagement, body: str | None) -> None:
     assert ws.handle(_ws_event("$default", body=body), ws_deps) == {"statusCode": 200}
