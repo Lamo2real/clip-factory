@@ -133,7 +133,7 @@ if [ -n "$enabled_expr" ] \
   && [ "$(jq -r "$enabled_expr" <<<'{"ask_enabled":{"value":false}}')" = "false" ] \
   && [ "$(jq -r "$enabled_expr" <<<'{"ask_enabled":{"value":true}}')" = "true" ] \
   && [ "$(jq -r "$enabled_expr" <<<'{}')" = "true" ] \
-  && grep -q '"$reason" = "not_found"' <<<"$smoke" && ! grep -q 'turn on model access' <<<"$smoke"; then
+  && grep -q 'reason" = "not_found"' <<<"$smoke" && ! grep -q 'turn on model access' <<<"$smoke"; then
   ok "ask_enabled = false skips the Ask check, and the access hint names today's Bedrock steps"
 else
   not_ok "the Ask check must read ask_enabled = false as off and give the Model catalog steps (expr: ${enabled_expr:-none})"
