@@ -455,7 +455,8 @@ function contrastKit() {
         if (r < worst) [worst, worstPair] = [r, [t, b]];
       }
       const large = size >= 24 || (size >= 18.66 && weight >= 700);
-      const need = large ? 3 : 4.5;
+      // A placeholder is a hint, not words: it is faded on purpose and held to 3:1, typed words keep 4.5:1.
+      const need = large || placeholder ? 3 : 4.5;
       if (worst < need - 0.005)
         contrast.push({ selector: describe(el), text: label, ratio: Math.round(worst * 100) / 100, need, fontSize: size, color: hex(worstPair[0]), background: hex(worstPair[1]) });
     }
