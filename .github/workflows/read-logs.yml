@@ -1,0 +1,130 @@
+# Read-only: prints the agent's and the job flow's CloudWatch lines that explain a stopped job (errors, exceptions,
+# heartbeats, timeouts, container starts and ends), with tokens, cookies and URL queries blanked. It changes nothing in
+# AWS: only logs:Describe*/StartQuery/GetQueryResults/FilterLogEvents and one dynamodb:GetItem/Scan of a job's steps.
+# Run it from the Actions tab (main only: the deploy role trusts refs/heads/main and nothing else).
+name: read-logs
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "How far back to read (minutes, at most 1440)"
+        default: "180"
+      end:
+        description: "Optional end time, UTC (e.g. 2026-11-19T16:40:00Z); empty means now"
+        default: ""
+      job_id:
+        description: "Optional job id: only its lines, plus its step times"
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: read-logs
+  cancel-in-progress: false
+
+jobs:
+  read:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.CF_REGION || 'eu-north-1' }}
+      MINUTES: ${{ inputs.minutes }}
+      END_AT: ${{ inputs.end }}
+      JOB_ID: ${{ inputs.job_id }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 900
+      - name: read
+        run: |
+          set -euo pipefail
+          [[ "$MINUTES" =~ ^[0-9]{1,4}$ ]] && [ "$MINUTES" -ge 1 ] && [ "$MINUTES" -le 1440 ] || { echo "::error::minutes must be 1..1440"; exit 1; }
+          [ -z "$JOB_ID" ] || [[ "$JOB_ID" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || { echo "::error::job_id is invalid"; exit 1; }
+          if [ -n "$END_AT" ]; then end=$(date -u -d "$END_AT" +%s); else end=$(date -u +%s); fi
+          start=$(( end - MINUTES * 60 ))
+          echo "Window: $(date -u -d "@$start" +%FT%TZ) .. $(date -u -d "@$end" +%FT%TZ)"
+
+          # Blank anything secret-looking: presigned-URL params, bearer/session tokens, cookies, any URL's query.
+          redact() {
+            sed -E \
+              -e 's/(X-Amz-[A-Za-z-]+)=[^&" ]+/\1=<redacted>/Ig' \
+              -e 's#(https?://[^ "?]+)\?[^ "]*#\1?<redacted>#g' \
+              -e 's/((token|cookie|cookies|secret|password|authorization|callbackId|CallbackId)"?[:=] ?"?)[^", ]+/\1<redacted>/Ig' \
+              -e 's/(Bearer )[A-Za-z0-9._~+\/=-]+/\1<redacted>/g' \
+              -e 's#[a-z][a-z0-9+.-]*://[^/ :@"]+:[^/ @"]+@#<redacted>@#Ig' \
+              -e 's#(https?|s3)://[^ "]+#<url>#g' \
+              -e 's#USER\#[A-Za-z0-9_-]+#USER\#<id>#g' \
+              -e 's#/(users|u)/[A-Za-z0-9_-]+/#/\1/<id>/#g'
+          }
+          # This repository is public, and so are its Actions logs: an agent line is cut down to the fields that tell
+          # what happened (no titles, links, user ids or file names); a line that is not JSON (a traceback, a Lambda
+          # REPORT or timeout line) is kept, with links and ids blanked by redact.
+          # shellcheck disable=SC2016 # a jq program: $m and $j are jq variables
+          keep='.["@message"] as $m | ($m | try fromjson catch null) as $j
+            | if ($j | type) == "object"
+              then ($j | {level, event, job, jobId, step, index, what, kind, error, errorType, timedOut, outcome, status,
+                          code, starts, sent, type, stopped, started, superseded, seconds, free, height, estBytes,
+                          detail: ((.detail // null) | if . then .[0:300] else null end)} | with_entries(select(.value != null)) | tojson)
+              else ($m | gsub("\n"; " ") | .[0:400]) end'
+
+          query() { # $1 log group, $2 Logs Insights query
+            local id status
+            id=$(aws logs start-query --log-group-name "$1" --start-time "$start" --end-time "$end" \
+              --query-string "$2" --limit 10000 --query queryId --output text)
+            for _ in $(seq 1 60); do
+              status=$(aws logs get-query-results --query-id "$id" --query status --output text)
+              [ "$status" = "Complete" ] && break
+              [ "$status" = "Failed" ] || [ "$status" = "Cancelled" ] && { echo "query $status"; return 0; }
+              sleep 2
+            done
+            aws logs get-query-results --query-id "$id" --output json \
+              | jq -r ".results[] | map({(.field): .value}) | add | \"\\(.[\"@timestamp\"]) \\(.[\"@logStream\"] // \"\" | .[-12:]) \\($keep)\"" \
+              | redact
+          }
+
+          job_filter=""
+          [ -n "$JOB_ID" ] && job_filter="| filter @message like /${JOB_ID}/ or @message like /(?i)traceback|killed|out of memory|sigterm|shutdown|lifespan|pot\\.exit|started server|application startup/"
+
+          agent_groups=$(aws logs describe-log-groups --log-group-name-prefix /aws/bedrock-agentcore/runtimes/ \
+            --query 'logGroups[].logGroupName' --output text | tr '\t' '\n' | grep -i clip_agent || true)
+          for g in $agent_groups; do
+            echo "::group::Agent container sessions in $g (log streams with events in the window)"
+            aws logs describe-log-streams --log-group-name "$g" --order-by LastEventTime --descending --max-items 40 \
+              --query 'logStreams[].[logStreamName, firstEventTimestamp, lastEventTimestamp]' --output json \
+              | jq -r --argjson s "$start" '.[] | select((.[2] // 0) / 1000 >= $s)
+                  | "\(.[0][-60:])  first \((.[1] // 0) / 1000 | todate)  last \((.[2] // 0) / 1000 | todate)"'
+            echo "::endgroup::"
+            echo "::group::Agent lines: errors, exceptions, heartbeats, timeouts, job and cut events ($g)"
+            query "$g" "fields @timestamp, @logStream, @message
+              | filter @message like /(?i)error|exception|traceback|warn|heartbeat|timeout|timed out|killed|memory|oom|signal|sigterm|shutdown|lifespan|exit|job\\.|render\\.|cut\\.|callback\\.|pot\\.|started server|startup/
+              $job_filter
+              | sort @timestamp asc | limit 10000"
+            echo "::endgroup::"
+          done
+
+          for fn in cf-prod-job-flow cf-prod-api; do
+            echo "::group::/aws/lambda/$fn: job flow events, errors, timeouts"
+            query "/aws/lambda/$fn" "fields @timestamp, @logStream, @message
+              | filter @message like /(?i)error|exception|traceback|timeout|timed out|job_flow\\.|callback|heartbeat|retry/
+              $job_filter
+              | sort @timestamp asc | limit 2000"
+            echo "::endgroup::"
+          done
+
+          if [ -n "$JOB_ID" ]; then
+            echo "::group::Job $JOB_ID: status and step times (no titles, links or user ids)"
+            aws dynamodb scan --table-name cf-prod-data \
+              --filter-expression "sk = :sk" --expression-attribute-values "{\":sk\":{\"S\":\"JOB#${JOB_ID}\"}}" \
+              --projection-expression "#s, #e, heartbeatAt, createdAt, updatedAt, progress, steps" \
+              --expression-attribute-names '{"#s":"status","#e":"error"}' --output json \
+              | jq '.Items[] | {status: .status.S, error: .error.S, createdAt: .createdAt.S, updatedAt: .updatedAt.S,
+                    heartbeatAt: .heartbeatAt.S, progress: .progress.N,
+                    steps: [.steps.L[]?.M | {key: .key.S, status: .status.S, startedAt: .startedAt.S, finishedAt: .finishedAt.S, message: .message.S}]}'
+            echo "::endgroup::"
+          fi
