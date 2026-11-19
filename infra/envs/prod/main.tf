@@ -352,6 +352,7 @@ module "ask" {
   search_secret_name    = local.ask_search_secret
   search_secret_arn     = local.ask_search_secret_arn
   help_enabled          = var.help_enabled
+  ask_eager_tools       = var.ask_eager_tools
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn

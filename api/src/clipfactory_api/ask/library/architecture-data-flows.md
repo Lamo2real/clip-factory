@@ -832,3 +832,21 @@ sequenceDiagram
 - **In the browser**: help calls use their own quiet `fetch` (27 s timeout), so no page refetches. On a network
   error, a timeout or a 5xx the panel answers from its own copy of the corpus with the same rules; on 429 it shows a
   countdown and never retries by itself; on `help_off` the launcher disappears and the local copy is not used.
+
+### 18. Ask as a full assistant (CONTRACTS §27, ADR-50)
+
+```
+browser ── whoami ──▶ cf-prod-ws ──▶ {connectionId}
+browser ── POST /v1/help/files ──▶ cf-prod-api ──▶ presigned PUTs ──▶ cf-prod-media ask/{sub}/{fileId}
+browser ── POST /v1/help/asks ──▶ cf-prod-api ── async Invoke ──▶ cf-prod-ask
+cf-prod-ask ── skills, knowledge pack, APP STATE (DynamoDB reads) ──▶ Claude Opus 5.5 (Bedrock Mantle, eu-north-1)
+            ◀── tool calls: web_search (Brave) · web_fetch (SSRF-guarded) · read_app_doc · read_my_clip_factory · show_app_buttons
+cf-prod-ask ── PostToConnection ask.* ──▶ the owner's socket ──▶ the panel streams the answer
+cf-prod-ask ── finally: delete ask/{sub}/{fileId}
+```
+
+The HTTP API keeps its 29 s limit: the answer runs in `cf-prod-ask` (150 s, async, never retried) and comes back as
+events on the WebSocket the app already holds. The search key is the owner's own, in Secrets Manager
+(`cf-prod/ask/search-key`). Everything Ask knows about the app is a generated pack shipped in the zip
+(`api/src/clipfactory_api/ask/knowledge.json`, `ask/library/`), behind the owner's skills and cached for an hour.
+When the socket, the model or the assistant switch is not there, the panel answers with §17 (above) instead.

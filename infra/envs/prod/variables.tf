@@ -97,3 +97,9 @@ variable "ask_tokens_alarm_threshold" {
   default     = 20000000
   description = "Ask's new input tokens in 24 hours before the cf-prod-ask-tokens-day alarm tells the owner. It blocks nothing."
 }
+
+variable "ask_eager_tools" {
+  type        = bool
+  default     = true
+  description = "ASK_EAGER_TOOLS on cf-prod-ask: eager_input_streaming on Ask's tools. Set false if Bedrock rejects the field (docs/DEPLOYMENT.md)."
+}

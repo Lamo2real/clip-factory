@@ -287,12 +287,8 @@ Adapters: `platforms/{youtube,tiktok,instagram,facebook,x}.py` implement, beside
 ```python
 class StatsAdapter(Protocol):
     platform: str
-
-    def fetch_stats(
-        self, posts: list[Record], account: Record | None, *, now: datetime, want_insights: bool, http: HttpClient
-    ) -> StatsBatch: ...
-
-
+    def fetch_stats(self, posts: list[Record], account: Record | None, *, now: datetime,
+                    want_insights: bool, http: HttpClient) -> StatsBatch: ...
 # StatsBatch(results: dict[postId, PostMetrics-dict], errors: dict[postId, str], meta: ResponseMeta(status, headers,
 #            error_code, retry_after), requests: int, units: int)
 # HttpClient = Callable[[HttpRequest], HttpResponse] (urllib in production, a recorder in tests); one request per
