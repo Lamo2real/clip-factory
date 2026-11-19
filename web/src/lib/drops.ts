@@ -1,4 +1,4 @@
-// Dragging a video or a link onto the new-job card on Home (docs/CONTRACTS.md §12.4).
+// Dragging a video or a link onto the new-job card on Home (docs/CONTRACTS.md §12.5).
 // Pure helpers: what a drag carries (while it is over the card, only the types can be read) and what a drop holds.
 import { filesFrom } from "../features/help/pictures.ts";
 import { extractLink } from "./links.ts";

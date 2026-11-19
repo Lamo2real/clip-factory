@@ -149,7 +149,7 @@
 .newjob .segmented {
   justify-self: start;
 }
-/* A video or a link dragged over the card (§12.4): one soft fill over the whole card with plain words, no edges. */
+/* A video or a link dragged over the card (§12.5): one soft fill over the whole card with plain words, no edges. */
 .newjob__drop {
   position: absolute;
   inset: 0;

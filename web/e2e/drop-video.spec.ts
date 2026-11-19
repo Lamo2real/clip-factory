@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
-// Drag a video or a link onto the new-job card on Home (docs/CONTRACTS.md §12.4): real dragenter/dragover/drop
+// Drag a video or a link onto the new-job card on Home (docs/CONTRACTS.md §12.5): real dragenter/dragover/drop
 // events carrying a DataTransfer, as a drag from Finder or a browser's address bar sends them.
 
 type Payload = { files?: { name: string; type: string }[]; uri?: string; text?: string };

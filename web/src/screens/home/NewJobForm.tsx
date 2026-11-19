@@ -49,7 +49,7 @@ export function NewJobForm() {
   const linkInput = useRef<HTMLInputElement>(null);
   const [nudge, setNudge] = useState(false);
   const mounted = useRef(true);
-  // A video or a link dragged over the card (§12.4): one soft highlight for the whole card, counted so moving over
+  // A video or a link dragged over the card (§12.5): one soft highlight for the whole card, counted so moving over
   // the fields inside it never makes it flicker.
   const [over, setOver] = useState<DragKind>(null);
   const dragDepth = useRef(0);
