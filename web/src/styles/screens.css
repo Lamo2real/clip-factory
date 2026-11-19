@@ -155,18 +155,27 @@
   inset: 0;
   z-index: 3;
   display: grid;
-  place-content: center;
+  align-items: center;
   justify-items: center;
-  gap: 10px;
   padding: 24px;
   border-radius: inherit;
   text-align: center;
   color: var(--ink);
-  background: linear-gradient(rgb(var(--green-leaf-rgb) / 0.2), rgb(var(--green-leaf-rgb) / 0.2)), rgb(var(--green-rgb) / 0.97);
+  /* Opaque: nothing of the card shows through behind the words. */
+  background: linear-gradient(rgb(var(--green-leaf-rgb) / 0.2), rgb(var(--green-leaf-rgb) / 0.2)), rgb(var(--green-rgb));
   pointer-events: none;
   animation: newjob-drop-in 160ms var(--ease-out) both;
 }
-.newjob__drop > svg {
+/* Centred on the card, but kept on screen when the card runs past the top or bottom of the window. */
+.newjob__drop-say {
+  position: sticky;
+  top: 24px;
+  bottom: 24px;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+.newjob__drop-say > svg {
   animation: newjob-drop-rise 320ms var(--ease-spring) both;
 }
 .newjob__drop p {
@@ -187,12 +196,12 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .newjob__drop,
-  .newjob__drop > svg {
+  .newjob__drop-say > svg {
     animation: none;
   }
 }
 .reduce-motion .newjob__drop,
-.reduce-motion .newjob__drop > svg {
+.reduce-motion .newjob__drop-say > svg {
   animation: none;
 }
 /* Narrow phones: the two options would wrap into a ragged two-row blob, so they become two equal columns that

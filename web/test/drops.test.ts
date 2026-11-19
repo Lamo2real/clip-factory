@@ -18,6 +18,7 @@ describe("dragKind", () => {
   it("is file for a Finder drag, link for a browser link, nothing otherwise", () => {
     expect(dragKind({ types: ["Files"] })).toBe("file");
     expect(dragKind({ types: ["text/uri-list", "text/plain"] })).toBe("link");
+    expect(dragKind({ types: ["Files", "text/uri-list"] })).toBe("either");
     expect(dragKind({ types: ["text/plain"] })).toBeNull();
     expect(dragKind({ types: [] })).toBeNull();
     expect(dragKind(null)).toBeNull();
@@ -86,6 +87,23 @@ describe("classifyDrop", () => {
 
   it("takes a dropped link when no file came", () => {
     expect(classifyDrop(dt([], { "text/uri-list": "https://www.twitch.tv/videos/1" }))).toEqual({ kind: "link", url: "https://www.twitch.tv/videos/1" });
+  });
+
+  it("takes the link of a thumbnail dragged off a video page (its picture plus the page link)", () => {
+    const jpg = new File(["x"], "hqdefault.jpg", { type: "image/jpeg" });
+    const uri = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+    expect(classifyDrop(dt([jpg], { "text/uri-list": uri }))).toEqual({ kind: "link", url: uri });
+  });
+
+  it("still takes a video over a link that came with it", () => {
+    const f = video();
+    expect(classifyDrop(dt([f], { "text/uri-list": "https://kick.com/x" }))).toEqual({ kind: "video", file: f, others: 0 });
+  });
+
+  it("takes a video with no type by its name", () => {
+    const f = new File(["x"], "clip.mov", { type: "" });
+    expect(classifyDrop(dt([f]))).toEqual({ kind: "video", file: f, others: 0 });
+    expect(videoType(f)).toBe("video/quicktime");
   });
 
   it("is none for nothing it can use", () => {

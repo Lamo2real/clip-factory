@@ -1,5 +1,5 @@
 {
- "version": "88d92097da20",
+ "version": "0721236f3bfc",
  "parts": [
   {
    "id": "app-map",
@@ -99,7 +99,7 @@
    "id": "contracts-12",
    "title": "CONTRACTS: 12. Get the app, updates, and kid-proof UX (added by the owner after the first build)",
    "line": "12.1 \"Get the app\" (sidebar item; on phones a card in Settings plus a one-time banner on Home)",
-   "chars": 18344
+   "chars": 18901
   },
   {
    "id": "contracts-13",

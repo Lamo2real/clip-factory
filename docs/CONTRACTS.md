@@ -703,10 +703,15 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
 * **Drag and drop on the new-job card** (`web/src/lib/drops.ts`): a video dragged from Finder (or the desktop)
   anywhere on the card switches to Pick a video and is picked like the file picker (same checks, words and motion);
   several files take the first video ("One video per job…"); another file says "That is not a video. Drop an MP4,
-  MOV or WebM video."; a link (a uri-list, or dragged text that is a link) switches to Paste a link and is checked.
-  While dragging, one soft fill over the card says "Drop your video here" / "Drop your link here" (no edges, no
-  animation with less motion); a drop outside the card is still refused by Ask's window guard. The same form serves
-  Use a video file (`/?file=1&from=`). Covered by `web/test/drops.test.ts` and `web/e2e/drop-video.spec.ts`.
+  MOV or WebM video."; a link (a uri-list, or dragged text that is a link) switches to Paste a link and is checked;
+  a thumbnail dragged off a video page (its picture plus the page link) is taken as the link. Text or a link dragged
+  into Notes goes into the note. While dragging, one opaque soft fill over the card says "Drop your video here" /
+  "Drop your link here" / "Drop it here" (files with a link), its words kept on screen (no edges, no animation with
+  less motion); it stays while the pointer holds still and goes on leaving the card or window, Escape or a drop.
+  While an upload or a start runs it says "Upload still running" / "Starting your job…" and refuses the drop with a
+  toast. A hidden status line says what each drop did ("Video picked: …", the error, "Link added. …") for screen
+  readers. A drop outside the card is still refused by Ask's window guard. The same form serves Use a video file
+  (`/?file=1&from=`). Covered by `web/test/drops.test.ts` and `web/e2e/drop-video.spec.ts`.
 * **Jobs list on phones**: when a job started is never cut (the source part shortens with "…" instead), and a failed
   job's error is shown in full because its last sentence says how to fix it.
 * **No blank pages**: a malformed `#anchor` (`/jobs#100%`) is used as typed instead of throwing, and render errors

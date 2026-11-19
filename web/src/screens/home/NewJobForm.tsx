@@ -18,8 +18,8 @@ import { useUnsaved } from "../../features/help/unsaved.ts";
 const MAX_UPLOAD = 5 * 1024 ** 3;
 
 type Mode = "link" | "upload";
-/** No dragover for this long means the drag left without a dragleave (Escape, a lost event): the highlight goes. */
-const DRAG_IDLE_MS = 1000;
+/** The highlight over the card while something is dragged over it (§12.5); "busy" while an upload or a start runs. */
+type Over = Exclude<DragKind, null> | "busy" | null;
 type Count = "range" | "exact";
 
 /** Use a video file on a failed link job (docs/CONTRACTS.md §29.7) opens Home at `/?file=1&from={jobId}`: the form
@@ -51,9 +51,13 @@ export function NewJobForm() {
   const mounted = useRef(true);
   // A video or a link dragged over the card (§12.5): one soft highlight for the whole card, counted so moving over
   // the fields inside it never makes it flicker.
-  const [over, setOver] = useState<DragKind>(null);
+  // No idle timer: a drag held still sends no dragover in WebKit, and hiding then would put the counter out of step.
+  const [over, setOver] = useState<Over>(null);
   const dragDepth = useRef(0);
-  const dragIdle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const form = useRef<HTMLFormElement>(null);
+  // One status line that is always there, so a screen reader hears what a drop did even when it switched the bar.
+  const [said, setSaid] = useState("");
+  const sayTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Action motion (§20.11 (a)): Make clips' scissors fly; Paste drops in; Clear spins away; the dropzone's arrow rises.
   const send = useAction("send");
   const pasteAct = useAction("paste");
@@ -93,18 +97,29 @@ export function NewJobForm() {
     };
   }, [start.from]);
 
-  // A drop anywhere (or the drag ending) clears the highlight, even when the drop landed outside the card.
+  // A drop anywhere, the drag ending, the drag going into another part of the page, or leaving the window (Escape
+  // fires a dragleave too) clears the highlight, even when the card itself never heard about it.
   useEffect(() => {
-    if (!over) return;
     const done = () => endDrag();
+    const entered = (e: globalThis.DragEvent) => {
+      if (!form.current?.contains(e.target as Node)) endDrag();
+    };
+    const left = (e: globalThis.DragEvent) => {
+      const outside = e.clientX <= 0 || e.clientY <= 0 || e.clientX >= innerWidth || e.clientY >= innerHeight;
+      if (!e.relatedTarget && outside) endDrag();
+    };
     window.addEventListener("drop", done);
     window.addEventListener("dragend", done);
+    window.addEventListener("dragenter", entered);
+    window.addEventListener("dragleave", left);
     return () => {
       window.removeEventListener("drop", done);
       window.removeEventListener("dragend", done);
+      window.removeEventListener("dragenter", entered);
+      window.removeEventListener("dragleave", left);
+      clearTimeout(sayTimer.current);
     };
-  }, [over]);
-  useEffect(() => () => clearTimeout(dragIdle.current), []);
+  }, []);
 
   const check = useMemo(() => checkLink(link), [link]);
   const min = me?.settings.clipMin ?? 5;
@@ -135,92 +150,108 @@ export function NewJobForm() {
     }
   }
 
-  function pick(f: File | null, how: "tap" | "drop" = "tap") {
+  /** Picks a file (from the picker or a drop) and says what is wrong with it, if anything. */
+  function pick(f: File | null, how: "tap" | "drop" = "tap"): string | null {
     setFile(f);
     setFileError(null);
-    if (!f) return;
+    if (!f) return null;
+    let error: string | null = null;
     // Played on the file arriving, not on the tap that opens the picker (§20.11 (a)).
     if (!isVideoFile(f)) {
-      setFileError(how === "drop" ? "That is not a video. Drop an MP4, MOV or WebM video." : "That is not a video. Tap the box and pick an MP4 or MOV file.");
-      uploadAct.fail();
+      error = how === "drop" ? "That is not a video. Drop an MP4, MOV or WebM video." : "That is not a video. Tap the box and pick an MP4 or MOV file.";
     } else if (f.size > MAX_UPLOAD) {
-      setFileError(`That file is ${bytes(f.size)}. Videos can be up to 5 GB. Pick a shorter one.`);
-      uploadAct.fail();
-    } else uploadAct.play();
+      error = `That file is ${bytes(f.size)}. Videos can be up to 5 GB. Pick a shorter one.`;
+    }
+    setFileError(error);
+    if (error) uploadAct.fail();
+    else uploadAct.play();
+    return error;
+  }
+
+  /** Says one line in the always-there status (cleared first, so the same words are heard again). */
+  function say(text: string) {
+    setSaid("");
+    clearTimeout(sayTimer.current);
+    sayTimer.current = setTimeout(() => setSaid(text), 60);
   }
 
   function endDrag() {
     dragDepth.current = 0;
-    clearTimeout(dragIdle.current);
     setOver(null);
   }
 
-  function keepDrag() {
-    clearTimeout(dragIdle.current);
-    dragIdle.current = setTimeout(endDrag, DRAG_IDLE_MS);
-  }
-
-  /** The card takes files and links; plain text only when it is not going into a text box (it types there). */
-  function takesDrag(e: DragEvent<HTMLElement>): boolean {
-    if (dragKind(e.dataTransfer)) return true;
+  /**
+   * What the card does with this drag where the pointer is now: the highlight to show, or null to let it through
+   * (text, or a link, dragged into Notes types there; plain text into the link box too). undefined: not ours at all.
+   */
+  function overFor(e: DragEvent<HTMLElement>): Over | undefined {
+    const kind = dragKind(e.dataTransfer);
+    if (!kind && !dragMayHoldText(e.dataTransfer)) return undefined;
     const t = e.target as HTMLElement | null;
-    return dragMayHoldText(e.dataTransfer) && !t?.closest?.("input, textarea");
+    if (!kind && t?.closest?.("input, textarea")) return null;
+    if (kind === "link" && t?.closest?.("textarea")) return null;
+    if (progress !== null || busy) return "busy";
+    return kind ?? "link";
   }
 
   function dragEnter(e: DragEvent<HTMLFormElement>) {
-    const kind = dragKind(e.dataTransfer);
-    if (!kind) return;
-    e.preventDefault();
+    const o = overFor(e);
+    if (o === undefined) return;
     dragDepth.current++;
-    setOver(kind);
-    keepDrag();
+    setOver(o);
+    if (o) e.preventDefault();
   }
 
   function dragOver(e: DragEvent<HTMLFormElement>) {
-    if (!takesDrag(e)) return;
-    // Without this the drop would be refused (the window guard) or the file opened instead of picked.
+    const o = overFor(e);
+    if (o === undefined) return;
+    // The window lost track (it cleared on a leave it took for the last one): the pointer is on the card again.
+    if (dragDepth.current === 0) dragDepth.current = 1;
+    if (o !== over) setOver(o);
+    if (!o) return;
+    // Without this the drop would be refused (the window guard) or the file opened instead of picked. While an upload
+    // runs the card says so and refuses the drop, still without the file replacing the app.
     e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-    const kind = dragKind(e.dataTransfer);
-    if (kind) {
-      if (over !== kind) setOver(kind);
-      keepDrag();
-    }
+    e.dataTransfer.dropEffect = o === "busy" ? "none" : "copy";
   }
 
   function dragLeave(e: DragEvent<HTMLFormElement>) {
-    if (!dragKind(e.dataTransfer)) return;
+    if (overFor(e) === undefined) return;
     dragDepth.current = Math.max(0, dragDepth.current - 1);
     if (dragDepth.current === 0) endDrag();
   }
 
   function drop(e: DragEvent<HTMLFormElement>) {
-    if (!takesDrag(e)) return;
-    const dropped = classifyDrop(e.dataTransfer);
+    const o = overFor(e);
     endDrag();
-    if (dropped.kind === "none") return;
+    if (!o) return;
     e.preventDefault();
-    takeDrop(dropped);
+    if (o === "busy") {
+      toast.info(
+        progress !== null ? "The upload is still running. Cancel it first, then drop again." : "Clip Factory is starting your job. Drop it again in a moment.",
+      );
+      return;
+    }
+    const dropped = classifyDrop(e.dataTransfer);
+    if (dropped.kind !== "none") takeDrop(dropped);
   }
 
   /** A dropped video is picked like the file picker's; a dropped link is pasted like Paste's. Both switch the bar. */
   function takeDrop(d: Exclude<Dropped, { kind: "none" }>) {
-    if (progress !== null) {
-      toast.info("The upload is still running. Tap Cancel upload first.");
-      return;
-    }
-    if (busy) return;
     setNudge(false);
     if (d.kind === "link") {
       setMode("link");
       takeLink(d.url);
       setTouched(true);
       pasteAct.play();
+      const c = checkLink(extractLink(d.url));
+      say(c.state === "ok" ? `Link added. ${PLATFORM_NAMES[c.platform]} ${KIND_LABEL[c.kind]} found.` : c.state === "error" ? `Link added. ${c.message}` : "Link added.");
       return;
     }
     setMode("upload");
-    pick(d.file, "drop");
+    const error = pick(d.file, "drop");
     if (d.kind === "video" && d.others > 0) toast.info(`One video per job. Clip Factory took ${d.file.name}.`);
+    say(error ?? `Video picked: ${d.file.name}. Then choose Make clips.`);
   }
 
   async function submit(e: FormEvent) {
@@ -265,6 +296,7 @@ export function NewJobForm() {
 
   return (
     <form
+      ref={form}
       className={`newjob${over ? " is-drop" : ""}`}
       onSubmit={submit}
       noValidate
@@ -481,11 +513,26 @@ export function NewJobForm() {
         <p className="newjob__hint">Nothing gets posted until you tap Keep.</p>
       </div>
 
+      <p className="sr-only" role="status">
+        {said}
+      </p>
       {over ? (
         // Pointer-only: the file box stays a labelled file input and the link box a labelled text box for keyboards.
-        <div className="newjob__drop" aria-hidden="true">
-          <Icon name={over === "file" ? "upload" : "link"} size={30} />
-          <p>{over === "file" ? "Drop your video here" : "Drop your link here"}</p>
+        <div className={`newjob__drop${over === "busy" ? " is-busy" : ""}`} aria-hidden="true">
+          <div className="newjob__drop-say">
+            <Icon name={over === "busy" ? "clock" : over === "link" ? "link" : "upload"} size={30} />
+            <p>
+              {over === "busy"
+                ? progress !== null
+                  ? "Upload still running"
+                  : "Starting your job…"
+                : over === "file"
+                  ? "Drop your video here"
+                  : over === "link"
+                    ? "Drop your link here"
+                    : "Drop it here"}
+            </p>
+          </div>
         </div>
       ) : null}
     </form>

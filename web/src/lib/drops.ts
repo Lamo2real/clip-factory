@@ -3,13 +3,17 @@
 import { filesFrom } from "../features/help/pictures.ts";
 import { extractLink } from "./links.ts";
 
-/** What a drag shows while it moves over the card: files, a link (from a browser), or nothing the card takes. */
-export type DragKind = "file" | "link" | null;
+/** What a drag shows while it moves over the card: files, a link (from a browser), files that came with a link (a
+ * thumbnail dragged off a video page: the picture plus the page's link, so it may still be a link), or nothing. */
+export type DragKind = "file" | "link" | "either" | null;
 
 export function dragKind(data: Pick<DataTransfer, "types"> | null | undefined): DragKind {
   const types = Array.from(data?.types ?? []);
-  if (types.includes("Files")) return "file";
-  if (types.includes("text/uri-list")) return "link";
+  const files = types.includes("Files");
+  const link = types.includes("text/uri-list");
+  if (files && link) return "either";
+  if (files) return "file";
+  if (link) return "link";
   return null;
 }
 
@@ -57,16 +61,15 @@ export function linkFrom(data: Pick<DataTransfer, "getData"> | null | undefined)
   return null;
 }
 
-/** What a drop on the card holds: the first video (and how many other files came with it), another file, a link. */
+/** What a drop on the card holds: the first video (and how many other files came with it), else a link (a thumbnail
+ * dragged off a video page carries its picture and the page's link: the link is what was meant), else another file. */
 export function classifyDrop(data: Pick<DataTransfer, "items" | "files" | "getData" | "types"> | null | undefined): Dropped {
   const files = filesFrom(data);
-  if (files.length) {
-    const video = files.find(isVideoFile);
-    if (video) return { kind: "video", file: video, others: files.length - 1 };
-    return { kind: "other", file: files[0]! };
-  }
+  const video = files.find(isVideoFile);
+  if (video) return { kind: "video", file: video, others: files.length - 1 };
   const url = linkFrom(data);
-  return url ? { kind: "link", url } : { kind: "none" };
+  if (url) return { kind: "link", url };
+  return files.length ? { kind: "other", file: files[0]! } : { kind: "none" };
 }
 
 /** The upload's content type: the file's own, else one from its name (some systems give dropped files none). */
