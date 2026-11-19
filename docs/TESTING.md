@@ -47,8 +47,10 @@ job, so [ci.yml](../.github/workflows/ci.yml) splits it:
 
 **WebKit too.** The macOS desktop app draws with WebKit, so `nav-smooth.spec.ts` (the menu highlight sampled every
 frame), `page-still.spec.ts` (no blink or twitch on a page change) and `top-line.spec.ts` (one top line, the
-traffic-light band) also run in the `webkit` Playwright project; the shards install WebKit next to Chromium. On a
-Mac: `npx playwright install webkit`, then `CF_E2E_PORT=4471 npx playwright test nav-smooth page-still top-line
+traffic-light band) also run in the `webkit` Playwright project; the shards install WebKit next to Chromium. The
+WebKit slide check (`nav-smooth`) runs on macOS only: Playwright's WebKit on the Linux runners is the GTK/WPE port,
+whose headless run never started the glide's Web Animation at all, which says nothing about the Mac app's WKWebView;
+`page-still` and `top-line` pass there and run in CI. On a Mac: `npx playwright install webkit`, then `CF_E2E_PORT=4471 npx playwright test nav-smooth page-still top-line
 --project=chromium --project=webkit`.
 
 A failed shard uploads `playwright-report-N` (its `test-results`); the other shards still finish. To run one shard on

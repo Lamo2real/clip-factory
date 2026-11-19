@@ -127,6 +127,11 @@ async function everySwitch(page: Page, list: string, itemSel: (to: string) => st
   test.info().annotations.push({ type: "glide", description: report.join(" | ") });
 }
 
+// WebKit here means the Mac app's engine, so its run counts on macOS. Playwright's WebKit on the Linux CI runners is
+// the GTK/WPE port with its own compositor: on CI it never started the glide's Web Animation at all (every switch,
+// reduced motion stated off), which says nothing about WKWebView. Chromium runs everywhere; WebKit runs on a Mac.
+test.skip(({ browserName }) => browserName === "webkit" && process.platform !== "darwin", "WebKit's slide is measured on macOS (the Mac app's engine)");
+
 const SIDEBAR = ["jobs", "review", "library", "settings", "home", "review", "jobs"];
 const sidebarItem = (to: string) => `.sidebar__item[data-help="nav-${to}"]`;
 

@@ -4173,7 +4173,7 @@ to the new one, instead of the old pill vanishing and a new one appearing.
   glide is decoration only.
 * **Tests:** `e2e/glide.spec.ts` checks that it travels (one transform-only `glide-slide` animation with a stretch),
   lands on the choice in every bar, follows a page change in the menu and the tab bar, snaps on resize, and does not
-  slide under reduced motion. `e2e/nav-smooth.spec.ts` (Chromium **and WebKit**) samples the glide every frame for
+  slide under reduced motion. `e2e/nav-smooth.spec.ts` (Chromium, and WebKit on macOS) samples the glide every frame for
   every menu switch in the simulated macOS window (1000 x 650), a 1440 x 900 browser and the phone tab bar: one
   transform-only animation, lands to the pixel, never passes the item (≤ 101 %), never creeps back, no step bigger than
   the curve's own launch, and fewer than half the switches with a frame later than about two and a half frames in the

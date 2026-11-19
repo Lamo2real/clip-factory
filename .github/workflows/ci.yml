@@ -50,7 +50,8 @@ jobs:
   web-e2e:
     name: web-e2e (${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # 35, not 25: installing WebKit and its system libraries alone took up to 20 minutes on a slow mirror.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:

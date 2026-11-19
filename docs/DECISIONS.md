@@ -1116,8 +1116,10 @@ logs its token counts (`bedrock.usage`), and this table is to be corrected from 
   - *An overlay title bar on macOS* (§12.3): `TitleBarStyle::Overlay` + `hidden_title(true)`, `__CF_TITLEBAR__ = 28`, a
     transparent `data-tauri-drag-region` strip exactly over the 28 px band, and one runtime capability for the app's own origin:
     `core:window:allow-start-dragging` and `core:window:allow-internal-toggle-maximize`.
-  - *WebKit in CI* for the three specs that hold this (`nav-smooth`, `page-still`, `top-line`): the `webkit` Playwright
-    project; ci.yml installs WebKit next to Chromium with the same pinned Playwright.
+  - *WebKit* for the three specs that hold this (`nav-smooth`, `page-still`, `top-line`): the `webkit` Playwright
+    project; ci.yml installs WebKit next to Chromium with the same pinned Playwright (shard timeout 35 min for the
+    install). `nav-smooth`'s WebKit run is macOS only: on the Linux runners WebKit (GTK/WPE, not the Mac's engine)
+    never started the glide's animation at all.
 - **Alternatives.** *Keep the cross-fade but shorter*: still blends two pictures of the whole window and still ends with
   WebKit rebuilding the glass. *A transform-only page entrance*: the owner asked for the window to stay still. *Defer the
   slide until the new page has painted*: measured, it moved the late frames rather than removing them, and added a
