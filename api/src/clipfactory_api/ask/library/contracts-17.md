@@ -168,14 +168,14 @@ v27.0; system-user tokens are for Tech Providers only). Get ready:
 | id | title | essentials |
 |---|---|---|
 | `ready-pro` | Make Instagram a pro account | Instagram app › your picture › menu › **Account type and tools** › **Switch to professional account** › **Creator** or **Business**. Personal accounts cannot connect. |
-| `ready-page` | Link Instagram to a Facebook Page | In the Instagram app, tap **Edit profile**, then **Page** (under Public business information). Pick your Facebook Page, or press **Create a Facebook Page**. No Page yet? Make one first in the Facebook setup, step 1. |
+| `ready-page` | Link Instagram to a Facebook Page | In the Instagram app, tap **Edit profile**, then **Page** (under Public business information). Pick your Facebook Page, or press **Create a Facebook Page**. No Page yet? Make one first in the Facebook setup, step 1. If you see **Manage connection** on Facebook: already linked; check the name, close it, **I did this**, never **Disconnect**. Wrong Instagram there: **Disconnect**, then **Connect account**. |
 | `ready-computer` | Use a computer | Log in to facebook.com with the Facebook account that will own the app. Wrong account? Log out first. |
-| `ready-portfolio` | Make a business portfolio | Open business.facebook.com, **Create a business portfolio** (name, your name, email), **Create**. **Settings** › **Accounts** › **Instagram accounts** › **Add**, log in to Instagram. Already in a portfolio? Use that one. |
+| `ready-portfolio` | Business portfolio, if Meta asks | (optional since 19 Nov 2026: only if Meta asks or the Instagram is already in one) Open business.facebook.com, **Create a business portfolio** (name, your name, email), **Create**. **Settings** › **Accounts** › **Instagram accounts** › **Add**, log in to Instagram. Already in a portfolio? Use that one. |
 Make your Instagram key:
 | id | title | essentials |
 |---|---|---|
 | `key-developer` | Become a Meta developer | Open developers.facebook.com/async/registration, **Next**, type the codes Meta sends, pick **Creator**. |
-| `key-app` | Create the app | developers.facebook.com/apps › **Create app**. App name `appName`, your email, **Next**. Use case **Manage messaging & content on Instagram**, **Next**. Pick your portfolio. **Next** / **Go to dashboard**. Never ask for a review. |
+| `key-app` | Create the app | developers.facebook.com/apps › **Create app**. App name `appName`, your email, **Next**. Use case **Manage messaging & content on Instagram**, **Next**. Pick your portfolio, or skip it. **Next** / **Go to dashboard**. Never ask for a review. |
 | `key-basic` | Fill in Basic settings | **App settings** › **Basic**: Privacy Policy URL `privacyUrl`, Terms of Service URL `termsUrl`, User data deletion › **Data deletion instructions URL** `dataDeletionUrl`, a Category. **Save changes**. |
 | `key-config` | Make the Instagram login setup | **Use cases** › **Customize** (Instagram) › open the tab **API setup with Facebook login**. Press **Create new configuration** (under Facebook Login for Business › Configurations). Token type: **User access token**, the longest expiry. Assets: your Page and Instagram account. **Edit permissions**: tick instagram_basic, instagram_manage_insights, instagram_content_publish, pages_show_list, pages_read_engagement (instagram_manage_insights is not ticked by default); untick the ad ones. **Use this configuration**. Redirect URL `redirectUri`, **Save**. |
 | `key-redirect-check` | Double-check the return address | If you see **Facebook Login for Business** › **Settings**: put `redirectUri` in **Valid OAuth Redirect URIs**, **Enforce HTTPS** on, **Save changes**. No such page: skip. (optional) |
@@ -185,12 +185,13 @@ account, leave every switch on, confirm. Several accounts → pick in Clip Facto
 (`ready-pro`), not linked to a Page (`ready-page`) or in another portfolio (`ready-portfolio`). Go public:
 `public-try` "Post one test clip" (Instagram may take a few minutes;
 numbers can take 2 days). Status: "Works now." If you see your Reels missing for other people: "Tell Clip Factory
-support; Meta may want the app Live."
+support; Meta may want the app Live." If Facebook asks to confirm who runs the Page (Page Publishing Authorization):
+"Do it. Instagram will not post until you do."
 
 **Facebook** (about 25 min, Free; Page Reels, Facebook Login for Business, Graph v27.0). Get ready:
 | id | title | essentials |
 |---|---|---|
-| `ready-page` | Have a Facebook Page | Open facebook.com/pages/?category=your_pages; none → **Create new Page**. Profiles cannot post Reels through apps. You need full control of the Page. Switch back to your profile. |
+| `ready-page` | Have a Facebook Page | Open facebook.com/pages/?category=your_pages; none → **Create new Page**. Profiles cannot post Reels through apps. You need **Content** or **Full control** access on the Page. Tap your picture and switch back to your own profile; do not change Page settings. If you see **Manage connection** after **Edit profile**: Instagram is already linked, close it, never **Disconnect**. **People who help manage your Page**: leave as is. |
 | `ready-computer` | Use a computer | |
 Make your Facebook key:
 | id | title | essentials |
@@ -199,15 +200,15 @@ Make your Facebook key:
 | `key-app` | Create the app | Open developers.facebook.com/apps/creation, App name copy "Clip Factory Pages" (never put Facebook, Meta or Instagram in the name), email, **Next**. |
 | `key-use-case` | Pick one use case | Tick only **Manage everything on your Page**. Do not tick the Instagram one or **Authenticate and request data from users with Facebook Login**. Use cases cannot be removed later. **Next**. |
 | `key-finish-app` | Finish the app | Business: your portfolio, or **I don't want to connect a business portfolio yet**. **Next**, **Next**, **Go to dashboard**. |
-| `key-permissions` | Turn on Page permissions | **Dashboard** › **Customize the Manage everything on your Page use case**. **Add** next to pages_read_engagement, pages_manage_posts, read_insights, pages_manage_engagement. **Ready to test**. |
+| `key-permissions` | Turn on Page permissions | **Dashboard** › **Customize the Manage everything on your Page use case**. **Add** next to pages_read_engagement, pages_manage_posts, read_insights, pages_manage_engagement (pages_show_list and business_management are already there). **Ready to test**. |
 | `key-basic` | Fill in Basic settings | **App settings** › **Basic**: App domains `appDomain`, Privacy `privacyUrl`, Terms `termsUrl`, **Data deletion instructions URL** `dataDeletionUrl`, Category, App icon (download). In the EU: Data Protection Officer = your name and email. **+ Add platform** › **Website** › Site URL `websiteUrl`. **Save changes**. |
-| `key-redirect` | Paste the return address | **Facebook Login for Business** › **Settings**: **Client OAuth login**, **Web OAuth login**, **Enforce HTTPS** = Yes, Strict Mode on. **Valid OAuth Redirect URIs** `redirectUri`; **Check URI**; **Save changes**. Not in the menu: look under **Use cases** › **Customize** or **Add product**. |
+| `key-redirect` | Paste the return address | **Facebook Login for Business** › **Settings**: **Client OAuth login**, **Web OAuth login**, **Enforce HTTPS** = Yes, Strict Mode on. **Valid OAuth Redirect URIs** `redirectUri`; **Check URI**; **Save changes**. Not in the menu: look under **Use cases** › **Customize** or **Add product**. **Deauthorize Callback URL** / **Data Deletion Request URL**: leave empty. |
 | `key-config` | Make a login configuration | **Facebook Login for Business** › **Configurations** › **+ Create configuration** (not a template). Name `appName`. If asked: **General**. Token **User access token**, longest expiry. Assets **Pages**. Permissions: pages_show_list, pages_read_engagement, pages_manage_posts, pages_manage_engagement, read_insights, business_management. **Create**. |
 | `key-paste` | Paste the 3 values | **App ID**, **App secret**, **Configuration ID**. **Save keys**. |
 Connect: `connect` **Connect Facebook**: **Continue**, tick your clip Page, leave every switch ON (one off and Facebook
 gives nothing), **Save**, **Got it**. Several Pages → pick in Clip Factory.
-Go public (`gate: app_live`): `public-live` "Make the app Live": left menu **Publish** › **Go live** (or the **App
-Mode** switch → **Live**). Missing info → back to `key-basic`. If Meta asks for **App Review** first: "Your Reels stay
+Go public (`gate: app_live`): `public-live` "Make the app Live": left menu **Publish**, check the list, **Publish** at the bottom right (no
+**Publish**: the **App Mode** switch → **Live**). Missing info → back to `key-basic`. If Meta asks for **App Review** first: "Your Reels stay
 visible only to you for now. Tell Clip Factory support." Status before: "Works now, but only you can see your
 Facebook Reels until the app is Live."
 
@@ -428,7 +429,7 @@ step id, e.g. `key-client`, so numbers never drift):
 | `redirect_wrong` | "The return address does not match. Copy it again in step 11." |
 | `missing_permissions` | "A permission box was not ticked. Connect again and tick every box." |
 | `no_channel` | "This Google account has no YouTube channel. Make one first (step 1)." |
-| `no_accounts`, `wrong_account_type` | "Instagram did not show a pro account. Do steps 1, 2 and 4, then connect again." |
+| `no_accounts`, `wrong_account_type` | "Instagram did not show a pro account. Do steps 1 and 2, then connect again." |
 | `no_pages` | "Facebook did not show a Page you control. Do step 1, then connect again." |
 | `platform_down` | "YouTube did not answer. Try again in a few minutes." |
 | `error` | "Something went wrong. Press Connect YouTube again." |

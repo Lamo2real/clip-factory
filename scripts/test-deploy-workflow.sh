@@ -6,6 +6,7 @@
 #   - every action is pinned to a full commit SHA (with its version in a comment).
 #   - the updater signing key reaches only the desktop build job (which has no OIDC token), and latest.json is
 #     written by desktop-manifest, which runs after desktop-upload (§12.6).
+#   - the smoke job checks that the deployed Ask model reads a picture (ADR-53).
 # Run: bash scripts/test-deploy-workflow.sh   (ci.yml runs it on every push)
 set -euo pipefail
 
@@ -114,6 +115,15 @@ if [ "${writers[*]:-}" = "desktop-manifest" ] && job desktop-manifest | grep -Eq
   ok "only desktop-manifest writes downloads/latest.json, after desktop-upload"
 else
   not_ok "downloads/latest.json must be written only by desktop-manifest, which needs desktop-upload (writers: ${writers[*]:-none})"
+fi
+
+# 8. The smoke job checks Ask with the real model (ADR-53): it invokes the worker with {"smoke":"ask"}, needs
+#    smoke_ok, and runs no npm (it holds id-token: write).
+smoke="$(job smoke)"
+if grep -q '"smoke":"ask"' <<<"$smoke" && grep -q "outcome == \"smoke_ok\"" <<<"$smoke" && ! grep -Eq 'npm |npx ' <<<"$smoke"; then
+  ok "the smoke job asks the deployed Ask model about a picture and needs smoke_ok"
+else
+  not_ok "the smoke job must invoke the Ask worker with {\"smoke\":\"ask\"} and require outcome smoke_ok"
 fi
 
 echo "${passed} passed, ${failed} failed"

@@ -1,4 +1,4 @@
-// X setup (docs/CONTRACTS.md §17.2), checked against the X Developer Console on 16 Nov 2026. Posting on X costs
+// X setup (docs/CONTRACTS.md §17.2), checked against the X Developer Console on 19 Nov 2026. Posting on X costs
 // money (pay per use), so this guide asks for a grown-up and a card first.
 import { CHECKED_ON, type SetupGuide } from "./types.ts";
 

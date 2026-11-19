@@ -25,7 +25,7 @@ import { AskMark } from "../../components/AskMark.tsx";
 import { liveConnection } from "../../lib/live.ts";
 import { defaultAskApi, type AskApi } from "./askApi.ts";
 import { AnswerBody, CopyButton, FileTile, Sources, StatusLine, unreadNote, UploadRing } from "./AskBits.tsx";
-import { runAsk, type AskConnection, type Running, type UploadFile } from "./askStream.ts";
+import { runAsk, type AskConnection, type Running, type RunEnd, type UploadFile } from "./askStream.ts";
 import { addedText, carriedFiles, classify, COUNTER_FROM as ASK_COUNTER_FROM, FILE_TEXT, FILES_MAX, BYTES_PER_FILE, IMAGES_MAX, formatLabel, pastedTextFile, QUESTION_CHARS, type AskFile } from "./files.ts";
 import { MarkupEditor, type MarkupResult } from "./MarkupEditor.tsx";
 import { api } from "../../api/index.ts";
@@ -63,6 +63,24 @@ export const DROP_ANY_TEXT = "Drop it here";
 export const ASK_PLACEHOLDER = "Ask me anything";
 export const FILES_PLACEHOLDER = "Ask about your files";
 export const SHORT_HELP_TEXT = "I couldn't think it through this time. Here is the short help.";
+/** When Ask could not answer and no short help truly fits (a picture, or "What do I do now?"): never a guess. */
+export const CANT_REACH_TEXT = "I can't reach Clip Factory right now. Your question is still here. Press Try again.";
+export const TOO_LONG_TEXT = "That took too long. Your question is still here. Press Try again.";
+export const PICTURE_KEPT_TEXT = "I couldn't look at your picture this time. It is still here. Press Try again.";
+export const FILE_KEPT_TEXT = "I couldn't read your file this time. It is still here. Press Try again.";
+export const TRY_AGAIN_LABEL = "Try again";
+
+type Fallback = Extract<RunEnd, { kind: "fallback" }>;
+
+/** What the panel says when the assistant could not answer: the server's own plain reason for a model problem
+ * (model access not turned on, busy), else why it could not reach Ask; then that the question was kept. */
+export function cantAnswerText(end: Pick<Fallback, "reason" | "message" | "why">, kept: "picture" | "file" | null): string {
+  if (end.reason === "model" && end.message && end.why && end.why !== "other") return `${end.message} Your question is still here.`;
+  if (kept === "picture") return PICTURE_KEPT_TEXT;
+  if (kept === "file") return FILE_KEPT_TEXT;
+  if (end.reason === "timeout" || end.why === "timeout") return TOO_LONG_TEXT;
+  return CANT_REACH_TEXT;
+}
 export const CUT_TEXT = "The answer was cut short. Ask me to go on.";
 export const UPLOAD_FAILED_TEXT = "I couldn't send your files. Check your internet and try again.";
 export const WEB_TIP_TEXT = "I can't search the web yet. Turn it on in Settings, and I can check today's steps for you.";
@@ -346,7 +364,7 @@ export function HelpPanel({
 
   /** §28: the question goes to the assistant; the answer streams into an "ai" entry. Falls back to §19 when it can't. */
   const askSmart = useCallback(
-    async (raw: string, fallback: (q: string, note: string | null) => Promise<void>) => {
+    async (raw: string, fallback: (q: string, end: Fallback, giveBack: () => void) => Promise<void>) => {
       const q = raw.trim().slice(0, QUESTION_CHARS);
       const s = stateRef.current;
       const files = readyFiles(s);
@@ -372,7 +390,7 @@ export function HelpPanel({
       };
       const api = await getAskApi();
       const conn = liveConnection();
-      const adapter: AskConnection | null = conn ? { whoami: (ms) => conn.whoami(ms), onRaw: (fn) => conn.onRaw(fn) } : null;
+      const adapter: AskConnection | null = conn ? { whoami: (ms) => conn.whoami(ms), onRaw: (fn) => conn.onRaw(fn), wake: () => conn.wake() } : null;
       const uploads: UploadFile[] = [...files, ...carried].map((f, i) => ({
         id: f.id,
         name: f.name,
@@ -429,7 +447,13 @@ export function HelpPanel({
           dispatch({ type: "ai_end", entryId: aiId });
           if (end.reason === "model" || end.reason === "timeout") sounds.play("deny");
           if (end.reason === "off") void checkHelpStatus(client);
-          return fallback(q, end.reason === "model" || end.reason === "timeout" ? SHORT_HELP_TEXT : null);
+          // A question with a picture or a file never gets a canned answer: the short help cannot see them.
+          if (uploads.length) {
+            const kept = uploads.some((u) => u.kind === "image") ? "picture" : "file";
+            dispatch({ type: "notice", id: entryId(), tone: "info", text: cantAnswerText(end, kept), retry: true });
+            return giveBack();
+          }
+          return fallback(q, end, giveBack);
         }
       }
     },
@@ -439,25 +463,47 @@ export function HelpPanel({
   const ask = useCallback(
     async (raw: string) => {
       if (assistantStatus().on) {
-        return askSmart(raw, async (q, note) => {
-          // The §19 path: the server's plain answer when the socket was not there, else the local one.
+        return askSmart(raw, async (q, end, giveBack) => {
+          // The §19 short help, only when it truly fits (a strong match, never an open question like "What do I do
+          // now?"). Otherwise say plainly why Ask could not answer, keep the question and offer Try again.
           const gen = generation.current;
           const history = historyOf(stateRef.current.entries);
           const context = helpContext(routeRef.current);
           const short = q.slice(0, QUESTION_MAX);
-          if (note) dispatch({ type: "notice", id: entryId(), tone: "info", text: note });
-          if (!short) return;
-          if (!note) {
+          const cantAnswer = () => {
+            if (gen !== generation.current) return;
+            dispatch({ type: "notice", id: entryId(), tone: "info", text: cantAnswerText(end, null), retry: true });
+            giveBack();
+          };
+          if (!short) return cantAnswer();
+          const modelTrouble = end.reason === "model" || end.reason === "timeout";
+          let answer: HelpAnswer | null = null;
+          let requestId = "";
+          let trouble = false;
+          if (!modelTrouble) {
             const result = await client.ask({ question: short, history, context });
             if (gen !== generation.current) return;
-            if (result.kind === "answer") return showAnswer(result.answer, result.requestId, false, gen);
+            if (result.kind === "answer") {
+              answer = result.answer;
+              requestId = result.requestId;
+            }
           }
-          try {
-            const local = await answerLocally(short, history, context);
-            if (gen === generation.current) showAnswer(local, `c-${Date.now()}`, true, gen);
-          } catch {
-            if (gen === generation.current) dispatch({ type: "notice", id: entryId(), tone: "info", text: "Ask Clip Factory can't answer right now." });
+          if (!answer) {
+            try {
+              answer = await answerLocally(short, history, context);
+              requestId = `c-${Date.now()}`;
+              trouble = true;
+            } catch {
+              answer = null;
+            }
           }
+          if (gen !== generation.current) return;
+          // Assistant turned off: the server's §19 answer is the honest one, "I don't know that one yet" included.
+          const offAnswer = end.reason === "off" && !!answer && !trouble;
+          if (!answer?.known && !offAnswer) return cantAnswer();
+          if (!answer) return;
+          if (modelTrouble) dispatch({ type: "notice", id: entryId(), tone: "info", text: SHORT_HELP_TEXT });
+          showAnswer(answer, requestId, trouble, gen);
         });
       }
       const q = raw.trim().slice(0, QUESTION_MAX);
@@ -1020,6 +1066,13 @@ export function HelpPanel({
           <div>
             <p>{busy && e.until && e.until > now ? busyText(Math.max(1, Math.ceil((e.until - now) / 1000))) : e.text}</p>
             {e.helpCode ? <HelpCode code={e.helpCode} onCopy={copyCode} /> : null}
+            {e.retry && e.id === state.entries[state.entries.length - 1]?.id ? (
+              <div className="help-actions">
+                <Button size="sm" variant="primary" icon="retry" onClick={() => submit()}>
+                  {TRY_AGAIN_LABEL}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       );

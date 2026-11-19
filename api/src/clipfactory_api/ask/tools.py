@@ -18,11 +18,44 @@ from typing import Any
 from ..log import log
 from . import fetch as web
 from .knowledge import Knowledge, read_section
-from .prompt import READ_MY_SECTIONS
+from .prompt import READ_MY_SECTIONS, SETUP_PLATFORMS
 from .search import QUERY_CHARS, SearchError, SearchProvider
 from .state import Reader
 
-CAPS = {"web_search": 6, "web_fetch": 6, "read_app_doc": 6, "read_my_clip_factory": 6, "show_app_buttons": 2}
+CAPS = {
+    "web_search": 6,
+    "web_fetch": 6,
+    "read_app_doc": 6,
+    "read_my_clip_factory": 6,
+    "read_setup_guide": 6,
+    "show_app_buttons": 2,
+}
+# Official help and developer sites ``web_fetch`` may open with no search key and no link in the conversation
+# (§28.3): the platforms the setup guides send the owner to, and the services Clip Factory runs on. A host matches
+# itself and its subdomains. The SSRF guard in fetch.py still checks every address.
+OFFICIAL_DOC_HOSTS = (
+    "developers.facebook.com",
+    "facebook.com",
+    "help.instagram.com",
+    "about.instagram.com",
+    "business.facebook.com",
+    "transparency.meta.com",
+    "developers.tiktok.com",
+    "support.tiktok.com",
+    "developers.google.com",
+    "support.google.com",
+    "console.cloud.google.com",
+    "cloud.google.com",
+    "docs.x.com",
+    "developer.x.com",
+    "help.x.com",
+    "docs.aws.amazon.com",
+    "aws.amazon.com",
+    "docs.anthropic.com",
+    "docs.claude.com",
+    "platform.claude.com",
+)
+SETUP_STEP_ACTION = re.compile(r"setup-step:([a-z]+):([a-z0-9-]{1,40})")
 LIMIT_REACHED = "limit reached, answer with what you have"
 LIBRARY_SOURCE = "clip-factory://library/"
 URL_IN_TEXT = re.compile(r"https?://[^\s<>\"'`)\]]+")
@@ -43,6 +76,46 @@ def typed_urls(texts: Iterable[str]) -> set[str]:
             url = web.normalise(raw.rstrip(".,;:!?"))
             if url:
                 out.add(url)
+    return out
+
+
+def official(url: str) -> bool:
+    """True for an https URL on an official help or developer site (OFFICIAL_DOC_HOSTS, subdomains included)."""
+    parts = urllib.parse.urlsplit(url)
+    host = (parts.hostname or "").lower().rstrip(".")
+    if parts.scheme != "https" or not host:
+        return False
+    return any(host == h or host.endswith("." + h) for h in OFFICIAL_DOC_HOSTS)
+
+
+def setup_step_action(knowledge: Knowledge, action_id: str) -> dict[str, Any] | None:
+    """The button for ``setup-step:{platform}:{stepId}``: opens that step of the setup guide and lights it."""
+    m = SETUP_STEP_ACTION.fullmatch(action_id)
+    if not m or m.group(1) not in SETUP_PLATFORMS:
+        return None
+    platform, step_id = m.group(1), m.group(2)
+    step = next((st for st in knowledge.setup_steps.get(platform, []) if st.get("id") == step_id), None)
+    if step is None:
+        return None
+    name = {"youtube": "YouTube", "tiktok": "TikTok", "x": "X"}.get(platform, platform.capitalize())
+    return {
+        "id": action_id,
+        "label": f"Open {name} step {step.get('n')}",
+        "to": f"/settings/posting/setup/{platform}#step-{step_id}",
+        "highlight": [f"step-{step_id}"],
+    }
+
+
+def guide_urls(knowledge: Knowledge) -> set[str]:
+    """Every page a setup step opens: web_fetch may read them without a search (§28.3)."""
+    out = set()
+    for rows in knowledge.setup_steps.values():
+        for st in rows:
+            url = (st.get("open") or {}).get("url") if isinstance(st.get("open"), dict) else None
+            if isinstance(url, str):
+                norm = web.normalise(url)
+                if norm:
+                    out.add(norm)
     return out
 
 
@@ -68,6 +141,7 @@ class Toolbox:
     titles: dict[str, str] = field(default_factory=dict)  # document title → "file" | "app"
     actions: list[dict[str, Any]] = field(default_factory=list)
     tool_docs: bool = True  # PDFs from the web as document blocks inside tool_result
+    doc_urls: set[str] = field(default_factory=set)  # pages the setup guides open: readable, not live links
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def __post_init__(self) -> None:
@@ -117,7 +191,13 @@ class Toolbox:
     def run(self, name: str, args: Any) -> Outcome:
         if name not in CAPS or not isinstance(args, dict):
             return Outcome('{"INVALID_JSON": "the input was not an object"}', True)
-        if self.soft_deadline() and name in {"web_search", "web_fetch", "read_app_doc", "read_my_clip_factory"}:
+        if self.soft_deadline() and name in {
+            "web_search",
+            "web_fetch",
+            "read_app_doc",
+            "read_my_clip_factory",
+            "read_setup_guide",
+        }:
             return Outcome("time is up, answer with what you have", True)
         with self._lock:  # parallel calls of one turn share the caps
             if self.used[name] >= CAPS[name]:
@@ -132,6 +212,8 @@ class Toolbox:
                 return self._doc(args)
             if name == "read_my_clip_factory":
                 return self._mine(args)
+            if name == "read_setup_guide":
+                return self._guide(args)
             return self._buttons(args)
         except Exception as e:  # a tool never ends the answer
             log("warning", "ask.tool_failed", tool=name, error=type(e).__name__)
@@ -170,9 +252,11 @@ class Toolbox:
         if set(args) != {"url"} or not isinstance(url, str):
             return Outcome('{"INVALID_JSON": "url must be a string"}', True)
         target = web.normalise(url)
-        if target is None or target not in self.allowed_urls:
+        if target is None or (target not in self.allowed_urls and target not in self.doc_urls and not official(target)):
             return Outcome(
-                "I can only open links from this answer's search results or links the owner typed himself.", True
+                "I can only open official help and developer pages, pages from the setup guide, links from this "
+                "answer's search results or links the owner typed himself.",
+                True,
             )
         status = ("reading", f"Reading {domain(target)}…")
         try:
@@ -240,6 +324,56 @@ class Toolbox:
         except LookupError as e:
             return Outcome(str(e), True, ("checking_app", "Checking your setup…"))
 
+    def _guide(self, args: dict[str, Any]) -> Outcome:
+        platform, step_id = args.get("platform"), args.get("stepId")
+        if set(args) - {"platform", "stepId"} or platform not in SETUP_PLATFORMS:
+            return Outcome('{"INVALID_JSON": "platform must be youtube, tiktok, instagram, facebook or x"}', True)
+        if step_id is not None and not isinstance(step_id, str):
+            return Outcome('{"INVALID_JSON": "stepId must be a string"}', True)
+        rows = self.knowledge.setup_steps.get(str(platform), [])
+        if not rows:
+            return Outcome("that guide is not in this version of the app", True)
+        if step_id:
+            rows = [r for r in rows if r.get("id") == step_id]
+            if not rows:
+                return Outcome("no such step; read the whole guide to see the step ids", True)
+        try:
+            mine = next((r for r in self.reader.setup() if r.get("platform") == platform), None)
+        except Exception as e:  # his progress is a bonus: the guide itself still answers
+            log("warning", "ask.setup_read_failed", error=type(e).__name__)
+            mine = None
+        lines = [
+            f"Setup guide: {platform} (Settings › Posting › Set up posting › {platform}). "
+            f"Steps checked on {rows[0].get('checkedOn') or 'unknown'}. Outside sites change; trust his picture "
+            "and the official page over these words when they differ.",
+        ]
+        if mine is not None:
+            nxt = mine.get("next") or {}
+            lines.append(
+                f"His progress: {mine.get('state')}, {mine.get('stepsDone')} of {mine.get('stepsTotal')} steps ticked"
+                + (f", next by his ticks: step {nxt.get('number')} {nxt.get('id')}" if nxt else "")
+                + f", connected: {'yes' if mine.get('connected') else 'no'}."
+            )
+        part = ""
+        for r in rows:
+            if r.get("partTitle") != part:
+                part = str(r.get("partTitle") or "")
+                lines.append(f"\nPart: {part}")
+            head = f"{r.get('n')}. [{r.get('id')}] {r.get('title')}"
+            if r.get("optional"):
+                head += " (optional)"
+            if r.get("auto"):
+                head += f" (ticks itself: {r.get('auto')})"
+            lines.append(head)
+            lines.extend(f"   - {line}" for line in r.get("say") or [])
+            for hint in r.get("ifYouSee") or []:
+                lines.append(f"   - If you see {hint.get('see')}: {hint.get('do')}")
+            opens = r.get("open")
+            if isinstance(opens, dict) and isinstance(opens.get("url"), str):
+                lines.append(f"   - Opens: {opens.get('label')} {opens['url']}")
+            lines.append(f"   - Button to this step: setup-step:{platform}:{r.get('id')}")
+        return Outcome("\n".join(lines), False, ("checking_app", "Reading the setup guide…"))
+
     def _buttons(self, args: dict[str, Any]) -> Outcome:
         ids = args.get("actionIds")
         if set(args) != {"actionIds"} or not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
@@ -247,9 +381,13 @@ class Toolbox:
         known, unknown = [], []
         for action_id in ids[:2]:
             action = self.knowledge.actions.get(action_id)
+            step = setup_step_action(self.knowledge, action_id) if action is None else None
             if action is not None and self.route_ok(action.to):
                 if all(a["id"] != action.id for a in self.actions):
                     known.append(action.public())
+            elif step is not None:
+                if all(a["id"] != step["id"] for a in self.actions):
+                    known.append(step)
             else:
                 unknown.append(action_id)
         self.actions = (self.actions + known)[:2]

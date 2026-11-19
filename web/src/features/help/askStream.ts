@@ -34,7 +34,10 @@ export type AskEvent =
   | { type: "ask.sources"; askId: string; sources: AskSource[] }
   | { type: "ask.files"; askId: string; files: FileRead[] }
   | { type: "ask.done"; askId: string; stop: StopReason; links: string[]; webMissing?: true }
-  | { type: "ask.error"; askId: string; code: "rate_limited" | "unavailable" | "model" | "timeout"; message: string; retryAfter?: number };
+  | { type: "ask.error"; askId: string; code: "rate_limited" | "unavailable" | "model" | "timeout"; message: string; retryAfter?: number; reason?: ModelErrorReason };
+
+/** Why the model gave no answer (§28.5): its access is not turned on, it is busy, it took too long, or anything else. */
+export type ModelErrorReason = "access" | "busy" | "timeout" | "other";
 
 export interface StreamAnswer {
   askId: string;
@@ -98,8 +101,9 @@ export function parseAskEvent(raw: RawMessage, askId: string): AskEvent | null {
             type: "ask.error",
             askId,
             code: (["rate_limited", "unavailable", "model", "timeout"].includes(raw.code) ? raw.code : "unavailable") as "unavailable",
-            message: raw.message,
+            message: raw.message.slice(0, 200),
             ...(typeof raw.retryAfter === "number" ? { retryAfter: raw.retryAfter } : {}),
+            ...(["access", "busy", "timeout", "other"].includes(String(raw.reason)) ? { reason: raw.reason as ModelErrorReason } : {}),
           }
         : null;
   }
@@ -159,10 +163,14 @@ export function liveLink(url: string, done: StreamAnswer["done"]): boolean {
 export const STARTED_MS = 8000;
 export const IDLE_MS = 45_000;
 export const WHOAMI_MS = 4000;
+/** After the first wait: wake the socket (a phone drops it while the owner is in another app) and wait this long. */
+export const REWAKE_MS = 10_000;
 
 export interface AskConnection {
   whoami(timeoutMs?: number): Promise<string | null>;
   onRaw(fn: (m: RawMessage) => void): () => void;
+  /** Reconnect now instead of waiting out a backoff or a pause (optional). */
+  wake?(): void;
 }
 
 export interface UploadFile {
@@ -179,8 +187,9 @@ export interface UploadFile {
 export type RunEnd =
   /** The answer streamed (it may have ended early: see the last event). */
   | { kind: "streamed" }
-  /** Answer from the §19 path instead (no socket, timeout, model failure before any words, assistant off). */
-  | { kind: "fallback"; reason: "no_socket" | "timeout" | "model" | "off" | "unavailable" }
+  /** The assistant could not answer (no socket, timeout, model failure before any words, assistant off). The panel
+   * never puts a canned answer in its place for a picture or an open question: it says why, with Try again. */
+  | { kind: "fallback"; reason: "no_socket" | "timeout" | "model" | "off" | "unavailable"; message?: string; why?: ModelErrorReason }
   | { kind: "refused"; text: string }
   | { kind: "rate_limited"; retryAfter: number }
   | { kind: "bad_request"; message: string }
@@ -249,6 +258,11 @@ export function runAsk(
   void (async () => {
     const conn = deps.conn;
     let connectionId = conn ? await conn.whoami(WHOAMI_MS) : null;
+    if (conn && !connectionId && !stopRequested) {
+      // Back from another app (a screenshot in Facebook): the phone dropped the socket. Wake it and wait once more.
+      conn.wake?.();
+      connectionId = await conn.whoami(REWAKE_MS);
+    }
     if (stopRequested) return end({ kind: "stopped" });
     if (!conn || !connectionId) return end({ kind: "fallback", reason: "no_socket" });
 
@@ -282,7 +296,13 @@ export function runAsk(
       if (ev.type === "ask.started") started = true;
       if (ev.type === "ask.delta") sawWords = true;
       if (ev.type === "ask.error") {
-        if (!sawWords) return end({ kind: "fallback", reason: ev.code === "model" ? "model" : "unavailable" });
+        if (!sawWords)
+          return end({
+            kind: "fallback",
+            reason: ev.code === "model" ? "model" : "unavailable",
+            message: ev.message,
+            ...(ev.reason ? { why: ev.reason } : {}),
+          });
         hooks.onEvent({ type: "ask.done", askId, stop: "error", links: [] });
         return end({ kind: "streamed" });
       }
@@ -293,7 +313,8 @@ export function runAsk(
 
     let res = await deps.api.start({ ...body, askId, connectionId, files: refs.length ? refs : undefined });
     if (res.kind === "not_live") {
-      connectionId = await conn.whoami(WHOAMI_MS);
+      conn.wake?.();
+      connectionId = await conn.whoami(REWAKE_MS);
       if (!connectionId) return end({ kind: "fallback", reason: "no_socket" });
       res = await deps.api.start({ ...body, askId, connectionId, files: refs.length ? refs : undefined });
     }

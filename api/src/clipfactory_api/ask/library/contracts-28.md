@@ -75,11 +75,24 @@ carries `cacheRead`; a test checks the prefix is byte-identical across two quest
 
 ### 28.3 The web (client-side tools; Bedrock has no server web tools)
 
+**What works with no owner step** (checked 2026-11-19: Anthropic's server `web_search` / `web_fetch` tools are not
+offered on Amazon Bedrock, only on the Claude API and Claude Platform on AWS, which ADR-51 ruled out): `web_fetch`
+reads **official help and developer pages with no key and no link in the chat**: any https page on
+`developers.facebook.com`, `facebook.com`, `business.facebook.com`, `help.instagram.com`, `about.instagram.com`,
+`transparency.meta.com`, `developers.tiktok.com`, `support.tiktok.com`, `developers.google.com`,
+`support.google.com`, `cloud.google.com`, `console.cloud.google.com`, `docs.x.com`, `developer.x.com`, `help.x.com`,
+`docs.aws.amazon.com`, `aws.amazon.com`, `docs.anthropic.com`, `docs.claude.com`, `platform.claude.com` (and their
+subdomains; `OFFICIAL_DOC_HOSTS` in `ask/tools.py`), plus every page a setup step opens (`open.url` in
+`knowledge.json` `setupSteps`). Some Meta help pages draw with script and come back nearly empty; Ask then says so
+and works from the guide and the picture. **Open web search** (any site) still needs the owner's Brave key: Ask
+reads the official pages first and mentions the key at most once, at the end.
+
 * **`web_search`** `{query ≤ 200, freshness?: day|week|month|year}`: the **Brave Search API** (checked on Brave's
   docs 2026-11-19: `GET https://api.search.brave.com/res/v1/web/search`, header `X-Subscription-Token`, `count` 8,
   `safesearch` moderate, `freshness` pd/pw/pm/py; the Search plan is $5 per 1,000 requests with $5 free each month).
   4 s, no retry. Results go back as `search_result` blocks with citations on. A failure is an `is_error` result.
-* **`web_fetch`** `{url}`: only a URL from this answer's search results (stored normalised, as the fetch compares it:
+* **`web_fetch`** `{url}`: an official help or developer page (above), a page a setup step opens, a URL from this
+  answer's search results (stored normalised, as the fetch compares it:
   lower-case host, no `#fragment`, `/` for an empty path), a web source of an earlier answer (sent back with the
   history, §28.6) or one the owner typed himself (question or history). https only (http upgraded), every address
   public (private, loopback, link-local, CGNAT, metadata, multicast, reserved, and IPv6 forms that carry an IPv4
@@ -95,8 +108,9 @@ carries `cacheRead`; a test checks the prefix is byte-identical across two quest
   `ForceDeleteWithoutRecovery`. Never echoed, logged or put in the prompt (and the answer filter hides it if the
   model ever writes it); the worker caches it **60 s**, so **Take key away** reaches a warm worker within a minute. A
   key that can't be read (throttling, permissions) is web `error`, not `no_key`: Ask never asks him to set it up again.
-* **No key**: no `web_search` tool (`web_fetch` stays for typed URLs); rule 10 makes Ask say "I can't search the web
-  yet." once; `ask.done` carries `webMissing` and the panel shows **Turn on web search** once per chat.
+* **No key**: no `web_search` tool; `web_fetch` stays (official pages, guide pages, typed URLs). Rule 10 makes Ask
+  read the official pages first and say "Turn on web search and I can check more." at most once, at the end;
+  `ask.done` carries `webMissing` and the panel shows **Turn on web search** once per chat.
 * Owner card: Settings › App & account › **Ask** (apples `ask-web-setup` and `ask-status`): the steps (make a free
   account and pick **Search**, copy the key, paste it and tap **Save key**) with **Get a search key** as a glass
   button (≥ 48 px, external icon) under them, not a link inside a sentence; **Take key away**.
@@ -108,7 +122,15 @@ carries `cacheRead`; a test checks the prefix is byte-identical across two quest
 |---|---|---|
 | `read_app_doc` | `{id, part?}` | One part (≤ 30,000 characters, cut at a line break) of a library section as a `search_result` block, source `clip-factory://library/{id}`; a long section starts "(part 1 of 3. Read part 2 for more.)". Only ids in the index. Cap 6. |
 | `read_my_clip_factory` | `{section, id?}`, sections `jobs`, `job`, `review`, `library`, `clip`, `week`, `setup`, `money`, `money_days`, `follows`, `settings`, `lessons`, `skills` | The owner's own data (ids looked up under his own key only), scrubbed, ≤ 12,000 characters. Cap 6. |
-| `show_app_buttons` | `{actionIds}` (1 or 2) | Buttons from the app map whose route is a real page (checked on the server against the pack's routes, as router.ts, and again in the panel); sends `ask.actions`; unknown ids come back as an error. Cap 2. |
+| `read_setup_guide` | `{platform, stepId?}` | One posting setup guide as the app shows it (from `knowledge.json` `setupSteps`, built from `web/src/setup/*.ts`): every step's number, id, title, words, "If you see" hints, the page it opens, the day it was checked, and the owner's own progress (state, steps ticked, next step by his ticks, connected). Each step lists its button id `setup-step:{platform}:{stepId}`. Cap 6. |
+| `show_app_buttons` | `{actionIds}` (1 or 2) | Buttons from the app map whose route is a real page (checked on the server against the pack's routes, as router.ts, and again in the panel), or `setup-step:{platform}:{stepId}` for one setup step ("Open Instagram step 2" → `/settings/posting/setup/instagram#step-ready-page`, lighting `step-ready-page`; the setup page opens and scrolls to a `#step-{id}` of its own guide); sends `ask.actions`; unknown ids come back as an error. Cap 2. |
+
+**Pictures** (rule 12): a screenshot is the main part of the question. Ask names the app and screen, finds the setup
+step with `read_setup_guide` (the picture wins over his ticks, which "Get ready" steps never set by themselves),
+says whether the step already looks done, gives the exact next taps on that screen and a button to the step. Outside
+sites change, so when the picture or an official page disagrees with the guide, Ask says "Our guide is out of date
+here." and gives the right steps with the source (rule 2). A question with a picture, or one about setup or another
+app's screen, runs at effort `high` at least (`ASK_EFFORT` stays for plain chat).
 
 The calls of one model turn run at the same time (up to 6, each inside its own deadline); `show_app_buttons` runs in
 order on the worker's thread. Before tools run, the worker checks Stop and the hard budget; a call still running when
@@ -122,7 +144,9 @@ Start over HTTP, stream over the existing WebSocket (Python Lambdas cannot strea
 32 KB, too small for a question with history):
 
 1. The panel sends `{"action": "whoami"}`; `cf-prod-ws` answers `{"type": "whoami", "connectionId"}`. No open socket
-   within 4 s: the §19 path (`POST /v1/help/answers`).
+   within 4 s: the panel wakes the socket (reconnects at once, without waiting out a backoff or a pause; a phone drops
+   it while the owner takes a screenshot in another app) and waits up to 10 s more. Still none: the "can't answer"
+   rule under **Failures** below.
 2. Files (only when Send is pressed): `POST /v1/help/files`, then a presigned PUT each, with progress.
 3. `POST /v1/help/asks` → **202** `{askId}`: JWT, kill switch (`assistant`), parse (≤ 200 KB), the connection is the
    owner's (`USER#{sub}`/`CONN#{id}`, else 409 `not_live`, retried once), rate limit, the secrets refusal on the typed
@@ -152,16 +176,31 @@ type AskEvent =
  | {type:"ask.sources", sources:{n, kind:"web"|"file"|"app", title, url?, file?, where?}[]}
  | {type:"ask.files", files:{fileId, read:boolean, why?:"unsupported"|"too_long"|"damaged"|"off"}[]}
  | {type:"ask.done", stop:"end"|"budget"|"stopped"|"refused"|"error", links:string[], webMissing?:true}
- | {type:"ask.error", code:"rate_limited"|"unavailable"|"model"|"timeout", message:string, retryAfter?:number}
+ | {type:"ask.error", code:"rate_limited"|"unavailable"|"model"|"timeout", message:string, retryAfter?:number,
+    reason?:"access"|"busy"|"timeout"|"other"}  // code "model": why the model gave no answer, said in plain words
 // every event also carries askId
 ```
 
 **Links**: while an answer streams no link is live; after `ask.done` only the https URLs in `links` (this answer's
 search and fetch results and the owner's own typed URLs) become live links (`target=_blank rel="noopener noreferrer"`;
-the Mac app opens them in the browser). **Failures**: a model error or no `ask.started` within 8 s before any words →
-the §19 answer with "I couldn't think it through this time. Here is the short help."; after words → the answer ends
-with "The answer was cut short. Ask me to go on."; 45 s without an event ends it the same way, and the panel then
-calls Stop so the worker stops spending.
+the Mac app opens them in the browser). **Failures** (owner report 2026-11-19: a screenshot question got "Jobs working
+right now: 0" because the fallback dropped the picture and matched "now"):
+* **Model errors before any words** (403/404 model access not turned on, 429, 5xx, a timeout) are tried once more on
+  `ASK_FALLBACK_MODEL_ID` (Opus 4.8) in the same answer; refusals keep their own middleware. Still failing: `ask.error`
+  `code: "model"` with `reason` and one of these messages: access "Ask's AI model is not turned on yet. In Amazon
+  Bedrock, turn on model access for Claude, then try again."; busy "Ask is very busy right now. Try again in a
+  minute."; timeout "That took too long. Try again."; other "I couldn't think it through this time. Try again.". The
+  worker logs `ask.model_switched` / `ask.model_failed` with `reason` and `status`, and `help.ask` carries `modelError`.
+* **No canned answer for a picture or an open question.** When the assistant gives no words (no socket after the wake,
+  no `ask.started` within 8 s, a model error, a 5xx, assistant off), a question **with files** never goes to the §19
+  path: the panel says "I couldn't look at your picture this time. It is still here. Press Try again." (or the
+  server's plain model message), puts the files and words back, and shows **Try again**, which sends them again. A
+  question without files gets the §19 short help **only when it truly matches** (`known`; open questions like "What do
+  I do now?" never match, §19.4); otherwise "I can't reach Clip Factory right now. Your question is still here. Press
+  Try again." with the same button. A known short help after a model error is introduced with "I couldn't think it
+  through this time. Here is the short help."
+* After words, the answer ends with "The answer was cut short. Ask me to go on."; 45 s without an event ends it the
+  same way, and the panel then calls Stop so the worker stops spending.
 
 ### 28.6 API
 
@@ -282,6 +321,14 @@ the `ask-1-day` rule (an in-place update; `prevent_destroy` stays); monitoring g
 for failures and two alarms; `config/models.json` gains `askModel`, `askFallbackModel`, `askEndpoint` and `opus-4-8`.
 No table, index, route, CORS or CSP change. The plan creates and updates only.
 
+**Post-deploy check** (ADR-53): `cf-prod-ask` also takes `{"smoke": "ask"}`. It loads the built-in skills block, asks
+the main model (never the fallback) at effort low what colour a 16 x 16 red PNG is, sent as an image block, and
+returns `{outcome: "smoke_ok" | "smoke_failed", model, answer, stop, reason?, status?}` (`reason` access, busy, timeout
+or other; one `ask.smoke` log line; no socket, no owner data, no files). deploy.yml's smoke job invokes it with the
+deploy role (it already has `lambda:*`; two new read-only outputs `ask_function_name` and `ask_enabled`), retries
+twice, and fails the deploy unless the outcome is `smoke_ok`; for `access` it says to turn on model access for Claude
+Opus 5.5 in the Bedrock console (eu-north-1). Skipped when `ask_enabled` is false.
+
 ### 28.13 Tests
 
 api: `tests/test_ask_worker.py` (request shape, cache prefix, events, the tool loop with citations, buttons, injection,
@@ -293,7 +340,11 @@ SSRF guard, HTML, Brave, the key cache, the secrets filter in both languages, th
 `e2e/ask-assistant.spec.ts` and `e2e/ask-markup.spec.ts` (chromium, webkit, webkit-phone), `e2e/ask-review.spec.ts`
 (the review fixes), and Ask's tray, tiles, sources, editor and key card in `e2e/edges.spec.ts` and
 `e2e/contrast.spec.ts`. infra: `modules/ask`,
-`modules/api`, `modules/monitoring` and `envs/prod` tests.
+`modules/api`, `modules/monitoring` and `envs/prod` tests. The 2026-11-19 fixes: picture answers with a fake model
+(image block first, effort high, `read_setup_guide`), the fallback model on 403/429/5xx, the plain model messages,
+official pages with no key, setup-step buttons, the smoke check (`test_ask_worker.py`, `test_ask_parts.py`); the
+open-question rule in both retrievers (`helpEvals.json`); the socket wake and reasons (`askAssistant.test.ts`); the
+honest fallback and **Try again** (`helpPanel.test.tsx`, and `e2e/ask-assistant.spec.ts` "can't reach Ask").
 
 ### 28.14 Mock build
 

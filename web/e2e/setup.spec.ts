@@ -424,3 +424,19 @@ test("a stale consent page answers expired, and Connect needs keys first", async
   await expect(page.getByRole("button", { name: "Connect TikTok", exact: true })).toHaveAttribute("aria-disabled", "true");
   await expect(page.getByText(`Paste your keys first (step ${stepNumber(GUIDES.tiktok, "key-paste")}). Then this button works.`)).toBeVisible();
 });
+
+// Ask's "Open Instagram step 2" button (§28.4): #step-{id} opens that step and brings it into view.
+test("a #step-{id} link opens that step and brings it into view", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/settings/posting/setup/instagram#step-ready-page");
+  await settle(page);
+  const card = step(page, "ready-page");
+  await expect(card).toHaveClass(/is-open/);
+  await expect(card).toBeInViewport();
+  await expect(card).toHaveAttribute("data-help", "step-ready-page");
+  await expect(card).toContainText("Manage connection");
+  // A step id of another guide does nothing.
+  await page.goto("/settings/posting/setup/facebook#step-key-config-nope");
+  await settle(page);
+  await expect(page.getByRole("heading", { level: 1, name: "Set up Facebook" })).toBeInViewport();
+});

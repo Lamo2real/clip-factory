@@ -17,8 +17,11 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
+import struct
 import threading
 import time
+import zlib
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
@@ -35,7 +38,7 @@ from .knowledge import Knowledge
 from .redact import Holdback
 from .search import KeyReader, SearchError, SearchProvider
 from .state import Reader
-from .tools import Toolbox, typed_urls
+from .tools import Toolbox, guide_urls, typed_urls
 
 SOFT_S = 95.0
 HARD_S = 110.0
@@ -61,7 +64,25 @@ STATUS_FOR_TOOL = {
     "web_fetch": ("reading", "Reading a page…"),
     "read_app_doc": ("checking_app", "Reading the Clip Factory guide…"),
     "read_my_clip_factory": ("checking_app", "Checking your setup…"),
+    "read_setup_guide": ("checking_app", "Reading the setup guide…"),
 }
+# Model errors before any words that the fallback model may fix (access not enabled for one model, a throttle, a
+# server error, a timeout): the answer is tried once more on ASK_FALLBACK_MODEL_ID. Refusals have their own middleware.
+RETRY_STATUSES = frozenset({403, 404, 408, 409, 429, 500, 502, 503, 504, 529})
+# What the owner reads when the model could not answer (the panel shows it with Try again, never a canned answer).
+MODEL_MESSAGES = {
+    "access": "Ask's AI model is not turned on yet. In Amazon Bedrock, turn on model access for Claude, then try again.",
+    "busy": "Ask is very busy right now. Try again in a minute.",
+    "timeout": "That took too long. Try again.",
+    "other": "I couldn't think it through this time. Try again.",
+}
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+SETUP_WORDS = re.compile(
+    r"\b(set ?up|setup|connect|stuck|instagram|facebook|meta|tiktok|youtube|google|twitter|x\.com|page|key|token|"
+    r"redirect|permission|portfolio|developer|console|error|screen|what do i do|what now|next)\b",
+    re.IGNORECASE,
+)
+SMOKE_QUESTION = "What one color fills this whole picture? Answer with just the color."
 
 
 class AskGone(Exception):
@@ -196,6 +217,7 @@ class Record:
     cache_write: int = 0
     model: str = ""
     web: str = "off"
+    model_error: str = ""  # access, busy, timeout or other: why the model gave no answer (logged, never the text)
     files: dict[str, int] = field(default_factory=lambda: {"image": 0, "pdf": 0, "text": 0, "office": 0})
     file_kb: int = 0
 
@@ -317,6 +339,7 @@ def answer(deps: WorkerDeps, payload: Mapping[str, Any]) -> Record:
             "toolsFetch": tools_used.get("web_fetch", 0),
             "toolsDoc": tools_used.get("read_app_doc", 0),
             "toolsMe": tools_used.get("read_my_clip_factory", 0),
+            "toolsGuide": tools_used.get("read_setup_guide", 0),
             "toolsButtons": tools_used.get("show_app_buttons", 0),
             "files": len(refs),
             "filesImage": record.files["image"],
@@ -329,6 +352,7 @@ def answer(deps: WorkerDeps, payload: Mapping[str, Any]) -> Record:
             "cacheRead": record.cache_read,
             "cacheWrite": record.cache_write,
             "model": record.model,
+            "modelError": record.model_error or None,
             "web": record.web,
             "knowledgeVersion": knowledge_version,
         }
@@ -408,6 +432,8 @@ def _run(
             provider=deps.provider if record.web == "on" else None,
             fetcher=deps.fetcher or _budget_fetch(lambda: deps.hard_s - (deps.monotonic() - started)),
             allowed_urls=typed_urls([*user_texts, " ".join(history_urls(history))]),
+            # Pages the setup guides open may be read with no search (§28.3); official doc hosts are allowed too.
+            doc_urls=guide_urls(knowledge),
             on_actions=lambda actions: sender.send({"type": "ask.actions", "actions": actions}),
             route_ok=deps.route_ok or knowledge.route_ok,
             soft_deadline=lambda: deps.monotonic() - started >= deps.soft_s,
@@ -416,6 +442,7 @@ def _run(
     )
     for name in (str(r.get("name") or "") for r in refs):
         loop.toolbox.titles[name[: askfiles.NAME_MAX]] = "file"
+    loop.effort = answer_effort(deps.effort, pictures=record.files["image"] > 0, question=question)
     stop = loop.run(skills, knowledge)
     if stop is not None:  # None: the model failed and the loop already told the owner
         _finish(sender, record, loop.toolbox, stop, redacted=redacted)
@@ -435,6 +462,8 @@ class _Loop:
     started: float
     messages: list[Any]
     toolbox: Toolbox
+    effort: str = ""
+    model: str = ""
     _last_check: float = 0.0
 
     def elapsed(self) -> float:
@@ -460,6 +489,8 @@ class _Loop:
         system = prompt.system_blocks(knowledge, deps.model_id)
         client = deps.mantle()
         docs_retry = False
+        self.model = self.model or deps.model_id
+        self.effort = self.effort or deps.effort
         try:
             from anthropic import BetaFallbackState
 
@@ -490,6 +521,8 @@ class _Loop:
                             messages=self.messages,
                             tools=tool_list,
                             tool_choice={"type": "none"} if final_round else None,
+                            model=self.model,
+                            effort=self.effort,
                             max_tokens=max(MIN_ROUND_TOKENS, min(MAX_TOKENS, OUTPUT_BUDGET - record.usage_out)),
                             timeout=max(5.0, deps.hard_s - self.elapsed()),
                         )
@@ -499,6 +532,9 @@ class _Loop:
                         if not docs_retry and getattr(e, "status_code", None) == 400 and _drop_tool_docs(self.messages):
                             docs_retry = True
                             self.toolbox.tool_docs = False
+                            record.iterations -= 1
+                            continue
+                        if self._switch_model(e):
                             record.iterations -= 1
                             continue
                         _model_failed(e, record, self.sender, self.toolbox)
@@ -534,6 +570,46 @@ class _Loop:
                     )
         except _Abort as a:
             return a.stop
+
+    def _switch_model(self, e: Exception) -> bool:
+        """Once per answer, before any words: an error the fallback model may not have (no access to one model, a
+        throttle, a 5xx, a timeout) moves this answer to ASK_FALLBACK_MODEL_ID. Logged with the reason."""
+        fallback = self.deps.fallback_model_id
+        if not fallback or self.model == fallback or self.sender.sent_text or not retryable(e):
+            return False
+        log("warning", "ask.model_switched", reason=model_error_reason(e), status=getattr(e, "status_code", None))
+        self.model = fallback
+        return True
+
+
+def retryable(e: Exception) -> bool:
+    status = getattr(e, "status_code", None)
+    if isinstance(status, int):
+        return status in RETRY_STATUSES
+    name = type(e).__name__
+    return "Timeout" in name or "Connection" in name
+
+
+def model_error_reason(e: Exception) -> str:
+    """access, busy, timeout or other (the log field and the owner's message)."""
+    status = getattr(e, "status_code", None)
+    name = type(e).__name__
+    if status in {401, 403, 404} or "PermissionDenied" in name or "NotFound" in name or "AccessDenied" in str(e)[:300]:
+        return "access"
+    if status in {429, 529} or "RateLimit" in name or "Overloaded" in name:
+        return "busy"
+    if status == 408 or "Timeout" in name:
+        return "timeout"
+    return "other"
+
+
+def answer_effort(base: str, *, pictures: bool, question: str) -> str:
+    """At least ``high`` for a picture or a setup question (finding where he is stuck needs the deeper look);
+    the deployed effort (ASK_EFFORT, medium) for plain chat."""
+    base = base if base in EFFORTS else "medium"
+    if pictures or SETUP_WORDS.search(question or ""):
+        return base if EFFORTS.index(base) >= EFFORTS.index("high") else "high"
+    return base
 
 
 def _finish(sender: Sender, record: Record, toolbox: Toolbox, stop: str, *, redacted: bool) -> None:
@@ -596,13 +672,15 @@ def _messages(  # noqa: PLR0917 (one call site, all required)
 def _model_failed(e: Exception, record: Record, sender: Sender, toolbox: Toolbox) -> None:
     record.outcome = "ask_model_timeout" if "Timeout" in type(e).__name__ else "ask_model_error"
     record.stop = "error"
-    log("warning", "ask.model_failed", error=type(e).__name__, status=getattr(e, "status_code", None))
+    reason = model_error_reason(e)
+    record.model_error = reason
+    log("warning", "ask.model_failed", error=type(e).__name__, status=getattr(e, "status_code", None), reason=reason)
     if sender.sent_text:
         sender.text(CUT_TEXT)
         sender.finish_text()
         sender.send({"type": "ask.done", "stop": "error", "links": sorted(toolbox.links)})
     else:
-        sender.send({"type": "ask.error", "code": "model", "message": "I couldn't think it through this time."})
+        sender.send({"type": "ask.error", "code": "model", "reason": reason, "message": MODEL_MESSAGES[reason]})
 
 
 def _count_usage(record: Record, final: Any, model_id: str) -> None:
@@ -677,18 +755,20 @@ def _stream_once(
     tool_choice: dict[str, Any] | None,
     timeout: float,
     max_tokens: int = MAX_TOKENS,
+    model: str = "",
+    effort: str = "",
 ) -> Any:
     citations: dict[int, list[Any]] = {}
     kinds: dict[int, str] = {}
     with learn.stream_messages(
         client,
-        model=deps.model_id,
+        model=model or deps.model_id,
         skills=skills,
         system=system,
         messages=messages,
         tools=tools,
         max_tokens=max_tokens,
-        effort=deps.effort,
+        effort=effort or deps.effort,
         tool_choice=tool_choice,
         timeout=timeout,
     ) as stream:
@@ -856,6 +936,84 @@ def get_deps(factory: Callable[[], WorkerDeps] = _from_env) -> WorkerDeps:
     return _deps
 
 
+# --- the post-deploy smoke check ------------------------------------------------------------------------------
+
+
+def smoke_png(rgb: tuple[int, int, int] = (220, 20, 20), size: int = 16) -> bytes:
+    """A tiny solid-colour PNG, made here so the smoke check needs no file and no upload."""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+    row = b"\x00" + bytes(rgb) * size
+    header = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(row * size)) + chunk(b"IEND", b"")
+    )
+
+
+def smoke(deps: WorkerDeps) -> dict[str, Any]:
+    """deploy.yml's Ask check: the deployed model looks at a tiny red picture and must say "red". It proves Bedrock
+    model access, the IAM grant and that pictures reach the model as image blocks. No socket, no owner data, no
+    files; one ``ask.smoke`` log line. The fallback model is not tried: a deploy where only it works must fail."""
+    import base64
+
+    started = deps.monotonic()
+    image = base64.b64encode(smoke_png()).decode()
+    out: dict[str, Any] = {"outcome": "smoke_failed", "model": _model_label(deps.model_id)}
+    try:
+        from .. import learn
+        from ..skill_prompt import load_block
+        from ..skills import load_builtins
+
+        skills = load_block(
+            deps.store, deps.media, "ask-smoke", where="api.ask.smoke", builtins=deps.builtins or load_builtins
+        )
+        with learn.stream_messages(
+            deps.mantle(),
+            model=deps.model_id,
+            skills=skills,
+            system=[],
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": image}},
+                        {"type": "text", "text": SMOKE_QUESTION},
+                    ],
+                }
+            ],
+            max_tokens=4_000,
+            effort="low",
+            timeout=60.0,
+        ) as stream:
+            final = stream.get_final_message()
+        text = " ".join(
+            str(getattr(b, "text", "")) for b in getattr(final, "content", []) if getattr(b, "type", "") == "text"
+        )
+        out["stop"] = str(getattr(final, "stop_reason", "") or "")
+        out["answer"] = text.strip()[:40]
+        out["model"] = _model_label(str(getattr(final, "model", "") or deps.model_id))
+        if "red" in text.lower():
+            out["outcome"] = "smoke_ok"
+        else:
+            out["reason"] = "the model did not see the picture"
+    except Exception as e:
+        out["reason"] = model_error_reason(e)
+        out["error"] = type(e).__name__
+        out["status"] = getattr(e, "status_code", None)
+    log(
+        "info" if out["outcome"] == "smoke_ok" else "error",
+        "ask.smoke",
+        outcome=str(out["outcome"]),
+        reason=str(out.get("reason") or ""),
+        ms=round((deps.monotonic() - started) * 1000),
+    )
+    return out
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
+    if isinstance(event, dict) and event.get("smoke") == "ask":
+        return smoke(get_deps())
     record = answer(get_deps(), event)
     return {"outcome": record.outcome}

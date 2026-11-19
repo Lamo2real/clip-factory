@@ -2,7 +2,7 @@
 // the chat memory, the API client and the markdown additions.
 import { describe, expect, it, vi } from "vitest";
 import { askApi, trimHistory, type AskApi, type AskHttp, type AskTurn } from "../src/features/help/askApi.ts";
-import { applyEvent, liveLink, newAnswer, parseAskEvent, runAsk, type AskConnection, type AskEvent } from "../src/features/help/askStream.ts";
+import { applyEvent, liveLink, newAnswer, parseAskEvent, REWAKE_MS, runAsk, WHOAMI_MS, type AskConnection, type AskEvent } from "../src/features/help/askStream.ts";
 import { askHistory, chatReducer, initialChat, liveUrls, readyFiles, type ChatState, type TrayFile } from "../src/features/help/chatState.ts";
 import { addedText, carriedFiles, classify, FILE_TEXT, fileIcon, formatLabel, pastedTextFile, sizeLabel, type AskFile } from "../src/features/help/files.ts";
 import {
@@ -242,7 +242,39 @@ describe("runAsk", () => {
     await flush();
     await flush();
     conn.emit({ askId: "B", type: "ask.error", code: "model", message: "x" });
-    expect(await run2.done).toEqual({ kind: "fallback", reason: "model" });
+    expect(await run2.done).toEqual({ kind: "fallback", reason: "model", message: "x" });
+  });
+
+  it("carries the server's plain reason when the model could not answer (access not turned on, busy)", async () => {
+    const conn = fakeConn();
+    const run = runAsk({ api: fakeApi(), conn, uuid: () => "C" }, body, [], { onEvent: () => undefined });
+    await flush();
+    await flush();
+    conn.emit({ askId: "C", type: "ask.error", code: "model", reason: "access", message: "Ask's AI model is not turned on yet." });
+    expect(await run.done).toEqual({ kind: "fallback", reason: "model", message: "Ask's AI model is not turned on yet.", why: "access" });
+    expect(parseAskEvent({ askId: "C", type: "ask.error", code: "model", reason: "bogus", message: "m" }, "C")).toEqual({ type: "ask.error", askId: "C", code: "model", message: "m" });
+  });
+
+  it("wakes a dropped socket and waits once more before giving up (back from a screenshot in another app)", async () => {
+    const whoami = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce("conn-9");
+    const wake = vi.fn();
+    const conn = { ...fakeConn(), whoami, wake };
+    const start = vi.fn(async () => ({ kind: "started" as const }));
+    const run = runAsk({ api: fakeApi({ start }), conn, uuid: () => "D" }, body, [], { onEvent: () => undefined });
+    await flush();
+    await flush();
+    await flush();
+    expect(wake).toHaveBeenCalledTimes(1);
+    expect(whoami.mock.calls.map((c) => c[0])).toEqual([WHOAMI_MS, REWAKE_MS]);
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ connectionId: "conn-9" }));
+    run.stop();
+  });
+
+  it("still ends as no_socket when the socket never comes back", async () => {
+    const conn = { ...fakeConn(null), wake: vi.fn() };
+    const run = runAsk({ api: fakeApi(), conn, uuid: () => "E" }, body, [], { onEvent: () => undefined });
+    expect(await run.done).toEqual({ kind: "fallback", reason: "no_socket" });
+    expect(conn.wake).toHaveBeenCalledTimes(1);
   });
 
   it("ends a cut answer where it is when the model fails after words", async () => {

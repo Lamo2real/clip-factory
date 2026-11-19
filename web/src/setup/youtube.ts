@@ -1,4 +1,4 @@
-// YouTube setup (docs/CONTRACTS.md §17.2), checked against Google's pages on 16 Nov 2026.
+// YouTube setup (docs/CONTRACTS.md §17.2), checked against Google's pages on 19 Nov 2026.
 import { CHECKED_ON, type SetupGuide } from "./types.ts";
 
 const CONSOLE = "https://console.cloud.google.com";

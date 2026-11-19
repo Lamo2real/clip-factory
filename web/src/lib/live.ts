@@ -136,6 +136,15 @@ export class LiveConnection {
     }
   }
 
+  /** Reconnects now when the socket is paused (tab was hidden) or waiting out a backoff (Ask's send, §28.5). */
+  wake(): void {
+    if (this.stopped || this.status === "live" || this.status === "connecting") return;
+    this.paused = false;
+    this.attempt = 0;
+    clearTimeout(this.retryTimer);
+    void this.connect();
+  }
+
   /** The open socket's connection id, asking the server once per socket; null when it is not open in time. */
   async whoami(timeoutMs = 4000): Promise<string | null> {
     const deadline = Date.now() + timeoutMs;

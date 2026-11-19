@@ -1,6 +1,6 @@
 ## Instagram
 
-About 25 minutes · Free · Steps checked on 16 Nov 2026. Uses Meta's Instagram API with Facebook Login.
+About 25 minutes · Free · Steps checked on 19 Nov 2026. Uses Meta's Instagram API with Facebook Login.
 
 Instagram and Facebook each get **their own** Meta app. Some steps look the same twice. That is on purpose: it keeps
 the two from getting in each other's way.
@@ -10,7 +10,7 @@ the two from getting in each other's way.
 | 1 | Make Instagram a pro account | Get ready |
 | 2 | Link Instagram to a Facebook Page | Get ready |
 | 3 | Use a computer | Get ready |
-| 4 | Make a business portfolio | Get ready |
+| 4 | Business portfolio, if Meta asks (only if you need it) | Get ready |
 | 5 | Become a Meta developer | Make your Instagram key |
 | 6 | Create the app | Make your Instagram key |
 | 7 | Fill in Basic settings | Make your Instagram key |
@@ -33,13 +33,20 @@ the two from getting in each other's way.
 - No Page yet? Make one first in the [Facebook setup, step 1](#1-have-a-facebook-page).
 - If you see no **Page** line in Edit profile: on Facebook, open your Page, then **Settings**, then **Linked
   accounts**, then **Instagram**. Press **Connect account**.
+- If you see **Manage connection** on Facebook (on your Page, after **Edit profile**): your Instagram is already
+  linked. Check the Instagram name, close it, and press **I did this**. Never press **Disconnect**.
+- If **Manage connection** shows the wrong Instagram: press **Disconnect**, then **Connect account** and log in to
+  your clip Instagram.
+- "People who help manage your Page" on that sheet: leave those choices as they are. They only matter if other
+  people help run the Page.
 
 #### 3. Use a computer
 - The developer websites work best on a computer. Use the same browser for every step.
 - Log in to facebook.com with the Facebook account that will own the app.
 - Wrong account? Log out first.
 
-#### 4. Make a business portfolio
+#### 4. Business portfolio, if Meta asks
+- Only if you need it: Meta asks for a portfolio, or your Instagram is already in one. Otherwise skip this step.
 - Press **Open** (business.facebook.com). Press **Create a business portfolio**.
 - Type a name, your name and your email. Press **Create**.
 - Press **Settings**, then **Accounts**, then **Instagram accounts**. Press **Add** and log in to Instagram.
@@ -55,7 +62,7 @@ the two from getting in each other's way.
 - Press **Open** (developers.facebook.com/apps). Press **Create app**.
 - App name: copy it. Type your email. Press **Next**.
 - Use case: **Manage messaging & content on Instagram**. Press **Next**.
-- Pick your portfolio. Press **Next**, then **Go to dashboard**.
+- Pick your portfolio, or skip it. Press **Next**, then **Go to dashboard**.
 - Never ask Meta for a review. You do not need one.
 
 #### 7. Fill in Basic settings
@@ -90,7 +97,7 @@ the two from getting in each other's way.
 
 #### 11. Connect Instagram
 - Press the big **Connect Instagram** button.
-- Log in with the same Facebook account. Pick your portfolio, then your Instagram. Confirm.
+- Log in with the same Facebook account. Pick your portfolio if asked, then your Instagram. Confirm.
 - Several accounts? Pick the right one in Clip Factory.
 - Your Instagram is not in the list? It is still personal (step 1), not linked to a Page (step 2), or in another
   portfolio (step 4).
@@ -102,6 +109,8 @@ the two from getting in each other's way.
 - Numbers can take 2 days.
 - Status: "Works now."
 - If you see your Reels missing for other people: tell Clip Factory support; Meta may want the app Live.
+- If Facebook asks you to confirm who runs the Page (Page Publishing Authorization): do it. Instagram will not post
+  until you do.
 
 ### If Instagram says something went wrong
 
@@ -112,7 +121,7 @@ the two from getting in each other's way.
 | "The key does not work. Copy the App ID, App secret and Configuration ID again (step 10)." | Do step 10 again. |
 | "The return address does not match. Copy it again in step 8." | Do step 8 again with the **Copy** button. |
 | "A permission box was not ticked. Connect again and tick every box." | Do step 8, then connect again. |
-| "Instagram did not show a pro account. Do steps 1, 2 and 4, then connect again." | Do steps 1, 2 and 4, then connect again. |
+| "Instagram did not show a pro account. Do steps 1 and 2, then connect again." | Do steps 1 and 2, then connect again. |
 | "Instagram did not answer. Try again in a few minutes." | Wait, then press **Connect Instagram**. |
 
 ---

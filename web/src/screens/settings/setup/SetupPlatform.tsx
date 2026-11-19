@@ -21,6 +21,7 @@ import { progressOf, stepDone } from "../../../lib/setupProgress.ts";
 import { cheerOnNextTap } from "../../../lib/sound.ts";
 import { sounds } from "../../../lib/sounds.ts";
 import {
+  allSteps,
   checkedOnText,
   gateLine,
   GUIDES,
@@ -128,11 +129,13 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
 
   // Resume where the owner left off: bring the current step into view (once per step), or an apple's anchor.
   const currentId = progress.current?.id ?? null;
+  // #step-{id}: Ask's "Open step N" button (docs/CONTRACTS.md §28.4). Only a step of this guide counts.
+  const stepAnchor = hash?.startsWith("step-") && guide && allSteps(guide).some((s) => `step-${s.id}` === hash) ? hash.slice(5) : null;
   useEffect(() => {
     if (!setup || result) return;
     // A fresh page stays at the top, so the owner sees which platform this is and how long it takes.
     const target =
-      hash && ["youtube-privacy", "x-cost"].includes(hash) ? hash : currentId && progress.done > 0 ? `step-${currentId}` : null;
+      hash && (["youtube-privacy", "x-cost"].includes(hash) || stepAnchor) ? hash : currentId && progress.done > 0 ? `step-${currentId}` : null;
     if (!target || scrolledTo.current === target) return;
     // Marked as done only when the scroll really runs: a refetch inside the delay must not cancel it for good.
     const t = setTimeout(() => {
@@ -140,10 +143,10 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
       document.getElementById(target)?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
     }, 160);
     return () => clearTimeout(t);
-  }, [setup, currentId, hash, result, progress.done]);
+  }, [setup, currentId, hash, result, progress.done, stepAnchor]);
 
-  // An anchor (#youtube-privacy, #x-cost) opens the step that holds it.
-  const anchorStep = hash === "youtube-privacy" ? "public-privacy" : hash === "x-cost" ? "ready-card" : null;
+  // An anchor (#youtube-privacy, #x-cost, or #step-{id} from an Ask button) opens the step that holds it.
+  const anchorStep = hash === "youtube-privacy" ? "public-privacy" : hash === "x-cost" ? "ready-card" : stepAnchor;
 
   const isOpen = (step: GuideStep) => {
     if (closed.has(step.id)) return false;

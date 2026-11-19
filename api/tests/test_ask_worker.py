@@ -17,7 +17,7 @@ import pytest
 from ask_support import ApiStatus, APITimeoutError, FakeMantle, load
 from clipfactory_api import db, s3
 from clipfactory_api.ask import fetch as web
-from clipfactory_api.ask import knowledge, prompt
+from clipfactory_api.ask import knowledge, prompt, worker
 from clipfactory_api.ask.files import file_key
 from clipfactory_api.ask.search import Result, SearchError
 from clipfactory_api.ask.worker import WorkerDeps, answer, stop_sk
@@ -96,7 +96,7 @@ def make(
             management=management,
             mantle=lambda: mantle,
             model_id=MODEL,
-            fallback_model_id=FALLBACK,
+            fallback_model_id=kw.pop("fallback_model_id", FALLBACK),
             key_reader=FakeKeys(key),  # type: ignore[arg-type]
             provider=kw.pop("provider", FakeSearch()),
             fetcher=kw.pop("fetcher", Pages()),
@@ -156,7 +156,7 @@ def test_request_shape(make: Any) -> None:
     assert (
         names
         == sorted(names)
-        == ["read_app_doc", "read_my_clip_factory", "show_app_buttons", "web_fetch", "web_search"]
+        == ["read_app_doc", "read_my_clip_factory", "read_setup_guide", "show_app_buttons", "web_fetch", "web_search"]
     )
     assert all(t["strict"] is True and t["eager_input_streaming"] is True for t in call["tools"])
     assert all(t["input_schema"]["additionalProperties"] is False for t in call["tools"])
@@ -341,7 +341,7 @@ def test_refusal(make: Any, management: FakeManagement) -> None:
 
 
 def test_model_error_before_any_words(make: Any, management: FakeManagement) -> None:
-    deps, _ = make([ApiStatus(403)])
+    deps, _ = make([ApiStatus(403), ApiStatus(403)])
     record = answer(deps, payload())
     assert record.outcome == "ask_model_error"
     assert sent(management)[-1]["type"] == "ask.error"
@@ -349,8 +349,54 @@ def test_model_error_before_any_words(make: Any, management: FakeManagement) -> 
 
 
 def test_model_timeout_is_its_own_outcome(make: Any) -> None:
-    deps, _ = make([APITimeoutError("slow")])
+    deps, mantle = make([APITimeoutError("slow"), APITimeoutError("slow again")])
     assert answer(deps, payload()).outcome == "ask_model_timeout"
+    assert [c["model"] for c in mantle.calls] == [MODEL, FALLBACK]
+
+
+def test_model_error_before_words_tries_the_fallback_model_once(make: Any, management: FakeManagement) -> None:
+    # Model access for Opus 5.5 not enabled (403), throttled (429) or a 5xx: the answer is tried once on Opus 4.8.
+    deps, mantle = make([ApiStatus(403), *load("text_only")])
+    record = answer(deps, payload())
+    assert record.outcome == "ask_ok"
+    assert [c["model"] for c in mantle.calls] == [MODEL, FALLBACK]
+    assert not any(e["type"] == "ask.error" for e in sent(management))
+
+
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [(ApiStatus(403), "access"), (ApiStatus(404), "access"), (ApiStatus(429), "busy"), (ApiStatus(500), "other")],
+)
+def test_model_error_says_why_in_plain_words(
+    make: Any, management: FakeManagement, capsys: pytest.CaptureFixture[str], error: Exception, reason: str
+) -> None:
+    deps, _ = make([error, error])
+    record = answer(deps, payload())
+    assert record.model_error == reason
+    last = sent(management)[-1]
+    assert last == {
+        "type": "ask.error",
+        "code": "model",
+        "reason": reason,
+        "message": worker.MODEL_MESSAGES[reason],
+        "askId": ASK_ID,
+    }
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
+    failed = next(line for line in lines if line["event"] == "ask.model_failed")
+    assert failed["reason"] == reason
+    assert next(line for line in lines if line["event"] == "help.ask")["modelError"] == reason
+
+
+def test_no_fallback_model_means_no_retry(make: Any) -> None:
+    deps, mantle = make([ApiStatus(429)], fallback_model_id="")
+    assert answer(deps, payload()).outcome == "ask_model_error"
+    assert len(mantle.calls) == 1
+
+
+def test_a_400_is_not_retried_on_the_fallback(make: Any) -> None:
+    deps, mantle = make([ApiStatus(400)])
+    assert answer(deps, payload()).outcome == "ask_model_error"
+    assert len(mantle.calls) == 1
 
 
 def test_model_error_after_words(make: Any, management: FakeManagement) -> None:
@@ -459,7 +505,7 @@ def test_files_are_read_then_deleted_on_every_exit(
     s3_client.objects[file_key(USER, bad_id)] = b"not a pdf"
     turns: list[Any] = load("text_only")
     if exit_case == "error":
-        turns = [ApiStatus(500)]
+        turns = [ApiStatus(500), ApiStatus(500)]
     deps, mantle = make(turns)
     if exit_case == "gone":
         management.gone.add(CONN)
@@ -834,3 +880,125 @@ def test_one_slow_read_does_not_hold_app_state(store: db.Store, monkeypatch: pyt
     state = Reader(store, None, USER, datetime(2026, 11, 19, tzinfo=UTC)).app_state(context={}, ask={})
     assert clock.monotonic() - started < 2.5
     assert '"money":"unknown"' in state
+
+
+# --- pictures: the screenshot is the question (owner report 2026-11-19) -------------------------------------------
+
+
+def _jpeg() -> bytes:
+    from test_help_pictures import jpeg
+
+    return jpeg(390, 844)
+
+
+def test_a_screenshot_reaches_the_model_as_an_image_block_first_with_high_effort(make: Any, s3_client: FakeS3) -> None:
+    pic_id = "S" * 22
+    s3_client.objects[file_key(USER, pic_id)] = _jpeg()
+    deps, mantle = make(load("text_only"))
+    answer(deps, payload("What do I do now?", files=_refs((pic_id, "IMG_0412.PNG", "IMAGE", "image"))))
+    call = mantle.calls[0]
+    user = call["messages"][-2]["content"]
+    assert user[0]["type"] == "image"
+    assert user[0]["source"]["type"] == "base64"
+    assert user[0]["source"]["media_type"] == "image/jpeg"
+    assert user[-1]["type"] == "text"
+    assert user[-1]["text"].startswith("What do I do now?")
+    assert call["messages"][-1]["role"] == "system"  # APP STATE after the question
+    assert call["output_config"] == {"effort": "high"}  # a picture always gets the deeper look
+    names = {t["name"] for t in call["tools"]}
+    assert {"read_setup_guide", "web_fetch", "show_app_buttons"} <= names
+    rules = call["system"][-1]["text"]
+    assert "picture" in rules
+    assert "read_setup_guide" in rules
+    assert "Our guide is out of date here." in rules
+
+
+def test_a_plain_chat_question_keeps_the_deployed_effort(make: Any) -> None:
+    deps, mantle = make(load("text_only"))
+    answer(deps, payload("Tell me a joke about cats"))
+    assert mantle.calls[0]["output_config"] == {"effort": "medium"}
+
+
+def test_answer_effort() -> None:
+    assert worker.answer_effort("medium", pictures=True, question="") == "high"
+    assert worker.answer_effort("medium", pictures=False, question="I'm stuck on Instagram") == "high"
+    assert worker.answer_effort("xhigh", pictures=True, question="") == "xhigh"
+    assert worker.answer_effort("low", pictures=False, question="hello") == "low"
+    assert worker.answer_effort("nonsense", pictures=False, question="hello") == "medium"
+
+
+# --- the post-deploy smoke check --------------------------------------------------------------------------------
+
+
+class _SmokeClient:
+    """``client.beta.messages.stream(**kw)`` that answers one final message (or raises)."""
+
+    def __init__(self, reply: Any) -> None:
+        from types import SimpleNamespace
+
+        self.calls: list[dict[str, Any]] = []
+        self.reply = reply
+        self.beta = SimpleNamespace(messages=SimpleNamespace(stream=self._stream))
+
+    def _stream(self, **kw: Any) -> Any:
+        import contextlib
+        from types import SimpleNamespace
+
+        self.calls.append(kw)
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        final = SimpleNamespace(
+            model=MODEL,
+            stop_reason="end_turn",
+            content=[SimpleNamespace(type="thinking", thinking=""), SimpleNamespace(type="text", text=self.reply)],
+        )
+        return contextlib.nullcontext(SimpleNamespace(get_final_message=lambda: final))
+
+
+def test_smoke_png_is_a_real_png() -> None:
+    import struct
+    import zlib
+
+    png = worker.smoke_png()
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+    width, height = struct.unpack(">II", png[16:24])
+    assert (width, height) == (16, 16)
+    idat_len = struct.unpack(">I", png[33:37])[0]
+    raw = zlib.decompress(png[41 : 41 + idat_len])
+    assert raw[:4] == b"\x00" + bytes((220, 20, 20))
+
+
+def test_smoke_passes_only_when_the_model_reads_the_picture(make: Any) -> None:
+    deps, _ = make([])
+    client = _SmokeClient("Red.")
+    deps.mantle = lambda: client
+    out = worker.smoke(deps)
+    assert out["outcome"] == "smoke_ok"
+    call = client.calls[0]
+    assert call["model"] == MODEL
+    image = call["messages"][0]["content"][0]
+    assert image["type"] == "image"
+    assert image["source"]["media_type"] == "image/png"
+    assert call["thinking"] == {"type": "adaptive"}
+    assert call["output_config"] == {"effort": "low"}
+    assert "temperature" not in call
+    assert call["system"][0]["text"]  # the skills block comes first, as on every model call
+
+    client.reply = "Blue"
+    assert worker.smoke(deps)["outcome"] == "smoke_failed"
+
+
+def test_smoke_reports_why_the_model_failed(make: Any) -> None:
+    deps, _ = make([])
+    deps.mantle = lambda: _SmokeClient(ApiStatus(403))
+    out = worker.smoke(deps)
+    assert out["outcome"] == "smoke_failed"
+    assert out["reason"] == "access"
+    assert out["status"] == 403
+
+
+def test_handler_routes_the_smoke_event(make: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    deps, _ = make([])
+    deps.mantle = lambda: _SmokeClient("red")
+    monkeypatch.setattr(worker, "_deps", deps)
+    assert worker.handler({"smoke": "ask"})["outcome"] == "smoke_ok"

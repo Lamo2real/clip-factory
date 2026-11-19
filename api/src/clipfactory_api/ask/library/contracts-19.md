@@ -135,6 +135,11 @@ on a platform's setup page) becomes a doc on that page, and the element there ca
   `-ly`; never below 3 letters) and one-edit fuzzy match for words ≥ 5 letters ("Instagarm").
 * Accept the best doc only when: score ≥ `MIN_SCORE` (2.0), ≥ 50 % of the content words matched, and at least one hit
   in title or keywords. Otherwise `known: false`. Return the top 6 as candidates.
+* **Open questions are never matched** (2026-11-19): when every content word is vague (`VAGUE_WORDS`: now, next,
+  stuck, lost, happen, ok, this screen, picture, work, problem…), the question is `known: false` without ranking,
+  unless words read from his pictures came with it (§26). Words that say when, not what (`TITLE_IGNORED`: now, next,
+  then, right, again, still, ok, okay) never count for the title rule. Evals: "What do I do now?" → unknown, "Is
+  anything running right now?" → `jobs-running`.
 * **Guide near-tie** (`GUIDE_TIE = 0.9`, applied after sorting and before the accept check): when the top doc is not a
   guide, the first guide whose route matches the top doc's route (ignoring `#hash`) and whose score is ≥ 0.9 × the top
   score moves to the top. In short: a guide within 10 % of the best generated doc on the same route wins. (A strict

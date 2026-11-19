@@ -533,6 +533,11 @@ PDF and "#search"-style words, and see the `help.ask` line in `/aws/lambda/cf-pr
 `ask_model_error` with status 400 on every answer, set `ASK_EAGER_TOOLS=false` (Terraform variable `ask_eager_tools = false`,
 for example `TF_VAR_ask_eager_tools: "false"` in the deploy workflow's plan step) and deploy.
 
+**Every deploy checks Ask with the real model** (ADR-53): the smoke job invokes `cf-prod-ask` with `{"smoke":"ask"}`,
+and the deployed model must say "red" for a tiny red picture. If the job fails with **Ask model access**, open the
+Amazon Bedrock console in Stockholm (eu-north-1), turn on model access for Claude Opus 5.5 (and Opus 4.8, the
+fallback), then re-run the deploy. Any other reason is in `/aws/lambda/cf-prod-ask`, event `ask.smoke`.
+
 ### Alarm emails
 
 Every alarm (Lambda errors, failed or timed-out durable executions, live-update lag, webhook 5xx, help model

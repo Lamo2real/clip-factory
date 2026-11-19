@@ -29,3 +29,8 @@ output "stats_tick_minutes" { value = module.stats.stats_tick_minutes } # lowest
 # docs/CONTRACTS.md §17.9: config.json oauthCallbackBase (required by write-web-config.sh). Redirect URIs are
 # {oauth_callback_base}/{platform}/callback.
 output "oauth_callback_base" { value = module.hooks.oauth_callback_base }
+
+# docs/CONTRACTS.md §28.5: deploy.yml's smoke job invokes the Ask worker with {"smoke": "ask"} (a tiny picture the
+# deployed model must read). Read only; nothing is created for it.
+output "ask_function_name" { value = module.ask.ask_function_name }
+output "ask_enabled" { value = var.ask_enabled }

@@ -6,12 +6,15 @@ const fakeApi = {
   me: vi.fn(async () => ({ counts: { review: 5, running: 1, posted: 9 } })),
 };
 vi.mock("../src/api/index.ts", () => ({ api: () => fakeApi }));
+// No socket in these tests (liveConnection() is null), so the assistant path ends before it calls the Ask API.
+vi.mock("../src/features/help/askApi.ts", async (orig) => ({ ...(await orig<object>()), defaultAskApi: async () => ({}) }));
 
 import { ToastProvider } from "../src/components/Toasts.tsx";
 import { openHelp } from "../src/features/help/context.ts";
 import type { AskBody, AskResult, HelpClient, StatusResult } from "../src/features/help/helpApi.ts";
 import { AskClipFactory } from "../src/features/help/HelpLauncher.tsx";
-import { setHelpSwitch } from "../src/features/help/status.ts";
+import { setAssistantStatus, setHelpSwitch } from "../src/features/help/status.ts";
+import { CANT_REACH_TEXT, cantAnswerText, PICTURE_KEPT_TEXT, TOO_LONG_TEXT } from "../src/features/help/HelpPanel.tsx";
 import type { HelpAnswer } from "../src/features/help/types.ts";
 import { registerUnsaved } from "../src/features/help/unsaved.ts";
 
@@ -106,6 +109,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  setAssistantStatus({ on: false, web: "off", files: false });
   await act(async () => root.unmount());
   host.remove();
 });
@@ -312,5 +316,50 @@ describe("Ask Clip Factory panel", () => {
     await until(() => client.ask.mock.calls.length > 0);
     expect($(".help-panel")).not.toBeNull();
     expect(client.ask).toHaveBeenCalledWith(expect.objectContaining({ question: "What does Keep do?" }));
+  });
+
+  describe("when the assistant can't answer (owner report 2026-11-19)", () => {
+    const unknownAnswer: HelpAnswer = { known: false, text: "I don't know that one yet.", steps: [], actions: [], sources: [] };
+    const on = { kind: "ok" as const, status: { enabled: true, mode: "model" as const, corpusVersion: "v", assistant: { on: true, web: "no_key" as const, files: true } } };
+
+    it("never answers an open question with a random topic: says it can't reach Ask, keeps the words, Try again resends", async () => {
+      const unknown = { kind: "answer" as const, answer: unknownAnswer, mode: "kb" as const, requestId: "r1" };
+      const client = fakeClient([unknown, unknown], on);
+      await mount(client);
+      await act(async () => launcher()!.click());
+      await settle();
+      await ask("What do I do now?");
+      await until(() => !!host.querySelector(".help-msg--notice"));
+      expect(host.querySelector(".help-msg--notice")!.textContent).toContain(CANT_REACH_TEXT);
+      expect(host.querySelector(".help-msg--bot")).toBeNull();
+      expect(host.textContent).not.toContain("Jobs working right now");
+      expect($<HTMLTextAreaElement>(".help-panel__input")!.value).toBe("What do I do now?");
+      const again = button("Try again")!;
+      expect(again).toBeTruthy();
+      await act(async () => again.click());
+      await until(() => host.querySelectorAll(".help-msg--notice").length === 2);
+      expect(client.ask).toHaveBeenCalledTimes(2);
+    });
+
+    it("still gives the short help when the question truly matches one", async () => {
+      const client = fakeClient([{ kind: "answer", answer: keepAnswer, mode: "kb", requestId: "r2" }], on);
+      await mount(client);
+      await act(async () => launcher()!.click());
+      await settle();
+      await ask("What does Keep do?");
+      await until(() => !!host.querySelector(".help-msg--bot"));
+      expect(host.querySelector(".help-msg--bot")!.textContent).toContain("Keep says yes to a clip.");
+      expect(button("Try again")).toBeUndefined();
+    });
+  });
+
+  it("words why Ask could not answer, never a guess", () => {
+    expect(cantAnswerText({ reason: "no_socket" }, null)).toBe(CANT_REACH_TEXT);
+    expect(cantAnswerText({ reason: "no_socket" }, "picture")).toBe(PICTURE_KEPT_TEXT);
+    expect(cantAnswerText({ reason: "timeout" }, null)).toBe(TOO_LONG_TEXT);
+    expect(cantAnswerText({ reason: "model", why: "access", message: "Ask's AI model is not turned on yet." }, "picture")).toBe(
+      "Ask's AI model is not turned on yet. Your question is still here.",
+    );
+    expect(cantAnswerText({ reason: "model", why: "other", message: "x" }, null)).toBe(CANT_REACH_TEXT);
   });
 });

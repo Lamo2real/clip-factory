@@ -14,7 +14,7 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.ask import fetch as web
-from clipfactory_api.ask import files, knowledge, redact, search
+from clipfactory_api.ask import files, knowledge, prompt, redact, search, tools
 from clipfactory_api.ask.state import Reader, scrub
 from clipfactory_api.ask.tools import CAPS, LIMIT_REACHED, Toolbox, typed_urls
 from conftest import OTHER, USER, seed_clip, seed_job
@@ -653,3 +653,114 @@ def test_the_key_cache_is_short() -> None:
     assert reader.get() == "k1-abcdefgh"
     now[0] = 61
     assert reader.get() is None
+
+
+# --- the web without a key, the setup guide tool, setup-step buttons (owner report 2026-11-19) -----------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://developers.facebook.com/documentation/instagram-platform/content-publishing",
+        "https://www.facebook.com/help/1148909221857370",
+        "https://help.instagram.com/570895513091465",
+        "https://support.google.com/cloud/answer/15549945",
+        "https://docs.x.com/x-api/getting-started/pricing",
+        "https://developers.tiktok.com/doc/login-kit-web",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html",
+    ],
+)
+def test_official_doc_pages_open_with_no_key_and_no_link(toolbox: Toolbox, url: str) -> None:
+    assert toolbox.search_key is None
+    out = toolbox.run("web_fetch", {"url": url})
+    assert out.is_error is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://developers.facebook.com.evil.example/x",  # a look-alike host
+        "https://notfacebook.com/help",
+        "https://random-blog.example/how-to-link-instagram",
+    ],
+)
+def test_other_pages_still_need_a_search_result_or_his_own_link(toolbox: Toolbox, url: str) -> None:
+    assert toolbox.run("web_fetch", {"url": url}).is_error is True
+
+
+def test_a_page_a_setup_step_opens_can_be_read(store: db.Store) -> None:
+    pack = knowledge.load()
+    urls = tools.guide_urls(pack)
+    assert "https://business.facebook.com/" in urls
+    box = Toolbox(
+        pack,
+        Reader(store, None, USER, NOW),
+        None,
+        None,
+        lambda u: web.Page(u, "t", "text", text="x"),
+        set(),
+        lambda _a: None,
+        doc_urls=urls,
+    )
+    assert box.run("web_fetch", {"url": "https://business.facebook.com/"}).is_error is False
+    assert box.links == {"https://business.facebook.com/"}  # read pages are live links; unread guide pages are not
+    assert box.run("web_fetch", {"url": "https://random-blog.example/"}).is_error is True
+
+
+def test_read_setup_guide_gives_every_step_with_hints_and_buttons(toolbox: Toolbox) -> None:
+    out = toolbox.run("read_setup_guide", {"platform": "instagram"})
+    assert out.is_error is False
+    text = str(out.content)
+    assert "Steps checked on 2026-11-19" in text
+    assert "2. [ready-page] Link Instagram to a Facebook Page" in text
+    assert "If you see **Manage connection** on Facebook:" in text
+    assert "Never press **Disconnect**" in text
+    assert "Button to this step: setup-step:instagram:ready-page" in text
+    assert "(optional)" in text  # the business portfolio is only if Meta asks
+    assert "His progress: not started" in text
+    one = str(toolbox.run("read_setup_guide", {"platform": "facebook", "stepId": "ready-page"}).content)
+    assert "Content** or **Full control**" in one
+    assert "key-app" not in one
+
+
+def test_read_setup_guide_refuses_bad_input(toolbox: Toolbox) -> None:
+    assert toolbox.run("read_setup_guide", {"platform": "myspace"}).is_error
+    assert toolbox.run("read_setup_guide", {"platform": "x", "stepId": "nope"}).is_error
+    assert toolbox.run("read_setup_guide", {"platform": "x", "extra": 1}).is_error
+
+
+def test_setup_step_buttons(toolbox: Toolbox) -> None:
+    shown: list[list[dict[str, Any]]] = []
+    toolbox.on_actions = shown.append
+    out = toolbox.run("show_app_buttons", {"actionIds": ["setup-step:instagram:ready-page", "setup-step:x:nope"]})
+    assert out.is_error is True
+    assert "setup-step:x:nope" in str(out.content)
+    assert shown[-1] == [
+        {
+            "id": "setup-step:instagram:ready-page",
+            "label": "Open Instagram step 2",
+            "to": "/settings/posting/setup/instagram#step-ready-page",
+            "highlight": ["step-ready-page"],
+        }
+    ]
+    assert tools.setup_step_action(knowledge.load(), "setup-step:myspace:ready-page") is None
+
+
+def test_the_pack_carries_the_guide_words() -> None:
+    page = next(s for s in knowledge.load().setup_steps["instagram"] if s["id"] == "ready-page")
+    assert page["say"][0].startswith("In the Instagram app")
+    assert any("Manage connection" in h["see"] for h in page["ifYouSee"])
+    assert page["checkedOn"] == "2026-11-19"
+
+
+def test_rules_read_pictures_and_never_block_fetch_without_a_key() -> None:
+    text = prompt.rules("anthropic.claude-opus-5-5")
+    assert "web_fetch works without any key" in text
+    assert "I can't search the web yet" not in text
+    assert "the picture wins over the ticks" in text
+    assert "Our guide is out of date here." in text
+    assert "Never answer a picture with something unrelated" in text
+    names = [t["name"] for t in prompt.tools(web_search=False, eager=True)]
+    assert "web_fetch" in names
+    assert "read_setup_guide" in names
+    assert "web_search" not in names

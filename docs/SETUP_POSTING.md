@@ -4,8 +4,8 @@ Clip Factory can post your clips by itself to **YouTube, TikTok, Instagram, Face
 five needs to be set up **once**. This page is the same list of steps the app shows you in **Settings › Posting ›
 Set up posting**, word for word in meaning and in the same order, so you can read ahead or print it.
 
-**Steps checked on 16 Nov 2026** against each platform's own help pages (the list is at the
-[end of this page](#research-sources-checked-on-16-nov-2026)); TikTok's again on 19 Nov 2026, on TikTok's own developer site. Platforms sometimes rename a button. When that happens, the app
+**Steps checked on 19 Nov 2026** against each platform's own help pages (the list is at the
+[end of this page](#research-sources-checked-on-16-nov-2026), with what changed on 19 Nov 2026 below it). Platforms sometimes rename a button. When that happens, the app
 shows an "If you see…" hint, and the [maintainer notes](#for-maintainers-keeping-the-app-and-this-page-in-step) say how to
 update both.
 
@@ -86,7 +86,7 @@ yours, and Google lists every web address your app uses.
 
 ## YouTube
 
-About 20 minutes · Free · Steps checked on 16 Nov 2026.
+About 20 minutes · Free · Steps checked on 19 Nov 2026.
 
 | # | Step | Part |
 |---|---|---|
@@ -417,7 +417,7 @@ If a clip says "Pick who can see it on TikTok again, then press Try again.", pre
 
 ## Instagram
 
-About 25 minutes · Free · Steps checked on 16 Nov 2026. Uses Meta's Instagram API with Facebook Login.
+About 25 minutes · Free · Steps checked on 19 Nov 2026. Uses Meta's Instagram API with Facebook Login.
 
 Instagram and Facebook each get **their own** Meta app. Some steps look the same twice. That is on purpose: it keeps
 the two from getting in each other's way.
@@ -427,7 +427,7 @@ the two from getting in each other's way.
 | 1 | Make Instagram a pro account | Get ready |
 | 2 | Link Instagram to a Facebook Page | Get ready |
 | 3 | Use a computer | Get ready |
-| 4 | Make a business portfolio | Get ready |
+| 4 | Business portfolio, if Meta asks (only if you need it) | Get ready |
 | 5 | Become a Meta developer | Make your Instagram key |
 | 6 | Create the app | Make your Instagram key |
 | 7 | Fill in Basic settings | Make your Instagram key |
@@ -450,13 +450,20 @@ the two from getting in each other's way.
 - No Page yet? Make one first in the [Facebook setup, step 1](#1-have-a-facebook-page).
 - If you see no **Page** line in Edit profile: on Facebook, open your Page, then **Settings**, then **Linked
   accounts**, then **Instagram**. Press **Connect account**.
+- If you see **Manage connection** on Facebook (on your Page, after **Edit profile**): your Instagram is already
+  linked. Check the Instagram name, close it, and press **I did this**. Never press **Disconnect**.
+- If **Manage connection** shows the wrong Instagram: press **Disconnect**, then **Connect account** and log in to
+  your clip Instagram.
+- "People who help manage your Page" on that sheet: leave those choices as they are. They only matter if other
+  people help run the Page.
 
 #### 3. Use a computer
 - The developer websites work best on a computer. Use the same browser for every step.
 - Log in to facebook.com with the Facebook account that will own the app.
 - Wrong account? Log out first.
 
-#### 4. Make a business portfolio
+#### 4. Business portfolio, if Meta asks
+- Only if you need it: Meta asks for a portfolio, or your Instagram is already in one. Otherwise skip this step.
 - Press **Open** (business.facebook.com). Press **Create a business portfolio**.
 - Type a name, your name and your email. Press **Create**.
 - Press **Settings**, then **Accounts**, then **Instagram accounts**. Press **Add** and log in to Instagram.
@@ -472,7 +479,7 @@ the two from getting in each other's way.
 - Press **Open** (developers.facebook.com/apps). Press **Create app**.
 - App name: copy it. Type your email. Press **Next**.
 - Use case: **Manage messaging & content on Instagram**. Press **Next**.
-- Pick your portfolio. Press **Next**, then **Go to dashboard**.
+- Pick your portfolio, or skip it. Press **Next**, then **Go to dashboard**.
 - Never ask Meta for a review. You do not need one.
 
 #### 7. Fill in Basic settings
@@ -507,7 +514,7 @@ the two from getting in each other's way.
 
 #### 11. Connect Instagram
 - Press the big **Connect Instagram** button.
-- Log in with the same Facebook account. Pick your portfolio, then your Instagram. Confirm.
+- Log in with the same Facebook account. Pick your portfolio if asked, then your Instagram. Confirm.
 - Several accounts? Pick the right one in Clip Factory.
 - Your Instagram is not in the list? It is still personal (step 1), not linked to a Page (step 2), or in another
   portfolio (step 4).
@@ -519,6 +526,8 @@ the two from getting in each other's way.
 - Numbers can take 2 days.
 - Status: "Works now."
 - If you see your Reels missing for other people: tell Clip Factory support; Meta may want the app Live.
+- If Facebook asks you to confirm who runs the Page (Page Publishing Authorization): do it. Instagram will not post
+  until you do.
 
 ### If Instagram says something went wrong
 
@@ -529,14 +538,14 @@ the two from getting in each other's way.
 | "The key does not work. Copy the App ID, App secret and Configuration ID again (step 10)." | Do step 10 again. |
 | "The return address does not match. Copy it again in step 8." | Do step 8 again with the **Copy** button. |
 | "A permission box was not ticked. Connect again and tick every box." | Do step 8, then connect again. |
-| "Instagram did not show a pro account. Do steps 1, 2 and 4, then connect again." | Do steps 1, 2 and 4, then connect again. |
+| "Instagram did not show a pro account. Do steps 1 and 2, then connect again." | Do steps 1 and 2, then connect again. |
 | "Instagram did not answer. Try again in a few minutes." | Wait, then press **Connect Instagram**. |
 
 ---
 
 ## Facebook
 
-About 25 minutes · Free · Steps checked on 16 Nov 2026. Posts Reels to your Facebook **Page**, with Facebook Login
+About 25 minutes · Free · Steps checked on 19 Nov 2026. Posts Reels to your Facebook **Page**, with Facebook Login
 for Business.
 
 | # | Step | Part |
@@ -561,7 +570,11 @@ for Business.
 - Press **Open** (facebook.com/pages/?category=your_pages).
 - No Page? Press **Create new Page**.
 - A normal profile cannot post Reels through apps. You need a Page.
-- You need full control of the Page. Then switch back to your profile.
+- You need **Content** or **Full control** access on the Page.
+- Then tap your picture and switch back to your own profile. Do not change Page settings.
+- If you see **Manage connection** after **Edit profile** on your Page: your Instagram is already linked to this
+  Page. Close it. Never press **Disconnect**. Press **I did this**.
+- If you see **People who help manage your Page**: leave those choices as they are.
 
 #### 2. Use a computer
 - The developer websites work best on a computer. Use the same browser for every step.
@@ -590,7 +603,7 @@ for Business.
 #### 7. Turn on Page permissions
 - On the **Dashboard**, press **Customize the Manage everything on your Page use case**.
 - Press **Add** next to pages_read_engagement, pages_manage_posts, read_insights and pages_manage_engagement.
-- Press **Ready to test**.
+- pages_show_list and business_management are already there. Press **Ready to test**.
 
 #### 8. Fill in Basic settings
 - Press **App settings**, then **Basic**.
@@ -606,6 +619,7 @@ for Business.
 - Set **Client OAuth login**, **Web OAuth login** and **Enforce HTTPS** to Yes. Turn Strict Mode on.
 - **Valid OAuth Redirect URIs**: copy the Redirect URI. Press **Check URI**, then **Save changes**.
 - Not in the menu? Look under **Use cases**, then **Customize**, or **Add product**.
+- If you see **Deauthorize Callback URL** or **Data Deletion Request URL** boxes: leave them empty.
 
 #### 10. Make a login configuration
 - Open **Facebook Login for Business**, then **Configurations**. Press **+ Create configuration** (not a template).
@@ -630,7 +644,10 @@ for Business.
 ### Part 4: Go public
 
 #### 13. Make the app Live
-- In the left menu, press **Publish**, then **Go live**. Or turn the **App Mode** switch to **Live**.
+- In the left menu, press **Publish**. Check the list, then press **Publish** at the bottom right.
+- No **Publish** in the menu? Turn the **App Mode** switch to **Live**.
+- Facebook Reels from apps must be 3 to 90 seconds long, 9:16, at least 540x960. Meta allows 30 app posts a day per
+  Page.
 - Something missing? Go back to step 8.
 - If Meta asks for **App Review** first: your Reels stay visible only to you for now. Tell Clip Factory support.
 - Status before this step: "Works now, but only you can see your Facebook Reels until the app is Live."
@@ -651,7 +668,7 @@ for Business.
 
 ## X
 
-About 15 minutes · **Costs a little**: X charges $0.015 per clip, about $1.50 for 100 clips · Steps checked on 16 Nov
+About 15 minutes · **Costs a little**: X charges $0.015 per clip, about $1.50 for 100 clips · Steps checked on 19 Nov
 2026.
 
 Clip Factory stops posting to X at **$10 a month**, and never puts links in X posts (a link costs $0.20).
@@ -694,7 +711,8 @@ Clip Factory stops posting to X at **$10 a month**, and never puts links in X po
 #### 5. Buy a few credits
 - Open **Billing**, then **Credits**. Save the card.
 - Buy the smallest amount. Set a spending limit of $10.
-- Leave auto-recharge OFF.
+- Leave auto-recharge OFF. (X matches your first auto-recharge up to $50. Clip Factory still says leave it off,
+  so a busy month can never spend more than you planned.)
 - X may add $20 for free after the first purchase.
 
 #### 6. Create the app
@@ -834,3 +852,28 @@ Each step above was written from these official pages. Uncertain details are wor
 - [OAuth 2.0 authorization code with PKCE](https://docs.x.com/resources/fundamentals/authentication/oauth-2-0/authorization-code)
 - [Chunked media upload](https://docs.x.com/x-api/media/quickstart/media-upload-chunked) and
   [Create a post](https://docs.x.com/x-api/posts/create-post)
+
+### What changed on 19 Nov 2026
+
+Checked again for Instagram, Facebook, YouTube and X (TikTok has its own check above). Ask, the in-app helper,
+reads these same official pages when a step may be out of date (docs/CONTRACTS.md §28.3).
+
+- **Instagram step 2**: new "If you see **Manage connection**" hints. On Facebook's phone app, a Page whose
+  Instagram is already linked shows **Manage connection** after **Edit profile**; a Page that is not linked shows
+  **Connect**. The Instagram app route (Edit profile › Page) is still right.
+- **Instagram step 4** (business portfolio) is now only if Meta asks. Neither the Instagram Platform overview nor
+  Content publishing requires a portfolio for a User access token on accounts you own
+  ([overview](https://developers.facebook.com/documentation/instagram-platform/overview)). Content publishing also
+  says a Page with a Business Manager role may need the ads permissions, so not using a portfolio is the simpler path
+  ([content publishing](https://developers.facebook.com/documentation/instagram-platform/content-publishing)).
+- **Instagram step 12**: a Page that needs Page Publishing Authorization cannot be posted to until it is done
+  (same content publishing page).
+- **Facebook step 1**: posting Reels needs the Page's **Content** task, not full control; full control is only needed
+  to link Instagram ([Reels publishing](https://developers.facebook.com/documentation/video-api/guides/reels-publishing)).
+- **Facebook step 7**: pages_show_list and business_management are added by default; **step 9**: leave the
+  Deauthorize and Data Deletion Request boxes empty; **step 13**: Meta now says **Publish**, then **Publish** at the
+  bottom right ([Create an app for Pages](https://developers.facebook.com/documentation/pages-api/create-an-app)).
+  Reels from apps are 3 to 90 seconds, 9:16, at least 540x960, 30 app posts a day per Page (Reels publishing).
+- **YouTube**: no step changed ([Videos: insert](https://developers.google.com/youtube/v3/docs/videos/insert)).
+- **X**: no step changed; the first auto-recharge is matched up to $50
+  ([Pricing](https://docs.x.com/x-api/getting-started/pricing)).

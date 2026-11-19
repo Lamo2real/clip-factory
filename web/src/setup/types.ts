@@ -3,7 +3,7 @@
 import type { ConnectResult, GateKey, KeyName, Platform } from "../api/types.ts";
 import type { IconName } from "../components/Icon.tsx";
 
-export const CHECKED_ON = "2026-11-16";
+export const CHECKED_ON = "2026-11-19";
 
 export interface SetupGuide {
   platform: Platform;

@@ -1,6 +1,6 @@
 ## X
 
-About 15 minutes · **Costs a little**: X charges $0.015 per clip, about $1.50 for 100 clips · Steps checked on 16 Nov
+About 15 minutes · **Costs a little**: X charges $0.015 per clip, about $1.50 for 100 clips · Steps checked on 19 Nov
 2026.
 
 Clip Factory stops posting to X at **$10 a month**, and never puts links in X posts (a link costs $0.20).
@@ -43,7 +43,8 @@ Clip Factory stops posting to X at **$10 a month**, and never puts links in X po
 #### 5. Buy a few credits
 - Open **Billing**, then **Credits**. Save the card.
 - Buy the smallest amount. Set a spending limit of $10.
-- Leave auto-recharge OFF.
+- Leave auto-recharge OFF. (X matches your first auto-recharge up to $50. Clip Factory still says leave it off,
+  so a busy month can never spend more than you planned.)
 - X may add $20 for free after the first purchase.
 
 #### 6. Create the app
