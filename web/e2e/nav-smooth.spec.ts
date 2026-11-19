@@ -59,11 +59,18 @@ async function record(page: Page, list: string, item: string) {
             done({ frames, target: [on.x, on.y, on.width, on.height], anims, transitions: getComputedStyle(g).transitionProperty });
           }
         };
-        requestAnimationFrame((now) => {
-          t0 = now;
-          box.querySelector<HTMLElement>(item)!.click();
-          tick(now);
-        });
+        // A real tap presses before it clicks, and the app does its press work then (the first press builds the audio
+        // context for the click sounds, lib/sound.ts). A bare click() skipped that, so on CI the first switch paid
+        // for it inside the click's own frame and the slide started up to two seconds late.
+        const target = box.querySelector<HTMLElement>(item)!;
+        target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, isPrimary: true, pointerType: "mouse" }));
+        requestAnimationFrame(() =>
+          requestAnimationFrame((now) => {
+            t0 = now;
+            target.click();
+            tick(now);
+          }),
+        );
       }),
     { list, item },
   );
