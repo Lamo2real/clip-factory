@@ -1,6 +1,6 @@
 ## Facebook
 
-About 25 minutes · Free · Steps checked on 16 Nov 2026. Posts Reels to your Facebook **Page**, with Facebook Login
+About 25 minutes · Free · Steps checked on 19 Nov 2026. Posts Reels to your Facebook **Page**, with Facebook Login
 for Business.
 
 | # | Step | Part |
@@ -25,7 +25,11 @@ for Business.
 - Press **Open** (facebook.com/pages/?category=your_pages).
 - No Page? Press **Create new Page**.
 - A normal profile cannot post Reels through apps. You need a Page.
-- You need full control of the Page. Then switch back to your profile.
+- You need **Content** or **Full control** access on the Page.
+- Then tap your picture and switch back to your own profile. Do not change Page settings.
+- If you see **Manage connection** after **Edit profile** on your Page: your Instagram is already linked to this
+  Page. Close it. Never press **Disconnect**. Press **I did this**.
+- If you see **People who help manage your Page**: leave those choices as they are.
 
 #### 2. Use a computer
 - The developer websites work best on a computer. Use the same browser for every step.
@@ -54,7 +58,7 @@ for Business.
 #### 7. Turn on Page permissions
 - On the **Dashboard**, press **Customize the Manage everything on your Page use case**.
 - Press **Add** next to pages_read_engagement, pages_manage_posts, read_insights and pages_manage_engagement.
-- Press **Ready to test**.
+- pages_show_list and business_management are already there. Press **Ready to test**.
 
 #### 8. Fill in Basic settings
 - Press **App settings**, then **Basic**.
@@ -70,6 +74,7 @@ for Business.
 - Set **Client OAuth login**, **Web OAuth login** and **Enforce HTTPS** to Yes. Turn Strict Mode on.
 - **Valid OAuth Redirect URIs**: copy the Redirect URI. Press **Check URI**, then **Save changes**.
 - Not in the menu? Look under **Use cases**, then **Customize**, or **Add product**.
+- If you see **Deauthorize Callback URL** or **Data Deletion Request URL** boxes: leave them empty.
 
 #### 10. Make a login configuration
 - Open **Facebook Login for Business**, then **Configurations**. Press **+ Create configuration** (not a template).
@@ -94,7 +99,10 @@ for Business.
 ### Part 4: Go public
 
 #### 13. Make the app Live
-- In the left menu, press **Publish**, then **Go live**. Or turn the **App Mode** switch to **Live**.
+- In the left menu, press **Publish**. Check the list, then press **Publish** at the bottom right.
+- No **Publish** in the menu? Turn the **App Mode** switch to **Live**.
+- Facebook Reels from apps must be 3 to 90 seconds long, 9:16, at least 540x960. Meta allows 30 app posts a day per
+  Page.
 - Something missing? Go back to step 8.
 - If Meta asks for **App Review** first: your Reels stay visible only to you for now. Tell Clip Factory support.
 - Status before this step: "Works now, but only you can see your Facebook Reels until the app is Live."

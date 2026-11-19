@@ -15,6 +15,9 @@
 //   starts with a follow-up phrase ("and …", "what about …"), or when it is short (≤ 4 content words) and unknown
 //   on its own. So "What does Keep do?" right after another question still answers Keep. The previous user turn's
 //   words are its text plus `seen`, what its pictures showed (§26).
+// * Open-ended questions (owner report 2026-11-19): a question whose content words are all vague ("What do I do
+//   now?", "I'm stuck", "what is this screen") is unknown, never matched to a topic. Words that say when, not what
+//   (TITLE_IGNORED: now, next, again…) never count for the title rule. Same lists as help/retrieve.py.
 import type { HelpContext, HelpDoc, HelpTurn } from "./types.ts";
 
 export const K1 = 1.2;
@@ -28,6 +31,15 @@ export const FOLLOW_UP_MAX_WORDS = 4;
 export const FUZZY_MIN_LEN = 5;
 /** A guide scoring at least this share of a generated doc's score on the same route goes first. */
 export const GUIDE_TIE = 0.9;
+/** Words that say "help me" without saying with what (help/retrieve.py VAGUE_WORDS). */
+export const VAGUE_WORDS: readonly string[] = `now next then stuck lost confused confusing happen happens happened happening going ok okay hi hello hey thanks
+thank yes no still again right thing things something anything everything nothing wrong else see seeing look
+looking mean means understand figure screen screens picture pictures image photo screenshot work works working
+problem issue press pressing click clicking tap tapping push here there this that button buttons done finished should
+do doing which on with in at to for`
+  .split(/\s+/)
+  .filter(Boolean);
+const TITLE_IGNORED_WORDS = ["now", "next", "then", "right", "again", "still", "ok", "okay"];
 const FIELD_WEIGHT = { title: 3, keywords: 2.5, where: 1.5, body: 1 } as const;
 const FOLLOW_UP_STARTS = ["and ", "what about ", "how about ", "and on ", "where is that"];
 
@@ -298,6 +310,24 @@ export function boostPage(page: HelpContext["page"] | null | undefined): HelpCon
   return page === "skill" ? "settings" : page;
 }
 
+/** True when every content word is vague ("What do I do now?"), or all but a platform name. Such a question is never
+ * matched to a help topic: only the assistant (or a person) can answer it from the screen it is about. */
+export function openEnded(question: string, stopwords: readonly string[] | ReadonlySet<string>): boolean {
+  const stop = stopwords instanceof Set ? (stopwords as ReadonlySet<string>) : new Set((stopwords as readonly string[]).map((w) => w.toLowerCase()));
+  const raw = tokenize(question);
+  const found = raw.filter((w) => !stop.has(w));
+  const vague = new Set(VAGUE_WORDS);
+  const vagueStems = new Set(VAGUE_WORDS.map(stem));
+  const isVague = (w: string) => vague.has(w) || vagueStems.has(stem(w));
+  // Every word a stop word ("what do i do", "is this done"): open when it names a vague word at all.
+  if (!found.length) return raw.some((w) => vague.has(w));
+  const rest = found.filter((w) => !isVague(w));
+  return !rest.length || (rest.length < found.length && rest.every((w) => PLATFORM_WORDS.has(w)));
+}
+
+/** A platform name alone says where, not what: "what do I do now with facebook" is still open (help/retrieve.py). */
+const PLATFORM_WORDS: ReadonlySet<string> = new Set(["facebook", "instagram", "tiktok", "youtube", "twitter", "x", "meta", "google"]);
+
 /** Starts with an explicit follow-up phrase ("and the error sound?", "what about TikTok?"). */
 export function startsFollowUp(question: string): boolean {
   const lowered = `${tokenize(question).join(" ")} `;
@@ -310,7 +340,8 @@ function scoreGroups(index: Index, gs: Group[], context: HelpContext | null | un
   const weights = new Map<string, number>();
   for (const g of gs) for (const t of g.alternatives) weights.set(t, Math.max(weights.get(t) ?? 0, g.weight));
   const own = gs.filter((g) => g.own);
-  const ownTerms = new Set(own.flatMap((g) => Array.from(g.alternatives)));
+  const ignored = new Set(TITLE_IGNORED_WORDS.map(stem));
+  const ownTerms = new Set(own.flatMap((g) => Array.from(g.alternatives)).filter((t) => !ignored.has(t)));
   const page = boostPage(context?.page);
 
   const scored: { score: number; guide: number; id: string; n: number }[] = [];
@@ -353,6 +384,7 @@ export function rank(
 ): Ranked {
   if (isRefused(question)) return { question, known: false, refused: true, followUp: false, candidates: [] };
   const stop = new Set(words.stopwords.map((w) => w.toLowerCase()));
+  if (openEnded(question, stop)) return { question, known: false, refused: false, followUp: false, candidates: [] };
   const shown = visibleDocs(docs, context);
   if (!shown.length) return { question, known: false, refused: false, followUp: false, candidates: [] };
   const index = build(shown, stop);

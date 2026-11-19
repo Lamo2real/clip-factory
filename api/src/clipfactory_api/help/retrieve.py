@@ -16,6 +16,10 @@
   history only when it starts with "and", "what about", "how about", "where is that", or when it is short (≤ 4
   content words) and unknown on its own. So a complete question asked right after another one keeps its answer.
   The previous user turn's words are its text plus ``seen``, what its pictures showed (§26).
+* Open-ended questions (owner report 2026-11-19): a question whose content words are all vague ("What do I do now?",
+  "I'm stuck", "what is this screen") is unknown, never matched to a topic, unless words read from his pictures came
+  with it. Words that say when, not what (``TITLE_IGNORED``: now, next, again…) never count for the title rule, so
+  "now" can't pick "Is anything running right now". retrieve.ts uses the same two lists.
 * Pictures (§26): the words the look step read from the owner's pictures join the query with weight 0.75. They can
   satisfy the title rule, and a picture question is also accepted when at least a quarter of the picture words
   match the best doc. Refusals are checked on the typed question only.
@@ -47,6 +51,93 @@ FOLLOW_UP_MAX_WORDS = 4
 FUZZY_MIN_LEN = 5
 FIELD_WEIGHTS = {"title": 3.0, "keywords": 2.5, "where": 1.5, "body": 1.0}
 FOLLOW_UP_STARTS = ("and ", "what about ", "how about ", "and on ", "where is that")
+
+# Words that say "help me" without saying with what. A question made only of these (and stopwords) is open-ended.
+VAGUE_WORDS = frozenset(
+    [
+        "now",
+        "next",
+        "then",
+        "stuck",
+        "lost",
+        "confused",
+        "confusing",
+        "happen",
+        "happens",
+        "happened",
+        "happening",
+        "going",
+        "ok",
+        "okay",
+        "hi",
+        "hello",
+        "hey",
+        "thanks",
+        "thank",
+        "yes",
+        "no",
+        "still",
+        "again",
+        "right",
+        "thing",
+        "things",
+        "something",
+        "anything",
+        "everything",
+        "nothing",
+        "wrong",
+        "else",
+        "see",
+        "seeing",
+        "look",
+        "looking",
+        "mean",
+        "means",
+        "understand",
+        "figure",
+        "screen",
+        "screens",
+        "picture",
+        "pictures",
+        "image",
+        "photo",
+        "screenshot",
+        "work",
+        "works",
+        "working",
+        "problem",
+        "issue",
+        # Words that point at a screen Ask can't see ("What should I press here?", "is this done", "which button?").
+        "press",
+        "pressing",
+        "click",
+        "clicking",
+        "tap",
+        "tapping",
+        "push",
+        "here",
+        "there",
+        "this",
+        "that",
+        "button",
+        "buttons",
+        "done",
+        "finished",
+        "should",
+        "do",
+        "doing",
+        "which",
+        "on",
+        "with",
+        "in",
+        "at",
+        "to",
+        "for",
+    ]
+)
+VAGUE_STEMS = frozenset(stem(w) for w in VAGUE_WORDS)
+# Of those, the ones that never count for the title rule (they say when, not what).
+TITLE_IGNORED = frozenset(stem(w) for w in ["now", "next", "then", "right", "again", "still", "ok", "okay"])
 
 REFUSED_TEXT = "I can't help with that. I only know how to use Clip Factory."
 UNKNOWN_TEXT = "I don't know that one yet. Try other words, or pick a question below."
@@ -253,6 +344,23 @@ def content_words(text: str, stopwords: frozenset[str] = DEFAULT_STOPWORDS) -> l
     return [w for w in words(text) if w not in stopwords]
 
 
+# A platform name alone says where, not what: "what do I do now with facebook" is still open (web PLATFORM_WORDS).
+PLATFORM_WORDS = frozenset({"facebook", "instagram", "tiktok", "youtube", "twitter", "x", "meta", "google"})
+
+
+def open_ended(question: str, stopwords: frozenset[str] = DEFAULT_STOPWORDS) -> bool:
+    """True when the question has content words and every one is vague ("What do I do now?"), or every one is vague
+    but a platform name ("what do I do now with facebook"). Only the assistant, looking at his screen, can answer."""
+    raw = words(question)
+    found = [w for w in raw if w not in stopwords]
+    vague = [w for w in found if w in VAGUE_WORDS or stem(w) in VAGUE_STEMS]
+    if not found:
+        # Every word is a stop word ("what do i do", "is this done"): open when it names a vague word at all.
+        return any(w in VAGUE_WORDS for w in raw)
+    rest = [w for w in found if w not in vague]
+    return not rest or (bool(vague) and all(w in PLATFORM_WORDS for w in rest))
+
+
 def previous_user_question(history: Sequence[Mapping[str, Any]] | None) -> str | None:
     for turn in reversed(list(history or [])):
         if turn.get("role") != "user" or not isinstance(turn.get("text"), str):
@@ -308,7 +416,7 @@ def _score(index: _Index, groups: list[_Group], context: HelpContext | None, mer
             weights[term] = max(weights.get(term, 0.0), g.weight)
     own = [g for g in groups if g.own and not g.picture]
     pictures = [g for g in groups if g.picture]
-    own_terms = {t for g in [*own, *pictures] for t in g.alternatives}
+    own_terms = {t for g in [*own, *pictures] for t in g.alternatives} - TITLE_IGNORED
     page = boost_page(context.page if context is not None else None)
     scored: list[tuple[float, int, str, int]] = []
     for n, doc in enumerate(index.docs):
@@ -358,6 +466,8 @@ def rank(
         return Ranked("refused", question=question)
     synonyms = DEFAULT_SYNONYMS if synonyms is None else synonyms
     stopwords = DEFAULT_STOPWORDS if stopwords is None else stopwords
+    if not picture_words and open_ended(question, stopwords):
+        return Ranked("unknown", question=question)
     shown = [d for d in docs if visible(d, context)]
     if not shown:
         return Ranked("unknown", question=question)

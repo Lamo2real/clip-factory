@@ -77,6 +77,13 @@ describe("fitJpeg", () => {
     expect(encode).toHaveBeenCalledWith(1568, 1176, 0.82);
   });
 
+  it("fits an iPhone screenshot (1179 x 2556, the owner's Facebook screen) to 1568 px on the long edge", async () => {
+    const encode = vi.fn(async (_w: number, _h: number, _q: number) => new Blob([new Uint8Array(200_000)]));
+    const out = await fitJpeg(1179, 2556, encode);
+    expect(out).toMatchObject({ width: 723, height: 1568 });
+    expect(encode).toHaveBeenCalledWith(723, 1568, 0.82);
+  });
+
   it("never makes a small picture bigger", async () => {
     const encode = vi.fn(async () => new Blob(["x"]));
     expect(await fitJpeg(390, 844, encode)).toMatchObject({ width: 390, height: 844 });

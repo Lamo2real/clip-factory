@@ -1,5 +1,5 @@
 // Instagram setup (docs/CONTRACTS.md §17.2): Instagram API with Facebook Login (Facebook Login for Business
-// configuration), Graph API v27.0, checked against Meta for Developers on 16 Nov 2026. Its own Meta app, separate
+// configuration), Graph API v27.0, checked against Meta for Developers on 19 Nov 2026. Its own Meta app, separate
 // from the Facebook one. That path needs the Instagram professional account linked to a Facebook Page.
 import { CHECKED_ON, type SetupGuide } from "./types.ts";
 
@@ -10,7 +10,7 @@ export const instagram: SetupGuide = {
   minutes: 25,
   cost: "Free",
   keyWords: "App ID, App secret and Configuration ID",
-  fix: { keys: "key-paste", redirect: "key-config", account: ["ready-pro", "ready-page", "ready-portfolio"] },
+  fix: { keys: "key-paste", redirect: "key-config", account: ["ready-pro", "ready-page"] },
   parts: [
     {
       id: "ready",
@@ -41,6 +41,14 @@ export const instagram: SetupGuide = {
               see: "no **Page** line in Edit profile",
               do: "On Facebook, open your Page, then **Settings**, then **Linked accounts**, then **Instagram**. Press **Connect account**.",
             },
+            {
+              see: "**Manage connection** on Facebook",
+              do: "If it shows your clip Instagram name, it is linked. Close it. Never press **Disconnect**. Press I did this.",
+            },
+            {
+              see: "the wrong Instagram under **Manage connection**",
+              do: "Press **Disconnect**, then **Connect account** and log in to your clip Instagram.",
+            },
           ],
         },
         {
@@ -57,14 +65,15 @@ export const instagram: SetupGuide = {
         {
           id: "ready-portfolio",
           icon: "folder",
-          title: "Make a business portfolio",
+          title: "Business portfolio, if Meta asks",
           say: [
-            "Press **Create a business portfolio**. Fill in a name, your name and email. Press **Create**.",
+            "Only if Meta asks for one. Press **Create a business portfolio**. Fill in a name, your name and email.",
             "Open **Settings**, then **Accounts**, then **Instagram accounts**.",
             "Press **Add** and log in to Instagram.",
             "Already in a portfolio? Use that one.",
           ],
           open: { label: "Open Meta Business", url: "https://business.facebook.com/" },
+          optional: true,
         },
       ],
     },
@@ -86,7 +95,7 @@ export const instagram: SetupGuide = {
           say: [
             "Press **Create app**. App name: paste it. Add your email. Press **Next**.",
             "Use case: **Manage messaging & content on Instagram**. Press **Next**.",
-            "Pick your portfolio. Press **Next**, then **Go to dashboard**.",
+            "Pick your portfolio, or skip it. Press **Next**, then **Go to dashboard**.",
             "Never ask Meta for a review.",
           ],
           open: { label: "Open My Apps", url: "https://developers.facebook.com/apps" },
@@ -162,7 +171,7 @@ export const instagram: SetupGuide = {
           title: "Connect Instagram",
           say: [
             "Press **Connect Instagram**. Log in with the same Facebook account.",
-            "Pick your portfolio, then your Instagram. Confirm.",
+            "Pick your portfolio if asked, then your Instagram. Confirm.",
             "Several accounts? You pick one in Clip Factory next.",
           ],
           auto: "connected",
@@ -189,6 +198,10 @@ export const instagram: SetupGuide = {
           ],
           ifYouSee: [
             { see: "your Reels missing for other people", do: "Tell Clip Factory support. Meta may want the app Live." },
+            {
+              see: "Facebook asking you to confirm who runs the Page",
+              do: "Do it. Instagram will not post until you do.",
+            },
           ],
         },
       ],

@@ -48,3 +48,31 @@ Each step above was written from these official pages. Uncertain details are wor
 - [OAuth 2.0 authorization code with PKCE](https://docs.x.com/resources/fundamentals/authentication/oauth-2-0/authorization-code)
 - [Chunked media upload](https://docs.x.com/x-api/media/quickstart/media-upload-chunked) and
   [Create a post](https://docs.x.com/x-api/posts/create-post)
+
+### What changed on 19 Nov 2026
+
+Checked again for Instagram, Facebook, YouTube and X (TikTok has its own check above). Ask, the in-app helper,
+reads these same official pages when a step may be out of date (docs/CONTRACTS.md §28.3).
+
+- **Instagram step 2**: new "If you see **Manage connection**" hints. On Facebook's phone app, a Page whose
+  Instagram is already linked shows **Manage connection** after **Edit profile**; a Page that is not linked shows
+  **Connect**. The Instagram app route (Edit profile › Page) is still right. Source: the owner's own screenshot of
+  that sheet (19 Nov 2026), not a Meta help page, so the hint is worded "If it shows your Instagram name…". The same
+  sheet also shows **People who help manage your Page** (Page access); the hint says to leave it as it is. When the sheet
+  looks different, Ask reads Meta's own help pages (facebook.com/help) before it answers.
+- **Instagram step 4** (business portfolio) is now only if Meta asks. Neither the Instagram Platform overview nor
+  Content publishing requires a portfolio for a User access token on accounts you own
+  ([overview](https://developers.facebook.com/documentation/instagram-platform/overview)). Content publishing also
+  says a Page with a Business Manager role may need the ads permissions, so not using a portfolio is the simpler path
+  ([content publishing](https://developers.facebook.com/documentation/instagram-platform/content-publishing)).
+- **Instagram step 12**: a Page that needs Page Publishing Authorization cannot be posted to until it is done
+  (same content publishing page).
+- **Facebook step 1**: posting Reels needs the Page's **Content** task, not full control; full control is only needed
+  to link Instagram ([Reels publishing](https://developers.facebook.com/documentation/video-api/guides/reels-publishing)).
+- **Facebook step 7**: pages_show_list and business_management are added by default; **step 9**: leave the
+  Deauthorize and Data Deletion Request boxes empty; **step 13**: Meta now says **Publish**, then **Publish** at the
+  bottom right ([Create an app for Pages](https://developers.facebook.com/documentation/pages-api/create-an-app)).
+  Reels from apps are 3 to 90 seconds, 9:16, at least 540x960, 30 app posts a day per Page (Reels publishing).
+- **YouTube**: no step changed ([Videos: insert](https://developers.google.com/youtube/v3/docs/videos/insert)).
+- **X**: no step changed; the first auto-recharge is matched up to $50
+  ([Pricing](https://docs.x.com/x-api/getting-started/pricing)).

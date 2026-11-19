@@ -3,7 +3,9 @@
 `cf-prod-ask` deploys with everything else (`ask_enabled = true` in prod). Two owner steps, both only once:
 
 1. **Bedrock model access (only if Bedrock asks for it).** Open the Bedrock console in **Stockholm (eu-north-1)** →
-   **Model access** → turn on **Claude Opus 5.5** and **Claude Opus 4.8** → try each once in the playground. Until then
+   **Model catalog** → **Claude Opus 5.5** → submit the Anthropic use-case form if asked → send one message in the
+   playground (that first call also makes the Marketplace subscription, §4). Do the same for **Claude Opus 4.8**, the
+   fallback. If the account still shows a **Model access** page, enable both there too. Until then
    answers fail with an access error (`ask_model_error`, alarm `cf-prod-ask-model-failures`) and Ask gives the plain
    §19 answers.
 2. **Web search.** In the app: **Settings › App & account › Ask** → **Get a search key** (Brave Search API) → make a
@@ -31,6 +33,13 @@ After the first deploy, check once (CI's deploy role, never a local deploy): one
 PDF and "#search"-style words, and see the `help.ask` line in `/aws/lambda/cf-prod-ask` say `ask_ok`. If it says
 `ask_model_error` with status 400 on every answer, set `ASK_EAGER_TOOLS=false` (Terraform variable `ask_eager_tools = false`,
 for example `TF_VAR_ask_eager_tools: "false"` in the deploy workflow's plan step) and deploy.
+
+**Every deploy checks Ask with the real model** (ADR-53): the smoke job invokes `cf-prod-ask` with `{"smoke":"ask"}`,
+and the deployed model must say "red" for a tiny red picture. If the job warns **Ask model access**, do step 1 above
+(Model catalog → Claude Opus 5.5 → use-case form if asked → one message in the playground); the next deploy checks
+again. **Ask model id not found** means `ASK_MODEL_ID` names a model or inference profile Bedrock does not have in
+eu-north-1. Those two only warn, so an unrelated merge never goes red for them; any other failure (the model did not
+see the picture) fails the deploy. The reason is in `/aws/lambda/cf-prod-ask`, event `ask.smoke`.
 
 ### Alarm emails
 

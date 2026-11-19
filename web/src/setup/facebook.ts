@@ -1,5 +1,5 @@
 // Facebook setup (docs/CONTRACTS.md §17.2): Page Reels with Facebook Login for Business, Graph API v27.0, checked
-// against Meta for Developers on 16 Nov 2026. Its own Meta app ("Clip Factory Pages"), separate from Instagram's.
+// against Meta for Developers on 19 Nov 2026. Its own Meta app ("Clip Factory Pages"), separate from Instagram's.
 import { CHECKED_ON, type SetupGuide } from "./types.ts";
 
 export const facebook: SetupGuide = {
@@ -22,10 +22,20 @@ export const facebook: SetupGuide = {
           say: [
             "Open your Pages. None yet? Press **Create new Page**.",
             "Profiles cannot post Reels through apps. You need a Page.",
-            "You need full control of the Page.",
-            "Then switch back to your profile.",
+            "You need **Content** or **Full control** access on the Page.",
+            "Then tap your picture and switch back to your own profile. Do not change Page settings.",
           ],
           open: { label: "Open your Pages", url: "https://www.facebook.com/pages/?category=your_pages" },
+          ifYouSee: [
+            {
+              see: "**Manage connection** after **Edit profile** on your Page",
+              do: "If it shows your Instagram name, it is linked. Close it. Never press **Disconnect**. Press I did this.",
+            },
+            {
+              see: "**People who help manage your Page**",
+              do: "Leave those choices as they are. They only matter if other people help run your Page.",
+            },
+          ],
         },
         {
           id: "ready-computer",
@@ -87,7 +97,7 @@ export const facebook: SetupGuide = {
           say: [
             "On the **Dashboard**, press **Customize the Manage everything on your Page use case**.",
             "Press **Add** next to pages_read_engagement, pages_manage_posts, read_insights and pages_manage_engagement.",
-            "Press **Ready to test**.",
+            "pages_show_list and business_management are already there. Press **Ready to test**.",
           ],
         },
         {
@@ -124,6 +134,10 @@ export const facebook: SetupGuide = {
             {
               see: "no Facebook Login for Business in the menu",
               do: "Look under **Use cases** › **Customize**, or **Add product**.",
+            },
+            {
+              see: "**Deauthorize Callback URL** or **Data Deletion Request URL** boxes",
+              do: "Leave them empty.",
             },
           ],
         },
@@ -183,8 +197,8 @@ export const facebook: SetupGuide = {
           icon: "globe",
           title: "Make the app Live",
           say: [
-            "In the left menu, press **Publish**, then **Go live**.",
-            "Or flip the **App Mode** switch to **Live**.",
+            "In the left menu, press **Publish**. Check the list, then press **Publish** at the bottom right.",
+            "No **Publish** in the menu? Flip the **App Mode** switch to **Live**.",
             "Meta says info is missing? Go back to Fill in Basic settings.",
           ],
           gate: "app_live",

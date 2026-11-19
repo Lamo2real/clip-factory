@@ -2116,14 +2116,14 @@ v27.0; system-user tokens are for Tech Providers only). Get ready:
 | id | title | essentials |
 |---|---|---|
 | `ready-pro` | Make Instagram a pro account | Instagram app › your picture › menu › **Account type and tools** › **Switch to professional account** › **Creator** or **Business**. Personal accounts cannot connect. |
-| `ready-page` | Link Instagram to a Facebook Page | In the Instagram app, tap **Edit profile**, then **Page** (under Public business information). Pick your Facebook Page, or press **Create a Facebook Page**. No Page yet? Make one first in the Facebook setup, step 1. |
+| `ready-page` | Link Instagram to a Facebook Page | In the Instagram app, tap **Edit profile**, then **Page** (under Public business information). Pick your Facebook Page, or press **Create a Facebook Page**. No Page yet? Make one first in the Facebook setup, step 1. If you see **Manage connection** on Facebook: already linked; check the name, close it, **I did this**, never **Disconnect**. Wrong Instagram there: **Disconnect**, then **Connect account**. |
 | `ready-computer` | Use a computer | Log in to facebook.com with the Facebook account that will own the app. Wrong account? Log out first. |
-| `ready-portfolio` | Make a business portfolio | Open business.facebook.com, **Create a business portfolio** (name, your name, email), **Create**. **Settings** › **Accounts** › **Instagram accounts** › **Add**, log in to Instagram. Already in a portfolio? Use that one. |
+| `ready-portfolio` | Business portfolio, if Meta asks | (optional since 19 Nov 2026: only if Meta asks or the Instagram is already in one) Open business.facebook.com, **Create a business portfolio** (name, your name, email), **Create**. **Settings** › **Accounts** › **Instagram accounts** › **Add**, log in to Instagram. Already in a portfolio? Use that one. |
 Make your Instagram key:
 | id | title | essentials |
 |---|---|---|
 | `key-developer` | Become a Meta developer | Open developers.facebook.com/async/registration, **Next**, type the codes Meta sends, pick **Creator**. |
-| `key-app` | Create the app | developers.facebook.com/apps › **Create app**. App name `appName`, your email, **Next**. Use case **Manage messaging & content on Instagram**, **Next**. Pick your portfolio. **Next** / **Go to dashboard**. Never ask for a review. |
+| `key-app` | Create the app | developers.facebook.com/apps › **Create app**. App name `appName`, your email, **Next**. Use case **Manage messaging & content on Instagram**, **Next**. Pick your portfolio, or skip it. **Next** / **Go to dashboard**. Never ask for a review. |
 | `key-basic` | Fill in Basic settings | **App settings** › **Basic**: Privacy Policy URL `privacyUrl`, Terms of Service URL `termsUrl`, User data deletion › **Data deletion instructions URL** `dataDeletionUrl`, a Category. **Save changes**. |
 | `key-config` | Make the Instagram login setup | **Use cases** › **Customize** (Instagram) › open the tab **API setup with Facebook login**. Press **Create new configuration** (under Facebook Login for Business › Configurations). Token type: **User access token**, the longest expiry. Assets: your Page and Instagram account. **Edit permissions**: tick instagram_basic, instagram_manage_insights, instagram_content_publish, pages_show_list, pages_read_engagement (instagram_manage_insights is not ticked by default); untick the ad ones. **Use this configuration**. Redirect URL `redirectUri`, **Save**. |
 | `key-redirect-check` | Double-check the return address | If you see **Facebook Login for Business** › **Settings**: put `redirectUri` in **Valid OAuth Redirect URIs**, **Enforce HTTPS** on, **Save changes**. No such page: skip. (optional) |
@@ -2133,12 +2133,13 @@ account, leave every switch on, confirm. Several accounts → pick in Clip Facto
 (`ready-pro`), not linked to a Page (`ready-page`) or in another portfolio (`ready-portfolio`). Go public:
 `public-try` "Post one test clip" (Instagram may take a few minutes;
 numbers can take 2 days). Status: "Works now." If you see your Reels missing for other people: "Tell Clip Factory
-support; Meta may want the app Live."
+support; Meta may want the app Live." If Facebook asks to confirm who runs the Page (Page Publishing Authorization):
+"Do it. Instagram will not post until you do."
 
 **Facebook** (about 25 min, Free; Page Reels, Facebook Login for Business, Graph v27.0). Get ready:
 | id | title | essentials |
 |---|---|---|
-| `ready-page` | Have a Facebook Page | Open facebook.com/pages/?category=your_pages; none → **Create new Page**. Profiles cannot post Reels through apps. You need full control of the Page. Switch back to your profile. |
+| `ready-page` | Have a Facebook Page | Open facebook.com/pages/?category=your_pages; none → **Create new Page**. Profiles cannot post Reels through apps. You need **Content** or **Full control** access on the Page. Tap your picture and switch back to your own profile; do not change Page settings. If you see **Manage connection** after **Edit profile**: Instagram is already linked, close it, never **Disconnect**. **People who help manage your Page**: leave as is. |
 | `ready-computer` | Use a computer | |
 Make your Facebook key:
 | id | title | essentials |
@@ -2147,15 +2148,15 @@ Make your Facebook key:
 | `key-app` | Create the app | Open developers.facebook.com/apps/creation, App name copy "Clip Factory Pages" (never put Facebook, Meta or Instagram in the name), email, **Next**. |
 | `key-use-case` | Pick one use case | Tick only **Manage everything on your Page**. Do not tick the Instagram one or **Authenticate and request data from users with Facebook Login**. Use cases cannot be removed later. **Next**. |
 | `key-finish-app` | Finish the app | Business: your portfolio, or **I don't want to connect a business portfolio yet**. **Next**, **Next**, **Go to dashboard**. |
-| `key-permissions` | Turn on Page permissions | **Dashboard** › **Customize the Manage everything on your Page use case**. **Add** next to pages_read_engagement, pages_manage_posts, read_insights, pages_manage_engagement. **Ready to test**. |
+| `key-permissions` | Turn on Page permissions | **Dashboard** › **Customize the Manage everything on your Page use case**. **Add** next to pages_read_engagement, pages_manage_posts, read_insights, pages_manage_engagement (pages_show_list and business_management are already there). **Ready to test**. |
 | `key-basic` | Fill in Basic settings | **App settings** › **Basic**: App domains `appDomain`, Privacy `privacyUrl`, Terms `termsUrl`, **Data deletion instructions URL** `dataDeletionUrl`, Category, App icon (download). In the EU: Data Protection Officer = your name and email. **+ Add platform** › **Website** › Site URL `websiteUrl`. **Save changes**. |
-| `key-redirect` | Paste the return address | **Facebook Login for Business** › **Settings**: **Client OAuth login**, **Web OAuth login**, **Enforce HTTPS** = Yes, Strict Mode on. **Valid OAuth Redirect URIs** `redirectUri`; **Check URI**; **Save changes**. Not in the menu: look under **Use cases** › **Customize** or **Add product**. |
+| `key-redirect` | Paste the return address | **Facebook Login for Business** › **Settings**: **Client OAuth login**, **Web OAuth login**, **Enforce HTTPS** = Yes, Strict Mode on. **Valid OAuth Redirect URIs** `redirectUri`; **Check URI**; **Save changes**. Not in the menu: look under **Use cases** › **Customize** or **Add product**. **Deauthorize Callback URL** / **Data Deletion Request URL**: leave empty. |
 | `key-config` | Make a login configuration | **Facebook Login for Business** › **Configurations** › **+ Create configuration** (not a template). Name `appName`. If asked: **General**. Token **User access token**, longest expiry. Assets **Pages**. Permissions: pages_show_list, pages_read_engagement, pages_manage_posts, pages_manage_engagement, read_insights, business_management. **Create**. |
 | `key-paste` | Paste the 3 values | **App ID**, **App secret**, **Configuration ID**. **Save keys**. |
 Connect: `connect` **Connect Facebook**: **Continue**, tick your clip Page, leave every switch ON (one off and Facebook
 gives nothing), **Save**, **Got it**. Several Pages → pick in Clip Factory.
-Go public (`gate: app_live`): `public-live` "Make the app Live": left menu **Publish** › **Go live** (or the **App
-Mode** switch → **Live**). Missing info → back to `key-basic`. If Meta asks for **App Review** first: "Your Reels stay
+Go public (`gate: app_live`): `public-live` "Make the app Live": left menu **Publish**, check the list, **Publish** at the bottom right (no
+**Publish**: the **App Mode** switch → **Live**). Missing info → back to `key-basic`. If Meta asks for **App Review** first: "Your Reels stay
 visible only to you for now. Tell Clip Factory support." Status before: "Works now, but only you can see your
 Facebook Reels until the app is Live."
 
@@ -2376,7 +2377,7 @@ step id, e.g. `key-client`, so numbers never drift):
 | `redirect_wrong` | "The return address does not match. Copy it again in step 11." |
 | `missing_permissions` | "A permission box was not ticked. Connect again and tick every box." |
 | `no_channel` | "This Google account has no YouTube channel. Make one first (step 1)." |
-| `no_accounts`, `wrong_account_type` | "Instagram did not show a pro account. Do steps 1, 2 and 4, then connect again." |
+| `no_accounts`, `wrong_account_type` | "Instagram did not show a pro account. Do steps 1 and 2, then connect again." |
 | `no_pages` | "Facebook did not show a Page you control. Do step 1, then connect again." |
 | `platform_down` | "YouTube did not answer. Try again in a few minutes." |
 | `error` | "Something went wrong. Press Connect YouTube again." |
@@ -3290,6 +3291,11 @@ on a platform's setup page) becomes a doc on that page, and the element there ca
   `-ly`; never below 3 letters) and one-edit fuzzy match for words ≥ 5 letters ("Instagarm").
 * Accept the best doc only when: score ≥ `MIN_SCORE` (2.0), ≥ 50 % of the content words matched, and at least one hit
   in title or keywords. Otherwise `known: false`. Return the top 6 as candidates.
+* **Open questions are never matched** (2026-11-19): when every content word is vague (`VAGUE_WORDS`: now, next,
+  stuck, lost, happen, ok, this screen, picture, work, problem…), the question is `known: false` without ranking,
+  unless words read from his pictures came with it (§26). Words that say when, not what (`TITLE_IGNORED`: now, next,
+  then, right, again, still, ok, okay) never count for the title rule. Evals: "What do I do now?" → unknown, "Is
+  anything running right now?" → `jobs-running`.
 * **Guide near-tie** (`GUIDE_TIE = 0.9`, applied after sorting and before the accept check): when the top doc is not a
   guide, the first guide whose route matches the top doc's route (ignoring `#hash`) and whose score is ≥ 0.9 × the top
   score moves to the top. In short: a guide within 10 % of the best generated doc on the same route wins. (A strict
@@ -5682,11 +5688,29 @@ carries `cacheRead`; a test checks the prefix is byte-identical across two quest
 
 ### 28.3 The web (client-side tools; Bedrock has no server web tools)
 
+**What works with no owner step** (checked 2026-11-19: Anthropic's server `web_search` / `web_fetch` tools are not
+offered on Amazon Bedrock, only on the Claude API and Claude Platform on AWS, which ADR-51 ruled out): `web_fetch`
+reads **official help and developer documentation with no key and no link in the chat**: an exact host (`www.`
+optional) and path prefix from `OFFICIAL_DOC_PAGES` in `ask/tools.py`: `developers.facebook.com/docs/` and
+`/documentation/`, `facebook.com/help/` and `/business/help/`, `business.facebook.com/business/help/`,
+`help.instagram.com`, `transparency.meta.com`, `developers.tiktok.com/doc/`, `support.tiktok.com`,
+`developers.google.com`, `support.google.com/{product}/answer/{id}`, `cloud.google.com/docs/`, `docs.x.com`,
+`developer.x.com/en/docs/`, `help.x.com`, `docs.aws.amazon.com`, `docs.anthropic.com`, `docs.claude.com`,
+`platform.claude.com/docs/`. Never posts, Pages, groups, forums, community threads or link shims (`l.facebook.com`).
+Because the model writes these URLs itself: the query string is dropped, every redirect hop must be another official
+page or the same host (`fetch(..., allow=)`; a hop that leaves stops the fetch before it is opened), at most **3**
+such reads per answer, text cut to 15,000 characters and PDFs over 500 KB refused. Every page a setup step opens
+(`open.url` in `knowledge.json` `setupSteps`, kept whole with its query when it is on a platform host and has no
+secret-looking parameter) is readable the same way, with the same redirect check. Some Meta help pages draw with script and come back nearly empty; Ask then says so
+and works from the guide and the picture. **Open web search** (any site) still needs the owner's Brave key: Ask
+reads the official pages first and mentions the key at most once, at the end.
+
 * **`web_search`** `{query ≤ 200, freshness?: day|week|month|year}`: the **Brave Search API** (checked on Brave's
   docs 2026-11-19: `GET https://api.search.brave.com/res/v1/web/search`, header `X-Subscription-Token`, `count` 8,
   `safesearch` moderate, `freshness` pd/pw/pm/py; the Search plan is $5 per 1,000 requests with $5 free each month).
   4 s, no retry. Results go back as `search_result` blocks with citations on. A failure is an `is_error` result.
-* **`web_fetch`** `{url}`: only a URL from this answer's search results (stored normalised, as the fetch compares it:
+* **`web_fetch`** `{url}`: an official help or developer page (above), a page a setup step opens, a URL from this
+  answer's search results (stored normalised, as the fetch compares it:
   lower-case host, no `#fragment`, `/` for an empty path), a web source of an earlier answer (sent back with the
   history, §28.6) or one the owner typed himself (question or history). https only (http upgraded), every address
   public (private, loopback, link-local, CGNAT, metadata, multicast, reserved, and IPv6 forms that carry an IPv4
@@ -5702,8 +5726,11 @@ carries `cacheRead`; a test checks the prefix is byte-identical across two quest
   `ForceDeleteWithoutRecovery`. Never echoed, logged or put in the prompt (and the answer filter hides it if the
   model ever writes it); the worker caches it **60 s**, so **Take key away** reaches a warm worker within a minute. A
   key that can't be read (throttling, permissions) is web `error`, not `no_key`: Ask never asks him to set it up again.
-* **No key**: no `web_search` tool (`web_fetch` stays for typed URLs); rule 10 makes Ask say "I can't search the web
-  yet." once; `ask.done` carries `webMissing` and the panel shows **Turn on web search** once per chat.
+* **Kill switch `web: false`** (record web `off`): no `web_search`, and `web_fetch` opens only links the owner typed
+  himself; official and guide pages are refused too (`Toolbox.web_off`).
+* **No key**: no `web_search` tool; `web_fetch` stays (official pages, guide pages, typed URLs). Rule 10 makes Ask
+  read the official pages first and say "Turn on web search and I can check more." at most once, at the end;
+  `ask.done` carries `webMissing` and the panel shows **Turn on web search** once per chat.
 * Owner card: Settings › App & account › **Ask** (apples `ask-web-setup` and `ask-status`): the steps (make a free
   account and pick **Search**, copy the key, paste it and tap **Save key**) with **Get a search key** as a glass
   button (≥ 48 px, external icon) under them, not a link inside a sentence; **Take key away**.
@@ -5715,7 +5742,15 @@ carries `cacheRead`; a test checks the prefix is byte-identical across two quest
 |---|---|---|
 | `read_app_doc` | `{id, part?}` | One part (≤ 30,000 characters, cut at a line break) of a library section as a `search_result` block, source `clip-factory://library/{id}`; a long section starts "(part 1 of 3. Read part 2 for more.)". Only ids in the index. Cap 6. |
 | `read_my_clip_factory` | `{section, id?}`, sections `jobs`, `job`, `review`, `library`, `clip`, `week`, `setup`, `money`, `money_days`, `follows`, `settings`, `lessons`, `skills` | The owner's own data (ids looked up under his own key only), scrubbed, ≤ 12,000 characters. Cap 6. |
-| `show_app_buttons` | `{actionIds}` (1 or 2) | Buttons from the app map whose route is a real page (checked on the server against the pack's routes, as router.ts, and again in the panel); sends `ask.actions`; unknown ids come back as an error. Cap 2. |
+| `read_setup_guide` | `{platform, stepId?}` | One posting setup guide as the app shows it (from `knowledge.json` `setupSteps`, built from `web/src/setup/*.ts`): every step's number, id, title, words, "If you see" hints, the page it opens, the day it was checked, and the owner's own progress (state, steps ticked, next step by his ticks, connected). Each step lists its button id `setup-step:{platform}:{stepId}`. Cap 6. |
+| `show_app_buttons` | `{actionIds}` (1 or 2) | Buttons from the app map whose route is a real page (checked on the server against the pack's routes, as router.ts, and again in the panel), or `setup-step:{platform}:{stepId}` for one setup step ("Open Instagram step 2" → `/settings/posting/setup/instagram#step-ready-page`, lighting `step-ready-page`; the setup page opens and scrolls to a `#step-{id}` of its own guide); sends `ask.actions`; unknown ids come back as an error. Cap 2. |
+
+**Pictures** (rule 12): a screenshot is the main part of the question. Ask names the app and screen, finds the setup
+step with `read_setup_guide` (the picture wins over his ticks, which "Get ready" steps never set by themselves),
+says whether the step already looks done, gives the exact next taps on that screen and a button to the step. Outside
+sites change, so when the picture or an official page disagrees with the guide, Ask says "Our guide is out of date
+here." and gives the right steps with the source (rule 2). A question with a picture, or one about setup or another
+app's screen, runs at effort `high` at least (`ASK_EFFORT` stays for plain chat).
 
 The calls of one model turn run at the same time (up to 6, each inside its own deadline); `show_app_buttons` runs in
 order on the worker's thread. Before tools run, the worker checks Stop and the hard budget; a call still running when
@@ -5729,7 +5764,9 @@ Start over HTTP, stream over the existing WebSocket (Python Lambdas cannot strea
 32 KB, too small for a question with history):
 
 1. The panel sends `{"action": "whoami"}`; `cf-prod-ws` answers `{"type": "whoami", "connectionId"}`. No open socket
-   within 4 s: the §19 path (`POST /v1/help/answers`).
+   within 4 s: the panel wakes the socket (reconnects at once, without waiting out a backoff or a pause; a phone drops
+   it while the owner takes a screenshot in another app) and waits up to 10 s more. Still none: the "can't answer"
+   rule under **Failures** below.
 2. Files (only when Send is pressed): `POST /v1/help/files`, then a presigned PUT each, with progress.
 3. `POST /v1/help/asks` → **202** `{askId}`: JWT, kill switch (`assistant`), parse (≤ 200 KB), the connection is the
    owner's (`USER#{sub}`/`CONN#{id}`, else 409 `not_live`, retried once), rate limit, the secrets refusal on the typed
@@ -5759,16 +5796,31 @@ type AskEvent =
  | {type:"ask.sources", sources:{n, kind:"web"|"file"|"app", title, url?, file?, where?}[]}
  | {type:"ask.files", files:{fileId, read:boolean, why?:"unsupported"|"too_long"|"damaged"|"off"}[]}
  | {type:"ask.done", stop:"end"|"budget"|"stopped"|"refused"|"error", links:string[], webMissing?:true}
- | {type:"ask.error", code:"rate_limited"|"unavailable"|"model"|"timeout", message:string, retryAfter?:number}
+ | {type:"ask.error", code:"rate_limited"|"unavailable"|"model"|"timeout", message:string, retryAfter?:number,
+    reason?:"access"|"busy"|"timeout"|"other"}  // code "model": why the model gave no answer, said in plain words
 // every event also carries askId
 ```
 
 **Links**: while an answer streams no link is live; after `ask.done` only the https URLs in `links` (this answer's
 search and fetch results and the owner's own typed URLs) become live links (`target=_blank rel="noopener noreferrer"`;
-the Mac app opens them in the browser). **Failures**: a model error or no `ask.started` within 8 s before any words →
-the §19 answer with "I couldn't think it through this time. Here is the short help."; after words → the answer ends
-with "The answer was cut short. Ask me to go on."; 45 s without an event ends it the same way, and the panel then
-calls Stop so the worker stops spending.
+the Mac app opens them in the browser). **Failures** (owner report 2026-11-19: a screenshot question got "Jobs working
+right now: 0" because the fallback dropped the picture and matched "now"):
+* **Model errors before any words** (403/404 model access not turned on, 429, 5xx, a timeout) are tried once more on
+  `ASK_FALLBACK_MODEL_ID` (Opus 4.8) in the same answer; refusals keep their own middleware. Still failing: `ask.error`
+  `code: "model"` with `reason` and one of these messages: access "Ask's AI model is not turned on yet. In Amazon
+  Bedrock, turn on model access for Claude, then try again."; busy "Ask is very busy right now. Try again in a
+  minute."; timeout "That took too long. Try again."; other "I couldn't think it through this time. Try again.". The
+  worker logs `ask.model_switched` / `ask.model_failed` with `reason` and `status`, and `help.ask` carries `modelError`.
+* **No canned answer for a picture or an open question.** When the assistant gives no words (no socket after the wake,
+  no `ask.started` within 8 s, a model error, a 5xx, assistant off), a question **with files** never goes to the §19
+  path: the panel says "I couldn't look at your picture this time. It is still here. Press Try again." (or the
+  server's plain model message), puts the files and words back, and shows **Try again**, which sends them again. A
+  question without files gets the §19 short help **only when it truly matches** (`known`; open questions like "What do
+  I do now?" never match, §19.4); otherwise "I can't reach Clip Factory right now. Your question is still here. Press
+  Try again." with the same button. A known short help after a model error is introduced with "I couldn't think it
+  through this time. Here is the short help."
+* After words, the answer ends with "The answer was cut short. Ask me to go on."; 45 s without an event ends it the
+  same way, and the panel then calls Stop so the worker stops spending.
 
 ### 28.6 API
 
@@ -5889,6 +5941,17 @@ the `ask-1-day` rule (an in-place update; `prevent_destroy` stays); monitoring g
 for failures and two alarms; `config/models.json` gains `askModel`, `askFallbackModel`, `askEndpoint` and `opus-4-8`.
 No table, index, route, CORS or CSP change. The plan creates and updates only.
 
+**Post-deploy check** (ADR-53): `cf-prod-ask` also takes `{"smoke": "ask"}`. It loads the built-in skills block, asks
+the main model (never the fallback) at effort low what colour a 16 x 16 red PNG is, sent as an image block, and
+returns `{outcome: "smoke_ok" | "smoke_failed", model, answer, stop, reason?, status?}` (`reason` access, not_found
+(404: a wrong model id or inference profile), busy, timeout or other; `smoke_ok` needs the word "red" on its own in an
+answer of at most 20 characters; one `ask.smoke` log line; no socket, no owner data, no files). deploy.yml's smoke
+job invokes it with the deploy role (it already has `lambda:*`; two new read-only outputs `ask_function_name` and
+`ask_enabled`) and retries twice. `access` and `not_found` only **warn** (access: Model catalog → Claude Opus 5.5 →
+use-case form if asked → one message in the playground; not_found: check `ASK_MODEL_ID`), so an unrelated merge
+never goes red before the owner's one-time Bedrock step; any other failure fails the deploy. Skipped when
+`ask_enabled` is false (read as `if .ask_enabled.value == false`, not jq's `//`).
+
 ### 28.13 Tests
 
 api: `tests/test_ask_worker.py` (request shape, cache prefix, events, the tool loop with citations, buttons, injection,
@@ -5900,7 +5963,11 @@ SSRF guard, HTML, Brave, the key cache, the secrets filter in both languages, th
 `e2e/ask-assistant.spec.ts` and `e2e/ask-markup.spec.ts` (chromium, webkit, webkit-phone), `e2e/ask-review.spec.ts`
 (the review fixes), and Ask's tray, tiles, sources, editor and key card in `e2e/edges.spec.ts` and
 `e2e/contrast.spec.ts`. infra: `modules/ask`,
-`modules/api`, `modules/monitoring` and `envs/prod` tests.
+`modules/api`, `modules/monitoring` and `envs/prod` tests. The 2026-11-19 fixes: picture answers with a fake model
+(image block first, effort high, `read_setup_guide`), the fallback model on 403/429/5xx, the plain model messages,
+official pages with no key, setup-step buttons, the smoke check (`test_ask_worker.py`, `test_ask_parts.py`); the
+open-question rule in both retrievers (`helpEvals.json`); the socket wake and reasons (`askAssistant.test.ts`); the
+honest fallback and **Try again** (`helpPanel.test.tsx`, and `e2e/ask-assistant.spec.ts` "can't reach Ask").
 
 ### 28.14 Mock build
 

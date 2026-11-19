@@ -46,6 +46,7 @@ export function StepCard({
       className={`gstep glass${done ? " is-done" : ""}${current ? " is-current" : ""}${open ? " is-open" : ""}`}
       id={`step-${step.id}`}
       data-step={step.id}
+      data-help={`step-${step.id}`}
       data-done={done || undefined}
     >
       <button type="button" className="gstep__head" aria-expanded={open} aria-controls={bodyId} onClick={onToggle}>

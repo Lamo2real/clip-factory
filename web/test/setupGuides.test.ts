@@ -68,7 +68,7 @@ const CONTRACT: Record<Platform, [string, string][]> = {
     ["ready-pro", "Make Instagram a pro account"],
     ["ready-page", "Link Instagram to a Facebook Page"],
     ["ready-computer", "Use a computer"],
-    ["ready-portfolio", "Make a business portfolio"],
+    ["ready-portfolio", "Business portfolio, if Meta asks"],
     ["key-developer", "Become a Meta developer"],
     ["key-app", "Create the app"],
     ["key-basic", "Fill in Basic settings"],
@@ -112,11 +112,11 @@ const CONTRACT: Record<Platform, [string, string][]> = {
 const steps = (p: Platform): GuideStep[] => allSteps(GUIDES[p]);
 
 describe("the five setup guides (§17.2)", () => {
-  it("are in SETUP_ORDER and checked on 16 Nov 2026 (TikTok on 19 Nov 2026)", () => {
+  it("are in SETUP_ORDER and checked on 19 Nov 2026", () => {
     expect(SETUP_ORDER).toEqual(["youtube", "tiktok", "instagram", "facebook", "x"]);
     for (const p of SETUP_ORDER) {
       expect(GUIDES[p].platform).toBe(p);
-      expect(GUIDES[p].checkedOn).toBe(p === "tiktok" ? "2026-11-19" : "2026-11-16");
+      expect(GUIDES[p].checkedOn).toBe("2026-11-19");
     }
     expect(checkedOnText(GUIDES.tiktok)).toBe("19 Nov 2026");
   });
@@ -185,7 +185,7 @@ describe("the five setup guides (§17.2)", () => {
     expect(yt.keys_wrong).toBe("The key does not work. Copy the Client ID and secret again (step 11).");
     expect(yt.redirect_wrong).toBe("The return address does not match. Copy it again in step 11.");
     expect(yt.no_channel).toBe("This Google account has no YouTube channel. Make one first (step 1).");
-    expect(resultCopy("instagram").no_accounts).toBe("Instagram did not show a pro account. Do steps 1, 2 and 4, then connect again.");
+    expect(resultCopy("instagram").no_accounts).toBe("Instagram did not show a pro account. Do steps 1 and 2, then connect again.");
     expect(resultCopy("facebook").no_pages).toBe("Facebook did not show a Page you control. Do step 1, then connect again.");
     expect(stepNumber(GUIDES.youtube, "key-client")).toBe(11);
   });

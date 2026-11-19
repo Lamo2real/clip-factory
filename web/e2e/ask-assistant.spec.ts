@@ -228,6 +228,36 @@ test.describe("Ask as a full assistant", () => {
     await expect(box(page)).toHaveValue("short words");
   });
 
+  test("can't reach Ask: says so plainly, keeps the picture and the words, and Try again sends them", async ({ page }) => {
+    await open(page);
+    await dispatchFiles(page, ".help-panel__log", "drop", [fileArg("shot.png", "image/png")]);
+    await expect(tiles(page)).toHaveCount(1);
+    await expect(panel(page).locator(".help-pic.is-busy")).toHaveCount(0, { timeout: 15_000 });
+    // #503: the server can't start the answer (the owner's phone at 18:14 got a canned "Jobs" answer here).
+    await ask(page, "What do I do now? #503");
+    const notice = panel(page).locator(".help-msg--notice").last();
+    await expect(notice).toContainText("I couldn't look at your picture this time. It is still here.");
+    await expect(panel(page).locator(".help-msg--bot")).toHaveCount(0);
+    await expect(panel(page)).not.toContainText("Jobs working right now");
+    await expect(tiles(page)).toHaveCount(1);
+    await expect(box(page)).toHaveValue("What do I do now? #503");
+    await box(page).fill("What do I do now?");
+    await notice.getByRole("button", { name: "Try again" }).click();
+    await answered(page);
+    await expect(tiles(page)).toHaveCount(0);
+    const got = await page.evaluate(() => Object.values(window.__cfMockAsk?.files ?? {}).map((f) => f.name));
+    expect(got).toContain("shot.png");
+  });
+
+  test("an open question with no way to reach Ask gets no canned topic", async ({ page }) => {
+    await open(page);
+    await ask(page, "What do I do now? #503");
+    const notice = panel(page).locator(".help-msg--notice").last();
+    await expect(notice).toContainText("Press Try again.");
+    await expect(notice.getByRole("button", { name: "Try again" })).toBeVisible();
+    await expect(panel(page).locator(".help-msg--bot")).toHaveCount(0);
+  });
+
   test("falls back to the plain answer when the assistant is off", async ({ page }) => {
     await open(page);
     await ask(page, "Where do I change my click sound? #off");

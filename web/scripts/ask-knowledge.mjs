@@ -45,6 +45,26 @@ export function redact(text) {
   return out.replace(CLIENT_ID, (_m, pre) => pre + HIDDEN);
 }
 
+/**
+ * A setup step's own link (web/src/setup/*.ts, written by us): on a platform host with no secret-looking query
+ * parameter it is kept whole, so Ask can read and name the exact page (Facebook step 1 opens
+ * /pages/?category=your_pages). Anything else still goes through redact().
+ */
+const SETUP_LINK_HOSTS = /^(?:[a-z0-9-]+\.)*(?:facebook\.com|instagram\.com|tiktok\.com|google\.com|youtube\.com|x\.com)$/;
+const SECRET_PARAM = /(?:^|[_-])(?:token|key|secret|code|password|pass|sig|signature|auth|session)(?:$|[_-])/i;
+export function setupLink(url) {
+  try {
+    const u = new URL(url);
+    const params = [...u.searchParams.keys()];
+    if (u.protocol === "https:" && SETUP_LINK_HOSTS.test(u.hostname) && !params.some((k) => SECRET_PARAM.test(k)) && !u.username) {
+      return url;
+    }
+  } catch {
+    /* not a URL: redact below */
+  }
+  return redact(url);
+}
+
 const read = (p) => readFileSync(p, "utf8").replace(/\r\n/g, "\n");
 const slug = (s) =>
   s
@@ -150,6 +170,11 @@ export async function setupSteps() {
     out[platform] = allSteps(guide).map((s, i) => {
       const part = partOf.get(s.id);
       const row = { id: s.id, n: i + 1, part: part?.id ?? "", partTitle: part?.title ?? "", title: s.title };
+      // The step's own words for Ask's read_setup_guide tool (§28.4): never in the cached prompt, only on request.
+      row.say = s.say.map(redact);
+      if (s.ifYouSee?.length) row.ifYouSee = s.ifYouSee.map((x) => ({ see: redact(x.see), do: redact(x.do) }));
+      if (s.open && /^https:\/\//.test(s.open.url)) row.open = { label: s.open.label, url: setupLink(s.open.url) };
+      row.checkedOn = guide.checkedOn;
       if (s.optional) row.optional = true;
       if (s.auto) row.auto = s.auto;
       if (s.gate) row.gate = s.gate;

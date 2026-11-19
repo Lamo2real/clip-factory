@@ -6,6 +6,7 @@
 #   - every action is pinned to a full commit SHA (with its version in a comment).
 #   - the updater signing key reaches only the desktop build job (which has no OIDC token), and latest.json is
 #     written by desktop-manifest, which runs after desktop-upload (§12.6).
+#   - the smoke job checks that the deployed Ask model reads a picture (ADR-53).
 # Run: bash scripts/test-deploy-workflow.sh   (ci.yml runs it on every push)
 set -euo pipefail
 
@@ -114,6 +115,28 @@ if [ "${writers[*]:-}" = "desktop-manifest" ] && job desktop-manifest | grep -Eq
   ok "only desktop-manifest writes downloads/latest.json, after desktop-upload"
 else
   not_ok "downloads/latest.json must be written only by desktop-manifest, which needs desktop-upload (writers: ${writers[*]:-none})"
+fi
+
+# 8. The smoke job checks Ask with the real model (ADR-53): it invokes the worker with {"smoke":"ask"}, needs
+#    smoke_ok, and runs no npm (it holds id-token: write).
+smoke="$(job smoke)"
+if grep -q '"smoke":"ask"' <<<"$smoke" && grep -q "outcome == \"smoke_ok\"" <<<"$smoke" && ! grep -Eq 'npm |npx ' <<<"$smoke"; then
+  ok "the smoke job asks the deployed Ask model about a picture and needs smoke_ok"
+else
+  not_ok "the smoke job must invoke the Ask worker with {\"smoke\":\"ask\"} and require outcome smoke_ok"
+fi
+
+# 9. ask_enabled = false really skips the Ask check (jq's `//` would turn false into true), and only access or
+#    not_found warn instead of failing.
+enabled_expr="$(grep -o "jq -r '[^']*ask_enabled[^']*'" <<<"$smoke" | head -1 | sed -E "s/^jq -r '(.*)'$/\1/")"
+if [ -n "$enabled_expr" ] \
+  && [ "$(jq -r "$enabled_expr" <<<'{"ask_enabled":{"value":false}}')" = "false" ] \
+  && [ "$(jq -r "$enabled_expr" <<<'{"ask_enabled":{"value":true}}')" = "true" ] \
+  && [ "$(jq -r "$enabled_expr" <<<'{}')" = "true" ] \
+  && grep -q 'reason" = "not_found"' <<<"$smoke" && ! grep -q 'turn on model access' <<<"$smoke"; then
+  ok "ask_enabled = false skips the Ask check, and the access hint names today's Bedrock steps"
+else
+  not_ok "the Ask check must read ask_enabled = false as off and give the Model catalog steps (expr: ${enabled_expr:-none})"
 fi
 
 echo "${passed} passed, ${failed} failed"

@@ -25,7 +25,7 @@ import { AskMark } from "../../components/AskMark.tsx";
 import { liveConnection } from "../../lib/live.ts";
 import { defaultAskApi, type AskApi } from "./askApi.ts";
 import { AnswerBody, CopyButton, FileTile, Sources, StatusLine, unreadNote, UploadRing } from "./AskBits.tsx";
-import { runAsk, type AskConnection, type Running, type UploadFile } from "./askStream.ts";
+import { runAsk, type AskConnection, type Running, type RunEnd, type UploadFile } from "./askStream.ts";
 import { addedText, carriedFiles, classify, COUNTER_FROM as ASK_COUNTER_FROM, FILE_TEXT, FILES_MAX, BYTES_PER_FILE, IMAGES_MAX, formatLabel, pastedTextFile, QUESTION_CHARS, type AskFile } from "./files.ts";
 import { MarkupEditor, type MarkupResult } from "./MarkupEditor.tsx";
 import { api } from "../../api/index.ts";
@@ -62,7 +62,36 @@ export const DROP_TEXT = "Drop your picture here";
 export const DROP_ANY_TEXT = "Drop it here";
 export const ASK_PLACEHOLDER = "Ask me anything";
 export const FILES_PLACEHOLDER = "Ask about your files";
-export const SHORT_HELP_TEXT = "I couldn't think it through this time. Here is the short help.";
+/** Under the "can't answer" notice when the short help has a topic that may fit: never shown as the answer itself. */
+export const MAYBE_LABEL = "Maybe this?";
+/** When Ask could not answer and no short help truly fits (a picture, or "What do I do now?"): never a guess. */
+export const CANT_REACH_TEXT = "I can't reach Clip Factory right now. Your question is still here. Press Try again.";
+export const TOO_LONG_TEXT = "That took too long. Your question is still here. Press Try again.";
+export const PICTURE_KEPT_TEXT = "I couldn't look at your picture this time. It is still here. Press Try again.";
+export const CANT_REACH_PICTURE_TEXT = "I can't reach Clip Factory right now. Your picture is still here. Press Try again.";
+export const TOO_LONG_PICTURE_TEXT = "That took too long. Your picture is still here. Press Try again.";
+export const OFF_PICTURE_TEXT = "Ask is resting right now. Press Try again and I'll look at your picture the simple way.";
+export const FILE_KEPT_TEXT = "I couldn't read your file this time. It is still here. Press Try again.";
+export const TRY_AGAIN_LABEL = "Try again";
+
+type Fallback = Extract<RunEnd, { kind: "fallback" }>;
+
+/** What the panel says when the assistant could not answer: the server's own plain reason for a model problem
+ * (model access not turned on, busy), else why it could not reach Ask (no connection, too long), then that the
+ * question and its picture or file were kept. A picture never hides the real reason. */
+export function cantAnswerText(end: Pick<Fallback, "reason" | "message" | "why">, kept: "picture" | "file" | null): string {
+  if (end.reason === "model" && end.message && end.why && end.why !== "other") return `${end.message} Your question is still here.`;
+  const timeout = end.reason === "timeout" || end.why === "timeout";
+  if (kept === "picture") {
+    if (end.reason === "off") return OFF_PICTURE_TEXT;
+    if (end.reason === "no_socket") return CANT_REACH_PICTURE_TEXT;
+    if (timeout) return TOO_LONG_PICTURE_TEXT;
+    return PICTURE_KEPT_TEXT;
+  }
+  if (kept === "file") return FILE_KEPT_TEXT;
+  if (timeout) return TOO_LONG_TEXT;
+  return CANT_REACH_TEXT;
+}
 export const CUT_TEXT = "The answer was cut short. Ask me to go on.";
 export const UPLOAD_FAILED_TEXT = "I couldn't send your files. Check your internet and try again.";
 export const WEB_TIP_TEXT = "I can't search the web yet. Turn it on in Settings, and I can check today's steps for you.";
@@ -341,12 +370,15 @@ export function HelpPanel({
     [dispatch],
   );
 
+  /** "Maybe this?" topics by notice id: shown only when he taps the button, never as Ask's answer. */
+  const maybes = useRef(new Map<number, { answer: HelpAnswer; requestId: string; trouble: boolean }>());
+
   /** A send that started while a picture was still being made ready: it goes as soon as the tray is ready. */
   const waiting = useRef<string | null>(null);
 
   /** §28: the question goes to the assistant; the answer streams into an "ai" entry. Falls back to §19 when it can't. */
   const askSmart = useCallback(
-    async (raw: string, fallback: (q: string, note: string | null) => Promise<void>) => {
+    async (raw: string, fallback: (q: string, end: Fallback, giveBack: () => void) => Promise<void>) => {
       const q = raw.trim().slice(0, QUESTION_CHARS);
       const s = stateRef.current;
       const files = readyFiles(s);
@@ -372,7 +404,7 @@ export function HelpPanel({
       };
       const api = await getAskApi();
       const conn = liveConnection();
-      const adapter: AskConnection | null = conn ? { whoami: (ms) => conn.whoami(ms), onRaw: (fn) => conn.onRaw(fn) } : null;
+      const adapter: AskConnection | null = conn ? { whoami: (ms) => conn.whoami(ms), onRaw: (fn) => conn.onRaw(fn), wake: () => conn.wake() } : null;
       const uploads: UploadFile[] = [...files, ...carried].map((f, i) => ({
         id: f.id,
         name: f.name,
@@ -429,7 +461,14 @@ export function HelpPanel({
           dispatch({ type: "ai_end", entryId: aiId });
           if (end.reason === "model" || end.reason === "timeout") sounds.play("deny");
           if (end.reason === "off") void checkHelpStatus(client);
-          return fallback(q, end.reason === "model" || end.reason === "timeout" ? SHORT_HELP_TEXT : null);
+          // A question with a picture or a file never gets a canned answer: the short help cannot see them. When Ask
+          // is off, Try again goes the §26 picture way (checkHelpStatus above turns the assistant path off).
+          if (uploads.length) {
+            const kept = uploads.some((u) => u.kind === "image") ? "picture" : "file";
+            dispatch({ type: "notice", id: entryId(), tone: "info", text: cantAnswerText(end, kept), retry: true });
+            return giveBack();
+          }
+          return fallback(q, end, giveBack);
         }
       }
     },
@@ -439,25 +478,49 @@ export function HelpPanel({
   const ask = useCallback(
     async (raw: string) => {
       if (assistantStatus().on) {
-        return askSmart(raw, async (q, note) => {
-          // The §19 path: the server's plain answer when the socket was not there, else the local one.
+        return askSmart(raw, async (q, end, giveBack) => {
+          // The assistant was meant to answer and could not: never a keyword answer in its place (it can't know
+          // what "What should I press here?" means). Say plainly why, keep the question, offer Try again, and at
+          // most a "Maybe this?" button to a short-help topic. Only when Ask is turned off is the §19 answer the
+          // honest one ("I don't know that one yet" included).
           const gen = generation.current;
           const history = historyOf(stateRef.current.entries);
           const context = helpContext(routeRef.current);
           const short = q.slice(0, QUESTION_MAX);
-          if (note) dispatch({ type: "notice", id: entryId(), tone: "info", text: note });
-          if (!short) return;
-          if (!note) {
+          const cantAnswer = (maybe?: { answer: HelpAnswer; requestId: string; trouble: boolean }) => {
+            if (gen !== generation.current) return;
+            const id = entryId();
+            if (maybe) maybes.current.set(id, maybe);
+            // A server that failed too gives its help code, so whoever helps him can find the log line.
+            dispatch({ type: "notice", id, tone: "info", text: cantAnswerText(end, null), retry: true, helpCode: failCode, ...(maybe ? { maybe: true } : {}) });
+            giveBack();
+          };
+          let failCode: string | null = null;
+          if (!short) return cantAnswer();
+          const modelTrouble = end.reason === "model" || end.reason === "timeout";
+          let answer: HelpAnswer | null = null;
+          let requestId = "";
+          let trouble = false;
+          if (!modelTrouble) {
             const result = await client.ask({ question: short, history, context });
             if (gen !== generation.current) return;
-            if (result.kind === "answer") return showAnswer(result.answer, result.requestId, false, gen);
+            if (result.kind === "answer") {
+              answer = result.answer;
+              requestId = result.requestId;
+            } else if (result.kind === "fallback") failCode = result.requestId;
           }
-          try {
-            const local = await answerLocally(short, history, context);
-            if (gen === generation.current) showAnswer(local, `c-${Date.now()}`, true, gen);
-          } catch {
-            if (gen === generation.current) dispatch({ type: "notice", id: entryId(), tone: "info", text: "Ask Clip Factory can't answer right now." });
+          if (!answer) {
+            try {
+              answer = await answerLocally(short, history, context);
+              requestId = `c-${Date.now()}`;
+              trouble = true;
+            } catch {
+              answer = null;
+            }
           }
+          if (gen !== generation.current) return;
+          if (end.reason === "off" && answer && !trouble) return showAnswer(answer, requestId, false, gen);
+          return cantAnswer(answer?.known ? { answer, requestId, trouble } : undefined);
         });
       }
       const q = raw.trim().slice(0, QUESTION_MAX);
@@ -767,8 +830,16 @@ export function HelpPanel({
     }
   }
 
+  function showMaybe(id: number) {
+    const m = maybes.current.get(id);
+    if (!m) return;
+    maybes.current.delete(id);
+    showAnswer(m.answer, m.requestId, m.trouble, generation.current);
+  }
+
   function startOver() {
     generation.current++;
+    maybes.current.clear();
     waiting.current = null;
     running.current?.stop();
     running.current = null;
@@ -1020,6 +1091,18 @@ export function HelpPanel({
           <div>
             <p>{busy && e.until && e.until > now ? busyText(Math.max(1, Math.ceil((e.until - now) / 1000))) : e.text}</p>
             {e.helpCode ? <HelpCode code={e.helpCode} onCopy={copyCode} /> : null}
+            {e.retry && e.id === state.entries[state.entries.length - 1]?.id ? (
+              <div className="help-actions">
+                <Button size="sm" variant="primary" icon="retry" onClick={() => submit()}>
+                  {TRY_AGAIN_LABEL}
+                </Button>
+                {e.maybe && maybes.current.has(e.id) ? (
+                  <Button size="sm" variant="glass" icon="compass" onClick={() => showMaybe(e.id)}>
+                    {MAYBE_LABEL}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       );

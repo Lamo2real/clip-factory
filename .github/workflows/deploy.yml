@@ -18,8 +18,10 @@
 #   web       - config.json from Terraform's outputs, version.json ("What's new": scripts/release-areas.sh over
 #               the commits since the live release), upload to S3, CloudFront refresh
 #   smoke     - the HTTP API answers /v1/health and the browser's CORS preflight from the app, the webhooks
-#               REST API refuses a Meta challenge without the verify token (403), the WebSocket API refuses a connection without a valid token (401), and
-#               the app serves this release's config.json (with wsUrl) and version.json
+#               REST API refuses a Meta challenge without the verify token (403), the WebSocket API refuses a
+#               connection without a valid token (401), Ask's worker reads a tiny picture with the real model
+#               (invoked with the deploy role; warns while Bedrock access is not set up), and the app serves this
+#               release's config.json (with wsUrl) and version.json
 #   desktop-plan, desktop, desktop-upload, desktop-manifest - after the web deploy: the Mac (.dmg) and Windows
 #               (.exe) desktop apps (desktop/, Tauri) are rebuilt only when what they are built from changed or the
 #               file is missing, both together, as version 1.<run number>.0. The build job has no OIDC token (it
@@ -317,6 +319,10 @@ jobs:
     if: needs.preflight.outputs.enabled == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      # Only for the Ask check: the deploy role invokes cf-prod-ask once (it already has lambda:*); no packages run here.
+      id-token: write
     steps:
       - name: the API answers /v1/health
         env:
@@ -415,6 +421,49 @@ jobs:
             done
             [ "$passed" = true ] || { echo "::error::${url} did not refuse a connection with ${label} (expected 401)."; exit 1; }
           done
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      # docs/CONTRACTS.md §28.5 and ADR-53: the deployed Ask model must read a tiny red picture and say "red". It
+      # proves Bedrock model access (Opus 5.5 in eu-north-1), the IAM grant and that pictures reach the model. A
+      # canned or fallback answer can't pass: the worker calls only the main model and checks the word itself.
+      # Until the owner has done the one-time Bedrock step (DEPLOYMENT.md §4), "access" and "not_found" only warn, so
+      # an unrelated merge never goes red for it; any other failure (the model did not see the picture) fails.
+      - name: Ask answers a picture with the real model
+        env:
+          TF_OUTPUTS: ${{ needs.infra.outputs.tf_outputs }}
+        run: |
+          fn="$(jq -r '.ask_function_name.value // empty' <<<"$TF_OUTPUTS")"
+          # Not `// true`: jq's `//` treats false as missing, so a turned-off Ask would still be called.
+          enabled="$(jq -r 'if .ask_enabled.value == false then "false" else "true" end' <<<"$TF_OUTPUTS")"
+          if [ "$enabled" != "true" ]; then
+            echo "Ask is turned off (ask_enabled = false); skipping the Ask check."
+            exit 0
+          fi
+          [ -n "$fn" ] || { echo "::error::Terraform output ask_function_name is missing."; exit 1; }
+          out="${RUNNER_TEMP}/ask-smoke.json"
+          for attempt in 1 2 3; do
+            if aws lambda invoke --function-name "$fn" --cli-binary-format raw-in-base64-out \
+                --cli-read-timeout 120 --payload '{"smoke":"ask"}' "$out" >/dev/null \
+              && jq -e '.outcome == "smoke_ok"' "$out" >/dev/null; then
+              echo "Ask check passed: $(jq -c '{model, answer, stop}' "$out")"
+              exit 0
+            fi
+            echo "Attempt ${attempt}: $(jq -c '{outcome, reason, status, error, answer}' "$out" 2>/dev/null || echo 'no answer')"
+            sleep 15
+          done
+          reason="$(jq -r '.reason // "unknown"' "$out" 2>/dev/null || echo unknown)"
+          if [ "$reason" = "access" ]; then
+            echo "::warning title=Ask model access::Bedrock refused the Ask model. In the Amazon Bedrock console (eu-north-1): Model catalog, Claude Opus 5.5, submit the Anthropic use-case form if asked, then send one message in the playground. The next deploy checks again."
+            exit 0
+          elif [ "$reason" = "not_found" ]; then
+            echo "::warning title=Ask model id not found::Bedrock does not know the Ask model id or inference profile (ASK_MODEL_ID). Check it against the Model catalog in eu-north-1. See /aws/lambda/${fn}, event ask.smoke."
+            exit 0
+          else
+            echo "::error title=Ask check::Ask did not answer a picture with the real model (reason: ${reason}). See /aws/lambda/${fn}, event ask.smoke."
+          fi
+          exit 1
       - name: the app serves this release
         env:
           APP_URL: ${{ needs.infra.outputs.app_url }}

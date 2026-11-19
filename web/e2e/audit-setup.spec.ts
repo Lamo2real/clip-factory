@@ -217,7 +217,8 @@ for (const size of [
     const page = await ctx.newPage();
     await page.goto("/settings/posting/setup/instagram");
     await settle(page);
-    const ids = GUIDES.instagram.parts[0]!.steps.map((s) => s.id);
+    // Optional steps ("Business portfolio, if Meta asks") stay folded and never hold the resume point.
+    const ids = GUIDES.instagram.parts[0]!.steps.filter((s) => !s.optional).map((s) => s.id);
     for (const id of ids) {
       const did = step(page, id).getByRole("button", { name: "I did this" });
       await did.evaluate((e) => e.scrollIntoView({ block: "center" }));
