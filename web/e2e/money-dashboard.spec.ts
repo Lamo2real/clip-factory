@@ -219,7 +219,9 @@ const textUnderAsk = () => {
     range.selectNodeContents(n);
     for (const r of range.getClientRects()) {
       if (r.width > 1 && r.height > 1 && Math.min(r.right, b.right) - Math.max(r.left, b.left) > 0.5 && Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top) > 0.5) {
-        under.push(n.textContent.trim().slice(0, 40));
+        const pr = p.getBoundingClientRect();
+        // What the failure says: the words, the box they are in, and Ask's state (to tell a miss from a late fade).
+        under.push(`${n.textContent.trim().slice(0, 40)} [words ${Math.round(r.left)}-${Math.round(r.right)}, box ${Math.round(pr.left)}-${Math.round(pr.right)}, Ask ${b.left}-${b.right}${el.hasAttribute("data-settling") ? ", settling" : ""}]`);
         break;
       }
     }

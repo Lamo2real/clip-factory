@@ -153,15 +153,15 @@ export function textBoxes(doc: Document = document, viewportHeight = window.inne
     for (let node = walk.nextNode(); node; node = walk.nextNode()) {
       const el = node.parentElement;
       if (!el || !node.textContent?.trim() || el.closest(CHROME) || el.closest("[inert], [hidden]")) continue;
-      const near = el.getBoundingClientRect();
-      if (near.bottom <= 0 || near.top >= viewportHeight) continue;
-      if (column && (near.right <= column.left || near.left >= column.right)) continue;
-      if (view && view.getComputedStyle(el).visibility === "hidden") continue;
+      // Measured by the words themselves, never the element they are in: a word can run out of a narrow box.
       const range = doc.createRange();
       range.selectNodeContents(node);
+      let seen: boolean | undefined;
       for (const r of Array.from(range.getClientRects())) {
         if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= viewportHeight) continue;
         if (column && (r.right <= column.left || r.left >= column.right)) continue;
+        seen ??= !view || view.getComputedStyle(el).visibility !== "hidden";
+        if (!seen) break;
         const shown = shownBox(el, r, true);
         if (shown && shown.right - shown.left >= 2 && shown.bottom - shown.top >= 2) out.push(shown);
       }
