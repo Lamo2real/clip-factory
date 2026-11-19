@@ -5,7 +5,7 @@ import { ACTIVE_SCENE, asDesktop, INACTIVE_FLOOR, paintGlass } from "./glass.ts"
 import { CLIPS, openClip, openTodo, settle } from "./helpers.ts";
 import { GALLERY, pauseActs, tapAct } from "./motionHelpers.ts";
 
-const dir = join(import.meta.dirname, "..", "screenshots");
+const dir = process.env.CF_SCREENSHOT_DIR || join(import.meta.dirname, "..", "screenshots");
 mkdirSync(dir, { recursive: true });
 
 const SIZES = [
@@ -59,21 +59,6 @@ for (const size of SIZES) {
         });
         await page.waitForTimeout(400);
         await page.screenshot({ path: join(dir, `clip-performance-stacks${suffix}.png`) });
-      });
-      // Earnings (§21): the money guess opened on the clip page, and Settings › Posting › Money with sources open.
-      test(`screenshot clip earnings ${scheme}`, async ({ page }) => {
-        await openClip(page, CLIPS.all);
-        await page.getByRole("button", { name: "How is this worked out?" }).click();
-        await page.locator(".perf__money").scrollIntoViewIfNeeded();
-        await page.waitForTimeout(400);
-        await page.screenshot({ path: join(dir, `clip-earnings${suffix}.png`) });
-      });
-      test(`screenshot settings money ${scheme}`, async ({ page }) => {
-        await page.goto("/settings/posting/money");
-        await settle(page);
-        await page.locator('[data-money-sources="youtube"]').getByRole("button").click();
-        await page.waitForTimeout(600);
-        await page.screenshot({ path: join(dir, `settings-money${suffix}.png`), fullPage: true });
       });
       test(`screenshot this week ${scheme}`, async ({ page }) => {
         await page.goto("/library?view=week");
@@ -417,6 +402,46 @@ for (const size of SIZES) {
           await page.waitForTimeout(400);
           await page.screenshot({ path: join(dir, `see-through-${name}-${strength}-${size.width}x${size.height}.png`) });
         }
+      });
+    }
+  });
+}
+
+// Real earnings (§25.7): Settings › Posting › Money and Home's money tile in each mock state, phone and desktop.
+const MONEY_STATES = ["start", "not_yet", "in_program", "earning", "facebook_verified", "unsupported", "not_connected", "error"];
+for (const size of SIZES) {
+  test.describe(`money ${size.name} ${size.width}x${size.height}`, () => {
+    test.use({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: size.scale, hasTouch: size.touch, isMobile: size.touch });
+    for (const state of MONEY_STATES) {
+      test(`screenshot money ${state}`, async ({ page }) => {
+        await page.goto("/");
+        await page.evaluate((s) => sessionStorage.setItem("cf-mock-money", JSON.stringify({ scenario: s, country: "US", seen: ["youtube:in_program", "youtube:first_money"] })), state);
+        await page.goto("/settings/posting/money");
+        await settle(page);
+        await page.waitForTimeout(900);
+        await page.screenshot({ path: join(dir, `money-${state}-${size.width}x${size.height}.png`), fullPage: true });
+      });
+    }
+    test("screenshot money youtube card open", async ({ page }) => {
+      await page.goto("/");
+      await page.evaluate(() => sessionStorage.setItem("cf-mock-money", JSON.stringify({ scenario: "start", country: "US", seen: [] })));
+      await page.goto("/settings/posting/money#money-youtube");
+      await settle(page);
+      const yt = page.locator("[data-money-card='youtube']");
+      await yt.getByRole("button", { name: "First time? Steps for a grown-up" }).click();
+      await yt.getByRole("button", { name: "More" }).click();
+      await page.waitForTimeout(900);
+      await yt.screenshot({ path: join(dir, `money-youtube-card-open-${size.width}x${size.height}.png`) });
+    });
+    for (const state of ["not_yet", "earning"]) {
+      test(`screenshot home money tile ${state}`, async ({ page }) => {
+        await page.goto("/");
+        await page.evaluate((s) => sessionStorage.setItem("cf-mock-money", JSON.stringify({ scenario: s, country: "US", seen: ["youtube:first_money"] })), state);
+        await page.goto("/");
+        await settle(page);
+        await page.locator(".money-tile").scrollIntoViewIfNeeded();
+        await page.waitForTimeout(900);
+        await page.screenshot({ path: join(dir, `home-money-${state}-${size.width}x${size.height}.png`) });
       });
     }
   });

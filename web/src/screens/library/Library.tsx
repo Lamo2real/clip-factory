@@ -19,9 +19,6 @@ import { SimilarClips } from "../../components/SimilarClips.tsx";
 import { keepClip, keptMessage, needsKeepAgain, needsTikTokChoices, STILL_WORKING } from "../../lib/keep.ts";
 import { TikTokSheet } from "../review/TikTokSheet.tsx";
 import { ClipStatusPill } from "../jobs/JobDetail.tsx";
-import { useSession } from "../../app/session.tsx";
-import { clipEarnings, postViews } from "../../lib/earnings.ts";
-import { EarnedChip } from "../../components/EarnedChip.tsx";
 
 interface LibraryData {
   clips: Clip[];
@@ -257,9 +254,6 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
   const waiting = ordered.filter((p) => p.status === "pending_integration");
   const totalViews = clip.totalViews ?? posts.reduce((n, p) => n + (p.metrics?.views ?? 0), 0);
   const rest = ordered.filter((p) => p.status !== "pending_integration");
-  const { me } = useSession();
-  const views = postViews(posts);
-  const earned = Object.keys(views).length ? clipEarnings(views, clip.durationSec, me?.settings) : null;
   return (
     <article className="lib-card glass" aria-labelledby={`lib-${clip.clipId}`}>
       <div className="lib-card__top">
@@ -277,7 +271,6 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
             {clip.decidedAt ? ` · kept ${relative(clip.decidedAt)}` : ""}
           </span>
           <ClipStatusPill status={clip.status} />
-          {earned ? <EarnedChip usd={earned.usd} reason={earned.reason} /> : null}
         </div>
       </div>
       <LinkButton href={`/clips/${clip.clipId}`} size="sm" icon="chart" iconAfter="chevronRight" className="lib-card__see">

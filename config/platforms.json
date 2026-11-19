@@ -1,5 +1,5 @@
 {
-  "$comment": "Stats refresh limits, scopes and posting settings per platform (docs/CONTRACTS.md §16.4, §17.7). Change values here only.",
+  "$comment": "Stats refresh limits, scopes and posting settings per platform (docs/CONTRACTS.md §16.4, §17.7). scopes: what Connect asks for (required, unchanged). moneyScopes: asked for only by Allow money reading (§25.4), never by Connect. Change values here only.",
   "graphApiVersion": "v27.0",
   "pollWindowDays": 30,
   "snapshotTtlDays": 90,
@@ -14,6 +14,7 @@
       "idsPerRequest": 50,
       "scopes": ["https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/yt-analytics.readonly",
                  "https://www.googleapis.com/auth/youtube.upload"],
+      "moneyScopes": ["https://www.googleapis.com/auth/yt-analytics-monetary.readonly"],
       "budget": { "kind": "daily_units", "dailyUnits": 10000, "reserveUnits": 500, "unitsPerCall": 1,
                   "blockOn": ["quotaExceeded", "rateLimitExceeded"] },
       "publish": { "checkSeconds": 30, "maxChecks": 60, "chunkMb": 8 }
@@ -23,6 +24,7 @@
       "minIntervalMinutes": 15, "tierIntervalsMinutes": [15, 30, 120], "manualCooldownMinutes": 5,
       "idsPerRequest": 20,
       "scopes": ["user.info.basic", "video.publish", "video.list"],
+      "moneyScopes": ["user.info.stats"],
       "budget": { "kind": "per_minute", "requestsPerMinute": 600, "useAtMost": 300, "blockOn": ["rate_limit_exceeded"] },
       "publish": { "checkSeconds": 15, "maxChecks": 80, "source": "FILE_UPLOAD", "idCheckMinutes": 10, "idMaxChecks": 12 }
     },
@@ -32,6 +34,7 @@
       "slowNote": "Can take 2 days", "idsPerRequest": 50,
       "scopes": ["instagram_basic", "instagram_manage_insights", "instagram_content_publish", "pages_show_list",
                  "pages_read_engagement"],
+      "moneyScopes": [],
       "budget": { "kind": "meta_buc", "stopAtPercent": 75, "throttleCodes": [80002], "minBlockMinutes": 60 },
       "publish": { "checkSeconds": 60, "maxChecks": 15, "source": "resumable" }
     },
@@ -41,6 +44,7 @@
       "slowNote": "Can take 2 days", "idsPerRequest": 50,
       "scopes": ["pages_show_list", "pages_read_engagement", "pages_manage_posts", "pages_manage_engagement", "read_insights",
                  "business_management"],
+      "moneyScopes": [],
       "budget": { "kind": "meta_buc", "stopAtPercent": 75, "throttleCodes": [80001], "minBlockMinutes": 60 },
       "publish": { "checkSeconds": 30, "maxChecks": 40, "source": "binary" }
     },
@@ -49,6 +53,7 @@
       "minIntervalMinutes": 15, "tierIntervalsMinutes": [15, 30, 120], "manualCooldownMinutes": 5,
       "idsPerRequest": 100, "nonPublicMaxAgeDays": 30,
       "scopes": ["tweet.read", "users.read", "tweet.write", "media.write", "offline.access"],
+      "moneyScopes": [],
       "budget": { "kind": "x", "appRequestsPer15Min": 3500, "userRequestsPer15Min": 5000, "useAtMost": 1000,
                   "usdPerPostRead": 0.005, "usdPerPost": 0.015, "monthlyUsd": 10 },
       "publish": { "maxChecks": 20, "chunkMb": 4 }

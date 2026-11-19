@@ -583,6 +583,16 @@
   color: var(--on-bone);
   text-shadow: none;
 }
+/* Quiet: the ghost button look, for a card whose one vermilion button is another action. */
+.copy-chip.is-quiet:not(.is-copied) .copy-chip__btn {
+  color: var(--ink);
+  text-shadow: none;
+  background: var(--fill-control);
+  box-shadow: none;
+}
+.copy-chip.is-quiet:not(.is-copied) .copy-chip__btn:hover:not([aria-disabled="true"]) {
+  background: var(--fill);
+}
 /* Off like every other CTA (components.css): a thin vermilion over deep green, the label at 0.7. */
 .copy-chip__btn[aria-disabled="true"] {
   color: rgb(255 255 255 / 0.7);

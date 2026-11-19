@@ -40,6 +40,10 @@ class HelpDeps:
     app_url: str = ""
     # () → bedrock-runtime client; None turns the model step off.
     bedrock: Callable[[], Any] | None = None
+    # Ask pictures (§26): the look call's own client (shorter timeouts) and, optionally, its own model.
+    bedrock_look: Callable[[], Any] | None = None
+    look_model_id: str = ""
+    picture_questions_per_day: int = 40
     # (url, timeout seconds, max bytes) → body, for the deployed corpus; None uses the bundled copy only.
     fetcher: Callable[[str, float, int], bytes] | None = None
     corpus_file: Path | None = None  # tests: a corpus file instead of the bundled one
@@ -56,6 +60,8 @@ def help_from_env(reg: str) -> HelpDeps:
     env = os.environ
     model_id = env.get("HELP_MODEL_ID", "")
     client: list[Any] = []
+    look_client: list[Any] = []
+    look_model_id = env.get("HELP_LOOK_MODEL_ID", "")
 
     def bedrock() -> Any:
         if not client:
@@ -63,6 +69,13 @@ def help_from_env(reg: str) -> HelpDeps:
 
             client.append(make_client(reg))
         return client[0]
+
+    def bedrock_look() -> Any:
+        if not look_client:
+            from .help.look import make_look_client
+
+            look_client.append(make_look_client(reg))
+        return look_client[0]
 
     def fetch(url: str, timeout: float, max_bytes: int) -> bytes:
         from .help.corpus import urllib_fetch
@@ -77,6 +90,9 @@ def help_from_env(reg: str) -> HelpDeps:
         rate_per_hour=_int_env("HELP_RATE_PER_HOUR", 60),
         app_url=env.get("APP_URL", ""),
         bedrock=bedrock if model_id else None,
+        bedrock_look=bedrock_look if (model_id or look_model_id) else None,
+        look_model_id=look_model_id,
+        picture_questions_per_day=_int_env("HELP_PICTURE_QUESTIONS_PER_DAY", 40),
         fetcher=fetch,
     )
 
@@ -178,7 +194,12 @@ def from_env() -> App:
         agent=AgentClient(agent_client.make_client(reg), env.get("AGENT_RUNTIME_ARN", "")),
         flows=FlowClient(lambda_client, env.get("JOB_FLOW_ARN", ""), env.get("CLIP_FLOW_ARN", "")),
         vectors=vector_store,
-        invoker=AsyncInvoker(lambda_client, env.get("STATS_FUNCTION_ARN", ""), env.get("LEARN_FUNCTION_ARN", "")),
+        invoker=AsyncInvoker(
+            lambda_client,
+            env.get("STATS_FUNCTION_ARN", ""),
+            env.get("LEARN_FUNCTION_ARN", ""),
+            env.get("MONEY_FUNCTION_ARN", ""),
+        ),
         version=env.get("VERSION", "dev"),
         email_lookup=_cognito_email_lookup(boto3.client("cognito-idp", region_name=reg, config=_short_config())),
         oauth=oauth,
@@ -191,7 +212,7 @@ def _posting_setup(env: Any, reg: str) -> tuple[OAuthEnv | None, WebFiles | None
     """Secrets Manager, the state key and the public URLs of §17.9; both None when any is missing."""
     import boto3
 
-    from .oauth import OAuthEnv, scopes_from_config
+    from .oauth import OAuthEnv, money_scopes_from_config, scopes_from_config
     from .oauth.secrets import PREFIX, Secrets
     from .routes.setup import WebFiles
     from .stats import config
@@ -209,6 +230,7 @@ def _posting_setup(env: Any, reg: str) -> tuple[OAuthEnv | None, WebFiles | None
         state_key=lambda: secrets.read_text(state_name).encode(),
         graph_version=config.load().graph_api_version,
         scopes=scopes_from_config(),
+        money_scopes=money_scopes_from_config(),
     )
     web_files = None
     if env.get("WEB_BUCKET") and env.get("DISTRIBUTION_ID"):

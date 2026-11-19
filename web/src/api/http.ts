@@ -105,7 +105,7 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     createCookiesUpload: (filename) => call("POST", "/settings/cookies", { filename }),
     deleteCookies: () => call("DELETE", "/settings/cookies"),
     listAccounts: async () => (await call<{ accounts: Account[] }>("GET", "/accounts")).accounts,
-    connectAccount: (platform) => call("POST", `/accounts/${id(platform)}/connect`),
+    connectAccount: (platform, grant) => call("POST", `/accounts/${id(platform)}/connect`, grant ? { grant } : undefined),
     chooseAccount: async (platform, accountId) =>
       (await call<{ setup: PlatformSetup }>("POST", `/accounts/${id(platform)}/choose`, { accountId })).setup,
     disconnectAccount: (platform) => call("DELETE", `/accounts/${id(platform)}`),
@@ -134,6 +134,10 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     refreshStats: async (clipId, platforms) =>
       (await call<{ platforms: RefreshResult[] }>("POST", `/clips/${id(clipId)}/stats/refresh`, platforms ? { platforms } : {}))
         .platforms,
+    getMoney: () => call("GET", "/money"),
+    refreshMoney: () => call("POST", "/money/refresh"),
+    seenMoney: (key) => call("POST", "/money/seen", { key }),
+    setMoneyCountry: (country) => call("PUT", "/money/country", { country }),
     listFollows: () => call("GET", "/follows"),
     lookupFollow: (text, platform) => call("POST", "/follows/lookup", platform ? { text, platform } : { text }),
     follow: async (platform, platformId) =>

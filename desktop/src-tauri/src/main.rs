@@ -227,6 +227,10 @@ fn main() {
                     // lightest glass, so a dark material would only darken them. Not switched without a measurement.
                     .theme(Some(Theme::Light))
                     .user_agent(&user_agent(&version))
+                    // Ask takes pictures dropped on it (§26). Tauri's own drop handler is on by default and keeps file
+                    // drops from the page, so it is turned off: the page handles drops, and drops anywhere else are
+                    // ignored by the page (web/src/features/help/HelpLauncher.tsx).
+                    .disable_drag_drop_handler()
                     .initialization_script(init_script(glass, &version, titlebar_height()));
             // macOS: the title bar is laid over the page, clear and without its title, so there is no white strip and
             // the traffic lights float on the app's own glass (the page keeps their band clear, §11.1). The title

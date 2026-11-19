@@ -56,6 +56,7 @@ def converse_text(
     request_fields: Mapping[str, Any] | None = None,
     output_config: Mapping[str, Any] | None = None,
     on_response: Callable[[Mapping[str, Any]], None] | None = None,
+    images: Sequence[bytes] = (),
 ) -> tuple[str, str]:
     """One Converse call with the owner's skills block first in the system prompt. Returns (stopReason, answer
     text). Reasoning blocks (``reasoningContent``) are not part of the answer. When Bedrock refuses the cache point,
@@ -63,15 +64,18 @@ def converse_text(
 
     The defaults are the shared Fable 5.1 settings (maxTokens 4000, effort low, no sampling parameters). Ask Clip
     Factory (§19.5) passes its own ``max_tokens``, ``request_fields`` and JSON-schema ``output_config``, and reads
-    the token usage through ``on_response``."""
+    the token usage through ``on_response``. ``images`` (JPEG bytes, Ask pictures §26) go before the text as image
+    blocks; the system prompt is the same, so the skills block stays first."""
     fields = dict(request_fields) if request_fields is not None else {"output_config": {"effort": EFFORT}}
     extra: dict[str, Any] = {"outputConfig": dict(output_config)} if output_config is not None else {}
+    content: list[dict[str, Any]] = [{"image": {"format": "jpeg", "source": {"bytes": b}}} for b in images]
+    content.append({"text": user_text})
 
     def send() -> Any:
         return bedrock.converse(
             modelId=model_id,
             system=compose_system(skills, system),
-            messages=[{"role": "user", "content": [{"text": user_text}]}],
+            messages=[{"role": "user", "content": content}],
             inferenceConfig={"maxTokens": max_tokens},
             additionalModelRequestFields=fields,
             **extra,

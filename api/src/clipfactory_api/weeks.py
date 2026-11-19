@@ -173,6 +173,13 @@ def week_view(
     # as picked here; the next save of this week drops it (routes/weeks.py).
     listed = {str(row["clip"]["clipId"]) for row in view["clips"]}
     view["clipIds"] = [c for c in view["clipIds"] if c in listed]
+    # §25.5: each platform's reported money for the week (its own currency, its estimate tag), only when reported.
+    from .money.view import week_revenue
+
+    monday = iso_monday(week)
+    revenue = week_revenue(store, user_id, monday.date()) if monday is not None else {}
+    if revenue:
+        view["revenueByPlatform"] = revenue
     learning_id = (item or {}).get("learningId")
     if learning_id:
         learning = store.get(db.user_pk(user_id), db.learning_sk(str(learning_id)))

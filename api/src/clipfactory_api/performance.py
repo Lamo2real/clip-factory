@@ -119,6 +119,12 @@ def platform_performance(platform: str, post: Item | None, account_status: str, 
     error = post.get("error") if post.get("status") == "failed" else post.get("statsError")
     if isinstance(error, str) and error:
         out["error"] = error
+    # §25.3: the money this clip made, only when its platform reported it (YouTube's estimate, never a guess).
+    from .money.view import clip_revenue
+
+    revenue = clip_revenue(post) if post.get("status") == "posted" else None
+    if revenue is not None:
+        out["revenue"] = revenue
     return out
 
 

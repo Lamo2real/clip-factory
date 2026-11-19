@@ -2,10 +2,23 @@
 // the shared api() client, so a question never touches live caches, toasts, busy states or page refetches.
 import { announceSignedOut, auth, type AuthClient } from "../../lib/auth.ts";
 import { config } from "../../lib/config.ts";
-import { HISTORY_MAX, QUESTION_MAX, type HelpAnswer, type HelpContext, type HelpStatus, type HelpTurn } from "./types.ts";
+import {
+  HISTORY_MAX,
+  PICTURES_MAX,
+  QUESTION_MAX,
+  SEEN_MAX,
+  type HelpAnswer,
+  type HelpContext,
+  type HelpPicture,
+  type HelpPictureResult,
+  type HelpStatus,
+  type HelpTurn,
+} from "./types.ts";
 
 /** The client gives up after this and answers locally (the API's own budget is 24 s). */
 export const HELP_TIMEOUT_MS = 27_000;
+/** Extra time for a question with pictures: a slow phone uplink sends up to 3 MB before the API's clock starts. */
+export const PICTURE_UPLOAD_MS = 10_000;
 
 export type HelpPath = "/help" | "/help/answers";
 
@@ -23,10 +36,12 @@ export interface AskBody {
   question: string;
   history?: HelpTurn[];
   context?: HelpContext;
+  /** 0..4 JPEGs (§26); with pictures the question may be empty. */
+  pictures?: HelpPicture[];
 }
 
 export type AskResult =
-  | { kind: "answer"; answer: HelpAnswer; mode: "model" | "kb"; requestId: string }
+  | { kind: "answer"; answer: HelpAnswer; mode: "model" | "kb"; requestId: string; picture?: HelpPictureResult }
   | { kind: "rate_limited"; retryAfter: number; requestId: string }
   | { kind: "off"; requestId: string }
   | { kind: "bad_request"; message: string; requestId: string }
@@ -63,12 +78,25 @@ export function fetchTransport(baseUrl: string, fetcher: typeof fetch = (...a) =
 
 export const clientRequestId = (now = Date.now()) => `c-${now}`;
 
-/** Cuts a request to the limits the API accepts (§19.6). */
+/** Cuts a request to the limits the API accepts (§19.6, §26). */
 export function trimBody(body: AskBody): AskBody {
   const out: AskBody = { question: body.question.trim().slice(0, QUESTION_MAX) };
-  if (body.history?.length) out.history = body.history.slice(-HISTORY_MAX).map((t) => ({ role: t.role, text: t.text.slice(0, QUESTION_MAX) }));
+  if (body.history?.length)
+    out.history = body.history.slice(-HISTORY_MAX).map((t) =>
+      t.role === "user" && t.seen ? { role: t.role, text: t.text.slice(0, QUESTION_MAX), seen: t.seen.slice(0, SEEN_MAX) } : { role: t.role, text: t.text.slice(0, QUESTION_MAX) },
+    );
   if (body.context) out.context = body.context;
+  if (body.pictures?.length) out.pictures = body.pictures.slice(0, PICTURES_MAX).map((p) => ({ type: "image/jpeg", data: p.data }));
   return out;
+}
+
+/** The `picture` field of an answer, when it is one of the two shapes the API sends. */
+export function pictureResult(raw: unknown): HelpPictureResult | undefined {
+  const p = raw as { read?: unknown; seen?: unknown; why?: unknown } | null | undefined;
+  if (!p || typeof p !== "object") return undefined;
+  if (p.read === true && typeof p.seen === "string") return { read: true, seen: p.seen.slice(0, SEEN_MAX) };
+  if (p.read === false && (p.why === "off" || p.why === "limit" || p.why === "trouble")) return { read: false, why: p.why };
+  return undefined;
 }
 
 function errorOf(body: unknown): { code: string; message: string; requestId: string | null; retryAfter: number | null } {
@@ -100,9 +128,9 @@ export function helpClient({
   now?: () => number;
 }): HelpClient {
   /** One exchange with a timeout and one forced token refresh on 401 (like api/http.ts). */
-  async function exchange(method: "GET" | "POST", path: HelpPath, body?: unknown): Promise<HelpHttp> {
+  async function exchange(method: "GET" | "POST", path: HelpPath, body?: unknown, limitMs = timeoutMs): Promise<HelpHttp> {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(new DOMException("timeout", "TimeoutError")), timeoutMs);
+    const timer = setTimeout(() => ctrl.abort(new DOMException("timeout", "TimeoutError")), limitMs);
     try {
       let res = await transport(method, path, body, await authClient.accessToken(), ctrl.signal);
       if (res.status === 401) {
@@ -122,9 +150,12 @@ export function helpClient({
         const b = res.body as Partial<HelpStatus> | null;
         if (res.status === 200 && b && typeof b.enabled === "boolean") {
           const mode = b.mode === "model" || b.mode === "kb" || b.mode === "off" ? b.mode : b.enabled ? "kb" : "off";
-          return { kind: "ok", status: { enabled: b.enabled, mode, corpusVersion: typeof b.corpusVersion === "string" ? b.corpusVersion : "" } };
+          return {
+            kind: "ok",
+            status: { enabled: b.enabled, mode, corpusVersion: typeof b.corpusVersion === "string" ? b.corpusVersion : "", pictures: b.pictures === true && mode === "model" },
+          };
         }
-        if (res.status === 403 && errorOf(res.body).code === "help_off") return { kind: "ok", status: { enabled: false, mode: "off", corpusVersion: "" } };
+        if (res.status === 403 && errorOf(res.body).code === "help_off") return { kind: "ok", status: { enabled: false, mode: "off", corpusVersion: "", pictures: false } };
         return { kind: "error" };
       } catch {
         return { kind: "error" };
@@ -133,19 +164,29 @@ export function helpClient({
 
     async ask(body) {
       const started = now();
+      const sent = trimBody(body);
+      const limitMs = sent.pictures?.length ? timeoutMs + PICTURE_UPLOAD_MS : timeoutMs;
       let res: HelpHttp;
       try {
-        res = await exchange("POST", "/help/answers", trimBody(body));
+        res = await exchange("POST", "/help/answers", sent, limitMs);
       } catch (e) {
-        const timedOut = (e as { name?: string } | null)?.name === "TimeoutError" || now() - started >= timeoutMs;
+        const timedOut = (e as { name?: string } | null)?.name === "TimeoutError" || now() - started >= limitMs;
         return { kind: "fallback", reason: timedOut ? "timeout" : "network", status: 0, requestId: clientRequestId(started) };
       }
       const err = errorOf(res.body);
       const requestId = err.requestId ?? clientRequestId(started);
       if (res.status === 200) {
-        const b = res.body as { answer?: unknown; mode?: unknown; requestId?: unknown } | null;
-        if (b && isAnswer(b.answer))
-          return { kind: "answer", answer: b.answer, mode: b.mode === "model" ? "model" : "kb", requestId: typeof b.requestId === "string" ? b.requestId : requestId };
+        const b = res.body as { answer?: unknown; mode?: unknown; requestId?: unknown; picture?: unknown } | null;
+        if (b && isAnswer(b.answer)) {
+          const picture = sent.pictures?.length ? pictureResult(b.picture) : undefined;
+          return {
+            kind: "answer",
+            answer: b.answer,
+            mode: b.mode === "model" ? "model" : "kb",
+            requestId: typeof b.requestId === "string" ? b.requestId : requestId,
+            ...(picture ? { picture } : {}),
+          };
+        }
         return { kind: "fallback", reason: "server", status: 200, requestId };
       }
       if (res.status === 429) return { kind: "rate_limited", retryAfter: Math.ceil(res.retryAfter ?? err.retryAfter ?? 60), requestId };

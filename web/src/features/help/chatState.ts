@@ -1,11 +1,27 @@
 // The conversation, in memory only (docs/CONTRACTS.md §19.8): nothing is stored, so closing the tab forgets it.
+// Pictures (§26) are object URLs in this memory too: the tray waiting to be sent, then the pictures of each question.
+// The reducer stays pure; `useRevokeDropped` lets go of every URL that leaves the state (Start over, take away,
+// the 12-picture memory limit) and of all of them when Ask unmounts (sign-out).
+import { useEffect, useRef } from "react";
 import type { LiveResult } from "./live.ts";
-import { HISTORY_MAX, type HelpAnswer, type HelpTurn } from "./types.ts";
+import { KEEP_MAX, PICTURES_MAX, type Pic } from "./pictures.ts";
+import { HISTORY_MAX, SEEN_MAX, type HelpAnswer, type HelpTurn } from "./types.ts";
+
+/** A picture shown in a question bubble; `url` is null once it was let go (the 12-picture memory limit). */
+export interface SentPic {
+  id: number;
+  url: string | null;
+  width: number;
+  height: number;
+}
+
+/** A tray tile: being made ready (shimmer), or ready to send. */
+export type TrayPic = { id: number; busy: true } | ({ busy?: false } & Pic);
 
 export type LiveState = { kind: "loading" } | { kind: "done"; result: LiveResult } | { kind: "failed" };
 
 export type Entry =
-  | { id: number; role: "user"; text: string }
+  | { id: number; role: "user"; text: string; pictures?: SentPic[]; seen?: string }
   | {
       id: number;
       role: "assistant";
@@ -25,26 +41,62 @@ export interface ChatState {
   blockedUntil: number;
   /** Navigation waiting for "Leave anyway?". */
   confirm: { actionId: string; entryId: number } | null;
+  /** Pictures waiting to go with the next question (kept by the launcher, so closing the panel keeps them). */
+  tray: TrayPic[];
 }
 
-export const initialChat: ChatState = { entries: [], thinking: false, blockedUntil: 0, confirm: null };
+export const initialChat: ChatState = { entries: [], thinking: false, blockedUntil: 0, confirm: null, tray: [] };
 
 let seq = 0;
 /** A new entry id (ids only need to be unique while the page is open). */
 export const entryId = () => ++seq;
 
 export type ChatEvent =
-  | { type: "ask"; id: number; text: string }
+  | { type: "ask"; id: number; text: string; pictures?: Pic[] }
   | { type: "answer"; id: number; answer: HelpAnswer; requestId: string; trouble: boolean }
   | { type: "notice"; id: number; tone: "busy" | "off" | "info"; text: string; until?: number; helpCode?: string | null }
   | { type: "live"; entryId: number; live: LiveState }
   | { type: "confirm"; confirm: ChatState["confirm"] }
-  | { type: "reset" };
+  | { type: "reset" }
+  | { type: "tray_add"; id: number }
+  | { type: "tray_ready"; pic: Pic }
+  | { type: "tray_remove"; id: number }
+  | { type: "tray_clear" }
+  /** A question that could not be sent gives its pictures back, so "try again" is one tap. */
+  | { type: "tray_restore"; pics: Pic[] }
+  | { type: "seen"; entryId: number; seen: string };
+
+/** Lets go of the oldest sent pictures once more than KEEP_MAX are kept (tray included). */
+function keepRecent(entries: Entry[], tray: readonly TrayPic[]): Entry[] {
+  let kept = tray.length;
+  const out = [...entries];
+  for (let i = out.length - 1; i >= 0; i--) {
+    const e = out[i]!;
+    if (e.role !== "user" || !e.pictures?.length) continue;
+    let changed = false;
+    const pics = [...e.pictures].reverse().map((p) => {
+      if (!p.url) return p;
+      if (kept < KEEP_MAX) {
+        kept++;
+        return p;
+      }
+      changed = true;
+      return { ...p, url: null };
+    });
+    if (changed) out[i] = { ...e, pictures: pics.reverse() };
+  }
+  return out;
+}
 
 export function chatReducer(s: ChatState, e: ChatEvent): ChatState {
   switch (e.type) {
-    case "ask":
-      return { ...s, thinking: true, confirm: null, entries: [...s.entries, { id: e.id, role: "user", text: e.text }] };
+    case "ask": {
+      const pictures = e.pictures?.map(({ id, url, width, height }) => ({ id, url, width, height }));
+      const sent = new Set(e.pictures?.map((p) => p.id));
+      const entry: Entry = pictures?.length ? { id: e.id, role: "user", text: e.text, pictures } : { id: e.id, role: "user", text: e.text };
+      const tray = s.tray.filter((p) => !sent.has(p.id));
+      return { ...s, thinking: true, confirm: null, tray, entries: keepRecent([...s.entries, entry], tray) };
+    }
     case "answer":
       return {
         ...s,
@@ -64,6 +116,29 @@ export function chatReducer(s: ChatState, e: ChatEvent): ChatState {
       return { ...s, confirm: e.confirm };
     case "reset":
       return initialChat;
+    case "tray_add":
+      return { ...s, tray: [...s.tray, { id: e.id, busy: true }] };
+    case "tray_ready": {
+      if (!s.tray.some((p) => p.id === e.pic.id)) return s;
+      const tray = s.tray.map((p) => (p.id === e.pic.id ? { ...e.pic, busy: false as const } : p));
+      return { ...s, tray, entries: keepRecent(s.entries, tray) };
+    }
+    case "tray_remove":
+      return { ...s, tray: s.tray.filter((p) => p.id !== e.id) };
+    case "tray_clear":
+      return { ...s, tray: [] };
+    case "tray_restore": {
+      const have = new Set(s.tray.map((p) => p.id));
+      const back = e.pics.filter((p) => !have.has(p.id)).slice(0, Math.max(0, PICTURES_MAX - s.tray.length));
+      if (!back.length) return s;
+      const tray: TrayPic[] = [...back.map((p) => ({ ...p, busy: false as const })), ...s.tray];
+      return { ...s, tray, entries: keepRecent(s.entries, tray) };
+    }
+    case "seen":
+      return {
+        ...s,
+        entries: s.entries.map((x) => (x.id === e.entryId && x.role === "user" ? { ...x, seen: e.seen.slice(0, SEEN_MAX) } : x)),
+      };
   }
 }
 
@@ -71,7 +146,7 @@ export function chatReducer(s: ChatState, e: ChatEvent): ChatState {
 export function historyOf(entries: readonly Entry[]): HelpTurn[] {
   const turns: HelpTurn[] = [];
   for (const e of entries) {
-    if (e.role === "user") turns.push({ role: "user", text: e.text });
+    if (e.role === "user") turns.push(e.seen ? { role: "user", text: e.text, seen: e.seen } : { role: "user", text: e.text });
     else if (e.role === "assistant") turns.push({ role: "assistant", text: e.answer.text });
   }
   return turns.slice(-HISTORY_MAX);
@@ -81,4 +156,39 @@ export function historyOf(entries: readonly Entry[]): HelpTurn[] {
 export function newestAnswerId(entries: readonly Entry[]): number | null {
   for (let i = entries.length - 1; i >= 0; i--) if (entries[i]!.role === "assistant") return entries[i]!.id;
   return null;
+}
+
+/** Every object URL the chat holds (tray and sent pictures). */
+export function liveUrls(s: ChatState): Set<string> {
+  const urls = new Set<string>();
+  for (const p of s.tray) if (!p.busy) urls.add(p.url);
+  for (const e of s.entries) if (e.role === "user") for (const p of e.pictures ?? []) if (p.url) urls.add(p.url);
+  return urls;
+}
+
+/** Lets go of every picture the chat holds (Start over, sign-out). */
+export function revokeAll(s: ChatState): void {
+  for (const url of liveUrls(s)) URL.revokeObjectURL(url);
+}
+
+/** Revokes each object URL once it leaves the chat, and all of them when the owner of the chat unmounts. */
+export function useRevokeDropped(state: ChatState): void {
+  const held = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const now = liveUrls(state);
+    for (const url of held.current) if (!now.has(url)) URL.revokeObjectURL(url);
+    held.current = now;
+  }, [state]);
+  useEffect(
+    () => () => {
+      for (const url of held.current) URL.revokeObjectURL(url);
+      held.current = new Set();
+    },
+    [],
+  );
+}
+
+/** The ready pictures in the tray, in order. */
+export function readyTray(s: Pick<ChatState, "tray">): Pic[] {
+  return s.tray.filter((p): p is Pic & { busy?: false } => !p.busy);
 }

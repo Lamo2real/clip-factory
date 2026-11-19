@@ -7,11 +7,12 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { AskMark } from "../../components/AskMark.tsx";
 import { useMedia } from "../../lib/hooks.ts";
 import { useRoute } from "../../lib/router.ts";
-import { chatReducer, initialChat } from "./chatState.ts";
+import { chatReducer, initialChat, useRevokeDropped } from "./chatState.ts";
 import { HELP_EVENT } from "./context.ts";
 import { useDodge } from "./dodge.ts";
 import { defaultHelpClient, type HelpClient } from "./helpApi.ts";
 import { HelpPanel } from "./HelpPanel.tsx";
+import { dragHasFiles } from "./pictures.ts";
 import { helpSwitch, useHelpSwitch, watchHelpStatus } from "./status.ts";
 
 /** True when the element shows a keyboard focus ring (false where the browser cannot tell). */
@@ -41,6 +42,24 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
   // closes it) and opening it again shows the last answer. Start over clears it; nothing is ever stored.
   const [chat, dispatch] = useReducer(chatReducer, initialChat);
   const generation = useRef(0);
+  // Pictures are object URLs: each is let go when it leaves the chat, and all of them when Ask goes (sign-out).
+  useRevokeDropped(chat);
+
+  // A file dropped anywhere no drop zone took it must never replace the app (the Mac app hands drops to the page
+  // since Ask takes pictures, §26): the drop is ignored.
+  useEffect(() => {
+    const guard = (e: DragEvent) => {
+      if (e.defaultPrevented || !dragHasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      if (e.type === "dragover" && e.dataTransfer) e.dataTransfer.dropEffect = "none";
+    };
+    window.addEventListener("dragover", guard);
+    window.addEventListener("drop", guard);
+    return () => {
+      window.removeEventListener("dragover", guard);
+      window.removeEventListener("drop", guard);
+    };
+  }, []);
 
   // On phones the sheet covers everything, so it is modal: the page and the launcher behind it are inert.
   useEffect(() => {

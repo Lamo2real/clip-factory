@@ -9,6 +9,10 @@
 The caller always redirects to ``{APP_URL}/settings/posting/setup/{platform}?result={code}``: a fixed path and a
 code from ``RESULTS`` only, so nothing from the request is reflected (no open redirect). The query, the code, the
 state and every token stay out of the logs.
+
+"Allow money reading" (§25.4: the state item carries ``grant: "money"``) goes through ``save_money_grant`` instead
+of ``save``: it merges the new token and scopes into the existing connection and never replaces the Account item.
+Its codes (``MONEY_RESULTS``) send the owner back to ``/settings/posting/money?result={code}&platform={platform}``.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ from typing import Any
 from .. import db
 from ..clock import iso
 from ..log import log
-from . import PKCE, SETUP_ORDER, OAuthEnv, providers, setup, state
+from . import MONEY_GRANT, PKCE, SETUP_ORDER, OAuthEnv, providers, setup, state
 from .providers import AppKeys, Linked
 
 RESULTS = (
@@ -38,12 +42,22 @@ RESULTS = (
     "platform_down",
     "error",
 )
+MONEY_RESULTS = (
+    "money_allowed",
+    "money_denied",
+    "money_missing",
+    "money_not_connected",
+    "money_wrong_account",
+    "money_error",
+)
 DENIED = frozenset({"access_denied", "user_denied", "user_cancelled", "cancelled", "consent_required"})
 CHOICES_TTL = timedelta(minutes=30)
 MAX_CODE_CHARS = 2048
 
 
 def location(app_url: str, platform: str, result: str) -> str:
+    if result in MONEY_RESULTS and platform in SETUP_ORDER:
+        return f"{app_url.rstrip('/')}/settings/posting/money?result={result}&platform={platform}"
     code = result if result in RESULTS else "error"
     return f"{app_url.rstrip('/')}/settings/posting/setup/{platform}?result={code}"
 
@@ -67,6 +81,19 @@ def handle_callback(platform: str, query: Mapping[str, str], store: db.Store, en
     if saved is None or saved.get("platform") != platform or not saved.get("userId"):
         return "expired"
     user_id = str(saved["userId"])
+    if saved.get("grant") == MONEY_GRANT:
+        money = _money_result(
+            platform,
+            query,
+            store,
+            env,
+            user_id=user_id,
+            nonce=nonce,
+            key=key,
+            redirect_uri=str(saved.get("redirectUri") or ""),
+        )
+        log("info", "oauth.callback", platform=platform, result=money)
+        return money
     result = _result(
         platform,
         query,
@@ -146,3 +173,75 @@ def save(store: db.Store, env: OAuthEnv, user_id: str, platform: str, linked: Li
     if platform == "x":
         gates.pop("credits", None)  # a fresh connection starts without a credits problem
     setup.record(store, user_id, platform, now, {"gates": gates}, remove=["choices", "choicesExpireAt"])
+
+
+# --- §25.4 "Allow money reading" ------------------------------------------------------------------------------
+
+
+def _money_result(
+    platform: str,
+    query: Mapping[str, str],
+    store: db.Store,
+    env: OAuthEnv,
+    *,
+    user_id: str,
+    nonce: str,
+    key: bytes,
+    redirect_uri: str,
+) -> str:
+    """The money grant's code. Anything short of a clean success writes nothing: the old token and Account stay."""
+    error = str(query.get("error") or query.get("error_code") or "")
+    if error:
+        denied = error in DENIED or "denied" in error or "cancel" in error
+        return "money_denied" if denied else "money_missing"
+    code = str(query.get("code") or "")
+    if not code or len(code) > MAX_CODE_CHARS:
+        return "money_error"
+    if not redirect_uri.startswith("https://") or (env.hooks_url and redirect_uri != env.redirect_uri(platform)):
+        return "money_error"
+    keys = AppKeys.from_secret(env.secrets.read(env.secrets.name(platform, "app"), fresh=True))
+    if keys is None:
+        return "money_error"
+    verifier = state.pkce(key, nonce)[0] if PKCE.get(platform) else None
+    try:
+        linked = providers.exchange(env, platform, keys, code, redirect_uri=redirect_uri, verifier=verifier)
+    except providers.Fail as e:
+        # A Connect scope missing, TikTok refusing a scope it has not approved yet, a dead code: nothing changes.
+        log("warning", "oauth.money_grant_refused", platform=platform, code=e.code)
+        return "money_missing" if e.code == "missing_permissions" else "money_error"
+    return save_money_grant(store, env, user_id, platform, linked)
+
+
+def save_money_grant(store: db.Store, env: OAuthEnv, user_id: str, platform: str, linked: Linked) -> str:
+    """Merges a money grant into the existing connection (§25.4). Never ``put_account``, never the gates, never a
+    disconnect: (1) the Account must exist, be connected and be the same account (channel, TikTok user), and every
+    money scope must be granted, else nothing is written; (2) the token secret is written; (3) one UpdateItem sets
+    ``scopes`` to the union of old and new and removes ``moneyScopesMissing``, keeping every other field."""
+    if linked.status != "connected":
+        return "money_error"
+    account = setup.account_item(store, user_id, platform)
+    if account is None or account.get("status") != "connected":
+        return "money_not_connected"
+    old_id = str(account.get("accountId") or "")
+    new_id = str(linked.account.get("accountId") or "")
+    if not new_id or (old_id and old_id != new_id):
+        return "money_wrong_account"
+    granted = {str(s) for s in linked.account.get("scopes") or []}
+    if any(s not in granted for s in env.money_scopes.get(platform, ())):
+        return "money_missing"
+    now = env.clock()
+    env.secrets.write(env.secrets.name(platform, "token"), linked.token, platform=platform)
+    old_scopes = {str(s) for s in account.get("scopes") or []}
+    setup.mark_account(
+        store,
+        user_id,
+        platform,
+        now,
+        remove=["moneyScopesMissing"],
+        scopes=sorted(old_scopes | granted),
+        moneyAllowedAt=iso(now),
+    )
+    # The Money page this lands on starts a Check now, which registers the owner for the daily run (cf-prod-hooks
+    # may only write OAUTH#, HOOK# and USER# items, and that is all this needs).
+    log("info", "oauth.money_grant", platform=platform)
+    return "money_allowed"

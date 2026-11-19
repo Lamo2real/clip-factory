@@ -13,7 +13,8 @@
 //   terms is in the doc's title or keywords.
 // * Follow-ups: a question is ranked on its own first. It borrows the previous user question's words only when it
 //   starts with a follow-up phrase ("and …", "what about …"), or when it is short (≤ 4 content words) and unknown
-//   on its own. So "What does Keep do?" right after another question still answers Keep.
+//   on its own. So "What does Keep do?" right after another question still answers Keep. The previous user turn's
+//   words are its text plus `seen`, what its pictures showed (§26).
 import type { HelpContext, HelpDoc, HelpTurn } from "./types.ts";
 
 export const K1 = 1.2;
@@ -143,10 +144,13 @@ export function isFollowUp(question: string, stop: ReadonlySet<string>): boolean
   return contentWords(question, stop).length <= FOLLOW_UP_MAX_WORDS || startsFollowUp(question);
 }
 
-function previousUserQuestion(history: readonly HelpTurn[]): string | null {
+/** The previous user turn's words: its text plus `seen`, what its pictures showed (§26). */
+export function previousUserQuestion(history: readonly HelpTurn[]): string | null {
   for (let i = history.length - 1; i >= 0; i--) {
     const t = history[i]!;
-    if (t.role === "user" && typeof t.text === "string" && t.text.trim()) return t.text;
+    if (t.role !== "user" || typeof t.text !== "string") continue;
+    const text = typeof t.seen === "string" && t.seen.trim() ? `${t.text} ${t.seen}` : t.text;
+    if (text.trim()) return text.trim();
   }
   return null;
 }

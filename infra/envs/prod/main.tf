@@ -221,6 +221,24 @@ module "stats" {
   permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
+# Real earnings (docs/CONTRACTS.md §25): cf-prod-money once a day and on "Check now". Additive: a new function, role,
+# log group and schedule; it reads and refreshes tokens exactly like cf-prod-stats and can never delete anything.
+module "money" {
+  source                     = "../../modules/money"
+  name                       = local.name
+  region                     = var.region
+  account_id                 = local.account_id
+  lambda_zip_path            = var.lambda_zip_path
+  table_name                 = module.data.table_name
+  table_arn                  = module.data.table_arn
+  secret_prefix              = module.hooks.secret_prefix
+  platform_secrets_arn       = module.hooks.platform_secrets_arn
+  platform_token_secrets_arn = module.hooks.platform_token_secrets_arn
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
+}
+
 module "api" {
   source               = "../../modules/api"
   name                 = local.name
@@ -241,6 +259,7 @@ module "api" {
   clip_flow_arn_prefix = module.flows.function_arns["clip-flow"]
   stats_function_arn   = module.stats.stats_function_arn
   learn_function_arn   = module.stats.learn_function_arn
+  money_function_arn   = module.money.money_function_arn
   vector_bucket        = module.vectors.vector_bucket
   vector_index         = module.vectors.vector_index
   vector_index_arn     = module.vectors.vector_index_arn
@@ -310,8 +329,9 @@ module "monitoring" {
     module.realtime.function_names,
     module.hooks.function_names,
     module.stats.function_names,
+    module.money.function_names,
   )
-  schedule_rule_names    = module.stats.schedule_rule_names
+  schedule_rule_names    = merge(module.stats.schedule_rule_names, module.money.schedule_rule_names)
   durable_function_names = module.flows.durable_function_names
   stream_consumer_name   = module.realtime.broadcast_function_name
   hooks_api_name         = module.hooks.hooks_api_name

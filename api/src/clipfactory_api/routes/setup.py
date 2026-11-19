@@ -16,7 +16,20 @@ from ..errors import ApiError, bad_request, conflict, not_found
 from ..http import Request, Response, no_content, ok
 from ..ids import ulid
 from ..log import log
-from ..oauth import PKCE, SETUP_ORDER, STATE_SECONDS, OAuthEnv, callback, formats, label, providers, setup, state
+from ..oauth import (
+    MONEY_GRANT,
+    PKCE,
+    SETUP_ORDER,
+    STATE_SECONDS,
+    OAuthEnv,
+    callback,
+    formats,
+    label,
+    money_capable,
+    providers,
+    setup,
+    state,
+)
 from ..oauth.providers import AppKeys
 from ..oauth.tokens import ReconnectNeededError, SecretsTokenProvider
 from ..platforms import errors as platform_errors
@@ -274,9 +287,21 @@ def list_accounts(app: App, req: Request) -> Response:
 def connect(app: App, req: Request) -> Response:
     platform = _platform(req)
     env = _env(app)
+    body = req.json()
+    validate.only_keys(body, {"grant"})
+    grant = body.get("grant")
+    if grant is not None and grant != MONEY_GRANT:
+        raise bad_request('grant can only be "money".')
+    money = grant == MONEY_GRANT
     keys = _keys(env, platform)
     if keys is None or (platform in {"instagram", "facebook"} and not keys.config_id):
         raise conflict(f"Paste your {label(platform)} keys first.")
+    if money:
+        # §25.4 "Allow money reading": only where it means something, and only on top of a working connection.
+        if not money_capable(env, platform):
+            raise bad_request(f"{label(platform)} does not share money with apps, so there is nothing to allow.")
+        if posts.connected_account(app.store, req.user_id, platform) is None:
+            raise conflict(f"Connect {label(platform)} first in Settings › Posting › Set up posting.")
     now = app.clock()
     if platform in {"instagram", "facebook"}:
         _drop_pending(app, env, req.user_id, platform)  # a new Connect never leaves an old list of Page tokens behind
@@ -294,13 +319,14 @@ def connect(app: App, req: Request) -> Response:
             "redirectUri": env.redirect_uri(platform),
             "createdAt": iso(now),
             "ttl": exp + 300,
+            **({"grant": MONEY_GRANT} if money else {}),
         },
         if_absent=True,
     )
     challenge = state.pkce(key, nonce)[1] if PKCE.get(platform) else None
-    rerequest = setup.item(app.store, req.user_id, platform).get("lastResult") == "missing_permissions"
-    url = providers.authorize_url(env, platform, keys, signed, challenge, rerequest=rerequest)
-    log("info", "setup.connect_started", platform=platform)
+    rerequest = not money and setup.item(app.store, req.user_id, platform).get("lastResult") == "missing_permissions"
+    url = providers.authorize_url(env, platform, keys, signed, challenge, rerequest=rerequest, money=money)
+    log("info", "setup.connect_started", platform=platform, grant=grant or "connect")
     return ok({"authorizeUrl": url, "expiresAt": iso(now + timedelta(seconds=STATE_SECONDS))})
 
 

@@ -25,14 +25,17 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
       testIgnore: /screenshots\.spec\.ts/,
     },
-    // The macOS desktop app draws with WebKit (WKWebView), not Chromium: the motion, stillness and top-line checks run
-    // there too (docs/CONTRACTS.md §20.13, §20.16, §11.1). CI installs WebKit next to Chromium (ci.yml).
+    // WebKit too: the Mac app (WKWebView) and the iPhone PWA (Safari) are WebKit. Pictures in Ask (§26), and the
+    // motion, stillness and top-line checks (§20.13, §20.16, §11.1). CI runs this project in its own job (ci.yml).
     {
       name: "webkit",
-      // Stated, not left to the system: WebKit on Linux follows the desktop's "animations off" setting, which a CI
-      // runner without a desktop may report as reduced motion, and then nothing slides at all.
-      use: { ...devices["Desktop Safari"], reducedMotion: "no-preference" },
-      testMatch: /(nav-smooth|page-still|top-line)\.spec\.ts/,
+      use: { ...devices["Desktop Safari"] },
+      testMatch: /(help-pictures|nav-smooth|page-still|top-line)\.spec\.ts/,
+    },
+    {
+      name: "webkit-phone",
+      use: { ...devices["iPhone 15"] },
+      testMatch: /help-pictures\.spec\.ts/,
     },
     {
       name: "screenshots",

@@ -83,7 +83,10 @@ def test_help_package_is_not_imported_by_the_route_table() -> None:
 
 def test_off_by_default(call: Call, app: App) -> None:
     assert app.help.enabled is False
-    assert call("GET", "/v1/help") == (200, {"enabled": False, "mode": "off", "corpusVersion": ""})
+    assert call("GET", "/v1/help") == (
+        200,
+        {"enabled": False, "mode": "off", "corpusVersion": "", "pictures": False},
+    )
     status, body = ask(call)
     assert status == 403
     assert body["error"] == {"code": "help_off", "message": "Ask Clip Factory is turned off right now."}
@@ -116,7 +119,10 @@ def test_env_flag_must_say_true(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_status_on(call: Call, help_on: App) -> None:
-    assert call("GET", "/v1/help") == (200, {"enabled": True, "mode": "model", "corpusVersion": "fixture-1"})
+    assert call("GET", "/v1/help") == (
+        200,
+        {"enabled": True, "mode": "model", "corpusVersion": "fixture-1", "pictures": True},
+    )
 
 
 def test_switch_enabled_false_turns_it_off(call: Call, help_on: App, store: db.Store) -> None:

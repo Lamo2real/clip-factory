@@ -33,6 +33,31 @@ export function useHelpSwitch(): HelpSwitch {
   );
 }
 
+// Pictures in Ask (§26): on only when the last check said so (model mode and the pictures switch on).
+let pictures = false;
+const pictureListeners = new Set<() => void>();
+
+export function picturesOn(): boolean {
+  return pictures;
+}
+
+export function setPicturesOn(next: boolean): void {
+  if (next === pictures) return;
+  pictures = next;
+  for (const fn of pictureListeners) fn();
+}
+
+export function usePicturesOn(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      pictureListeners.add(fn);
+      return () => pictureListeners.delete(fn);
+    },
+    () => pictures,
+    () => false,
+  );
+}
+
 let inflight: Promise<HelpSwitch> | null = null;
 
 /** Asks the API once (concurrent calls share one request). */
@@ -41,6 +66,9 @@ export function checkHelpStatus(client: HelpClient): Promise<HelpSwitch> {
     .status()
     .then((r) => {
       const next: HelpSwitch = r.kind === "ok" ? (r.status.enabled ? "on" : "off") : current === "off" ? "off" : "on";
+      // A failed check keeps the last answer about pictures; off turns them off.
+      if (r.kind === "ok") setPicturesOn(r.status.enabled && r.status.pictures === true);
+      else if (next === "off") setPicturesOn(false);
       setHelpSwitch(next);
       return next;
     })

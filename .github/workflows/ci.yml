@@ -50,8 +50,7 @@ jobs:
   web-e2e:
     name: web-e2e (${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-24.04
-    # 35, not 25: installing WebKit and its system libraries alone took up to 20 minutes on a slow mirror.
-    timeout-minutes: 35
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -67,14 +66,12 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      # WebKit too: the macOS desktop app's engine runs the motion, stillness and top-line specs (playwright.config.ts).
-      # Same pinned Playwright as Chromium (package-lock.json), so the browser builds match the local runs.
-      - name: Playwright (mock mode, Chromium and WebKit), shard ${{ matrix.shard }} of ${{ strategy.job-total }}
+      - name: Playwright (mock mode, Chromium), shard ${{ matrix.shard }} of ${{ strategy.job-total }}
         env:
           SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: |
-          npx playwright install --with-deps chromium webkit
-          npm run e2e -- --shard="$SHARD" --workers=4
+          npx playwright install --with-deps chromium
+          npm run e2e -- --shard="$SHARD" --workers=4 --project=chromium --project=screenshots
       - name: upload the Playwright report
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -86,10 +83,43 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  # WebKit: the Mac app (WKWebView) and the iPhone PWA (Safari). Ask pictures (§26), and the stillness and top-line
+  # checks (§20.16, §11.1; the slide check runs in WebKit on a Mac only, nav-smooth.spec.ts). One job of its own, because
+  # installing WebKit's system packages can take over 20 minutes on a slow apt mirror; paid once here, not per shard.
+  web-e2e-webkit:
+    name: web-e2e (WebKit)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Playwright (mock mode, WebKit desktop and iPhone)
+        run: |
+          npx playwright install --with-deps webkit
+          npm run e2e -- --project=webkit --project=webkit-phone --workers=4
+      - name: upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report-webkit
+          path: |
+            web/playwright-report
+            web/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
   # The required check. always() makes it report a failure (not "skipped", which branch protection would accept)
   # when a job it needs failed or was cancelled.
   web:
-    needs: [web-checks, web-e2e]
+    needs: [web-checks, web-e2e, web-e2e-webkit]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -98,10 +128,12 @@ jobs:
         env:
           CHECKS: ${{ needs.web-checks.result }}
           E2E: ${{ needs.web-e2e.result }}
+          WEBKIT: ${{ needs.web-e2e-webkit.result }}
         run: |
           echo "web-checks: ${CHECKS}"
           echo "web-e2e (all shards): ${E2E}"
-          [ "$CHECKS" = "success" ] && [ "$E2E" = "success" ]
+          echo "web-e2e (WebKit): ${WEBKIT}"
+          [ "$CHECKS" = "success" ] && [ "$E2E" = "success" ] && [ "$WEBKIT" = "success" ]
 
   api:
     runs-on: ubuntu-24.04

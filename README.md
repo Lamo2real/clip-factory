@@ -57,6 +57,13 @@ from the browser). It is built so simply that a child could use it.
     the right page and lights up the right control. It answers from knowledge built from the app itself, so it never
     makes things up, and it still works when the AI model is off ([details](docs/HELP_ASSISTANT.md)).
 
+14. **Real earnings.** Settings › Posting › Money shows, per app, how close you are to its paid programme (for example
+    812 / 1,000 subscribers, with YouTube's 2027 rules ready) and, once YouTube says you're in and you pressed **Allow
+    money reading**, the money YouTube itself reports, per day, per month and per clip. Every amount says whose estimate
+    it is; nothing is guessed or typed in. Instagram, TikTok and X don't share money with apps, so their cards say so and
+    show where to look. Each app pays you itself: add your bank or PayPal inside each app, never in Clip Factory
+    ([details](docs/CONTRACTS.md#25-real-earnings-paid-programme-progress-and-platform-reported-money-owner-request-2026-11-18)).
+
 ## Architecture
 
 Python for every backend, Terraform for every resource, and serverless only: CloudFront, S3 (web, media),

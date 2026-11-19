@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..http import Route, route
-from . import clips, follows, help, jobs, lessons, performance, setup, skills, system, weeks
+from . import clips, follows, help, jobs, lessons, money, performance, setup, skills, system, weeks
 
 ROUTES: list[Route] = [
     route("GET", "/v1/health", system.health, public=True),
@@ -61,6 +61,12 @@ ROUTES: list[Route] = [
     route("POST", "/v1/follows/keys/{platform}/check", follows.check_keys),
     route("PATCH", "/v1/follows/{platform}/{platformId}", follows.patch),
     route("DELETE", "/v1/follows/{platform}/{platformId}", follows.delete),
+    # §25: Real earnings. Reading only; Check now starts cf-prod-money at most once an hour.
+    route("GET", "/v1/money", money.get_money),
+    route("POST", "/v1/money/refresh", money.refresh),
+    route("POST", "/v1/money/seen", money.seen),
+    route("PUT", "/v1/money/country", money.put_country),
+    route("GET", "/v1/money/{platform}/days", money.get_days),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
     # Ask Clip Factory (§19.6): the help package loads only inside these two handlers.

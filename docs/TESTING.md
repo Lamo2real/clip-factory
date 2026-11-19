@@ -31,7 +31,13 @@ npm test                  # unit and component tests
 npx playwright install    # once, downloads the test browsers
 npx playwright test       # end-to-end and layout tests (start the mock server themselves)
 CF_E2E_PORT=4233 npx playwright test   # same, on another port (when 4179, the default, is taken)
+npx playwright install webkit           # once, for the WebKit projects (Ask pictures in Safari and on iPhone)
+CF_E2E_PORT=4233 npx playwright test e2e/help-pictures.spec.ts --project=chromium --project=webkit --project=webkit-phone
 ```
+
+The `webkit` (Desktop Safari) and `webkit-phone` (iPhone 15) projects run only `e2e/help-pictures.spec.ts`, headless:
+the Mac app (WKWebView) and the iPhone PWA are WebKit, so picking, pasting and dropping pictures is checked there too.
+CI runs them in a job of its own, `web-e2e (WebKit)`, so only that job installs WebKit and its system packages.
 
 Playwright serves the mock app on port 4179 and reuses a server already on that port. If another checkout's preview
 server holds 4179, set `CF_E2E_PORT` to a free port, or the tests run against the other checkout's build.
@@ -47,7 +53,7 @@ job, so [ci.yml](../.github/workflows/ci.yml) splits it:
 
 **WebKit too.** The macOS desktop app draws with WebKit, so `nav-smooth.spec.ts` (the menu highlight sampled every
 frame), `page-still.spec.ts` (no blink or twitch on a page change) and `top-line.spec.ts` (one top line, the
-traffic-light band) also run in the `webkit` Playwright project; the shards install WebKit next to Chromium. The
+traffic-light band) also run in the `webkit` Playwright project (CI: the `web-e2e (WebKit)` job). The
 WebKit slide check (`nav-smooth`) runs on macOS only: Playwright's WebKit on the Linux runners is the GTK/WPE port,
 whose headless run never started the glide's Web Animation at all, which says nothing about the Mac app's WKWebView;
 `page-still` and `top-line` pass there and run in CI. On a Mac: `npx playwright install webkit`, then `CF_E2E_PORT=4471 npx playwright test nav-smooth page-still top-line
@@ -116,6 +122,7 @@ cd api && uv run pytest -q tests/test_help*.py
 | API (pytest) | Off by default (flag unset: GET off, POST 403); kill switch `enabled: false` → 403, `model: false` → kb, read once per 60 s; 6 a minute and 60 an hour → 429 with `Retry-After` and `retryAfter`; cap reached → `kb_cap` and no model call; no model call for unknown or refused; bad bodies → 400; the exact Converse request (model id, `maxTokens` 700, no temperature, thinking disabled, schema with `additionalProperties: false`, the owner's skills block first and the help rules after it, sent through the shared `learn.converse_text` (§18.6), client timeouts, `max_attempts` 1); invented action id dropped; ungrounded bold name, invented digit or a live number written out → kb; malformed JSON, stop reasons, timeout, ClientError → kb; deadline skip; skills that cannot be loaded → `kb_skills` and no model call; `test_skills_everywhere.py` finds no model call outside the helper; corpus meta parse, other host or bad path refused, 10-minute cache, bundled fallback, sensitive filter; questions and answers never in any captured log record (token counts are logged as `usageIn` and `usageOut`); `requestId` in every error body; follow-up merge; exactly two help routes; the zip's `corpus.json` equals the web file (`tests/test_help_corpus.py::test_full_build_puts_the_web_corpus_in_the_zip` runs the whole Lambda build offline, with the dependency install faked, in every pytest run, so it is never skipped in CI); model answers with a link or domain, or a price the owner typed, fall back to the plain answer (`kb_ungrounded`). |
 | Web (Vitest) | Retriever evals; composer; `when` filter; a bad action `to` is dropped; generator `--check`; nothing sensitive and no em or en dashes in the corpus; `helpApi` 27 s timeout, no `keepalive`, one refresh on 401; 429 → countdown and no retry; 5xx or network → local answer; status off → hidden and no local answers; live fill and live failure; unsaved guard; dodge math. |
 | Playwright, mock mode (`e2e/help.spec.ts`, 375 × 812 and 1440 × 900) | Launcher name and place (not over the tab bar or update bar, above the update bar on desktop); three suggestions; "Where do I change my click sound?" → steps, vermilion **Open Sounds**, navigation to `/settings/look-and-feel/sounds`, the Click sound row gets the ring (panel closed on 375, open on 1440); the best-clip question shows the mock number; a refusal; `#429` notice with Ask disabled; `#503` → local answer and the copy-code link; `#off` → launcher gone; Escape returns focus; the Ask field spans the panel with a 44 px icon-only **Send** paper plane inside it (off when empty, Shift+Enter adds a line, four lines then scroll), the plane flies with its trail on send and the question bubble shows at once, the tap sound plays on click only; reduced motion → no animations, the plane only fades; each posting and skills guide opens its real page (`/settings/posting/setup/{platform}`, `/settings/clip-making/skills…`) and lights up its control (`setup-connect`/`setup-progress`, `skill-form`, `skill-edit`, `skill-delete`); the launcher never moves (smooth scrolls, small wheel nudges) and every fade starts only once the page is still, each held at least a second; over a small control it fades out in place once scrolling settles (taps reach the control) and back in when clear, also after its panel closed from a tap; it is always at its home spot (320, 390, 1024 px); at 390 px it shows and opens from a tap at the top of Home, Jobs, Settings and Look & feel, and is faded out at no more than a fifth of the places Home, Jobs, Settings, Look & feel, Sounds and Review are scrolled to (a third on the Library, whose cards end in a 48 px button in its column), and it never fades in and out within a second while Sounds is scrolled 140 px every 300 ms; no launcher over **Keep** on Review before any scroll (375 and 1440); after an answer button the spotlit control is the element at its centre (`elementFromPoint`), so nothing covers it; the conversation is still there after Close and reopen; Tab stays inside the phone sheet; the settled phone launcher makes no control hard to tap at 320, 375, 390 and 430 px, with and without `?update=1`. `overflow.spec.ts` adds the open panel at 320, 375, 768, 1024, 1440 and 1920 px, with a five-line question and the field's width; `screenshots.spec.ts` adds it at 375 and 1440 px, plus `help-review-launcher-*`, `help-spotlight-keep-*`, `help-panel-reopened-*`, `help-ask-box-*` and `help-plane-flying-*`. Port 4179 by default, `CF_E2E_PORT` for another ([Web](#web)). |
+| Pictures (CONTRACTS §26) | `api/tests/test_help_pictures.py`: 0..4 pictures accepted; 5, PNG, GIF, text, truncated, over 600 KB, over 1600 px, bad base64, extra keys and a body over 3.4 MB are friendly 400s; EXIF/GPS and COM never reach the fake Bedrock; image blocks before the text, skills first, the rewrite without images; injected words in a picture stay grounded and the link is dropped; sensitive words and long digit runs dropped; look timeout, bad JSON, `pictures: false`, the daily limit, a full cap and too little time left all answer in words; two cap units; the log line has `pictures` and `picKB` but no base64, `seen` or `words`; `seen` feeds the follow-up; no Bedrock invocation logging in `infra/`. `web/test/helpPictures.test.tsx`: `jpegInfo`, `stripJpeg`, the quality ladder, the messages, `trimBody`, the 37 s timeout, chat state and the 12-picture memory, the panel's button, tray, focus, Start over (URLs revoked) and notices. `web/e2e/help-pictures.spec.ts` (390 × 844 and 1440 × 900): attach, paste, drop and its layer, 4 at most, a text file, take away and focus, sending with no words (the mock saw 4 JPEGs, each ≤ 600 KB, ≤ 1568 px, no metadata), the follow-up carries `seen`, the viewer (arrows, Escape, focus back, Tab stays inside), `#unread` and `#piclimit`, the note floats (the field does not move), the take-away focus glow has room, a send that fails gives the pictures and words back, pictures off, Start over, reduced motion, no edges, no side scroll, 44 px controls. It runs in the `chromium`, `webkit` (Desktop Safari) and `webkit-phone` (iPhone 15) projects, headless; `ASKPICS_SHOTS=<folder>` also writes screenshots. |
 | Infrastructure (`terraform test`) | `HELP_*` env on `cf-prod-api` (enabled in prod, off by module default); statement `HelpModel` has only `bedrock:InvokeModel` on the EU profile ARN and the six foundation-model ARNs; the model id comes from `config/models.json` (`eu.` for help, Fable still `global.`); CORS exposes `retry-after`; the metric filter and the alarm exist; `models.json` parses and `helpModel` names a model. |
 
 ## Contrast and text size
@@ -400,26 +407,13 @@ Clip Factory window.
 - **Performance units** (Vitest): `lib/week.ts` (2026-01-01 is 2026-W01, 2027-01-01 is 2026-W53, weeks start on
   Monday, clock-change weeks are 167 and 169 hours); the Bézier builder `PerfLines.paths(layout, rects)` for the three
   layouts; compact numbers ("1.2K", "–" for null, "1:05"); status → words; live merge of `post` and `week` events.
-- **Earnings** (`e2e/earnings.spec.ts`, [CONTRACTS §21](CONTRACTS.md#21-earnings-what-each-clip-probably-made-per-platform-owner-request-2026-11-16)):
-  YouTube, Facebook and X start on, so the clip page first shows "Earned about $X" on those stacks (never "about less
-  than 1¢") and "This clip earned about $Y" with a Best guess tag (equal to the stacks' sum within a few cents), while
-  TikTok shows "Earned $0.00" with "Turn this on in Settings › Money if TikTok pays you."; "How is this worked out?"
-  uses the short app names, says replays are left out, shows "off, so $0" and "clip too short, so $0", puts each mark on
-  a dark round tile (`aria-hidden`, so X never reads "X X"), says "This only counts if you are in {App}'s paid
-  program." with the app's `kidRules` under YouTube, Facebook and X (never under an app that is off), and links to
-  Settings › Posting › Money; with YouTube, Facebook and X switched off the clip page shows "This clip earned $0.00"
-  with "These apps are switched off in Settings › Money.", no Best guess tag, and per stack "YouTube does not pay you
-  for views right now." plus what it would be; the Money edit flow starts with YouTube, Facebook and X on (each with its
-  paid-program line) and TikTok and Instagram off, refuses "abc", "0.055" and "1000" with a plain line, saves "2,5" as
-  $2.50, switches TikTok on (its paid-program line appears and the clip page then says "TikTok only pays for videos 1
-  minute or longer."), shows the sources in plain words with readable dates and 44 px links, and goes back with **Use
-  the usual**; Library and This week show each clip's guess and the week total with a visible Best guess tag by
-  default, then "Earned $0.00" with its reason once everything is off, without changing the order; no overflow at
-  320/375/768/1440/1920 px. Vitest `test/earnings.test.ts` covers every formula and format (rounding, less than 1¢,
-  "about" rules, minimum length incl. exactly 60 s, the on/off defaults and switched-off apps, `paidProgramNote`, custom
-  rate, missing views never adding up to $0, `paidViews`, zero reasons, source dates); pytest covers the
-  `earningsRates` / `earningsPaid` validation, the config defaults (YouTube, Facebook and X on; TikTok and Instagram
-  off) and the week `paidViews`.
+- **No money guesses** ([CONTRACTS §25](CONTRACTS.md#25-real-earnings-paid-programme-progress-and-platform-reported-money-owner-request-2026-11-18)):
+  §21's guesses are gone (the old `e2e/earnings.spec.ts` and `test/earnings.test.ts` with them). Vitest
+  `test/noGuesses.test.ts` is the CI guard: nothing in `web/src` imports `lib/earnings.ts` or `config/earnings.json`,
+  uses `rateFor`, `perThousand`, `moneyPhrase`, `moneyWords`, `earningFor` or `clipEarnings`, or reads `earningsRates` /
+  `earningsPaid` outside the settings types and the mock's validation, and the help guides never offer a rate or a
+  "best guess". Pytest keeps the retired `earningsRates` / `earningsPaid` validation and defaults (nothing stored is
+  lost) and the week `paidViews` (sent, never read).
 - **Old account links**: `/settings/posting/accounts` and `/settings?account=youtube&status=coming_soon` redirect to
   Set up posting (`settings-tree.spec.ts`).
 - **Kid-proof** ([UX-13](BUSINESS_REQUIREMENTS.md#ux-13-kid-proof-a-68-year-old-can-use-it)): at most one vermilion
@@ -611,6 +605,44 @@ out callbacks whose `result()` returns or raises a preset `CallbackError`.
   from 320 to 1920 px in light and dark (no overflow, 44 px targets, contrast).
 - **Manual release gate** (before part 2): a real Twitch and Kick webhook round trip from eu-north-1, and the YouTube
   channel page read from AWS (the consent page).
+
+### Real earnings (CONTRACTS §25)
+Offline only: recorded platform answers (`FakeHttp`), a fake token provider, the in-memory table, and the web mock with a
+scenario per state (`window.__cfMock.money.setScenario(name)`, kept in sessionStorage: `start`, `not_connected`,
+`consent_needed`, `not_yet`, `goal_reached`, `in_program`, `earning`, `facebook_verified`, `facebook_unverified`,
+`unsupported`, `error`).
+
+- **pytest, rules** (`api/tests/test_money_rules.py`): every goal names an official source (a blog or plain http is
+  refused), no rate keys, YouTube's 2027-02-01 switch (and the "keep 10M Shorts views" rule for channels already in),
+  TikTok by country (`no_country`, `not_open`, 10K vs 50K), X impressions as a number without a bar, `moneyScopes` only
+  for Allow money reading and the Connect scopes unchanged.
+- **pytest, the grant** (`api/tests/test_money_grant.py`): normal Connect asks for exactly the old scopes; a money grant
+  needs a connection and a platform that shares money; YouTube and TikTok grants merge (every Account field kept, even
+  unknown ones; posts, `STAT#`, settings, lessons and the setup gates untouched); cancel, a missing scope, another
+  channel, a dead code and an account that is no longer connected write nothing; two refreshers rotate TikTok's token
+  once.
+- **pytest, the collector and routes** (`api/tests/test_money.py`): the YouTube state matrix (each 403 reason, 200 with
+  0 and above 0), in the programme never goes down and `detectedAt` is written once, the three-month re-read with
+  `revisedAt`, first money only after a later read, the Shorts split hidden on 400, per-clip money on the Post without
+  touching its numbers, hidden subscribers never 0, uploads stop at the first old video; Facebook hidden while
+  unverified (the stored answer has no token or paging link), Meta's unit and currency kept once verified, a bare number
+  never shown, no fallback after a metric error; Instagram's Gifts goal; TikTok's pagination, counting and clamp; X's
+  budget charge and the refused field; one platform failing never stops the others; `thisMonth` per currency; the
+  routes (owner registry, Check now once an hour and the hour given back on a failed invoke, country, seen, days);
+  `forget` removes only YouTube's money; the daily handler; the run never deletes.
+- **vitest** (`web/test/money.test.tsx`, `web/test/noGuesses.test.ts`): formatting only (no maths), no vermilion pill,
+  every mock state renders with money only next to its source and estimate tag and at most one action button and three
+  bars, celebrations once, Check now once an hour, the result read once, old anchors, official sources in the config;
+  the CI guard against the retired guesses.
+- **Playwright** (`web/e2e/money.spec.ts`): first visit (one vermilion Allow money reading, grown-up steps, More, "?"),
+  the Allow round trip, a refused grant, earning with the first-money party once, two currencies, Home's tile and its
+  celebration, the country pick, Check now, not connected and couldn't check, old anchors, and 375 px light and dark
+  with no sideways scroll and contrast. `e2e/contrast.spec.ts` scans the country toast.
+- **Terraform** (`infra/modules/money/tests/money.tftest.hcl`, `envs/prod/tests/wiring.tftest.hcl`,
+  `modules/api/tests/api.tftest.hcl`): 06:00 UTC, no retries, no DeleteItem or secret create/delete, token writes only
+  to `token-*`, the money function and rule watched by monitoring, and the API may invoke it.
+- **Live checks, not done here** (§25.8): YouTube Analytics with the real monetary scope, Meta's earnings metrics and
+  unit, TikTok's `user.info.stats` review, X's `verified_followers_count`.
 
 ### Posting setup
 From [CONTRACTS.md §17.12](CONTRACTS.md#1712-tests-offline-fakes-only-no-aws-no-network). Everything offline: a fake
@@ -902,3 +934,26 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
    week?" and check the number matches Library › This week. In CloudWatch Logs, `/aws/lambda/cf-prod-api` shows one
    `help.answer` line per question with no question text. If every answer comes back in plain words only, open
    Claude Haiku 5.5 once in the Bedrock console ([DEPLOYMENT.md](DEPLOYMENT.md#4-bedrock-model-access-and-data-retention)).
+14. **Real earnings** ([CONTRACTS §25.8](CONTRACTS.md#258-not-verified-live-each-failure-becomes-a-not-available-label-never-a-number)):
+   these were not checked against the live platforms when the feature was built. Each failure becomes a "not shared"
+   line, never a number.
+   - In the deploy log, the plan says "0 to destroy" and the delete gate passes; `cf-prod-money` and the
+     `cf-prod-money-daily` rule are new.
+   - Open Settings › Posting › Money, pick your country, press **Check now**. In CloudWatch Logs,
+     `/aws/lambda/cf-prod-money` shows one `money.run` line; every connected card shows real numbers or a plain reason.
+   - YouTube, in this order: Google Cloud › Data access, add `yt-analytics-monetary.readonly` (same project, no new
+     keys); Audience says **In production**; then **Allow money reading** (the "unverified app" screen is expected). You
+     come back to Money with "Done!" and the pill is **Not yet**, **In the program** or **Earning**. Set up posting
+     still says Connected and a test post still works. Compare one day's amount with YouTube Studio › Analytics ›
+     Revenue (YouTube's number may still change at month end). Note whether the Shorts/long split appears.
+   - Whether `yt-analytics-monetary.readonly` shows as a sensitive scope, and the YouTube API Services policy's limit
+     on how long this data may be kept (until confirmed, only an explicit YouTube Disconnect deletes it).
+   - Facebook: with a Page in content monetization, call `content_monetization_earnings` once (Graph API Explorer)
+     and compare its unit and currency with Meta Business Suite › Monetization. Only when they match, set
+     `facebook.moneyVerified` to `true` in `config/monetization.json` in a pull request.
+   - TikTok: add `user.info.stats` and send the app for review. Check first whether that review pauses the live app's
+     posting. After approval press **Allow follower reading**.
+   - X: check that `verified_followers_count` comes back from `users/me`; if X refuses the field the card says "X didn't
+     share this".
+   - Open the official pages linked in `config/monetization.json` for TikTok, Instagram and X and confirm each number
+     (`verifiedHow: official-snippet` today).

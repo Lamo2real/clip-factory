@@ -26,8 +26,8 @@ DEFAULTS: dict[str, Any] = {
     "errorSound": 5,  # the owner's pick: "Nope nope nope"
     "platforms": list(PLATFORMS),
     "youtubePrivacy": "public",  # §17.6: who can see the YouTube uploads (YouTube policy wants the owner's choice)
-    # §21 Earnings: the owner's own USD per 1,000 views and "Do I get paid here?" per platform. A platform that is
-    # absent uses the default from config/earnings.json (typicalUsdPer1000 / paysPerView), which the web reads.
+    # §21 Earnings, retired by §25 (ADR-47): the owner's old USD per 1,000 views and "Do I get paid here?". Kept,
+    # validated and stored exactly as before so no saved value is lost, but nothing reads them any more.
     "earningsRates": {},
     "earningsPaid": {},
     # §17.13: platforms the owner chose to skip (and confirmed) on the floating setup to-do list. Skipping only
@@ -52,7 +52,7 @@ DEFAULTS: dict[str, Any] = {
 # job; the mapped value is written only when the owner next saves settings, as every default is. Any other choice (a
 # reordering or a subset too) is kept as it is.
 OLD_DEFAULT_COLOURS = ("#9caf88", "#f7f5ef", "#e8412c")
-# Mirrors config/earnings.json `maxUsdPer1000` (a test keeps them equal).
+# The retired §21 limit for `earningsRates` (still validated on write; config/earnings.json is gone, §25).
 MAX_USD_PER_1000 = 100
 # Mirrors config/models.json `clipModels` and `agentModel` (a test keeps them equal; the API Lambdas do not ship it).
 CLIP_MODELS: tuple[str, ...] = ("fable-5-2", "fable-5-1", "opus-5-5", "sonnet-5-5", "haiku-5-5")

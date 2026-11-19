@@ -34,6 +34,7 @@ variables {
   clip_flow_arn_prefix = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow"
   stats_function_arn   = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stats"
   learn_function_arn   = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-learn"
+  money_function_arn   = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-money"
   vector_bucket        = "cf-test-vectors-123456789012"
   vector_index         = "clips"
   vector_index_arn     = "arn:aws:s3vectors:eu-north-1:123456789012:bucket/cf-test-vectors-123456789012/index/clips"
@@ -79,6 +80,7 @@ run "environment_names_the_flow_aliases" {
       VERSION            = "test"
       STATS_FUNCTION_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stats"
       LEARN_FUNCTION_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-learn"
+      MONEY_FUNCTION_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-money"
       HOOKS_URL          = "https://rest123.execute-api.eu-north-1.amazonaws.com/v1"
       SECRET_PREFIX      = "cf-test/platforms/"
       OAUTH_STATE_SECRET = "cf-test/oauth/state-key"
@@ -89,6 +91,8 @@ run "environment_names_the_flow_aliases" {
       HELP_MONTHLY_CAP     = "2000"
       HELP_RATE_PER_MINUTE = "6"
       HELP_RATE_PER_HOUR   = "60"
+      # §26: picture questions per owner per day.
+      HELP_PICTURE_QUESTIONS_PER_DAY = "40"
     })
     error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9 and §19.9 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
   }
@@ -222,8 +226,18 @@ run "permissions" {
       "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:*",
       "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stats",
       "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-learn",
+      "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-money",
     ])
-    error_message = "lambda:InvokeFunction covers exactly the two flows, cf-prod-stats and cf-prod-learn."
+    error_message = "lambda:InvokeFunction covers exactly the two flows, cf-prod-stats, cf-prod-learn and cf-prod-money."
+  }
+
+  # §25.5: "Check now" on Settings › Posting › Money.
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement :
+      s.Sid == "Money" && s.Action == ["lambda:InvokeFunction"] && s.Resource == ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-money"]
+    ])
+    error_message = "The API may invoke cf-prod-money (Check now), unqualified, and nothing else for money."
   }
 
   assert {
@@ -278,6 +292,7 @@ run "help_assistant_with_model" {
       one(aws_lambda_function.fn["api"].environment).variables["HELP_MONTHLY_CAP"] == "2000" &&
       one(aws_lambda_function.fn["api"].environment).variables["HELP_RATE_PER_MINUTE"] == "6" &&
       one(aws_lambda_function.fn["api"].environment).variables["HELP_RATE_PER_HOUR"] == "60" &&
+      one(aws_lambda_function.fn["api"].environment).variables["HELP_PICTURE_QUESTIONS_PER_DAY"] == "40" &&
       one(aws_lambda_function.fn["api"].environment).variables["APP_URL"] == "https://app.example.test"
     )
     error_message = "cf-prod-api gets HELP_ENABLED, HELP_MODEL_ID, HELP_MONTHLY_CAP 2000, 6 per minute, 60 per hour, and APP_URL for the corpus."
