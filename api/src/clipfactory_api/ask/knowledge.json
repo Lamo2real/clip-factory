@@ -1,5 +1,5 @@
 {
- "version": "6e52c807020b",
+ "version": "8120deca814c",
  "parts": [
   {
    "id": "app-map",
@@ -201,7 +201,7 @@
    "id": "contracts-29",
    "title": "CONTRACTS: 29. YouTube downloads that hold up (owner request, 2026-11-19)",
    "line": "29.1 The owner's words",
-   "chars": 10243
+   "chars": 10249
   },
   {
    "id": "adr-01",

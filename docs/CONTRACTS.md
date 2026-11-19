@@ -5988,7 +5988,7 @@ mode, then the source job's exact clip count and notes when it can be loaded). e
 
 ### 29.9 Job page header
 
-The title card's top room and the status chip inside the card are fixed on `fix/job-header`, not in this change.
+The title card's top room and the status chip inside the card are fixed in §11.1 (PR #45, `web/e2e/job-head.spec.ts`).
 
 ### 29.10 Tests
 
