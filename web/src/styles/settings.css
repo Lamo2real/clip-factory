@@ -337,8 +337,8 @@
   box-shadow: none;
 }
 .find__input::placeholder {
-  color: var(--ink-3);
-  opacity: 0.85;
+  color: var(--placeholder);
+  opacity: 1;
 }
 .find__input::-webkit-search-cancel-button {
   display: none;

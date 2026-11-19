@@ -76,3 +76,27 @@ describe("the comfort halo", () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe("placeholders read as hints", () => {
+  const tokens = css("tokens.css");
+  const placeholder = /--placeholder:\s*(#[0-9a-f]{6})/i.exec(tokens)![1]!;
+  const ink = /--ink:\s*(#[0-9a-f]{6})/i.exec(tokens)![1]!;
+  it("is at least 3:1 on the lightest field any look allows, and clearly dimmer than typed text", () => {
+    const over = (top: number[], under: number[], a: number) => top.map((c, i) => c * a + under[i]! * (1 - a));
+    const hex = (rgb: number[]) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
+    const panel = over([15, 55, 43], [255, 255, 255], 0.73);
+    const field = hex(over([10, 40, 32], panel, 0.45));
+    expect(contrast(placeholder, field)).toBeGreaterThanOrEqual(3);
+    expect(contrast(ink, field) / contrast(placeholder, field)).toBeGreaterThanOrEqual(1.5);
+    expect(contrast(ink, placeholder)).toBeGreaterThanOrEqual(1.8);
+    expect(placeholder.toLowerCase()).not.toBe(ink.toLowerCase());
+  });
+  it("is set app-wide with Firefox's own dimming normalised", () => {
+    const base = css("base.css");
+    expect(base).toMatch(/input::placeholder,\s*textarea::placeholder \{\s*color: var\(--placeholder\);\s*opacity: 1;/);
+    expect(base).toMatch(/::-webkit-input-placeholder/);
+  });
+  it("no rule still colours a placeholder with the typed-text ink", () => {
+    for (const [file, text] of all) expect(text, file).not.toMatch(/::placeholder \{[^}]*var\(--ink/);
+  });
+});
