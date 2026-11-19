@@ -17,6 +17,7 @@ export const ROUTES: string[] = [
   "/jobs/:failed",
   "/review",
   "/library",
+  "/money",
   ...SETTINGS_ROUTES,
   "/get-app",
   "/mock-oauth/youtube",
