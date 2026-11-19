@@ -187,6 +187,20 @@ describe("Allow money reading and celebrations", () => {
     expect((await api.getMoney()).celebrations).toEqual([]);
   });
 
+  it("Home's money tile opens the money dashboard (§25.7, §27.4)", async () => {
+    const { MoneyTile } = await import("../src/screens/home/MoneyTile.tsx");
+    current = { getMoney: async () => buildMoneyView({ scenario: "earning", country: "US", seen: ["youtube:first_money"] }), seenMoney: vi.fn() };
+    await act(async () => {
+      root.render(
+        <ToastProvider>
+          <MoneyTile />
+        </ToastProvider>,
+      );
+    });
+    const link = [...host.querySelectorAll("a")].find((a) => a.textContent?.includes("See money"));
+    expect(link?.getAttribute("href")).toBe("/money");
+  });
+
   it("Check now runs at most once an hour", async () => {
     const { api } = moneyApi(async () => undefined);
     expect((await api.refreshMoney()).started).toBe(true);
@@ -209,6 +223,7 @@ describe("settings tree and config", () => {
     for (const old of ["money-how", "money-paid", "money-rate", "money-sources"]) {
       expect(legacySettingsRedirect("/settings", "", `#${old}`)).toBe("/settings/posting/money");
     }
+    expect(findApple("money-dashboard")?.apple.href).toBe("/money");
     for (const id of ["money-country", "money-youtube", "money-tiktok", "money-instagram", "money-facebook", "money-x", "money-payouts"]) {
       expect(findApple(id)?.branch.slug).toBe("money");
     }
