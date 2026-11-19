@@ -179,6 +179,42 @@ variable "help_monthly_cap" {
   }
 }
 
+variable "ask_enabled" {
+  type        = bool
+  default     = false
+  description = "ASK_ENABLED: Ask as a full assistant (docs/CONTRACTS.md §27). Off by default; prod turns it on."
+}
+
+variable "ask_function_name" {
+  type    = string
+  default = ""
+}
+
+variable "ask_function_arn" {
+  type        = string
+  default     = ""
+  description = "cf-prod-ask (unqualified ARN), started with InvocationType=Event. Empty: no assistant, no permission."
+  validation {
+    condition     = var.ask_function_arn == "" || can(regex("^arn:aws[a-z-]*:lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9_-]+$", var.ask_function_arn))
+    error_message = "ask_function_arn must be empty or an unqualified Lambda function ARN."
+  }
+}
+
+variable "search_secret_name" {
+  type    = string
+  default = "cf-prod/ask/search-key"
+}
+
+variable "search_secret_arn" {
+  type        = string
+  default     = ""
+  description = "arn:aws:secretsmanager:REGION:ACCT:secret:cf-prod/ask/search-key*: the web search key the owner saves (created by the app, never by Terraform with a value)."
+  validation {
+    condition     = (var.ask_function_arn == "") == (var.search_secret_arn == "")
+    error_message = "ask_function_arn and search_secret_arn go together: both set or both empty."
+  }
+}
+
 variable "log_retention_days" {
   type    = number
   default = 30

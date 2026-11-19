@@ -1,9 +1,12 @@
 {
-  "$comment": "The only place model ids live. Everything else reads them from here (Terraform, the agent image, the web app for the labels). agentModel is the default model for clip jobs; clipModels lists, in display order, the models the owner may pick for clip jobs in Settings › Clip making › AI model (the clipModel setting, docs/CONTRACTS.md §5 and docs/DECISIONS.md ADR-42), each with a label and one plain line for that screen. A model's own profilePrefix overrides the top-level one (Haiku for Ask Clip Factory and Nova 2 Lite, the second watcher of the deep analysis, use the EU geo profile, docs/CONTRACTS.md §19.5 and docs/DECISIONS.md ADR-40); profileRegions lists that profile's destination regions, for IAM. embeddingModel.modelId is in-Region and used as is (never prefixed with profilePrefix).",
+  "$comment": "The only place model ids live. Everything else reads them from here (Terraform, the agent image, the web app for the labels). agentModel is the default model for clip jobs; clipModels lists, in display order, the models the owner may pick for clip jobs in Settings › Clip making › AI model (the clipModel setting, docs/CONTRACTS.md §5 and docs/DECISIONS.md ADR-42), each with a label and one plain line for that screen. A model's own profilePrefix overrides the top-level one (Haiku for Ask Clip Factory and Nova 2 Lite, the second watcher of the deep analysis, use the EU geo profile, docs/CONTRACTS.md §19.5 and docs/DECISIONS.md ADR-40); profileRegions lists that profile's destination regions, for IAM. embeddingModel.modelId is in-Region and used as is (never prefixed with profilePrefix). askModel and askFallbackModel are Ask's models (docs/CONTRACTS.md §27.1, ADR-50): Claude in Amazon Bedrock (the bedrock-mantle Messages API) in-Region at askEndpoint.region, so their bare modelId is used (no profile prefix); opus-4-8 is Ask's refusal fallback only and is not in clipModels.",
   "profilePrefix": "global",
   "agentModel": "fable-5-1",
   "clipModels": ["fable-5-2", "fable-5-1", "opus-5-5", "sonnet-5-5", "haiku-5-5"],
   "helpModel": "haiku-5-5",
+  "askModel": "opus-5-5",
+  "askFallbackModel": "opus-4-8",
+  "askEndpoint": { "kind": "mantle", "region": "eu-north-1" },
   "watchModel": "nova-2-lite",
   "models": {
     "fable-5-2": {
@@ -20,6 +23,11 @@
       "label": "Claude Opus 5.5",
       "line": "Smart and quicker.",
       "modelId": "anthropic.claude-opus-5-5"
+    },
+    "opus-4-8": {
+      "label": "Claude Opus 4.8",
+      "line": "Ask's backup when Opus 5.5 says no.",
+      "modelId": "anthropic.claude-opus-4-8"
     },
     "sonnet-5-5": {
       "label": "Claude Sonnet 5.5",

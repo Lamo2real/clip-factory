@@ -93,6 +93,8 @@ run "environment_names_the_flow_aliases" {
       HELP_RATE_PER_HOUR   = "60"
       # §26: picture questions per owner per day.
       HELP_PICTURE_QUESTIONS_PER_DAY = "40"
+      # §27.12 module default: no assistant worker, so off.
+      ASK_ENABLED = "false"
     })
     error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9 and §19.9 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
   }
@@ -377,5 +379,60 @@ run "cors_exposes_retry_after" {
   assert {
     condition     = output.log_group_name == "/aws/lambda/cf-test-api"
     error_message = "log_group_name is cf-prod-api's log group, for the help model alarm."
+  }
+}
+
+# docs/CONTRACTS.md §27.12: the assistant adds starting cf-prod-ask, the search key and the ask/ media prefix. Nothing
+# else changes: no new route (ANY /v1/{proxy+} covers the new paths) and retry-after is already exposed.
+run "ask_assistant_additions" {
+  command = plan
+  variables {
+    ask_enabled        = true
+    ask_function_name  = "cf-test-ask"
+    ask_function_arn   = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-ask"
+    search_secret_name = "cf-test/ask/search-key"
+    search_secret_arn  = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/ask/search-key*"
+  }
+
+  assert {
+    condition = (one(aws_lambda_function.fn["api"].environment).variables["ASK_ENABLED"] == "true" &&
+      one(aws_lambda_function.fn["api"].environment).variables["ASK_FUNCTION_NAME"] == "cf-test-ask" &&
+    one(aws_lambda_function.fn["api"].environment).variables["ASK_SEARCH_SECRET"] == "cf-test/ask/search-key")
+    error_message = "ASK_ENABLED, ASK_FUNCTION_NAME and ASK_SEARCH_SECRET are set."
+  }
+
+  assert {
+    condition = contains(jsondecode(aws_iam_role_policy.fn["api"].policy).Statement, {
+      Sid = "AskWorker", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-ask"]
+    })
+    error_message = "cf-prod-api may start cf-prod-ask and nothing else new."
+  }
+
+  assert {
+    condition = contains(jsondecode(aws_iam_role_policy.fn["api"].policy).Statement, {
+      Sid      = "AskSearchKey", Effect = "Allow"
+      Action   = ["secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource"]
+      Resource = ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/ask/search-key*"]
+    })
+    error_message = "The search key secret is managed by the app, only under its own name."
+  }
+
+  assert {
+    condition     = contains(flatten([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Resource if try(s.Sid, "") == "MediaObjects"]), "arn:aws:s3:::cf-test-media/ask/*")
+    error_message = "Presigned PUTs and DELETE work under ask/."
+  }
+
+  assert {
+    condition     = toset([for r in [aws_apigatewayv2_route.authorized, aws_apigatewayv2_route.health] : r.route_key]) == toset(["ANY /v1/{proxy+}", "GET /v1/health"])
+    error_message = "No new HTTP API routes."
+  }
+}
+
+run "ask_off_without_a_worker" {
+  command = plan
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["ASK_ENABLED"] == "false" && !strcontains(aws_iam_role_policy.fn["api"].policy, "AskWorker")
+    error_message = "Without the worker the assistant is off and no permission is granted."
   }
 }

@@ -13,7 +13,8 @@ locals {
 
   data_rw         = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:BatchWriteItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem"]
   table_resources = [var.table_arn, "${var.table_arn}/index/*"]
-  media_prefixes  = ["uploads", "jobs", "skills", "private"]
+  # "ask": the question's files (§27.7): presigned PUTs and DELETE /v1/help/files/{fileId}.
+  media_prefixes = ["uploads", "jobs", "skills", "private", "ask"]
 
   # Ask Clip Factory (docs/CONTRACTS.md §19.6, §19.9). Off unless the env turns it on; without a model id it
   # answers from the help knowledge only. The per-user rate limits are fixed by the contract.
@@ -33,13 +34,25 @@ locals {
     { Sid = "HelpModel", Action = ["bedrock:InvokeModel"], Resource = var.help_model_invoke_arns },
   ]
 
+  # Ask as a full assistant (docs/CONTRACTS.md §27): start cf-prod-ask (async Invoke) and keep the web search key.
+  ask_on  = var.ask_function_arn != ""
+  ask_env = local.ask_on ? { ASK_ENABLED = var.ask_enabled ? "true" : "false", ASK_FUNCTION_NAME = var.ask_function_name, ASK_SEARCH_SECRET = var.search_secret_name } : { ASK_ENABLED = "false" }
+  ask_permissions = local.ask_on ? [
+    { Sid = "AskWorker", Action = ["lambda:InvokeFunction"], Resource = [var.ask_function_arn] },
+    {
+      Sid      = "AskSearchKey"
+      Action   = ["secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource"]
+      Resource = [var.search_secret_arn]
+    },
+  ] : []
+
   # One function; a map so the resource addresses (aws_lambda_function.fn["api"]) stay as they were.
   functions = {
     api = {
       handler = "clipfactory_api.http.handler"
       timeout = 29
       memory  = 512
-      env = merge(local.help_env, {
+      env = merge(local.help_env, local.ask_env, {
         TABLE_NAME        = var.table_name
         MEDIA_BUCKET      = var.media_bucket
         AGENT_RUNTIME_ARN = var.agent_runtime_arn
@@ -67,7 +80,7 @@ locals {
 
   # What each function may do beyond writing its own logs and traces.
   permissions = {
-    api = concat(local.help_permissions, [
+    api = concat(local.help_permissions, local.ask_permissions, [
       # Confirm writes the clip and its posts in one transaction.
       { Sid = "Data", Action = local.data_rw, Resource = local.table_resources },
       # Presigned uploads and downloads, decline (deletes the clip's files), skill and cookie files.

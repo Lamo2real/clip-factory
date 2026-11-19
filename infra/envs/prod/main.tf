@@ -75,6 +75,14 @@ locals {
     [for r in local.help_model.profileRegions : "arn:aws:bedrock:${r}::foundation-model/${local.help_model.modelId}"],
   )
 
+  # Ask as a full assistant (docs/CONTRACTS.md §27.1, ADR-50): Claude in Amazon Bedrock (Mantle) in-Region, so the
+  # bare model ids are used (profilePrefix does not apply) and questions stay in askEndpoint.region (Stockholm).
+  ask_region            = local.models.askEndpoint.region
+  ask_model_id          = local.models.models[local.models.askModel].modelId
+  ask_fallback_model_id = local.models.models[local.models.askFallbackModel].modelId
+  ask_search_secret     = "${local.name}/ask/search-key"
+  ask_search_secret_arn = "arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${local.ask_search_secret}*"
+
   # The deep analysis's second watcher (docs/DECISIONS.md ADR-40): Amazon Nova 2 Lite through the EU geo profile, so
   # the video parts it watches stay in the EU. Same shape as the help model: the profile here plus the foundation
   # model in each region the profile may route to, listed in config/models.json (no region wildcard).
@@ -278,6 +286,12 @@ module "api" {
   help_model_id          = local.help_model_id
   help_model_invoke_arns = local.help_model_invoke_arns
   help_monthly_cap       = var.help_monthly_cap
+  # Ask as a full assistant (§27): start cf-prod-ask, keep the web search key.
+  ask_enabled        = var.ask_enabled
+  ask_function_name  = module.ask.ask_function_name
+  ask_function_arn   = module.ask.ask_function_arn
+  search_secret_name = local.ask_search_secret
+  search_secret_arn  = local.ask_search_secret_arn
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
@@ -318,6 +332,31 @@ module "realtime" {
   permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
+# Ask as a full assistant (docs/CONTRACTS.md §27): cf-prod-ask answers with Claude Opus 5.5 and streams the answer
+# over the WebSocket. Additive: a new function, role, log group and async-invoke config; nothing that holds data.
+module "ask" {
+  source                = "../../modules/ask"
+  name                  = local.name
+  region                = var.region
+  account_id            = local.account_id
+  lambda_zip_path       = var.lambda_zip_path
+  table_name            = module.data.table_name
+  table_arn             = module.data.table_arn
+  media_bucket          = module.storage.media_bucket
+  media_bucket_arn      = module.storage.media_bucket_arn
+  ws_endpoint           = module.realtime.ws_endpoint
+  ws_connections_arn    = module.realtime.ws_connections_arn
+  ask_model_id          = local.ask_model_id
+  ask_fallback_model_id = local.ask_fallback_model_id
+  ask_region            = local.ask_region
+  search_secret_name    = local.ask_search_secret
+  search_secret_arn     = local.ask_search_secret_arn
+  help_enabled          = var.help_enabled
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
+}
+
 module "monitoring" {
   source      = "../../modules/monitoring"
   name        = local.name
@@ -330,6 +369,7 @@ module "monitoring" {
     module.hooks.function_names,
     module.stats.function_names,
     module.money.function_names,
+    module.ask.function_names,
   )
   schedule_rule_names    = merge(module.stats.schedule_rule_names, module.money.schedule_rule_names)
   durable_function_names = module.flows.durable_function_names
@@ -338,4 +378,7 @@ module "monitoring" {
   hooks_stage_name       = module.hooks.hooks_stage_name
   # §19.9: Ask Clip Factory's model calls that fell back to plain answers (errors and timeouts).
   help_log_group_name = module.api.log_group_name
+  # §27.10, §27.11: Ask's model failures and its daily token use.
+  ask_log_group_name         = module.ask.log_group_name
+  ask_tokens_alarm_threshold = var.ask_tokens_alarm_threshold
 }

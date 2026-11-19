@@ -155,3 +155,40 @@ run "no_help_log_group_no_help_alarm" {
     error_message = "Without the API log group there is no help metric filter or alarm."
   }
 }
+
+# docs/CONTRACTS.md §27.10, §27.11: Ask's model failures and its daily input tokens.
+run "ask_is_watched" {
+  command = plan
+  variables {
+    ask_log_group_name = "/aws/lambda/cf-test-ask"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.ask_model_failures[0].alarm_name == "cf-test-ask-model-failures" && aws_cloudwatch_metric_alarm.ask_model_failures[0].threshold == 10 && aws_cloudwatch_metric_alarm.ask_model_failures[0].period == 3600
+    error_message = "cf-prod-ask-model-failures fires at 10 or more in an hour."
+  }
+
+  assert {
+    condition     = strcontains(aws_cloudwatch_log_metric_filter.ask_model_failures[0].pattern, "ask_model_error") && strcontains(aws_cloudwatch_log_metric_filter.ask_model_failures[0].pattern, "ask_model_timeout")
+    error_message = "The filter counts help.ask lines with ask_model_error or ask_model_timeout."
+  }
+
+  assert {
+    condition     = toset(keys(aws_cloudwatch_log_metric_filter.ask_tokens)) == toset(["AskInputTokens", "AskOutputTokens"]) && one(aws_cloudwatch_log_metric_filter.ask_tokens["AskInputTokens"].metric_transformation).value == "$.usageIn"
+    error_message = "AskInputTokens and AskOutputTokens sum usageIn and usageOut."
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.ask_tokens_day[0].alarm_name == "cf-test-ask-tokens-day" && aws_cloudwatch_metric_alarm.ask_tokens_day[0].threshold == 20000000 && aws_cloudwatch_metric_alarm.ask_tokens_day[0].period == 86400
+    error_message = "cf-prod-ask-tokens-day: over 20M input tokens in 24 h."
+  }
+}
+
+run "no_ask_log_group_no_ask_alarms" {
+  command = plan
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.ask_model_failures) == 0 && length(aws_cloudwatch_log_metric_filter.ask_tokens) == 0
+    error_message = "Without cf-prod-ask's log group there are no Ask alarms."
+  }
+}
