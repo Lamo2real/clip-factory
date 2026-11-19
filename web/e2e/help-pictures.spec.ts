@@ -218,6 +218,8 @@ for (const size of SIZES) {
     test("the take-away button's focus glow is not cut off", async ({ page }) => {
       await open(page);
       await attach(page, SHOT);
+      // Measure once the new tile has finished coming in: mid-entrance it still sits a little high.
+      await animationsDone(page);
       await panel(page).getByRole("button", { name: "Take away picture 1" }).focus();
       const room = await page.evaluate(() => {
         const tray = document.querySelector(".help-pics")!.getBoundingClientRect();

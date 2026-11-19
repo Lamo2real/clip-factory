@@ -170,8 +170,11 @@ for (const v of VIEWPORTS) {
       const inRightHalf = async () =>
         bar.evaluate((el) => [...el.querySelectorAll("button, .segmented__opt")].every((c) => c.getBoundingClientRect().left >= innerWidth / 2 - 80));
       expect(await inRightHalf()).toBe(true);
+      // Wheel over the page itself (not the sidebar under the mouse's start point), then wait for the scroll to land.
+      await page.mouse.move(v.w * 0.6, v.h * 0.6);
       await page.mouse.wheel(0, 1500);
-      await page.waitForTimeout(300);
+      await expect.poll(() => page.evaluate(() => document.scrollingElement!.scrollTop)).toBeGreaterThan(600);
+      await page.waitForTimeout(150);
       const box = await bar.boundingBox();
       expect(box!.y).toBeGreaterThanOrEqual(0);
       expect(box!.y + box!.height).toBeLessThanOrEqual(v.h / 3);
