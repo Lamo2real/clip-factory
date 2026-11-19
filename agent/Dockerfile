@@ -66,16 +66,17 @@ ENV PATH=/app/.venv/bin:$PATH \
     DENO_NO_UPDATE_CHECK=1 \
     DENO_NO_PROMPT=1
 # The build fails here, not at the first job, if libass, Inter, Deno, yt-dlp, the PO token plugin or its server is
-# missing: yt-dlp -v lists the bgutil providers, and the server must answer /ping.
+# missing: yt-dlp -v lists the bgutil providers, and the server must answer /ping (checked below, as clipfactory).
 RUN mkdir -p /tmp/cf-work && chown clipfactory:clipfactory /tmp/cf-work \
  && ffmpeg -hide_banner -filters | grep " ass " > /dev/null \
  && fc-list | grep -i "inter" > /dev/null \
  && deno --version > /dev/null \
  && yt-dlp --version > /dev/null \
  && python -c "import yt_dlp_plugins.extractor.getpot_bgutil_http, yt_dlp_plugins.extractor.getpot_bgutil_script" \
- && python -m clipfactory_agent.pot \
  && uvicorn --version > /dev/null
 USER clipfactory
+# The PO token self-check runs as the user the server runs as, with the read-only Deno cache it gets at runtime.
+RUN python -m clipfactory_agent.pot
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/ping').status==200 else 1)"
 CMD ["uvicorn", "clipfactory_agent.server:build_app", "--factory", "--host", "0.0.0.0", "--port", "8080", "--log-level", "warning"]

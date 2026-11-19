@@ -241,6 +241,11 @@ export function JobDetail({ jobId }: { jobId: string }) {
                 Try again
               </Button>
             ) : null}
+            {job.status === "failed" && job.source.type === "link" ? (
+              <LinkButton href={`/?file=1&from=${job.jobId}`} variant="ghost" icon="upload">
+                Use a video file
+              </LinkButton>
+            ) : null}
             {job.status === "ready" && data.clips.some((c) => c.status === "review") ? (
               <LinkButton href={`/review?job=${job.jobId}`} variant="primary" iconAfter="chevronRight">
                 Check these clips

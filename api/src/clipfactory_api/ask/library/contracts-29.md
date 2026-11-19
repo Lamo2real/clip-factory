@@ -19,33 +19,44 @@ YouTube jobs to download, with no technical steps for him. ADR-52 has the reason
   script mode (`youtubepot-bgutilscript:server_home=$CF_POT_HOME`), and with neither it runs without a token.
 - `CF_POT=off` starts nothing (tests, emergencies). `CF_POT_HOME=/opt/bgutil/server` is set in the image.
 - The build runs `python -m clipfactory_agent.pot`: `yt-dlp -v` (pointed at a dead local proxy, so it never reaches
-  YouTube) must list `bgutil:http` and a usable `bgutil:script-deno`, and the server must answer `/ping`.
+  YouTube) must list `bgutil:http` and a usable `bgutil:script-deno`, and the server must answer `/ping`. It runs as
+  the `clipfactory` user (after `USER`), with the read-only Deno cache the server gets at runtime.
 
 ### 29.3 yt-dlp arguments for YouTube
 
 Every YouTube call (resolve, audio, picture, sections, full download) gets the common arguments **without**
 `--no-warnings`, plus `--extractor-args youtube:player_client=default,mweb`, the script-mode argument above, the
 owner's cookies when saved, and `--proxy` when §29.8 gives one. `mweb` is never used alone (it only offers 360p).
-Twitch and Kick keep their arguments exactly. yt-dlp's text goes to the log only (URLs redacted); the cookies' "no
-longer valid … rotated" warning is kept in the error tail so the owner can be told.
+Twitch and Kick keep their arguments exactly. yt-dlp's text goes to the log only (URLs redacted: `X-Amz-*` values,
+the whole query of a `googlevideo.com` URL, and any `user:pass@` in a URL); the cookies' "no longer valid … rotated"
+warning is kept in the error tail. That warning is only a warning (yt-dlp goes on signed out), so it means "your
+cookies ran out" only when the error itself is the bot check or a sign-in wall; with a 403, fragment, ffmpeg or 429
+error the failure keeps its own kind and the fallback below still runs. Each yt-dlp call gets its own 0600 copy of the
+cookies file, deleted afterwards (yt-dlp writes the jar back on exit; parallel calls must not share it). `cut-info.json`
+is written to a temp file and renamed, so a parallel cut never reads it half-written.
 
 ### 29.4 Cut the clips, in order (YouTube links)
 
 1. At the start of the step, one `-J` saved to `source/cut-info.json`. A bot check fails the step with `CUT_BLOCKED`,
    run-out cookies with `COOKIES_EXPIRED`; any other failure leaves the sections to fetch from the link as before.
 2. Each clip: a section download with `--load-info-json cut-info.json` (no new player calls per clip).
-3. A 403, fragment or merge failure: `cut-info.json` is fetched again **once per job** (under a lock), and the
+3. A 403, 429, fragment or merge failure: `cut-info.json` is fetched again **once per job** (under a lock), and the
    section is tried once more.
 4. Still failing, or a bot check: **one** full download for the job (under the same lock), at the first rung of
-   1080p → 720p → 480p (H.264 preferred) whose estimate (video + audio, +10%) leaves `DISK_RESERVE` (3 GB) free,
-   `--http-chunk-size 10M`, `--max-filesize` 1.5× the estimate, 90 minutes at most. Log line `cut.full_fallback`
-   (height, estimated bytes, seconds). No rung fits: `CUT_TOO_BIG`. The download fails: `CUT_BLOCKED` or
+   1080p → 720p → 480p (H.264 preferred) whose estimate (video + audio, +10%; a rendition with no known size counts
+   at 5 / 2.5 / 1.2 Mbit/s) leaves `DISK_RESERVE` (3 GB) free and would finish within 90 minutes at 4 MB/s.
+   What it fetches: the whole video (yt-dlp's own downloader, `--http-chunk-size 10M`, `--max-filesize` 1.5× the
+   estimate, the sturdiest way) when the chosen clips and spares spread over at least half of it and it fits;
+   otherwise only their range plus 60 s on each side (`--download-sections`, no `--max-filesize`), e.g. a capped
+   multi-hour stream whose clips all sit in its first hours. If `cut-info.json` is missing (step 1 failed without a
+   bot check), it is fetched once more first; still missing: `CUT_FAILED`. Log line `cut.full_fallback` (height,
+   estimated bytes, seconds, section). Nothing fits: `CUT_TOO_BIG`. The download fails: `CUT_BLOCKED` or
    `CUT_FAILED`; the failure is remembered so the other clips do not try again.
 5. That clip and every later one (spares and checklist re-cuts too) are cut from `source/full.mp4` with the same
-   ffmpeg arguments as uploads.
+   ffmpeg arguments as uploads, shifted by where a range download starts.
 6. `full.mp4` and `cut-info.json` are deleted when the run ends (and when the step fails).
 
-Network blips (timeouts, 5xx, 429) are still retried three times as before. A clip that cannot be cut is skipped;
+Network blips (timeouts, 5xx, and a 429 outside a section) are still retried three times as before. A clip that cannot be cut is skipped;
 the step fails only when none could be cut ("Cut 6 clips; 2 could not be cut." stays).
 
 ### 29.5 Owner words
@@ -79,7 +90,8 @@ other plain reason, the generic words. Every message names a real button ("Try a
 
 A button on every failed link job, next to Try again, opening New job in file mode (`/?file=1&from={jobId}`) with
 the clip count and notes copied. It uses the existing upload flow; the video then comes from the owner's own
-connection. The button and the job page header are built on `fix/job-header` (§29.9).
+connection. Built in `JobDetail.tsx` (a ghost `LinkButton`) and `NewJobForm.tsx` (`fileStart` reads the query: file
+mode, then the source job's exact clip count and notes when it can be loaded). e2e: `web/e2e/use-file.spec.ts`.
 
 ### 29.8 Optional proxy
 
@@ -99,7 +111,10 @@ The title card's top room and the status chip inside the card are fixed on `fix/
   the Cut order with two parallel cuts, refresh then success, blocked → full at once, one failing clip still finishes,
   all blocked, too big, rotated cookies, Twitch unchanged, the proxy secret, the sidecar restart/off/ping, the stale
   cookies warning kept in the error tail).
-- Web: `test/cookiesFile.test.ts`.
+- Agent, review fixes: stale cookies with a 403 stay a retry, a section 429 goes to the fallback, the range download
+  and its shifted cuts, whole-or-range planning, the time limit and unknown sizes, the `-J` retried before the full
+  download, `cut-info.json` replaced whole, one cookies copy per call, redaction of media URLs and proxy logins.
+- Web: `test/cookiesFile.test.ts`; e2e `use-file.spec.ts` (the button on a failed link job opens Pick a video).
 - Infra: `modules/agent/tests/runtime.tftest.hcl` (`youtube_proxy_secret_is_read_only`) and
   `envs/prod/tests/wiring.tftest.hcl` (the ARN pattern).
 
@@ -110,4 +125,6 @@ Tested on a home connection only, which never sees the AWS block: the agent's ow
 real jobs on AWS can show whether the token, fresh private-window cookies and `default,mweb` together pass "Sign in to
 confirm" from the AgentCore address (bgutil says it might not; hence the file button and the proxy), how big the
 container's disk really is (`cut.full_fallback` logs the height chosen), how long a full download takes from AWS, and
-that `node-canvas` loads on Debian arm64 (CI's arm64 image build runs the check of §29.2).
+that `node-canvas` loads on Debian arm64 (CI's arm64 image build runs the check of §29.2, as the `clipfactory` user;
+its `npm ci` fetches the canvas prebuild from GitHub, so a GitHub outage can fail that build), and whether
+`--download-sections` on the range download holds up from AWS better than the per-clip sections did.

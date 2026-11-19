@@ -196,6 +196,8 @@ class Tube:
     def __init__(self, tmp: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         self.cmds: list[list[str]] = []
         self.info_error: str | None = None
+        self.info_errors: list[str] = []  # popped per -J before info_error applies
+        self.cookie_files: list[tuple[str, int]] = []  # each yt-dlp call's --cookies path and its mode
         self.section_errors: list[str] = []  # popped per section download; empty = works
         self.section_always: str | None = None
         self.full_error: str | None = None
@@ -211,12 +213,19 @@ class Tube:
                     raise proc.CommandError("ffmpeg", 1, "Invalid data found when processing input")
                 Path(cmd[-1]).write_bytes(b"cut")
                 return proc.Result(b"", "")
+            if "--cookies" in cmd:
+                ck = Path(cmd[cmd.index("--cookies") + 1])
+                self.cookie_files.append((str(ck), stat.S_IMODE(ck.stat().st_mode) if ck.exists() else -1))
             if "-J" in cmd:
-                if self.info_error:
-                    raise err(self.info_error)
+                problem = self.info_errors.pop(0) if self.info_errors else self.info_error
+                if problem:
+                    raise err(problem)
                 return proc.Result(json.dumps(info()).encode(), "")
             out = Path(cmd[cmd.index("-o") + 1].replace("%(ext)s", "mp4"))
-            if "--download-sections" in cmd:
+            if out.name == "full.mp4":
+                if self.full_error:
+                    raise err(self.full_error)
+            elif "--download-sections" in cmd:
                 problem = self.section_errors.pop(0) if self.section_errors else self.section_always
                 if problem:
                     raise err(problem)
@@ -244,6 +253,8 @@ class Tube:
                 out.append("local" if "full.mp4" in c[c.index("-i") + 1] else "ffmpeg")
             elif "-J" in c:
                 out.append("info")
+            elif "full.%(ext)s" in c[c.index("-o") + 1]:
+                out.append("full")
             elif "--download-sections" in c:
                 out.append("section+json" if "--load-info-json" in c else "section")
             else:
@@ -321,7 +332,8 @@ async def test_cut_blocked_on_first_try_goes_straight_to_full(tube: Tube) -> Non
 
 async def test_one_clip_failing_still_finishes(tube: Tube) -> None:
     tube.section_always = E403
-    tube.ffmpeg_fail_at = {200.0}
+    # The full download is the clips' range from 40 s (100 s minus FULL_PAD), so clip 1 at 200 s is at 160 s in it.
+    tube.ffmpeg_fail_at = {160.0}
     p, st = pipe(), tube.state(3)
     assert await p.render(st, FakeTracker()) == "Cut 2 clips; 1 could not be cut."  # type: ignore[arg-type]
     assert [c.index for c in st.candidates] == [0, 2]
@@ -531,3 +543,126 @@ def test_error_tail_keeps_the_stale_cookies_warning() -> None:
     assert tail.startswith("WARNING: [youtube] The provided YouTube account cookies are no longer valid")
     assert tail.endswith("not a bot")
     assert str(sources.explain(err(tail), "youtube", True)) == sources.COOKIES_EXPIRED
+
+
+# --- review fixes: stale cookies, 429, the range download, the -J retry, own cookie files, redaction -----------------
+
+STALE = (
+    "WARNING: [youtube] The provided YouTube account cookies are no longer valid. They have likely been rotated in "
+    "the browser as a security measure."
+)
+
+
+def test_stale_cookies_with_a_403_stay_a_retry() -> None:
+    """The stale warning only blames the cookies when the error is the bot check; a 403 still goes to the fallback."""
+    e = sources.explain(err(f"{STALE} {E403}"), "youtube", True, section=True)
+    assert sources.kind_of(e) == "retry"
+    e = sources.explain(
+        err(f"{STALE} ERROR: [download] Got error: fragment 3 not found"), "youtube", True, section=True
+    )
+    assert sources.kind_of(e) == "retry"
+    e = sources.explain(err(f"{STALE} {BOT}"), "youtube", True, section=True)
+    assert str(e) == sources.COOKIES_EXPIRED and sources.kind_of(e) == "cookies"
+
+
+def test_section_429_goes_to_the_fallback() -> None:
+    t = "ERROR: unable to download video data: HTTP Error 429: Too Many Requests"
+    assert sources.kind_of(sources.explain(err(t), "youtube", True, section=True)) == "retry"
+    assert sources.kind_of(sources.explain(err(t), "youtube", True)) == "transient"
+
+
+async def test_stale_cookies_and_403_sections_still_cut_from_the_full_download(tube: Tube) -> None:
+    tube.section_always = f"{STALE} {E403}"
+    p, st = pipe(), tube.state(2)
+    st.cookies = tube.tmp / "work" / "cookies.txt"
+    st.cookies.parent.mkdir(parents=True, exist_ok=True)
+    st.cookies.write_text("# Netscape HTTP Cookie File\n")
+    assert await p.render(st, FakeTracker()) == "Cut 2 clips."  # type: ignore[arg-type]
+    assert tube.kinds().count("full") == 1 and tube.kinds().count("local") == 2
+
+
+async def test_full_fallback_downloads_only_the_clips_range(tube: Tube) -> None:
+    """Clips at 100–430 s of a 1 h 41 min video: the full download is 40–490 s, and the cuts are shifted by 40 s."""
+    tube.section_always = BOT
+    p, st = pipe(), tube.state(4)
+    await p.render(st, FakeTracker())  # type: ignore[arg-type]
+    full = next(c for c, k in zip(tube.cmds, tube.kinds(), strict=True) if k == "full")
+    assert full[full.index("--download-sections") + 1] == "*40.00-490.00" and "--max-filesize" not in full
+    starts = sorted(float(c[c.index("-ss") + 1]) for c, k in zip(tube.cmds, tube.kinds(), strict=True) if k == "local")
+    assert starts == [60.0, 160.0, 260.0, 360.0]
+
+
+def test_full_plan_whole_or_range() -> None:
+    i = info()
+    whole = pipeline_mod.full_plan(i, 6060.0, (100.0, 5000.0), 100 * GB)
+    assert whole is not None and whole[1] is None  # spread over most of the video: the sturdier whole download
+    part = pipeline_mod.full_plan(i, 6060.0, (100.0, 400.0), 100 * GB)
+    assert part is not None and part[1] == (40.0, 460.0)
+    # A 4 h stream that does not fit the disk whole still fits as the clips' range.
+    long = info(4 * 3600.0)
+    free = sources.DISK_RESERVE + 1 * GB
+    assert sources.full_format(long, 4 * 3600.0, free) is None
+    plan = pipeline_mod.full_plan(long, 4 * 3600.0, (600.0, 7000.0), free)
+    assert plan is not None and plan[1] == (540.0, 7060.0)
+    assert pipeline_mod.full_plan(long, 4 * 3600.0, None, free) is None
+
+
+def test_full_format_time_limit_and_unknown_sizes() -> None:
+    i = info()
+    # At 0.4 MB/s the 1080p rung (about 2.8 GB) would take longer than 90 min: the next one that fits in time wins.
+    pick = sources.full_format(i, 6060.0, 100 * GB, rate=400_000)
+    assert pick is not None and pick["height"] < 1080
+    bare = {"duration": 3600.0, "formats": [{"format_id": "1", "height": 1080, "vcodec": "avc1", "acodec": "none"}]}
+    pick = sources.full_format(bare, 3600.0, 100 * GB)
+    assert pick is not None and pick["estBytes"] >= 5_000_000 * 3600 // 8  # never "about 0"
+    assert sources.full_format(bare, 3600.0, sources.DISK_RESERVE + 1 * GB) is None
+
+
+async def test_full_fallback_retries_a_missing_info(tube: Tube) -> None:
+    """The first -J timed out (kind other); the fallback asks once more instead of blaming YouTube."""
+    tube.info_errors = ["ERROR: Read timed out"]
+    tube.section_always = BOT
+    p, st = pipe(), tube.state(2)
+    assert await p.render(st, FakeTracker()) == "Cut 2 clips."  # type: ignore[arg-type]
+    assert tube.kinds().count("info") == 2 and tube.kinds().count("full") == 1
+
+
+async def test_full_fallback_without_any_info_says_cut_failed(tube: Tube) -> None:
+    tube.info_error = "ERROR: something odd"
+    tube.section_always = E403
+    p, st = pipe(), tube.state(1)
+    with pytest.raises(UserFacingError) as e:
+        await p.render(st, FakeTracker())  # type: ignore[arg-type]
+    assert str(e.value) == sources.CUT_FAILED
+
+
+async def test_info_json_is_replaced_whole(tube: Tube) -> None:
+    p, st = pipe(), tube.state(1)
+    await p.render(st, FakeTracker())  # type: ignore[arg-type]
+    folder = tube.tmp / "work" / "source"
+    assert [f.name for f in folder.iterdir() if f.name.endswith(".tmp")] == []
+    assert json.loads((folder / "cut-info.json").read_bytes())["id"] == "abc"
+
+
+async def test_every_ytdlp_call_gets_its_own_cookies_copy(tube: Tube) -> None:
+    tube.section_always = E403
+    p, st = pipe(), tube.state(3)
+    st.cookies = tube.tmp / "work" / "cookies.txt"
+    st.cookies.parent.mkdir(parents=True, exist_ok=True)
+    st.cookies.write_text("# Netscape HTTP Cookie File\n")
+    await p.render(st, FakeTracker())  # type: ignore[arg-type]
+    paths = [path for path, _ in tube.cookie_files]
+    assert len(paths) >= 4 and len(set(paths)) == len(paths) and str(st.cookies) not in paths
+    assert all(mode == 0o600 for _, mode in tube.cookie_files)
+    assert not any(Path(x).exists() for x in paths) and st.cookies.is_file()
+
+
+def test_redact_urls_googlevideo_and_proxy_login() -> None:
+    from clipfactory_agent.util import redact_urls
+
+    media = "https://rr3---sn-abc.googlevideo.com/videoplayback?expire=1&ip=13.48.1.2&sig=AbC"
+    out = redact_urls(f"ERROR: {media} 403")
+    assert "13.48.1.2" not in out and "sig=AbC" not in out and "googlevideo.com/videoplayback?<redacted>" in out
+    out = redact_urls("Unable to connect to proxy http://user:s3cret@proxy.example:8080")
+    assert "s3cret" not in out and "user:" not in out and "http://<redacted>@proxy.example:8080" in out
+    assert redact_urls("https://www.youtube.com/watch?v=abc") == "https://www.youtube.com/watch?v=abc"

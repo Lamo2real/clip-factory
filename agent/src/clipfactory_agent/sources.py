@@ -3,10 +3,12 @@ and section downloads up to 1080p."""
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
-from collections.abc import Callable
+import tempfile
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -116,7 +118,11 @@ def explain(e: proc.CommandError, platform: str, has_cookies: bool, *, section: 
     (``KINDS``) the Cut step uses to pick its fallback."""
     t = e.tail.lower()
     bot = "sign in to confirm" in t or "not a bot" in t
-    if has_cookies and ("cookies are no longer valid" in t or "rotated" in t):
+    # yt-dlp only WARNS that the cookies are stale and goes on signed out, so the warning is the cause only when the
+    # error itself is the bot check or a sign-in wall. A 403, fragment or ffmpeg error with the warning in the tail
+    # stays a "retry", so the Cut step's fallback still runs.
+    stale = has_cookies and "cookies are no longer valid" in t
+    if stale and (bot or "sign in" in t.replace("cookies are no longer valid", "") or "login required" in t):
         log("warn", "download.cookies_expired", platform=platform, detail=e.tail[:500])
         return _kinded(UserFacingError(COOKIES_EXPIRED), "cookies")
     if bot:
@@ -132,9 +138,11 @@ def explain(e: proc.CommandError, platform: str, has_cookies: bool, *, section: 
         return _kinded(
             UserFacingError("This stream is still live or has not started. Try again once it has ended."), "gone"
         )
+    # A section's 429 (rate limited, common from cloud IPs) goes to the fallback, which asks YouTube far less often.
+    if section and any(s in t for s in ("http error 403", "forbidden", "fragment", "ffmpeg", "http error 429")):
+        return _kinded(TransientError(str(e)), "retry")
     if any(s in t for s in ("timed out", "http error 5", "connection reset", "temporarily", "429")):
         return _kinded(TransientError(str(e)), "transient")
-    if section and any(s in t for s in ("http error 403", "forbidden", "fragment", "ffmpeg")):
         return _kinded(TransientError(str(e)), "retry")
     # yt-dlp's own words go to the log, never to the owner.
     log("warn", "download.failed", platform=platform, detail=e.tail[:500])
@@ -149,6 +157,28 @@ def explain(e: proc.CommandError, platform: str, has_cookies: bool, *, section: 
 
 def _cookie_args(cookies: Path | None) -> list[str]:
     return ["--cookies", str(cookies)] if cookies else []
+
+
+@contextlib.contextmanager
+def _own_cookies(cmd: list[str], cookies: Path | None) -> Iterator[list[str]]:
+    """``cmd`` with its own copy of the cookies file (mode 0600, removed afterwards): yt-dlp writes the jar back when
+    it exits, so parallel calls sharing one file could read it half-written."""
+    if cookies is None or not cookies.is_file():
+        yield cmd
+        return
+    fd, name = tempfile.mkstemp(prefix=".cookies-", suffix=".txt", dir=cookies.parent)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(cookies.read_bytes())
+        yield [name if a == str(cookies) else a for a in cmd]
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(name)
+
+
+async def _run(cmd: list[str], cookies: Path | None, **kw: Any) -> proc.Result:
+    with _own_cookies(cmd, cookies) as own:
+        return await proc.run(own, **kw)
 
 
 def youtube_args(cookies: Path | None = None, proxy: str | None = None) -> list[str]:
@@ -176,13 +206,16 @@ async def video_info(
 ) -> dict[str, Any]:
     """yt-dlp's ``-J`` for the link. With ``info_json`` the same JSON is also written there, so later downloads can
     ``--load-info-json`` it instead of asking YouTube again (one extraction per Cut step, §29.4)."""
-    r = await proc.run(["yt-dlp", "-J", *_args(platform_of(url), cookies, proxy), url], time_limit=180)
+    r = await _run(["yt-dlp", "-J", *_args(platform_of(url), cookies, proxy), url], cookies, time_limit=180)
     info = json.loads(r.stdout)
     if not isinstance(info, dict):
         raise UserFacingError("The link did not lead to a video.")
     if info_json is not None:
+        # A temp file then a rename: a parallel cut may be reading the old file with --load-info-json right now.
         info_json.parent.mkdir(parents=True, exist_ok=True)
-        info_json.write_bytes(r.stdout)
+        tmp = info_json.with_name(f".{info_json.name}.{os.getpid()}.{id(r)}.tmp")
+        tmp.write_bytes(r.stdout)
+        os.replace(tmp, info_json)
     return info
 
 
@@ -252,7 +285,9 @@ async def download_audio(
     ]
     if max_seconds:
         args += ["--download-sections", f"*0-{int(max_seconds)}"]
-    await proc.run([*args, url], time_limit=6 * 3600, on_line=progress_reader(on_progress) if on_progress else None)
+    await _run(
+        [*args, url], cookies, time_limit=6 * 3600, on_line=progress_reader(on_progress) if on_progress else None
+    )
     out = dest_dir / "audio.m4a"
     if not out.is_file():
         raise UserFacingError("The audio did not download. Try again, or upload the video file instead.")
@@ -275,7 +310,7 @@ async def download_section(
     stem = dest.with_suffix("")
     platform = "youtube" if info_json is not None else platform_of(url)
     source = ["--load-info-json", str(info_json)] if info_json is not None else [url]
-    await proc.run(
+    await _run(
         [
             "yt-dlp",
             *_args(platform, cookies, proxy),
@@ -290,6 +325,7 @@ async def download_section(
             f"{stem}.%(ext)s",
             *source,
         ],
+        cookies,
         time_limit=30 * 60,
     )
     for ext in (".mp4", ".mkv", ".webm"):
@@ -306,18 +342,37 @@ FULL_LADDER = (
     (480, "bv*[height<=480][vcodec^=avc1]+ba/bv*[height<=480]+ba/b[height<=480]/b"),
 )
 FULL_TIME_LIMIT = 90 * 60
+# A cautious download speed for the time check (bytes per second): a rung that would take longer than the time limit
+# at this speed is skipped like one that does not fit the disk.
+FULL_ASSUMED_RATE = 4_000_000
+# When yt-dlp knows no size or bitrate for a rendition: a cautious bitrate (bits per second) per height, never 0.
+FULL_DEFAULT_BITRATE = {1080: 5_000_000, 720: 2_500_000, 480: 1_200_000}
 
 
 def full_format(
-    info: dict[str, Any], seconds: float, free_bytes: int, reserve: int = DISK_RESERVE
+    info: dict[str, Any],
+    seconds: float,
+    free_bytes: int,
+    reserve: int = DISK_RESERVE,
+    *,
+    time_limit: float = FULL_TIME_LIMIT,
+    rate: float = FULL_ASSUMED_RATE,
 ) -> dict[str, Any] | None:
-    """The format for the one full download, or None when not even 480p leaves ``reserve`` bytes free. The size of a
-    rung is its tallest H.264 video up to that height (else any video up to it) plus the best audio, plus 10%."""
+    """The format for the one full download, or None when not even 480p leaves ``reserve`` bytes free and finishes
+    within ``time_limit`` at ``rate``. The size of a rung is its tallest H.264 video up to that height (else any video
+    up to it) plus the best audio, plus 10%. A rendition with no known size counts at ``FULL_DEFAULT_BITRATE``."""
     formats = [f for f in info.get("formats") or [] if isinstance(f, dict)]
     audio = [
         f for f in formats if str(f.get("vcodec") or "none") == "none" and str(f.get("acodec") or "none") != "none"
     ]
-    audio_bytes = max((_estimate_bytes(f, seconds) for f in audio), default=0)
+    # Sizes are for the whole video; ``seconds`` may be a part of it (a range download), so scale them down.
+    total = max(float(info.get("duration") or 0), seconds, 1.0)
+    share = max(0.0, seconds) / total
+
+    def size(f: dict[str, Any], bitrate: int) -> int:
+        return int(_estimate_bytes(f, total, bitrate) * share)
+
+    audio_bytes = max((size(f, 160_000) for f in audio), default=int(160_000 * seconds / 8))
     videos = [f for f in formats if _has_video(f)]
     for height, fmt in FULL_LADDER:
         fit = [f for f in videos if int(f["height"]) <= height]
@@ -326,10 +381,11 @@ def full_format(
         if not pool:
             continue
         top = max(int(f["height"]) for f in pool)
-        best = max((f for f in pool if int(f["height"]) == top), key=lambda f: _estimate_bytes(f, seconds))
+        fallback = FULL_DEFAULT_BITRATE.get(height, FULL_DEFAULT_BITRATE[480])
+        best = max((f for f in pool if int(f["height"]) == top), key=lambda f: size(f, fallback))
         has_sound = str(best.get("acodec") or "none") != "none"
-        est = int((_estimate_bytes(best, seconds) + (0 if has_sound else audio_bytes)) * 1.1)
-        if est <= free_bytes - reserve:
+        est = int((size(best, fallback) + (0 if has_sound else audio_bytes)) * 1.1)
+        if est <= free_bytes - reserve and est / rate <= time_limit:
             return {"format": fmt, "height": top, "estBytes": est}
     return None
 
@@ -343,8 +399,10 @@ async def download_full(
     cookies: Path | None = None,
     proxy: str | None = None,
     info_json: Path | None = None,
+    section: tuple[float, float] | None = None,
 ) -> Path:
-    """The whole video once, as mp4, for the Cut step to cut every remaining clip from (YouTube only)."""
+    """The whole video once, as mp4, for the Cut step to cut every remaining clip from (YouTube only). With
+    ``section`` only that range (from, to in seconds), when the clips sit in a small part of a long video."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     stem = dest.with_suffix("")
     source = ["--load-info-json", str(info_json)] if info_json is not None else [url]
@@ -361,9 +419,12 @@ async def download_full(
         "-o",
         f"{stem}.%(ext)s",
     ]
-    if est_bytes > 0:
+    if section is not None:
+        # No --max-filesize here: yt-dlp would compare it with the whole video's size, not the range's.
+        args += ["--download-sections", f"*{section[0]:.2f}-{section[1]:.2f}"]
+    elif est_bytes > 0:
         args += ["--max-filesize", str(int(est_bytes * 1.5))]
-    await proc.run([*args, *source], time_limit=FULL_TIME_LIMIT)
+    await _run([*args, *source], cookies, time_limit=FULL_TIME_LIMIT)
     for ext in (".mp4", ".mkv", ".webm"):
         f = stem.with_suffix(ext)
         if f.is_file() and f.stat().st_size > 0:
@@ -377,13 +438,14 @@ PICTURE_DEFAULT_BITRATE = 800_000  # bits per second, when yt-dlp knows neither 
 PICTURE_TIME_LIMIT = 2 * 3600
 
 
-def _estimate_bytes(f: dict[str, Any], seconds: float) -> int:
-    """How big one rendition is: its size, its rough size, its bitrate times the length, else 0.8 Mbit/s."""
+def _estimate_bytes(f: dict[str, Any], seconds: float, default_bitrate: int = PICTURE_DEFAULT_BITRATE) -> int:
+    """How big one rendition is: its size, its rough size, its bitrate times the length, else ``default_bitrate``
+    (bits per second; 0.8 Mbit/s for the analysis picture)."""
     for k in ("filesize", "filesize_approx"):
         if f.get(k):
             return int(f[k])
     tbr = float(f.get("tbr") or f.get("vbr") or 0)  # kbit/s
-    bits = tbr * 1000 if tbr > 0 else PICTURE_DEFAULT_BITRATE
+    bits = tbr * 1000 if tbr > 0 else default_bitrate
     return int(bits * max(0.0, seconds) / 8)
 
 
@@ -459,7 +521,7 @@ async def download_picture(
         args += ["--max-filesize", str(int(est_bytes * 1.5))]
     if max_seconds:
         args += ["--download-sections", f"*0-{int(max_seconds)}"]
-    await proc.run([*args, url], time_limit=PICTURE_TIME_LIMIT)
+    await _run([*args, url], cookies, time_limit=PICTURE_TIME_LIMIT)
     for f in sorted(stem.parent.glob(stem.name + ".*")):
         if f.suffix not in (".part", ".ytdl") and f.is_file() and f.stat().st_size > 0:
             return f

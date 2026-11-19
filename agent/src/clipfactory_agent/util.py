@@ -34,12 +34,18 @@ def hms(seconds: float) -> str:
 
 
 _AMZ_PARAM = re.compile(r"(X-Amz-[A-Za-z-]+)=[^&\s\"'<>]+", re.IGNORECASE)
+_GOOGLEVIDEO_QUERY = re.compile(r"(\bhttps?://[^/\s\"'<>]*googlevideo\.com/[^?\s\"'<>]*)\?[^\s\"'<>]+", re.IGNORECASE)
+_URL_LOGIN = re.compile(r"(\b[a-z][a-z0-9+.-]*://)[^/\s:@\"'<>]+:[^/\s@\"'<>]+@", re.IGNORECASE)
 
 
 def redact_urls(text: str) -> str:
     """``text`` with the value of every ``X-Amz-*`` query parameter blanked, so a presigned S3 URL (its credential,
-    signature and session token) never reaches a log line or a message. Other links (a YouTube ``?v=``) are kept."""
-    return _AMZ_PARAM.sub(r"\1=<redacted>", text)
+    signature and session token) never reaches a log line or a message. A YouTube media URL (googlevideo.com) loses
+    its whole query (the signature and the container's IP), and a ``user:pass@`` in any URL (a proxy) is blanked.
+    Other links (a YouTube ``?v=``) are kept."""
+    text = _AMZ_PARAM.sub(r"\1=<redacted>", text)
+    text = _GOOGLEVIDEO_QUERY.sub(r"\1?<redacted>", text)
+    return _URL_LOGIN.sub(r"\1<redacted>@", text)
 
 
 def log(level: str, event: str, **fields: Any) -> None:

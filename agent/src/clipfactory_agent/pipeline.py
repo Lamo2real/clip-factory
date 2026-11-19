@@ -89,6 +89,47 @@ def cut_failure(reasons: list[str]) -> str:
     return reasons[0] if reasons else sources.CUT_FAILED
 
 
+# The full-download fallback (§29.4) keeps this much video around the clips' range, in seconds: the cut takes a
+# couple of seconds before each moment and its tease.
+FULL_PAD = 60.0
+
+
+def clip_span(st: JobState) -> tuple[float, float] | None:
+    """The part of the video every chosen clip and spare sits in (with any tease), or None when there are none."""
+    starts: list[float] = []
+    ends: list[float] = []
+    for m in (*st.chosen, *st.spares):
+        tease = getattr(m, "tease", None)
+        starts.append(min(m.start, tease[0]) if tease else m.start)
+        ends.append(max(m.end, tease[1]) if tease else m.end)
+    if not starts:
+        return None
+    return min(starts), max(ends)
+
+
+def full_plan(
+    info: dict[str, Any], seconds: float, span: tuple[float, float] | None, free: int
+) -> tuple[dict[str, Any], tuple[float, float] | None] | None:
+    """What the one full download fetches (§29.4): the whole video with yt-dlp's own downloader (the sturdiest way)
+    when the clips spread over at least half of it and it fits the disk and the time limit; else only the clips'
+    range plus ``FULL_PAD`` (a capped multi-hour stream whose clips all sit in its first hours). None when neither
+    fits. Returns the format and the range (None for the whole video)."""
+    section: tuple[float, float] | None = None
+    if span is not None and seconds > 0:
+        a, b = max(0.0, span[0] - FULL_PAD), min(seconds, span[1] + FULL_PAD)
+        if b > a and b - a < seconds:
+            section = (a, b)
+    if section is None or section[1] - section[0] >= seconds / 2:
+        whole = sources.full_format(info, seconds, free)
+        if whole is not None:
+            return whole, None
+    if section is not None:
+        part = sources.full_format(info, section[1] - section[0], free)
+        if part is not None:
+            return part, section
+    return None
+
+
 def count(n: int, word: str) -> str:
     """``1 clip``, ``2 clips``, ``4,812 words``: step messages are read by the owner, so no "clip(s)"."""
     return f"{n:,} {word}{'' if n == 1 else 's'}"
@@ -122,6 +163,7 @@ class JobState:
     info_json: Path | None = None
     info_refreshed: bool = False
     full_source: Path | None = None
+    full_offset: float = 0.0  # where full_source starts in the video (a range download starts after 0)
     full_error: UserFacingError | None = None
     full_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     words: list[list[Any]] = field(default_factory=list)
@@ -1083,7 +1125,7 @@ class Pipeline:
         the job and tries again; still failing, or YouTube's bot check, downloads the whole video once and cuts this
         clip (and every later one) from it."""
         if st.full_source is not None:
-            return await self._ffmpeg_cut(str(st.full_source), start, end, dest)
+            return await self._cut_full(st, st.full_source, start, end, dest)
         try:
             return await self._youtube_section(st, start, end, dest)
         except (UserFacingError, TransientError) as e:
@@ -1098,7 +1140,12 @@ class Pipeline:
                 if sources.kind_of(e) not in ("retry", "blocked"):
                     raise
         full = await self._ensure_full(st)
-        return await self._ffmpeg_cut(str(full), start, end, dest)
+        return await self._cut_full(st, full, start, end, dest)
+
+    async def _cut_full(self, st: JobState, full: Path, start: float, end: float, dest: Path) -> Path:
+        """One clip's piece of the local full download, which starts at ``st.full_offset`` in the video."""
+        off = st.full_offset
+        return await self._ffmpeg_cut(str(full), max(0.0, start - off), max(0.0, end - off), dest)
 
     async def _refresh_info(self, st: JobState) -> bool:
         """A new ``-J`` (fresh signed URLs), once per job. True when this call or an earlier one has refreshed it and
@@ -1143,6 +1190,9 @@ class Pipeline:
             if st.full_error is not None:
                 raise st.full_error
             try:
+                if st.info_json is None or not st.info_json.is_file():
+                    # The first -J failed for a reason other than the bot check (a timeout): one more try.
+                    await self._save_info(st)
                 st.full_source = await self._download_full(st)
             except UserFacingError as e:
                 st.full_error = e
@@ -1152,21 +1202,31 @@ class Pipeline:
     async def _download_full(self, st: JobState) -> Path:
         info_json = st.info_json
         if info_json is None or not info_json.is_file():
-            raise UserFacingError(sources.CUT_BLOCKED)
+            # No bot check was seen (that raises in _save_info), so these are the plain "try again" words.
+            raise UserFacingError(sources.CUT_FAILED)
         try:
             info = json.loads(info_json.read_bytes())
         except ValueError as e:
             raise UserFacingError(sources.CUT_FAILED) from e
         seconds = float(info.get("duration") or st.source.get("durationSec") or 0)
         free = shutil.disk_usage(st.workdir).free
-        fmt = sources.full_format(info, seconds, free)
-        if fmt is None:
+        plan = full_plan(info, seconds, clip_span(st), free)
+        if plan is None:
             log("warn", "cut.full_too_big", job=st.job_id, seconds=seconds, free=free)
             raise UserFacingError(sources.CUT_TOO_BIG)
-        log("info", "cut.full_fallback", job=st.job_id, height=fmt["height"], estBytes=fmt["estBytes"], seconds=seconds)
+        fmt, section = plan
+        log(
+            "info",
+            "cut.full_fallback",
+            job=st.job_id,
+            height=fmt["height"],
+            estBytes=fmt["estBytes"],
+            seconds=seconds,
+            section=list(section) if section else None,
+        )
         url = str(st.meta.get("webpageUrl") or st.source["url"])
         try:
-            return await sources.download_full(
+            path = await sources.download_full(
                 url,
                 fmt["format"],
                 st.workdir / "source" / "full.mp4",
@@ -1174,7 +1234,10 @@ class Pipeline:
                 cookies=st.cookies,
                 proxy=st.proxy,
                 info_json=info_json,
+                section=section,
             )
+            st.full_offset = section[0] if section else 0.0
+            return path
         except proc.CommandError as e:
             err = sources.explain(e, "youtube", st.cookies is not None)
             if sources.kind_of(err) == "cookies":
@@ -1194,6 +1257,7 @@ class Pipeline:
             f.unlink(missing_ok=True)
         (st.workdir / "source" / "cut-info.json").unlink(missing_ok=True)
         st.full_source = None
+        st.full_offset = 0.0
         st.info_json = None
 
     async def _cut(self, st: JobState, m: Moment, index: int, layout: FrameLayout | None = None) -> Candidate:

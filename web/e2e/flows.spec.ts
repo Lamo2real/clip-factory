@@ -138,7 +138,8 @@ test("settings: skills, preferences, appearance", async ({ page }) => {
   await page.locator('input[type="file"][accept=".txt,text/plain"]').setInputFiles({
     name: "cookies.txt",
     mimeType: "text/plain",
-    buffer: Buffer.from("# Netscape HTTP Cookie File\n"),
+    // A made-up sign-in row that passes the check before upload (§29.6); no real cookie.
+    buffer: Buffer.from("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t4102444800\tLOGIN_INFO\ttest\n"),
   });
   await expect(page.getByText("YouTube cookies saved.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Remove" })).toBeVisible();

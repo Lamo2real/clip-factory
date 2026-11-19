@@ -1,5 +1,5 @@
 {
-  "version": "89bfe8a784ec",
+  "version": "6aa3232b5df6",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -2669,6 +2669,9 @@
         "progress",
         "source",
         "stop",
+        "use",
+        "video",
+        "file",
         "check",
         "gone",
         "stopping",

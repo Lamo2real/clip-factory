@@ -15,11 +15,11 @@ export const COOKIES_WORDS: Record<Exclude<CookiesCheck, "ok">, string> = {
 
 /** The steps of "How to get cookies" in Settings › YouTube help. */
 export const COOKIES_STEPS = [
-  "Open a private window in Chrome (⌘ Shift N).",
+  "Open a private window in Chrome (⌘ Shift N on a Mac, Ctrl Shift N on Windows).",
   "Turn on Get cookies.txt LOCALLY for private windows (Extensions › Details › Allow in Incognito).",
   "Sign in to YouTube there.",
   "In the same tab, go to youtube.com/robots.txt.",
-  "Click Get cookies.txt LOCALLY, then Export.",
+  "Tap Get cookies.txt LOCALLY, then Export.",
   "Close the private window. Don't open it again.",
   "Tap Add cookies.txt and pick the file.",
 ] as const;
