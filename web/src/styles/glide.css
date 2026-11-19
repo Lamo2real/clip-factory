@@ -1,7 +1,10 @@
-/* ---------- Glide: the sliding highlight (docs/CONTRACTS.md §20.12) ----------
-   One highlight per switch bar, tab row or menu. It slides to the chosen item on a spring and stretches a little
-   along the way it travels, then settles. Until <Glide> has measured, the container has no `has-glide` class and the
-   chosen item paints its own highlight, so nothing ever shows without one. */
+/* ---------- Glide: the sliding highlight (docs/CONTRACTS.md §20.13) ----------
+   One highlight per switch bar, tab row or menu. It slides to the chosen item and stretches a little along the way it
+   travels, then settles without overshooting. Until <Glide> has measured, the container has no `has-glide` class and
+   the chosen item paints its own highlight, so nothing ever shows without one.
+   The slide itself is a Web Animation on `transform` only, started by Glide.tsx (FLIP: the glide stands at its new
+   place and size at once and is carried there from the old box). Nothing here transitions its transform, width,
+   height or position, so the slide stays on the compositor in WebKit and Chromium alike. */
 .segmented,
 .tabs,
 .lib-tabs,
@@ -21,97 +24,17 @@
   list-style: none;
   border-radius: var(--r-pill);
   transform: translate(var(--glide-x, 0), var(--glide-y, 0));
+  transform-origin: 0 0;
+  /* Its own layer before the first tap, so a slide never waits for one to be made. */
+  will-change: transform;
   opacity: 0;
   /* The selected pill is bone, with --on-bone words (the reference's bone button). */
   background: var(--selected);
   box-shadow: 0 2px 8px -2px rgb(var(--shadow-rgb) / 0.5);
-  transition:
-    transform 460ms var(--ease-spring),
-    width 460ms var(--ease-spring),
-    height 460ms var(--ease-spring),
-    opacity var(--dur-2) var(--ease-out);
+  transition: opacity var(--dur-2) var(--ease-out);
 }
 .glide.is-still {
   transition: none;
-}
-/* The stretch: the pill grows along its path and squeezes across it, then eases back. It runs on an inner scale so
-   it never fights the slide's transform. The keyframes trace one smooth curve (sampled every 10%, linear between):
-   eased segments made each step land in a frame or two, and the last one showed as a tick at the end of the slide. */
-.glide.is-moving[data-axis="x"] {
-  animation: glide-stretch-x 460ms linear;
-}
-.glide.is-moving[data-axis="y"] {
-  animation: glide-stretch-y 460ms linear;
-}
-@keyframes glide-stretch-x {
-  0% {
-    scale: 1.000 1.000;
-  }
-  10% {
-    scale: 1.036 0.970;
-  }
-  20% {
-    scale: 1.066 0.945;
-  }
-  30% {
-    scale: 1.087 0.928;
-  }
-  40% {
-    scale: 1.098 0.918;
-  }
-  50% {
-    scale: 1.099 0.917;
-  }
-  60% {
-    scale: 1.090 0.925;
-  }
-  70% {
-    scale: 1.073 0.939;
-  }
-  80% {
-    scale: 1.051 0.958;
-  }
-  90% {
-    scale: 1.025 0.979;
-  }
-  100% {
-    scale: 1.000 1.000;
-  }
-}
-@keyframes glide-stretch-y {
-  0% {
-    scale: 1.000 1.000;
-  }
-  10% {
-    scale: 0.988 1.042;
-  }
-  20% {
-    scale: 0.978 1.077;
-  }
-  30% {
-    scale: 0.971 1.101;
-  }
-  40% {
-    scale: 0.967 1.115;
-  }
-  50% {
-    scale: 0.967 1.115;
-  }
-  60% {
-    scale: 0.970 1.105;
-  }
-  70% {
-    scale: 0.976 1.086;
-  }
-  80% {
-    scale: 0.983 1.059;
-  }
-  90% {
-    scale: 0.992 1.030;
-  }
-  100% {
-    scale: 1.000 1.000;
-  }
 }
 
 /* Items sit above the glide. Once it has measured, the chosen item drops its own highlight.
@@ -240,9 +163,6 @@
 @media (prefers-reduced-motion: reduce) {
   .glide {
     transition: opacity 150ms linear;
-  }
-  .glide.is-moving[data-axis] {
-    animation: none;
   }
   .ask-mark__dot {
     animation: none;

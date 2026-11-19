@@ -72,7 +72,7 @@ export function Library({ view = "all", week = null }: { view?: "all" | "week"; 
           This week
         </A>
       </nav>
-      {view === "week" ? <WeekView key={week ?? "now"} week={week} /> : <AllClips />}
+      {view === "week" ? <WeekView week={week} /> : <AllClips />}
     </div>
   );
 }

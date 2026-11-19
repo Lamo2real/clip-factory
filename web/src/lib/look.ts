@@ -5,7 +5,12 @@ import { cantSelfUpdate, isOldDesktopApp, readDesktopVersion, readNativeGlass, r
 import { getPrefs, usePrefs, type Prefs } from "./prefs.ts";
 
 /** The desktop wrapper sets these before the page loads (desktop/src-tauri/src/init.js). */
-type DesktopWindow = Window & { __CF_DESKTOP__?: unknown; __CF_GLASS__?: unknown; __CF_DESKTOP_VERSION__?: unknown };
+type DesktopWindow = Window & {
+  __CF_DESKTOP__?: unknown;
+  __CF_GLASS__?: unknown;
+  __CF_DESKTOP_VERSION__?: unknown;
+  __CF_TITLEBAR__?: unknown;
+};
 
 export function nativeGlass(): NativeGlass {
   return typeof window === "undefined" ? "none" : readNativeGlass(window as DesktopWindow);
@@ -85,7 +90,33 @@ export function applyLook(look: Look, root: HTMLElement = document.documentEleme
   root.style.setProperty("--panel-veil", String(look.panelVeil));
 }
 
-/** Before React draws anything, so the desktop window never flashes an opaque page. */
+/**
+ * The height (CSS px) of the desktop window's title bar band that lies over the page, or 0. On macOS the wrapper lays
+ * its title bar over the page (the traffic lights float on the app's own glass) and says how tall it is in
+ * `window.__CF_TITLEBAR__` (desktop/src-tauri/src/main.rs). Anything that is not a sane number counts as 0.
+ */
+export function titlebarHeight(w: { __CF_DESKTOP__?: unknown; __CF_TITLEBAR__?: unknown } | undefined = typeof window === "undefined" ? undefined : (window as DesktopWindow)): number {
+  if (!w || w.__CF_DESKTOP__ !== true) return 0;
+  const n = w.__CF_TITLEBAR__;
+  return typeof n === "number" && Number.isFinite(n) && n > 0 && n <= 120 ? Math.round(n) : 0;
+}
+
+/**
+ * `data-titlebar="overlay"` and `--titlebar-h` keep every column below the window's own buttons (§11.1): the shared
+ * top line (`--top-line`, tokens.css) starts under the band, and an invisible strip there drags the window (App.tsx).
+ */
+export function applyTitlebar(height: number = titlebarHeight(), root: HTMLElement = document.documentElement) {
+  if (height > 0) {
+    root.dataset.titlebar = "overlay";
+    root.style.setProperty("--titlebar-h", `${height}px`);
+  } else {
+    delete root.dataset.titlebar;
+    root.style.removeProperty("--titlebar-h");
+  }
+}
+
+/** Before React draws anything, so the desktop window never flashes an opaque page or a page under its buttons. */
 export function applyLookNow() {
+  applyTitlebar();
   applyLook(lookFor(getPrefs()));
 }

@@ -432,7 +432,7 @@ h1.getapp__title {
   gap: 10px 12px;
   padding: 12px var(--inset);
   border-radius: var(--r-lg);
-  animation: rise var(--dur-3) var(--ease-out);
+  /* No entrance: it opens with Home, and a panel fading in on a page change is a blink (§20.16). */
 }
 .getapp-banner__icon {
   display: grid;

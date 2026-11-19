@@ -1,8 +1,6 @@
-// A tiny history router: a handful of screens do not need a routing library. Page changes use the View Transitions API
-// where the browser has it (a soft cross-fade), and swap instantly elsewhere or when motion is reduced.
+// A tiny history router: a handful of screens do not need a routing library. A page change swaps the content in
+// place, with no animation at all (docs/CONTRACTS.md §20.16): the window around it stays perfectly still.
 import { useSyncExternalStore } from "react";
-import { flushSync } from "react-dom";
-import { prefersReducedMotion } from "./prefs.ts";
 import type { Platform } from "../api/types.ts";
 import { isMock } from "./config.ts";
 import { findBranch, findTree } from "./settingsTree.ts";
@@ -158,42 +156,14 @@ if (typeof window !== "undefined") {
   window.addEventListener("hashchange", emit);
 }
 
-interface ViewTransitionLike {
-  finished: Promise<void>;
-  skipTransition(): void;
-}
-
 /**
- * The longest a page change may animate. While a View Transition runs, the browser sends every tap to the page
- * itself, not to the button under the finger. On a slow device (no GPU help with the glass) a 340 ms cross-fade can
- * take seconds, and taps in that time do nothing. So the fade is cut short after this, and at once on any tap or key.
+ * A page change is an instant swap of the content, never a cross-fade (docs/CONTRACTS.md §20.16). The View Transitions
+ * cross-fade this used to run captured the whole window as two pictures and blended them: in the see-through desktop
+ * window the glass panels thinned out for a moment on every click (a white blink over the light window glass), and
+ * WebKit rebuilt every glass layer when it ended, right on the last third of the menu highlight's slide (a stall).
  */
-export const TRANSITION_CAP_MS = 450;
-
-let running: ViewTransitionLike | null = null;
-
 function transition(update: () => void) {
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => ViewTransitionLike };
-  if (!doc.startViewTransition || prefersReducedMotion() || document.visibilityState !== "visible") {
-    update();
-    return;
-  }
-  // A new page change while the last one still fades: finish that one first instead of stacking them.
-  running?.skipTransition();
-  const vt = doc.startViewTransition(() => flushSync(update));
-  running = vt;
-  const skip = () => vt.skipTransition();
-  const cap = window.setTimeout(skip, TRANSITION_CAP_MS);
-  const opts = { capture: true, once: true } as const;
-  window.addEventListener("pointerdown", skip, opts);
-  window.addEventListener("keydown", skip, opts);
-  const done = () => {
-    window.clearTimeout(cap);
-    window.removeEventListener("pointerdown", skip, opts);
-    window.removeEventListener("keydown", skip, opts);
-    if (running === vt) running = null;
-  };
-  vt.finished.then(done, done);
+  update();
 }
 
 export function navigate(to: string, { replace = false, force = false } = {}) {

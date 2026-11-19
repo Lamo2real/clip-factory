@@ -25,6 +25,13 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
       testIgnore: /screenshots\.spec\.ts/,
     },
+    // The macOS desktop app draws with WebKit (WKWebView), not Chromium: the motion, stillness and top-line checks run
+    // there too (docs/CONTRACTS.md §20.13, §20.16, §11.1). CI installs WebKit next to Chromium (ci.yml).
+    {
+      name: "webkit",
+      use: { ...devices["Desktop Safari"] },
+      testMatch: /(nav-smooth|page-still|top-line)\.spec\.ts/,
+    },
     {
       name: "screenshots",
       use: { ...devices["Desktop Chrome"] },

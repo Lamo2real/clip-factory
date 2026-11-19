@@ -105,6 +105,9 @@ export function App() {
     <ToastProvider onError={() => sounds.play("deny")}>
       <Backdrop />
       <GlassFilter />
+      {/* The desktop window's title bar band (macOS, §11.1): invisible, and only there when look.ts set
+          data-titlebar="overlay". Pressing it moves the window, and a double click zooms it, like a title bar. */}
+      <div className="titlebar-drag" data-tauri-drag-region="" aria-hidden="true" />
       {boot.state === "loading" ? (
         <div className="boot" role="status" aria-label="Loading Clip Factory">
           <span className="brand__mark brand__mark--boot" aria-hidden="true">

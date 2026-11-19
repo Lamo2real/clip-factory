@@ -502,6 +502,38 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
   posted!" + Show all; "Posted" with kept clips still on their way → "Nothing posted yet" + Show all.
 * Installable PWA (manifest + service worker) on phone and desktop.
 
+### 11.1 One top line (owner request, 2026-11-19)
+
+Scrolled to the top, every column starts on the same horizontal line: the menu, the setup list (its open card or its
+pill), the settings folders and the page's first panel or title plate. In the macOS desktop window the line sits under
+the traffic lights' band; nothing ever covers the traffic lights.
+
+* **Tokens** (`web/src/styles/tokens.css`): `--titlebar-h` is the desktop window's title bar band (0 everywhere but the
+  macOS window, 28 px there); `--top-safe: max(env(safe-area-inset-top), var(--titlebar-h))` is what nothing may sit in
+  (that band or a phone's status bar); `--top-line` is `--top-safe + 12px` on phones and `+ 14px` from 768 px. Every
+  column reads `--top-line` (the sidebar `top`, the `.shell` `padding-top`, the setup list and its panel `top`, the
+  folders' sticky `top`); none adds a number of its own to the safe area. `env(safe-area-inset-top)` appears only in
+  `tokens.css` (a unit test holds it). From 768 px `.page-head` has no top padding, so the title plate starts on the line (phones keep 6 px of air under their top bar).
+* **The pill strip.** While the setup list is folded to its pill (§17.13; under 1440 px, or the list closed), the pill
+  sits on the line with the menu and the page starts one strip lower (`--todo-top`: 60 px on phones, 72 px from 768
+  px); the settings folders and the page share that lower line. Putting the page on the menu's line too would mean
+  moving the pill into the page head's row, which changes how the list sits: an owner choice, not built.
+* **The desktop window** (§12.3) sets `window.__CF_TITLEBAR__` (28 on macOS, 0 elsewhere). `web/src/lib/look.ts`
+  (`titlebarHeight`, `applyTitlebar`, run in `applyLookNow` before the first paint) reads it only when
+  `__CF_DESKTOP__ === true` and the value is a number from 1 to 120, then sets `html[data-titlebar="overlay"]` and
+  `--titlebar-h`. A web page that claims a title bar gets no band.
+* **Dragging the window.** With the title bar laid over the page, `App.tsx` draws `.titlebar-drag`
+  (`data-tauri-drag-region`, `aria-hidden`), shown only on `html[data-titlebar="overlay"]`: fixed at the top, full
+  width, exactly `--top-line` tall (it ends where the menu and the pill start, so it never covers a control),
+  `z-index: 45`, transparent, no border, rim or shadow. Pressing it moves the window; a double click zooms it.
+* **Phones** keep their own top bar under the pill strip (top bar at `--top-line + --todo-top`).
+* **Also on the token:** `html { scroll-padding-top }`, the skip link, the sign-in screen, the small question sheet's
+  scrim, the phone Ask sheet and the setup list's glass bar all clear `--top-safe`.
+* **Tests:** `e2e/top-line.spec.ts` (Chromium and WebKit): the simulated macOS window at 1000 x 650 and 1440 x 900 on
+  `/`, `/jobs`, `/review`, `/library`, `/settings` and a settings branch puts every column within 1 px of the line (42
+  px), keeps the 80 x 28 traffic-light corner clear and checks the drag strip; a Windows or Linux window and a web page
+  claiming a band get the plain line (14 px); browsers at 1440, 1280, 1000, 820 and 390 px wide share their line.
+
 ## 12. Get the app, updates, and kid-proof UX (added by the owner after the first build)
 
 ### 12.1 "Get the app" (sidebar item; on phones a card in Settings plus a one-time banner on Home)
@@ -544,7 +576,19 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
   380×600, remembers size/position, external links open in the system browser, user agent suffix `ClipFactoryDesktop`,
   injects `window.__CF_DESKTOP__ = true`, `window.__CF_GLASS__` (the native see-through glass, §22.2) and
   `window.__CF_DESKTOP_VERSION__` (this app's version, `1.<n>.0`). The pages update from the website itself (the
-  update banner); the wrapper updates itself from `downloads/latest.json` (§12.6).
+  update banner); the wrapper updates itself from `downloads/latest.json` (§12.6). `window.__CF_TITLEBAR__` (below) says how tall the overlay title bar is.
+* **macOS title bar (owner request, 2026-11-19):** `TitleBarStyle::Overlay` with `hidden_title(true)`: the title bar is
+  transparent and lies over the page, so there is no white strip and the traffic lights float on the app's own glass.
+  The title "Clip Factory" still names the window in the Dock, Mission Control and the Window menu. The traffic lights
+  keep the system's own place (no `traffic_light_position`). `__CF_TITLEBAR__` is `MAC_TITLEBAR_HEIGHT` (28) on macOS
+  and 0 on Windows and Linux, which keep their normal frame; `init.js` defaults it to 0. The page keeps that band
+  clear (§11.1). If a macOS release draws a taller title bar, only that number changes. In full screen the traffic
+  lights hide and the 28 px band stays empty (a possible follow-up: `--titlebar-h: 0` in full screen).
+* **The one native permission:** dragging the window by that band. `main.rs` adds the capability `title-bar-drag` at
+  start-up (the app's address is only known at build time): `remote` = the app's own origin + `/*`, `local: false`,
+  window `main`, permissions `core:window:allow-start-dragging` and `core:window:allow-internal-toggle-maximize`
+  (used by Tauri's own drag script on `[data-tauri-drag-region]`). Nothing else is granted (`capabilities/main.json`
+  stays empty); a Rust test holds the exact grant.
 * Built in deploy.yml after the web deploy (job `desktop`, matrix `macos-latest` → universal `.dmg`,
   `windows-latest` → NSIS `.exe`), app URL from terraform output, uploaded to the web bucket as
   `downloads/Clip-Factory.dmg` and `downloads/Clip-Factory-Setup.exe`, then `downloads/manifest.json` rewritten.
@@ -2415,7 +2459,7 @@ in the confirm body; the API replaces that post's `postOptions` (mock `_try_agai
 The sheet (and the shared confirm `Sheet` in `components/Sheet.tsx`) is drawn with `createPortal` on `document.body`,
 so its backdrop covers the whole screen (tab bar, sidebar and Ask included; toasts stay on top, so a failed Keep's
 error shows) even though the card that opens it is
-glass (`backdrop-filter`); `.main > *` animates `page-in` with `fill-mode: backwards` so a page keeps no transform. It
+glass (`backdrop-filter`); a page keeps no transform of its own (pages have no entrance, §20.16). It
 is a real modal: focus moves in once on open (typing in the caption never loses the caret), Tab and Shift+Tab wrap
 inside it, Escape closes it, and on close the focus goes back to the Keep that opened it. A clip longer than the
 creator's `maxDurationSec` (a limit of 0 means TikTok did not say: it does not block, the publisher checks again)
@@ -2606,7 +2650,7 @@ over the page:
 * **< 1440 px, folded, and on a clip's page** (`data-mode="pill"`; `/clips/{id}` needs its whole width to fan out its
   five columns, so there the list is always the pill, `todoNoRailOn`): a 48 px glass pill at the top right, ring +
   "Set up posting" + "2/5" (the words show at every width, 320 px too; its name reads "Set up posting: 2 of 5 done").
-  The page leaves a strip for it at the top: `--todo-top` (60 px on phones, 58 px from 768 px) on `html`, added to
+  The page leaves a strip for it at the top: `--todo-top` (60 px on phones, 72 px from 768 px, measured from the top line, §11.1) on `html`, added to
   `.shell`'s top padding, so at the top of every page nothing is under it (phones: above the brand row and Live dot;
   the tab bar is at the bottom). Behind the pill is `.setup-todo-bar`, a band of the panels' liquid glass (the
   `.glass` tint and blur) over that strip (`--todo-bar-h`: 66 / 76 px; from 768 px it starts right of the sidebar)
@@ -4091,19 +4135,34 @@ to the new one, instead of the old pill vanishing and a new one appearing.
 * **How:** `components/Glide.tsx` renders one `aria-hidden` element as the first child of the bar and moves it to the
   item matching its `active` selector, measured from the bar (which is `position: relative`), so a scrolling tab row
   carries it along. Styles live in `styles/glide.css`.
-* **Motion:** a 460 ms spring slide (`--ease-spring`) with a short stretch along the way it travels (wider for a
-  sideways move, taller for an up/down move), then it settles. The stretch is one smooth curve (keyframes every 10%,
-  linear between), so no frame jumps. It aims at the item's layout box (offsets, not the painted box), so a tapped
+* **Motion (rebuilt 2026-11-19, ADR-47):** a 360 ms ease-out slide, `cubic-bezier(0.22, 1, 0.36, 1)` (`GLIDE_MS`,
+  `GLIDE_EASE` in `Glide.tsx`), that never passes the target: no spring, no overshoot, no creep back (the old 460 ms
+  `--ease-spring` reached the item at 170 ms, overshot to 110 % and crawled back for the last 190 ms, which read as
+  lag). On the way it stretches along its path and narrows across it (at most +9 % / -7 %, centred), and the stretch
+  eases back to nothing before it lands. It aims at the item's layout box (offsets, not the painted box), so a tapped
   item's press shrink never makes it aim small and snap at the end. Only a change of choice slides: first paint, a
-  resize or a layout shift moves it instantly, except while a slide is under way, when it re-aims smoothly.
+  resize or a layout shift moves it instantly, except while a slide is under way, when it re-aims from where it is
+  painted.
+* **Compositor only (FLIP):** the glide takes its new place (`--glide-x/-y`) and size at once; one Web Animation
+  (`id: "glide-slide"`, 24 keyframes of `transform: translate() scale()` with `transform-origin: 0 0`, linear between)
+  carries it there from the old box, the stretch folded into the same transform. Nothing transitions its transform,
+  width, height or position (the only CSS transition is its opacity), there is no separate `scale` animation and no
+  forced layout per tap, and `.glide` has `will-change: transform`. So WebKit (the macOS app) and Chromium run the
+  slide on the compositor and a busy main thread (a new page being laid out under the glass) cannot stall it.
 * **Fallback:** until it has measured, the bar has no `has-glide` class and the chosen item paints its own highlight,
   so there is never a moment with no highlight. With `has-glide`, the chosen item drops its own background, its
   vermilion marker and its shadow, and the glide draws them.
-* **Reduced motion:** no slide and no stretch. The highlight jumps to the choice (only a 150 ms opacity fade).
+* **Reduced motion:** no slide and no stretch (no Web Animation is started). The highlight jumps to the choice (only a
+  150 ms opacity fade).
 * **Accessibility:** the chosen state stays on the item itself (`aria-checked`, `aria-selected`, `aria-current`); the
   glide is decoration only.
-* **Tests:** `e2e/glide.spec.ts` checks that it travels (part-way across before it lands), lands on the choice in
-  every bar, follows a page change in the menu and the tab bar, snaps on resize, and does not slide under reduced motion.
+* **Tests:** `e2e/glide.spec.ts` checks that it travels (one transform-only `glide-slide` animation with a stretch),
+  lands on the choice in every bar, follows a page change in the menu and the tab bar, snaps on resize, and does not
+  slide under reduced motion. `e2e/nav-smooth.spec.ts` (Chromium **and WebKit**) samples the glide every frame for
+  every menu switch in the simulated macOS window (1000 x 650), a 1440 x 900 browser and the phone tab bar: one
+  transform-only animation, lands to the pixel, never passes the item (≤ 101 %), never creeps back, no step bigger than
+  the curve's own launch, and at most an odd switch with a frame later than about two and a half frames in the last
+  two thirds. `web/test/stillNav.test.ts` holds the curve and the keyframes.
 
 ### 20.14 The cursor never changes (owner rule, 2026-11-16)
 
@@ -4119,6 +4178,31 @@ Ask Clip Factory has its own mark instead of a generic sparkle: a chat bubble wi
 the brand's vermilion dot on its corner (the same dot as the "C" in the logo). The dot breathes slowly (2.8 s, still
 under reduced motion). It is used on the Ask launcher, the panel's header and Settings' "Ask Clip Factory" search row
 (`components/AskMark.tsx`). The sparkle icon stays for "Clip Factory learned" and update messages.
+
+### 20.16 A page change is still (owner request, 2026-11-19)
+
+The owner: every page change made the whole see-through window blink white and twitch. A page change now swaps the
+content in place and nothing else moves: no cross-fade, no fade-in, no lift, in the desktop window, browsers and phones.
+
+* **No View Transition.** `router.ts` `transition()` just runs the update. The old cross-fade captured the whole window
+  as two pictures and blended them: every glass panel, the unchanged menu included, thinned to 32 to 53 % for the first
+  100 ms (over the light window glass that is a white blink), and WebKit rebuilt every glass layer when it ended at
+  about 400 ms, right on the last third of the menu highlight's slide (35 to 118 ms frames). `TRANSITION_CAP_MS` and the
+  tap-through cap are gone with it.
+* **No page entrance.** `.main > *` no longer runs `page-in` (from opacity 0.001): in the see-through window a new page
+  was transparent for about 300 ms after every tap, so the light glass showed through. Pages and their panels are at
+  full strength from their first frame. Small things inside a page may still arrive (a badge pops, a list row rises),
+  but nothing animates `.main`, `.shell`, `.app`, a page or a glass panel's opacity as a page opens (the Home get-app
+  banner lost its `rise` for this).
+* **Unchanged:** the backdrop stays mounted (it lives in `App`, outside the routed page); focus still moves to the page
+  for screen readers; scroll still resets to the top.
+* **Tests:** `e2e/page-still.spec.ts` (Chromium **and WebKit**): through every menu page change, every frame for 700 ms
+  has no View Transition, no animation fading the page or a glass panel, no page panel under full opacity, and the same
+  backdrop element; over white "glass" behind the see-through window (1000 x 650) the title bar band, the menu and the
+  gap beside it stay within 3 grey levels of rest in screenshots taken right after each tap (the old cross-fade moved
+  them 30 to 60); the same at 1440 x 900 in a browser and on a phone. `e2e/navigation.spec.ts` checks that no page
+  change calls `startViewTransition`; `web/test/stillNav.test.ts` fails on any `::view-transition` rule or an
+  animation on the page's own blocks.
 
 ## 21. Earnings: what each clip probably made, per platform (owner request, 2026-11-16)
 

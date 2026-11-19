@@ -606,14 +606,6 @@ for (const size of [
     await page.goto("/settings/posting/setup/x");
     await settle(page);
     await expect(page.locator(".setup-todo")).toHaveCount(0);
-    // The page itself rises 8 px into place as it opens (`page-in` on `.main > *`), and animations only advance when
-    // the browser draws a frame. The Linux CI runner draws the glass without a GPU, so under load its frames can come
-    // later than any fixed wait: the heading was then still read at the start of its rise (8 px low) and "moved" once
-    // the next frame came, which is the page's own entrance and not the card's doing. So the resting place is taken
-    // once that entrance is over, waiting on the animation itself, never on a clock.
-    await page.waitForFunction(() =>
-      Array.from(document.querySelectorAll(".main > *")).every((el) => el.getAnimations().every((a) => a.playState !== "running")),
-    );
     const where = () =>
       page.evaluate(() => {
         const s = getComputedStyle(document.querySelector(".shell")!);

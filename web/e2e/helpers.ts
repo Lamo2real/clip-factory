@@ -31,18 +31,9 @@ export const WIDTHS = [320, 360, 375, 390, 414, 430, 768, 1024, 1280, 1440, 1920
 export async function settle(page: Page) {
   await page.waitForFunction(() => !document.querySelector(".skeleton, .boot"), undefined, { timeout: 15_000 });
   await page.evaluate(() => document.fonts.ready);
+  // Pages have no entrance of their own (a page change is an instant swap, docs/CONTRACTS.md §20.16); this leaves
+  // room for the small things inside them that still arrive (a badge popping in, a list rising).
   await page.waitForTimeout(650);
-  // The page rises 8 px into place as it opens (`page-in` on `.main > *`, 420 ms). Animations only advance when a
-  // frame is drawn, and a runner without a GPU can draw its frames later than the wait above, so a place read right
-  // after settle() could still be mid-rise. Wait on the entrance itself (endless animations never count).
-  await page.waitForFunction(
-    () =>
-      Array.from(document.querySelectorAll(".main > *")).every((el) =>
-        el.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity),
-      ),
-    undefined,
-    { timeout: 15_000 },
-  );
 }
 
 /**

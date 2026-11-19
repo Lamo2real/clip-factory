@@ -15,18 +15,20 @@ html:has(.setup-todo[data-mode="pill"]) {
   --todo-top: 60px;
   --todo-bar-h: 66px;
   --todo-feather: 22px;
-  scroll-padding-top: calc(env(safe-area-inset-top) + var(--todo-bar-h) + var(--todo-feather) + 8px);
+  scroll-padding-top: calc(var(--top-safe) + var(--todo-bar-h) + var(--todo-feather) + 8px);
 }
 .app:has(> .setup-todo[data-mode="pill"]) .shell {
-  padding-top: calc(env(safe-area-inset-top) + 12px + var(--todo-top));
+  padding-top: calc(var(--top-line) + var(--todo-top));
 }
 @media (min-width: 768px) {
   html:has(.setup-todo[data-mode="pill"]) {
-    --todo-top: 58px;
+    /* The pill strip, measured from the top line: the pill sits on the line, the page starts below the strip's glass
+       bar (--todo-bar-h from the top safe area), so nothing on the page sits under the bar once it scrolls. */
+    --todo-top: 72px;
     --todo-bar-h: 76px;
   }
   .app:has(> .setup-todo[data-mode="pill"]) .shell {
-    padding-top: calc(env(safe-area-inset-top) + 28px + var(--todo-top));
+    padding-top: calc(var(--top-line) + var(--todo-top));
   }
   /* The open list on wide screens gets its own column instead: the page is narrower, never covered. */
   .app:has(> .setup-todo[data-mode="rail"]) .shell {
@@ -47,7 +49,7 @@ html:has(.setup-todo[data-mode="pill"]) {
   top: 0;
   left: 0;
   right: 0;
-  height: calc(env(safe-area-inset-top) + var(--todo-bar-h, 66px));
+  height: calc(var(--top-safe) + var(--todo-bar-h, 66px));
   pointer-events: none;
 }
 .setup-todo-bar.is-scrolled {
@@ -102,7 +104,7 @@ html:has(.setup-todo[data-mode="pill"]) {
 .setup-todo {
   position: fixed;
   z-index: 44;
-  top: calc(env(safe-area-inset-top) + 10px);
+  top: var(--top-line);
   right: max(12px, env(safe-area-inset-right));
   transition:
     opacity var(--dur-2) var(--ease-out),
@@ -118,7 +120,7 @@ html:has(.setup-todo[data-mode="pill"]) {
 }
 @media (min-width: 768px) {
   .setup-todo {
-    top: calc(env(safe-area-inset-top) + 18px);
+    top: var(--top-line);
     right: max(24px, env(safe-area-inset-right));
   }
 }
@@ -191,7 +193,7 @@ html:has(.setup-todo[data-mode="pill"]) {
 .setup-todo--rail {
   width: var(--todo-w);
   /* Never down to the Ask pill (and the update bar under it). */
-  max-height: calc(100dvh - env(safe-area-inset-top) - 18px - var(--help-bottom, 24px) - 48px - 14px);
+  max-height: calc(100dvh - var(--top-line) - var(--help-bottom, 24px) - 48px - 14px);
   /* Pages scroll under the open list too: a floating layer's tint. */
   --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
   --glass-blur: 28px;
@@ -224,11 +226,11 @@ html:has(.setup-todo[data-mode="pill"]) {
 }
 .setup-todo-panel {
   position: fixed;
-  top: calc(env(safe-area-inset-top) + 10px);
+  top: var(--top-line);
   left: max(12px, env(safe-area-inset-left));
   right: max(12px, env(safe-area-inset-right));
   /* Stops above the tab bar, so it is never covered and never covers it. */
-  max-height: calc(100dvh - env(safe-area-inset-top) - 10px - var(--tabbar-h) - env(safe-area-inset-bottom) - 24px);
+  max-height: calc(100dvh - var(--top-line) - var(--tabbar-h) - env(safe-area-inset-bottom) - 24px);
   --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
   --glass-blur: 28px;
   animation: todo-drop 360ms var(--ease-spring);
@@ -242,11 +244,11 @@ html:has(.setup-todo[data-mode="pill"]) {
 }
 @media (min-width: 768px) {
   .setup-todo-panel {
-    top: calc(env(safe-area-inset-top) + 18px);
+    top: var(--top-line);
     left: auto;
     right: max(24px, env(safe-area-inset-right));
     width: min(380px, calc(100vw - 48px));
-    max-height: calc(100dvh - env(safe-area-inset-top) - 18px - 24px);
+    max-height: calc(100dvh - var(--top-line) - 24px);
   }
 }
 

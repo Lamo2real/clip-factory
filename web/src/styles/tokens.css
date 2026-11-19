@@ -107,6 +107,14 @@
   --sidebar-w-collapsed: 80px;
   --tabbar-h: 66px;
 
+  /* The one top line (docs/CONTRACTS.md §11.1). --titlebar-h is the band the desktop window's own buttons (the macOS
+     traffic lights) float in; 0 everywhere else. --top-safe is what nothing may sit in: that band or the phone's
+     status bar. --top-line is where every column starts (the menu, the page, the settings folders, the setup list):
+     each one reads this token and none adds its own number, so their top edges stay on one horizontal line. */
+  --titlebar-h: 0px;
+  --top-safe: max(env(safe-area-inset-top), var(--titlebar-h));
+  --top-line: calc(var(--top-safe) + 12px);
+
   --shadow-1: 0 8px 24px -14px rgb(var(--shadow-rgb) / 0.55);
   --shadow-2: 0 6px 18px -6px rgb(var(--shadow-rgb) / 0.22), 0 22px 48px -24px rgb(var(--shadow-rgb) / 0.65);
   --focus: 0 0 0 3px rgb(var(--bone-rgb) / 0.95), 0 0 0 5.5px var(--vermilion-deep);
@@ -115,4 +123,15 @@
   --focus-field: 0 0 0 2px var(--bone), 0 0 14px 2px rgb(var(--bone-rgb) / 0.22);
   /* A field tapped or clicked (Chromium still calls it :focus-visible): no ring, its deeper well and a soft glow. */
   --focus-field-soft: var(--shade-field), 0 0 16px 1px rgb(var(--bone-rgb) / 0.2);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --top-line: calc(var(--top-safe) + 14px);
+  }
+}
+/* The desktop window with its title bar laid over the page (macOS, desktop/src-tauri/src/main.rs): look.ts sets this
+   and the band's height from window.__CF_TITLEBAR__. */
+html[data-titlebar="overlay"] {
+  --titlebar-h: 28px;
 }
