@@ -67,6 +67,8 @@ class PlatformConfig:
     insights_interval: int | None = None  # minutes (YouTube Analytics only)
     non_public_max_age_days: int | None = None  # X only
     scopes: tuple[str, ...] = ()
+    # §25.4: asked for only by "Allow money reading" (grant=money), never by a normal Connect.
+    money_scopes: tuple[str, ...] = ()
     publish: dict[str, Any] | None = None  # §17.7
 
     @property
@@ -102,6 +104,15 @@ def _int(value: Any, where: str, *, lo: int = 1) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < lo:
         raise ConfigError(f"{where} must be a whole number of at least {lo}")
     return value
+
+
+def _money_scopes(raw: Any, scopes: list[str], where: str) -> tuple[str, ...]:
+    """§25.4: the extra scopes "Allow money reading" asks for; never one Connect already asks for."""
+    if not isinstance(raw, list) or not all(isinstance(s, str) and s for s in raw):
+        raise ConfigError(f"{where}.moneyScopes must be a list of scope names")
+    if set(raw) & set(scopes):
+        raise ConfigError(f"{where}.moneyScopes must not repeat a Connect scope")
+    return tuple(raw)
 
 
 def parse(raw: Any) -> PlatformsConfig:
@@ -166,6 +177,7 @@ def parse(raw: Any) -> PlatformsConfig:
             if non_public is not None
             else None,
             scopes=tuple(scopes),
+            money_scopes=_money_scopes(entry.get("moneyScopes", []), scopes, where),
             publish=_publish(name, entry.get("publish"), where),
         )
     return PlatformsConfig(

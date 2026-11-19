@@ -375,12 +375,11 @@ for (const { glass, paints } of WINDOW_LOOKS) {
       await animationsDone(page);
       await scan(`the delete sheet @${width}`);
 
-      // A toast: saving an amount in Settings › Money.
+      // A toast: picking the country in Settings › Posting › Money (§25.7).
       await page.goto("/settings/posting/money");
       await settle(page);
-      await page.getByLabel("Your amount for 1,000 views on YouTube").fill("2,5");
-      await page.locator('[data-money-rate="youtube"]').getByRole("button", { name: "Save" }).click();
-      await expect(page.getByText("Saved. YouTube now uses $2.50 for 1,000 views.")).toBeVisible();
+      await page.locator(".money-country__select").selectOption("SE");
+      await expect(page.getByText("Saved. Your country is Sweden.")).toBeVisible();
       await animationsDone(page);
       await scan(`a toast @${width}`);
 

@@ -1374,200 +1374,334 @@ ol.md__list {
   }
 }
 
-/* ---------- Settings › Posting › Money (docs/CONTRACTS.md §21) ---------- */
-.money__how {
+/* ---------- Settings › Posting › Money: real earnings (docs/CONTRACTS.md §25.7) ----------
+   One colour meaning each: leaf for progress and good news, bone for "goal reached", warm yellow for "needs your OK"
+   and "couldn't check". Vermilion is only ever the action button. */
+.money-top__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+.money-top__lines {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+.money-top__lines li,
+.money-revenue__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+.money-top__lead,
+.money-revenue__lead {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.money-top__num,
+.money-revenue__num {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.money-top__none {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.money-top__rule {
+  margin-top: 10px;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.money-tag {
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  background: var(--tint-leaf);
+  color: var(--green-text);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.money-country {
+  display: block;
+  max-width: 360px;
+}
+.money-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.money-card__head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 10px;
-  font-size: var(--fs-small);
-  color: var(--ink-2);
 }
-.money__list {
+.money-card__mark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgb(var(--green-deep-rgb) / 0.55);
+  color: var(--ink);
+}
+.money-card__name {
+  font-size: var(--fs-h3);
+  font-weight: 700;
+}
+.money-card__pill .pill {
+  min-height: 30px;
+  font-size: var(--fs-small);
+}
+.money-card__line {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.money-card__fine,
+.money-card__where {
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+}
+.money-card__where a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+}
+.money-card__soon {
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+  font-weight: 600;
+}
+.money-card__extras {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+  font-size: var(--fs-small);
+}
+.money-revenue {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--tint-leaf);
+}
+.money-revenue .money-tag {
+  background: rgb(var(--green-deep-rgb) / 0.45);
+}
+.money-spark .spark__line {
+  stroke: var(--green-ink);
+}
+.money-goals {
   display: grid;
   gap: 10px;
   padding: 0;
   list-style: none;
-  min-width: 0;
 }
-.money__item {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  padding: 12px 14px;
-  border-radius: var(--r-md);
-  background: rgb(var(--green-deep-rgb) / 0.25);
-  border: 1px solid transparent;
-}
-.money__app {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  font-weight: 700;
-}
-.money__app svg {
-  flex: none;
-}
-/* The mark on a small dark tile, like the stacks: X's mark never sits bare beside the word "X". */
-.money__tile {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--selected);
-  color: var(--on-bone);
-  text-shadow: none;
-  --mark-cut: #efe7da;
-}
-.money__app-name {
-  overflow-wrap: anywhere;
-}
-.money__paid {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-.money__paid .money__app {
-  flex: 1 1 auto;
-}
-.money__paid-word {
-  font-size: var(--fs-small);
-  font-weight: 700;
-  color: var(--green-text); /* --green-deep is only ~4.2:1 on the glass here */
-}
-.money__item.is-off .money__paid-word {
-  color: var(--ink-2);
-}
-.money__note {
-  font-size: var(--fs-small);
-  color: var(--ink-2);
-}
-/* An app that is on: the money only counts inside that app's paid program (§21.1). */
-.money__rule {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  min-width: 0;
-  font-size: var(--fs-small);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.money__rule .icon {
-  flex: none;
-  margin-top: 2px;
-  color: var(--green-ink);
-}
-.money__usual {
-  font-size: var(--fs-small);
-  overflow-wrap: anywhere;
-}
-.money__usual strong {
-  font-size: 1rem;
-}
-.money__range {
-  color: var(--ink-2);
-}
-.money__form {
+.money-goal {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
-.money__label {
-  font-size: var(--fs-small);
-  font-weight: 600;
+.money-goal__or {
+  justify-self: start;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
-.money__row {
+.money-goal__line {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.money__input {
-  position: relative;
-  flex: 0 1 11rem;
-  min-width: 7.5rem;
-}
-.money__dollar {
-  position: absolute;
-  top: 50%;
-  left: 14px;
-  transform: translateY(-50%);
-  font-weight: 650;
-  color: var(--ink-2);
-  pointer-events: none;
-}
-.input.money__field {
-  padding-left: 30px;
+  gap: 4px 8px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.money__help {
-  font-size: var(--fs-small);
+.money-goal__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* The "?" rides on the last word of its line and never wraps onto a row of its own. */
+.money-goal__why {
+  white-space: nowrap;
+}
+/* At the end of a line the 44 px target must not hang past it (that would scroll the card sideways at 320 px). */
+.money-goal__why .money-why {
+  margin-inline: -12px 0;
+}
+.money-goal__tick {
   color: var(--ink-2);
 }
-.money__more {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 44px;
+.money-goal__tick.is-on {
+  color: var(--green-ink);
+}
+.money-goal__missing {
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+}
+.money-bar {
+  position: relative;
+  display: block;
+  height: 12px;
+  border-radius: var(--r-pill);
+  background: rgb(var(--bone-rgb) / 0.14);
+  overflow: hidden;
+}
+.money-bar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green-leaf), #8cc7a8);
+  animation: money-grow 900ms var(--ease-out) both;
+  transform-origin: left center;
+}
+.money-goal.is-reached .money-bar__fill {
+  background: linear-gradient(90deg, var(--green-leaf), var(--bone));
+}
+@keyframes money-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .money-bar__fill {
+    animation: none;
+  }
+}
+.reduce-motion .money-bar__fill {
+  animation: none;
+}
+/* A 44 px target; the small circle the eye sees is drawn inside it. */
+.money-why {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: -8px -6px;
   padding: 0;
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: 50%;
   background: none;
   color: var(--ink);
   font: inherit;
-  text-align: left;
+  font-weight: 700;
+  isolation: isolate; /* the circle (z-index -1) stays inside the button, above the card */
 }
-.money__more:hover .money__more-word {
-  text-decoration-color: currentColor;
+.money-why::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: linear-gradient(var(--fill), var(--fill)); /* an image, so it reads as a filled button */
+  z-index: -1;
 }
-.money__more .money__app {
-  flex: 1 1 auto;
-}
-.money__more-word {
+.money-why__text {
+  flex-basis: 100%;
+  color: var(--ink-2);
   font-size: var(--fs-small);
-  font-weight: 650;
-  color: var(--vermilion-ink);
-  text-decoration: underline;
-  text-decoration-color: rgb(var(--vermilion-rgb) / 0.6);
+  font-weight: 500;
 }
-/* Each source link is a full 44 px tap target; its date sits on its own line under it. */
-.money__link {
-  display: flex;
-  min-height: 44px;
-  padding-block: 8px;
+.money-more {
+  display: inline-flex;
   align-items: center;
+  gap: 4px;
+  justify-self: start;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 650;
 }
-.money__sources {
+.money-permission {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.money-permission__go {
+  max-width: 100%;
+}
+.money-permission__steps {
   display: grid;
   gap: 8px;
-  min-width: 0;
-}
-.money__fine {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: rgb(var(--green-deep-rgb) / 0.27);
   font-size: var(--fs-small);
-  color: var(--ink-2);
-  overflow-wrap: anywhere;
 }
-.money__links {
+.money-permission__steps ol {
+  display: grid;
+  gap: 4px;
+  padding-left: 20px;
+}
+.money-payouts {
+  display: grid;
+  gap: 10px;
+}
+.money-payouts__list {
   display: grid;
   gap: 8px;
   padding: 0;
   list-style: none;
-  font-size: var(--fs-small);
-  overflow-wrap: anywhere;
 }
-.money__links li {
-  display: grid;
+.money-payouts__list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   min-width: 0;
 }
-.money__date {
-  color: var(--ink-2);
-  font-size: var(--fs-xs);
+.money-payouts__list .money-card__mark {
+  width: 28px;
+  height: 28px;
+}
+.money-card-skel {
+  display: block;
+  height: 180px;
+  border-radius: var(--r-md);
+}
+
+/* Home › Your money */
+.money-tile__body {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: clamp(14px, 2vw, 22px);
+  border-radius: var(--r-lg);
+  min-width: 0;
+}
+.money-tile__near-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  min-width: 0;
+}
+@media (min-width: 1100px) {
+  .money-tile {
+    grid-template-columns: minmax(200px, 0.9fr) minmax(0, 3.2fr);
+  }
 }
 
 /* ---------- What it learned (docs/CONTRACTS.md §16.12) ---------- */

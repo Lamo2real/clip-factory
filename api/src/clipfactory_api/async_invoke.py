@@ -1,4 +1,5 @@
-"""Asynchronous Invokes of ``cf-prod-stats`` (manual refresh) and ``cf-prod-learn`` (weekly best), §16.2.
+"""Asynchronous Invokes of ``cf-prod-stats`` (manual refresh), ``cf-prod-learn`` (weekly best), §16.2, and
+``cf-prod-money`` (Check now, §25.5).
 
 Both are plain functions (not durable), invoked on their unqualified ARN with ``InvocationType="Event"``: Lambda
 queues the event and answers 202 at once, so the API request never waits for a platform or for Bedrock.
@@ -18,10 +19,11 @@ class InvokeError(Exception):
 
 
 class AsyncInvoker:
-    def __init__(self, client: Any, stats_arn: str, learn_arn: str) -> None:
+    def __init__(self, client: Any, stats_arn: str, learn_arn: str, money_arn: str = "") -> None:
         self._client = client
         self.stats_arn = stats_arn
         self.learn_arn = learn_arn
+        self.money_arn = money_arn
 
     def refresh_stats(self, user_id: str, clip_id: str, post_ids: list[str]) -> None:
         self._invoke(self.stats_arn, {"action": "refresh", "userId": user_id, "clipId": clip_id, "postIds": post_ids})
@@ -29,6 +31,10 @@ class AsyncInvoker:
     def forget(self, user_id: str, platform: str) -> None:
         """``cf-prod-stats`` drops the numbers it read from a disconnected platform (YouTube policy, §17.6)."""
         self._invoke(self.stats_arn, {"action": "forget", "userId": user_id, "platform": platform})
+
+    def refresh_money(self, user_id: str) -> None:
+        """``cf-prod-money`` reads every connected platform for this owner now (§25.5 Check now)."""
+        self._invoke(self.money_arn, {"action": "refresh", "userId": user_id})
 
     def learn_week(self, user_id: str, week: str, revision: int) -> None:
         self._invoke(self.learn_arn, {"userId": user_id, "week": week, "revision": revision})

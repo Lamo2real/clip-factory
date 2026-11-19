@@ -381,17 +381,15 @@
       ]
     },
     {
-      "id": "clip-earnings",
-      "title": "How much did my clip earn?",
-      "where": "Library › a clip",
-      "route": "/library",
-      "answer": "Open a clip in **Library**. Each place shows what it earned and the top shows what the whole clip earned. It is a best guess from views, not money you were sent. YouTube, Facebook and X start on, and that money only counts if you are in that app's paid program. TikTok and Instagram start off and earn $0. Turn apps on or off in **Settings › Posting › Money**.",
+      "id": "real-money",
+      "title": "How much money did I make?",
+      "where": "Settings › Posting › Money",
+      "route": "/settings/posting/money",
+      "answer": "Clip Factory only shows money a platform reports. It never guesses from views and you never type money in. Open **Settings › Posting › Money**. YouTube shows its own estimate once you're in the Partner Program and pressed **Allow money reading**. Instagram, TikTok and X don't share money with apps, so their cards show how close you are instead.",
       "steps": [
-        "Tap **Library**.",
-        "Tap the clip.",
-        "Read **This clip earned** at the top.",
-        "Each place shows its own **Earned** line.",
-        "Tap **How is this worked out?** to see the amounts used."
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Money**.",
+        "Read the money at the top. Each amount says whose estimate it is."
       ],
       "keywords": [
         "earn",
@@ -404,71 +402,142 @@
         "make money",
         "money from my video",
         "money from my clip",
-        "paid",
-        "pay",
         "income",
         "revenue",
         "dollars",
-        "cents",
-        "rpm",
-        "per 1000 views",
-        "cpm",
-        "monetization"
+        "estimate"
       ],
       "actions": [
         {
-          "id": "clip-earnings:library",
-          "label": "Open Library",
-          "to": "/library",
-          "highlight": [
-            "nav-library"
-          ]
-        },
-        {
-          "id": "clip-earnings:money",
+          "id": "real-money:money",
           "label": "Open Money",
-          "to": "/settings/posting/money#money-rate",
+          "to": "/settings/posting/money",
           "highlight": [
-            "money-rate"
+            "money-check"
           ]
         }
       ]
     },
     {
-      "id": "money-rates",
-      "title": "Change how much each app pays",
+      "id": "money-progress",
+      "title": "Am I monetized yet?",
       "where": "Settings › Posting › Money",
       "route": "/settings/posting/money",
-      "hash": "money-rate",
-      "answer": "YouTube, Facebook and X start on. TikTok and Instagram start off and earn $0. Money only counts if you are in that app's paid program, so turn an app off if it does not pay you. Clip Factory uses the usual amount for 1,000 views, or type your real amount from the app's own money page.",
+      "hash": "money-youtube",
+      "answer": "Open **Settings › Posting › Money**. Each app's card has a pill: **Earning**, **In the program**, **Not yet**, **Goal reached**, **Can't tell** or **Not shared**, and bars like 812 / 1,000 subscribers. Only YouTube tells apps if you're in its paid program. **Goal reached** means you hit the numbers, but the app also checks things Clip Factory can't see.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**.",
-        "Under **Do I get paid here?**, turn an app on or off.",
-        "Under **Money for 1,000 views**, type your amount and tap **Save**.",
-        "Tap **Use the usual** to go back."
+        "Look at each app's pill and bars.",
+        "Tap **More** to see the other goals."
       ],
       "keywords": [
-        "rate",
-        "my rate",
-        "rpm",
-        "cpm",
-        "change money",
-        "per 1000 views",
-        "do i get paid here",
-        "paid",
-        "money settings",
-        "earnings settings",
-        "how much does youtube pay",
-        "how much does tiktok pay"
+        "monetized",
+        "monetization",
+        "am i monetized",
+        "partner program",
+        "ypp",
+        "creator rewards",
+        "creativity program",
+        "how close",
+        "goal",
+        "subscribers",
+        "watch hours",
+        "1000 subscribers",
+        "4000 hours",
+        "get paid",
+        "when do i get paid",
+        "eligible",
+        "qualify",
+        "gifts",
+        "revenue sharing",
+        "premium"
       ],
       "actions": [
         {
-          "id": "money-rates:money",
+          "id": "money-progress:money",
           "label": "Open Money",
-          "to": "/settings/posting/money#money-rate",
+          "to": "/settings/posting/money#money-youtube",
           "highlight": [
-            "money-rate"
+            "money-youtube"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-allow",
+      "title": "Let Clip Factory read your YouTube money",
+      "where": "Settings › Posting › Money › YouTube",
+      "route": "/settings/posting/money",
+      "hash": "money-youtube",
+      "answer": "On the YouTube card, press **Allow money reading** and say yes on Google's page. A grown-up first adds the money permission in the same Google Cloud project (no new keys) and sets Publishing status to **In production**. Google's \"unverified app\" screen is normal: press **Advanced**, then **Continue**. Your connection and posts stay as they are.",
+      "steps": [
+        "Tap **Settings**, then **Posting**, then **Money**.",
+        "On the YouTube card, tap **First time? Steps for a grown-up** and do the steps.",
+        "Tap **Allow money reading**.",
+        "On Google's page, tap **Allow**."
+      ],
+      "keywords": [
+        "allow money reading",
+        "allow follower reading",
+        "needs your ok",
+        "permission",
+        "monetary",
+        "yt-analytics-monetary",
+        "unverified app",
+        "google says unverified",
+        "read money",
+        "connect money",
+        "tiktok followers"
+      ],
+      "actions": [
+        {
+          "id": "money-allow:money",
+          "label": "Open the YouTube card",
+          "to": "/settings/posting/money#money-youtube",
+          "highlight": [
+            "money-youtube"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-payouts",
+      "title": "Where do I add my bank account to get paid?",
+      "where": "Settings › Posting › Money › Getting your money out",
+      "route": "/settings/posting/money",
+      "hash": "money-payouts",
+      "answer": "Each app pays you itself, so you add your bank account or PayPal inside each app. YouTube: **AdSense for YouTube › Payments**. Facebook and Instagram: Meta's payout settings. TikTok: your TikTok **Balance**. X: **Monetization**, through Stripe. Clip Factory never needs your bank details, and never asks for them.",
+      "steps": [
+        "Tap **Settings**, then **Posting**, then **Money**.",
+        "Scroll to **Getting your money out**.",
+        "Open that app and add your bank or PayPal there."
+      ],
+      "keywords": [
+        "bank",
+        "bank account",
+        "add my bank",
+        "paypal",
+        "payout",
+        "payouts",
+        "withdraw",
+        "cash out",
+        "get my money",
+        "payment details",
+        "stripe",
+        "adsense",
+        "tiktok balance",
+        "meta payouts",
+        "how do i get paid",
+        "where is my money"
+      ],
+      "actions": [
+        {
+          "id": "money-payouts:money",
+          "label": "Open payouts help",
+          "to": "/settings/posting/money#money-payouts",
+          "highlight": [
+            "money-payouts"
           ]
         }
       ]

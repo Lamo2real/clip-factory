@@ -40,6 +40,7 @@ JOB_FLOW_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-job-flow
 CLIP_FLOW_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-clip-flow:live"
 STATS_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-stats"
 LEARN_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-learn"
+MONEY_ARN = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-money"
 BUILTIN_MD = """---
 name: "short-form-video-playbook"
 description: Plan, script and hook short clips.
@@ -171,7 +172,7 @@ def app(
         agent=AgentClient(agentcore, "arn:aws:bedrock-agentcore:eu-north-1:123:runtime/cf_prod_clip_agent"),
         flows=FlowClient(lambda_client, JOB_FLOW_ARN, CLIP_FLOW_ARN),
         vectors=vectors,
-        invoker=AsyncInvoker(lambda_client, STATS_ARN, LEARN_ARN),
+        invoker=AsyncInvoker(lambda_client, STATS_ARN, LEARN_ARN, MONEY_ARN),
         version="abc123",
         clock=clock,
         email_lookup=lambda sub, token: "owner@example.com" if token else None,

@@ -49,8 +49,9 @@ export async function readClipboard(): Promise<string | null> {
   }
 }
 
-/** A label and a value in mono, with one big Copy button. Shows a bone "Copied!" for a moment. */
-export function CopyChip({ label, value }: { label: string; value: string | null }) {
+/** A label and a value in mono, with one big Copy button. Shows a bone "Copied!" for a moment. ``quiet`` gives the
+ * button the ghost look for a card whose one vermilion button is something else (Money, §25.7). */
+export function CopyChip({ label, value, quiet = false }: { label: string; value: string | null; quiet?: boolean }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const valueRef = useRef<HTMLElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -77,7 +78,7 @@ export function CopyChip({ label, value }: { label: string; value: string | null
   }
 
   return (
-    <div className={`copy-chip${state === "copied" ? " is-copied" : ""}`}>
+    <div className={`copy-chip${quiet ? " is-quiet" : ""}${state === "copied" ? " is-copied" : ""}`}>
       <span className="copy-chip__text">
         <span className="copy-chip__label">{label}</span>
         <code className="copy-chip__value" ref={valueRef}>

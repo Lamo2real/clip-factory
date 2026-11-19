@@ -280,7 +280,7 @@ def _from_env() -> HooksDeps:
     from botocore.config import Config
 
     from .app import region, table
-    from .oauth import scopes_from_config
+    from .oauth import money_scopes_from_config, scopes_from_config
     from .oauth.secrets import PREFIX, Secrets
     from .stats import config
 
@@ -301,6 +301,7 @@ def _from_env() -> HooksDeps:
             state_key=lambda: secrets.read_text(state_name).encode(),
             graph_version=config.load().graph_api_version,
             scopes=scopes_from_config(),
+            money_scopes=money_scopes_from_config(),
         )
     from .follow.platforms import FollowEnv
     from .follow.webhooks import KickKeys

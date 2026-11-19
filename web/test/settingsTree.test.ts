@@ -118,7 +118,11 @@ describe("old links", () => {
     expect(legacySettingsRedirect("/settings", "", "#youtube-privacy")).toBe("/settings/posting/setup/youtube#youtube-privacy");
     expect(searchSettings("unlisted")[0]!.href).toBe("/settings/posting/setup/youtube#youtube-privacy");
     expect(searchSettings("credits")[0]!.href).toBe("/settings/posting/setup/x#x-cost");
-    expect(searchSettings("tiktok")[0]!.href).toBe("/settings/posting/setup#setup-posting");
+    expect(searchSettings("connect tiktok")[0]!.href).toBe("/settings/posting/setup#setup-posting");
+    // §25.7: "tiktok" alone also finds TikTok's money card, and Set up posting is still in the list.
+    const tiktok = searchSettings("tiktok").map((h) => h.href);
+    expect(tiktok).toContain("/settings/posting/money#money-tiktok");
+    expect(tiktok).toContain("/settings/posting/setup#setup-posting");
   });
 
   it("route each platform's setup page, and nothing else under it", () => {

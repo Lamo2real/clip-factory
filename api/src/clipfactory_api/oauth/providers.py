@@ -29,8 +29,8 @@ TIKTOK_TOKEN = f"{TIKTOK_API}/v2/oauth/token/"
 TIKTOK_REVOKE = f"{TIKTOK_API}/v2/oauth/revoke/"
 TIKTOK_USER = f"{TIKTOK_API}/v2/user/info/?fields=open_id,avatar_url,display_name"
 TIKTOK_CREATOR = f"{TIKTOK_API}/v2/post/publish/creator_info/query/"
-TIKTOK_SCOPES = "user.info.basic,video.publish,video.list"
-TIKTOK_REQUIRED = ("user.info.basic", "video.publish", "video.list")
+# TikTok's Connect scopes come from config/platforms.json like every other platform's (§25.4, same values as before):
+# env.scopes["tiktok"], joined with commas.
 META_DIALOG_HOST = "https://www.facebook.com"
 GRAPH = "https://graph.facebook.com"
 X_AUTHORIZE = "https://x.com/i/oauth2/authorize"
@@ -167,8 +167,22 @@ def _scope_list(raw: Any, sep: str) -> list[str]:
 # --- authorize URLs ------------------------------------------------------------------------------------------------
 
 
+def requested_scopes(env: OAuthEnv, platform: str, *, money: bool = False) -> tuple[str, ...]:
+    """What the authorize URL asks for: the Connect scopes, plus the money scopes for "Allow money reading" (§25.4)."""
+    base = tuple(env.scopes.get(platform, ()))
+    extra = tuple(s for s in env.money_scopes.get(platform, ()) if s not in base) if money else ()
+    return base + extra
+
+
 def authorize_url(
-    env: OAuthEnv, platform: str, keys: AppKeys, state: str, challenge: str | None, *, rerequest: bool = False
+    env: OAuthEnv,
+    platform: str,
+    keys: AppKeys,
+    state: str,
+    challenge: str | None,
+    *,
+    rerequest: bool = False,
+    money: bool = False,
 ) -> str:
     redirect = env.redirect_uri(platform)
     if platform == "youtube":
@@ -176,7 +190,7 @@ def authorize_url(
             "client_id": keys.client_id,
             "redirect_uri": redirect,
             "response_type": "code",
-            "scope": " ".join(env.scopes["youtube"]),
+            "scope": " ".join(requested_scopes(env, "youtube", money=money)),
             "access_type": "offline",
             "prompt": "consent",
             "include_granted_scopes": "true",
@@ -189,7 +203,7 @@ def authorize_url(
         params = {
             "client_key": keys.client_id,
             "response_type": "code",
-            "scope": TIKTOK_SCOPES,
+            "scope": ",".join(requested_scopes(env, "tiktok", money=money)),
             "redirect_uri": redirect,
             "state": state,
             "disable_auto_auth": "1",
@@ -439,7 +453,7 @@ def _tiktok(env: OAuthEnv, keys: AppKeys, code: str, redirect: str, now: datetim
     if resp.status != 200 or not isinstance(data.get("access_token"), str):
         raise Fail(token_error(resp))
     granted = set(_scope_list(data.get("scope"), ","))
-    missing = [s for s in TIKTOK_REQUIRED if s not in granted]
+    missing = [s for s in env.scopes["tiktok"] if s not in granted]
     if missing:
         raise Fail("missing_permissions", ",".join(missing))
     access = str(data["access_token"])

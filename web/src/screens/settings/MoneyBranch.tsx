@@ -1,276 +1,202 @@
-// Settings › Posting › Money (docs/CONTRACTS.md §21): a "Do I get paid here?" switch per app, a box for the owner's
-// real amount for 1,000 views (from the app's own money page), and where each usual amount comes from. The usual
-// amounts live in config/earnings.json; the owner's choices are saved in Settings and follow them to every device.
-import { useState, type FormEvent } from "react";
-import type { Platform, Settings } from "../../api/types.ts";
-import { useSession } from "../../app/session.tsx";
-import { Icon } from "../../components/Icon.tsx";
+// Settings › Posting › Money (docs/CONTRACTS.md §25.7): how close the owner is to each app's paid programme and the
+// money each app itself reported. Nothing is typed in and nothing is guessed: an app that does not share money says
+// so, with where to look in that app. "Allow money reading" comes back here with ?result=…&platform=….
+import { useEffect, useRef, useState } from "react";
+import { api, friendlyMessage } from "../../api/index.ts";
+import type { MoneyResult, MoneyView, Platform } from "../../api/types.ts";
+import { MoneyCard } from "../../components/MoneyCard.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { Button, Pill, Skeleton } from "../../components/ui.tsx";
-import { APP_NAME, EARNINGS, formatRate, paidProgramNote, parseRate, rateFor, rateRange, sourceDate } from "../../lib/earnings.ts";
+import { Button, ErrorPanel, Skeleton } from "../../components/ui.tsx";
+import { burst } from "../../lib/confetti.ts";
+import { PLATFORM_LABEL } from "../../lib/format.ts";
+import { formatMoney, MONEY_RESULTS, PAYOUTS, resultCopy } from "../../lib/money.ts";
 import { useAction } from "../../lib/motion.ts";
+import { useMoney } from "../../lib/useMoney.ts";
 import { Apple, Panel } from "./parts.tsx";
 
-const SHORT = APP_NAME;
+const ORDER: Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
 
-/** "16 Nov 2026" from "2026-11-16". */
-export function dayLabel(iso: string): string {
-  const d = new Date(`${iso}T12:00:00Z`);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-}
-
-/** The app's mark on a small dark tile (like the stacks), so X's mark and the word "X" never read as "X X". */
-function AppName({ platform }: { platform: Platform }) {
-  return (
-    <span className="money__app">
-      <span className={`money__tile is-${platform}`} aria-hidden="true">
-        <PlatformMark platform={platform} size={16} />
-      </span>
-      <span className="money__app-name">{SHORT[platform]}</span>
-    </span>
-  );
+/** Reads ?result=&platform= once and takes them out of the address, so a reload does not say it again. */
+export function readMoneyResult(): { result: MoneyResult; platform: Platform } | null {
+  const q = new URLSearchParams(location.search);
+  const result = q.get("result") as MoneyResult | null;
+  const platform = q.get("platform") as Platform | null;
+  if (!result) return null;
+  q.delete("result");
+  q.delete("platform");
+  const rest = q.toString();
+  history.replaceState(history.state, "", `${location.pathname}${rest ? `?${rest}` : ""}${location.hash}`);
+  if (!MONEY_RESULTS.includes(result) || !platform || !ORDER.includes(platform)) return null;
+  return { result, platform };
 }
 
 export function MoneyBranch() {
-  const { me } = useSession();
-  const s = me?.settings;
+  const { data, error, reload, setData } = useMoney();
+  const toast = useToast();
+  const arrived = useRef(false);
+  const [checking, setChecking] = useState(false);
+  const check = useAction("refresh");
+
+  async function checkNow(quiet = false): Promise<boolean> {
+    setChecking(true);
+    try {
+      const out = await api().refreshMoney();
+      if (!out.started) {
+        if (!quiet) toast.info("Clip Factory checked less than an hour ago. Your numbers are up to date.", { group: "money" });
+        return false;
+      }
+      if (!quiet) toast.success("Checking every app now. New numbers show in a minute.", { group: "money" });
+      setTimeout(() => void reload(), 4000);
+      return true;
+    } catch (e) {
+      toast.error(friendlyMessage(e));
+      return false;
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  useEffect(() => {
+    if (arrived.current) return;
+    arrived.current = true;
+    const back = readMoneyResult();
+    if (!back) return;
+    const { ok, text } = resultCopy(back.result, PLATFORM_LABEL[back.platform]);
+    if (ok) {
+      burst(undefined, 120);
+      toast.success(text, { group: "money-result" });
+      void checkNow(true);
+    } else {
+      toast.info(text, { group: "money-result" });
+    }
+    // checkNow is stable enough for a one-time arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
+      <Panel className="money-top">
+        <div className="money-top__row">
+          <MonthLines view={data} />
+          <Button variant="primary" size="md" icon="retry" act={check} loading={checking} onClick={() => checkNow()} className="money-top__check" data-help="money-check">
+            Check now
+          </Button>
+        </div>
+        <p className="money-top__rule">
+          Clip Factory only shows money an app reports. It never guesses, and you never type money in. Each amount is that
+          app's own estimate.
+        </p>
+      </Panel>
+      {error && !data ? (
+        <Panel>
+          <ErrorPanel message={error} onRetry={() => void reload()} />
+        </Panel>
+      ) : null}
       <Panel>
-        <Apple id="money-how" wide>
-          <p className="money__how">
-            <Pill tone="success" icon="info">
-              Best guess
-            </Pill>
-            <span>Amounts are in US dollars, checked on {dayLabel(EARNINGS.asOf)}.</span>
-          </p>
+        <Apple id="money-country" wide>
+          {data ? <CountryPick view={data} onChange={(v) => setData(() => v)} /> : <Skeleton className="line-skel" />}
         </Apple>
       </Panel>
+      {ORDER.map((p) => {
+        const card = data?.platforms.find((c) => c.platform === p);
+        return (
+          <Panel key={p}>
+            <Apple id={`money-${p}`} wide>
+              {card ? <MoneyCard card={card} named={false} /> : <Skeleton className="money-card-skel" />}
+            </Apple>
+          </Panel>
+        );
+      })}
       <Panel>
-        <Apple id="money-paid" wide>
-          {!s ? (
-            <Skeleton className="line-skel" />
-          ) : (
-            <ul className="money__list">
-              {EARNINGS.order.map((p) => (
-                <li key={p}>
-                  <PaidRow platform={p} settings={s} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Apple>
-      </Panel>
-      <Panel>
-        <Apple id="money-rate" wide>
-          {!s ? (
-            <Skeleton className="line-skel" />
-          ) : (
-            <ul className="money__list">
-              {EARNINGS.order.map((p) => (
-                <li key={p}>
-                  <RateRow platform={p} settings={s} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Apple>
-      </Panel>
-      <Panel>
-        <Apple id="money-sources" wide>
-          <ul className="money__list">
-            {EARNINGS.order.map((p) => (
-              <li key={p}>
-                <SourcesRow platform={p} />
-              </li>
-            ))}
-          </ul>
+        <Apple id="money-payouts" wide>
+          <Payouts />
         </Apple>
       </Panel>
     </>
   );
 }
 
-function PaidRow({ platform, settings }: { platform: Platform; settings: Settings }) {
-  const { saveSettings } = useSession();
-  const toast = useToast();
-  const { paid } = rateFor(platform, settings);
-  const name = SHORT[platform];
+/** "This month: $12.40 · YouTube's estimate", one line per currency (never converted), or how to get there. */
+export function MonthLines({ view }: { view: MoneyView | null }) {
+  if (!view) return <Skeleton className="line-skel" />;
+  if (!view.thisMonth.length) {
+    return (
+      <p className="money-top__none">
+        <strong>No money yet.</strong> Each card below shows how close you are.
+      </p>
+    );
+  }
   return (
-    <div className={`money__item${paid ? "" : " is-off"}`} data-money-paid={platform}>
-      <div className="money__paid">
-        <AppName platform={platform} />
-        <span className="money__paid-word" aria-hidden="true">
-          {paid ? "Yes" : "No"}
-        </span>
-        <button
-          type="button"
-          role="switch"
-          className="switch"
-          data-help-dodge=""
-          aria-checked={paid}
-          aria-label={`Do I get paid on ${name}?`}
-          onClick={() => {
-            const next = !paid;
-            void saveSettings({ earningsPaid: { ...(settings.earningsPaid ?? {}), [platform]: next } }).then((saved) => {
-              if (saved) toast.success(next ? `${name} is on. Clips earn money there.` : `${name} is off. Clips earn $0 there.`, { group: "money" });
-            });
-          }}
-        >
-          <span className="switch__thumb" />
-        </button>
-      </div>
-      <p className="money__note">{EARNINGS.platforms[platform].kidNote}</p>
-      {paid ? (
-        <p className="money__rule" data-money-rule={platform}>
-          <Icon name="info" size={16} />
-          <span>{paidProgramNote(platform)}</span>
-        </p>
-      ) : null}
-    </div>
+    <ul className="money-top__lines" aria-label="Money this month">
+      {view.thisMonth.map((line) => (
+        <li key={line.currency} data-money-month={line.currency}>
+          <span className="money-top__lead">This month</span>
+          <strong className="money-top__num">{formatMoney(line.amountMicros, line.currency)}</strong>
+          <span className="money-tag">{line.platforms.map((p) => (p === "facebook" ? "Meta" : PLATFORM_LABEL[p])).join(" and ")}'s estimate</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
-function RateRow({ platform, settings }: { platform: Platform; settings: Settings }) {
-  const { saveSettings } = useSession();
+function CountryPick({ view, onChange }: { view: MoneyView; onChange: (v: MoneyView) => void }) {
   const toast = useToast();
-  const usual = EARNINGS.platforms[platform];
-  const inUse = rateFor(platform, settings);
-  const name = SHORT[platform];
-  const [text, setText] = useState(inUse.yours ? String(inUse.rate) : "");
-  const saved = inUse.yours ? String(inUse.rate) : "";
-  const [problem, setProblem] = useState<string | null>(null);
-  const save = useAction("save");
-  const reset = useAction("undo");
-  const fieldId = `money-rate-${platform}`;
-  const helpId = `money-rate-help-${platform}`;
-  const errId = `money-rate-err-${platform}`;
-  const rates = settings.earningsRates ?? {};
-
-  /** Saves the typed amount: "ok", "invalid" (the box says why) or "failed" (the error toast already said why). */
-  async function submit(e: FormEvent): Promise<"ok" | "invalid" | "failed"> {
-    e.preventDefault();
-    const parsed = parseRate(text);
-    if (!parsed.ok) {
-      setProblem(parsed.message);
-      return "invalid";
-    }
-    setProblem(null);
-    setText(String(parsed.value));
-    const saved = await saveSettings({ earningsRates: { ...rates, [platform]: parsed.value } });
-    if (!saved) return "failed";
-    toast.success(`Saved. ${name} now uses ${formatRate(parsed.value)} for 1,000 views.`, { group: "money" });
-    return "ok";
-  }
-
-  async function backToUsual() {
-    const rest = { ...rates };
-    delete rest[platform];
-    setText("");
-    setProblem(null);
-    const saved = await saveSettings({ earningsRates: rest });
-    if (!saved) return false;
-    toast.success(`${name} uses the usual amount again.`, { group: "money" });
-    return true;
-  }
-
+  const [busy, setBusy] = useState(false);
   return (
-    <form
-      className="money__item money__form"
-      data-money-rate={platform}
-      noValidate
-      onSubmit={(e) => {
-        // Enter in the box and the Save button both land here, once.
-        void submit(e).then((r) => (r === "ok" ? save.play() : save.fail({ sound: r === "invalid" })));
-      }}
-    >
-      <AppName platform={platform} />
-      <p className="money__usual">
-        Usually <strong>{formatRate(usual.typicalUsdPer1000)}</strong> <span className="money__range">({rateRange(platform)})</span>
-      </p>
-      <label className="money__label" htmlFor={fieldId}>
-        Your amount for 1,000 views on {name}
-      </label>
-      <div className="money__row">
-        <span className="money__input">
-          <span className="money__dollar" aria-hidden="true">
-            $
-          </span>
-          <input
-            id={fieldId}
-            className="input money__field"
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder={usual.typicalUsdPer1000.toFixed(2)}
-            value={text}
-            aria-invalid={problem ? true : undefined}
-            aria-describedby={problem ? `${errId} ${helpId}` : helpId}
-            onChange={(e) => {
-              setText(e.target.value);
-              if (problem) setProblem(null);
-            }}
-          />
-        </span>
-        {/* Vermilion like every action, but off until the amount differs from the saved one, so the page does not
-            show five vermilion buttons at rest. Enter in an unchanged box then does nothing, as there is nothing to save. */}
-        <Button type="submit" size="sm" variant="action" icon="check" act={save} playOnClick={false} disabled={text.trim() === saved}>
-          Save
-        </Button>
-        {inUse.yours ? (
-          <Button size="sm" variant="ghost" icon="undo" act={reset} playOnClick={false} onClick={() => backToUsual().then((ok) => (ok ? reset.play() : reset.fail({ sound: false })))}>
-            Use the usual
-          </Button>
-        ) : null}
-      </div>
-      {problem ? (
-        <p className="field__status is-bad" id={errId} role="alert">
-          <Icon name="alert" size={16} />
-          <span>{problem}</span>
-        </p>
-      ) : null}
-      <p className="money__help" id={helpId}>
-        {inUse.yours ? `Using your amount: ${formatRate(inUse.rate)}.` : "Using the usual amount."}
-      </p>
-    </form>
+    <label className="money-country">
+      <span className="sr-only">Your country</span>
+      <select
+        className="input money-country__select"
+        value={view.country ?? ""}
+        disabled={busy}
+        onChange={async (e) => {
+          const code = e.target.value;
+          if (!code) return;
+          setBusy(true);
+          try {
+            const next = await api().setMoneyCountry(code);
+            onChange(next);
+            const name = view.countries.find((c) => c.code === code)?.name ?? code;
+            toast.success(`Saved. Your country is ${name}.`, { group: "money" });
+          } catch (err) {
+            toast.error(friendlyMessage(err));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <option value="" disabled>
+          Pick your country
+        </option>
+        {view.countries.map((c) => (
+          <option key={c.code} value={c.code}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
-function SourcesRow({ platform }: { platform: Platform }) {
-  const [open, setOpen] = useState(false);
-  const usual = EARNINGS.platforms[platform];
-  const id = `money-more-${platform}`;
+function Payouts() {
   return (
-    <div className="money__item" data-money-sources={platform}>
-      <button type="button" className="money__more" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)}>
-        <Icon name={open ? "chevronDown" : "chevronRight"} size={16} />
-        <AppName platform={platform} />
-        <span className="money__more-word">{open ? "Hide" : "Show"}</span>
-      </button>
-      {open ? (
-        <div className="money__sources" id={id}>
-          {/* Plain words only; the full rules and units stay in config/earnings.json for maintainers. */}
-          <p className="money__fine">
-            <strong>Who gets paid: </strong>
-            {usual.kidRules}
-          </p>
-          <p className="money__fine">
-            <strong>What counts: </strong>
-            {usual.kidCounts}
-          </p>
-          <ul className="money__links">
-            {usual.sources.map((src) => (
-              <li key={src.url}>
-                <a className="text-link money__link" href={src.url} target="_blank" rel="noopener noreferrer">
-                  {src.title}
-                  <span className="sr-only"> (opens in a new tab)</span>
-                </a>
-                <span className="money__date">{sourceDate(src.date)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+    <div className="money-payouts">
+      <p className="money-payouts__safe">
+        <strong>Clip Factory never needs your bank details.</strong> Each app sends money to you itself.
+      </p>
+      <ul className="money-payouts__list">
+        {PAYOUTS.map((p) => (
+          <li key={p.platform} data-payout={p.platform}>
+            <span className={`money-card__mark is-${p.platform}`} aria-hidden="true">
+              <PlatformMark platform={p.platform} size={16} />
+            </span>
+            <span>
+              <strong>{PLATFORM_LABEL[p.platform]}:</strong> {p.how}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

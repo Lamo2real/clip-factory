@@ -18,8 +18,6 @@ import { STATS_ORDER, ago, compact, full, until } from "../../lib/metrics.ts";
 import { useAction } from "../../lib/motion.ts";
 import { prefersReducedMotion, usePrefs } from "../../lib/prefs.ts";
 import { goBack } from "../../lib/router.ts";
-import { useSession } from "../../app/session.tsx";
-import { APP_NAME, MONEY_HREF, earningFor, formatRate, moneyWords, paidProgramNote, paidViews, sumUsd, zeroReason, type PlatformEarning } from "../../lib/earnings.ts";
 import { isoWeek, weekRange } from "../../lib/week.ts";
 
 /** Re-renders every `ms` so "3 min ago" and "Next check in 4 min" stay true. */
@@ -83,21 +81,7 @@ export function refreshMessage(results: RefreshResult[], now = Date.now()): { to
   return { tone: "info", text: notes[0] ?? "There is nothing posted to check yet." };
 }
 
-/**
- * The money estimate per app (§21): only for apps whose stack shows numbers (posted, with metrics), using the view
- * count each app pays for (`paidViews`). Pure, for the tests.
- */
-export function perfEarnings(perf: Perf, settings: Parameters<typeof earningFor>[3]): { usd: number | null; platforms: Partial<Record<Platform, PlatformEarning>> } {
-  const platforms: Partial<Record<Platform, PlatformEarning>> = {};
-  for (const p of perf.posts) {
-    if (p.status !== "posted" || !p.metrics) continue;
-    platforms[p.platform] = earningFor(p.platform, paidViews(p.platform, p.metrics), perf.clip.durationSec, settings);
-  }
-  return { usd: sumUsd(Object.values(platforms).map((e) => e.usd)), platforms };
-}
-
 export function ClipPerformance({ clipId }: { clipId: string }) {
-  const { me } = useSession();
   const [perf, setPerf] = useState<Perf | null>(null);
   const [error, setError] = useState<{ message: string; missing: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -269,7 +253,6 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   const off = state.allWaiting || state.checkable === 0;
   const waiting = !state.refreshing && state.allWaiting && !!state.nextAt;
   const best = winner(perf);
-  const money = perfEarnings(perf, me?.settings);
 
   /** A chip jumps to its platform's stack and moves the focus to its name. */
   function jump(platform: Platform, e: MouseEvent) {
@@ -378,7 +361,6 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
                 </span>
               </p>
             ) : null}
-            <EarnedTotal usd={money.usd} platforms={money.platforms} />
           </div>
 
           <div className="perf__actions">
@@ -436,7 +418,6 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
                 best={perf.bestPlatform === platform}
                 index={i}
                 now={now}
-                earning={money.platforms[platform]}
               />
             );
           })}
@@ -452,72 +433,6 @@ function BackRow() {
       <Button icon="chevronLeft" size="sm" onClick={() => goBack("/library")}>
         Back
       </Button>
-    </div>
-  );
-}
-
-/** "This clip earned about $0.42", marked as a guess, with a small "How is this worked out?" (§21). */
-function EarnedTotal({ usd, platforms }: { usd: number | null; platforms: Partial<Record<Platform, PlatformEarning>> }) {
-  const [open, setOpen] = useState(false);
-  const shown = STATS_ORDER.filter((p) => platforms[p]);
-  const words = usd === null ? null : moneyWords(usd);
-  const reason = usd === 0 ? zeroReason(shown.map((p) => platforms[p]!)) : "";
-  return (
-    <div className="perf__money" data-help="clip-earned">
-      <p className="perf__earned">
-        <Icon name="coin" size={18} />
-        <span data-earned="total">
-          {words === null ? (
-            "No money yet"
-          ) : (
-            <>
-              This clip earned {words.about}
-              <strong className="perf__earned-num">{words.amount}</strong>
-            </>
-          )}
-        </span>
-        {usd !== null && usd > 0 ? <span className="perf__guess">Best guess</span> : null}
-      </p>
-      {reason ? <p className="perf__earned-why">{reason}</p> : null}
-      <button type="button" className="perf__how text-link" aria-expanded={open} aria-controls="perf-money-how" onClick={() => setOpen((o) => !o)}>
-        <Icon name="info" size={16} />
-        How is this worked out?
-      </button>
-      {open ? (
-        <div className="perf__how-box" id="perf-money-how">
-          <p>Each app pays a tiny amount for every 1,000 views. Clip Factory multiplies your views by it. It is a guess, not money you were sent.</p>
-          <p>YouTube and Facebook do not pay for replays, and X counts every time your post was seen. Until an app sends those numbers, replays count too, so the guess can be a little high.</p>
-          {shown.length ? (
-            <ul className="perf__how-list">
-              {shown.map((p) => {
-                const e = platforms[p]!;
-                return (
-                  <li key={p} data-how={p}>
-                    {/* The mark on the same dark round tile as Settings › Money, so X's mark and "X:" never read as "X X". */}
-                    <span className={`money__tile perf__how-tile is-${p}`} aria-hidden="true">
-                      <PlatformMark platform={p} size={12} />
-                    </span>
-                    <span className="perf__how-text">
-                      <span>
-                        {APP_NAME[p]}:{" "}
-                        {e.why === "off"
-                          ? "off, so $0"
-                          : e.why === "too_short"
-                            ? "clip too short, so $0"
-                            : `${formatRate(e.rate)} for 1,000 views${e.yours ? " (your amount)" : " (usual)"}`}
-                      </span>
-                      {e.why === "off" ? null : <span className="perf__how-rule">{paidProgramNote(p)}</span>}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-          <LinkButton href={MONEY_HREF} size="sm" icon="coin" iconAfter="chevronRight">
-            Change it in Settings › Money
-          </LinkButton>
-        </div>
-      ) : null}
     </div>
   );
 }

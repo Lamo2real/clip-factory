@@ -189,6 +189,12 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/follows/keys/youtube-read/check"),
         ("PATCH", "/v1/follows/twitch/somestreamer"),
         ("DELETE", "/v1/follows/kick/someone"),
+        # §25: Real earnings
+        ("GET", "/v1/money"),
+        ("POST", "/v1/money/refresh"),
+        ("POST", "/v1/money/seen"),
+        ("PUT", "/v1/money/country"),
+        ("GET", "/v1/money/youtube/days"),
         # §19.6: Ask Clip Factory
         ("GET", "/v1/help"),
         ("POST", "/v1/help/answers"),
