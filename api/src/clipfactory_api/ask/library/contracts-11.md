@@ -73,3 +73,8 @@ the traffic lights' band; nothing ever covers the traffic lights.
   web page claiming a band get the plain line (14 px); browsers at 1440, 1280, 1000, 820 and 390 px wide share their
   line. The band's 28 lives only in `main.rs` (`MAC_TITLEBAR_HEIGHT`); `look.ts` sets it inline, and a unit test holds
   that no stylesheet hard-codes it.
+* **The job page's title plate** (owner screenshot, 2026-11-19): the job's tag ("Didn't work", "Ready", ...) sits
+  inside the title plate, on one wrapping row with the start line (`.page-head__meta` in `.page-head__text`), never
+  beside the plate or in the gap under it. `e2e/job-head.spec.ts` (Chromium and WebKit) opens a failed job on a
+  phone (390 x 844), a tablet (800 x 1000), the macOS window (1000 x 650, 1440 x 900) and a 1400 x 900 browser and
+  checks the plate starts at least 8 px below `--top-safe`, ends inside the window and holds the tag's whole box.
