@@ -267,7 +267,11 @@ for (const size of SIZES) {
     });
 
     for (const scheme of ["light", "dark"] as const) {
-      test(`screenshots in ${scheme}`, async ({ page }, info) => {
+      test(`screenshots in ${scheme}`, async ({ page, browserName }, info) => {
+        // Four full-page pictures of 2 to 7 million device pixels (1920 px wide, or the iPhone's 3x at tablet size),
+        // which Linux WebKit paints without a GPU: about 1.3 minutes in CI with the backdrop held still, too close
+        // to the 2-minute limit on a slow runner.
+        test.slow(browserName === "webkit" && size.width >= 768, "large WebKit screenshots paint in software in CI");
         await page.emulateMedia({ colorScheme: scheme });
         await open(page);
         await shot(page, `ask-empty-${size.name}-${scheme}`, info);
