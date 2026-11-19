@@ -216,6 +216,7 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 | review | `/review` |
 | library | `/library` |
 | library | `/library?view=week` |
+| money | `/money` |
 | clip | `/clips/{clipId}` |
 | settings | `/settings` |
 | settings | `/settings/clip-making/clips` |
