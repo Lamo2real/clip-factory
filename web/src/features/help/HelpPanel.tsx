@@ -1,6 +1,23 @@
 // The Ask Clip Factory panel (docs/CONTRACTS.md §19.8): a non-modal glass dialog above the launcher on wide
 // screens, a full-screen sheet on phones. Short answers, numbered steps and up to two buttons that take you there.
-import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type FormEvent, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
+// Pictures (§26): the picture button, paste and drop add up to 4 pictures to the tray above the field; they go with
+// the next question and show in its bubble, where a tap opens them bigger.
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type Dispatch,
+  type DragEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type MutableRefObject,
+  type ReactNode,
+} from "react";
 import { AskMark } from "../../components/AskMark.tsx";
 import { api } from "../../api/index.ts";
 import { Icon, type IconName } from "../../components/Icon.tsx";
@@ -12,15 +29,17 @@ import { useAction, watchResult } from "../../lib/motion.ts";
 import { getPrefs, prefersReducedMotion } from "../../lib/prefs.ts";
 import { navigate, type Route } from "../../lib/router.ts";
 import { sounds } from "../../lib/sounds.ts";
-import { entryId, historyOf, newestAnswerId, type ChatEvent, type ChatState, type Entry, type LiveState } from "./chatState.ts";
+import { entryId, historyOf, newestAnswerId, readyTray, type ChatEvent, type ChatState, type Entry, type LiveState, type SentPic } from "./chatState.ts";
 import { boldParts, fill, GO_HOME, GREETING, hasPlaceholder, LIVE_FAILED_TEXT, OFF_TEXT, suggestionsFor, withoutLive } from "./compose.ts";
 import { helpContext, helpPage } from "./context.ts";
 import type { HelpClient } from "./helpApi.ts";
 import { answerLocally, loadCorpus, routeOk, safeActions } from "./kb.ts";
 import { readLive } from "./live.ts";
+import { ADDED_TEXT, dragHasFiles, filesFrom, isPictureFile, NOTE_MS, PICTURE_TEXT, PICTURES_MAX, preparePicture, READYING_TEXT, toBase64, type PicError } from "./pictures.ts";
+import { PictureViewer, type ViewerPicture } from "./PictureViewer.tsx";
 import { spotlight } from "./spotlight.ts";
-import { checkHelpStatus, helpSwitch } from "./status.ts";
-import { QUESTION_MAX, type HelpAction, type HelpAnswer } from "./types.ts";
+import { checkHelpStatus, helpSwitch, picturesOn, usePicturesOn } from "./status.ts";
+import { QUESTION_MAX, type HelpAction, type HelpAnswer, type HelpPictureResult } from "./types.ts";
 import { hasUnsaved } from "./unsaved.ts";
 
 export const COUNTER_FROM = 250;
@@ -28,6 +47,9 @@ export const STILL_LOOKING_MS = 6000;
 export const COPIED_TEXT = "Copied. Send this code to whoever helps you with Clip Factory.";
 export const UNSAVED_TEXT = "You have a change that isn't saved yet. Leave anyway?";
 export const AGAIN_TEXT = "You can ask again now.";
+export const PICTURE_PLACEHOLDER = "Ask about your picture";
+export const LOOKING_AT_PICTURE = "Looking at your picture…";
+export const DROP_TEXT = "Drop your picture here";
 /** How often, and how many times, to check that the open panel does not cover a control that just lit up. */
 const TUCK_EVERY_MS = 120;
 const TUCK_CHECKS = 10;
@@ -112,6 +134,19 @@ export function HelpPanel({
   const [text, setText] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [slow, setSlow] = useState(false);
+  const pics = usePicturesOn();
+  /** A short glass note floating above the tray and field (a picture that could not be added), gone after 5 s. */
+  const [note, setNote] = useState<string | null>(null);
+  /** What a screen reader hears about the tray ("Picture added. 2 of 4."). */
+  const [trayNews, setTrayNews] = useState("");
+  const [viewer, setViewer] = useState<{ pictures: ViewerPicture[]; start: number; opener: HTMLElement } | null>(null);
+  const [dropping, setDropping] = useState(false);
+  /** Tiles shrinking out (160 ms) before they leave the tray. */
+  const [leaving, setLeaving] = useState<readonly number[]>([]);
+  const dragDepth = useRef(0);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const picButton = useRef<HTMLButtonElement>(null);
+  const trayRef = useRef<HTMLUListElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
   const stateRef = useRef(state);
@@ -169,6 +204,13 @@ export function HelpPanel({
     return () => clearTimeout(t);
   }, [state.thinking]);
 
+  // A picture note goes away by itself.
+  useEffect(() => {
+    if (!note) return;
+    const t = setTimeout(() => setNote(null), NOTE_MS);
+    return () => clearTimeout(t);
+  }, [note]);
+
   // The 429 countdown.
   const blocked = state.blockedUntil > now;
   useEffect(() => {
@@ -217,24 +259,69 @@ export function HelpPanel({
     [fillLive, dispatch],
   );
 
+  /** Before the answer to a question with pictures: keep what they showed, or say why they were not read. With no
+   * words the answer itself already says why (the server picks it), so no second note. */
+  const beforePictureAnswer = useCallback(
+    (askId: number, picture: HelpPictureResult | undefined, worded: boolean) => {
+      if (!picture) return;
+      if (picture.read) return dispatch({ type: "seen", entryId: askId, seen: picture.seen });
+      // Only trouble is an error (deny); off and the daily limit are just how things are.
+      if (picture.why === "trouble") sounds.play("deny");
+      if (!worded) return;
+      const text = picture.why === "off" ? PICTURE_TEXT.off : picture.why === "limit" ? PICTURE_TEXT.limit : PICTURE_TEXT.unread;
+      dispatch({ type: "notice", id: entryId(), tone: "info", text });
+    },
+    [dispatch],
+  );
+
+  /** A send that started while a picture was still being made ready: it goes as soon as the tray is ready. */
+  const waiting = useRef<string | null>(null);
+
   const ask = useCallback(
     async (raw: string) => {
       const q = raw.trim().slice(0, QUESTION_MAX);
       const s = stateRef.current;
-      if (!q || s.thinking || s.blockedUntil > Date.now() || helpSwitch() === "off") return;
+      const tray = readyTray(s);
+      if (s.tray.some((p) => p.busy)) {
+        waiting.current = raw;
+        setNote(READYING_TEXT);
+        return;
+      }
+      if ((!q && !tray.length) || s.thinking || s.blockedUntil > Date.now() || helpSwitch() === "off") return;
       const gen = generation.current;
       const history = historyOf(s.entries);
       const context = helpContext(routeRef.current);
-      dispatch({ type: "ask", id: entryId(), text: q });
+      const askId = entryId();
+      dispatch({ type: "ask", id: askId, text: q, pictures: tray.length ? tray : undefined });
       setText("");
-      const result = await client.ask({ question: q, history, context });
+      // When the question could not go, its pictures (and words) come back, so trying again is one tap.
+      const giveBack = () => {
+        if (!tray.length || gen !== generation.current) return;
+        dispatch({ type: "tray_restore", pics: tray });
+        if (q) setText((t) => t || q);
+      };
+      let pictures;
+      try {
+        pictures = tray.length ? await Promise.all(tray.map(async (p) => ({ type: "image/jpeg" as const, data: await toBase64(p.blob) }))) : undefined;
+      } catch {
+        pictures = undefined;
+      }
+      if (gen !== generation.current) return;
+      if (tray.length && !pictures) {
+        sounds.play("deny");
+        dispatch({ type: "notice", id: entryId(), tone: "info", text: PICTURE_TEXT.unread });
+        return giveBack();
+      }
+      const result = await client.ask(pictures ? { question: q, history, context, pictures } : { question: q, history, context });
       if (gen !== generation.current) return;
       switch (result.kind) {
         case "answer":
+          beforePictureAnswer(askId, result.picture, !!q);
           return showAnswer(result.answer, result.requestId, false, gen);
         case "rate_limited": {
           sounds.play("deny");
-          return dispatch({ type: "notice", id: entryId(), tone: "busy", text: AGAIN_TEXT, until: Date.now() + result.retryAfter * 1000 });
+          dispatch({ type: "notice", id: entryId(), tone: "busy", text: AGAIN_TEXT, until: Date.now() + result.retryAfter * 1000 });
+          return giveBack();
         }
         case "off":
           dispatch({ type: "notice", id: entryId(), tone: "off", text: OFF_TEXT });
@@ -242,13 +329,20 @@ export function HelpPanel({
           void checkHelpStatus(client);
           return;
         case "bad_request":
-          return dispatch({ type: "notice", id: entryId(), tone: "info", text: result.message });
+          dispatch({ type: "notice", id: entryId(), tone: "info", text: result.message });
+          return giveBack();
         case "signed_out":
           return dispatch({ type: "notice", id: entryId(), tone: "info", text: "Sign in again, then ask me." });
         case "fallback": {
           if (result.reason === "server") sounds.play("deny");
           // The kill switch also stops the local answers.
           if (helpSwitch() === "off") return dispatch({ type: "notice", id: entryId(), tone: "off", text: OFF_TEXT });
+          // The local answers cannot look at pictures: say so, and answer the words if there are any.
+          if (tray.length) {
+            dispatch({ type: "notice", id: entryId(), tone: "info", text: PICTURE_TEXT.unread });
+            giveBack();
+            if (!q) return;
+          }
           try {
             const local = await answerLocally(q, history, context);
             if (gen === generation.current) showAnswer(local, result.requestId, true, gen);
@@ -259,8 +353,111 @@ export function HelpPanel({
         }
       }
     },
-    [client, showAnswer, dispatch, generation],
+    [client, showAnswer, beforePictureAnswer, dispatch, generation],
   );
+
+  // The waiting send goes once no picture is still being made ready.
+  useEffect(() => {
+    if (waiting.current === null || state.tray.some((p) => p.busy)) return;
+    const raw = waiting.current;
+    waiting.current = null;
+    setNote((n) => (n === READYING_TEXT ? null : n));
+    void ask(raw);
+  }, [state.tray, ask]);
+
+  /** Adds picked, pasted or dropped files to the tray (pictures only, at most 4). */
+  const addFiles = useCallback(
+    async (files: readonly File[]) => {
+      if (!files.length) return;
+      if (!picturesOn()) return setNote(PICTURE_TEXT.off);
+      const pictures = files.filter(isPictureFile);
+      let error: PicError | null = pictures.length < files.length ? "not_picture" : null;
+      const room = PICTURES_MAX - stateRef.current.tray.length;
+      if (pictures.length > room) error = "too_many";
+      const taking = pictures.slice(0, Math.max(0, room));
+      const ids = taking.map(() => entryId());
+      ids.forEach((id) => dispatch({ type: "tray_add", id }));
+      if (ids.length) setTrayNews(READYING_TEXT);
+      const gen = generation.current;
+      const results = await Promise.all(taking.map((f) => preparePicture(f)));
+      let added = 0;
+      results.forEach((r, i) => {
+        const id = ids[i]!;
+        if ("error" in r) {
+          error ??= r.error;
+          dispatch({ type: "tray_remove", id });
+          return;
+        }
+        // Start over or a take-away while it was being made ready: let it go.
+        if (gen !== generation.current || !stateRef.current.tray.some((p) => p.id === id)) {
+          URL.revokeObjectURL(r.url);
+          return;
+        }
+        dispatch({ type: "tray_ready", pic: { ...r, id } });
+        added++;
+      });
+      if (added) setTrayNews(ADDED_TEXT(Math.min(PICTURES_MAX, stateRef.current.tray.length)));
+      else setTrayNews("");
+      if (error) setNote(PICTURE_TEXT[error]);
+    },
+    [dispatch, generation],
+  );
+
+  function removePicture(id: number, index: number) {
+    if (leaving.includes(id)) return;
+    const reduced = prefersReducedMotion() || getPrefs().reduceMotion;
+    setLeaving((l) => [...l, id]);
+    setTrayNews(`Picture taken away. ${Math.max(0, stateRef.current.tray.length - 1)} of ${PICTURES_MAX}.`);
+    setTimeout(
+      () => {
+        dispatch({ type: "tray_remove", id });
+        setLeaving((l) => l.filter((x) => x !== id));
+        // Focus moves to the next take-away button, or to the picture button when the tray is empty.
+        requestAnimationFrame(() => {
+          const left = Array.from(trayRef.current?.querySelectorAll<HTMLButtonElement>(".help-pic:not(.is-leaving) .help-pic__remove") ?? []);
+          (left[Math.min(index, left.length - 1)] ?? picButton.current ?? input.current)?.focus({ preventScroll: true });
+        });
+      },
+      reduced ? 120 : 160,
+    );
+  }
+
+  function paste(e: ClipboardEvent<HTMLElement>) {
+    const files = filesFrom(e.clipboardData).filter(isPictureFile);
+    // Text pastes as text; only a picture is taken over.
+    if (!files.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void addFiles(files);
+  }
+
+  function dragEnter(e: DragEvent<HTMLElement>) {
+    if (!dragHasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    dragDepth.current++;
+    setDropping(true);
+  }
+
+  function dragOver(e: DragEvent<HTMLElement>) {
+    if (!dragHasFiles(e.dataTransfer)) return;
+    // Without this the webview would open the file instead of handing it to Ask.
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  function dragLeave(e: DragEvent<HTMLElement>) {
+    if (!dragHasFiles(e.dataTransfer)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDropping(false);
+  }
+
+  function drop(e: DragEvent<HTMLElement>) {
+    if (!dragHasFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDropping(false);
+    void addFiles(filesFrom(e.dataTransfer));
+  }
 
   // A question handed over by openHelp("…").
   useEffect(() => {
@@ -285,8 +482,12 @@ export function HelpPanel({
 
   function startOver() {
     generation.current++;
+    waiting.current = null;
+    // The reset lets go of every picture (useRevokeDropped in the launcher).
     dispatch({ type: "reset" });
     setText("");
+    setNote(null);
+    setTrayNews("");
     input.current?.focus();
   }
 
@@ -333,7 +534,11 @@ export function HelpPanel({
   const mainTaken = !!newestEntry && newestEntry.role === "assistant" && shown(newestEntry.answer.actions).length > 0;
   const suggestions = suggestionsFor({ page: helpPage(route.name) });
   const left = Math.max(0, Math.ceil((state.blockedUntil - now) / 1000));
-  const askOff = !text.trim() || state.thinking || blocked;
+  const tray = state.tray;
+  const processing = tray.some((p) => p.busy);
+  const askOff = (!text.trim() && tray.length === 0) || processing || state.thinking || blocked;
+  const lastUser = [...state.entries].reverse().find((x) => x.role === "user");
+  const lookingAtPicture = state.thinking && lastUser?.role === "user" && !!lastUser.pictures?.length;
 
   const chips = (key: string) => (
     <ul className="help-chips" aria-label="Questions you can ask" key={key}>
@@ -357,12 +562,37 @@ export function HelpPanel({
   );
 
   function renderEntry(e: Entry): ReactNode {
-    if (e.role === "user")
+    if (e.role === "user") {
+      const sent = e.pictures ?? [];
+      const viewable = sent.filter((p): p is SentPic & { url: string } => !!p.url);
       return (
-        <div key={e.id} className="help-msg help-msg--me">
-          <p className="user-text">{e.text}</p>
+        <div key={e.id} className={`help-msg help-msg--me${sent.length ? " has-pics" : ""}`}>
+          {sent.length ? (
+            <ul className={`help-sent${sent.length === 1 ? " is-one" : ""}`} aria-label={sent.length === 1 ? "Your picture" : `Your ${sent.length} pictures`}>
+              {sent.map((p, i) => (
+                <li key={p.id}>
+                  {p.url ? (
+                    <button
+                      type="button"
+                      className="help-sent__tile"
+                      aria-label={`Open picture ${i + 1} bigger`}
+                      onClick={(ev) => setViewer({ pictures: viewable, start: Math.max(0, viewable.findIndex((v) => v.id === p.id)), opener: ev.currentTarget })}
+                    >
+                      <img src={p.url} alt="" width={p.width} height={p.height} />
+                    </button>
+                  ) : (
+                    <span className="help-sent__tile is-gone" role="img" aria-label={`Picture ${i + 1}, no longer kept`}>
+                      <Icon name="image" size={28} />
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {e.text ? <p className="user-text">{e.text}</p> : null}
         </div>
       );
+    }
     if (e.role === "notice") {
       const busy = e.tone === "busy";
       return (
@@ -435,6 +665,11 @@ export function HelpPanel({
       role="dialog"
       aria-modal={phone ? "true" : "false"}
       aria-labelledby={titleId}
+      onPaste={paste}
+      onDragEnter={dragEnter}
+      onDragOver={dragOver}
+      onDragLeave={dragLeave}
+      onDrop={drop}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.stopPropagation();
@@ -508,23 +743,75 @@ export function HelpPanel({
               <span />
               <span />
             </span>
-            <span className={slow ? "" : "sr-only"}>{slow ? "Still looking…" : "Looking…"}</span>
+            <span className={slow || lookingAtPicture ? "" : "sr-only"}>{lookingAtPicture ? LOOKING_AT_PICTURE : slow ? "Still looking…" : "Looking…"}</span>
           </div>
         ) : null}
       </div>
 
       <form className="help-panel__form" onSubmit={submit}>
+        {tray.length ? (
+          <ul className="help-pics" ref={trayRef} aria-label="Pictures to send">
+            {tray.map((p, i) => (
+              <li key={p.id} className={`help-pic${p.busy ? " is-busy" : ""}${leaving.includes(p.id) ? " is-leaving" : ""}`}>
+                {p.busy ? (
+                  <span className="help-pic__wait help-shimmer" aria-hidden="true" />
+                ) : (
+                  <>
+                    <img className="help-pic__img" src={p.url} alt={`Picture ${i + 1}`} width={p.width} height={p.height} />
+                    <button type="button" className="help-pic__remove" aria-label={`Take away picture ${i + 1}`} onClick={() => removePicture(p.id, i)}>
+                      <Icon name="x" size={16} />
+                    </button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <span className="sr-only" role="status">
+          {trayNews}
+        </span>
         <label className="sr-only" htmlFor={inputId}>
           Your question
         </label>
-        <div className="help-panel__field">
+        <div className={`help-panel__field${pics ? " has-pic-btn" : ""}`}>
+          {pics ? (
+            <>
+              <button
+                ref={picButton}
+                type="button"
+                className="icon-btn help-panel__pic"
+                aria-label="Add a picture"
+                onClick={() => {
+                  if (stateRef.current.tray.length >= PICTURES_MAX) return setNote(PICTURE_TEXT.too_many);
+                  fileInput.current?.click();
+                }}
+              >
+                <Icon name="image" size={phone ? 24 : 22} />
+              </button>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+                onChange={(e) => {
+                  const files = Array.from(e.currentTarget.files ?? []);
+                  // The same picture can be picked again next time.
+                  e.currentTarget.value = "";
+                  void addFiles(files);
+                }}
+              />
+            </>
+          ) : null}
           <textarea
             id={inputId}
             ref={input}
             className="input help-panel__input"
             rows={1}
             maxLength={QUESTION_MAX}
-            placeholder="Ask me how to do something"
+            placeholder={tray.length ? PICTURE_PLACEHOLDER : "Ask me how to do something"}
             enterKeyHint="send"
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -545,7 +832,22 @@ export function HelpPanel({
             {text.length}/{QUESTION_MAX}
           </span>
         ) : null}
+        <div className="help-note-slot" role="status">
+          {note ? (
+            <p className="help-note">
+              <Icon name="info" size={18} />
+              <span>{note}</span>
+            </p>
+          ) : null}
+        </div>
       </form>
+      {dropping ? (
+        <div className="help-drop" aria-hidden="true">
+          <Icon name="image" size={56} />
+          <p>{DROP_TEXT}</p>
+        </div>
+      ) : null}
+      {viewer ? <PictureViewer pictures={viewer.pictures} start={viewer.start} opener={viewer.opener} onClose={() => setViewer(null)} /> : null}
     </section>
   );
 }

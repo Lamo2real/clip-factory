@@ -23,6 +23,8 @@ locals {
       HELP_MONTHLY_CAP     = tostring(var.help_monthly_cap)
       HELP_RATE_PER_MINUTE = "6"
       HELP_RATE_PER_HOUR   = "60"
+      # §26: picture questions per owner per UTC day; over it Ask answers in words only.
+      HELP_PICTURE_QUESTIONS_PER_DAY = "40"
     },
     var.help_model_id == "" ? {} : { HELP_MODEL_ID = var.help_model_id },
   )

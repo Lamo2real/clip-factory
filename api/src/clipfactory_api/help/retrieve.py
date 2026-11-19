@@ -15,6 +15,10 @@
 * Follow-ups: the question is ranked on its own first. It is merged with the previous *user* question from the
   history only when it starts with "and", "what about", "how about", "where is that", or when it is short (≤ 4
   content words) and unknown on its own. So a complete question asked right after another one keeps its answer.
+  The previous user turn's words are its text plus ``seen``, what its pictures showed (§26).
+* Pictures (§26): the words the look step read from the owner's pictures join the query with weight 0.75. They can
+  satisfy the title rule, and a picture question is also accepted when at least a quarter of the picture words
+  match the best doc. Refusals are checked on the typed question only.
 """
 
 from __future__ import annotations
@@ -37,6 +41,8 @@ MAX_CANDIDATES = 6
 PAGE_BOOST = 1.1
 GUIDE_TIE = 0.9  # a guide within 10 % of a generated doc on the same route counts as a tie, and wins it
 FOLLOW_UP_WEIGHT = 0.5
+PICTURE_WEIGHT = 0.75
+PICTURE_MIN_MATCHED = 0.25
 FOLLOW_UP_MAX_WORDS = 4
 FUZZY_MIN_LEN = 5
 FIELD_WEIGHTS = {"title": 3.0, "keywords": 2.5, "where": 1.5, "body": 1.0}
@@ -206,6 +212,7 @@ class _Group:
     alternatives: set[str]
     weight: float
     own: bool  # from the question itself (not merged in from the previous one)
+    picture: bool = False  # read from the owner's pictures (§26)
 
 
 def _groups(
@@ -248,8 +255,12 @@ def content_words(text: str, stopwords: frozenset[str] = DEFAULT_STOPWORDS) -> l
 
 def previous_user_question(history: Sequence[Mapping[str, Any]] | None) -> str | None:
     for turn in reversed(list(history or [])):
-        if turn.get("role") == "user" and isinstance(turn.get("text"), str) and turn["text"].strip():
-            return str(turn["text"])
+        if turn.get("role") != "user" or not isinstance(turn.get("text"), str):
+            continue
+        seen = turn.get("seen")
+        text = f"{turn['text']} {seen}" if isinstance(seen, str) and seen.strip() else str(turn["text"])
+        if text.strip():
+            return text.strip()
     return None
 
 
@@ -295,8 +306,9 @@ def _score(index: _Index, groups: list[_Group], context: HelpContext | None, mer
     for g in groups:
         for term in g.alternatives:
             weights[term] = max(weights.get(term, 0.0), g.weight)
-    own = [g for g in groups if g.own]
-    own_terms = {t for g in own for t in g.alternatives}
+    own = [g for g in groups if g.own and not g.picture]
+    pictures = [g for g in groups if g.picture]
+    own_terms = {t for g in [*own, *pictures] for t in g.alternatives}
     page = boost_page(context.page if context is not None else None)
     scored: list[tuple[float, int, str, int]] = []
     for n, doc in enumerate(index.docs):
@@ -315,7 +327,11 @@ def _score(index: _Index, groups: list[_Group], context: HelpContext | None, mer
     tf = index.tf[best]
     matched = sum(1 for g in own if any(tf.get(t, 0) > 0 for t in g.alternatives))
     title_hit = bool(own_terms & index.title_terms[best])
-    if best_score < MIN_SCORE or matched < MIN_MATCHED * len(own) or not title_hit:
+    enough = (bool(own) or not pictures) and matched >= MIN_MATCHED * len(own)
+    if pictures and not enough:
+        seen = sum(1 for g in pictures if any(tf.get(t, 0) > 0 for t in g.alternatives))
+        enough = seen >= max(1, math.ceil(PICTURE_MIN_MATCHED * len(pictures)))
+    if best_score < MIN_SCORE or not enough or not title_hit:
         return Ranked("unknown", score=best_score, question=merged)
     return Ranked(
         "answer",
@@ -333,6 +349,7 @@ def rank(
     *,
     synonyms: Mapping[str, str] | None = None,
     stopwords: frozenset[str] | None = None,
+    picture_words: Sequence[str] = (),
 ) -> Ranked:
     """Ranks the visible docs for a question. Refusals and unknowns carry no candidates (and never cost a model
     call). The question is ranked on its own first; see the module docstring for when it borrows the previous
@@ -347,6 +364,9 @@ def rank(
     index = _index_for(docs, shown, stopwords)
     vocab = index.vocab_set
     groups = _groups(question, 1.0, True, synonyms, stopwords, vocab=vocab)
+    if picture_words:
+        seen = _groups(" ".join(picture_words), PICTURE_WEIGHT, True, synonyms, stopwords, vocab=vocab)
+        groups = groups + [_Group(g.alternatives, g.weight, True, picture=True) for g in seen]
     previous = previous_user_question(history)
     if previous is None or previous.strip() == question.strip():
         return _score(index, groups, context, question)

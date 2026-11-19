@@ -66,11 +66,11 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      - name: Playwright (mock mode, Chromium), shard ${{ matrix.shard }} of ${{ strategy.job-total }}
+      - name: Playwright (mock mode, Chromium, and WebKit for Ask pictures), shard ${{ matrix.shard }} of ${{ strategy.job-total }}
         env:
           SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: |
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
           npm run e2e -- --shard="$SHARD" --workers=4
       - name: upload the Playwright report
         if: failure()
