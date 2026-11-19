@@ -327,6 +327,7 @@ a.dash-shared:hover {
 .dash-kpi--main .dash-kpi__lines {
   margin-block: auto;
 }
+
 .dash-kpi__head {
   display: flex;
   align-items: center;
@@ -441,6 +442,18 @@ a.dash-shared:hover {
 .dash-grid-box {
   container-type: inline-size;
 }
+/* A phone: one card per row. Weekly no longer sits beside the taller Daily card, so there is no empty gap above its
+   number, and every card's words stay at the left, clear of Ask's spot at the right (§27.4). */
+@container (max-width: 559px) {
+  .dash-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dash-kpi--weekly,
+  .dash-kpi--daily,
+  .dash-kpi--yearly {
+    min-height: 0;
+  }
+}
 @container (min-width: 880px) {
   .dash-grid {
     grid-template-columns: minmax(0, 7fr) minmax(0, 2.5fr) minmax(0, 2.5fr);
@@ -454,6 +467,10 @@ a.dash-shared:hover {
   .dash-kpi--weekly,
   .dash-kpi--daily {
     min-height: 132px;
+  }
+  .dash-kpi--weekly .dash-kpi__lines,
+  .dash-kpi--daily .dash-kpi__lines {
+    margin-top: auto;
   }
   .dash-kpi--yearly {
     grid-column: 2 / 4;

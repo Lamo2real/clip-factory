@@ -140,6 +140,46 @@ export function controlBoxes(doc: Document = document, viewportHeight = window.i
 }
 
 /**
+ * Words on screen inside a block marked data-help-dodge-text (the Money page, §27.4), as boxes: one per line of
+ * each run of text, cut to what shows of it (`shownBox`, so the hidden words of a screen-reader label or a clamp do
+ * not count). There the launcher treats words like controls: it never comes to rest on top of a single letter.
+ * Elsewhere words are not obstacles (§19.8). With `column`, only lines in the launcher's column are returned.
+ */
+export function textBoxes(doc: Document = document, viewportHeight = window.innerHeight, column?: Pick<Box, "left" | "right">): Box[] {
+  const out: Box[] = [];
+  const view = doc.defaultView;
+  for (const block of Array.from(doc.querySelectorAll("[data-help-dodge-text]"))) {
+    const walk = doc.createTreeWalker(block, 4 /* NodeFilter.SHOW_TEXT */);
+    for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+      const el = node.parentElement;
+      if (!el || !node.textContent?.trim() || el.closest(CHROME) || el.closest("[inert], [hidden]")) continue;
+      // Measured by the words themselves, never the element they are in: a word can run out of a narrow box.
+      const range = doc.createRange();
+      range.selectNodeContents(node);
+      let seen: boolean | undefined;
+      for (const r of Array.from(range.getClientRects())) {
+        if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= viewportHeight) continue;
+        if (column && (r.right <= column.left - DODGE_TEXT_GAP || r.left >= column.right + DODGE_TEXT_GAP)) continue;
+        seen ??= !view || view.getComputedStyle(el).visibility !== "hidden";
+        if (!seen) break;
+        const shown = shownBox(el, r, true);
+        if (shown && shown.right - shown.left >= 2 && shown.bottom - shown.top >= 2) out.push(shown);
+      }
+    }
+  }
+  return out;
+}
+
+/** How close words may come to the launcher's edge (px), so a rounding of a pixel never leaves it on a letter. */
+export const DODGE_TEXT_GAP = 2;
+
+/** True when the launcher at `base` lies over any of the words, or comes within DODGE_TEXT_GAP of them. */
+export function coversText(base: Box, words: readonly Box[]): boolean {
+  const g = DODGE_TEXT_GAP;
+  return words.some((t) => Math.min(base.right + g, t.right) - Math.max(base.left - g, t.left) > 0 && Math.min(base.bottom + g, t.bottom) - Math.max(base.top - g, t.top) > 0);
+}
+
+/**
  * Where the launcher sits: its layout box, which no transform, translate or scale (the fade, the press) changes,
  * so a measure in the middle of a transition is still right.
  */
@@ -194,13 +234,17 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
       const still = now - lastMove;
       if (still < DODGE_SETTLE_MS) return later(DODGE_SETTLE_MS - still);
       const base = restingBox(el);
-      const want = blocks(base, controlBoxes(document, window.innerHeight, { left: base.left, right: base.right }));
+      const column = { left: base.left, right: base.right };
+      const want = blocks(base, controlBoxes(document, window.innerHeight, column)) || coversText(base, textBoxes(document, window.innerHeight, column));
       if (want === !shown.current) return settling(false);
       // Back in only after a longer stillness, and never sooner than the hold after the last change.
       const wait = Math.max(want ? 0 : DODGE_RETURN_MS - still, DODGE_HOLD_MS - (now - lastChange));
       if (wait > 0) return later(wait);
       lastChange = now;
       shown.current = !want;
+      // The class goes on now, in the same frame as the look, not when React gets to it: nothing can see the
+      // launcher "settled" but still shown over what it should keep clear of. React then sets the same class.
+      el.classList.toggle("is-hidden", want);
       settling(false);
       setBlocked(want);
     };
@@ -226,11 +270,13 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
     resized?.observe(document.documentElement);
     if (launcher.current) resized?.observe(launcher.current);
     const changed = typeof MutationObserver !== "undefined" ? new MutationObserver(schedule) : null;
-    changed?.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden", "aria-expanded"] });
+    changed?.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class", "style", "hidden", "aria-expanded"] });
     // The launcher's spot moves without new content: the update bar's class and height on <html>.
     changed?.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style"] });
     window.addEventListener("transitionend", schedule, true);
     window.addEventListener("animationend", schedule, true);
+    // A picture that loads can move the words around it.
+    window.addEventListener("load", schedule, true);
     document.fonts?.addEventListener?.("loadingdone", schedule);
     window.addEventListener("scroll", moved, { passive: true });
     window.addEventListener("resize", moved);
@@ -252,6 +298,7 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
       resized?.disconnect();
       window.removeEventListener("transitionend", schedule, true);
       window.removeEventListener("animationend", schedule, true);
+      window.removeEventListener("load", schedule, true);
       document.fonts?.removeEventListener?.("loadingdone", schedule);
     };
   }, [launcher, page]);

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Api, Job, WeekClip } from "../src/api/types.ts";
 import { chatReducer, historyOf, initialChat, newestAnswerId } from "../src/features/help/chatState.ts";
 import { deviceOf } from "../src/features/help/context.ts";
-import { blocks, DODGE_COVER, DODGE_HOLD_MS, DODGE_RETURN_MS, DODGE_SETTLE_MS, DODGE_TAP, hardToTap } from "../src/features/help/dodge.ts";
+import { blocks, DODGE_COVER, DODGE_HOLD_MS, DODGE_RETURN_MS, DODGE_SETTLE_MS, DODGE_TAP, coversText, hardToTap } from "../src/features/help/dodge.ts";
 import { readLive } from "../src/features/help/live.ts";
 import { nameOf, ringTarget, SPOT_ARRIVE_CAP_MS, SPOT_SHOW_MS, SPOT_STILL_MS, spotlight } from "../src/features/help/spotlight.ts";
 import { hasUnsaved, registerUnsaved } from "../src/features/help/unsaved.ts";
@@ -228,5 +228,16 @@ describe("live numbers (§19.7)", () => {
     expect(await readLive({ metric: "clip_views", text: "" }, a)).toEqual({ kind: "skip" });
     expect(await readLive({ metric: "clip_views", text: "" }, a, { clipId: "c1" })).toEqual({ kind: "values", values: { value: "3.4K", platform: "TikTok" } });
     await expect(readLive({ metric: "review_waiting", text: "" }, a)).rejects.toThrow("offline");
+  });
+});
+
+describe("launcher over words (Money page, §27.4)", () => {
+  const base = { top: 600, bottom: 656, left: 300, right: 356 };
+  it("any overlap with a line of words counts, or words within 2 px; a line further away does not", () => {
+    expect(coversText(base, [{ top: 640, bottom: 658, left: 210, right: 302 }])).toBe(true);
+    expect(coversText(base, [{ top: 657, bottom: 675, left: 210, right: 340 }])).toBe(true);
+    expect(coversText(base, [{ top: 659, bottom: 677, left: 210, right: 340 }])).toBe(false);
+    expect(coversText(base, [{ top: 620, bottom: 638, left: 32, right: 297 }])).toBe(false);
+    expect(coversText(base, [])).toBe(false);
   });
 });

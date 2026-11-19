@@ -3520,7 +3520,9 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   one only from the box it is placed against). A tab scrolled out of its row or a strip that runs on under another
   panel is not on screen there, so it is no obstacle. The setup list (§17.13) is not chrome: its buttons are controls
   like any other. Words are not obstacles: a floating button over a line of text is expected, and scrolling moves the
-  words out from under it. Settled, it never rests on a control at any width from 320 to 1920 px, at the top of a page
+  words out from under it. The one exception is a block marked `data-help-dodge-text` (the Money page, §27.4): there
+  every visible line of words (`textBoxes`, cut to what shows) counts like a control, so the launcher fades out rather
+  than rest on a single letter (`coversText`). Settled, it never rests on a control at any width from 320 to 1920 px, at the top of a page
   or after scrolling, with or without the update bar, and with other fonts (`e2e/help.spec.ts`). Every page adds
   bottom padding under its last control so the last control can always be scrolled clear of the spot, and the
   launcher shows at home at the end. Green glass, never vermilion.
@@ -5471,8 +5473,13 @@ Every amount carries its tag ("YouTube's estimate", "Meta's estimate", "Apps' es
   the list on screen. With no money per video for the chosen apps the clip list hides its Sort bar (the note says
   "Sorted by views.").
 * **Cards**: Monthly (main card, display-size number that counts up once, 700 ms) then Weekly | Daily side by side,
-  then Yearly. When the card area is 880 px or wider: Monthly on the left over two rows, Weekly and Daily on the
-  right with Yearly under them. A card narrower than 150 px drops its number one step (container query).
+  then Yearly. When the card area is under 560 px (a phone) the four cards stack one per row, so Weekly has no empty
+  gap above its number and every card's words stay at the left, clear of Ask's spot. When the card area is 880 px or
+  wider: Monthly on the left over two rows, Weekly and Daily on the right with Yearly under them. A card narrower
+  than 150 px drops its number one step (container query).
+* **Ask never covers words here** (owner request, 2026-11-19): the page is marked `data-help-dodge-text` (§19.8), so
+  wherever the page is scrolled and left, Ask is either clear of every line of text or faded out; on first load it is
+  clear and shown at 320, 375, 390 and 430 px, light and dark (`e2e/money-dashboard.spec.ts`).
 * **Chart** (hand-drawn SVG, no library): money per day (7, 30, 90) or per week (Year, weeks ending on `through`, the
   oldest marked partial), split by app only when two or more apps have money (YouTube bone, Facebook leaf; never
   vermilion). No gridlines, axis lines or borders: one soft baseline band, the highest value on top, the first and
