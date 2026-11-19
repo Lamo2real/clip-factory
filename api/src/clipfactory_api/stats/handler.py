@@ -88,6 +88,7 @@ FORGET_FIELDS = [
     "day7CheckedAt",
     "day7Verdict",  # the winner verdict and the baseline median it was judged against
     "revenue",  # §25.3: YouTube's estimate for the clip (read with the monetary scope)
+    "revenueWindows",  # §27.6: the same estimate over the last 7, 30 and 90 reported days
 ]
 
 

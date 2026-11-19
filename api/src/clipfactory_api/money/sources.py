@@ -61,6 +61,11 @@ class Reading:
     split: dict[str, Any] | None = None  # YouTube: this month's money by content type (hidden when the API says 400)
     videos: dict[str, int] = field(default_factory=dict)  # YouTube videoId → micros since the clip's first day
     videos_through: str | None = None
+    video_views: dict[str, int] = field(default_factory=dict)  # the same lifetime report's views (§27.6)
+    # §27.6: per-video money over the last 7, 30 and 90 reported days. "7" → {"from", "to", "videos": {id: {amount,
+    # views}}}; a period whose report failed is in `windows_failed` (its stored value is kept).
+    windows: dict[str, dict[str, Any]] = field(default_factory=dict)
+    windows_failed: dict[str, str] = field(default_factory=dict)
     raw: dict[str, Any] | None = None  # Facebook while unverified: the stripped answer, never shown
     approx_month: dict[str, Any] | None = None  # Facebook: monetization_approximate_earnings this month
     long_videos: int | None = None  # TikTok: videos of 1 minute or longer among the newest 20
@@ -229,6 +234,7 @@ def read_youtube(
             )
         out.split = _youtube_split(http, token, end, out)
         out.videos, out.videos_through = _youtube_videos(http, token, end, video_ids, out), end.isoformat()
+        _youtube_windows(http, token, video_ids, out)
         return out
     reason = _yt_reason(money)
     if money.status == 403 and reason == "forbidden" and nonmoney_ok:
@@ -328,8 +334,36 @@ def _youtube_split(http: HttpClient, token: str, end: date, out: Reading) -> dic
     return split if len(split) > 1 else None
 
 
+def _video_rows(
+    http: HttpClient, token: str, chunk: list[str], *, start: str, end: str, out: Reading
+) -> tuple[bool, dict[str, tuple[int, int | None]]]:
+    """One ``dimensions=video`` report: ``(ok, {videoId: (micros, views)})`` for the chunk's ids."""
+    resp = _report(
+        http,
+        token,
+        startDate=start,
+        endDate=end,
+        metrics="estimatedRevenue,views",
+        dimensions="video",
+        filters="video==" + ",".join(chunk),
+        sort="-estimatedRevenue",
+        maxResults=str(VIDEO_IDS_PER_REPORT),
+    )
+    out.requests += 1
+    if resp.status != 200:
+        return False, {}
+    found: dict[str, tuple[int, int | None]] = {}
+    for r in _rows(_body(resp)):
+        video = str(r.get("video") or "")
+        amount = micros(r.get("estimatedRevenue"))
+        if video in chunk and amount is not None:
+            found[video] = (amount, to_int(r.get("views")))
+    return True, found
+
+
 def _youtube_videos(http: HttpClient, token: str, end: date, video_ids: dict[str, str], out: Reading) -> dict[str, int]:
-    """Money per Clip Factory video since its first day (≤ 50 ids a call, so no video is ever cut off)."""
+    """Money per Clip Factory video since its first day (≤ 50 ids a call, so no video is ever cut off), with the same
+    report's views (``video_views``)."""
     found: dict[str, int] = {}
     ids = sorted(video_ids, key=lambda v: video_ids[v])
     for i in range(0, len(ids), VIDEO_IDS_PER_REPORT):
@@ -337,26 +371,45 @@ def _youtube_videos(http: HttpClient, token: str, end: date, video_ids: dict[str
         start = min(video_ids[v] for v in chunk)
         if start > end.isoformat():
             continue
-        resp = _report(
-            http,
-            token,
-            startDate=start,
-            endDate=end.isoformat(),
-            metrics="estimatedRevenue",
-            dimensions="video",
-            filters="video==" + ",".join(chunk),
-            sort="-estimatedRevenue",
-            maxResults=str(VIDEO_IDS_PER_REPORT),
-        )
-        out.requests += 1
-        if resp.status != 200:
+        ok, rows = _video_rows(http, token, chunk, start=start, end=end.isoformat(), out=out)
+        if not ok:
             continue
-        for r in _rows(_body(resp)):
-            video = str(r.get("video") or "")
-            amount = micros(r.get("estimatedRevenue"))
-            if video in video_ids and amount is not None:
-                found[video] = amount
+        for video, (amount, views) in rows.items():
+            found[video] = amount
+            if views is not None:
+                out.video_views[video] = views
     return found
+
+
+WINDOW_DAYS = (7, 30, 90)
+
+
+def _youtube_windows(http: HttpClient, token: str, video_ids: dict[str, str], out: Reading) -> None:
+    """§27.6: money and views per video over the last 7, 30 and 90 days YouTube finished, ending on the newest day of
+    the day report (so a clip's period money covers the same days as the dashboard's periods). A video YouTube left
+    out of a successful report had no money and no views in those days: it is stored as 0. Never asked for a video
+    posted after the window ends."""
+    if not out.days or not video_ids:
+        return
+    through = max(str(d["date"]) for d in out.days)
+    end = date.fromisoformat(through)
+    ids = sorted(v for v in video_ids if video_ids[v] <= through)
+    for n in WINDOW_DAYS:
+        start = (end - timedelta(days=n - 1)).isoformat()
+        videos: dict[str, dict[str, int]] = {}
+        failed = False
+        for i in range(0, len(ids), VIDEO_IDS_PER_REPORT):
+            chunk = ids[i : i + VIDEO_IDS_PER_REPORT]
+            ok, rows = _video_rows(http, token, chunk, start=start, end=through, out=out)
+            if not ok:
+                failed = True
+                continue
+            for video in chunk:
+                amount, views = rows.get(video, (0, 0))
+                videos[video] = {"amountMicros": amount, "views": views if views is not None else 0}
+        if failed:
+            out.windows_failed[str(n)] = YT_OTHER
+        out.windows[str(n)] = {"from": start, "to": through, "videos": videos}
 
 
 # --- Meta (Facebook Page, Instagram) ---------------------------------------------------------------------------
