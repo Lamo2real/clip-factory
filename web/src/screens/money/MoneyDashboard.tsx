@@ -310,7 +310,9 @@ function OnlyNotShared({ excluded }: { excluded: MoneyExcluded[] }) {
 }
 
 function AppsFilter({ apps, onChange }: { apps: Platform[]; onChange: (apps: Platform[]) => void }) {
+  // §20.11: the tapped chip's content bumps (`toggle`); instant under reduced motion.
   const bump = useAction("toggle");
+  const [tapped, setTapped] = useState<Platform | "all" | null>(null);
   const all = isAll(apps);
   const chip = (key: Platform | "all", on: boolean, content: ReactNode, label: string) => (
     <button
@@ -322,14 +324,19 @@ function AppsFilter({ apps, onChange }: { apps: Platform[]; onChange: (apps: Pla
       data-app={key}
       onClick={() => {
         onChange(toggleApp(apps, key));
+        setTapped(key);
         bump.play();
       }}
     >
-      {content}
+      <span className={`act act--toggle is-${tapped === key ? bump.phase : "idle"}`}>
+        <span className="act__item" key={tapped === key ? bump.shot : 0}>
+          {content}
+        </span>
+      </span>
     </button>
   );
   return (
-    <div className={`dash-apps act act--toggle is-${bump.phase}`} role="group" aria-label="Apps" data-help="money-dash-filter">
+    <div className="dash-apps" role="group" aria-label="Apps" data-help="money-dash-filter">
       {APPS.map((p) => chip(p, !all && apps.includes(p), <PlatformMark platform={p} size={20} />, PLATFORM_LABEL[p]))}
       {chip("all", all, <span>All</span>, "All apps")}
     </div>
@@ -355,6 +362,14 @@ function Controls({ choice, set, dock }: { choice: DashChoice; set: (c: Partial<
       <AppsFilter apps={choice.apps} onChange={(apps) => set({ apps })} />
       <PeriodPick value={choice.period} onChange={(period) => set({ period })} />
     </div>
+  );
+}
+
+function PaidLink() {
+  return (
+    <A href={MONEY_PATH} className="dash-head__link text-link">
+      How close am I to getting paid?
+    </A>
   );
 }
 
@@ -475,9 +490,8 @@ export function MoneyDashboard() {
           </p>
         </div>
         {dock ? null : <span className="dash-head__room" aria-hidden="true" />}
-        <A href={MONEY_PATH} className="dash-head__link text-link">
-          How close am I to getting paid?
-        </A>
+        {/* Phones: the link waits under the cards, so the Monthly number is in view above the dock. */}
+        {dock ? null : <PaidLink />}
       </header>
 
       {error && !data ? <ErrorPanel message={error} onRetry={reload} /> : null}
@@ -509,6 +523,7 @@ export function MoneyDashboard() {
             </p>
           ) : null}
           {onlyNotShared ? null : <Notes excluded={data.excluded} />}
+          {dock ? <PaidLink /> : null}
           {shown ? (
             <section className="dash-chart-card glass" aria-labelledby="dash-chart-title">
               <div className="dash-section-head">

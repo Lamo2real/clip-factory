@@ -430,7 +430,7 @@ export function dashData(scenario: MoneyScenario, today = todayUtc()): DashData 
         rows: youtube(80, addDays(today, -9)),
         status: { ...ALL_CONNECTED, youtube: { ...OK, lastError: "YouTube didn't answer. Clip Factory checks again tomorrow.", checkedAt: new Date().toISOString() } },
         facebookVerified: false,
-        clips: { extra: 19, withMoney: 14, money: true, failPage2: true },
+        clips: { extra: 26, withMoney: 14, money: true, failPage2: true },
       };
     case "earning":
       return { rows: series("youtube", "USD", fb, YT_DAILY), status: ALL_CONNECTED, facebookVerified: false, clips: { extra: 0, withMoney: 4, money: true } };

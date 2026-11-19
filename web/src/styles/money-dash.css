@@ -39,6 +39,7 @@
 .dash-head__link {
   grid-column: 1 / -1;
   justify-self: end;
+  align-self: end;
   text-align: right;
   font-size: var(--fs-small);
   padding-inline: 4px;
@@ -51,6 +52,9 @@
 .dash-through {
   padding-inline: 0;
 }
+.money-dash > .dash-head__link {
+  margin-top: -6px;
+}
 
 /* ---------- Wide screens: the toolbar's rail (top right, stays in view) ---------- */
 .dash-rail {
@@ -59,8 +63,10 @@
   top: calc(6px + var(--dash-head-h, 0px));
   right: 0;
   bottom: 0;
-  width: max-content;
-  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 100%;
   pointer-events: none;
 }
 .dash-toolbar {
@@ -71,7 +77,8 @@
   justify-content: flex-end;
   align-items: center;
   gap: 6px 10px;
-  max-width: min(100%, 680px);
+  /* Two short rows (the apps, then the days), so it stays in the top-right corner at every width. */
+  max-width: min(100%, 340px);
   padding: 6px;
   border-radius: var(--r-lg);
   pointer-events: auto;
@@ -81,6 +88,12 @@
 }
 
 /* ---------- The controls ---------- */
+/* Above the refracting glass layer of their bar (as the tab bar's items are). */
+.money-dock > *,
+.dash-toolbar > * {
+  position: relative;
+  z-index: 1;
+}
 .dash-apps {
   display: flex;
   gap: 2px;
