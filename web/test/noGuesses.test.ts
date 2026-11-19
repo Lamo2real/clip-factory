@@ -1,4 +1,4 @@
-// The CI guard of docs/CONTRACTS.md §25 (ADR-45): no screen may guess money again. The retired §21 helpers and the
+// The CI guard of docs/CONTRACTS.md §25 (ADR-47): no screen may guess money again. The retired §21 helpers and the
 // owner-typed rates must not come back anywhere in web/src. `earningsRates` and `earningsPaid` stay only where the
 // settings are typed and validated (they are stored, never read).
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -18,7 +18,7 @@ function files(dir: string): string[] {
 const read = (f: string) => readFileSync(f, "utf8");
 const rel = (f: string) => relative(SRC, f).split("\\").join("/");
 
-describe("no money guesses (§25, ADR-45)", () => {
+describe("no money guesses (§25, ADR-47)", () => {
   it("nothing imports the retired lib/earnings.ts or config/earnings.json", () => {
     const using = files(SRC).filter((f) => /from\s+["'][^"']*(lib\/earnings|config\/earnings\.json)/.test(read(f)) || /earnings\.(ts|json)/.test(read(f)));
     expect(using.map(rel)).toEqual([]);

@@ -1,4 +1,4 @@
-# Real earnings (docs/CONTRACTS.md §25.6, docs/DECISIONS.md ADR-45):
+# Real earnings (docs/CONTRACTS.md §25.6, docs/DECISIONS.md ADR-47):
 #   cf-prod-money  once a day (06:00 UTC, after the 05:00 learning run) reads each connected platform's account numbers
 #                  and the money the platform itself reports (YouTube Analytics estimatedRevenue; Facebook only after
 #                  its live check), and writes ACCTSTAT#, REVENUE# and MONEYSTATE# items under the owner. cf-prod-api

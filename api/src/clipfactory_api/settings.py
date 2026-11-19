@@ -26,7 +26,7 @@ DEFAULTS: dict[str, Any] = {
     "errorSound": 5,  # the owner's pick: "Nope nope nope"
     "platforms": list(PLATFORMS),
     "youtubePrivacy": "public",  # §17.6: who can see the YouTube uploads (YouTube policy wants the owner's choice)
-    # §21 Earnings, retired by §25 (ADR-45): the owner's old USD per 1,000 views and "Do I get paid here?". Kept,
+    # §21 Earnings, retired by §25 (ADR-47): the owner's old USD per 1,000 views and "Do I get paid here?". Kept,
     # validated and stored exactly as before so no saved value is lost, but nothing reads them any more.
     "earningsRates": {},
     "earningsPaid": {},
