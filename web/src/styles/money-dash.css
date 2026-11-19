@@ -50,7 +50,7 @@
 .dash-band {
   position: sticky;
   z-index: 30;
-  top: calc(env(safe-area-inset-top) + 8px + var(--todo-bar-h, 0px));
+  top: calc(var(--top-safe) + 8px + var(--todo-bar-h, 0px));
   display: flex;
   justify-content: flex-end;
   padding: 6px;
