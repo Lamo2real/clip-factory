@@ -7,6 +7,7 @@ import {
   PICTURES_MAX,
   QUESTION_MAX,
   SEEN_MAX,
+  type AssistantStatus,
   type HelpAnswer,
   type HelpContext,
   type HelpPicture,
@@ -111,6 +112,13 @@ function errorOf(body: unknown): { code: string; message: string; requestId: str
   };
 }
 
+/** The `assistant` field of GET /v1/help (§27.6); off when absent or malformed. */
+export function assistantOf(raw: unknown): AssistantStatus {
+  const a = raw as { on?: unknown; web?: unknown; files?: unknown } | null | undefined;
+  if (!a || typeof a !== "object" || a.on !== true) return { on: false, web: "off", files: false };
+  return { on: true, web: a.web === "on" || a.web === "no_key" ? a.web : "off", files: a.files === true };
+}
+
 function isAnswer(a: unknown): a is HelpAnswer {
   const x = a as Partial<HelpAnswer> | null;
   return !!x && typeof x.known === "boolean" && typeof x.text === "string" && Array.isArray(x.steps) && Array.isArray(x.actions);
@@ -152,7 +160,13 @@ export function helpClient({
           const mode = b.mode === "model" || b.mode === "kb" || b.mode === "off" ? b.mode : b.enabled ? "kb" : "off";
           return {
             kind: "ok",
-            status: { enabled: b.enabled, mode, corpusVersion: typeof b.corpusVersion === "string" ? b.corpusVersion : "", pictures: b.pictures === true && mode === "model" },
+            status: {
+              enabled: b.enabled,
+              mode,
+              corpusVersion: typeof b.corpusVersion === "string" ? b.corpusVersion : "",
+              pictures: b.pictures === true && mode === "model",
+              assistant: assistantOf((b as { assistant?: unknown }).assistant),
+            },
           };
         }
         if (res.status === 403 && errorOf(res.body).code === "help_off") return { kind: "ok", status: { enabled: false, mode: "off", corpusVersion: "", pictures: false } };

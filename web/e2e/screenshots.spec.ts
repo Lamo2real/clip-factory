@@ -336,7 +336,8 @@ for (const size of [
       await page.screenshot({ path: join(dir, `help-spotlight-keep-${size.width}x${size.height}.png`) });
       if (await panel.count()) await panel.getByRole("button", { name: "Close" }).click();
       await page.evaluate(() => window.dispatchEvent(new CustomEvent("cf:help", { detail: {} })));
-      await panel.locator(".help-steps").waitFor();
+      // The plain answer's steps (§19), or the assistant's answer (§27).
+      await panel.locator(".help-steps, .ask-answer").last().waitFor();
       await page.waitForTimeout(400);
       await page.screenshot({ path: join(dir, `help-panel-reopened-${size.width}x${size.height}.png`) });
     });

@@ -2161,6 +2161,153 @@
         ],
         "installed": false
       }
+    },
+    {
+      "id": "ask-web-setup",
+      "route": "/settings/app/ask",
+      "hash": "ask-web-setup",
+      "where": "Settings › App & account › Ask",
+      "title": "Turn on web search for Ask",
+      "keywords": [
+        "web search",
+        "search key",
+        "brave",
+        "internet",
+        "browse",
+        "search the web",
+        "can't search the web",
+        "web",
+        "online",
+        "latest steps"
+      ],
+      "answer": "Ask can read today's web pages once you add a free search key. Get it from Brave Search, paste it in **Settings › App & account › Ask** and tap **Save key**.",
+      "steps": [
+        "Open **Settings**, then **App & account**, then **Ask**.",
+        "Tap **Get a search key** and make a free account. Pick the **Search** plan.",
+        "Copy your key.",
+        "Paste it under **Your search key** and tap **Save key**. A green check says web search is on."
+      ],
+      "actions": [
+        {
+          "id": "ask-web-setup:open",
+          "label": "Turn on web search",
+          "to": "/settings/app/ask#ask-web-setup",
+          "highlight": [
+            "ask-web-setup"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ask-what",
+      "route": "/settings/app/ask",
+      "hash": "ask-status",
+      "where": "Ask",
+      "title": "What Ask can do",
+      "keywords": [
+        "what can you do",
+        "ask anything",
+        "assistant",
+        "chat",
+        "claude",
+        "opus",
+        "general question",
+        "help me with",
+        "who are you"
+      ],
+      "answer": "Ask answers any question, not only about Clip Factory. It knows every page and setting, sees your own setup, can search the web and reads the files you add.",
+      "steps": [
+        "Tap **Ask** at the bottom right.",
+        "Type any question, or add a file with the paperclip.",
+        "Tap the paper plane. The answer appears as it is written. Tap **Stop answer** to end it."
+      ],
+      "actions": [
+        {
+          "id": "ask-what:open",
+          "label": "Open Ask settings",
+          "to": "/settings/app/ask#ask-status",
+          "highlight": [
+            "ask-status"
+          ]
+        }
+      ],
+      "suggest": true
+    },
+    {
+      "id": "ask-files",
+      "route": "/settings/app/ask",
+      "hash": "ask-status",
+      "where": "Ask",
+      "title": "Add files to Ask",
+      "keywords": [
+        "attach",
+        "file",
+        "pdf",
+        "document",
+        "upload file",
+        "drag",
+        "drop",
+        "paste",
+        "word",
+        "excel",
+        "csv",
+        "paperclip",
+        "spreadsheet"
+      ],
+      "answer": "Add files with the paperclip, drop them on Ask, or paste them. Ask reads pictures, PDFs, text files and Word, Excel and PowerPoint files. It never keeps them.",
+      "steps": [
+        "Open **Ask**.",
+        "Tap the paperclip, or drag files onto Ask, or paste them.",
+        "Each file shows as a tile with its kind and name.",
+        "Ask your question and tap the paper plane."
+      ],
+      "actions": [
+        {
+          "id": "ask-files:open",
+          "label": "Open Ask settings",
+          "to": "/settings/app/ask#ask-status",
+          "highlight": [
+            "ask-status"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ask-markup",
+      "route": "/settings/app/ask",
+      "hash": "ask-status",
+      "where": "Ask",
+      "title": "Mark a picture in red",
+      "keywords": [
+        "mark",
+        "draw",
+        "red",
+        "circle",
+        "highlight picture",
+        "arrow",
+        "box",
+        "annotate",
+        "markup",
+        "scribble"
+      ],
+      "answer": "Tap a picture in Ask's tray to mark it. Draw with **Pen**, **Box** or **Arrow** in red, then tap **Save**. Ask sees exactly what you marked.",
+      "steps": [
+        "Add a picture to Ask.",
+        "Tap the picture.",
+        "Pick **Pen**, **Box** or **Arrow** and draw on what you mean.",
+        "Tap **Undo** or **Clear** to fix it.",
+        "Tap **Save**."
+      ],
+      "actions": [
+        {
+          "id": "ask-markup:open",
+          "label": "Open Ask settings",
+          "to": "/settings/app/ask#ask-status",
+          "highlight": [
+            "ask-status"
+          ]
+        }
+      ]
     }
   ]
 }
