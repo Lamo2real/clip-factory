@@ -31,7 +31,7 @@ export default defineConfig({
     {
       name: "webkit",
       use: { ...devices["Desktop Safari"] },
-      testMatch: /(help-pictures|ask-assistant|ask-markup|nav-smooth|page-still|top-line|job-head)\.spec\.ts/,
+      testMatch: /(help-pictures|ask-assistant|ask-markup|nav-smooth|page-still|top-line|job-head|drop-video)\.spec\.ts/,
     },
     {
       name: "webkit-phone",
