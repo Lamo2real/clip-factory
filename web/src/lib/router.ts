@@ -16,6 +16,8 @@ export type Route =
   | { name: "library"; view: "all" | "week"; week: string | null }
   /** One clip's performance page. */
   | { name: "clip"; clipId: string }
+  /** The money dashboard (§27.4). Its apps, period and sort live in the query, read by the page itself. */
+  | { name: "money" }
   /**
    * Settings is a tree (docs/CONTRACTS.md §15.1): the field, a tree, or one of its branches. Posting › Set up
    * posting has one page per platform (`platform`, §17.1).
@@ -50,6 +52,7 @@ export function match(pathname: string, search = ""): Route {
       ? { name: "library", view: "week", week: week || null }
       : { name: "library", view: "all", week: null };
   }
+  if (path === "/money") return { name: "money" };
   const clip = /^\/clips\/([A-Za-z0-9_-]{1,64})$/.exec(path);
   if (clip) return { name: "clip", clipId: clip[1]! };
   const skill = /^\/settings\/clip-making\/skills\/(.+)$/.exec(path);
@@ -230,7 +233,7 @@ export function decodeHash(raw: string): string {
 }
 
 /** The nav section a route belongs to (a job detail page highlights Jobs). */
-export function section(route: Route): "home" | "jobs" | "review" | "library" | "settings" | "get_app" | null {
+export function section(route: Route): "home" | "jobs" | "review" | "library" | "money" | "settings" | "get_app" | null {
   switch (route.name) {
     case "mock_oauth":
     case "motion_gallery":

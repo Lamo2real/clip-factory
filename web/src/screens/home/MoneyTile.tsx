@@ -5,7 +5,8 @@ import type { MoneyView } from "../../api/types.ts";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { LinkButton } from "../../components/ui.tsx";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
-import { fraction, goalText, MONEY_PATH, nearestGoal } from "../../lib/money.ts";
+import { fraction, goalText, nearestGoal } from "../../lib/money.ts";
+import { DASH_PATH } from "../../lib/moneyDash.ts";
 import { useMoney } from "../../lib/useMoney.ts";
 import { MonthLines } from "../settings/MoneyBranch.tsx";
 
@@ -27,7 +28,7 @@ export function MoneyTile() {
           Your <em>money</em>.
         </h2>
         <p className="muted">{moneyTileLine(data)}</p>
-        <LinkButton href={MONEY_PATH} size="sm" icon="coin" iconAfter="chevronRight">
+        <LinkButton href={DASH_PATH} size="sm" icon="coin" iconAfter="chevronRight">
           See money
         </LinkButton>
       </div>

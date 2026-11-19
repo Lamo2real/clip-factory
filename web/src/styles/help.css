@@ -8,6 +8,18 @@
 .has-update-bar {
   --help-bottom: calc(20px + var(--update-bar-h) + 12px);
 }
+/* A page dock raises the launcher's home spot, like the update bar (§19.8, §27.4): the money dashboard sets
+   .has-money-dock and --dock-h on <html> before it paints and takes them away when it closes, so the launcher never
+   moves while that page is open. --dock-base is where a dock sits on wide touch screens (no tab bar there). */
+:root {
+  --dock-base: 24px;
+}
+.has-update-bar {
+  --dock-base: calc(20px + var(--update-bar-h) + 12px);
+}
+.has-money-dock {
+  --help-bottom: calc(var(--dock-base) + var(--dock-h) + 10px);
+}
 
 /* ---------- Launcher ---------- */
 .help-launcher {
@@ -82,6 +94,12 @@
 
 /* Phones: room under the last control so it can scroll clear of the launcher circle (56 px + a 28 px gap). */
 @media (max-width: 767px) {
+  .has-money-dock .help-launcher {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 18px + var(--dock-h) + 10px);
+  }
+  .has-money-dock.has-update-bar .help-launcher {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 18px + var(--update-bar-h) + 10px + var(--dock-h) + 10px);
+  }
   .app:has(> .help-launcher) .shell {
     padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 18px + 56px + 28px);
   }

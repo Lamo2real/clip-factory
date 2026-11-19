@@ -133,9 +133,15 @@ html[data-titlebar="overlay"] .titlebar-drag {
   --glass-blur: 28px;
   box-shadow: 0 18px 40px -18px rgb(var(--shadow-rgb) / 0.83);
 }
+/* Six tabs (§27.4): at the narrowest phones the bar's own padding gives way so each tab keeps 48 px. */
+@media (max-width: 359px) {
+  .tabbar {
+    padding-inline: 2px;
+  }
+}
 .tabbar__list {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   height: 100%;
 }
 .tabbar__cell {

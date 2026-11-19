@@ -20,6 +20,7 @@ import { Jobs } from "../screens/jobs/Jobs.tsx";
 import { Library } from "../screens/library/Library.tsx";
 import { weekTitle } from "../screens/library/WeekView.tsx";
 import { ClipPerformance } from "../screens/clip/ClipPerformance.tsx";
+import { MoneyDashboard } from "../screens/money/MoneyDashboard.tsx";
 import { Review } from "../screens/review/Review.tsx";
 import { Settings } from "../screens/settings/Settings.tsx";
 import { SignIn } from "../screens/SignIn.tsx";
@@ -44,6 +45,7 @@ const TITLES: Record<Route["name"], string> = {
   review: "Review",
   library: "Library",
   clip: "Clip numbers",
+  money: "Money",
   settings: "Settings",
   skill: "Skill",
   get_app: "Get the app",
@@ -208,6 +210,8 @@ function Screen({ route }: { route: Route }) {
       return <Library view={route.view} week={route.week} />;
     case "clip":
       return <ClipPerformance key={route.clipId} clipId={route.clipId} />;
+    case "money":
+      return <MoneyDashboard />;
     case "settings":
       return <Settings tree={route.tree} branch={route.branch} platform={route.platform ?? null} />;
     case "skill":

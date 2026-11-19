@@ -14,6 +14,7 @@ import "./styles/settings.css";
 import "./styles/performance.css";
 import "./styles/setup.css";
 import "./styles/help.css";
+import "./styles/money-dash.css";
 import "./styles/setup-todo.css";
 import "./styles/glide.css";
 
