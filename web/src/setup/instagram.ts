@@ -43,7 +43,7 @@ export const instagram: SetupGuide = {
             },
             {
               see: "**Manage connection** on Facebook",
-              do: "Your Instagram is already linked. Check the name, close it, press I did this. Never press **Disconnect**.",
+              do: "If it shows your clip Instagram name, it is linked. Close it. Never press **Disconnect**. Press I did this.",
             },
             {
               see: "the wrong Instagram under **Manage connection**",

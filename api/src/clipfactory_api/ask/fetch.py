@@ -200,8 +200,11 @@ def fetch(
     opener: Opener = https_open,
     budget: float = FETCH_BUDGET_S,
     clock: Callable[[], float] = time.monotonic,
+    allow: Callable[[str], bool] | None = None,
 ) -> Page:
-    """One page, with one deadline for everything (``budget`` seconds, at most ``FETCH_BUDGET_S``)."""
+    """One page, with one deadline for everything (``budget`` seconds, at most ``FETCH_BUDGET_S``). With ``allow``,
+    every redirect hop must pass it too, or the fetch stops before that hop is opened (§28.3: a page Ask opened only
+    because it is official may not bounce it to another site, for example through a link shim)."""
     deadline = clock() + min(budget, FETCH_BUDGET_S)
 
     def left(cap: float) -> float:
@@ -230,7 +233,7 @@ def fetch(
             raise FetchError("that page could not be read") from None
         if status in {301, 302, 303, 307, 308}:
             nxt = normalise(urllib.parse.urljoin(current, headers.get("location", "")))
-            if nxt is None:
+            if nxt is None or (allow is not None and not allow(nxt)):
                 raise FetchError("that page sent me somewhere I can't go")
             current = nxt
             continue

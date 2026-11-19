@@ -57,7 +57,7 @@ export type Entry =
       /** True when this answer came from the local corpus after server trouble (the help code link shows). */
       trouble: boolean;
     }
-  | { id: number; role: "notice"; tone: "busy" | "off" | "info"; text: string; until?: number; helpCode?: string | null; retry?: boolean };
+  | { id: number; role: "notice"; tone: "busy" | "off" | "info"; text: string; until?: number; helpCode?: string | null; retry?: boolean; maybe?: boolean };
 
 export interface ChatState {
   entries: Entry[];
@@ -94,7 +94,7 @@ export type ChatEvent =
   | { type: "tray_marked"; id: number; blob: Blob; url: string; width: number; height: number; strokes: Stroke[]; original: { blob: Blob; url: string; width: number; height: number } }
   | { type: "tray_file"; file: TrayFile }
   | { type: "answer"; id: number; answer: HelpAnswer; requestId: string; trouble: boolean }
-  | { type: "notice"; id: number; tone: "busy" | "off" | "info"; text: string; until?: number; helpCode?: string | null; retry?: boolean }
+  | { type: "notice"; id: number; tone: "busy" | "off" | "info"; text: string; until?: number; helpCode?: string | null; retry?: boolean; maybe?: boolean }
   | { type: "live"; entryId: number; live: LiveState }
   | { type: "confirm"; confirm: ChatState["confirm"] }
   | { type: "reset" }
@@ -224,7 +224,7 @@ export function chatReducer(s: ChatState, e: ChatEvent): ChatState {
         ...s,
         thinking: false,
         blockedUntil: e.until ?? s.blockedUntil,
-        entries: [...s.entries, { id: e.id, role: "notice", tone: e.tone, text: e.text, until: e.until, helpCode: e.helpCode ?? null, ...(e.retry ? { retry: true } : {}) }],
+        entries: [...s.entries, { id: e.id, role: "notice", tone: e.tone, text: e.text, until: e.until, helpCode: e.helpCode ?? null, ...(e.retry ? { retry: true } : {}), ...(e.maybe ? { maybe: true } : {}) }],
       };
     case "live":
       return { ...s, entries: s.entries.map((x) => (x.id === e.entryId && x.role === "assistant" ? { ...x, live: e.live } : x)) };

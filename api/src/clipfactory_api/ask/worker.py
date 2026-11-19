@@ -71,15 +71,20 @@ STATUS_FOR_TOOL = {
 RETRY_STATUSES = frozenset({403, 404, 408, 409, 429, 500, 502, 503, 504, 529})
 # What the owner reads when the model could not answer (the panel shows it with Try again, never a canned answer).
 MODEL_MESSAGES = {
-    "access": "Ask's AI model is not turned on yet. In Amazon Bedrock, turn on model access for Claude, then try again.",
+    "access": (
+        "Ask's AI model is not switched on yet. In Amazon Bedrock (Stockholm), open Model catalog, pick Claude "
+        "Opus 5.5, fill in the form if it asks, and send it one message. Then try again."
+    ),
     "busy": "Ask is very busy right now. Try again in a minute.",
     "timeout": "That took too long. Try again.",
     "other": "I couldn't think it through this time. Try again.",
 }
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
-SETUP_WORDS = re.compile(
-    r"\b(set ?up|setup|connect|stuck|instagram|facebook|meta|tiktok|youtube|google|twitter|x\.com|page|key|token|"
-    r"redirect|permission|portfolio|developer|console|error|screen|what do i do|what now|next)\b",
+# A setup question: a platform name together with a setup word, or plainly stuck. Plain chat stays at ASK_EFFORT.
+SETUP_PLATFORM_WORDS = re.compile(r"\b(instagram|facebook|meta|tiktok|youtube|twitter|x\.com)\b", re.IGNORECASE)
+SETUP_VERBS = re.compile(
+    r"\b(set ?up|setup|connect\w*|link\w*|stuck|token|redirect|permission\w*|portfolio|developer|app review|"
+    r"what do i do|what now)\b",
     re.IGNORECASE,
 )
 SMOKE_QUESTION = "What one color fills this whole picture? Answer with just the color."
@@ -112,7 +117,7 @@ class WorkerDeps:
     tool_docs: bool = True
     key_reader: KeyReader | None = None
     provider: SearchProvider | None = None
-    fetcher: Callable[[str], Page] | None = None
+    fetcher: Callable[..., Page] | None = None  # (url, allow=None): allow checks every redirect hop
     knowledge: Callable[[], Knowledge] | None = None
     builtins: Callable[[], Any] | None = None
     route_ok: Callable[[str], bool] | None = None  # None: the knowledge pack's routes (router.ts)
@@ -434,6 +439,7 @@ def _run(
             allowed_urls=typed_urls([*user_texts, " ".join(history_urls(history))]),
             # Pages the setup guides open may be read with no search (§28.3); official doc hosts are allowed too.
             doc_urls=guide_urls(knowledge),
+            web_off=record.web == "off",
             on_actions=lambda actions: sender.send({"type": "ask.actions", "actions": actions}),
             route_ok=deps.route_ok or knowledge.route_ok,
             soft_deadline=lambda: deps.monotonic() - started >= deps.soft_s,
@@ -607,7 +613,8 @@ def answer_effort(base: str, *, pictures: bool, question: str) -> str:
     """At least ``high`` for a picture or a setup question (finding where he is stuck needs the deeper look);
     the deployed effort (ASK_EFFORT, medium) for plain chat."""
     base = base if base in EFFORTS else "medium"
-    if pictures or SETUP_WORDS.search(question or ""):
+    q = question or ""
+    if pictures or (SETUP_PLATFORM_WORDS.search(q) and SETUP_VERBS.search(q)) or re.search(r"\bstuck\b", q, re.I):
         return base if EFFORTS.index(base) >= EFFORTS.index("high") else "high"
     return base
 
@@ -868,13 +875,13 @@ def _read_files(
 def _budget_fetch(time_left: Callable[[], float]) -> Callable[[str], Page]:
     """``web_fetch`` with one deadline that never runs past the answer's hard budget."""
 
-    def run(url: str) -> Page:
+    def run(url: str, allow: Callable[[str], bool] | None = None) -> Page:
         from .fetch import FetchError, fetch
 
         left = time_left() - 2.0  # keep time to finish the answer
         if left <= 0.5:
             raise FetchError("time is up, answer with what you have")
-        return fetch(url, budget=left)
+        return fetch(url, budget=left, allow=allow)
 
     return run
 
@@ -994,12 +1001,14 @@ def smoke(deps: WorkerDeps) -> dict[str, Any]:
         out["stop"] = str(getattr(final, "stop_reason", "") or "")
         out["answer"] = text.strip()[:40]
         out["model"] = _model_label(str(getattr(final, "model", "") or deps.model_id))
-        if "red" in text.lower():
+        if re.search(r"\bred\b", text, re.IGNORECASE) and len(text.strip()) <= 20:
             out["outcome"] = "smoke_ok"
         else:
             out["reason"] = "the model did not see the picture"
     except Exception as e:
         out["reason"] = model_error_reason(e)
+        if getattr(e, "status_code", None) == 404 or "NotFound" in type(e).__name__:
+            out["reason"] = "not_found"  # a wrong model id or inference profile, not a missing access step
         out["error"] = type(e).__name__
         out["status"] = getattr(e, "status_code", None)
     log(

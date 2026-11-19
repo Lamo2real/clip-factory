@@ -860,7 +860,10 @@ reads these same official pages when a step may be out of date (docs/CONTRACTS.m
 
 - **Instagram step 2**: new "If you see **Manage connection**" hints. On Facebook's phone app, a Page whose
   Instagram is already linked shows **Manage connection** after **Edit profile**; a Page that is not linked shows
-  **Connect**. The Instagram app route (Edit profile › Page) is still right.
+  **Connect**. The Instagram app route (Edit profile › Page) is still right. Source: the owner's own screenshot of
+  that sheet (19 Nov 2026), not a Meta help page, so the hint is worded "If it shows your Instagram name…". The same
+  sheet also shows **People who help manage your Page** (Page access); the hint says to leave it as it is. When the sheet
+  looks different, Ask reads Meta's own help pages (facebook.com/help) before it answers.
 - **Instagram step 4** (business portfolio) is now only if Meta asks. Neither the Instagram Platform overview nor
   Content publishing requires a portfolio for a User access token on accounts you own
   ([overview](https://developers.facebook.com/documentation/instagram-platform/overview)). Content publishing also

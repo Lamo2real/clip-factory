@@ -77,13 +77,18 @@ carries `cacheRead`; a test checks the prefix is byte-identical across two quest
 
 **What works with no owner step** (checked 2026-11-19: Anthropic's server `web_search` / `web_fetch` tools are not
 offered on Amazon Bedrock, only on the Claude API and Claude Platform on AWS, which ADR-51 ruled out): `web_fetch`
-reads **official help and developer pages with no key and no link in the chat**: any https page on
-`developers.facebook.com`, `facebook.com`, `business.facebook.com`, `help.instagram.com`, `about.instagram.com`,
-`transparency.meta.com`, `developers.tiktok.com`, `support.tiktok.com`, `developers.google.com`,
-`support.google.com`, `cloud.google.com`, `console.cloud.google.com`, `docs.x.com`, `developer.x.com`, `help.x.com`,
-`docs.aws.amazon.com`, `aws.amazon.com`, `docs.anthropic.com`, `docs.claude.com`, `platform.claude.com` (and their
-subdomains; `OFFICIAL_DOC_HOSTS` in `ask/tools.py`), plus every page a setup step opens (`open.url` in
-`knowledge.json` `setupSteps`). Some Meta help pages draw with script and come back nearly empty; Ask then says so
+reads **official help and developer documentation with no key and no link in the chat**: an exact host (`www.`
+optional) and path prefix from `OFFICIAL_DOC_PAGES` in `ask/tools.py`: `developers.facebook.com/docs/` and
+`/documentation/`, `facebook.com/help/` and `/business/help/`, `business.facebook.com/business/help/`,
+`help.instagram.com`, `transparency.meta.com`, `developers.tiktok.com/doc/`, `support.tiktok.com`,
+`developers.google.com`, `support.google.com/{product}/answer/{id}`, `cloud.google.com/docs/`, `docs.x.com`,
+`developer.x.com/en/docs/`, `help.x.com`, `docs.aws.amazon.com`, `docs.anthropic.com`, `docs.claude.com`,
+`platform.claude.com/docs/`. Never posts, Pages, groups, forums, community threads or link shims (`l.facebook.com`).
+Because the model writes these URLs itself: the query string is dropped, every redirect hop must be another official
+page or the same host (`fetch(..., allow=)`; a hop that leaves stops the fetch before it is opened), at most **3**
+such reads per answer, text cut to 15,000 characters and PDFs over 500 KB refused. Every page a setup step opens
+(`open.url` in `knowledge.json` `setupSteps`, kept whole with its query when it is on a platform host and has no
+secret-looking parameter) is readable the same way, with the same redirect check. Some Meta help pages draw with script and come back nearly empty; Ask then says so
 and works from the guide and the picture. **Open web search** (any site) still needs the owner's Brave key: Ask
 reads the official pages first and mentions the key at most once, at the end.
 
@@ -108,6 +113,8 @@ reads the official pages first and mentions the key at most once, at the end.
   `ForceDeleteWithoutRecovery`. Never echoed, logged or put in the prompt (and the answer filter hides it if the
   model ever writes it); the worker caches it **60 s**, so **Take key away** reaches a warm worker within a minute. A
   key that can't be read (throttling, permissions) is web `error`, not `no_key`: Ask never asks him to set it up again.
+* **Kill switch `web: false`** (record web `off`): no `web_search`, and `web_fetch` opens only links the owner typed
+  himself; official and guide pages are refused too (`Toolbox.web_off`).
 * **No key**: no `web_search` tool; `web_fetch` stays (official pages, guide pages, typed URLs). Rule 10 makes Ask
   read the official pages first and say "Turn on web search and I can check more." at most once, at the end;
   `ask.done` carries `webMissing` and the panel shows **Turn on web search** once per chat.
@@ -323,11 +330,14 @@ No table, index, route, CORS or CSP change. The plan creates and updates only.
 
 **Post-deploy check** (ADR-53): `cf-prod-ask` also takes `{"smoke": "ask"}`. It loads the built-in skills block, asks
 the main model (never the fallback) at effort low what colour a 16 x 16 red PNG is, sent as an image block, and
-returns `{outcome: "smoke_ok" | "smoke_failed", model, answer, stop, reason?, status?}` (`reason` access, busy, timeout
-or other; one `ask.smoke` log line; no socket, no owner data, no files). deploy.yml's smoke job invokes it with the
-deploy role (it already has `lambda:*`; two new read-only outputs `ask_function_name` and `ask_enabled`), retries
-twice, and fails the deploy unless the outcome is `smoke_ok`; for `access` it says to turn on model access for Claude
-Opus 5.5 in the Bedrock console (eu-north-1). Skipped when `ask_enabled` is false.
+returns `{outcome: "smoke_ok" | "smoke_failed", model, answer, stop, reason?, status?}` (`reason` access, not_found
+(404: a wrong model id or inference profile), busy, timeout or other; `smoke_ok` needs the word "red" on its own in an
+answer of at most 20 characters; one `ask.smoke` log line; no socket, no owner data, no files). deploy.yml's smoke
+job invokes it with the deploy role (it already has `lambda:*`; two new read-only outputs `ask_function_name` and
+`ask_enabled`) and retries twice. `access` and `not_found` only **warn** (access: Model catalog → Claude Opus 5.5 →
+use-case form if asked → one message in the playground; not_found: check `ASK_MODEL_ID`), so an unrelated merge
+never goes red before the owner's one-time Bedrock step; any other failure fails the deploy. Skipped when
+`ask_enabled` is false (read as `if .ask_enabled.value == false`, not jq's `//`).
 
 ### 28.13 Tests
 

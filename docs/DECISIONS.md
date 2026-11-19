@@ -1329,12 +1329,15 @@ logs its token counts (`bedrock.usage`), and this table is to be corrected from 
     for Meta, TikTok, Google and X, his picture and the official page win, and Ask says "Our guide is out of date
     here." with the source.
   - *The web without a key.* Anthropic's server web tools are still not on Bedrock (only the Claude API and Claude
-    Platform on AWS, ruled out in ADR-51), so `web_fetch` now opens a fixed list of official help and developer hosts
-    and every page a setup step opens, with no key and no link in the chat, behind the same SSRF guard. Open search of
+    Platform on AWS, ruled out in ADR-51), so `web_fetch` now opens a fixed list of official documentation pages
+    (exact host plus path prefix, never posts, Pages, forums or link shims; query dropped; every redirect hop stays
+    official or on the same host; 3 per answer) and every page a setup step opens, with no key and no link in the
+    chat, behind the same SSRF guard. The kill switch's `web: false` stops all of it except links he typed. Open search of
     any site still uses the owner's Brave key, mentioned at most once, at the end.
   - *Proof on every deploy.* `cf-prod-ask` takes `{"smoke": "ask"}`: the deployed model must say "red" for a tiny red
     PNG sent as an image block. deploy.yml's smoke job invokes it with the deploy role (which already has `lambda:*`)
-    and fails the deploy otherwise. Only the main model counts.
+    and fails the deploy otherwise. Only the main model counts. Until the owner's one-time Bedrock step, an access
+    or model-id-not-found error only warns, so unrelated merges stay green.
   - *Guides re-checked on 19 Nov 2026* for Instagram, Facebook, YouTube and X (docs/SETUP_POSTING.md lists the
     changes and sources).
 - **Alternatives considered.** *Moving Ask to Claude Platform on AWS for server web search and fetch*: still not EU
@@ -1344,7 +1347,8 @@ logs its token counts (`bedrock.usage`), and this table is to be corrected from 
   portfolio with a Business Manager role; making the portfolio optional avoids that path without a scope change.
   *Switching Instagram to "Instagram API with Instagram Login"* (no Facebook Page): simpler for the owner, but a new
   OAuth flow and publisher; a later ADR.
-- **Consequences.** The deploy now fails when Bedrock model access for Opus 5.5 in eu-north-1 is not turned on (an
-  owner step in the Bedrock console) or the model cannot see pictures. Picture and setup answers cost more (effort
+- **Consequences.** The deploy warns when Bedrock has not let Clip Factory use Opus 5.5 in eu-north-1 yet (an owner
+  step in the Bedrock console: Model catalog, use-case form, one playground message) and fails when the model cannot
+  see pictures. Picture and setup answers cost more (effort
   high). Ask can be wrong about a Meta page that only draws with script; it then says it could not read it and
   works from the picture and the guide.

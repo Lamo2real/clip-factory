@@ -397,7 +397,7 @@ def toolbox(store: db.Store) -> Toolbox:
         reader=reader,
         search_key=None,
         provider=None,
-        fetcher=lambda url: web.Page(url, "t", "text", text="x"),
+        fetcher=lambda url, allow=None: web.Page(url, "t", "text", text="x"),
         allowed_urls=typed_urls(["see https://typed.example/page."]),
         on_actions=lambda _a: None,
     )
@@ -682,6 +682,16 @@ def test_official_doc_pages_open_with_no_key_and_no_link(toolbox: Toolbox, url: 
         "https://developers.facebook.com.evil.example/x",  # a look-alike host
         "https://notfacebook.com/help",
         "https://random-blog.example/how-to-link-instagram",
+        # Review (19 Nov): posts, Pages, groups, forums, community threads and link shims are written by anyone.
+        "https://www.facebook.com/somepage/posts/1",
+        "https://www.facebook.com/groups/123",
+        "https://developers.facebook.com/community/threads/1",
+        "https://l.facebook.com/l.php?u=https://evil.example/?d=secret",
+        "https://lm.facebook.com/l.php?u=https://evil.example/",
+        "https://support.google.com/youtube/thread/12345",
+        "https://aws.amazon.com/blogs/x",
+        "https://console.cloud.google.com/apis",
+        "https://developers.facebook.com:8443/docs/x",
     ],
 )
 def test_other_pages_still_need_a_search_result_or_his_own_link(toolbox: Toolbox, url: str) -> None:
@@ -697,7 +707,7 @@ def test_a_page_a_setup_step_opens_can_be_read(store: db.Store) -> None:
         Reader(store, None, USER, NOW),
         None,
         None,
-        lambda u: web.Page(u, "t", "text", text="x"),
+        lambda u, allow=None: web.Page(u, "t", "text", text="x"),
         set(),
         lambda _a: None,
         doc_urls=urls,
@@ -764,3 +774,92 @@ def test_rules_read_pictures_and_never_block_fetch_without_a_key() -> None:
     assert "web_fetch" in names
     assert "read_setup_guide" in names
     assert "web_search" not in names
+
+
+def _recording_box(store: db.Store, **kw: Any) -> tuple[Toolbox, list[tuple[str, Any]]]:
+    opened: list[tuple[str, Any]] = []
+
+    def fetcher(url: str, allow: Any = None) -> web.Page:
+        opened.append((url, allow))
+        return web.Page(url, "t", "text", text="x" * 50_000)
+
+    defaults: dict[str, Any] = {
+        "knowledge": knowledge.load(),
+        "reader": Reader(store, None, USER, NOW),
+        "search_key": None,
+        "provider": None,
+        "fetcher": fetcher,
+        "allowed_urls": set(),
+        "on_actions": lambda _a: None,
+    }
+    defaults.update(kw)
+    return Toolbox(**defaults), opened
+
+
+def test_a_keyless_official_read_drops_the_query_and_checks_every_hop(store: db.Store) -> None:
+    """Review (19 Nov): the model writes official URLs itself, so it may not put words in the query, and a redirect
+    may not leave the official pages (an open redirect would send his data anywhere)."""
+    box, opened = _recording_box(store)
+    out = box.run("web_fetch", {"url": "https://developers.facebook.com/docs/x?leak=his-state"})
+    assert out.is_error is False
+    url, hops = opened[0]
+    assert url == "https://developers.facebook.com/docs/x"
+    assert hops("https://developers.facebook.com/other") is True  # same host
+    assert hops("https://help.instagram.com/123") is True  # another official page
+    assert hops("https://l.facebook.com/l.php?u=https://evil.example/") is False
+    assert hops("https://evil.example/?d=secret") is False
+    text = out.content[0]["content"][0]["text"]
+    assert len(text) == tools.OFFICIAL_TEXT_CHARS  # trimmed
+
+
+def test_keyless_official_reads_are_capped_at_three(store: db.Store) -> None:
+    box, _ = _recording_box(store)
+    outs = [box.run("web_fetch", {"url": f"https://docs.x.com/page{i}"}) for i in range(4)]
+    assert [o.is_error for o in outs] == [False, False, False, True]
+    assert outs[3].content == tools.LIMIT_REACHED
+
+
+def test_a_redirect_off_the_official_pages_is_refused_by_fetch() -> None:
+    def opener(_addr: str, host: str, target: str, _t: float) -> tuple[int, dict[str, str], bytes]:
+        return 302, {"location": "https://l.facebook.com/l.php?u=https://evil.example/"}, b""
+
+    with pytest.raises(web.FetchError, match="somewhere I can't go"):
+        web.fetch(
+            "https://developers.facebook.com/docs/x",
+            resolver=lambda _h: ["157.240.1.1"],
+            opener=opener,
+            allow=tools.hop_check("https://developers.facebook.com/docs/x"),
+        )
+
+
+def test_a_search_result_or_his_own_link_keeps_its_query_and_any_redirect(store: db.Store) -> None:
+    box, opened = _recording_box(store, allowed_urls={"https://typed.example/a?b=1"})
+    assert box.run("web_fetch", {"url": "https://typed.example/a?b=1"}).is_error is False
+    assert opened == [("https://typed.example/a?b=1", None)]
+
+
+def test_web_off_opens_only_his_own_links(store: db.Store) -> None:
+    """Review (19 Nov): the kill switch's web: false stops official and guide pages too (§28.6)."""
+    box, opened = _recording_box(
+        store,
+        allowed_urls={"https://typed.example/a"},
+        doc_urls={"https://business.facebook.com/"},
+        web_off=True,
+    )
+    assert box.run("web_fetch", {"url": "https://developers.facebook.com/docs/x"}).is_error is True
+    assert box.run("web_fetch", {"url": "https://business.facebook.com/"}).is_error is True
+    assert box.run("web_fetch", {"url": "https://typed.example/a"}).is_error is False
+    assert [u for u, _ in opened] == ["https://typed.example/a"]
+
+
+def test_a_guide_page_with_a_query_keeps_it_and_stays_official(store: db.Store) -> None:
+    """Review (19 Nov): Facebook step 1 opens /pages/?category=your_pages; its link must not be hidden."""
+    pack = knowledge.load()
+    urls = tools.guide_urls(pack)
+    assert "https://www.facebook.com/pages/?category=your_pages" in urls
+    box, opened = _recording_box(store, doc_urls=urls)
+    assert box.run("web_fetch", {"url": "https://www.facebook.com/pages/?category=your_pages"}).is_error is False
+    url, hops = opened[0]
+    assert url == "https://www.facebook.com/pages/?category=your_pages"
+    assert hops is not None
+    assert hops("https://evil.example/") is False

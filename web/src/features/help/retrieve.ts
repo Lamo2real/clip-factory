@@ -35,7 +35,8 @@ export const GUIDE_TIE = 0.9;
 export const VAGUE_WORDS: readonly string[] = `now next then stuck lost confused confusing happen happens happened happening going ok okay hi hello hey thanks
 thank yes no still again right thing things something anything everything nothing wrong else see seeing look
 looking mean means understand figure screen screens picture pictures image photo screenshot work works working
-problem issue`
+problem issue press pressing click clicking tap tapping push here there this that button buttons done finished should
+do doing which on with in at to for`
   .split(/\s+/)
   .filter(Boolean);
 const TITLE_IGNORED_WORDS = ["now", "next", "then", "right", "again", "still", "ok", "okay"];
@@ -309,15 +310,23 @@ export function boostPage(page: HelpContext["page"] | null | undefined): HelpCon
   return page === "skill" ? "settings" : page;
 }
 
-/** True when the question has content words and every one is vague ("What do I do now?"). Such a question is never
+/** True when every content word is vague ("What do I do now?"), or all but a platform name. Such a question is never
  * matched to a help topic: only the assistant (or a person) can answer it from the screen it is about. */
 export function openEnded(question: string, stopwords: readonly string[] | ReadonlySet<string>): boolean {
   const stop = stopwords instanceof Set ? (stopwords as ReadonlySet<string>) : new Set((stopwords as readonly string[]).map((w) => w.toLowerCase()));
-  const found = tokenize(question).filter((w) => !stop.has(w));
+  const raw = tokenize(question);
+  const found = raw.filter((w) => !stop.has(w));
   const vague = new Set(VAGUE_WORDS);
   const vagueStems = new Set(VAGUE_WORDS.map(stem));
-  return found.length > 0 && found.every((w) => vague.has(w) || vagueStems.has(stem(w)));
+  const isVague = (w: string) => vague.has(w) || vagueStems.has(stem(w));
+  // Every word a stop word ("what do i do", "is this done"): open when it names a vague word at all.
+  if (!found.length) return raw.some((w) => vague.has(w));
+  const rest = found.filter((w) => !isVague(w));
+  return !rest.length || (rest.length < found.length && rest.every((w) => PLATFORM_WORDS.has(w)));
 }
+
+/** A platform name alone says where, not what: "what do I do now with facebook" is still open (help/retrieve.py). */
+const PLATFORM_WORDS: ReadonlySet<string> = new Set(["facebook", "instagram", "tiktok", "youtube", "twitter", "x", "meta", "google"]);
 
 /** Starts with an explicit follow-up phrase ("and the error sound?", "what about TikTok?"). */
 export function startsFollowUp(question: string): boolean {

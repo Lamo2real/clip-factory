@@ -29,7 +29,7 @@ export const facebook: SetupGuide = {
           ifYouSee: [
             {
               see: "**Manage connection** after **Edit profile** on your Page",
-              do: "Your Instagram is already linked to this Page. Close it. Never press **Disconnect**. Press I did this.",
+              do: "If it shows your Instagram name, it is linked. Close it. Never press **Disconnect**. Press I did this.",
             },
             {
               see: "**People who help manage your Page**",

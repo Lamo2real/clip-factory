@@ -126,5 +126,18 @@ else
   not_ok "the smoke job must invoke the Ask worker with {\"smoke\":\"ask\"} and require outcome smoke_ok"
 fi
 
+# 9. ask_enabled = false really skips the Ask check (jq's `//` would turn false into true), and only access or
+#    not_found warn instead of failing.
+enabled_expr="$(grep -o "jq -r '[^']*ask_enabled[^']*'" <<<"$smoke" | head -1 | sed -E "s/^jq -r '(.*)'$/\1/")"
+if [ -n "$enabled_expr" ] \
+  && [ "$(jq -r "$enabled_expr" <<<'{"ask_enabled":{"value":false}}')" = "false" ] \
+  && [ "$(jq -r "$enabled_expr" <<<'{"ask_enabled":{"value":true}}')" = "true" ] \
+  && [ "$(jq -r "$enabled_expr" <<<'{}')" = "true" ] \
+  && grep -q '"$reason" = "not_found"' <<<"$smoke" && ! grep -q 'turn on model access' <<<"$smoke"; then
+  ok "ask_enabled = false skips the Ask check, and the access hint names today's Bedrock steps"
+else
+  not_ok "the Ask check must read ask_enabled = false as off and give the Model catalog steps (expr: ${enabled_expr:-none})"
+fi
+
 echo "${passed} passed, ${failed} failed"
 [ "$failed" -eq 0 ]

@@ -14,7 +14,16 @@ import { openHelp } from "../src/features/help/context.ts";
 import type { AskBody, AskResult, HelpClient, StatusResult } from "../src/features/help/helpApi.ts";
 import { AskClipFactory } from "../src/features/help/HelpLauncher.tsx";
 import { setAssistantStatus, setHelpSwitch } from "../src/features/help/status.ts";
-import { CANT_REACH_TEXT, cantAnswerText, PICTURE_KEPT_TEXT, TOO_LONG_TEXT } from "../src/features/help/HelpPanel.tsx";
+import {
+  CANT_REACH_PICTURE_TEXT,
+  CANT_REACH_TEXT,
+  cantAnswerText,
+  MAYBE_LABEL,
+  OFF_PICTURE_TEXT,
+  PICTURE_KEPT_TEXT,
+  TOO_LONG_PICTURE_TEXT,
+  TOO_LONG_TEXT,
+} from "../src/features/help/HelpPanel.tsx";
 import type { HelpAnswer } from "../src/features/help/types.ts";
 import { registerUnsaved } from "../src/features/help/unsaved.ts";
 
@@ -341,21 +350,31 @@ describe("Ask Clip Factory panel", () => {
       expect(client.ask).toHaveBeenCalledTimes(2);
     });
 
-    it("still gives the short help when the question truly matches one", async () => {
+    it("never shows a matched short-help topic as Ask's answer: only behind Maybe this? (review 19 Nov)", async () => {
       const client = fakeClient([{ kind: "answer", answer: keepAnswer, mode: "kb", requestId: "r2" }], on);
       await mount(client);
       await act(async () => launcher()!.click());
       await settle();
       await ask("What does Keep do?");
+      await until(() => !!host.querySelector(".help-msg--notice"));
+      expect(host.querySelector(".help-msg--notice")!.textContent).toContain(CANT_REACH_TEXT);
+      expect(host.querySelector(".help-msg--bot")).toBeNull();
+      expect(button("Try again")).toBeTruthy();
+      const maybe = button(MAYBE_LABEL)!;
+      expect(maybe).toBeTruthy();
+      await act(async () => maybe.click());
       await until(() => !!host.querySelector(".help-msg--bot"));
       expect(host.querySelector(".help-msg--bot")!.textContent).toContain("Keep says yes to a clip.");
-      expect(button("Try again")).toBeUndefined();
     });
   });
 
   it("words why Ask could not answer, never a guess", () => {
     expect(cantAnswerText({ reason: "no_socket" }, null)).toBe(CANT_REACH_TEXT);
-    expect(cantAnswerText({ reason: "no_socket" }, "picture")).toBe(PICTURE_KEPT_TEXT);
+    // A picture never hides the real reason (review 19 Nov): no connection, too long, Ask off.
+    expect(cantAnswerText({ reason: "no_socket" }, "picture")).toBe(CANT_REACH_PICTURE_TEXT);
+    expect(cantAnswerText({ reason: "timeout" }, "picture")).toBe(TOO_LONG_PICTURE_TEXT);
+    expect(cantAnswerText({ reason: "off" }, "picture")).toBe(OFF_PICTURE_TEXT);
+    expect(cantAnswerText({ reason: "unavailable" }, "picture")).toBe(PICTURE_KEPT_TEXT);
     expect(cantAnswerText({ reason: "timeout" }, null)).toBe(TOO_LONG_TEXT);
     expect(cantAnswerText({ reason: "model", why: "access", message: "Ask's AI model is not turned on yet." }, "picture")).toBe(
       "Ask's AI model is not turned on yet. Your question is still here.",

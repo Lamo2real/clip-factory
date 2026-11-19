@@ -107,6 +107,32 @@ VAGUE_WORDS = frozenset(
         "working",
         "problem",
         "issue",
+        # Words that point at a screen Ask can't see ("What should I press here?", "is this done", "which button?").
+        "press",
+        "pressing",
+        "click",
+        "clicking",
+        "tap",
+        "tapping",
+        "push",
+        "here",
+        "there",
+        "this",
+        "that",
+        "button",
+        "buttons",
+        "done",
+        "finished",
+        "should",
+        "do",
+        "doing",
+        "which",
+        "on",
+        "with",
+        "in",
+        "at",
+        "to",
+        "for",
     ]
 )
 VAGUE_STEMS = frozenset(stem(w) for w in VAGUE_WORDS)
@@ -318,10 +344,21 @@ def content_words(text: str, stopwords: frozenset[str] = DEFAULT_STOPWORDS) -> l
     return [w for w in words(text) if w not in stopwords]
 
 
+# A platform name alone says where, not what: "what do I do now with facebook" is still open (web PLATFORM_WORDS).
+PLATFORM_WORDS = frozenset({"facebook", "instagram", "tiktok", "youtube", "twitter", "x", "meta", "google"})
+
+
 def open_ended(question: str, stopwords: frozenset[str] = DEFAULT_STOPWORDS) -> bool:
-    """True when the question has content words and every one is vague ("What do I do now?")."""
-    found = content_words(question, stopwords)
-    return bool(found) and all(w in VAGUE_WORDS or stem(w) in VAGUE_STEMS for w in found)
+    """True when the question has content words and every one is vague ("What do I do now?"), or every one is vague
+    but a platform name ("what do I do now with facebook"). Only the assistant, looking at his screen, can answer."""
+    raw = words(question)
+    found = [w for w in raw if w not in stopwords]
+    vague = [w for w in found if w in VAGUE_WORDS or stem(w) in VAGUE_STEMS]
+    if not found:
+        # Every word is a stop word ("what do i do", "is this done"): open when it names a vague word at all.
+        return any(w in VAGUE_WORDS for w in raw)
+    rest = [w for w in found if w not in vague]
+    return not rest or (bool(vague) and all(w in PLATFORM_WORDS for w in rest))
 
 
 def previous_user_question(history: Sequence[Mapping[str, Any]] | None) -> str | None:

@@ -30,31 +30,35 @@ CAPS = {
     "read_setup_guide": 6,
     "show_app_buttons": 2,
 }
-# Official help and developer sites ``web_fetch`` may open with no search key and no link in the conversation
-# (§28.3): the platforms the setup guides send the owner to, and the services Clip Factory runs on. A host matches
-# itself and its subdomains. The SSRF guard in fetch.py still checks every address.
-OFFICIAL_DOC_HOSTS = (
-    "developers.facebook.com",
-    "facebook.com",
-    "help.instagram.com",
-    "about.instagram.com",
-    "business.facebook.com",
-    "transparency.meta.com",
-    "developers.tiktok.com",
-    "support.tiktok.com",
-    "developers.google.com",
-    "support.google.com",
-    "console.cloud.google.com",
-    "cloud.google.com",
-    "docs.x.com",
-    "developer.x.com",
-    "help.x.com",
-    "docs.aws.amazon.com",
-    "aws.amazon.com",
-    "docs.anthropic.com",
-    "docs.claude.com",
-    "platform.claude.com",
-)
+# Official help and developer pages ``web_fetch`` may open with no search key and no link in the conversation
+# (§28.3): the platforms' own help and developer documentation, never posts, Pages, groups, forums or comments.
+# Each entry is an exact host (``www.`` optional) and the path prefixes that hold that documentation; link shims
+# (l.facebook.com, lm.facebook.com) and the bare facebook.com or aws.amazon.com are not on it. The SSRF guard in
+# fetch.py still checks every address, and every redirect hop must stay official or on the same host.
+OFFICIAL_DOC_PAGES: dict[str, tuple[str, ...]] = {
+    "developers.facebook.com": ("/docs/", "/documentation/"),
+    "facebook.com": ("/help/", "/business/help/"),
+    "business.facebook.com": ("/business/help/",),
+    "help.instagram.com": ("/",),
+    "transparency.meta.com": ("/",),
+    "developers.tiktok.com": ("/doc/",),
+    "support.tiktok.com": ("/",),
+    "developers.google.com": ("/",),
+    "support.google.com": (),  # only /{product}/answer/{id} (SUPPORT_GOOGLE_ANSWER): never the community threads
+    "cloud.google.com": ("/docs/",),
+    "docs.x.com": ("/",),
+    "developer.x.com": ("/en/docs/",),
+    "help.x.com": ("/",),
+    "docs.aws.amazon.com": ("/",),
+    "docs.anthropic.com": ("/",),
+    "docs.claude.com": ("/",),
+    "platform.claude.com": ("/docs/",),
+}
+SUPPORT_GOOGLE_ANSWER = re.compile(r"/[a-z0-9_-]{1,40}/answer/\d{1,12}")
+# Keyless official reads are capped lower than web_fetch's own cap and trimmed, so a setup question stays cheap.
+OFFICIAL_FETCH_CAP = 3
+OFFICIAL_TEXT_CHARS = 15_000
+OFFICIAL_PDF_BYTES = 500_000
 SETUP_STEP_ACTION = re.compile(r"setup-step:([a-z]+):([a-z0-9-]{1,40})")
 LIMIT_REACHED = "limit reached, answer with what you have"
 LIBRARY_SOURCE = "clip-factory://library/"
@@ -80,12 +84,37 @@ def typed_urls(texts: Iterable[str]) -> set[str]:
 
 
 def official(url: str) -> bool:
-    """True for an https URL on an official help or developer site (OFFICIAL_DOC_HOSTS, subdomains included)."""
-    parts = urllib.parse.urlsplit(url)
-    host = (parts.hostname or "").lower().rstrip(".")
-    if parts.scheme != "https" or not host:
+    """True for an https page of a platform's own help or developer documentation (OFFICIAL_DOC_PAGES)."""
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
         return False
-    return any(host == h or host.endswith("." + h) for h in OFFICIAL_DOC_HOSTS)
+    host = (parts.hostname or "").lower().rstrip(".").removeprefix("www.")
+    if parts.scheme != "https" or not host or parts.username or parts.password or parts.port not in {None, 443}:
+        return False
+    if host not in OFFICIAL_DOC_PAGES:
+        return False
+    path = parts.path or "/"
+    if host == "support.google.com":
+        return bool(SUPPORT_GOOGLE_ANSWER.match(path))
+    return any(path.startswith(prefix) for prefix in OFFICIAL_DOC_PAGES[host])
+
+
+def without_query(url: str) -> str:
+    """The URL with no query string: a keyless official read may not carry words the model chose (§28.3)."""
+    parts = urllib.parse.urlsplit(url)
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, parts.path or "/", "", ""))
+
+
+def hop_check(start: str) -> Callable[[str], bool]:
+    """For a fetch allowed only as official or a guide page: a redirect may go to another official page or stay on
+    the same host, never anywhere else (no link shim, no open redirect)."""
+    start_host = (urllib.parse.urlsplit(start).hostname or "").lower()
+
+    def ok(url: str) -> bool:
+        return official(url) or (urllib.parse.urlsplit(url).hostname or "").lower() == start_host
+
+    return ok
 
 
 def setup_step_action(knowledge: Knowledge, action_id: str) -> dict[str, Any] | None:
@@ -130,7 +159,7 @@ class Toolbox:
     reader: Reader
     search_key: str | None
     provider: SearchProvider | None
-    fetcher: Callable[[str], web.Page]
+    fetcher: Callable[..., web.Page]  # (url) or (url, allow=hop check)
     allowed_urls: set[str]
     on_actions: Callable[[list[dict[str, Any]]], None]
     route_ok: Callable[[str], bool] = lambda _to: True
@@ -142,10 +171,14 @@ class Toolbox:
     actions: list[dict[str, Any]] = field(default_factory=list)
     tool_docs: bool = True  # PDFs from the web as document blocks inside tool_result
     doc_urls: set[str] = field(default_factory=set)  # pages the setup guides open: readable, not live links
+    # The kill switch's ``web: false``: no outside page at all except links the owner typed himself (§28.6).
+    web_off: bool = False
+    official_used: int = 0
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def __post_init__(self) -> None:
         self.links |= set(self.allowed_urls)
+        self.typed = frozenset(self.allowed_urls)  # the owner's own links (search results are added later)
 
     def allow(self, url: str) -> None:
         """A URL ``web_fetch`` may open and the panel may make live (thread-safe: tools run in parallel)."""
@@ -252,22 +285,42 @@ class Toolbox:
         if set(args) != {"url"} or not isinstance(url, str):
             return Outcome('{"INVALID_JSON": "url must be a string"}', True)
         target = web.normalise(url)
-        if target is None or (target not in self.allowed_urls and target not in self.doc_urls and not official(target)):
+        if target is not None and self.web_off:
+            if target not in self.typed:
+                return Outcome("Web reading is turned off. I can only open a link the owner typed himself.", True)
+            return self._open(target, None)
+        if target is not None and (target in self.allowed_urls or target in self.doc_urls):
+            # A search result or his own link may redirect anywhere public; a guide page only stays official.
+            return self._open(target, None if target in self.allowed_urls else hop_check(target))
+        if target is None or not official(target):
             return Outcome(
-                "I can only open official help and developer pages, pages from the setup guide, links from this "
-                "answer's search results or links the owner typed himself.",
+                "I can only open official help and developer documentation pages, pages from the setup guide, links "
+                "from this answer's search results or links the owner typed himself.",
                 True,
             )
+        with self._lock:
+            if self.official_used >= OFFICIAL_FETCH_CAP:
+                return Outcome(LIMIT_REACHED, True)
+            self.official_used += 1
+        target = without_query(target)
+        return self._open(target, hop_check(target))
+
+    def _open(self, target: str, hops: Callable[[str], bool] | None) -> Outcome:
+        """Fetch one page. ``hops`` set: an official or guide page, read with no key, so every redirect is checked,
+        the text is trimmed and big PDFs are refused."""
         status = ("reading", f"Reading {domain(target)}…")
         try:
-            page = self.fetcher(target)
+            page = self.fetcher(target) if hops is None else self.fetcher(target, allow=hops)
         except web.FetchError as e:
             return Outcome(str(e), True, status)
-        with self._lock:
-            self.links.add(page.url)
+        if hops is None or hops(page.url):
+            with self._lock:
+                self.links.add(page.url)
         if page.kind == "pdf":
             if not self.tool_docs:
                 return Outcome("I can't read PDFs from the web yet", True, status)
+            if hops is not None and len(page.data) > OFFICIAL_PDF_BYTES:
+                return Outcome("that PDF is too big to read here; ask him to send it as a file", True, status)
             title = page.title[:120]
             with self._lock:
                 self.titles[title] = "web"
@@ -283,6 +336,8 @@ class Toolbox:
             }
             return Outcome([pdf], False, status)
         text = page.text or "(the page had no readable text)"
+        if hops is not None:
+            text = text[:OFFICIAL_TEXT_CHARS]
         block: dict[str, Any] = {
             "type": "search_result",
             "source": page.url,

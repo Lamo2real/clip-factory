@@ -72,7 +72,7 @@ class Pages:
         }
         self.opened: list[str] = []
 
-    def __call__(self, url: str) -> web.Page:
+    def __call__(self, url: str, allow: Any = None) -> web.Page:
         self.opened.append(url)
         if url not in self.pages:
             raise web.FetchError("that page could not be read")
@@ -925,6 +925,16 @@ def test_answer_effort() -> None:
     assert worker.answer_effort("xhigh", pictures=True, question="") == "xhigh"
     assert worker.answer_effort("low", pictures=False, question="hello") == "low"
     assert worker.answer_effort("nonsense", pictures=False, question="hello") == "medium"
+    # Review (19 Nov): common words alone no longer raise the effort (cost).
+    for q in (
+        "which page shows my clips?",
+        "what is the next job",
+        "is there an error",
+        "google it",
+        "make a key clip",
+    ):
+        assert worker.answer_effort("medium", pictures=False, question=q) == "medium", q
+    assert worker.answer_effort("medium", pictures=False, question="how do I connect Facebook") == "high"
 
 
 # --- the post-deploy smoke check --------------------------------------------------------------------------------
@@ -986,6 +996,10 @@ def test_smoke_passes_only_when_the_model_reads_the_picture(make: Any) -> None:
 
     client.reply = "Blue"
     assert worker.smoke(deps)["outcome"] == "smoke_failed"
+    # Review (19 Nov): "red" inside another word, or a long refusal, is not the model reading the picture.
+    for reply in ("Rendered.", "I'm unable to view the image you've shared.", "Ordered", "It is red, as considered"):
+        client.reply = reply
+        assert worker.smoke(deps)["outcome"] == "smoke_failed", reply
 
 
 def test_smoke_reports_why_the_model_failed(make: Any) -> None:
@@ -995,6 +1009,16 @@ def test_smoke_reports_why_the_model_failed(make: Any) -> None:
     assert out["outcome"] == "smoke_failed"
     assert out["reason"] == "access"
     assert out["status"] == 403
+    deps.mantle = lambda: _SmokeClient(ApiStatus(404))
+    assert worker.smoke(deps)["reason"] == "not_found"  # a wrong model id, not an access step
+
+
+def test_the_access_message_names_todays_bedrock_steps() -> None:
+    """Review (19 Nov): Bedrock may have no Model access page any more (DEPLOYMENT.md §4)."""
+    text = worker.MODEL_MESSAGES["access"]
+    assert "Model catalog" in text
+    assert "Opus 5.5" in text
+    assert "model access" not in text.lower()
 
 
 def test_handler_routes_the_smoke_event(make: Any, monkeypatch: pytest.MonkeyPatch) -> None:
