@@ -136,12 +136,13 @@ def retry(app: App, req: Request) -> Response:
     if job.get("sessionId"):
         # The run read above must still be current, so two retries never start the same flow name.
         expect["sessionId"] = [job["sessionId"]]
+    pick_up = bool(job.get("pickUp")) and job.get("status") == "failed"  # it stopped partway: pick up (§30.6)
     try:
         updated = app.store.update(
             job["pk"],
             job["sk"],
-            jobs.restart_fields(job["jobId"], now, int(job.get("flowRun") or 1)),
-            remove=["error", "flowExecutionArn"],
+            jobs.restart_fields(job["jobId"], now, int(job.get("flowRun") or 1), pick_up=pick_up),
+            remove=["error", "flowExecutionArn"] + ([] if pick_up else ["pickUp", "note"]),
             expect_in=expect,
         )
     except db.ConditionFailed as e:

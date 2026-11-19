@@ -76,6 +76,7 @@ class PotServer:
                 self.starts += 1
                 self._proc = await asyncio.create_subprocess_exec(
                     *command(self.home, self.deno),
+                    start_new_session=True,  # its own process group: stop() kills all of it
                     stdin=asyncio.subprocess.DEVNULL,
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
@@ -104,11 +105,10 @@ class PotServer:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await self._task
             self._task = None
-        if self._proc is not None and self._proc.returncode is None:
-            with contextlib.suppress(ProcessLookupError):
-                self._proc.kill()
-            with contextlib.suppress(Exception):
-                await self._proc.wait()
+        if self._proc is not None:
+            from .proc import kill_group
+
+            await kill_group(self._proc, grace=2.0)  # Deno and anything it started
         self._proc = None
 
 
@@ -124,6 +124,23 @@ def from_env(env: Mapping[str, str] | None = None) -> PotServer | None:
 
 
 _running: list[PotServer] = []  # the container's one sidecar, while the app runs
+_config: list[Mapping[str, str] | None] = []  # set by configure(): the sidecar may start when a YouTube job asks
+
+
+def configure(env: Mapping[str, str] | None = None) -> None:
+    """Remembers how to start the sidecar, without starting it: ``ready()`` starts it the first time a YouTube call
+    needs it (an uploaded video never runs Deno, docs/CONTRACTS.md §30.5)."""
+    _config.clear()
+    _config.append(env)
+
+
+async def ensure_started() -> PotServer | None:
+    """The sidecar, started now if the app configured one and it is not running yet."""
+    if _running:
+        return _running[0]
+    if not _config:
+        return None
+    return await start(_config[0])
 
 
 async def start(env: Mapping[str, str] | None = None) -> PotServer | None:
@@ -143,11 +160,13 @@ async def stop() -> None:
 
 
 async def ready(within: float = 10.0) -> bool:
-    """Waits (at most ``within`` seconds) for the sidecar before a YouTube call. True with no sidecar: there is
-    nothing to wait for, and yt-dlp's script mode or no token at all is what happens then."""
+    """Starts the sidecar if it is not running (only YouTube calls ask), then waits at most ``within`` seconds (never
+    more than 10) for it. True with no sidecar: there is nothing to wait for, and yt-dlp's script mode or no token at
+    all is what happens then."""
+    await ensure_started()
     if not _running:
         return True
-    ok = await _running[0].ready(within)
+    ok = await _running[0].ready(min(within, 10.0))
     if not ok:
         log("warn", "pot.not_ready")
     return ok

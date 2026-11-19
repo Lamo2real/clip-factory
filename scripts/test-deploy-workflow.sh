@@ -90,6 +90,15 @@ else
   not_ok "deploy.yml must run scripts/check-plan-deletes.sh on terraform show -json prod.tfplan before the apply"
 fi
 
+# 5b. The deploy drain (docs/CONTRACTS.md §30.7) runs after the delete gate and before the apply.
+drain_line="$(grep -n 'scripts/wait-for-jobs.sh' <<<"$infra" | head -1 | cut -d: -f1)"
+if [ -n "$drain_line" ] && [ -n "$gate_line" ] && [ -n "$apply_line" ] \
+  && [ "$gate_line" -lt "$drain_line" ] && [ "$drain_line" -lt "$apply_line" ]; then
+  ok "the deploy drain waits for running jobs between the delete gate and terraform apply"
+else
+  not_ok "deploy.yml must run scripts/wait-for-jobs.sh after the delete gate and before the apply"
+fi
+
 # 6. The updater signing key (TAURI_SIGNING_PRIVATE_KEY and its password) is read only by the desktop build job, and
 #    desktop-plan, which may only ask whether it is set.
 key_users=()

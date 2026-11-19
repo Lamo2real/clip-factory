@@ -56,7 +56,7 @@ def test_job_flow_success_finishes(store: db.Store, agentcore: FakeAgentCore, ta
     ((name, config),) = ctx.callbacks
     assert name == "agent-done"
     assert config.timeout_seconds == 8 * 3600
-    assert config.heartbeat_timeout_seconds == 15 * 60
+    assert config.heartbeat_timeout_seconds == 6 * 60
     (invocation,) = agentcore.calls
     assert invocation["runtimeSessionId"] == job["sessionId"]
     assert invocation["payload"] == {
@@ -91,19 +91,34 @@ def test_job_flow_finish_leaves_a_ready_job_alone(store: db.Store, agentcore: Fa
         CallbackTimeoutError(message="heartbeat timed out"),
     ],
 )
-def test_job_flow_timeout_or_missed_heartbeat_fails_the_job(
+def test_job_flow_timeout_or_missed_heartbeat_fails_the_job_after_two_resumes(
     store: db.Store, agentcore: FakeAgentCore, table: FakeTable, error: Exception
 ) -> None:
     job = seed_job(store, status="queued")
-    ctx = FakeDurableContext(FakeCallback(error=error))
+    ctx = FakeDurableContext(FakeCallback(error=error))  # every attempt stops the same way
     out = run_job_flow(ctx, _job_event(job), _job_deps(store, agentcore))
     assert out == {"jobId": job["jobId"], "outcome": "failed"}
-    assert ctx.steps == ["start-agent", "fail", "stop-session"]
+    assert ctx.steps == [
+        "start-agent",
+        "resume-1",
+        "stop-old-1",
+        "start-agent-1",
+        "resume-2",
+        "stop-old-2",
+        "start-agent-2",
+        "fail",
+        "stop-session",
+    ]
     stored = table.raw(job["pk"], job["sk"])
     assert stored is not None
     assert stored["status"] == "failed"
-    assert stored["error"] == STOPPED_MESSAGE == "Making the clips stopped partway. Tap Try again."
-    assert agentcore.stopped == [job["sessionId"]]
+    assert stored["error"] == STOPPED_MESSAGE == "Making the clips stopped. Tap Try again to pick up where it left off."
+    assert stored["pickUp"] is True
+    assert "note" not in stored
+    assert stored["resumes"] == 2
+    assert len(agentcore.stopped) == 3
+    assert agentcore.stopped[0] == job["sessionId"]
+    assert len({c["runtimeSessionId"] for c in agentcore.calls}) == 3  # three sessions, one per attempt
 
 
 def test_job_flow_marks_running_steps_failed(store: db.Store, agentcore: FakeAgentCore, table: FakeTable) -> None:
@@ -199,10 +214,12 @@ def test_job_flow_read_timeout_after_the_agent_began_still_waits_for_the_callbac
     ctx = FakeDurableContext(FakeCallback(error=CallbackTimeoutError(message="heartbeat timed out")))
     out = run_job_flow(ctx, _job_event(job), _job_deps(store, agentcore))
     assert ctx.attempts["start-agent"] == 2
-    assert len(agentcore.calls) == 1  # the retry sees this run's 'running' and does not re-invoke
-    assert ctx.callback.waited == 1  # the heartbeat timeout still watches the run
+    # The retry sees this run's 'running' and does not re-invoke the same session (later calls are resumes).
+    assert len([c for c in agentcore.calls if c["runtimeSessionId"] == job["sessionId"]]) == 1
+    assert ctx.callback.waited >= 1  # the heartbeat timeout still watches the run
     assert out == {"jobId": job["jobId"], "outcome": "failed"}
-    assert ctx.steps == ["start-agent", "fail", "stop-session"]
+    assert ctx.steps[:2] == ["start-agent", "resume-1"]
+    assert ctx.steps[-2:] == ["fail", "stop-session"]
     assert table.raw(job["pk"], job["sk"])["status"] == "failed"  # type: ignore[index]
 
 
@@ -284,7 +301,7 @@ def test_job_flow_write_conditions_carry_the_session(
     )
     run_job_flow(FakeDurableContext(), _job_event(seed_job(store, status="queued")), _job_deps(store, agentcore))
     updates = [kw for op, kw in table.calls if op == "update_item"]
-    assert len(updates) == 2
+    assert len(updates) == 4  # resume-1, resume-2 and fail of the first job; finish of the second
     for kw in updates:
         assert "sessionId" in kw["ExpressionAttributeNames"].values()
 
@@ -852,3 +869,131 @@ def test_clip_flow_metrics_fall_back_to_stored_metrics_when_blocked(store: db.St
         "checkedAt": "2026-11-16T00:00:00.000Z",
     }
     assert adapter.stats_calls == 0
+
+
+# --- resume (docs/CONTRACTS.md §30.1) --------------------------------------------------------------------------------
+
+
+def _agent_begins(table: FakeTable, job: dict[str, Any], agentcore: FakeAgentCore) -> Any:
+    def invoke(**kw: Any) -> dict[str, Any]:
+        agentcore.calls.append({**kw, "payload": json.loads(kw["payload"])})
+        item = table.items[(job["pk"], job["sk"])]
+        if item.get("sessionId") == kw["runtimeSessionId"]:
+            item["status"] = "running"
+        return {"statusCode": 200, "response": json.dumps({"accepted": True}).encode()}
+
+    return invoke
+
+
+@pytest.mark.parametrize(
+    "error",
+    [CallbackTimeoutError(message="heartbeat timed out"), _external("AgentStopped", "Picking up where it stopped…")],
+)
+def test_job_flow_resumes_a_stopped_job_on_a_new_session(
+    store: db.Store, agentcore: FakeAgentCore, table: FakeTable, error: Exception
+) -> None:
+    steps = [
+        {"key": "resolve", "label": "Find the video", "status": "done", "startedAt": "2026-11-15T11:40:00.000Z"},
+        {"key": "render", "label": "Cut the clips", "status": "running"},
+    ]
+    job = seed_job(store, status="queued", steps=steps, progress=0.79, clipCount=0)
+    agentcore.invoke_agent_runtime = _agent_begins(table, job, agentcore)  # type: ignore[method-assign]
+    ok = FakeCallback(result=json.dumps({"jobId": job["jobId"], "clipCount": 9}))
+    ok.callback_id = "cb-456"
+    ctx = FakeDurableContext(FakeCallback(error=error), then=[ok])
+    out = run_job_flow(ctx, _job_event(job), _job_deps(store, agentcore))
+    assert out == {"jobId": job["jobId"], "outcome": "ready"}
+    assert ctx.steps == ["start-agent", "resume-1", "stop-old-1", "start-agent-1", "finish"]
+    assert [n for n, _ in ctx.callbacks] == ["agent-done", "agent-done-1"]
+    # The new callback gets what is left of the 8 h (20 minutes have gone by since the first step started).
+    assert ctx.callbacks[1][1].timeout_seconds == 8 * 3600 - 20 * 60
+    assert ctx.callbacks[1][1].heartbeat_timeout_seconds == 6 * 60
+    first, second = agentcore.calls
+    assert first["runtimeSessionId"] == job["sessionId"] != second["runtimeSessionId"]
+    assert second["payload"]["callbackId"] == "cb-456"
+    assert agentcore.stopped == [job["sessionId"]]  # the old container is stopped; its writes are fenced out
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    assert stored["status"] == "ready"
+    assert stored["clipCount"] == 9
+    assert stored["sessionId"] == second["runtimeSessionId"]
+    assert stored["resumes"] == 1
+    assert stored["steps"] == steps
+    assert stored["progress"] == 1
+    assert stored["note"] == "Picking up where it stopped…"  # the agent clears it when it writes ready
+
+
+def test_begin_resume_writes_only_additive_fields(store: db.Store, agentcore: FakeAgentCore, table: FakeTable) -> None:
+    from clipfactory_api.flows.job_flow import Run, begin_resume
+
+    job = seed_job(store, status="running", clipCount=3, progress=0.5)
+    out = begin_resume(_job_deps(store, agentcore), Run(job["jobId"], USER, job["sessionId"]), 1)
+    assert out["sessionId"] != job["sessionId"]
+    assert out["seconds"] > 7 * 3600
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    for key in ("steps", "progress", "clipCount", "source", "createdAt", "clipTarget"):
+        assert stored[key] == job[key]
+    assert (stored["status"], stored["resumes"], stored["pickUp"]) == ("queued", 1, True)
+    (update,) = [c for c in table.calls if c[0] == "update_item"]
+    assert "REMOVE" not in update[1]["UpdateExpression"]
+    assert ":old" in json.dumps(update[1]) or job["sessionId"] in json.dumps(update[1])  # fenced on the old session
+
+
+@pytest.mark.parametrize("kind", ["JobFailed", "Canceled", "Superseded"])
+def test_job_flow_never_resumes_the_agents_own_outcome(
+    store: db.Store, agentcore: FakeAgentCore, table: FakeTable, kind: str
+) -> None:
+    job = seed_job(store, status="queued")
+    ctx = FakeDurableContext(FakeCallback(error=_external(kind, "words")))
+    run_job_flow(ctx, _job_event(job), _job_deps(store, agentcore))
+    assert not [s for s in ctx.steps if s.startswith("resume")]
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    assert "pickUp" not in stored
+
+
+def test_job_flow_does_not_resume_a_job_the_owner_canceled(
+    store: db.Store, agentcore: FakeAgentCore, table: FakeTable
+) -> None:
+    job = seed_job(store, status="queued")
+
+    def canceled_meanwhile(**kw: Any) -> dict[str, Any]:
+        agentcore.calls.append(kw)
+        table.items[(job["pk"], job["sk"])]["status"] = "canceled"
+        return {"statusCode": 200, "response": json.dumps({"accepted": True}).encode()}
+
+    agentcore.invoke_agent_runtime = canceled_meanwhile  # type: ignore[method-assign]
+    ctx = FakeDurableContext(FakeCallback(error=CallbackTimeoutError(message="heartbeat timed out")))
+    out = run_job_flow(ctx, _job_event(job), _job_deps(store, agentcore))
+    assert out["outcome"] == "canceled"
+    assert ctx.steps == ["start-agent", "resume-1"]
+    assert table.raw(job["pk"], job["sk"])["status"] == "canceled"  # type: ignore[index]
+    assert len(agentcore.calls) == 1
+
+
+def test_job_flow_does_not_resume_with_too_little_time_left(
+    store: db.Store, agentcore: FakeAgentCore, table: FakeTable
+) -> None:
+    steps = [{"key": "resolve", "label": "Find the video", "status": "done", "startedAt": "2026-11-15T03:50:00.000Z"}]
+    job = seed_job(store, status="queued", steps=steps)
+    ctx = FakeDurableContext(FakeCallback(error=CallbackTimeoutError(message="heartbeat timed out")))
+    out = run_job_flow(ctx, _job_event(job), _job_deps(store, agentcore))
+    assert out["outcome"] == "failed"
+    assert ctx.steps == ["start-agent", "resume-1", "fail", "stop-session"]
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    assert stored["error"] == STOPPED_MESSAGE
+    assert stored["pickUp"] is True
+
+
+def test_job_flow_replay_of_an_old_execution_keeps_its_names(
+    store: db.Store, agentcore: FakeAgentCore, table: FakeTable
+) -> None:
+    """An execution checkpointed before resumes existed has "agent-done" and "start-agent": the first attempt still
+    uses exactly those names, in that order, so its replay is deterministic."""
+    job = seed_job(store, status="queued")
+    ctx = FakeDurableContext(FakeCallback(result=json.dumps({"jobId": job["jobId"], "clipCount": 1})))
+    run_job_flow(ctx, _job_event(job), _job_deps(store, agentcore))
+    assert [n for n, _ in ctx.callbacks] == ["agent-done"]
+    assert ctx.steps == ["start-agent", "finish"]

@@ -289,6 +289,42 @@ def test_retry_failed_job(
     assert agentcore.stopped == [job["sessionId"]]
 
 
+def test_try_again_after_a_stop_picks_up_where_it_left_off(call: Call, store: db.Store, table: FakeTable) -> None:
+    """docs/CONTRACTS.md §30.6: the same job id (so the same saved moments and clips), pickUp kept, and the note."""
+    job = seed_job(
+        store,
+        status="failed",
+        error="Making the clips stopped. Tap Try again to pick up where it left off.",
+        pickUp=True,
+        resumes=2,
+        flowRun=1,
+    )
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    out = body["job"]
+    assert out["jobId"] == job["jobId"]
+    assert out["note"] == "Picking up where it stopped…"
+    assert "pickUp" not in out
+    assert "resumes" not in out
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    assert stored["pickUp"] is True
+    assert stored["resumes"] == 0
+    assert stored["status"] == "queued"
+    assert "error" not in stored
+
+
+def test_try_again_after_a_real_failure_starts_over(call: Call, store: db.Store, table: FakeTable) -> None:
+    job = seed_job(store, status="failed", error="No clip passed the checklist.", note="old", flowRun=1)
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    assert "note" not in body["job"]
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    assert "pickUp" not in stored
+    assert "note" not in stored
+
+
 def test_retry_starts_even_if_old_session_cannot_be_stopped(
     call: Call, store: db.Store, agentcore: FakeAgentCore, monkeypatch: pytest.MonkeyPatch
 ) -> None:

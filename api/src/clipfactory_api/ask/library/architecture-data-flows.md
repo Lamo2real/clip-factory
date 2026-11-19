@@ -58,13 +58,15 @@ stops until the callback arrives.
 
 ```mermaid
 flowchart TD
-  start([job-flow starts]) --> cb["create_callback agent-done<br/>timeout 8 h, heartbeat timeout 15 min"]
+  start([job-flow starts]) --> cb["create_callback agent-done<br/>timeout 8 h, heartbeat timeout 6 min"]
   cb --> sa["step start-agent<br/>GetItem Job, InvokeAgentRuntime process_job + callbackId"]
   sa -- "job missing, another sessionId, or terminal" --> sup([outcome superseded])
   sa --> wait["cb.result(): no compute while waiting"]
   wait -- success --> fin["step finish: Job ready + clipCount if not already"] --> ready([outcome ready])
   wait -- "JobFailed" --> fail["step fail: Job failed with the agent's message"]
-  wait -- "timeout or missed heartbeat" --> fail2["step fail: 'Making the clips stopped partway. Tap Try again.'"]
+  wait -- "timeout, missed heartbeat or AgentStopped" --> resume["step resume-n: new sessionId, pickUp, note<br/>step stop-old-n; again on the new session (at most twice)"]
+  resume --> cb
+  resume -- "after 2 resumes" --> fail2["step fail: 'Making the clips stopped. Tap Try again to pick up where it left off.'"]
   wait -- "Canceled or Superseded" --> nowrite([outcome canceled or superseded, no write])
   fail --> stop["step stop-session: StopRuntimeSession"] --> failed([outcome failed])
   fail2 --> stop
@@ -95,9 +97,10 @@ sequenceDiagram
     R->>L: SendDurableExecutionCallbackFailure JobFailed
     L->>F: resume with CallbackError
     F->>R: step stop-session
-  else container died (no heartbeat for 15 min)
+  else container died (no heartbeat for 6 min) or got SIGTERM (AgentStopped)
     L->>F: resume with CallbackError (heartbeat timeout)
-    F->>D: step fail: Job failed, "Making the clips stopped partway. Tap Try again."
+    F->>D: step resume-n: new sessionId, pickUp, "Picking up where it stopped…" (at most twice, §30)
+    F->>D: after the last resume, step fail: "Making the clips stopped. Tap Try again to pick up where it left off."
     F->>R: step stop-session (errors ignored)
   end
 ```

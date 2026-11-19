@@ -251,8 +251,10 @@ query, Instagram media, Facebook video insights and post views, X posts lookup).
 ### Durable flows (`api/tests/test_flows.py`, pytest)
 A `FakeDurableContext` runs each `step` at once and records its name, records each `wait` and its duration, and hands
 out callbacks whose `result()` returns or raises a preset `CallbackError`.
-- **Job flow**: success → `finish`; timeout or missed heartbeat → `fail` with "Making the clips stopped partway.
-  Tap Try again." and `stop-session`; `JobFailed` → the agent's message; `Canceled` and `Superseded` → no write; a job that is missing,
+- **Job flow**: success → `finish`; timeout, missed heartbeat or `AgentStopped` → `resume-n` and `stop-old-n`, a new
+  session and success, or after two resumes `fail` with "Making the clips stopped. Tap Try again to pick up where it
+  left off." and `stop-session` (CONTRACTS §30; the agent side in `agent/tests/test_resume.py`, `test_heartbeat.py`,
+  `test_proc.py`; the deploy drain in `scripts/test-wait-for-jobs.sh`); `JobFailed` → the agent's message; `Canceled` and `Superseded` → no write; a job that is missing,
   has another `sessionId` or is terminal → `start-agent` skips and the flow ends `superseded` (already `running` with
   this `sessionId` → no second invoke, the flow waits); every write is fenced on
   `sessionId`.

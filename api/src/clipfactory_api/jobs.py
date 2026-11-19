@@ -31,7 +31,7 @@ STEPS: tuple[tuple[str, str], ...] = (
 )
 ACTIVE = ("queued", "running")
 RESTARTABLE = ("failed", "canceled")
-INTERNAL_FIELDS = ("sessionId", "heartbeatAt", "flowRun", "flowExecutionArn")
+INTERNAL_FIELDS = ("sessionId", "heartbeatAt", "flowRun", "flowExecutionArn", "pickUp", "resumes")
 
 START_FAILED = "Could not start. Press Try again."
 
@@ -117,14 +117,24 @@ def start(store: db.Store, flows: FlowClient, job: Item, now: str) -> Item:
         return store.get(job["pk"], job["sk"]) or job
 
 
-def restart_fields(job_id: str, now: str, previous_run: int) -> Item:
-    return {
+RESUME_NOTE = "Picking up where it stopped…"
+
+
+def restart_fields(job_id: str, now: str, previous_run: int, *, pick_up: bool = False) -> Item:
+    """A new run of the same job (Try again): same job id, so the same saved files. ``pick_up`` (the last run
+    stopped partway rather than failing on its own, ``pickUp`` on the job, docs/CONTRACTS.md §30.6) keeps the moments
+    and clips it saved and says so; otherwise the run starts over, as Try again always did."""
+    fields: Item = {
         "status": "queued",
         "flowRun": previous_run + 1,
         "steps": new_steps(),
         "progress": 0,
         "clipCount": 0,
+        "resumes": 0,
         "sessionId": new_session_id(job_id),
         "heartbeatAt": now,
         "updatedAt": now,
     }
+    if pick_up:
+        fields.update(pickUp=True, note=RESUME_NOTE)
+    return fields

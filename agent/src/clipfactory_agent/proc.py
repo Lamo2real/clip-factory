@@ -1,14 +1,22 @@
-"""Running ffmpeg, ffprobe and yt-dlp without blocking the event loop, killed on cancel or timeout."""
+"""Running ffmpeg, ffprobe and yt-dlp without blocking the event loop, killed on cancel or timeout.
+
+Every child runs in its own process group, and a timeout, a cancel or any error kills the whole group (SIGTERM, then
+SIGKILL after a few seconds), so yt-dlp's own ffmpeg never outlives it. On Linux each child also asks the kernel to
+pick it first when memory runs out (``oom_score_adj`` 1000): one clip's ffmpeg is lost instead of the agent, its
+heartbeat and the whole job (docs/CONTRACTS.md §30)."""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import json
+import os
 import re
+import signal
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .util import redact_urls
 
@@ -16,6 +24,14 @@ _INTERESTING = re.compile(r"error|unable|denied|not |fail|forbidden|sign in|priv
 
 
 _STALE_COOKIES = "cookies are no longer valid"
+OOM_SCORE_FILE = Path("/proc/self/oom_score_adj")
+OOM_SCORE = 1000  # the most likely to be picked by the kernel's out-of-memory killer
+KILL_GRACE = 5.0  # seconds between SIGTERM and SIGKILL
+KILLED_CODES = (-signal.SIGKILL, 128 + signal.SIGKILL)  # what the kernel's out-of-memory kill looks like
+
+
+class StalledError(TimeoutError):
+    """The command printed nothing for ``stall_limit`` seconds and was killed."""
 
 
 class CommandError(Exception):
@@ -46,27 +62,67 @@ def error_tail(text: str, lines: int = 3) -> str:
     return " ".join(tail)[:500]
 
 
+def oom_first(args: Sequence[str]) -> list[str]:
+    """``args`` behind a tiny ``sh`` that sets the child's ``oom_score_adj`` to 1000 and then ``exec``s it (Linux only;
+    elsewhere the command is unchanged). A shell rather than ``preexec_fn``, which is unsafe with threads running."""
+    if not OOM_SCORE_FILE.exists():
+        return list(args)
+    return ["sh", "-c", f'echo {OOM_SCORE} > {OOM_SCORE_FILE} 2>/dev/null; exec "$@"', "sh", *args]
+
+
+def was_killed(e: BaseException) -> bool:
+    """True when a command died of SIGKILL: on the agent that is the kernel's out-of-memory killer."""
+    return isinstance(e, CommandError) and e.code in KILLED_CODES
+
+
+async def kill_group(proc: asyncio.subprocess.Process, grace: float = KILL_GRACE) -> None:
+    """SIGTERM to the child's whole process group, SIGKILL after ``grace`` seconds. Never raises."""
+    if proc.returncode is not None:
+        with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+            os.killpg(proc.pid, signal.SIGKILL)  # the child is gone; its own children may not be
+        return
+    with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+        os.killpg(proc.pid, signal.SIGTERM)
+    with contextlib.suppress(BaseException):  # a timeout or a second cancel: SIGKILL below either way
+        await asyncio.wait_for(asyncio.shield(proc.wait()), grace)
+    with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+        os.killpg(proc.pid, signal.SIGKILL)
+    with contextlib.suppress(ProcessLookupError):
+        proc.kill()
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(proc.wait(), grace)
+
+
 async def run(
     args: Sequence[str],
     *,
-    time_limit: float = 3600,
+    time_limit: float,
+    stall_limit: float | None = None,
     on_line: Callable[[str], None] | None = None,
     cwd: Path | None = None,
 ) -> Result:
-    """Runs a command; raises CommandError on a non-zero exit. stderr lines go to ``on_line`` as they arrive."""
+    """Runs a command; raises CommandError on a non-zero exit. stderr lines go to ``on_line`` as they arrive.
+
+    ``time_limit`` is required at every call site (tests/test_proc.py checks): nothing runs unbounded. ``stall_limit``
+    also kills a command that prints nothing for that long (for commands that print progress, like yt-dlp)."""
     proc = await asyncio.create_subprocess_exec(
-        *args,
+        *oom_first(args),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         stdin=asyncio.subprocess.DEVNULL,
         cwd=str(cwd) if cwd else None,
+        start_new_session=True,
     )
     err_lines: list[str] = []
+    loop = asyncio.get_running_loop()
+    last_output = loop.time()
 
     async def read_err() -> None:
+        nonlocal last_output
         assert proc.stderr is not None
         buf = b""
         while chunk := await proc.stderr.read(4096):
+            last_output = loop.time()
             buf += chunk
             *done, buf = re.split(rb"[\r\n]", buf)
             for raw in done:
@@ -80,19 +136,52 @@ async def run(
             err_lines.append(buf.decode("utf-8", "replace"))
 
     async def read_out() -> bytes:
+        nonlocal last_output
         assert proc.stdout is not None
-        return await proc.stdout.read()
+        parts: list[bytes] = []
+        while chunk := await proc.stdout.read(65536):
+            last_output = loop.time()
+            parts.append(chunk)
+        return b"".join(parts)
+
+    async def watch_stall() -> None:
+        assert stall_limit is not None
+        while True:
+            await asyncio.sleep(min(5.0, stall_limit / 4))
+            if loop.time() - last_output >= stall_limit:
+                raise StalledError(f"{Path(args[0]).name} printed nothing for {stall_limit:.0f} s")
+
+    async def everything() -> bytes:
+        io: asyncio.Future[tuple[bytes, None]] = asyncio.gather(read_out(), read_err())
+        if stall_limit is None:
+            out, _ = await io
+            return out
+        watcher: asyncio.Future[None] = asyncio.ensure_future(watch_stall())
+        try:
+            both: list[asyncio.Future[Any]] = [io, watcher]
+            done, _ = await asyncio.wait(both, return_when=asyncio.FIRST_COMPLETED)
+            if watcher in done:
+                io.cancel()
+                with contextlib.suppress(BaseException):
+                    await io
+                watcher.result()  # raises StalledError
+            out, _ = io.result()
+            return out
+        finally:
+            watcher.cancel()
+            with contextlib.suppress(BaseException):
+                await watcher
 
     try:
-        out, _ = await asyncio.wait_for(asyncio.gather(read_out(), read_err()), time_limit)
+        out = await asyncio.wait_for(everything(), time_limit)
         code = await proc.wait()
     except BaseException:
-        # Timeout or cancel: never leave a 6-hour download running behind a canceled job.
-        with contextlib.suppress(ProcessLookupError):
-            proc.kill()
-        with contextlib.suppress(Exception):
-            await proc.wait()
+        # Timeout, stall, cancel or error: never leave a 6-hour download (or its ffmpeg) running behind a job.
+        await kill_group(proc)
         raise
+    # A command that exited may still have left children in its group (yt-dlp's ffmpeg after a crash).
+    with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+        os.killpg(proc.pid, signal.SIGKILL)
     stderr = "\n".join(err_lines)
     if code != 0:
         raise CommandError(Path(args[0]).name, code, error_tail(stderr))

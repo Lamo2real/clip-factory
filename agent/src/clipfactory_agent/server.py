@@ -30,6 +30,7 @@ from starlette.routing import Route
 
 from .callback import DurableCallback
 from .callback import report as report_outcome
+from .heartbeat import Liveness
 from .util import log
 
 if TYPE_CHECKING:
@@ -46,6 +47,8 @@ SESSION_HEADER = "x-amzn-bedrock-agentcore-runtime-session-id"
 class Runner(Protocol):
     @property
     def busy(self) -> bool: ...
+
+    async def shutdown(self, within: float = 20.0) -> None: ...
 
     def submit(
         self, job_id: str, user_id: str, session_id: str | None = None, callback_id: str | None = None
@@ -199,7 +202,11 @@ def make_run(
                 await report_outcome(cb, done.status, job_id=job_id, clip_count=done.clip_count, error=done.error)
                 return done.status
             st = JobState(job_id=job_id, user_id=user_id, workdir=work_root / job_id, session_id=session_id)
-            tracker = make_tracker(store, user_id, job_id, session_id=session_id, on_beat=cb.beat if cb else None)
+            # The heartbeat runs on its own thread and beats only while this loop ticks (heartbeat.py, §30.3).
+            liveness = Liveness()
+            tracker = make_tracker(store, user_id, job_id, session_id=session_id, on_beat=liveness.tick, resume=job)
+            if cb:
+                cb.start_heartbeat(liveness)
             status = await run_job(tracker, pipeline.steps(st, tracker), clip_count=lambda: len(st.candidates))
             log("info", "job.finished", job=job_id, status=status)
             await report_outcome(cb, status, job_id=job_id, clip_count=len(st.candidates), error=tracker.error)
@@ -256,7 +263,8 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     def new_callback(callback_id: str) -> DurableCallback:
         if not client:
             client.append(lambda_client(cfg.region))
-        return DurableCallback(callback_id, client[0])
+        # The heartbeat thread gets its own client (heartbeat.py): nothing it does waits on the event loop.
+        return DurableCallback(callback_id, client[0], new_client=lambda: lambda_client(cfg.region))
 
     log(
         "info",
@@ -268,21 +276,34 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
         deep=cfg.deep_enabled,
         watchModel=cfg.watch_model_id if watcher else None,
     )
-    return create_app(
-        JobRunner(make_run(store, pipeline, cfg.work_root, new_callback), cfg.work_root), pot_lifespan(env)
-    )
+    runner = JobRunner(make_run(store, pipeline, cfg.work_root, new_callback), cfg.work_root)
+    return create_app(runner, app_lifespan(runner, env))
 
 
-def pot_lifespan(env: Mapping[str, str] | None = None) -> Callable[[Starlette], AbstractAsyncContextManager[None]]:
-    """Runs the PO token sidecar (pot.py) for as long as the app runs."""
+def app_lifespan(
+    runner: Runner | None = None, env: Mapping[str, str] | None = None
+) -> Callable[[Starlette], AbstractAsyncContextManager[None]]:
+    """What the app does when it starts and stops.
+
+    Start: only remembers how to run the PO token sidecar (pot.py); it starts the first time a YouTube job needs it,
+    so an uploaded video never runs Deno (§30.5).
+
+    Stop (uvicorn got SIGTERM: AgentCore stopped the session or retired this version): every running job stops as
+    ``stopped`` and sends ``AgentStopped`` to its job flow, which resumes it on a new session at once instead of after
+    the heartbeat timeout (§30.2). The steps and clips it saved are the checkpoint. Then the sidecar stops."""
     from . import pot
 
     @asynccontextmanager
     async def lifespan(_: Starlette) -> AsyncIterator[None]:
-        await pot.start(env)
+        pot.configure(env)
         try:
             yield
         finally:
+            if runner is not None:
+                try:
+                    await runner.shutdown()
+                except Exception as e:
+                    log("warn", "runtime.shutdown_failed", error=type(e).__name__)
             await pot.stop()
 
     return lifespan

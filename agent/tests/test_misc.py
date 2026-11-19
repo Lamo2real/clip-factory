@@ -199,10 +199,10 @@ def test_probe_and_tail() -> None:
 
 
 async def test_run_reports_failures() -> None:
-    r = await run(["python3", "-c", "import sys; print('out'); print('progress 1', file=sys.stderr)"])
+    r = await run(["python3", "-c", "import sys; print('out'); print('progress 1', file=sys.stderr)"], time_limit=30)
     assert r.stdout.strip() == b"out" and "progress 1" in r.stderr
     with pytest.raises(CommandError, match="exit 3"):
-        await run(["python3", "-c", "import sys; print('ERROR: nope', file=sys.stderr); sys.exit(3)"])
+        await run(["python3", "-c", "import sys; print('ERROR: nope', file=sys.stderr); sys.exit(3)"], time_limit=30)
     with pytest.raises(TimeoutError):
         await run(["python3", "-c", "import time; time.sleep(5)"], time_limit=0.2)
 

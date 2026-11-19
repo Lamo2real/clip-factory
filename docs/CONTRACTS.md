@@ -453,8 +453,9 @@ the SQS publish queue and the EventBridge resources: §14.
   ones through the platform adapter (adapters arrive in phase 2; today every platform is `pending_integration`), waits
   48 hours, reads metrics (through the shared stats refresh, §16.5) and updates the clip's vector (the one-sentence
   48-hour Learning is retired, §16.12). Between and after those steps `cf-prod-stats` keeps every posted post's numbers fresh for 30 days (§16).
-* A `running` job whose agent stops sending heartbeats for 15 minutes becomes `failed` ("Making the clips
-  stopped partway. Tap Try again.") through the job-flow callback heartbeat timeout (§14.4), not a scan.
+* A `running` job whose agent stops sending heartbeats for 6 minutes is resumed on a new session (at most twice,
+  §30.1) through the job-flow callback heartbeat timeout (§14.4), not a scan; only after that does it become `failed`
+  ("Making the clips stopped. Tap Try again to pick up where it left off.").
 
 ## 10. Terraform outputs (read by deploy.yml)
 
@@ -951,7 +952,8 @@ wrapper around `run_job_flow(ctx, event, deps)` so tests drive it with a fake co
 * **Steps** (names are contract; all DynamoDB writes are conditional on `sessionId = :sessionId`, so a superseded run
   never overwrites a newer one, and on the job not already being in the target state):
   1. `cb = context.create_callback(name="agent-done", config=CallbackConfig(timeout=Duration.from_hours(8),
-     heartbeat_timeout=Duration.from_minutes(15)))`.
+     heartbeat_timeout=Duration.from_minutes(6)))`. A resumed attempt `n` (§30.1) uses `agent-done-n`,
+     `start-agent-n` and the time left of the 8 h; the first attempt keeps these names so old executions replay.
   2. Step `start-agent` (retry: 3 attempts, exponential backoff, retryable on throttling/5xx/connection errors):
      GetItem the Job. Missing, another `sessionId`, or a terminal status (canceled or retried meanwhile) → return
      `{"skipped": true}` and the flow ends with outcome `superseded` without waiting. Already `running` with this
@@ -961,16 +963,19 @@ wrapper around `run_job_flow(ctx, event, deps)` so tests drive it with a fake co
      The agent ignores a duplicate `process_job` (at-least-once step).
   3. `result = cb.result()` (no compute while waiting). Success → step `finish`: if the Job is not `ready`, set
      `ready` and `clipCount` from the result. Outcome `ready`.
-  4. `CallbackError` → step `fail`: if the Job is `queued`/`running` with this `sessionId`, set `failed` with `error` =
-     the agent's `ErrorMessage` when `ErrorType == "JobFailed"`, else "Making the clips stopped partway. Tap Try again."
-     (timeout or missed heartbeat); then step `stop-session` (`StopRuntimeSession`, errors ignored). `ErrorType`
+  4. `CallbackError` with a timeout, a missed heartbeat or `ErrorType == "AgentStopped"` → resume (§30.1: steps
+     `resume-n`, `stop-old-n`, then 1-3 again on the new session), at most twice. Otherwise, or after the last resume,
+     step `fail`: if the Job is `queued`/`running` with this `sessionId`, set `failed` with `error` =
+     the agent's `ErrorMessage` when `ErrorType == "JobFailed"`, else "Making the clips stopped. Tap Try again to pick
+     up where it left off." (and `pickUp: true`, §30.6); then step `stop-session` (`StopRuntimeSession`, errors ignored). `ErrorType`
      `Canceled` / `Superseded` → no write (the API or the newer run already set the state). Outcome `failed` /
      `canceled` / `superseded`.
   The handler returns `{"jobId", "outcome"}` and never raises for these expected outcomes, so `DurableExecutionFailed`
   means a bug.
 * **Agent side of the callback** (`agent/src/clipfactory_agent/callback.py`, boto3 `lambda` client in `CF_REGION`):
-  * Heartbeat: `send_durable_execution_callback_heartbeat(CallbackId=...)` from the existing job heartbeat loop, at most
-    once per 5 minutes (timeout is 15). Failures are logged, never fatal.
+  * Heartbeat: `send_durable_execution_callback_heartbeat(CallbackId=...)` every 2 minutes from its own thread with its
+    own client, only while the event loop is alive (timeout is 6 minutes; §30.3). Failures are logged, tried again
+    after 20 s, never fatal.
   * Success after `finalize` wrote the Job `ready`: `send_durable_execution_callback_success(CallbackId=...,
     Result=json.dumps({"jobId", "clipCount"}).encode())`.
   * Failure: `send_durable_execution_callback_failure(CallbackId=..., Error={"ErrorType": "JobFailed" | "Canceled" |
@@ -1212,7 +1217,7 @@ Shared function names across builders: `posts.create_for_clip(store, user_id, cl
   24 KB → `partial`, internal fields absent; hooks: Meta challenge ok/403, YouTube challenge, tiktok/x 501, POST stores
   a HOOK item with 14-day `ttl`, 413 over 256 KB, OAuth callback per §17.12 (was the `coming_soon` 302), unknown
   platform 404, query string never logged.
-* **agent**: `callbackId` → heartbeat ≤ every 5 min, success after `ready`, `JobFailed`/`Canceled`/`Superseded`
+* **agent**: `callbackId` → heartbeat every 2 min from a thread (§30.3), success after `ready`, `JobFailed`/`Canceled`/`Superseded`
   failures, closed-callback errors ignored, no callback without `callbackId`; duplicate `process_job` ignored; finalize
   puts vectors with the §14.6 metadata; query fallback (< 3 performed hits) and skip on error.
 * **web** (Vitest + Playwright mock mode): backoff sequence and fresh token per attempt, cache merge of each event
@@ -6112,3 +6117,95 @@ container's disk really is (`cut.full_fallback` logs the height chosen), how lon
 that `node-canvas` loads on Debian arm64 (CI's arm64 image build runs the check of §29.2, as the `clipfactory` user;
 its `npm ci` fetches the canvas prebuild from GitHub, so a GitHub outage can fail that build), and whether
 `--download-sections` on the range download holds up from AWS better than the per-clip sections did.
+
+## 30. Jobs that never stop partway (owner request, 2026-11-19)
+
+### 30.1 The owner's words and what they mean
+
+"Why does this happen? ... It should not cut, like when they cut the clip, it should always work." An uploaded
+26-minute video stopped at Cut the clips with "Making the clips stopped partway. Tap Try again." That sentence came
+only from the job flow's timeout path (no heartbeat for 15 minutes): the agent's container went quiet during Cut, and
+nothing resumed the job. The cause and the alternatives are in [ADR-54](DECISIONS.md#adr-54-resume-dont-fail).
+
+### 30.2 Resume, don't fail (`api/src/clipfactory_api/flows/job_flow.py`)
+
+* `MAX_RESUMES = 2`. Resumable: a callback timeout, a missed heartbeat, and the agent's `AgentStopped` failure (it got
+  SIGTERM: a stopped session or a retired runtime version). Never resumed: `JobFailed`, `Canceled`, `Superseded`, a job
+  the owner canceled or retried meanwhile, or a job with under 20 minutes left of its 8 h (the execution timeout is
+  8.5 h).
+* Step `resume-n` (`begin_resume`) is one conditional UpdateItem on `status IN (queued, running) AND sessionId = :old`
+  that sets `status: queued`, a new `sessionId`, `resumes: n`, `pickUp: true`, `note: "Picking up where it stopped…"`,
+  `heartbeatAt`, `updatedAt`. It removes and resets nothing: steps, progress, clip count and saved files stay. The new
+  `sessionId` is the fence (§13): the old container can no longer write. Then step `stop-old-n` stops the old session,
+  and `agent-done-n` / `start-agent-n` invoke `DEFAULT`, the newest runtime version.
+* After the last resume: `failed`, "Making the clips stopped. Tap Try again to pick up where it left off.", with
+  `pickUp: true`.
+
+### 30.3 Heartbeat thread (`agent/src/clipfactory_agent/heartbeat.py`)
+
+* A daemon thread with its own boto3 Lambda client sends the heartbeat every **120 s**; a failed send is tried again
+  after **20 s**; the time of the last beat is set only after a send went through. Flow side: heartbeat timeout
+  **6 minutes**.
+* It beats only while the event loop is alive: the loop ticks a `Liveness` every 5 s (the Tracker's loop); after
+  **300 s** without a tick it logs `agent.loop_stalled` and stops beating, so the flow resumes the job.
+* Every beat logs `agent.mem` (`current`, `max`, `oom_kills` from cgroup v2, `/proc/meminfo` as a fallback).
+* SIGTERM: uvicorn runs the app's shutdown; every running job stops as `stopped` (not `canceled`: nothing is written)
+  and sends `AgentStopped` with "Picking up where it stopped…"; the flow resumes it at once.
+
+### 30.4 The Cut step uses bounded memory
+
+* An upload is downloaded to the disk once per run (when its size plus 3 GiB fits) and cut locally; else from S3 with
+  `-rw_timeout 60 s`.
+* The section cut: `-vf scale='min(1920,iw)':-2:flags=bicubic,fps=30 -crf 18 -threads 2`.
+* The payoff tease is its own input (`-ss t0 -t d -i section.mp4` as `[1:v]`/`[1:a]`; `anullsrc` moves to input 2),
+  so `concat` never holds the body's frames while it waits for the tease. The render runs with
+  `-filter_complex_threads 1` and `-threads 2`.
+* `RENDER_CONCURRENCY = 2` is a ceiling: a second clip starts only for a source up to 1080p and with more than 3 GiB of
+  free memory.
+* `proc.run`: every child runs in its own process group and gets `oom_score_adj 1000` (Linux); a timeout, a cancel, a
+  stall (`stall_limit`, opt-in) or any error kills the whole group (SIGTERM, SIGKILL 5 s later). Every call site passes
+  `time_limit` (a test checks).
+* A clip whose ffmpeg the kernel killed (SIGKILL) is tried once more with nothing cut alongside, then skipped; one bad
+  clip is skipped as before ("Cut 9 clips; 1 could not be cut.").
+
+### 30.5 YouTube machinery only for YouTube
+
+The PO token sidecar starts the first time a YouTube call needs it, never at app start. `_save_info`, `_ensure_full`
+(`full_lock`) and `_cut_full` raise for an upload.
+
+### 30.6 Checkpoints and Try again
+
+| Saved | Key under `jobs/{jobId}/source/` | Reused when the job has `pickUp` |
+|---|---|---|
+| Chosen moments | `moments.json` (`version: 1`, `settings`: hash of notes, clip target and model) | `select` returns "Used the N moments picked last time." without a model call, when `settings` match |
+| Each finished clip | `render/NN/clip.mp4`, `cover.jpg`, `done.json` (written right after the clip, `done.json` last) | `render` downloads it back instead of cutting it, when its moment matches |
+| Earlier steps | as before (audio, words, picture, what was watched) | always |
+
+* A resumed run keeps the steps already done (they reload quietly and stay done) and the progress; its `begin` writes
+  no `clipCount: 0`. The agent removes `note` and `pickUp` when it writes `ready` or `failed`.
+* **Try again** keeps the job id, so the saved files. After a stop (`pickUp: true` on a failed job) it keeps
+  `pickUp` and shows "Picking up where it stopped…"; after a real failure it removes `pickUp` and starts over as
+  before. `pickUp` and `resumes` are internal (not in the API's job JSON); `note` is.
+* Not checkpointed: the checklist and the captions (they re-run, from the reused clips).
+
+### 30.7 Deploys wait for running jobs
+
+`deploy.yml` runs `scripts/wait-for-jobs.sh` between the delete gate and `terraform apply`. When nothing under
+`module.agent` changes it goes on at once. Otherwise it counts jobs that are `queued`/`running` with a heartbeat newer
+than 3 minutes (a projection-only Scan every 30 s, counts only in the log) and waits until there are none, at most 45
+minutes; then it goes on, and a job still running resumes on the new version (§30.2). It reads only; no IAM change.
+
+### 30.8 Owner words
+
+| Moment | Words |
+|---|---|
+| Resumed automatically, or Try again after a stop (note under the progress) | "Picking up where it stopped…" |
+| One clip skipped | "Cut 9 clips; 1 could not be cut." |
+| Gave up after 2 resumes | "Making the clips stopped. Tap Try again to pick up where it left off." |
+| Nothing could be cut | the agent's own sentence (unchanged) |
+
+### 30.9 Tests
+
+`agent/tests/test_heartbeat.py`, `test_proc.py`, `test_resume.py`, `test_callback.py`; `api/tests/test_flows.py`
+(resume, never resuming the agent's own outcomes or a canceled job, time left, replay names), `test_jobs.py` (Try
+again); `web/test/jobNote.test.tsx`; `scripts/test-wait-for-jobs.sh`, `scripts/test-deploy-workflow.sh`.

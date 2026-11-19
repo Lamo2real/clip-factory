@@ -156,8 +156,8 @@ jobs:
     needs: [preflight, build]
     if: needs.preflight.outputs.enabled == 'true'
     runs-on: ubuntu-24.04
-    # The first apply builds the ARM64 agent image under QEMU.
-    timeout-minutes: 90
+    # The first apply builds the ARM64 agent image under QEMU; the drain before it may wait up to 45 minutes.
+    timeout-minutes: 120
     permissions:
       contents: read
       id-token: write
@@ -243,6 +243,13 @@ jobs:
         run: |
           terraform show -json prod.tfplan > "${RUNNER_TEMP}/plan.json"
           bash "${GITHUB_WORKSPACE}/scripts/check-plan-deletes.sh" "${RUNNER_TEMP}/plan.json"
+      # docs/CONTRACTS.md §30.7: when the agent changes, wait (at most 45 minutes) for the jobs being made to finish, so
+      # a deploy never stops one partway; a job still running after that resumes on the new version by itself. Reads
+      # only (one projection-only Scan every 30 s with this role), prints counts only.
+      - name: wait for running jobs (only when the agent changes)
+        env:
+          TABLE: cf-prod-data
+        run: bash scripts/wait-for-jobs.sh "${RUNNER_TEMP}/plan.json"
       - name: terraform apply (exactly the saved plan)
         working-directory: infra/envs/prod
         run: terraform apply -input=false -auto-approve prod.tfplan

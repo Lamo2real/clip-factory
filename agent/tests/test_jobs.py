@@ -65,7 +65,7 @@ async def test_run_job_marks_every_step_and_ends_ready() -> None:
     status = await run_job(tracker(store), ok_steps(seen), clip_count=lambda: 7)
     assert status == "ready"
     assert seen == [k for k, _, _ in STEPS]
-    assert store.writes[0]["status"] == "running" and store.removed == ["error"]
+    assert store.writes[0]["status"] == "running" and store.removed == ["error", "note", "pickUp"]
     assert store.last["status"] == "ready" and store.last["clipCount"] == 7 and store.last["progress"] == 1.0
     assert all(s["status"] == "done" and s["message"] == f"{s['key']} done" for s in store.last["steps"])
     assert all("heartbeatAt" in w for w in store.writes)

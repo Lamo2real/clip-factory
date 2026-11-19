@@ -157,6 +157,24 @@ function makeClip(job: Job, rank: number, m: (typeof MOMENTS)[number], status: C
   };
 }
 
+/** A job the app picked back up on its own after it stopped partway (CONTRACTS §30): the steps already done stay
+ * done, the progress does not go back, and the note says what is happening. Not in the seeded list. */
+export function resumedJob(ageMs = 25 * MIN): Job {
+  const done = STEP_KEYS.indexOf("render");
+  return {
+    jobId: ulid(Date.now() - ageMs),
+    status: "queued",
+    source: { type: "upload", platform: "upload", key: "uploads/u/1/stream.mp4", filename: "stream.mp4", title: "stream.mp4" },
+    clipTarget: { min: 5, max: 10 },
+    steps: stepsAt(done, "queued"),
+    progress: 0.79,
+    clipCount: 0,
+    note: "Picking up where it stopped…",
+    createdAt: iso(ageMs),
+    updatedAt: iso(0),
+  };
+}
+
 export function seed(): Store {
   const job = (partial: Partial<Job> & Pick<Job, "status" | "source">, ageMs: number, done: number, message?: string): Job => {
     const steps = stepsAt(done, partial.status === "ready" ? "ready" : (partial.status as "running"), message);

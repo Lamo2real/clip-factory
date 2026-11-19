@@ -11,6 +11,7 @@ from botocore.exceptions import ClientError
 
 from clipfactory_agent import callback as cbmod
 from clipfactory_agent.callback import DurableCallback, is_closed, report
+from clipfactory_agent.heartbeat import Liveness
 from clipfactory_agent.jobs import Tracker, run_job
 
 CB = "cb-0123456789abcdef"
@@ -125,7 +126,7 @@ async def test_only_one_outcome_is_ever_sent() -> None:
     cb = make(client)
     await cb.succeed("J", 1)
     assert await cb.fail("JobFailed", "late") is False
-    assert await cb.heartbeat() is False
+    assert cb.send_heartbeat() is False
     assert client.names() == ["success"]
 
 
@@ -168,8 +169,8 @@ async def test_a_send_that_keeps_failing_never_raises() -> None:
     assert len(client.calls) == 4
     client2 = FakeLambda()
     client2.fail = [client_error("AccessDeniedException", "no", 403)]
-    assert await make(client2).heartbeat() is False
-    assert len(client2.calls) == 1  # not transient, not retried
+    assert make(client2).send_heartbeat() is False
+    assert len(client2.calls) == 1  # the heartbeat thread tries again itself, 20 s later
 
 
 def test_other_invalid_parameter_errors_are_not_closed() -> None:
@@ -177,82 +178,77 @@ def test_other_invalid_parameter_errors_are_not_closed() -> None:
     assert not is_closed(ValueError("x"))
 
 
-# --- heartbeat ----------------------------------------------------------------------------------------------------
+# --- heartbeat (its own thread, docs/CONTRACTS.md §30.3) -----------------------------------------------------------
 
 
-async def test_beat_sends_at_most_once_per_five_minutes() -> None:
+def test_send_heartbeat_sets_the_last_beat_only_on_success() -> None:
     client, clock = FakeLambda(), Clock()
+    client.fail = [client_error("ServiceException", "boom", 500)]
     cb = make(client, clock)
-    cb.beat()
-    await settle()
-    for _ in range(10):  # the job heartbeat loop ticks every few seconds
-        clock.t += 20
-        cb.beat()
-        await settle()
-    assert client.names() == ["heartbeat"]  # 200 s later: still one
-    clock.t += 100  # 300 s since the first
-    cb.beat()
-    await settle()
-    assert client.names() == ["heartbeat", "heartbeat"]
-    assert cbmod.HEARTBEAT_SECONDS == 300 and cbmod.HEARTBEAT_SECONDS < 15 * 60
+    assert cb.send_heartbeat() is False
+    assert cb._last_beat is None  # the old code set it before the send, so a failure waited a whole period
+    clock.t += 20
+    assert cb.send_heartbeat() is True
+    assert cb._last_beat == clock.t
     assert all(kw == {"CallbackId": CB} for _, kw in client.calls)
+    assert cbmod.HEARTBEAT_SECONDS == 120 and cbmod.HEARTBEAT_SECONDS * 3 == 6 * 60
 
 
-async def test_heartbeat_stops_once_the_callback_is_closed() -> None:
-    client, clock = FakeLambda(), Clock()
+def test_heartbeat_stops_once_the_callback_is_closed() -> None:
+    client = FakeLambda()
     client.fail = [client_error("CallbackTimeoutException", "timed out")]
-    cb = make(client, clock)
-    cb.beat()
-    await settle()
-    clock.t += 600
-    cb.beat()
-    await settle()
+    cb = make(client)
+    assert cb.send_heartbeat() is False
+    assert cb.closed
+    assert cb.send_heartbeat() is False
     assert client.names() == ["heartbeat"]
 
 
-async def test_tracker_heartbeat_loop_drives_the_callback() -> None:
-    """The job's own heartbeat loop calls the callback; a run of a few loop ticks sends one heartbeat, then the
-    outcome after the job is ready."""
+def test_heartbeat_thread_uses_its_own_client() -> None:
+    shared, own = FakeLambda(), FakeLambda()
+    cb = DurableCallback(CB, shared, new_client=lambda: own)
+    assert cb.send_heartbeat() is True
+    assert own.names() == ["heartbeat"] and shared.names() == []
+
+
+async def test_tracker_ticks_liveness_and_the_thread_beats() -> None:
+    """The job's loop ticks the liveness; the thread beats from the start and the outcome follows the job."""
 
     class Store:
-        def __init__(self) -> None:
-            self.writes: list[dict[str, Any]] = []
-
         async def update_job(self, user_id: str, job_id: str, fields: dict[str, Any], **kw: Any) -> bool:
-            self.writes.append(fields)
             return True
 
-    client, clock = FakeLambda(), Clock()
-    cb = make(client, clock)
-    tracker = Tracker(Store(), "U", "J", session_id="S", heartbeat=0.01, flush=0.005, on_beat=cb.beat)
+    client = FakeLambda()
+    cb = DurableCallback(CB, client, retry_base=0.001, heartbeat_every=0.02)
+    live = Liveness()
+    before = live.last
+    tracker = Tracker(Store(), "U", "J", session_id="S", heartbeat=0.01, flush=0.005, on_beat=live.tick)
+    cb.start_heartbeat(live)
 
     async def slow() -> str:
-        await asyncio.sleep(0.06)
+        await asyncio.sleep(0.15)
         return "done"
 
     status = await run_job(tracker, [("resolve", slow)], clip_count=lambda: 2)
     assert status == "ready"
+    assert live.last > before
     await report(cb, status, job_id="J", clip_count=2, error=tracker.error)
-    assert client.names() == ["heartbeat", "success"]
+    names = client.names()
+    assert names[-1] == "success" and names.count("heartbeat") >= 2
+    assert cb._thread is None  # stopped with the outcome
 
 
-async def test_close_stops_a_heartbeat_in_flight() -> None:
-    gate = asyncio.Event()
+async def test_close_stops_the_heartbeat_thread() -> None:
+    cb = DurableCallback(CB, FakeLambda(), heartbeat_every=60)
+    thread = cb.start_heartbeat(Liveness())
+    assert thread.is_alive()
+    await cb.close()
+    assert not thread.is_alive() and cb._thread is None
 
-    class Slow(FakeLambda):
-        def send_durable_execution_callback_heartbeat(self, **kw: Any) -> dict[str, Any]:
-            self.calls.append(("heartbeat", kw))
-            return {}
 
-    client = Slow()
-    cb = make(client)
-
-    async def never() -> bool:
-        await gate.wait()
-        return True
-
-    cb.heartbeat = never  # type: ignore[method-assign]
-    cb.beat()
-    await settle()
-    await cb.close()  # returns although the heartbeat never finishes
-    assert cb._beat_task is None
+async def test_stopped_sends_agent_stopped() -> None:
+    client = FakeLambda()
+    await report(make(client), "stopped", job_id="J", clip_count=0, error=None)
+    ((name, kw),) = client.calls
+    assert name == "failure"
+    assert kw["Error"] == {"ErrorType": "AgentStopped", "ErrorMessage": "Picking up where it stopped…"}

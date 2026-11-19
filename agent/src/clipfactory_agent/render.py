@@ -262,15 +262,26 @@ def layout_parts(
     ]
 
 
-def filter_graph(segs: Sequence[Segment], parts: Sequence[str], ass_file: Path, has_audio: bool) -> str:
-    """One graph: trim each segment (section seconds), concat, normalise to 30 fps, lay out, burn the subtitles."""
+def filter_graph(
+    segs: Sequence[Segment], parts: Sequence[str], ass_file: Path, has_audio: bool, *, tease: bool = False
+) -> str:
+    """One graph: trim each segment (section seconds), concat, normalise to 30 fps, lay out, burn the subtitles.
+
+    With ``tease`` the first segment is the payoff tease, which plays first but sits later in the section. It comes
+    from its own input (``[1:v]``/``[1:a]``, the section opened again at the tease), so ``concat`` never has to hold
+    every frame of the body in memory while it waits for the tease (that is gigabytes for a 1080p60 source, §30.4)."""
     if not _SAFE_PATH.match(str(ass_file)):
         raise ValueError(f"unsafe subtitle path: {ass_file}")
     chains: list[str] = []
     for i, (a, b) in enumerate(segs):
+        fade_out = max(0.0, b - a - 0.03)
+        if tease and i == 0:
+            chains.append("[1:v]setpts=PTS-STARTPTS[v0]")
+            if has_audio:
+                chains.append(f"[1:a]asetpts=PTS-STARTPTS,afade=t=in:d=0.02,afade=t=out:st={fade_out:.3f}:d=0.03[a0]")
+            continue
         chains.append(f"[0:v]trim=start={a:.3f}:end={b:.3f},setpts=PTS-STARTPTS[v{i}]")
         if has_audio:
-            fade_out = max(0.0, b - a - 0.03)
             chains.append(
                 f"[0:a]atrim=start={a:.3f}:end={b:.3f},asetpts=PTS-STARTPTS,"
                 f"afade=t=in:d=0.02,afade=t=out:st={fade_out:.3f}:d=0.03[a{i}]"
@@ -287,8 +298,9 @@ def filter_graph(segs: Sequence[Segment], parts: Sequence[str], ass_file: Path, 
     return ";".join(chains)
 
 
-def encode_args(total: float, has_audio: bool) -> list[str]:
-    audio = ["-map", "[aout]"] if has_audio else ["-map", "1:a"]
+def encode_args(total: float, has_audio: bool, *, silent_input: int = 1) -> list[str]:
+    """The output options. Without sound the clip takes its silence from input ``silent_input`` (``anullsrc``)."""
+    audio = ["-map", "[aout]"] if has_audio else ["-map", f"{silent_input}:a"]
     return [
         "-map",
         "[vout]",
@@ -301,6 +313,8 @@ def encode_args(total: float, has_audio: bool) -> list[str]:
         "veryfast",
         "-crf",
         "20",
+        "-threads",
+        "2",
         "-profile:v",
         "high",
         "-pix_fmt",
@@ -432,6 +446,8 @@ async def render_clip(
     if tease:
         segs.append((t(tease[0]), min(t(tease[1]), info.duration - 0.05)))
     segs += keep_segments(t(m.start), end, quiet)
+    if tease and segs[0][1] - segs[0][0] <= 0.1:
+        tease = None  # too short to show: the clip plays without it
     segs = [(a, b) for a, b in segs if b - a > 0.1]
     if not segs:
         raise ValueError("nothing left to show after cutting the pauses")
@@ -447,6 +463,10 @@ async def render_clip(
 
     out = workdir / "clip.mp4"
     inputs = ["-i", str(section)]
+    if tease:
+        a, b = segs[0]
+        inputs += ["-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", "-i", str(section)]  # the tease's own input
+    silent_input = 2 if tease else 1
     if not info.has_audio:
         inputs += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
     await proc.run(
@@ -455,10 +475,12 @@ async def render_clip(
             "-v",
             "error",
             "-y",
+            "-filter_complex_threads",
+            "1",
             *inputs,
             "-filter_complex",
-            filter_graph(segs, parts, ass_file, info.has_audio),
-            *encode_args(total, info.has_audio),
+            filter_graph(segs, parts, ass_file, info.has_audio, tease=bool(tease)),
+            *encode_args(total, info.has_audio, silent_input=silent_input),
             str(out),
         ],
         time_limit=30 * 60,

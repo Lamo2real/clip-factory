@@ -549,8 +549,14 @@ class FakeDurableContext:
     its checkpoint (steps are at-least-once).
     """
 
-    def __init__(self, callback: FakeCallback | None = None, replay: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        callback: FakeCallback | None = None,
+        replay: set[str] | None = None,
+        then: list[FakeCallback] | None = None,
+    ) -> None:
         self.callback = callback or FakeCallback(result=json.dumps({"jobId": "x", "clipCount": 0}))
+        self.then = list(then or [])  # the callbacks of later attempts (a resumed job), in order
         self.steps: list[str] = []
         self.attempts: dict[str, int] = {}
         self.configs: dict[str, Any] = {}
@@ -561,6 +567,8 @@ class FakeDurableContext:
 
     def create_callback(self, name: str | None = None, config: Any = None) -> FakeCallback:
         self.callbacks.append((name, config))
+        if len(self.callbacks) > 1 and self.then:
+            self.callback = self.then.pop(0)
         return self.callback
 
     def wait(self, duration: Any, name: str | None = None) -> None:
