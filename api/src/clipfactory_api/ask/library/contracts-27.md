@@ -90,8 +90,13 @@ Every amount carries its tag ("YouTube's estimate", "Meta's estimate", "Apps' es
   the list on screen. With no money per video for the chosen apps the clip list hides its Sort bar (the note says
   "Sorted by views.").
 * **Cards**: Monthly (main card, display-size number that counts up once, 700 ms) then Weekly | Daily side by side,
-  then Yearly. When the card area is 880 px or wider: Monthly on the left over two rows, Weekly and Daily on the
-  right with Yearly under them. A card narrower than 150 px drops its number one step (container query).
+  then Yearly. When the card area is under 560 px (a phone) the four cards stack one per row, so Weekly has no empty
+  gap above its number and every card's words stay at the left, clear of Ask's spot. When the card area is 880 px or
+  wider: Monthly on the left over two rows, Weekly and Daily on the right with Yearly under them. A card narrower
+  than 150 px drops its number one step (container query).
+* **Ask never covers words here** (owner request, 2026-11-19): the page is marked `data-help-dodge-text` (§19.8), so
+  wherever the page is scrolled and left, Ask is either clear of every line of text or faded out; on first load it is
+  clear and shown at 320, 375, 390 and 430 px, light and dark (`e2e/money-dashboard.spec.ts`).
 * **Chart** (hand-drawn SVG, no library): money per day (7, 30, 90) or per week (Year, weeks ending on `through`, the
   oldest marked partial), split by app only when two or more apps have money (YouTube bone, Facebook leaf; never
   vermilion). No gridlines, axis lines or borders: one soft baseline band, the highest value on top, the first and

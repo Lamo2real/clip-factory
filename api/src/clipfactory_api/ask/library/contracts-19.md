@@ -367,7 +367,9 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   one only from the box it is placed against). A tab scrolled out of its row or a strip that runs on under another
   panel is not on screen there, so it is no obstacle. The setup list (§17.13) is not chrome: its buttons are controls
   like any other. Words are not obstacles: a floating button over a line of text is expected, and scrolling moves the
-  words out from under it. Settled, it never rests on a control at any width from 320 to 1920 px, at the top of a page
+  words out from under it. The one exception is a block marked `data-help-dodge-text` (the Money page, §27.4): there
+  every visible line of words (`textBoxes`, cut to what shows) counts like a control, so the launcher fades out rather
+  than rest on a single letter (`coversText`). Settled, it never rests on a control at any width from 320 to 1920 px, at the top of a page
   or after scrolling, with or without the update bar, and with other fonts (`e2e/help.spec.ts`). Every page adds
   bottom padding under its last control so the last control can always be scrolled clear of the spot, and the
   launcher shows at home at the end. Green glass, never vermilion.

@@ -1,5 +1,5 @@
 {
- "version": "0721236f3bfc",
+ "version": "ef03cf96246d",
  "parts": [
   {
    "id": "app-map",
@@ -141,7 +141,7 @@
    "id": "contracts-19",
    "title": "CONTRACTS: 19. Ask Clip Factory: grounded in-app help assistant (owner request, 2026-11-16)",
    "line": "The owner's picture: a friendly helper in the corner that answers \"how do I…\" and \"where is…\" in short steps a child",
-   "chars": 53738
+   "chars": 53994
   },
   {
    "id": "contracts-20",
@@ -189,7 +189,7 @@
    "id": "contracts-27",
    "title": "CONTRACTS: 27. Money dashboard: MRR by app and money per clip (owner request, 2026-11-19)",
    "line": "27.1 The owner's words",
-   "chars": 19330
+   "chars": 19849
   },
   {
    "id": "contracts-28",

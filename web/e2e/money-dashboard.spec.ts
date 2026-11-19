@@ -202,6 +202,63 @@ for (const v of VIEWPORTS) {
   }
 }
 
+// Ask never covers words on the Money page (§27.4): on every phone size, light and dark, at the top and at every
+// place the page can be scrolled to and left, a shown Ask has no line of visible text under it (it fades out there
+// instead), and on first load it is shown. Weekly reads from the top: no empty gap above its number.
+const textUnderAsk = () => {
+  const el = document.querySelector<HTMLElement>(".help-launcher");
+  if (!el || el.classList.contains("is-hidden")) return { shown: false, under: [] as string[] };
+  const b = { top: el.offsetTop, bottom: el.offsetTop + el.offsetHeight, left: el.offsetLeft, right: el.offsetLeft + el.offsetWidth };
+  const under: string[] = [];
+  const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    const p = n.parentElement;
+    if (!p || !n.textContent?.trim() || p.closest(".help-launcher, .help-panel, .sr-only, [hidden], [inert]")) continue;
+    if (getComputedStyle(p).visibility === "hidden") continue;
+    const range = document.createRange();
+    range.selectNodeContents(n);
+    for (const r of range.getClientRects()) {
+      if (r.width > 1 && r.height > 1 && Math.min(r.right, b.right) - Math.max(r.left, b.left) > 0.5 && Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top) > 0.5) {
+        under.push(n.textContent.trim().slice(0, 40));
+        break;
+      }
+    }
+  }
+  return { shown: true, under };
+};
+for (const v of VIEWPORTS.filter((x) => x.w < 768)) {
+  for (const scheme of ["light", "dark"] as const) {
+    test(`no words under Ask, at rest anywhere on the page: ${label(v)} ${scheme}`, async ({ browser }) => {
+      const ctx = await context(browser, v, scheme);
+      const page = await ctx.newPage();
+      const fails: string[] = [];
+      for (const scenario of ["dash_youtube_only", "dash_many"]) {
+        await open(page, scenario);
+        await launcherSettled(page);
+        const first = await page.evaluate(textUnderAsk);
+        expect(first.shown, `${scenario}: Ask is shown on first load`).toBe(true);
+        if (scenario === "dash_youtube_only") {
+          const gap = await page.evaluate(() => {
+            const sub = document.querySelector("[data-kpi=weekly] .dash-kpi__sub")!.getBoundingClientRect();
+            const num = document.querySelector("[data-kpi=weekly] .dash-num")!.getBoundingClientRect();
+            return num.top - sub.bottom;
+          });
+          expect(gap, "Weekly's number sits right under its words").toBeLessThanOrEqual(24);
+        }
+        const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+        for (const y of [...Array.from({ length: Math.floor(max / 260) + 1 }, (_, i) => i * 260), max]) {
+          await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), y);
+          await launcherSettled(page);
+          const at = await page.evaluate(textUnderAsk);
+          if (at.under.length) fails.push(`${scenario} at ${y}: ${at.under.join(" | ")}`);
+        }
+      }
+      expect(fails, fails.join("\n")).toEqual([]);
+      await ctx.close();
+    });
+  }
+}
+
 test.describe("flows", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 

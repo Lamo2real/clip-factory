@@ -472,7 +472,7 @@ export function MoneyDashboard() {
   const thisYear = new Date().getUTCFullYear();
 
   return (
-    <div className={`page money-dash${dock ? " is-dock" : " is-toolbar"}`} data-help="money-dash" aria-busy={!fresh || undefined}>
+    <div className={`page money-dash${dock ? " is-dock" : " is-toolbar"}`} data-help="money-dash" data-help-dodge-text aria-busy={!fresh || undefined}>
       <header className="dash-head">
         <div className="dash-head__text">
           <h1 className="page-head__title">Money</h1>

@@ -140,6 +140,42 @@ export function controlBoxes(doc: Document = document, viewportHeight = window.i
 }
 
 /**
+ * Words on screen inside a block marked data-help-dodge-text (the Money page, §27.4), as boxes: one per line of
+ * each run of text, cut to what shows of it (`shownBox`, so the hidden words of a screen-reader label or a clamp do
+ * not count). There the launcher treats words like controls: it never comes to rest on top of a single letter.
+ * Elsewhere words are not obstacles (§19.8). With `column`, only lines in the launcher's column are returned.
+ */
+export function textBoxes(doc: Document = document, viewportHeight = window.innerHeight, column?: Pick<Box, "left" | "right">): Box[] {
+  const out: Box[] = [];
+  const view = doc.defaultView;
+  for (const block of Array.from(doc.querySelectorAll("[data-help-dodge-text]"))) {
+    const walk = doc.createTreeWalker(block, 4 /* NodeFilter.SHOW_TEXT */);
+    for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+      const el = node.parentElement;
+      if (!el || !node.textContent?.trim() || el.closest(CHROME) || el.closest("[inert], [hidden]")) continue;
+      const near = el.getBoundingClientRect();
+      if (near.bottom <= 0 || near.top >= viewportHeight) continue;
+      if (column && (near.right <= column.left || near.left >= column.right)) continue;
+      if (view && view.getComputedStyle(el).visibility === "hidden") continue;
+      const range = doc.createRange();
+      range.selectNodeContents(node);
+      for (const r of Array.from(range.getClientRects())) {
+        if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= viewportHeight) continue;
+        if (column && (r.right <= column.left || r.left >= column.right)) continue;
+        const shown = shownBox(el, r, true);
+        if (shown && shown.right - shown.left >= 2 && shown.bottom - shown.top >= 2) out.push(shown);
+      }
+    }
+  }
+  return out;
+}
+
+/** True when the launcher at `base` lies over any of the words (touching an edge is not over). */
+export function coversText(base: Box, words: readonly Box[]): boolean {
+  return words.some((t) => Math.min(base.right, t.right) - Math.max(base.left, t.left) > 0.5 && Math.min(base.bottom, t.bottom) - Math.max(base.top, t.top) > 0.5);
+}
+
+/**
  * Where the launcher sits: its layout box, which no transform, translate or scale (the fade, the press) changes,
  * so a measure in the middle of a transition is still right.
  */
@@ -194,7 +230,8 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
       const still = now - lastMove;
       if (still < DODGE_SETTLE_MS) return later(DODGE_SETTLE_MS - still);
       const base = restingBox(el);
-      const want = blocks(base, controlBoxes(document, window.innerHeight, { left: base.left, right: base.right }));
+      const column = { left: base.left, right: base.right };
+      const want = blocks(base, controlBoxes(document, window.innerHeight, column)) || coversText(base, textBoxes(document, window.innerHeight, column));
       if (want === !shown.current) return settling(false);
       // Back in only after a longer stillness, and never sooner than the hold after the last change.
       const wait = Math.max(want ? 0 : DODGE_RETURN_MS - still, DODGE_HOLD_MS - (now - lastChange));
