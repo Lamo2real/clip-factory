@@ -11,6 +11,8 @@ export const SPOT_SHOW_MS = 2400;
 export const SPOT_STILL_MS = 150;
 /** The longest the ring waits for the control to arrive before its 2.4 s start anyway (a page that never stops moving). */
 export const SPOT_ARRIVE_CAP_MS = 4000;
+/** The ring's fade-in (help.css: the first 12 % of its 2.4 s), held bright until the control arrives. */
+const RING_IN_MS = 288;
 
 const cssEscape = (s: string) => (typeof CSS !== "undefined" && CSS.escape ? CSS.escape(s) : s.replace(/["\\]/g, "\\$&"));
 
@@ -117,7 +119,7 @@ export async function spotlight(ids: readonly string[], { reduced, waitMs = SPOT
   else window.scrollTo?.({ top: Math.max(0, window.scrollY + r0.top - TALL_TOP), behavior });
 
   const ring = document.createElement("div");
-  ring.className = `help-ring${reduced ? " is-static" : ""}`;
+  ring.className = `help-ring ${reduced ? "is-static" : "is-coming"}`;
   ring.setAttribute("aria-hidden", "true");
   document.body.appendChild(ring);
   spot.setAttribute("data-help-spotlit", "");
@@ -133,6 +135,9 @@ export async function spotlight(ids: readonly string[], { reduced, waitMs = SPOT
   const arrive = () => {
     if (arrived || done) return;
     arrived = true;
+    // The visible fade (help.css) starts now too, from where the fade-in ended, so it is never spent before arrival.
+    ring.classList.remove("is-coming");
+    ring.style.animationDelay = `-${RING_IN_MS}ms`;
     removeEventListener("scroll", scrolled, { capture: true });
     clearTimeout(cap);
     timer = setTimeout(stop, showMs);

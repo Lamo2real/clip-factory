@@ -79,12 +79,15 @@ describe("spotlight names and targets", () => {
       await vi.advanceTimersByTimeAsync(SPOT_SHOW_MS + 500);
       expect(btn.hasAttribute("data-help-spotlit")).toBe(true);
       expect(arrived).not.toHaveBeenCalled();
+      // The visible ring too: it has only faded in, and its own fade has not started (help.css .is-coming).
+      expect(document.querySelector(".help-ring")?.classList.contains("is-coming")).toBe(true);
 
       // The scroll lands: it is in view and sits still. The ring's 2.4 s start only now.
       top = 400;
       window.dispatchEvent(new Event("scroll"));
       await vi.advanceTimersByTimeAsync(SPOT_STILL_MS + 50);
       expect(arrived).toHaveBeenCalledTimes(1);
+      expect(document.querySelector(".help-ring")?.classList.contains("is-coming")).toBe(false);
       await vi.advanceTimersByTimeAsync(SPOT_SHOW_MS - 300);
       expect(btn.hasAttribute("data-help-spotlit")).toBe(true);
       await vi.advanceTimersByTimeAsync(400);
