@@ -62,7 +62,7 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
 
 ```ts
 // web/src/setup/types.ts
-export interface SetupGuide { platform: Platform; name: string; checkedOn: "2026-11-16"; minutes: number;
+export interface SetupGuide { platform: Platform; name: string; checkedOn: string /* "YYYY-MM-DD"; TikTok "2026-11-19", the rest "2026-11-16" */; minutes: number;
   cost: string /* "Free" | "About 1.5 cents per clip" */; parts: GuidePart[] }
 export interface GuidePart { id: "ready" | "key" | "connect" | "public"; title: string; steps: GuideStep[] }
 export interface GuideStep {
@@ -120,7 +120,9 @@ with the link / Only me, shown inside the card; default Everyone; YouTube policy
 (Open button "Open Google's ask-for-more form" → Google's Audit and Quota Extension Form; not needed to start). Status
 line: "Works now. Your clips go up for everyone."
 
-**TikTok** (about 40 min + TikTok's review time, Free). Get ready:
+**TikTok** (about 40 min + TikTok's review time, Free; `checkedOn` 2026-11-19, from what the owner met on TikTok for
+Developers: the app page has one **Save** that stays off until **App review** has its text and a video; Display API is
+no longer a product, its scopes come with Login Kit's **Add scopes**; Platforms is Web only). Get ready:
 | id | title | essentials |
 |---|---|---|
 | `ready-account` | Have your TikTok account | The account your clips go on. |
@@ -132,18 +134,19 @@ Make your TikTok key:
 | `key-signup` | Make a TikTok developer account | Open developers.tiktok.com/signup, **Sign up** (or **Log in**). Accept the terms. |
 | `key-org` | Make an organization | Open `/organizations`, **Add organization**, name `appName`, **Create**. |
 | `key-app` | Create the app | Profile icon › **Manage apps** › **Connect an app**. Pick your organization, **Confirm**. |
-| `key-details` | Fill in App details | Download the icon (`download`) and upload it. App name `appName`. Category: the closest one. Description `appDescription`. Terms of Service URL `termsUrl`, Privacy Policy URL `privacyUrl`. |
-| `key-web` | Choose Web | Under Platforms tick **Web** only. Website URL `websiteUrl`. |
-| `key-products` | Add 3 products | **Add products**: **Login Kit**, **Content Posting API** and **Display API**. Nothing else. |
+| `key-details` | Fill in App details | Download the icon (`download`) and upload it. App name `appName`. Category: the closest one. Description `appDescription`. Terms of Service URL `termsUrl`, Privacy Policy URL `privacyUrl`. "Don't press **Save** yet. It stays off until **App review** has its text and a video (step `key-review`)." |
+| `key-web` | Choose Web | Under Platforms tick **Web** only (not Desktop, Android or iOS). Website URL `websiteUrl`. |
+| `key-products` | Add 2 products | **Add products**: **Login Kit** and **Content Posting API**. Nothing else. There is no Display API to add now: its permissions come with Login Kit. |
 | `key-redirect` | Paste the return address | Login Kit settings › Redirect URI for Web: paste `redirectUri`. |
 | `key-direct-post` | Turn on Direct Post | Content Posting API settings: turn on Direct Post. If you see a switch with "Direct Post" in its name, turn it on. |
-| `key-scopes` | Check the 3 permissions | Open **Scopes**. These 3 must be ticked: user.info.basic, video.publish, video.list. If video.list is missing, **Display API** is missing: go back to `key-products` and add it. |
+| `key-scopes` | Add 2 permissions | **Login Kit** › **Scopes** › **Add scopes**: tick video.list and user.info.stats (followers, for the money tile), **Add**. Then there: user.info.basic, video.publish, video.list, user.info.stats. video.upload may be there too: leave it. No **Add scopes** button: open Login Kit first. |
+| `key-review` | Fill in App review, then Save | **App review**: paste `tiktokReviewText`; record a few seconds of the screen (the About page, then this setup page) and upload it; **Save** (the real demo replaces it in `public-demo`). Save still won't press: App review needs both the text and a video. |
 | `key-verify` | Prove the website is yours | **URL properties** › **Verify properties** (Production picked) › **URL prefix** › paste `websitePrefix` › **Verify** › download TikTok's file › drop it in the upload box here (`upload`, `auto: files`) › back on TikTok press **Verify**. Pick URL prefix, not Domain. |
 | `key-paste` | Paste Client key and secret | Credentials: copy icon next to **Client key** and **Client secret** → paste boxes, **Save keys** (`auto: keys`). |
 Connect:
 | id | title | essentials |
 |---|---|---|
-| `sandbox-make` | Make a Sandbox for testing | Toggle **Production** → **Sandbox**, **Create Sandbox**, a name, clone Production, **Confirm**, **Apply changes**. TikTok only lets you test in a Sandbox until it approves the app. |
+| `sandbox-make` | Make a Sandbox for testing | Toggle **Production** → **Sandbox**, **Create Sandbox**, a name, clone Production, **Confirm**, **Apply changes**. Connect in the Sandbox first; posts stay private until TikTok approves the app. |
 | `sandbox-user` | Add yourself as a test user | **Sandbox settings** › **Target users** › **Add account**, log in, accept. Can take up to an hour: refresh the page. |
 | `sandbox-verify` | Verify the website in Sandbox too | Same as `key-verify` with Sandbox picked; upload that file too. |
 | `sandbox-keys` | Use the Sandbox keys | If you see a different Client key in the Sandbox, paste those keys here for now. |
@@ -151,8 +154,8 @@ Connect:
 Go public (`gate: app_review`, `posting_audit`):
 | id | title | essentials |
 |---|---|---|
-| `public-demo` | Record a short demo video | Record your screen on Clip Factory: the About page with Privacy and Terms, **Connect TikTok**, TikTok's permission screen, Keep with the **Post to TikTok** sheet, the "processing" message, the result. Then show the clip's views on the clip page. Up to 5 videos, 50 MB each. |
-| `public-review` | Ask TikTok to check the app | Switch to **Production**. **App review**: paste `tiktokReviewText` (one line per product and scope), upload the videos, **Save**, **Submit for review**. Then pick the status here: Draft / In review / Live / Not approved (`PATCH gate app_review`). Not approved: read **Review comments**, fix, submit again. |
+| `public-demo` | Record the real demo video | Record your screen on Clip Factory, connected in the Sandbox: open Clip Factory, **Connect TikTok**, TikTok's **Authorize** screen, **Keep** on a clip with the **Post to TikTok** sheet, the post arriving on TikTok. Up to 5 videos, 50 MB each. |
+| `public-review` | Ask TikTok to check the app | Switch to **Production**. **App review**: check `tiktokReviewText` is there (one line per scope), swap in the real demo video, **Save**, **Submit for review**. Then pick the status here: Draft / In review / Live / Not approved (`PATCH gate app_review`). Not approved: read **Review comments**, fix, submit again. |
 | `public-live-keys` | When it says Live | If the Production keys differ from the Sandbox ones, paste them and press **Connect again**. |
 | `public-audit` | Ask to post publicly | Open developers.tiktok.com/application/content-posting-api and fill in the form. Until it passes, every post is "Only me". TikTok may say no to a tool only you use; then posts stay private. |
 | `public-unprivate` | Make your account public again | Only after the audit: turn **Private account** off. |
@@ -229,9 +232,13 @@ not approved" → redo `key-addresses` with the Copy button. Go public (`gate: c
 credits" — status "Works now. Posts are public straight away." / empty → "Your X credits ran out. Buy more in
 **Billing** › **Credits**." Leaf: "Clip Factory never puts links in X posts (a link costs $0.20)."
 
-`tiktokReviewText` (copy chip): "Login Kit + user.info.basic: connect my TikTok and show my name and picture.
-video.publish: post clips I approved with Keep (Direct Post). video.list: show views and likes of my own posts on the
-Clip Factory dashboard."
+`tiktokReviewText` (copy chip, five lines, one per scope on the app; connect asks for user.info.basic, video.publish,
+video.list, the money grant adds user.info.stats, and nothing asks for video.upload, so its line says so):
+"user.info.basic (Login Kit): connect my TikTok and show my name and picture in Clip Factory.
+video.publish: post clips I approved with Keep straight to my own TikTok (Direct Post).
+video.upload: comes with Content Posting API. Clip Factory does not ask for it; it only uses Direct Post.
+video.list: show the views and likes of my own posts on my Clip Factory dashboard.
+user.info.stats: show my follower and like totals on my Clip Factory money tile, only after I say OK."
 
 ### 17.3 Public pages for the platforms (web, static, no sign-in)
 
@@ -643,7 +650,7 @@ Shared names: `oauth.state.sign(key, platform, nonce, exp)`, `oauth.state.verify
   statements exactly §17.9 per role (no secrets access on api beyond the prefix and state key; none on job-flow,
   realtime, learn); hooks timeout 28; envs on api/hooks/flows/stats; ESM filter has seven prefixes; output
   `oauth_callback_base` ends `/oauth`; `test-write-web-config.sh` requires `oauthCallbackBase`.
-* **web** (Vitest): every guide file has unique step ids matching `^[a-z0-9-]{1,40}$`, `checkedOn` "2026-11-16", each
+* **web** (Vitest): every guide file has unique step ids matching `^[a-z0-9-]{1,40}$`, `checkedOn` "2026-11-16" (TikTok "2026-11-19"), each
   `open.url` https, every `ValueRef` known, each guide has the four parts in order and one `connect` step; `keyFormats`
   samples (same as api); `setupProgress` (ring excludes optional, auto steps, current step = first not done, ready
   rule); result-code copy exists for every code × platform; Google JSON paste fills both boxes.

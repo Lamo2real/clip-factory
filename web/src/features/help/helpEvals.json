@@ -25,6 +25,7 @@
     { "q": "is anything running?", "expect": "jobs-running" },
     { "q": "connect youtube", "expect": "posting-setup-youtube" },
     { "q": "connect tik tok", "expect": "posting-setup-tiktok" },
+    { "q": "TikTok won't let me press save on my app", "expect": "tiktok-app-review" },
     { "q": "connect facebook", "expect": "posting-setup-facebook" },
     { "q": "post to X", "expect": "posting-setup-x" },
     { "q": "does X cost money", "expect": "x-costs" },

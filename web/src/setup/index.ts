@@ -23,10 +23,17 @@ export const APP_DESCRIPTION =
   "Clip Factory turns my gameplay recordings into short vertical clips and posts them to my own accounts when I press Keep.";
 export const X_USE_CASE =
   "Post my own short video clips to my own X account and read their view and like counts in my personal Clip Factory app.";
+/**
+ * TikTok's App review box: one plain line per scope on the app. The app asks for user.info.basic, video.publish and
+ * video.list when it connects, and user.info.stats only for the money tile. video.upload comes with Content Posting
+ * API; Clip Factory never asks for it, and the line says so.
+ */
 export const TIKTOK_REVIEW_TEXT = [
-  "Login Kit + user.info.basic: connect my TikTok and show my name and picture.",
-  "video.publish: post clips I approved with Keep (Direct Post).",
-  "video.list: show views and likes of my own posts on the Clip Factory dashboard.",
+  "user.info.basic (Login Kit): connect my TikTok and show my name and picture in Clip Factory.",
+  "video.publish: post clips I approved with Keep straight to my own TikTok (Direct Post).",
+  "video.upload: comes with Content Posting API. Clip Factory does not ask for it; it only uses Direct Post.",
+  "video.list: show the views and likes of my own posts on my Clip Factory dashboard.",
+  "user.info.stats: show my follower and like totals on my Clip Factory money tile, only after I say OK.",
 ].join("\n");
 
 export const VALUE_REFS: readonly ValueRefName[] = [

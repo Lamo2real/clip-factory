@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import type { Platform } from "../src/api/types.ts";
 import { MOCK_VALUES } from "../src/api/mock/setup.ts";
 import { maskKey } from "../src/lib/keyFormats.ts";
-import { allSteps, GUIDES, resolveValue, resultCopy, SETUP_ORDER, type GuideStep } from "../src/setup/index.ts";
+import { allSteps, checkedOnText, GUIDES, resolveValue, resultCopy, SETUP_ORDER, type GuideStep } from "../src/setup/index.ts";
 import { animationsDone, findOverflow, openTodo, settle } from "./helpers.ts";
 
 // The posting setup, clicked through for every platform on a phone and on a desktop (docs/CONTRACTS.md §17.12):
@@ -169,7 +169,7 @@ for (const size of SIZES) {
         await expect(page).toHaveURL(new RegExp(`/settings/posting/setup/${platform}$`));
         await settle(page);
         await expect(page.getByRole("heading", { level: 1, name: `Set up ${guide.name}` })).toBeVisible();
-        await expect(page.getByText("Steps checked on 16 Nov 2026")).toBeVisible();
+        await expect(page.getByText(`Steps checked on ${checkedOnText(guide)}`)).toBeVisible();
         // Nothing done yet: the page stays at the top, so the title, the time and the date are on screen.
         await page.waitForTimeout(700);
         await expect(page.getByRole("heading", { level: 1, name: `Set up ${guide.name}` })).toBeInViewport();

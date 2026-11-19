@@ -8,7 +8,8 @@ export const CHECKED_ON = "2026-11-16";
 export interface SetupGuide {
   platform: Platform;
   name: string;
-  checkedOn: typeof CHECKED_ON;
+  /** The day these steps were last checked on the platform's own site ("YYYY-MM-DD"). */
+  checkedOn: string;
   /** About how long the whole setup takes. */
   minutes: number;
   /** "Free", or what it costs. */

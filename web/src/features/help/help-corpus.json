@@ -1,5 +1,5 @@
 {
-  "version": "6aa3232b5df6",
+  "version": "433546c0b2d7",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -1197,6 +1197,42 @@
         }
       ],
       "suggest": true
+    },
+    {
+      "id": "tiktok-app-review",
+      "kind": "guide",
+      "route": "/settings/posting/setup/tiktok",
+      "where": "Settings › Posting › Set up posting › TikTok",
+      "title": "TikTok won't let me press Save",
+      "keywords": [
+        "tiktok save",
+        "save greyed out",
+        "save won't press",
+        "app review",
+        "demo video",
+        "review text",
+        "display api",
+        "add scopes",
+        "video.list",
+        "user.info.stats"
+      ],
+      "answer": "On TikTok's app page, **Save** stays off until **App review** has its text and a video. Copy the review text in TikTok setup step 13, add a short screen video, then Save. Display API is not a product any more: add video.list and user.info.stats with **Add scopes** under Login Kit.",
+      "steps": [
+        "Open TikTok setup, step 13.",
+        "Copy the review text into **App review**.",
+        "Upload a short screen video.",
+        "Press **Save**."
+      ],
+      "actions": [
+        {
+          "id": "tiktok-app-review:page",
+          "label": "Set up TikTok",
+          "to": "/settings/posting/setup/tiktok",
+          "highlight": [
+            "setup-progress"
+          ]
+        }
+      ]
     },
     {
       "id": "posting-setup-youtube",

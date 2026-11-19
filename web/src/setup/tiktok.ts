@@ -1,13 +1,15 @@
-// TikTok setup (docs/CONTRACTS.md §17.2), checked against TikTok for Developers on 16 Nov 2026.
+// TikTok setup (docs/CONTRACTS.md §17.2), checked against TikTok for Developers on 19 Nov 2026, from what the owner
+// really met there: Save on the app page stays off until App review has its text and a video, Display API is now part
+// of Login Kit (video.list and user.info.stats come from Login Kit's Add scopes), and Platforms is Web only.
 // Until TikTok approves the app, it only posts to private accounts, and every post is "Only me".
-import { CHECKED_ON, type SetupGuide } from "./types.ts";
+import type { SetupGuide } from "./types.ts";
 
 const DEV = "https://developers.tiktok.com";
 
 export const tiktok: SetupGuide = {
   platform: "tiktok",
   name: "TikTok",
-  checkedOn: CHECKED_ON,
+  checkedOn: "2026-11-19",
   minutes: 40,
   cost: "Free",
   timeNote: "+ TikTok's review time",
@@ -80,9 +82,9 @@ export const tiktok: SetupGuide = {
           title: "Fill in App details",
           say: [
             "Download the icon below, then upload it as the app icon.",
-            "Paste the App name and the Description.",
-            "Category: pick the one that fits best.",
+            "Paste the App name and the Description. Category: pick the one that fits best.",
             "Paste the **Terms of Service URL** and the **Privacy Policy URL**.",
+            "Don't press **Save** yet. It stays off until **App review** has its text and a video (step 13).",
           ],
           download: { label: "Download the icon", href: "/brand/clip-factory-1024.png" },
           copy: [
@@ -96,14 +98,18 @@ export const tiktok: SetupGuide = {
           id: "key-web",
           icon: "globe",
           title: "Choose Web",
-          say: ["Under **Platforms**, tick **Web** only.", "Website URL: paste it."],
+          say: ["Under **Platforms**, tick **Web** only. Not **Desktop**, not Android or iOS.", "Website URL: paste it."],
           copy: [{ label: "Website URL", value: { ref: "websiteUrl" } }],
         },
         {
           id: "key-products",
           icon: "plus",
-          title: "Add 3 products",
-          say: ["Press **Add products**.", "Add **Login Kit**, **Content Posting API** and **Display API**. Nothing else."],
+          title: "Add 2 products",
+          say: [
+            "Press **Add products**.",
+            "Add **Login Kit** and **Content Posting API**. Nothing else.",
+            "There is no **Display API** to add now. Its permissions come with Login Kit.",
+          ],
         },
         {
           id: "key-redirect",
@@ -122,12 +128,29 @@ export const tiktok: SetupGuide = {
         {
           id: "key-scopes",
           icon: "key",
-          title: "Check the 3 permissions",
+          title: "Add 2 permissions",
           say: [
-            "Open **Scopes**.",
-            "These 3 must be ticked: user.info.basic, video.publish, video.list.",
+            "In **Login Kit**, open **Scopes**. Press **Add scopes**.",
+            "Tick **video.list** (your views) and **user.info.stats** (your followers, for the money tile). Press **Add**.",
+            "Now these must be there: user.info.basic, video.publish, video.list, user.info.stats.",
+            "video.upload may be there too. Leave it.",
           ],
-          ifYouSee: [{ see: "video.list is missing", do: "**Display API** is missing. Go back to step 9 and add it." }],
+          ifYouSee: [{ see: "no **Add scopes** button", do: "Open **Login Kit** first. The button is under its **Scopes**." }],
+        },
+        {
+          id: "key-review",
+          icon: "review",
+          title: "Fill in App review, then Save",
+          say: [
+            "Open **App review**. Paste the text below.",
+            "Record your screen for a few seconds: the About page, then this setup page. Upload that video.",
+            "Now press **Save**. You swap in the real demo video later (step 21).",
+          ],
+          copy: [
+            { label: "Review text", value: { ref: "tiktokReviewText" } },
+            { label: "About page", value: { ref: "websiteUrl" } },
+          ],
+          ifYouSee: [{ see: "**Save** still won't press", do: "App review needs both: the text and a video. Check both are there." }],
         },
         {
           id: "key-verify",
@@ -169,7 +192,7 @@ export const tiktok: SetupGuide = {
             "Switch **Production** to **Sandbox**. Press **Create Sandbox**.",
             "Give it a name. Clone Production. Press **Confirm**.",
             "Press **Apply changes**.",
-            "TikTok only lets you test in a Sandbox until it approves the app.",
+            "Connect in the Sandbox first. Posts stay private until TikTok approves the app.",
           ],
         },
         {
@@ -226,12 +249,12 @@ export const tiktok: SetupGuide = {
         {
           id: "public-demo",
           icon: "video",
-          title: "Record a short demo video",
+          title: "Record the real demo video",
           say: [
-            "Record your screen while you use Clip Factory.",
-            "Show: the About page with Privacy and Terms, then **Connect TikTok** and TikTok's permission screen.",
-            "Then Keep a clip with the **Post to TikTok** sheet. Show the processing message and the result.",
-            "Then show the clip's views on the clip page.",
+            "Record your screen while you use Clip Factory, connected in the Sandbox.",
+            "Show: open Clip Factory, press **Connect TikTok**, TikTok's **Authorize** screen.",
+            "Then press **Keep** on a clip, pick in the **Post to TikTok** sheet, and Keep.",
+            "Then show the post arriving on your TikTok.",
           ],
           copy: [{ label: "About page", value: { ref: "websiteUrl" } }],
         },
@@ -241,7 +264,7 @@ export const tiktok: SetupGuide = {
           title: "Ask TikTok to check the app",
           say: [
             "Switch back to **Production**. Open **App review**.",
-            "Paste the text below. Upload the videos (up to 5, 50 MB each). Press **Save**.",
+            "Check the text below is there. Swap in the real demo video (up to 5, 50 MB each). Press **Save**.",
             "Press **Submit for review**. Then pick what TikTok says below.",
           ],
           copy: [{ label: "Review text", value: { ref: "tiktokReviewText" } }],
