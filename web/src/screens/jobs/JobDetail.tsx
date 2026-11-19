@@ -172,15 +172,17 @@ export function JobDetail({ jobId }: { jobId: string }) {
       <header className="page-head">
         <div className="page-head__text">
           <h1 className="page-head__title page-head__title--sm user-text">{jobTitle(job)}</h1>
-          <p className="page-head__lede">
-            Started {relative(job.createdAt)} · aiming for{" "}
-            {job.clipTarget.min === job.clipTarget.max
-              ? plural(job.clipTarget.min, "clip")
-              : <span className="nowrap">{`${job.clipTarget.min}–${job.clipTarget.max} clips`}</span>}
-          </p>
-        </div>
-        <div className="page-head__actions">
-          <JobStatusPill status={job.status} />
+          {/* The tag rides inside the title's plate, on the line with the start time, so it never floats outside it
+              (CONTRACTS §11.1). */}
+          <div className="page-head__meta">
+            <JobStatusPill status={job.status} />
+            <p className="page-head__lede">
+              Started {relative(job.createdAt)} · aiming for{" "}
+              {job.clipTarget.min === job.clipTarget.max
+                ? plural(job.clipTarget.min, "clip")
+                : <span className="nowrap">{`${job.clipTarget.min}–${job.clipTarget.max} clips`}</span>}
+            </p>
+          </div>
         </div>
       </header>
 

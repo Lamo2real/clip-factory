@@ -415,6 +415,13 @@ html[data-titlebar="overlay"] .titlebar-drag {
   color: var(--ink-2);
   font-size: 1.02rem;
 }
+/* A job's tag and its start line, inside the title's plate: they wrap as one row and never leave the plate. */
+.page-head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
 .page-head__actions {
   display: flex;
   flex-wrap: wrap;

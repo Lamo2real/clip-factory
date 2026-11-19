@@ -33,7 +33,7 @@ test.describe("job page", () => {
     await expect(page.getByText("Stopping in a few seconds.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Stop job" })).toHaveCount(0);
     await expect(page.getByText("Job stopped.")).toBeVisible({ timeout: 12_000 });
-    await expect(page.locator(".page-head__actions .pill")).toHaveText(/Canceled/);
+    await expect(page.locator(".page-head__meta .pill")).toHaveText(/Canceled/);
     await expect(page.locator(".toast--error")).toHaveCount(0);
   });
 
