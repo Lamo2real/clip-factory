@@ -1542,6 +1542,10 @@ ol.md__list {
 .money-goal__why {
   white-space: nowrap;
 }
+/* At the end of a line the 44 px target must not hang past it (that would scroll the card sideways at 320 px). */
+.money-goal__why .money-why {
+  margin-inline: -12px 0;
+}
 .money-goal__tick {
   color: var(--ink-2);
 }
@@ -1609,7 +1613,7 @@ ol.md__list {
   position: absolute;
   inset: 8px;
   border-radius: 50%;
-  background: var(--fill);
+  background: linear-gradient(var(--fill), var(--fill)); /* an image, so it reads as a filled button */
   z-index: -1;
 }
 .money-why__text {
