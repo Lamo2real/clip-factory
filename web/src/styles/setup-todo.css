@@ -13,6 +13,7 @@
    edge it fades out over below that. Scrolling to a control (Tab, a link to a #part) stops below the fade. */
 html:has(.setup-todo[data-mode="pill"]) {
   --todo-top: 60px;
+  --todo-clear: 60px;
   --todo-bar-h: 66px;
   --todo-feather: 22px;
   scroll-padding-top: calc(var(--top-safe) + var(--todo-bar-h) + var(--todo-feather) + 8px);
@@ -21,15 +22,40 @@ html:has(.setup-todo[data-mode="pill"]) {
   padding-top: calc(var(--top-line) + var(--todo-top));
 }
 @media (min-width: 768px) {
+  /* The pill strip, measured from the top line (768 to 939 px, where the page is too narrow to share its first row
+     with the pill): the pill sits on the line, the page starts below the strip's glass bar. --todo-clear is that bar
+     measured from the top line: what sticks while the page scrolls (a review clip's video) stops below it. */
   html:has(.setup-todo[data-mode="pill"]) {
-    /* The pill strip, measured from the top line: the pill sits on the line, the page starts below the strip's glass
-       bar (--todo-bar-h from the top safe area), so nothing on the page sits under the bar once it scrolls. */
     --todo-top: 72px;
+    --todo-clear: 72px;
     --todo-bar-h: 76px;
   }
   .app:has(> .setup-todo[data-mode="pill"]) .shell {
     padding-top: calc(var(--top-line) + var(--todo-top));
   }
+  /* Its right edge on the page's right edge. */
+  .setup-todo[data-mode="pill"] {
+    right: max(var(--gutter), env(safe-area-inset-right));
+  }
+}
+/* From 940 px the pill shares the top line with the menu and the page (§11.1): the page starts on the line and its
+   first row leaves the pill room on the right (--todo-room: the page-head plate, the settings trail, the home hero's
+   side column). The settings folders stick on the line, over the strip's bar, like the menu. */
+@media (min-width: 940px) {
+  html:has(.setup-todo[data-mode="pill"]) {
+    --todo-top: 0px;
+    --todo-room: calc(var(--todo-pill-w, 232px) + 20px);
+  }
+}
+/* With the settings folders beside it (1024 px and up) the settings column is too narrow for that until about
+   1180 px: there it starts below the pill strip, the folders stay on the line. */
+@media (min-width: 1024px) and (max-width: 1179.98px) {
+  html:has(.setup-todo[data-mode="pill"]) .settings-content {
+    --todo-room: 0px;
+    padding-top: var(--todo-clear);
+  }
+}
+@media (min-width: 768px) {
   /* The open list on wide screens gets its own column instead: the page is narrower, never covered. */
   .app:has(> .setup-todo[data-mode="rail"]) .shell {
     padding-right: calc(max(24px, env(safe-area-inset-right)) + var(--todo-w) + 24px);

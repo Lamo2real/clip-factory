@@ -87,6 +87,13 @@
   gap: 28px;
   align-content: start;
 }
+/* The setup list's pill sits on the hero's top right when it shares the top line (--todo-room, setup-todo.css): the
+   side column starts below it. */
+@media (min-width: 1100px) {
+  html:has(.setup-todo[data-mode="pill"]) .hero__side {
+    padding-top: min(var(--todo-room, 0px), 12px);
+  }
+}
 .cover-stack {
   display: none;
 }
@@ -742,7 +749,7 @@
   .review-card__media {
     position: sticky;
     /* Below the setup list's glass bar while it shows (§17.13). */
-    top: calc(var(--top-line) + 10px + var(--todo-top, 0px));
+    top: calc(var(--top-line) + 10px + var(--todo-clear, 0px));
   }
 }
 .player {

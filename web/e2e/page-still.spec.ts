@@ -99,6 +99,48 @@ async function stillRegions(page: Page, regions: Region[], items: string[]) {
 
 const MENU = ["review", "library", "settings", "home", "jobs"].map((k) => `.sidebar__item[data-help="nav-${k}"]`);
 
+/**
+ * Share of near-white pixels in the page's content below its title: on the see-through window over white, that is
+ * how much of the light glass shows through. A page that renders empty or with see-through placeholders while its
+ * data loads shows as a jump toward 1.
+ */
+async function lightShare(page: Page): Promise<number> {
+  const box = await page.evaluate(() => {
+    const main = document.querySelector(".main")!.getBoundingClientRect();
+    const head = document.querySelector(".main .page-head, .main h1");
+    const top = Math.round(
+      head ? head.getBoundingClientRect().bottom + 8 : main.top + 120,
+    );
+    return {
+      x: Math.round(main.left + 8),
+      y: top,
+      w: Math.round(main.width - 16),
+      h: Math.round(Math.min(innerHeight - top - 8, 300)),
+    };
+  });
+  const png = await page.screenshot({ scale: "css", animations: "allow" });
+  return page.evaluate(
+    async ({ b64, box }) => {
+      const bytes = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+      const bmp = await createImageBitmap(
+        new Blob([bytes], { type: "image/png" }),
+      );
+      const cv = document.createElement("canvas");
+      cv.width = bmp.width;
+      cv.height = bmp.height;
+      const ctx = cv.getContext("2d")!;
+      ctx.drawImage(bmp, 0, 0);
+      const d = ctx.getImageData(box.x, box.y, box.w, box.h).data;
+      let light = 0;
+      for (let i = 0; i < d.length; i += 4)
+        if (0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]! > 235)
+          light++;
+      return light / (d.length / 4);
+    },
+    { b64: png.toString("base64"), box },
+  );
+}
+
 test.describe("a page change keeps the window still", () => {
   test("the macOS desktop window over light glass (1000 x 650)", async ({ page }) => {
     await page.setViewportSize({ width: 1000, height: 650 });
@@ -125,6 +167,57 @@ test.describe("a page change keeps the window still", () => {
       ],
       MENU,
     );
+  });
+
+  test("a slow connection: the page never goes see-through while it loads", async ({
+    page,
+  }) => {
+    // The cloud app answers in a few hundred ms, not the mock's 30: every first visit shows its loading state long
+    // enough to see. The placeholders carry the panel tint, and a page visited before shows its last data at once.
+    await page.setViewportSize({ width: 1000, height: 650 });
+    await asMacWindow(page);
+    await page.addInitScript((css) => {
+      document.addEventListener("DOMContentLoaded", () => {
+        const s = document.createElement("style");
+        s.textContent = css;
+        document.head.append(s);
+      });
+    }, WHITE_GLASS);
+    await page.goto("/jobs");
+    await settle(page);
+    await page.evaluate(() => {
+      (
+        window as unknown as { __cfMockFaults: { latencyMs?: number } }
+      ).__cfMockFaults.latencyMs = 1200;
+    });
+    const report: string[] = [];
+    for (const round of ["first visit", "second visit"]) {
+      for (const item of MENU) {
+        const before = await lightShare(page);
+        await page.locator(item).click();
+        let worst = 0;
+        for (let i = 0; i < 4; i++)
+          worst = Math.max(worst, await lightShare(page));
+        await expect(page.locator(".main .skeleton")).toHaveCount(0, {
+          timeout: 5000,
+        });
+        await page.waitForTimeout(150);
+        const after = await lightShare(page);
+        report.push(
+          `${round} ${item.slice(-12, -2)}: ${before.toFixed(2)} > ${worst.toFixed(2)} > ${after.toFixed(2)}`,
+        );
+        // While it loads, no more of the glass shows than on either page at rest (5 points for the shimmer).
+        expect(worst, report.at(-1)).toBeLessThanOrEqual(
+          Math.max(before, after) + 0.05,
+        );
+      }
+    }
+    test
+      .info()
+      .annotations.push({
+        type: "light share",
+        description: report.join("; "),
+      });
   });
 
   test("a wide browser window (1440 x 900)", async ({ page }) => {

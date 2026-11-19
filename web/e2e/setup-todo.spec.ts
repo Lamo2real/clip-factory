@@ -59,7 +59,10 @@ async function coveredControls(page: Page): Promise<string[]> {
     if (!todo || Number(getComputedStyle(todo).opacity) === 0) return [];
     const bar = document.querySelector<HTMLElement>(".setup-todo-bar");
     if (bar?.classList.contains("is-scrolled")) return [];
-    const boxes = [todo.getBoundingClientRect(), ...(bar ? [bar.getBoundingClientRect()] : [])];
+    // At the top of the page the strip's bar is clear and takes no taps (from 940 px the page's first row shares it
+    // with the pill, §11.1): only a bar that takes taps covers anything.
+    const takesTaps = bar !== null && getComputedStyle(bar).pointerEvents !== "none";
+    const boxes = [todo.getBoundingClientRect(), ...(bar && takesTaps ? [bar.getBoundingClientRect()] : [])];
     const SEL =
       'a[href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="switch"], [role="tab"], [role="checkbox"], [role="radio"], [tabindex]:not([tabindex="-1"])';
     const out: string[] = [];

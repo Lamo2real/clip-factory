@@ -6,8 +6,9 @@ import { settle } from "./helpers.ts";
 // menu, the setup list (open card or pill), the settings folders and the page's first panel or title plate. Each one
 // reads --top-line; none adds a number of its own. In the macOS desktop window the title bar lies over the page
 // (no white strip), so the line starts below the traffic lights' band, which nothing may cover.
-// With the setup list folded to its pill (narrower windows), the pill sits on the line with the menu and the page
-// starts one pill strip lower: the folders and the page still share one line of their own.
+// With the setup list folded to its pill (narrower windows, including the desktop app's first 1200 x 820 window), the
+// pill sits on the line too, at the right end of the page's first row, which leaves it room. Only below 940 px, where
+// that row would be too narrow, does the page start one pill strip lower (--todo-top).
 // Run in WebKit too (playwright.config.ts, project "webkit").
 
 const ROUTES = ["/", "/jobs", "/review", "/library", "/settings", "/settings/look-and-feel/background"];
@@ -96,6 +97,7 @@ async function lightsClear(page: Page) {
 
 for (const size of [
   { width: 1000, height: 650 },
+  { width: 1200, height: 820 },
   { width: 1440, height: 900 },
 ]) {
   test(`the macOS desktop window at ${size.width} x ${size.height}: one top line below the traffic lights`, async ({ page }) => {
@@ -117,10 +119,27 @@ for (const size of [
       const r = el.getBoundingClientRect();
       return { top: r.top, height: r.height, width: r.width, bg: cs.backgroundColor, border: cs.borderTopWidth, shadow: cs.boxShadow };
     });
-    expect(s).toEqual({ top: 0, height: 42, width: size.width, bg: "rgba(0, 0, 0, 0)", border: "0px", shadow: "none" });
+    // Exactly the title bar (28 px), never the air below it, where page controls scroll up and must still take a click.
+    expect(s).toEqual({ top: 0, height: 28, width: size.width, bg: "rgba(0, 0, 0, 0)", border: "0px", shadow: "none" });
     test.info().annotations.push({ type: "tops", description: report.join("\n") });
   });
 }
+
+test("the macOS desktop window: a control scrolled up just under the title bar still takes its click", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await asMacWindow(page);
+  await page.goto("/library");
+  await settle(page);
+  const week = page.locator(".lib-tab", { hasText: "This week" });
+  // Scroll so the tab's top sits at 30 px: below the 28 px title bar, inside the 14 px of air above the top line.
+  const top = await week.evaluate((el) => el.getBoundingClientRect().top + window.scrollY);
+  await page.evaluate((y) => window.scrollTo(0, y), top - 30);
+  const b = (await week.boundingBox())!;
+  expect(b.y).toBeLessThan(42);
+  expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest(".lib-tab") !== null, { x: b.x + b.width / 2, y: 34 })).toBe(true);
+  await page.mouse.click(b.x + b.width / 2, 34);
+  await expect(page).toHaveURL(/view=week/);
+});
 
 test("a Windows or Linux desktop window keeps its own frame: no band", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });

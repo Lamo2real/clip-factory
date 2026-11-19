@@ -21,7 +21,17 @@ const clone = <T>(v: T): T => structuredClone(v);
 const frozen = () => typeof navigator !== "undefined" && navigator.webdriver === true;
 
 function delay(min = 160, max = 420): Promise<void> {
-  const ms = frozen() ? 30 : min + Math.random() * (max - min);
+  const slow =
+    typeof window === "undefined"
+      ? undefined
+      : (window as unknown as { __cfMockFaults?: MockFaults }).__cfMockFaults
+          ?.latencyMs;
+  const ms =
+    slow !== undefined
+      ? slow
+      : frozen()
+        ? 30
+        : min + Math.random() * (max - min);
   return new Promise((r) => setTimeout(r, ms));
 }
 
@@ -46,6 +56,8 @@ export interface MockFaults extends StatsFaults {
   olderJobsFails?: number;
   /** The next N Make clips (createJob) fail like a server error. */
   createJobFails?: number;
+  /** Every answer takes this long (ms), like a slow connection to the cloud (a page change must not blink meanwhile). */
+  latencyMs?: number;
   /** Settings › What it learned shows the never-checked ("empty") or not-enough-clips ("needs-more") state. */
   lessons?: LessonsFault;
 }

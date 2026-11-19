@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { contrast, FLOAT_VEIL, mix, TABBAR_VEIL, VEIL, type Rgb } from "../src/lib/background.ts";
+import { DODGE_SETTLE_MS } from "../src/features/help/dodge.ts";
 import { TODO_CELEBRATE_MS } from "../src/lib/setupTodo.ts";
 import { GUIDES, SETUP_ORDER } from "../src/setup/index.ts";
 import { asDesktop, paintGlass, WINDOW_EXTRA_ROUTES, WINDOW_LOOKS, type GlassPaint } from "./glass.ts";
@@ -176,6 +177,9 @@ for (const scheme of SCHEMES) {
     await page.mouse.move(0, 0);
     await page.evaluate(() => window.scrollTo(0, 500));
     await expect(page.locator(".setup-todo-bar")).toHaveClass(/is-scrolled/);
+    // Ask may step aside from a control that scrolled under it: let it settle (it waits for the page to be still,
+    // then fades) before reading, or the scan catches it half faded.
+    await page.waitForTimeout(DODGE_SETTLE_MS + 100);
     await readableList(page, `folded pill on its bar ${scheme}`, failures);
 
     // Settings keeps every platform: a skipped card with Un-skip, cards with Skip, one that needs the owner.

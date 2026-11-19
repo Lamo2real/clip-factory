@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { cubicBezier, GLIDE_EASE, GLIDE_MS, slideFrames } from "../src/components/Glide.tsx";
+import { cubicBezier, GLIDE_EASE, GLIDE_MS, slideFrames, unevenBoxes } from "../src/components/Glide.tsx";
 import { applyTitlebar, titlebarHeight } from "../src/lib/look.ts";
 
 // Page changes keep the window still (docs/CONTRACTS.md §20.16), the glide slides on the compositor without
@@ -83,6 +83,17 @@ describe("the glide's slide", () => {
     for (const f of frames) expect(Object.keys(f).sort()).toEqual(["offset", "transform"]);
   });
 
+  it("between boxes of clearly different sizes, animates the size itself so a pill is never squashed", () => {
+    const a = { x: 0, y: 0, width: 50, height: 40 };
+    const b = { x: 60, y: 0, width: 134, height: 40 };
+    expect(unevenBoxes(a, b)).toBe(true);
+    expect(unevenBoxes({ ...a, width: 100 }, { ...b, width: 106 })).toBe(false);
+    const frames = slideFrames(a, b, "x", true);
+    expect(frames[0]).toMatchObject({ transform: "translate(0px, 0px)", width: "50px", height: "40px" });
+    expect(frames.at(-1)).toMatchObject({ transform: "translate(60px, 0px)", width: "134px", height: "40px" });
+    for (const f of frames) expect(String(f.transform)).not.toMatch(/scale/);
+  });
+
   it("changes size by scale between boxes of different sizes", () => {
     const frames = slideFrames({ x: 0, y: 0, width: 100, height: 40 }, { x: 150, y: 0, width: 50, height: 40 }, "x");
     expect(String(frames[0]!.transform)).toBe("translate(0px, 0px) scale(2, 1)");
@@ -121,6 +132,7 @@ describe("the desktop window's title bar band", () => {
     }
     const tokens = css.find(({ f }) => f.endsWith("tokens.css"))!.text;
     expect(tokens).toMatch(/--top-safe:\s*max\(env\(safe-area-inset-top\), var\(--titlebar-h\)\)/);
-    expect(tokens).toMatch(/html\[data-titlebar="overlay"\]\s*\{\s*--titlebar-h:\s*28px;/);
+    // The band's height lives in one place (main.rs), set inline by look.ts: no second number in the CSS.
+    for (const { f, text } of css) expect(text, f).not.toMatch(/--titlebar-h:\s*(?!0px)\d+px/);
   });
 });

@@ -15,7 +15,7 @@ export interface SetupData {
 }
 
 export function useSetup(): SetupData {
-  const { data, error, reload, setData } = useLoad(() => api().getSetup());
+  const { data, error, reload, setData } = useLoad(() => api().getSetup(), "", "setup");
   useLiveEvents(
     (e) => {
       if (e.type === "setup") void reload();

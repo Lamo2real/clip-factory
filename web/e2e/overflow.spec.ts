@@ -284,7 +284,9 @@ for (const width of [320, 375, 768, 1024, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/?update=1");
     await settle(page);
-    await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+    // This checks the panel, not the launcher: at some widths the launcher has stepped aside from a control under it
+    // (Home's "Working now" card, §19.8 dodge), so it is pressed directly.
+    await page.getByRole("button", { name: "Ask Clip Factory" }).dispatchEvent("click");
     const panel = page.getByRole("dialog", { name: "Ask Clip Factory" });
     const failures: string[] = [];
     const check = async (label: string) => {

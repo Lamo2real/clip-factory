@@ -5,7 +5,8 @@
   min-height: 100dvh;
 }
 /* The desktop window's title bar band (§11.1): the macOS traffic lights float here on the app's own glass. It is clear
-   (no fill, no edge) and ends right where the menu and the setup list start, so it never covers a control. */
+   (no fill, no edge) and exactly as tall as the real title bar (--titlebar-h), never into the air below it: a page
+   control scrolled up into that air still takes its click. */
 .titlebar-drag {
   display: none;
 }
@@ -14,7 +15,7 @@ html[data-titlebar="overlay"] .titlebar-drag {
   position: fixed;
   inset: 0 0 auto 0;
   z-index: 45;
-  height: var(--top-line);
+  height: var(--titlebar-h);
   background: transparent;
 }
 .shell {
@@ -363,6 +364,11 @@ html[data-titlebar="overlay"] .titlebar-drag {
   display: grid;
   gap: 10px;
   flex: 1 1 420px;
+}
+/* The first row of a page ends before the setup list's pill when the pill shares the top line (--todo-room,
+   setup-todo.css). */
+.page-head:first-child > .page-head__text {
+  max-width: calc(100% - var(--todo-room, 0px));
 }
 /* Words that sit loose on the page start where the words inside the panels start (--loose-x: a panel's rim and side
    padding), in every look and at every size, so the left edge of the text runs as one line down the page. Boxes

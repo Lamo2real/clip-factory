@@ -810,16 +810,23 @@
   border-radius: var(--r-md);
   background:
     linear-gradient(100deg, transparent 20%, rgb(var(--bone-rgb) / 0.14) 50%, transparent 80%) no-repeat,
-    rgb(var(--bone-rgb) / 0.06);
-  background-size: 50% 100%, auto;
+    linear-gradient(rgb(var(--bone-rgb) / 0.06), rgb(var(--bone-rgb) / 0.06)),
+    /* Never lighter than a panel: on the see-through window a bare 6% bone showed the light glass through it, a
+       white flash on every first visit to a page (docs/CONTRACTS.md §20.16). */
+    var(--skel-floor, rgb(var(--green-rgb) / var(--panel-veil)));
+  background-size: 50% 100%, auto, auto;
   animation: shimmer 1.4s linear infinite;
+}
+/* Inside a panel the panel already holds the tint. */
+.glass .skeleton {
+  --skel-floor: transparent;
 }
 @keyframes shimmer {
   from {
-    background-position: -60% 0, 0 0;
+    background-position: -60% 0, 0 0, 0 0;
   }
   to {
-    background-position: 160% 0, 0 0;
+    background-position: 160% 0, 0 0, 0 0;
   }
 }
 .line-skel {

@@ -130,8 +130,6 @@
     --top-line: calc(var(--top-safe) + 14px);
   }
 }
-/* The desktop window with its title bar laid over the page (macOS, desktop/src-tauri/src/main.rs): look.ts sets this
-   and the band's height from window.__CF_TITLEBAR__. */
-html[data-titlebar="overlay"] {
-  --titlebar-h: 28px;
-}
+/* The desktop window with its title bar laid over the page (macOS): look.ts sets html[data-titlebar="overlay"] and,
+   with it, --titlebar-h inline from window.__CF_TITLEBAR__ (MAC_TITLEBAR_HEIGHT in desktop/src-tauri/src/main.rs, the
+   one place that number lives). */

@@ -41,7 +41,7 @@ export async function loadHome(): Promise<HomeData> {
 }
 
 export function Home() {
-  const { data, error, setData, reload } = useLoad(loadHome);
+  const { data, error, setData, reload } = useLoad(loadHome, "", "home");
   // Nothing loaded and the last try failed: say so and offer Try again, instead of skeletons forever (§12.4).
   const failed = !data && error ? error : null;
   const working = data?.jobs.filter((j) => j.status === "running" || j.status === "queued") ?? [];

@@ -27,7 +27,7 @@ export function liveSummary(follows: readonly Follow[]): string {
 }
 
 export function StreamersRow() {
-  const { data, setData, reload } = useLoad(loadFollows);
+  const { data, setData, reload } = useLoad(loadFollows, "", "streamers");
   useLiveEvents(
     (e) => {
       if (e.type === "follow") setData((d) => (d ? applyFollowEvent(d, e) : d));

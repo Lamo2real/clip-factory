@@ -78,7 +78,7 @@ export function Library({ view = "all", week = null }: { view?: "all" | "week"; 
 }
 
 function AllClips() {
-  const { data, error, reload, setData } = useLoad(loadLibrary);
+  const { data, error, reload, setData } = useLoad(loadLibrary, "", "library");
   // Keep again worked: swap in the fresh clip and its new posts.
   const kept = (clip: Clip, posts: Post[]) =>
     setData((d) =>

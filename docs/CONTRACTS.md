@@ -514,25 +514,36 @@ the traffic lights' band; nothing ever covers the traffic lights.
   column reads `--top-line` (the sidebar `top`, the `.shell` `padding-top`, the setup list and its panel `top`, the
   folders' sticky `top`); none adds a number of its own to the safe area. `env(safe-area-inset-top)` appears only in
   `tokens.css` (a unit test holds it). From 768 px `.page-head` has no top padding, so the title plate starts on the line (phones keep 6 px of air under their top bar).
-* **The pill strip.** While the setup list is folded to its pill (§17.13; under 1440 px, or the list closed), the pill
-  sits on the line with the menu and the page starts one strip lower (`--todo-top`: 60 px on phones, 72 px from 768
-  px); the settings folders and the page share that lower line. Putting the page on the menu's line too would mean
-  moving the pill into the page head's row, which changes how the list sits: an owner choice, not built.
+* **The pill shares the line.** While the setup list is folded to its pill (§17.13; under 1440 px, or the list
+  closed; the desktop app's first 1200 x 820 window is one), the pill sits on the line at the page's right edge
+  (`right` = the page gutter) and, **from 940 px**, the page starts on the line too (`--todo-top: 0`). The page's
+  first row leaves the pill room on the right: `--todo-room` (the pill's width, measured by `SetupTodo.tsx` into
+  `--todo-pill-w`, + 20 px) narrows the first `.page-head`'s title plate, pads the settings trail (whose breadcrumbs
+  then keep to one row and end in "…" instead of wrapping, like on phones) and the home hero's side column steps
+  12 px below the pill. The settings folders stick on the line with `z-index: 40`, over the strip's glass bar once the
+  page scrolls, like the menu. What sticks inside the page (a review clip's video) stops below the bar
+  (`--todo-clear`: 72 px). Below 940 px, where that row would be too narrow, and in the settings column from 1024 to
+  1179 px (with the folders beside it), the page starts one strip lower (`--todo-top` / `--todo-clear`: 60 px on
+  phones, 72 px from 768 px), the folders still on the line.
 * **The desktop window** (§12.3) sets `window.__CF_TITLEBAR__` (28 on macOS, 0 elsewhere). `web/src/lib/look.ts`
   (`titlebarHeight`, `applyTitlebar`, run in `applyLookNow` before the first paint) reads it only when
   `__CF_DESKTOP__ === true` and the value is a number from 1 to 120, then sets `html[data-titlebar="overlay"]` and
   `--titlebar-h`. A web page that claims a title bar gets no band.
 * **Dragging the window.** With the title bar laid over the page, `App.tsx` draws `.titlebar-drag`
   (`data-tauri-drag-region`, `aria-hidden`), shown only on `html[data-titlebar="overlay"]`: fixed at the top, full
-  width, exactly `--top-line` tall (it ends where the menu and the pill start, so it never covers a control),
+  width, exactly `--titlebar-h` tall (the real title bar, never the 14 px of air below it, where a page control that
+  scrolled up must still take its click),
   `z-index: 45`, transparent, no border, rim or shadow. Pressing it moves the window; a double click zooms it.
 * **Phones** keep their own top bar under the pill strip (top bar at `--top-line + --todo-top`).
 * **Also on the token:** `html { scroll-padding-top }`, the skip link, the sign-in screen, the small question sheet's
   scrim, the phone Ask sheet and the setup list's glass bar all clear `--top-safe`.
-* **Tests:** `e2e/top-line.spec.ts` (Chromium and WebKit): the simulated macOS window at 1000 x 650 and 1440 x 900 on
-  `/`, `/jobs`, `/review`, `/library`, `/settings` and a settings branch puts every column within 1 px of the line (42
-  px), keeps the 80 x 28 traffic-light corner clear and checks the drag strip; a Windows or Linux window and a web page
-  claiming a band get the plain line (14 px); browsers at 1440, 1280, 1000, 820 and 390 px wide share their line.
+* **Tests:** `e2e/top-line.spec.ts` (Chromium and WebKit): the simulated macOS window at 1000 x 650, 1200 x 820 (the
+  pill) and 1440 x 900 on `/`, `/jobs`, `/review`, `/library`, `/settings` and a settings branch puts every column
+  within 1 px of the line (42 px), keeps the 80 x 28 traffic-light corner clear and checks the 28 px drag strip; a tab
+  scrolled up to 30 px (under the line, below the title bar) still takes its click; a Windows or Linux window and a
+  web page claiming a band get the plain line (14 px); browsers at 1440, 1280, 1000, 820 and 390 px wide share their
+  line. The band's 28 lives only in `main.rs` (`MAC_TITLEBAR_HEIGHT`); `look.ts` sets it inline, and a unit test holds
+  that no stylesheet hard-codes it.
 
 ## 12. Get the app, updates, and kid-proof UX (added by the owner after the first build)
 
@@ -4149,6 +4160,10 @@ to the new one, instead of the old pill vanishing and a new one appearing.
   width, height or position (the only CSS transition is its opacity), there is no separate `scale` animation and no
   forced layout per tap, and `.glide` has `will-change: transform`. So WebKit (the macOS app) and Chromium run the
   slide on the compositor and a busy main thread (a new page being laid out under the glass) cannot stall it.
+* **Bars with options of different widths** (more than a tenth apart, `unevenBoxes`: the Library's All / Not posted
+  yet / Posted, the Review caption platform tabs) animate `width` and `height` in the same `glide-slide` animation and
+  only move by `transform`, so the pill's round ends and its shadow are never squashed. These bars sit inside a page,
+  never over one being rebuilt; the menu, the phone tab bar and the background tiles keep the transform-only slide.
 * **Fallback:** until it has measured, the bar has no `has-glide` class and the chosen item paints its own highlight,
   so there is never a moment with no highlight. With `has-glide`, the chosen item drops its own background, its
   vermilion marker and its shadow, and the glide draws them.
@@ -4161,8 +4176,8 @@ to the new one, instead of the old pill vanishing and a new one appearing.
   slide under reduced motion. `e2e/nav-smooth.spec.ts` (Chromium **and WebKit**) samples the glide every frame for
   every menu switch in the simulated macOS window (1000 x 650), a 1440 x 900 browser and the phone tab bar: one
   transform-only animation, lands to the pixel, never passes the item (≤ 101 %), never creeps back, no step bigger than
-  the curve's own launch, and at most an odd switch with a frame later than about two and a half frames in the last
-  two thirds. `web/test/stillNav.test.ts` holds the curve and the keyframes.
+  the curve's own launch, and fewer than half the switches with a frame later than about two and a half frames in the
+  last two thirds (frame times follow the machine's load; the old cross-fade stalled most switches). `web/test/stillNav.test.ts` holds the curve and the keyframes.
 
 ### 20.14 The cursor never changes (owner rule, 2026-11-16)
 
@@ -4194,13 +4209,22 @@ content in place and nothing else moves: no cross-fade, no fade-in, no lift, in 
   full strength from their first frame. Small things inside a page may still arrive (a badge pops, a list row rises),
   but nothing animates `.main`, `.shell`, `.app`, a page or a glass panel's opacity as a page opens (the Home get-app
   banner lost its `rise` for this).
+* **No see-through loading state.** A page's data takes a full round trip to the cloud, and every visit used to start
+  empty: the skeletons were 6 % bone over the see-through window, one near-white sheet under the page title until the
+  data came. Now `useLoad(load, key, cache)` keeps the last result per cache name and key for the life of the page
+  (Home, Jobs, Review, Library, the setup list and the streamers row opt in): a page visited before shows what it
+  showed last at once and refreshes in the background. Sign-out (and a sign-in that ends) forgets it all
+  (`forgetLoaded`). On a first visit the skeletons carry the panel tint (`--panel-veil` green under the shimmer;
+  inside a panel, the panel's), so the glass never shows through.
 * **Unchanged:** the backdrop stays mounted (it lives in `App`, outside the routed page); focus still moves to the page
   for screen readers; scroll still resets to the top.
 * **Tests:** `e2e/page-still.spec.ts` (Chromium **and WebKit**): through every menu page change, every frame for 700 ms
   has no View Transition, no animation fading the page or a glass panel, no page panel under full opacity, and the same
   backdrop element; over white "glass" behind the see-through window (1000 x 650) the title bar band, the menu and the
   gap beside it stay within 3 grey levels of rest in screenshots taken right after each tap (the old cross-fade moved
-  them 30 to 60); the same at 1440 x 900 in a browser and on a phone. `e2e/navigation.spec.ts` checks that no page
+  them 30 to 60); the same at 1440 x 900 in a browser and on a phone. With the mock API slowed to 1.2 s a call
+  (`__cfMockFaults.latencyMs`), first and second visits to every menu page never show more of the white glass below
+  the page title than either page at rest (the old skeletons: 94 % white). `e2e/navigation.spec.ts` checks that no page
   change calls `startViewTransition`; `web/test/stillNav.test.ts` fails on any `::view-transition` rule or an
   animation on the page's own blocks.
 

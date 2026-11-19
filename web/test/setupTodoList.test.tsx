@@ -8,6 +8,7 @@ import { ApiError } from "../src/api/errors.ts";
 import { seed } from "../src/api/mock/fixtures.ts";
 import { mockApi } from "../src/api/mock/index.ts";
 import type { Api, SetupOverview } from "../src/api/types.ts";
+import { forgetLoaded } from "../src/lib/hooks.ts";
 import { TODO_SEEN_KEY } from "../src/lib/setupTodo.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -63,6 +64,8 @@ async function mount() {
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  // Each test is a fresh sign-in: nothing remembered from the last one's setups (useLoad's cache).
+  forgetLoaded();
   // jsdom has no matchMedia: a window that matches no width query (below 1440 px, so the pill).
   vi.stubGlobal("matchMedia", (media: string) => ({ matches: false, media, addEventListener: () => undefined, removeEventListener: () => undefined }));
   current = mockApi(seed());

@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { usePoll } from "../src/lib/hooks.ts";
+import { forgetLoaded, useLoad, usePoll } from "../src/lib/hooks.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -83,5 +83,50 @@ describe("usePoll", () => {
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(tick).toHaveBeenCalledTimes(2);
     await act(async () => root.unmount());
+  });
+});
+
+describe("useLoad remembers a page's last result (docs/CONTRACTS.md §20.16)", () => {
+  function Shows({ load, cache, k = "", seen }: { load: () => Promise<string>; cache?: string; k?: string; seen: (string | null)[] }) {
+    const { data } = useLoad(load, k, cache);
+    seen.push(data);
+    return null;
+  }
+  const visit = async (props: Parameters<typeof Shows>[0]) => {
+    const root = createRoot(document.createElement("div"));
+    await act(async () => root.render(<Shows {...props} />));
+    return root;
+  };
+  beforeEach(() => forgetLoaded());
+
+  it("a page visited before shows its last data from the first render, then refreshes it", async () => {
+    let answer = "first";
+    const load = () => Promise.resolve(answer);
+    const one: (string | null)[] = [];
+    (await visit({ load, cache: "jobs", seen: one })).unmount();
+    expect(one[0]).toBeNull();
+    expect(one.at(-1)).toBe("first");
+
+    answer = "second";
+    const two: (string | null)[] = [];
+    (await visit({ load, cache: "jobs", seen: two })).unmount();
+    expect(two[0]).toBe("first");
+    expect(two.at(-1)).toBe("second");
+  });
+
+  it("keeps each key apart, remembers nothing without a cache name, and forgets everything on sign-out", async () => {
+    const load = () => Promise.resolve("a");
+    (await visit({ load, cache: "review", k: "job-1", seen: [] })).unmount();
+    const other: (string | null)[] = [];
+    (await visit({ load, cache: "review", k: "job-2", seen: other })).unmount();
+    expect(other[0]).toBeNull();
+    (await visit({ load, seen: [] })).unmount();
+    const plain: (string | null)[] = [];
+    (await visit({ load, seen: plain })).unmount();
+    expect(plain[0]).toBeNull();
+    forgetLoaded();
+    const after: (string | null)[] = [];
+    (await visit({ load, cache: "review", k: "job-1", seen: after })).unmount();
+    expect(after[0]).toBeNull();
   });
 });

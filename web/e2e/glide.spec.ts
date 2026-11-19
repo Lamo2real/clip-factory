@@ -67,6 +67,34 @@ test.describe("glide", () => {
       expect(await bar.locator(".segmented__opt.is-on").evaluate((el) => getComputedStyle(el).backgroundImage)).toBe("none");
     });
 
+    test("between options of different widths the pill keeps its round ends (never squashed)", async ({ page }) => {
+      await page.goto("/library");
+      await settle(page);
+      const bar = page.locator(".segmented", { hasText: "Not posted yet" }).first();
+      await expect(bar).toHaveClass(/has-glide/);
+      const run = await bar.evaluate(
+        (el) =>
+          new Promise<{ slide: boolean; scaled: boolean; widths: number[] }>((done) => {
+            const g = el.querySelector<HTMLElement>(":scope > .glide")!;
+            const target = [...el.querySelectorAll<HTMLElement>(".segmented__opt")].find((o) => o.textContent?.includes("Not posted yet"))!;
+            target.querySelector("input")!.click();
+            requestAnimationFrame(() => {
+              const slide = g.getAnimations().find((a) => a.id === "glide-slide");
+              const frames = (slide?.effect as KeyframeEffect | undefined)?.getKeyframes() ?? [];
+              done({
+                slide: !!slide,
+                scaled: frames.some((f) => /scale/.test(String(f.transform))),
+                widths: frames.map((f) => parseFloat(String(f.width))),
+              });
+            });
+          }),
+      );
+      expect(run.slide).toBe(true);
+      expect(run.scaled).toBe(false);
+      expect(run.widths.at(-1)! - run.widths[0]!).toBeGreaterThan(40);
+      await landsOn(bar, ".segmented__opt.is-on");
+    });
+
     test("the menu highlight and its vermilion bar follow the page", async ({ page }) => {
       await page.goto("/");
       await settle(page);

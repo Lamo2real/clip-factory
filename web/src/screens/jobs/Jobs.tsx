@@ -17,7 +17,7 @@ import { mergeJobs, pollLimit } from "./mergeJobs.ts";
 const DOWN = { "--act-dir-in": "90deg" } as CSSProperties;
 
 export function Jobs() {
-  const { data, error, reload, setData } = useLoad(() => api().listJobs({ limit: 20 }));
+  const { data, error, reload, setData } = useLoad(() => api().listJobs({ limit: 20 }), "", "jobs");
   const [more, setMore] = useState(false);
   const toast = useToast();
   const seen = useRef(new Map<string, Job["status"]>());
