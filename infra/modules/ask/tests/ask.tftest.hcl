@@ -28,7 +28,7 @@ variables {
   ask_model_id          = "anthropic.claude-opus-5-5"
   ask_fallback_model_id = "anthropic.claude-opus-4-8"
   search_secret_name    = "cf-test/ask/search-key"
-  search_secret_arn     = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/ask/search-key*"
+  search_secret_arn     = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/ask/search-key-??????"
   help_enabled          = true
 }
 
@@ -90,9 +90,9 @@ run "least_privilege" {
       },
       { Sid = "AskFiles", Effect = "Allow", Action = ["s3:GetObject", "s3:DeleteObject"], Resource = ["arn:aws:s3:::cf-test-media/ask/*"] },
       { Sid = "SkillFiles", Effect = "Allow", Action = ["s3:GetObject"], Resource = ["arn:aws:s3:::cf-test-media/skills/*"] },
-      { Sid = "Data", Effect = "Allow", Action = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:UpdateItem"], Resource = ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data", "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data/index/*"] },
+      { Sid = "Data", Effect = "Allow", Action = ["dynamodb:GetItem", "dynamodb:Query"], Resource = ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data", "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data/index/*"] },
       { Sid = "Stream", Effect = "Allow", Action = ["execute-api:ManageConnections"], Resource = ["arn:aws:execute-api:eu-north-1:123456789012:ws123/live/POST/@connections/*"] },
-      { Sid = "SearchKey", Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/ask/search-key*"] },
+      { Sid = "SearchKey", Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/ask/search-key-??????"] },
     ]
     error_message = "cf-prod-ask has exactly the contract's permissions: no bedrock:*, no bearer token, no Put or Delete on the table."
   }

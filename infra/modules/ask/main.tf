@@ -58,8 +58,8 @@ resource "aws_iam_role_policy" "ask" {
       # The question's files: read once, deleted when the answer ends. The owner's skill files (§18.6).
       { Sid = "AskFiles", Effect = "Allow", Action = ["s3:GetObject", "s3:DeleteObject"], Resource = ["${var.media_bucket_arn}/ask/*"] },
       { Sid = "SkillFiles", Effect = "Allow", Action = ["s3:GetObject"], Resource = ["${var.media_bucket_arn}/skills/*"] },
-      # APP STATE and read_my_clip_factory (Get, Query), the Stop item (Get). Never PutItem or DeleteItem.
-      { Sid = "Data", Effect = "Allow", Action = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:UpdateItem"], Resource = [var.table_arn, "${var.table_arn}/index/*"] },
+      # APP STATE and read_my_clip_factory (Get, Query), the Stop item (Get). Read only: no writes of any kind.
+      { Sid = "Data", Effect = "Allow", Action = ["dynamodb:GetItem", "dynamodb:Query"], Resource = [var.table_arn, "${var.table_arn}/index/*"] },
       # Stream the answer to the owner's own connection (the id was checked by cf-prod-api).
       { Sid = "Stream", Effect = "Allow", Action = ["execute-api:ManageConnections"], Resource = [var.ws_connections_arn] },
       # The web search key, saved by the owner in Settings › App & account › Ask.

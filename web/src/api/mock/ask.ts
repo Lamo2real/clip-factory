@@ -101,8 +101,14 @@ export function mockAskTransport(): AskTransport {
       if ((!q && !b.files?.length) || q.length > 4000) return err(400, "bad_request", "Ask a question with up to 4,000 letters.");
       const send = mockLive.raw.get(b.connectionId);
       if (!send) return err(409, "not_live", "Ask lost its live link. Trying again.");
-      if (/\b(show|tell|give)\b.{0,30}\b(password|api key|token)\b/i.test(q)) {
-        return ok(200, { askId: b.askId, refused: true, text: "I can't help with passwords, keys or tokens, and I never show them." });
+      // The server's narrow refusal (api/src/clipfactory_api/ask/redact.py): only asking to be shown his own stored
+      // values; "what is a refresh token?" or "how do I store keys in Terraform?" are answered.
+      if (/\b(show|tell|give|what'?s|what is)\b.{0,20}\b(my|your|the app'?s|saved|stored)\b.{0,30}\b(passwords?|api ?keys?|tokens?|secrets?|keys?)\b/i.test(q) && !/\b(how|where|why)\b/i.test(q)) {
+        return ok(200, {
+          askId: b.askId,
+          refused: true,
+          text: "I can't show passwords, keys or tokens, and I never read them. You enter them yourself in **Settings › Posting › Set up posting** (for the posting apps) or **Settings › App & account › Ask** (for web search).",
+        });
       }
       s.starts.push(b);
       void worker(b, send, s.searchKey);

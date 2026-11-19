@@ -2,6 +2,8 @@
 // comes back over the app's WebSocket as `ask.*` events. `applyEvent` folds them into one answer; `runAsk` drives one
 // question: connection id, file uploads, start, events, Stop, and the timeouts that send the panel to the plain
 // §19 answer instead. Links in an answer become live only after it is done, and only the URLs the server listed.
+// Files uploaded for a question that never started are taken away on every ending (stop, refusal, 4xx, 5xx, network),
+// and a timed-out answer is stopped on the server too, so it never keeps spending.
 import type { RawMessage } from "../../lib/live.ts";
 import type { AskApi, AskStartBody, PresignedFile } from "./askApi.ts";
 import type { HelpAction } from "./types.ts";
@@ -216,17 +218,28 @@ export function runAsk(
   let settled = false;
   let off: (() => void) | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** True once the server took the question (202): from then on the worker deletes its files. */
+  let accepted = false;
+  const uploaded: string[] = [];
+  const dropFiles = () => {
+    // Best effort; the 1-day S3 rule is the safety net. Never for an answer the server took.
+    if (accepted) return;
+    for (const id of uploaded.splice(0)) void deps.api.deleteFile(id).catch(() => undefined);
+  };
   const end = (e: RunEnd) => {
     if (settled) return;
     settled = true;
     off?.();
     clearT(timer);
+    dropFiles();
     finish(e);
   };
   const arm = (ms: number) => {
     clearT(timer);
     timer = setT(() => {
-      // Silence: before any words the plain answer takes over; after words, the answer ends where it is.
+      // Silence: the server may still be working, so stop it there too (it must not keep spending).
+      if (accepted) void deps.api.stop(askId).catch(() => undefined);
+      // Before any words the plain answer takes over; after words, the answer ends where it is.
       if (!sawWords) return end({ kind: "fallback", reason: "timeout" });
       hooks.onEvent({ type: "ask.done", askId, stop: "error", links: [] });
       end({ kind: "streamed" });
@@ -250,7 +263,9 @@ export function runAsk(
       }
       const ids: Record<number, string> = {};
       presigned.files.forEach((p, i) => (ids[files[i]!.id] = p.fileId));
+      uploaded.push(...presigned.files.map((p) => p.fileId));
       hooks.onFileIds?.(ids);
+      if (settled) return dropFiles(); // Stop was pressed while the links were made
       const results = await Promise.all(
         presigned.files.map((p: PresignedFile, i) =>
           deps.api.upload(p, files[i]!.blob, (fr) => hooks.onUpload?.(files[i]!.id, fr), ctrl.signal),
@@ -284,6 +299,8 @@ export function runAsk(
     }
     switch (res.kind) {
       case "started":
+        accepted = true;
+        uploaded.length = 0;
         if (!settled) arm(started ? IDLE_MS : STARTED_MS);
         if (stopRequested) void deps.api.stop(askId);
         return;

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { openTodo, CLIPS, openClip, resolveRoute, ROUTES, settle } from "./helpers.ts";
 import { decode, rowMeans } from "./pixels.ts";
@@ -164,3 +166,61 @@ test("the Ask box wears no ring when Ask is opened by a click, and the ring afte
   await expect(box).toBeFocused();
   expect(await ring()).toBe(true);
 });
+
+// Ask as a full assistant (§27, review C14): the file tray and its tiles, an answer with its sources list, the
+// markup editor and the search key card draw no edges either, at a phone and a desktop size.
+const ASK_PDF = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Page >> endobj\ntrailer << >>\n%%EOF\n").toString("base64");
+for (const size of SIZES) {
+  test(`no visible edges in Ask's tray, file tiles, sources, markup editor and search key card, ${size.name}`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.setViewportSize({ width: size.width, height: size.height });
+    await page.goto("/");
+    await settle(page);
+    await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+    const panel = page.locator("#help-panel");
+    await panel.waitFor();
+    const png = readFileSync(join(import.meta.dirname, "fixtures", "shot.png")).toString("base64");
+    await page.evaluate(
+      ({ pdf, img }) => {
+        const dt = new DataTransfer();
+        const file = (b64: string, name: string, type: string) => {
+          const bin = atob(b64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          return new File([bytes], name, { type });
+        };
+        dt.items.add(file(pdf, "report.pdf", "application/pdf"));
+        dt.items.add(file(img, "shot.png", "image/png"));
+        const e = new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt });
+        if (!e.dataTransfer) Object.defineProperty(e, "dataTransfer", { value: dt });
+        document.querySelector(".help-panel__log")!.dispatchEvent(e);
+      },
+      { pdf: ASK_PDF, img: png },
+    );
+    await expect(panel.locator(".help-pic__img")).toHaveCount(1, { timeout: 15_000 });
+    await page.waitForTimeout(400);
+    const failures: string[] = [];
+    for (const e of await visibleEdges(page)) failures.push(`Ask tray: ${e}`);
+    await panel.getByRole("button", { name: /Mark picture 1/ }).click();
+    await page.locator(".mk__canvas").waitFor();
+    await page.waitForTimeout(300);
+    for (const e of await visibleEdges(page)) failures.push(`markup editor: ${e}`);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    // A fresh chat for an answer with web sources.
+    await page.goto("/");
+    await settle(page);
+    await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+    await panel.waitFor();
+    await panel.getByLabel("Your question").fill("I made the Meta app, what now? #search");
+    await panel.getByRole("button", { name: "Send" }).click();
+    await expect(panel.locator(".ask-msg").last().getByRole("button", { name: "Copy answer" })).toBeVisible({ timeout: 20_000 });
+    await expect(panel.locator(".ask-source__link").first()).toBeVisible();
+    for (const e of await visibleEdges(page)) failures.push(`an answer with sources: ${e}`);
+    await page.goto("/settings/app/ask");
+    await settle(page);
+    await page.getByRole("button", { name: "Take key away" }).click();
+    await page.getByRole("link", { name: "Get a search key" }).waitFor();
+    for (const e of await visibleEdges(page)) failures.push(`search key card: ${e}`);
+    expect(failures).toEqual([]);
+  });
+}

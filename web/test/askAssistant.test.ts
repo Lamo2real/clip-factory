@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { askApi, trimHistory, type AskApi, type AskHttp, type AskTurn } from "../src/features/help/askApi.ts";
 import { applyEvent, liveLink, newAnswer, parseAskEvent, runAsk, type AskConnection, type AskEvent } from "../src/features/help/askStream.ts";
 import { askHistory, chatReducer, initialChat, liveUrls, readyFiles, type ChatState, type TrayFile } from "../src/features/help/chatState.ts";
-import { carriedFiles, classify, FILE_TEXT, fileIcon, formatLabel, pastedTextFile, sizeLabel, type AskFile } from "../src/features/help/files.ts";
+import { addedText, carriedFiles, classify, FILE_TEXT, fileIcon, formatLabel, pastedTextFile, sizeLabel, type AskFile } from "../src/features/help/files.ts";
 import {
   addPoint,
   addStroke,
@@ -416,5 +416,94 @@ describe("markdown for answers", () => {
 
   it("still reads a plain paragraph with a pipe as a paragraph", () => {
     expect(parseMarkdown("a | b").blocks[0]!.t).toBe("p");
+  });
+});
+
+// ---------- review fixes (2026-11-19) ----------
+
+describe("review fixes", () => {
+  const pdf = (id: number) => ({ id, name: `r${id}.pdf`, type: "application/pdf", size: 3, blob: new Blob(["abc"]), format: "PDF", kind: "pdf" as const, carried: false });
+
+  it("takes uploaded files away on every ending where the question did not start (A2)", async () => {
+    const endings = [
+      { kind: "rate_limited", retryAfter: 5 },
+      { kind: "bad_request", message: "no" },
+      { kind: "off" },
+      { kind: "error" },
+      { kind: "refused", text: "No." },
+    ] as const;
+    for (const res of endings) {
+      const api = fakeApi({ start: async () => res });
+      await runAsk({ api, conn: fakeConn(), uuid: () => "A" }, body, [pdf(1), pdf(2)], { onEvent: () => undefined }).done;
+      expect(vi.mocked(api.deleteFile).mock.calls.map((c) => c[0]).sort()).toEqual(["F0", "F1"]);
+    }
+    // 409 twice: the retry failed too.
+    const api = fakeApi({ start: async () => ({ kind: "not_live" }) });
+    const conn = fakeConn();
+    vi.mocked(conn.whoami).mockResolvedValueOnce("conn-1").mockResolvedValueOnce(null);
+    expect(await runAsk({ api, conn, uuid: () => "A" }, body, [pdf(1)], { onEvent: () => undefined }).done).toEqual({ kind: "fallback", reason: "no_socket" });
+    expect(api.deleteFile).toHaveBeenCalledWith("F0");
+    // One upload failed after the others went up: all are taken away.
+    const half = fakeApi({ upload: vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false) });
+    expect(await runAsk({ api: half, conn: fakeConn(), uuid: () => "A" }, body, [pdf(1), pdf(2)], { onEvent: () => undefined }).done).toEqual({ kind: "upload_failed" });
+    expect(vi.mocked(half.deleteFile).mock.calls.map((c) => c[0]).sort()).toEqual(["F0", "F1"]);
+  });
+
+  it("takes files away when Stop is pressed during the upload, never after the server took them", async () => {
+    let release: (ok: boolean) => void = () => undefined;
+    const api = fakeApi({ upload: vi.fn(() => new Promise<boolean>((r) => (release = r))) });
+    const run = runAsk({ api, conn: fakeConn(), uuid: () => "A" }, body, [pdf(1)], { onEvent: () => undefined });
+    await vi.waitFor(() => expect(api.upload).toHaveBeenCalled());
+    run.stop();
+    release(true);
+    expect(await run.done).toEqual({ kind: "stopped" });
+    expect(api.deleteFile).toHaveBeenCalledWith("F0");
+
+    const started = fakeApi();
+    const conn = fakeConn();
+    const run2 = runAsk({ api: started, conn, uuid: () => "B" }, body, [pdf(1)], { onEvent: () => undefined });
+    await vi.waitFor(() => expect(started.start).toHaveBeenCalled());
+    await flush();
+    conn.emit({ askId: "B", type: "ask.done", stop: "end", links: [] });
+    await run2.done;
+    expect(started.deleteFile).not.toHaveBeenCalled(); // the worker deletes them
+  });
+
+  it("stops the server when the panel times out (B7)", async () => {
+    vi.useFakeTimers();
+    try {
+      const api = fakeApi();
+      const conn = fakeConn();
+      const run = runAsk({ api, conn, uuid: () => "A" }, body, [], { onEvent: () => undefined });
+      await vi.advanceTimersByTimeAsync(10);
+      conn.emit({ askId: "A", type: "ask.started" });
+      conn.emit({ askId: "A", type: "ask.delta", seq: 1, text: "Half" });
+      await vi.advanceTimersByTimeAsync(46_000);
+      expect(await run.done).toEqual({ kind: "streamed" });
+      expect(api.stop).toHaveBeenCalledWith("A");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends an answer's web sources with the history, so a follow-up can open them (B11)", () => {
+    let s = chatReducer(initialChat, { type: "ask", id: 1, text: "Meta app review?" } as never);
+    s = chatReducer(s, { type: "ai_start", id: 2, askId: "A" } as never);
+    s = chatReducer(s, { type: "ai_event", entryId: 2, event: { type: "ask.delta", askId: "A", seq: 1, text: "See [1]." } } as never);
+    const sources = [
+      { n: 1, kind: "web", title: "App Review", url: "https://developers.facebook.com/docs/x" },
+      { n: 2, kind: "file", title: "r.pdf", file: "r.pdf" },
+    ];
+    s = chatReducer(s, { type: "ai_event", entryId: 2, event: { type: "ask.sources", askId: "A", sources } } as never);
+    const turns = askHistory(s.entries);
+    const answer = turns.find((t) => t.role === "assistant");
+    expect(answer?.sources).toEqual([{ title: "App Review", url: "https://developers.facebook.com/docs/x" }]);
+    const trimmed = trimHistory([{ role: "user", text: "q" }, { role: "assistant", text: "a", sources: [{ title: "x", url: "http://plain.example/" }, { title: "y", url: "https://ok.example/" }] }]);
+    expect(trimmed[1]!.sources).toEqual([{ title: "y", url: "https://ok.example/" }]);
+  });
+
+  it("a screen reader hears how many files a drop added (C11)", () => {
+    expect(addedText("PDF", 1)).toBe("PDF file added. 1 of 10.");
+    expect(addedText("IMAGE", 3, 3)).toBe("3 files added. 3 of 10.");
   });
 });

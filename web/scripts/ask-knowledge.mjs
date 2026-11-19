@@ -140,6 +140,59 @@ function kidProof(contracts) {
   return contracts.slice(at, end < 0 ? undefined : end).trim();
 }
 
+/** The setup guides' steps (web/src/setup/*.ts), numbered 1…N per platform as the guide screens number them. */
+export async function setupSteps() {
+  const { GUIDES, SETUP_ORDER, allSteps } = await import(pathToFileURL(join(web, "src/setup/index.ts")).href);
+  const out = {};
+  for (const platform of SETUP_ORDER) {
+    const guide = GUIDES[platform];
+    const partOf = new Map(guide.parts.flatMap((p) => p.steps.map((s) => [s.id, p])));
+    out[platform] = allSteps(guide).map((s, i) => {
+      const part = partOf.get(s.id);
+      const row = { id: s.id, n: i + 1, part: part?.id ?? "", partTitle: part?.title ?? "", title: s.title };
+      if (s.optional) row.optional = true;
+      if (s.auto) row.auto = s.auto;
+      if (s.gate) row.gate = s.gate;
+      return row;
+    });
+  }
+  return { steps: out, names: Object.fromEntries(SETUP_ORDER.map((p) => [p, GUIDES[p].name])) };
+}
+
+function stepsText({ steps, names }) {
+  return Object.entries(steps)
+    .map(([platform, list]) => {
+      const lines = [`### ${names[platform]} (Settings › Posting › Set up posting › ${names[platform]}, /settings/posting/setup/${platform})`];
+      let part = "";
+      for (const s of list) {
+        if (s.partTitle !== part) {
+          part = s.partTitle;
+          lines.push(`Part: ${part}`);
+        }
+        lines.push(`${s.n}. ${s.id} · ${s.title}${s.optional ? " (optional)" : ""}${s.auto ? ` (ticks itself: ${s.auto})` : ""}`);
+      }
+      return lines.join("\n");
+    })
+    .join("\n\n");
+}
+
+/** Every place in Settings (web/src/lib/settingsTree.ts): tree › branch (route), then its apples with their leaf. */
+export async function settingsPlaces() {
+  const { TREES, settingsPath } = await import(pathToFileURL(join(web, "src/lib/settingsTree.ts")).href);
+  const lines = [];
+  const routes = ["/", "/jobs", "/review", "/library", "/settings", "/get-app", "/settings/clip-making/skills/new"];
+  for (const tree of TREES) {
+    routes.push(settingsPath(tree.slug));
+    for (const branch of tree.branches) {
+      const path = settingsPath(tree.slug, branch.slug);
+      routes.push(path);
+      lines.push(`Settings › ${tree.name} › ${branch.name} (${path}): ${branch.line}`);
+      for (const apple of branch.apples) lines.push(`  - ${apple.name} (#${apple.id}): ${apple.leaf}`);
+    }
+  }
+  return { text: lines.join("\n"), routes };
+}
+
 // ---------- C. the library ----------
 
 const LIBRARY_DOCS = [
@@ -181,7 +234,7 @@ export function library() {
 
 // ---------- the pack ----------
 
-export function build() {
+export async function build() {
   const corpus = JSON.parse(read(CORPUS));
   const contracts = read(join(repo, "docs/CONTRACTS.md"));
   const map = appMap(corpus);
@@ -194,12 +247,27 @@ export function build() {
     "## AI models for clip jobs (Settings › Clip making › Clips › AI model)\n\n" + modelsText(models),
     "## Kid-proof words\n\n" + kidProof(contracts),
   ].join("\n\n");
+  const setup = await setupSteps();
+  const places = await settingsPlaces();
+  const platformRoutes = Object.keys(setup.steps).map((p) => `/settings/posting/setup/${p}`);
   const parts = [
     { id: "app-map", title: "App map: every page, setting and guide", text: redact(map.text) },
     { id: "owner-manual", title: "Owner manual", text: redact(manual) },
+    {
+      id: "setup-steps",
+      title: "Setup steps per platform (ids and titles, numbered as the guide shows them)",
+      text: redact(stepsText(setup)),
+    },
+    { id: "settings-places", title: "Every place in Settings", text: redact(places.text) },
   ];
   const lib = library();
-  const body = { parts, library: lib.map(({ id, title, line, text }) => ({ id, title, line, chars: text.length })), actions: map.actions };
+  const body = {
+    parts,
+    library: lib.map(({ id, title, line, text }) => ({ id, title, line, chars: text.length })),
+    actions: map.actions,
+    setupSteps: setup.steps,
+    routes: [...new Set([...places.routes, ...platformRoutes])].sort(),
+  };
   const hash = createHash("sha256");
   hash.update(JSON.stringify(body));
   for (const e of lib) hash.update(e.text);
@@ -212,9 +280,9 @@ export function packTokens(pack) {
   return charsToTokens(pack.parts.reduce((n, p) => n + p.text.length, 0) + pack.library.reduce((n, e) => n + e.id.length + e.title.length + e.line.length + 6, 0));
 }
 
-function main() {
+async function main() {
   const check = process.argv.includes("--check");
-  const { pack, lib } = build();
+  const { pack, lib } = await build();
   const tokens = packTokens(pack);
   if (tokens > MAX_TOKENS) {
     console.error(`ask knowledge is ${tokens} tokens, over the ${MAX_TOKENS} cap (docs/CONTRACTS.md §27.2)`);
@@ -245,4 +313,4 @@ function main() {
   console.log(`ask knowledge: version ${pack.version}, about ${tokens} tokens, ${lib.length} library sections, ${pack.actions.length} buttons`);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await main();

@@ -391,7 +391,7 @@ run "ask_assistant_additions" {
     ask_function_name  = "cf-test-ask"
     ask_function_arn   = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-ask"
     search_secret_name = "cf-test/ask/search-key"
-    search_secret_arn  = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/ask/search-key*"
+    search_secret_arn  = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/ask/search-key-??????"
   }
 
   assert {
@@ -412,7 +412,7 @@ run "ask_assistant_additions" {
     condition = contains(jsondecode(aws_iam_role_policy.fn["api"].policy).Statement, {
       Sid      = "AskSearchKey", Effect = "Allow"
       Action   = ["secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource"]
-      Resource = ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/ask/search-key*"]
+      Resource = ["arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/ask/search-key-??????"]
     })
     error_message = "The search key secret is managed by the app, only under its own name."
   }

@@ -76,10 +76,10 @@ variable "search_secret_name" {
 
 variable "search_secret_arn" {
   type        = string
-  description = "arn:aws:secretsmanager:REGION:ACCT:secret:cf-prod/ask/search-key* (the secret gets a random suffix)."
+  description = "arn:aws:secretsmanager:REGION:ACCT:secret:cf-prod/ask/search-key-?????? (the secret gets a random suffix)."
   validation {
-    condition     = can(regex("^arn:aws[a-z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9_/-]+\\*$", var.search_secret_arn))
-    error_message = "search_secret_arn must be a secretsmanager ARN ending in *."
+    condition     = can(regex("^arn:aws[a-z-]*:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9_/-]+-\\?{6}$", var.search_secret_arn))
+    error_message = "search_secret_arn must be a secretsmanager ARN ending in -?????? (the name plus its 6-character suffix, never *)."
   }
 }
 

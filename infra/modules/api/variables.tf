@@ -208,7 +208,7 @@ variable "search_secret_name" {
 variable "search_secret_arn" {
   type        = string
   default     = ""
-  description = "arn:aws:secretsmanager:REGION:ACCT:secret:cf-prod/ask/search-key*: the web search key the owner saves (created by the app, never by Terraform with a value)."
+  description = "arn:aws:secretsmanager:REGION:ACCT:secret:cf-prod/ask/search-key-??????: the web search key the owner saves (created by the app, never by Terraform with a value)."
   validation {
     condition     = (var.ask_function_arn == "") == (var.search_secret_arn == "")
     error_message = "ask_function_arn and search_secret_arn go together: both set or both empty."

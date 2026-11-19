@@ -81,7 +81,7 @@ locals {
   ask_model_id          = local.models.models[local.models.askModel].modelId
   ask_fallback_model_id = local.models.models[local.models.askFallbackModel].modelId
   ask_search_secret     = "${local.name}/ask/search-key"
-  ask_search_secret_arn = "arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${local.ask_search_secret}*"
+  ask_search_secret_arn = "arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${local.ask_search_secret}-??????"
 
   # The deep analysis's second watcher (docs/DECISIONS.md ADR-40): Amazon Nova 2 Lite through the EU geo profile, so
   # the video parts it watches stay in the EU. Same shape as the help model: the profile here plus the foundation

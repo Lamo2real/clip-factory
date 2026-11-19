@@ -14,9 +14,52 @@
   flex: none;
 }
 
+/* Files dragged over the Ask button: it grows a little and glows, so it is clear it takes them. */
+.help-launcher.is-drop {
+  transform: scale(1.08);
+  box-shadow:
+    0 0 28px 8px rgb(var(--green-leaf-rgb) / 0.45),
+    0 14px 30px -12px rgb(var(--shadow-rgb) / 0.8);
+  transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .help-launcher.is-drop {
+    transform: none;
+    transition: none;
+  }
+}
+.reduce-motion .help-launcher.is-drop {
+  transform: none;
+  transition: none;
+}
+
+/* The search key card's first step: a real button. */
+.ask-key__get {
+  justify-self: start;
+  min-height: 48px;
+}
+
 /* ---------- The tray: picture tiles and file tiles ---------- */
+/* Phones keep the §26 single row that scrolls sideways inside itself (the chat stays in view with 10 files). Wider
+   panels wrap, capped at about two rows of tiles, and scroll inside the tray beyond that. */
 .ask-tray {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+@media (min-width: 768px) {
+  .help-panel:not(.is-sheet) .ask-tray {
+    flex-wrap: wrap;
+    max-height: 156px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+.help-pics.ask-tray > * {
+  flex: none;
+}
+/* Notes sit over the chips and the tray: fully opaque so nothing shows through. */
+.help-note {
+  background: rgb(var(--green-deep-rgb));
 }
 .help-pic.is-file {
   width: 168px;
@@ -125,7 +168,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-small);
 }
 .ask-carry__label {
   color: var(--ink-2);
@@ -149,18 +192,30 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* A 32 px circle you see inside a 44 px target you tap. */
 .ask-carry__drop {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  margin: -4px -2px -4px 0;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin: -8px -6px -8px -4px;
   border: 0;
   border-radius: 50%;
   color: var(--ink);
   background: none;
 }
-.ask-carry__drop:hover {
+.ask-carry__drop::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+}
+.ask-carry__drop > svg {
+  position: relative;
+}
+.ask-carry__drop:hover::before {
   background: var(--fill-hover);
 }
 
@@ -424,9 +479,16 @@
 .mk .mk__dialog {
   background: linear-gradient(150deg, rgb(var(--green-rgb) / 0.96), rgb(var(--green-deep-rgb) / 0.97));
 }
+/* The tools come before the picture in the page (Tab order: tools, picture, Undo, Clear, Cancel, Save); the grid
+   draws the picture above and the tools and actions in the bottom bar. */
 .mk__dialog {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "head head"
+    "stage stage"
+    "tools actions";
   gap: 10px;
   width: min(1100px, 100%);
   height: min(820px, 100%);
@@ -441,6 +503,7 @@
   height: 88vh;
 }
 .mk__head {
+  grid-area: head;
   display: flex;
   align-items: baseline;
   gap: 10px;
@@ -465,6 +528,7 @@
   margin-left: auto;
 }
 .mk__stage {
+  grid-area: stage;
   position: relative;
   min-height: 0;
   border-radius: var(--r-md);
@@ -480,14 +544,10 @@
 .mk__canvas:focus-visible {
   outline-offset: -4px;
 }
-.mk__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-}
 .mk-tools {
+  grid-area: tools;
+  align-self: center;
+  justify-self: start;
   position: relative;
   display: flex;
   gap: 2px;
@@ -523,9 +583,20 @@
   border-radius: var(--r-pill);
 }
 .mk__actions {
+  grid-area: actions;
+  justify-self: end;
+  align-self: center;
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+}
+/* Holding Undo (Redo on phones) never opens the text callout or a context menu. */
+.mk-tool,
+.mk-btn {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .mk-btn {
   display: inline-flex;
@@ -586,13 +657,29 @@
 .mk.is-phone .mk__hint {
   display: none;
 }
-.mk.is-phone .mk__bar {
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  row-gap: 8px;
+.mk.is-phone .mk__head {
+  min-height: 44px;
+  align-items: center;
+  padding-right: 52px;
 }
-.mk.is-phone .mk-tools {
-  margin-right: auto;
+/* Cancel (×) top right on phones; in the page it comes after Clear, before Save. */
+.mk.is-phone .mk__close {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 4px);
+  right: max(8px, env(safe-area-inset-right));
+  z-index: 1;
+}
+@media (max-width: 419px) {
+  .mk.is-phone .mk__dialog {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "head"
+      "stage"
+      "tools"
+      "actions";
+    row-gap: 8px;
+  }
 }
 .mk.is-phone .mk-tool__name,
 .mk.is-phone .mk-btn__word {
@@ -626,6 +713,14 @@
 }
 .mk.is-tablet .mk-btn {
   padding: 0 12px;
+}
+.mk.is-tablet .mk__close {
+  min-width: 48px;
+  min-height: 48px;
+  margin-left: 0;
+  border-radius: var(--r-pill);
+  color: var(--green-ink);
+  background: var(--tint-leaf);
 }
 @media (max-width: 359px) {
   .mk.is-phone .mk-tool,

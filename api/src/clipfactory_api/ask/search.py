@@ -5,8 +5,8 @@ the ``X-Subscription-Token`` header; ``q``, ``count`` (≤ 20), ``freshness`` (`
 ``safesearch``; results in ``web.results[]`` (``title``, ``url``, ``description``). The Search plan costs $5 per
 1,000 requests with $5 of free credit each month.
 
-The key lives only in Secrets Manager (``cf-prod/ask/search-key``); it is read with ``GetSecretValue``, cached five
-minutes per warm Lambda, and never logged, echoed or put in the prompt. Swapping the provider is one class.
+The key lives only in Secrets Manager (``cf-prod/ask/search-key``); it is read with ``GetSecretValue``, cached one
+minute per warm Lambda (so "Take key away" is felt within a minute), and never logged, echoed or put in the prompt. Swapping the provider is one class.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ SEARCH_TIMEOUT_S = 4.0
 RESULT_COUNT = 8
 SNIPPET_CHARS = 600
 QUERY_CHARS = 200
-KEY_CACHE_S = 300.0
+KEY_CACHE_S = 60.0  # "Take key away" reaches a warm worker within a minute
 MAX_KEY_CHARS = 200
 FRESHNESS = {"day": "pd", "week": "pw", "month": "pm", "year": "py"}
 USER_AGENT = "ClipFactoryAsk/1.0"

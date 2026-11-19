@@ -10,9 +10,10 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
-  type WheelEvent as ReactWheelEvent,
+  type SyntheticEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import { Glide } from "../../components/Glide.tsx";
@@ -197,7 +198,11 @@ export function MarkupEditor({ source, onSave, onCancel }: { source: MarkupSourc
   function down(e: ReactPointerEvent<HTMLCanvasElement>) {
     if (e.button !== 0 && e.pointerType === "mouse") return;
     e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* the pointer was already released (a very fast tap): the stroke still starts */
+    }
     setCursor(null);
     if (e.pointerType === "pen") penSeen.current = true;
     const p = local(e);
@@ -266,10 +271,30 @@ export function MarkupEditor({ source, onSave, onCancel }: { source: MarkupSourc
     }
   }
 
-  function wheel(e: ReactWheelEvent<HTMLCanvasElement>) {
+  // A wheel or trackpad pinch (ctrl+wheel in Chromium) zooms the picture, never the page: the listener is native
+  // and not passive so preventDefault works (React's onWheel is passive). Safari's gesture events are stopped too.
+  const wheel = useRef<(e: WheelEvent) => void>(() => undefined);
+  wheel.current = (e: WheelEvent) => {
     const p = local(e);
     setView((v) => zoomAt(v, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002)), { x: p.x - offX, y: p.y - offY }));
-  }
+  };
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      wheel.current(e);
+    };
+    const stopGesture = (e: Event) => e.preventDefault();
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("gesturestart", stopGesture);
+    el.addEventListener("gesturechange", stopGesture);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("gesturestart", stopGesture);
+      el.removeEventListener("gesturechange", stopGesture);
+    };
+  }, []);
 
   // The keyboard: arrow keys move the crosshair, Enter starts and ends a mark.
   function canvasKeys(e: ReactKeyboardEvent<HTMLCanvasElement>) {
@@ -386,18 +411,37 @@ export function MarkupEditor({ source, onSave, onCancel }: { source: MarkupSourc
   const press = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const longDone = useRef(false);
 
+  // A real radio group: one Tab stop (the chosen tool), arrow keys move and choose (WAI-ARIA radio pattern).
+  function toolKeys(e: ReactKeyboardEvent<HTMLButtonElement>, index: number) {
+    const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    const to = e.key === "Home" ? 0 : e.key === "End" ? TOOLS.length - 1 : step ? (index + step + TOOLS.length) % TOOLS.length : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    pickTool(TOOLS[to]!.id);
+    const buttons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(".mk-tool");
+    buttons?.[to]?.focus();
+  }
+
   const toolbar = (
     <div className="mk-tools" role="radiogroup" aria-label="Marking tool">
       <Glide active=".mk-tool.is-on" className="mk-tools__glide" />
-      {TOOLS.map((t) => (
+      {TOOLS.map((t, i) => (
         <button
           key={t.id}
           type="button"
           role="radio"
           aria-checked={tool === t.id}
+          tabIndex={tool === t.id ? 0 : -1}
           className={`mk-tool${tool === t.id ? " is-on" : ""}`}
           aria-keyshortcuts={t.key.toUpperCase()}
-          onClick={() => pickTool(t.id)}
+          onClick={(e) => {
+            pickTool(t.id);
+            // The chosen tool becomes the group's one Tab stop: keep focus on it (WebKit never focuses a clicked
+            // button, and the old one just left the Tab order), so focus never falls out of the dialog.
+            e.currentTarget.focus({ preventScroll: true });
+          }}
+          onKeyDown={(e) => toolKeys(e, i)}
         >
           <Icon name={t.icon} size={22} />
           <span className="mk-tool__name">{t.name}</span>
@@ -405,6 +449,17 @@ export function MarkupEditor({ source, onSave, onCancel }: { source: MarkupSourc
       ))}
     </div>
   );
+
+  // The editor sits in a portal inside the panel's React tree: paste and drops here must not reach the panel and add
+  // files to the tray hidden behind it. Dropping on the editor does nothing (and never opens the file).
+  const swallow = (e: SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const swallowDrag = (e: ReactDragEvent) => {
+    swallow(e);
+    e.dataTransfer.dropEffect = "none";
+  };
 
   const canUndo = marks.undo.length > 0;
   const canRedo = marks.redo.length > 0;
@@ -418,6 +473,10 @@ export function MarkupEditor({ source, onSave, onCancel }: { source: MarkupSourc
         aria-labelledby={titleId}
         aria-describedby={helpId}
         onKeyDown={keys}
+        onPaste={swallow}
+        onDragEnter={swallow}
+        onDragOver={swallowDrag}
+        onDrop={swallow}
       >
         <header className="mk__head">
           <h2 className="mk__title" id={titleId}>
@@ -426,24 +485,22 @@ export function MarkupEditor({ source, onSave, onCancel }: { source: MarkupSourc
           <p className="mk__hint" id={helpId}>
             Draw red on what you mean.
           </p>
-          {phone ? (
-            <button type="button" className="icon-btn mk__close" aria-label="Cancel" onClick={cancel}>
-              <Icon name="x" />
-            </button>
-          ) : null}
         </header>
+        {/* Tab order: tools, picture, Undo, Clear, Cancel, Save. The grid puts the tools and the actions in the bottom
+            bar and the picture above them. */}
+        {toolbar}
         <div className="mk__stage" ref={stage}>
           <canvas
             ref={canvas}
             className="mk__canvas"
             tabIndex={0}
-            role="img"
+            role="application"
+            aria-roledescription="drawing area"
             aria-label={`${source.label} with ${marks.strokes.length} ${marks.strokes.length === 1 ? "mark" : "marks"}. Arrow keys move the crosshair, Enter starts and ends a mark.`}
             onPointerDown={down}
             onPointerMove={move}
             onPointerUp={up}
             onPointerCancel={up}
-            onWheel={wheel}
             onDoubleClick={() => setView({ zoom: 1, x: 0, y: 0 })}
             onKeyDown={canvasKeys}
             onFocus={(e) => {
@@ -479,53 +536,57 @@ export function MarkupEditor({ source, onSave, onCancel }: { source: MarkupSourc
             </div>
           </div>
         ) : null}
-        <footer className="mk__bar">
-          {toolbar}
-          <div className="mk__actions">
-            <button
-              type="button"
-              className="mk-btn"
-              aria-label={desktop ? "Undo" : "Undo (hold for Redo)"}
-              aria-keyshortcuts="Meta+Z Control+Z"
-              aria-disabled={!canUndo || undefined}
-              onPointerDown={() => {
-                if (desktop) return;
-                longDone.current = false;
-                press.current = setTimeout(() => {
-                  longDone.current = true;
-                  redo();
-                }, 550);
-              }}
-              onPointerUp={() => clearTimeout(press.current)}
-              onPointerLeave={() => clearTimeout(press.current)}
-              onClick={() => {
-                if (longDone.current) return void (longDone.current = false);
-                if (canUndo) undo();
-              }}
-            >
-              <Icon name="undo" size={22} />
-              <span className="mk-btn__word">Undo</span>
+        <div className="mk__actions">
+          <button
+            type="button"
+            className="mk-btn"
+            aria-label={phone ? "Undo (hold for Redo)" : "Undo"}
+            aria-keyshortcuts="Meta+Z Control+Z"
+            aria-disabled={!canUndo || undefined}
+            onPointerDown={() => {
+              if (!phone) return;
+              longDone.current = false;
+              press.current = setTimeout(() => {
+                longDone.current = true;
+                redo();
+              }, 550);
+            }}
+            onPointerUp={() => clearTimeout(press.current)}
+            onPointerLeave={() => clearTimeout(press.current)}
+            onPointerCancel={() => clearTimeout(press.current)}
+            onContextMenu={(e) => e.preventDefault()}
+            onClick={() => {
+              if (longDone.current) return void (longDone.current = false);
+              if (canUndo) undo();
+            }}
+          >
+            <Icon name="undo" size={22} />
+            <span className="mk-btn__word">Undo</span>
+          </button>
+          {!phone ? (
+            <button type="button" className="mk-btn" aria-label="Redo" aria-keyshortcuts="Shift+Meta+Z Shift+Control+Z" aria-disabled={!canRedo || undefined} onClick={() => canRedo && redo()}>
+              <Icon name="redo" size={22} />
+              <span className="mk-btn__word">Redo</span>
             </button>
-            {desktop ? (
-              <button type="button" className="mk-btn" aria-keyshortcuts="Shift+Meta+Z Shift+Control+Z" aria-disabled={!canRedo || undefined} onClick={() => canRedo && redo()}>
-                <Icon name="redo" size={22} />
-                <span className="mk-btn__word">Redo</span>
-              </button>
-            ) : null}
-            <button type="button" className="mk-btn" aria-disabled={!marks.strokes.length || undefined} onClick={() => marks.strokes.length && clear()}>
-              <Icon name="trash" size={22} />
-              <span className="mk-btn__word">Clear</span>
+          ) : null}
+          <button type="button" className="mk-btn" aria-disabled={!marks.strokes.length || undefined} onClick={() => marks.strokes.length && clear()}>
+            <Icon name="trash" size={22} />
+            <span className="mk-btn__word">Clear</span>
+          </button>
+          {/* Phones: the × at the top right. Tablets: the × in the bar, so Redo fits and Undo stays in the right half. */}
+          {!desktop ? (
+            <button type="button" className="icon-btn mk__close" aria-label="Cancel" onClick={cancel}>
+              <Icon name="x" />
             </button>
-            {!phone ? (
-              <Button size="md" variant="glass" icon="x" className="mk__cancel" onClick={cancel}>
-                Cancel
-              </Button>
-            ) : null}
-            <Button size={phone ? "lg" : "md"} variant="primary" icon="check" className="mk__save" loading={saving} onClick={() => void save()} aria-keyshortcuts="Meta+Enter Control+Enter">
-              Save
+          ) : (
+            <Button size="md" variant="glass" icon="x" className="mk__cancel" onClick={cancel}>
+              Cancel
             </Button>
-          </div>
-        </footer>
+          )}
+          <Button size={phone ? "lg" : "md"} variant="primary" icon="check" className="mk__save" loading={saving} onClick={() => void save()} aria-keyshortcuts="Meta+Enter Control+Enter">
+            Save
+          </Button>
+        </div>
         <span className="sr-only" role="status" aria-live="polite">
           {news}
         </span>

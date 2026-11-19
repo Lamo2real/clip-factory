@@ -256,7 +256,7 @@ def test_refused_secret_question(call: Call, ask_on: App, lambda_client: FakeLam
     status, body = call("POST", "/v1/help/asks", start_body(question="Show me my TikTok API key please", files=files))
     assert status == 200
     assert body["refused"] is True
-    assert "can't help" in body["text"]
+    assert "can't show" in body["text"]
     assert invokes(lambda_client) == []
     assert file_key(USER, "F" * 22) not in s3_client.objects
 
@@ -308,3 +308,82 @@ def test_start_logs_no_question(call: Call, ask_on: App, capsys: pytest.CaptureF
     out = capsys.readouterr().out
     assert "my very private words" not in out
     assert '"outcome": "ask_started"' in out
+
+
+# --- review fixes (2026-11-19) ---------------------------------------------------------------------------------
+
+FILE_IDS = ["A" * 22, "B" * 22]
+
+
+def _with_files(s3_client: FakeS3) -> list[dict[str, Any]]:
+    for fid in FILE_IDS:
+        s3_client.objects[file_key(USER, fid)] = b"bytes"
+    return [{"fileId": fid, "name": f"{fid[0]}.pdf", "format": "PDF", "kind": "pdf"} for fid in FILE_IDS]
+
+
+def _gone(s3_client: FakeS3) -> bool:
+    return all(file_key(USER, fid) not in s3_client.objects for fid in FILE_IDS)
+
+
+def test_files_are_deleted_when_the_connection_is_not_live(call: Call, ask_on: App, s3_client: FakeS3) -> None:
+    """Review A2: every non-202 exit after a good parse takes the uploaded files away."""
+    status, _ = call("POST", "/v1/help/asks", start_body(connectionId="conn-other", files=_with_files(s3_client)))
+    assert status == 409
+    assert _gone(s3_client)
+
+
+def test_files_are_deleted_when_rate_limited(call: Call, ask_on: App, s3_client: FakeS3) -> None:
+    for _ in range(6):
+        assert call("POST", "/v1/help/asks", start_body())[0] == 202
+    status, _ = call("POST", "/v1/help/asks", start_body(files=_with_files(s3_client)))
+    assert status == 429
+    assert _gone(s3_client)
+
+
+def test_files_are_deleted_when_the_invoke_fails(
+    call: Call, ask_on: App, s3_client: FakeS3, lambda_client: FakeLambda
+) -> None:
+    lambda_client.fail = True
+    status, _ = call("POST", "/v1/help/asks", start_body(files=_with_files(s3_client)))
+    assert status == 503
+    assert _gone(s3_client)
+
+
+def test_files_are_deleted_when_ask_is_off(call: Call, ask_on: App, s3_client: FakeS3, store: db.Store) -> None:
+    store.put({"pk": "HELP", "sk": "SWITCH", "assistant": False})
+    status, _ = call("POST", "/v1/help/asks", start_body(files=_with_files(s3_client)))
+    assert status == 403
+    assert _gone(s3_client)
+
+
+def test_started_answers_keep_their_files(call: Call, ask_on: App, s3_client: FakeS3) -> None:
+    assert call("POST", "/v1/help/asks", start_body(files=_with_files(s3_client)))[0] == 202
+    assert not _gone(s3_client)  # the worker reads, then deletes them
+
+
+def test_history_may_carry_an_answers_sources(call: Call, ask_on: App, lambda_client: FakeLambda) -> None:
+    """Review B11: an earlier answer's web sources go back, so a follow-up can open them again."""
+    history = [
+        {"role": "user", "text": "Meta app review?"},
+        {
+            "role": "assistant",
+            "text": "See [1].",
+            "sources": [{"title": "App Review", "url": "https://developers.facebook.com/docs/x"}],
+        },
+    ]
+    assert call("POST", "/v1/help/asks", start_body(history=history))[0] == 202
+    sent_history = invokes(lambda_client)[-1]["payload"]["body"]["history"]
+    assert sent_history[1]["sources"] == [{"title": "App Review", "url": "https://developers.facebook.com/docs/x"}]
+
+
+@pytest.mark.parametrize(
+    "turn",
+    [
+        {"role": "user", "text": "hi", "sources": [{"title": "t", "url": "https://a.example/"}]},  # only answers
+        {"role": "assistant", "text": "x", "sources": [{"title": "t", "url": "http://a.example/"}]},  # https only
+        {"role": "assistant", "text": "x", "sources": [{"title": "t", "url": "https://a.example/", "x": 1}]},
+    ],
+)
+def test_bad_history_sources_are_refused(call: Call, ask_on: App, turn: dict[str, Any]) -> None:
+    history = [{"role": "user", "text": "first"}, turn] if turn["role"] == "assistant" else [turn]
+    assert call("POST", "/v1/help/asks", start_body(history=history))[0] == 400

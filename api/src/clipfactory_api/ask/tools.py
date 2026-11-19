@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import re
+import threading
 import urllib.parse
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -67,9 +68,16 @@ class Toolbox:
     titles: dict[str, str] = field(default_factory=dict)  # document title → "file" | "app"
     actions: list[dict[str, Any]] = field(default_factory=list)
     tool_docs: bool = True  # PDFs from the web as document blocks inside tool_result
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def __post_init__(self) -> None:
         self.links |= set(self.allowed_urls)
+
+    def allow(self, url: str) -> None:
+        """A URL ``web_fetch`` may open and the panel may make live (thread-safe: tools run in parallel)."""
+        with self._lock:
+            self.allowed_urls.add(web.normalise(url) or url)
+            self.links.add(url)
 
     # --- sources --------------------------------------------------------------------------------------------------
 
@@ -109,11 +117,12 @@ class Toolbox:
     def run(self, name: str, args: Any) -> Outcome:
         if name not in CAPS or not isinstance(args, dict):
             return Outcome('{"INVALID_JSON": "the input was not an object"}', True)
-        if self.used[name] >= CAPS[name]:
-            return Outcome(LIMIT_REACHED, True)
         if self.soft_deadline() and name in {"web_search", "web_fetch", "read_app_doc", "read_my_clip_factory"}:
             return Outcome("time is up, answer with what you have", True)
-        self.used[name] += 1
+        with self._lock:  # parallel calls of one turn share the caps
+            if self.used[name] >= CAPS[name]:
+                return Outcome(LIMIT_REACHED, True)
+            self.used[name] += 1
         try:
             if name == "web_search":
                 return self._search(args)
@@ -142,8 +151,7 @@ class Toolbox:
             return Outcome("search is not working right now", True, ("searching", "Searching the web…"))
         blocks = []
         for r in results:
-            self.allowed_urls.add(r.url)
-            self.links.add(r.url)
+            self.allow(r.url)  # stored normalised, as web_fetch compares it
             blocks.append(
                 {
                     "type": "search_result",
@@ -171,12 +179,14 @@ class Toolbox:
             page = self.fetcher(target)
         except web.FetchError as e:
             return Outcome(str(e), True, status)
-        self.links.add(page.url)
+        with self._lock:
+            self.links.add(page.url)
         if page.kind == "pdf":
             if not self.tool_docs:
                 return Outcome("I can't read PDFs from the web yet", True, status)
             title = page.title[:120]
-            self.titles[title] = "web"
+            with self._lock:
+                self.titles[title] = "web"
             pdf: dict[str, Any] = {
                 "type": "document",
                 "source": {
@@ -199,13 +209,17 @@ class Toolbox:
         return Outcome([block], False, status)
 
     def _doc(self, args: dict[str, Any]) -> Outcome:
-        doc_id = args.get("id")
-        if set(args) != {"id"} or not isinstance(doc_id, str):
+        doc_id, part = args.get("id"), args.get("part", 1)
+        if set(args) - {"id", "part"} or "id" not in args or not isinstance(doc_id, str):
             return Outcome('{"INVALID_JSON": "id must be a string"}', True)
-        text = read_section(doc_id, self.knowledge)
+        if not isinstance(part, int) or isinstance(part, bool) or part < 1:
+            return Outcome('{"INVALID_JSON": "part must be a whole number from 1"}', True)
         entry = self.knowledge.entry(doc_id)
-        if text is None or entry is None:
+        if entry is None:
             return Outcome("no library section with that id; pick one from the library index", True)
+        text = read_section(doc_id, self.knowledge, part=part)
+        if text is None:
+            return Outcome("that section has no such part", True)
         block = {
             "type": "search_result",
             "source": LIBRARY_SOURCE + doc_id,

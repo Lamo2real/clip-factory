@@ -13,6 +13,8 @@ export interface AskTurn {
   role: "user" | "assistant";
   text: string;
   files?: { name: string; format: string }[];
+  /** An answer's web sources, so a follow-up ("open that page you found") may fetch them again. */
+  sources?: { title: string; url: string }[];
 }
 
 export interface AskFileRef {
@@ -78,6 +80,10 @@ export function trimHistory(turns: readonly AskTurn[]): AskTurn[] {
   const cut = turns.map((t) => {
     const out: AskTurn = { role: t.role, text: t.text.slice(0, t.role === "user" ? USER_TURN_CHARS : ASSISTANT_TURN_CHARS) };
     if (t.role === "user" && t.files?.length) out.files = t.files.slice(0, 10).map((f) => ({ name: f.name.slice(0, 120), format: f.format.slice(0, 8) }));
+    if (t.role === "assistant" && t.sources?.length) {
+      const web = t.sources.filter((x) => /^https:\/\//.test(x.url) && x.url.length <= 2000).slice(0, 30);
+      if (web.length) out.sources = web.map((x) => ({ title: x.title.slice(0, 200), url: x.url }));
+    }
     return out;
   });
   let total = cut.reduce((n, t) => n + t.text.length, 0);

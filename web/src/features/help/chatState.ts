@@ -270,7 +270,8 @@ export function historyOf(entries: readonly Entry[]): HelpTurn[] {
   return turns.slice(-HISTORY_MAX);
 }
 
-/** The conversation for the assistant (§27): every turn as plain text, user turns with their files' names. The API
+/** The conversation for the assistant (§27): every turn as plain text, user turns with their files' names, answers
+ * with their web sources (so "open that page you found" can be fetched again). The API
  * keeps at most 90,000 characters (askApi.trimHistory drops the oldest). */
 export function askHistory(entries: readonly Entry[]): AskTurn[] {
   const turns: AskTurn[] = [];
@@ -281,7 +282,10 @@ export function askHistory(entries: readonly Entry[]): AskTurn[] {
     } else if (e.role === "assistant") {
       const steps = e.answer.steps.map((x, i) => `${i + 1}. ${x}`).join("\n");
       turns.push({ role: "assistant", text: steps ? `${e.answer.text}\n${steps}` : e.answer.text });
-    } else if (e.role === "ai" && e.answer.text) turns.push({ role: "assistant", text: e.answer.text });
+    } else if (e.role === "ai" && e.answer.text) {
+      const sources = e.answer.sources.flatMap((x) => (x.kind === "web" && x.url ? [{ title: x.title, url: x.url }] : []));
+      turns.push(sources.length ? { role: "assistant", text: e.answer.text, sources } : { role: "assistant", text: e.answer.text });
+    }
   }
   return turns;
 }

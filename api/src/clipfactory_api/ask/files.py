@@ -311,9 +311,9 @@ def read(name: str, kind: Kind, data: bytes, *, chars_left: int, b64_left: int) 
                 return Read(None, "damaged")
             text = decoded
         redacted = False
-        if ext in REDACT_EXT or kind == "text":
+        if ext in REDACT_EXT or kind in {"text", "office"}:
+            # Text and office files both pass the wide filter: a key pasted into a .docx is hidden too.
             cleaned, hit = redact(text)
-            # Only key-like files are always cleaned; other text files are cleaned too, but noted only when hit.
             text, redacted = cleaned, hit
         if not text.strip():
             return Read(None, "damaged")

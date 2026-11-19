@@ -87,11 +87,7 @@ export function AskBranch() {
           ) : (
             <ol className="ask-key__steps">
               <li>
-                Tap{" "}
-                <a className="text-link" href={SEARCH_KEY_URL} target="_blank" rel="noopener noreferrer">
-                  <strong>Get a search key</strong>
-                </a>
-                .
+                Tap <strong>Get a search key</strong> below.
               </li>
               <li>
                 Make a free account and pick the <strong>Search</strong> plan.
@@ -102,6 +98,13 @@ export function AskBranch() {
               </li>
             </ol>
           )}
+          {!webOn ? (
+            // The card's first step is a real button (a big target), not a link inside a sentence.
+            <a className="btn btn--glass ask-key__get" href={SEARCH_KEY_URL} target="_blank" rel="noopener noreferrer">
+              <Icon name="external" size={20} />
+              <span>Get a search key</span>
+            </a>
+          ) : null}
           {!webOn ? (
             <form className="ask-key__form" onSubmit={(e) => void save(e)}>
               <label className="ask-key__label" htmlFor={keyId}>

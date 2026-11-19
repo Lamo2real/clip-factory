@@ -30,7 +30,7 @@ import { addedText, carriedFiles, classify, COUNTER_FROM as ASK_COUNTER_FROM, FI
 import { MarkupEditor, type MarkupResult } from "./MarkupEditor.tsx";
 import { api } from "../../api/index.ts";
 import { Icon, type IconName } from "../../components/Icon.tsx";
-import { PaperPlaneButton, useLaunch } from "../../components/PaperPlane.tsx";
+import { Flight, PaperPlaneIcon, useLaunch } from "../../components/PaperPlane.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { ActGlyph, Button } from "../../components/ui.tsx";
 import { useMedia } from "../../lib/hooks.ts";
@@ -191,6 +191,8 @@ export function HelpPanel({
   const smart = assistant.on;
   const filesOn = smart && assistant.files;
   const [marking, setMarking] = useState<{ id: number; opener: HTMLElement | null } | null>(null);
+  const markingRef = useRef(false);
+  markingRef.current = marking !== null;
   const running = useRef<Running | null>(null);
   const askApiRef = useRef<Promise<AskApi> | null>(null);
   /** Server file ids → names, for "I couldn't read this one" notes (memory only). */
@@ -223,6 +225,9 @@ export function HelpPanel({
     const t = setTimeout(() => setStopReady(true), STOP_AFTER_MS);
     return () => clearTimeout(t);
   }, [state.streaming]);
+  // Send and Stop are one button that changes its icon and name, so keyboard focus never drops to the page when one
+  // turns into the other (WCAG 2.4.3).
+  const showStop = state.streaming !== null && stopReady;
 
   // The field grows with the question, up to four lines (CSS max-height), then scrolls.
   useLayoutEffect(() => {
@@ -378,13 +383,11 @@ export function HelpPanel({
         kind: f.kind,
         carried: i >= files.length,
       }));
-      let fileIds: Record<number, string> = {};
       dispatch({ type: "ai_start", id: aiId, askId: "pending" });
       const run = runAsk({ api, conn: adapter }, { question: q, history, context }, uploads, {
         onEvent: (ev) => gen === generation.current && dispatch({ type: "ai_event", entryId: aiId, event: ev }),
         onUpload: (id, fraction) => gen === generation.current && dispatch({ type: "upload", id, fraction }),
         onFileIds: (ids) => {
-          fileIds = ids;
           for (const u of uploads) if (ids[u.id]) fileNames.current.set(ids[u.id]!, u.name);
         },
       });
@@ -420,7 +423,6 @@ export function HelpPanel({
         case "upload_failed":
           dispatch({ type: "ai_end", entryId: aiId });
           sounds.play("deny");
-          for (const id of Object.values(fileIds)) void api.deleteFile(id);
           dispatch({ type: "notice", id: entryId(), tone: "info", text: UPLOAD_FAILED_TEXT });
           return giveBack();
         case "fallback": {
@@ -556,6 +558,7 @@ export function HelpPanel({
       let images = tray.filter((p) => p.busy || p.kind === "image").length;
       const pictures: { file: File; id: number }[] = [];
       let lastFormat = "";
+      const before = count;
       for (const file of files) {
         const c = classify(file);
         if ("refused" in c) {
@@ -590,7 +593,7 @@ export function HelpPanel({
         lastFormat = c.kind === "image" ? "IMAGE" : format;
         count++;
       }
-      if (lastFormat) setTrayNews(addedText(lastFormat, Math.min(FILES_MAX, count)));
+      if (lastFormat) setTrayNews(addedText(lastFormat, Math.min(FILES_MAX, count), count - before));
       if (error) {
         setNote(error.replace(/\*\*/g, ""));
         sounds.play("deny");
@@ -704,6 +707,7 @@ export function HelpPanel({
   function dragEnter(e: DragEvent<HTMLElement>) {
     if (!dragHasFiles(e.dataTransfer)) return;
     e.preventDefault();
+    if (markingRef.current) return; // the markup editor is open: nothing joins the hidden tray
     dragDepth.current++;
     setDropping(true);
   }
@@ -712,7 +716,7 @@ export function HelpPanel({
     if (!dragHasFiles(e.dataTransfer)) return;
     // Without this the webview would open the file instead of handing it to Ask.
     e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
+    e.dataTransfer.dropEffect = markingRef.current ? "none" : "copy";
   }
 
   function dragLeave(e: DragEvent<HTMLElement>) {
@@ -726,6 +730,7 @@ export function HelpPanel({
     e.preventDefault();
     dragDepth.current = 0;
     setDropping(false);
+    if (markingRef.current) return;
     void addFiles(filesFrom(e.dataTransfer));
   }
 
@@ -1284,20 +1289,23 @@ export function HelpPanel({
             onKeyDown={keys}
             aria-describedby={text.length >= counterFrom ? `${inputId}-count` : undefined}
           />
-          {streaming && stopReady ? (
-            <button type="submit" className="btn btn--sm btn--glass ask-stop" aria-label="Stop answer">
+          <button
+            type="submit"
+            className={showStop ? "btn btn--sm btn--glass ask-stop" : `btn btn--sm fly-btn btn--${mainTaken ? "action" : "primary"} help-panel__ask`}
+            aria-label={showStop ? "Stop answer" : blocked ? `Send, available in ${left} seconds` : "Send"}
+            aria-disabled={(!showStop && askOff) || undefined}
+            onClick={(e) => {
+              if (!showStop && askOff) e.preventDefault();
+            }}
+          >
+            {showStop ? (
               <Icon name="square" size={20} />
-            </button>
-          ) : (
-            <PaperPlaneButton
-              type="submit"
-              flight={flight}
-              tone={mainTaken ? "action" : "primary"}
-              className="help-panel__ask"
-              disabled={askOff}
-              aria-label={blocked ? `Send, available in ${left} seconds` : "Send"}
-            />
-          )}
+            ) : (
+              <Flight shot={flight.shot} mode={flight.mode}>
+                <PaperPlaneIcon />
+              </Flight>
+            )}
+          </button>
         </div>
         {text.length >= counterFrom ? (
           <span className="help-panel__count" id={`${inputId}-count`}>
@@ -1333,18 +1341,28 @@ export function HelpPanel({
             const opener = marking.opener;
             saveMarks(markItem.id, r);
             setMarking(null);
-            requestAnimationFrame(() => opener?.isConnected && opener.focus({ preventScroll: true }));
+            returnFocus(opener);
           }}
           onCancel={() => {
             const opener = marking.opener;
             setMarking(null);
-            requestAnimationFrame(() => opener?.isConnected && opener.focus({ preventScroll: true }));
+            returnFocus(opener);
           }}
         />
       ) : null}
       {viewer ? <PictureViewer pictures={viewer.pictures} start={viewer.start} opener={viewer.opener} onClose={() => setViewer(null)} /> : null}
     </section>
   );
+}
+
+/** Gives focus back to the tile that opened the markup editor. The editor's last frame (its inert page, a WebKit
+ * click that focused nothing) can still be settling, so it tries for a few frames until the tile holds focus. */
+function returnFocus(opener: HTMLElement | null, tries = 4) {
+  requestAnimationFrame(() => {
+    if (!opener?.isConnected) return;
+    opener.focus({ preventScroll: true });
+    if (document.activeElement !== opener && tries > 1) returnFocus(opener, tries - 1);
+  });
 }
 
 /** True when two boxes share any area. */

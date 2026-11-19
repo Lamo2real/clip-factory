@@ -103,8 +103,9 @@ export function pastedTextFile(text: string): File {
   return new File([text], "Pasted text.txt", { type: "text/plain" });
 }
 
-/** What a screen reader hears when a file is added. */
-export const addedText = (format: string, n: number) => `${format === "IMAGE" ? "Picture" : `${format} file`} added. ${n} of ${FILES_MAX}.`;
+/** What a screen reader hears when files are added: the format for one, the count for several ("3 files added"). */
+export const addedText = (format: string, n: number, added = 1) =>
+  `${added > 1 ? `${added} files` : format === "IMAGE" ? "Picture" : `${format} file`} added. ${n} of ${FILES_MAX}.`;
 
 /** One file in a question (sent or waiting), in memory only. */
 export interface AskFile {

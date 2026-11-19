@@ -16,8 +16,15 @@
     his own words, behind an SSRF guard.
   - *Transport*: `POST /v1/help/asks` returns 202 and starts `cf-prod-ask` asynchronously; the answer streams back as
     `ask.*` events over the existing WebSocket (its id learned with `whoami`). The §19 path stays as the fallback.
-  - *Files*: uploaded with presigned PUTs to `ask/{sub}/`, read once by the worker and deleted in its `finally`, with a
-    1-day lifecycle rule as a safety net.
+  - *Files*: uploaded with presigned PUTs to `ask/{sub}/`, read once by the worker and deleted as soon as they are in
+    memory (again in its `finally`); the API and the panel delete them when a question does not start; a 1-day
+    lifecycle rule is the safety net.
+  - *Review of 2026-11-19*: APP STATE (system weight) holds only enums, numbers, ids and Clip Factory's own words;
+    outside words go through a tool as data. The typed-question refusal is narrowed to asking for his own stored
+    values, and answers pass a narrow filter (high-confidence key shapes and his stored key) so general and Terraform
+    answers stay intact; the wide filter stays on the pack, APP STATE and files. Each fetch has one deadline inside the
+    answer's budget, tools run in parallel, a heartbeat keeps the panel's silence timer from firing, and the output
+    budget ends with a tool-free last round instead of a cut.
   - *Markup*: a client-only editor that saves one flattened JPEG in place of the picture; the original never leaves
     the device.
 - **Alternatives considered.** *Claude Fable 5.2*: not on Mantle, twice the price, long turns. *Converse with native

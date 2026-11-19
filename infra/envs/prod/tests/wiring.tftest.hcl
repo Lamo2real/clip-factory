@@ -264,4 +264,9 @@ run "ask_assistant_is_wired" {
     condition     = toset([for r in module.storage.media_lifecycle_rule_ids : r]) == toset(["uploads-14-days", "job-sources-14-days", "ask-1-day", "abort-incomplete-uploads"])
     error_message = "The media bucket keeps its rules and gains ask-1-day."
   }
+
+  assert {
+    condition     = local.ask_search_secret_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/ask/search-key-??????"
+    error_message = "The search key permission covers exactly cf-prod/ask/search-key plus the 6-character suffix Secrets Manager adds (no trailing *)."
+  }
 }

@@ -4,8 +4,10 @@ Started by ``POST /v1/help/asks`` with an async Invoke (retries 0, so an answer 
 ``ask.started`` → the owner's skills (no skills, no model call) → the knowledge pack → the web key state → the files
 (read, checked, turned into content blocks) → APP STATE → up to 8 streamed model iterations with read-only tools →
 ``ask.done``. Text deltas are batched (≥ 80 ms or 400 characters) and pass a 64-character secrets hold-back first. The
-answer stops on the owner's Stop (checked at most every 1.5 s), on a closed socket (``GoneException`` ends the model
-stream at once), or at the hard budget. The question's files are deleted in ``finally`` whatever happened.
+answer stops on the owner's Stop (checked at most every 1.5 s, and before every round of tools), on a closed socket
+(``GoneException`` ends the model stream at once), or at the hard budget. A status heartbeat goes out when nothing
+else was sent for 10 s, so the panel knows the answer is still alive. The question's files are deleted as soon as
+they are read into memory, and again in ``finally`` whatever happened.
 
 One ``help.ask`` log line per question with ids, counts, timings, token usage and the outcome; never the question,
 history, answer, file names or contents, URLs, search queries or the search key.
@@ -15,8 +17,10 @@ from __future__ import annotations
 
 import contextlib
 import os
+import threading
 import time
 from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,8 +40,12 @@ from .tools import Toolbox, typed_urls
 SOFT_S = 95.0
 HARD_S = 110.0
 MAX_ITERATIONS = 8
-MAX_TOKENS = 16_000
-OUTPUT_BUDGET = 24_000
+MAX_TOKENS = 64_000  # per iteration (streaming); thinking counts too
+OUTPUT_BUDGET = 64_000  # per answer: past 80 % the next round is the last one, with no tools
+FINAL_ROUND_AT = 0.8
+MIN_ROUND_TOKENS = 4_000
+HEARTBEAT_S = 10.0
+TOOL_WORKERS = 6
 INPUT_BUDGET = 400_000
 STOP_CHECK_S = 1.5
 DELTA_MS = 80
@@ -45,6 +53,7 @@ DELTA_CHARS = 400
 STOP_SK = "ASK#STOP#"
 REFUSED_TEXT = "I can't help with that one."
 BUDGET_TEXT = "\n\nI ran out of time. Ask me to go on."
+LENGTH_TEXT = "\n\nThat was a long answer, so I stopped there. Ask me to go on."
 CUT_TEXT = "\n\nThe answer was cut short. Ask me to go on."
 REDACTED_NOTE = "\n\nI hid things that looked like keys."
 STATUS_FOR_TOOL = {
@@ -85,11 +94,12 @@ class WorkerDeps:
     fetcher: Callable[[str], Page] | None = None
     knowledge: Callable[[], Knowledge] | None = None
     builtins: Callable[[], Any] | None = None
-    route_ok: Callable[[str], bool] = lambda _to: True
+    route_ok: Callable[[str], bool] | None = None  # None: the knowledge pack's routes (router.ts)
     clock: Clock = utcnow
     monotonic: Callable[[], float] = time.monotonic
     soft_s: float = SOFT_S
     hard_s: float = HARD_S
+    heartbeat_s: float = HEARTBEAT_S
 
 
 @dataclass
@@ -104,17 +114,25 @@ class Sender:
     sent_text: bool = False
     first_text_at: float | None = None
     holdback: Holdback = field(default_factory=Holdback)
+    gone: bool = False
+    last_sent: float = field(default_factory=time.monotonic)
     _buffer: str = ""
     _last_flush: float = 0.0
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def send(self, event: dict[str, Any]) -> None:
+        if self.gone:
+            raise AskGone
         message = {**event, "askId": self.ask_id}
-        try:
-            self.management.post_to_connection(ConnectionId=self.connection_id, Data=encode(message))
-        except Exception as e:
-            if is_gone(e):
-                raise AskGone from None
-            log("warning", "ask.post_failed", error=type(e).__name__)
+        with self._lock:
+            try:
+                self.management.post_to_connection(ConnectionId=self.connection_id, Data=encode(message))
+                self.last_sent = time.monotonic()
+            except Exception as e:
+                if is_gone(e):
+                    self.gone = True
+                    raise AskGone from None
+                log("warning", "ask.post_failed", error=type(e).__name__)
 
     def text(self, chunk: str) -> None:
         self._buffer += self.holdback.push(chunk)
@@ -136,6 +154,35 @@ class Sender:
     def finish_text(self) -> None:
         self._buffer += self.holdback.flush()
         self._flush(self.monotonic())
+
+
+class Heartbeat:
+    """Sends a status event when nothing else went out for ``every`` seconds (a long think, a big PDF, slow tools),
+    so the panel's 45 s silence timer never fires on an answer that is still alive."""
+
+    def __init__(self, sender: Sender, every: float) -> None:
+        self._sender = sender
+        self._every = every
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="ask-heartbeat", daemon=True)
+
+    def __enter__(self) -> Heartbeat:
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self._stop.set()
+        self._thread.join(timeout=1)
+
+    def _run(self) -> None:
+        tick = min(1.0, self._every / 4)
+        while not self._stop.wait(tick):
+            if time.monotonic() - self._sender.last_sent < self._every:
+                continue
+            try:
+                self._sender.send({"type": "ask.status", "kind": "thinking", "label": "Still working…"})
+            except AskGone:
+                return  # the main loop sees ``sender.gone`` at its next check
 
 
 @dataclass
@@ -170,6 +217,13 @@ def _turns(history: Any) -> list[dict[str, Any]]:
         ]
         if names:
             text = (text + "\n" if text else "") + "[Files he attached: " + ", ".join(names) + "]"
+        sources = [
+            f"[{i}] {str(src.get('title') or '')[:200]} {src['url']}"
+            for i, src in enumerate(turn.get("sources") or [], 1)
+            if turn["role"] == "assistant" and isinstance(src, dict) and isinstance(src.get("url"), str)
+        ]
+        if sources:
+            text += "\n\nSources of that answer:\n" + "\n".join(sources)
         if not text.strip():
             continue
         if not out and turn["role"] == "assistant":
@@ -180,6 +234,17 @@ def _turns(history: Any) -> list[dict[str, Any]]:
 
 def _model_label(model: str) -> str:
     return "opus-4-8" if "opus-4-8" in model else "opus-5-5"
+
+
+def history_urls(history: list[Any]) -> list[str]:
+    """Source URLs of earlier answers (sent back by the panel), so "open that page you found" can be fetched."""
+    out = []
+    for turn in history:
+        if isinstance(turn, dict) and turn.get("role") == "assistant":
+            for src in turn.get("sources") or []:
+                if isinstance(src, dict) and isinstance(src.get("url"), str):
+                    out.append(src["url"])
+    return out
 
 
 # --- the answer ---------------------------------------------------------------------------------------------
@@ -209,9 +274,20 @@ def answer(deps: WorkerDeps, payload: Mapping[str, Any]) -> Record:
             return record
         sender.send({"type": "ask.started"})
         sender.send({"type": "ask.status", "kind": "thinking", "label": "Thinking…"})
-        knowledge_version = _run(
-            deps, sender, record, tools_used, sub=sub, ask_id=ask_id, body=body, flags=flags, refs=refs, started=started
-        )
+        with Heartbeat(sender, deps.heartbeat_s):
+            knowledge_version = _run(
+                deps,
+                sender,
+                record,
+                tools_used,
+                sub=sub,
+                ask_id=ask_id,
+                body=body,
+                flags=flags,
+                refs=refs,
+                keys=keys,
+                started=started,
+            )
     except AskGone:
         record.outcome, record.stop = "ask_gone", "stopped"
     except Exception as e:
@@ -227,11 +303,7 @@ def answer(deps: WorkerDeps, payload: Mapping[str, Any]) -> Record:
         except AskGone:
             pass
     finally:
-        for key in keys:
-            try:
-                deps.media.delete(key)
-            except Exception as e:
-                log("warning", "ask.file_delete_failed", error=type(e).__name__)
+        _delete(deps, keys)  # again: every exit path (end, stop, gone, error), whatever was deleted before
         first = sender.first_text_at
         fields: dict[str, LogValue] = {
             "requestId": str(payload.get("requestId") or ""),
@@ -275,6 +347,7 @@ def _run(
     body: Mapping[str, Any],
     flags: Mapping[str, Any],
     refs: list[dict[str, Any]],
+    keys: list[str],
     started: float,
 ) -> str:
     """Prepares the question (skills, knowledge, web, files, APP STATE), runs the model loop and sends ask.done.
@@ -292,6 +365,7 @@ def _run(
         return ""
     knowledge = (deps.knowledge or knowledge_mod.load)()
     key = _web_key(deps, record, flags)
+    sender.holdback.secret(key)  # his stored search key is never shown, whatever the model writes
     files_on = flags.get("files", True) is not False
     file_blocks: list[dict[str, Any]] = []
     file_notes: list[str] = []
@@ -299,6 +373,7 @@ def _run(
     if refs:
         sender.send({"type": "ask.status", "kind": "reading_files", "label": "Reading your files…"})
         file_blocks, file_notes, results, redacted = _read_files(deps, record, sub, refs, enabled=files_on)
+        _delete(deps, keys)  # the bytes are in memory now: nothing waits in S3 while the model thinks
         sender.send({"type": "ask.files", "files": results})
         if redacted:
             file_notes.append("Some parts that looked like keys were hidden before you saw the files.")
@@ -311,7 +386,7 @@ def _run(
         *(str(t.get("text") or "") for t in history if isinstance(t, dict) and t.get("role") == "user"),
     ]
     sender.send({"type": "ask.status", "kind": "checking_app", "label": "Checking your setup…"})
-    reader = Reader(deps.store, deps.media, sub, deps.clock())
+    reader = Reader(deps.store, deps.media, sub, deps.clock(), steps=knowledge.setup_steps)
     raw_context = body.get("context")
     context: dict[str, Any] = raw_context if isinstance(raw_context, dict) else {}
     state = reader.app_state(
@@ -331,10 +406,10 @@ def _run(
             reader=reader,
             search_key=key,
             provider=deps.provider if record.web == "on" else None,
-            fetcher=deps.fetcher or _default_fetch,
-            allowed_urls=typed_urls(user_texts),
+            fetcher=deps.fetcher or _budget_fetch(lambda: deps.hard_s - (deps.monotonic() - started)),
+            allowed_urls=typed_urls([*user_texts, " ".join(history_urls(history))]),
             on_actions=lambda actions: sender.send({"type": "ask.actions", "actions": actions}),
-            route_ok=deps.route_ok,
+            route_ok=deps.route_ok or knowledge.route_ok,
             soft_deadline=lambda: deps.monotonic() - started >= deps.soft_s,
             tool_docs=deps.tool_docs,
         ),
@@ -342,22 +417,8 @@ def _run(
     for name in (str(r.get("name") or "") for r in refs):
         loop.toolbox.titles[name[: askfiles.NAME_MAX]] = "file"
     stop = loop.run(skills, knowledge)
-    if stop is None:  # the model failed; the loop already told the owner
-        return knowledge.version
-    if stop == "refused" and not sender.sent_text:
-        sender.text(REFUSED_TEXT)
-    if stop == "budget":
-        sender.text(BUDGET_TEXT)
-    sender.finish_text()
-    if redacted or sender.holdback.hit:
-        sender.text(REDACTED_NOTE)
-        sender.finish_text()
-    done: dict[str, Any] = {"type": "ask.done", "stop": stop, "links": sorted(loop.toolbox.links)}
-    if record.web == "no_key":
-        done["webMissing"] = True
-    sender.send(done)
-    record.stop = stop
-    record.outcome = {"end": "ask_ok", "budget": "ask_budget", "stopped": "ask_stopped", "refused": "ask_refused"}[stop]
+    if stop is not None:  # None: the model failed and the loop already told the owner
+        _finish(sender, record, loop.toolbox, stop, redacted=redacted)
     return knowledge.version
 
 
@@ -380,7 +441,9 @@ class _Loop:
         return self.deps.monotonic() - self.started
 
     def check(self, now_s: float, *, force: bool = False) -> None:
-        """The hard budget, then the owner's Stop item (read at most every 1.5 s)."""
+        """A closed socket, the hard budget, then the owner's Stop item (read at most every 1.5 s)."""
+        if self.sender.gone:
+            raise AskGone
         if now_s - self.started >= self.deps.hard_s:
             raise _Abort("budget")
         if force or now_s - self._last_check >= STOP_CHECK_S:
@@ -389,12 +452,12 @@ class _Loop:
                 raise _Abort("stopped")
 
     def run(self, skills: Any, knowledge: Knowledge) -> str | None:
-        """The stop reason ("end", "budget", "stopped", "refused"), or None when the model failed."""
+        """The stop reason ("end", "budget", "length", "stopped", "refused"), or None when the model failed."""
         from .. import learn
 
         deps, record = self.deps, self.record
         tool_list = prompt.tools(web_search=record.web == "on", eager=deps.eager)
-        system = prompt.system_blocks(knowledge)
+        system = prompt.system_blocks(knowledge, deps.model_id)
         client = deps.mantle()
         docs_retry = False
         try:
@@ -412,6 +475,7 @@ class _Loop:
                         record.iterations >= MAX_ITERATIONS
                         or self.elapsed() >= deps.soft_s
                         or record.usage_in + record.cache_write > INPUT_BUDGET
+                        or record.usage_out >= OUTPUT_BUDGET * FINAL_ROUND_AT
                     )
                     try:
                         final = _stream_once(
@@ -426,6 +490,7 @@ class _Loop:
                             messages=self.messages,
                             tools=tool_list,
                             tool_choice={"type": "none"} if final_round else None,
+                            max_tokens=max(MIN_ROUND_TOKENS, min(MAX_TOKENS, OUTPUT_BUDGET - record.usage_out)),
                             timeout=max(5.0, deps.hard_s - self.elapsed()),
                         )
                     except (AskGone, _Abort):
@@ -446,17 +511,50 @@ class _Loop:
                     if reason == "pause_turn":
                         self.messages.append({"role": "assistant", "content": content})
                         continue
-                    if record.usage_out >= OUTPUT_BUDGET:
-                        return "budget"
+                    if reason == "max_tokens":
+                        return "length"  # cut at the output limit: say so, never run a half-written tool call
                     uses = [b for b in content if getattr(b, "type", "") == "tool_use"]
                     if not uses or reason != "tool_use":
                         return "end"
+                    if final_round:  # tools were off this round; a tool call here can't be answered
+                        return "budget" if self.elapsed() >= deps.soft_s else "length"
+                    self.check(deps.monotonic(), force=True)  # Stop and the hard budget before the tools run
                     self.messages.append({"role": "assistant", "content": content})
                     self.messages.append(
-                        {"role": "user", "content": _run_tools(uses, self.toolbox, self.sender, self.tools_used)}
+                        {
+                            "role": "user",
+                            "content": _run_tools(
+                                uses,
+                                self.toolbox,
+                                self.sender,
+                                self.tools_used,
+                                time_left=lambda: deps.hard_s - self.elapsed(),
+                            ),
+                        }
                     )
         except _Abort as a:
             return a.stop
+
+
+def _finish(sender: Sender, record: Record, toolbox: Toolbox, stop: str, *, redacted: bool) -> None:
+    """The closing words for the stop reason, the hidden-keys note, and ``ask.done``."""
+    if stop == "refused" and not sender.sent_text:
+        sender.text(REFUSED_TEXT)
+    if stop == "budget":
+        sender.text(BUDGET_TEXT)
+    if stop == "length":
+        sender.text(LENGTH_TEXT)
+        stop = "budget"
+    sender.finish_text()
+    if redacted or sender.holdback.hit:
+        sender.text(REDACTED_NOTE)
+        sender.finish_text()
+    done: dict[str, Any] = {"type": "ask.done", "stop": stop, "links": sorted(toolbox.links)}
+    if record.web == "no_key":
+        done["webMissing"] = True
+    sender.send(done)
+    record.stop = stop
+    record.outcome = {"end": "ask_ok", "budget": "ask_budget", "stopped": "ask_stopped", "refused": "ask_refused"}[stop]
 
 
 def _web_key(deps: WorkerDeps, record: Record, flags: Mapping[str, Any]) -> str | None:
@@ -467,7 +565,8 @@ def _web_key(deps: WorkerDeps, record: Record, flags: Mapping[str, Any]) -> str 
     try:
         key = deps.key_reader.get() if deps.key_reader is not None else None
     except SearchError:
-        key = None
+        record.web = "error"  # a key may be saved but could not be read: never tell him to set it up again
+        return None
     record.web = "on" if key and deps.provider is not None else "no_key"
     return key
 
@@ -515,13 +614,41 @@ def _count_usage(record: Record, final: Any, model_id: str) -> None:
     record.model = _model_label(str(getattr(final, "model", "") or model_id))
 
 
-def _run_tools(uses: list[Any], toolbox: Toolbox, sender: Sender, tools_used: dict[str, int]) -> list[dict[str, Any]]:
-    """Every tool_use of one turn answered in one user message (parallel calls stay parallel)."""
+def _run_tools(
+    uses: list[Any],
+    toolbox: Toolbox,
+    sender: Sender,
+    tools_used: dict[str, int],
+    *,
+    time_left: Callable[[], float] = lambda: HARD_S,
+) -> list[dict[str, Any]]:
+    """Every tool_use of one turn answered in one user message. The calls run at the same time (each with its own
+    deadline inside the answer's budget); ``show_app_buttons`` runs on this thread, in order, as it sends events.
+    A call still running when the budget ends is answered "took too long"."""
+    from .tools import Outcome
+
+    outcomes: dict[int, Outcome] = {}
+    parallel: dict[int, Any] = {}
+    pool = ThreadPoolExecutor(max_workers=TOOL_WORKERS, thread_name_prefix="ask-tool")
+    try:
+        for i, block in enumerate(uses):
+            name = str(getattr(block, "name", ""))
+            tools_used[name] = tools_used.get(name, 0) + 1
+            if name == "show_app_buttons":
+                outcomes[i] = toolbox.run(name, getattr(block, "input", None))
+            else:
+                parallel[i] = pool.submit(toolbox.run, name, getattr(block, "input", None))
+        wait(parallel.values(), timeout=max(0.0, time_left()))
+        for i, future in parallel.items():
+            if future.done():
+                outcomes[i] = future.result()  # Toolbox.run never raises
+            else:
+                outcomes[i] = Outcome("that took too long, answer with what you have", True)
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
     results = []
-    for block in uses:
-        name = str(getattr(block, "name", ""))
-        tools_used[name] = tools_used.get(name, 0) + 1
-        outcome = toolbox.run(name, getattr(block, "input", None))
+    for i, block in enumerate(uses):
+        outcome = outcomes[i]
         if outcome.status is not None:
             sender.send({"type": "ask.status", "kind": outcome.status[0], "label": outcome.status[1]})
         result: dict[str, Any] = {
@@ -549,6 +676,7 @@ def _stream_once(
     tools: list[dict[str, Any]],
     tool_choice: dict[str, Any] | None,
     timeout: float,
+    max_tokens: int = MAX_TOKENS,
 ) -> Any:
     citations: dict[int, list[Any]] = {}
     kinds: dict[int, str] = {}
@@ -559,7 +687,7 @@ def _stream_once(
         system=system,
         messages=messages,
         tools=tools,
-        max_tokens=MAX_TOKENS,
+        max_tokens=max_tokens,
         effort=deps.effort,
         tool_choice=tool_choice,
         timeout=timeout,
@@ -657,10 +785,26 @@ def _read_files(
     return blocks, notes, results, redacted
 
 
-def _default_fetch(url: str) -> Page:
-    from .fetch import fetch
+def _budget_fetch(time_left: Callable[[], float]) -> Callable[[str], Page]:
+    """``web_fetch`` with one deadline that never runs past the answer's hard budget."""
 
-    return fetch(url)
+    def run(url: str) -> Page:
+        from .fetch import FetchError, fetch
+
+        left = time_left() - 2.0  # keep time to finish the answer
+        if left <= 0.5:
+            raise FetchError("time is up, answer with what you have")
+        return fetch(url, budget=left)
+
+    return run
+
+
+def _delete(deps: WorkerDeps, keys: list[str]) -> None:
+    for key in keys:
+        try:
+            deps.media.delete(key)
+        except Exception as e:
+            log("warning", "ask.file_delete_failed", error=type(e).__name__)
 
 
 # --- the Lambda --------------------------------------------------------------------------------------------------

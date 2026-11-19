@@ -3,11 +3,13 @@
 ``POST /v1/help/asks`` checks the question and starts ``cf-prod-ask`` with an async Invoke; the answer streams back
 over the owner's WebSocket. Order of work: JWT (as every route) → kill switch (``assistant``) → parse (≤ 200 KB) →
 the connection is the owner's → rate limit (the §19.6 item, plus ≤ 400 a day) → the secrets refusal on the typed
-words (no model call, its files deleted) → Invoke. The question, history and file names are never logged.
+words (no model call) → Invoke. Once the body parsed, the question's uploaded files are deleted on every exit except
+a started answer (the worker deletes those). The question, history and file names are never logged.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from typing import Any
@@ -24,6 +26,7 @@ USER_TURN_CHARS = 4000
 ASSISTANT_TURN_CHARS = 12_000
 HISTORY_CHARS = 90_000
 HISTORY_TURNS = 60
+SOURCES_PER_TURN = 30
 UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 CONNECTION_ID = re.compile(r"^[A-Za-z0-9=_+/-]{4,128}$")
 MIME = re.compile(r"^[a-z0-9][a-z0-9.+-]{0,40}/[a-z0-9][a-z0-9.+-]{0,60}$")
@@ -187,7 +190,7 @@ def _history(raw: Any) -> list[dict[str, Any]]:
         raise _bad()
     out, total = [], 0
     for turn in raw:
-        if not isinstance(turn, dict) or not {"role", "text"} <= set(turn) <= {"role", "text", "files"}:
+        if not isinstance(turn, dict) or not {"role", "text"} <= set(turn) <= {"role", "text", "files", "sources"}:
             raise _bad()
         role, text = turn["role"], turn["text"]
         if role not in {"user", "assistant"} or not isinstance(text, str):
@@ -207,10 +210,28 @@ def _history(raw: Any) -> list[dict[str, Any]]:
                     raise _bad()
                 names.append({"name": f["name"][:120], "format": f["format"][:8]})
             kept["files"] = names
+        sources = turn.get("sources")
+        if sources is not None:
+            kept["sources"] = _sources(role, sources)
         total += len(text)
         out.append(kept)
     if total > HISTORY_CHARS:
         raise _bad()
+    return out
+
+
+def _sources(role: str, raw: Any) -> list[dict[str, str]]:
+    """An earlier answer's web sources ({title, url}), so a follow-up can open "that page you found" again."""
+    if role != "assistant" or not isinstance(raw, list) or len(raw) > SOURCES_PER_TURN:
+        raise _bad()
+    out = []
+    for src in raw:
+        if not isinstance(src, dict) or set(src) != {"title", "url"}:
+            raise _bad()
+        title, url = src["title"], src["url"]
+        if not isinstance(title, str) or not isinstance(url, str) or len(url) > 2000 or not url.startswith("https://"):
+            raise _bad()
+        out.append({"title": title[:200], "url": url})
     return out
 
 
@@ -295,15 +316,24 @@ def start(app: App, req: Request) -> Response:
         log("info", "help.ask_start", requestId=req.request_id, **record)
 
 
-def _start(app: App, req: Request, record: dict[str, LogValue]) -> Response:
+def _drop_files(app: App, user_id: str, files: list[dict[str, Any]]) -> None:
+    """Best effort: the question's uploaded files when no answer will read them."""
     from ..ask import files as askfiles
-    from ..ask.redact import REFUSED_ANSWER, refused
-    from ..help import guard
 
+    for f in files:
+        try:
+            app.media.delete(askfiles.file_key(user_id, f["fileId"]))
+        except Exception as e:
+            log("warning", "help.file_delete_failed", error=type(e).__name__)
+
+
+def _start(app: App, req: Request, record: dict[str, LogValue]) -> Response:
     try:
         switch = _switch(app)
     except ApiError as e:
         record["outcome"] = "ask_off" if e.status == 403 else "ask_error"
+        with contextlib.suppress(ApiError):  # Ask is off: still take away any files the panel uploaded
+            _drop_files(app, req.user_id, _parse(req)["files"])
         raise
     try:
         body = _parse(req)
@@ -312,6 +342,20 @@ def _start(app: App, req: Request, record: dict[str, LogValue]) -> Response:
         raise
     record["askId"] = body["askId"]
     record["files"] = len(body["files"])
+    started = False
+    try:
+        response = _start_parsed(app, req, record, switch, body)
+        started = response.status == 202
+        return response
+    finally:
+        if not started:
+            _drop_files(app, req.user_id, body["files"])
+
+
+def _start_parsed(app: App, req: Request, record: dict[str, LogValue], switch: Any, body: dict[str, Any]) -> Response:
+    from ..ask.redact import REFUSED_ANSWER, refused
+    from ..help import guard
+
     try:
         conn = app.store.get(db.user_pk(req.user_id), db.conn_sk(body["connectionId"]))
     except Exception:
@@ -341,11 +385,6 @@ def _start(app: App, req: Request, record: dict[str, LogValue]) -> Response:
         )
     if body["question"] and refused(body["question"]):
         record["outcome"] = "ask_refused_secret"
-        for f in body["files"]:
-            try:
-                app.media.delete(askfiles.file_key(req.user_id, f["fileId"]))
-            except Exception as e:
-                log("warning", "help.file_delete_failed", error=type(e).__name__)
         return ok({"askId": body["askId"], "refused": True, "text": REFUSED_ANSWER})
     payload = {
         "askId": body["askId"],

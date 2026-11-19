@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+import urllib.parse
+from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -18,8 +19,14 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 PACK = HERE / "knowledge.json"
 LIBRARY = HERE / "library"
-MAX_DOC_CHARS = 30_000
+MAX_DOC_CHARS = 30_000  # one part of a library section; a longer section is read in parts
 LIBRARY_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,80}$")
+
+
+# Pages with an id in the path (a job, a clip, a skill): their own pattern, as in router.ts.
+_DYNAMIC = re.compile(
+    r"^/(?:jobs/[A-Za-z0-9_-]{1,64}|clips/[A-Za-z0-9_-]{1,64}|settings/clip-making/skills/[A-Za-z0-9_-]{1,80}(?:/edit)?)$"
+)
 
 
 class KnowledgeError(Exception):
@@ -32,6 +39,10 @@ class LibraryEntry:
     title: str
     line: str
     chars: int
+
+    @property
+    def long(self) -> bool:
+        return self.chars > MAX_DOC_CHARS
 
 
 @dataclass(frozen=True)
@@ -54,9 +65,20 @@ class Knowledge:
     text: str  # the system block: every part, in order
     library: tuple[LibraryEntry, ...]
     actions: dict[str, Action]  # the only buttons Ask may show (from the app map)
+    setup_steps: dict[str, list[dict[str, Any]]] = field(default_factory=dict)  # per platform, in guide order
+    routes: frozenset[str] = frozenset()  # every page of the app (web/src/lib/router.ts), from the generator
 
     def entry(self, doc_id: str) -> LibraryEntry | None:
         return next((e for e in self.library if e.id == doc_id), None)
+
+    def route_ok(self, to: str) -> bool:
+        """The server side of web/src/features/help/kb.ts ``routeOk``: an in-app path to a real page."""
+        if not to.startswith("/") or to.startswith("//"):
+            return False
+        path = urllib.parse.urlsplit(to).path.rstrip("/") or "/"
+        if not self.routes:
+            return True  # an older pack without routes: the panel's own check still filters
+        return path in self.routes or bool(_DYNAMIC.match(path))
 
 
 def parse(raw: Any) -> Knowledge:
@@ -76,7 +98,10 @@ def parse(raw: Any) -> Knowledge:
                 str(row["id"]), str(row.get("title") or ""), str(row.get("line") or ""), int(row.get("chars") or 0)
             )
         )
-    index = "\n".join(f"{e.id} · {e.title} · {e.line}" for e in library)
+    index = "\n".join(
+        f"{e.id} · {e.title} · {e.line}" + (" · long: read it in parts (part 1, 2, …)" if e.long else "")
+        for e in library
+    )
     parts.append(
         '<knowledge part="library" title="Library index (read a section with read_app_doc)">\n'
         + index
@@ -88,7 +113,16 @@ def parse(raw: Any) -> Knowledge:
             light = tuple(str(h) for h in a.get("highlight") or [] if isinstance(h, str))
             actions[a["id"]] = Action(a["id"], a["label"], a["to"], light)
     text = f'<clip_factory_knowledge version="{raw["version"]}">\n' + "\n\n".join(parts) + "\n</clip_factory_knowledge>"
-    return Knowledge(raw["version"], text, tuple(library), actions)
+    steps_raw = raw.get("setupSteps")
+    if not isinstance(steps_raw, dict):
+        steps_raw = {}
+    steps = {
+        str(p): [dict(s) for s in rows if isinstance(s, dict)]
+        for p, rows in steps_raw.items()
+        if isinstance(rows, list)
+    }
+    routes = frozenset(str(r) for r in raw.get("routes") or [] if isinstance(r, str))
+    return Knowledge(raw["version"], text, tuple(library), actions, steps, routes)
 
 
 @cache
@@ -100,8 +134,21 @@ def load(path: Path = PACK) -> Knowledge:
     return parse(raw)
 
 
-def read_section(doc_id: str, knowledge: Knowledge, library_dir: Path = LIBRARY) -> str | None:
-    """One library section (≤ 30,000 characters), or None for an id that is not in the index."""
+def chunks(text: str, size: int = MAX_DOC_CHARS) -> list[str]:
+    """The text in parts of at most ``size`` characters, cut at a line break where one is near."""
+    out = []
+    while len(text) > size:
+        cut = text.rfind("\n", size // 2, size)
+        cut = cut + 1 if cut > 0 else size
+        out.append(text[:cut])
+        text = text[cut:]
+    out.append(text)
+    return out
+
+
+def read_section(doc_id: str, knowledge: Knowledge, library_dir: Path = LIBRARY, part: int = 1) -> str | None:
+    """One part (≤ 30,000 characters) of a library section, with "(part N of M)" when it has more than one; None for
+    an id that is not in the index or a part past the end."""
     if not LIBRARY_ID.match(doc_id) or knowledge.entry(doc_id) is None:
         return None
     path = library_dir / f"{doc_id}.md"
@@ -109,4 +156,10 @@ def read_section(doc_id: str, knowledge: Knowledge, library_dir: Path = LIBRARY)
         text = path.read_text(encoding="utf-8")
     except OSError:
         return None
-    return text[:MAX_DOC_CHARS]
+    pieces = chunks(text)
+    if not 1 <= part <= len(pieces):
+        return None
+    if len(pieces) == 1:
+        return pieces[0]
+    more = f" Read part {part + 1} for more." if part < len(pieces) else ""
+    return f"(part {part} of {len(pieces)}.{more})\n" + pieces[part - 1]
