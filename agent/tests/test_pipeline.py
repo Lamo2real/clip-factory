@@ -284,7 +284,7 @@ class World:
         }
 
     def patch(self, mp: pytest.MonkeyPatch) -> None:
-        async def video_info(url: str, cookies: Any = None) -> dict[str, Any]:
+        async def video_info(url: str, cookies: Any = None, **kw: Any) -> dict[str, Any]:
             return self.info
 
         async def download_audio(url: str, dest: Path, **kw: Any) -> Path:

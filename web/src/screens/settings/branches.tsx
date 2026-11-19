@@ -12,6 +12,7 @@ import { useToast } from "../../components/Toasts.tsx";
 import { A, ActGlyph, Button, LinkButton, Pill, Segmented, Skeleton, Stepper } from "../../components/ui.tsx";
 import { Glide } from "../../components/Glide.tsx";
 import { Icon } from "../../components/Icon.tsx";
+import { checkCookies, COOKIES_STEPS, COOKIES_TIP, COOKIES_WORDS } from "../../lib/cookiesFile.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 import { useAction } from "../../lib/motion.ts";
 import { setPrefs, shrinkImage, usePrefs } from "../../lib/prefs.ts";
@@ -125,6 +126,7 @@ export function YoutubeBranch() {
   // Kept here, not on the button: the button goes while the Undo is up, and comes back rewinding on Undo.
   const removeAct = useAction("delete");
   const hasCookies = (me?.settings.hasYoutubeCookies ?? false) && !removing;
+  const guideId = useId();
 
   async function uploadCookies(f: File) {
     pick.play();
@@ -132,12 +134,19 @@ export function YoutubeBranch() {
       pick.fail({ sound: false });
       return toast.error("That file is too big to be cookies.txt. Export cookies.txt again and pick that file.");
     }
+    // Checked here, in the browser, before upload (§29.6); the text is never logged or kept.
+    const verdict = checkCookies(await f.text(), Date.now() / 1000);
+    if (verdict !== "ok") {
+      pick.fail({ sound: false });
+      if (file.current) file.current.value = "";
+      return toast.error(COOKIES_WORDS[verdict]);
+    }
     setBusy(true);
     try {
       const up = await api().createCookiesUpload(f.name);
       await putFile(up, f);
       await refresh();
-      toast.success("YouTube cookies saved. Retry any job YouTube blocked.");
+      toast.success("YouTube cookies saved. Tap Try again on any job YouTube stopped.");
     } catch (e) {
       pick.fail({ sound: false });
       toast.error(friendlyMessage(e));
@@ -190,6 +199,17 @@ export function YoutubeBranch() {
         </div>
       </Apple>
       {hasCookies ? <p className="apple-panel__note">They are only used to download YouTube videos.</p> : null}
+      <section className="cookie-guide" aria-labelledby={guideId}>
+        <h3 className="cookie-guide__title" id={guideId}>
+          How to get cookies
+        </h3>
+        <ol className="cookie-guide__steps">
+          {COOKIES_STEPS.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+        <p className="cookie-guide__tip">{COOKIES_TIP}</p>
+      </section>
     </Panel>
   );
 }

@@ -144,8 +144,8 @@ export const TREES: Tree[] = [
           {
             id: "youtube-cookies",
             name: "YouTube cookies",
-            leaf: "You can skip this. Add them only if YouTube blocks a video.",
-            words: ["cookies.txt", "blocked", "download"],
+            leaf: "You can skip this. Add them only if YouTube blocks a video. Export them from a private window, then close it.",
+            words: ["cookies.txt", "blocked", "download", "private window", "incognito", "expired", "get cookies.txt locally", "ran out"],
           },
         ],
       },

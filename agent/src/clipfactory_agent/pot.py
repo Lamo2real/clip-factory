@@ -1,0 +1,215 @@
+"""The PO token sidecar (docs/CONTRACTS.md §29.2): bgutil-ytdlp-pot-provider's HTTP server, run with the image's
+Deno on 127.0.0.1:4416, so yt-dlp's ``web`` and ``mweb`` YouTube clients get the token YouTube wants from cloud IPs.
+
+The server only listens on loopback and gets no write permission. If it stops, a supervisor starts it again with a
+growing pause; while it is down yt-dlp falls back to the plugin's script mode by itself (``CF_POT_HOME``). ``CF_POT=off``
+starts nothing (tests, or an emergency)."""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import os
+from collections.abc import Mapping
+from pathlib import Path
+
+from .util import log
+
+HOST = "127.0.0.1"
+PORT = 4416
+MAX_BACKOFF = 60.0
+
+
+def command(home: Path, deno: str = "deno") -> list[str]:
+    modules = home / "node_modules"
+    return [
+        deno,
+        "run",
+        "--allow-env",
+        "--allow-net",
+        f"--allow-ffi={modules}",
+        f"--allow-read={modules}",
+        str(home / "src" / "main.ts"),
+        "--host",
+        HOST,
+        "--port",
+        str(PORT),
+    ]
+
+
+async def ping(within: float = 2.0) -> bool:
+    """True when the server answers GET /ping."""
+    try:
+        reader, writer = await asyncio.wait_for(asyncio.open_connection(HOST, PORT), within)
+    except (OSError, TimeoutError):
+        return False
+    try:
+        writer.write(f"GET /ping HTTP/1.0\r\nHost: {HOST}\r\n\r\n".encode())
+        await writer.drain()
+        head = await asyncio.wait_for(reader.readline(), within)
+        return b" 200 " in head
+    except (OSError, TimeoutError):
+        return False
+    finally:
+        writer.close()
+        with contextlib.suppress(Exception):
+            await writer.wait_closed()
+
+
+class PotServer:
+    def __init__(self, home: Path, deno: str = "deno", backoff: float = 1.0) -> None:
+        self.home = home
+        self.deno = deno
+        self.backoff = backoff
+        self.starts = 0
+        self._proc: asyncio.subprocess.Process | None = None
+        self._task: asyncio.Task[None] | None = None
+
+    def start(self) -> None:
+        if self._task is None:
+            self._task = asyncio.create_task(self._supervise())
+
+    async def _supervise(self) -> None:
+        pause = self.backoff
+        while True:
+            try:
+                self.starts += 1
+                self._proc = await asyncio.create_subprocess_exec(
+                    *command(self.home, self.deno),
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                    env={**os.environ, "DENO_NO_UPDATE_CHECK": "1", "DENO_NO_PROMPT": "1"},
+                )
+                code = await self._proc.wait()
+                log("warn", "pot.exit", code=code, starts=self.starts)
+            except OSError as e:
+                log("warn", "pot.exit", error=type(e).__name__, starts=self.starts)
+            await asyncio.sleep(pause)
+            pause = min(MAX_BACKOFF, pause * 2)
+
+    async def ready(self, within: float = 10.0) -> bool:
+        loop = asyncio.get_running_loop()
+        until = loop.time() + within
+        while True:
+            if await ping():
+                return True
+            if loop.time() >= until:
+                return False
+            await asyncio.sleep(0.25)
+
+    async def stop(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._task
+            self._task = None
+        if self._proc is not None and self._proc.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                self._proc.kill()
+            with contextlib.suppress(Exception):
+                await self._proc.wait()
+        self._proc = None
+
+
+def from_env(env: Mapping[str, str] | None = None) -> PotServer | None:
+    """The sidecar this container should run, or None (``CF_POT=off``, or no ``CF_POT_HOME`` with a main.ts)."""
+    e = os.environ if env is None else env
+    if (e.get("CF_POT") or "on").strip().lower() == "off":
+        return None
+    home = e.get("CF_POT_HOME") or ""
+    if not home or not (Path(home) / "src" / "main.ts").is_file():
+        return None
+    return PotServer(Path(home), deno=e.get("CF_POT_DENO") or "deno")
+
+
+_running: list[PotServer] = []  # the container's one sidecar, while the app runs
+
+
+async def start(env: Mapping[str, str] | None = None) -> PotServer | None:
+    await stop()
+    server = from_env(env)
+    if server is None:
+        log("info", "pot.off")
+        return None
+    server.start()
+    _running.append(server)
+    return server
+
+
+async def stop() -> None:
+    while _running:
+        await _running.pop().stop()
+
+
+async def ready(within: float = 10.0) -> bool:
+    """Waits (at most ``within`` seconds) for the sidecar before a YouTube call. True with no sidecar: there is
+    nothing to wait for, and yt-dlp's script mode or no token at all is what happens then."""
+    if not _running:
+        return True
+    ok = await _running[0].ready(within)
+    if not ok:
+        log("warn", "pot.not_ready")
+    return ok
+
+
+async def self_check(env: Mapping[str, str] | None = None) -> list[str]:
+    """What the image build checks (``python -m clipfactory_agent.pot``): yt-dlp lists both bgutil providers as usable,
+    and the server starts and answers /ping. Returns the problems found; none means it works. Never reaches YouTube:
+    yt-dlp is pointed at a dead local proxy, and the provider list is printed before the first request."""
+    problems: list[str] = []
+    e = dict(os.environ if env is None else env)
+    home = e.get("CF_POT_HOME")
+    if not home:
+        return ["CF_POT_HOME is not set"]
+    run = await asyncio.create_subprocess_exec(
+        "yt-dlp",
+        "-v",
+        "--simulate",
+        "--ignore-config",
+        "--no-cache-dir",
+        "--retries",
+        "0",
+        "--extractor-retries",
+        "0",
+        "--proxy",
+        "http://127.0.0.1:9",
+        "--extractor-args",
+        f"youtubepot-bgutilscript:server_home={home}",
+        "https://www.youtube.com/watch?v=aqz-KE-bpKQ",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        stdin=asyncio.subprocess.DEVNULL,
+    )
+    out, _ = await asyncio.wait_for(run.communicate(), 120)
+    line = next((ln for ln in out.decode("utf-8", "replace").splitlines() if "PO Token Providers:" in ln), "")
+    print(line.strip() or "yt-dlp printed no PO Token Providers line")
+    providers = {p.strip() for p in line.split("PO Token Providers:", 1)[-1].split(",")}
+    if not any(p.startswith("bgutil:http-") for p in providers):
+        problems.append("yt-dlp does not list bgutil:http")
+    if not any(p.startswith("bgutil:script-deno-") and "unavailable" not in p for p in providers):
+        problems.append("yt-dlp lists bgutil:script-deno as unavailable")
+    server = from_env(e)
+    if server is None:
+        problems.append("no PO token server (CF_POT=off or no src/main.ts)")
+        return problems
+    server.start()
+    try:
+        if not await server.ready(60):
+            problems.append("the PO token server did not answer /ping")
+    finally:
+        await server.stop()
+    return problems
+
+
+def main() -> None:
+    import sys
+
+    problems = asyncio.run(self_check())
+    for p in problems:
+        print(f"PO token check: {p}", file=sys.stderr)
+    sys.exit(1 if problems else 0)
+
+
+if __name__ == "__main__":
+    main()

@@ -44,7 +44,7 @@ def test_download_failure_is_plain_and_names_the_brand(capsys: pytest.CaptureFix
     msg = str(e)
     assert "YouTube" in msg and "Youtube" not in msg
     assert "KeyError" not in msg and "streamingData" not in msg
-    assert "Try again" in msg and "upload the video file" in msg
+    assert "Try again" in msg and "Use a video file" in msg
     assert "streamingData" in capsys.readouterr().out  # still in the log for us
     gone = sources.explain(CommandError("yt-dlp", 1, "ERROR: Video unavailable"), "twitch", False)
     assert "Twitch" in str(gone)

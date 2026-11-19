@@ -11,6 +11,9 @@ dependencies = [
   # Pinned: YouTube changes often and a known-good yt-dlp is part of the image. "deno" installs the JavaScript
   # runtime yt-dlp needs for YouTube; "default" brings yt-dlp-ejs (the challenge solver) and friends.
   "yt-dlp[default,deno]==2026.10.26",
+  # The PO token plugin for yt-dlp (docs/CONTRACTS.md §29.2). Its server is built into the image from the same tag
+  # (agent/Dockerfile, BGUTIL_VERSION): bump the two together.
+  "bgutil-ytdlp-pot-provider==2.0.2",
 ]
 
 [dependency-groups]

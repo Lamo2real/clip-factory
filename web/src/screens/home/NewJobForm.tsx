@@ -19,11 +19,20 @@ const MAX_UPLOAD = 5 * 1024 ** 3;
 type Mode = "link" | "upload";
 type Count = "range" | "exact";
 
+/** Use a video file on a failed link job (docs/CONTRACTS.md §29.7) opens Home at `/?file=1&from={jobId}`: the form
+ * starts on Pick a video, with that job's clip count and notes. */
+export function fileStart(search: string): { file: boolean; from: string | null } {
+  const q = new URLSearchParams(search);
+  const from = q.get("from");
+  return { file: q.get("file") === "1", from: from && /^[A-Za-z0-9_-]{1,64}$/.test(from) ? from : null };
+}
+
 export function NewJobForm() {
   const id = useId();
   const { me, refresh } = useSession();
   const toast = useToast();
-  const [mode, setMode] = useState<Mode>("link");
+  const [start] = useState(() => fileStart(location.search));
+  const [mode, setMode] = useState<Mode>(start.file ? "upload" : "link");
   const [link, setLink] = useState("");
   const [touched, setTouched] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -54,6 +63,27 @@ export function NewJobForm() {
       abort.current?.abort();
     };
   }, []);
+
+  // From a failed job: the same clip count and notes, so only the file is new.
+  useEffect(() => {
+    if (!start.from) return;
+    let live = true;
+    api()
+      .getJob(start.from)
+      .then(({ job }) => {
+        if (!live) return;
+        const t = job.clipTarget;
+        if (t && t.min === t.max && t.min >= 1 && t.min <= 10) {
+          setCount("exact");
+          setExact(t.min);
+        }
+        if (job.notes) setNotes((n) => n || job.notes!);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [start.from]);
 
   const check = useMemo(() => checkLink(link), [link]);
   const min = me?.settings.clipMin ?? 5;

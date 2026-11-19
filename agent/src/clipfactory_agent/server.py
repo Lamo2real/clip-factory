@@ -17,7 +17,8 @@ import json
 import os
 import re
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
@@ -53,7 +54,7 @@ class Runner(Protocol):
     def cancel(self, job_id: str, session_id: str | None = None) -> bool: ...
 
 
-def create_app(runner: Runner) -> Starlette:
+def create_app(runner: Runner, lifespan: Any = None) -> Starlette:
     state = {"last_update": int(time.time())}
 
     async def ping(_: Request) -> JSONResponse:
@@ -106,6 +107,7 @@ def create_app(runner: Runner) -> Starlette:
     return Starlette(
         routes=[Route("/ping", ping, methods=["GET"]), Route("/invocations", invocations, methods=["POST"])],
         exception_handlers={404: not_found, 405: not_found},
+        lifespan=lifespan,
     )
 
 
@@ -266,7 +268,24 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
         deep=cfg.deep_enabled,
         watchModel=cfg.watch_model_id if watcher else None,
     )
-    return create_app(JobRunner(make_run(store, pipeline, cfg.work_root, new_callback), cfg.work_root))
+    return create_app(
+        JobRunner(make_run(store, pipeline, cfg.work_root, new_callback), cfg.work_root), pot_lifespan(env)
+    )
+
+
+def pot_lifespan(env: Mapping[str, str] | None = None) -> Callable[[Starlette], AbstractAsyncContextManager[None]]:
+    """Runs the PO token sidecar (pot.py) for as long as the app runs."""
+    from . import pot
+
+    @asynccontextmanager
+    async def lifespan(_: Starlette) -> AsyncIterator[None]:
+        await pot.start(env)
+        try:
+            yield
+        finally:
+            await pot.stop()
+
+    return lifespan
 
 
 def main() -> None:

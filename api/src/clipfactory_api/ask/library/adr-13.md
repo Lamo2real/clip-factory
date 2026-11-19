@@ -7,3 +7,6 @@
 - **Amended by [ADR-40](#adr-40-watch-the-whole-video-before-picking) (2026-11-17).** The audio-only half no longer
   holds: after the audio, the agent also downloads a small copy of the whole picture (up to 480p, no sound) so the
   moments can be picked with the picture. The clip sections are still downloaded on their own, at full quality.
+- **Amended by [ADR-52](#adr-52-youtube-from-the-cloud-po-tokens-one-extraction-per-cut-a-full-download-only-as-fallback-a-file-upload-always-one-tap-away)
+  (2026-11-19).** For YouTube the sections share one saved extraction, and when they keep failing the whole video is
+  downloaded once (up to 1080p, within the disk budget) and cut locally.

@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import json
 import os
 import shutil
 from collections.abc import Callable
@@ -22,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from . import captions as captions_mod
-from . import learnings, loudness, nova, proc, sources, verify, watch
+from . import learnings, loudness, nova, pot, proc, sources, verify, watch
 from . import picture as picture_mod
 from . import signals as signals_mod
 from . import vectors as vectors_mod
@@ -63,6 +64,72 @@ ALMOST_NO_SPEECH = (
 )
 
 
+def read_secret(name: str, region: str) -> str | None:
+    """A Secrets Manager secret's string, or None when it does not exist (§29.8). Other errors raise."""
+    import boto3
+
+    client = boto3.client("secretsmanager", region_name=region)
+    try:
+        r = client.get_secret_value(SecretId=name)
+    except client.exceptions.ResourceNotFoundException:
+        return None
+    return str(r.get("SecretString") or "") or None
+
+
+def cut_failure(reasons: list[str]) -> str:
+    """What the Cut step says when no clip could be cut (§29.5): YouTube's block, then ran-out cookies, then a video
+    too long for the disk, then the first other plain reason, else the generic words. Never yt-dlp's text: every
+    reason here is already one of the owner sentences ``sources.explain`` or the fallback wrote."""
+    blocked = {sources.CUT_BLOCKED, sources.BLOCKED_NO_COOKIES, sources.BLOCKED_WITH_COOKIES}
+    if any(r in blocked for r in reasons):
+        return sources.CUT_BLOCKED
+    for preferred in (sources.COOKIES_EXPIRED, sources.CUT_TOO_BIG):
+        if preferred in reasons:
+            return preferred
+    return reasons[0] if reasons else sources.CUT_FAILED
+
+
+# The full-download fallback (§29.4) keeps this much video around the clips' range, in seconds: the cut takes a
+# couple of seconds before each moment and its tease.
+FULL_PAD = 60.0
+
+
+def clip_span(st: JobState) -> tuple[float, float] | None:
+    """The part of the video every chosen clip and spare sits in (with any tease), or None when there are none."""
+    starts: list[float] = []
+    ends: list[float] = []
+    for m in (*st.chosen, *st.spares):
+        tease = getattr(m, "tease", None)
+        starts.append(min(m.start, tease[0]) if tease else m.start)
+        ends.append(max(m.end, tease[1]) if tease else m.end)
+    if not starts:
+        return None
+    return min(starts), max(ends)
+
+
+def full_plan(
+    info: dict[str, Any], seconds: float, span: tuple[float, float] | None, free: int
+) -> tuple[dict[str, Any], tuple[float, float] | None] | None:
+    """What the one full download fetches (§29.4): the whole video with yt-dlp's own downloader (the sturdiest way)
+    when the clips spread over at least half of it and it fits the disk and the time limit; else only the clips'
+    range plus ``FULL_PAD`` (a capped multi-hour stream whose clips all sit in its first hours). None when neither
+    fits. Returns the format and the range (None for the whole video)."""
+    section: tuple[float, float] | None = None
+    if span is not None and seconds > 0:
+        a, b = max(0.0, span[0] - FULL_PAD), min(seconds, span[1] + FULL_PAD)
+        if b > a and b - a < seconds:
+            section = (a, b)
+    if section is None or section[1] - section[0] >= seconds / 2:
+        whole = sources.full_format(info, seconds, free)
+        if whole is not None:
+            return whole, None
+    if section is not None:
+        part = sources.full_format(info, section[1] - section[0], free)
+        if part is not None:
+            return part, section
+    return None
+
+
 def count(n: int, word: str) -> str:
     """``1 clip``, ``2 clips``, ``4,812 words``: step messages are read by the owner, so no "clip(s)"."""
     return f"{n:,} {word}{'' if n == 1 else 's'}"
@@ -90,6 +157,15 @@ class JobState:
     source: dict[str, Any] = field(default_factory=dict)
     meta: dict[str, Any] = field(default_factory=dict)
     cookies: Path | None = None
+    # YouTube from the cloud (docs/CONTRACTS.md §29): the optional proxy, the Cut step's one saved ``-J`` and, only
+    # when section downloads keep failing, the whole video downloaded once and cut locally.
+    proxy: str | None = None
+    info_json: Path | None = None
+    info_refreshed: bool = False
+    full_source: Path | None = None
+    full_offset: float = 0.0  # where full_source starts in the video (a range download starts after 0)
+    full_error: UserFacingError | None = None
+    full_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     words: list[list[Any]] = field(default_factory=list)
     loud: list[float] = field(default_factory=list)
     skills: SkillSet = field(default_factory=lambda: SkillSet([]))
@@ -297,12 +373,15 @@ class Pipeline:
     async def _resolve_link(self, st: JobState, tr: Tracker) -> None:
         url = str(st.source.get("url") or "")
         platform = sources.check_link(url)
-        if platform == "youtube" and await self.store.exists(cookies_key(st.user_id)):
-            st.cookies = st.workdir / "cookies.txt"
-            await self.store.download(cookies_key(st.user_id), st.cookies)
-            os.chmod(st.cookies, 0o600)
+        if platform == "youtube":
+            if await self.store.exists(cookies_key(st.user_id)):
+                st.cookies = st.workdir / "cookies.txt"
+                await self.store.download(cookies_key(st.user_id), st.cookies)
+                os.chmod(st.cookies, 0o600)
+            st.proxy = await self._youtube_proxy(st)
+            await pot.ready()
         try:
-            info = await sources.video_info(url, st.cookies)
+            info = await sources.video_info(url, st.cookies, proxy=st.proxy)
         except proc.CommandError as e:
             raise sources.explain(e, platform, st.cookies is not None) from e
         if info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming"):
@@ -311,6 +390,27 @@ class Pipeline:
         st.meta["heatmap"] = sources.heatmap(info)
         st.meta["webpageUrl"] = info.get("webpage_url") or url
         st.meta["picture"] = self._pick_picture(st, info)
+
+    async def _youtube_proxy(self, st: JobState) -> str | None:
+        """The optional YouTube proxy from Secrets Manager (§29.8). No secret, no access or an odd value: no proxy, and
+        the job goes on. The value is never logged."""
+        name = getattr(self.cfg, "youtube_proxy_secret", None)
+        if not name:
+            return None
+        try:
+            value = await asyncio.to_thread(read_secret, name, self.cfg.region)
+        except Exception as e:
+            log("debug", "youtube.proxy_none", job=st.job_id, error=type(e).__name__)
+            return None
+        value = (value or "").strip()
+        if not value:
+            log("debug", "youtube.proxy_none", job=st.job_id)
+            return None
+        if not value.startswith(("http://", "https://", "socks5://", "socks5h://")):
+            log("warn", "youtube.proxy_ignored", job=st.job_id, reason="not a proxy URL")
+            return None
+        log("info", "youtube.proxy_on", job=st.job_id)
+        return value
 
     def _pick_picture(self, st: JobState, info: dict[str, Any]) -> dict[str, Any] | None:
         """Which small rendition the deep analysis will watch (``meta.picture``); None when none fits the disk."""
@@ -395,6 +495,7 @@ class Pipeline:
                     local.parent,
                     max_seconds=cap if capped or not total else None,
                     cookies=st.cookies,
+                    proxy=st.proxy,
                     on_progress=lambda f: tr.report(0.9 * f),
                 )
             except proc.CommandError as e:
@@ -495,6 +596,7 @@ class Pipeline:
                 est_bytes=est,
                 max_seconds=cap if capped or not total else None,
                 cookies=st.cookies,
+                proxy=st.proxy,
             )
             src, keyframes = str(downloaded), False
         files, motion, scene = await picture_mod.prepare(
@@ -530,6 +632,7 @@ class Pipeline:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
+        self._drop_full(st)
 
     async def _local_audio(self, st: JobState) -> Path:
         local = st.workdir / "source" / "audio.m4a"
@@ -963,41 +1066,199 @@ class Pipeline:
 
     # --- render ----------------------------------------------------------------------------------------------
 
+    @staticmethod
+    async def _ffmpeg_cut(src: str, start: float, end: float, dest: Path) -> Path:
+        """One clip's piece of a video file (an upload in S3, or the full YouTube download on disk)."""
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        await proc.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-y",
+                "-ss",
+                f"{start:.2f}",
+                "-to",
+                f"{end:.2f}",
+                "-i",
+                src,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "16",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                str(dest),
+            ],
+            time_limit=20 * 60,
+        )
+        return dest
+
     async def _fetch_section(self, st: JobState, start: float, end: float, dest: Path) -> Path:
         if st.source.get("type") == "upload":
-            await proc.run(
-                [
-                    "ffmpeg",
-                    "-v",
-                    "error",
-                    "-y",
-                    "-ss",
-                    f"{start:.2f}",
-                    "-to",
-                    f"{end:.2f}",
-                    "-i",
-                    self.store.presign(st.key("video.mp4")),
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    "veryfast",
-                    "-crf",
-                    "16",
-                    "-c:a",
-                    "aac",
-                    "-b:a",
-                    "192k",
-                    str(dest),
-                ],
-                time_limit=20 * 60,
-            )
-            return dest
+            return await self._ffmpeg_cut(self.store.presign(st.key("video.mp4")), start, end, dest)
         platform = str(st.source.get("platform"))
+        if platform == "youtube":
+            return await self._fetch_youtube(st, start, end, dest)
         url = str(st.meta.get("webpageUrl") or st.source["url"])
         try:
             return await sources.download_section(url, start, end, dest, st.cookies)
         except proc.CommandError as e:
             raise sources.explain(e, platform, st.cookies is not None, section=True) from e
+
+    async def _youtube_section(self, st: JobState, start: float, end: float, dest: Path) -> Path:
+        url = str(st.meta.get("webpageUrl") or st.source["url"])
+        try:
+            return await sources.download_section(
+                url, start, end, dest, st.cookies, proxy=st.proxy, info_json=st.info_json
+            )
+        except proc.CommandError as e:
+            raise sources.explain(e, "youtube", st.cookies is not None, section=True) from e
+
+    async def _fetch_youtube(self, st: JobState, start: float, end: float, dest: Path) -> Path:
+        """One YouTube clip's piece, in the order of docs/CONTRACTS.md §29.4: the local full video when there is one;
+        else a section download from the saved ``-J``; a 403, fragment or merge failure refreshes that ``-J`` once for
+        the job and tries again; still failing, or YouTube's bot check, downloads the whole video once and cuts this
+        clip (and every later one) from it."""
+        if st.full_source is not None:
+            return await self._cut_full(st, st.full_source, start, end, dest)
+        try:
+            return await self._youtube_section(st, start, end, dest)
+        except (UserFacingError, TransientError) as e:
+            kind = sources.kind_of(e)
+            if kind not in ("retry", "blocked"):
+                raise
+            first = e
+        if sources.kind_of(first) == "retry" and await self._refresh_info(st):
+            try:
+                return await self._youtube_section(st, start, end, dest)
+            except (UserFacingError, TransientError) as e:
+                if sources.kind_of(e) not in ("retry", "blocked"):
+                    raise
+        full = await self._ensure_full(st)
+        return await self._cut_full(st, full, start, end, dest)
+
+    async def _cut_full(self, st: JobState, full: Path, start: float, end: float, dest: Path) -> Path:
+        """One clip's piece of the local full download, which starts at ``st.full_offset`` in the video."""
+        off = st.full_offset
+        return await self._ffmpeg_cut(str(full), max(0.0, start - off), max(0.0, end - off), dest)
+
+    async def _refresh_info(self, st: JobState) -> bool:
+        """A new ``-J`` (fresh signed URLs), once per job. True when this call or an earlier one has refreshed it and
+        the section is worth one more try."""
+        async with st.full_lock:
+            if st.full_source is not None:
+                return False
+            if st.info_refreshed:
+                return True
+            st.info_refreshed = True
+            if await self._save_info(st):
+                log("info", "cut.info_refreshed", job=st.job_id)
+                return True
+            return False
+
+    async def _save_info(self, st: JobState) -> bool:
+        """YouTube's ``-J`` for the Cut step, saved once to the job's scratch folder (§29.4). A bot check or ran-out
+        cookies raise: nothing later in the step can help. Any other failure leaves the sections to ask YouTube
+        themselves."""
+        url = str(st.meta.get("webpageUrl") or st.source["url"])
+        path = st.workdir / "source" / "cut-info.json"
+        await pot.ready()
+        try:
+            await sources.video_info(url, st.cookies, proxy=st.proxy, info_json=path)
+        except proc.CommandError as e:
+            err = sources.explain(e, "youtube", st.cookies is not None)
+            if sources.kind_of(err) == "blocked":
+                raise UserFacingError(sources.CUT_BLOCKED) from e
+            if sources.kind_of(err) == "cookies":
+                raise err from e
+            log("warn", "cut.info_failed", job=st.job_id, error=type(err).__name__, detail=str(e)[:300])
+            return False
+        st.info_json = path if path.is_file() else None
+        return st.info_json is not None
+
+    async def _ensure_full(self, st: JobState) -> Path:
+        """The whole video, downloaded once per job (behind ``full_lock``), at the tallest height of the ladder that
+        fits the disk. A failure is remembered, so the other clips do not try again."""
+        async with st.full_lock:
+            if st.full_source is not None:
+                return st.full_source
+            if st.full_error is not None:
+                raise st.full_error
+            try:
+                if st.info_json is None or not st.info_json.is_file():
+                    # The first -J failed for a reason other than the bot check (a timeout): one more try.
+                    await self._save_info(st)
+                st.full_source = await self._download_full(st)
+            except UserFacingError as e:
+                st.full_error = e
+                raise
+            return st.full_source
+
+    async def _download_full(self, st: JobState) -> Path:
+        info_json = st.info_json
+        if info_json is None or not info_json.is_file():
+            # No bot check was seen (that raises in _save_info), so these are the plain "try again" words.
+            raise UserFacingError(sources.CUT_FAILED)
+        try:
+            info = json.loads(info_json.read_bytes())
+        except ValueError as e:
+            raise UserFacingError(sources.CUT_FAILED) from e
+        seconds = float(info.get("duration") or st.source.get("durationSec") or 0)
+        free = shutil.disk_usage(st.workdir).free
+        plan = full_plan(info, seconds, clip_span(st), free)
+        if plan is None:
+            log("warn", "cut.full_too_big", job=st.job_id, seconds=seconds, free=free)
+            raise UserFacingError(sources.CUT_TOO_BIG)
+        fmt, section = plan
+        log(
+            "info",
+            "cut.full_fallback",
+            job=st.job_id,
+            height=fmt["height"],
+            estBytes=fmt["estBytes"],
+            seconds=seconds,
+            section=list(section) if section else None,
+        )
+        url = str(st.meta.get("webpageUrl") or st.source["url"])
+        try:
+            path = await sources.download_full(
+                url,
+                fmt["format"],
+                st.workdir / "source" / "full.mp4",
+                est_bytes=int(fmt["estBytes"]),
+                cookies=st.cookies,
+                proxy=st.proxy,
+                info_json=info_json,
+                section=section,
+            )
+            st.full_offset = section[0] if section else 0.0
+            return path
+        except proc.CommandError as e:
+            err = sources.explain(e, "youtube", st.cookies is not None)
+            if sources.kind_of(err) == "cookies":
+                raise err from e
+            log("warn", "cut.full_failed", job=st.job_id, kind=sources.kind_of(err), detail=str(e)[:300])
+            raise UserFacingError(
+                sources.CUT_BLOCKED if sources.kind_of(err) == "blocked" else sources.CUT_FAILED
+            ) from e
+        except TransientError as e:
+            log("warn", "cut.full_failed", job=st.job_id, kind="retry", detail=str(e)[:300])
+            raise UserFacingError(sources.CUT_FAILED) from e
+
+    @staticmethod
+    def _drop_full(st: JobState) -> None:
+        """The full video and the saved ``-J`` are only for this run's cuts: gone once the clips are made."""
+        for f in (st.workdir / "source").glob("full.*"):
+            f.unlink(missing_ok=True)
+        (st.workdir / "source" / "cut-info.json").unlink(missing_ok=True)
+        st.full_source = None
+        st.full_offset = 0.0
+        st.info_json = None
 
     async def _cut(self, st: JobState, m: Moment, index: int, layout: FrameLayout | None = None) -> Candidate:
         workdir = st.workdir / "clips" / f"{index:02d}"
@@ -1018,6 +1279,9 @@ class Pipeline:
         return Candidate(m, r, index=index)
 
     async def render(self, st: JobState, tr: Tracker) -> str:
+        if st.source.get("type") != "upload" and st.source.get("platform") == "youtube":
+            # One extraction for every clip (§29.4): the sections read the formats from this file.
+            await self._save_info(st)
         sem = asyncio.Semaphore(RENDER_CONCURRENCY)
         done = 0
         results: list[Candidate | None] = [None] * len(st.chosen)
@@ -1051,11 +1315,8 @@ class Pipeline:
         await gather_all(*(one(i, m) for i, m in enumerate(st.chosen)))
         st.candidates = [c for c in results if c]
         if not st.candidates:
-            if reasons:
-                raise UserFacingError(reasons[0])
-            raise UserFacingError(
-                "None of the clips could be cut. Tap Try again; if it happens again, try another video."
-            )
+            self._drop_full(st)
+            raise UserFacingError(cut_failure(reasons))
         failed = len(st.chosen) - len(st.candidates)
         return f"Cut {count(len(st.candidates), 'clip')}" + (f"; {failed} could not be cut." if failed else ".")
 

@@ -89,3 +89,13 @@ variable "log_retention_days" {
   default     = 30
   description = "Retention of the runtime's log group, the same as every other log group in the stack."
 }
+
+variable "youtube_proxy_secret" {
+  type        = string
+  description = "Name of the optional Secrets Manager secret with a proxy URL for YouTube (CF_YOUTUBE_PROXY_SECRET, docs/CONTRACTS.md §29.8). It may not exist."
+}
+
+variable "youtube_proxy_secret_arn" {
+  type        = string
+  description = "ARN pattern of that secret (name plus the 6-character suffix Secrets Manager adds)."
+}
