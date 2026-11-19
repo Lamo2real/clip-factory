@@ -1,4 +1,4 @@
-// Ask's answers as they stream in (docs/CONTRACTS.md §27.5). The question starts over HTTP (askApi.ts) and the answer
+// Ask's answers as they stream in (docs/CONTRACTS.md §28.5). The question starts over HTTP (askApi.ts) and the answer
 // comes back over the app's WebSocket as `ask.*` events. `applyEvent` folds them into one answer; `runAsk` drives one
 // question: connection id, file uploads, start, events, Stop, and the timeouts that send the panel to the plain
 // §19 answer instead. Links in an answer become live only after it is done, and only the URLs the server listed.

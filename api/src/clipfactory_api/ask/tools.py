@@ -1,4 +1,4 @@
-"""The tools Ask may call while answering one question (docs/CONTRACTS.md §27.3, §27.4). All read only.
+"""The tools Ask may call while answering one question (docs/CONTRACTS.md §28.3, §28.4). All read only.
 
 ``Toolbox`` holds the per-answer state: the caps per tool, the URLs ``web_fetch`` may open (search results of this
 answer and URLs the owner typed himself, never a URL a page or file mentioned), the numbered sources and the links

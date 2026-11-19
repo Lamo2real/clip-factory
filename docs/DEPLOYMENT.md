@@ -499,7 +499,7 @@ Terraform does not manage this item. To turn help off for good, set the Terrafor
 answers are capped at 2,000 per 30 days (`HELP_MONTHLY_CAP`, Terraform variable `help_monthly_cap`, a whole number);
 past the cap help keeps answering from search.
 
-## Ask as a full assistant (CONTRACTS §27)
+## Ask as a full assistant (CONTRACTS §28)
 
 `cf-prod-ask` deploys with everything else (`ask_enabled = true` in prod). Two owner steps, both only once:
 

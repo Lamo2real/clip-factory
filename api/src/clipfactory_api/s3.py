@@ -115,7 +115,7 @@ class Media:
         return url
 
     def presign_put_sized(self, key: str, content_type: str, size: int, seconds: int = PRESIGN_SECONDS) -> str:
-        """A PUT URL that signs the type and the exact length too (Ask files, §27.7)."""
+        """A PUT URL that signs the type and the exact length too (Ask files, §28.7)."""
         url: str = self._s3.generate_presigned_url(
             "put_object",
             Params={"Bucket": self.bucket, "Key": key, "ContentType": content_type, "ContentLength": size},

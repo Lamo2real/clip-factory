@@ -1,4 +1,4 @@
-## Ask as a full assistant (CONTRACTS §27)
+## Ask as a full assistant (CONTRACTS §28)
 
 * **api** (`uv run pytest`): `tests/test_ask_worker.py` replays recorded model turns (`tests/fixtures/ask/*.json`,
   `tests/ask_support.py` builds the documented stream events) through a fake Mantle client: the request shape (model,

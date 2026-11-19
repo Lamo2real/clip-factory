@@ -51,7 +51,7 @@ class HelpDeps:
 
 @dataclass
 class AskDeps:
-    """Ask as a full assistant (docs/CONTRACTS.md §27). Off unless ``ASK_ENABLED`` is "true" and the worker's name
+    """Ask as a full assistant (docs/CONTRACTS.md §28). Off unless ``ASK_ENABLED`` is "true" and the worker's name
     is set. ``invoke`` starts the worker (async Lambda Invoke); ``secrets`` holds the web search key."""
 
     enabled: bool = False

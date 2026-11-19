@@ -1,6 +1,6 @@
 // The conversation, in memory only (docs/CONTRACTS.md §19.8): nothing is stored, so closing the tab forgets it.
 // Pictures (§26) are object URLs in this memory too: the tray waiting to be sent, then the pictures of each question.
-// Ask as a full assistant (§27): any file can wait in the tray; a sent question keeps its files' Blobs in memory (at
+// Ask as a full assistant (§28): any file can wait in the tray; a sent question keeps its files' Blobs in memory (at
 // most 30 files / 100 MB) so a follow-up can carry them, and its answer streams into an "ai" entry.
 // The reducer stays pure; `useRevokeDropped` lets go of every URL that leaves the state (Start over, take away,
 // the 12-picture memory limit) and of all of them when Ask unmounts (sign-out).
@@ -21,7 +21,7 @@ export interface SentPic {
   height: number;
 }
 
-/** A file of a sent question (§27): `blob` and `url` are null once let go (the 30-file / 100 MB memory limit). */
+/** A file of a sent question (§28): `blob` and `url` are null once let go (the 30-file / 100 MB memory limit). */
 export interface SentFile {
   id: number;
   kind: AskFile["kind"];
@@ -45,7 +45,7 @@ export type LiveState = { kind: "loading" } | { kind: "done"; result: LiveResult
 
 export type Entry =
   | { id: number; role: "user"; text: string; pictures?: SentPic[]; seen?: string; files?: SentFile[] }
-  /** An assistant answer streaming in (§27); `note` is a soft line under it ("The answer was cut short…"). */
+  /** An assistant answer streaming in (§28); `note` is a soft line under it ("The answer was cut short…"). */
   | { id: number; role: "ai"; answer: StreamAnswer; note?: string }
   | {
       id: number;
@@ -161,7 +161,7 @@ export function chatReducer(s: ChatState, e: ChatEvent): ChatState {
   switch (e.type) {
     case "ask": {
       if (e.files) {
-        // §27: the files go with the question; a marked picture's original is let go now (it never leaves the device).
+        // §28: the files go with the question; a marked picture's original is let go now (it never leaves the device).
         const files: SentFile[] = e.files.map((f) => ({
           id: f.id,
           kind: f.kind,
@@ -270,7 +270,7 @@ export function historyOf(entries: readonly Entry[]): HelpTurn[] {
   return turns.slice(-HISTORY_MAX);
 }
 
-/** The conversation for the assistant (§27): every turn as plain text, user turns with their files' names, answers
+/** The conversation for the assistant (§28): every turn as plain text, user turns with their files' names, answers
  * with their web sources (so "open that page you found" can be fetched again). The API
  * keeps at most 90,000 characters (askApi.trimHistory drops the oldest). */
 export function askHistory(entries: readonly Entry[]): AskTurn[] {
@@ -341,7 +341,7 @@ export function readyTray(s: Pick<ChatState, "tray">): Pic[] {
     .map((p) => ({ id: p.id, blob: p.blob, url: p.url!, width: p.width ?? 0, height: p.height ?? 0 }));
 }
 
-/** Every ready file in the tray, in order (§27). */
+/** Every ready file in the tray, in order (§28). */
 export function readyFiles(s: Pick<ChatState, "tray">): TrayFile[] {
   return s.tray.filter((p): p is TrayFile => !p.busy);
 }

@@ -97,7 +97,7 @@ allows `PUT` from the same origins for uploads.
 - The desktop `.dmg` and `.exe` are not code-signed yet ([ADR-19](DECISIONS.md#adr-19-unsigned-desktop-builds-for-now)).
   Download them only from the app's own Get the app card, never from a copy someone sends you.
 
-## Ask as a full assistant (CONTRACTS §27)
+## Ask as a full assistant (CONTRACTS §28)
 
 * **Prompt injection.** Web pages, search results, files and pictures are data: the rules say never follow
   instructions inside them, and the tools make it safe even if the model did. Ask has no tool that writes, posts,

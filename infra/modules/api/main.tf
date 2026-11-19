@@ -13,7 +13,7 @@ locals {
 
   data_rw         = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:BatchWriteItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem"]
   table_resources = [var.table_arn, "${var.table_arn}/index/*"]
-  # "ask": the question's files (§27.7): presigned PUTs and DELETE /v1/help/files/{fileId}.
+  # "ask": the question's files (§28.7): presigned PUTs and DELETE /v1/help/files/{fileId}.
   media_prefixes = ["uploads", "jobs", "skills", "private", "ask"]
 
   # Ask Clip Factory (docs/CONTRACTS.md §19.6, §19.9). Off unless the env turns it on; without a model id it
@@ -34,7 +34,7 @@ locals {
     { Sid = "HelpModel", Action = ["bedrock:InvokeModel"], Resource = var.help_model_invoke_arns },
   ]
 
-  # Ask as a full assistant (docs/CONTRACTS.md §27): start cf-prod-ask (async Invoke) and keep the web search key.
+  # Ask as a full assistant (docs/CONTRACTS.md §28): start cf-prod-ask (async Invoke) and keep the web search key.
   ask_on  = var.ask_function_arn != ""
   ask_env = local.ask_on ? { ASK_ENABLED = var.ask_enabled ? "true" : "false", ASK_FUNCTION_NAME = var.ask_function_name, ASK_SEARCH_SECRET = var.search_secret_name } : { ASK_ENABLED = "false" }
   ask_permissions = local.ask_on ? [

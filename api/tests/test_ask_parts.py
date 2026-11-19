@@ -1,4 +1,4 @@
-"""Ask's parts (§27): files, the SSRF-guarded fetch, Brave search, the secrets filter, the knowledge pack, the tools."""
+"""Ask's parts (§28): files, the SSRF-guarded fetch, Brave search, the secrets filter, the knowledge pack, the tools."""
 
 from __future__ import annotations
 

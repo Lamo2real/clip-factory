@@ -1,4 +1,4 @@
-"""POST /v1/help/files, /v1/help/asks, Stop and the web search key (§27.6). No AWS: fakes only."""
+"""POST /v1/help/files, /v1/help/asks, Stop and the web search key (§28.6). No AWS: fakes only."""
 
 from __future__ import annotations
 

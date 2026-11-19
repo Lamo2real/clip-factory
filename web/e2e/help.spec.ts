@@ -3,7 +3,7 @@ import { DODGE_HOLD_MS, DODGE_SETTLE_MS } from "../src/features/help/dodge.ts";
 import { SPOT_ARRIVE_CAP_MS } from "../src/features/help/spotlight.ts";
 import { animationsDone, findOverflow, launcherSettled, settle } from "./helpers.ts";
 
-// These cover Ask's §19/§26 path (plain answers, pictures inline): the mock's assistant (§27) is turned off here.
+// These cover Ask's §19/§26 path (plain answers, pictures inline): the mock's assistant (§28) is turned off here.
 // e2e/ask-assistant.spec.ts and e2e/ask-markup.spec.ts cover the assistant.
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {

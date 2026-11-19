@@ -57,7 +57,7 @@ variable "help_model_failure_threshold" {
 variable "ask_log_group_name" {
   type        = string
   default     = ""
-  description = "cf-prod-ask's log group, where Ask writes one help.ask line per answer (docs/CONTRACTS.md §27.11). Empty: no Ask alarms."
+  description = "cf-prod-ask's log group, where Ask writes one help.ask line per answer (docs/CONTRACTS.md §28.11). Empty: no Ask alarms."
 }
 
 variable "ask_tokens_alarm_threshold" {

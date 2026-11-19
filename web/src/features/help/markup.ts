@@ -1,4 +1,4 @@
-// The picture markup editor's model (docs/CONTRACTS.md §27.8): red marks drawn over a picture before it goes to Ask,
+// The picture markup editor's model (docs/CONTRACTS.md §28.8): red marks drawn over a picture before it goes to Ask,
 // so Claude sees exactly what the owner means. Strokes are vectors over the picture's own pixels (≤ 1568 px), kept
 // in memory only. Saving draws the picture and the marks into one JPEG (≤ 600 KB, metadata stripped) that replaces
 // the tray picture; the original never leaves the device.

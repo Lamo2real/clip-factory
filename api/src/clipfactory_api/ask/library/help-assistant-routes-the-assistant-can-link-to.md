@@ -12,6 +12,7 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 | review | `/review` |
 | library | `/library` |
 | library | `/library?view=week` |
+| money | `/money` |
 | clip | `/clips/{clipId}` |
 | settings | `/settings` |
 | settings | `/settings/clip-making/clips` |
@@ -34,4 +35,4 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 
 The API side has `GET /v1/help` and `POST /v1/help/answers` (§19), plus the assistant's `POST /v1/help/files`,
 `DELETE /v1/help/files/{fileId}`, `POST /v1/help/asks`, `POST /v1/help/asks/{askId}/stop`, `PUT /v1/help/search-key` and
-`DELETE /v1/help/search-key` (§27), all behind the Cognito JWT like every other `/v1` route.
+`DELETE /v1/help/search-key` (§28), all behind the Cognito JWT like every other `/v1` route.

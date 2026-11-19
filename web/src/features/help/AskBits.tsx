@@ -1,4 +1,4 @@
-// The pieces of Ask as a full assistant (docs/CONTRACTS.md §27.7, §27.9): file tiles (tray and sent), a streamed
+// The pieces of Ask as a full assistant (docs/CONTRACTS.md §28.7, §28.9): file tiles (tray and sent), a streamed
 // answer (safe markdown, tables, code with Copy, [n] source chips, live links only when allowed) and its sources.
 import { Fragment, useMemo, type ReactNode } from "react";
 import { AskMark } from "../../components/AskMark.tsx";

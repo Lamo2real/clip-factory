@@ -1,4 +1,4 @@
-// The picture markup editor in the mock build (docs/CONTRACTS.md §27.8): open it from a tray picture, draw with the
+// The picture markup editor in the mock build (docs/CONTRACTS.md §28.8): open it from a tray picture, draw with the
 // pen (mouse, and touch on the phone project), a box and an arrow, undo and clear, Save (the tile's picture changes
 // and gets its red pen; the JPEG that is sent has red where the owner drew), keyboard-only drawing and saving, the
 // Escape question, the thumb zone on phones, no overflow and the sliding tool bar. Screenshots go to

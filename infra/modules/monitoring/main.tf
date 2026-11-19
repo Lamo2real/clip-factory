@@ -183,7 +183,7 @@ resource "aws_cloudwatch_metric_alarm" "help_model_failures" {
   tags                = local.tags
 }
 
-# Ask as a full assistant (docs/CONTRACTS.md §27.10, §27.11): cf-prod-ask writes one help.ask line per answer with
+# Ask as a full assistant (docs/CONTRACTS.md §28.10, §28.11): cf-prod-ask writes one help.ask line per answer with
 # its token usage and outcome (never the question). Model failures send the panel to the plain §19 answer, so ten in
 # an hour means something is broken (often Bedrock model access, docs/DEPLOYMENT.md). The token alarm blocks
 # nothing: it tells the owner when a day used far more than usual.

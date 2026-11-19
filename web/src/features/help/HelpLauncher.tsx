@@ -34,7 +34,7 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
   const [client, setClient] = useState<HelpClient | null>(given ?? null);
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState<string | null>(null);
-  /** Files dropped on the launcher (§27.7): the panel opens with them in the tray. */
+  /** Files dropped on the launcher (§28.7): the panel opens with them in the tray. */
   const [dropped, setDropped] = useState<File[] | null>(null);
   const [focused, setFocused] = useState(false);
   // Files dragged over the button: it glows to say it will take them (any file with the assistant, pictures with §26).

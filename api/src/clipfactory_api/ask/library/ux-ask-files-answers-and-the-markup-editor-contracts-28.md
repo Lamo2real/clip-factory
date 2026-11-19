@@ -1,4 +1,4 @@
-## Ask: files, answers and the markup editor (CONTRACTS §27)
+## Ask: files, answers and the markup editor (CONTRACTS §28)
 
 * **File tile**: 168 × 64 (72 tall in the phone sheet), a soft control fill, a bone square with the format icon
   (`fileText`, `fileTable`, `fileCode`, `filePdf`, `file`), the format in capitals (xs, bold), the name on one line with

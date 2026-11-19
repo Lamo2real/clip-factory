@@ -1,4 +1,4 @@
-// Ask's own requests (docs/CONTRACTS.md §27.6): file uploads, start, Stop and the web search key. Like helpApi.ts it
+// Ask's own requests (docs/CONTRACTS.md §28.6): file uploads, start, Stop and the web search key. Like helpApi.ts it
 // has its own fetch with the owner's token (never the shared api() client), so asking never touches page caches,
 // toasts or busy states. Files go straight to S3 with the presigned PUT (signed type and length).
 import { announceSignedOut, auth, type AuthClient } from "../../lib/auth.ts";

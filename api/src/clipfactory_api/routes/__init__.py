@@ -75,7 +75,7 @@ ROUTES: list[Route] = [
     # Ask Clip Factory (§19.6): the help package loads only inside these handlers.
     route("GET", "/v1/help", help.status),
     route("POST", "/v1/help/answers", help.answer),
-    # Ask as a full assistant (§27): start over HTTP, the answer streams over the WebSocket.
+    # Ask as a full assistant (§28): start over HTTP, the answer streams over the WebSocket.
     route("POST", "/v1/help/files", ask.create_files),
     route("DELETE", "/v1/help/files/{fileId}", ask.delete_file),
     route("POST", "/v1/help/asks", ask.start),

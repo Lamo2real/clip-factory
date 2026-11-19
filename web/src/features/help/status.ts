@@ -59,7 +59,7 @@ export function usePicturesOn(): boolean {
   );
 }
 
-// Ask as a full assistant (§27): on only when the last check said so; off means the §19 answers.
+// Ask as a full assistant (§28): on only when the last check said so; off means the §19 answers.
 let assistant: AssistantStatus = { on: false, web: "off", files: false };
 const assistantListeners = new Set<() => void>();
 

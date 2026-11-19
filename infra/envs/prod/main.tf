@@ -75,7 +75,7 @@ locals {
     [for r in local.help_model.profileRegions : "arn:aws:bedrock:${r}::foundation-model/${local.help_model.modelId}"],
   )
 
-  # Ask as a full assistant (docs/CONTRACTS.md §27.1, ADR-50): Claude in Amazon Bedrock (Mantle) in-Region, so the
+  # Ask as a full assistant (docs/CONTRACTS.md §28.1, ADR-51): Claude in Amazon Bedrock (Mantle) in-Region, so the
   # bare model ids are used (profilePrefix does not apply) and questions stay in askEndpoint.region (Stockholm).
   ask_region            = local.models.askEndpoint.region
   ask_model_id          = local.models.models[local.models.askModel].modelId
@@ -286,7 +286,7 @@ module "api" {
   help_model_id          = local.help_model_id
   help_model_invoke_arns = local.help_model_invoke_arns
   help_monthly_cap       = var.help_monthly_cap
-  # Ask as a full assistant (§27): start cf-prod-ask, keep the web search key.
+  # Ask as a full assistant (§28): start cf-prod-ask, keep the web search key.
   ask_enabled        = var.ask_enabled
   ask_function_name  = module.ask.ask_function_name
   ask_function_arn   = module.ask.ask_function_arn
@@ -332,7 +332,7 @@ module "realtime" {
   permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
-# Ask as a full assistant (docs/CONTRACTS.md §27): cf-prod-ask answers with Claude Opus 5.5 and streams the answer
+# Ask as a full assistant (docs/CONTRACTS.md §28): cf-prod-ask answers with Claude Opus 5.5 and streams the answer
 # over the WebSocket. Additive: a new function, role, log group and async-invoke config; nothing that holds data.
 module "ask" {
   source                = "../../modules/ask"
@@ -379,7 +379,7 @@ module "monitoring" {
   hooks_stage_name       = module.hooks.hooks_stage_name
   # §19.9: Ask Clip Factory's model calls that fell back to plain answers (errors and timeouts).
   help_log_group_name = module.api.log_group_name
-  # §27.10, §27.11: Ask's model failures and its daily token use.
+  # §28.10, §28.11: Ask's model failures and its daily token use.
   ask_log_group_name         = module.ask.log_group_name
   ask_tokens_alarm_threshold = var.ask_tokens_alarm_threshold
 }

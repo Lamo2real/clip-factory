@@ -200,7 +200,7 @@ def test_every_contract_route_is_registered() -> None:
         # §19.6: Ask Clip Factory
         ("GET", "/v1/help"),
         ("POST", "/v1/help/answers"),
-        # §27: Ask as a full assistant
+        # §28: Ask as a full assistant
         ("POST", "/v1/help/files"),
         ("DELETE", "/v1/help/files/AAAAAAAAAAAAAAAAAAAAAA"),
         ("POST", "/v1/help/asks"),

@@ -93,7 +93,7 @@ run "environment_names_the_flow_aliases" {
       HELP_RATE_PER_HOUR   = "60"
       # §26: picture questions per owner per day.
       HELP_PICTURE_QUESTIONS_PER_DAY = "40"
-      # §27.12 module default: no assistant worker, so off.
+      # §28.12 module default: no assistant worker, so off.
       ASK_ENABLED = "false"
     })
     error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9 and §19.9 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
@@ -382,7 +382,7 @@ run "cors_exposes_retry_after" {
   }
 }
 
-# docs/CONTRACTS.md §27.12: the assistant adds starting cf-prod-ask, the search key and the ask/ media prefix. Nothing
+# docs/CONTRACTS.md §28.12: the assistant adds starting cf-prod-ask, the search key and the ask/ media prefix. Nothing
 # else changes: no new route (ANY /v1/{proxy+} covers the new paths) and retry-after is already exposed.
 run "ask_assistant_additions" {
   command = plan

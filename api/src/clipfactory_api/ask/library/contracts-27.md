@@ -1,305 +1,216 @@
-## 27. Ask becomes a full assistant (owner request, 2026-11-19)
+## 27. Money dashboard: MRR by app and money per clip (owner request, 2026-11-19)
 
-The owner: Ask should answer **any** question (Clip Factory, Terraform, food, a file he gives it), always knowing the
-whole app and his own setup, search the web for current steps (Instagram, TikTok, Meta), take files by attach, drop
-and paste, show pictures as thumbnails and other files with their format, and let him **mark a picture in red** before
-it goes. Decision record: docs/DECISIONS.md ADR-50. This section supersedes §19.1's "grounded, not generative" and
-§19.5's "only rewords" for the assistant path, and §26's "pictures inline, never S3" for files sent on this path. §19
-and §26 stay exactly as they are as the **fallback** (no socket, model failure before any words, `assistant: false`).
+### 27.1 The owner's words
 
-### 27.1 Model and endpoint
+"Daily MRR, monthly MRR, and weekly MRR, and yearly MRR. And that should all be based on whatever I filter by. So if
+it's TikTok, YouTube, or if I want to select some of them, or if I want all of them, which is default. … the most
+important ones, which are my KPIs, is … first of all, monthly MRR." Then: "And when I say revenue, I mean how much I'm
+earning per video or per whatever, but it's from these social media platforms, how much money I'm getting." He also
+asked for it to work on every screen he uses, and for buttons on phones to sit where the thumb rests (bottom right),
+never top left. The release label is "Money dashboard".
 
-* **Claude Opus 5.5** on Claude in Amazon Bedrock (the `bedrock-mantle` Messages API), **in-Region eu-north-1**, bare
-  model id `anthropic.claude-opus-5-5` (`askModel` in config/models.json; Mantle in-Region takes no profile prefix).
-  Questions and answers stay in Stockholm. Fable 5.2 is not on Mantle, costs twice as much and runs long turns.
-* SDK: the official Anthropic Python SDK `anthropic[bedrock]` pinned at **2.5.0** in `api/uv.lock` (vendored into the
-  Lambda zip; `pydantic_core` and `jiter` as manylinux aarch64 wheels, the only compiled files allowed),
-  `AnthropicBedrockMantle(aws_region=ASK_REGION)`, SigV4 with the Lambda role (no bearer token). API version
-  `2026-10-21`: history goes back as plain text, never `citations` in a user message.
-* Every request: `client.beta.messages.stream(...)` through `learn.stream_messages` (the only `.messages.stream(` in
-  the package), `max_tokens` 64000 per round (streaming; capped at what is left of the answer's output budget, at
-  least 4000), `thinking {type: adaptive}`, `output_config.effort` = `ASK_EFFORT` (medium), no
-  temperature/top_p/top_k, no forced `tool_choice` (`{type: none}` on the final round only), top-level automatic
-  caching. Tools are `strict` with `eager_input_streaming` (`ASK_EAGER_TOOLS=false` turns it off if Bedrock refuses
-  the field); every parsed input is checked before a tool runs. The full assistant content (thinking blocks included)
-  is appended unchanged inside one answer's loop. `stop_reason` `refusal`, `max_tokens` and `pause_turn` are handled
-  before tools run; `max_tokens` never runs a half-written tool call and ends with "That was a long answer, so I
-  stopped there. Ask me to go on." (`stop: "budget"`, outcome `ask_budget`, never logged as complete).
-* The rules name the model (rule 11: "You are Claude Opus 5.5, running on Amazon Bedrock in Stockholm"), filled in
-  from `ASK_MODEL_ID` per deploy, so "which model are you?" gets the right answer.
-* Refusals: Bedrock has no server-side `fallbacks`; the SDK's `BetaRefusalFallbackMiddleware([{model:
-  anthropic.claude-opus-4-8}])` retries on **Opus 4.8** (`askFallbackModel`, not a clip model) with one
-  `BetaFallbackState` per answer. A final refusal is outcome `ask_refused` and the panel shows "I can't help with that
-  one."
-* IAM (`cf-prod-fn-ask`, statement `AskModel`): `bedrock-mantle:CreateInference` on
-  `arn:aws:bedrock-mantle:eu-north-1:{account}:project/*` (the Service Authorization Reference names `project` as the
-  only resource type of CreateInference) with `StringEquals bedrock-mantle:Model` = the two model ids. No
-  `CallWithBearerToken`, no `bedrock:*`.
+### 27.2 The numbers
 
-### 27.2 What Ask always knows
+The owner is paid per view, not by subscription, so "MRR" here is **the money the apps reported over a recent stretch
+of days**, built only from stored `REVENUE#{platform}#{day}` rows (§25). The screen keeps the MRR names with a plain
+line under each, and a "?" says: "MRR usually means subscriptions. Here it means the money YouTube (and other apps that
+share it) reported for your videos over that many days."
 
-Render order (the cache prefix): `tools` (sorted) → `system` → `messages`. `system` is, in order:
+* **`through`** (the end day): the newest stored row date of each counted app (`throughBy`, a $0 day counts as
+  reported), and the **earliest** of those across the counted apps, so every app covers the same days. Every period
+  ends on `through`, inclusive; the page says "Up to Sat 16 Nov" and, with YouTube counted, "· YouTube is 2–3 days
+  behind". Dates are the platform's own calendar days, formatted on the web as plain dates, never through a time zone.
+* **Monthly MRR** (the main card, biggest number): the sum over `[through−29, through]`, compared with
+  `[through−59, through−30]`. **Weekly MRR**: `[through−6, through]` against the 7 days before. **Daily MRR**: Monthly
+  ÷ `coveredDays` in whole micros (half away from zero), plus "Latest day: Sat 16 Nov · $1.12". `coveredDays` is the
+  number of the last 30 days that stored history covers (from the earliest counted app's `historyFrom`, at most 30),
+  so 10 days of $1.00 read $1.00 a day, not $0.33. **Yearly MRR**: Monthly × 12 once 30 days are covered, Monthly ×
+  360 ÷ `coveredDays` before that (`paceMicros`), always "At this pace for a year", never added to anything, worked out
+  only on the server; "Last 365 days: $X" shows only when stored history covers every day of `[through−364, through]`
+  for every counted app. Under 30 covered days the sub-lines say so ("only 10 days so far", "average of 10 days",
+  "from 10 days so far").
+* A day between an app's first stored row (`historyFrom`) and `through` with no row counts as $0; a day before it is
+  not covered. A comparison shows only when every counted app covers the whole previous period; otherwise the card
+  says "Not enough days to compare yet".
+* The chip: `changePct = round((cur − prev) × 100 ÷ |prev|)` (whole %, half away from zero, integers only) with
+  `direction` `up | down | same | new | none`. "Up 12%" (success tone, up arrow), "Down 8%" (neutral, down arrow),
+  "Same", "New" when the previous period was $0 and this one is not, nothing when both are $0. Over 999 % reads
+  "Up 999%+". Never vermilion, never colour alone.
+* Currencies are never converted or added: one `currencies` entry per currency, biggest Monthly first.
 
-1. **The owner's skills block** (§18.6), `load_block(..., where="api.ask")`. No skills, no model call (`ask_skills`).
-2. **The knowledge pack**, `api/src/clipfactory_api/ask/knowledge.json`, generated by `web/scripts/ask-knowledge.mjs`
-   (no network; in `prebuild`/`pretest`; CI runs `--check`; hard cap 110k tokens, about 43k today): the **app map**
-   (every help-corpus doc: id, where, route, title, answer, steps and its buttons; those action ids are the only
-   buttons Ask may show), the **owner manual** (SETUP_POSTING.md, the requirement sections of
-   BUSINESS_REQUIREMENTS.md, the platforms, the clip model labels, §12.4), the **setup steps** (every step of the five
-   setup guides in web/src/setup/*.ts: platform, part, number, id and title, in guide order; also in the pack as
-   `setupSteps` for APP STATE), **every place in Settings** (web/src/lib/settingsTree.ts: tree › branch, route, apples
-   and leaves), the app's **routes** (for the server-side button check) and the **library index** (one line per
-   section of CONTRACTS, DECISIONS, ARCHITECTURE, DEPLOYMENT, SECURITY, TESTING, UX_DESIGN_SYSTEM, HELP_ASSISTANT,
-   AGENT, SETUP_POSTING and BUSINESS_REQUIREMENTS; the sections themselves are `ask/library/{id}.md`, read with
-   `read_app_doc`; a section over 30,000 characters is marked "long: read it in parts" and read part by part).
-   Everything passes the **secrets filter** first (keys, tokens, 12-digit account ids, ARNs with an
-   account, emails, URLs with a query, private keys, Cognito ids). It is not the §19.2 infra-word filter: the owner may
-   ask how the app is built.
-3. **The Ask rules** (`ask/prompt.py`, `RULES`), with the one explicit `cache_control {ephemeral, ttl: 1h}`.
+### 27.3 Honesty states
 
-**APP STATE** (`ask/state.py`) goes after the question as a mid-conversation `{"role": "system"}` message, rebuilt
-every question, ≤ 6,000 characters of JSON: now, device, counts, the last 3 jobs (status, progress, source, clip
-count, an error **code**), setup per platform (state `not started`/`in progress`/`ready`/`skipped`, `stepsDone` of
-`stepsTotal` counted like the setup screens, `next` = the first step not done with its number, part and title from
-the guide, account status, `connected`, keys saved yes/no, gates `{gate, state}`), posting places, settings (clip
-model, counts, sounds, motion, background), skills, follows, this week (clips, views, best views), money per platform
-and the `ask` state (web `on`/`no_key`/`off`/`error`, files, knowledgeVersion). Because it has system weight, it
-holds only enums, numbers, ids, booleans and Clip Factory's own step titles: words written by others or by a model
-(clip hooks, raw error text, account names) reach the model only as `read_my_clip_factory` tool results (data).
-Read with the verified user id through the same service functions the routes use, in parallel under **one shared
-1.5 s deadline**; a read not back by then is `"unknown"` and is not waited for. Never included: tokens, keys, secret
-names, ARNs, emails, OAuth state.
+| Situation | What the dashboard does |
+|---|---|
+| TikTok, Instagram or X in the filter | Left out of the totals. Under the cards: "Not counted: TikTok, Instagram and X don't share money with apps." with a "Not shared" chip per app linking to its `paidWhere` when it has a link. Never a number. |
+| Facebook while `moneyVerified` is false | Left out: "Facebook money: coming soon." |
+| App not connected | Left out: "Connect {App} in Settings › Posting › Set up posting." |
+| YouTube without the monetary scope | Left out: "YouTube needs your OK first." with one vermilion **Allow money reading** link to `/settings/posting/money#money-youtube`. |
+| Counted app with no rows yet | Left out: "No money from YouTube yet." |
+| `lastError` and no rows yet | Left out with reason `error`: "Couldn't check YouTube today." and listed in `errors`, so the banner says so (a broken check never reads as "you earned nothing"). |
+| `lastError` on a counted app | Kept in with the rows it has; banner "Couldn't check YouTube today. Showing money up to Thu 14 Nov." (warn tone), naming only the apps in `errors`. |
+| One counted app's newest day older than today − 6 while another is up to date | That app is left out with reason `behind` ("Facebook hasn't sent money since Tue 27 Oct. Not counted for now.") and listed in `behind`, so it cannot pull every app's days back; the others keep current numbers. |
+| Every counted app older than today − 6 | They stay in; `stale: true`; the banner names the apps in `errors` ("Couldn't check …") and the other `behind` apps ("… hasn't sent new money lately."), then "Showing money up to …". |
+| Revised days in the 60 days shown | Grey line "YouTube changed 2 days after rechecking them." |
+| Two or more currencies | Each card stacks one line per currency; a Segmented currency picker (with Glide) above the chart; "Different money types are never added together." |
+| Nothing can be counted | "No money yet." with the nearest goal bar (`nearestGoal`, as on Home) and **See how close you are** (Settings › Posting › Money). No zeros, no chart. |
+| Only apps that never share | One card: "{App} doesn't share money with apps. Look in {paidWhere}." The clip list still shows views. |
 
-Cache invalidators: a skills edit, a knowledge version (deploys) and the web key state (the tool list). The log line
-carries `cacheRead`; a test checks the prefix is byte-identical across two questions.
+Every amount carries its tag ("YouTube's estimate", "Meta's estimate", "Apps' estimates" for a mix). "Paid",
+"received" and "actual" never sit next to an amount.
 
-### 27.3 The web (client-side tools; Bedrock has no server web tools)
+### 27.4 The screen
 
-* **`web_search`** `{query ≤ 200, freshness?: day|week|month|year}`: the **Brave Search API** (checked on Brave's
-  docs 2026-11-19: `GET https://api.search.brave.com/res/v1/web/search`, header `X-Subscription-Token`, `count` 8,
-  `safesearch` moderate, `freshness` pd/pw/pm/py; the Search plan is $5 per 1,000 requests with $5 free each month).
-  4 s, no retry. Results go back as `search_result` blocks with citations on. A failure is an `is_error` result.
-* **`web_fetch`** `{url}`: only a URL from this answer's search results (stored normalised, as the fetch compares it:
-  lower-case host, no `#fragment`, `/` for an empty path), a web source of an earlier answer (sent back with the
-  history, §27.6) or one the owner typed himself (question or history). https only (http upgraded), every address
-  public (private, loopback, link-local, CGNAT, metadata, multicast, reserved, and IPv6 forms that carry an IPv4
-  address: NAT64 `64:ff9b::/96` and `64:ff9b:1::/48`, 6to4, Teredo, refused) and checked again on each of at most 3
-  redirects, the connection goes to the checked address, **one deadline for the whole fetch** (DNS with a 2 s timeout,
-  connect, every redirect and every read; at most 10 s, each request at most 6 s, never past the answer's hard
-  budget less 2 s), 2 MB, `text/html`/`text/plain`/`application/json`/`application/pdf`, a fixed User-Agent, no cookies.
-  HTML becomes text (scripts, styles, nav, header, footer dropped) ≤ 40,000 characters in a `search_result` block; a
-  PDF goes as a `document` block in the tool result (if Bedrock refuses that, the worker replaces it with an error
-  result once and turns web PDFs off for the answer).
-* **The key** lives only in Secrets Manager `cf-prod/ask/search-key`, created by the app: `PUT /v1/help/search-key`
-  runs one test search, then `PutSecretValue` or `CreateSecret`; `DELETE` removes it with
-  `ForceDeleteWithoutRecovery`. Never echoed, logged or put in the prompt (and the answer filter hides it if the
-  model ever writes it); the worker caches it **60 s**, so **Take key away** reaches a warm worker within a minute. A
-  key that can't be read (throttling, permissions) is web `error`, not `no_key`: Ask never asks him to set it up again.
-* **No key**: no `web_search` tool (`web_fetch` stays for typed URLs); rule 10 makes Ask say "I can't search the web
-  yet." once; `ask.done` carries `webMissing` and the panel shows **Turn on web search** once per chat.
-* Owner card: Settings › App & account › **Ask** (apples `ask-web-setup` and `ask-status`): the steps (make a free
-  account and pick **Search**, copy the key, paste it and tap **Save key**) with **Get a search key** as a glass
-  button (≥ 48 px, external icon) under them, not a link inside a sentence; **Take key away**.
-* Caps per answer: `web_search` 6, `web_fetch` 6; past a cap the tool says "limit reached, answer with what you have".
+* **Route** `/money` (`{ name: "money" }`, section `money`, title "Money · Clip Factory"). Apps, period and sort are
+  not part of the Route: the page reads `?apps=youtube,facebook&period=30&sort=views` itself and keeps the address up
+  to date with `history.replaceState` (no focus move, no scroll). Saved per device in `localStorage["cf-money-dash"]`
+  (every read and write in try/catch, bad values fall back to the defaults); the address wins over storage.
+* **Navigation**: "Money" (icon `coin`) between Library and Settings in the sidebar and the phone tab bar (6 tabs;
+  under 360 px the bar's side padding shrinks so each tab keeps 48 px). Home's **See money** opens `/money`. The
+  dashboard header links "How close am I to getting paid?" to Settings › Posting › Money, which keeps programme
+  progress, Allow money reading, Check now and payouts, and now starts with a **Money dashboard** apple
+  (`money-dashboard`, `href: "/money"`, found by "revenue", "mrr", "money per video").
+* **Controls**: an **Apps** group of toggle chips (`<button aria-pressed>`, 44 × 44, a 20 px PlatformMark each, then
+  **All** at the right end). Tapping an app while All is on picks only it; turning the last one off is All; all five is
+  All; All clears the rest. **Period** (Segmented with Glide): 7 days, 30 days, 90 days, Year (default 30). **Sort
+  clips** (Segmented): Most money, Most views. The cards always use their fixed days; the period changes the chart and
+  the clip list ("Cards use fixed days. The picker changes the chart and the clip list.").
+* **Phones and touch tablets** (`(max-width: 767px), (pointer: coarse) and (max-width: 1194px)`): the controls sit in
+  a glass **dock** (110 px, two rows, right-aligned) above the tab bar at the bottom right: the app chips on top, the
+  period nearest the thumb. Nothing tappable in the top-left third of the page. Ask's home spot moves above the dock
+  (§19.8) and the page's bottom padding grows so the last clip scrolls clear. On touch tablets the dock hugs the right
+  edge. On a short phone (height 640 px or less) the header and the Monthly card tighten so the Monthly number is above
+  the dock on first load, and the "?" stays clear of Ask's home spot. **Wide screens with a mouse**: a full-width glass
+  band under the title that stays at the top (sticky) while the page scrolls; the controls sit at its right end (two
+  short rows, one row once the band is 900 px or wider). The page scrolls under the whole band, so it never floats
+  over the sort bar, a clip's money or the chart. On both layouts the controls come right after the title in reading
+  and tab order (CSS keeps them where they show).
+* **Loading a new filter**: the last filter's numbers and clips stay in place dimmed (`aria-busy`) until the new ones
+  arrive; when the new load fails, they go and the error with Try again shows instead, and Show more appears only for
+  the list on screen. With no money per video for the chosen apps the clip list hides its Sort bar (the note says
+  "Sorted by views.").
+* **Cards**: Monthly (main card, display-size number that counts up once, 700 ms) then Weekly | Daily side by side,
+  then Yearly. When the card area is 880 px or wider: Monthly on the left over two rows, Weekly and Daily on the
+  right with Yearly under them. A card narrower than 150 px drops its number one step (container query).
+* **Chart** (hand-drawn SVG, no library): money per day (7, 30, 90) or per week (Year, weeks ending on `through`, the
+  oldest marked partial), split by app only when two or more apps have money (YouTube bone, Facebook leaf; never
+  vermilion). No gridlines, axis lines or borders: one soft baseline band, the highest value on top, the first and
+  last dates under it. 180 px tall on phones, 240 px from 768 px, 280 px from 1280 px. A tap, pointer or the arrow
+  keys show "Sat 16 Nov · $1.12 · YouTube's estimate" in a small tip, mirrored in a polite live line; "Show as a list"
+  lists every value. "Money history starts 1 Sep." when the period reaches back before the first stored day. Bars
+  grow once (520 ms, staggered up to 240 ms); nothing moves under reduced motion.
+* **Money per clip**: "From {from}, up to {to}. YouTube's estimate." Each row is a whole-row link to `/clips/{id}`:
+  the 9:16 cover, the title (two lines), YouTube's amount (or "None yet"), the apps that don't share on one line with
+  "Not shared", "12.3K views so far", and "$4.10 per 1,000 views · YouTube's numbers" when the server sent it; the
+  row's total at the right. When the list is 900 px or wider each app gets its own column with its views. 20 a page,
+  **Show more**, skeletons while loading, an error panel with Try again. Year shows each clip's lifetime money.
+* **Ask anchors**: `money-dash`, `money-dash-monthly`, `money-dash-filter`, `money-dash-period`, `money-dash-clips`;
+  help guides `real-money` (now opens `/money`) and `money-mrr`; `money` is a help page name (§19.6).
 
-### 27.4 The other tools (all read only)
+### 27.5 API (additive, under `ANY /v1/{proxy+}`)
 
-| Tool | Input | Does |
-|---|---|---|
-| `read_app_doc` | `{id, part?}` | One part (≤ 30,000 characters, cut at a line break) of a library section as a `search_result` block, source `clip-factory://library/{id}`; a long section starts "(part 1 of 3. Read part 2 for more.)". Only ids in the index. Cap 6. |
-| `read_my_clip_factory` | `{section, id?}`, sections `jobs`, `job`, `review`, `library`, `clip`, `week`, `setup`, `money`, `money_days`, `follows`, `settings`, `lessons`, `skills` | The owner's own data (ids looked up under his own key only), scrubbed, ≤ 12,000 characters. Cap 6. |
-| `show_app_buttons` | `{actionIds}` (1 or 2) | Buttons from the app map whose route is a real page (checked on the server against the pack's routes, as router.ts, and again in the panel); sends `ask.actions`; unknown ids come back as an error. Cap 2. |
-
-The calls of one model turn run at the same time (up to 6, each inside its own deadline); `show_app_buttons` runs in
-order on the worker's thread. Before tools run, the worker checks Stop and the hard budget; a call still running when
-the budget ends is answered "that took too long".
-
-Nothing writes, posts, deletes, connects or sends.
-
-### 27.5 Transport
-
-Start over HTTP, stream over the existing WebSocket (Python Lambdas cannot stream a response; WebSocket frames are
-32 KB, too small for a question with history):
-
-1. The panel sends `{"action": "whoami"}`; `cf-prod-ws` answers `{"type": "whoami", "connectionId"}`. No open socket
-   within 4 s: the §19 path (`POST /v1/help/answers`).
-2. Files (only when Send is pressed): `POST /v1/help/files`, then a presigned PUT each, with progress.
-3. `POST /v1/help/asks` → **202** `{askId}`: JWT, kill switch (`assistant`), parse (≤ 200 KB), the connection is the
-   owner's (`USER#{sub}`/`CONN#{id}`, else 409 `not_live`, retried once), rate limit, the secrets refusal on the typed
-   words (a fixed answer `{askId, refused: true, text}` with 200, no model call), then an async Invoke of `cf-prod-ask`
-   with `{askId, sub, connectionId, requestId, flags: {web, files}, body}`. The refusal is narrow: only asking to be
-   shown his own stored values ("show me my API key", "what's my Instagram app secret"); "what is a refresh token?" or
-   "how do I store API keys in Terraform?" reach the model. **Every exit but a 202** (refusal, 400 after parsing, 403
-   off, 409, 429, 503, a failed Invoke) deletes the question's uploaded files; the panel also deletes them on every
-   ending where the question did not start (Stop during the upload, a failed upload, a 4xx/5xx, a network failure).
-4. `cf-prod-ask` (python3.13 arm64, 1024 MB, 150 s, async retries 0 and event age 60 s, so an answer never runs twice;
-   no reserved concurrency, the account cannot reserve any) posts one JSON event per message. The question's files are
-   deleted from S3 as soon as they are read into memory (and again in `finally`). Text deltas are batched (≥ 80 ms or
-   400 characters) after the answer filter: a 64-character hold-back that never cuts inside an unbroken token and
-   holds a private key block back until its END; on answers it hides only high-confidence key shapes (private key
-   blocks, `AKIA`/`ASIA`, `sk-`/`ghp_`/`xox` style keys) and his stored search key, so Terraform examples, emails and
-   cited links with a query stay readable. When nothing else was sent for 10 s, a status heartbeat ("Still working…")
-   goes out. A `GoneException` ends the model stream at once.
-5. Stop: `POST /v1/help/asks/{askId}/stop` writes `USER#{sub}`/`ASK#STOP#{askId}` (ttl 10 minutes); the worker
-   checks it at most every 1.5 s and ends with `stop: "stopped"`. `ASK#` is not a broadcast prefix.
+`GET /v1/money/summary?platforms=youtube,facebook&chart=30`: `platforms` any of the five (missing = all; unknown → 400
+"Pick apps from the list."; duplicates folded; STATS_ORDER), `chart` 7 | 30 | 90 | 365 (default 30, else 400).
+Registers the owner like `GET /v1/money`. Reads `MONEYSTATE#` and `REVENUE#{p}#` only for the chosen apps that
+`money_shown()` allows (`money/summary.py`).
 
 ```ts
-type AskEvent =
- | {type:"ask.started"}
- | {type:"ask.status", kind:"thinking"|"searching"|"reading"|"looking"|"checking_app"|"reading_files", label:string}
- | {type:"ask.delta", seq:number, text:string}
- | {type:"ask.actions", actions:HelpAction[]}            // ≤ 2, from the app map
- | {type:"ask.sources", sources:{n, kind:"web"|"file"|"app", title, url?, file?, where?}[]}
- | {type:"ask.files", files:{fileId, read:boolean, why?:"unsupported"|"too_long"|"damaged"|"off"}[]}
- | {type:"ask.done", stop:"end"|"budget"|"stopped"|"refused"|"error", links:string[], webMissing?:true}
- | {type:"ask.error", code:"rate_limited"|"unavailable"|"model"|"timeout", message:string, retryAfter?:number}
-// every event also carries askId
+interface MoneySummary {
+  platforms: Platform[]; included: Platform[];
+  excluded: { platform: Platform; reason: "not_shared" | "coming_soon" | "not_connected" | "needs_permission" | "no_money_yet" | "behind" | "error"; text: string; where?: MoneyWhere }[];
+  through: string | null; throughBy: Partial<Record<Platform, string>>; historyFrom: Partial<Record<Platform, string>>;
+  lagNote?: string; currencies: MoneyCurrencySummary[]; revised: { days: number; platforms: Platform[] };
+  errors: { platform: Platform; text: string; checkedAt?: string }[]; behind: Platform[]; stale: boolean; asOf: string;
+}
+interface MoneyChange { previousPeriodMicros: number | null; changePct: number | null; direction: "up" | "down" | "same" | "new" | "none" }
+interface MoneyCurrencySummary {
+  currency: string; tag: string; platforms: Platform[]; coveredDays: number;   // 1–30
+  monthly: { amountMicros: number; from: string; to: string } & MoneyChange;
+  weekly:  { amountMicros: number; from: string; to: string } & MoneyChange;
+  daily:   { averageMicros: number; from: string; to: string; latest: { date: string; amountMicros: number } | null } & MoneyChange;
+  yearly:  { paceMicros: number; last365Micros: number | null };
+  chart:   { period: 7 | 30 | 90 | 365; bucket: "day" | "week"; from: string; to: string;
+             points: { start: string; end: string; amountMicros: number; byPlatform: Partial<Record<Platform, number>>; partial?: true }[] };
+}
 ```
 
-**Links**: while an answer streams no link is live; after `ask.done` only the https URLs in `links` (this answer's
-search and fetch results and the owner's own typed URLs) become live links (`target=_blank rel="noopener noreferrer"`;
-the Mac app opens them in the browser). **Failures**: a model error or no `ask.started` within 8 s before any words →
-the §19 answer with "I couldn't think it through this time. Here is the short help."; after words → the answer ends
-with "The answer was cut short. Ask me to go on."; 45 s without an event ends it the same way, and the panel then
-calls Stop so the worker stops spending.
+The comparison's previous amount is `previousPeriodMicros` (not `previousMicros`, which stays the stored revision field
+and never leaves the server, with `breakdown`, tokens and raw bodies).
 
-### 27.6 API
-
-| Method & path | Body | 2xx |
-|---|---|---|
-| POST `/v1/help/files` | `{files: {name ≤ 120, type ≤ 100, size}[1..10]}` | 200 `{files: {fileId, kind, url, headers: {Content-Type, Content-Length}, expiresIn: 300}[]}` |
-| DELETE `/v1/help/files/{fileId}` | none | 204 (best effort) |
-| POST `/v1/help/asks` | `AskStart` | 202 `{askId}`, or 200 `{askId, refused: true, text}` |
-| POST `/v1/help/asks/{askId}/stop` | none | 204 |
-| PUT `/v1/help/search-key` | `{key ≤ 200}` | 204 |
-| DELETE `/v1/help/search-key` | none | 204 |
-
-GET /v1/help (§19.6) adds `assistant: {on, web: "on"|"no_key"|"off", files, limits}` with limits `{filesPerQuestion:
-10, bytesPerFile: 25000000, bytesPerQuestion: 50000000, imagesPerQuestion: 8, questionChars: 4000, pdfPages: 100}`.
+`GET /v1/money/clips?platforms=&period=30&sort=money&cursor=&limit=20`: `period` 7 | 30 | 90 | all, `sort` money |
+views, `limit` 1–50. One Query of `POST#`, grouped by clip and sorted here (most money: total, then views, then
+newest; most views: views, then newest; when no chosen app shares money, by views with `note` "{TikTok} doesn't share
+money per video. Sorted by views."), then one BatchGetItem of the page's `CLIP#` items and 1-hour cover links for the
+page only. Clips with a posted Post on a chosen app, posted on or before `to`. The cursor is opaque (an offset and a
+hash of the apps, period, sort and `to`); one that no longer fits → 400 "This list changed. Load it again."
 
 ```ts
-interface AskStart { askId: string /* uuid v4 */; connectionId: string; question: string /* 0..4000; 0 only with files */;
-  history?: { role: "user"|"assistant"; text: string /* ≤ 4000 / ≤ 12000 */; files?: {name, format}[] /* user turns */;
-    sources?: {title ≤ 200, url: https ≤ 2000}[] /* answers, ≤ 30: their web sources */ }[] /* ≤ 90 000 */;
-  context?: HelpContext; files?: { fileId; name; format; kind: "image"|"pdf"|"text"|"office"; carried?: boolean }[] /* ≤ 10 */ }
+interface MoneyClips {
+  period: 7 | 30 | 90 | "all"; from: string | null; to: string | null; sort: "money" | "views"; sortedBy: "money" | "views"; note?: string;
+  clips: { clipId: string; title: string; coverUrl?: string; firstPostedAt: string; views: number | null;
+    totals: { currency: string; amountMicros: number }[];
+    platforms: { platform: Platform; postId: string; url?: string; postedAt: string; views: number | null;
+      money: { amountMicros: number; currency: string; from: string | null; to: string; tag: string; source: string } | null;
+      per1000Views: { amountMicros: number; currency: string; views: number; tag: "YouTube's numbers" } | null;
+      moneyState: "reported" | "not_shared" | "coming_soon" | "not_reported_yet" | "needs_permission" | "not_connected" }[] }[];
+  nextCursor?: string;
+}
 ```
 
-Errors use the §19.6 shape: 400 "Ask a question with up to 4,000 letters.", "You can send 10 files at a time.",
-"That file is too big. The most is 25 MB." and the unsupported-file notes (§27.7); 403 `help_off`; 409 `not_live`;
-429 with `Retry-After` (the shared §19.6 6 a minute and 60 an hour, plus `askDayKey`/`askDayCount` ≤ 400 a UTC day;
-files ≤ 300 and ≤ 1 GB a day, `fileDayKey`/`fileDayCount`/`fileDayBytes`); 503. Unknown keys are a 400. The kill
-switch `HELP`/`SWITCH` gains `assistant`, `web` and `files` (absent = true). cf-prod-api env: `ASK_ENABLED` (prod
-true), `ASK_FUNCTION_NAME`, `ASK_SEARCH_SECRET`.
+Money per clip: `all` reads the Post's `revenue`; 7, 30 and 90 read `revenueWindows[period]`, and only a window over
+the list's own days (`from` and `to` equal to the list's, `to` being YouTube's newest window) counts: one left from an
+older run is `not_reported_yet` with `money: null`, never ranked beside fresh ones. Only YouTube reports money per
+video (Facebook's is per Page, so a verified Facebook alone is still sorted by views with the note), and only while
+it is connected with the monetary scope, as in the summary: otherwise its lines are `needs_permission` ("YouTube needs
+your OK first. Sorted by views.") or `not_connected` ("Connect YouTube to see money per video. Sorted by views.") with
+no money counted. `per1000Views =
+round(amountMicros × 1000 ÷ views)` only when the money and the views come from the same stored YouTube report and
+those views are at least 1,000. Views per app are the post's lifetime views ("so far").
 
-### 27.7 Files
+### 27.6 Collector and storage (additive)
 
-* Added by the paperclip ("Add a file", any file), drop on the panel ("Drop it here") or on the launcher (Ask opens
-  with them), and paste (files and pictures; text over 4,000 characters becomes "Pasted text.txt" with "That was long,
-  so I added it as a file."). The Mac app keeps `disable_drag_drop_handler()`, so drops reach the page.
-* Kinds: **image** (jpg, png, webp, gif, heic/heif, bmp, avif: re-encoded in the browser to a clean JPEG ≤ 1568 px,
-  ≤ 600 KB, as §26; ≤ 8 a question), **pdf** (≤ 100 pages, a `document` with citations), **text** (txt, md, csv, tsv,
-  json, yaml, xml, html, log, ini, toml, tf, tfvars, hcl, code, srt, vtt, any `text/*`: UTF-8 else cp1252, ≤ 400,000
-  characters), **office** (docx, xlsx, pptx, odt, ods: text pulled out with zipfile + xml.etree, ≤ 50 MB unzipped and
-  ≤ 2,000 entries, no DTDs). Refused when added, with a note: zip/rar/7z ("I can't read .ZIP files. Unzip it and add
-  the files inside."), doc/xls/ppt ("Save it as .DOCX or PDF."), video ("I can't watch videos here. To make clips, use
-  **Make clips** on Home.") and anything else ("I can't read that kind of file yet. Try a PDF, a picture or a text
-  file."). The worker checks magic bytes against the kind (`damaged`), keeps ≤ 600,000 characters of text and ≤ 20 MB
-  of base64 a question (`too_long`), and redacts text **and office** files with the wide filter (always noted for
-  .tfvars, .env, .pem: "I hid things that looked like keys.").
-* Upload: `ask/{sub}/{fileId}` (22 url-safe characters), presigned PUT for 300 s with the type and length signed;
-  SSE-S3; the existing media CORS and CSP already allow it.
-* Deletion: the worker deletes every file of the question right after reading it and again in `finally` (end, stop,
-  error, gone); the API deletes them on every non-202 start; the panel deletes them on every ending where the
-  question did not start; the lifecycle rule `ask-1-day` (prefix `ask/`, 1 day, incomplete uploads 1 day; S3 expires
-  once a day, so up to 2 days) is the safety net.
-  Nothing about a file goes to DynamoDB or the logs but its kind and size.
-* Carried files: the chat keeps sent files' Blobs in memory (≤ 30 files / 100 MB, older ones become "No longer kept");
-  a follow-up re-sends the files of the last 2 questions that had files (`carried: true`), within the limits; "Still
-  using: …" above the field lets the owner take one away (a 32 px circle in a 44 px target). They are uploaded again
-  each time and sent as new blocks in the new question, so the model reads them again in full (prompt caching covers
-  the earlier turns' text, not re-sent files).
-* Tiles: a picture is a 64 px thumbnail (72 px in the phone sheet) and a button "Mark picture N"; a file is 168×64 with
-  a format icon, the format in capitals, the name on one line and the size; each has "Take away …"; a ring shows
-  upload progress; a screen reader hears "PDF file added. 2 of 10." (several at once: "3 files added. 3 of 10."). On
-  phones the tray is one row that scrolls sideways; wider panels wrap it, at most 156 px tall, scrolling inside.
-  Notes over the tray are opaque. Files dragged over the Ask button make it glow (a still glow with less motion); with
-  the assistant off it still takes pictures (§26).
+* The lifetime per-video read (§25.3) asks `metrics=estimatedRevenue,views` and also keeps `revenue.views`.
+* After the day report, `throughYT` is its newest row date. For N in 7, 30, 90: `startDate = throughYT − (N−1)`,
+  `endDate = throughYT`, `dimensions=video`, `metrics=estimatedRevenue,views`, the same 50-id chunks, only for videos
+  posted on or before `throughYT`. A video YouTube leaves out of a successful report had no money and no views in those
+  days and is stored as 0. Each period is written with `UpdateItem SET revenueWindows.#n = :w` (the map is made with a
+  conditional `SET revenueWindows = :m` first when missing, never on a Post that is gone): `{amountMicros, views, from,
+  to, currency: "USD", source: "youtube.estimatedRevenue", fetchedAt}`. A period whose report fails keeps its old value
+  (logged as `money.windows_failed`). Cost: 3 more report sets per daily run, `ceil(videos ÷ 50)` each.
+* `forget` (explicit YouTube Disconnect, `cf-prod-stats`) also removes `revenueWindows`. Nothing else deletes it.
+* No table, index, bucket, Lambda, role or route-infra change: the Terraform plan shows code updates only
+  (`cf-prod-api`, `cf-prod-money`, `cf-prod-stats`).
 
-### 27.8 The markup editor
+### 27.7 Mock scenarios
 
-Tap or press Enter on a tray picture. Pen (default), Box and Arrow in a `<Glide>` bar (a real radio group: one Tab
-stop, arrow keys, Home and End move and choose); Undo, Redo (desktop and tablet; on phones a long press of Undo, with
-no text callout or context menu), Clear (undoable), Cancel and Save (vermilion, the one action). Ink `--ask-ink`
-`#E8231B` with a white halo, 0.6 % of the long edge (≥ 4 px), pen pressure 0.6× to 1.4×. Pointer Events with
-capture and coalesced points, quadratic smoothing; two fingers zoom (1 to 4×) and pan, never draw; a finger pans while
-a pencil is in use; wheel and trackpad pinch zoom at the pointer, never the page (a native non-passive wheel listener;
-Safari's gesture events are stopped); double-tap resets; a pointer already released never stops a stroke. The canvas
-is `role="application"` with `aria-roledescription="drawing area"`, so screen readers pass the arrow keys and Enter
-through. Drops and pastes on the editor are taken by it and never reach the panel's tray. Keyboard (page order):
-tools → canvas → Undo → Redo → Clear → Cancel → Save; arrow keys move a crosshair (Shift faster), Enter starts and ends a mark, P/B/A, Cmd/Ctrl+Z,
-Shift+Cmd/Ctrl+Z, Cmd/Ctrl+Enter saves, Escape cancels (with new marks it asks "Throw away your marks?" with **Keep
-marking** and **Throw away**). Save draws picture and marks into one JPEG (0.9, 0.82, then the §26 ladder, ≤ 600 KB,
-APPn stripped) that **replaces** the tray picture; the original and the marks stay in memory so the picture can be
-marked again, and the original is let go when the question is sent. Phones: full screen, tools bottom left, Undo, Clear
-and Save bottom right (Save at the far right, 56 px tall), Cancel top right. Tablets: a 92vw × 88vh dialog, Undo,
-Redo, Clear and Cancel (×) as 48 px icons in the bar, so Undo stays in the right half. Desktop: ≤ 1100 × 820. Modal everywhere (the page is inert). Less motion: nothing moves.
+Added to `MONEY_SCENARIOS` (`window.__cfMock.money.setScenario`): `dash_many` (YouTube 400 days with a weekly wave,
+Facebook verified USD 120 days, TikTok/Instagram/X not shared, 26 clips with 18 earning, 2 revised days),
+`dash_youtube_only` (75 days, so the 90-day and Year charts show the history note), `dash_nothing` (no rows; views
+only), `dash_two_currencies` (YouTube USD, Facebook EUR), `dash_short_history` (20 days: no comparisons) and
+`dash_error` (`lastError`, newest row today − 9; the clip list's second page answers 500). Every older scenario
+renders the dashboard's own states. Dates count from `Date.now()`; tests fix the clock at 2026-11-19 12:00 UTC.
+`web/src/api/mock/moneySummary.ts` is the mock's copy of the server's rules, checked against the shared golden cases;
+it is the only web file allowed to do money arithmetic.
 
-### 27.9 The panel
+### 27.8 Not verified live
 
-"Ask me anything" (4,000 characters, the counter from 3,800); the paperclip at the left of the field; Send becomes a
-green **Stop answer** square while an answer streams (one button that changes its icon and name, so keyboard focus
-stays on it); **Bigger** (desktop and tablet, 440 ↔ `min(880px, 100vw - 48px)`,
-remembered in localStorage when it can be). Answers stream as safe markdown (tables, code blocks with **Copy**), `[n]`
-chips that jump to a **Sources** list (web: title and domain; files: name and page; app: "Clip Factory guide"), a
-status line with the Ask mark, up to two app buttons (the newest answer's first is vermilion; the spotlight and unsaved
-guard of §19.8 unchanged), "I couldn't read this one" notes, and **Copy answer**. Memory only, as §19.8.
+That YouTube returns rows for $0 days in the day report; that Analytics `views` with `dimensions=video` match for
+Shorts; the Analytics quota for the 3 more report sets a day; that a video missing from a successful `dimensions=video`
+report earned nothing in those days.
 
-### 27.10 Budgets
+### 27.9 Tests
 
-Per answer: 95 s soft (no new tool calls), 110 s hard (`stop: "budget"`, "I ran out of time. Ask me to go on."),
-≤ 8 model rounds, up to 64,000 `max_tokens` per round, ≤ 64,000 output tokens an answer (past 80 % the next round is
-the last, with no tools, so it finishes in words; a finished answer is never labelled as cut), ≤ 400,000 uncached
-input tokens (then the final round has no tools). No monthly cap (the owner's choice): `cf-prod/AskInputTokens` and `AskOutputTokens` from the
-log line, and the alarm `cf-prod-ask-tokens-day` above 20M input tokens in 24 h (`ask_tokens_alarm_threshold`), which
-blocks nothing. A plain question costs about $0.04, a web question $0.10 to $0.20, a 100-page PDF $0.50 to $0.80 (list
-prices, before Bedrock's regional pricing).
-
-### 27.11 Logging
-
-One `help.ask` line per answer from `cf-prod-ask` (fields and outcomes in docs/HELP_ASSISTANT.md: `ask_ok`,
-`ask_budget`, `ask_stopped`, `ask_gone`, `ask_refused`, `ask_refused_secret`, `ask_skills`, `ask_model_error`,
-`ask_model_timeout`, `ask_bad_body`, `ask_rate_limited`, `ask_off`, `ask_error`) and one `help.ask_start` line from
-`cf-prod-api`. Never logged: the question, history, answer, file names or contents, URLs, search queries, the key or a
-presigned URL. `cf-prod/AskModelFailures` feeds `cf-prod-ask-model-failures` (≥ 10 in an hour).
-
-### 27.12 Infrastructure (additive)
-
-`infra/modules/ask` (function, role, log group, async-invoke config); cf-prod-api gains `lambda:InvokeFunction` on
-it, the search-key secret actions on `cf-prod/ask/search-key-??????` (the name plus the 6-character suffix Secrets
-Manager adds, never a trailing `*`) and `ask` in its media prefixes; `cf-prod-fn-ask` reads the table (`GetItem`,
-`Query`) and never writes it; the media bucket gains
-the `ask-1-day` rule (an in-place update; `prevent_destroy` stays); monitoring gains two metric filters for tokens, one
-for failures and two alarms; `config/models.json` gains `askModel`, `askFallbackModel`, `askEndpoint` and `opus-4-8`.
-No table, index, route, CORS or CSP change. The plan creates and updates only.
-
-### 27.13 Tests
-
-api: `tests/test_ask_worker.py` (request shape, cache prefix, events, the tool loop with citations, buttons, injection,
-refusal, model errors before and after words, gone, Stop, both budgets, skills failure, the hold-back, files read and
-deleted on every exit, logs), `tests/test_ask_api.py` (status, presign, limits, start, not_live, rate limits, the
-refusal, Stop, the search key), `tests/test_ask_parts.py` (office extraction, zip bomb, PDF pages, text decoding, the
-SSRF guard, HTML, Brave, the key cache, the secrets filter in both languages, the knowledge pack, tools and state),
-`tests/test_skills_everywhere.py` (the stream helper). web: `test/askAssistant.test.ts`; Playwright
-`e2e/ask-assistant.spec.ts` and `e2e/ask-markup.spec.ts` (chromium, webkit, webkit-phone), `e2e/ask-review.spec.ts`
-(the review fixes), and Ask's tray, tiles, sources, editor and key card in `e2e/edges.spec.ts` and
-`e2e/contrast.spec.ts`. infra: `modules/ask`,
-`modules/api`, `modules/monitoring` and `envs/prod` tests.
-
-### 27.14 Mock build
-
-The mock socket answers `whoami`; `api/mock/ask.ts` takes presigned PUTs in memory (`window.__cfMockAsk.files` keeps
-the bytes for tests), starts a deterministic fake worker (status at 150 ms, 20-character deltas every 40 ms; app
-questions from the local retriever, Terraform and recipes as markdown, Instagram/Meta/"now" with a fake source on
-`https://developers.example.test`, files as one line each) and the magic words `#nokey`, `#search`, `#slow`, `#cut`,
-`#refuse`, `#gone`, `#429`, `#503`, `#off`, `#budget`. `localStorage` `cf-mock-assistant` = `off` turns the assistant off
-(the §19/§26 specs use it).
+`api/tests/fixtures/money_summary_cases.json` (26 shared golden cases, written by `api/tests/money_cases.py`, read by
+pytest and vitest); `api/tests/test_money_summary.py` (the golden cases, the end day, missing days and coverage,
+rounding and the 999 cap, daily and pace, last 365, currencies, revised, every excluded reason, errors and stale, week
+buckets, parameters, no internal keys); `api/tests/test_money_clips.py` (grouping, filter, both sorts, the views
+fallback with its note, per 1,000 views only from the same report, all vs periods, cursor and the changed list, page
+only presigns, no internal fields); `api/tests/test_money.py` additions (periods anchored on YouTube's newest day with
+the same report's views, `SET revenueWindows.#n` only, a failed period keeps its value, a deleted Post stays deleted,
+`forget`). `web/test/moneyDash.test.ts` (filter rules, address over storage, throwing storage, plain dates in three
+time zones, chip words, chart shape, the font step, the mock against every golden case); `web/test/noGuesses.test.ts`
+(no `amountMicros` times or divided outside the mock copy and the Settings sparkline's drawing, no × 12 near money,
+no views turned into money, `per1000Views` only formatted); `web/test/money.test.tsx` (See money opens `/money`);
+`web/e2e/money-dashboard.spec.ts` (13 sizes incl. 768 and 1024 with and without touch and the desktop app's
+1200 × 820 and 380 × 600: no sideways scroll, no edges, axe contrast light and dark, 44 px targets, the arrow cursor;
+the thumb zone, the toolbar staying in view, and every flow); `web/e2e/navigation.spec.ts` (6 tabs).

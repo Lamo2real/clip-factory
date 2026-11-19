@@ -1,4 +1,4 @@
-"""Shared bits for the Ask assistant tests (§27): a fake Claude in Amazon Bedrock client that replays recorded turns.
+"""Shared bits for the Ask assistant tests (§28): a fake Claude in Amazon Bedrock client that replays recorded turns.
 
 A fixture turn lists the content blocks of one model response and its stop reason; ``events`` turns it into the
 documented stream event sequence (``content_block_start`` → ``text_delta``/``citations_delta``/``input_json_delta``

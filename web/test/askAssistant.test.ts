@@ -1,4 +1,4 @@
-// Ask as a full assistant (docs/CONTRACTS.md §27): files, the markup model, the streamed answer, running one question,
+// Ask as a full assistant (docs/CONTRACTS.md §28): files, the markup model, the streamed answer, running one question,
 // the chat memory, the API client and the markdown additions.
 import { describe, expect, it, vi } from "vitest";
 import { askApi, trimHistory, type AskApi, type AskHttp, type AskTurn } from "../src/features/help/askApi.ts";
@@ -302,7 +302,7 @@ describe("runAsk", () => {
 
 // ---------- the chat memory ----------
 
-describe("chat memory (§27)", () => {
+describe("chat memory (§28)", () => {
   const tf = (id: number, kind: TrayFile["kind"] = "pdf"): TrayFile => ({
     id,
     kind,

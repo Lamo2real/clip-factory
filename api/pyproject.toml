@@ -30,7 +30,7 @@ pythonpath = ["src", "tests"]
 line-length = 120
 target-version = "py313"
 src = ["src", "tests", "scripts"]
-# Ask's library (docs sections the model reads, CONTRACTS §27.2) is generated text, not code to lint or format.
+# Ask's library (docs sections the model reads, CONTRACTS §28.2) is generated text, not code to lint or format.
 extend-exclude = ["src/clipfactory_api/ask/library"]
 
 [tool.ruff.lint]

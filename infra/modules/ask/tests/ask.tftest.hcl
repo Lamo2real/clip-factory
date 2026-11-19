@@ -1,7 +1,7 @@
 # Offline plan test (mock AWS provider, no credentials, no AWS calls):
 #   cd infra/modules/ask && terraform init -backend=false && terraform test
 #
-# docs/CONTRACTS.md §27.12: cf-prod-ask is one arm64 function on the shared zip, started only asynchronously and never
+# docs/CONTRACTS.md §28.12: cf-prod-ask is one arm64 function on the shared zip, started only asynchronously and never
 # retried, with exactly the permissions it calls: the two Ask models on Bedrock Mantle (by the bedrock-mantle:Model
 # condition), the question's files under ask/ (read and delete), skill files (read), the owner's items (no Put or
 # Delete), PostToConnection on the live stage and the search key (read).
@@ -65,7 +65,7 @@ run "function_and_async_config" {
       ASK_SEARCH_SECRET     = "cf-test/ask/search-key"
       HELP_ENABLED          = "true"
     })
-    error_message = "The worker's environment is exactly the contract's (§27.12)."
+    error_message = "The worker's environment is exactly the contract's (§28.12)."
   }
 
   assert {

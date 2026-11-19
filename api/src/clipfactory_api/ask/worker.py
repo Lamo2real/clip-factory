@@ -1,4 +1,4 @@
-"""``cf-prod-ask``: answers one Ask question and streams it over the WebSocket (docs/CONTRACTS.md §27.5).
+"""``cf-prod-ask``: answers one Ask question and streams it over the WebSocket (docs/CONTRACTS.md §28.5).
 
 Started by ``POST /v1/help/asks`` with an async Invoke (retries 0, so an answer never runs twice). Order of work:
 ``ask.started`` → the owner's skills (no skills, no model call) → the knowledge pack → the web key state → the files

@@ -1,4 +1,4 @@
-"""Web search for Ask (docs/CONTRACTS.md §27.3): the Brave Search API behind a small ``SearchProvider`` interface.
+"""Web search for Ask (docs/CONTRACTS.md §28.3): the Brave Search API behind a small ``SearchProvider`` interface.
 
 Checked against Brave's own docs (2026-11-19): ``GET https://api.search.brave.com/res/v1/web/search`` with the key in
 the ``X-Subscription-Token`` header; ``q``, ``count`` (≤ 20), ``freshness`` (``pd``/``pw``/``pm``/``py``) and

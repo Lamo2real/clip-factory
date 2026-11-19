@@ -1,4 +1,4 @@
-// Ask as a full assistant in the mock build (docs/CONTRACTS.md §27): streaming answers with a status line, sources,
+// Ask as a full assistant in the mock build (docs/CONTRACTS.md §28): streaming answers with a status line, sources,
 // live links only when allowed, app buttons with the spotlight, Stop, general questions with code and tables, the
 // setup-state question with a web source, web search not set up, files by paperclip, drop (panel and launcher) and
 // paste, long pasted text as a TXT file, the thumb zone, no overflow, no edges, reduced motion, and screenshots at

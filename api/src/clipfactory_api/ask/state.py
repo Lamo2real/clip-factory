@@ -1,4 +1,4 @@
-"""The owner's live state for Ask (docs/CONTRACTS.md §27.2): ``APP STATE`` and the ``read_my_clip_factory`` tool.
+"""The owner's live state for Ask (docs/CONTRACTS.md §28.2): ``APP STATE`` and the ``read_my_clip_factory`` tool.
 
 Everything is read with the verified user id, through the same service functions the routes use (not over HTTP), and
 only read: nothing here writes. The reads for APP STATE run in parallel under one shared 1.5 s deadline; a read that

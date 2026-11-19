@@ -156,7 +156,7 @@ run "no_help_log_group_no_help_alarm" {
   }
 }
 
-# docs/CONTRACTS.md §27.10, §27.11: Ask's model failures and its daily input tokens.
+# docs/CONTRACTS.md §28.10, §28.11: Ask's model failures and its daily input tokens.
 run "ask_is_watched" {
   command = plan
   variables {

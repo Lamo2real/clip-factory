@@ -1,4 +1,4 @@
-// The review fixes for Ask as a full assistant (docs/CONTRACTS.md §27, review of 2026-11-19), in the mock build:
+// The review fixes for Ask as a full assistant (docs/CONTRACTS.md §28, review of 2026-11-19), in the mock build:
 // the tray stays one sideways row on phones and is capped on wider panels; drops and pastes on the markup editor
 // never reach the hidden tray; Send and Stop keep keyboard focus; a trackpad pinch zooms the picture, not the page;
 // the drawing area is an application for screen readers; the editor's Tab order and radio tool bar; a lost pointer

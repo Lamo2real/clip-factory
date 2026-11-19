@@ -983,7 +983,7 @@ sequenceDiagram
   error, a timeout or a 5xx the panel answers from its own copy of the corpus with the same rules; on 429 it shows a
   countdown and never retries by itself; on `help_off` the launcher disappears and the local copy is not used.
 
-### 18. Ask as a full assistant (CONTRACTS §27, ADR-50)
+### 18. Ask as a full assistant (CONTRACTS §28, ADR-51)
 
 ```
 browser ── whoami ──▶ cf-prod-ws ──▶ {connectionId}

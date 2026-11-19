@@ -1,4 +1,4 @@
-## Ask as a full assistant (CONTRACTS §27)
+## Ask as a full assistant (CONTRACTS §28)
 
 `cf-prod-ask` deploys with everything else (`ask_enabled = true` in prod). Two owner steps, both only once:
 

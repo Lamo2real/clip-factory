@@ -26,7 +26,7 @@ export default defineConfig({
       testIgnore: /screenshots\.spec\.ts/,
     },
     // WebKit too: the Mac app (WKWebView) and the iPhone PWA (Safari) are WebKit. Pictures in Ask (§26), the
-    // assistant's files and markup editor (§27), and the motion, stillness and top-line checks (§20.13, §20.16, §11.1).
+    // assistant's files and markup editor (§28), and the motion, stillness and top-line checks (§20.13, §20.16, §11.1).
     // CI runs this project in its own job (ci.yml).
     {
       name: "webkit",

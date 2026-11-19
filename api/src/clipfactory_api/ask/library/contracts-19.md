@@ -337,7 +337,9 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   12 px **above the update bar** when it is shown (UpdateBar sets `--update-bar-h` on `<html>` with a
   `ResizeObserver`; 0 when hidden). Phones: 56 px icon-only glass circle (`aria-label="Ask Clip Factory"`), `right:
   max(16px, safe-area-inset-right)`, bottom = `--tabbar-h` + safe area + 18 px + `--update-bar-h` (+ 10 px), so it
-  never covers the tab bar or the update bar. **One home spot, calm** (`dodge.ts`): it never moves. No lift, no
+  never covers the tab bar or the update bar. A page dock raises its home spot, like the update bar (§27.4: the money
+  dashboard sets `.has-money-dock` and `--dock-h` on `<html>` before it paints and removes them when it closes, so the
+  spot is fixed for as long as that page is open). **One home spot, calm** (`dodge.ts`): it never moves. No lift, no
   glide, nothing sideways, never towards the middle of the screen, and nothing changes while the page scrolls or a
   finger is on the screen, however the page scrolls (a drag, a wheel, a fling and its momentum, an iOS rubber-band
   bounce, a drag that pauses mid-gesture; a resize counts the same). The only thing it ever does is **fade out where it

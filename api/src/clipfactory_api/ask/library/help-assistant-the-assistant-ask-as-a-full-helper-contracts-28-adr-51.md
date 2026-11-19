@@ -1,6 +1,6 @@
-## The assistant (Ask as a full helper, CONTRACTS §27, ADR-50)
+## The assistant (Ask as a full helper, CONTRACTS §28, ADR-51)
 
-Since §27, Ask answers **any** question (Clip Factory, Terraform, food, a file the owner drops in), not only the help
+Since §28, Ask answers **any** question (Clip Factory, Terraform, food, a file the owner drops in), not only the help
 corpus. The §19 path above (corpus + Haiku rewrite, `POST /v1/help/answers`) stays as the fallback.
 
 **How Ask thinks.** Claude Opus 5.5 on Claude in Amazon Bedrock (the `bedrock-mantle` Messages API, in-Region

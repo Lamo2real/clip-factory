@@ -1,4 +1,4 @@
-# Ask as a full assistant (docs/CONTRACTS.md §27, docs/DECISIONS.md ADR-50):
+# Ask as a full assistant (docs/CONTRACTS.md §28, docs/DECISIONS.md ADR-51):
 #   cf-prod-ask  answers one question with Claude Opus 5.5 on Claude in Amazon Bedrock (the bedrock-mantle Messages
 #                API, in-Region eu-north-1) and streams it to the owner's WebSocket connection. cf-prod-api starts it
 #                with an async Invoke (retries 0, so an answer never runs twice).
@@ -106,7 +106,7 @@ resource "aws_lambda_function" "ask" {
   depends_on = [aws_iam_role_policy.ask]
 }
 
-# No reserved concurrency (spec §27.12 asked for 3): this account cannot reserve any (docs/DECISIONS.md, the stats
+# No reserved concurrency (spec §28.12 asked for 3): this account cannot reserve any (docs/DECISIONS.md, the stats
 # and follow ticks hit the same limit), and a deploy that tries fails. The per-owner rate limit (6 a minute, 60 an
 # hour, 400 a day, one conditional write in cf-prod-api) bounds how many answers run at once instead.
 # Only ever invoked asynchronously by cf-prod-api. Never retried (an answer must not run twice); a question that

@@ -7,8 +7,8 @@ built-in skills from the repository's ``skills/`` folder as package
 data (``clipfactory_api/builtin_skills/<name>/SKILL.md``) and ``config/platforms.json`` (the stats limits, §16.4) as
 ``clipfactory_api/config/platforms.json``, ``config/monetization.json`` (§25.2) next to it, and the help corpus the web build commits
 (``web/src/features/help/help-corpus.json``, §19.6) as ``clipfactory_api/help/corpus.json``. Ask's knowledge pack and library
-(``clipfactory_api/ask/knowledge.json`` and ``ask/library/*.md``, §27.2) are package files already. The Anthropic SDK
-(``anthropic[bedrock]``, for Claude in Amazon Bedrock, §27.1) is vendored too; its two compiled dependencies
+(``clipfactory_api/ask/knowledge.json`` and ``ask/library/*.md``, §28.2) are package files already. The Anthropic SDK
+(``anthropic[bedrock]``, for Claude in Amazon Bedrock, §28.1) is vendored too; its two compiled dependencies
 (``pydantic_core`` and ``jiter``) are installed as manylinux aarch64 wheels, the Lambdas' own platform, and are the only
 compiled files allowed in the zip. The build is deterministic: same inputs, byte-identical zip (sorted entries, fixed timestamps and modes).
 
@@ -48,7 +48,7 @@ HANDLERS = (
     "clipfactory_api/stats/handler.py",  # cf-prod-stats (§16.5)
     "clipfactory_api/weekly.py",  # cf-prod-learn (§16.6)
     "clipfactory_api/money/handler.py",  # cf-prod-money (§25.6)
-    "clipfactory_api/ask/worker.py",  # cf-prod-ask (§27.5)
+    "clipfactory_api/ask/worker.py",  # cf-prod-ask (§28.5)
 )
 REQUIRED_PACKAGES = ("boto3==", "botocore==", "aws-durable-execution-sdk-python==", "anthropic==")
 VENDORED = (

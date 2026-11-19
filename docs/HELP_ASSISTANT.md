@@ -202,9 +202,9 @@ that is expected. If this AWS account has never used Haiku 5.5, open it once in 
 
 A failed read says "I couldn't get that number right now." and offers the button to the page that shows it.
 
-## The assistant (Ask as a full helper, CONTRACTS §27, ADR-50)
+## The assistant (Ask as a full helper, CONTRACTS §28, ADR-51)
 
-Since §27, Ask answers **any** question (Clip Factory, Terraform, food, a file the owner drops in), not only the help
+Since §28, Ask answers **any** question (Clip Factory, Terraform, food, a file the owner drops in), not only the help
 corpus. The §19 path above (corpus + Haiku rewrite, `POST /v1/help/answers`) stays as the fallback.
 
 **How Ask thinks.** Claude Opus 5.5 on Claude in Amazon Bedrock (the `bedrock-mantle` Messages API, in-Region
@@ -315,4 +315,4 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 
 The API side has `GET /v1/help` and `POST /v1/help/answers` (§19), plus the assistant's `POST /v1/help/files`,
 `DELETE /v1/help/files/{fileId}`, `POST /v1/help/asks`, `POST /v1/help/asks/{askId}/stop`, `PUT /v1/help/search-key` and
-`DELETE /v1/help/search-key` (§27), all behind the Cognito JWT like every other `/v1` route.
+`DELETE /v1/help/search-key` (§28), all behind the Cognito JWT like every other `/v1` route.

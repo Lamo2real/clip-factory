@@ -1,4 +1,4 @@
-"""cf-prod-ask: the model loop, events, tools, budgets, Stop, the secrets hold-back and logging (§27.5).
+"""cf-prod-ask: the model loop, events, tools, budgets, Stop, the secrets hold-back and logging (§28.5).
 
 The model is a recorded fake (tests/ask_support.py); no AWS, no network.
 """

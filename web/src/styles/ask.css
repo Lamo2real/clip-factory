@@ -1,4 +1,4 @@
-/* Ask as a full assistant (docs/CONTRACTS.md §27, docs/UX_DESIGN_SYSTEM.md "Ask: files, answers and the markup
+/* Ask as a full assistant (docs/CONTRACTS.md §28, docs/UX_DESIGN_SYSTEM.md "Ask: files, answers and the markup
    editor"). Glass, soft fills and no visible edges; vermilion only for the one action; the ink red (--ask-ink) is a
    content colour on pictures, never a UI edge. No cursor rules anywhere. */
 :root {

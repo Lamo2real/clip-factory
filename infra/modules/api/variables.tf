@@ -182,7 +182,7 @@ variable "help_monthly_cap" {
 variable "ask_enabled" {
   type        = bool
   default     = false
-  description = "ASK_ENABLED: Ask as a full assistant (docs/CONTRACTS.md §27). Off by default; prod turns it on."
+  description = "ASK_ENABLED: Ask as a full assistant (docs/CONTRACTS.md §28). Off by default; prod turns it on."
 }
 
 variable "ask_function_name" {

@@ -409,7 +409,7 @@ export function parseMarkdown(text: string): MdDoc {
 
 const h = createElement;
 
-/** Choices for drawing (Ask's answers, §27.9): which links may be live, and how code blocks are drawn. */
+/** Choices for drawing (Ask's answers, §28.9): which links may be live, and how code blocks are drawn. */
 export interface DrawOptions {
   /** When given, only links it allows are live; every other link shows as its words. */
   linkOk?: (href: string) => boolean;

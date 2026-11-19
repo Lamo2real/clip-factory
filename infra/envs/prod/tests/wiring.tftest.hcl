@@ -242,7 +242,7 @@ run "follow_creators_is_wired" {
   }
 }
 
-# docs/CONTRACTS.md §27.1 and §27.12: Ask as a full assistant. Claude Opus 5.5 with Opus 4.8 as the refusal fallback,
+# docs/CONTRACTS.md §28.1 and §28.12: Ask as a full assistant. Claude Opus 5.5 with Opus 4.8 as the refusal fallback,
 # bare Mantle ids in-Region in Stockholm, cf-prod-api starts cf-prod-ask, and the media bucket gets the ask-1-day rule
 # next to the existing ones (an in-place update; the bucket keeps prevent_destroy).
 run "ask_assistant_is_wired" {

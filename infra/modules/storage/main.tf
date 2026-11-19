@@ -110,7 +110,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "media" {
     }
   }
 
-  # Ask's files (docs/CONTRACTS.md §27.7): cf-prod-ask deletes each question's files when the answer ends; this is
+  # Ask's files (docs/CONTRACTS.md §28.7): cf-prod-ask deletes each question's files when the answer ends; this is
   # the safety net for a worker that never ran (an upload whose question was never sent).
   rule {
     id     = "ask-1-day"

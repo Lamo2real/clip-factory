@@ -167,7 +167,7 @@ test("the Ask box wears no ring when Ask is opened by a click, and the ring afte
   expect(await ring()).toBe(true);
 });
 
-// Ask as a full assistant (§27, review C14): the file tray and its tiles, an answer with its sources list, the
+// Ask as a full assistant (§28, review C14): the file tray and its tiles, an answer with its sources list, the
 // markup editor and the search key card draw no edges either, at a phone and a desktop size.
 const ASK_PDF = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Page >> endobj\ntrailer << >>\n%%EOF\n").toString("base64");
 for (const size of SIZES) {

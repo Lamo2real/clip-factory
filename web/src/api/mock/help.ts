@@ -87,7 +87,7 @@ export function mockHelpTransport(state: MockHelpState = { enabled: true, outcom
           mode: state.enabled ? "model" : "off",
           corpusVersion: corpus.version,
           pictures: state.enabled && state.pictures !== false,
-          // §27: the assistant, unless a test turned it off (localStorage cf-mock-assistant = off).
+          // §28: the assistant, unless a test turned it off (localStorage cf-mock-assistant = off).
           assistant: {
             on: state.enabled && mockAssistantOn(),
             web: window.__cfMockAsk?.searchKey === false ? "no_key" : "on",

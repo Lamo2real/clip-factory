@@ -1,4 +1,4 @@
-"""Ask as a full assistant: start, stop, files and the web search key (docs/CONTRACTS.md §27.6).
+"""Ask as a full assistant: start, stop, files and the web search key (docs/CONTRACTS.md §28.6).
 
 ``POST /v1/help/asks`` checks the question and starts ``cf-prod-ask`` with an async Invoke; the answer streams back
 over the owner's WebSocket. Order of work: JWT (as every route) → kill switch (``assistant``) → parse (≤ 200 KB) →
@@ -80,7 +80,7 @@ def web_state(app: App, switch: Any) -> str:
 
 
 def assistant_status(app: App, switch: Any) -> dict[str, Any]:
-    """The ``assistant`` field of ``GET /v1/help`` (§27.6)."""
+    """The ``assistant`` field of ``GET /v1/help`` (§28.6)."""
     from ..ask.files import LIMITS
 
     on = bool(switch.enabled and switch.assistant and app.ask.ready)

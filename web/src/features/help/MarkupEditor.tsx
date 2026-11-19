@@ -1,4 +1,4 @@
-// The picture markup editor (docs/CONTRACTS.md §27.8): draw red marks on a picture before it goes to Ask (pen, box,
+// The picture markup editor (docs/CONTRACTS.md §28.8): draw red marks on a picture before it goes to Ask (pen, box,
 // arrow), undo, redo, clear, then Save: the marked picture replaces the tray picture and the original never leaves the
 // device. Mouse, trackpad, touch and pencil draw with one pointer; two fingers zoom and pan; a finger pans while a
 // pencil is in use. Fully usable from the keyboard (arrow keys move a crosshair, Enter starts and ends a mark).

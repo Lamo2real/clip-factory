@@ -112,7 +112,7 @@ function errorOf(body: unknown): { code: string; message: string; requestId: str
   };
 }
 
-/** The `assistant` field of GET /v1/help (§27.6); off when absent or malformed. */
+/** The `assistant` field of GET /v1/help (§28.6); off when absent or malformed. */
 export function assistantOf(raw: unknown): AssistantStatus {
   const a = raw as { on?: unknown; web?: unknown; files?: unknown } | null | undefined;
   if (!a || typeof a !== "object" || a.on !== true) return { on: false, web: "off", files: false };

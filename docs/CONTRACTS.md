@@ -5577,7 +5577,7 @@ the thumb zone, the toolbar staying in view, and every flow); `web/e2e/navigatio
 The owner: Ask should answer **any** question (Clip Factory, Terraform, food, a file he gives it), always knowing the
 whole app and his own setup, search the web for current steps (Instagram, TikTok, Meta), take files by attach, drop
 and paste, show pictures as thumbnails and other files with their format, and let him **mark a picture in red** before
-it goes. Decision record: docs/DECISIONS.md ADR-50. This section supersedes §19.1's "grounded, not generative" and
+it goes. Decision record: docs/DECISIONS.md ADR-51. This section supersedes §19.1's "grounded, not generative" and
 §19.5's "only rewords" for the assistant path, and §26's "pictures inline, never S3" for files sent on this path. §19
 and §26 stay exactly as they are as the **fallback** (no socket, model failure before any words, `assistant: false`).
 
@@ -5655,7 +5655,7 @@ carries `cacheRead`; a test checks the prefix is byte-identical across two quest
   4 s, no retry. Results go back as `search_result` blocks with citations on. A failure is an `is_error` result.
 * **`web_fetch`** `{url}`: only a URL from this answer's search results (stored normalised, as the fetch compares it:
   lower-case host, no `#fragment`, `/` for an empty path), a web source of an earlier answer (sent back with the
-  history, §27.6) or one the owner typed himself (question or history). https only (http upgraded), every address
+  history, §28.6) or one the owner typed himself (question or history). https only (http upgraded), every address
   public (private, loopback, link-local, CGNAT, metadata, multicast, reserved, and IPv6 forms that carry an IPv4
   address: NAT64 `64:ff9b::/96` and `64:ff9b:1::/48`, 6to4, Teredo, refused) and checked again on each of at most 3
   redirects, the connection goes to the checked address, **one deadline for the whole fetch** (DNS with a 2 s timeout,
@@ -5759,7 +5759,7 @@ interface AskStart { askId: string /* uuid v4 */; connectionId: string; question
 ```
 
 Errors use the §19.6 shape: 400 "Ask a question with up to 4,000 letters.", "You can send 10 files at a time.",
-"That file is too big. The most is 25 MB." and the unsupported-file notes (§27.7); 403 `help_off`; 409 `not_live`;
+"That file is too big. The most is 25 MB." and the unsupported-file notes (§28.7); 403 `help_off`; 409 `not_live`;
 429 with `Retry-After` (the shared §19.6 6 a minute and 60 an hour, plus `askDayKey`/`askDayCount` ≤ 400 a UTC day;
 files ≤ 300 and ≤ 1 GB a day, `fileDayKey`/`fileDayCount`/`fileDayBytes`); 503. Unknown keys are a 400. The kill
 switch `HELP`/`SWITCH` gains `assistant`, `web` and `files` (absent = true). cf-prod-api env: `ASK_ENABLED` (prod

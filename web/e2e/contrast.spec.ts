@@ -522,7 +522,7 @@ test("the Library tabs stay readable over a white picture, at 390 and 1440 px", 
   }
 });
 
-// Ask as a full assistant (§27, review C14): a file tile's format label, name and size, the status line while an
+// Ask as a full assistant (§28, review C14): a file tile's format label, name and size, the status line while an
 // answer thinks, and the sources list under an answer, at 375 and 1440 px in both schemes.
 const ASK_PDF_B64 = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Page >> endobj\ntrailer << >>\n%%EOF\n").toString("base64");
 for (const scheme of SCHEMES) {

@@ -1,4 +1,4 @@
-"""Files in Ask (docs/CONTRACTS.md §27.7): which kinds are read, the limits, and turning each file into model input.
+"""Files in Ask (docs/CONTRACTS.md §28.7): which kinds are read, the limits, and turning each file into model input.
 
 A file is uploaded by the browser to ``ask/{sub}/{fileId}`` with a presigned PUT (signed type and length), read once
 by the worker, and deleted in the worker's ``finally``. Nothing about a file is logged except its kind and size.

@@ -1,4 +1,4 @@
-"""The Ask system prompt and tool list (docs/CONTRACTS.md §27.2-§27.4).
+"""The Ask system prompt and tool list (docs/CONTRACTS.md §28.2-§28.4).
 
 Render order is ``tools`` → ``system`` → ``messages``. ``system`` is three blocks: the owner's skills block (§18.6,
 always first), the knowledge pack and the Ask rules, which carry the one explicit 1-hour cache breakpoint. Nothing in

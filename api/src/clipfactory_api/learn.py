@@ -5,7 +5,7 @@ day-7 numbers (``lessons.py``, ``daily.py``) took its place. Older 48-hour learn
 A weekly learning is only written when the model finished its answer (``end_turn``) and there is text.
 
 Every model call goes through ``converse_text`` (Converse) or ``stream_messages`` (the Messages API on Claude in
-Amazon Bedrock, used by Ask §27), which both put the owner's skills block first in the system prompt (§18.6): they
+Amazon Bedrock, used by Ask §28), which both put the owner's skills block first in the system prompt (§18.6): they
 are the only places in this package that call ``.converse(`` or ``.messages.stream(``.
 """
 
@@ -111,7 +111,7 @@ def stream_messages(
     tool_choice: Mapping[str, Any] | None = None,
     timeout: float | None = None,
 ) -> Any:
-    """One streamed Messages API request (Ask, §27) with the owner's skills block as the first system block.
+    """One streamed Messages API request (Ask, §28) with the owner's skills block as the first system block.
 
     Returns the SDK's stream context manager (``with ... as stream``). Adaptive thinking (thinking cannot be turned off
     on Claude Opus 5.5) with the effort set explicitly; no sampling parameters and never a forced ``tool_choice``

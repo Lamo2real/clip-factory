@@ -1,4 +1,4 @@
-// Files in Ask (docs/CONTRACTS.md §27.7): what can be added, how each looks in the tray, and which files a follow-up
+// Files in Ask (docs/CONTRACTS.md §28.7): what can be added, how each looks in the tray, and which files a follow-up
 // question carries along. Pictures are made ready by pictures.ts (a small clean JPEG); every other file goes as it is.
 // Files live in memory only (Blobs and object URLs), are uploaded when Send is pressed, and the server deletes them
 // when the answer ends.

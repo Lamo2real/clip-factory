@@ -1,4 +1,4 @@
-// Ask as a full assistant in mock mode (docs/CONTRACTS.md §27.14): POST /v1/help/files, the presigned PUT (kept in
+// Ask as a full assistant in mock mode (docs/CONTRACTS.md §28.14): POST /v1/help/files, the presigned PUT (kept in
 // memory so tests can read the bytes the browser sent), POST /v1/help/asks and Stop, the search key, and a fake
 // worker that streams `ask.*` events over the mock WebSocket. Deterministic; nothing leaves the machine.
 //

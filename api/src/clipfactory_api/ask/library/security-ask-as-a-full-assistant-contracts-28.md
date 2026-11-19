@@ -1,4 +1,4 @@
-## Ask as a full assistant (CONTRACTS §27)
+## Ask as a full assistant (CONTRACTS §28)
 
 * **Prompt injection.** Web pages, search results, files and pictures are data: the rules say never follow
   instructions inside them, and the tools make it safe even if the model did. Ask has no tool that writes, posts,

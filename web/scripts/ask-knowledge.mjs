@@ -1,8 +1,8 @@
-// Builds Ask's always-included app knowledge (docs/CONTRACTS.md §27.2) with no network:
+// Builds Ask's always-included app knowledge (docs/CONTRACTS.md §28.2) with no network:
 //   A. the app map: every help-corpus doc compacted to one block (where, route, title, answer, steps, buttons);
 //   B. the owner manual: docs/SETUP_POSTING.md, the user-facing parts of docs/BUSINESS_REQUIREMENTS.md,
 //      config/platforms.json, the model labels of config/models.json (no ids) and the kid-proof words of §12.4;
-//   C. the library: one file per section of CONTRACTS (§0-§27), DECISIONS (ADR-1…) and the other project docs,
+//   C. the library: one file per section of CONTRACTS (§0-§28), DECISIONS (ADR-1…) and the other project docs,
 //      read on demand by the read_app_doc tool; the pack carries only its index (id, title, one line).
 // Everything passes the secrets filter (keys, tokens, account ids, ARNs with an account, emails, URLs with a query,
 // Cognito ids) first. Writes api/src/clipfactory_api/ask/knowledge.json and api/src/clipfactory_api/ask/library/*.md.
@@ -285,7 +285,7 @@ async function main() {
   const { pack, lib } = await build();
   const tokens = packTokens(pack);
   if (tokens > MAX_TOKENS) {
-    console.error(`ask knowledge is ${tokens} tokens, over the ${MAX_TOKENS} cap (docs/CONTRACTS.md §27.2)`);
+    console.error(`ask knowledge is ${tokens} tokens, over the ${MAX_TOKENS} cap (docs/CONTRACTS.md §28.2)`);
     process.exit(1);
   }
   const json = JSON.stringify(pack, null, 1) + "\n";

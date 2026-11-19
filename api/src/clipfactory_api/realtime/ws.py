@@ -3,7 +3,7 @@
 ``$connect`` (already authorized) stores a Connection item under the owner with a 2-hour ``ttl`` (API Gateway ends
 every connection after 2 hours anyway). ``$disconnect`` removes it. ``$default`` answers ``{"action": "ping"}``
 with a pong and ``{"action": "whoami"}`` with ``{"type": "whoami", "connectionId"}`` (Ask streams its answers to that
-connection, §27.5); anything else gets ``{"type": "error", "code": "bad_request"}``. Every route answers 200.
+connection, §28.5); anything else gets ``{"type": "error", "code": "bad_request"}``. Every route answers 200.
 """
 
 from __future__ import annotations

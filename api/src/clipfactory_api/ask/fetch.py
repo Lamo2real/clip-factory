@@ -1,4 +1,4 @@
-"""``web_fetch`` for Ask, with an SSRF guard (docs/CONTRACTS.md §27.3).
+"""``web_fetch`` for Ask, with an SSRF guard (docs/CONTRACTS.md §28.3).
 
 Only https; every host is resolved and every address must be public (no private, loopback, link-local, CGNAT,
 multicast, reserved or metadata address, and no IPv6 form that carries an IPv4 address inside: NAT64, 6to4,

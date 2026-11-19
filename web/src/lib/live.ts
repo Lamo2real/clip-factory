@@ -77,7 +77,7 @@ export function parseLiveMessage(data: unknown): LiveEvent | null {
 
 const OPEN = 1;
 
-/** Any JSON object the server sent (Ask's `ask.*` events and `whoami` replies arrive this way, §27.5). */
+/** Any JSON object the server sent (Ask's `ask.*` events and `whoami` replies arrive this way, §28.5). */
 export type RawMessage = Record<string, unknown>;
 
 export class LiveConnection {
@@ -386,7 +386,7 @@ export function stopLive(): void {
   for (const fn of hubStatus) fn();
 }
 
-/** The shared connection (Ask streams over it, §27.5), or null when signed out. */
+/** The shared connection (Ask streams over it, §28.5), or null when signed out. */
 export function liveConnection(): LiveConnection | null {
   return current;
 }

@@ -1,4 +1,4 @@
-"""Ask as a full assistant (docs/CONTRACTS.md §27, docs/DECISIONS.md ADR-50).
+"""Ask as a full assistant (docs/CONTRACTS.md §28, docs/DECISIONS.md ADR-51).
 
 ``routes/ask.py`` (in ``cf-prod-api``) checks and starts a question; ``worker`` (``cf-prod-ask``) answers it with
 Claude Opus 5.5 on Amazon Bedrock (Mantle, in-Region eu-north-1) and streams the answer back over the WebSocket.

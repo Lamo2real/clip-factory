@@ -1,4 +1,4 @@
-"""The secrets filter of Ask (docs/CONTRACTS.md §27.2, §27.5).
+"""The secrets filter of Ask (docs/CONTRACTS.md §28.2, §28.5).
 
 Two strengths:
 

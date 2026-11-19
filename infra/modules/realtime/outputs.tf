@@ -5,7 +5,7 @@ output "ws_api_id" { value = aws_apigatewayv2_api.ws.id }
 # Management endpoint for PostToConnection (WS_ENDPOINT).
 output "ws_endpoint" { value = local.ws_endpoint }
 
-# What may post to the owner's connections (cf-prod-ask streams its answers there, §27.5).
+# What may post to the owner's connections (cf-prod-ask streams its answers there, §28.5).
 output "ws_connections_arn" {
   value = "arn:aws:execute-api:${var.region}:${var.account_id}:${aws_apigatewayv2_api.ws.id}/${local.stage_name}/POST/@connections/*"
 }

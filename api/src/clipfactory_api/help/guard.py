@@ -2,7 +2,7 @@
 
 Items in the existing table (no new table):
 
-* ``HELP`` / ``SWITCH``: ``enabled``, ``model``, ``pictures``, and for the assistant (§27) ``assistant``, ``web`` and
+* ``HELP`` / ``SWITCH``: ``enabled``, ``model``, ``pictures``, and for the assistant (§28) ``assistant``, ``web`` and
   ``files`` (all absent = true), written by hand when needed, read at most once a minute per warm Lambda.
 * ``USER#{userId}`` / ``HELP#RATE``: ``minuteKey``/``minuteCount``, ``hourKey``/``hourCount``, ``version``, ``ttl``.
   One conditional UpdateItem on ``version`` per question (compare-and-swap, like ``stats.budget.reserve``).
@@ -207,7 +207,7 @@ def _seconds_to_next_day(now: datetime) -> int:
 def reserve_files(
     store: db.Store, user_id: str, now: datetime, *, count: int, size: int, per_day: int, bytes_per_day: int
 ) -> int | None:
-    """Counts ``count`` files of ``size`` bytes for today (§27.6). ``None`` when allowed, else seconds to wait."""
+    """Counts ``count`` files of ``size`` bytes for today (§28.6). ``None`` when allowed, else seconds to wait."""
     pk = db.user_pk(user_id)
     dkey = day_key(now)
     for _ in range(CAS_ATTEMPTS):

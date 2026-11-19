@@ -164,7 +164,8 @@ a 30-day sparkline, a grey "2–3 days behind · checked 2 h ago" line and at mo
 tile (estimate lines per currency, or "No money yet. Here's how close you are" with the nearest bar). Clip page:
 "YouTube's estimate for this clip: $0.42" only when reported. This week: the reported total only. Celebrations are
 once each, acknowledged on the server ("You hit 1,000 subscribers!", "You're in YouTube's Partner Program!", "Your
-first money from YouTube!"). The release label is "Real earnings".
+first money from YouTube!"). The release label is "Real earnings". Since §27 the tile's **See money** opens the money
+dashboard (`/money`), which links back here with "How close am I to getting paid?".
 
 ### 25.8 Not verified live (each failure becomes a "not available" label, never a number)
 

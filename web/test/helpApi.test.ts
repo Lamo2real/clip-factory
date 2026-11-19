@@ -116,7 +116,7 @@ describe("helpClient.status", () => {
   it("reads on, off and trouble", async () => {
     const on = await helpClient({ transport: async () => ok({ enabled: true, mode: "model", corpusVersion: "abc" }), auth: authOf(["t"]) }).status();
     expect(on).toEqual({ kind: "ok", status: { enabled: true, mode: "model", corpusVersion: "abc", pictures: false, assistant: { on: false, web: "off", files: false } } });
-    // §27: the assistant's state comes through as it is; anything odd counts as off.
+    // §28: the assistant's state comes through as it is; anything odd counts as off.
     const smart = await helpClient({
       transport: async () => ok({ enabled: true, mode: "model", corpusVersion: "abc", assistant: { on: true, web: "no_key", files: true, limits: {} } }),
       auth: authOf(["t"]),

@@ -61,7 +61,7 @@ def _logs(capsys: pytest.CaptureFixture[str]) -> list[dict[str, Any]]:
 def test_route_table_has_exactly_the_help_routes() -> None:
     help_routes = [(r.method, r.pattern.pattern) for r in ROUTES if "/v1/help" in r.pattern.pattern]
     assert help_routes[:2] == [("GET", "^/v1/help$"), ("POST", "^/v1/help/answers$")]
-    # §27: the assistant's routes (tests/test_ask_api.py covers them).
+    # §28: the assistant's routes (tests/test_ask_api.py covers them).
     assert [m for m, _ in help_routes[2:]] == ["POST", "DELETE", "POST", "POST", "PUT", "DELETE"]
     assert all(not r.public for r in ROUTES if "/v1/help" in r.pattern.pattern)
 

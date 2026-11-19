@@ -1,4 +1,4 @@
-// Settings › App & account › Ask (docs/CONTRACTS.md §27.3): turn on web search with a free Brave Search API key, take
+// Settings › App & account › Ask (docs/CONTRACTS.md §28.3): turn on web search with a free Brave Search API key, take
 // the key away again, and see what Ask can do. The key goes once to the API, which keeps it in AWS Secrets Manager:
 // it is never shown again, never stored in the browser and never logged.
 import { useId, useState, type FormEvent } from "react";

@@ -2,7 +2,7 @@
 // screens, a full-screen sheet on phones. Short answers, numbered steps and up to two buttons that take you there.
 // Pictures (§26): the picture button, paste and drop add up to 4 pictures to the tray above the field; they go with
 // the next question and show in its bubble, where a tap opens them bigger.
-// Ask as a full assistant (§27): when the API says the assistant is on, any question goes to Claude Opus 5.5 and the
+// Ask as a full assistant (§28): when the API says the assistant is on, any question goes to Claude Opus 5.5 and the
 // answer streams in; any file can be added (paperclip, drop, paste), pictures can be marked in red first, and a
 // follow-up carries the last files along. Without the assistant everything works as §19 and §26 describe.
 import {
@@ -143,7 +143,7 @@ export function HelpPanel({
   /** A question to ask right away (from openHelp("…")). */
   question: string | null;
   onQuestionTaken: () => void;
-  /** Files dropped on the launcher (§27.7), added to the tray once the panel is open. */
+  /** Files dropped on the launcher (§28.7), added to the tray once the panel is open. */
   files?: File[] | null;
   onFilesTaken?: () => void;
   onClose: (opts?: { returnFocus?: boolean }) => void;
@@ -186,7 +186,7 @@ export function HelpPanel({
   const flight = useLaunch();
   // §20: Start over turns once (one handle: only one of its two looks is on screen at a time).
   const restart = useAction("refresh");
-  // §27: the assistant, the picture being marked, the answer streaming now, Bigger (desktop and tablet).
+  // §28: the assistant, the picture being marked, the answer streaming now, Bigger (desktop and tablet).
   const assistant = useAssistant();
   const smart = assistant.on;
   const filesOn = smart && assistant.files;
@@ -344,7 +344,7 @@ export function HelpPanel({
   /** A send that started while a picture was still being made ready: it goes as soon as the tray is ready. */
   const waiting = useRef<string | null>(null);
 
-  /** §27: the question goes to the assistant; the answer streams into an "ai" entry. Falls back to §19 when it can't. */
+  /** §28: the question goes to the assistant; the answer streams into an "ai" entry. Falls back to §19 when it can't. */
   const askSmart = useCallback(
     async (raw: string, fallback: (q: string, note: string | null) => Promise<void>) => {
       const q = raw.trim().slice(0, QUESTION_CHARS);
@@ -546,7 +546,7 @@ export function HelpPanel({
     void ask(raw);
   }, [state.tray, ask]);
 
-  /** §27: adds any files to the tray. Pictures become small clean JPEGs; other files go as they are; files Ask can't
+  /** §28: adds any files to the tray. Pictures become small clean JPEGs; other files go as they are; files Ask can't
    * read are refused here with a note that says what to do. */
   const addAny = useCallback(
     async (files: readonly File[]) => {
@@ -688,7 +688,7 @@ export function HelpPanel({
         void addFiles(all);
         return;
       }
-      // Long text becomes a file, so the question stays short (§27.7).
+      // Long text becomes a file, so the question stays short (§28.7).
       const pasted = e.clipboardData?.getData("text/plain") ?? "";
       if (pasted.length > QUESTION_CHARS && assistantStatus().files) {
         e.preventDefault();
@@ -882,7 +882,7 @@ export function HelpPanel({
     </ul>
   );
 
-  /** A streamed answer (§27.9): status line, text, sources, buttons, unread files, Copy answer. */
+  /** A streamed answer (§28.9): status line, text, sources, buttons, unread files, Copy answer. */
   function renderAi(e: Extract<Entry, { role: "ai" }>): ReactNode {
     const a = e.answer;
     const isNewest = e.id === newest;

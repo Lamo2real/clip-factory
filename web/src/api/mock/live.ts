@@ -45,7 +45,7 @@ export class FakeSocket implements SocketLike {
   };
   private ticker: ReturnType<typeof setInterval> | undefined;
   private static count = 0;
-  /** Like API Gateway's connectionId, learned with {"action":"whoami"} (§27.5). */
+  /** Like API Gateway's connectionId, learned with {"action":"whoami"} (§28.5). */
   readonly connectionId = `mockconn${++FakeSocket.count}=`;
 
   constructor(url: string) {

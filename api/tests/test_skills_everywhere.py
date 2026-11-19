@@ -10,7 +10,7 @@ Every ``src/**/*.py`` file is parsed and ``problems`` lists each way around the 
 - ``getattr`` / ``operator.attrgetter`` / ``operator.methodcaller`` may only take a plain string name, never a computed
   one (``getattr(bedrock, "con" + "verse")``);
 - ``converse_text`` may only be called, never passed around or aliased (so every call is seen with its ``skills=``);
-- ``.messages.stream(`` (the Messages API on Claude in Amazon Bedrock, Ask §27) may only be called inside
+- ``.messages.stream(`` (the Messages API on Claude in Amazon Bedrock, Ask §28) may only be called inside
   ``learn.stream_messages``, every ``stream_messages(`` call must pass ``skills=``, and ``messages.create`` is not used.
 
 A future model call therefore has to go through the helper. The bypass tests below prove the scan fails on each one.
