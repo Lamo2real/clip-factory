@@ -40,7 +40,19 @@
   380×600, remembers size/position, external links open in the system browser, user agent suffix `ClipFactoryDesktop`,
   injects `window.__CF_DESKTOP__ = true`, `window.__CF_GLASS__` (the native see-through glass, §22.2) and
   `window.__CF_DESKTOP_VERSION__` (this app's version, `1.<n>.0`). The pages update from the website itself (the
-  update banner); the wrapper updates itself from `downloads/latest.json` (§12.6).
+  update banner); the wrapper updates itself from `downloads/latest.json` (§12.6). `window.__CF_TITLEBAR__` (below) says how tall the overlay title bar is.
+* **macOS title bar (owner request, 2026-11-19):** `TitleBarStyle::Overlay` with `hidden_title(true)`: the title bar is
+  transparent and lies over the page, so there is no white strip and the traffic lights float on the app's own glass.
+  The title "Clip Factory" still names the window in the Dock, Mission Control and the Window menu. The traffic lights
+  keep the system's own place (no `traffic_light_position`). `__CF_TITLEBAR__` is `MAC_TITLEBAR_HEIGHT` (28) on macOS
+  and 0 on Windows and Linux, which keep their normal frame; `init.js` defaults it to 0. The page keeps that band
+  clear (§11.1). If a macOS release draws a taller title bar, only that number changes. In full screen the traffic
+  lights hide and the 28 px band stays empty (a possible follow-up: `--titlebar-h: 0` in full screen).
+* **The one native permission:** dragging the window by that band. `main.rs` adds the capability `title-bar-drag` at
+  start-up (the app's address is only known at build time): `remote` = the app's own origin + `/*`, `local: false`,
+  window `main`, permissions `core:window:allow-start-dragging` and `core:window:allow-internal-toggle-maximize`
+  (used by Tauri's own drag script on `[data-tauri-drag-region]`). Nothing else is granted (`capabilities/main.json`
+  stays empty); a Rust test holds the exact grant.
 * Built in deploy.yml after the web deploy (job `desktop`, matrix `macos-latest` → universal `.dmg`,
   `windows-latest` → NSIS `.exe`), app URL from terraform output, uploaded to the web bucket as
   `downloads/Clip-Factory.dmg` and `downloads/Clip-Factory-Setup.exe`, then `downloads/manifest.json` rewritten.

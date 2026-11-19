@@ -413,7 +413,8 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
 * **Spotlight** (`spotlight.ts`): waits up to 4 s for `[data-help~="{id}"]` (apples: `data-help={apple.id}` on the
   apple row), scrolls it to the centre (smooth unless reduced motion), draws a bone ring with a soft vermilion glow that
   fades over 2.4 s (static ring, no pulse, with reduced motion), announces "Here it is: {label}" politely, and does not
-  move focus. A target taller than 60 % of the window rings only its heading, scrolled to 80 px from the top. On wide
+  move focus. The 2.4 s start once the control has arrived (the page has scrolled, and it has sat still on screen for
+  150 ms; at most 4 s after it lit), so a slow machine whose smooth scroll takes a second or two still shows it lit. The ring's own fade waits too: until arrival it only fades in and stays bright. A target taller than 60 % of the window rings only its heading, scrolled to 80 px from the top. On wide
   screens the panel closes (the chat is kept) when it would cover the control an answer button just lit up, so the
   ring is always visible and clickable. Anchors added by the web builder: `paste-link`, `make-clips`, `upload-video`,
   `try-again`, `failed-job` (a failed row in the Jobs list), `keep`, `throw-away`, `captions`, `best-star`,

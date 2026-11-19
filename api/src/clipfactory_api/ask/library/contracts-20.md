@@ -477,19 +477,38 @@ to the new one, instead of the old pill vanishing and a new one appearing.
 * **How:** `components/Glide.tsx` renders one `aria-hidden` element as the first child of the bar and moves it to the
   item matching its `active` selector, measured from the bar (which is `position: relative`), so a scrolling tab row
   carries it along. Styles live in `styles/glide.css`.
-* **Motion:** a 460 ms spring slide (`--ease-spring`) with a short stretch along the way it travels (wider for a
-  sideways move, taller for an up/down move), then it settles. The stretch is one smooth curve (keyframes every 10%,
-  linear between), so no frame jumps. It aims at the item's layout box (offsets, not the painted box), so a tapped
+* **Motion (rebuilt 2026-11-19, ADR-49):** a 360 ms ease-out slide, `cubic-bezier(0.22, 1, 0.36, 1)` (`GLIDE_MS`,
+  `GLIDE_EASE` in `Glide.tsx`), that never passes the target: no spring, no overshoot, no creep back (the old 460 ms
+  `--ease-spring` reached the item at 170 ms, overshot to 110 % and crawled back for the last 190 ms, which read as
+  lag). On the way it stretches along its path and narrows across it (at most +9 % / -7 %, centred), and the stretch
+  eases back to nothing before it lands. It aims at the item's layout box (offsets, not the painted box), so a tapped
   item's press shrink never makes it aim small and snap at the end. Only a change of choice slides: first paint, a
-  resize or a layout shift moves it instantly, except while a slide is under way, when it re-aims smoothly.
+  resize or a layout shift moves it instantly, except while a slide is under way, when it re-aims from where it is
+  painted.
+* **Compositor only (FLIP):** the glide takes its new place (`--glide-x/-y`) and size at once; one Web Animation
+  (`id: "glide-slide"`, 24 keyframes of `transform: translate() scale()` with `transform-origin: 0 0`, linear between)
+  carries it there from the old box, the stretch folded into the same transform. Nothing transitions its transform,
+  width, height or position (the only CSS transition is its opacity), there is no separate `scale` animation and no
+  forced layout per tap, and `.glide` has `will-change: transform`. So WebKit (the macOS app) and Chromium run the
+  slide on the compositor and a busy main thread (a new page being laid out under the glass) cannot stall it.
+* **Bars with options of different widths** (more than a tenth apart, `unevenBoxes`: the Library's All / Not posted
+  yet / Posted, the Review caption platform tabs) animate `width` and `height` in the same `glide-slide` animation and
+  only move by `transform`, so the pill's round ends and its shadow are never squashed. These bars sit inside a page,
+  never over one being rebuilt; the menu, the phone tab bar and the background tiles keep the transform-only slide.
 * **Fallback:** until it has measured, the bar has no `has-glide` class and the chosen item paints its own highlight,
   so there is never a moment with no highlight. With `has-glide`, the chosen item drops its own background, its
   vermilion marker and its shadow, and the glide draws them.
-* **Reduced motion:** no slide and no stretch. The highlight jumps to the choice (only a 150 ms opacity fade).
+* **Reduced motion:** no slide and no stretch (no Web Animation is started). The highlight jumps to the choice (only a
+  150 ms opacity fade).
 * **Accessibility:** the chosen state stays on the item itself (`aria-checked`, `aria-selected`, `aria-current`); the
   glide is decoration only.
-* **Tests:** `e2e/glide.spec.ts` checks that it travels (part-way across before it lands), lands on the choice in
-  every bar, follows a page change in the menu and the tab bar, snaps on resize, and does not slide under reduced motion.
+* **Tests:** `e2e/glide.spec.ts` checks that it travels (one transform-only `glide-slide` animation with a stretch),
+  lands on the choice in every bar, follows a page change in the menu and the tab bar, snaps on resize, and does not
+  slide under reduced motion. `e2e/nav-smooth.spec.ts` (Chromium, and WebKit on macOS) samples the glide every frame for
+  every menu switch in the simulated macOS window (1000 x 650), a 1440 x 900 browser and the phone tab bar: one
+  transform-only animation, lands to the pixel, never passes the item (≤ 101 %), never creeps back, no step bigger than
+  the curve's own launch, and fewer than half the switches with a frame later than about two and a half frames in the
+  last two thirds (frame times follow the machine's load; the old cross-fade stalled most switches). `web/test/stillNav.test.ts` holds the curve and the keyframes.
 
 ### 20.14 The cursor never changes (owner rule, 2026-11-16)
 
@@ -505,3 +524,37 @@ Ask Clip Factory has its own mark instead of a generic sparkle: a chat bubble wi
 the brand's vermilion dot on its corner (the same dot as the "C" in the logo). The dot breathes slowly (2.8 s, still
 under reduced motion). It is used on the Ask launcher, the panel's header and Settings' "Ask Clip Factory" search row
 (`components/AskMark.tsx`). The sparkle icon stays for "Clip Factory learned" and update messages.
+
+### 20.16 A page change is still (owner request, 2026-11-19)
+
+The owner: every page change made the whole see-through window blink white and twitch. A page change now swaps the
+content in place and nothing else moves: no cross-fade, no fade-in, no lift, in the desktop window, browsers and phones.
+
+* **No View Transition.** `router.ts` `transition()` just runs the update. The old cross-fade captured the whole window
+  as two pictures and blended them: every glass panel, the unchanged menu included, thinned to 32 to 53 % for the first
+  100 ms (over the light window glass that is a white blink), and WebKit rebuilt every glass layer when it ended at
+  about 400 ms, right on the last third of the menu highlight's slide (35 to 118 ms frames). `TRANSITION_CAP_MS` and the
+  tap-through cap are gone with it.
+* **No page entrance.** `.main > *` no longer runs `page-in` (from opacity 0.001): in the see-through window a new page
+  was transparent for about 300 ms after every tap, so the light glass showed through. Pages and their panels are at
+  full strength from their first frame. Small things inside a page may still arrive (a badge pops, a list row rises),
+  but nothing animates `.main`, `.shell`, `.app`, a page or a glass panel's opacity as a page opens (the Home get-app
+  banner lost its `rise` for this).
+* **No see-through loading state.** A page's data takes a full round trip to the cloud, and every visit used to start
+  empty: the skeletons were 6 % bone over the see-through window, one near-white sheet under the page title until the
+  data came. Now `useLoad(load, key, cache)` keeps the last result per cache name and key for the life of the page
+  (Home, Jobs, Review, Library, the setup list and the streamers row opt in): a page visited before shows what it
+  showed last at once and refreshes in the background. Sign-out (and a sign-in that ends) forgets it all
+  (`forgetLoaded`). On a first visit the skeletons carry the panel tint (`--panel-veil` green under the shimmer;
+  inside a panel, the panel's), so the glass never shows through.
+* **Unchanged:** the backdrop stays mounted (it lives in `App`, outside the routed page); focus still moves to the page
+  for screen readers; scroll still resets to the top.
+* **Tests:** `e2e/page-still.spec.ts` (Chromium **and WebKit**): through every menu page change, every frame for 700 ms
+  has no View Transition, no animation fading the page or a glass panel, no page panel under full opacity, and the same
+  backdrop element; over white "glass" behind the see-through window (1000 x 650) the title bar band, the menu and the
+  gap beside it stay within 3 grey levels of rest in screenshots taken right after each tap (the old cross-fade moved
+  them 30 to 60); the same at 1440 x 900 in a browser and on a phone. With the mock API slowed to 1.2 s a call
+  (`__cfMockFaults.latencyMs`), first and second visits to every menu page never show more of the white glass below
+  the page title than either page at rest (the old skeletons: 94 % white). `e2e/navigation.spec.ts` checks that no page
+  change calls `startViewTransition`; `web/test/stillNav.test.ts` fails on any `::view-transition` rule or an
+  animation on the page's own blocks.

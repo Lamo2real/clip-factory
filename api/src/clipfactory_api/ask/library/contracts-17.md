@@ -542,7 +542,7 @@ in the confirm body; the API replaces that post's `postOptions` (mock `_try_agai
 The sheet (and the shared confirm `Sheet` in `components/Sheet.tsx`) is drawn with `createPortal` on `document.body`,
 so its backdrop covers the whole screen (tab bar, sidebar and Ask included; toasts stay on top, so a failed Keep's
 error shows) even though the card that opens it is
-glass (`backdrop-filter`); `.main > *` animates `page-in` with `fill-mode: backwards` so a page keeps no transform. It
+glass (`backdrop-filter`); a page keeps no transform of its own (pages have no entrance, §20.16). It
 is a real modal: focus moves in once on open (typing in the caption never loses the caret), Tab and Shift+Tab wrap
 inside it, Escape closes it, and on close the focus goes back to the Keep that opened it. A clip longer than the
 creator's `maxDurationSec` (a limit of 0 means TikTok did not say: it does not block, the publisher checks again)
@@ -733,7 +733,7 @@ over the page:
 * **< 1440 px, folded, and on a clip's page** (`data-mode="pill"`; `/clips/{id}` needs its whole width to fan out its
   five columns, so there the list is always the pill, `todoNoRailOn`): a 48 px glass pill at the top right, ring +
   "Set up posting" + "2/5" (the words show at every width, 320 px too; its name reads "Set up posting: 2 of 5 done").
-  The page leaves a strip for it at the top: `--todo-top` (60 px on phones, 58 px from 768 px) on `html`, added to
+  The page leaves a strip for it at the top: `--todo-top` (60 px on phones, 72 px from 768 px, measured from the top line, §11.1) on `html`, added to
   `.shell`'s top padding, so at the top of every page nothing is under it (phones: above the brand row and Live dot;
   the tab bar is at the bottom). Behind the pill is `.setup-todo-bar`, a band of the panels' liquid glass (the
   `.glass` tint and blur) over that strip (`--todo-bar-h`: 66 / 76 px; from 768 px it starts right of the sidebar)

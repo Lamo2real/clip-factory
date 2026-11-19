@@ -1,5 +1,5 @@
 {
- "version": "2c7d1aba9da1",
+ "version": "38621d7e400b",
  "parts": [
   {
    "id": "app-map",
@@ -93,13 +93,13 @@
    "id": "contracts-11",
    "title": "CONTRACTS: 11. Design system (summary; details in docs/UX_DESIGN_SYSTEM.md)",
    "line": "Colours (owner request 2026-11-18, ADR-43): Bottle Green #0F372B (the surface), Bone #EFE7DA (the",
-   "chars": 3151
+   "chars": 7378
   },
   {
    "id": "contracts-12",
    "title": "CONTRACTS: 12. Get the app, updates, and kid-proof UX (added by the owner after the first build)",
    "line": "12.1 \"Get the app\" (sidebar item; on phones a card in Settings plus a one-time banner on Home)",
-   "chars": 16156
+   "chars": 17550
   },
   {
    "id": "contracts-13",
@@ -129,7 +129,7 @@
    "id": "contracts-17",
    "title": "CONTRACTS: 17. Posting setup: a setup list per platform, real Connect, real posting (owner request, 2026-11-16)",
    "line": "The owner's words: \"Facebook, Instagram, YouTube, TikTok and X should each be a step to connect to in order for this",
-   "chars": 87785
+   "chars": 87802
   },
   {
    "id": "contracts-18",
@@ -141,13 +141,13 @@
    "id": "contracts-19",
    "title": "CONTRACTS: 19. Ask Clip Factory: grounded in-app help assistant (owner request, 2026-11-16)",
    "line": "The owner's picture: a friendly helper in the corner that answers \"how do I…\" and \"where is…\" in short steps a child",
-   "chars": 53195
+   "chars": 53496
   },
   {
    "id": "contracts-20",
    "title": "CONTRACTS: 20. Action animations (owner request, 2026-11-16)",
    "line": "The owner's words: \"Most buttons in the application should have that: the animation of sending a paper plane or",
-   "chars": 40680
+   "chars": 45975
   },
   {
    "id": "contracts-21",
@@ -480,6 +480,12 @@
    "chars": 2847
   },
   {
+   "id": "adr-49",
+   "title": "DECISIONS: ADR-49 Still page changes, a compositor-only glide, and one top line under an overlay title bar",
+   "line": "Context. The owner (2026-11-19, the Mac app, macOS 27.2, see-through Liquid Glass): the menu highlight was smooth",
+   "chars": 4223
+  },
+  {
    "id": "adr-50",
    "title": "DECISIONS: ADR-50 Ask becomes a full assistant: Opus 5.5 on Bedrock Mantle in-Region, client-side web tools, HTTP start + WebSocket stream, files via a 1-day S3",
    "line": "Context. The owner (2026-11-19) wants Ask to answer any question, on any topic, while always knowing his app and",
@@ -633,7 +639,7 @@
    "id": "testing-what-runs-where",
    "title": "TESTING: What runs where",
    "line": "Suite | Folder | Tools | In CI ([ci.yml](../.github/workflows/ci.yml)) | Before deploy ([deploy.yml](../.github/workflows/deploy.yml)) |",
-   "chars": 4804
+   "chars": 5573
   },
   {
    "id": "testing-ask-clip-factory",
