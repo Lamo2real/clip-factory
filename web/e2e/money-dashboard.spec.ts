@@ -269,7 +269,17 @@ for (const v of VIEWPORTS.filter((x) => x.w < 768)) {
           await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), y);
           await launcherSettled(page);
           const at = await page.evaluate(textUnderAsk);
-          if (at.under.length) fails.push(`${scenario} at ${y}: ${at.under.join(" | ")}`);
+          if (at.under.length) {
+            // Say whether Ask fades a little later (it looked too early) or never does (it missed the words).
+            const state = await page.evaluate(() => {
+              const el = document.querySelector<HTMLElement>(".help-launcher")!;
+              const vv = window.visualViewport;
+              return `scrollY ${Math.round(scrollY)}, inner ${innerWidth}x${innerHeight}, vv ${vv ? `${vv.scale} ${Math.round(vv.offsetTop)}` : "-"}, class "${el.className}"`;
+            });
+            await page.waitForTimeout(2500);
+            const later = await page.evaluate(textUnderAsk);
+            fails.push(`${scenario} at ${y}: ${at.under.join(" | ")} {${state}; 2.5 s later ${later.shown ? `still shown over ${later.under.length}` : "faded"}}`);
+          }
         }
       }
       expect(fails, fails.join("\n")).toEqual([]);

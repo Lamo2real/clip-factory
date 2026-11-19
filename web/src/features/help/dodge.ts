@@ -242,6 +242,9 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
       if (wait > 0) return later(wait);
       lastChange = now;
       shown.current = !want;
+      // The class goes on now, in the same frame as the look, not when React gets to it: nothing can see the
+      // launcher "settled" but still shown over what it should keep clear of. React then sets the same class.
+      el.classList.toggle("is-hidden", want);
       settling(false);
       setBlocked(want);
     };
@@ -267,11 +270,13 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
     resized?.observe(document.documentElement);
     if (launcher.current) resized?.observe(launcher.current);
     const changed = typeof MutationObserver !== "undefined" ? new MutationObserver(schedule) : null;
-    changed?.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden", "aria-expanded"] });
+    changed?.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class", "style", "hidden", "aria-expanded"] });
     // The launcher's spot moves without new content: the update bar's class and height on <html>.
     changed?.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style"] });
     window.addEventListener("transitionend", schedule, true);
     window.addEventListener("animationend", schedule, true);
+    // A picture that loads can move the words around it.
+    window.addEventListener("load", schedule, true);
     document.fonts?.addEventListener?.("loadingdone", schedule);
     window.addEventListener("scroll", moved, { passive: true });
     window.addEventListener("resize", moved);
@@ -293,6 +298,7 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
       resized?.disconnect();
       window.removeEventListener("transitionend", schedule, true);
       window.removeEventListener("animationend", schedule, true);
+      window.removeEventListener("load", schedule, true);
       document.fonts?.removeEventListener?.("loadingdone", schedule);
     };
   }, [launcher, page]);
