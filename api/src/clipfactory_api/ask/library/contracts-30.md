@@ -9,7 +9,11 @@ nothing resumed the job. The cause and the alternatives are in [ADR-54](DECISION
 
 ### 30.2 Resume, don't fail (`api/src/clipfactory_api/flows/job_flow.py`)
 
-* `MAX_RESUMES = 2`. Resumable: a callback timeout, a missed heartbeat, and the agent's `AgentStopped` failure (it got
+* Resumes are limited by progress, not by count alone: `MAX_RESUMES = 6` in all, of which at most `MAX_STALLED = 2`
+  may follow an attempt that made no progress. `start-agent-n` returns the job's `progress` when the attempt starts;
+  `resume-n` compares it with the job's progress now (more than 0.001 higher: it moved forward) and returns
+  `stalled`, the count so far. A third attempt in a row that does not move the job fails it, so a job that keeps
+  cutting more clips between deaths is never failed for dying, only for being stuck. Resumable: a callback timeout, a missed heartbeat, and the agent's `AgentStopped` failure (it got
   SIGTERM: a stopped session or a retired runtime version). Never resumed: `JobFailed`, `Canceled`, `Superseded`, a job
   the owner canceled or retried meanwhile, or a job with under 20 minutes left of its 8 h (the execution timeout is
   8.5 h).
@@ -18,6 +22,7 @@ nothing resumed the job. The cause and the alternatives are in [ADR-54](DECISION
   `heartbeatAt`, `updatedAt`. It removes and resets nothing: steps, progress, clip count and saved files stay. The new
   `sessionId` is the fence (§13): the old container can no longer write. Then step `stop-old-n` stops the old session,
   and `agent-done-n` / `start-agent-n` invoke `DEFAULT`, the newest runtime version.
+* The 8 h budget counts from `runStartedAt` (written by Try again) or else the first step's `startedAt`.
 * After the last resume: `failed`, "Making the clips stopped. Tap Try again to pick up where it left off.", with
   `pickUp: true`.
 
@@ -26,7 +31,8 @@ nothing resumed the job. The cause and the alternatives are in [ADR-54](DECISION
 * A daemon thread with its own boto3 Lambda client sends the heartbeat every **120 s**; a failed send is tried again
   after **20 s**; the time of the last beat is set only after a send went through. Flow side: heartbeat timeout
   **6 minutes**.
-* It beats only while the event loop is alive: the loop ticks a `Liveness` every 5 s (the Tracker's loop); after
+* It beats only while the event loop is alive: a task of its own (`keep_ticking`: no I/O, no lock, never the Job item
+  write, which can wait minutes on a throttled table or a full thread pool) ticks a `Liveness` every 5 s; after
   **300 s** without a tick it logs `agent.loop_stalled` and stops beating, so the flow resumes the job.
 * Every beat logs `agent.mem` (`current`, `max`, `oom_kills` from cgroup v2, `/proc/meminfo` as a fallback).
 * SIGTERM: uvicorn runs the app's shutdown; every running job stops as `stopped` (not `canceled`: nothing is written)
@@ -35,13 +41,19 @@ nothing resumed the job. The cause and the alternatives are in [ADR-54](DECISION
 ### 30.4 The Cut step uses bounded memory
 
 * An upload is downloaded to the disk once per run (when its size plus 3 GiB fits) and cut locally; else from S3 with
-  `-rw_timeout 60 s`.
+  `-rw_timeout 60 s`. `cut.work_disk` logs the work folder's filesystem type (`/proc/mounts`) and free space; on a
+  filesystem kept in memory (`tmpfs`, `ramfs`) the copy is made only when it takes at most a quarter of free memory.
 * The section cut: `-vf scale='min(1920,iw)':-2:flags=bicubic,fps=30 -crf 18 -threads 2`.
 * The payoff tease is its own input (`-ss t0 -t d -i section.mp4` as `[1:v]`/`[1:a]`; `anullsrc` moves to input 2),
   so `concat` never holds the body's frames while it waits for the tease. The render runs with
   `-filter_complex_threads 1` and `-threads 2`.
 * `RENDER_CONCURRENCY = 2` is a ceiling: a second clip starts only for a source up to 1080p and with more than 3 GiB of
-  free memory.
+  free memory (from one source: the cgroup's `memory.max` minus `memory.current`, else `MemAvailable`). The height is
+  the upload's own (`meta.sourceHeight`); a link's sections are 1080p at most.
+* Picking up (`pickUp`): clips are cut one at a time. Before each cut, `render/NN/started.json` records the session
+  and `runs`, the runs that were cutting this clip when they stopped (this one included; an ordinary failure writes
+  0). A clip whose marker comes from another session with `runs: 1` is cut last, alone; with `runs: 2` or more
+  (`MAX_CLIP_DEATHS`) it is left out ("could not be cut") and the rest of the job finishes.
 * `proc.run`: every child runs in its own process group and gets `oom_score_adj 1000` (Linux); a timeout, a cancel, a
   stall (`stall_limit`, opt-in) or any error kills the whole group (SIGTERM, SIGKILL 5 s later). Every call site passes
   `time_limit` (a test checks).
@@ -59,21 +71,28 @@ The PO token sidecar starts the first time a YouTube call needs it, never at app
 |---|---|---|
 | Chosen moments | `moments.json` (`version: 1`, `settings`: hash of notes, clip target and model) | `select` returns "Used the N moments picked last time." without a model call, when `settings` match |
 | Each finished clip | `render/NN/clip.mp4`, `cover.jpg`, `done.json` (written right after the clip, `done.json` last) | `render` downloads it back instead of cutting it, when its moment matches |
+| Clip ids and captions | `clips.json` (`version: 1`; per clip index: `id`, `moment`, `captions`), written by `captions` | each clip keeps the id the stopped run gave it; the captions are reused when every clip is the same moment |
 | Earlier steps | as before (audio, words, picture, what was watched) | always |
 
+* `finalize`, picking up, skips a clip whose Clip item already exists (`clip_statuses`): a clip the stopped run wrote
+  is never written twice, and one the owner kept or declined is left alone. Its files stay when a newer run
+  supersedes it, because that run uses the same ids.
 * A resumed run keeps the steps already done (they reload quietly and stay done) and the progress; its `begin` writes
   no `clipCount: 0`. The agent removes `note` and `pickUp` when it writes `ready` or `failed`.
 * **Try again** keeps the job id, so the saved files. After a stop (`pickUp: true` on a failed job) it keeps
-  `pickUp` and shows "Picking up where it stopped…"; after a real failure it removes `pickUp` and starts over as
-  before. `pickUp` and `resumes` are internal (not in the API's job JSON); `note` is.
-* Not checkpointed: the checklist and the captions (they re-run, from the reused clips).
+  `pickUp`, the done and skipped steps (the stopped step and later ones go back to pending) and `progress`, and shows
+  "Picking up where it stopped…"; after a real failure it removes `pickUp` and starts over as
+  before. `runStartedAt` starts the run's 8 h budget. `pickUp`, `resumes` and `runStartedAt` are internal (not in the API's job JSON); `note` is.
+* Not checkpointed: the checklist (it re-runs, from the reused clips).
 
 ### 30.7 Deploys wait for running jobs
 
 `deploy.yml` runs `scripts/wait-for-jobs.sh` between the delete gate and `terraform apply`. When nothing under
 `module.agent` changes it goes on at once. Otherwise it counts jobs that are `queued`/`running` with a heartbeat newer
-than 3 minutes (a projection-only Scan every 30 s, counts only in the log) and waits until there are none, at most 45
-minutes; then it goes on, and a job still running resumes on the new version (§30.2). It reads only; no IAM change.
+than 3 minutes (a projection-only Scan every 30 s, counts only in the log) and waits until there are none, at most 25
+minutes (the step stops at 27 and may fail without stopping the deploy), so the apply keeps its whole 90-minute image
+build inside the job's 120 minutes and is never killed partway. A Scan that fails is tried three times; then the drain
+goes on without waiting. A job still running resumes on the new version (§30.2). It reads only; no IAM change.
 
 ### 30.8 Owner words
 
@@ -81,7 +100,7 @@ minutes; then it goes on, and a job still running resumes on the new version (§
 |---|---|
 | Resumed automatically, or Try again after a stop (note under the progress) | "Picking up where it stopped…" |
 | One clip skipped | "Cut 9 clips; 1 could not be cut." |
-| Gave up after 2 resumes | "Making the clips stopped. Tap Try again to pick up where it left off." |
+| Gave up (stuck: two resumes without progress, or 6 in all) | "Making the clips stopped. Tap Try again to pick up where it left off." |
 | Nothing could be cut | the agent's own sentence (unchanged) |
 
 ### 30.9 Tests

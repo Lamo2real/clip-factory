@@ -141,6 +141,24 @@ async def test_a_resumed_job_reuses_moments_and_clips(world: World) -> None:
     assert steps["select"]["message"] == "Used the 2 moments picked last time."
     assert renders == []  # both clips came back from S3
     assert len(st.candidates) == 2
+    # The same clips keep the same ids; the clips already written are not written a second time.
+    assert len(world.store.clips) == 2 and len({c["clipId"] for c in world.store.clips}) == 2
+
+
+async def test_a_run_that_stopped_in_finish_up_never_posts_a_clip_twice(world: World) -> None:
+    status, _, _ = await world.run()
+    assert status == "ready"
+    first = [dict(c) for c in world.store.clips]
+    saved = world.store.json("clips.json")
+    assert [r["id"] for r in saved["clips"]] == [c["clipId"] for c in first]
+    # The run stopped after writing only the first clip (the owner may already have kept it).
+    world.store.clips = [{**first[0], "status": "kept"}]
+    world.store.job.update(status="queued", pickUp=True)
+    status, st, _ = await world.run()
+    assert status == "ready"
+    assert [c["clipId"] for c in world.store.clips] == [c["clipId"] for c in first]  # one item per clip, same ids
+    assert world.store.clips[0]["status"] == "kept"  # the owner's choice is left alone
+    assert st.captions[first[1]["clipId"]] == first[1]["captions"]  # captions reused, not written again
 
 
 async def test_changed_notes_pick_again(world: World) -> None:
@@ -292,6 +310,89 @@ async def test_a_clip_killed_for_memory_is_tried_once_more_alone(
     assert tries == {0: 1, 1: 2, 2: 2}
     assert [c.index for c in st.candidates] == [0, 1]
     assert msg == "Cut 2 clips; 1 could not be cut."
+
+
+async def test_a_clip_in_flight_when_runs_died_is_cut_last_alone_then_left_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    p, st, store = render_world(tmp_path, n=5)
+    st.session_id = "S3"
+    st.pick_up = True
+    store.files["jobs/J/source/render/01/started.json"] = json.dumps({"session": "S2", "runs": 1}).encode()
+    store.files["jobs/J/source/render/02/started.json"] = json.dumps({"session": "S2", "runs": 2}).encode()
+    store.files["jobs/J/source/render/03/started.json"] = json.dumps({"session": "S2", "runs": 0}).encode()
+    order: list[int] = []
+    running = 0
+    top = 0
+
+    async def fake_cut(st: JobState, m: Any, index: int, layout: Any = None) -> Candidate:
+        nonlocal running, top
+        running += 1
+        top = max(top, running)
+        marker = json.loads(store.files[f"jobs/J/source/render/{index:02d}/started.json"])
+        assert marker["session"] == "S3"  # marked before it is cut
+        order.append(index)
+        await asyncio.sleep(0.01)
+        running -= 1
+        if index == 4:
+            raise proc.CommandError("ffmpeg", 1, "bad fragment")
+        return Candidate(m, result(st.workdir / f"c{index}", m), index=index)
+
+    monkeypatch.setattr(p, "_cut", fake_cut)
+    msg = await p.render(st, FakeTracker())  # type: ignore[arg-type]
+    assert 2 not in order  # in flight during two deaths: left out, the job goes on
+    assert order[-1] == 1  # in flight during one death: cut last
+    assert top == 1  # picking up: one clip at a time
+    assert json.loads(store.files["jobs/J/source/render/01/started.json"])["runs"] == 2
+    assert json.loads(store.files["jobs/J/source/render/04/started.json"])["runs"] == 0  # a plain failure, not a death
+    assert [c.index for c in st.candidates] == [0, 1, 3]
+    assert msg == "Cut 3 clips; 2 could not be cut."
+
+
+async def test_a_fresh_run_ignores_old_markers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    p, st, store = render_world(tmp_path, n=2)
+    st.session_id = "S9"
+    store.files["jobs/J/source/render/01/started.json"] = json.dumps({"session": "S2", "runs": 5}).encode()
+    cut: list[int] = []
+
+    async def fake_cut(st: JobState, m: Any, index: int, layout: Any = None) -> Candidate:
+        cut.append(index)
+        return Candidate(m, result(st.workdir / f"c{index}", m), index=index)
+
+    monkeypatch.setattr(p, "_cut", fake_cut)
+    assert await p.render(st, FakeTracker()) == "Cut 2 clips."  # type: ignore[arg-type]
+    assert sorted(cut) == [0, 1]
+
+
+def test_mount_type_reads_the_longest_mount(tmp_path: Path) -> None:
+    mounts = tmp_path / "mounts"
+    mounts.write_text("overlay / overlay rw,relatime 0 0\ntmpfs /tmp tmpfs rw 0 0\n/dev/vdb /tmp/cf-work ext4 rw 0 0\n")
+    assert pipeline_mod.mount_type(Path("/tmp/cf-work/J/source"), mounts) == "ext4"
+    assert pipeline_mod.mount_type(Path("/tmp/other"), mounts) == "tmpfs"
+    assert pipeline_mod.mount_type(Path("/srv"), mounts) == "overlay"
+    assert pipeline_mod.mount_type(Path("/srv"), tmp_path / "none") == "unknown"
+
+
+async def test_an_upload_is_not_copied_to_a_disk_in_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    p, st, store = render_world(tmp_path, n=1)
+    store.files["jobs/J/source/video.mp4"] = b"x" * 1000
+
+    async def head(key: str) -> dict[str, Any]:
+        return {"ContentLength": 3 * GB}
+
+    store.head = head  # type: ignore[attr-defined]
+    srcs: list[str] = []
+
+    async def cut(src: str, start: float, end: float, dest: Path) -> Path:
+        srcs.append(src)
+        return dest
+
+    monkeypatch.setattr(p, "_ffmpeg_cut", cut)
+    monkeypatch.setattr(pipeline_mod.shutil, "disk_usage", lambda _: SimpleNamespace(free=20 * GB))
+    monkeypatch.setattr(pipeline_mod, "mount_type", lambda _: "tmpfs")
+    monkeypatch.setattr(pipeline_mod, "free_memory", lambda: 6 * GB)
+    await p._fetch_section(st, 1, 2, tmp_path / "s.mp4")
+    assert srcs == ["https://s3.test/jobs/J/source/video.mp4"]  # 3 GB in RAM would starve the cut: read from S3
 
 
 # --- uploads never run the YouTube machinery ----------------------------------------------------------------------

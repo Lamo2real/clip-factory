@@ -14,13 +14,15 @@ ok() { passed=$((passed + 1)); echo "ok   - $1"; }
 not_ok() { failed=$((failed + 1)); echo "FAIL - $1" >&2; }
 
 mkdir -p "${work}/bin"
-# COUNTS: space-separated active-job counts, one per scan call (the last one repeats).
+# COUNTS: space-separated active-job counts, one per successful scan call (the last one repeats).
 cat >"${work}/bin/aws" <<'FAKE'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$AWS_CALLS"
 n="$(grep -c '^dynamodb scan' "$AWS_CALLS")"
+# FAIL_CALLS: the first this many scans fail (throttling, a network blip).
+if [ "$n" -le "${FAIL_CALLS:-0}" ]; then echo "An error occurred (ThrottlingException)" >&2; exit 254; fi
 read -r -a counts <<<"$COUNTS"
-i=$((n - 1)); [ "$i" -lt "${#counts[@]}" ] || i=$((${#counts[@]} - 1))
+i=$((n - ${FAIL_CALLS:-0} - 1)); [ "$i" -lt "${#counts[@]}" ] || i=$((${#counts[@]} - 1))
 c="${counts[$i]}"
 items=""
 j=0
@@ -37,7 +39,7 @@ run() { # run <name> <counts> [wait max]: sets $calls and $log
   calls="${work}/$1.calls"
   log="${work}/$1.log"
   : >"$calls"
-  PATH="${work}/bin:${PATH}" AWS_CALLS="$calls" COUNTS="$2" POLL_SECONDS=0 WAIT_MAX_SECONDS="${3:-2700}" \
+  PATH="${work}/bin:${PATH}" AWS_CALLS="$calls" COUNTS="$2" POLL_SECONDS=0 RETRY_SECONDS=0 WAIT_MAX_SECONDS="${3:-2700}" \
     NOW=1763568000 TABLE=cf-test-data bash "$SCRIPT" "${work}/plan.json" >"$log" 2>&1
 }
 
@@ -75,6 +77,22 @@ if run cap "1" 0 && grep -q "Running jobs: 1; continuing, they will pick up wher
   ok "the cap is reached: the deploy goes on (exit 0) and says the jobs will pick up"
 else
   not_ok "cap: $(cat "$log")"
+fi
+
+# 4b. A scan that fails twice is tried again and the drain still waits for the running job.
+if FAIL_CALLS=2 run flaky "1 0" && [ "$(grep -c '^dynamodb scan' "$calls")" -eq 4 ] \
+  && grep -q "Running jobs: 0; going on." "$log"; then
+  ok "a failed scan is tried again; the drain goes on counting"
+else
+  not_ok "flaky scan: $(cat "$log")"
+fi
+
+# 4c. A scan that keeps failing never stops the deploy: three tries, then it goes on (exit 0).
+if FAIL_CALLS=99 run broken "1" && [ "$(grep -c '^dynamodb scan' "$calls")" -eq 3 ] \
+  && grep -q "could not be counted; going on" "$log" && ! grep -qi "throttl" "$log"; then
+  ok "a scan that keeps failing: the deploy goes on after three tries"
+else
+  not_ok "broken scan: $(cat "$log")"
 fi
 
 # 5. Nothing it prints names a job.

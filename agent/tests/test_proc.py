@@ -142,3 +142,18 @@ def test_every_proc_run_call_passes_a_time_limit() -> None:
 
 def test_kill_signal_codes() -> None:
     assert -signal.SIGKILL in proc.KILLED_CODES and 137 in proc.KILLED_CODES
+
+
+def test_a_failed_oom_score_write_says_nothing_on_stderr(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A write the kernel refuses must not put "can't create … denied" in stderr, error_tail or the owner's words."""
+    import subprocess
+
+    score = tmp_path / "oom_score_adj"
+    score.write_text("0")
+    monkeypatch.setattr(proc, "OOM_SCORE_FILE", score)
+    wrapped = oom_first(["echo", "hi"])
+    # Point the write at a place it cannot go (a folder that does not exist); the command still runs.
+    script = wrapped[2].replace(str(score), str(tmp_path / "no" / "such" / "file"))
+    r = subprocess.run([*wrapped[:2], script, *wrapped[3:]], capture_output=True, check=True)
+    assert r.stdout == b"hi\n"
+    assert r.stderr == b""

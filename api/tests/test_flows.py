@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -91,7 +92,7 @@ def test_job_flow_finish_leaves_a_ready_job_alone(store: db.Store, agentcore: Fa
         CallbackTimeoutError(message="heartbeat timed out"),
     ],
 )
-def test_job_flow_timeout_or_missed_heartbeat_fails_the_job_after_two_resumes(
+def test_job_flow_fails_a_job_only_after_two_resumes_that_made_no_progress(
     store: db.Store, agentcore: FakeAgentCore, table: FakeTable, error: Exception
 ) -> None:
     job = seed_job(store, status="queued")
@@ -106,6 +107,7 @@ def test_job_flow_timeout_or_missed_heartbeat_fails_the_job_after_two_resumes(
         "resume-2",
         "stop-old-2",
         "start-agent-2",
+        "resume-3",  # a third attempt with no progress either: the job is stuck, it fails
         "fail",
         "stop-session",
     ]
@@ -237,7 +239,7 @@ def test_job_flow_replayed_start_after_the_agent_began_waits_for_the_callback(
     ctx = FakeDurableContext(FakeCallback(result=json.dumps({"clipCount": 2})), replay={"start-agent"})
     assert run_job_flow(ctx, _job_event(job), _job_deps(store, agentcore))["outcome"] == "ready"
     assert len(agentcore.calls) == 1
-    assert ctx.results["start-agent"] == {"skipped": False}
+    assert ctx.results["start-agent"] == {"skipped": False, "progress": 0.1}
     assert ctx.callback.waited == 1
 
 
@@ -921,6 +923,48 @@ def test_job_flow_resumes_a_stopped_job_on_a_new_session(
     assert stored["steps"] == steps
     assert stored["progress"] == 1
     assert stored["note"] == "Picking up where it stopped…"  # the agent clears it when it writes ready
+
+
+def test_job_flow_keeps_resuming_while_each_attempt_moves_forward(
+    store: db.Store, agentcore: FakeAgentCore, table: FakeTable
+) -> None:
+    """A long job whose container keeps dying (§30.1): every attempt that moved it forward earns another resume, up to
+    MAX_RESUMES; only stops without progress are limited to MAX_STALLED."""
+    from clipfactory_api.flows.job_flow import MAX_RESUMES
+
+    job = seed_job(store, status="queued", progress=0.1)
+    begin = _agent_begins(table, job, agentcore)
+
+    def begins_and_moves(**kw: Any) -> dict[str, Any]:
+        out = begin(**kw)
+        item = table.items[(job["pk"], job["sk"])]
+        item["progress"] = Decimal(str(item["progress"])) + Decimal("0.1")  # each attempt cuts more clips, then dies
+        return out
+
+    agentcore.invoke_agent_runtime = begins_and_moves  # type: ignore[method-assign]
+    ctx = FakeDurableContext(FakeCallback(error=CallbackTimeoutError(message="heartbeat timed out")))
+    out = run_job_flow(ctx, _job_event(job), _job_deps(store, agentcore))
+    assert out["outcome"] == "failed"
+    assert MAX_RESUMES == 6
+    assert [s for s in ctx.steps if s.startswith("resume")] == [f"resume-{n}" for n in range(1, 7)]
+    assert ctx.steps[-2:] == ["fail", "stop-session"]
+    assert table.raw(job["pk"], job["sk"])["resumes"] == 6  # type: ignore[index]
+
+
+def test_a_stuck_attempt_after_progress_still_gets_resumed(
+    store: db.Store, agentcore: FakeAgentCore, table: FakeTable
+) -> None:
+    from clipfactory_api.flows.job_flow import Run, begin_resume
+
+    job = seed_job(store, status="running", progress=0.5)
+    deps = _job_deps(store, agentcore)
+    run = Run(job["jobId"], USER, job["sessionId"])
+    assert begin_resume(deps, run, 1, since=0.3, stalled=2)["stalled"] == 2  # it moved: always resumed
+    job2 = seed_job(store, status="running", progress=0.5)
+    run2 = Run(job2["jobId"], USER, job2["sessionId"])
+    assert begin_resume(deps, run2, 1, since=0.5, stalled=1)["stalled"] == 2  # no progress: counted
+    job3 = seed_job(store, status="running", progress=0.5)
+    assert begin_resume(deps, Run(job3["jobId"], USER, job3["sessionId"]), 3, since=0.5, stalled=2) == {}
 
 
 def test_begin_resume_writes_only_additive_fields(store: db.Store, agentcore: FakeAgentCore, table: FakeTable) -> None:

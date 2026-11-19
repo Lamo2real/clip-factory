@@ -314,6 +314,30 @@ def test_try_again_after_a_stop_picks_up_where_it_left_off(call: Call, store: db
     assert "error" not in stored
 
 
+def test_try_again_after_a_stop_keeps_the_done_steps_and_the_progress(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    """The owner sees what is true: the steps done before the stop stay done, the stopped step waits again."""
+    from clipfactory_api.jobs import new_steps
+
+    steps = new_steps()
+    for s in steps[:6]:
+        s.update(status="done", message="ok", startedAt="2026-11-19T16:08:00.000Z", finishedAt="2026-11-19T16:20:00Z")
+    steps[6].update(status="failed", message="Making the clips stopped.", startedAt="2026-11-19T16:21:00.000Z")
+    job = seed_job(store, status="failed", pickUp=True, steps=steps, progress=0.79, flowRun=1)
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    assert [s["status"] for s in stored["steps"]] == ["done"] * 6 + ["pending"] * 4
+    assert stored["steps"][0]["message"] == "ok"
+    assert "message" not in stored["steps"][6]
+    assert "startedAt" not in stored["steps"][6]
+    assert float(stored["progress"]) == 0.79
+    assert stored["runStartedAt"] == stored["updatedAt"]  # the 8 h budget starts now, not at the old steps
+    assert "runStartedAt" not in body["job"]
+
+
 def test_try_again_after_a_real_failure_starts_over(call: Call, store: db.Store, table: FakeTable) -> None:
     job = seed_job(store, status="failed", error="No clip passed the checklist.", note="old", flowRun=1)
     status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
@@ -323,6 +347,8 @@ def test_try_again_after_a_real_failure_starts_over(call: Call, store: db.Store,
     assert stored is not None
     assert "pickUp" not in stored
     assert "note" not in stored
+    assert stored["progress"] == 0
+    assert {s["status"] for s in stored["steps"]} == {"pending"}
 
 
 def test_retry_starts_even_if_old_session_cannot_be_stopped(

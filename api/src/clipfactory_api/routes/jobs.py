@@ -141,7 +141,14 @@ def retry(app: App, req: Request) -> Response:
         updated = app.store.update(
             job["pk"],
             job["sk"],
-            jobs.restart_fields(job["jobId"], now, int(job.get("flowRun") or 1), pick_up=pick_up),
+            jobs.restart_fields(
+                job["jobId"],
+                now,
+                int(job.get("flowRun") or 1),
+                pick_up=pick_up,
+                steps=job.get("steps"),
+                progress=job.get("progress"),
+            ),
             remove=["error", "flowExecutionArn"] + ([] if pick_up else ["pickUp", "note"]),
             expect_in=expect,
         )

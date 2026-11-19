@@ -67,7 +67,9 @@ def oom_first(args: Sequence[str]) -> list[str]:
     elsewhere the command is unchanged). A shell rather than ``preexec_fn``, which is unsafe with threads running."""
     if not OOM_SCORE_FILE.exists():
         return list(args)
-    return ["sh", "-c", f'echo {OOM_SCORE} > {OOM_SCORE_FILE} 2>/dev/null; exec "$@"', "sh", *args]
+    # The braces send a failed write's own "can't create" error to /dev/null too (a bare ``2>/dev/null`` after the
+    # ``>`` does not): it must never reach the command's stderr, error_tail or the owner's words.
+    return ["sh", "-c", f'{{ echo {OOM_SCORE} > {OOM_SCORE_FILE}; }} 2>/dev/null; exec "$@"', "sh", *args]
 
 
 def was_killed(e: BaseException) -> bool:

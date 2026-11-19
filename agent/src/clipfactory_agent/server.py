@@ -30,7 +30,7 @@ from starlette.routing import Route
 
 from .callback import DurableCallback
 from .callback import report as report_outcome
-from .heartbeat import Liveness
+from .heartbeat import Liveness, keep_ticking
 from .util import log
 
 if TYPE_CHECKING:
@@ -202,12 +202,17 @@ def make_run(
                 await report_outcome(cb, done.status, job_id=job_id, clip_count=done.clip_count, error=done.error)
                 return done.status
             st = JobState(job_id=job_id, user_id=user_id, workdir=work_root / job_id, session_id=session_id)
-            # The heartbeat runs on its own thread and beats only while this loop ticks (heartbeat.py, §30.3).
+            # The heartbeat runs on its own thread and beats only while this loop ticks (heartbeat.py, §30.3). The
+            # ticks come from a task of their own, never from the Job item's writes: a slow write is not a dead loop.
             liveness = Liveness()
-            tracker = make_tracker(store, user_id, job_id, session_id=session_id, on_beat=liveness.tick, resume=job)
+            ticker = asyncio.create_task(keep_ticking(liveness), name=f"tick-{job_id}")
+            tracker = make_tracker(store, user_id, job_id, session_id=session_id, resume=job)
             if cb:
                 cb.start_heartbeat(liveness)
-            status = await run_job(tracker, pipeline.steps(st, tracker), clip_count=lambda: len(st.candidates))
+            try:
+                status = await run_job(tracker, pipeline.steps(st, tracker), clip_count=lambda: len(st.candidates))
+            finally:
+                ticker.cancel()
             log("info", "job.finished", job=job_id, status=status)
             await report_outcome(cb, status, job_id=job_id, clip_count=len(st.candidates), error=tracker.error)
             return status

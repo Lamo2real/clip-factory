@@ -59,7 +59,15 @@ RENDER_CONCURRENCY = 2  # the ceiling: a second clip is cut alongside only when 
 PARALLEL_FREE = 3 * 1024**3  # free memory a second render needs (a 1080p clip's two ffmpeg runs, with room to spare)
 PARALLEL_MAX_HEIGHT = 1080
 UPLOAD_DISK_SPARE = 3 * 1024**3  # the local copy of an upload leaves this much disk free (picture.DISK_RESERVE)
+# Filesystems kept in memory: there the local copy of an upload is made only when it takes this share of free memory
+# at most (else the Cut step reads the file from S3).
+RAM_FILESYSTEMS = frozenset({"tmpfs", "ramfs"})
+RAM_COPY_SHARE = 0.25
+MOUNTS = Path("/proc/mounts")
 MOMENTS_VERSION = 1
+# A clip that was being cut when this many earlier runs died is not tried again: the rest of the job finishes without
+# it (§30.4). A clip in flight during one death is cut last, alone.
+MAX_CLIP_DEATHS = 2
 SPOKEN_CHARS = 1000  # the start of what a clip says, for the daily second look (§16.12)
 FEW_WORDS = 20
 NOT_WATCHED = "Could not watch the video this time. Picking from the words and the sound."
@@ -68,6 +76,26 @@ ALMOST_NO_SPEECH = (
     "Almost no speech was found in this video, so there is nothing to pick moments from. "
     "Clip Factory needs talking or commentary."
 )
+
+
+def mount_type(path: Path, mounts: Path | None = None) -> str:
+    """The filesystem type ``path`` lives on, from ``/proc/mounts`` (the longest mount point that holds it), or
+    "unknown" (not Linux)."""
+    try:
+        text = (mounts or MOUNTS).read_text()
+    except OSError:
+        return "unknown"
+    target = os.path.abspath(path)
+    best, kind = "", "unknown"
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        point = parts[1].replace("\\040", " ")
+        inside = target == point or target.startswith(point.rstrip("/") + "/")
+        if inside and len(point) >= len(best):
+            best, kind = point, parts[2]
+    return kind
 
 
 def read_secret(name: str, region: str) -> str | None:
@@ -223,6 +251,7 @@ class JobState:
     candidates: list[Candidate] = field(default_factory=list)
     captions: dict[str, dict[str, str]] = field(default_factory=dict)
     clip_ids: dict[int, str] = field(default_factory=dict)
+    ids_saved: bool = False  # clips.json holds this run's clip ids: a newer run picking up reuses them (§30.6)
     # The deep analysis (ADR-40); every one of these may stay empty and the job still makes its clips.
     picture_task: asyncio.Task[None] | None = None  # the background picture preparation started by download
     picture_started: float = 0.0  # loop time the preparation started (the watch step's wait counts from here)
@@ -485,6 +514,7 @@ class Pipeline:
         st.source.update(platform="upload", durationSec=round(info.duration, 2))
         st.source.setdefault("title", str(st.source.get("filename") or "Uploaded video"))
         st.meta["hasAudio"] = info.has_audio
+        st.meta["sourceHeight"] = info.height  # the Cut step's "two at once" check reads it (§30.4)
         st.meta["picture"] = {"upload": True, "height": info.height, "fps": info.fps} if self.cfg.deep_enabled else None
 
     # --- download --------------------------------------------------------------------------------------------
@@ -1203,7 +1233,14 @@ class Pipeline:
                     size = int((await self.store.head(key)).get("ContentLength") or 0)
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     free = shutil.disk_usage(dest.parent).free
-                    if size and size + UPLOAD_DISK_SPARE <= free:
+                    fs = mount_type(dest.parent)
+                    room = size + UPLOAD_DISK_SPARE <= free
+                    if room and fs in RAM_FILESYSTEMS:
+                        # A disk in memory: the copy would use the very memory the cut needs. Only a small file.
+                        mem = free_memory()
+                        room = mem is not None and size <= mem * RAM_COPY_SHARE
+                    log("info", "cut.work_disk", job=st.job_id, fs=fs, free=free, bytes=size)
+                    if size and room:
                         await self.store.download(key, dest)
                         st.upload_source = dest
                         log("info", "cut.upload_local", job=st.job_id, bytes=size)
@@ -1473,69 +1510,124 @@ class Pipeline:
         return Candidate(m, r, index=index)
 
     def _can_parallel(self, st: JobState) -> bool:
-        """A second clip is cut alongside only for a source up to 1080p and with 3 GiB of memory to spare."""
-        height = int((st.meta.get("picture") or {}).get("height") or st.source.get("height") or 0)
+        """A second clip is cut alongside only for a source up to 1080p and with 3 GiB of memory to spare. A link's
+        sections are 1080p at most (sources.VIDEO_FORMAT); an upload's height is the file's own (``sourceHeight``)."""
+        height = int(st.meta.get("sourceHeight") or (st.meta.get("picture") or {}).get("height") or 0)
         if height > PARALLEL_MAX_HEIGHT:
             return False
         free = free_memory()
         return free is None or free > PARALLEL_FREE
+
+    async def _deaths(self, st: JobState, index: int) -> int:
+        """How many earlier runs stopped while this clip was being cut (``render/NN/started.json`` left by another
+        session, with no ``done.json``). 0 unless picking up."""
+        if not st.pick_up:
+            return 0
+        mark = await self._saved_json(self._render_key(st, index, "started.json"))
+        if not isinstance(mark, dict) or mark.get("session") == st.session_id:
+            return 0
+        try:
+            return max(0, int(mark.get("runs") or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    async def _mark_started(self, st: JobState, index: int, runs: int) -> None:
+        """``render/NN/started.json``: this clip is being cut now (``runs``: the runs that were cutting it when they
+        stopped, this one included). An ordinary failure writes 0: only a death counts."""
+        try:
+            await self.store.put_json(
+                self._render_key(st, index, "started.json"), {"session": st.session_id, "runs": runs, "at": now_iso()}
+            )
+        except (JobCanceled, asyncio.CancelledError):
+            raise
+        except Exception as e:
+            log("warn", "render.mark_failed", job=st.job_id, index=index, error=type(e).__name__)
 
     async def render(self, st: JobState, tr: Tracker) -> str:
         if st.source.get("type") != "upload" and st.source.get("platform") == "youtube":
             # One extraction for every clip (§29.4): the sections read the formats from this file.
             await self._save_info(st)
         gate = RenderGate(RENDER_CONCURRENCY, lambda: self._can_parallel(st))
+        if st.pick_up:
+            gate.serial = True  # the run before stopped partway: one clip at a time, the safest way (§30.4)
         done = 0
         reused = 0
+        given_up = 0
         results: list[Candidate | None] = [None] * len(st.chosen)
         reasons: list[str] = []
 
-        async def one(i: int, m: Moment) -> None:
-            nonlocal done, reused
+        def tick() -> None:
+            nonlocal done
+            done += 1
+            tr.report(done / len(st.chosen))
+
+        async def cut(i: int, m: Moment, deaths: int) -> None:
+            for attempt in (1, 2):
+                async with gate:
+                    await tr.check_cancel()
+                    await self._mark_started(st, i, deaths + 1)
+                    try:
+                        results[i] = await self._cut(st, m, i)
+                        break
+                    except JobCanceled:
+                        raise
+                    except Exception as e:
+                        if attempt == 1 and proc.was_killed(e):
+                            # The kernel killed ffmpeg for memory: once more, with nothing cut alongside.
+                            gate.serial = True
+                            log("warn", "render.clip_killed", job=st.job_id, index=i)
+                            continue
+                        # One clip that can't be cut (a 403 on one section, a failed ffmpeg fragment) is
+                        # skipped; only "none of them" fails the step.
+                        if isinstance(e, UserFacingError):
+                            reasons.append(str(e))
+                        log(
+                            "warn",
+                            "render.clip_failed",
+                            job=st.job_id,
+                            index=i,
+                            error=type(e).__name__,
+                            detail=str(e)[:600],
+                        )
+                        break
+            if results[i] is not None:
+                await self._save_clip(st, results[i])  # type: ignore[arg-type]
+            else:
+                await self._mark_started(st, i, 0)  # an ordinary failure, not a death
+            tick()
+
+        # Clips a run that stopped already cut come back from S3; a clip that was being cut when an earlier run died
+        # is cut last, alone, and one that was in flight during MAX_CLIP_DEATHS deaths is left out (§30.4).
+        plain: list[tuple[int, Moment]] = []
+        suspects: list[tuple[int, Moment, int]] = []
+        for i, m in enumerate(st.chosen):
             await tr.check_cancel()
             saved = await self._saved_clip(st, m, i)
             if saved is not None:
                 results[i] = saved
                 reused += 1
+                tick()
+                continue
+            deaths = await self._deaths(st, i)
+            if deaths >= MAX_CLIP_DEATHS:
+                given_up += 1
+                log("warn", "render.clip_given_up", job=st.job_id, index=i, deaths=deaths)
+                tick()
+            elif deaths:
+                suspects.append((i, m, deaths))
             else:
-                for attempt in (1, 2):
-                    async with gate:
-                        await tr.check_cancel()
-                        try:
-                            results[i] = await self._cut(st, m, i)
-                            break
-                        except JobCanceled:
-                            raise
-                        except Exception as e:
-                            if attempt == 1 and proc.was_killed(e):
-                                # The kernel killed ffmpeg for memory: once more, with nothing cut alongside.
-                                gate.serial = True
-                                log("warn", "render.clip_killed", job=st.job_id, index=i)
-                                continue
-                            # One clip that can't be cut (a 403 on one section, a failed ffmpeg fragment) is
-                            # skipped; only "none of them" fails the step.
-                            if isinstance(e, UserFacingError):
-                                reasons.append(str(e))
-                            log(
-                                "warn",
-                                "render.clip_failed",
-                                job=st.job_id,
-                                index=i,
-                                error=type(e).__name__,
-                                detail=str(e)[:600],
-                            )
-                            break
-                if results[i] is not None:
-                    await self._save_clip(st, results[i])  # type: ignore[arg-type]
-            done += 1
-            tr.report(done / len(st.chosen))
-
+                plain.append((i, m))
         # A cancel stops every cut still running before the job's workdir is removed. The upload's local copy stays
         # for the checklist's spares; the job's workdir goes when the run ends.
-        await gather_all(*(one(i, m) for i, m in enumerate(st.chosen)))
+        if plain:
+            await gather_all(*(cut(i, m, 0) for i, m in plain))
+        for i, m, deaths in suspects:
+            log("warn", "render.clip_retried_alone", job=st.job_id, index=i, deaths=deaths)
+            gate.serial = True
+            await cut(i, m, deaths)
         st.candidates = [c for c in results if c]
-        if reused:
-            log("info", "render.reused", job=st.job_id, clips=reused)
+        if reused or given_up:
+            log("info", "render.reused", job=st.job_id, clips=reused, given_up=given_up)
         if not st.candidates:
             self._drop_full(st)
             raise UserFacingError(cut_failure(reasons))
@@ -1657,21 +1749,64 @@ class Pipeline:
 
     # --- captions --------------------------------------------------------------------------------------------
 
+    async def _saved_clip_ids(self, st: JobState) -> dict[int, dict[str, Any]]:
+        """``clips.json`` of a run that stopped partway (§30.6): per clip index, the clip id it gave the clip, the moment
+        and its captions. Empty unless picking up."""
+        if not st.pick_up:
+            return {}
+        saved = await self._saved_json(st.key("clips.json"))
+        if not isinstance(saved, dict) or saved.get("version") != MOMENTS_VERSION:
+            return {}
+        out: dict[int, dict[str, Any]] = {}
+        for row in saved.get("clips") or []:
+            if isinstance(row, dict) and isinstance(row.get("index"), int) and isinstance(row.get("id"), str):
+                out[row["index"]] = row
+        return out
+
     async def write_captions(self, st: JobState, tr: Tracker) -> str:
+        # A run picking up gives each clip the id the stopped run gave it (by clip index), so a clip that run already
+        # wrote is never written twice; its captions are reused when the clip is the same moment.
+        saved = await self._saved_clip_ids(st)
         for c in st.candidates:
-            st.clip_ids[id(c)] = ulid()
-        texts = [
-            captions_mod.ClipText(st.clip_ids[id(c)], c.moment, " ".join(x["text"] for x in c.render.captions))
+            old = saved.get(c.index)
+            st.clip_ids[id(c)] = str(old["id"]) if old else ulid()
+        same = bool(st.candidates) and all(
+            (old := saved.get(c.index)) is not None
+            and old.get("moment") == c.moment.to_dict()
+            and isinstance(old.get("captions"), dict)
+            for c in st.candidates
+        )
+        if same:
+            st.captions = {st.clip_ids[id(c)]: dict(saved[c.index]["captions"]) for c in st.candidates}
+        else:
+            texts = [
+                captions_mod.ClipText(st.clip_ids[id(c)], c.moment, " ".join(x["text"] for x in c.render.captions))
+                for c in st.candidates
+            ]
+            st.captions = await captions_mod.write_captions(
+                self.claude(st),
+                texts,
+                notes=st.notes,
+                skills=st.block,
+                skills_text=st.skills.full_text,
+                system=learnings.with_prior(st.prior, "You write social captions for short clips."),
+            )
+        rows = [
+            {
+                "index": c.index,
+                "id": st.clip_ids[id(c)],
+                "moment": c.moment.to_dict(),
+                "captions": st.captions.get(st.clip_ids[id(c)]),
+            }
             for c in st.candidates
         ]
-        st.captions = await captions_mod.write_captions(
-            self.claude(st),
-            texts,
-            notes=st.notes,
-            skills=st.block,
-            skills_text=st.skills.full_text,
-            system=learnings.with_prior(st.prior, "You write social captions for short clips."),
-        )
+        try:
+            await self.store.put_json(st.key("clips.json"), {"version": MOMENTS_VERSION, "clips": rows})
+            st.ids_saved = True
+        except (JobCanceled, asyncio.CancelledError):
+            raise
+        except Exception as e:
+            log("warn", "captions.save_failed", job=st.job_id, error=type(e).__name__)
         required = captions_mod.required_tags(st.notes, st.skills.full_text)
         for c in st.candidates:
             title = st.captions[st.clip_ids[id(c)]]["youtubeTitle"]
@@ -1696,22 +1831,32 @@ class Pipeline:
             clip_item(st, c, st.clip_ids[id(c)], rank, clip_prefix(st.job_id, st.clip_ids[id(c)]), platform, url)
             for rank, c in enumerate(st.candidates, start=1)
         ]
+        pairs = list(zip(st.candidates, items, strict=True))
+        if st.pick_up:
+            # The run that stopped may have written some of these clips already (same ids, write_captions); a clip the
+            # owner already kept or declined is left exactly as it is, never written twice (§30.6).
+            there = await self.store.clip_statuses(st.user_id, [i["clipId"] for i in items])
+            if there:
+                log("info", "finalize.already_written", job=st.job_id, clips=len(there))
+            pairs = [(c, i) for c, i in pairs if i["clipId"] not in there]
         # The vectors go first: once a Clip item is visible the owner can Keep or Decline it, and clip-flow then
         # rewrites (Keep) or the API deletes (Decline) its vector. A later put here would undo that.
         await tr.check_cancel()
-        await self._put_vectors(st, items)
-        for c, item in zip(st.candidates, items, strict=True):
+        await self._put_vectors(st, [i for _, i in pairs])
+        for c, item in pairs:
             await tr.check_cancel()
             await self.store.upload(c.render.video, item["videoKey"], "video/mp4")
             await self.store.upload(c.render.cover, item["coverKey"], "image/jpeg")
             try:
                 await self.store.put_clip(item, fence=st.fence)
             except JobSuperseded:
-                # A newer run owns the job: this clip's files (a fresh clip id, so no other run uses them) go too.
-                try:
-                    await self.store.delete_keys([item["videoKey"], item["coverKey"]])
-                except Exception as e:
-                    log("warn", "finalize.cleanup_failed", job=st.job_id, error=type(e).__name__)
+                # A newer run owns the job: this clip's files go too, unless clips.json holds its id; then the newer
+                # run picking up uses the same id and the same files, and they stay.
+                if not st.ids_saved:
+                    try:
+                        await self.store.delete_keys([item["videoKey"], item["coverKey"]])
+                    except Exception as e:
+                        log("warn", "finalize.cleanup_failed", job=st.job_id, error=type(e).__name__)
                 raise
             tr.report(item["rank"] / len(items))
         return f"{count(len(st.candidates), 'clip')} ready for review."

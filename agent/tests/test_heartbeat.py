@@ -114,5 +114,30 @@ def test_memory_from_cgroup_and_meminfo(tmp_path: Path) -> None:
     info = tmp_path / "meminfo"
     info.write_text("MemTotal:       8 kB\nMemFree:        1 kB\nMemAvailable:   6 kB\n")
     assert memory(cg, info) == {"current": 3000, "max": 8192, "oom_kills": 2}
+    # Free memory never mixes the cgroup's use with the machine's total: with no limit it is MemAvailable.
+    assert free_memory(cg, info) == 6144
     assert memory(tmp_path / "nothing", tmp_path / "nothing") == {}
     assert free_memory(tmp_path / "nothing", tmp_path / "nothing") is None
+
+
+async def test_the_loop_ticks_on_its_own_while_a_write_is_stuck() -> None:
+    """A Job item write stuck for minutes (throttling, a full thread pool) must not look like a dead loop: the ticks
+    come from their own task, which waits on nothing."""
+    from clipfactory_agent.heartbeat import keep_ticking
+
+    now = [0.0]
+    live = Liveness(lambda: now[0])
+    now[0] = 1000.0  # the last tick looks old
+    lock = asyncio.Lock()
+    await lock.acquire()  # the tracker's write holds its lock and never returns
+
+    async def stuck_write() -> None:
+        async with lock:
+            pass
+
+    writer = asyncio.create_task(stuck_write())
+    ticker = asyncio.create_task(keep_ticking(live, every=0.01))
+    await asyncio.sleep(0.05)
+    assert live.age() == 0.0
+    ticker.cancel()
+    writer.cancel()

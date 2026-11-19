@@ -20,11 +20,12 @@ Checkpointed jobs, an independent heartbeat thread, and deploys that drain the a
 - **Options.** Pin the agent to a runtime endpoint moved only after a smoke test (protects deploys only, not memory or
   a frozen loop); drain deploys (protects deploys only); resume from checkpoints (covers all three causes, and any we
   have not thought of). Bigger containers do not fix a frozen loop or a deploy.
-- **Decision.** (CONTRACTS §30) Resume, don't fail: the flow resumes a stopped job on a new session up to twice, from
-  saved moments and clips; heartbeats come from a thread that beats only while the loop is alive, every 2 minutes,
+- **Decision.** (CONTRACTS §30) Resume, don't fail: the flow resumes a stopped job on a new session from saved moments
+  and clips, as long as each attempt moves it forward (up to 6 resumes; 2 without progress end it); heartbeats come from a thread that beats only while the loop is alive, every 2 minutes,
   with a 6-minute timeout, and log memory; SIGTERM tells the flow at once; the Cut step's memory is bounded; deploys
-  wait up to 45 minutes for running jobs when the agent changes. The pinned endpoint stays a later option, only if
+  wait up to 25 minutes for running jobs when the agent changes. The pinned endpoint stays a later option, only if
   the logs keep showing deploy kills.
-- **Consequences.** A stop costs minutes, not the job; the owner sees "stopped" only after two resumes, and even then
-  Try again picks up. A resumed job may cut again a clip that was half done. The flow's first attempt keeps its
+- **Consequences.** A stop costs minutes, not the job; the owner sees "stopped" only when the job is stuck, and even then
+  Try again picks up. A resumed job may cut again a clip that was half done; a clip that was being cut when two runs
+  died is left out so the rest finish. Clip ids are kept across runs, so no clip is posted twice. The flow's first attempt keeps its
   operation names, so executions started before this change replay unchanged.

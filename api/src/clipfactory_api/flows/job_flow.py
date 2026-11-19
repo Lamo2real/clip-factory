@@ -11,7 +11,8 @@ Started by the API (``job-{jobId}-{flowRun}`` on the alias ``live``) with ``{"jo
 3. Wait for the callback, with no compute while waiting. Success → step ``finish``. The agent's own failure
    (``JobFailed``, ``Canceled``, ``Superseded``) → step ``fail`` (plus ``stop-session`` when this run failed).
 4. A timeout, a missed heartbeat or ``AgentStopped`` (the container is shutting down) does not fail the job: it is
-   resumed, at most ``MAX_RESUMES`` times (docs/CONTRACTS.md §30.1). Step ``resume-n`` gives the job a new
+   resumed (docs/CONTRACTS.md §30.1) while each attempt moves it forward (its progress went up), at most
+   ``MAX_RESUMES`` times; only ``MAX_STALLED`` resumes after attempts that made no progress are allowed. Step ``resume-n`` gives the job a new
    ``sessionId`` (which fences the old container out) with status ``queued``, ``pickUp`` and the note "Picking up
    where it stopped…", keeping its steps, progress and saved files; step ``stop-old-n`` ends the old session; then
    ``agent-done-n`` / ``start-agent-n`` run as in 1-3 on the new session, on the newest runtime version. Only after
@@ -52,7 +53,9 @@ CALLBACK_HOURS = 8
 CALLBACK_TIMEOUT = Duration.from_hours(CALLBACK_HOURS)
 HEARTBEAT_TIMEOUT = Duration.from_minutes(6)
 QUIET_TYPES = {"Canceled": "canceled", "Superseded": "superseded"}
-MAX_RESUMES = 2
+MAX_RESUMES = 6  # the most resumes of one flow run, and only while each attempt moves the job forward
+MAX_STALLED = 2  # resumes after an attempt that made no progress (the old limit, now only for a stuck job)
+PROGRESS_STEP = 0.001  # progress (0..1) must rise by more than this for an attempt to count as moving forward
 AGENT_STOPPED = "AgentStopped"  # the agent got SIGTERM (a stopped session, a retired version): resume at once
 # The whole execution may run 8.5 h (infra/modules/flows: execution_timeout). A resume needs at least this much of the
 # 8 h left, and its callback gets only what is left, so the execution never outlives its timeout with the job running.
@@ -99,12 +102,14 @@ def run_job_flow(ctx: Any, event: Any, deps: JobFlowDeps) -> dict[str, Any]:
         return {"jobId": event.get("jobId") if isinstance(event, dict) else None, "outcome": "bad_event"}
     first = run
     timeout = CALLBACK_TIMEOUT
+    stalled = 0
     for attempt in range(MAX_RESUMES + 1):
-        ended, resumed = _attempt(ctx, deps, run, attempt, timeout)
+        ended, resumed = _attempt(ctx, deps, run, attempt, timeout, stalled=stalled)
         if resumed is None:
             return _done(first, ended or "failed")
         run = Run(run.job_id, run.user_id, str(resumed["sessionId"]))
         timeout = Duration.from_seconds(int(resumed["seconds"]))
+        stalled = int(resumed.get("stalled") or 0)
     raise AssertionError("the last attempt never resumes")  # pragma: no cover
 
 
@@ -116,7 +121,7 @@ class _Stop:
 
 
 def _attempt(
-    ctx: Any, deps: JobFlowDeps, run: Run, attempt: int, timeout: Duration
+    ctx: Any, deps: JobFlowDeps, run: Run, attempt: int, timeout: Duration, *, stalled: int = 0
 ) -> tuple[str | None, dict[str, Any] | None]:
     """One agent run on ``run.session_id``: ``(outcome, None)`` when the flow ends, ``(None, resumed)`` to go on with
     the new session ``begin_resume`` gave the job. The first attempt keeps the names it always had ("agent-done",
@@ -141,16 +146,31 @@ def _attempt(
         raw = callback.result()
     except CallbackError as e:
         stop = _Stop(error_type(e, callback), isinstance(e, CallbackTimeoutError), error_message(e))
-        return _stopped(ctx, deps, run, attempt, stop)
+        return _stopped(ctx, deps, run, attempt, stop, since=_progress(started.get("progress")), stalled=stalled)
     clip_count = clip_count_from(raw)
     return ctx.step(lambda _sc: finish(deps, run, clip_count), name="finish", config=retrying()), None
 
 
+def _progress(raw: Any) -> float | None:
+    try:
+        return None if raw is None else float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def _stopped(
-    ctx: Any, deps: JobFlowDeps, run: Run, attempt: int, stop: _Stop
+    ctx: Any,
+    deps: JobFlowDeps,
+    run: Run,
+    attempt: int,
+    stop: _Stop,
+    *,
+    since: float | None = None,
+    stalled: int = 0,
 ) -> tuple[str | None, dict[str, Any] | None]:
     """The callback failed. A timeout, a missed heartbeat or ``AgentStopped`` resumes the job while resumes are left
-    (§30.1); anything else, or the last one, fails it."""
+    (§30.1): ``since`` is the job's progress when this attempt started, ``stalled`` the resumes so far after attempts
+    that made none. Anything else, or the last one, fails it."""
     log(
         "info",
         "job_flow.callback_failed",
@@ -162,7 +182,9 @@ def _stopped(
     stopped = stop.timed_out or stop.kind == AGENT_STOPPED
     if stopped and attempt < MAX_RESUMES:
         n = attempt + 1
-        resumed = ctx.step(lambda _sc: begin_resume(deps, run, n), name=f"resume-{n}", config=retrying())
+        resumed = ctx.step(
+            lambda _sc: begin_resume(deps, run, n, since=since, stalled=stalled), name=f"resume-{n}", config=retrying()
+        )
         if resumed.get("sessionId"):
             ctx.step(lambda _sc: stop_session(deps, run), name=f"stop-old-{n}", config=retrying())
             return None, resumed
@@ -202,7 +224,7 @@ def _get(deps: JobFlowDeps, run: Run) -> Item | None:
         raise transient(e) from e
 
 
-def start_agent(deps: JobFlowDeps, run: Run, callback_id: str) -> dict[str, bool]:
+def start_agent(deps: JobFlowDeps, run: Run, callback_id: str) -> dict[str, Any]:
     """Sends ``process_job`` for this run. Skips (the flow ends ``superseded``) only when the job is gone, belongs to
     a newer run or has already ended. ``running`` with this run's ``sessionId`` means an earlier attempt of this
     at-least-once step reached the agent (a read timeout after the agent's ``begin()``, or a crash before the
@@ -213,9 +235,10 @@ def start_agent(deps: JobFlowDeps, run: Run, callback_id: str) -> dict[str, bool
     if job is None or job.get("sessionId") != run.session_id or status not in ACTIVE:
         log("info", "job_flow.skip_start", jobId=run.job_id, status=status)
         return {"skipped": True}
+    progress = _progress(job.get("progress")) or 0.0  # where this attempt starts (a resume counts what it adds)
     if status == "running":
         log("info", "job_flow.already_started", jobId=run.job_id)
-        return {"skipped": False}
+        return {"skipped": False, "progress": progress}
     try:
         deps.agent.start_job(run.job_id, run.user_id, run.session_id, callback_id)
     except AgentError as e:
@@ -223,7 +246,7 @@ def start_agent(deps: JobFlowDeps, run: Run, callback_id: str) -> dict[str, bool
             raise TransientError(str(e)) from e
         raise
     log("info", "job_flow.agent_started", jobId=run.job_id)
-    return {"skipped": False}
+    return {"skipped": False, "progress": progress}
 
 
 def _state_outcome(job: Item | None, run: Run) -> str | None:
@@ -298,7 +321,9 @@ def _elapsed_seconds(job: Item, now_iso: str) -> float:
     from datetime import datetime
 
     steps = [s for s in job.get("steps") or [] if isinstance(s, dict)]
-    first = next((str(s["startedAt"]) for s in steps if s.get("startedAt")), None)
+    # Try again that picks up keeps the done steps (and their old times) but marks when this flow run began.
+    first = str(job["runStartedAt"]) if job.get("runStartedAt") else None
+    first = first or next((str(s["startedAt"]) for s in steps if s.get("startedAt")), None)
     if not first:
         return 0.0
     try:
@@ -309,10 +334,14 @@ def _elapsed_seconds(job: Item, now_iso: str) -> float:
     return max(0.0, (b - a).total_seconds())
 
 
-def begin_resume(deps: JobFlowDeps, run: Run, n: int) -> dict[str, Any]:
-    """Hands a job that stopped partway to a new session (§30.1): ``{"sessionId", "seconds"}`` (the new callback's
-    timeout), or ``{"outcome"}`` when the job must not resume (canceled, retried by the owner, ended, gone, or too
-    little of the 8 h left), or ``{}`` to fail it. Only adds and changes fields: the steps, progress, clip count and
+def begin_resume(
+    deps: JobFlowDeps, run: Run, n: int, *, since: float | None = None, stalled: int = 0
+) -> dict[str, Any]:
+    """Hands a job that stopped partway to a new session (§30.1): ``{"sessionId", "seconds", "stalled"}`` (the new
+    callback's timeout and the resumes so far after attempts that made no progress), or ``{"outcome"}`` when the job
+    must not resume (canceled, retried by the owner, ended, gone), or ``{}`` to fail it (too little of the 8 h left,
+    or a job that stopped ``MAX_STALLED`` times already without moving forward). ``since``: the job's progress when the
+    attempt that stopped began (None: unknown, counted as moving forward). Only adds and changes fields: the steps, progress, clip count and
     saved files stay. The new ``sessionId`` fences the old container: from now on none of its writes land."""
     job = _get(deps, run)
     known = _state_outcome(job, run)
@@ -324,6 +353,13 @@ def begin_resume(deps: JobFlowDeps, run: Run, n: int) -> dict[str, Any]:
     if left < RESUME_MIN_SECONDS:
         log("info", "job_flow.no_time_to_resume", jobId=run.job_id, left=int(left))
         return {}
+    progress = _progress(job.get("progress")) or 0.0
+    moved = since is None or progress > since + PROGRESS_STEP
+    if not moved:
+        if stalled >= MAX_STALLED:
+            log("info", "job_flow.stuck", jobId=run.job_id, stalled=stalled)
+            return {}
+        stalled += 1
     from ..agent_client import new_session_id
 
     session = new_session_id(run.job_id)
@@ -348,8 +384,8 @@ def begin_resume(deps: JobFlowDeps, run: Run, n: int) -> dict[str, Any]:
         return {"outcome": outcome}
     except Exception as e:
         raise transient(e) from e
-    log("warning", "job_flow.resumed", jobId=run.job_id, resumes=n)
-    return {"sessionId": session, "seconds": int(left)}
+    log("warning", "job_flow.resumed", jobId=run.job_id, resumes=n, moved=moved, stalled=stalled)
+    return {"sessionId": session, "seconds": int(left), "stalled": stalled}
 
 
 def stop_session(deps: JobFlowDeps, run: Run) -> dict[str, bool]:

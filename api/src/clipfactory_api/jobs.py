@@ -31,7 +31,7 @@ STEPS: tuple[tuple[str, str], ...] = (
 )
 ACTIVE = ("queued", "running")
 RESTARTABLE = ("failed", "canceled")
-INTERNAL_FIELDS = ("sessionId", "heartbeatAt", "flowRun", "flowExecutionArn", "pickUp", "resumes")
+INTERNAL_FIELDS = ("sessionId", "heartbeatAt", "flowRun", "flowExecutionArn", "pickUp", "resumes", "runStartedAt")
 
 START_FAILED = "Could not start. Press Try again."
 
@@ -120,10 +120,33 @@ def start(store: db.Store, flows: FlowClient, job: Item, now: str) -> Item:
 RESUME_NOTE = "Picking up where it stopped…"
 
 
-def restart_fields(job_id: str, now: str, previous_run: int, *, pick_up: bool = False) -> Item:
+def picked_up_steps(steps: Any) -> list[Item]:
+    """The step list a pick-up starts from: done and skipped steps stay as they are, the step that stopped (failed or
+    running) and every later one go back to pending. Anything unreadable: a fresh list."""
+    old = {s.get("key"): s for s in steps or [] if isinstance(s, dict)}
+    out: list[Item] = []
+    for fresh in new_steps():
+        prev = old.get(fresh["key"])
+        if prev and prev.get("status") in ("done", "skipped"):
+            out.append({**fresh, **{k: prev[k] for k in ("status", "message", "startedAt", "finishedAt") if k in prev}})
+        else:
+            out.append(fresh)
+    return out
+
+
+def restart_fields(
+    job_id: str,
+    now: str,
+    previous_run: int,
+    *,
+    pick_up: bool = False,
+    steps: Any = None,
+    progress: Any = 0,
+) -> Item:
     """A new run of the same job (Try again): same job id, so the same saved files. ``pick_up`` (the last run
     stopped partway rather than failing on its own, ``pickUp`` on the job, docs/CONTRACTS.md §30.6) keeps the moments
-    and clips it saved and says so; otherwise the run starts over, as Try again always did."""
+    and clips it saved, its done steps (``steps``) and its ``progress``, and says so; otherwise the run starts over, as
+    Try again always did. ``runStartedAt`` starts this run's 8 h budget (the kept steps carry older times)."""
     fields: Item = {
         "status": "queued",
         "flowRun": previous_run + 1,
@@ -133,8 +156,13 @@ def restart_fields(job_id: str, now: str, previous_run: int, *, pick_up: bool = 
         "resumes": 0,
         "sessionId": new_session_id(job_id),
         "heartbeatAt": now,
+        "runStartedAt": now,
         "updatedAt": now,
     }
     if pick_up:
-        fields.update(pickUp=True, note=RESUME_NOTE)
+        try:
+            done = max(0.0, min(1.0, float(progress or 0)))
+        except (TypeError, ValueError):
+            done = 0.0
+        fields.update(pickUp=True, note=RESUME_NOTE, steps=picked_up_steps(steps), progress=done)
     return fields

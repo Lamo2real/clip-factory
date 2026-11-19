@@ -345,7 +345,7 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
 5. **Terraform** `init` (S3 backend with lockfile), `plan`, then `apply` of exactly that plan. No manual approval
    (the owner's choice).
    Between the delete gate and the apply, `scripts/wait-for-jobs.sh` (the drain, CONTRACTS §30.7) waits for jobs
-   being made when the plan changes anything under `module.agent`: up to 45 minutes, counting `queued`/`running` jobs
+   being made when the plan changes anything under `module.agent`: up to 25 minutes (a failed Scan is tried three times, then it goes on), counting `queued`/`running` jobs
    with a fresh heartbeat (counts only in the log, read only). A job still running after that resumes on the new
    agent version by itself.
    The apply creates or updates every resource, including the three API Gateway APIs (REST first, then WebSocket,

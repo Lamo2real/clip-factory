@@ -4,7 +4,8 @@ The asyncio loop runs the whole job: ffmpeg, model calls, the Job item's progres
 loop too, so a loop that froze (or a container starved for memory) looked exactly like a dead one only after 15
 minutes. Now a plain thread sends ``SendDurableExecutionCallbackHeartbeat`` every 2 minutes with its own boto3 client:
 
-* it beats only while the loop is alive: the loop touches ``Liveness.tick()`` every few seconds, and when it has not
+* it beats only while the loop is alive: a task of its own (``keep_ticking``: no I/O, no lock, so a slow DynamoDB
+  write or a full thread pool never holds it up) touches ``Liveness.tick()`` every few seconds, and when it has not
   for ``LOOP_STALL`` seconds the thread logs ``agent.loop_stalled`` and stops beating, so the flow resumes the job
   (§30.1) instead of waiting hours on a hung process;
 * a failed send is tried again after 20 seconds, not after a whole period; the time of the last beat is set only when
@@ -14,6 +15,7 @@ minutes. Now a plain thread sends ``SendDurableExecutionCallbackHeartbeat`` ever
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from collections.abc import Callable
@@ -25,6 +27,7 @@ from .util import log
 HEARTBEAT_SECONDS = 120.0  # the flow's heartbeat timeout is 6 minutes: three beats may be lost
 RETRY_SECONDS = 20.0
 LOOP_STALL = 300.0
+TICK_SECONDS = 5.0
 CGROUP = Path("/sys/fs/cgroup")
 MEMINFO = Path("/proc/meminfo")
 
@@ -41,6 +44,14 @@ class Liveness:
 
     def age(self) -> float:
         return self.clock() - self.last
+
+
+async def keep_ticking(liveness: Liveness, every: float = TICK_SECONDS) -> None:
+    """Shows the heartbeat thread the loop is alive, until cancelled. Only ticks and sleeps: it never waits on a write,
+    a lock or the thread pool, so only a loop that truly stopped turning stops the heartbeat."""
+    while True:
+        liveness.tick()
+        await asyncio.sleep(every)
 
 
 def _read_int(path: Path) -> int | None:
@@ -88,10 +99,19 @@ def memory(root: Path = CGROUP, meminfo: Path = MEMINFO) -> dict[str, int]:
 
 
 def free_memory(root: Path = CGROUP, meminfo: Path = MEMINFO) -> int | None:
-    """Bytes the container can still use, or None when it cannot be told (not Linux)."""
-    m = memory(root, meminfo)
-    if "max" in m and "current" in m:
-        return max(0, m["max"] - m["current"])
+    """Bytes the container can still use, or None when it cannot be told (not Linux). From one source only: the
+    cgroup's limit and use when it has a limit, else ``MemAvailable`` (never cgroup use against the machine's total)."""
+    current = _read_int(root / "memory.current")
+    limit = _read_int(root / "memory.max")
+    if current is not None and limit is not None:
+        return max(0, limit - current)
+    try:
+        for line in meminfo.read_text().splitlines():
+            name, _, value = line.partition(":")
+            if name.strip() == "MemAvailable":
+                return int(value.split()[0]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
     return None
 
 

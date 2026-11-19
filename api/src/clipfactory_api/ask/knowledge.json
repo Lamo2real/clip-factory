@@ -1,5 +1,5 @@
 {
- "version": "6d795b218ae0",
+ "version": "757c1e7531e5",
  "parts": [
   {
    "id": "app-map",
@@ -81,7 +81,7 @@
    "id": "contracts-9",
    "title": "CONTRACTS: 9. Lambdas (one zip `api/dist/lambda.zip`, Python 3.13, arm64, package `clipfactory_api`)",
    "line": "Function | Handler | Trigger | Environment |",
-   "chars": 3295
+   "chars": 3316
   },
   {
    "id": "contracts-10",
@@ -207,7 +207,7 @@
    "id": "contracts-30",
    "title": "CONTRACTS: 30. Jobs that never stop partway (owner request, 2026-11-19)",
    "line": "30.1 The owner's words and what they mean",
-   "chars": 6359
+   "chars": 8845
   },
   {
    "id": "adr-01",
@@ -531,7 +531,7 @@
    "id": "adr-54",
    "title": "DECISIONS: ADR-54 Resume, don't fail",
    "line": "Checkpointed jobs, an independent heartbeat thread, and deploys that drain the agent.",
-   "chars": 2906
+   "chars": 3122
   },
   {
    "id": "architecture-overview",
@@ -555,7 +555,7 @@
    "id": "architecture-failure-handling",
    "title": "ARCHITECTURE: Failure handling",
    "line": "What can fail | What happens |",
-   "chars": 10454
+   "chars": 10533
   },
   {
    "id": "architecture-cost-notes",
@@ -579,7 +579,7 @@
    "id": "deployment-what-a-deploy-does",
    "title": "DEPLOYMENT: What a deploy does",
    "line": "Triggered by a push to main ([deploy.yml](../.github/workflows/deploy.yml)) or by hand (Actions → deploy → Run workflow).",
-   "chars": 4203
+   "chars": 4257
   },
   {
    "id": "deployment-desktop-downloads",
@@ -717,7 +717,7 @@
    "id": "testing-what-the-tests-must-cover",
    "title": "TESTING: What the tests must cover",
    "line": "Web (Playwright, mock mode)",
-   "chars": 62602
+   "chars": 62650
   },
   {
    "id": "testing-manual-checks-after-the-first-deploy",
