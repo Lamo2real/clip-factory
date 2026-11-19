@@ -39,31 +39,60 @@ test.describe("glide", () => {
       const bar = page.locator(".segmented").first();
       await expect(bar).toHaveClass(/has-glide/);
       await landsOn(bar, ".segmented__opt.is-on");
-      // It travels instead of jumping: right after the tap a transform transition is running from the old spot to the new
-      // one (exact, unlike sampling frames, which a busy machine may skip), and its stretch animation plays.
+      // It travels instead of jumping: right after the tap one Web Animation runs on the glide's transform only (the
+      // slide, with the stretch folded in), from the old spot to the new one. Exact, unlike sampling frames.
       const run = await bar.evaluate(
         (el) =>
-          new Promise<{ slide: boolean; stretch: boolean }>((done) => {
+          new Promise<{ slide: boolean; stretch: boolean; onlyTransform: boolean }>((done) => {
             const g = el.querySelector<HTMLElement>(":scope > .glide")!;
             const target = [...el.querySelectorAll<HTMLElement>(".segmented__opt")].find((o) => o.textContent?.includes("Pick a video"))!;
-            const seen = { slide: false, stretch: false };
-            const check = () => seen.slide && seen.stretch && done(seen);
-            g.addEventListener("transitionrun", (e) => {
-              if (e.propertyName === "transform") seen.slide = true;
-              check();
-            });
-            g.addEventListener("animationstart", (e) => {
-              if (e.animationName === "glide-stretch-x") seen.stretch = true;
-              check();
-            });
-            setTimeout(() => done(seen), 5000);
             target.querySelector("input")!.click();
+            requestAnimationFrame(() => {
+              const anims = g.getAnimations();
+              const slide = anims.find((a) => a.id === "glide-slide");
+              const frames = (slide?.effect as KeyframeEffect | undefined)?.getKeyframes() ?? [];
+              const props = new Set(frames.flatMap((f) => Object.keys(f).filter((k) => !["offset", "easing", "composite", "computedOffset"].includes(k))));
+              const scales = frames.map((f) => /scale\(([\d.]+)/.exec(String(f.transform))?.[1]).map(Number);
+              done({
+                slide: !!slide && slide.playState === "running",
+                stretch: Math.max(...scales) > 1.02,
+                onlyTransform: anims.every((a) => a.id === "glide-slide" || a instanceof CSSTransition) && [...props].join() === "transform",
+              });
+            });
           }),
       );
-      expect(run).toEqual({ slide: true, stretch: true });
+      expect(run).toEqual({ slide: true, stretch: true, onlyTransform: true });
       await landsOn(bar, ".segmented__opt.is-on");
       // The chosen option no longer paints its own pill; the glide is the pill.
       expect(await bar.locator(".segmented__opt.is-on").evaluate((el) => getComputedStyle(el).backgroundImage)).toBe("none");
+    });
+
+    test("between options of different widths the pill keeps its round ends (never squashed)", async ({ page }) => {
+      await page.goto("/library");
+      await settle(page);
+      const bar = page.locator(".segmented", { hasText: "Not posted yet" }).first();
+      await expect(bar).toHaveClass(/has-glide/);
+      const run = await bar.evaluate(
+        (el) =>
+          new Promise<{ slide: boolean; scaled: boolean; widths: number[] }>((done) => {
+            const g = el.querySelector<HTMLElement>(":scope > .glide")!;
+            const target = [...el.querySelectorAll<HTMLElement>(".segmented__opt")].find((o) => o.textContent?.includes("Not posted yet"))!;
+            target.querySelector("input")!.click();
+            requestAnimationFrame(() => {
+              const slide = g.getAnimations().find((a) => a.id === "glide-slide");
+              const frames = (slide?.effect as KeyframeEffect | undefined)?.getKeyframes() ?? [];
+              done({
+                slide: !!slide,
+                scaled: frames.some((f) => /scale/.test(String(f.transform))),
+                widths: frames.map((f) => parseFloat(String(f.width))),
+              });
+            });
+          }),
+      );
+      expect(run.slide).toBe(true);
+      expect(run.scaled).toBe(false);
+      expect(run.widths.at(-1)! - run.widths[0]!).toBeGreaterThan(40);
+      await landsOn(bar, ".segmented__opt.is-on");
     });
 
     test("the menu highlight and its vermilion bar follow the page", async ({ page }) => {
@@ -186,13 +215,14 @@ test.describe("glide", () => {
         const start = frames[0]!;
         const travel = Math.abs(end[0]! - start[0]!);
         // The slide eases: speed is measured per 16.7 ms (so a busy test machine dropping frames does not count), and
-        // never exceeds what the spring curve itself reaches (its launch is about 4.6x the average speed over the 460 ms slide; a skipped stretch of frames shows as more).
+        // never exceeds what the curve itself reaches (its launch is about 4.5x the average speed over the 360 ms
+        // slide, plus the stretch; a skipped stretch of frames shows as more).
         const perFrame = (i: number, k: number) => (Math.abs(frames[i]![k]! - frames[i - 1]![k]!) * 16.7) / Math.max(16.7, frames[i]![3]! - frames[i - 1]![3]!);
         let worst = 0;
         for (let i = 1; i < frames.length; i++) worst = Math.max(worst, perFrame(i, 0));
-        expect(worst, `tab ${to}: fastest step ${worst.toFixed(1)}px a frame over ${travel.toFixed(1)}px`).toBeLessThanOrEqual(Math.max(8, (travel / (460 / 16.7)) * 6));
+        expect(worst, `tab ${to}: fastest step ${worst.toFixed(1)}px a frame over ${travel.toFixed(1)}px`).toBeLessThanOrEqual(Math.max(8, (travel / (360 / 16.7)) * 6));
         // No sudden change of size from one frame to the next (the old snap at the end grew it ~6px in one frame;
-        // the spring's stretch changes it under 1.5px a frame).
+        // the stretch changes it under 1.5px a frame).
         let sizeJump = 0;
         for (let i = 1; i < frames.length; i++) sizeJump = Math.max(sizeJump, perFrame(i, 1), perFrame(i, 2));
         expect(sizeJump, `tab ${to}: size jumped ${sizeJump.toFixed(1)}px in one frame`).toBeLessThanOrEqual(2);
@@ -211,6 +241,7 @@ test.describe("glide", () => {
       const glide = bar.locator(".glide");
       expect(await glide.evaluate((el) => getComputedStyle(el).transitionProperty)).toBe("opacity");
       expect(await glide.evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
+      expect(await glide.evaluate((el) => el.getAnimations().filter((a) => a.id === "glide-slide").length)).toBe(0);
       await landsOn(bar, ".segmented__opt.is-on");
     });
   });

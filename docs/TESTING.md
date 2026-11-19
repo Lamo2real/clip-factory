@@ -51,6 +51,14 @@ job, so [ci.yml](../.github/workflows/ci.yml) splits it:
 | `web-e2e (1/6)` … `web-e2e (6/6)` | one sixth of the Playwright tests each: `npm run e2e -- --shard=N/6 --workers=4`. Each shard builds the mock app once. Playwright splits test by test (`fullyParallel`), so every test runs in exactly one shard and the shards add up to the whole suite. |
 | `web` | the gate: passes only when `web-checks` and all six shards passed. This is the check branch protection requires, so keep a job with this exact name. |
 
+**WebKit too.** The macOS desktop app draws with WebKit, so `nav-smooth.spec.ts` (the menu highlight sampled every
+frame), `page-still.spec.ts` (no blink or twitch on a page change) and `top-line.spec.ts` (one top line, the
+traffic-light band) also run in the `webkit` Playwright project (CI: the `web-e2e (WebKit)` job). The
+WebKit slide check (`nav-smooth`) runs on macOS only: Playwright's WebKit on the Linux runners is the GTK/WPE port,
+whose headless run never started the glide's Web Animation at all, which says nothing about the Mac app's WKWebView;
+`page-still` and `top-line` pass there and run in CI. On a Mac: `npx playwright install webkit`, then `CF_E2E_PORT=4471 npx playwright test nav-smooth page-still top-line
+--project=chromium --project=webkit`.
+
 A failed shard uploads `playwright-report-N` (its `test-results`); the other shards still finish. To run one shard on
 your machine: `npx playwright test --shard=3/6`. To add a shard, add a number to the `shard` list in `ci.yml`; the
 total is read from the list's length. `deploy.yml` does not run the browser tests: a deploy starts from a push to

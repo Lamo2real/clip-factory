@@ -7,7 +7,7 @@
 mod update;
 
 use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
-use tauri::{RunEvent, Theme, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, RunEvent, Theme, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
 /// The deployed app, baked in by build.rs from `CF_APP_URL`.
@@ -20,6 +20,22 @@ const WINDOW_LABEL: &str = "main";
 const TITLE: &str = "Clip Factory";
 const MIN_SIZE: (f64, f64) = (380.0, 600.0);
 const START_SIZE: (f64, f64) = (1200.0, 820.0);
+
+/// The height, in points, of the macOS title bar band that lies over the page (docs/CONTRACTS.md §12.3, §11.1).
+/// The window's title bar is transparent and its title hidden, so the traffic lights float on the app's own glass;
+/// the page keeps this band clear (`window.__CF_TITLEBAR__`, read by web/src/lib/look.ts) and starts every column
+/// below it. 28 is the standard AppKit title bar; if a macOS release makes it taller, only this number changes.
+const MAC_TITLEBAR_HEIGHT: u32 = 28;
+
+/// The band the page keeps clear on this system: the overlay title bar on macOS, nothing elsewhere (Windows and
+/// Linux keep their normal window frame, which sits outside the page).
+fn titlebar_height() -> u32 {
+    if cfg!(target_os = "macos") {
+        MAC_TITLEBAR_HEIGHT
+    } else {
+        0
+    }
+}
 
 /// The tint laid into the native glass (Clip Factory bottle green, a little over half strength), so the gaps between
 /// the panels look green while the window is in use.
@@ -146,14 +162,27 @@ fn windows_build() -> Option<u32> {
     None
 }
 
-/// The injected script, led by the glass this window has and the version of this app (`window.__CF_DESKTOP_VERSION__`,
-/// so the page can tell copies apart, §12.6).
-fn init_script(glass: Glass, version: &str) -> String {
+/// The injected script, led by the glass this window has, the version of this app (`window.__CF_DESKTOP_VERSION__`,
+/// so the page can tell copies apart, §12.6) and the title bar band the page must keep clear (§11.1).
+fn init_script(glass: Glass, version: &str, titlebar: u32) -> String {
     format!(
-        "window.__CF_GLASS__ = \"{}\";\nwindow.__CF_DESKTOP_VERSION__ = \"{}\";\n{INIT_SCRIPT}",
+        "window.__CF_GLASS__ = \"{}\";\nwindow.__CF_DESKTOP_VERSION__ = \"{}\";\nwindow.__CF_TITLEBAR__ = {titlebar};\n{INIT_SCRIPT}",
         glass.name(),
         safe_version(version)
     )
+}
+
+/// The one native permission the remote page gets: dragging the window by its title bar band, and zooming it with a
+/// double click there (Tauri's drag script, `data-tauri-drag-region`), for this app's own address only, in the main
+/// window only. Without it the overlay title bar could not move the window. Everything else stays denied
+/// (capabilities/main.json).
+fn drag_capability(app_url: &Url) -> tauri::ipc::CapabilityBuilder {
+    tauri::ipc::CapabilityBuilder::new("title-bar-drag")
+        .remote(format!("{}/*", app_url.origin().ascii_serialization()))
+        .local(false)
+        .window(WINDOW_LABEL)
+        .permission("core:window:allow-start-dragging")
+        .permission("core:window:allow-internal-toggle-maximize")
 }
 
 /// The app version as it goes into the script: semver characters only, anything else becomes "unknown".
@@ -186,6 +215,7 @@ fn main() {
             let home = app_url.clone();
             let glass = Glass::here();
             let version = app.package_info().version.to_string();
+            app.add_capability(drag_capability(&app_url))?;
 
             let mut window =
                 WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::External(app_url))
@@ -201,7 +231,16 @@ fn main() {
                     // drops from the page, so it is turned off: the page handles drops, and drops anywhere else are
                     // ignored by the page (web/src/features/help/HelpLauncher.tsx).
                     .disable_drag_drop_handler()
-                    .initialization_script(init_script(glass, &version));
+                    .initialization_script(init_script(glass, &version, titlebar_height()));
+            // macOS: the title bar is laid over the page, clear and without its title, so there is no white strip and
+            // the traffic lights float on the app's own glass (the page keeps their band clear, §11.1). The title
+            // still names the window in the Dock, Mission Control and the Window menu.
+            #[cfg(target_os = "macos")]
+            {
+                window = window
+                    .title_bar_style(tauri::TitleBarStyle::Overlay)
+                    .hidden_title(true);
+            }
             if let Some(effects) = glass.effects() {
                 window = window.transparent(true).effects(effects.build());
             }
@@ -370,9 +409,9 @@ mod tests {
             (Glass::Blur, "blur"),
             (Glass::None, "none"),
         ] {
-            let script = init_script(glass, "1.42.0");
+            let script = init_script(glass, "1.42.0", 28);
             assert!(script.starts_with(&format!(
-                "window.__CF_GLASS__ = \"{name}\";\nwindow.__CF_DESKTOP_VERSION__ = \"1.42.0\";\n"
+                "window.__CF_GLASS__ = \"{name}\";\nwindow.__CF_DESKTOP_VERSION__ = \"1.42.0\";\nwindow.__CF_TITLEBAR__ = 28;\n"
             )));
             assert!(script.contains("window.__CF_DESKTOP__ = true"));
         }
@@ -385,8 +424,39 @@ mod tests {
         assert_eq!(safe_version(""), "unknown");
         assert_eq!(safe_version("1\";alert(1);\""), "unknown");
         assert_eq!(safe_version("1.0.0\n"), "unknown");
-        let script = init_script(Glass::None, "</script>");
+        let script = init_script(Glass::None, "</script>", 0);
         assert!(script.contains("window.__CF_DESKTOP_VERSION__ = \"unknown\";"));
+    }
+
+    #[test]
+    fn the_page_keeps_the_mac_title_bar_band_clear_and_nothing_elsewhere() {
+        if cfg!(target_os = "macos") {
+            assert_eq!(titlebar_height(), 28);
+        } else {
+            assert_eq!(titlebar_height(), 0);
+        }
+        assert!(init_script(Glass::None, "1.42.0", 0).contains("window.__CF_TITLEBAR__ = 0;\n"));
+    }
+
+    #[test]
+    fn only_the_app_itself_may_drag_the_window_and_nothing_more() {
+        use tauri::ipc::RuntimeCapability;
+        use tauri::utils::acl::capability::CapabilityFile;
+        let CapabilityFile::Capability(cap) =
+            drag_capability(&url("https://d1.cloudfront.net/")).build()
+        else {
+            panic!("one capability");
+        };
+        assert_eq!(cap.identifier, "title-bar-drag");
+        assert!(!cap.local, "only the remote app, never a local page");
+        assert_eq!(cap.windows, vec![WINDOW_LABEL.to_owned()]);
+        let remote = cap.remote.expect("a remote capability");
+        assert_eq!(remote.urls, vec!["https://d1.cloudfront.net/*".to_owned()]);
+        // Exactly the two window permissions: no files, shell, opener or anything else.
+        let perms = format!("{:?}", cap.permissions);
+        assert_eq!(cap.permissions.len(), 2, "{perms}");
+        assert!(perms.contains("allow-start-dragging"), "{perms}");
+        assert!(perms.contains("allow-internal-toggle-maximize"), "{perms}");
     }
 
     #[test]

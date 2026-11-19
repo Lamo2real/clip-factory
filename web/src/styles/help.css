@@ -128,7 +128,7 @@
   width: auto;
   max-height: none;
   border-radius: 0;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  padding: var(--top-safe) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 .help-panel__head {
@@ -440,6 +440,21 @@
     opacity: 0;
   }
 }
+/* Until the control has arrived (scrolled in and still) the ring only fades in and stays bright; the 2.4 s fade starts
+   on arrival, from the 12 % frame (spotlight.ts), so a slow scroll does not use up the time the owner sees it. */
+@keyframes help-ring-in {
+  from {
+    opacity: 0;
+    scale: 1.08;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+.help-ring.is-coming {
+  animation: help-ring-in 288ms var(--ease-out) forwards;
+}
 .help-ring.is-static {
   animation: none;
 }
@@ -710,7 +725,7 @@
   z-index: 100;
   display: grid;
   place-items: center;
-  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom))
+  padding: max(16px, var(--top-safe)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom))
     max(16px, env(safe-area-inset-left));
   background: rgb(var(--green-deep-rgb) / 0.6);
   animation: help-fade-in 220ms var(--ease-out) both;

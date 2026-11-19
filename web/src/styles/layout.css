@@ -4,12 +4,26 @@
   min-height: 100vh;
   min-height: 100dvh;
 }
+/* The desktop window's title bar band (§11.1): the macOS traffic lights float here on the app's own glass. It is clear
+   (no fill, no edge) and exactly as tall as the real title bar (--titlebar-h), never into the air below it: a page
+   control scrolled up into that air still takes its click. */
+.titlebar-drag {
+  display: none;
+}
+html[data-titlebar="overlay"] .titlebar-drag {
+  display: block;
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 45;
+  height: var(--titlebar-h);
+  background: transparent;
+}
 .shell {
   min-height: 100vh;
   min-height: 100dvh;
   padding-left: max(var(--gutter), env(safe-area-inset-left));
   padding-right: max(var(--gutter), env(safe-area-inset-right));
-  padding-top: calc(env(safe-area-inset-top) + 12px);
+  padding-top: var(--top-line);
   padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 36px);
 }
 .main {
@@ -183,7 +197,7 @@
   .sidebar {
     position: fixed;
     z-index: 40;
-    top: calc(env(safe-area-inset-top) + 14px);
+    top: var(--top-line);
     bottom: 14px;
     left: max(14px, env(safe-area-inset-left));
     display: flex;
@@ -199,7 +213,7 @@
   }
   .shell {
     padding-left: calc(var(--sidebar-w) + 14px + var(--gutter));
-    padding-top: calc(env(safe-area-inset-top) + 28px);
+    padding-top: var(--top-line);
     padding-bottom: 48px;
     transition: padding-left var(--dur-3) var(--ease-out);
   }
@@ -337,12 +351,24 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 14px 24px;
+  /* None from 768 px: the title's plate starts right on the top line, level with the menu (§11.1). Phones keep a
+     little air under their top bar (the brand row), which is the first thing on the line there. */
   padding-top: 6px;
+}
+@media (min-width: 768px) {
+  .page-head {
+    padding-top: 0;
+  }
 }
 .page-head__text {
   display: grid;
   gap: 10px;
   flex: 1 1 420px;
+}
+/* The first row of a page ends before the setup list's pill when the pill shares the top line (--todo-room,
+   setup-todo.css). */
+.page-head:first-child > .page-head__text {
+  max-width: calc(100% - var(--todo-room, 0px));
 }
 /* Words that sit loose on the page start where the words inside the panels start (--loose-x: a panel's rim and side
    padding), in every look and at every size, so the left edge of the text runs as one line down the page. Boxes
@@ -405,32 +431,6 @@
   justify-content: center;
 }
 
-/* Page change: a soft cross-fade with a little lift (View Transitions API). */
-::view-transition-old(root) {
-  animation: 180ms var(--ease-out) both vt-out;
-}
-::view-transition-new(root) {
-  animation: 340ms var(--ease-out) both vt-in;
-}
-@keyframes vt-out {
-  to {
-    opacity: 0;
-  }
-}
-@keyframes vt-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-}
-/* `backwards`, not `both`: once the page has risen it keeps no transform, so it never becomes the containing block of
-   a fixed sheet or scrim inside it (those would then cover only the page, not the screen). */
-.main > * {
-  animation: page-in 420ms var(--ease-out) backwards;
-}
-@keyframes page-in {
-  from {
-    opacity: 0.001;
-    transform: translateY(8px);
-  }
-}
+/* Page change: none. The new page is simply there (docs/CONTRACTS.md §20.16). No cross-fade, no fade-in, no lift: in the
+   see-through desktop window a page fading in shows the light window glass through it for a moment (a white blink),
+   and the window must stay perfectly still while only the content changes. e2e/page-still.spec.ts holds this. */

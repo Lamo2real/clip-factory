@@ -5,6 +5,7 @@ import { loadConfig } from "../lib/config.ts";
 import { usePrefs } from "../lib/prefs.ts";
 import { navigate, useHash, useRoute, type Route } from "../lib/router.ts";
 import { findBranch, findTree, legacySettingsRedirect } from "../lib/settingsTree.ts";
+import { forgetLoaded } from "../lib/hooks.ts";
 import { sounds } from "../lib/sounds.ts";
 import { Backdrop, GlassFilter } from "../components/Backdrop.tsx";
 import { Sidebar, TabBar } from "../components/Nav.tsx";
@@ -86,9 +87,10 @@ export function App() {
 
   useEffect(
     () =>
-      onSignedOut(() =>
-        setBoot({ state: "signed_out", note: "Your sign-in on this device has ended. Please sign in again." }),
-      ),
+      onSignedOut(() => {
+        forgetLoaded();
+        setBoot({ state: "signed_out", note: "Your sign-in on this device has ended. Please sign in again." });
+      }),
     [],
   );
 
@@ -98,6 +100,7 @@ export function App() {
 
   const signOut = useCallback(async () => {
     await auth().signOut();
+    forgetLoaded();
     setBoot({ state: "signed_out", note: null });
   }, []);
 
@@ -105,6 +108,9 @@ export function App() {
     <ToastProvider onError={() => sounds.play("deny")}>
       <Backdrop />
       <GlassFilter />
+      {/* The desktop window's title bar band (macOS, §11.1): invisible, and only there when look.ts set
+          data-titlebar="overlay". Pressing it moves the window, and a double click zooms it, like a title bar. */}
+      <div className="titlebar-drag" data-tauri-drag-region="" aria-hidden="true" />
       {boot.state === "loading" ? (
         <div className="boot" role="status" aria-label="Loading Clip Factory">
           <span className="brand__mark brand__mark--boot" aria-hidden="true">

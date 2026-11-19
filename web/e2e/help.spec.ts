@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { DODGE_HOLD_MS, DODGE_SETTLE_MS } from "../src/features/help/dodge.ts";
+import { SPOT_ARRIVE_CAP_MS } from "../src/features/help/spotlight.ts";
 import { animationsDone, findOverflow, launcherSettled, settle } from "./helpers.ts";
 
 /** The launcher's box when it is shown (not stepped aside), else null. */
@@ -133,7 +134,8 @@ for (const size of SIZES) {
       await answer.getByRole("button", { name: "Open Review" }).click();
       await expect(page).toHaveURL(/\/review$/);
       await expect(page.locator('[data-help-spotlit][data-help~="keep"]')).toBeVisible();
-      await expect.poll(() => spotlitIsReachable(page), { timeout: 3000 }).toBe("ok");
+      // The ring stays lit for its full time once Keep has scrolled in, however long the scroll takes on this machine.
+      await expect.poll(() => spotlitIsReachable(page), { timeout: SPOT_ARRIVE_CAP_MS }).toBe("ok");
       // Open it again: the question and its steps are still there (memory only).
       // The panel may still step away by itself while the page scrolls Keep in: close it if it is there, then wait for
       // the one end state (no panel) either way.
@@ -220,7 +222,7 @@ for (const size of SIZES) {
       await expect(page.locator(".help-ring")).toBeVisible();
       if (size.phone) await expect(panel(page)).toBeHidden();
       // On wide screens the panel stays open unless it would cover what lit up.
-      else await expect.poll(() => spotlitIsReachable(page), { timeout: 2000 }).toBe("ok");
+      else await expect.poll(() => spotlitIsReachable(page), { timeout: SPOT_ARRIVE_CAP_MS }).toBe("ok");
     });
 
     test("the Ask box spans the panel and sends with a paper plane", async ({ page }) => {

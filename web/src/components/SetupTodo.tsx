@@ -7,7 +7,7 @@
 // screens (and a clip's page, which needs the whole width) show a pill at the top right in a strip the page also
 // leaves free. Once the page scrolls, that strip turns into a glass bar the page slides under, so the pill is always
 // there and never sits on a control. Tapping it opens the list.
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { Platform } from "../api/types.ts";
 import { useSession } from "../app/session.tsx";
 import { burst } from "../lib/confetti.ts";
@@ -99,6 +99,7 @@ export function SetupTodo() {
   const mode = rail ? "rail" : "pill";
   const open = !railHere && openOn === page;
   const scrolled = useScrolled(phase !== "gone" && mode === "pill" && !hiddenHere);
+  usePillRoom(pill, phase !== "gone" && mode === "pill" && !hiddenHere);
 
   // Open → shown; finished after being shown (here, or on an earlier visit on this device) → celebrate, then leave.
   useEffect(() => {
@@ -436,6 +437,26 @@ function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Pla
  * True once the page has scrolled at all: the pill's strip then shows its glass bar, so whatever slides up the page
  * passes under the bar instead of under the bare pill (it never has to step aside).
  */
+/**
+ * Tells the page how wide the pill is (`--todo-pill-w` on <html>), so the title row the pill shares from 940 px leaves
+ * it room (docs/CONTRACTS.md §11.1). Runs before paint, so the title never draws under the pill first.
+ */
+function usePillRoom(pill: RefObject<HTMLElement | null>, active: boolean): void {
+  useLayoutEffect(() => {
+    const el = pill.current;
+    if (!active || !el || typeof ResizeObserver === "undefined") return;
+    const root = document.documentElement;
+    const set = () => root.style.setProperty("--todo-pill-w", `${Math.ceil(el.getBoundingClientRect().width)}px`);
+    set();
+    const watch = new ResizeObserver(set);
+    watch.observe(el);
+    return () => {
+      watch.disconnect();
+      root.style.removeProperty("--todo-pill-w");
+    };
+  });
+}
+
 function useScrolled(active: boolean): boolean {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {

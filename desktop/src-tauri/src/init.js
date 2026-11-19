@@ -5,12 +5,16 @@
 //    not "none", and tints its panels for the glass it is told. Wrappers built before 2026-11-16 16:54 never set it,
 //    which is how the page tells an old copy from a computer that truly cannot show glass.
 // 3. Says which version of the app this is (window.__CF_DESKTOP_VERSION__, set just above by main.rs, §12.6).
-// 4. Links to other sites (and window.open) become a plain navigation, which the wrapper catches and opens
+// 4. Says how tall the title bar band laid over the page is (window.__CF_TITLEBAR__, in CSS px; set just above this
+//    script by main.rs: 28 on macOS, where the title bar is transparent and the traffic lights float over the page,
+//    0 elsewhere). The web app keeps that band clear and starts every column below it (docs/CONTRACTS.md §11.1).
+// 5. Links to other sites (and window.open) become a plain navigation, which the wrapper catches and opens
 //    in the system browser. The page itself never leaves the app. Same-site links open in this window.
 (function () {
   "use strict";
   window.__CF_DESKTOP__ = true;
   if (typeof window.__CF_GLASS__ !== "string") window.__CF_GLASS__ = "none";
+  if (typeof window.__CF_TITLEBAR__ !== "number") window.__CF_TITLEBAR__ = 0;
 
   function parse(href) {
     try {

@@ -11,9 +11,39 @@ export interface Loaded<T> {
   setData: (fn: (prev: T | null) => T | null) => void;
 }
 
-/** Loads once on mount (and when `key` changes). Errors become a sentence for the screen to show. */
-export function useLoad<T>(load: () => Promise<T>, key: string = ""): Loaded<T> {
-  const [data, setState] = useState<T | null>(null);
+/**
+ * The last result of each cached load (`useLoad`'s `cache` name + key), kept for the life of the page. A page the
+ * owner comes back to shows what it showed last at once and refreshes it in the background, so a page change never
+ * passes through an empty, see-through skeleton (docs/CONTRACTS.md §20.16). Emptied on sign-out.
+ */
+const lastLoaded = new Map<string, unknown>();
+
+/** Forgets every remembered result (sign-out, and between tests). */
+export function forgetLoaded(): void {
+  lastLoaded.clear();
+}
+
+/**
+ * Loads once on mount (and when `key` changes). Errors become a sentence for the screen to show. With `cache`, the
+ * last result for the same name and key shows at once while the load runs again.
+ */
+export function useLoad<T>(load: () => Promise<T>, key: string = "", cache?: string): Loaded<T> {
+  const slot = cache === undefined ? null : `${cache}\u0000${key}`;
+  const slotRef = useRef(slot);
+  slotRef.current = slot;
+  const remembered = (at: string | null) => (at !== null && lastLoaded.has(at) ? (lastLoaded.get(at) as T) : null);
+  const [data, setRaw] = useState<T | null>(() => remembered(slot));
+  const setState = useCallback((next: T | null | ((prev: T | null) => T | null)) => {
+    setRaw((prev) => {
+      const value = typeof next === "function" ? (next as (prev: T | null) => T | null)(prev) : next;
+      const at = slotRef.current;
+      if (at !== null) {
+        if (value === null) lastLoaded.delete(at);
+        else lastLoaded.set(at, value);
+      }
+      return value;
+    });
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -39,13 +69,20 @@ export function useLoad<T>(load: () => Promise<T>, key: string = ""): Loaded<T> 
     } finally {
       if (mine === seq.current) setLoading(false);
     }
-  }, []);
+  }, [setState]);
+
+  // A new key shows that key's remembered result (or nothing) until its own load lands, never the old key's.
+  const shownSlot = useRef(slot);
+  if (shownSlot.current !== slot) {
+    shownSlot.current = slot;
+    if (slot !== null) setRaw(remembered(slot));
+  }
 
   useEffect(() => {
     void reload();
   }, [reload, key]);
 
-  const setData = useCallback((fn: (prev: T | null) => T | null) => setState((p) => fn(p)), []);
+  const setData = useCallback((fn: (prev: T | null) => T | null) => setState((p) => fn(p)), [setState]);
   return { data, error, missing, loading, reload, setData };
 }
 

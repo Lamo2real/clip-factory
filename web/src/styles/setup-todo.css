@@ -13,21 +13,49 @@
    edge it fades out over below that. Scrolling to a control (Tab, a link to a #part) stops below the fade. */
 html:has(.setup-todo[data-mode="pill"]) {
   --todo-top: 60px;
+  --todo-clear: 60px;
   --todo-bar-h: 66px;
   --todo-feather: 22px;
-  scroll-padding-top: calc(env(safe-area-inset-top) + var(--todo-bar-h) + var(--todo-feather) + 8px);
+  scroll-padding-top: calc(var(--top-safe) + var(--todo-bar-h) + var(--todo-feather) + 8px);
 }
 .app:has(> .setup-todo[data-mode="pill"]) .shell {
-  padding-top: calc(env(safe-area-inset-top) + 12px + var(--todo-top));
+  padding-top: calc(var(--top-line) + var(--todo-top));
 }
 @media (min-width: 768px) {
+  /* The pill strip, measured from the top line (768 to 939 px, where the page is too narrow to share its first row
+     with the pill): the pill sits on the line, the page starts below the strip's glass bar. --todo-clear is that bar
+     measured from the top line: what sticks while the page scrolls (a review clip's video) stops below it. */
   html:has(.setup-todo[data-mode="pill"]) {
-    --todo-top: 58px;
+    --todo-top: 72px;
+    --todo-clear: 72px;
     --todo-bar-h: 76px;
   }
   .app:has(> .setup-todo[data-mode="pill"]) .shell {
-    padding-top: calc(env(safe-area-inset-top) + 28px + var(--todo-top));
+    padding-top: calc(var(--top-line) + var(--todo-top));
   }
+  /* Its right edge on the page's right edge. */
+  .setup-todo[data-mode="pill"] {
+    right: max(var(--gutter), env(safe-area-inset-right));
+  }
+}
+/* From 940 px the pill shares the top line with the menu and the page (§11.1): the page starts on the line and its
+   first row leaves the pill room on the right (--todo-room: the page-head plate, the settings trail, the home hero's
+   side column). The settings folders stick on the line, over the strip's bar, like the menu. */
+@media (min-width: 940px) {
+  html:has(.setup-todo[data-mode="pill"]) {
+    --todo-top: 0px;
+    --todo-room: calc(var(--todo-pill-w, 232px) + 20px);
+  }
+}
+/* With the settings folders beside it (1024 px and up) the settings column is too narrow for that until about
+   1180 px: there it starts below the pill strip, the folders stay on the line. */
+@media (min-width: 1024px) and (max-width: 1179.98px) {
+  html:has(.setup-todo[data-mode="pill"]) .settings-content {
+    --todo-room: 0px;
+    padding-top: var(--todo-clear);
+  }
+}
+@media (min-width: 768px) {
   /* The open list on wide screens gets its own column instead: the page is narrower, never covered. */
   .app:has(> .setup-todo[data-mode="rail"]) .shell {
     padding-right: calc(max(24px, env(safe-area-inset-right)) + var(--todo-w) + 24px);
@@ -47,7 +75,7 @@ html:has(.setup-todo[data-mode="pill"]) {
   top: 0;
   left: 0;
   right: 0;
-  height: calc(env(safe-area-inset-top) + var(--todo-bar-h, 66px));
+  height: calc(var(--top-safe) + var(--todo-bar-h, 66px));
   pointer-events: none;
 }
 .setup-todo-bar.is-scrolled {
@@ -102,7 +130,7 @@ html:has(.setup-todo[data-mode="pill"]) {
 .setup-todo {
   position: fixed;
   z-index: 44;
-  top: calc(env(safe-area-inset-top) + 10px);
+  top: var(--top-line);
   right: max(12px, env(safe-area-inset-right));
   transition:
     opacity var(--dur-2) var(--ease-out),
@@ -118,7 +146,7 @@ html:has(.setup-todo[data-mode="pill"]) {
 }
 @media (min-width: 768px) {
   .setup-todo {
-    top: calc(env(safe-area-inset-top) + 18px);
+    top: var(--top-line);
     right: max(24px, env(safe-area-inset-right));
   }
 }
@@ -191,7 +219,7 @@ html:has(.setup-todo[data-mode="pill"]) {
 .setup-todo--rail {
   width: var(--todo-w);
   /* Never down to the Ask pill (and the update bar under it). */
-  max-height: calc(100dvh - env(safe-area-inset-top) - 18px - var(--help-bottom, 24px) - 48px - 14px);
+  max-height: calc(100dvh - var(--top-line) - var(--help-bottom, 24px) - 48px - 14px);
   /* Pages scroll under the open list too: a floating layer's tint. */
   --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
   --glass-blur: 28px;
@@ -224,11 +252,11 @@ html:has(.setup-todo[data-mode="pill"]) {
 }
 .setup-todo-panel {
   position: fixed;
-  top: calc(env(safe-area-inset-top) + 10px);
+  top: var(--top-line);
   left: max(12px, env(safe-area-inset-left));
   right: max(12px, env(safe-area-inset-right));
   /* Stops above the tab bar, so it is never covered and never covers it. */
-  max-height: calc(100dvh - env(safe-area-inset-top) - 10px - var(--tabbar-h) - env(safe-area-inset-bottom) - 24px);
+  max-height: calc(100dvh - var(--top-line) - var(--tabbar-h) - env(safe-area-inset-bottom) - 24px);
   --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
   --glass-blur: 28px;
   animation: todo-drop 360ms var(--ease-spring);
@@ -242,11 +270,11 @@ html:has(.setup-todo[data-mode="pill"]) {
 }
 @media (min-width: 768px) {
   .setup-todo-panel {
-    top: calc(env(safe-area-inset-top) + 18px);
+    top: var(--top-line);
     left: auto;
     right: max(24px, env(safe-area-inset-right));
     width: min(380px, calc(100vw - 48px));
-    max-height: calc(100dvh - env(safe-area-inset-top) - 18px - 24px);
+    max-height: calc(100dvh - var(--top-line) - 24px);
   }
 }
 

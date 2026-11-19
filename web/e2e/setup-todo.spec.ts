@@ -59,7 +59,10 @@ async function coveredControls(page: Page): Promise<string[]> {
     if (!todo || Number(getComputedStyle(todo).opacity) === 0) return [];
     const bar = document.querySelector<HTMLElement>(".setup-todo-bar");
     if (bar?.classList.contains("is-scrolled")) return [];
-    const boxes = [todo.getBoundingClientRect(), ...(bar ? [bar.getBoundingClientRect()] : [])];
+    // At the top of the page the strip's bar is clear and takes no taps (from 940 px the page's first row shares it
+    // with the pill, §11.1): only a bar that takes taps covers anything.
+    const takesTaps = bar !== null && getComputedStyle(bar).pointerEvents !== "none";
+    const boxes = [todo.getBoundingClientRect(), ...(bar && takesTaps ? [bar.getBoundingClientRect()] : [])];
     const SEL =
       'a[href], button, input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="switch"], [role="tab"], [role="checkbox"], [role="radio"], [tabindex]:not([tabindex="-1"])';
     const out: string[] = [];
@@ -606,14 +609,6 @@ for (const size of [
     await page.goto("/settings/posting/setup/x");
     await settle(page);
     await expect(page.locator(".setup-todo")).toHaveCount(0);
-    // The page itself rises 8 px into place as it opens (`page-in` on `.main > *`), and animations only advance when
-    // the browser draws a frame. The Linux CI runner draws the glass without a GPU, so under load its frames can come
-    // later than any fixed wait: the heading was then still read at the start of its rise (8 px low) and "moved" once
-    // the next frame came, which is the page's own entrance and not the card's doing. So the resting place is taken
-    // once that entrance is over, waiting on the animation itself, never on a clock.
-    await page.waitForFunction(() =>
-      Array.from(document.querySelectorAll(".main > *")).every((el) => el.getAnimations().every((a) => a.playState !== "running")),
-    );
     const where = () =>
       page.evaluate(() => {
         const s = getComputedStyle(document.querySelector(".shell")!);

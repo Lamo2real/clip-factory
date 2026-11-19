@@ -4,7 +4,7 @@ import { chatReducer, historyOf, initialChat, newestAnswerId } from "../src/feat
 import { deviceOf } from "../src/features/help/context.ts";
 import { blocks, DODGE_COVER, DODGE_HOLD_MS, DODGE_RETURN_MS, DODGE_SETTLE_MS, DODGE_TAP, hardToTap } from "../src/features/help/dodge.ts";
 import { readLive } from "../src/features/help/live.ts";
-import { nameOf, ringTarget } from "../src/features/help/spotlight.ts";
+import { nameOf, ringTarget, SPOT_ARRIVE_CAP_MS, SPOT_SHOW_MS, SPOT_STILL_MS, spotlight } from "../src/features/help/spotlight.ts";
 import { hasUnsaved, registerUnsaved } from "../src/features/help/unsaved.ts";
 import type { HelpAnswer } from "../src/features/help/types.ts";
 
@@ -55,6 +55,60 @@ describe("spotlight names and targets", () => {
     expect(ringTarget(section, 812)).toBe(section.querySelector(".apple__head"));
     section.getBoundingClientRect = () => ({ height: 200 }) as DOMRect;
     expect(ringTarget(section, 812)).toBe(section);
+  });
+
+  it("stays lit for its full time from when the control has scrolled in, however slow the scroll", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("requestAnimationFrame", (fn: FrameRequestCallback) => setTimeout(() => fn(Date.now()), 16) as unknown as number);
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => clearTimeout(id));
+    try {
+      Object.defineProperty(document.documentElement, "scrollHeight", { configurable: true, value: 5000 });
+      const btn = document.createElement("button");
+      btn.setAttribute("data-help", "keep");
+      btn.textContent = "Keep";
+      document.body.appendChild(btn);
+      // Far below the window, and the page has not scrolled yet (a slow machine starts its smooth scroll late).
+      let top = 1500;
+      btn.getBoundingClientRect = () => ({ top, bottom: top + 50, left: 100, right: 200, width: 100, height: 50 }) as DOMRect;
+      btn.scrollIntoView = () => undefined;
+      const arrived = vi.fn();
+      await spotlight(["keep"], { reduced: false, onArrive: arrived });
+      expect(btn.hasAttribute("data-help-spotlit")).toBe(true);
+
+      // Still where it was well past 2.4 s: the scroll has not come, so the ring waits.
+      await vi.advanceTimersByTimeAsync(SPOT_SHOW_MS + 500);
+      expect(btn.hasAttribute("data-help-spotlit")).toBe(true);
+      expect(arrived).not.toHaveBeenCalled();
+      // The visible ring too: it has only faded in, and its own fade has not started (help.css .is-coming).
+      expect(document.querySelector(".help-ring")?.classList.contains("is-coming")).toBe(true);
+
+      // The scroll lands: it is in view and sits still. The ring's 2.4 s start only now.
+      top = 400;
+      window.dispatchEvent(new Event("scroll"));
+      await vi.advanceTimersByTimeAsync(SPOT_STILL_MS + 50);
+      expect(arrived).toHaveBeenCalledTimes(1);
+      expect(document.querySelector(".help-ring")?.classList.contains("is-coming")).toBe(false);
+      await vi.advanceTimersByTimeAsync(SPOT_SHOW_MS - 300);
+      expect(btn.hasAttribute("data-help-spotlit")).toBe(true);
+      await vi.advanceTimersByTimeAsync(400);
+      expect(btn.hasAttribute("data-help-spotlit")).toBe(false);
+      expect(document.querySelector(".help-ring")).toBeNull();
+
+      // A control that never settles still gets its ring time, from the cap.
+      top = 400;
+      const moving = setInterval(() => (top = top === 400 ? 401 : 400), 16);
+      await spotlight(["keep"], { reduced: false });
+      await vi.advanceTimersByTimeAsync(SPOT_ARRIVE_CAP_MS + SPOT_SHOW_MS - 100);
+      expect(btn.hasAttribute("data-help-spotlit")).toBe(true);
+      await vi.advanceTimersByTimeAsync(200);
+      expect(btn.hasAttribute("data-help-spotlit")).toBe(false);
+      clearInterval(moving);
+      btn.remove();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+      delete (document.documentElement as unknown as { scrollHeight?: number }).scrollHeight;
+    }
   });
 });
 

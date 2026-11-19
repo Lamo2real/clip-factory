@@ -38,8 +38,100 @@ export function weekTitle(asked: string | null, now = new Date()): string {
   return isCurrent ? "This week" : `Week of ${weekLabel(week)}`;
 }
 
+/**
+ * Library › This week. The arrows and the heading stay put while the week changes (a page change is an instant swap,
+ * §20.16), so an arrow's slide plays out on the arrow that was tapped; everything below them belongs to one week and
+ * starts afresh for the next one (`WeekBody`, keyed by the week).
+ */
 export function WeekView({ week: asked }: { week: string | null }) {
   const { week, current, isCurrent, valid } = shownWeek(asked);
+  const toast = useToast();
+  const earlierAct = useAction("prev");
+  const laterAct = useAction("next");
+  // The newest week's "Later week" tap (§20.11): a 4 px nudge the way the arrow points and back (the `nudge` kind in
+  // motion.css), no shake and no deny; the info toast says why. The glyph shows whichever motion was tapped last.
+  const laterNudge = useAction("nudge");
+  const [nudged, setNudged] = useState(false);
+
+  if (!valid) {
+    return (
+      <Empty icon="alert" title="That week does not look right" action={<LinkButton href="/library?view=week" variant="primary" icon="star">Go back to This week</LinkButton>}>
+        The link may be old or have a typo.
+      </Empty>
+    );
+  }
+
+  const earlier = shiftWeek(week, -1);
+  const later = shiftWeek(week, 1);
+  const laterOff = isCurrent || compareWeeks(later, current) > 0;
+
+  return (
+    <section className="week" aria-labelledby="week-title">
+      <div className="week__head">
+        <A
+          href={weekHref(earlier, current)}
+          className="week__arrow icon-btn glass"
+          aria-label="Earlier week"
+          data-act="prev"
+          onClick={() => {
+            setNudged(false);
+            earlierAct.play();
+          }}
+        >
+          <ActGlyph act={earlierAct}>
+            <Icon name="chevronLeft" size={22} />
+          </ActGlyph>
+        </A>
+        <h2 className="week__title display-3" id="week-title">
+          {isCurrent ? (
+            <>
+              {/* On the narrowest phones the dates drop to their own line and the dot hides (it stays for screen readers).
+                  A no-break space ties the dot to the dates, so at any width a wrap moves "· 16–22 Nov" together. */}
+              This week{" "}
+              <span className="week__dates">
+                <span className="week__sep">{"· "}</span>
+                {weekLabel(week)}
+              </span>
+            </>
+          ) : (
+            <>
+              Week of <span className="week__dates">{weekLabel(week)}</span>
+            </>
+          )}
+        </h2>
+        <button
+          type="button"
+          className="week__arrow icon-btn glass"
+          aria-label="Later week"
+          aria-disabled={laterOff || undefined}
+          // The newest week's nudge has no sound (§20.3, §20.11): without this, aria-disabled would play the deny sound.
+          data-sound={laterOff ? "off" : undefined}
+          data-act="next"
+          onClick={() => {
+            if (laterOff) {
+              setNudged(true);
+              laterNudge.play();
+              return;
+            }
+            navigate(weekHref(later, current));
+            setNudged(false);
+            laterAct.play();
+          }}
+          onClickCapture={() => {
+            if (laterOff) toast.info("This is the newest week. Tap the left arrow to see earlier weeks.", { group: "week-arrow" });
+          }}
+        >
+          <ActGlyph act={nudged ? laterNudge : laterAct}>
+            <Icon name="chevronRight" size={22} />
+          </ActGlyph>
+        </button>
+      </div>
+      <WeekBody key={week} week={week} isCurrent={isCurrent} />
+    </section>
+  );
+}
+
+function WeekBody({ week, isCurrent }: { week: string; isCurrent: boolean }) {
   const range = weekRange(week);
   const toast = useToast();
 
@@ -52,13 +144,6 @@ export function WeekView({ week: asked }: { week: string | null }) {
   const pending = useRef<string[] | null>(null);
   // Stars whose save failed (they were put back): their cards shake once per failure (§20.5).
   const [failed, setFailed] = useState<{ n: number; ids: string[] }>({ n: 0, ids: [] });
-  const earlierAct = useAction("prev");
-  const laterAct = useAction("next");
-  // The newest week's "Later week" tap (§20.11): a 4 px nudge the way the arrow points and back (the `nudge` kind in
-  // motion.css), no shake and no deny; the info toast says why. The glyph shows whichever motion was tapped last.
-  const laterNudge = useAction("nudge");
-  const [nudged, setNudged] = useState(false);
-
   const load = useCallback(async () => {
     try {
       const w = await api().getWeek(week, range.from, range.to);
@@ -70,8 +155,8 @@ export function WeekView({ week: asked }: { week: string | null }) {
   }, [week, range.from, range.to]);
 
   useEffect(() => {
-    if (valid) void load();
-  }, [load, valid]);
+    void load();
+  }, [load]);
 
   useLiveEvents(
     (e) => {
@@ -145,78 +230,10 @@ export function WeekView({ week: asked }: { week: string | null }) {
     return true;
   }
 
-  if (!valid) {
-    return (
-      <Empty icon="alert" title="That week does not look right" action={<LinkButton href="/library?view=week" variant="primary" icon="star">Go back to This week</LinkButton>}>
-        The link may be old or have a typo.
-      </Empty>
-    );
-  }
-
-  const earlier = shiftWeek(week, -1);
-  const later = shiftWeek(week, 1);
-  const laterOff = isCurrent || compareWeeks(later, current) > 0;
   const shown = picks ?? data?.clipIds ?? [];
 
   return (
-    <section className="week" aria-labelledby="week-title">
-      <div className="week__head">
-        <A
-          href={weekHref(earlier, current)}
-          className="week__arrow icon-btn glass"
-          aria-label="Earlier week"
-          data-act="prev"
-          onClick={() => earlierAct.play()}
-        >
-          <ActGlyph act={earlierAct}>
-            <Icon name="chevronLeft" size={22} />
-          </ActGlyph>
-        </A>
-        <h2 className="week__title display-3" id="week-title">
-          {isCurrent ? (
-            <>
-              {/* On the narrowest phones the dates drop to their own line and the dot hides (it stays for screen readers).
-                  A no-break space ties the dot to the dates, so at any width a wrap moves "· 16–22 Nov" together. */}
-              This week{" "}
-              <span className="week__dates">
-                <span className="week__sep">{"· "}</span>
-                {weekLabel(week)}
-              </span>
-            </>
-          ) : (
-            <>
-              Week of <span className="week__dates">{weekLabel(week)}</span>
-            </>
-          )}
-        </h2>
-        <button
-          type="button"
-          className="week__arrow icon-btn glass"
-          aria-label="Later week"
-          aria-disabled={laterOff || undefined}
-          // The newest week's nudge has no sound (§20.3, §20.11): without this, aria-disabled would play the deny sound.
-          data-sound={laterOff ? "off" : undefined}
-          data-act="next"
-          onClick={() => {
-            if (laterOff) {
-              setNudged(true);
-              laterNudge.play();
-              return;
-            }
-            navigate(weekHref(later, current));
-            setNudged(false);
-            laterAct.play();
-          }}
-          onClickCapture={() => {
-            if (laterOff) toast.info("This is the newest week. Tap the left arrow to see earlier weeks.", { group: "week-arrow" });
-          }}
-        >
-          <ActGlyph act={nudged ? laterNudge : laterAct}>
-            <Icon name="chevronRight" size={22} />
-          </ActGlyph>
-        </button>
-      </div>
-
+    <>
       {/* Only above clips: on an empty week "Star the clips…" would ask for something that is not there. */}
       {data && data.clips.length > 0 ? <LearnLine week={data} current={isCurrent} /> : null}
 
@@ -265,7 +282,7 @@ export function WeekView({ week: asked }: { week: string | null }) {
           </ol>
         </>
       ) : null}
-    </section>
+    </>
   );
 }
 

@@ -83,7 +83,8 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # Ask pictures (§26) in WebKit: the Mac app (WKWebView) and the iPhone PWA (Safari). One job of its own, because
+  # WebKit: the Mac app (WKWebView) and the iPhone PWA (Safari). Ask pictures (§26), and the stillness and top-line
+  # checks (§20.16, §11.1; the slide check runs in WebKit on a Mac only, nav-smooth.spec.ts). One job of its own, because
   # installing WebKit's system packages can take over 20 minutes on a slow apt mirror; paid once here, not per shard.
   web-e2e-webkit:
     name: web-e2e (WebKit)

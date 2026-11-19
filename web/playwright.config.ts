@@ -25,11 +25,12 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
       testIgnore: /screenshots\.spec\.ts/,
     },
-    // Pictures in Ask (§26) in WebKit too: the Mac app (WKWebView) and the iPhone PWA (Safari) are WebKit.
+    // WebKit too: the Mac app (WKWebView) and the iPhone PWA (Safari) are WebKit. Pictures in Ask (§26), and the
+    // motion, stillness and top-line checks (§20.13, §20.16, §11.1). CI runs this project in its own job (ci.yml).
     {
       name: "webkit",
       use: { ...devices["Desktop Safari"] },
-      testMatch: /help-pictures\.spec\.ts/,
+      testMatch: /(help-pictures|nav-smooth|page-still|top-line)\.spec\.ts/,
     },
     {
       name: "webkit-phone",

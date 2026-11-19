@@ -509,14 +509,22 @@ export function HelpPanel({
     if (phone) onClose({ returnFocus: false });
     navigate(action.to);
     const reduced = prefersReducedMotion() || getPrefs().reduceMotion;
-    void spotlight(action.highlight ?? [], { reduced }).then(async (el) => {
-      // On wide screens the panel stays open, unless it covers the control that just lit up: then it steps away
-      // (the chat is kept, so the launcher brings the steps back). Checked while the page scrolls the control in.
+    // On wide screens the panel stays open, unless it covers the control that just lit up: then it steps away
+    // (the chat is kept, so the launcher brings the steps back). Checked while the page scrolls the control in, and
+    // once more where it comes to rest (on a slow machine the scroll can outlast the checks).
+    const covers = (el: HTMLElement) => {
+      const box = self.current;
+      if (!box?.isConnected || !el.isConnected) return false;
+      return overlaps(el.getBoundingClientRect(), box.getBoundingClientRect());
+    };
+    const onArrive = (el: HTMLElement) => {
+      if (!phone && covers(el)) onClose({ returnFocus: false });
+    };
+    void spotlight(action.highlight ?? [], { reduced, onArrive }).then(async (el) => {
       if (phone || !el) return;
       for (let i = 0; i < TUCK_CHECKS; i++) {
-        const box = self.current;
-        if (!box?.isConnected || !el.isConnected) return;
-        if (overlaps(el.getBoundingClientRect(), box.getBoundingClientRect())) return onClose({ returnFocus: false });
+        if (!self.current?.isConnected || !el.isConnected) return;
+        if (covers(el)) return onClose({ returnFocus: false });
         await new Promise((r) => setTimeout(r, TUCK_EVERY_MS));
       }
     });

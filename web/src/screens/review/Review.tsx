@@ -33,6 +33,7 @@ export function Review({ jobId }: { jobId: string | null }) {
           return clips;
         }),
     jobId ?? "",
+    "review",
   );
 
   // Coming back to the app after a long while: the video links have expired, so fetch the list again.
