@@ -115,7 +115,12 @@ describe("helpClient.ask", () => {
 describe("helpClient.status", () => {
   it("reads on, off and trouble", async () => {
     const on = await helpClient({ transport: async () => ok({ enabled: true, mode: "model", corpusVersion: "abc" }), auth: authOf(["t"]) }).status();
-    expect(on).toEqual({ kind: "ok", status: { enabled: true, mode: "model", corpusVersion: "abc" } });
+    expect(on).toEqual({ kind: "ok", status: { enabled: true, mode: "model", corpusVersion: "abc", pictures: false } });
+    const withPictures = await helpClient({ transport: async () => ok({ enabled: true, mode: "model", corpusVersion: "abc", pictures: true }), auth: authOf(["t"]) }).status();
+    expect(withPictures.kind === "ok" && withPictures.status.pictures).toBe(true);
+    // Pictures need the model: a kb answer never says yes.
+    const kbPictures = await helpClient({ transport: async () => ok({ enabled: true, mode: "kb", corpusVersion: "abc", pictures: true }), auth: authOf(["t"]) }).status();
+    expect(kbPictures.kind === "ok" && kbPictures.status.pictures).toBe(false);
     const off = await helpClient({ transport: async () => ok({ enabled: false, mode: "off", corpusVersion: "" }), auth: authOf(["t"]) }).status();
     expect(off.kind === "ok" && off.status.enabled).toBe(false);
     const forbidden = await helpClient({ transport: async () => ok({ error: { code: "help_off" } }, 403), auth: authOf(["t"]) }).status();

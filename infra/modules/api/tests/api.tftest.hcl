@@ -91,6 +91,8 @@ run "environment_names_the_flow_aliases" {
       HELP_MONTHLY_CAP     = "2000"
       HELP_RATE_PER_MINUTE = "6"
       HELP_RATE_PER_HOUR   = "60"
+      # §26: picture questions per owner per day.
+      HELP_PICTURE_QUESTIONS_PER_DAY = "40"
     })
     error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9 and §19.9 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
   }
@@ -290,6 +292,7 @@ run "help_assistant_with_model" {
       one(aws_lambda_function.fn["api"].environment).variables["HELP_MONTHLY_CAP"] == "2000" &&
       one(aws_lambda_function.fn["api"].environment).variables["HELP_RATE_PER_MINUTE"] == "6" &&
       one(aws_lambda_function.fn["api"].environment).variables["HELP_RATE_PER_HOUR"] == "60" &&
+      one(aws_lambda_function.fn["api"].environment).variables["HELP_PICTURE_QUESTIONS_PER_DAY"] == "40" &&
       one(aws_lambda_function.fn["api"].environment).variables["APP_URL"] == "https://app.example.test"
     )
     error_message = "cf-prod-api gets HELP_ENABLED, HELP_MODEL_ID, HELP_MONTHLY_CAP 2000, 6 per minute, 60 per hour, and APP_URL for the corpus."

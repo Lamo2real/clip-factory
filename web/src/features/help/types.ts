@@ -88,7 +88,18 @@ export interface HelpCorpus {
 export interface HelpTurn {
   role: "user" | "assistant";
   text: string;
+  /** What that user turn's pictures showed (§26), ≤ 200 letters; user turns only. */
+  seen?: string;
 }
+
+/** One picture in a question (§26): base64 JPEG without the data: prefix. */
+export interface HelpPicture {
+  type: "image/jpeg";
+  data: string;
+}
+
+/** What the API did with the pictures (only when some were sent). */
+export type HelpPictureResult = { read: true; seen: string } | { read: false; why: "off" | "limit" | "trouble" };
 
 /**
  * The pages the API knows (docs/CONTRACTS.md §19.6, api routes/help.py PAGES). Every real route name is one; the
@@ -121,8 +132,13 @@ export interface HelpStatus {
   enabled: boolean;
   mode: HelpMode;
   corpusVersion: string;
+  /** Pictures can be added to a question (§26): only in model mode with the pictures switch on. */
+  pictures?: boolean;
 }
 
 /** Limits shared with the API (§19.6). */
 export const QUESTION_MAX = 300;
 export const HISTORY_MAX = 4;
+/** Pictures in one question (§26). */
+export const PICTURES_MAX = 4;
+export const SEEN_MAX = 200;

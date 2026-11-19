@@ -25,6 +25,17 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
       testIgnore: /screenshots\.spec\.ts/,
     },
+    // Pictures in Ask (§26) in WebKit too: the Mac app (WKWebView) and the iPhone PWA (Safari) are WebKit.
+    {
+      name: "webkit",
+      use: { ...devices["Desktop Safari"] },
+      testMatch: /help-pictures\.spec\.ts/,
+    },
+    {
+      name: "webkit-phone",
+      use: { ...devices["iPhone 15"] },
+      testMatch: /help-pictures\.spec\.ts/,
+    },
     {
       name: "screenshots",
       use: { ...devices["Desktop Chrome"] },

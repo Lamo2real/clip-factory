@@ -12,8 +12,10 @@ explains how it works and how to keep it up to date. Why it is built this way:
 ```mermaid
 flowchart LR
   q([Owner asks a question]) --> p[Ask panel in the app]
-  p -- "POST /v1/help/answers: question, last 4 turns, context" --> api[cf-prod-api, help package]
-  api --> f[Kill switch, rate limit, when filter]
+  p -- "POST /v1/help/answers: question, last 4 turns, context, up to 4 pictures" --> api[cf-prod-api, help package]
+  api --> f[Kill switch, rate limit, daily picture limit, when filter]
+  f -- "pictures" --> look[Look: Claude Haiku 5.5 reads the pictures into page, words and seen]
+  look -- "words and page join the search" --> r
   f --> r[BM25 search over the help corpus, top 6]
   r -- "no good match" --> u[I do not know that one yet, plus 3 suggestions]
   r -- "secrets, other people" --> x[Fixed refusal, no model call]
@@ -53,12 +55,20 @@ flowchart LR
    draws a bone ring around the control for 2.4 seconds.
 7. **Private.** Questions and answers are never stored and never logged. Each request logs one outcome line with a
    request id, which the "Copy the help code" link copies when something goes wrong.
+8. **Pictures** ([CONTRACTS.md §26](CONTRACTS.md#26-pictures-in-ask-owner-request-2026-11-19), ADR-48). The owner can
+   add, paste or drop up to 4 pictures. The browser shrinks each to a clean JPEG (at most 1568 px and 600 KB, no
+   EXIF or GPS). One "look" call reads them into a page, up to 12 labels and one sentence (`seen`); search runs on the
+   question plus those labels, and the rewrite is grounded exactly as before. Pictures are never stored or logged;
+   later questions carry only `seen`.
 
 ## The log line
 
 Each `POST /v1/help/answers` writes one JSON line, `event: "help.answer"`, with `requestId`, `outcome`, `mode`
 (`kb` or `model`), the number of candidates and, after a model call, `usageIn` and `usageOut` (token counts; the log
-filter drops any field whose name contains "token"). Never the question or the answer.
+filter drops any field whose name contains "token"). Never the question or the answer. A question with pictures adds
+`pictures` (how many), `picKB` (their size in KB) and `look` (`read`, `off`, `limit`, `cap`, `deadline`, `timeout`,
+`error`, `bad_output` or `stop_<reason>`); never the pictures, what was read from them (`words`, `seen`) or their
+base64.
 
 | Outcome | Meaning |
 |---|---|
@@ -152,6 +162,7 @@ The look and the exact numbers are in [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#
 | Instructions | The owner's skills block first (CONTRACTS §18.6), then the help rules, which win on facts |
 | When it is skipped | No match, a refusal, the kill switch says `model: false`, the skills could not be read, or 2,000 model answers in the current 30 days |
 | What the owner sees on failure | The composed answer; never an error |
+| Pictures (the look call) | Same model and profile, image blocks before the text, `maxTokens` 300, thinking off, JSON schema `{page, words, seen}`; 2 s to connect, 6 s to read, no retry; needs 12 s left; one more unit of the cap. `HELP_LOOK_MODEL_ID` can name another model (empty by default) |
 
 The first call after a schema change can wait for Bedrock to compile the schema and fall back to the plain answer;
 that is expected. If this AWS account has never used Haiku 5.5, open it once in the Bedrock console
@@ -162,7 +173,8 @@ that is expected. If this AWS account has never used Haiku 5.5, open it once in 
 - **Deploy flag:** `HELP_ENABLED` on `cf-prod-api` (`"true"` in prod). Off means the launcher disappears.
 - **Kill switch, no deploy:** the DynamoDB item `HELP` / `SWITCH`. `enabled: false` turns the assistant off within
   60 seconds (open apps hide the launcher at their next status check, at most 5 minutes, and stop answering locally
-  too). `model: false` keeps answering from search only. In Terraform, `help_enabled` (default true) and
+  too). `model: false` keeps answering from search only. `pictures: false` turns pictures off (no look call; the
+  picture button goes at the app's next status check). In Terraform, `help_enabled` (default true) and
   `help_monthly_cap` (default 2000) are optional variables of `infra/envs/prod`. The command is in
   [DEPLOYMENT.md](DEPLOYMENT.md#ask-clip-factory-kill-switch).
 
@@ -174,6 +186,8 @@ that is expected. If this AWS account has never used Haiku 5.5, open it once in 
 | Question length | 300 letters | The counter appears from 250 |
 | History sent | last 4 turns | Follow-ups like "and the error sound?" still work |
 | Model answers | 2,000 per 30 days | Answers come from search only until the window ends |
+| Pictures | 4 per question, 600 KB and 1568 px each after the browser shrinks them | "You can add 4 pictures. Take one away first." |
+| Picture questions | 40 per owner per day (`HELP_PICTURE_QUESTIONS_PER_DAY`) | "You sent lots of pictures today. Ask me in words, or try again tomorrow." |
 
 ## Live numbers
 

@@ -2,10 +2,12 @@
 
 Items in the existing table (no new table):
 
-* ``HELP`` / ``SWITCH``: ``enabled`` and ``model`` (absent = true), written by hand when needed, read at most once a
+* ``HELP`` / ``SWITCH``: ``enabled``, ``model`` and ``pictures`` (absent = true), written by hand when needed, read at most once a
   minute per warm Lambda.
 * ``USER#{userId}`` / ``HELP#RATE``: ``minuteKey``/``minuteCount``, ``hourKey``/``hourCount``, ``version``, ``ttl``.
   One conditional UpdateItem on ``version`` per question (compare-and-swap, like ``stats.budget.reserve``).
+  A question with pictures also counts ``picDayKey``/``picDayCount`` (the per-owner daily picture limit, §26) in
+  that same update, and keeps the item until the day is over.
 * ``HELP`` / ``CAP#{window}``: ``modelAnswers``, ``ttl``; ``window = floor(epochDays / 30)``. One conditional ``ADD``
   per model call while under the cap.
 
@@ -26,6 +28,7 @@ SWITCH_SK = "SWITCH"
 RATE_SK = "HELP#RATE"
 SWITCH_TTL = timedelta(seconds=60)
 RATE_TTL = timedelta(hours=2)
+PICTURE_DAY_TTL = timedelta(hours=26)
 CAP_TTL = timedelta(days=62)
 CAP_WINDOW_DAYS = 30
 CAS_ATTEMPTS = 4
@@ -39,6 +42,7 @@ class GuardUnavailable(Exception):
 class Switch:
     enabled: bool
     model: bool
+    pictures: bool = True
 
 
 @dataclass
@@ -54,7 +58,7 @@ _SWITCH = SwitchCache()
 def check_switch(store: db.Store, now: datetime, *, flag_enabled: bool, cache: SwitchCache | None = None) -> Switch:
     """The kill switch. The deploy flag ``HELP_ENABLED`` off wins without reading the table."""
     if not flag_enabled:
-        return Switch(False, False)
+        return Switch(False, False, False)
     cache = _SWITCH if cache is None else cache
     if cache.value is not None and cache.read_at is not None and now - cache.read_at < SWITCH_TTL:
         return cache.value
@@ -64,7 +68,11 @@ def check_switch(store: db.Store, now: datetime, *, flag_enabled: bool, cache: S
         if cache.value is not None:
             return cache.value  # keep the last answer rather than failing every question
         raise GuardUnavailable(type(e).__name__) from e
-    value = Switch(item.get("enabled", True) is not False, item.get("model", True) is not False)
+    value = Switch(
+        item.get("enabled", True) is not False,
+        item.get("model", True) is not False,
+        item.get("pictures", True) is not False,
+    )
     cache.value, cache.read_at = value, now
     cache.reads += 1
     return value
@@ -93,10 +101,35 @@ def _seconds_to_next_hour(now: datetime) -> int:
     return max(1, math.ceil((nxt - utc).total_seconds()))
 
 
+def day_key(now: datetime) -> str:
+    return now.astimezone(UTC).strftime("%Y-%m-%d")
+
+
+@dataclass(frozen=True)
+class Reserved:
+    wait: int | None  # None → allowed; else seconds until the owner may ask again
+    picture: bool = False  # this question may look at its pictures (under the daily picture limit)
+
+
 def reserve_rate(store: db.Store, user_id: str, now: datetime, *, per_minute: int, per_hour: int) -> int | None:
     """Counts one question. Returns ``None`` when allowed, else the seconds until the owner may ask again."""
+    return reserve_question(store, user_id, now, per_minute=per_minute, per_hour=per_hour).wait
+
+
+def reserve_question(
+    store: db.Store,
+    user_id: str,
+    now: datetime,
+    *,
+    per_minute: int,
+    per_hour: int,
+    pictures_per_day: int | None = None,
+) -> Reserved:
+    """Counts one question, and with ``pictures_per_day`` also one picture question for today, in the same
+    compare-and-swap. Over the picture limit the question is still allowed, without
+    pictures (``picture=False``)."""
     pk = db.user_pk(user_id)
-    mkey, hkey = minute_key(now), hour_key(now)
+    mkey, hkey, dkey = minute_key(now), hour_key(now), day_key(now)
     for _ in range(CAS_ATTEMPTS):
         try:
             item = store.get(pk, RATE_SK) or {}
@@ -105,17 +138,22 @@ def reserve_rate(store: db.Store, user_id: str, now: datetime, *, per_minute: in
         minute = int(item.get("minuteCount") or 0) if item.get("minuteKey") == mkey else 0
         hour = int(item.get("hourCount") or 0) if item.get("hourKey") == hkey else 0
         if hour >= per_hour:
-            return _seconds_to_next_hour(now)
+            return Reserved(_seconds_to_next_hour(now))
         if minute >= per_minute:
-            return _seconds_to_next_minute(now)
+            return Reserved(_seconds_to_next_minute(now))
         version = int(item.get("version") or 0)
-        values = {
+        pic_today = int(item.get("picDayCount") or 0) if item.get("picDayKey") == dkey else 0
+        picture = pictures_per_day is not None and pic_today < pictures_per_day
+        if picture:
+            pic_today += 1
+        ttl = now + (PICTURE_DAY_TTL if pic_today else RATE_TTL)
+        values: dict[str, object] = {
             ":mk": mkey,
             ":mc": minute + 1,
             ":hk": hkey,
             ":hc": hour + 1,
             ":v": version + 1,
-            ":ttl": int((now + RATE_TTL).timestamp()),
+            ":ttl": int(ttl.timestamp()),
             ":type": "help_rate",
         }
         names = {"#ver": "version", "#ttl": "ttl", "#type": "type"}
@@ -123,6 +161,9 @@ def reserve_rate(store: db.Store, user_id: str, now: datetime, *, per_minute: in
             "SET minuteKey = :mk, minuteCount = :mc, hourKey = :hk, hourCount = :hc, #ver = :v, #ttl = :ttl, "
             "#type = :type"
         )
+        if picture:
+            update += ", picDayKey = :pk, picDayCount = :pc"
+            values[":pk"], values[":pc"] = dkey, pic_today
         if item:
             condition = "#ver = :expected" if "version" in item else "attribute_not_exists(#ver)"
             if "version" in item:
@@ -137,9 +178,9 @@ def reserve_rate(store: db.Store, user_id: str, now: datetime, *, per_minute: in
             continue  # another question from the same owner landed meanwhile: read again
         except Exception as e:
             raise GuardUnavailable(type(e).__name__) from e
-        return None
+        return Reserved(None, picture)
     log("warning", "help.rate_contended")
-    return 1
+    return Reserved(1)
 
 
 # --- the 30-day model cap ---------------------------------------------------------------------------------------

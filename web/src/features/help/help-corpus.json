@@ -1,5 +1,5 @@
 {
-  "version": "a151e9c4bc84",
+  "version": "e6f4cdf10a62",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -2141,6 +2141,122 @@
           ]
         }
       ]
+    },
+    {
+      "id": "help-pictures",
+      "kind": "guide",
+      "route": "/",
+      "where": "Ask",
+      "title": "Show Ask a picture",
+      "keywords": [
+        "picture",
+        "pictures",
+        "screenshot",
+        "screen shot",
+        "photo",
+        "image",
+        "paste",
+        "attach",
+        "show",
+        "drop",
+        "show ask a picture",
+        "send a screenshot",
+        "add a picture",
+        "mac"
+      ],
+      "answer": "Ask can look at a picture of your screen. Take a screenshot, then paste it in Ask or drop it on Ask.",
+      "steps": [
+        "Press **Cmd+Ctrl+Shift+4** and drag over the part of the screen you want.",
+        "Open **Ask** and press **Cmd+V**.",
+        "Or drag a picture onto **Ask**, or tap **Add a picture**.",
+        "Tap **Send**."
+      ],
+      "actions": [],
+      "when": {
+        "os": [
+          "mac"
+        ]
+      }
+    },
+    {
+      "id": "help-pictures-windows",
+      "kind": "guide",
+      "route": "/",
+      "where": "Ask",
+      "title": "Show Ask a picture",
+      "keywords": [
+        "picture",
+        "pictures",
+        "screenshot",
+        "screen shot",
+        "photo",
+        "image",
+        "paste",
+        "attach",
+        "show",
+        "drop",
+        "show ask a picture",
+        "send a screenshot",
+        "add a picture",
+        "windows",
+        "pc"
+      ],
+      "answer": "Ask can look at a picture of your screen. Take a screenshot, then paste it in Ask.",
+      "steps": [
+        "Press **Win+Shift+S** and drag over the part of the screen you want.",
+        "Open **Ask** and press **Ctrl+V**.",
+        "Or drag a picture onto **Ask**, or tap **Add a picture**.",
+        "Tap **Send**."
+      ],
+      "actions": [],
+      "when": {
+        "os": [
+          "windows",
+          "linux",
+          "chromeos",
+          "unknown"
+        ]
+      }
+    },
+    {
+      "id": "help-pictures-phone",
+      "kind": "guide",
+      "route": "/",
+      "where": "Ask",
+      "title": "Show Ask a picture",
+      "keywords": [
+        "picture",
+        "pictures",
+        "screenshot",
+        "screen shot",
+        "photo",
+        "image",
+        "paste",
+        "attach",
+        "show",
+        "drop",
+        "show ask a picture",
+        "send a screenshot",
+        "add a picture",
+        "iphone",
+        "ipad",
+        "phone",
+        "camera"
+      ],
+      "answer": "Ask can look at a picture of your screen, or a photo.",
+      "steps": [
+        "Press the side button and the volume up button together to take a screenshot.",
+        "Open **Ask** and tap **Add a picture**.",
+        "Pick your screenshot, or take a photo.",
+        "Tap **Send**."
+      ],
+      "actions": [],
+      "when": {
+        "os": [
+          "ios",
+          "android"
+        ]
+      }
     },
     {
       "id": "what-is-clip-factory",

@@ -44,10 +44,10 @@ def test_every_page_the_client_sends_is_accepted() -> None:
 @pytest.mark.parametrize("page", sorted(_route_names()))
 def test_parse_accepts_every_route_name(page: str) -> None:
     class _Req:
-        def json(self) -> dict[str, object]:
+        def json(self, max_bytes: int = 0) -> dict[str, object]:
             return {"question": "How do I write a skill?", "context": {"device": "desktop", "os": "mac", "page": page}}
 
-    question, _, context = help_route._parse(_Req())  # type: ignore[arg-type]
+    question, _, context, _ = help_route._parse(_Req())  # type: ignore[arg-type]
     assert question == "How do I write a skill?"
     assert context is not None
     assert context.page == page
