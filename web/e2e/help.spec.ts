@@ -398,17 +398,22 @@ for (const size of SIZES) {
         let hidden = el.classList.contains("is-hidden");
         const onScroll = () => (lastScroll = performance.now());
         window.addEventListener("scroll", onScroll, { passive: true });
+        // A flip is timed when the class changes (the observer runs in the same task), not at the next frame: a
+        // scroll event landing in that frame after the change would otherwise look like it came first.
+        const watch = new MutationObserver(() => {
+          const now = el.classList.contains("is-hidden");
+          if (now !== hidden) {
+            hidden = now;
+            flips.push({ since: performance.now() - lastScroll, at: performance.now() });
+          }
+        });
+        watch.observe(el, { attributes: true, attributeFilter: ["class"] });
         let run = true;
         const tick = () => {
           const b = el.getBoundingClientRect();
           // The fade shrinks it a little around its centre; its centre never moves.
           sideways = Math.max(sideways, Math.abs(b.left + b.width / 2 - (home.left + home.width / 2)));
           moved = Math.max(moved, Math.abs(b.top + b.height / 2 - (home.top + home.height / 2)));
-          const now = el.classList.contains("is-hidden");
-          if (now !== hidden) {
-            hidden = now;
-            flips.push({ since: performance.now() - lastScroll, at: performance.now() });
-          }
           if (run) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
@@ -428,6 +433,7 @@ for (const size of SIZES) {
         }
         await new Promise((res) => setTimeout(res, 1600));
         run = false;
+        watch.disconnect();
         window.removeEventListener("scroll", onScroll);
         return { moved, sideways, flips };
       });
