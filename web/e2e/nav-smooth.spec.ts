@@ -94,7 +94,8 @@ function analyse(frames: Frame[], target: number[], axis: 1 | 2) {
   }
   const last = frames[frames.length - 1]!;
   const landed = [last[1] - target[0]!, last[2] - target[1]!, last[3] - target[2]!, last[4] - target[3]!].every((d) => Math.abs(d) <= 1);
-  return { travel, overshoot: Math.max(...progress), back, worstStep, gap, lateGap, landed, tStart };
+  const miss = `glide ${last.slice(1).map((v) => v.toFixed(1)).join(",")} vs item ${target.map((v) => v.toFixed(1)).join(",")}`;
+  return { travel, overshoot: Math.max(...progress), back, worstStep, gap, lateGap, landed, miss, tStart };
 }
 
 async function everySwitch(page: Page, list: string, itemSel: (to: string) => string, order: string[], axis: 1 | 2) {
@@ -111,7 +112,7 @@ async function everySwitch(page: Page, list: string, itemSel: (to: string) => st
     // One animation, transform only; nothing transitions its place or size.
     expect(rec.anims, to).toEqual(["glide-slide:transform"]);
     expect(rec.transitions, to).not.toMatch(/transform|width|height|left|top|all/);
-    expect(a.landed, `${to}: lands on the chosen item (to the pixel)`).toBe(true);
+    expect(a.landed, `${to}: lands on the chosen item (to the pixel): ${a.miss}`).toBe(true);
     expect(a.overshoot, `${to}: never passes the item`).toBeLessThanOrEqual(1.01);
     expect(a.back, `${to}: never creeps back`).toBeGreaterThanOrEqual(-0.5);
     // The curve's fastest frame is its launch: about 0.21 of the way per 16.7 ms. A stall shows as a bigger jump.
