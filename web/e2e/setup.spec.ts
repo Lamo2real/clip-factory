@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import type { Platform } from "../src/api/types.ts";
 import { MOCK_VALUES } from "../src/api/mock/setup.ts";
 import { maskKey } from "../src/lib/keyFormats.ts";
-import { allSteps, checkedOnText, GUIDES, resolveValue, resultCopy, SETUP_ORDER, type GuideStep } from "../src/setup/index.ts";
+import { allSteps, checkedOnText, GUIDES, resolveValue, resultCopy, SETUP_ORDER, stepNumber, type GuideStep } from "../src/setup/index.ts";
 import { animationsDone, findOverflow, openTodo, settle } from "./helpers.ts";
 
 // The posting setup, clicked through for every platform on a phone and on a desktop (docs/CONTRACTS.md §17.12):
@@ -422,5 +422,5 @@ test("a stale consent page answers expired, and Connect needs keys first", async
   await expect(page.getByText("That took too long. Press Connect TikTok again.")).toBeVisible();
   await page.locator("[data-step='connect'] .gstep__head").click();
   await expect(page.getByRole("button", { name: "Connect TikTok", exact: true })).toHaveAttribute("aria-disabled", "true");
-  await expect(page.getByText("Paste your keys first (step 14). Then this button works.")).toBeVisible();
+  await expect(page.getByText(`Paste your keys first (step ${stepNumber(GUIDES.tiktok, "key-paste")}). Then this button works.`)).toBeVisible();
 });
