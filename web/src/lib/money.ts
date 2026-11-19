@@ -35,10 +35,17 @@ export function fraction(goal: MoneyGoal): number {
   return Math.max(0, Math.min(1, goal.current / goal.goal));
 }
 
-/** "812 / 1,000 subscribers", "Premium: yes", "40.2K impressions in 90 days". */
+/** A line never starts lowercase: "followers" becomes "Followers". */
+export function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** "812 / 1,000 subscribers", "Premium: yes", "Followers: not counted yet", "Views in 30 days: counting… 12 days to go". */
 export function goalText(goal: MoneyGoal): string {
-  if (goal.kind === "tick") return goal.current === null ? goal.label : `${goal.label}: ${goal.current >= 1 ? "yes" : "not yet"}`;
-  if (goal.current === null) return goal.label;
+  const lead = capitalise(goal.label);
+  if (goal.countingDaysLeft) return `${lead}: counting… ${goal.countingDaysLeft} days to go`;
+  if (goal.current === null) return `${lead}: not counted yet`;
+  if (goal.kind === "tick") return `${lead}: ${goal.current >= 1 ? "yes" : "not yet"}`;
   if (goal.kind === "number" || goal.goal === null) return `${goalNumber(goal.current)} ${goal.label}`;
   return `${goalNumber(goal.current)} / ${goalNumber(goal.goal)} ${goal.label}`;
 }
@@ -117,7 +124,6 @@ export const MONEY_RESULTS: readonly MoneyResult[] = [
   "money_missing",
   "money_not_connected",
   "money_wrong_account",
-  "money_expired",
   "money_error",
 ];
 

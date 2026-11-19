@@ -928,7 +928,7 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
      `/aws/lambda/cf-prod-money` shows one `money.run` line; every connected card shows real numbers or a plain reason.
    - YouTube, in this order: Google Cloud › Data access, add `yt-analytics-monetary.readonly` (same project, no new
      keys); Audience says **In production**; then **Allow money reading** (the "unverified app" screen is expected). You
-     come back to Money with "Done!" and the pill is **Not yet**, **In the programme** or **Earning**. Set up posting
+     come back to Money with "Done!" and the pill is **Not yet**, **In the program** or **Earning**. Set up posting
      still says Connected and a test post still works. Compare one day's amount with YouTube Studio › Analytics ›
      Revenue (YouTube's number may still change at month end). Note whether the Shorts/long split appears.
    - Whether `yt-analytics-monetary.readonly` shows as a sensitive scope, and the YouTube API Services policy's limit

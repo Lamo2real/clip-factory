@@ -69,6 +69,9 @@ describe("formatting, never maths", () => {
     expect(money.goalText(goal({ current: 1_200_000, goal: 10_000_000, label: "Shorts views in 90 days" }))).toBe("1.2M / 10M Shorts views in 90 days");
     expect(money.goalText(goal({ kind: "tick", current: 1, goal: 1, label: "Premium" }))).toBe("Premium: yes");
     expect(money.goalText(goal({ kind: "number", current: 40_200, goal: null, label: "impressions in 90 days" }))).toBe("40,200 impressions in 90 days");
+    // A goal with no number yet is still a whole sentence that starts with a capital.
+    expect(money.goalText(goal({ current: null, label: "followers" }))).toBe("Followers: not counted yet");
+    expect(money.goalText(goal({ current: null, label: "views in 30 days", countingDaysLeft: 12 }))).toBe("Views in 30 days: counting… 12 days to go");
     expect(money.fraction(goal({ current: 1500, goal: 1000 }))).toBe(1);
     expect(money.fraction(goal({ current: null }))).toBe(0);
   });
@@ -150,7 +153,7 @@ describe("every state from the mock", () => {
 
   it("TikTok needs a country, and says when it is not open", () => {
     expect(buildMoneyView({ scenario: "start", country: null, seen: [] }).platforms[1]!.extras[0]).toBe(
-      "Pick your country at the top to see this programme's goals.",
+      "Pick your country at the top to see this program's goals.",
     );
     expect(buildMoneyView({ scenario: "unsupported", country: "other", seen: [] }).platforms[1]!.extras[0]).toContain("not open in your country");
   });

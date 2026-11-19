@@ -826,7 +826,6 @@ export type MoneyResult =
   | "money_missing"
   | "money_not_connected"
   | "money_wrong_account"
-  | "money_expired"
   | "money_error";
 
 /** Everything the screens need from the backend. The HTTP client and the mock both implement it. */

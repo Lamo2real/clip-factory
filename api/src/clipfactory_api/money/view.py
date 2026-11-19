@@ -18,11 +18,11 @@ from . import MONEY_ORDER, PREFS_SK, label, revenue_prefix, rules, sources, stat
 Item = dict[str, Any]
 PILL = {
     "earning": "Earning",
-    "in_program": "In the programme",
+    "in_program": "In the program",
     "goal_reached": "Goal reached",
     "not_yet": "Not yet",
     "counting": "Counting",
-    "unknown": "Not earning yet",
+    "unknown": "Can't tell",
     "needs_permission": "Needs your OK",
     "not_available": "Not shared",
     "not_connected": "Not connected",
@@ -128,7 +128,7 @@ def _goals(out: Item, platform: str, picked: rules.Rule | str | None, numbers: I
         if picked.upcoming and not in_program:
             out["extras"].append(picked.upcoming)
     elif picked == "no_country":
-        out["extras"].append("Pick your country at the top to see this programme's goals.")
+        out["extras"].append("Pick your country at the top to see this program's goals.")
     elif picked == "not_open":
         out["extras"].append(
             f"{out['programme']} is not open in your country. Check its rules in the {label(platform)} app."
@@ -285,7 +285,7 @@ def _line(platform: str, shown: str, p: rules.PlatformRules, goals: list[Item], 
         left = max((int(g.get("countingDaysLeft") or 0) for g in goals), default=0)
         return f"Counting your views… {left} days to go."
     if shown == "unknown":
-        return "Not earning yet. Meta doesn't tell apps if you've joined."
+        return "Meta doesn't tell apps if you've joined."
     if shown == "needs_permission":
         what = "money" if platform == "youtube" else "followers"
         return f"{name} needs your OK before Clip Factory can read {what}."
@@ -318,7 +318,7 @@ def money_view(store: db.Store, user_id: str, now: datetime, cfg: rules.Monetiza
         {k: c.get(k) for k in ("key", "platform", "kind", "text")}
         for platform in MONEY_ORDER
         for c in (states.get(platform, {}).get("pendingCelebrations") or [])
-        if isinstance(c, dict) and c.get("key")
+        if isinstance(c, dict) and c.get("key") and c["key"] not in (states.get(platform, {}).get("celebrated") or {})
     ]
     view: Item = {
         "platforms": cards,

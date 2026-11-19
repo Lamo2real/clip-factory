@@ -4904,11 +4904,11 @@ to each platform's payout page instead. Every stored money row has `platform`, `
 | State | Pill (fixed text) | Set when |
 |---|---|---|
 | `earning` | Earning | A platform reported money above 0 (YouTube; Facebook once `moneyVerified`) |
-| `in_program` | In the programme | YouTube's monetary report answered 200 |
+| `in_program` | In the program | YouTube's monetary report answered 200 |
 | `goal_reached` | Goal reached | Every published goal is reached. Always with "[Platform] also checks things we can't see." |
 | `not_yet` | Not yet | YouTube's monetary report answered 403 `forbidden` while the scope is granted and the non-money report works |
 | `counting` | Counting | TikTok's 30-day views need 30 daily snapshots first |
-| `unknown` | Not earning yet | Facebook: "Meta doesn't tell apps if you've joined." Never "not monetized" |
+| `unknown` | Can't tell | Facebook: "Meta doesn't tell apps if you've joined." Never "not monetized" |
 | `needs_permission` | Needs your OK | The money scope (YouTube) or `user.info.stats` (TikTok) is not granted yet |
 | `not_available` | Not shared | Instagram, TikTok and X: no API reports programme status or money |
 | `not_connected` | Not connected | The platform is not connected (Settings › Posting › Set up posting) |
@@ -4917,7 +4917,7 @@ to each platform's payout page instead. Every stored money row has `platform`, `
 `in_program` and `earning` are permanent: a later 403 or outage only sets `lastError` and shows "Couldn't check today".
 `detectedAt` (first seen in the programme) and `earningSince` are written once (conditional `attribute_not_exists`).
 YouTube 403 reasons other than `forbidden` (`accessNotConfigured`, `quotaExceeded`, `insufficientPermissions`, …) are
-`error` with a fix sentence ("Turn on YouTube Analytics API in Google Cloud."), never a false "Not yet".
+`error` with a fix sentence ("Ask a grown-up: turn on YouTube Analytics API. The steps are in Settings › Posting › Set up posting › YouTube."), never a false "Not yet".
 
 ### 25.2 `config/monetization.json`
 
@@ -4972,8 +4972,9 @@ call is checked against Meta Business Suite), TikTok `warning`, and `rules[]`:
   moneyScopesMissing)`, an UpdateItem that keeps every other Account field. It never calls `put_account`,
   `setup.record(gates)`, `_disconnect` or the keys route.
 * It then redirects to `/settings/posting/money?result={code}&platform={platform}` with a code from
-  `money_allowed | money_denied | money_missing | money_not_connected | money_wrong_account | money_expired |
-  money_error`; the page starts a "Check now".
+  `money_allowed | money_denied | money_missing | money_not_connected | money_wrong_account |
+  money_error`; the page starts a "Check now". A bad, expired or reused state carries no grant, so it ends as the
+  plain Setup `expired` result (nothing is written either way).
 * Setup text on the card, for a grown-up: "Use the same Google Cloud project. Don't make new keys." · add the monetary
   permission (Copy) · set Publishing status to In production · press **Allow money reading** (Google's "unverified
   app" screen is expected: Advanced › Continue). TikTok: add `user.info.stats` and send for review, then press

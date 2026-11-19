@@ -48,7 +48,6 @@ MONEY_RESULTS = (
     "money_missing",
     "money_not_connected",
     "money_wrong_account",
-    "money_expired",
     "money_error",
 )
 DENIED = frozenset({"access_denied", "user_denied", "user_cancelled", "cancelled", "consent_required"})

@@ -40,9 +40,10 @@ test("first visit: real progress, one Allow money reading button, and apps that 
   await expect(pill(page, "instagram")).toHaveText("Goal reached");
   await expect(card(page, "instagram")).toContainText("Instagram also checks things we can't see.");
   await expect(card(page, "instagram")).toContainText("Instagram doesn't share earnings with apps.");
-  await expect(pill(page, "facebook")).toHaveText("Not earning yet");
+  await expect(pill(page, "facebook")).toHaveText("Can't tell");
   await expect(card(page, "facebook")).toContainText("Facebook money: coming soon");
-  await expect(card(page, "x")).toContainText("X doesn't share earnings with apps.");
+  await expect(card(page, "x")).toContainText("X doesn't tell apps if you're getting paid.");
+  await expect(card(page, "x")).not.toContainText("X doesn't share earnings with apps."); // said once per card
   // No money figure anywhere without its platform's estimate tag.
   await expect(page.locator(".settings-content")).not.toContainText("$");
   await expect(page.locator("[data-money='revenue']")).toHaveCount(0);
@@ -97,7 +98,7 @@ test("in the programme: Home celebrates once and shows how close the money is", 
   await tile.getByRole("link", { name: "See money" }).click();
   await expect(page).toHaveURL(new RegExp(`${PATH}$`));
   await settle(page);
-  await expect(pill(page, "youtube")).toHaveText("In the programme");
+  await expect(pill(page, "youtube")).toHaveText("In the program");
   await expect(page.getByText("You're in YouTube's Partner Program!")).toHaveCount(0);
 });
 
@@ -111,7 +112,7 @@ test("Home's tile shows the bar nearest its goal before any money", async ({ pag
 
 test("the country is picked once and TikTok's goals follow it", async ({ page }) => {
   await scenario(page, "unsupported", PATH, null);
-  await expect(card(page, "tiktok")).toContainText("Pick your country at the top to see this programme's goals.");
+  await expect(card(page, "tiktok")).toContainText("Pick your country at the top to see this program's goals.");
   await page.locator(".money-country__select").selectOption("US");
   await expect(page.getByText("Saved. Your country is United States.")).toBeVisible();
   await expect(card(page, "tiktok").getByText("10,500 / 10,000 followers")).toBeVisible();
@@ -132,7 +133,7 @@ test("not connected and couldn't-check states read plainly", async ({ page }) =>
   await expect(card(page, "youtube")).toContainText("Connect YouTube in Settings › Posting › Set up posting to see this.");
   await scenario(page, "error");
   await expect(pill(page, "youtube")).toHaveText("Couldn't check");
-  await expect(card(page, "youtube")).toContainText("Turn on YouTube Analytics API in Google Cloud.");
+  await expect(card(page, "youtube")).toContainText("Ask a grown-up: turn on YouTube Analytics API. The steps are in Settings › Posting › Set up posting › YouTube.");
 });
 
 test("the old money anchors open the Money branch", async ({ page }) => {

@@ -48,6 +48,8 @@ from . import (
 from . import rules as money_rules
 
 FIRST_MONEY_WAIT = timedelta(days=3)
+# YouTube and Meta fill in a day for 2-3 days; only a change to a day older than this counts as "revised".
+SETTLE_DAYS = timedelta(days=3)
 VIEWS_WINDOW_DAYS = 30
 X_IMPRESSIONS_DAYS = 90
 RANK = {"earning": 2, "in_program": 1}
@@ -203,6 +205,7 @@ def _write_days(deps: MoneyDeps, user_id: str, platform: str, days: list[dict[st
     """Upserts each reported day; a changed amount keeps the first ``firstFetchedAt`` and sets ``revisedAt``."""
     pk = db.user_pk(user_id)
     existing = {str(i.get("date")): i for i in deps.store.query_all(pk, revenue_prefix(platform))}
+    settled = (now.date() - SETTLE_DAYS).isoformat()
     written = 0
     for day in days:
         old = existing.get(day["date"])
@@ -221,8 +224,12 @@ def _write_days(deps: MoneyDeps, user_id: str, platform: str, days: list[dict[st
             "fetchedAt": iso(now),
             "firstFetchedAt": (old or {}).get("firstFetchedAt") or (old or {}).get("fetchedAt") or iso(now),
         }
+        changed = old is not None and (
+            old.get("amountMicros") != item["amountMicros"] or old.get("currency") != item["currency"]
+        )
         if old is not None:
-            if old.get("amountMicros") != item["amountMicros"] or old.get("currency") != item["currency"]:
+            # Days inside the platform's 2-3 day lag are still filling in: a change there is not a revision.
+            if changed and day["date"] <= settled:
                 item["revisedAt"] = iso(now)
                 item["previousMicros"] = old.get("amountMicros")
             elif old.get("revisedAt"):
@@ -487,7 +494,10 @@ def run_platform(deps: MoneyDeps, user_id: str, platform: str, *, now: datetime,
     )
     fields = _state_fields(platform, reading, state, numbers, counting)
     fields["lastCheckedAt"] = now_iso
-    fields["pendingCelebrations"] = [c for c in previous.get("pendingCelebrations") or [] if isinstance(c, dict)] + new
+    seen = previous.get("celebrated") or {}
+    fields["pendingCelebrations"] = [
+        c for c in previous.get("pendingCelebrations") or [] if isinstance(c, dict) and c.get("key") not in seen
+    ] + new
     _write_state(deps, user_id, platform, fields, error)
     _mark_scopes(deps, user_id, platform, account, state=state, now=now)
     out.state = state

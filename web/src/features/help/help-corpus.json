@@ -1,5 +1,5 @@
 {
-  "version": "3412c6995aa1",
+  "version": "a151e9c4bc84",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -659,7 +659,7 @@
         "revenue sharing",
         "premium"
       ],
-      "answer": "Open **Settings › Posting › Money**. Each app's card has a pill: **Earning**, **In the programme**, **Not yet**, **Goal reached** or **Not shared**, and bars like 812 / 1,000 subscribers. Only YouTube tells apps if you're in its paid program. **Goal reached** means you hit the numbers, but the app also checks things Clip Factory can't see.",
+      "answer": "Open **Settings › Posting › Money**. Each app's card has a pill: **Earning**, **In the program**, **Not yet**, **Goal reached**, **Can't tell** or **Not shared**, and bars like 812 / 1,000 subscribers. Only YouTube tells apps if you're in its paid program. **Goal reached** means you hit the numbers, but the app also checks things Clip Factory can't see.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**.",
@@ -3459,7 +3459,7 @@
         "monetized",
         "allow follower reading"
       ],
-      "answer": "How close you are to Creator Rewards. TikTok doesn't share money with apps.",
+      "answer": "How close you are to Creator Rewards.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**.",
@@ -3494,7 +3494,7 @@
         "monetized",
         "reels"
       ],
-      "answer": "Followers against the goal for Gifts. Instagram doesn't share money with apps.",
+      "answer": "Followers against the goal for Gifts.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**.",
@@ -3563,7 +3563,7 @@
         "revenue sharing",
         "creator revenue"
       ],
-      "answer": "Premium and verified followers. X doesn't share money with apps.",
+      "answer": "Premium and verified followers against the goal.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**.",

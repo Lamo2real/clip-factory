@@ -226,13 +226,13 @@ export const TREES: Tree[] = [
           {
             id: "money-tiktok",
             name: "TikTok",
-            leaf: "How close you are to Creator Rewards. TikTok doesn't share money with apps.",
+            leaf: "How close you are to Creator Rewards.",
             words: ["tiktok", "creator rewards", "creativity program", "followers", "views", "monetized", "allow follower reading"],
           },
           {
             id: "money-instagram",
             name: "Instagram",
-            leaf: "Followers against the goal for Gifts. Instagram doesn't share money with apps.",
+            leaf: "Followers against the goal for Gifts.",
             words: ["instagram", "insta", "gifts", "followers", "monetized", "reels"],
           },
           {
@@ -244,7 +244,7 @@ export const TREES: Tree[] = [
           {
             id: "money-x",
             name: "X",
-            leaf: "Premium and verified followers. X doesn't share money with apps.",
+            leaf: "Premium and verified followers against the goal.",
             words: ["x", "twitter", "premium", "verified followers", "revenue sharing", "creator revenue"],
           },
           {

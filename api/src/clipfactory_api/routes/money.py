@@ -91,16 +91,37 @@ def seen(app: App, req: Request) -> Response:
         raise not_found("That celebration is not waiting.")
     pk = db.user_pk(req.user_id)
     item = app.store.get(pk, money.state_sk(platform)) or {}
+    celebrated = item.get("celebrated") or {}
     pending = [c for c in item.get("pendingCelebrations") or [] if isinstance(c, dict)]
-    if not any(c.get("key") == key for c in pending):
+    if key in celebrated or not any(c.get("key") == key for c in pending):
         raise not_found("That celebration is not waiting.")
-    celebrated = dict(item.get("celebrated") or {})
-    celebrated[key] = iso(app.clock())
-    app.store.update(
-        pk,
-        money.state_sk(platform),
-        {"pendingCelebrations": [c for c in pending if c.get("key") != key], "celebrated": celebrated},
-    )
+    # Only ``celebrated.<key>`` is written, never the pending list: the collector may be appending to that
+    # list right now, and the view hides any pending key that is already celebrated (the collector prunes it).
+    when = iso(app.clock())
+    for _ in range(2):
+        try:
+            app.store.update_expr(
+                pk,
+                money.state_sk(platform),
+                "SET #c.#k = :t",
+                condition="attribute_exists(#c)",
+                names={"#c": "celebrated", "#k": key},
+                values={":t": when},
+            )
+            break
+        except db.ConditionFailed:
+            try:
+                app.store.update_expr(
+                    pk,
+                    money.state_sk(platform),
+                    "SET #c = :m",
+                    condition="attribute_not_exists(#c)",
+                    names={"#c": "celebrated"},
+                    values={":m": {key: when}},
+                )
+                break
+            except db.ConditionFailed:
+                continue  # someone else made the map a moment ago: set the key inside it
     return ok(_view(app, req))
 
 

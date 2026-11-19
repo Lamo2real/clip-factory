@@ -56,11 +56,11 @@ const COUNTRIES = [
 ];
 const PILL: Record<MoneyState, string> = {
   earning: "Earning",
-  in_program: "In the programme",
+  in_program: "In the program",
   goal_reached: "Goal reached",
   not_yet: "Not yet",
   counting: "Counting",
-  unknown: "Not earning yet",
+  unknown: "Can't tell",
   needs_permission: "Needs your OK",
   not_available: "Not shared",
   not_connected: "Not connected",
@@ -235,8 +235,8 @@ function youtubeCard(scenario: MoneyScenario): MoneyCard {
     return c;
   }
   if (scenario === "error") {
-    const c = base("youtube", "error", "Turn on YouTube Analytics API in Google Cloud.");
-    Object.assign(c, youtubeGoals(812, 1500, 1_200_000), { lastError: "Turn on YouTube Analytics API in Google Cloud.", lagNote: "2–3 days behind" });
+    const c = base("youtube", "error", "Ask a grown-up: turn on YouTube Analytics API. The steps are in Settings › Posting › Set up posting › YouTube.");
+    Object.assign(c, youtubeGoals(812, 1500, 1_200_000), { lastError: "Ask a grown-up: turn on YouTube Analytics API. The steps are in Settings › Posting › Set up posting › YouTube.", lagNote: "2–3 days behind" });
     return c;
   }
   if (scenario === "in_program") {
@@ -295,7 +295,7 @@ function facebookCard(scenario: MoneyScenario): MoneyCard {
     const c = base("facebook", "earning", "You're earning on Facebook.");
     return { ...c, goals: facts, extras, lagNote: "Can take 2 days", revenue: money("facebook", "EUR", "Meta's estimate", "Final may differ", FB_DAILY) };
   }
-  const c = base("facebook", "unknown", "Not earning yet. Meta doesn't tell apps if you've joined.");
+  const c = base("facebook", "unknown", "Meta doesn't tell apps if you've joined.");
   return {
     ...c,
     goals: facts,
@@ -342,7 +342,7 @@ export function buildMoneyView(saved: Saved): MoneyView {
     const tiktok = cards.find((c) => c.platform === "tiktok");
     if (tiktok && tiktok.state !== "not_connected") {
       tiktok.goals = [];
-      tiktok.extras = ["Pick your country at the top to see this programme's goals.", ...tiktok.extras];
+      tiktok.extras = ["Pick your country at the top to see this program's goals.", ...tiktok.extras];
     }
   } else if (saved.country === "other") {
     const tiktok = cards.find((c) => c.platform === "tiktok");

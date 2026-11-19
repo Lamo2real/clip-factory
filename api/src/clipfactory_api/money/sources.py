@@ -40,7 +40,7 @@ NOT_SHARED = "{name} didn't share this."
 
 # YouTube Analytics 403 reasons that are never "not in the Partner Program yet" (§25.1).
 YT_FIX = {
-    "accessNotConfigured": "Turn on YouTube Analytics API in Google Cloud.",
+    "accessNotConfigured": "Ask a grown-up: turn on YouTube Analytics API. The steps are in Settings › Posting › Set up posting › YouTube.",
     "quotaExceeded": "YouTube's daily limit is used up. Clip Factory checks again tomorrow.",
     "dailyLimitExceeded": "YouTube's daily limit is used up. Clip Factory checks again tomorrow.",
     "rateLimitExceeded": "YouTube asked us to slow down. Clip Factory checks again tomorrow.",

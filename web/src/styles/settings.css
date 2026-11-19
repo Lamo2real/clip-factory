@@ -1537,7 +1537,12 @@ ol.md__list {
   font-variant-numeric: tabular-nums;
 }
 .money-goal__text {
+  flex: 1 1 auto;
   min-width: 0;
+}
+/* The "?" rides on the last word of its line and never wraps onto a row of its own. */
+.money-goal__why {
+  white-space: nowrap;
 }
 .money-goal__tick {
   color: var(--ink-2);

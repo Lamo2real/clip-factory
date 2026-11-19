@@ -14,20 +14,11 @@ import { useToast } from "./Toasts.tsx";
 import { Button, Pill } from "./ui.tsx";
 
 /** A small "?" that opens one explanation under the line it belongs to (kept out of the way: one number, one bar). */
-function Why({ text, label }: { text: string; label: string }) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
+function WhyButton({ open, onToggle, controls, label }: { open: boolean; onToggle: () => void; controls: string; label: string }) {
   return (
-    <>
-      <button type="button" className="money-why" aria-expanded={open} aria-controls={id} aria-label={`What does ${label} mean?`} onClick={() => setOpen((o) => !o)}>
-        ?
-      </button>
-      {open ? (
-        <span className="money-why__text" id={id} role="note">
-          {text}
-        </span>
-      ) : null}
-    </>
+    <button type="button" className="money-why" aria-expanded={open} aria-controls={controls} aria-label={`What does ${label} mean?`} onClick={onToggle}>
+      ?
+    </button>
   );
 }
 
@@ -35,6 +26,8 @@ function Goal({ goal, or }: { goal: MoneyGoal; or: boolean }) {
   const f = fraction(goal);
   const text = goalText(goal);
   const why = [goal.note, goal.help, goal.approx && goal.kind !== "number" ? "About: this is our count." : undefined].filter(Boolean).join(" ");
+  const [open, setOpen] = useState(false);
+  const whyId = useId();
   return (
     <li className={`money-goal is-${goal.kind}${goal.reached ? " is-reached" : ""}`} data-goal={goal.key}>
       {or ? <span className="money-goal__or">or</span> : null}
@@ -44,8 +37,21 @@ function Goal({ goal, or }: { goal: MoneyGoal; or: boolean }) {
         ) : goal.reached ? (
           <Icon name="checkCircle" size={18} className="icon money-goal__tick is-on" />
         ) : null}
-        <span className="money-goal__text">{goal.countingDaysLeft ? `${goal.label}: counting… ${goal.countingDaysLeft} days to go` : text}</span>
-        {why ? <Why text={why} label={goal.label} /> : null}
+        <span className="money-goal__text">
+          {text}
+          {/* The "?" stays glued to the last word, so it never wraps onto a row of its own. */}
+          {why ? (
+            <span className="money-goal__why">
+              {"\u00a0"}
+              <WhyButton open={open} onToggle={() => setOpen((o) => !o)} controls={whyId} label={goal.label} />
+            </span>
+          ) : null}
+        </span>
+        {why && open ? (
+          <span className="money-why__text" id={whyId} role="note">
+            {why}
+          </span>
+        ) : null}
       </p>
       {goal.kind === "bar" && goal.current !== null ? (
         <span
@@ -158,7 +164,8 @@ function Permission({ card }: { card: Card }) {
               <li key={s}>{s}</li>
             ))}
           </ol>
-          {need.copy?.map((c) => <CopyChip key={c.value} label={c.label} value={c.value} />)}
+          {/* Quiet copy buttons: "Allow money reading" stays the card's only vermilion button (§25.7). */}
+          {need.copy?.map((c) => <CopyChip key={c.value} label={c.label} value={c.value} quiet />)}
           {need.open ? (
             <a className="text-link" href={need.open.url} target="_blank" rel="noopener noreferrer">
               {need.open.label}
@@ -203,7 +210,8 @@ export function MoneyCard({ card, now = Date.now(), named = true }: { card: Card
         </p>
       ) : null}
       {card.comingSoon ? <p className="money-card__soon">{card.comingSoon}</p> : null}
-      {card.notShared ? <p className="money-card__fine">{card.notShared}</p> : null}
+      {/* One "not shared" sentence per card: the not_available line already says it. */}
+      {card.notShared && card.state !== "not_available" ? <p className="money-card__fine">{card.notShared}</p> : null}
       {card.needsPermission ? <Permission card={card} /> : null}
       {shown.length ? <Goals goals={shown} /> : null}
       {hidden.length ? (
@@ -228,7 +236,7 @@ export function MoneyCard({ card, now = Date.now(), named = true }: { card: Card
       ) : null}
       {card.state !== "not_connected" ? (
         <>
-          <Where lead="Programme status:" label={card.statusWhere.label} url={card.statusWhere.url} />
+          <Where lead="Program status:" label={card.statusWhere.label} url={card.statusWhere.url} />
           <Where lead="Money you get:" label={card.paidWhere.label} url={card.paidWhere.url} />
         </>
       ) : null}

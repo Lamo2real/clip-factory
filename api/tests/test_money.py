@@ -216,7 +216,12 @@ def test_hidden_subscribers_are_never_a_zero() -> None:
     [
         (yt_error(403, "forbidden"), True, "not_yet", None),
         (yt_error(403, "forbidden"), False, "error", "YouTube didn't answer. Clip Factory checks again tomorrow."),
-        (yt_error(403, "accessNotConfigured"), True, "error", "Turn on YouTube Analytics API in Google Cloud."),
+        (
+            yt_error(403, "accessNotConfigured"),
+            True,
+            "error",
+            "Ask a grown-up: turn on YouTube Analytics API. The steps are in Settings › Posting › Set up posting › YouTube.",
+        ),
         (
             yt_error(403, "quotaExceeded"),
             True,
@@ -303,6 +308,33 @@ def test_reported_money_is_stored_as_received_and_revisions_are_marked(
     item = state(store, "youtube")
     assert item["state"] == "earning"
     assert item["adsOn"] is True
+
+
+def test_a_change_inside_the_lag_is_not_a_revision(deps: MoneyDeps, store: db.Store, fake_http: FakeHttp) -> None:
+    connect(store, "youtube", [*YT_SCOPES, MONETARY], account_id="UC1")
+    fake_http.answers.extend(yt_answers((200, money_days(("2026-11-17", 0.10, 0.10))), extra=[(400, {})]))
+    collect.run_platform(deps, USER, "youtube", now=NOW, country=None)
+    fake_http.answers.extend(yt_answers((200, money_days(("2026-11-17", 0.30, 0.30))), extra=[(400, {})]))
+    collect.run_platform(deps, USER, "youtube", now=NOW + timedelta(days=1), country=None)
+    row = {r["date"]: r for r in revenue_rows(store, "youtube")}["2026-11-17"]
+    assert row["amountMicros"] == 300_000  # the newest number is always kept
+    assert "revisedAt" not in row  # YouTube was still filling the day in
+
+
+def test_a_celebration_seen_during_a_check_never_plays_again(
+    deps: MoneyDeps, store: db.Store, fake_http: FakeHttp, call: Call
+) -> None:
+    pk = db.user_pk(USER)
+    pending = {"key": "youtube:in_program", "platform": "youtube", "kind": "in_program", "text": "You're in!"}
+    store.put({"pk": pk, "sk": money.state_sk("youtube"), "state": "in_program", "pendingCelebrations": [pending]})
+    stale = store.get(pk, money.state_sk("youtube"))
+    assert call("POST", "/v1/money/seen", {"key": "youtube:in_program"})[0] == 200
+    # A check that read the item before the owner pressed OK writes the old list back.
+    store.update(pk, money.state_sk("youtube"), {"pendingCelebrations": stale["pendingCelebrations"]})
+    status, body = call("GET", "/v1/money")
+    assert status == 200
+    assert body["celebrations"] == []
+    assert call("POST", "/v1/money/seen", {"key": "youtube:in_program"})[0] == 404
 
 
 def test_first_money_waits_until_it_survives_a_later_read(
@@ -438,7 +470,7 @@ def test_facebook_money_stays_hidden_until_the_live_check(
     card = view.money_view(store, USER, NOW)["platforms"][3]
     assert card["platform"] == "facebook"
     assert card["state"] == "unknown"
-    assert card["line"] == "Not earning yet. Meta doesn't tell apps if you've joined."
+    assert card["line"] == "Meta doesn't tell apps if you've joined."
     assert card["comingSoon"].startswith("Facebook money: coming soon")
     assert "revenue" not in card
     assert {g["key"]: g["current"] for g in card["goals"]} == {
@@ -559,7 +591,7 @@ def test_tiktok_goals_need_a_country(store: db.Store) -> None:
     store.put({"pk": db.user_pk(USER), "sk": money.state_sk("tiktok"), "state": "not_available", "numbers": {}})
     card = view.money_view(store, USER, NOW)["platforms"][1]
     assert card["goals"] == []
-    assert "Pick your country at the top to see this programme's goals." in card["extras"]
+    assert "Pick your country at the top to see this program's goals." in card["extras"]
     store.put({"pk": db.user_pk(USER), "sk": money.PREFS_SK, "country": "other"})
     card = view.money_view(store, USER, NOW)["platforms"][1]
     assert any("not open in your country" in e for e in card["extras"])

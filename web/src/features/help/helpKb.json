@@ -424,7 +424,7 @@
       "where": "Settings › Posting › Money",
       "route": "/settings/posting/money",
       "hash": "money-youtube",
-      "answer": "Open **Settings › Posting › Money**. Each app's card has a pill: **Earning**, **In the programme**, **Not yet**, **Goal reached** or **Not shared**, and bars like 812 / 1,000 subscribers. Only YouTube tells apps if you're in its paid program. **Goal reached** means you hit the numbers, but the app also checks things Clip Factory can't see.",
+      "answer": "Open **Settings › Posting › Money**. Each app's card has a pill: **Earning**, **In the program**, **Not yet**, **Goal reached**, **Can't tell** or **Not shared**, and bars like 812 / 1,000 subscribers. Only YouTube tells apps if you're in its paid program. **Goal reached** means you hit the numbers, but the app also checks things Clip Factory can't see.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**.",
