@@ -287,12 +287,14 @@ test.describe("Ask with less motion", () => {
     await open(page);
     await ask(page, "How do I write a terraform module?");
     await expect(answers(page).last().locator(".ask-answer")).toBeVisible();
-    // The paper plane keeps its 300 ms fade with less motion (§20.6), so it is left out.
+    // The paper plane keeps its 300 ms fade with less motion (§20.6), so it is left out. Less motion clamps every
+    // other transition to 1 ms (base.css); one that has just started is still "running" until the next frame on a
+    // busy machine, so only animations longer than that count.
     await expect(panel(page).getByRole("button", { name: "Stop answer" })).toBeVisible();
     const running = await page.evaluate(() =>
       Array.from(document.querySelectorAll("#help-panel *"))
         .filter((el) => !el.closest(".fly-btn"))
-        .flatMap((el) => el.getAnimations().filter((a) => a.playState === "running").map((a) => `${el.className}: ${(a as CSSAnimation).animationName ?? "transition"}`)),
+        .flatMap((el) => el.getAnimations().filter((a) => a.playState === "running" && Number(a.effect?.getTiming().duration ?? 0) > 1).map((a) => `${el.className}: ${(a as CSSAnimation).animationName ?? "transition"}`)),
     );
     expect(running).toEqual([]);
   });

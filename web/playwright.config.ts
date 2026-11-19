@@ -37,6 +37,9 @@ export default defineConfig({
       name: "webkit-phone",
       use: { ...devices["iPhone 15"] },
       testMatch: /(help-pictures|ask-assistant|ask-markup)\.spec\.ts/,
+      // Desktop sizes run in the webkit project: a phone at 3x pixels and a 1920 px wide page made Linux WebKit's
+      // screenshots and clicks time out in CI.
+      grepInvert: /desktop/,
     },
     {
       name: "screenshots",
