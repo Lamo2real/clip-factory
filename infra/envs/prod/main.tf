@@ -83,6 +83,11 @@ locals {
   ask_search_secret     = "${local.name}/ask/search-key"
   ask_search_secret_arn = "arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${local.ask_search_secret}-??????"
 
+  # The optional YouTube proxy (docs/CONTRACTS.md §29.8): the owner may create this secret later (value
+  # http://user:pass@host:port). Not managed here: no apply creates, replaces or deletes it.
+  youtube_proxy_secret     = "${local.name}/agent/youtube-proxy"
+  youtube_proxy_secret_arn = "arn:aws:secretsmanager:${var.region}:${local.account_id}:secret:${local.youtube_proxy_secret}-??????"
+
   # The deep analysis's second watcher (docs/DECISIONS.md ADR-40): Amazon Nova 2 Lite through the EU geo profile, so
   # the video parts it watches stay in the EU. Same shape as the help model: the profile here plus the foundation
   # model in each region the profile may route to, listed in config/models.json (no region wildcard).
@@ -168,6 +173,10 @@ module "agent" {
   # "Watch the video" (ADR-40): the second watcher. Fable, the main watcher, needs nothing new.
   watch_model_id          = local.watch_model_id
   watch_model_invoke_arns = local.watch_model_invoke_arns
+
+  # YouTube from the cloud (§29.8): the optional proxy secret, read only.
+  youtube_proxy_secret     = local.youtube_proxy_secret
+  youtube_proxy_secret_arn = local.youtube_proxy_secret_arn
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn

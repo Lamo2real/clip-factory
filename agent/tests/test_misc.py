@@ -128,10 +128,12 @@ def test_explain_ytdlp_errors() -> None:
     def e(tail: str) -> CommandError:
         return CommandError("yt-dlp", 1, tail)
 
-    assert "Add your YouTube cookies" in str(
-        sources.explain(e("ERROR: Sign in to confirm you’re not a bot"), "youtube", False)
+    assert str(sources.explain(e("ERROR: Sign in to confirm you’re not a bot"), "youtube", False)) == (
+        sources.BLOCKED_NO_COOKIES
     )
-    assert "fresh cookies" in str(sources.explain(e("Sign in to confirm you're not a bot"), "youtube", True))
+    assert str(sources.explain(e("Sign in to confirm you're not a bot"), "youtube", True)) == (
+        sources.BLOCKED_WITH_COOKIES
+    )
     assert "private" in str(sources.explain(e("ERROR: Private video"), "youtube", False))
     assert isinstance(sources.explain(e("HTTP Error 503: Service Unavailable"), "twitch", False), UserFacingError)
     assert isinstance(sources.explain(e("Read timed out"), "twitch", False), TransientError)

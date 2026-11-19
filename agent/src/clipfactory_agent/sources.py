@@ -4,6 +4,7 @@ and section downloads up to 1080p."""
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -32,6 +33,11 @@ _COMMON = [
     "30",
     "--no-cache-dir",
 ]
+# YouTube from a cloud IP (docs/CONTRACTS.md §29.3): yt-dlp's default clients plus mweb, a PO token from the bgutil
+# sidecar (pot.py; its HTTP provider needs no arguments, the script provider is the backup when the sidecar is down),
+# and warnings ON, so "the cookies are no longer valid" reaches the error tail and explain() can say so.
+_YOUTUBE_BASE = [a for a in _COMMON if a != "--no-warnings"]
+YOUTUBE_CLIENTS = "youtube:player_client=default,mweb"
 VIDEO_FORMAT = "bv*[height<=1080][vcodec^=avc1]+ba/bv*[height<=1080]+ba/b[height<=1080]/b"
 # Audio only where the site has it (YouTube, Twitch's Audio_Only). Kick's VOD playlists have no audio-only rendition:
 # then the smallest stream that has sound ("wa*": worst with audio, video allowed), never the 1080p60 one.
@@ -70,36 +76,74 @@ def platform_name(platform: str) -> str:
     return PLATFORM_NAMES.get(platform, platform.title())
 
 
+# What the owner reads when YouTube says no (docs/CONTRACTS.md §29.5). Every one names a real button: "Try again" or
+# "Use a video file" (the failed job's button that opens New job with the file picker).
+BLOCKED_NO_COOKIES = (
+    "YouTube stopped the cloud from getting this video. Tap Use a video file, "
+    "or add your YouTube cookies in Settings › YouTube help."
+)
+BLOCKED_WITH_COOKIES = (
+    "YouTube stopped the cloud from getting this video, even with your cookies. Tap Use a video file, "
+    "or get new cookies in Settings › YouTube help."
+)
+COOKIES_EXPIRED = "Your YouTube cookies ran out. Get new ones in Settings › YouTube help, then tap Try again."
+CUT_BLOCKED = (
+    "YouTube stopped the cloud while cutting the clips. Tap Try again. If it stops again, tap Use a video file."
+)
+CUT_TOO_BIG = "This video is too long to cut in the cloud right now. Tap Use a video file, or try a shorter video."
+CUT_FAILED = "The clips could not be cut this time. Tap Try again, or tap Use a video file."
+OWNER_WORDS = (BLOCKED_NO_COOKIES, BLOCKED_WITH_COOKIES, COOKIES_EXPIRED, CUT_BLOCKED, CUT_TOO_BIG, CUT_FAILED)
+
+# How a download failed, for the Cut step's fallback (never shown): "blocked" (the bot check), "cookies" (rotated or
+# expired), "gone" (private, removed, live), "retry" (a section's 403, fragment or merge failure), "transient" (a
+# network blip, retried as is), "other".
+KINDS = ("blocked", "cookies", "gone", "retry", "transient", "other")
+
+
+def _kinded[E: Exception](e: E, kind: str) -> E:
+    e.kind = kind  # type: ignore[attr-defined]
+    return e
+
+
+def kind_of(e: BaseException) -> str:
+    return str(getattr(e, "kind", "other"))
+
+
 def explain(e: proc.CommandError, platform: str, has_cookies: bool, *, section: bool = False) -> Exception:
     """yt-dlp's error, turned into something the owner can act on (or a retryable error). With ``section``, the
     failure was one clip's piece of video: a 403 (an expired signed URL), a failed fragment or an ffmpeg merge
-    failure is then worth another try rather than a verdict on the whole video."""
+    failure is then worth another try rather than a verdict on the whole video. The result carries a ``kind``
+    (``KINDS``) the Cut step uses to pick its fallback."""
     t = e.tail.lower()
-    if "sign in to confirm" in t or "not a bot" in t:
-        if has_cookies:
-            return UserFacingError(
-                "YouTube is blocking downloads from the cloud and your cookies did not help. "
-                "Export fresh cookies in Settings, or upload the video file instead."
-            )
-        return UserFacingError(
-            "YouTube is blocking downloads from the cloud. Add your YouTube cookies in Settings, "
-            "or upload the video file instead."
-        )
+    bot = "sign in to confirm" in t or "not a bot" in t
+    if has_cookies and ("cookies are no longer valid" in t or "rotated" in t):
+        log("warn", "download.cookies_expired", platform=platform, detail=e.tail[:500])
+        return _kinded(UserFacingError(COOKIES_EXPIRED), "cookies")
+    if bot:
+        log("warn", "download.blocked", platform=platform, cookies=has_cookies, detail=e.tail[:500])
+        return _kinded(UserFacingError(BLOCKED_WITH_COOKIES if has_cookies else BLOCKED_NO_COOKIES), "blocked")
     if "private video" in t or "members-only" in t or "join this channel" in t:
-        return UserFacingError("This video is private or members-only, so it can't be downloaded.")
+        return _kinded(UserFacingError("This video is private or members-only, so it can't be downloaded."), "gone")
     if "unavailable" in t or "removed" in t or "does not exist" in t or "404" in t:
-        return UserFacingError(f"This {platform_name(platform)} video is not available. Check the link.")
+        return _kinded(
+            UserFacingError(f"This {platform_name(platform)} video is not available. Check the link."), "gone"
+        )
     if "live event will begin" in t or "is live" in t or "premieres in" in t:
-        return UserFacingError("This stream is still live or has not started. Try again once it has ended.")
+        return _kinded(
+            UserFacingError("This stream is still live or has not started. Try again once it has ended."), "gone"
+        )
     if any(s in t for s in ("timed out", "http error 5", "connection reset", "temporarily", "429")):
-        return TransientError(str(e))
+        return _kinded(TransientError(str(e)), "transient")
     if section and any(s in t for s in ("http error 403", "forbidden", "fragment", "ffmpeg")):
-        return TransientError(str(e))
+        return _kinded(TransientError(str(e)), "retry")
     # yt-dlp's own words go to the log, never to the owner.
     log("warn", "download.failed", platform=platform, detail=e.tail[:500])
-    return UserFacingError(
-        f"The video could not be downloaded from {platform_name(platform)}. Check the link and tap Try again, "
-        "or upload the video file instead."
+    return _kinded(
+        UserFacingError(
+            f"The video could not be downloaded from {platform_name(platform)}. Check the link and tap Try again, "
+            "or tap Use a video file."
+        ),
+        "other",
     )
 
 
@@ -107,11 +151,38 @@ def _cookie_args(cookies: Path | None) -> list[str]:
     return ["--cookies", str(cookies)] if cookies else []
 
 
-async def video_info(url: str, cookies: Path | None = None) -> dict[str, Any]:
-    r = await proc.run(["yt-dlp", "-J", *_COMMON, *_cookie_args(cookies), url], time_limit=180)
+def youtube_args(cookies: Path | None = None, proxy: str | None = None) -> list[str]:
+    """The extra yt-dlp arguments every YouTube call gets (docs/CONTRACTS.md §29.3)."""
+    out = ["--extractor-args", YOUTUBE_CLIENTS]
+    home = os.environ.get("CF_POT_HOME")
+    if home:
+        out += ["--extractor-args", f"youtubepot-bgutilscript:server_home={home}"]
+    out += _cookie_args(cookies)
+    if proxy:
+        out += ["--proxy", proxy]
+    return out
+
+
+def _args(platform: str | None, cookies: Path | None = None, proxy: str | None = None) -> list[str]:
+    """The common yt-dlp arguments for one site: YouTube gets its clients, the PO token, cookies and the optional
+    proxy; Twitch and Kick keep exactly what they had."""
+    if platform == "youtube":
+        return [*_YOUTUBE_BASE, *youtube_args(cookies, proxy)]
+    return [*_COMMON, *_cookie_args(cookies)]
+
+
+async def video_info(
+    url: str, cookies: Path | None = None, *, proxy: str | None = None, info_json: Path | None = None
+) -> dict[str, Any]:
+    """yt-dlp's ``-J`` for the link. With ``info_json`` the same JSON is also written there, so later downloads can
+    ``--load-info-json`` it instead of asking YouTube again (one extraction per Cut step, §29.4)."""
+    r = await proc.run(["yt-dlp", "-J", *_args(platform_of(url), cookies, proxy), url], time_limit=180)
     info = json.loads(r.stdout)
     if not isinstance(info, dict):
         raise UserFacingError("The link did not lead to a video.")
+    if info_json is not None:
+        info_json.parent.mkdir(parents=True, exist_ok=True)
+        info_json.write_bytes(r.stdout)
     return info
 
 
@@ -160,14 +231,14 @@ async def download_audio(
     *,
     max_seconds: float | None,
     cookies: Path | None = None,
+    proxy: str | None = None,
     on_progress: Callable[[float], None] | None = None,
 ) -> Path:
     """Audio only, as m4a: the cheapest way to listen to an 8-hour stream. Stops at ``max_seconds``."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     args = [
         "yt-dlp",
-        *_COMMON,
-        *_cookie_args(cookies),
+        *_args(platform_of(url), cookies, proxy),
         "-f",
         AUDIO_FORMAT,
         "-x",
@@ -188,15 +259,26 @@ async def download_audio(
     return out
 
 
-async def download_section(url: str, start: float, end: float, dest: Path, cookies: Path | None = None) -> Path:
-    """Just the piece of video a clip needs, up to 1080p, as mp4."""
+async def download_section(
+    url: str,
+    start: float,
+    end: float,
+    dest: Path,
+    cookies: Path | None = None,
+    *,
+    proxy: str | None = None,
+    info_json: Path | None = None,
+) -> Path:
+    """Just the piece of video a clip needs, up to 1080p, as mp4. With ``info_json`` (YouTube's ``-J`` saved once
+    for the Cut step) yt-dlp reads the formats from that file and does not ask YouTube's player again."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     stem = dest.with_suffix("")
+    platform = "youtube" if info_json is not None else platform_of(url)
+    source = ["--load-info-json", str(info_json)] if info_json is not None else [url]
     await proc.run(
         [
             "yt-dlp",
-            *_COMMON,
-            *_cookie_args(cookies),
+            *_args(platform, cookies, proxy),
             "-f",
             VIDEO_FORMAT,
             "--download-sections",
@@ -206,7 +288,7 @@ async def download_section(url: str, start: float, end: float, dest: Path, cooki
             "--force-overwrites",
             "-o",
             f"{stem}.%(ext)s",
-            url,
+            *source,
         ],
         time_limit=30 * 60,
     )
@@ -214,7 +296,79 @@ async def download_section(url: str, start: float, end: float, dest: Path, cooki
         f = stem.with_suffix(ext)
         if f.is_file() and f.stat().st_size > 0:
             return f
-    raise TransientError("The video section did not download.")
+    raise _kinded(TransientError("The video section did not download."), "retry")
+
+
+# The Cut step's last resort for YouTube (§29.4): the whole video once, at the tallest height that fits the disk.
+FULL_LADDER = (
+    (1080, VIDEO_FORMAT),
+    (720, "bv*[height<=720][vcodec^=avc1]+ba/bv*[height<=720]+ba/b[height<=720]/b"),
+    (480, "bv*[height<=480][vcodec^=avc1]+ba/bv*[height<=480]+ba/b[height<=480]/b"),
+)
+FULL_TIME_LIMIT = 90 * 60
+
+
+def full_format(
+    info: dict[str, Any], seconds: float, free_bytes: int, reserve: int = DISK_RESERVE
+) -> dict[str, Any] | None:
+    """The format for the one full download, or None when not even 480p leaves ``reserve`` bytes free. The size of a
+    rung is its tallest H.264 video up to that height (else any video up to it) plus the best audio, plus 10%."""
+    formats = [f for f in info.get("formats") or [] if isinstance(f, dict)]
+    audio = [
+        f for f in formats if str(f.get("vcodec") or "none") == "none" and str(f.get("acodec") or "none") != "none"
+    ]
+    audio_bytes = max((_estimate_bytes(f, seconds) for f in audio), default=0)
+    videos = [f for f in formats if _has_video(f)]
+    for height, fmt in FULL_LADDER:
+        fit = [f for f in videos if int(f["height"]) <= height]
+        avc = [f for f in fit if str(f.get("vcodec") or "").startswith("avc1")]
+        pool = avc or fit
+        if not pool:
+            continue
+        top = max(int(f["height"]) for f in pool)
+        best = max((f for f in pool if int(f["height"]) == top), key=lambda f: _estimate_bytes(f, seconds))
+        has_sound = str(best.get("acodec") or "none") != "none"
+        est = int((_estimate_bytes(best, seconds) + (0 if has_sound else audio_bytes)) * 1.1)
+        if est <= free_bytes - reserve:
+            return {"format": fmt, "height": top, "estBytes": est}
+    return None
+
+
+async def download_full(
+    url: str,
+    fmt: str,
+    dest: Path,
+    *,
+    est_bytes: int,
+    cookies: Path | None = None,
+    proxy: str | None = None,
+    info_json: Path | None = None,
+) -> Path:
+    """The whole video once, as mp4, for the Cut step to cut every remaining clip from (YouTube only)."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    stem = dest.with_suffix("")
+    source = ["--load-info-json", str(info_json)] if info_json is not None else [url]
+    args = [
+        "yt-dlp",
+        *_args("youtube", cookies, proxy),
+        "-f",
+        fmt,
+        "--merge-output-format",
+        "mp4",
+        "--http-chunk-size",
+        "10M",
+        "--force-overwrites",
+        "-o",
+        f"{stem}.%(ext)s",
+    ]
+    if est_bytes > 0:
+        args += ["--max-filesize", str(int(est_bytes * 1.5))]
+    await proc.run([*args, *source], time_limit=FULL_TIME_LIMIT)
+    for ext in (".mp4", ".mkv", ".webm"):
+        f = stem.with_suffix(ext)
+        if f.is_file() and f.stat().st_size > 0:
+            return f
+    raise _kinded(TransientError("The full video did not download."), "retry")
 
 
 PICTURE_HEIGHTS = (480, 360)  # the ladder for the analysis picture: enough to see what happens, small enough to keep
@@ -284,6 +438,7 @@ async def download_picture(
     est_bytes: int,
     max_seconds: float | None,
     cookies: Path | None = None,
+    proxy: str | None = None,
 ) -> Path:
     """The whole picture in the chosen small rendition (no sound), for the deep analysis. yt-dlp's own downloader
     with eight fragments at a time; ``--download-sections`` only when the source is capped, as the audio does."""
@@ -291,8 +446,7 @@ async def download_picture(
     stem = dest.with_suffix("")
     args = [
         "yt-dlp",
-        *_COMMON,
-        *_cookie_args(cookies),
+        *_args(platform_of(url), cookies, proxy),
         "-f",
         format_id,
         "--concurrent-fragments",

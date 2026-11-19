@@ -269,4 +269,9 @@ run "ask_assistant_is_wired" {
     condition     = local.ask_search_secret_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/ask/search-key-??????"
     error_message = "The search key permission covers exactly cf-prod/ask/search-key plus the 6-character suffix Secrets Manager adds (no trailing *)."
   }
+
+  assert {
+    condition     = local.youtube_proxy_secret_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/agent/youtube-proxy-??????" && local.youtube_proxy_secret == "cf-prod/agent/youtube-proxy"
+    error_message = "The YouTube proxy permission covers exactly cf-prod/agent/youtube-proxy plus the 6-character suffix (docs/CONTRACTS.md §29.8)."
+  }
 }

@@ -15,6 +15,9 @@ from .util import redact_urls
 _INTERESTING = re.compile(r"error|unable|denied|not |fail|forbidden|sign in|private|unavailable", re.IGNORECASE)
 
 
+_STALE_COOKIES = "cookies are no longer valid"
+
+
 class CommandError(Exception):
     def __init__(self, cmd: str, code: int | None, tail: str) -> None:
         self.cmd = cmd
@@ -35,7 +38,12 @@ def error_tail(text: str, lines: int = 3) -> str:
     picked = [ln.strip() for ln in text.splitlines() if _INTERESTING.search(ln)]
     if not picked:
         picked = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    return " ".join(picked[-lines:])[:500]
+    tail = picked[-lines:]
+    # yt-dlp's "the cookies are no longer valid" warning comes early; it is what tells the owner's cookies ran out.
+    stale = next((ln.strip() for ln in text.splitlines() if _STALE_COOKIES in ln), None)
+    if stale and stale not in tail:
+        tail.insert(0, stale[:200])
+    return " ".join(tail)[:500]
 
 
 async def run(

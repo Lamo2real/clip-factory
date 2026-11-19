@@ -31,6 +31,9 @@ class Config:
     # whose profile id is ``model_id``) and every model the owner may pick, key -> profile id, from clipModels.
     default_model_key: str | None = None
     clip_models: dict[str, str] = field(default_factory=dict)
+    # The name of an optional Secrets Manager secret holding a proxy for YouTube (docs/CONTRACTS.md §29.8). The secret
+    # may not exist: then YouTube is fetched without one.
+    youtube_proxy_secret: str | None = None
 
 
 def _read(path: Path) -> dict[str, Any] | None:
@@ -109,4 +112,5 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         deep_enabled=(e.get("CF_DEEP") or "on").strip().lower() != "off",
         default_model_key=default_key if isinstance(default_key, str) else None,
         clip_models=clip_models_from_models_json(models_json),
+        youtube_proxy_secret=e.get("CF_YOUTUBE_PROXY_SECRET") or None,
     )

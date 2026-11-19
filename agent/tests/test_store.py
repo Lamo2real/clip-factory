@@ -87,7 +87,9 @@ def test_tag_matches_the_infra_lifecycle_rule() -> None:
 def test_dockerfile_builds_the_venv_where_it_runs() -> None:
     """uv writes absolute shebangs, so the build stage's venv path must equal the runtime one."""
     text = (REPO / "agent/Dockerfile").read_text()
-    _, build, runtime = re.split(r"^FROM ", text, flags=re.M)
+    stages = re.split(r"^FROM ", text, flags=re.M)[1:]
+    build = next(s for s in stages if " AS build\n" in s)
+    runtime = stages[-1]
     workdir = re.findall(r"^WORKDIR (\S+)", build, re.M)[-1]
     copied = re.search(r"COPY --from=build (\S+)/\.venv (\S+)/\.venv", runtime)
     assert copied and copied.group(1) == workdir == copied.group(2)

@@ -158,6 +158,9 @@ resource "aws_iam_role_policy" "agent" {
         Resource = var.vector_index_arn
       },
       { Sid = "Embeddings", Effect = "Allow", Action = ["bedrock:InvokeModel"], Resource = var.embed_model_arn },
+      # The optional YouTube proxy (docs/CONTRACTS.md §29.8): read only, one secret the owner may create later. Not a
+      # Terraform resource, so no apply can create, replace or delete it; while it does not exist the agent goes on.
+      { Sid = "YoutubeProxy", Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = var.youtube_proxy_secret_arn },
     ]
   })
 }
@@ -196,6 +199,7 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {
     CF_EMBED_MODEL_ID       = var.embed_model_id
     CF_WATCH_MODEL_ID       = var.watch_model_id
     CF_DEEP                 = var.deep_analysis_enabled ? "on" : "off"
+    CF_YOUTUBE_PROXY_SECRET = var.youtube_proxy_secret
   }
   tags = local.tags
 }

@@ -23,23 +23,25 @@ mock_provider "aws" {
 }
 
 variables {
-  name              = "cf-test"
-  region            = "eu-north-1"
-  account_id        = "123456789012"
-  image_tag         = "test"
-  table_name        = "cf-test-data"
-  table_arn         = "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"
-  media_bucket      = "cf-test-media"
-  media_bucket_arn  = "arn:aws:s3:::cf-test-media"
-  model_id          = "global.anthropic.claude-fable-5-1"
-  model_profile_arn = "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-fable-5-1"
-  model_invoke_arns = ["arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-fable-5-1", "arn:aws:bedrock:*::foundation-model/anthropic.claude-fable-5-1"]
-  vector_bucket     = "cf-test-vectors-123456789012"
-  vector_index      = "clips"
-  vector_index_arn  = "arn:aws:s3vectors:eu-north-1:123456789012:bucket/cf-test-vectors-123456789012/index/clips"
-  embed_model_id    = "amazon.titan-embed-text-v2:0"
-  embed_model_arn   = "arn:aws:bedrock:eu-north-1::foundation-model/amazon.titan-embed-text-v2:0"
-  watch_model_id    = "eu.amazon.nova-2-lite-v1:0"
+  name                     = "cf-test"
+  region                   = "eu-north-1"
+  account_id               = "123456789012"
+  image_tag                = "test"
+  table_name               = "cf-test-data"
+  table_arn                = "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"
+  media_bucket             = "cf-test-media"
+  media_bucket_arn         = "arn:aws:s3:::cf-test-media"
+  model_id                 = "global.anthropic.claude-fable-5-1"
+  model_profile_arn        = "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-fable-5-1"
+  model_invoke_arns        = ["arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-fable-5-1", "arn:aws:bedrock:*::foundation-model/anthropic.claude-fable-5-1"]
+  vector_bucket            = "cf-test-vectors-123456789012"
+  vector_index             = "clips"
+  vector_index_arn         = "arn:aws:s3vectors:eu-north-1:123456789012:bucket/cf-test-vectors-123456789012/index/clips"
+  embed_model_id           = "amazon.titan-embed-text-v2:0"
+  embed_model_arn          = "arn:aws:bedrock:eu-north-1::foundation-model/amazon.titan-embed-text-v2:0"
+  watch_model_id           = "eu.amazon.nova-2-lite-v1:0"
+  youtube_proxy_secret     = "cf-test/agent/youtube-proxy"
+  youtube_proxy_secret_arn = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/agent/youtube-proxy-??????"
   watch_model_invoke_arns = [
     "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/eu.amazon.nova-2-lite-v1:0",
     "arn:aws:bedrock:eu-central-1::foundation-model/amazon.nova-2-lite-v1:0",
@@ -274,5 +276,30 @@ run "role_allows_every_clip_model" {
   assert {
     condition     = aws_bedrockagentcore_agent_runtime.agent.environment_variables["CF_MODEL_ID"] == "global.anthropic.claude-fable-5-1"
     error_message = "CF_MODEL_ID stays the default model; the owner's pick travels with each job."
+  }
+}
+
+# docs/CONTRACTS.md §29.8: the agent may read the one optional YouTube proxy secret, nothing more, and knows its name.
+run "youtube_proxy_secret_is_read_only" {
+  command = plan
+
+  assert {
+    condition     = aws_bedrockagentcore_agent_runtime.agent.environment_variables["CF_YOUTUBE_PROXY_SECRET"] == "cf-test/agent/youtube-proxy"
+    error_message = "The agent gets the proxy secret's name in CF_YOUTUBE_PROXY_SECRET."
+  }
+
+  assert {
+    condition = length([for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : s if
+      s.Sid == "YoutubeProxy" && s.Effect == "Allow" && s.Action == ["secretsmanager:GetSecretValue"] &&
+      s.Resource == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/agent/youtube-proxy-??????"
+    ]) == 1
+    error_message = "The agent may only read the YouTube proxy secret (GetSecretValue on its exact ARN pattern)."
+  }
+
+  assert {
+    condition = length([for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : s if
+      anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:")]) && s.Sid != "YoutubeProxy"
+    ]) == 0
+    error_message = "No other statement touches Secrets Manager."
   }
 }
