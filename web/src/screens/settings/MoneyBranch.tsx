@@ -7,7 +7,7 @@ import type { MoneyResult, MoneyView, Platform } from "../../api/types.ts";
 import { MoneyCard } from "../../components/MoneyCard.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { Button, ErrorPanel, Skeleton } from "../../components/ui.tsx";
+import { Button, ErrorPanel, LinkButton, Skeleton } from "../../components/ui.tsx";
 import { burst } from "../../lib/confetti.ts";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
 import { formatMoney, MONEY_RESULTS, PAYOUTS, resultCopy } from "../../lib/money.ts";
@@ -93,6 +93,13 @@ export function MoneyBranch() {
           <ErrorPanel message={error} onRetry={() => void reload()} />
         </Panel>
       ) : null}
+      <Panel>
+        <Apple id="money-dashboard" wide>
+          <LinkButton href="/money" icon="chart" iconAfter="chevronRight">
+            Open the money dashboard
+          </LinkButton>
+        </Apple>
+      </Panel>
       <Panel>
         <Apple id="money-country" wide>
           {data ? <CountryPick view={data} onChange={(v) => setData(() => v)} /> : <Skeleton className="line-skel" />}

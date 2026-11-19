@@ -52,6 +52,7 @@ PAGES = frozenset(
         "review",
         "library",
         "clip",
+        "money",
         "settings",
         "skill",
         "mock_oauth",
