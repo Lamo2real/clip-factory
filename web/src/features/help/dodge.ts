@@ -159,7 +159,7 @@ export function textBoxes(doc: Document = document, viewportHeight = window.inne
       let seen: boolean | undefined;
       for (const r of Array.from(range.getClientRects())) {
         if (r.width < 1 || r.height < 1 || r.bottom <= 0 || r.top >= viewportHeight) continue;
-        if (column && (r.right <= column.left || r.left >= column.right)) continue;
+        if (column && (r.right <= column.left - DODGE_TEXT_GAP || r.left >= column.right + DODGE_TEXT_GAP)) continue;
         seen ??= !view || view.getComputedStyle(el).visibility !== "hidden";
         if (!seen) break;
         const shown = shownBox(el, r, true);
@@ -170,9 +170,13 @@ export function textBoxes(doc: Document = document, viewportHeight = window.inne
   return out;
 }
 
-/** True when the launcher at `base` lies over any of the words (touching an edge is not over). */
+/** How close words may come to the launcher's edge (px), so a rounding of a pixel never leaves it on a letter. */
+export const DODGE_TEXT_GAP = 2;
+
+/** True when the launcher at `base` lies over any of the words, or comes within DODGE_TEXT_GAP of them. */
 export function coversText(base: Box, words: readonly Box[]): boolean {
-  return words.some((t) => Math.min(base.right, t.right) - Math.max(base.left, t.left) > 0.5 && Math.min(base.bottom, t.bottom) - Math.max(base.top, t.top) > 0.5);
+  const g = DODGE_TEXT_GAP;
+  return words.some((t) => Math.min(base.right + g, t.right) - Math.max(base.left - g, t.left) > 0 && Math.min(base.bottom + g, t.bottom) - Math.max(base.top - g, t.top) > 0);
 }
 
 /**

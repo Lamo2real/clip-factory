@@ -217,11 +217,28 @@ const textUnderAsk = () => {
     if (getComputedStyle(p).visibility === "hidden") continue;
     const range = document.createRange();
     range.selectNodeContents(n);
-    for (const r of range.getClientRects()) {
+    for (const line of range.getClientRects()) {
+      // Only what shows: the part of the line inside every box around it that cuts off what runs past it.
+      const r = { left: line.left, right: line.right, top: line.top, bottom: line.bottom, width: 0, height: 0 };
+      for (let a: HTMLElement | null = p; a && a !== document.body; a = a.parentElement) {
+        const cs = getComputedStyle(a);
+        const box = a.getBoundingClientRect();
+        if (cs.overflowX !== "visible") {
+          r.left = Math.max(r.left, box.left);
+          r.right = Math.min(r.right, box.right);
+        }
+        if (cs.overflowY !== "visible") {
+          r.top = Math.max(r.top, box.top);
+          r.bottom = Math.min(r.bottom, box.bottom);
+        }
+        if (cs.position === "fixed") break;
+      }
+      r.width = r.right - r.left;
+      r.height = r.bottom - r.top;
       if (r.width > 1 && r.height > 1 && Math.min(r.right, b.right) - Math.max(r.left, b.left) > 0.5 && Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top) > 0.5) {
         const pr = p.getBoundingClientRect();
         // What the failure says: the words, the box they are in, and Ask's state (to tell a miss from a late fade).
-        under.push(`${n.textContent.trim().slice(0, 40)} [words ${Math.round(r.left)}-${Math.round(r.right)}, box ${Math.round(pr.left)}-${Math.round(pr.right)}, Ask ${b.left}-${b.right}${el.hasAttribute("data-settling") ? ", settling" : ""}]`);
+        under.push(`${n.textContent.trim().slice(0, 40)} [words ${Math.round(r.left)}-${Math.round(r.right)} x ${Math.round(r.top)}-${Math.round(r.bottom)}, box ${Math.round(pr.left)}-${Math.round(pr.right)}, Ask ${b.left}-${b.right} x ${b.top}-${b.bottom}${el.hasAttribute("data-settling") ? ", settling" : ""}]`);
         break;
       }
     }
