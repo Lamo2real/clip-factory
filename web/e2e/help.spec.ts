@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { DODGE_HOLD_MS, DODGE_SETTLE_MS } from "../src/features/help/dodge.ts";
+import { blocks, CONTROLS, DODGE_HOLD_MS, DODGE_SETTLE_MS, type Box } from "../src/features/help/dodge.ts";
 import { SPOT_ARRIVE_CAP_MS } from "../src/features/help/spotlight.ts";
 import { animationsDone, findOverflow, launcherSettled, settle } from "./helpers.ts";
 
@@ -625,10 +625,47 @@ for (const size of [
   });
 }
 
+/**
+ * What is under the launcher's resting spot right now: its box, and the controls in its column (what shows of each,
+ * counted like dodge.ts `controlBoxes`: a marked block by its parts, a control holding controls through them).
+ */
+async function underLauncher(page: Page): Promise<{ base: Box; controls: Box[] }> {
+  return page.evaluate((selector) => {
+    const el = document.querySelector<HTMLElement>(".help-launcher")!;
+    const base = { top: el.offsetTop, bottom: el.offsetTop + el.offsetHeight, left: el.offsetLeft, right: el.offsetLeft + el.offsetWidth };
+    const chrome = ".help-launcher, .help-panel, .help-ring, .update-bar, .tabbar, .sidebar, .setup-todo-bar, .setup-todo-scrim";
+    const out: Box[] = [];
+    const seen = new Set<Element>();
+    const add = (c: Element) => {
+      if (seen.has(c) || c.closest(chrome) || c.closest("[inert], [hidden]")) return;
+      seen.add(c);
+      const s = getComputedStyle(c);
+      if (s.visibility === "hidden" || s.pointerEvents === "none") return;
+      const r = c.getBoundingClientRect();
+      const box = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+      for (let a = c.parentElement; a && a !== document.body; a = a.parentElement) {
+        const cs = getComputedStyle(a);
+        const ar = a.getBoundingClientRect();
+        if (cs.overflowX !== "visible") [box.left, box.right] = [Math.max(box.left, ar.left), Math.min(box.right, ar.right)];
+        if (cs.overflowY !== "visible") [box.top, box.bottom] = [Math.max(box.top, ar.top), Math.min(box.bottom, ar.bottom)];
+        if (cs.position === "fixed") break;
+      }
+      if (box.right - box.left >= 1 && box.bottom - box.top >= 1 && box.right > base.left && box.left < base.right) out.push(box);
+    };
+    for (const block of document.querySelectorAll("[data-help-dodge]")) {
+      if (block.matches(selector) || !block.children.length) add(block);
+      else for (const part of block.children) add(part);
+    }
+    for (const c of document.querySelectorAll(selector)) if (!c.querySelector(selector)) add(c);
+    return { base, controls: out };
+  }, CONTROLS);
+}
+
 // The launcher is there when the owner wants it (§19.8): shown and tappable at the top of the main pages on a phone,
 // and faded out at no more than a fifth of the places a page can be scrolled to and left. The Library is the one
-// exception: every card ends in a 48 px open button right in the launcher's column, and covering that would make it
-// hard to tap, so there it may be faded out at a third of the places.
+// exception: its cards and their post rows end in 48 px open buttons right in the launcher's column, and covering one
+// would make it hard to tap. How often that is depends on the cards (and a font's line height), so there it is held
+// to the rule itself, at every place: faded out only where it would make a control hard to tap, shown everywhere else.
 test.describe("Ask Clip Factory launcher is mostly there on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 } });
   for (const route of ["/", "/jobs", "/settings", "/settings/look-and-feel", "/settings/look-and-feel/sounds", "/library", "/review"]) {
@@ -647,14 +684,21 @@ test.describe("Ask Clip Factory launcher is mostly there on a phone", () => {
       const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
       let hidden = 0;
       let spots = 0;
+      const wrong: string[] = [];
       for (let y = 0; y <= max; y += 150) {
         await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), y);
         await launcherSettled(page);
         spots++;
-        if (await launcher(page).evaluate((el) => el.classList.contains("is-hidden"))) hidden++;
+        const out = await launcher(page).evaluate((el) => el.classList.contains("is-hidden"));
+        if (out) hidden++;
+        if (route === "/library") {
+          const { base, controls } = await underLauncher(page);
+          const must = blocks(base, controls);
+          if (out !== must) wrong.push(`at ${y}: ${out ? "faded out with nothing hard to tap under it" : "shown over a control it makes hard to tap"}`);
+        }
       }
-      const share = route === "/library" ? 0.34 : 0.2;
-      expect(hidden, `faded out at ${hidden} of ${spots} spots`).toBeLessThanOrEqual(Math.max(1, Math.floor(spots * share)));
+      if (route === "/library") expect(wrong, `faded out at ${hidden} of ${spots} spots\n${wrong.join("\n")}`).toEqual([]);
+      else expect(hidden, `faded out at ${hidden} of ${spots} spots`).toBeLessThanOrEqual(Math.max(1, Math.floor(spots * 0.2)));
     });
   }
 

@@ -17,6 +17,11 @@ export const DODGE_SETTLE_MS = 260;
 export const DODGE_RETURN_MS = 700;
 /** The least time it stays in a state (shown or faded) once it has changed. */
 export const DODGE_HOLD_MS = 1000;
+/**
+ * After a look that settles the launcher, it looks once more this much later before it counts as settled: layout
+ * that moves with no event (a picture's size arriving before its load event, a slow frame) is caught then.
+ */
+export const DODGE_CONFIRM_MS = 120;
 /** The smallest part of a control, in px each way, that still counts as easy to tap. */
 export const DODGE_TAP = 44;
 /** Covering more than this share of a control's area makes it hard to tap. */
@@ -188,6 +193,14 @@ export function restingBox(el: HTMLElement): Box {
   return { top: el.offsetTop, bottom: el.offsetTop + el.offsetHeight, left: el.offsetLeft, right: el.offsetLeft + el.offsetWidth };
 }
 
+/**
+ * Where the page is: scroll position and window size, whole pixels. The launcher stamps the place of its last
+ * settled look on itself (`data-looked`), so a test can wait until it has looked at exactly where the page is now.
+ */
+export function pagePlace(view: Window = window): string {
+  return `${Math.round(view.scrollX)},${Math.round(view.scrollY)},${view.innerWidth}x${view.innerHeight}`;
+}
+
 /** Why the launcher is out of the way right now: it would make a control under its spot hard to tap. */
 export type DodgeReason = "blocked" | null;
 
@@ -214,10 +227,19 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
     // A page that opens is still and has never changed: it may look, and change, at once.
     let lastMove = -Infinity;
     let lastChange = -Infinity;
-    // data-settling on the launcher while it may still change (tests wait for it to go).
+    // Where the page was when the launcher last saw it move. A look at any other place is a move, even when the
+    // scroll event has not come yet (a slow machine can deliver it frames late): it never decides on a place it has
+    // not seen still for DODGE_SETTLE_MS.
+    let place = pagePlace();
+    // A settling look is only final once a second look DODGE_CONFIRM_MS later agrees.
+    let confirmed = false;
+    // data-settling on the launcher while it may still change; data-looked, the place of its last settled look
+    // (tests wait for data-settling to go and data-looked to be where the page is).
     const settling = (on: boolean) => {
       const el = launcher.current;
-      if (el) el.toggleAttribute("data-settling", on);
+      if (!el) return;
+      el.toggleAttribute("data-settling", on);
+      if (!on) el.setAttribute("data-looked", place);
     };
     const later = (ms: number) => {
       clearTimeout(timer);
@@ -228,15 +250,25 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
       raf = 0;
       const el = launcher.current;
       if (!el) return;
+      const now = performance.now();
+      const here = pagePlace();
+      if (here !== place) {
+        place = here;
+        lastMove = now;
+        confirmed = false;
+      }
       if (frozen.current) return settling(false);
       if (touching) return settling(true);
-      const now = performance.now();
       const still = now - lastMove;
       if (still < DODGE_SETTLE_MS) return later(DODGE_SETTLE_MS - still);
       const base = restingBox(el);
       const column = { left: base.left, right: base.right };
       const want = blocks(base, controlBoxes(document, window.innerHeight, column)) || coversText(base, textBoxes(document, window.innerHeight, column));
-      if (want === !shown.current) return settling(false);
+      if (want === !shown.current) {
+        if (confirmed) return settling(false);
+        confirmed = true;
+        return later(DODGE_CONFIRM_MS);
+      }
       // Back in only after a longer stillness, and never sooner than the hold after the last change.
       const wait = Math.max(want ? 0 : DODGE_RETURN_MS - still, DODGE_HOLD_MS - (now - lastChange));
       if (wait > 0) return later(wait);
@@ -245,8 +277,10 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
       // The class goes on now, in the same frame as the look, not when React gets to it: nothing can see the
       // launcher "settled" but still shown over what it should keep clear of. React then sets the same class.
       el.classList.toggle("is-hidden", want);
-      settling(false);
       setBlocked(want);
+      // Looked at once more before it counts as settled.
+      confirmed = true;
+      later(DODGE_CONFIRM_MS);
     };
     function schedule() {
       if (!raf) raf = requestAnimationFrame(check);
@@ -255,6 +289,8 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
     // Movement (a scroll, a resize, a finger) changes nothing; the launcher looks again once it has settled.
     const moved = () => {
       lastMove = performance.now();
+      place = pagePlace();
+      confirmed = false;
       later(DODGE_SETTLE_MS);
     };
     const touchDown = () => {
@@ -279,6 +315,8 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
     window.addEventListener("load", schedule, true);
     document.fonts?.addEventListener?.("loadingdone", schedule);
     window.addEventListener("scroll", moved, { passive: true });
+    // The end of a scroll (and its momentum) where the browser says so: still from here.
+    window.addEventListener("scrollend", moved, { passive: true });
     window.addEventListener("resize", moved);
     window.addEventListener("touchstart", touchDown, { passive: true });
     window.addEventListener("touchmove", moved, { passive: true });
@@ -287,6 +325,7 @@ export function useDodge(launcher: RefObject<HTMLElement | null>, pinned: boolea
     raf = requestAnimationFrame(check);
     return () => {
       window.removeEventListener("scroll", moved);
+      window.removeEventListener("scrollend", moved);
       window.removeEventListener("resize", moved);
       window.removeEventListener("touchstart", touchDown);
       window.removeEventListener("touchmove", moved);

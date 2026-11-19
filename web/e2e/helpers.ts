@@ -39,20 +39,24 @@ export async function settle(page: Page) {
 
 /**
  * Waits until the Ask launcher has settled (docs/CONTRACTS.md §19.8): it changes only once the page has been still
- * (and fades back in after a longer stillness, holding each state a while), and carries data-settling while a change
- * may still come. So: a frame for any scroll before this call to reach it, then three frames in a row with no
- * data-settling and no fade running.
+ * (and fades back in after a longer stillness, holding each state a while), carries data-settling while a change may
+ * still come, and stamps data-looked with the place (scroll and window size, `pagePlace`) of its last settled look.
+ * So: three frames in a row with no data-settling, no fade running and data-looked where the page is now, so a scroll
+ * whose event reaches the page frames late (a slow CI machine) can never be mistaken for a settled look.
  */
 export async function launcherSettled(page: Page) {
   await page.evaluate(
     () =>
       new Promise<void>((resolve) => {
         let calm = 0;
+        // A backstop only: a launcher that never settles fails the check that follows, it does not hang the test.
+        const give = performance.now() + 15_000;
         const tick = () => {
           const el = document.querySelector<HTMLElement>(".help-launcher");
-          const still = !el || (!el.hasAttribute("data-settling") && el.getAnimations().every((a) => a.playState !== "running"));
+          const place = `${Math.round(scrollX)},${Math.round(scrollY)},${innerWidth}x${innerHeight}`;
+          const still = !el || (!el.hasAttribute("data-settling") && el.getAttribute("data-looked") === place && el.getAnimations().every((a) => a.playState !== "running"));
           calm = still ? calm + 1 : 0;
-          if (calm >= 3) resolve();
+          if (calm >= 3 || performance.now() > give) resolve();
           else requestAnimationFrame(tick);
         };
         requestAnimationFrame(() => requestAnimationFrame(tick));

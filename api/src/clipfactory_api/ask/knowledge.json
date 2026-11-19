@@ -1,5 +1,5 @@
 {
- "version": "2d177bfa75e0",
+ "version": "6d93d0afb72b",
  "parts": [
   {
    "id": "app-map",
@@ -141,7 +141,7 @@
    "id": "contracts-19",
    "title": "CONTRACTS: 19. Ask Clip Factory: grounded in-app help assistant (owner request, 2026-11-16)",
    "line": "The owner's picture: a friendly helper in the corner that answers \"how do I…\" and \"where is…\" in short steps a child",
-   "chars": 54500
+   "chars": 55002
   },
   {
    "id": "contracts-20",

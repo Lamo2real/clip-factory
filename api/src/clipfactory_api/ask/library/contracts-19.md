@@ -356,8 +356,12 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   small button or a choice under it does. **When**: it may fade out once the page and the finger have been still for
   `DODGE_SETTLE_MS` (260 ms; touchstart / touchend are tracked, so a held finger is not still), fades back in only
   after `DODGE_RETURN_MS` (700 ms) of stillness with the spot clear, and keeps each state for at least
-  `DODGE_HOLD_MS` (1 s), so short scrolls at reading pace cannot make it blink. While a change may still come it
-  carries `data-settling` (tests wait for it to go). No fade with reduced motion (it simply goes). A page that opens
+  `DODGE_HOLD_MS` (1 s), so short scrolls at reading pace cannot make it blink. A look at a place (scroll and window
+  size, `pagePlace`) other than the one it last saw move counts as a move, so it never decides before the page has
+  been still there, even when a slow machine delivers the scroll event frames late; and every look that settles it is
+  repeated `DODGE_CONFIRM_MS` (120 ms) later, so layout that moves with no event is caught before it counts as
+  settled. While a change may still come it carries `data-settling`; each settled look stamps `data-looked` with its
+  place (tests wait for no `data-settling` and `data-looked` equal to where the page is). No fade with reduced motion (it simply goes). A page that opens
   is looked at at once, and a page that changes under a still launcher (content loading in, the update bar) is looked
   at on the next frame (the same stillness and hold apply). With **keyboard** focus on it (`:focus-visible`) it shows
   and stays; focus handed back to it after a tap (Close) does not hold it; with its
