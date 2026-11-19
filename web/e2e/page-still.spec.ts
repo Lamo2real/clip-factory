@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { asMacWindow } from "./desktopWindow.ts";
-import { settle } from "./helpers.ts";
+import { arrived, settle } from "./helpers.ts";
 
 // A page change keeps the window perfectly still (docs/CONTRACTS.md §20.16): only the content swaps. Nothing blinks
 // white, nothing twitches. The owner saw the whole see-through desktop window flash on every menu tap: the page
@@ -142,6 +142,8 @@ async function lightShare(page: Page): Promise<number> {
 }
 
 test.describe("a page change keeps the window still", () => {
+  // Screenshots after every tap are slow in WebKit on the Linux runners.
+  test.describe.configure({ timeout: 300_000 });
   test("the macOS desktop window over light glass (1000 x 650)", async ({ page }) => {
     await page.setViewportSize({ width: 1000, height: 650 });
     await asMacWindow(page);
@@ -154,9 +156,11 @@ test.describe("a page change keeps the window still", () => {
     }, WHITE_GLASS);
     await page.goto("/jobs");
     await settle(page);
+    await arrived(page);
     await expect(page.locator("html")).toHaveClass(/see-through/);
     for (const item of MENU) expect(await watchFrames(page, item), item).toEqual([]);
     await settle(page);
+    await arrived(page);
     // The window's own band (traffic lights), the menu below its items, and the strip between the menu and the page.
     await stillRegions(
       page,
@@ -185,6 +189,7 @@ test.describe("a page change keeps the window still", () => {
     }, WHITE_GLASS);
     await page.goto("/jobs");
     await settle(page);
+    await arrived(page);
     await page.evaluate(() => {
       (
         window as unknown as { __cfMockFaults: { latencyMs?: number } }
@@ -224,10 +229,12 @@ test.describe("a page change keeps the window still", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/jobs");
     await settle(page);
+    await arrived(page);
     // The living backdrop drifts on its own (24 to 44 s loops): held still here, so only a page change could move a pixel.
     await page.addStyleTag({ content: ".backdrop, .backdrop *, .backdrop::after { animation-play-state: paused !important; }" });
     for (const item of MENU) expect(await watchFrames(page, item), item).toEqual([]);
     await settle(page);
+    await arrived(page);
     await stillRegions(page, [{ name: "menu", x: 34, y: 700, w: 180, h: 80 }], MENU);
   });
 
@@ -235,6 +242,7 @@ test.describe("a page change keeps the window still", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/jobs");
     await settle(page);
+    await arrived(page);
     for (const k of ["review", "library", "settings", "home", "jobs"]) expect(await watchFrames(page, `.tabbar__item[data-help="nav-${k}"]`), k).toEqual([]);
   });
 });

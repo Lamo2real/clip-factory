@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { asMacWindow, TRAFFIC_LIGHTS } from "./desktopWindow.ts";
-import { settle } from "./helpers.ts";
+import { arrived, settle } from "./helpers.ts";
 
 // One top line (docs/CONTRACTS.md §11.1). Scrolled to the top, every column starts on the same horizontal line: the
 // menu, the setup list (open card or pill), the settings folders and the page's first panel or title plate. Each one
@@ -61,10 +61,8 @@ async function checkLine(page: Page, route: string) {
   await page.goto(route);
   await settle(page);
   await page.evaluate(() => window.scrollTo(0, 0));
-  // The setup list arrives with a short drop-in of its own: read its place once it has landed.
-  await page.waitForFunction(() =>
-    document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity),
-  );
+  // The setup list arrives with its data and a short drop-in of its own: read its place once it has landed.
+  await arrived(page);
   const t = await tops(page);
   const near = (v: number | null, want: number, what: string) => {
     if (v !== null) expect(Math.abs(v - want), `${route}: ${what} at ${v}, line at ${want} (${JSON.stringify(t)})`).toBeLessThanOrEqual(1);

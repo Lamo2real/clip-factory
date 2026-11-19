@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { GLIDE_MS } from "../src/components/Glide.tsx";
 import { asMacWindow } from "./desktopWindow.ts";
-import { settle } from "./helpers.ts";
+import { arrived, settle } from "./helpers.ts";
 
 // The menu highlight slides smoothly from start to finish on every page change (docs/CONTRACTS.md §20.13), in WebKit
 // (the macOS desktop app's engine) and Chromium. Every frame is sampled from the tap until long after it lands:
@@ -44,8 +44,9 @@ async function record(page: Page, list: string, item: string) {
         const tick = (now: number) => {
           const r = g.getBoundingClientRect();
           frames.push([now - t0, r.x, r.y, r.width, r.height]);
-          if (frames.length === 2) {
-            // What runs on the glide right after the tap: the one slide animation and the properties it animates.
+          if (anims.length === 0 && frames.length >= 2 && frames.length <= 12) {
+            // What runs on the glide right after the tap (the first frames that show any: a slow runner can take a
+            // frame or two to draw the new page): the one slide animation and the properties it animates.
             anims = g.getAnimations().map((a) => {
               const kf = (a.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
               const props = [...new Set(kf.flatMap((f) => Object.keys(f)).filter((k) => !["offset", "computedOffset", "easing", "composite"].includes(k)))];
@@ -135,6 +136,7 @@ test.describe("the menu highlight slides smoothly", () => {
     await asMacWindow(page);
     await page.goto("/");
     await settle(page);
+    await arrived(page);
     await expect(page.locator("html")).toHaveClass(/see-through/);
     await everySwitch(page, ".sidebar__list", sidebarItem, SIDEBAR, 2);
   });
@@ -143,6 +145,7 @@ test.describe("the menu highlight slides smoothly", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/");
     await settle(page);
+    await arrived(page);
     await everySwitch(page, ".sidebar__list", sidebarItem, SIDEBAR, 2);
   });
 
@@ -150,6 +153,7 @@ test.describe("the menu highlight slides smoothly", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     await settle(page);
+    await arrived(page);
     await everySwitch(page, ".tabbar__list", (to) => `.tabbar__item[data-help="nav-${to}"]`, ["jobs", "library", "home", "review", "settings", "jobs"], 1);
   });
 });

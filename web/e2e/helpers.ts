@@ -150,6 +150,16 @@ export async function openClip(page: Page, hook: string) {
 }
 
 /** Waits until every finite animation (draw-ins, rises, fades) has finished; endless ones (the backdrop) are ignored. */
+/**
+ * The window's own late arrivals have landed: the setup list (it comes with its data, with a short drop-in) and every
+ * one-off entrance (the live dot). On a slow runner `settle` can return before they start, and a check of what a page
+ * change does would then see them arriving.
+ */
+export async function arrived(page: Page) {
+  await page.waitForFunction(() => document.querySelector(".setup-todo:not(.setup-todo--hold)") !== null, undefined, { timeout: 15_000 });
+  await animationsDone(page);
+}
+
 export async function animationsDone(page: Page) {
   await page.waitForFunction(
     () =>
