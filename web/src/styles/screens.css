@@ -162,7 +162,7 @@
   border-radius: inherit;
   text-align: center;
   color: var(--ink);
-  background: linear-gradient(rgb(var(--green-leaf-rgb) / 0.2), rgb(var(--green-leaf-rgb) / 0.2)), rgb(var(--green-rgb) / 0.94);
+  background: linear-gradient(rgb(var(--green-leaf-rgb) / 0.2), rgb(var(--green-leaf-rgb) / 0.2)), rgb(var(--green-rgb) / 0.97);
   pointer-events: none;
   animation: newjob-drop-in 160ms var(--ease-out) both;
 }
