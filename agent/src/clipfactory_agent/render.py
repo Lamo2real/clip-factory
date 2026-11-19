@@ -1,5 +1,6 @@
 """Cutting one clip with ffmpeg: 1080×1920 at 30 fps, facecam on top (or a blurred fill), dead pauses cut, an
-optional payoff tease first, the hook and word-by-word captions burned in with libass, a cover at the peak."""
+optional payoff tease first, the hook and word-by-word captions burned in with libass inside every platform's safe
+area, a smooth punch-in on the face at the peak, loudness normalised to -14 LUFS, a cover at the peak."""
 
 from __future__ import annotations
 
@@ -9,15 +10,27 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import proc
+from . import loudness, proc
 from .bedrock import Facecam, FrameLayout
 from .moments import Moment
 
 W, H = 1080, 1920
 FPS = 30
-BAND = 300  # top band for the hook
+# The parts of the picture the apps cover with their own buttons and text (TikTok, Shorts, Reels, Facebook, X): the
+# top 10% (tabs), the bottom 25% (name, caption, sound) and the right 15% (like, comment, share). No word and no face
+# goes there. SAFE is (left, top, right, bottom) in pixels; the left edge is only a margin.
+SAFE = (60, round(H * 0.10), round(W * 0.85), round(H * 0.75))  # (60, 192, 918, 1440)
+BAND = 400  # the band above the facecam (or the picture) that holds the hook
 CAM_H = 560
-CAP_BOX = 280
+FILL_H = 880  # the picture's height in blur_fill
+HOOK_TOP = SAFE[1] + 20  # the hook's first line starts here and the hook grows down
+CAP_BOTTOM = SAFE[3] - 60  # the captions' last line ends here and longer captions grow up
+TEXT_MARGIN_L, TEXT_MARGIN_R = SAFE[0], W - SAFE[2] + 10  # libass wraps text between these
+# The punch-in on the face at the peak: up to 120%, eased in over 0.4 s, held, eased out over 0.6 s. It zooms toward a
+# point a little above the middle of the camera picture, where a webcam's face sits, so the face is never cut off.
+PUNCH_ZOOM = 1.2
+PUNCH_IN, PUNCH_HOLD, PUNCH_OUT = 0.4, 1.2, 0.6
+PUNCH_ANCHOR = (0.5, 0.4)
 _SAFE_PATH = re.compile(r"^[A-Za-z0-9/_.-]+$")
 _SILENCE = re.compile(r"silence_(start|end): (-?[\d.]+)")
 _TRAILING = re.compile(r"[.,!?;:\"“”]+$")
@@ -152,8 +165,11 @@ def hook_markup(hook: str) -> str:
     return " ".join(words[:cut]) + " {\\c" + YELLOW + "}" + " ".join(words[cut:])
 
 
-def build_ass(hook: str, caps: Sequence[Phrase], total: float, cap_y: int) -> str:
-    """The subtitle file: the hook for the whole clip, then each phrase with the word being said in yellow."""
+def build_ass(hook: str, caps: Sequence[Phrase], total: float) -> str:
+    """The subtitle file: the hook for the whole clip, then each phrase with the word being said in yellow. Both sit
+    inside SAFE: the hook hangs from HOOK_TOP (alignment 8), the captions stand on CAP_BOTTOM (alignment 2), and libass
+    wraps them between the left margin and the buttons on the right."""
+    ml, mr = TEXT_MARGIN_L, TEXT_MARGIN_R
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -164,16 +180,13 @@ YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Hook,Inter,68,&H00FFFFFF,&H00FFFFFF,&H00000000,&H8C000000,-1,0,0,0,100,100,0,0,1,7,3,5,60,60,0,1
-Style: Caption,Inter,82,&H00FFFFFF,&H00FFFFFF,&H00000000,&H99000000,-1,0,0,0,100,100,0,0,1,9,4,5,60,60,0,1
+Style: Hook,Inter,68,&H00FFFFFF,&H00FFFFFF,&H00000000,&H8C000000,-1,0,0,0,100,100,0,0,1,7,3,8,{ml},{mr},{HOOK_TOP},1
+Style: Caption,Inter,82,&H00FFFFFF,&H00FFFFFF,&H00000000,&H99000000,-1,0,0,0,100,100,0,0,1,9,4,2,{ml},{mr},{H - CAP_BOTTOM},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    events = [
-        f"Dialogue: 1,{ass_time(0)},{ass_time(total)},Hook,,0,0,0,,{{\\pos({W // 2},{BAND // 2 + 20})}}{hook_markup(hook)}"
-    ]
-    pos = f"{{\\pos({W // 2},{cap_y + CAP_BOX // 2})}}"
+    events = [f"Dialogue: 1,{ass_time(0)},{ass_time(total)},Hook,,0,0,0,,{hook_markup(hook)}"]
     for i, p in enumerate(caps):
         nxt = caps[i + 1].t0 if i + 1 < len(caps) else total
         end = min(total, max(p.t1, p.t0 + 0.25), nxt)
@@ -184,15 +197,34 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if stop - start < 0.02:
                 continue
             text = " ".join(f"{{\\c{YELLOW}}}{t}{{\\c&H00FFFFFF&}}" if k == j else t for k, t in enumerate(words))
-            events.append(f"Dialogue: 0,{ass_time(start)},{ass_time(stop)},Caption,,0,0,0,,{pos}{text}")
+            events.append(f"Dialogue: 0,{ass_time(start)},{ass_time(stop)},Caption,,0,0,0,,{text}")
     return head + "\n".join(events) + "\n"
 
 
-def layout_parts(fc: Facecam | None, src_w: int, src_h: int) -> tuple[list[str], int]:
-    """Filter chains from ``[vin]`` to ``[lay]``, and the caption box's top edge."""
+def punch_zoom(peak: float) -> str:
+    """zoompan's zoom for each frame: 1 until just before ``peak`` (clip seconds), eased up to PUNCH_ZOOM, held, then
+    eased back to 1 (smoothstep both ways, so the picture never jumps)."""
+    t = f"(in/{FPS})"
+    a, b = peak - PUNCH_IN, peak + PUNCH_HOLD + PUNCH_OUT
+    u = f"clip(min(({t}-{a:.3f})/{PUNCH_IN}\\,({b:.3f}-{t})/{PUNCH_OUT})\\,0\\,1)"
+    return f"1+{PUNCH_ZOOM - 1:.2f}*{u}*{u}*(3-2*{u})"
+
+
+def punch_in(peak: float, w: int, h: int) -> str:
+    """Filters that turn a picture already scaled to ``2w × 2h`` into ``w × h`` with the punch-in at ``peak``. Working
+    at twice the size keeps zoompan's whole-pixel steps at half a pixel of the result, so the zoom is smooth."""
+    ax, ay = PUNCH_ANCHOR
+    return f"zoompan=z={punch_zoom(peak)}:x=(iw-iw/zoom)*{ax}:y=(ih-ih/zoom)*{ay}:d=1:s={w}x{h}:fps={FPS}"
+
+
+def layout_parts(
+    fc: Facecam | None, src_w: int, src_h: int, *, peak: float | None = None, face_fill: bool = False
+) -> list[str]:
+    """Filter chains from ``[vin]`` to ``[lay]``. ``peak`` (clip seconds) adds the punch-in on the face: on the
+    facecam, or on the whole picture when ``face_fill`` (a camera shot with no facecam box)."""
     blur = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=24:2,eq=brightness=-0.18"
     if fc:
-        # Facecam on top, gameplay below (the layout the skills assume), over a blurred copy.
+        # Facecam under the hook band, gameplay below (the layout the skills assume), over a blurred copy.
         game_y = BAND + CAM_H
         game_h = H - game_y
         cx, cy, cw, ch = even(fc.x * src_w), even(fc.y * src_h), even(fc.w * src_w), even(fc.h * src_h)
@@ -200,22 +232,34 @@ def layout_parts(fc: Facecam | None, src_w: int, src_h: int) -> tuple[list[str],
         gh = src_h
         gw = min(src_w, even(gh * W / game_h))
         gx = even((src_w - gw) / 2)
+        if peak is None:
+            cam = f"scale={W}:{CAM_H}:force_original_aspect_ratio=increase,crop={W}:{CAM_H}"
+        else:
+            cam = (
+                f"scale={2 * W}:{2 * CAM_H}:force_original_aspect_ratio=increase,crop={2 * W}:{2 * CAM_H},"
+                + punch_in(peak, W, CAM_H)
+            )
         return [
             "[vin]split=3[bgs][cams][games]",
             f"[bgs]{blur}[bg]",
-            f"[cams]crop={cw}:{ch}:{cx}:{cy},scale={W}:{CAM_H}:force_original_aspect_ratio=increase,crop={W}:{CAM_H}[cam]",
+            f"[cams]crop={cw}:{ch}:{cx}:{cy},{cam}[cam]",
             f"[games]crop={gw}:{gh}:{gx}:0,scale={W}:{game_h}:force_original_aspect_ratio=increase,crop={W}:{game_h}[game]",
             f"[bg][cam]overlay=0:{BAND}[l1]",
             f"[l1][game]overlay=0:{game_y}[lay]",
-        ], game_y + 260
-    # No facecam: the whole frame, a little zoomed, over a blurred copy of itself.
-    fg_h, fg_y = 1000, BAND + 40
+        ]
+    # No facecam: the whole frame, a little zoomed, under the hook band, over a blurred copy of itself.
+    fg_h, fg_y = FILL_H, BAND
+    if peak is not None and face_fill:
+        fw = min(W, even(src_w * fg_h / max(1, src_h)))
+        fg = f"scale=-2:{2 * fg_h},crop=min(iw\\,{2 * fw}):{2 * fg_h}," + punch_in(peak, fw, fg_h)
+    else:
+        fg = f"scale=-2:{fg_h},crop=min(iw\\,{W}):{fg_h}"
     return [
         "[vin]split=2[bgs][fgs]",
         f"[bgs]{blur}[bg]",
-        f"[fgs]scale=-2:{fg_h},crop=min(iw\\,{W}):{fg_h}[fg]",
+        f"[fgs]{fg}[fg]",
         f"[bg][fg]overlay=(W-w)/2:{fg_y}[lay]",
-    ], fg_y + fg_h + 20
+    ]
 
 
 def filter_graph(segs: Sequence[Segment], parts: Sequence[str], ass_file: Path, has_audio: bool) -> str:
@@ -274,15 +318,22 @@ def encode_args(total: float, has_audio: bool) -> list[str]:
     ]
 
 
-def cover_time(segs: Sequence[Segment], peak: float, tease: bool, total: float) -> float:
-    """Where the peak (section seconds) lands in the finished clip; the first segment is the tease if there is one."""
+def peak_time(segs: Sequence[Segment], peak: float, tease: bool) -> float | None:
+    """Where the peak (section seconds) lands in the finished clip, or None when it was cut out with a pause; the first
+    segment is the tease if there is one."""
     body = segs[1:] if tease else segs
     acc = segs[0][1] - segs[0][0] if tease and segs else 0.0
     for a, b in body:
         if a <= peak <= b:
-            return max(0.0, min(total - 0.5, acc + peak - a))
+            return acc + peak - a
         acc += b - a
-    return max(0.0, min(total - 0.5, 2.0))
+    return None
+
+
+def cover_time(segs: Sequence[Segment], peak: float, tease: bool, total: float) -> float:
+    """The cover's second: the peak in the finished clip, or 2 s in when the peak was cut out."""
+    at = peak_time(segs, peak, tease)
+    return max(0.0, min(total - 0.5, 2.0 if at is None else at))
 
 
 SectionFetcher = Callable[[float, float, Path], Awaitable[Path]]
@@ -388,9 +439,11 @@ async def render_clip(
 
     source_segs = [(a + src_from, b + src_from) for a, b in segs]
     caps = phrases(retime(words, source_segs))
-    parts, cap_y = layout_parts(fc, info.width, info.height)
+    peak = peak_time(segs, t(m.peak_at), bool(tease))
+    face_fill = layout.scene == "camera_only"
+    parts = layout_parts(fc, info.width, info.height, peak=peak if fc or face_fill else None, face_fill=face_fill)
     ass_file = workdir / "captions.ass"
-    ass_file.write_text(build_ass(m.hook, caps, total, cap_y), "utf-8")
+    ass_file.write_text(build_ass(m.hook, caps, total), "utf-8")
 
     out = workdir / "clip.mp4"
     inputs = ["-i", str(section)]
@@ -410,6 +463,7 @@ async def render_clip(
         ],
         time_limit=30 * 60,
     )
+    level = await loudness.normalize(out, workdir / "clip.loud.mp4") if info.has_audio else None
     cover = workdir / "cover.jpg"
     at = cover_time(segs, t(m.peak_at), bool(tease), total)
     try:
@@ -444,4 +498,5 @@ async def render_clip(
         layout="facecam_top" if fc else "blur_fill",
         tease=bool(tease),
         frame_layout=layout,
+        extra={"loudness": level} if level else {},
     )

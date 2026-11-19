@@ -291,7 +291,8 @@ and deleted by `GET /v1/skills` when it sees them.)
   watch the whole picture; merged into `visual_log.json` and `signals.json`; rules below) → select (Claude: 5–10
   moments within `clipTarget`, six moment types, hooks, reading words and picture notes; then the second look at each
   picked moment; `pickedFor` built by code) → render (ffmpeg:
-  section download, facecam detection via Claude vision, 1080×1920, hook, ASS captions, cover) → checklist (skill
+  section download, facecam detection via Claude vision, 1080×1920, hook and ASS captions inside the platforms'
+  safe area, a punch-in on the face at the peak, two-pass loudnorm to -14 LUFS and ≤ -1 dBTP, cover) → checklist (skill
   section D, measured + Claude judgement, one fix pass, spares replace failures) → captions (per platform, required
   tags from the owner's notes) → finalize (job `ready`, `clipCount`).
 * Select coverage: after the Claude Agent SDK run ends, whatever its outcome (error, time limit, or a normal

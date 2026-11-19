@@ -76,6 +76,7 @@ Most moments are a 4 to 6. Give an 8 or more only when a stranger would laugh or
 - **Length:** stay inside the job's length target. Within it, shorter is better when in doubt: a short clip watched twice beats a long one people leave.
 - **payoff_at** is the exact second the promise is delivered: the crash, the punchline, the save.
 - **peak_at** is the second of the **biggest face reaction or most striking picture**. It also becomes the **cover image** of the clip, so choose a frame that shows a clear, expressive face or unmistakable action. Never choose a blurry, half-turned, mid-blink or menu frame.
+- **The app punches in on the face at peak_at:** the facecam (or a camera shot) zooms smoothly to about 120% just before that second, holds about 1 second and eases back out. So put peak_at on the reaction itself, the face at its strongest, not on what caused it.
 - Never start or end in the middle of a word or a laugh.
 
 ## 3. The hook
@@ -94,7 +95,7 @@ When the best second comes late in the clip, use a tease: show 1 to 2 seconds of
 Never tease the whole answer. The tease raises the question and the clip answers it. Skip the tease when the clip already opens on its strongest second.
 
 ### Writing the hook text
-The app shows it in big bold white letters in the band at the top, for the whole clip. **The last word (the last two on a longer hook) is shown in yellow**, so end on the strongest word.
+The app shows it in big bold white letters near the top, just below where the apps put their own tabs, for the whole clip, about two lines wide. **The last word (the last two on a longer hook) is shown in yellow**, so end on the strongest word.
 
 - **6 to 8 words.** Plain spoken words, the way a friend would say it.
 - **Open a question** the clip answers, or **promise a payoff**. Never give the ending away.
@@ -114,7 +115,7 @@ Never: labels ("funny moment", "GTA clip #4", "epic gameplay"), spoilers ("he cr
 
 ## 4. The middle: keep them watching
 
-The app cuts silences over about 0.7 seconds and adds burned-in captions (uppercase, up to 3 words at a time, with the spoken word in yellow) on its own. Your job is to choose a stretch that keeps rising:
+The app cuts silences over about 0.7 seconds, adds burned-in captions (uppercase, up to 3 words at a time, with the spoken word in yellow) just above where the apps put their name and caption, and makes every clip equally loud (section 7) on its own. Your job is to choose a stretch that keeps rising:
 - **Every few seconds something changes:** a new line, a new action, a reaction. A stretch where nothing changes is a place people leave, so start later or end sooner.
 - **Energy goes up, not down.** If the part after the payoff is slower, end before it.
 - **Don't keep the explanation of the joke.** Show it and stop.
@@ -167,6 +168,12 @@ Each clip is made once, as a vertical 9:16 video (1080 × 1920), and posted to e
 | Instagram Reels | Bottom ~25–30% (caption, name), right ~15% (buttons), top ~10% | 15–30 s; shares and saves matter most | Center-cropped to 3:4 in the profile grid, and to 1:1 in some places |
 | Facebook Reels | Bottom ~25% and right ~15%, like Instagram | 15–30 s; keep it under 60 s | Center-cropped like Instagram |
 | X | Plays muted in the feed, often cropped toward the center | Under 45 s, with the hook in the first second | The first frame or the chosen one, center-cropped |
+
+What the app already does for every platform, on its own:
+- **Safe area:** the hook, the captions and the face are kept out of every part any of these apps covers (top 10%, bottom 25%, right 15%). Nothing you choose can put text under a button.
+- **Layout:** facecam under the hook with the gameplay below it; or, with no facecam, the whole picture over a blurred copy of itself.
+- **Punch-in:** a smooth zoom on the face at peak_at (section 2). Gameplay without a facecam is not zoomed.
+- **Loudness:** every clip is turned up or down to the level the platforms play at (-14 LUFS), without letting the peaks clip. A quiet voice comes out as loud as a shout would, but a shout stays a shout. So choose by what is said and shown, not by how loud the source was.
 
 What this means for your choices:
 - **Length:** inside the job's target, aim for **20–35 seconds**. That suits every platform. Go longer only when the moment truly needs it and keeps rising.
