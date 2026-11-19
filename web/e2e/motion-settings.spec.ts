@@ -88,13 +88,16 @@ test.describe("motion in Settings (APPLY c)", () => {
     await expect(page.getByRole("button", { name: "Remove picture" }).locator(".act")).toHaveClass(/is-rewind/);
   });
 
+  // A made-up sign-in row that passes the check before upload (§29.6); no real cookie.
+  const GOOD_COOKIES = Buffer.from("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t4102444800\tLOGIN_INFO\ttest\n");
+
   test("YouTube cookies: a bad file fails, a good one uploads, Remove rewinds on Undo", async ({ page }) => {
     await open(page, "/settings/clip-making/youtube");
     const input = page.locator('input[type="file"][accept=".txt,text/plain"]');
     await input.setInputFiles({ name: "cookies.txt", mimeType: "text/plain", buffer: Buffer.alloc(1024 ** 2 + 10, "a") });
     await expect(page.locator('[data-act="upload"] .act')).toHaveClass(/is-fail/);
     await page.waitForTimeout(400);
-    await input.setInputFiles({ name: "cookies.txt", mimeType: "text/plain", buffer: Buffer.from("# Netscape HTTP Cookie File\n") });
+    await input.setInputFiles({ name: "cookies.txt", mimeType: "text/plain", buffer: GOOD_COOKIES });
     const remove = page.getByRole("button", { name: "Remove" });
     await expect(remove).toHaveAttribute("data-act", "delete");
     await remove.click();
