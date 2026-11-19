@@ -1,5 +1,5 @@
 {
- "version": "5437154b76fc",
+ "version": "a337fec87c20",
  "parts": [
   {
    "id": "app-map",
@@ -69,7 +69,7 @@
    "id": "contracts-7",
    "title": "CONTRACTS: 7. S3 media bucket `cf-prod-media-<accountId>` (private, SSE-S3, CORS for PUT from app origins)",
    "line": "Prefix | What | Lifecycle |",
-   "chars": 1306
+   "chars": 1348
   },
   {
    "id": "contracts-8",
@@ -198,6 +198,12 @@
    "chars": 26522
   },
   {
+   "id": "contracts-29",
+   "title": "CONTRACTS: 29. YouTube downloads that hold up (owner request, 2026-11-19)",
+   "line": "29.1 The owner's words",
+   "chars": 8112
+  },
+  {
    "id": "adr-01",
    "title": "DECISIONS: ADR-01 Region: eu-north-1 (Stockholm)",
    "line": "Context. The owner is in Europe and already runs production work in eu-north-1. Bedrock, AgentCore Runtime,",
@@ -273,7 +279,7 @@
    "id": "adr-13",
    "title": "DECISIONS: ADR-13 Download audio first, then only the clip sections",
    "line": "Context. Streams can be 10 hours long; downloading full video in the cloud is slow and costly.",
-   "chars": 825
+   "chars": 1171
   },
   {
    "id": "adr-14",
@@ -504,6 +510,12 @@
    "chars": 4053
   },
   {
+   "id": "adr-52",
+   "title": "DECISIONS: ADR-52 YouTube from the cloud: PO tokens, one extraction per cut, a full download only as fallback, a file upload always one tap away",
+   "line": "Context. Two owner screenshots of a 1 h 41 min YouTube job: first \"YouTube is blocking downloads from the cloud",
+   "chars": 2579
+  },
+  {
    "id": "architecture-overview",
    "title": "ARCHITECTURE: Overview",
    "line": "The numbers match the numbered flows in the diagram.",
@@ -537,7 +549,7 @@
    "id": "architecture-limits",
    "title": "ARCHITECTURE: Limits",
    "line": "YouTube may block cloud IP addresses. Requests from AWS addresses are sometimes asked to \"sign in to confirm",
-   "chars": 5656
+   "chars": 5909
   },
   {
    "id": "deployment-one-time-setup",
@@ -921,7 +933,7 @@
    "id": "agent-pipeline",
    "title": "AGENT: Pipeline",
    "line": "Step (key) | The owner sees | What happens | Tools |",
-   "chars": 10639
+   "chars": 10827
   },
   {
    "id": "agent-skills",

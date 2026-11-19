@@ -8,4 +8,4 @@
 | `jobs/{jobId}/source/watch/chunk-NNNN.json`, `watch/nova-NNNN.json` | one watcher answer each, saved at once: `{i, start, end, ok, scene, events[]}` | expire after 14 days |
 | `jobs/{jobId}/clips/{clipId}/` | `clip.mp4`, `cover.jpg` | kept |
 | `skills/{userId}/{skillId}/{revisionId}/` | `SKILL.md` or `skill.zip`, one folder per saved revision (§18.1; skills added before §18 keep their old key `skills/{userId}/{skillId}/SKILL.md\|skill.zip` until their next save) | kept; old revisions deleted after each save, all deleted with the skill |
-| `private/{userId}/youtube-cookies.txt` | optional cookies for yt-dlp | kept, never returned by the API |
+| `private/{userId}/youtube-cookies.txt` | optional cookies for yt-dlp (how they are got, checked and used: §29) | kept, never returned by the API |

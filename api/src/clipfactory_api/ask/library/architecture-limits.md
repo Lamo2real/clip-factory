@@ -1,9 +1,11 @@
 ## Limits
 
 - **YouTube may block cloud IP addresses.** Requests from AWS addresses are sometimes asked to "sign in to confirm
-  you're not a bot". Two ways out: add a `cookies.txt` from a signed-in browser in Settings (stored privately at
-  `private/<userId>/youtube-cookies.txt`, used only by yt-dlp), or download the video yourself and upload it. The job
-  error says which one to try.
+  you're not a bot". The agent sends a PO token from its bgutil sidecar and uses `default,mweb` clients; the Cut step
+  makes one extraction for all clips and falls back to one full download cut locally (CONTRACTS §29, ADR-52). Ways
+  out for the owner: fresh `cookies.txt` from a private window (Settings › YouTube help; stored privately at
+  `private/<userId>/youtube-cookies.txt`, used only by yt-dlp), **Use a video file** on the failed job, or the
+  optional proxy secret. The job error says which one to try.
 - **Twitch and Kick** VODs can be subscriber-only or deleted after a while; those fail at the resolve step with a
   plain reason.
 - **Very long streams** are processed up to `maxSourceHours` (1–12). A job must finish within the 8-hour callback
