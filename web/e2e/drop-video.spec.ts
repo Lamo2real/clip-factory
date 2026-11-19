@@ -215,21 +215,30 @@ test("while a job is starting, a drag says so and the drop is refused with plain
 test("while the upload runs, a drop is refused and says to cancel first", async ({ page }) => {
   await dragDrop(page, "form.newjob", { files: [VIDEO] });
   await page.getByRole("button", { name: "Make clips" }).click();
-  // In the page, so the drop lands inside the short mock upload.
+  // In the page, so the drop lands inside the short mock upload: a MutationObserver sees "Uploading…" the moment
+  // it shows (requestAnimationFrame can stall in a headless WebKit).
   const toast = await page.evaluate(
     () =>
       new Promise<boolean>((resolve) => {
-        const tick = () => {
-          if (!document.body.textContent?.includes("Uploading…")) return requestAnimationFrame(tick);
+        const form = document.querySelector("form.newjob")!;
+        let done = false;
+        const tryDrop = () => {
+          if (done || !form.textContent?.includes("Uploading…")) return;
+          done = true;
+          obs.disconnect();
           const dt = new DataTransfer();
           dt.items.add(new File([new Uint8Array(8)], "other.mp4", { type: "video/mp4" }));
-          const form = document.querySelector("form.newjob")!;
           form.dispatchEvent(new DragEvent("dragenter", { bubbles: true, cancelable: true, dataTransfer: dt }));
-          const words = document.querySelector(".newjob__drop")?.textContent ?? "";
           form.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
-          resolve(words === "Upload still running" || words === "");
+          resolve(true);
         };
-        tick();
+        const obs = new MutationObserver(tryDrop);
+        obs.observe(form, { subtree: true, childList: true, characterData: true });
+        tryDrop();
+        setTimeout(() => {
+          obs.disconnect();
+          if (!done) resolve(false);
+        }, 15_000);
       }),
   );
   expect(toast).toBe(true);
@@ -245,7 +254,8 @@ test("a link dragged from a browser switches to Paste a link and is checked", as
   await expect(overlay(page)).toHaveCount(0);
   await expect(sourceTab(page, "Paste a link")).toHaveClass(/is-on/);
   await expect(page.getByLabel("YouTube, Twitch or Kick link")).toHaveValue("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
-  await expect(page.getByText("YouTube video found.")).toBeVisible();
+  await expect(page.locator(".field__status.is-ok")).toHaveText("YouTube video found.");
+  await expect(said(page)).toHaveText("Link added. YouTube video found.");
 });
 
 test("a file dropped outside the card is still refused, and never replaces the app", async ({ page }) => {
