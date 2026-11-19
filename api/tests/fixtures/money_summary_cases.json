@@ -504,6 +504,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 23560500,
        "from": "2026-10-18",
@@ -791,6 +792,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -1246,6 +1248,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 23560500,
        "from": "2026-10-18",
@@ -1533,6 +1536,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -2021,6 +2025,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 23560500,
        "from": "2026-10-18",
@@ -2493,6 +2498,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -2981,6 +2987,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 23560500,
        "from": "2026-10-18",
@@ -3084,6 +3091,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -3572,6 +3580,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 23560500,
        "from": "2026-10-18",
@@ -4339,6 +4348,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -4502,6 +4512,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 20725500,
        "from": "2026-10-18",
@@ -5149,6 +5160,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -5312,6 +5324,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 20725500,
        "from": "2026-10-18",
@@ -5448,6 +5461,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -5556,6 +5570,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 20,
       "monthly": {
        "amountMicros": 13187000,
        "from": "2026-10-18",
@@ -5573,7 +5588,7 @@
        "direction": "same"
       },
       "daily": {
-       "averageMicros": 439567,
+       "averageMicros": 659350,
        "from": "2026-10-18",
        "to": "2026-11-16",
        "latest": {
@@ -5585,7 +5600,7 @@
        "direction": "none"
       },
       "yearly": {
-       "paceMicros": 158244000,
+       "paceMicros": 237366000,
        "last365Micros": null
       },
       "chart": {
@@ -5763,6 +5778,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -5911,6 +5927,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 30000000,
        "from": "2026-10-18",
@@ -6198,6 +6215,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -6345,6 +6363,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 30000000,
        "from": "2026-10-18",
@@ -6632,6 +6651,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -6790,6 +6810,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 10000000,
        "from": "2026-10-17",
@@ -7077,6 +7098,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -7225,6 +7247,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 6000000,
        "from": "2026-10-18",
@@ -7512,6 +7535,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -7660,6 +7684,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 0,
        "from": "2026-10-18",
@@ -7947,6 +7972,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -8095,6 +8121,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 30000030,
        "from": "2026-10-18",
@@ -8382,6 +8409,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -8530,6 +8558,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 30000000,
        "from": "2026-10-18",
@@ -8817,6 +8846,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -8965,6 +8995,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 150000000,
        "from": "2026-10-18",
@@ -9252,6 +9283,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -9570,6 +9602,7 @@
        "youtube",
        "facebook"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 24903000,
        "from": "2026-10-16",
@@ -9887,6 +9920,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -10230,6 +10264,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 21040500,
        "from": "2026-10-18",
@@ -10517,6 +10552,7 @@
       "platforms": [
        "facebook"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 4240500,
        "from": "2026-10-18",
@@ -10804,6 +10840,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -10982,6 +11019,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 21040500,
        "from": "2026-10-18",
@@ -11269,6 +11307,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -11427,6 +11466,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false
    }
   },
@@ -11501,6 +11541,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false
    }
   },
@@ -11576,6 +11617,7 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false
    }
   },
@@ -11741,6 +11783,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 20410500,
        "from": "2026-10-12",
@@ -12033,6 +12076,9 @@
       "text": "Couldn't check YouTube today."
      }
     ],
+    "behind": [
+     "youtube"
+    ],
     "stale": true,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -12255,6 +12301,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": 21040500,
        "from": "2026-10-18",
@@ -12544,6 +12591,7 @@
      ]
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
@@ -12771,8 +12819,7 @@
      "x"
     ],
     "included": [
-     "youtube",
-     "facebook"
+     "youtube"
     ],
     "excluded": [
      {
@@ -12792,6 +12839,11 @@
       }
      },
      {
+      "platform": "facebook",
+      "reason": "behind",
+      "text": "Facebook hasn't sent money since Thu 12 Nov. Not counted for now."
+     },
+     {
       "platform": "x",
       "reason": "not_shared",
       "text": "X doesn't share money with apps.",
@@ -12801,122 +12853,113 @@
       }
      }
     ],
-    "through": "2026-11-12",
+    "through": "2026-11-16",
     "throughBy": {
-     "youtube": "2026-11-16",
-     "facebook": "2026-11-12"
+     "youtube": "2026-11-16"
     },
     "historyFrom": {
-     "youtube": "2026-08-19",
-     "facebook": "2026-08-15"
+     "youtube": "2026-08-19"
     },
     "currencies": [
      {
       "currency": "USD",
-      "tag": "Apps' estimates",
+      "tag": "YouTube's estimate",
       "platforms": [
-       "youtube",
-       "facebook"
+       "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
-       "amountMicros": 24315000,
-       "from": "2026-10-14",
-       "to": "2026-11-12",
-       "previousPeriodMicros": 24595000,
-       "changePct": -1,
-       "direction": "down"
-      },
-      "weekly": {
-       "amountMicros": 5812800,
-       "from": "2026-11-06",
-       "to": "2026-11-12",
-       "previousPeriodMicros": 5783400,
-       "changePct": 1,
+       "amountMicros": 21040500,
+       "from": "2026-10-18",
+       "to": "2026-11-16",
+       "previousPeriodMicros": 20410500,
+       "changePct": 3,
        "direction": "up"
       },
+      "weekly": {
+       "amountMicros": 4870600,
+       "from": "2026-11-10",
+       "to": "2026-11-16",
+       "previousPeriodMicros": 4855900,
+       "changePct": 0,
+       "direction": "same"
+      },
       "daily": {
-       "averageMicros": 810500,
-       "from": "2026-10-14",
-       "to": "2026-11-12",
+       "averageMicros": 701350,
+       "from": "2026-10-18",
+       "to": "2026-11-16",
        "latest": {
-        "date": "2026-11-12",
-        "amountMicros": 692200
+        "date": "2026-11-16",
+        "amountMicros": 876700
        },
-       "previousPeriodMicros": 819833,
-       "changePct": -1,
-       "direction": "down"
+       "previousPeriodMicros": 680350,
+       "changePct": 3,
+       "direction": "up"
       },
       "yearly": {
-       "paceMicros": 291780000,
+       "paceMicros": 252486000,
        "last365Micros": null
       },
       "chart": {
        "period": 7,
        "bucket": "day",
-       "from": "2026-11-06",
-       "to": "2026-11-12",
+       "from": "2026-11-10",
+       "to": "2026-11-16",
        "points": [
-        {
-         "start": "2026-11-06",
-         "end": "2026-11-06",
-         "amountMicros": 798600,
-         "byPlatform": {
-          "youtube": 603700,
-          "facebook": 194900
-         }
-        },
-        {
-         "start": "2026-11-07",
-         "end": "2026-11-07",
-         "amountMicros": 769200,
-         "byPlatform": {
-          "youtube": 694000,
-          "facebook": 75200
-         }
-        },
-        {
-         "start": "2026-11-08",
-         "end": "2026-11-08",
-         "amountMicros": 879800,
-         "byPlatform": {
-          "youtube": 784300,
-          "facebook": 95500
-         }
-        },
-        {
-         "start": "2026-11-09",
-         "end": "2026-11-09",
-         "amountMicros": 990400,
-         "byPlatform": {
-          "youtube": 874600,
-          "facebook": 115800
-         }
-        },
         {
          "start": "2026-11-10",
          "end": "2026-11-10",
-         "amountMicros": 1101000,
+         "amountMicros": 964900,
          "byPlatform": {
-          "youtube": 964900,
-          "facebook": 136100
+          "youtube": 964900
          }
         },
         {
          "start": "2026-11-11",
          "end": "2026-11-11",
-         "amountMicros": 581600,
+         "amountMicros": 425200,
          "byPlatform": {
-          "youtube": 425200,
-          "facebook": 156400
+          "youtube": 425200
          }
         },
         {
          "start": "2026-11-12",
          "end": "2026-11-12",
-         "amountMicros": 692200,
+         "amountMicros": 515500,
          "byPlatform": {
-          "youtube": 515500,
-          "facebook": 176700
+          "youtube": 515500
+         }
+        },
+        {
+         "start": "2026-11-13",
+         "end": "2026-11-13",
+         "amountMicros": 605800,
+         "byPlatform": {
+          "youtube": 605800
+         }
+        },
+        {
+         "start": "2026-11-14",
+         "end": "2026-11-14",
+         "amountMicros": 696100,
+         "byPlatform": {
+          "youtube": 696100
+         }
+        },
+        {
+         "start": "2026-11-15",
+         "end": "2026-11-15",
+         "amountMicros": 786400,
+         "byPlatform": {
+          "youtube": 786400
+         }
+        },
+        {
+         "start": "2026-11-16",
+         "end": "2026-11-16",
+         "amountMicros": 876700,
+         "byPlatform": {
+          "youtube": 876700
          }
         }
        ]
@@ -12928,7 +12971,10 @@
      "platforms": []
     },
     "errors": [],
-    "stale": true,
+    "behind": [
+     "facebook"
+    ],
+    "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
    }
   },
@@ -13076,6 +13122,7 @@
       "platforms": [
        "youtube"
       ],
+      "coveredDays": 30,
       "monthly": {
        "amountMicros": -1350,
        "from": "2026-10-18",
@@ -13363,8 +13410,1449 @@
      "platforms": []
     },
     "errors": [],
+    "behind": [],
     "stale": false,
     "lagNote": "YouTube is 2–3 days behind"
+   }
+  },
+  {
+   "name": "10 days so far: daily and pace use the 10 covered days",
+   "today": "2026-11-19",
+   "platforms": [],
+   "chart": 30,
+   "facebookVerified": true,
+   "status": {
+    "youtube": {
+     "connected": true,
+     "moneyScope": true,
+     "lastError": null
+    },
+    "facebook": {
+     "connected": true,
+     "moneyScope": true,
+     "lastError": null
+    }
+   },
+   "series": [
+    {
+     "platform": "youtube",
+     "currency": "USD",
+     "start": "2026-11-07",
+     "amounts": [
+      1000000,
+      1000000,
+      1000000,
+      1000000,
+      1000000,
+      1000000,
+      1000000,
+      1000000,
+      1000000,
+      1000000
+     ]
+    }
+   ],
+   "expected": {
+    "platforms": [
+     "youtube",
+     "tiktok",
+     "instagram",
+     "facebook",
+     "x"
+    ],
+    "included": [
+     "youtube"
+    ],
+    "excluded": [
+     {
+      "platform": "tiktok",
+      "reason": "not_shared",
+      "text": "TikTok doesn't share money with apps.",
+      "where": {
+       "label": "Profile › Balance"
+      }
+     },
+     {
+      "platform": "instagram",
+      "reason": "not_shared",
+      "text": "Instagram doesn't share money with apps.",
+      "where": {
+       "label": "Professional dashboard › Payouts"
+      }
+     },
+     {
+      "platform": "facebook",
+      "reason": "no_money_yet",
+      "text": "No money from Facebook yet."
+     },
+     {
+      "platform": "x",
+      "reason": "not_shared",
+      "text": "X doesn't share money with apps.",
+      "where": {
+       "label": "X › Monetization (paid through Stripe)",
+       "url": "https://x.com/settings/monetization"
+      }
+     }
+    ],
+    "through": "2026-11-16",
+    "throughBy": {
+     "youtube": "2026-11-16"
+    },
+    "historyFrom": {
+     "youtube": "2026-11-07"
+    },
+    "currencies": [
+     {
+      "currency": "USD",
+      "tag": "YouTube's estimate",
+      "platforms": [
+       "youtube"
+      ],
+      "coveredDays": 10,
+      "monthly": {
+       "amountMicros": 10000000,
+       "from": "2026-10-18",
+       "to": "2026-11-16",
+       "previousPeriodMicros": null,
+       "changePct": null,
+       "direction": "none"
+      },
+      "weekly": {
+       "amountMicros": 7000000,
+       "from": "2026-11-10",
+       "to": "2026-11-16",
+       "previousPeriodMicros": null,
+       "changePct": null,
+       "direction": "none"
+      },
+      "daily": {
+       "averageMicros": 1000000,
+       "from": "2026-10-18",
+       "to": "2026-11-16",
+       "latest": {
+        "date": "2026-11-16",
+        "amountMicros": 1000000
+       },
+       "previousPeriodMicros": null,
+       "changePct": null,
+       "direction": "none"
+      },
+      "yearly": {
+       "paceMicros": 360000000,
+       "last365Micros": null
+      },
+      "chart": {
+       "period": 30,
+       "bucket": "day",
+       "from": "2026-11-07",
+       "to": "2026-11-16",
+       "points": [
+        {
+         "start": "2026-11-07",
+         "end": "2026-11-07",
+         "amountMicros": 1000000,
+         "byPlatform": {
+          "youtube": 1000000
+         }
+        },
+        {
+         "start": "2026-11-08",
+         "end": "2026-11-08",
+         "amountMicros": 1000000,
+         "byPlatform": {
+          "youtube": 1000000
+         }
+        },
+        {
+         "start": "2026-11-09",
+         "end": "2026-11-09",
+         "amountMicros": 1000000,
+         "byPlatform": {
+          "youtube": 1000000
+         }
+        },
+        {
+         "start": "2026-11-10",
+         "end": "2026-11-10",
+         "amountMicros": 1000000,
+         "byPlatform": {
+          "youtube": 1000000
+         }
+        },
+        {
+         "start": "2026-11-11",
+         "end": "2026-11-11",
+         "amountMicros": 1000000,
+         "byPlatform": {
+          "youtube": 1000000
+         }
+        },
+        {
+         "start": "2026-11-12",
+         "end": "2026-11-12",
+         "amountMicros": 1000000,
+         "byPlatform": {
+          "youtube": 1000000
+         }
+        },
+        {
+         "start": "2026-11-13",
+         "end": "2026-11-13",
+         "amountMicros": 1000000,
+         "byPlatform": {
+          "youtube": 1000000
+         }
+        },
+        {
+         "start": "2026-11-14",
+         "end": "2026-11-14",
+         "amountMicros": 1000000,
+         "byPlatform": {
+          "youtube": 1000000
+         }
+        },
+        {
+         "start": "2026-11-15",
+         "end": "2026-11-15",
+         "amountMicros": 1000000,
+         "byPlatform": {
+          "youtube": 1000000
+         }
+        },
+        {
+         "start": "2026-11-16",
+         "end": "2026-11-16",
+         "amountMicros": 1000000,
+         "byPlatform": {
+          "youtube": 1000000
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "revised": {
+     "days": 0,
+     "platforms": []
+    },
+    "errors": [],
+    "behind": [],
+    "stale": false,
+    "lagNote": "YouTube is 2–3 days behind"
+   }
+  },
+  {
+   "name": "facebook behind is left out so youtube stays current",
+   "today": "2026-11-19",
+   "platforms": [
+    "youtube",
+    "facebook"
+   ],
+   "chart": 30,
+   "facebookVerified": true,
+   "status": {
+    "youtube": {
+     "connected": true,
+     "moneyScope": true,
+     "lastError": null
+    },
+    "facebook": {
+     "connected": true,
+     "moneyScope": true,
+     "lastError": null
+    }
+   },
+   "series": [
+    {
+     "platform": "youtube",
+     "currency": "USD",
+     "start": "2026-07-10",
+     "amounts": [
+      400000,
+      490300,
+      580600,
+      670900,
+      761200,
+      851500,
+      941800,
+      402100,
+      492400,
+      582700,
+      673000,
+      763300,
+      853600,
+      943900,
+      404200,
+      494500,
+      584800,
+      675100,
+      765400,
+      855700,
+      946000,
+      406300,
+      496600,
+      586900,
+      677200,
+      767500,
+      857800,
+      948100,
+      408400,
+      498700,
+      589000,
+      679300,
+      769600,
+      859900,
+      950200,
+      410500,
+      500800,
+      591100,
+      681400,
+      771700,
+      862000,
+      952300,
+      412600,
+      502900,
+      593200,
+      683500,
+      773800,
+      864100,
+      954400,
+      414700,
+      505000,
+      595300,
+      685600,
+      775900,
+      866200,
+      956500,
+      416800,
+      507100,
+      597400,
+      687700,
+      778000,
+      868300,
+      958600,
+      418900,
+      509200,
+      599500,
+      689800,
+      780100,
+      870400,
+      960700,
+      421000,
+      511300,
+      601600,
+      691900,
+      782200,
+      872500,
+      962800,
+      423100,
+      513400,
+      603700,
+      694000,
+      784300,
+      874600,
+      964900,
+      425200,
+      515500,
+      605800,
+      696100,
+      786400,
+      876700,
+      967000,
+      427300,
+      517600,
+      607900,
+      698200,
+      788500,
+      878800,
+      969100,
+      429400,
+      519700,
+      610000,
+      700300,
+      790600,
+      880900,
+      971200,
+      431500,
+      521800,
+      612100,
+      702400,
+      792700,
+      883000,
+      973300,
+      433600,
+      523900,
+      614200,
+      704500,
+      794800,
+      885100,
+      975400,
+      435700,
+      526000,
+      616300,
+      706600,
+      796900,
+      887200,
+      977500,
+      437800,
+      528100,
+      618400,
+      708700
+     ]
+    },
+    {
+     "platform": "facebook",
+     "currency": "USD",
+     "start": "2026-08-29",
+     "amounts": [
+      50000,
+      70300,
+      90600,
+      110900,
+      131200,
+      151500,
+      171800,
+      52100,
+      72400,
+      92700,
+      113000,
+      133300,
+      153600,
+      173900,
+      54200,
+      74500,
+      94800,
+      115100,
+      135400,
+      155700,
+      176000,
+      56300,
+      76600,
+      96900,
+      117200,
+      137500,
+      157800,
+      178100,
+      58400,
+      78700,
+      99000,
+      119300,
+      139600,
+      159900,
+      180200,
+      60500,
+      80800,
+      101100,
+      121400,
+      141700,
+      162000,
+      182300,
+      62600,
+      82900,
+      103200,
+      123500,
+      143800,
+      164100,
+      184400,
+      64700,
+      85000,
+      105300,
+      125600,
+      145900,
+      166200,
+      186500,
+      66800,
+      87100,
+      107400,
+      127700
+     ]
+    }
+   ],
+   "expected": {
+    "platforms": [
+     "youtube",
+     "facebook"
+    ],
+    "included": [
+     "youtube"
+    ],
+    "excluded": [
+     {
+      "platform": "facebook",
+      "reason": "behind",
+      "text": "Facebook hasn't sent money since Tue 27 Oct. Not counted for now."
+     }
+    ],
+    "through": "2026-11-16",
+    "throughBy": {
+     "youtube": "2026-11-16"
+    },
+    "historyFrom": {
+     "youtube": "2026-07-10"
+    },
+    "currencies": [
+     {
+      "currency": "USD",
+      "tag": "YouTube's estimate",
+      "platforms": [
+       "youtube"
+      ],
+      "coveredDays": 30,
+      "monthly": {
+       "amountMicros": 21040500,
+       "from": "2026-10-18",
+       "to": "2026-11-16",
+       "previousPeriodMicros": 20410500,
+       "changePct": 3,
+       "direction": "up"
+      },
+      "weekly": {
+       "amountMicros": 4954600,
+       "from": "2026-11-10",
+       "to": "2026-11-16",
+       "previousPeriodMicros": 4939900,
+       "changePct": 0,
+       "direction": "same"
+      },
+      "daily": {
+       "averageMicros": 701350,
+       "from": "2026-10-18",
+       "to": "2026-11-16",
+       "latest": {
+        "date": "2026-11-16",
+        "amountMicros": 708700
+       },
+       "previousPeriodMicros": 680350,
+       "changePct": 3,
+       "direction": "up"
+      },
+      "yearly": {
+       "paceMicros": 252486000,
+       "last365Micros": null
+      },
+      "chart": {
+       "period": 30,
+       "bucket": "day",
+       "from": "2026-10-18",
+       "to": "2026-11-16",
+       "points": [
+        {
+         "start": "2026-10-18",
+         "end": "2026-10-18",
+         "amountMicros": 610000,
+         "byPlatform": {
+          "youtube": 610000
+         }
+        },
+        {
+         "start": "2026-10-19",
+         "end": "2026-10-19",
+         "amountMicros": 700300,
+         "byPlatform": {
+          "youtube": 700300
+         }
+        },
+        {
+         "start": "2026-10-20",
+         "end": "2026-10-20",
+         "amountMicros": 790600,
+         "byPlatform": {
+          "youtube": 790600
+         }
+        },
+        {
+         "start": "2026-10-21",
+         "end": "2026-10-21",
+         "amountMicros": 880900,
+         "byPlatform": {
+          "youtube": 880900
+         }
+        },
+        {
+         "start": "2026-10-22",
+         "end": "2026-10-22",
+         "amountMicros": 971200,
+         "byPlatform": {
+          "youtube": 971200
+         }
+        },
+        {
+         "start": "2026-10-23",
+         "end": "2026-10-23",
+         "amountMicros": 431500,
+         "byPlatform": {
+          "youtube": 431500
+         }
+        },
+        {
+         "start": "2026-10-24",
+         "end": "2026-10-24",
+         "amountMicros": 521800,
+         "byPlatform": {
+          "youtube": 521800
+         }
+        },
+        {
+         "start": "2026-10-25",
+         "end": "2026-10-25",
+         "amountMicros": 612100,
+         "byPlatform": {
+          "youtube": 612100
+         }
+        },
+        {
+         "start": "2026-10-26",
+         "end": "2026-10-26",
+         "amountMicros": 702400,
+         "byPlatform": {
+          "youtube": 702400
+         }
+        },
+        {
+         "start": "2026-10-27",
+         "end": "2026-10-27",
+         "amountMicros": 792700,
+         "byPlatform": {
+          "youtube": 792700
+         }
+        },
+        {
+         "start": "2026-10-28",
+         "end": "2026-10-28",
+         "amountMicros": 883000,
+         "byPlatform": {
+          "youtube": 883000
+         }
+        },
+        {
+         "start": "2026-10-29",
+         "end": "2026-10-29",
+         "amountMicros": 973300,
+         "byPlatform": {
+          "youtube": 973300
+         }
+        },
+        {
+         "start": "2026-10-30",
+         "end": "2026-10-30",
+         "amountMicros": 433600,
+         "byPlatform": {
+          "youtube": 433600
+         }
+        },
+        {
+         "start": "2026-10-31",
+         "end": "2026-10-31",
+         "amountMicros": 523900,
+         "byPlatform": {
+          "youtube": 523900
+         }
+        },
+        {
+         "start": "2026-11-01",
+         "end": "2026-11-01",
+         "amountMicros": 614200,
+         "byPlatform": {
+          "youtube": 614200
+         }
+        },
+        {
+         "start": "2026-11-02",
+         "end": "2026-11-02",
+         "amountMicros": 704500,
+         "byPlatform": {
+          "youtube": 704500
+         }
+        },
+        {
+         "start": "2026-11-03",
+         "end": "2026-11-03",
+         "amountMicros": 794800,
+         "byPlatform": {
+          "youtube": 794800
+         }
+        },
+        {
+         "start": "2026-11-04",
+         "end": "2026-11-04",
+         "amountMicros": 885100,
+         "byPlatform": {
+          "youtube": 885100
+         }
+        },
+        {
+         "start": "2026-11-05",
+         "end": "2026-11-05",
+         "amountMicros": 975400,
+         "byPlatform": {
+          "youtube": 975400
+         }
+        },
+        {
+         "start": "2026-11-06",
+         "end": "2026-11-06",
+         "amountMicros": 435700,
+         "byPlatform": {
+          "youtube": 435700
+         }
+        },
+        {
+         "start": "2026-11-07",
+         "end": "2026-11-07",
+         "amountMicros": 526000,
+         "byPlatform": {
+          "youtube": 526000
+         }
+        },
+        {
+         "start": "2026-11-08",
+         "end": "2026-11-08",
+         "amountMicros": 616300,
+         "byPlatform": {
+          "youtube": 616300
+         }
+        },
+        {
+         "start": "2026-11-09",
+         "end": "2026-11-09",
+         "amountMicros": 706600,
+         "byPlatform": {
+          "youtube": 706600
+         }
+        },
+        {
+         "start": "2026-11-10",
+         "end": "2026-11-10",
+         "amountMicros": 796900,
+         "byPlatform": {
+          "youtube": 796900
+         }
+        },
+        {
+         "start": "2026-11-11",
+         "end": "2026-11-11",
+         "amountMicros": 887200,
+         "byPlatform": {
+          "youtube": 887200
+         }
+        },
+        {
+         "start": "2026-11-12",
+         "end": "2026-11-12",
+         "amountMicros": 977500,
+         "byPlatform": {
+          "youtube": 977500
+         }
+        },
+        {
+         "start": "2026-11-13",
+         "end": "2026-11-13",
+         "amountMicros": 437800,
+         "byPlatform": {
+          "youtube": 437800
+         }
+        },
+        {
+         "start": "2026-11-14",
+         "end": "2026-11-14",
+         "amountMicros": 528100,
+         "byPlatform": {
+          "youtube": 528100
+         }
+        },
+        {
+         "start": "2026-11-15",
+         "end": "2026-11-15",
+         "amountMicros": 618400,
+         "byPlatform": {
+          "youtube": 618400
+         }
+        },
+        {
+         "start": "2026-11-16",
+         "end": "2026-11-16",
+         "amountMicros": 708700,
+         "byPlatform": {
+          "youtube": 708700
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "revised": {
+     "days": 0,
+     "platforms": []
+    },
+    "errors": [],
+    "behind": [
+     "facebook"
+    ],
+    "stale": false,
+    "lagNote": "YouTube is 2–3 days behind"
+   }
+  },
+  {
+   "name": "facebook behind with an error, youtube current",
+   "today": "2026-11-19",
+   "platforms": [],
+   "chart": 30,
+   "facebookVerified": true,
+   "status": {
+    "youtube": {
+     "connected": true,
+     "moneyScope": true,
+     "lastError": null
+    },
+    "facebook": {
+     "connected": true,
+     "moneyScope": true,
+     "lastError": "Meta didn't answer."
+    }
+   },
+   "series": [
+    {
+     "platform": "youtube",
+     "currency": "USD",
+     "start": "2026-07-10",
+     "amounts": [
+      400000,
+      490300,
+      580600,
+      670900,
+      761200,
+      851500,
+      941800,
+      402100,
+      492400,
+      582700,
+      673000,
+      763300,
+      853600,
+      943900,
+      404200,
+      494500,
+      584800,
+      675100,
+      765400,
+      855700,
+      946000,
+      406300,
+      496600,
+      586900,
+      677200,
+      767500,
+      857800,
+      948100,
+      408400,
+      498700,
+      589000,
+      679300,
+      769600,
+      859900,
+      950200,
+      410500,
+      500800,
+      591100,
+      681400,
+      771700,
+      862000,
+      952300,
+      412600,
+      502900,
+      593200,
+      683500,
+      773800,
+      864100,
+      954400,
+      414700,
+      505000,
+      595300,
+      685600,
+      775900,
+      866200,
+      956500,
+      416800,
+      507100,
+      597400,
+      687700,
+      778000,
+      868300,
+      958600,
+      418900,
+      509200,
+      599500,
+      689800,
+      780100,
+      870400,
+      960700,
+      421000,
+      511300,
+      601600,
+      691900,
+      782200,
+      872500,
+      962800,
+      423100,
+      513400,
+      603700,
+      694000,
+      784300,
+      874600,
+      964900,
+      425200,
+      515500,
+      605800,
+      696100,
+      786400,
+      876700,
+      967000,
+      427300,
+      517600,
+      607900,
+      698200,
+      788500,
+      878800,
+      969100,
+      429400,
+      519700,
+      610000,
+      700300,
+      790600,
+      880900,
+      971200,
+      431500,
+      521800,
+      612100,
+      702400,
+      792700,
+      883000,
+      973300,
+      433600,
+      523900,
+      614200,
+      704500,
+      794800,
+      885100,
+      975400,
+      435700,
+      526000,
+      616300,
+      706600,
+      796900,
+      887200,
+      977500,
+      437800,
+      528100,
+      618400,
+      708700
+     ]
+    },
+    {
+     "platform": "facebook",
+     "currency": "USD",
+     "start": "2026-08-29",
+     "amounts": [
+      50000,
+      70300,
+      90600,
+      110900,
+      131200,
+      151500,
+      171800,
+      52100,
+      72400,
+      92700,
+      113000,
+      133300,
+      153600,
+      173900,
+      54200,
+      74500,
+      94800,
+      115100,
+      135400,
+      155700,
+      176000,
+      56300,
+      76600,
+      96900,
+      117200,
+      137500,
+      157800,
+      178100,
+      58400,
+      78700,
+      99000,
+      119300,
+      139600,
+      159900,
+      180200,
+      60500,
+      80800,
+      101100,
+      121400,
+      141700,
+      162000,
+      182300,
+      62600,
+      82900,
+      103200,
+      123500,
+      143800,
+      164100,
+      184400,
+      64700,
+      85000,
+      105300,
+      125600,
+      145900,
+      166200,
+      186500,
+      66800,
+      87100,
+      107400,
+      127700
+     ]
+    }
+   ],
+   "expected": {
+    "platforms": [
+     "youtube",
+     "tiktok",
+     "instagram",
+     "facebook",
+     "x"
+    ],
+    "included": [
+     "youtube"
+    ],
+    "excluded": [
+     {
+      "platform": "tiktok",
+      "reason": "not_shared",
+      "text": "TikTok doesn't share money with apps.",
+      "where": {
+       "label": "Profile › Balance"
+      }
+     },
+     {
+      "platform": "instagram",
+      "reason": "not_shared",
+      "text": "Instagram doesn't share money with apps.",
+      "where": {
+       "label": "Professional dashboard › Payouts"
+      }
+     },
+     {
+      "platform": "facebook",
+      "reason": "behind",
+      "text": "Facebook hasn't sent money since Tue 27 Oct. Not counted for now."
+     },
+     {
+      "platform": "x",
+      "reason": "not_shared",
+      "text": "X doesn't share money with apps.",
+      "where": {
+       "label": "X › Monetization (paid through Stripe)",
+       "url": "https://x.com/settings/monetization"
+      }
+     }
+    ],
+    "through": "2026-11-16",
+    "throughBy": {
+     "youtube": "2026-11-16"
+    },
+    "historyFrom": {
+     "youtube": "2026-07-10"
+    },
+    "currencies": [
+     {
+      "currency": "USD",
+      "tag": "YouTube's estimate",
+      "platforms": [
+       "youtube"
+      ],
+      "coveredDays": 30,
+      "monthly": {
+       "amountMicros": 21040500,
+       "from": "2026-10-18",
+       "to": "2026-11-16",
+       "previousPeriodMicros": 20410500,
+       "changePct": 3,
+       "direction": "up"
+      },
+      "weekly": {
+       "amountMicros": 4954600,
+       "from": "2026-11-10",
+       "to": "2026-11-16",
+       "previousPeriodMicros": 4939900,
+       "changePct": 0,
+       "direction": "same"
+      },
+      "daily": {
+       "averageMicros": 701350,
+       "from": "2026-10-18",
+       "to": "2026-11-16",
+       "latest": {
+        "date": "2026-11-16",
+        "amountMicros": 708700
+       },
+       "previousPeriodMicros": 680350,
+       "changePct": 3,
+       "direction": "up"
+      },
+      "yearly": {
+       "paceMicros": 252486000,
+       "last365Micros": null
+      },
+      "chart": {
+       "period": 30,
+       "bucket": "day",
+       "from": "2026-10-18",
+       "to": "2026-11-16",
+       "points": [
+        {
+         "start": "2026-10-18",
+         "end": "2026-10-18",
+         "amountMicros": 610000,
+         "byPlatform": {
+          "youtube": 610000
+         }
+        },
+        {
+         "start": "2026-10-19",
+         "end": "2026-10-19",
+         "amountMicros": 700300,
+         "byPlatform": {
+          "youtube": 700300
+         }
+        },
+        {
+         "start": "2026-10-20",
+         "end": "2026-10-20",
+         "amountMicros": 790600,
+         "byPlatform": {
+          "youtube": 790600
+         }
+        },
+        {
+         "start": "2026-10-21",
+         "end": "2026-10-21",
+         "amountMicros": 880900,
+         "byPlatform": {
+          "youtube": 880900
+         }
+        },
+        {
+         "start": "2026-10-22",
+         "end": "2026-10-22",
+         "amountMicros": 971200,
+         "byPlatform": {
+          "youtube": 971200
+         }
+        },
+        {
+         "start": "2026-10-23",
+         "end": "2026-10-23",
+         "amountMicros": 431500,
+         "byPlatform": {
+          "youtube": 431500
+         }
+        },
+        {
+         "start": "2026-10-24",
+         "end": "2026-10-24",
+         "amountMicros": 521800,
+         "byPlatform": {
+          "youtube": 521800
+         }
+        },
+        {
+         "start": "2026-10-25",
+         "end": "2026-10-25",
+         "amountMicros": 612100,
+         "byPlatform": {
+          "youtube": 612100
+         }
+        },
+        {
+         "start": "2026-10-26",
+         "end": "2026-10-26",
+         "amountMicros": 702400,
+         "byPlatform": {
+          "youtube": 702400
+         }
+        },
+        {
+         "start": "2026-10-27",
+         "end": "2026-10-27",
+         "amountMicros": 792700,
+         "byPlatform": {
+          "youtube": 792700
+         }
+        },
+        {
+         "start": "2026-10-28",
+         "end": "2026-10-28",
+         "amountMicros": 883000,
+         "byPlatform": {
+          "youtube": 883000
+         }
+        },
+        {
+         "start": "2026-10-29",
+         "end": "2026-10-29",
+         "amountMicros": 973300,
+         "byPlatform": {
+          "youtube": 973300
+         }
+        },
+        {
+         "start": "2026-10-30",
+         "end": "2026-10-30",
+         "amountMicros": 433600,
+         "byPlatform": {
+          "youtube": 433600
+         }
+        },
+        {
+         "start": "2026-10-31",
+         "end": "2026-10-31",
+         "amountMicros": 523900,
+         "byPlatform": {
+          "youtube": 523900
+         }
+        },
+        {
+         "start": "2026-11-01",
+         "end": "2026-11-01",
+         "amountMicros": 614200,
+         "byPlatform": {
+          "youtube": 614200
+         }
+        },
+        {
+         "start": "2026-11-02",
+         "end": "2026-11-02",
+         "amountMicros": 704500,
+         "byPlatform": {
+          "youtube": 704500
+         }
+        },
+        {
+         "start": "2026-11-03",
+         "end": "2026-11-03",
+         "amountMicros": 794800,
+         "byPlatform": {
+          "youtube": 794800
+         }
+        },
+        {
+         "start": "2026-11-04",
+         "end": "2026-11-04",
+         "amountMicros": 885100,
+         "byPlatform": {
+          "youtube": 885100
+         }
+        },
+        {
+         "start": "2026-11-05",
+         "end": "2026-11-05",
+         "amountMicros": 975400,
+         "byPlatform": {
+          "youtube": 975400
+         }
+        },
+        {
+         "start": "2026-11-06",
+         "end": "2026-11-06",
+         "amountMicros": 435700,
+         "byPlatform": {
+          "youtube": 435700
+         }
+        },
+        {
+         "start": "2026-11-07",
+         "end": "2026-11-07",
+         "amountMicros": 526000,
+         "byPlatform": {
+          "youtube": 526000
+         }
+        },
+        {
+         "start": "2026-11-08",
+         "end": "2026-11-08",
+         "amountMicros": 616300,
+         "byPlatform": {
+          "youtube": 616300
+         }
+        },
+        {
+         "start": "2026-11-09",
+         "end": "2026-11-09",
+         "amountMicros": 706600,
+         "byPlatform": {
+          "youtube": 706600
+         }
+        },
+        {
+         "start": "2026-11-10",
+         "end": "2026-11-10",
+         "amountMicros": 796900,
+         "byPlatform": {
+          "youtube": 796900
+         }
+        },
+        {
+         "start": "2026-11-11",
+         "end": "2026-11-11",
+         "amountMicros": 887200,
+         "byPlatform": {
+          "youtube": 887200
+         }
+        },
+        {
+         "start": "2026-11-12",
+         "end": "2026-11-12",
+         "amountMicros": 977500,
+         "byPlatform": {
+          "youtube": 977500
+         }
+        },
+        {
+         "start": "2026-11-13",
+         "end": "2026-11-13",
+         "amountMicros": 437800,
+         "byPlatform": {
+          "youtube": 437800
+         }
+        },
+        {
+         "start": "2026-11-14",
+         "end": "2026-11-14",
+         "amountMicros": 528100,
+         "byPlatform": {
+          "youtube": 528100
+         }
+        },
+        {
+         "start": "2026-11-15",
+         "end": "2026-11-15",
+         "amountMicros": 618400,
+         "byPlatform": {
+          "youtube": 618400
+         }
+        },
+        {
+         "start": "2026-11-16",
+         "end": "2026-11-16",
+         "amountMicros": 708700,
+         "byPlatform": {
+          "youtube": 708700
+         }
+        }
+       ]
+      }
+     }
+    ],
+    "revised": {
+     "days": 0,
+     "platforms": []
+    },
+    "errors": [
+     {
+      "platform": "facebook",
+      "text": "Couldn't check Facebook today."
+     }
+    ],
+    "behind": [
+     "facebook"
+    ],
+    "stale": false,
+    "lagNote": "YouTube is 2–3 days behind"
+   }
+  },
+  {
+   "name": "collector error and no rows: an error, not no money yet",
+   "today": "2026-11-19",
+   "platforms": [],
+   "chart": 30,
+   "facebookVerified": true,
+   "status": {
+    "youtube": {
+     "connected": true,
+     "moneyScope": true,
+     "lastError": "YouTube didn't answer."
+    },
+    "facebook": {
+     "connected": false
+    }
+   },
+   "series": [],
+   "expected": {
+    "platforms": [
+     "youtube",
+     "tiktok",
+     "instagram",
+     "facebook",
+     "x"
+    ],
+    "included": [],
+    "excluded": [
+     {
+      "platform": "youtube",
+      "reason": "error",
+      "text": "Couldn't check YouTube today."
+     },
+     {
+      "platform": "tiktok",
+      "reason": "not_shared",
+      "text": "TikTok doesn't share money with apps.",
+      "where": {
+       "label": "Profile › Balance"
+      }
+     },
+     {
+      "platform": "instagram",
+      "reason": "not_shared",
+      "text": "Instagram doesn't share money with apps.",
+      "where": {
+       "label": "Professional dashboard › Payouts"
+      }
+     },
+     {
+      "platform": "facebook",
+      "reason": "not_connected",
+      "text": "Connect Facebook in Settings › Posting › Set up posting."
+     },
+     {
+      "platform": "x",
+      "reason": "not_shared",
+      "text": "X doesn't share money with apps.",
+      "where": {
+       "label": "X › Monetization (paid through Stripe)",
+       "url": "https://x.com/settings/monetization"
+      }
+     }
+    ],
+    "through": null,
+    "throughBy": {},
+    "historyFrom": {},
+    "currencies": [],
+    "revised": {
+     "days": 0,
+     "platforms": []
+    },
+    "errors": [
+     {
+      "platform": "youtube",
+      "text": "Couldn't check YouTube today."
+     }
+    ],
+    "behind": [],
+    "stale": false
    }
   }
  ]

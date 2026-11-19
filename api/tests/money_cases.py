@@ -138,6 +138,22 @@ def cases() -> list[dict[str, Any]]:
         ),
         _case("rows after through are left out", [_yt(90), _fb(90, end="2026-11-12")], chart=7),
         _case("negative day (a platform correction) rounds half away from zero", [_yt(60, [-15] * 30 + [-45] * 30)]),
+        _case("10 days so far: daily and pace use the 10 covered days", [_yt(10, [1_000_000] * 10)]),
+        _case(
+            "facebook behind is left out so youtube stays current",
+            [_yt(130), _fb(60, end="2026-10-27")],
+            platforms=["youtube", "facebook"],
+        ),
+        _case(
+            "facebook behind with an error, youtube current",
+            [_yt(130), _fb(60, end="2026-10-27")],
+            status={"youtube": OK, "facebook": {**OK, "lastError": "Meta didn't answer."}},
+        ),
+        _case(
+            "collector error and no rows: an error, not no money yet",
+            [],
+            status={"youtube": {**OK, "lastError": "YouTube didn't answer."}, "facebook": {"connected": False}},
+        ),
     ]
 
 

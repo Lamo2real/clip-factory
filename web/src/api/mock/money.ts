@@ -530,7 +530,8 @@ export function moneyApi(wait: () => Promise<void>, source: ClipSource = { clips
         end: summary.through,
         platforms: ORDER,
       });
-      return moneyClips(posts, cards, query, data.facebookVerified);
+      const yt = data.status.youtube;
+      return moneyClips(posts, cards, query, data.facebookVerified, !yt?.connected ? "not_connected" : !yt.moneyScope ? "needs_permission" : "ok");
     },
     async setMoneyCountry(country) {
       await wait();

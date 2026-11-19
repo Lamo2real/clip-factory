@@ -294,3 +294,77 @@ def test_facebook_money_never_counts_before_its_live_check(call: Call, store: db
     body = call("GET", "/v1/money/summary", query={"platforms": "facebook"})[1]
     assert body["currencies"] == []
     assert body["excluded"][0]["reason"] == "coming_soon"
+
+
+# --- review fixes -----------------------------------------------------------------------------------------------
+
+
+def test_daily_and_pace_use_the_days_history_covers() -> None:
+    """10 days of $1.00: a normal day is $1.00 (not $0.33) and the pace is $360 a year (not $120)."""
+    usd = run(days("youtube", "2026-11-16", [1_000_000] * 10), platforms=["youtube"])["currencies"][0]
+    assert usd["coveredDays"] == 10
+    assert usd["monthly"]["amountMicros"] == 10_000_000
+    assert usd["daily"]["averageMicros"] == 1_000_000
+    assert usd["yearly"]["paceMicros"] == 360_000_000
+    full = run(days("youtube", "2026-11-16", [1_000_000] * 45), platforms=["youtube"])["currencies"][0]
+    assert full["coveredDays"] == 30
+    assert full["daily"]["averageMicros"] == 1_000_000
+    assert full["yearly"]["paceMicros"] == 30_000_000 * 12  # monthly x 12 once 30 days are covered
+
+
+def test_an_app_that_falls_behind_is_left_out_and_named() -> None:
+    """Facebook stuck on 27 Oct (no error) must not pull YouTube's days back, nor make the banner blame YouTube."""
+    rows = days("youtube", "2026-11-16", [1_000_000] * 60) + days("facebook", "2026-10-27", [100_000] * 60)
+    out = run(rows, platforms=["youtube", "facebook"])
+    assert out["through"] == "2026-11-16"
+    assert out["included"] == ["youtube"]
+    assert out["behind"] == ["facebook"]
+    assert out["stale"] is False
+    assert out["errors"] == []
+    assert out["excluded"] == [
+        {
+            "platform": "facebook",
+            "reason": "behind",
+            "text": "Facebook hasn't sent money since Tue 27 Oct. Not counted for now.",
+        }
+    ]
+    assert out["currencies"][0]["monthly"]["amountMicros"] == 30_000_000
+
+
+def test_every_app_behind_keeps_them_and_is_stale() -> None:
+    rows = days("youtube", "2026-11-10", [1_000_000] * 60) + days("facebook", "2026-11-09", [100_000] * 60)
+    out = run(rows, platforms=["youtube", "facebook"])
+    assert out["included"] == ["youtube", "facebook"]
+    assert out["behind"] == ["youtube", "facebook"]
+    assert out["through"] == "2026-11-09"
+    assert out["stale"] is True
+
+
+def test_a_failed_check_with_no_rows_is_an_error_not_no_money() -> None:
+    out = run([], platforms=["youtube"], status={"youtube": {**OK, "lastError": "YouTube didn't answer."}})
+    assert out["excluded"] == [{"platform": "youtube", "reason": "error", "text": "Couldn't check YouTube today."}]
+    assert out["errors"] == [{"platform": "youtube", "text": "Couldn't check YouTube today."}]
+
+
+def test_a_negative_previous_period_still_reads_up() -> None:
+    prev = [0] * 29 + [-10]
+    cur = [0] * 29 + [5]
+    usd = run(days("youtube", "2026-11-16", prev + cur), platforms=["youtube"])["currencies"][0]
+    assert (usd["monthly"]["changePct"], usd["monthly"]["direction"]) == (150, "up")
+
+
+def test_the_year_charts_first_week_can_be_a_single_day() -> None:
+    usd = run(days("youtube", "2026-11-16", [1_000] * 400), platforms=["youtube"], chart=365)["currencies"][0]
+    first = usd["chart"]["points"][0]
+    assert first["start"] == first["end"] == "2025-11-17"
+    assert first["partial"] is True
+    assert first["amountMicros"] == 1_000
+
+
+def test_latest_day_with_no_row_in_that_currency_is_zero() -> None:
+    rows = days("youtube", "2026-11-16", [1_000_000] * 40) + days("facebook", "2026-11-15", [200_000] * 40, "EUR")
+    rows = [r for r in rows if not (r["platform"] == "facebook" and r["date"] == "2026-11-15")]
+    rows += [{"platform": "facebook", "date": "2026-11-16", "amountMicros": 0, "currency": "USD"}]
+    out = run(rows, platforms=["youtube", "facebook"])
+    eur = next(c for c in out["currencies"] if c["currency"] == "EUR")
+    assert eur["daily"]["latest"] == {"date": "2026-11-16", "amountMicros": 0}

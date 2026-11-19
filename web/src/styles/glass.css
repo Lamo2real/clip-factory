@@ -304,7 +304,7 @@ html:is(.see-through, [data-backdrop])
     .skill-meta,
     .dash-head__text,
     .dash-head__link,
-    .money-dash > .dash-grey
+    :is(.money-dash, .dash-body) > .dash-grey
   ) {
   border-radius: var(--r-md);
   background: rgb(var(--green-rgb) / var(--panel-veil));
@@ -341,7 +341,7 @@ html:is(.see-through, [data-backdrop])
     .week__money,
     .skill-meta,
     .dash-head__link,
-    .money-dash > .dash-grey
+    :is(.money-dash, .dash-body) > .dash-grey
   ) {
   width: fit-content;
   max-width: 100%;

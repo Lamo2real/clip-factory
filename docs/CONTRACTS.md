@@ -5379,9 +5379,13 @@ share it) reported for your videos over that many days."
   behind". Dates are the platform's own calendar days, formatted on the web as plain dates, never through a time zone.
 * **Monthly MRR** (the main card, biggest number): the sum over `[through−29, through]`, compared with
   `[through−59, through−30]`. **Weekly MRR**: `[through−6, through]` against the 7 days before. **Daily MRR**: Monthly
-  ÷ 30 in whole micros (half away from zero), plus "Latest day: Sat 16 Nov · $1.12". **Yearly MRR**: Monthly × 12
-  (`paceMicros`), always "At this pace for a year", never added to anything, worked out only on the server; "Last 365
-  days: $X" shows only when stored history covers every day of `[through−364, through]` for every counted app.
+  ÷ `coveredDays` in whole micros (half away from zero), plus "Latest day: Sat 16 Nov · $1.12". `coveredDays` is the
+  number of the last 30 days that stored history covers (from the earliest counted app's `historyFrom`, at most 30),
+  so 10 days of $1.00 read $1.00 a day, not $0.33. **Yearly MRR**: Monthly × 12 once 30 days are covered, Monthly ×
+  360 ÷ `coveredDays` before that (`paceMicros`), always "At this pace for a year", never added to anything, worked out
+  only on the server; "Last 365 days: $X" shows only when stored history covers every day of `[through−364, through]`
+  for every counted app. Under 30 covered days the sub-lines say so ("only 10 days so far", "average of 10 days",
+  "from 10 days so far").
 * A day between an app's first stored row (`historyFrom`) and `through` with no row counts as $0; a day before it is
   not covered. A comparison shows only when every counted app covers the whole previous period; otherwise the card
   says "Not enough days to compare yet".
@@ -5400,8 +5404,10 @@ share it) reported for your videos over that many days."
 | App not connected | Left out: "Connect {App} in Settings › Posting › Set up posting." |
 | YouTube without the monetary scope | Left out: "YouTube needs your OK first." with one vermilion **Allow money reading** link to `/settings/posting/money#money-youtube`. |
 | Counted app with no rows yet | Left out: "No money from YouTube yet." |
-| `lastError` on a counted app | Kept in with the rows it has; banner "Couldn't check YouTube today. Showing money up to Thu 14 Nov." (warn tone). |
-| `through` older than today − 6 | The same banner (`stale: true`). |
+| `lastError` and no rows yet | Left out with reason `error`: "Couldn't check YouTube today." and listed in `errors`, so the banner says so (a broken check never reads as "you earned nothing"). |
+| `lastError` on a counted app | Kept in with the rows it has; banner "Couldn't check YouTube today. Showing money up to Thu 14 Nov." (warn tone), naming only the apps in `errors`. |
+| One counted app's newest day older than today − 6 while another is up to date | That app is left out with reason `behind` ("Facebook hasn't sent money since Tue 27 Oct. Not counted for now.") and listed in `behind`, so it cannot pull every app's days back; the others keep current numbers. |
+| Every counted app older than today − 6 | They stay in; `stale: true`; the banner names the apps in `errors` ("Couldn't check …") and the other `behind` apps ("… hasn't sent new money lately."), then "Showing money up to …". |
 | Revised days in the 60 days shown | Grey line "YouTube changed 2 days after rechecking them." |
 | Two or more currencies | Each card stacks one line per currency; a Segmented currency picker (with Glide) above the chart; "Different money types are never added together." |
 | Nothing can be counted | "No money yet." with the nearest goal bar (`nearestGoal`, as on Home) and **See how close you are** (Settings › Posting › Money). No zeros, no chart. |
@@ -5430,9 +5436,16 @@ Every amount carries its tag ("YouTube's estimate", "Meta's estimate", "Apps' es
   a glass **dock** (110 px, two rows, right-aligned) above the tab bar at the bottom right: the app chips on top, the
   period nearest the thumb. Nothing tappable in the top-left third of the page. Ask's home spot moves above the dock
   (§19.8) and the page's bottom padding grows so the last clip scrolls clear. On touch tablets the dock hugs the right
-  edge. **Wide screens with a mouse**: a glass toolbar at the top right of the page, in a rail down the page's right
-  side, so it stays in view (sticky) while the page scrolls; when the page is too narrow for the title beside it, it
-  sits under the title, still on the right.
+  edge. On a short phone (height 640 px or less) the header and the Monthly card tighten so the Monthly number is above
+  the dock on first load, and the "?" stays clear of Ask's home spot. **Wide screens with a mouse**: a full-width glass
+  band under the title that stays at the top (sticky) while the page scrolls; the controls sit at its right end (two
+  short rows, one row once the band is 900 px or wider). The page scrolls under the whole band, so it never floats
+  over the sort bar, a clip's money or the chart. On both layouts the controls come right after the title in reading
+  and tab order (CSS keeps them where they show).
+* **Loading a new filter**: the last filter's numbers and clips stay in place dimmed (`aria-busy`) until the new ones
+  arrive; when the new load fails, they go and the error with Try again shows instead, and Show more appears only for
+  the list on screen. With no money per video for the chosen apps the clip list hides its Sort bar (the note says
+  "Sorted by views.").
 * **Cards**: Monthly (main card, display-size number that counts up once, 700 ms) then Weekly | Daily side by side,
   then Yearly. When the card area is 880 px or wider: Monthly on the left over two rows, Weekly and Daily on the
   right with Yearly under them. A card narrower than 150 px drops its number one step (container query).
@@ -5461,14 +5474,14 @@ Registers the owner like `GET /v1/money`. Reads `MONEYSTATE#` and `REVENUE#{p}#`
 ```ts
 interface MoneySummary {
   platforms: Platform[]; included: Platform[];
-  excluded: { platform: Platform; reason: "not_shared" | "coming_soon" | "not_connected" | "needs_permission" | "no_money_yet"; text: string; where?: MoneyWhere }[];
+  excluded: { platform: Platform; reason: "not_shared" | "coming_soon" | "not_connected" | "needs_permission" | "no_money_yet" | "behind" | "error"; text: string; where?: MoneyWhere }[];
   through: string | null; throughBy: Partial<Record<Platform, string>>; historyFrom: Partial<Record<Platform, string>>;
   lagNote?: string; currencies: MoneyCurrencySummary[]; revised: { days: number; platforms: Platform[] };
-  errors: { platform: Platform; text: string; checkedAt?: string }[]; stale: boolean; asOf: string;
+  errors: { platform: Platform; text: string; checkedAt?: string }[]; behind: Platform[]; stale: boolean; asOf: string;
 }
 interface MoneyChange { previousPeriodMicros: number | null; changePct: number | null; direction: "up" | "down" | "same" | "new" | "none" }
 interface MoneyCurrencySummary {
-  currency: string; tag: string; platforms: Platform[];
+  currency: string; tag: string; platforms: Platform[]; coveredDays: number;   // 1–30
   monthly: { amountMicros: number; from: string; to: string } & MoneyChange;
   weekly:  { amountMicros: number; from: string; to: string } & MoneyChange;
   daily:   { averageMicros: number; from: string; to: string; latest: { date: string; amountMicros: number } | null } & MoneyChange;
@@ -5496,12 +5509,18 @@ interface MoneyClips {
     platforms: { platform: Platform; postId: string; url?: string; postedAt: string; views: number | null;
       money: { amountMicros: number; currency: string; from: string | null; to: string; tag: string; source: string } | null;
       per1000Views: { amountMicros: number; currency: string; views: number; tag: "YouTube's numbers" } | null;
-      moneyState: "reported" | "not_shared" | "coming_soon" | "not_reported_yet" | "needs_permission" }[] }[];
+      moneyState: "reported" | "not_shared" | "coming_soon" | "not_reported_yet" | "needs_permission" | "not_connected" }[] }[];
   nextCursor?: string;
 }
 ```
 
-Money per clip: `all` reads the Post's `revenue`; 7, 30 and 90 read `revenueWindows[period]`. `per1000Views =
+Money per clip: `all` reads the Post's `revenue`; 7, 30 and 90 read `revenueWindows[period]`, and only a window over
+the list's own days (`from` and `to` equal to the list's, `to` being YouTube's newest window) counts: one left from an
+older run is `not_reported_yet` with `money: null`, never ranked beside fresh ones. Only YouTube reports money per
+video (Facebook's is per Page, so a verified Facebook alone is still sorted by views with the note), and only while
+it is connected with the monetary scope, as in the summary: otherwise its lines are `needs_permission` ("YouTube needs
+your OK first. Sorted by views.") or `not_connected` ("Connect YouTube to see money per video. Sorted by views.") with
+no money counted. `per1000Views =
 round(amountMicros × 1000 ÷ views)` only when the money and the views come from the same stored YouTube report and
 those views are at least 1,000. Views per app are the post's lifetime views ("so far").
 

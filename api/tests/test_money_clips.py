@@ -7,14 +7,33 @@ least 1,000.
 
 from __future__ import annotations
 
+import dataclasses
 import json
+from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from clipfactory_api import db
+from clipfactory_api.money import clips, rules
+from clipfactory_api.oauth import setup
 from conftest import USER, Call, seed_clip
 from fakes import FakeS3
 
 PK = db.user_pk(USER)
+NOW = datetime(2026, 11, 19, 12, 0, tzinfo=UTC)
+MONETARY = "https://www.googleapis.com/auth/yt-analytics-monetary.readonly"
+
+
+def connect_youtube(store: db.Store, scopes: list[str] | None = None) -> None:
+    fields = {"accountId": "UC1", "scopes": [MONETARY] if scopes is None else scopes}
+    setup.put_account(store, USER, "youtube", "connected", now=NOW, fields=fields)
+
+
+@pytest.fixture(autouse=True)
+def youtube_may_read_money(store: db.Store) -> None:
+    """YouTube connected with the money permission, as the owner has it once money reading is allowed."""
+    connect_youtube(store)
 
 
 def post(
@@ -244,3 +263,62 @@ def test_internal_fields_never_leave(call: Call, store: db.Store, s3_client: Fak
         '"sk"',
     ):
         assert key not in text
+
+
+def test_a_window_from_an_older_run_is_not_ranked_with_fresh_ones(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    """Finding: clip A's 7-day window from a run weeks ago ($9) must not outrank clip B's real window ($1)."""
+    a = seed_clip(store, s3_client, status="posted")
+    b = seed_clip(store, s3_client, status="posted")
+    old = {**window(9_000_000, 5_000, 7, to="2026-10-01"), "from": "2026-09-25"}
+    post(store, a["clipId"], "youtube", 1, views=9_000, revenueWindows={"7": old})
+    post(store, b["clipId"], "youtube", 2, views=2_000, revenueWindows={"7": window(1_000_000, 1_500, 7)})
+    body = call("GET", "/v1/money/clips", query={"period": "7"})[1]
+    assert (body["from"], body["to"]) == ("2026-11-10", "2026-11-16")
+    assert [c["clipId"] for c in body["clips"]] == [b["clipId"], a["clipId"]]
+    stale = body["clips"][1]
+    assert stale["totals"] == []
+    assert stale["platforms"][0]["moneyState"] == "not_reported_yet"
+    assert stale["platforms"][0]["money"] is None
+    assert stale["platforms"][0]["per1000Views"] is None
+
+
+def test_verified_facebook_alone_sorts_by_views_and_says_so(store: db.Store, s3_client: FakeS3) -> None:
+    """Facebook's money is per Page, not per video: even verified, its clip list can only be sorted by views."""
+    real = rules.load()
+    fb = dataclasses.replace(real.platform("facebook"), money_verified=True)
+    cfg = dataclasses.replace(real, platforms={**real.platforms, "facebook": fb})
+    for i, views in enumerate([10, 900, 50]):
+        clip = seed_clip(store, s3_client, status="posted")
+        post(store, clip["clipId"], "facebook", i, views=views)
+    body = clips.money_clips(
+        store, None, USER, platforms=["facebook"], period="30", sort="money", cursor=None, limit=20, cfg=cfg
+    )
+    assert body["sortedBy"] == "views"
+    assert body["note"] == "Facebook doesn't share money per video. Sorted by views."
+    assert [c["views"] for c in body["clips"]] == [900, 50, 10]
+    assert all(c["platforms"][0]["moneyState"] == "not_shared" for c in body["clips"])
+
+
+def test_youtube_without_the_money_permission_counts_no_money(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    """The summary says "YouTube needs your OK first": the clip list agrees instead of showing stored money."""
+    three_clips(store, s3_client)
+    connect_youtube(store, scopes=[])
+    body = call("GET", "/v1/money/clips", query={"period": "30"})[1]
+    assert body["sortedBy"] == "views"
+    assert body["note"] == "YouTube needs your OK first. Sorted by views."
+    assert (body["from"], body["to"]) == (None, None)
+    for clip in body["clips"]:
+        assert clip["totals"] == []
+        yt = next(line for line in clip["platforms"] if line["platform"] == "youtube")
+        assert (yt["moneyState"], yt["money"], yt["per1000Views"]) == ("needs_permission", None, None)
+
+
+def test_youtube_not_connected_counts_no_money(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    three_clips(store, s3_client)
+    store.delete(PK, setup.account_sk("youtube"))
+    body = call("GET", "/v1/money/clips", query={"platforms": "youtube"})[1]
+    assert body["note"] == "Connect YouTube to see money per video. Sorted by views."
+    assert all(c["platforms"][0]["moneyState"] == "not_connected" for c in body["clips"])
+    assert all(c["totals"] == [] for c in body["clips"])

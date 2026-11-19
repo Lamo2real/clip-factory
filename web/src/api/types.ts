@@ -828,7 +828,9 @@ export type MoneyClipSort = "money" | "views";
 /** Why an app is left out of the totals (§27.3). Never a number. */
 export interface MoneyExcluded {
   platform: Platform;
-  reason: "not_shared" | "coming_soon" | "not_connected" | "needs_permission" | "no_money_yet";
+  /** `behind`: its newest day is over 6 days old while another app is up to date. `error`: its check failed and
+   * nothing is stored yet. */
+  reason: "not_shared" | "coming_soon" | "not_connected" | "needs_permission" | "no_money_yet" | "behind" | "error";
   text: string;
   where?: MoneyWhere;
 }
@@ -854,10 +856,13 @@ export interface MoneyCurrencySummary {
   /** "YouTube's estimate", "Meta's estimate" or "Apps' estimates". */
   tag: string;
   platforms: Platform[];
+  /** The days of the last 30 that stored history covers (30 once it reaches that far): Daily and the pace use it. */
+  coveredDays: number;
   monthly: { amountMicros: number; from: string; to: string } & MoneyChange;
   weekly: { amountMicros: number; from: string; to: string } & MoneyChange;
   daily: { averageMicros: number; from: string; to: string; latest: { date: string; amountMicros: number } | null } & MoneyChange;
-  /** `paceMicros` is Monthly × 12, always shown as "at this pace"; `last365Micros` a real sum once covered. */
+  /** `paceMicros` is Monthly × 12 (over the covered days while under 30), always shown as "at this pace";
+   * `last365Micros` a real sum once covered. */
   yearly: { paceMicros: number; last365Micros: number | null };
   chart: { period: MoneyChart; bucket: "day" | "week"; from: string; to: string; points: MoneyChartPoint[] };
 }
@@ -876,6 +881,8 @@ export interface MoneySummary {
   currencies: MoneyCurrencySummary[];
   revised: { days: number; platforms: Platform[] };
   errors: { platform: Platform; text: string; checkedAt?: string }[];
+  /** Apps whose newest day is over 6 days old (left out while another app is current; all of them when `stale`). */
+  behind: Platform[];
   stale: boolean;
   asOf: string;
 }
@@ -890,7 +897,7 @@ export interface MoneyClipLine {
   money: { amountMicros: number; currency: string; from: string | null; to: string; tag: string; source: string } | null;
   /** Only YouTube, only from the same report as the money, only from 1,000 views. */
   per1000Views: { amountMicros: number; currency: string; views: number; tag: string } | null;
-  moneyState: "reported" | "not_shared" | "coming_soon" | "not_reported_yet" | "needs_permission";
+  moneyState: "reported" | "not_shared" | "coming_soon" | "not_reported_yet" | "needs_permission" | "not_connected";
 }
 
 export interface MoneyClip {

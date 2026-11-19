@@ -19,9 +19,17 @@ export function forgetClipCache(): void {
   cache.clear();
 }
 
-function views(n: number | null): string {
-  return n === null ? "Views not counted yet" : `${count(n)} ${n === 1 ? "view" : "views"} so far`;
+function views(n: number | null, soFar = true): string {
+  return n === null ? "Views not counted yet" : `${count(n)} ${n === 1 ? "view" : "views"}${soFar ? " so far" : ""}`;
 }
+
+const NONE_TEXT: Record<Exclude<MoneyClipLine["moneyState"], "reported">, string> = {
+  not_shared: "Not shared",
+  coming_soon: "Coming soon",
+  not_reported_yet: "None yet",
+  needs_permission: "Needs your OK",
+  not_connected: "Not connected",
+};
 
 function Line({ line }: { line: MoneyClipLine }) {
   return (
@@ -33,9 +41,10 @@ function Line({ line }: { line: MoneyClipLine }) {
       {line.money ? (
         <strong className="mclip__app-money">{formatMoney(line.money.amountMicros, line.money.currency)}</strong>
       ) : (
-        <span className="mclip__none">{line.moneyState === "coming_soon" ? "Coming soon" : line.moneyState === "not_reported_yet" ? "None yet" : "Not shared"}</span>
+        <span className="mclip__none">{NONE_TEXT[line.moneyState === "reported" ? "not_reported_yet" : line.moneyState]}</span>
       )}
-      <span className="mclip__app-views">{views(line.views)}</span>
+      {/* In the wide row's column; the middle text already says "so far". */}
+      <span className="mclip__app-views">{views(line.views, false)}</span>
     </li>
   );
 }
@@ -96,7 +105,10 @@ function Row({ clip }: { clip: MoneyClip }) {
               ))}
             </>
           ) : (
-            <span className="mclip__none">{clip.platforms.some((l) => l.moneyState === "not_reported_yet" || l.moneyState === "coming_soon") ? "None yet" : "Not shared"}</span>
+            <span className="mclip__none">
+              {/* Short, so the row's middle keeps its room on a phone; each app's line says why. */}
+              {clip.platforms.some((l) => l.moneyState !== "not_shared") ? "None yet" : "Not shared"}
+            </span>
           )}
           <Icon name="chevronRight" size={18} />
         </span>
@@ -108,8 +120,13 @@ function Row({ clip }: { clip: MoneyClip }) {
 export function MoneyClipList({ choice, onSort }: { choice: DashChoice; onSort: (sort: MoneyClipSort) => void }) {
   const period = clipPeriod(choice.period);
   const key = `${choice.apps.join(",")}|${period}|${choice.sort}`;
-  const [data, setData] = useState<MoneyClips | null>(() => cache.get(key) ?? null);
-  const [error, setError] = useState<string | null>(null);
+  // Each answer is kept with the filter it belongs to: a load that fails for a new filter never leaves the last
+  // filter's clips and money on screen, and Show more only ever sends a cursor of the list on screen.
+  const [loaded, setLoaded] = useState<{ key: string; data: MoneyClips } | null>(() => {
+    const hit = cache.get(key);
+    return hit ? { key, data: hit } : null;
+  });
+  const [failed, setFailed] = useState<{ key: string; message: string } | null>(null);
   const [moreError, setMoreError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [nonce, setNonce] = useState(0);
@@ -118,24 +135,29 @@ export function MoneyClipList({ choice, onSort }: { choice: DashChoice; onSort: 
   useEffect(() => {
     const mine = ++seq.current;
     const hit = cache.get(key);
-    if (hit) setData(hit);
-    setError(null);
+    if (hit) setLoaded({ key, data: hit });
+    setFailed(null);
     setMoreError(null);
     api()
       .getMoneyClips({ platforms: choice.apps, period, sort: choice.sort, limit: PAGE })
       .then((d) => {
         cache.set(key, d);
-        if (mine === seq.current) setData(d);
+        if (mine === seq.current) setLoaded({ key, data: d });
       })
       .catch((e: unknown) => {
-        if (mine === seq.current) setError(friendlyMessage(e));
+        if (mine === seq.current) setFailed({ key, message: friendlyMessage(e) });
       });
     // `choice.apps` and `choice.sort` are in `key`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, nonce]);
 
+  const fresh = loaded?.key === key;
+  const error = failed?.key === key ? failed.message : null;
+  // While the new filter loads, the last list stays (dimmed, no Show more); once it fails, it goes.
+  const data = loaded && (fresh || !error) ? loaded.data : null;
+
   async function more() {
-    if (!data?.nextCursor) return false;
+    if (!fresh || !data?.nextCursor) return false;
     setBusy(true);
     setMoreError(null);
     const mine = seq.current;
@@ -144,10 +166,10 @@ export function MoneyClipList({ choice, onSort }: { choice: DashChoice; onSort: 
       if (mine !== seq.current) return true;
       const merged = { ...next, clips: [...data.clips, ...next.clips] };
       cache.set(key, merged);
-      setData(merged);
+      setLoaded({ key, data: merged });
       return true;
     } catch (e) {
-      setMoreError(friendlyMessage(e));
+      if (mine === seq.current) setMoreError(friendlyMessage(e));
       return false;
     } finally {
       setBusy(false);
@@ -165,11 +187,14 @@ export function MoneyClipList({ choice, onSort }: { choice: DashChoice; onSort: 
           <h2 className="dash-section-title" id="dash-clips-title">
             Money per clip
           </h2>
-          <p className="dash-grey">{data?.note ?? (data ? sub : " ")}</p>
+          <p className="dash-grey">{fresh ? (data?.note ?? sub) : " "}</p>
         </div>
-        <span className="dash-sort">
-          <Segmented label="Sort clips" value={choice.sort} options={(["money", "views"] as const).map((s) => ({ value: s, label: SORT_LABEL[s] }))} onChange={onSort} />
-        </span>
+        {/* No money per video for these apps: the list can only be sorted by views, and the note says so. */}
+        {fresh && data?.note ? null : (
+          <span className="dash-sort">
+            <Segmented label="Sort clips" value={choice.sort} options={(["money", "views"] as const).map((s) => ({ value: s, label: SORT_LABEL[s] }))} onChange={onSort} />
+          </span>
+        )}
       </div>
       {error && !data ? <ErrorPanel message={error} onRetry={() => setNonce((n) => n + 1)} /> : null}
       {!data && !error ? (
@@ -183,14 +208,14 @@ export function MoneyClipList({ choice, onSort }: { choice: DashChoice; onSort: 
       ) : null}
       {data && !data.clips.length ? <p className="dash-empty-list glass">No posted clips for these apps yet. Clips show here once they're posted.</p> : null}
       {data?.clips.length ? (
-        <ul className="mclip-list" aria-label="Clips">
+        <ul className={`mclip-list${fresh ? "" : " is-loading"}`} aria-label="Clips" aria-busy={!fresh || undefined}>
           {data.clips.map((c) => (
             <Row key={c.clipId} clip={c} />
           ))}
         </ul>
       ) : null}
       {moreError ? <ErrorPanel message={moreError} onRetry={() => void more()} /> : null}
-      {data?.nextCursor && !moreError ? (
+      {fresh && data?.nextCursor && !moreError ? (
         <div className="dash-more">
           <Button icon="plus" act="add" loading={busy} onClick={more}>
             Show more

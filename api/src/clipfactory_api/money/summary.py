@@ -6,9 +6,14 @@ the counted apps, so each app covers the same days (YouTube is 2-3 days behind; 
 period look short).
 
 * Monthly: the 30 days ending on ``through``, compared with the 30 before. Weekly: 7 days, compared with the 7 before.
-* Daily: the 30-day sum divided by 30 (whole micros, half away from zero). Latest day: the amount on ``through``.
-* Yearly: monthly times 12, the "at this pace" figure. It is worked out here so the web never multiplies money, and it
-  is never added to anything. "Last 365 days" is a real sum, only once stored history covers all of it.
+* Daily: the 30-day sum divided by the days of it that stored history covers (``coveredDays``, 30 once history
+  reaches back that far), in whole micros, half away from zero. Latest day: the amount on ``through``.
+* Yearly: the "at this pace" figure, monthly times 12 once 30 days are covered (the 30-day sum times 360 divided by
+  the covered days before that, so a new channel's pace is not cut short). It is worked out here so the web never
+  multiplies money, and it is never added to anything. "Last 365 days" is a real sum, only once stored history covers
+  all of it.
+* An app whose newest day is more than 6 days old while another counted app is up to date is left out (``behind``),
+  so it cannot pull every period back; when every counted app is that old the periods end on it and ``stale`` is on.
 * A missing day inside an app's history counts as 0; a day before its first stored row is not covered. A comparison
   shows only when every counted app covers the whole previous period.
 * Currencies are never converted or added together: one ``currencies`` entry per currency.
@@ -98,6 +103,9 @@ def _excluded(platform: str, status: Mapping[str, Any], *, verified: bool, has_r
         }
     if platform == "youtube" and not status.get("moneyScope"):
         return {"platform": platform, "reason": "needs_permission", "text": f"{name} needs your OK first."}
+    if not has_rows and status.get("lastError"):
+        # A broken check with nothing stored is not "you earned nothing".
+        return {"platform": platform, "reason": "error", "text": f"Couldn't check {name} today."}
     if not has_rows:
         return {"platform": platform, "reason": "no_money_yet", "text": f"No money from {name} yet."}
     return None
@@ -181,6 +189,9 @@ def _entry(
     def covered(start: date) -> bool:
         return all(history[p] <= start for p in plats)
 
+    # The days of the last 30 that stored history covers: a new channel's 10 days are 10 days, not 30.
+    first = min(history[p] for p in plats)
+    days = max(1, min(30, (t - first).days + 1))
     monthly = _total(by_day, back(29), t)
     prev_month = _total(by_day, back(59), back(30)) if covered(back(59)) else None
     weekly = _total(by_day, back(6), t)
@@ -192,17 +203,18 @@ def _entry(
         "currency": currency,
         "tag": tag(plats[0]) if len(plats) == 1 else MIXED_TAG,
         "platforms": plats,
+        "coveredDays": days,
         "monthly": {"amountMicros": monthly, "from": _s(back(29)), "to": _s(t), **change(monthly, prev_month)},
         "weekly": {"amountMicros": weekly, "from": _s(back(6)), "to": _s(t), **change(weekly, prev_week)},
         "daily": {
-            "averageMicros": div_round(monthly, 30),
+            "averageMicros": div_round(monthly, days),
             "from": _s(back(29)),
             "to": _s(t),
             "latest": {"date": _s(t), "amountMicros": sum(by_day.get(_s(t), {}).values())},
             **daily_change,
         },
         "yearly": {
-            "paceMicros": monthly * 12,
+            "paceMicros": div_round(monthly * 360, days),  # monthly x 12 once 30 days are covered
             "last365Micros": _total(by_day, back(364), t) if covered(back(364)) else None,
         },
         "chart": _chart(chart, t, by_day=by_day, plats=plats, history=history),
@@ -247,9 +259,9 @@ def _revised(included: list[str], by_platform: Mapping[str, list[Mapping[str, An
     return {"days": days, "platforms": platforms}
 
 
-def _errors(included: list[str], status: Mapping[str, Mapping[str, Any]]) -> list[Item]:
+def _errors(platforms: list[str], status: Mapping[str, Mapping[str, Any]]) -> list[Item]:
     errors = []
-    for p in included:
+    for p in platforms:
         if status.get(p, {}).get("lastError"):
             item: Item = {"platform": p, "text": f"Couldn't check {label(p)} today."}
             checked = status.get(p, {}).get("checkedAt")
@@ -288,11 +300,32 @@ def summarize(
         "currencies": [],
         "revised": {"days": 0, "platforms": []},
         "errors": [],
+        "behind": [],
         "stale": False,
     }
+    errored = [e["platform"] for e in excluded if e["reason"] == "error"]
     if not included:
+        summary["errors"] = _errors(errored, status)
         return summary
-    through_by = {p: max(str(r["date"]) for r in by_platform[p]) for p in included}
+    newest = {p: max(str(r["date"]) for r in by_platform[p]) for p in included}
+    oldest_ok = today - timedelta(days=STALE_DAYS)
+    behind = [p for p in included if _d(newest[p]) < oldest_ok]
+    if behind and len(behind) < len(included):
+        # One app falling behind would pull every app's days back: count the up-to-date ones, say which is behind.
+        for p in behind:
+            d = _d(newest[p])
+            excluded.append(
+                {
+                    "platform": p,
+                    "reason": "behind",
+                    "text": f"{label(p)} hasn't sent money since {d:%a} {d.day} {d:%b}. Not counted for now.",
+                }
+            )
+        included = [p for p in included if p not in behind]
+        excluded.sort(key=lambda e: MONEY_ORDER.index(e["platform"]))
+        summary["included"] = included
+    summary["behind"] = behind
+    through_by = {p: newest[p] for p in included}
     history_from = {p: min(str(r["date"]) for r in by_platform[p]) for p in included}
     through = _d(min(through_by.values()))
     history = {p: _d(d) for p, d in history_from.items()}
@@ -316,7 +349,7 @@ def summarize(
     entries.sort(key=lambda e: (-int(e["monthly"]["amountMicros"]), str(e["currency"])))
     summary["currencies"] = entries
     summary["revised"] = _revised(included, by_platform, through)
-    summary["errors"] = _errors(included, status)
+    summary["errors"] = _errors(order([*included, *errored, *behind]), status)
     return summary
 
 

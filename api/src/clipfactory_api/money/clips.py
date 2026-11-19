@@ -5,7 +5,10 @@ One Query of the owner's ``POST#`` items, grouped by clip, sorted here, and only
 
 * ``period=all``: the Post's lifetime ``revenue`` (``dimensions=video`` from the video's post day).
 * ``period=7|30|90``: the Post's ``revenueWindows[period]``, read by the collector over the same days as its own
-  ``views`` (§27.6).
+  ``views`` (§27.6). Only a window over the list's own days counts: one left from an older run (that period's read
+  failed later) is "not reported yet", never ranked beside fresh ones.
+* YouTube's money counts only while YouTube is connected with the money permission, the same as the summary: without
+  it the rows say so ("needs_permission" / "not_connected") and the list is sorted by views.
 
 ``per1000Views`` is worked out here only when the money and the views come from the same stored YouTube report and
 those views are at least 1,000. Every other app shows nothing for it: TikTok, Instagram and X have no money API,
@@ -21,9 +24,9 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from .. import db, s3
+from .. import db, posts, s3
 from ..errors import bad_request
-from . import MONEY_ORDER, label, rules
+from . import MONEY_ORDER, label, rules, sources
 from .summary import MONEY_PLATFORMS, div_round, order
 from .view import money_shown, tag
 
@@ -120,8 +123,18 @@ def decode(cursor: str, digest: str) -> int:
     return int(found["o"])
 
 
-def _row(clip_id: str, items: list[Item], chosen: list[str], period: str, cfg: rules.Monetization) -> Item | None:
-    """One clip's line per selected app it was posted to, and its money per currency (only YouTube's numbers)."""
+def _row(
+    clip_id: str,
+    items: list[Item],
+    chosen: list[str],
+    period: str,
+    cfg: rules.Monetization,
+    *,
+    youtube: str,
+    window: tuple[str | None, str | None],
+) -> Item | None:
+    """One clip's line per selected app it was posted to, and its money per currency (only YouTube's numbers).
+    ``youtube``: "ok", "needs_permission" or "not_connected". ``window``: the list's ``(from, to)`` for a period."""
     lines = []
     totals: dict[str, int] = {}
     views_total = 0
@@ -136,8 +149,12 @@ def _row(clip_id: str, items: list[Item], chosen: list[str], period: str, cfg: r
             any_views = True
         money, per = (None, None)
         state = _state(platform, cfg)
-        if platform == "youtube":
+        if platform == "youtube" and youtube != "ok":
+            state = youtube
+        elif platform == "youtube":
             money, per = _money(post, period)
+            if money is not None and period != "all" and (money["from"], money["to"]) != window:
+                money, per = None, None  # an older run's window: other days than the list's
             if money is not None:
                 state = "reported"
                 totals[money["currency"]] = totals.get(money["currency"], 0) + money["amountMicros"]
@@ -221,19 +238,35 @@ def money_clips(
         for p in store.query_all(pk, "POST#")
         if p.get("type") == "post" and p.get("status") == "posted" and p.get("platform") in chosen and p.get("clipId")
     ]
-    sharing = [p for p in chosen if p in MONEY_PLATFORMS and money_shown(cfg, p)]
-    # The money's days: YouTube's window for this period (it ends on YouTube's newest reported day).
+    # Only YouTube reports money per video (Facebook's is per Page), and only while it may read it (as the summary).
+    youtube = "ok"
+    if "youtube" in chosen:
+        account = posts.connected_account(store, user_id, "youtube")
+        if account is None:
+            youtube = "not_connected"
+        elif sources.MONETARY_SCOPE not in {str(s) for s in account.get("scopes") or []}:
+            youtube = "needs_permission"
+    per_video = "youtube" in chosen and youtube == "ok" and money_shown(cfg, "youtube")
+    # The money's days: YouTube's newest window for this period (it ends on YouTube's newest reported day).
     reported = [m for m, _ in (_money(p, period) for p in posted if p.get("platform") == "youtube") if m is not None]
-    to = max((m["to"] for m in reported if m["to"]), default=None) if "youtube" in sharing else None
-    start = min((m["from"] for m in reported if m["from"]), default=None) if to and period != "all" else None
+    to = max((m["to"] for m in reported if m["to"]), default=None) if per_video else None
+    start = (
+        min((m["from"] for m in reported if m["from"] and m["to"] == to), default=None)
+        if to and period != "all"
+        else None
+    )
     groups: dict[str, list[Item]] = {}
     for p in posted:
         day = str(p.get("postedAt") or "")[:10]
         if to is not None and day and day > to:
             continue  # posted after the money's last day: nothing could be reported for it yet
         groups.setdefault(str(p["clipId"]), []).append(p)
-    rows = [r for clip_id, items in groups.items() if (r := _row(clip_id, items, chosen, period, cfg)) is not None]
-    sorted_by = sort if sharing else "views"
+    rows = [
+        r
+        for clip_id, items in groups.items()
+        if (r := _row(clip_id, items, chosen, period, cfg, youtube=youtube, window=(start, to))) is not None
+    ]
+    sorted_by = sort if per_video else "views"
     _sort(rows, sorted_by)
 
     digest = _cursor_hash(chosen, period, sort, to)
@@ -248,9 +281,14 @@ def money_clips(
         "sortedBy": sorted_by,
         "clips": _details(store, media, pk, rows[offset : offset + limit]),
     }
-    if not sharing:
-        verb = "doesn't" if len(chosen) == 1 else "don't"
-        out["note"] = f"{_names(chosen)} {verb} share money per video. Sorted by views."
+    if not per_video:
+        if youtube == "needs_permission":
+            out["note"] = "YouTube needs your OK first. Sorted by views."
+        elif youtube == "not_connected":
+            out["note"] = "Connect YouTube to see money per video. Sorted by views."
+        else:
+            verb = "doesn't" if len(chosen) == 1 else "don't"
+            out["note"] = f"{_names(chosen)} {verb} share money per video. Sorted by views."
     if offset + limit < len(rows):
         out["nextCursor"] = encode(offset + limit, digest)
     return out

@@ -3,8 +3,9 @@
 // are left out with a note, never guessed. Every amount comes from the server and is only formatted here.
 //
 // Phones (and touch tablets) keep the controls in a dock at the bottom right, where the thumb rests, above the tab
-// bar; Ask's home spot moves above the dock while this page is open. Wide screens with a mouse get a toolbar on the
-// title's row, at the top right, that stays in view.
+// bar; Ask's home spot moves above the dock while this page is open. Wide screens with a mouse get the controls at the
+// right of a full-width glass band under the title that stays at the top (the page scrolls under it, so it never
+// floats over a clip's money or the sort bar).
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { api, friendlyMessage } from "../../api/index.ts";
 import type { MoneyChange, MoneyCurrencySummary, MoneyExcluded, MoneySummary, MoneyView, Platform } from "../../api/types.ts";
@@ -46,23 +47,27 @@ export function forgetDashCache(): void {
   cache.clear();
 }
 
-function useSummary(apps: Platform[], period: DashChoice["period"]) {
+/** The summary for one filter. `data` may still be the last filter's (`fresh` false: shown dimmed while the new one
+ * loads, so nothing jumps); an error belongs to its own filter only, and then no old numbers are shown at all. */
+export function useSummary(apps: Platform[], period: DashChoice["period"]) {
   const key = `${apps.join(",")}|${period}`;
-  const [state, setState] = useState<{ key: string; data: MoneySummary | null; error: string | null }>(() => ({ key, data: cache.get(key) ?? null, error: null }));
+  const [state, setState] = useState<{ key: string; data: MoneySummary | null; errorKey: string | null; error: string | null }>(() => {
+    const hit = cache.get(key);
+    return { key, data: hit ?? null, errorKey: null, error: null };
+  });
   const [nonce, setNonce] = useState(0);
   useEffect(() => {
     let alive = true;
     const hit = cache.get(key);
-    // A new filter keeps the last numbers on screen until its own arrive: no skeleton flash, no jump.
-    setState((s) => ({ key, data: hit ?? s.data, error: null }));
+    setState((s) => (hit ? { key, data: hit, errorKey: null, error: null } : { ...s, errorKey: null, error: null }));
     api()
       .getMoneySummary(apps, period)
       .then((data) => {
         cache.set(key, data);
-        if (alive) setState({ key, data, error: null });
+        if (alive) setState({ key, data, errorKey: null, error: null });
       })
       .catch((e: unknown) => {
-        if (alive) setState((s) => ({ ...s, error: friendlyMessage(e) }));
+        if (alive) setState((s) => ({ ...s, errorKey: key, error: friendlyMessage(e) }));
       });
     return () => {
       alive = false;
@@ -70,7 +75,10 @@ function useSummary(apps: Platform[], period: DashChoice["period"]) {
     // `apps` is part of `key`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, nonce]);
-  return { ...state, fresh: state.key === key, reload: () => setNonce((n) => n + 1) };
+  const error = state.errorKey === key ? state.error : null;
+  const fresh = state.key === key;
+  // A failed load for this filter never shows the last filter's numbers under its chips.
+  return { data: error && !fresh ? null : state.data, error, fresh, reload: () => setNonce((n) => n + 1) };
 }
 
 /** The KPI's number counts up once (dopamine), never under reduced motion: the final number is on first paint. */
@@ -81,10 +89,12 @@ function useCountUp(target: number, run: boolean): number {
       setShown(target);
       return;
     }
-    const start = performance.now();
+    // The first frame's time is the start: a frame stamped before this effect ran must never give a negative number.
+    let start: number | null = null;
     let frame = 0;
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / 700);
+      start ??= now;
+      const t = Math.min(1, Math.max(0, (now - start) / 700));
       const eased = 1 - (1 - t) ** 3;
       setShown(t >= 1 ? target : Math.round(target * eased));
       if (t < 1) frame = requestAnimationFrame(tick);
@@ -169,9 +179,20 @@ function noCompare(c: MoneyCurrencySummary, kind: Kpi): boolean {
   return ch.direction === "none" && ch.previousPeriodMicros === null;
 }
 
+/** The sub-line, honest about a short history: Daily and the pace are worked out over the days stored so far. */
+export function kpiSub(kind: Kpi, coveredDays: number): string {
+  if (coveredDays >= 30) return KPI_TEXT[kind].sub;
+  const n = coveredDays === 1 ? "1 day" : `${coveredDays} days`;
+  if (kind === "monthly") return `Money in the last 30 days · only ${n} so far`;
+  if (kind === "daily") return `A normal day lately (average of ${n})`;
+  if (kind === "yearly") return `At this pace for a year · from ${n} so far`;
+  return KPI_TEXT[kind].sub;
+}
+
 function KpiCard({ kind, currencies, help, main = false, children }: { kind: Kpi; currencies: MoneyCurrencySummary[]; help?: string; main?: boolean; children?: ReactNode }) {
   const t = KPI_TEXT[kind];
   const titleId = useId();
+  const covered = Math.min(...currencies.map((c) => c.coveredDays));
   return (
     <section className={`dash-kpi dash-kpi--${kind} glass${main ? " dash-kpi--main glass--green" : ""}`} aria-labelledby={titleId} data-kpi={kind} data-help={help}>
       <div className="dash-kpi__head">
@@ -180,7 +201,7 @@ function KpiCard({ kind, currencies, help, main = false, children }: { kind: Kpi
         </h2>
         {children}
       </div>
-      <p className="dash-kpi__sub">{t.sub}</p>
+      <p className="dash-kpi__sub">{kpiSub(kind, covered)}</p>
       <div className="dash-kpi__lines">
         {currencies.map((c) => (
           <KpiLine key={c.currency} kind={kind} c={c} count={main} />
@@ -358,7 +379,7 @@ function PeriodPick({ value, onChange }: { value: DashChoice["period"]; onChange
 
 function Controls({ choice, set, dock }: { choice: DashChoice; set: (c: Partial<DashChoice>) => void; dock: boolean }) {
   return (
-    <div className={dock ? "money-dock glass glass--refract" : "dash-toolbar glass glass--refract"} data-help-dodge="">
+    <div className={dock ? "money-dock glass glass--refract" : "dash-toolbar"} data-help-dodge="" role="group" aria-label="Choose apps and days">
       <AppsFilter apps={choice.apps} onChange={(apps) => set({ apps })} />
       <PeriodPick value={choice.period} onChange={(period) => set({ period })} />
     </div>
@@ -373,16 +394,25 @@ function PaidLink() {
   );
 }
 
+/** The words of the warn banner: only the apps whose check failed, or that are behind, are named (§27.3). */
+export function bannerText(summary: Pick<MoneySummary, "errors" | "behind" | "stale" | "through">): string | null {
+  const failed = summary.errors.map((e) => e.platform);
+  const late = (summary.stale ? (summary.behind ?? []) : []).filter((p) => !failed.includes(p));
+  if (!failed.length && !late.length) return null;
+  const parts: string[] = [];
+  if (failed.length) parts.push(`Couldn't check ${names(failed)} today.`);
+  if (late.length) parts.push(`${names(late)} ${late.length === 1 ? "hasn't" : "haven't"} sent new money lately.`);
+  if (summary.stale && summary.through) parts.push(`Showing money up to ${plainDay(summary.through)}.`);
+  return parts.join(" ");
+}
+
 function Banner({ summary }: { summary: MoneySummary }) {
-  const err = summary.errors[0];
-  if (!err && !summary.stale) return null;
-  const app = err ? PLATFORM_LABEL[err.platform] : names(summary.included);
+  const text = bannerText(summary);
+  if (!text) return null;
   return (
     <p className="dash-banner" role="status">
       <Icon name="alert" size={18} />
-      <span>
-        Couldn't check {app} today.{summary.through ? ` Showing money up to ${plainDay(summary.through)}.` : ""}
-      </span>
+      <span>{text}</span>
     </p>
   );
 }
@@ -437,42 +467,12 @@ export function MoneyDashboard() {
     };
   }, [dock]);
 
-  // Wide screens: the toolbar floats in a rail down the page's right side (so it stays in view, top right, as the page
-  // scrolls), and the header keeps its room free.
-  const page = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const root = page.current;
-    const bar = root?.querySelector<HTMLElement>(".dash-toolbar");
-    if (dock || !root || !bar) return;
-    const text = root.querySelector<HTMLElement>(".dash-head__text");
-    const measure = () => {
-      // Too narrow for the title and the toolbar side by side: the toolbar goes under the title, still on the right.
-      const stacked = root.clientWidth - bar.offsetWidth < 300;
-      root.classList.toggle("is-stacked", stacked);
-      root.style.setProperty("--dash-tb-w", `${Math.ceil(bar.offsetWidth)}px`);
-      root.style.setProperty("--dash-tb-h", `${Math.ceil(bar.offsetHeight)}px`);
-      root.style.setProperty("--dash-head-h", stacked && text ? `${Math.ceil(text.offsetHeight) + 8}px` : "0px");
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(bar);
-    ro.observe(root);
-    if (text) ro.observe(text);
-    return () => ro.disconnect();
-  }, [dock]);
-
   const shown = data?.currencies.find((c) => c.currency === currency) ?? data?.currencies[0] ?? null;
   const onlyNotShared = data && !data.included.length && data.excluded.length > 0 && data.excluded.every((e) => e.reason === "not_shared");
   const thisYear = new Date().getUTCFullYear();
 
   return (
-    <div ref={page} className={`page money-dash${dock ? " is-dock" : " is-toolbar"}`} data-help="money-dash" aria-busy={!fresh || undefined}>
-      {dock ? null : (
-        <div className="dash-rail">
-          <Controls choice={choice} set={set} dock={false} />
-        </div>
-      )}
+    <div className={`page money-dash${dock ? " is-dock" : " is-toolbar"}`} data-help="money-dash" aria-busy={!fresh || undefined}>
       <header className="dash-head">
         <div className="dash-head__text">
           <h1 className="page-head__title">Money</h1>
@@ -489,15 +489,24 @@ export function MoneyDashboard() {
             )}
           </p>
         </div>
-        {dock ? null : <span className="dash-head__room" aria-hidden="true" />}
         {/* Phones: the link waits under the cards, so the Monthly number is in view above the dock. */}
         {dock ? null : <PaidLink />}
       </header>
 
+      {/* Right after the title in the reading and tab order on both layouts. Wide screens: a full-width glass band
+          that stays at the top (the page scrolls under it, nothing hides beside it); phones: the fixed dock. */}
+      {dock ? (
+        <Controls choice={choice} set={set} dock />
+      ) : (
+        <div className="dash-band glass glass--refract">
+          <Controls choice={choice} set={set} dock={false} />
+        </div>
+      )}
+
       {error && !data ? <ErrorPanel message={error} onRetry={reload} /> : null}
       {!data && !error ? <Skeletons /> : null}
       {data ? (
-        <>
+        <div className={`dash-body${fresh ? "" : " is-loading"}`}>
           <Banner summary={data} />
           <div className="dash-grid-box">
           <div className="dash-grid">
@@ -538,12 +547,10 @@ export function MoneyDashboard() {
               <HistoryNote summary={data} entry={shown} thisYear={thisYear} />
             </section>
           ) : null}
-        </>
+        </div>
       ) : null}
 
       <MoneyClipList choice={choice} onSort={(sort) => set({ sort })} />
-
-      {dock ? <Controls choice={choice} set={set} dock /> : null}
     </div>
   );
 }

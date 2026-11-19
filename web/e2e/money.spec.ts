@@ -95,7 +95,10 @@ test("in the programme: Home celebrates once and shows how close the money is", 
   await expect(page.getByText("You're in YouTube's Partner Program!")).toBeVisible();
   const tile = page.locator(".money-tile");
   await expect(tile).toContainText("Your money.");
+  // See money opens the money dashboard (§25.7 as amended by §27.4); its header link leads on to the programme cards.
   await tile.getByRole("link", { name: "See money" }).click();
+  await expect(page).toHaveURL(/\/money$/);
+  await page.getByRole("link", { name: "How close am I to getting paid?" }).click();
   await expect(page).toHaveURL(new RegExp(`${PATH}$`));
   await settle(page);
   await expect(pill(page, "youtube")).toHaveText("In the program");

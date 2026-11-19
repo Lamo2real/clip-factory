@@ -80,6 +80,8 @@ export function MoneyChart({ summary, entry }: { summary: MoneySummary; entry: M
         className="dash-chart__plot"
         style={{ height }}
         tabIndex={0}
+        role="group"
+        aria-roledescription="chart"
         aria-label={`${label} Use the left and right arrow keys to read each ${unit}.`}
         aria-describedby={list ? listId : undefined}
         onPointerMove={(e) => pick(e.clientX)}
@@ -98,7 +100,7 @@ export function MoneyChart({ summary, entry }: { summary: MoneySummary; entry: M
           setAt(next);
         }}
       >
-        <svg width="100%" height={height} viewBox={`0 0 ${Math.max(1, width)} ${height}`} preserveAspectRatio="none" role="img" aria-label={label}>
+        <svg width="100%" height={height} viewBox={`0 0 ${Math.max(1, width)} ${height}`} preserveAspectRatio="none" aria-hidden="true" focusable="false">
           <rect className="dash-chart__base" x={0} y={height - 3} width={Math.max(1, width)} height={3} rx={1.5} />
           {width > 0
             ? points.map((p, i) => {
@@ -150,7 +152,7 @@ export function MoneyChart({ summary, entry }: { summary: MoneySummary; entry: M
       <div className="dash-chart__under">
         <span>{points[0] ? plainShort(points[0].start) : ""}</span>
         {split ? (
-          <span className="dash-legend" aria-label="Colours">
+          <span className="dash-legend" role="group" aria-label="Colours">
             {stacked.map((s) => (
               <span key={s} className="dash-legend__item">
                 <span className="dash-legend__swatch" style={{ background: FILL[s] }} aria-hidden="true" />

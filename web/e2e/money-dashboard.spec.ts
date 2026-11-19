@@ -85,6 +85,18 @@ for (const v of VIEWPORTS) {
         [...document.querySelectorAll(".money-dash a, .money-dash button, .money-dash label, .money-dash [tabindex]")].map((el) => getComputedStyle(el).cursor).filter((c) => c !== "default"),
       );
       expect(cursors).toEqual([]);
+      // The change chip's words carry the change: never cut off, even in the narrowest card.
+      const cut = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>(".dash-chip .pill__text")].filter((el) => el.scrollWidth > el.clientWidth + 0.5).map((el) => el.textContent),
+      );
+      expect(cut, `${label(v)} ${scheme}: cut-off chips`).toEqual([]);
+      // Wide clip rows: each app's views fit on one line in its column.
+      const wrapped = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>(".mclip__app:not(.mclip__app--none) .mclip__app-views")]
+          .filter((el) => getComputedStyle(el).display !== "none")
+          .filter((el) => el.getBoundingClientRect().height > parseFloat(getComputedStyle(el).lineHeight) * 1.5).length,
+      );
+      expect(wrapped, `${label(v)} ${scheme}: app views wrapping`).toBe(0);
       await ctx.close();
     }
   });
@@ -103,6 +115,7 @@ for (const v of VIEWPORTS) {
         const pad = parseFloat(getComputedStyle(d).paddingRight);
         const controls = [...d.querySelectorAll<HTMLElement>("button, .segmented__opt")].map((el) => el.getBoundingClientRect());
         const seg = d.querySelector(".dash-period .segmented")!.getBoundingClientRect();
+        const num = document.querySelector("[data-kpi=monthly] .dash-num")!.getBoundingClientRect();
         const tabEl = document.querySelector<HTMLElement>(".tabbar");
         const tab = tabEl && tabEl.offsetParent !== null ? tabEl.getBoundingClientRect() : null;
         const ask = document.querySelector<HTMLElement>(".help-launcher");
@@ -121,6 +134,7 @@ for (const v of VIEWPORTS) {
           tab: tab && { top: tab.top, bottom: tab.bottom },
           ask: askBox && { top: askBox.top, bottom: askBox.bottom, left: askBox.left, right: askBox.right },
           askHidden: ask?.classList.contains("is-hidden") ?? false,
+          numBottom: num.bottom,
           topLeft: topLeft.length,
         };
       });
@@ -132,7 +146,9 @@ for (const v of VIEWPORTS) {
       if (geo.ask) {
         const overlaps = !(geo.ask.bottom <= geo.box.top || geo.ask.top >= geo.box.bottom || geo.ask.right <= geo.box.left || geo.ask.left >= geo.box.right);
         expect(overlaps, "Ask sits above the dock").toBe(false);
+        expect(geo.askHidden, "Ask stays shown once the page is still").toBe(false);
       }
+      expect(geo.numBottom, "the Monthly number is in view above the dock on first load").toBeLessThanOrEqual(geo.box.top);
       // The last clip row scrolls fully clear of the dock.
       await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
       await page.waitForTimeout(200);
@@ -160,6 +176,24 @@ for (const v of VIEWPORTS) {
       expect(box!.y).toBeGreaterThanOrEqual(0);
       expect(box!.y + box!.height).toBeLessThanOrEqual(v.h / 3);
       await expect(bar).toBeInViewport();
+      // It is a full-width band the page scrolls under, not a pill floating over the content beside it.
+      const widths = await page.evaluate(() => ({
+        band: document.querySelector(".dash-band")!.getBoundingClientRect().width,
+        page: document.querySelector(".money-dash")!.getBoundingClientRect().width,
+      }));
+      expect(widths.band).toBeGreaterThanOrEqual(widths.page - 1);
+      // The sort bar and a clip's money, scrolled to where they are read, are never under the band.
+      const clear = async (selector: string) => {
+        await page.locator(selector).first().evaluate((el) => el.scrollIntoView({ block: "center" }));
+        await page.waitForTimeout(150);
+        return page.evaluate((sel) => {
+          const band = document.querySelector(".dash-band")!.getBoundingClientRect();
+          const r = document.querySelector(sel)!.getBoundingClientRect();
+          return r.top >= band.bottom || r.bottom <= band.top;
+        }, selector);
+      };
+      expect(await clear(".dash-sort"), "sort bar clear of the band").toBe(true);
+      expect(await clear(".mclip-item:nth-child(6) .mclip__total"), "a clip's total clear of the band").toBe(true);
       await ctx.close();
     });
   }
@@ -191,6 +225,8 @@ test.describe("flows", () => {
     await expect(page.locator("[data-kpi='not-shared']")).toContainText("TikTok doesn't share money with apps. Look in Profile › Balance.");
     await expect(page.locator(".dash-clips")).toContainText("TikTok doesn't share money per video. Sorted by views.");
     await expect(page.locator(".mclip").first()).not.toContainText("$");
+    // The list can only be sorted by views: no sort bar saying "Most money".
+    await expect(page.getByRole("radiogroup", { name: "Sort clips" })).toHaveCount(0);
     await expect(page).toHaveURL(/\/money\?apps=tiktok$/);
   });
 
@@ -249,7 +285,10 @@ test.describe("flows", () => {
     await expect(page.locator(".dash-chart [aria-live]")).toContainText("Mon 16 Nov");
     await page.getByRole("button", { name: "Show as a list" }).click();
     await expect(page.locator(".dash-chart__list li")).toHaveCount(30);
-    await expect(plot.locator("svg")).toHaveAttribute("aria-label", /^Money per day, 30 days up to Mon 16 Nov\. Highest: \$/);
+    // One name, on the focusable plot (a group, so screen readers read it); the drawing itself is hidden.
+    await expect(plot).toHaveAttribute("role", "group");
+    await expect(plot).toHaveAttribute("aria-label", /^Money per day, 30 days up to Mon 16 Nov\. Highest: \$/);
+    await expect(plot.locator("svg")).toHaveAttribute("aria-hidden", "true");
   });
 
   test("a clip row opens its clip page, and Show more loads the next page", async ({ page }) => {
@@ -294,6 +333,33 @@ test.describe("flows", () => {
     await expect(page).toHaveURL(/\/money$/);
     await expect(page.locator(".tabbar__item[aria-current='page']")).toHaveAttribute("aria-label", "Money");
     expect(await page.title()).toBe("Money · Clip Factory");
+  });
+
+  test("the filters come right after the title in reading and tab order", async ({ page }) => {
+    await open(page);
+    const order = await page.evaluate(() => [...document.querySelector(".money-dash")!.children].slice(0, 2).map((el) => el.className));
+    expect(order[0]).toContain("dash-head");
+    expect(order[1]).toContain("money-dock");
+  });
+
+  test("with motion on, the count-up never shows a negative amount", async ({ browser }) => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: "no-preference" });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => {
+      const seen: string[] = [];
+      (window as unknown as { __seen: string[] }).__seen = seen;
+      new MutationObserver(() => {
+        for (const el of document.querySelectorAll("[data-kpi=monthly] .dash-num")) seen.push(el.textContent ?? "");
+      }).observe(document, { subtree: true, childList: true, characterData: true });
+    });
+    await open(page);
+    await page.waitForTimeout(1200);
+    const seen = await page.evaluate(() => (window as unknown as { __seen: string[] }).__seen);
+    expect(seen.length).toBeGreaterThan(1);
+    expect(seen.filter((t) => t.trim().startsWith("-") || t.includes("−"))).toEqual([]);
+    const num = page.locator("[data-kpi='monthly'] .dash-num").first();
+    expect(await num.textContent()).toBe(await num.getAttribute("data-final"));
+    await ctx.close();
   });
 
   test("with reduced motion the number is final on first paint (no count-up)", async ({ page }) => {

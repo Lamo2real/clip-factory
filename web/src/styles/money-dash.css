@@ -23,18 +23,6 @@
   min-width: 0;
   padding-inline: var(--loose-x);
 }
-.dash-head__room {
-  width: var(--dash-tb-w, 0px);
-  height: var(--dash-tb-h, 0px);
-}
-.money-dash.is-stacked .dash-head__text,
-.money-dash.is-stacked .dash-head__room {
-  grid-column: 1 / -1;
-}
-.money-dash.is-stacked .dash-head__room {
-  justify-self: end;
-  margin-top: 8px;
-}
 /* Under the title, at the right: never top left, where a thumb can't reach. */
 .dash-head__link {
   grid-column: 1 / -1;
@@ -52,39 +40,57 @@
 .dash-through {
   padding-inline: 0;
 }
-.money-dash > .dash-head__link {
+.dash-body > .dash-head__link {
   margin-top: -6px;
 }
 
-/* ---------- Wide screens: the toolbar's rail (top right, stays in view) ---------- */
-.dash-rail {
-  position: absolute;
+/* ---------- Wide screens: a full-width glass band under the title that stays at the top ---------- */
+/* The page scrolls under the whole band, so the controls never float over the sort bar, a clip's money or the chart
+   beside them (a band, not a pill). The controls sit at its right end: top right, never top left. */
+.dash-band {
+  position: sticky;
   z-index: 30;
-  top: calc(6px + var(--dash-head-h, 0px));
-  right: 0;
-  bottom: 0;
+  top: calc(env(safe-area-inset-top) + 8px + var(--todo-bar-h, 0px));
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  width: 100%;
-  pointer-events: none;
+  justify-content: flex-end;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  --glass-blur: 28px;
+}
+.dash-band > * {
+  position: relative;
+  z-index: 1;
+}
+.dash-band {
+  container-type: inline-size;
 }
 .dash-toolbar {
-  position: sticky;
-  top: calc(env(safe-area-inset-top) + 12px + var(--todo-bar-h, 0px));
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: 6px 10px;
-  /* Two short rows (the apps, then the days), so it stays in the top-right corner at every width. */
+  min-width: 0;
+  /* Two short rows (the apps, then the days) so it stays in the right half; one row once the band is wide. */
   max-width: min(100%, 340px);
-  padding: 6px;
-  border-radius: var(--r-lg);
-  pointer-events: auto;
-  /* Pages scroll under it: a floating layer's tint. */
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
-  --glass-blur: 28px;
+}
+@container (min-width: 900px) {
+  .dash-toolbar {
+    max-width: none;
+  }
+}
+
+/* While a new filter loads, the last numbers stay in place but dimmed, so they never read as the new filter's. */
+.dash-body {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.dash-body.is-loading,
+.mclip-list.is-loading {
+  opacity: 0.4;
+  transition: opacity var(--dur-2) var(--ease-out);
 }
 
 /* ---------- The controls ---------- */
@@ -179,6 +185,26 @@
 .money-dock .dash-period .segmented__opt {
   padding: 6px 8px;
   font-size: 0.85rem;
+}
+/* Short phones (320 x 568, the desktop app's 380 x 600): a tighter header and Monthly card, so the main number sits
+   above the dock on first load instead of under it. */
+@media (max-height: 640px) {
+  .money-dash.is-dock {
+    gap: 10px;
+  }
+  .money-dash.is-dock .dash-body {
+    gap: 10px;
+  }
+  .money-dash.is-dock .dash-head {
+    padding-top: 0;
+  }
+  .money-dash.is-dock .dash-kpi--main {
+    min-height: 0;
+    padding-block: 12px 14px;
+  }
+  .money-dash.is-dock .dash-kpi--main .dash-kpi__lines {
+    margin-block: 0;
+  }
 }
 /* Touch tablets: no tab bar; the dock hugs the right edge and is only as wide as it needs. */
 @media (min-width: 768px) {
@@ -355,7 +381,24 @@ a.dash-shared:hover {
     font-family: var(--font-ui);
     font-weight: 750;
   }
+  /* The words carry the change (never colour alone): in a narrow card they wrap rather than get cut. */
+  .dash-chip .pill {
+    max-width: none;
+    white-space: normal;
+    padding-inline: 8px;
+    font-size: var(--fs-xs);
+  }
+  .dash-chip .pill .icon,
+  .dash-chip .pill svg {
+    display: none;
+  }
+  .dash-chip .pill__text {
+    overflow: visible;
+    text-overflow: clip;
+  }
 }
+/* In the card's top-right corner (never top left, where a thumb can't reach). On a short phone the tighter Monthly card
+   (below) keeps it above Ask's home spot, so Ask never has to fade out on landing. */
 .dash-why {
   margin: -10px -10px -10px 0;
 }
@@ -774,17 +817,23 @@ a.dash-shared:hover {
     flex-direction: column;
     align-items: flex-start;
     justify-content: center;
-    width: 88px;
+    flex: none;
+    width: 96px;
     gap: 2px;
   }
+  /* The apps that don't share: their marks on one line and their views wrapping under them, never squeezed. */
   .mclip__app--none {
-    width: auto;
-    max-width: 180px;
+    flex: none;
+    width: 176px;
   }
   .mclip__app-views {
     display: block;
     color: var(--ink-2);
     font-size: var(--fs-xs);
+    white-space: nowrap;
+  }
+  .mclip__app--none .mclip__app-views {
+    white-space: normal;
   }
   .mclip__total {
     grid-column: 4;
@@ -799,4 +848,16 @@ a.dash-shared:hover {
 }
 .mclip__app--none .mclip__none {
   white-space: nowrap;
+}
+.mclip__app--none > .mclip__marks {
+  flex-wrap: wrap;
+}
+
+/* The see-through window: the alternate clip rows take a green tint instead of a light one, so their words keep AA
+   contrast over a white desktop behind the glass. */
+html:is(.see-through, [data-backdrop]) .mclip-item:nth-child(odd) .mclip {
+  background: rgb(var(--green-deep-rgb) / 0.34);
+}
+html:is(.see-through, [data-backdrop]) .mclip:hover {
+  background: rgb(var(--green-deep-rgb) / 0.44);
 }

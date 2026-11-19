@@ -33,6 +33,13 @@ const toN = (day: string) => Date.UTC(Number(day.slice(0, 4)), Number(day.slice(
 const toS = (n: number) => new Date(n * DAY_MS).toISOString().slice(0, 10);
 export const addDays = (day: string, n: number) => toS(toN(day) + n);
 export const todayUtc = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
+const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "Tue 27 Oct", as the server words it (English, no time zone). */
+const plainDayEn = (day: string) => {
+  const d = new Date(toN(day) * DAY_MS);
+  return `${WEEKDAY[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH[d.getUTCMonth()]}`;
+};
 
 // ---------- integer helpers (the same steps as the server) ----------
 
@@ -93,6 +100,7 @@ function excludedFor(platform: Platform, status: MoneyStatus, verified: boolean,
   if (platform === "facebook" && !verified) return { platform, reason: "coming_soon", text: "Facebook money: coming soon." };
   if (!status.connected) return { platform, reason: "not_connected", text: `Connect ${name} in Settings › Posting › Set up posting.` };
   if (platform === "youtube" && !status.moneyScope) return { platform, reason: "needs_permission", text: `${name} needs your OK first.` };
+  if (!hasRows && status.lastError) return { platform, reason: "error", text: `Couldn't check ${name} today.` };
   if (!hasRows) return { platform, reason: "no_money_yet", text: `No money from ${name} yet.` };
   return null;
 }
@@ -144,6 +152,8 @@ function chartFor(period: MoneyChart, through: number, byDay: ByDay, plats: Plat
 
 function entry(currency: string, byDay: ByDay, t: number, plats: Platform[], history: Map<Platform, number>, chart: MoneyChart): MoneyCurrencySummary {
   const covered = (start: number) => plats.every((p) => history.get(p)! <= start);
+  const first = Math.min(...plats.map((p) => history.get(p)!));
+  const days = Math.max(1, Math.min(30, t - first + 1));
   const monthly = total(byDay, t - 29, t);
   const prevMonth = covered(t - 59) ? total(byDay, t - 59, t - 30) : null;
   const weekly = total(byDay, t - 6, t);
@@ -156,10 +166,11 @@ function entry(currency: string, byDay: ByDay, t: number, plats: Platform[], his
     currency,
     tag: plats.length === 1 ? (plats[0] === "facebook" || plats[0] === "instagram" ? "Meta's estimate" : `${LABEL[plats[0]!]}'s estimate`) : "Apps' estimates",
     platforms: plats,
+    coveredDays: days,
     monthly: { amountMicros: monthly, from: toS(t - 29), to: toS(t), ...change(monthly, prevMonth) },
     weekly: { amountMicros: weekly, from: toS(t - 6), to: toS(t), ...change(weekly, prevWeek) },
-    daily: { averageMicros: divRound(monthly, 30), from: toS(t - 29), to: toS(t), latest: { date: toS(t), amountMicros: latest }, ...dailyChange },
-    yearly: { paceMicros: monthly * 12, last365Micros: covered(t - 364) ? total(byDay, t - 364, t) : null },
+    daily: { averageMicros: divRound(monthly, days), from: toS(t - 29), to: toS(t), latest: { date: toS(t), amountMicros: latest }, ...dailyChange },
+    yearly: { paceMicros: divRound(monthly * 360, days), last365Micros: covered(t - 364) ? total(byDay, t - 364, t) : null },
     chart: chartFor(chart, t, byDay, plats, history),
   };
 }
@@ -189,9 +200,34 @@ export function summarize(input: SummaryInput): Omit<MoneySummary, "asOf"> {
     currencies: [],
     revised: { days: 0, platforms: [] },
     errors: [],
+    behind: [],
     stale: false,
   };
-  if (!included.length) return summary;
+  const errorsFor = (list: Platform[]) =>
+    orderOf(list)
+      .filter((p) => input.status[p]?.lastError)
+      .map((p) => {
+        const item: MoneySummary["errors"][number] = { platform: p, text: `Couldn't check ${LABEL[p]} today.` };
+        const checked = input.status[p]?.checkedAt;
+        if (checked) item.checkedAt = checked;
+        return item;
+      });
+  const errored = excluded.filter((e) => e.reason === "error").map((e) => e.platform);
+  if (!included.length) {
+    summary.errors = errorsFor(errored);
+    return summary;
+  }
+  const newest = new Map<Platform, string>(included.map((p) => [p, byPlatform.get(p)!.map((r) => r.date).sort().at(-1)!]));
+  const oldestOk = toN(input.today) - STALE_DAYS;
+  const behind = included.filter((p) => toN(newest.get(p)!) < oldestOk);
+  if (behind.length && behind.length < included.length) {
+    // One app falling behind would pull every app's days back: count the up-to-date ones, say which is behind.
+    for (const p of behind) excluded.push({ platform: p, reason: "behind", text: `${LABEL[p]} hasn't sent money since ${plainDayEn(newest.get(p)!)}. Not counted for now.` });
+    excluded.sort((a, b) => ORDER.indexOf(a.platform) - ORDER.indexOf(b.platform));
+    included.splice(0, included.length, ...included.filter((p) => !behind.includes(p)));
+    summary.included = included;
+  }
+  summary.behind = behind;
   const throughBy: Partial<Record<Platform, string>> = {};
   const historyFrom: Partial<Record<Platform, string>> = {};
   for (const p of included) {
@@ -239,14 +275,7 @@ export function summarize(input: SummaryInput): Omit<MoneySummary, "asOf"> {
     }
   }
   summary.revised = { days: revisedDays, platforms: revisedPlatforms };
-  summary.errors = included
-    .filter((p) => input.status[p]?.lastError)
-    .map((p) => {
-      const item: MoneySummary["errors"][number] = { platform: p, text: `Couldn't check ${LABEL[p]} today.` };
-      const checked = input.status[p]?.checkedAt;
-      if (checked) item.checkedAt = checked;
-      return item;
-    });
+  summary.errors = errorsFor([...included, ...errored, ...behind]);
   return summary;
 }
 
@@ -294,14 +323,22 @@ function moneyOf(post: MoneyPost, period: MoneyClipsQuery["period"]): [MoneyClip
 const namesOf = (list: Platform[]) => (list.length === 1 ? LABEL[list[0]!] : `${list.slice(0, -1).map((p) => LABEL[p]).join(", ")} and ${LABEL[list.at(-1)!]}`);
 
 /** GET /v1/money/clips over the pretend app's posts. `cursor` is the offset as a string (opaque to the screen). */
-export function moneyClips(posts: MoneyPost[], cards: Map<string, ClipCard>, query: MoneyClipsQuery, facebookVerified: boolean): MoneyClips {
+export function moneyClips(
+  posts: MoneyPost[],
+  cards: Map<string, ClipCard>,
+  query: MoneyClipsQuery,
+  facebookVerified: boolean,
+  youtube: "ok" | "needs_permission" | "not_connected" = "ok",
+): MoneyClips {
   const chosen = orderOf(query.platforms).length ? orderOf(query.platforms) : [...ORDER];
   const posted = posts.filter((p) => chosen.includes(p.platform));
-  const sharing = chosen.filter((p) => MONEY_PLATFORMS.has(p) && (p !== "facebook" || facebookVerified));
+  // Only YouTube reports money per video (Facebook's is per Page), and only while it may read it.
+  const perVideo = chosen.includes("youtube") && youtube === "ok";
   const reported = posted.filter((p) => p.platform === "youtube").map((p) => moneyOf(p, query.period)[0]).filter((m) => m !== null);
   const ends = reported.map((m) => m.to).filter(Boolean).sort();
-  const to = sharing.includes("youtube") && ends.length ? ends.at(-1)! : null;
-  const starts = reported.map((m) => m.from).filter((f): f is string => Boolean(f)).sort();
+  const to = perVideo && ends.length ? ends.at(-1)! : null;
+  const starts = reported.filter((m) => m.to === to).map((m) => m.from).filter((f): f is string => Boolean(f)).sort();
+  const windowFrom = to && query.period !== "all" ? (starts[0] ?? null) : null;
   const groups = new Map<string, MoneyPost[]>();
   for (const p of posted) {
     const day = p.postedAt.slice(0, 10);
@@ -324,8 +361,11 @@ export function moneyClips(posts: MoneyPost[], cards: Map<string, ClipCard>, que
       let money: MoneyClipLine["money"] = null;
       let per: MoneyClipLine["per1000Views"] = null;
       let state: MoneyClipLine["moneyState"] = !MONEY_PLATFORMS.has(platform) ? "not_shared" : platform === "facebook" ? (facebookVerified ? "not_shared" : "coming_soon") : "not_reported_yet";
-      if (platform === "youtube") {
+      if (platform === "youtube" && youtube !== "ok") state = youtube;
+      else if (platform === "youtube") {
         [money, per] = moneyOf(post, query.period);
+        // An older run's window covers other days than the list's: "not reported yet", never ranked with fresh ones.
+        if (money && query.period !== "all" && (money.from !== windowFrom || money.to !== to)) [money, per] = [null, null];
         if (money) {
           state = "reported";
           totals.set(money.currency, (totals.get(money.currency) ?? 0) + money.amountMicros);
@@ -344,7 +384,7 @@ export function moneyClips(posts: MoneyPost[], cards: Map<string, ClipCard>, que
       platforms: lines,
     });
   }
-  const sortedBy = sharing.length ? query.sort : "views";
+  const sortedBy = perVideo ? query.sort : "views";
   const viewsKey = (r: (typeof rows)[number]) => r.views ?? -1;
   const moneyKey = (r: (typeof rows)[number]) => r.totals[0]?.amountMicros ?? -1;
   rows.sort((a, b) => (a.firstPostedAt < b.firstPostedAt ? 1 : a.firstPostedAt > b.firstPostedAt ? -1 : 0));
@@ -360,13 +400,20 @@ export function moneyClips(posts: MoneyPost[], cards: Map<string, ClipCard>, que
   });
   const out: MoneyClips = {
     period: query.period,
-    from: to && query.period !== "all" ? (starts[0] ?? null) : null,
+    from: windowFrom,
     to,
     sort: query.sort,
     sortedBy,
     clips: page,
   };
-  if (!sharing.length) out.note = `${namesOf(chosen)} ${chosen.length === 1 ? "doesn't" : "don't"} share money per video. Sorted by views.`;
+  if (!perVideo) {
+    out.note =
+      youtube === "needs_permission" && chosen.includes("youtube")
+        ? "YouTube needs your OK first. Sorted by views."
+        : youtube === "not_connected" && chosen.includes("youtube")
+          ? "Connect YouTube to see money per video. Sorted by views."
+          : `${namesOf(chosen)} ${chosen.length === 1 ? "doesn't" : "don't"} share money per video. Sorted by views.`;
+  }
   if (offset + limit < rows.length) out.nextCursor = String(offset + limit);
   return out;
 }
