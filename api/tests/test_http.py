@@ -195,6 +195,8 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/money/seen"),
         ("PUT", "/v1/money/country"),
         ("GET", "/v1/money/youtube/days"),
+        ("GET", "/v1/money/summary"),
+        ("GET", "/v1/money/clips"),
         # §19.6: Ask Clip Factory
         ("GET", "/v1/help"),
         ("POST", "/v1/help/answers"),

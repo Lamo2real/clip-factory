@@ -66,6 +66,9 @@ ROUTES: list[Route] = [
     route("POST", "/v1/money/refresh", money.refresh),
     route("POST", "/v1/money/seen", money.seen),
     route("PUT", "/v1/money/country", money.put_country),
+    # §27: the money dashboard. Before "/v1/money/{platform}/days" so "summary" and "clips" never read as an app.
+    route("GET", "/v1/money/summary", money.get_summary),
+    route("GET", "/v1/money/clips", money.get_clips),
     route("GET", "/v1/money/{platform}/days", money.get_days),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),

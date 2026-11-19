@@ -15,7 +15,8 @@ from ..clock import iso
 from ..errors import ApiError, bad_request, not_found
 from ..http import Request, Response, ok
 from ..log import log
-from ..money import rules, view
+from ..money import clips as money_clips
+from ..money import rules, summary, view
 
 REFRESH_EVERY = timedelta(hours=1)
 
@@ -43,6 +44,46 @@ def get_days(app: App, req: Request) -> Response:
     if end < start or (end - start).days > view.MAX_DAYS_RANGE:
         raise bad_request(f"Ask for at most {view.MAX_DAYS_RANGE} days, with from before to.")
     return ok({"days": view.day_rows(app.store, req.user_id, platform, start, end)})
+
+
+def get_summary(app: App, req: Request) -> Response:
+    """§27.5: Monthly, Weekly, Daily and Yearly MRR for the chosen apps, and the chart's points."""
+    platforms = summary.parse_platforms(req.query.get("platforms"))
+    if platforms is None:
+        raise bad_request("Pick apps from the list.", "platforms")
+    raw = req.query.get("chart") or "30"
+    if raw not in {str(c) for c in summary.CHARTS}:
+        raise bad_request("Pick 7, 30, 90 or 365 days.", "chart")
+    now = app.clock()
+    money.register_owner(app.store, req.user_id, now)
+    return ok(summary.money_summary(app.store, req.user_id, now, platforms=platforms, chart=int(raw)))
+
+
+def get_clips(app: App, req: Request) -> Response:
+    """§27.5: money per clip for the chosen apps and days, 20 a page, biggest first."""
+    platforms = summary.parse_platforms(req.query.get("platforms"))
+    if platforms is None:
+        raise bad_request("Pick apps from the list.", "platforms")
+    period = req.query.get("period") or "30"
+    if period not in money_clips.PERIODS:
+        raise bad_request("Pick 7, 30 or 90 days, or all.", "period")
+    sort = req.query.get("sort") or "money"
+    if sort not in money_clips.SORTS:
+        raise bad_request("Sort by money or views.", "sort")
+    raw_limit = req.query.get("limit") or "20"
+    if not raw_limit.isdigit() or not 1 <= int(raw_limit) <= 50:
+        raise bad_request("Ask for 1 to 50 clips.", "limit")
+    out = money_clips.money_clips(
+        app.store,
+        app.media,
+        req.user_id,
+        platforms=platforms,
+        period=period,
+        sort=sort,
+        cursor=req.query.get("cursor") or None,
+        limit=int(raw_limit),
+    )
+    return ok(out)
 
 
 def refresh(app: App, req: Request) -> Response:
