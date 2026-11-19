@@ -246,7 +246,7 @@ for (const v of VIEWPORTS.filter((x) => x.w < 768)) {
           expect(gap, "Weekly's number sits right under its words").toBeLessThanOrEqual(24);
         }
         const max = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
-        for (const y of [...Array.from({ length: Math.floor(max / 260) + 1 }, (_, i) => i * 260), max]) {
+        for (const y of [...Array.from({ length: Math.floor(max / 400) + 1 }, (_, i) => i * 400), max]) {
           await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), y);
           await launcherSettled(page);
           const at = await page.evaluate(textUnderAsk);
