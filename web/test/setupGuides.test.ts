@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Platform } from "../src/api/types.ts";
 import {
   allSteps,
+  checkedOnText,
   GUIDES,
   RESULT_CODES,
   resolveValue,
@@ -9,6 +10,7 @@ import {
   resultStep,
   SETUP_ORDER,
   stepNumber,
+  TIKTOK_REVIEW_TEXT,
   VALUE_REFS,
   type GuideStep,
 } from "../src/setup/index.ts";
@@ -44,10 +46,11 @@ const CONTRACT: Record<Platform, [string, string][]> = {
     ["key-app", "Create the app"],
     ["key-details", "Fill in App details"],
     ["key-web", "Choose Web"],
-    ["key-products", "Add 3 products"],
+    ["key-products", "Add 2 products"],
     ["key-redirect", "Paste the return address"],
     ["key-direct-post", "Turn on Direct Post"],
-    ["key-scopes", "Check the 3 permissions"],
+    ["key-scopes", "Add 2 permissions"],
+    ["key-review", "Fill in App review, then Save"],
     ["key-verify", "Prove the website is yours"],
     ["key-paste", "Paste Client key and secret"],
     ["sandbox-make", "Make a Sandbox for testing"],
@@ -55,7 +58,7 @@ const CONTRACT: Record<Platform, [string, string][]> = {
     ["sandbox-verify", "Verify the website in Sandbox too"],
     ["sandbox-keys", "Use the Sandbox keys"],
     ["connect", "Connect TikTok"],
-    ["public-demo", "Record a short demo video"],
+    ["public-demo", "Record the real demo video"],
     ["public-review", "Ask TikTok to check the app"],
     ["public-live-keys", "When it says Live"],
     ["public-audit", "Ask to post publicly"],
@@ -109,12 +112,13 @@ const CONTRACT: Record<Platform, [string, string][]> = {
 const steps = (p: Platform): GuideStep[] => allSteps(GUIDES[p]);
 
 describe("the five setup guides (§17.2)", () => {
-  it("are in SETUP_ORDER and checked on 16 Nov 2026", () => {
+  it("are in SETUP_ORDER and checked on 16 Nov 2026 (TikTok on 19 Nov 2026)", () => {
     expect(SETUP_ORDER).toEqual(["youtube", "tiktok", "instagram", "facebook", "x"]);
     for (const p of SETUP_ORDER) {
       expect(GUIDES[p].platform).toBe(p);
-      expect(GUIDES[p].checkedOn).toBe("2026-11-16");
+      expect(GUIDES[p].checkedOn).toBe(p === "tiktok" ? "2026-11-19" : "2026-11-16");
     }
+    expect(checkedOnText(GUIDES.tiktok)).toBe("19 Nov 2026");
   });
 
   for (const p of SETUP_ORDER) {
@@ -190,6 +194,35 @@ describe("the five setup guides (§17.2)", () => {
     expect(GUIDES.x.cost).toMatch(/Costs a little/);
     expect(steps("x").find((s) => s.id === "ready-card")!.say.join(" ")).toMatch(/grown-up/);
     expect(steps("tiktok").find((s) => s.id === "public-audit")!.say.join(" ")).toMatch(/stay private/);
+  });
+
+  it("walks TikTok's site as it really is: Save needs App review, Web only, no Display API", () => {
+    const say = (id: string): string => steps("tiktok").find((s) => s.id === id)!.say.join(" ");
+    // Save stays off until App review has its text and a video: the guide says so before Save, then fills it.
+    expect(say("key-details")).toMatch(/Don't press \*\*Save\*\* yet/);
+    expect(stepNumber(GUIDES.tiktok, "key-details")).toBeLessThan(stepNumber(GUIDES.tiktok, "key-review"));
+    expect(say("key-details")).toContain(`step ${stepNumber(GUIDES.tiktok, "key-review")}`);
+    expect(say("key-review")).toMatch(/text below/);
+    expect(say("key-review")).toContain(`step ${stepNumber(GUIDES.tiktok, "public-demo")}`);
+    expect(steps("tiktok").find((s) => s.id === "key-review")!.copy![0]!.value).toEqual({ ref: "tiktokReviewText" });
+    expect(say("key-web")).toMatch(/\*\*Web\*\* only\. Not \*\*Desktop\*\*/);
+    expect(steps("tiktok").find((s) => s.id === "key-products")!.say[1]).toBe("Add **Login Kit** and **Content Posting API**. Nothing else.");
+    expect(say("key-products")).toMatch(/no \*\*Display API\*\* to add/);
+    expect(say("key-scopes")).toMatch(/Add scopes/);
+    for (const scope of ["user.info.basic", "video.publish", "video.list", "user.info.stats"]) expect(say("key-scopes")).toContain(scope);
+    // The real demo shows the whole path TikTok's reviewers ask for.
+    expect(say("public-demo")).toMatch(/Connect TikTok.*Authorize.*Keep.*arriving/);
+    expect(say("sandbox-make")).toMatch(/Sandbox first.*private/);
+  });
+
+  it("explains every TikTok scope in the review text, one plain line each, matching what the app asks for", () => {
+    const lines = TIKTOK_REVIEW_TEXT.split("\n");
+    expect(lines.map((l) => l.split(/[ :]/)[0])).toEqual(["user.info.basic", "video.publish", "video.upload", "video.list", "user.info.stats"]);
+    for (const line of lines) expect(line.split(/\s+/).length, line).toBeLessThanOrEqual(26);
+    // Connect asks for these three (MOCK_VALUES mirrors the api); video.upload is never asked for, and says so.
+    for (const scope of MOCK_VALUES.scopes.tiktok) expect(TIKTOK_REVIEW_TEXT).toContain(`${scope}`);
+    expect(lines[2]).toMatch(/does not ask for it/);
+    expect(resolveValue({ ref: "tiktokReviewText" }, "tiktok", null)).toBe(TIKTOK_REVIEW_TEXT);
   });
 
   it("copies the shared values the contract names", () => {

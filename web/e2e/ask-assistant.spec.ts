@@ -92,7 +92,8 @@ test.describe("Ask as a full assistant", () => {
 
   test("streams an app answer: status, words before done, sources, then Open buttons with the spotlight", async ({ page }) => {
     await open(page);
-    await ask(page, "How do I change my click sound?");
+    // #long keeps the answer streaming long enough to see it busy, even on a slow runner.
+    await ask(page, "How do I change my click sound? #long");
     const a = answers(page).last();
     await expect(a.locator(".ask-status")).toBeVisible();
     // The first words show before the answer is done.

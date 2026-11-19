@@ -46,7 +46,7 @@ them. `{app}` is your Clip Factory address and `{hooks}` is its sign-in return a
 | Permissions (scopes) | the list for that platform (YouTube: 3 lines) |
 | Your email | the email you sign in to Clip Factory with |
 | X use case | "Post my own short video clips to my own X account and read their view and like counts in my personal Clip Factory app." |
-| TikTok review text | See [step 21 of TikTok](#21-ask-tiktok-to-check-the-app). |
+| TikTok review text | See [step 13 of TikTok](#13-fill-in-app-review-then-save). |
 
 The About, Privacy and Terms pages live on your Clip Factory address on purpose: TikTok checks that the website is
 yours, and Google lists every web address your app uses.
