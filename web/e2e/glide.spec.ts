@@ -199,7 +199,10 @@ test.describe("glide", () => {
           const t0 = performance.now();
           const tick = () => {
             const r = g.getBoundingClientRect();
-            w.__frames.push([r.x, r.width, r.height, performance.now()]);
+            // The slide's own clock too (-1 when no slide runs): see perFrame below.
+            const run = g.getAnimations().find((a) => a.id === "glide-slide");
+            const at = run && run.playState === "running" ? Number(run.currentTime ?? -1) : -1;
+            w.__frames.push([r.x, r.width, r.height, performance.now(), at]);
             if (performance.now() - t0 < 1400) requestAnimationFrame(tick);
           };
           requestAnimationFrame(tick);
@@ -217,7 +220,17 @@ test.describe("glide", () => {
         // The slide eases: speed is measured per 16.7 ms (so a busy test machine dropping frames does not count), and
         // never exceeds what the curve itself reaches (its launch is about 4.5x the average speed over the 360 ms
         // slide, plus the stretch; a skipped stretch of frames shows as more).
-        const perFrame = (i: number, k: number) => (Math.abs(frames[i]![k]! - frames[i - 1]![k]!) * 16.7) / Math.max(16.7, frames[i]![3]! - frames[i - 1]![3]!);
+        // While the slide runs, time is the slide's own clock (Animation.currentTime), not the page's: the slide runs
+        // on the compositor, so a new page that takes a frame to lay out (Settings) lets the first sample land a frame
+        // into the curve with only one page frame between. The first sample of a slide counts from its start (0). A
+        // real skip or snap is still a big step in little slide time.
+        const elapsed = (i: number) => {
+          const [a, b] = [frames[i - 1]![4]!, frames[i]![4]!];
+          if (b >= 0 && a >= 0 && b >= a) return b - a;
+          if (b >= 0 && a < 0) return b;
+          return frames[i]![3]! - frames[i - 1]![3]!;
+        };
+        const perFrame = (i: number, k: number) => (Math.abs(frames[i]![k]! - frames[i - 1]![k]!) * 16.7) / Math.max(16.7, elapsed(i));
         let worst = 0;
         for (let i = 1; i < frames.length; i++) worst = Math.max(worst, perFrame(i, 0));
         expect(worst, `tab ${to}: fastest step ${worst.toFixed(1)}px a frame over ${travel.toFixed(1)}px`).toBeLessThanOrEqual(Math.max(8, (travel / (360 / 16.7)) * 6));
