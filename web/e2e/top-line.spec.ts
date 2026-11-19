@@ -63,6 +63,14 @@ async function checkLine(page: Page, route: string) {
   await page.evaluate(() => window.scrollTo(0, 0));
   // The setup list arrives with its data and a short drop-in of its own: read its place once it has landed.
   await arrived(page);
+  // And read once the list stands still on the line (a slow runner can still be drawing its drop-in).
+  await expect
+    .poll(async () => {
+      const a = await tops(page);
+      return a.todo === null || Math.abs(a.todo - a.line) <= 1;
+    }, { timeout: 5_000 })
+    .toBe(true)
+    .catch(() => undefined);
   const t = await tops(page);
   const near = (v: number | null, want: number, what: string) => {
     if (v !== null) expect(Math.abs(v - want), `${route}: ${what} at ${v}, line at ${want} (${JSON.stringify(t)})`).toBeLessThanOrEqual(1);

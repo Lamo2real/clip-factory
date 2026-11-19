@@ -29,7 +29,9 @@ export default defineConfig({
     // there too (docs/CONTRACTS.md §20.13, §20.16, §11.1). CI installs WebKit next to Chromium (ci.yml).
     {
       name: "webkit",
-      use: { ...devices["Desktop Safari"] },
+      // Stated, not left to the system: WebKit on Linux follows the desktop's "animations off" setting, which a CI
+      // runner without a desktop may report as reduced motion, and then nothing slides at all.
+      use: { ...devices["Desktop Safari"], reducedMotion: "no-preference" },
       testMatch: /(nav-smooth|page-still|top-line)\.spec\.ts/,
     },
     {
