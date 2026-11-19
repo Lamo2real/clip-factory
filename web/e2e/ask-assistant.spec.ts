@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { visibleEdges } from "./edges.ts";
-import { findOverflow, settle, stillBackdrop } from "./helpers.ts";
+import { animationsDone, findOverflow, settle, stillBackdrop } from "./helpers.ts";
 
 const SIZES = [
   { name: "phone-375", width: 375, height: 812 },
@@ -261,6 +261,8 @@ for (const size of SIZES) {
       await answered(page);
       const over = await findOverflow(page);
       expect(over.page, JSON.stringify(over.items.slice(0, 3))).toBeLessThanOrEqual(over.viewport);
+      // The paper plane comes back when the answer ends and its shadow eases in: a frame mid-way reads as a thin edge.
+      await animationsDone(page);
       expect(await visibleEdges(page)).toEqual([]);
     });
 
