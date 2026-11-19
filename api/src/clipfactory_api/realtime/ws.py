@@ -2,7 +2,8 @@
 
 ``$connect`` (already authorized) stores a Connection item under the owner with a 2-hour ``ttl`` (API Gateway ends
 every connection after 2 hours anyway). ``$disconnect`` removes it. ``$default`` answers ``{"action": "ping"}``
-with a pong; anything else gets ``{"type": "error", "code": "bad_request"}``. Every route answers 200.
+with a pong and ``{"action": "whoami"}`` with ``{"type": "whoami", "connectionId"}`` (Ask streams its answers to that
+connection, §28.5); anything else gets ``{"type": "error", "code": "bad_request"}``. Every route answers 200.
 """
 
 from __future__ import annotations
@@ -101,6 +102,8 @@ def _default(deps: WsDeps, event: Mapping[str, Any], connection_id: str) -> dict
             message = None
     if isinstance(message, dict) and message.get("action") == "ping":
         reply: dict[str, Any] = {"type": "pong", "at": iso(deps.clock())}
+    elif isinstance(message, dict) and message.get("action") == "whoami":
+        reply = {"type": "whoami", "connectionId": connection_id}
     else:
         reply = {"type": "error", "code": "bad_request"}
     try:

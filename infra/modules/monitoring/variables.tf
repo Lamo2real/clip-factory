@@ -53,3 +53,15 @@ variable "help_model_failure_threshold" {
   default     = 10
   description = "Help model calls that errored or timed out in one hour before the alarm fires. Each one still gave the owner a plain answer."
 }
+
+variable "ask_log_group_name" {
+  type        = string
+  default     = ""
+  description = "cf-prod-ask's log group, where Ask writes one help.ask line per answer (docs/CONTRACTS.md §28.11). Empty: no Ask alarms."
+}
+
+variable "ask_tokens_alarm_threshold" {
+  type        = number
+  default     = 20000000
+  description = "New input tokens (usageIn) Ask may read in 24 hours before the alarm tells the owner. It blocks nothing."
+}

@@ -2,8 +2,8 @@
 
 Items in the existing table (no new table):
 
-* ``HELP`` / ``SWITCH``: ``enabled``, ``model`` and ``pictures`` (absent = true), written by hand when needed, read at most once a
-  minute per warm Lambda.
+* ``HELP`` / ``SWITCH``: ``enabled``, ``model``, ``pictures``, and for the assistant (§28) ``assistant``, ``web`` and
+  ``files`` (all absent = true), written by hand when needed, read at most once a minute per warm Lambda.
 * ``USER#{userId}`` / ``HELP#RATE``: ``minuteKey``/``minuteCount``, ``hourKey``/``hourCount``, ``version``, ``ttl``.
   One conditional UpdateItem on ``version`` per question (compare-and-swap, like ``stats.budget.reserve``).
   A question with pictures also counts ``picDayKey``/``picDayCount`` (the per-owner daily picture limit, §26) in
@@ -43,6 +43,9 @@ class Switch:
     enabled: bool
     model: bool
     pictures: bool = True
+    assistant: bool = True
+    web: bool = True
+    files: bool = True
 
 
 @dataclass
@@ -72,6 +75,9 @@ def check_switch(store: db.Store, now: datetime, *, flag_enabled: bool, cache: S
         item.get("enabled", True) is not False,
         item.get("model", True) is not False,
         item.get("pictures", True) is not False,
+        item.get("assistant", True) is not False,
+        item.get("web", True) is not False,
+        item.get("files", True) is not False,
     )
     cache.value, cache.read_at = value, now
     cache.reads += 1
@@ -124,6 +130,7 @@ def reserve_question(
     per_minute: int,
     per_hour: int,
     pictures_per_day: int | None = None,
+    asks_per_day: int | None = None,
 ) -> Reserved:
     """Counts one question, and with ``pictures_per_day`` also one picture question for today, in the same
     compare-and-swap. Over the picture limit the question is still allowed, without
@@ -141,12 +148,17 @@ def reserve_question(
             return Reserved(_seconds_to_next_hour(now))
         if minute >= per_minute:
             return Reserved(_seconds_to_next_minute(now))
+        ask_today = int(item.get("askDayCount") or 0) if item.get("askDayKey") == dkey else 0
+        if asks_per_day is not None and ask_today >= asks_per_day:
+            return Reserved(_seconds_to_next_day(now))
         version = int(item.get("version") or 0)
         pic_today = int(item.get("picDayCount") or 0) if item.get("picDayKey") == dkey else 0
         picture = pictures_per_day is not None and pic_today < pictures_per_day
         if picture:
             pic_today += 1
-        ttl = now + (PICTURE_DAY_TTL if pic_today else RATE_TTL)
+        ttl = now + (
+            PICTURE_DAY_TTL if pic_today or asks_per_day is not None or item.get("fileDayKey") == dkey else RATE_TTL
+        )
         values: dict[str, object] = {
             ":mk": mkey,
             ":mc": minute + 1,
@@ -164,6 +176,9 @@ def reserve_question(
         if picture:
             update += ", picDayKey = :pk, picDayCount = :pc"
             values[":pk"], values[":pc"] = dkey, pic_today
+        if asks_per_day is not None:
+            update += ", askDayKey = :ak, askDayCount = :ac"
+            values[":ak"], values[":ac"] = dkey, ask_today + 1
         if item:
             condition = "#ver = :expected" if "version" in item else "attribute_not_exists(#ver)"
             if "version" in item:
@@ -181,6 +196,57 @@ def reserve_question(
         return Reserved(None, picture)
     log("warning", "help.rate_contended")
     return Reserved(1)
+
+
+def _seconds_to_next_day(now: datetime) -> int:
+    utc = now.astimezone(UTC)
+    nxt = utc.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    return max(1, math.ceil((nxt - utc).total_seconds()))
+
+
+def reserve_files(
+    store: db.Store, user_id: str, now: datetime, *, count: int, size: int, per_day: int, bytes_per_day: int
+) -> int | None:
+    """Counts ``count`` files of ``size`` bytes for today (§28.6). ``None`` when allowed, else seconds to wait."""
+    pk = db.user_pk(user_id)
+    dkey = day_key(now)
+    for _ in range(CAS_ATTEMPTS):
+        try:
+            item = store.get(pk, RATE_SK) or {}
+        except Exception as e:
+            raise GuardUnavailable(type(e).__name__) from e
+        today = item.get("fileDayKey") == dkey
+        files = int(item.get("fileDayCount") or 0) if today else 0
+        used = int(item.get("fileDayBytes") or 0) if today else 0
+        if files + count > per_day or used + size > bytes_per_day:
+            return _seconds_to_next_day(now)
+        version = int(item.get("version") or 0)
+        names = {"#ver": "version", "#ttl": "ttl", "#type": "type"}
+        values: dict[str, object] = {
+            ":fk": dkey,
+            ":fc": files + count,
+            ":fb": used + size,
+            ":v": version + 1,
+            ":ttl": int((now + PICTURE_DAY_TTL).timestamp()),
+            ":type": "help_rate",
+        }
+        update = "SET fileDayKey = :fk, fileDayCount = :fc, fileDayBytes = :fb, #ver = :v, #ttl = :ttl, #type = :type"
+        if not item:
+            condition = "attribute_not_exists(pk)"
+        elif "version" in item:
+            condition = "#ver = :expected"
+            values[":expected"] = version
+        else:
+            condition = "attribute_not_exists(#ver)"
+        try:
+            store.update_expr(pk, RATE_SK, update, condition=condition, names=names, values=values)
+        except db.ConditionFailed:
+            continue
+        except Exception as e:
+            raise GuardUnavailable(type(e).__name__) from e
+        return None
+    log("warning", "help.rate_contended")
+    return 1
 
 
 # --- the 30-day model cap ---------------------------------------------------------------------------------------

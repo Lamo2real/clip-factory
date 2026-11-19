@@ -110,6 +110,22 @@ resource "aws_s3_bucket_lifecycle_configuration" "media" {
     }
   }
 
+  # Ask's files (docs/CONTRACTS.md §28.7): cf-prod-ask deletes each question's files when the answer ends; this is
+  # the safety net for a worker that never ran (an upload whose question was never sent).
+  rule {
+    id     = "ask-1-day"
+    status = "Enabled"
+    filter {
+      prefix = "ask/"
+    }
+    expiration {
+      days = 1
+    }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+
   # Uploads of up to 5 GB are multipart; a tab closed mid-upload must not leave billed parts behind.
   rule {
     id     = "abort-incomplete-uploads"

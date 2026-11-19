@@ -22,6 +22,7 @@ export type Block =
   | { t: "ol"; start: number; items: Block[][] }
   | { t: "quote"; c: Block[] }
   | { t: "pre"; lang: string; v: string }
+  | { t: "table"; head: Inline[][]; align: ("left" | "center" | "right" | null)[]; rows: Inline[][][] }
   | { t: "hr" };
 
 export interface Frontmatter {
@@ -260,6 +261,36 @@ const QUOTE = /^ {0,3}>\s?(.*)$/;
 
 const isBlank = (l: string) => !l.trim();
 
+/** A GFM table's delimiter row (`| --- | :-: |`). */
+const TABLE_DELIM = /^ {0,3}\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
+const MAX_TABLE_COLS = 20;
+
+/** Splits one table row into its cells (escaped pipes stay in the cell). */
+function tableCells(line: string): string[] {
+  let l = line.trim();
+  if (l.startsWith("|")) l = l.slice(1);
+  if (l.endsWith("|") && !l.endsWith("\\|")) l = l.slice(0, -1);
+  const cells: string[] = [];
+  let cur = "";
+  for (let i = 0; i < l.length; i++) {
+    if (l[i] === "\\" && l[i + 1] === "|") {
+      cur += "|";
+      i++;
+    } else if (l[i] === "|") {
+      cells.push(cur.trim());
+      cur = "";
+    } else cur += l[i];
+  }
+  cells.push(cur.trim());
+  return cells.slice(0, MAX_TABLE_COLS);
+}
+
+function isTableStart(lines: string[], i: number): boolean {
+  const head = lines[i];
+  const delim = lines[i + 1];
+  return !!head && !!delim && head.includes("|") && TABLE_DELIM.test(delim) && delim.includes("-");
+}
+
 /** A heading's words without its optional closing #s ("# Title ##" → "Title"), with no backtracking regex. */
 function headingText(rest: string): string {
   let s = rest.trimEnd();
@@ -270,6 +301,7 @@ function headingText(rest: string): string {
 }
 
 function startsBlock(line: string): boolean {
+  if (/^\s*\|/.test(line)) return true;
   return FENCE.test(line) || HEADING.test(line) || HR.test(line) || BULLET.test(line) || ORDERED.test(line) || QUOTE.test(line);
 }
 
@@ -290,6 +322,15 @@ function parseBlocks(lines: string[], depth: number): Block[] {
       while (i < lines.length && !new RegExp(`^ {0,3}${mark[0] === "`" ? "`" : "~"}{${mark.length},}\\s*$`).test(lines[i]!)) body.push(lines[i++]!);
       i++; // the closing fence (or the end)
       blocks.push({ t: "pre", lang: fence[2] ?? "", v: body.join("\n") });
+      continue;
+    }
+    if (isTableStart(lines, i)) {
+      const head = tableCells(line);
+      const align = tableCells(lines[i + 1]!).map((c) => (c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : c.startsWith(":") ? "left" : null));
+      i += 2;
+      const rows: Inline[][][] = [];
+      while (i < lines.length && !isBlank(lines[i]!) && lines[i]!.includes("|")) rows.push(tableCells(lines[i++]!).map((c) => parseInline(c)));
+      blocks.push({ t: "table", head: head.map((c) => parseInline(c)), align: head.map((_, k) => align[k] ?? null), rows });
       continue;
     }
     const heading = HEADING.exec(line);
@@ -368,19 +409,30 @@ export function parseMarkdown(text: string): MdDoc {
 
 const h = createElement;
 
-function drawInline(nodes: Inline[]): ReactNode[] {
+/** Choices for drawing (Ask's answers, §28.9): which links may be live, and how code blocks are drawn. */
+export interface DrawOptions {
+  /** When given, only links it allows are live; every other link shows as its words. */
+  linkOk?: (href: string) => boolean;
+  /** Draws a fenced code block (Ask adds a Copy button). */
+  pre?: (lang: string, code: string, key: number) => ReactNode;
+  /** Draws plain text (Ask turns its `[1]` source marks into chips). */
+  text?: (text: string, key: number) => ReactNode;
+}
+
+function drawInline(nodes: Inline[], opts: DrawOptions = {}): ReactNode[] {
   return nodes.map((n, k) => {
     switch (n.t) {
       case "text":
-        return n.v;
+        return opts.text ? opts.text(n.v, k) : n.v;
       case "code":
         return h("code", { key: k, className: "md__code" }, n.v);
       case "strong":
-        return h("strong", { key: k }, ...drawInline(n.c));
+        return h("strong", { key: k }, ...drawInline(n.c, opts));
       case "em":
-        return h("em", { key: k }, ...drawInline(n.c));
+        return h("em", { key: k }, ...drawInline(n.c, opts));
       case "link":
-        return h("a", { key: k, href: n.href, target: "_blank", rel: "noopener noreferrer nofollow", className: "md__link" }, ...drawInline(n.c));
+        if (opts.linkOk && !opts.linkOk(n.href)) return h("span", { key: k, className: "md__link-text" }, ...drawInline(n.c, opts));
+        return h("a", { key: k, href: n.href, target: "_blank", rel: "noopener noreferrer nofollow", className: "md__link" }, ...drawInline(n.c, opts));
       case "image":
         // Never loaded, and no raw address either: just what the picture shows.
         return h("span", { key: k, className: "md__img" }, `Picture: ${n.alt || "no description"}`);
@@ -397,26 +449,44 @@ export function inlineText(nodes: Inline[]): string {
  * The blocks as React elements. Headings start at `topLevel` (the page already has its own h1), so a skill's `#`
  * becomes an h2.
  */
-export function drawBlocks(blocks: Block[], topLevel = 2): ReactNode[] {
+export function drawBlocks(blocks: Block[], topLevel = 2, opts: DrawOptions = {}): ReactNode[] {
   return blocks.map((b, k) => {
     switch (b.t) {
       case "h": {
         const level = Math.min(6, b.level + topLevel - 1);
-        return h(`h${level}`, { key: k, className: `md__h md__h${b.level}` }, ...drawInline(b.c));
+        return h(`h${level}`, { key: k, className: `md__h md__h${b.level}` }, ...drawInline(b.c, opts));
       }
       case "p":
-        return h("p", { key: k, className: "md__p" }, ...drawInline(b.c));
+        return h("p", { key: k, className: "md__p" }, ...drawInline(b.c, opts));
       case "ul":
-        return h("ul", { key: k, className: "md__list" }, ...b.items.map((item, j) => h("li", { key: j }, ...drawBlocks(item, topLevel))));
+        return h("ul", { key: k, className: "md__list" }, ...b.items.map((item, j) => h("li", { key: j }, ...drawBlocks(item, topLevel, opts))));
       case "ol":
         return h(
           "ol",
           { key: k, className: "md__list", start: b.start },
-          ...b.items.map((item, j) => h("li", { key: j }, ...drawBlocks(item, topLevel))),
+          ...b.items.map((item, j) => h("li", { key: j }, ...drawBlocks(item, topLevel, opts))),
         );
       case "quote":
-        return h("blockquote", { key: k, className: "md__quote" }, ...drawBlocks(b.c, topLevel));
+        return h("blockquote", { key: k, className: "md__quote" }, ...drawBlocks(b.c, topLevel, opts));
+      case "table":
+        return h(
+          "div",
+          { key: k, className: "md__table-wrap", tabIndex: 0, role: "region", "aria-label": "Table" },
+          h(
+            "table",
+            { className: "md__table" },
+            h("thead", null, h("tr", null, ...b.head.map((c, j) => h("th", { key: j, scope: "col", style: b.align[j] ? { textAlign: b.align[j] } : undefined }, ...drawInline(c, opts))))),
+            h(
+              "tbody",
+              null,
+              ...b.rows.map((row, r) =>
+                h("tr", { key: r }, ...b.head.map((_, j) => h("td", { key: j, style: b.align[j] ? { textAlign: b.align[j] } : undefined }, ...drawInline(row[j] ?? [], opts)))),
+              ),
+            ),
+          ),
+        );
       case "pre":
+        if (opts.pre) return opts.pre(b.lang, b.v, k);
         return h("pre", { key: k, className: "md__pre", tabIndex: 0 }, h("code", null, b.v));
       case "hr":
         return h("hr", { key: k, className: "md__hr" });

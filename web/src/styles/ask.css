@@ -1,0 +1,831 @@
+/* Ask as a full assistant (docs/CONTRACTS.md §28, docs/UX_DESIGN_SYSTEM.md "Ask: files, answers and the markup
+   editor"). Glass, soft fills and no visible edges; vermilion only for the one action; the ink red (--ask-ink) is a
+   content colour on pictures, never a UI edge. No cursor rules anywhere. */
+:root {
+  --ask-ink: #e8231b;
+}
+
+/* ---------- The panel ---------- */
+.help-panel.is-bigger {
+  width: min(880px, calc(100vw - 48px));
+  max-height: min(860px, calc(100dvh - 120px), calc(100dvh - var(--help-bottom) - 84px));
+}
+.help-panel__bigger {
+  flex: none;
+}
+
+/* Files dragged over the Ask button: it grows a little and glows, so it is clear it takes them. */
+.help-launcher.is-drop {
+  transform: scale(1.08);
+  box-shadow:
+    0 0 28px 8px rgb(var(--green-leaf-rgb) / 0.45),
+    0 14px 30px -12px rgb(var(--shadow-rgb) / 0.8);
+  transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .help-launcher.is-drop {
+    transform: none;
+    transition: none;
+  }
+}
+.reduce-motion .help-launcher.is-drop {
+  transform: none;
+  transition: none;
+}
+
+/* The search key card's first step: a real button. */
+.ask-key__get {
+  justify-self: start;
+  min-height: 48px;
+}
+
+/* ---------- The tray: picture tiles and file tiles ---------- */
+/* Phones keep the §26 single row that scrolls sideways inside itself (the chat stays in view with 10 files). Wider
+   panels wrap, capped at about two rows of tiles, and scroll inside the tray beyond that. */
+.ask-tray {
+  flex-wrap: nowrap;
+}
+@media (min-width: 768px) {
+  .help-panel:not(.is-sheet) .ask-tray {
+    flex-wrap: wrap;
+    max-height: 156px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+.help-pics.ask-tray > * {
+  flex: none;
+}
+/* Notes sit over the chips and the tray: fully opaque so nothing shows through. */
+.help-note {
+  background: rgb(var(--green-deep-rgb));
+}
+.help-pic.is-file {
+  width: 168px;
+  max-width: 100%;
+  height: 64px;
+  background: var(--fill-control);
+}
+.is-sheet .help-pic.is-file {
+  height: 72px;
+}
+.help-pic__mark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  overflow: hidden;
+}
+.help-pic__mark:focus-visible {
+  outline-offset: 2px;
+}
+.ask-marked {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--ink);
+  background: var(--ask-ink);
+  box-shadow: 0 2px 6px rgb(var(--shadow-rgb) / 0.55);
+  pointer-events: none;
+}
+/* Before marking: a soft bone pen that says "tap to mark"; after Save it turns red. */
+.ask-marked.is-hint {
+  color: var(--on-bone);
+  text-shadow: none;
+  background: var(--selected);
+}
+.ask-upload {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: rgb(var(--green-deep-rgb) / 0.55);
+  pointer-events: none;
+}
+
+.ask-file {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: inherit;
+}
+.ask-file__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-xs);
+  color: var(--on-bone);
+  text-shadow: none;
+  background: var(--selected);
+}
+.ask-file__text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.15;
+}
+.ask-file__format {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.ask-file__name {
+  overflow: hidden;
+  font-size: var(--fs-small);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ask-file__size {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  opacity: 0.86;
+}
+.help-pic.is-file .help-pic__remove {
+  top: -8px;
+  right: -8px;
+}
+
+/* "Still using: report.pdf, picture 1" above the field. */
+.ask-carry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-small);
+}
+.ask-carry__label {
+  color: var(--ink-2);
+}
+.ask-carry__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.ask-carry__item {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  padding-left: 10px;
+  border-radius: var(--r-pill);
+  background: var(--fill-control);
+}
+.ask-carry__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* A 32 px circle you see inside a 44 px target you tap. */
+.ask-carry__drop {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin: -8px -6px -8px -4px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink);
+  background: none;
+}
+.ask-carry__drop::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+}
+.ask-carry__drop > svg {
+  position: relative;
+}
+.ask-carry__drop:hover::before {
+  background: var(--fill-hover);
+}
+
+/* Stop (while an answer streams): a green glass square where the plane was. */
+.ask-stop {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--green-ink);
+  background: var(--tint-leaf);
+}
+
+/* ---------- Sent files ---------- */
+.ask-sent {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+/* Inside the bone bubble: a solid green tile with bone words, so it reads clearly. */
+.ask-sent .ask-file {
+  width: 168px;
+  height: 64px;
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  background: rgb(var(--green-rgb) / 0.94);
+}
+.ask-sent .help-sent__tile {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+
+/* ---------- A streamed answer ---------- */
+.ask-msg {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.ask-answer {
+  display: grid;
+  gap: 10px;
+  max-width: none;
+  padding: 0;
+  border-radius: 0;
+  overflow-wrap: anywhere;
+}
+.ask-answer .md__p,
+.ask-answer .md__list {
+  margin: 0;
+}
+.ask-answer .md__h {
+  margin: 4px 0 0;
+}
+.md__link-text {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.ask-cite {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  margin: 0 2px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  vertical-align: 2px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  color: var(--on-bone);
+  text-shadow: none;
+  background: var(--selected);
+}
+.ask-code {
+  min-width: 0;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: rgb(var(--green-deep-rgb) / 0.86);
+}
+.ask-code__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 0 14px;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+.ask-code .md__pre {
+  border-radius: 0;
+  background: none;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.ask-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--fill-control);
+}
+.ask-copy:hover {
+  background: var(--fill-hover);
+}
+.ask-copy--answer {
+  justify-self: start;
+}
+.md__table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: var(--r-sm);
+  background: var(--fill);
+}
+.md__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-small);
+}
+.md__table th,
+.md__table td {
+  padding: 7px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.md__table th {
+  font-weight: 700;
+  background: rgb(var(--bone-rgb) / 0.08);
+}
+.md__table tbody tr:nth-child(even) {
+  background: rgb(var(--bone-rgb) / 0.04);
+}
+
+/* "Thinking…", "Searching the web…" with the Ask mark. */
+.ask-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.ask-status__mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--on-bone);
+  text-shadow: none;
+  background: var(--selected);
+  animation: ask-breathe 1.6s ease-in-out infinite;
+}
+@keyframes ask-breathe {
+  50% {
+    transform: scale(0.88);
+    opacity: 0.8;
+  }
+}
+
+.ask-sources {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.ask-sources__title {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.ask-sources__list {
+  display: grid;
+  gap: 6px;
+}
+.ask-source {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--fs-small);
+}
+.ask-source__n {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--on-bone);
+  text-shadow: none;
+  background: var(--selected);
+}
+.ask-source__text {
+  display: grid;
+  min-width: 0;
+}
+.ask-source__link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ask-source__where {
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ask-unread {
+  display: grid;
+  gap: 4px;
+  font-size: var(--fs-small);
+}
+.ask-unread li {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.ask-tip {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--tint-leaf);
+  font-size: var(--fs-small);
+}
+.ask-tip .btn {
+  justify-self: start;
+}
+
+/* ---------- The markup editor ---------- */
+.mk {
+  position: fixed;
+  z-index: 200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(var(--shadow-rgb) / 0.62);
+  animation: mk-in 220ms var(--ease-out) both;
+}
+.mk .mk__dialog {
+  background: linear-gradient(150deg, rgb(var(--green-rgb) / 0.96), rgb(var(--green-deep-rgb) / 0.97));
+}
+/* The tools come before the picture in the page (Tab order: tools, picture, Undo, Clear, Cancel, Save); the grid
+   draws the picture above and the tools and actions in the bottom bar. */
+.mk__dialog {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "head head"
+    "stage stage"
+    "tools actions";
+  gap: 10px;
+  width: min(1100px, 100%);
+  height: min(820px, 100%);
+  padding: 14px;
+  border-radius: var(--r-lg);
+  --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.06)), rgb(var(--green-rgb) / calc(var(--float-veil) + 0.04)));
+  box-shadow: 0 30px 70px -30px rgb(var(--shadow-rgb) / 0.9);
+  animation: mk-pop 260ms var(--ease-spring) both;
+}
+.mk.is-tablet .mk__dialog {
+  width: 92vw;
+  height: 88vh;
+}
+.mk__head {
+  grid-area: head;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  padding: 0 4px;
+}
+.mk__title {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.3rem;
+  line-height: 1.15;
+}
+.mk__hint {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.mk__close {
+  flex: none;
+  margin-left: auto;
+}
+.mk__stage {
+  grid-area: stage;
+  position: relative;
+  min-height: 0;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: rgb(var(--green-deep-rgb) / 0.7);
+}
+.mk__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.mk__canvas:focus-visible {
+  outline-offset: -4px;
+}
+.mk-tools {
+  grid-area: tools;
+  align-self: center;
+  justify-self: start;
+  position: relative;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--r-pill);
+  background: var(--fill);
+}
+.mk-tool {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+}
+.mk-tool.is-on {
+  color: var(--on-bone);
+  text-shadow: none;
+}
+.mk-tools:not(.has-glide) .mk-tool.is-on {
+  background: var(--selected);
+}
+.mk-tools__glide {
+  background: var(--selected);
+  border-radius: var(--r-pill);
+}
+.mk__actions {
+  grid-area: actions;
+  justify-self: end;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* Holding Undo (Redo on phones) never opens the text callout or a context menu. */
+.mk-tool,
+.mk-btn {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.mk-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  font: inherit;
+  font-weight: 600;
+  color: var(--green-ink);
+  background: var(--tint-leaf);
+}
+.mk-btn[aria-disabled="true"] {
+  opacity: 0.5;
+}
+.mk-btn:hover:not([aria-disabled="true"]) {
+  background: linear-gradient(rgb(var(--green-leaf-rgb) / 0.32), rgb(var(--green-leaf-rgb) / 0.32)), rgb(var(--green-deep-rgb) / 0.35);
+}
+.mk__save {
+  min-height: 48px;
+}
+.mk__confirm {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100% - 32px));
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  transform: translateX(-50%);
+  background: rgb(var(--green-deep-rgb) / 0.96);
+  box-shadow: 0 20px 40px -20px rgb(var(--shadow-rgb) / 0.9);
+}
+.mk__dialog {
+  position: relative;
+}
+.mk__confirm-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Phones: full screen, the picture between the top safe area and the bottom bar; Save and Undo bottom right. */
+.mk.is-phone {
+  padding: 0;
+}
+.mk.is-phone .mk__dialog {
+  width: 100vw;
+  height: 100dvh;
+  padding: calc(var(--top-safe) + 8px) max(12px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 10px) max(12px, env(safe-area-inset-left));
+  border-radius: 0;
+}
+.mk.is-phone .mk__hint {
+  display: none;
+}
+.mk.is-phone .mk__head {
+  min-height: 44px;
+  align-items: center;
+  padding-right: 52px;
+}
+/* Cancel (×) top right on phones; in the page it comes after Clear, before Save. */
+.mk.is-phone .mk__close {
+  position: absolute;
+  top: calc(var(--top-safe) + 4px);
+  right: max(8px, env(safe-area-inset-right));
+  z-index: 1;
+}
+@media (max-width: 419px) {
+  .mk.is-phone .mk__dialog {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "head"
+      "stage"
+      "tools"
+      "actions";
+    row-gap: 8px;
+  }
+}
+.mk.is-phone .mk-tool__name,
+.mk.is-phone .mk-btn__word {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.mk.is-phone .mk-tool,
+.mk.is-phone .mk-btn {
+  padding: 0 12px;
+}
+.mk.is-phone .mk__actions {
+  gap: 4px;
+}
+.mk.is-phone .mk__save {
+  min-height: 56px;
+  min-width: 84px;
+  padding: 0 12px;
+}
+/* Tablets: Undo and Clear as icons, so Save, Cancel, Undo and Clear all sit in the right half. */
+.mk.is-tablet .mk-btn__word {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.mk.is-tablet .mk-btn {
+  padding: 0 12px;
+}
+.mk.is-tablet .mk__close {
+  min-width: 48px;
+  min-height: 48px;
+  margin-left: 0;
+  border-radius: var(--r-pill);
+  color: var(--green-ink);
+  background: var(--tint-leaf);
+}
+@media (max-width: 359px) {
+  .mk.is-phone .mk-tool,
+  .mk.is-phone .mk-btn {
+    padding: 0 10px;
+  }
+}
+
+@keyframes mk-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes mk-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/* ---------- Settings › App & account › Ask ---------- */
+.ask-key {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.ask-key__steps {
+  display: grid;
+  gap: 6px;
+  padding-left: 1.4em;
+  list-style: decimal;
+}
+.ask-key__steps li {
+  display: list-item;
+}
+.ask-key__state {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--green-ink);
+}
+.ask-key__form {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.ask-key__label {
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.ask-key__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.ask-key__input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.ask-key__msg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 1.4em;
+  font-size: var(--fs-small);
+}
+.ask-key__msg.is-ok {
+  color: var(--green-ink);
+}
+.ask-key__msg.is-bad {
+  color: var(--vermilion-ink);
+}
+.ask-can {
+  display: grid;
+  gap: 8px;
+}
+.ask-can li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* ---------- Less motion: nothing moves (the editor just appears; the status mark stays still) ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .ask-status__mark,
+  .mk,
+  .mk__dialog {
+    animation: none !important;
+  }
+  .mk *,
+  .ask-msg * {
+    transition: none !important;
+  }
+}
+.reduce-motion .ask-status__mark,
+.reduce-motion .mk,
+.reduce-motion .mk__dialog,
+.mk.is-reduced,
+.mk.is-reduced .mk__dialog {
+  animation: none !important;
+}
+.mk.is-reduced *,
+.reduce-motion .ask-msg * {
+  transition: none !important;
+}

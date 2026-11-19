@@ -1,0 +1,13 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "content": [
+      {"type": "tool_use", "id": "toolu_me", "name": "read_my_clip_factory", "input": {"section": "setup"}},
+      {"type": "tool_use", "id": "toolu_btn", "name": "show_app_buttons", "input": {"actionIds": ["BUTTON", "nope:missing"]}}
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "content": [{"type": "text", "text": "Tap **Open Sounds** below."}]
+  }
+]

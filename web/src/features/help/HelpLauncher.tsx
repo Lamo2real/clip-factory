@@ -12,8 +12,8 @@ import { HELP_EVENT } from "./context.ts";
 import { useDodge } from "./dodge.ts";
 import { defaultHelpClient, type HelpClient } from "./helpApi.ts";
 import { HelpPanel } from "./HelpPanel.tsx";
-import { dragHasFiles } from "./pictures.ts";
-import { helpSwitch, useHelpSwitch, watchHelpStatus } from "./status.ts";
+import { dragHasFiles, filesFrom } from "./pictures.ts";
+import { assistantStatus, helpSwitch, picturesOn, useHelpSwitch, watchHelpStatus } from "./status.ts";
 
 /** True when the element shows a keyboard focus ring (false where the browser cannot tell). */
 function focusVisible(el: Element): boolean {
@@ -34,7 +34,12 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
   const [client, setClient] = useState<HelpClient | null>(given ?? null);
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState<string | null>(null);
+  /** Files dropped on the launcher (§28.7): the panel opens with them in the tray. */
+  const [dropped, setDropped] = useState<File[] | null>(null);
   const [focused, setFocused] = useState(false);
+  // Files dragged over the button: it glows to say it will take them (any file with the assistant, pictures with §26).
+  const [dropHover, setDropHover] = useState(false);
+  const takesDrops = () => assistantStatus().files || picturesOn();
   const launcher = useRef<HTMLButtonElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const { hidden, reason } = useDodge(launcher, open || focused, open);
@@ -124,6 +129,7 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
   }, [sw, open]);
 
   const takeQuestion = useCallback(() => setQuestion(null), []);
+  const takeFiles = useCallback(() => setDropped(null), []);
 
   if (!client || sw === "unknown" || (sw === "off" && !open)) return null;
   return (
@@ -132,7 +138,7 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
         <button
           ref={launcher}
           type="button"
-          className={`help-launcher glass glass--green${hidden ? " is-hidden" : ""}${open ? " is-open" : ""}`}
+          className={`help-launcher glass glass--green${hidden ? " is-hidden" : ""}${open ? " is-open" : ""}${dropHover ? " is-drop" : ""}`}
           aria-label="Ask Clip Factory"
           aria-expanded={open}
           aria-controls={open ? "help-panel" : undefined}
@@ -143,6 +149,29 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
           onClick={() => {
             if (open) return close();
             opener.current = launcher.current;
+            setOpen(true);
+          }}
+          onDragEnter={(e) => {
+            if (!takesDrops() || !dragHasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            setDropHover(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropHover(false);
+          }}
+          onDragOver={(e) => {
+            if (!takesDrops() || !dragHasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+          }}
+          onDrop={(e) => {
+            setDropHover(false);
+            if (!takesDrops() || !dragHasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            const files = filesFrom(e.dataTransfer);
+            if (!files.length) return;
+            opener.current = launcher.current;
+            setDropped(files);
             setOpen(true);
           }}
         >
@@ -158,6 +187,8 @@ export function AskClipFactory({ client: given }: { client?: HelpClient } = {}) 
           off={sw === "off"}
           question={question}
           onQuestionTaken={takeQuestion}
+          files={dropped}
+          onFilesTaken={takeFiles}
           onClose={close}
           chat={chat}
           dispatch={dispatch}

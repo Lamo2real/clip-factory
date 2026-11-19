@@ -392,6 +392,26 @@ export const TREES: Tree[] = [
         ],
       },
       {
+        slug: "ask",
+        name: "Ask",
+        line: "Web search, and what Ask can do for you.",
+        icon: "search",
+        apples: [
+          {
+            id: "ask-web-setup",
+            name: "Web search",
+            leaf: "Lets Ask read today's web pages, for steps that change.",
+            words: ["internet", "search key", "brave", "browse", "web", "google", "online", "key"],
+          },
+          {
+            id: "ask-status",
+            name: "What Ask can do",
+            leaf: "Ask answers any question, knows your app and reads your files.",
+            words: ["assistant", "chat", "claude", "opus", "files", "pictures", "help"],
+          },
+        ],
+      },
+      {
         slug: "account",
         name: "Account",
         line: "Who is signed in, and signing out.",

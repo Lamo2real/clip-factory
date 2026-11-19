@@ -200,6 +200,13 @@ def test_every_contract_route_is_registered() -> None:
         # §19.6: Ask Clip Factory
         ("GET", "/v1/help"),
         ("POST", "/v1/help/answers"),
+        # §28: Ask as a full assistant
+        ("POST", "/v1/help/files"),
+        ("DELETE", "/v1/help/files/AAAAAAAAAAAAAAAAAAAAAA"),
+        ("POST", "/v1/help/asks"),
+        ("POST", "/v1/help/asks/0b7c3c1e-1d2f-4a5b-8c9d-0e1f2a3b4c5d/stop"),
+        ("PUT", "/v1/help/search-key"),
+        ("DELETE", "/v1/help/search-key"),
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)

@@ -38,6 +38,10 @@ jobs:
       # The committed help corpus, the docs routes table and CONTRACTS §19.6 must match the app routes.
       - name: help corpus is up to date
         run: node scripts/help-corpus.mjs --check
+      # Ask's knowledge pack and library (api/src/clipfactory_api/ask, CONTRACTS §28.2) match the docs and the corpus,
+      # pass the secrets filter and stay under 110k tokens.
+      - name: Ask knowledge is up to date
+        run: node scripts/ask-knowledge.mjs --check
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test

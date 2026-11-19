@@ -4,6 +4,18 @@ import { expect, test, type Page } from "@playwright/test";
 import { visibleEdges } from "./edges.ts";
 import { animationsDone, findOverflow, settle } from "./helpers.ts";
 
+// These cover Ask's §19/§26 path (plain answers, pictures inline): the mock's assistant (§28) is turned off here.
+// e2e/ask-assistant.spec.ts and e2e/ask-markup.spec.ts cover the assistant.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem("cf-mock-assistant", "off");
+    } catch {
+      /* no storage: the assistant stays on */
+    }
+  });
+});
+
 // Pictures in Ask (docs/CONTRACTS.md §26) in the mock build: attach, paste and drop; the 4-picture limit; take away;
 // sending pictures with no words; the follow-up carrying `seen`; the viewer; the notices; pictures off; Start over;
 // reduced motion; and the no-edges, no-side-scroll and 44 px rules. Runs in Chromium and in WebKit (Desktop Safari,

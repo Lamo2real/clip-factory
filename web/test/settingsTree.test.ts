@@ -13,14 +13,20 @@ import { BRANCH_ROUTES } from "../src/screens/settings/Settings.tsx";
 import { titleFor } from "../src/app/App.tsx";
 
 describe("the settings tree", () => {
-  it("has the four trees and fourteen branches of §15.1, §16.12, §21 and §24, in order", () => {
+  it("has the four trees and fifteen branches of §15.1, §16.12, §21, §24 and §28, in order", () => {
     expect(TREES.map((t) => t.slug)).toEqual(["clip-making", "posting", "look-and-feel", "app"]);
     expect(TREES.map((t) => t.branches.map((b) => b.slug))).toEqual([
       ["clips", "skills", "learned", "streamers", "youtube"],
       ["setup", "where", "money"],
       ["sounds", "motion", "background"],
-      ["get-the-app", "updates", "account"],
+      ["get-the-app", "updates", "ask", "account"],
     ]);
+  });
+
+  it("§28: App & account › Ask has Web search and What Ask can do, with their data-help anchors", () => {
+    const ask = TREES.find((t) => t.slug === "app")!.branches.find((b) => b.slug === "ask")!;
+    expect(ask.apples.map((a) => a.id)).toEqual(["ask-web-setup", "ask-status"]);
+    expect(searchSettings("search key").map((h) => h.apple.id)).toContain("ask-web-setup");
   });
 
   it("every apple has a unique id, a name and one short leaf", () => {

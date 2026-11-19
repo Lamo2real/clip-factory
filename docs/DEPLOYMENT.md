@@ -499,6 +499,40 @@ Terraform does not manage this item. To turn help off for good, set the Terrafor
 answers are capped at 2,000 per 30 days (`HELP_MONTHLY_CAP`, Terraform variable `help_monthly_cap`, a whole number);
 past the cap help keeps answering from search.
 
+## Ask as a full assistant (CONTRACTS §28)
+
+`cf-prod-ask` deploys with everything else (`ask_enabled = true` in prod). Two owner steps, both only once:
+
+1. **Bedrock model access (only if Bedrock asks for it).** Open the Bedrock console in **Stockholm (eu-north-1)** →
+   **Model access** → turn on **Claude Opus 5.5** and **Claude Opus 4.8** → try each once in the playground. Until then
+   answers fail with an access error (`ask_model_error`, alarm `cf-prod-ask-model-failures`) and Ask gives the plain
+   §19 answers.
+2. **Web search.** In the app: **Settings › App & account › Ask** → **Get a search key** (Brave Search API) → make a
+   free account and pick the **Search** plan ($5 of free credit a month, about 1,000 searches) → copy the key →
+   paste it → **Save key**. The app stores it in Secrets Manager as `cf-prod/ask/search-key`; Terraform never does.
+   Until then Ask says "I can't search the web yet." and answers from what it knows.
+
+The kill switch item gains three attributes (absent = on):
+
+```bash
+# The assistant off: the panel answers with the §19 path again
+aws dynamodb put-item --table-name cf-prod-data --region eu-north-1 \
+  --item '{"pk":{"S":"HELP"},"sk":{"S":"SWITCH"},"assistant":{"BOOL":false}}'
+
+# The assistant on, but no web search and no files
+aws dynamodb put-item --table-name cf-prod-data --region eu-north-1 \
+  --item '{"pk":{"S":"HELP"},"sk":{"S":"SWITCH"},"web":{"BOOL":false},"files":{"BOOL":false}}'
+```
+
+**Alarm `cf-prod-ask-model-failures`**: 10 or more model errors or timeouts in an hour (step 1 above is the usual
+cause). **Alarm `cf-prod-ask-tokens-day`**: more than 20M new input tokens in a day (`ask_tokens_alarm_threshold`); it
+blocks nothing. If either keeps firing, turn the assistant off with the first command.
+
+After the first deploy, check once (CI's deploy role, never a local deploy): one question in the app with a picture, a
+PDF and "#search"-style words, and see the `help.ask` line in `/aws/lambda/cf-prod-ask` say `ask_ok`. If it says
+`ask_model_error` with status 400 on every answer, set `ASK_EAGER_TOOLS=false` (Terraform variable `ask_eager_tools = false`,
+for example `TF_VAR_ask_eager_tools: "false"` in the deploy workflow's plan step) and deploy.
+
 ### Alarm emails
 
 Every alarm (Lambda errors, failed or timed-out durable executions, live-update lag, webhook 5xx, help model

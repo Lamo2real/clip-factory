@@ -14,6 +14,7 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App, HelpDeps
+from clipfactory_api.ask.files import LIMITS
 from clipfactory_api.help import guard, look, model, pictures, retrieve
 from clipfactory_api.learn import converse_text
 from clipfactory_api.routes import help as help_route
@@ -259,6 +260,7 @@ def test_status_says_pictures(call: Call, help_on: App, store: db.Store) -> None
         "mode": "kb",
         "corpusVersion": "fixture-1",
         "pictures": False,
+        "assistant": {"on": False, "web": "off", "files": False, "limits": LIMITS},
     }
 
 

@@ -4,8 +4,9 @@ The one-sentence 48-hour learning (the clip flow's old ``distil``) is retired (�
 day-7 numbers (``lessons.py``, ``daily.py``) took its place. Older 48-hour learnings stay readable on Insights.
 A weekly learning is only written when the model finished its answer (``end_turn``) and there is text.
 
-Every model call goes through ``converse_text``, which puts the owner's skills block first in the system prompt
-(§18.6): it is the only place in this package that calls ``.converse(``.
+Every model call goes through ``converse_text`` (Converse) or ``stream_messages`` (the Messages API on Claude in
+Amazon Bedrock, used by Ask §28), which both put the owner's skills block first in the system prompt (§18.6): they
+are the only places in this package that call ``.converse(`` or ``.messages.stream(``.
 """
 
 from __future__ import annotations
@@ -95,6 +96,46 @@ def converse_text(
     text = " ".join(b["text"] for b in blocks if isinstance(b, dict) and isinstance(b.get("text"), str))
     text = " ".join(text.split()).strip().strip('"')
     return stop_reason, text[:max_chars]
+
+
+def stream_messages(
+    client: Any,
+    *,
+    model: str,
+    skills: SkillsBlock,
+    system: Sequence[Mapping[str, Any]],
+    messages: Sequence[Any],
+    tools: Sequence[Mapping[str, Any]] = (),
+    max_tokens: int = 16_000,
+    effort: str = "medium",
+    tool_choice: Mapping[str, Any] | None = None,
+    timeout: float | None = None,
+) -> Any:
+    """One streamed Messages API request (Ask, §28) with the owner's skills block as the first system block.
+
+    Returns the SDK's stream context manager (``with ... as stream``). Adaptive thinking (thinking cannot be turned off
+    on Claude Opus 5.5) with the effort set explicitly; no sampling parameters and never a forced ``tool_choice``
+    (both are a 400 on Opus 5.5). Top-level automatic caching covers the growing message tail; the caller's last
+    system block carries the explicit 1-hour breakpoint. ``client`` is an ``AnthropicBedrockMantle`` with the refusal
+    fallback middleware, so the beta stream is used."""
+    if tool_choice is not None and tool_choice.get("type") in {"any", "tool"}:
+        raise ValueError("forced tool_choice is not allowed on this model")
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": [{"type": "text", "text": skills.text}, *[dict(b) for b in system]],
+        "messages": list(messages),
+        "thinking": {"type": "adaptive"},
+        "output_config": {"effort": effort},
+        "cache_control": {"type": "ephemeral"},
+    }
+    if tools:
+        kwargs["tools"] = [dict(t) for t in tools]
+    if tool_choice is not None:
+        kwargs["tool_choice"] = dict(tool_choice)
+    if timeout is not None:
+        kwargs["timeout"] = timeout
+    return client.beta.messages.stream(**kwargs)
 
 
 def _count(value: Any) -> int | None:

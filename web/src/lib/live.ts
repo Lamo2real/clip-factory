@@ -77,8 +77,14 @@ export function parseLiveMessage(data: unknown): LiveEvent | null {
 
 const OPEN = 1;
 
+/** Any JSON object the server sent (Ask's `ask.*` events and `whoami` replies arrive this way, §28.5). */
+export type RawMessage = Record<string, unknown>;
+
 export class LiveConnection {
   status: LiveStatus = "off";
+  private readonly rawListeners = new Set<(m: RawMessage) => void>();
+  /** The id API Gateway gave the open socket, learned with `{"action":"whoami"}` (cached until it closes). */
+  private connectionId: string | null = null;
   private readonly opts: Required<Omit<LiveOptions, "url" | "doc" | "win">> & Pick<LiveOptions, "url" | "doc" | "win">;
   private readonly signalListeners = new Set<(s: LiveSignal) => void>();
   private readonly statusListeners = new Set<(s: LiveStatus) => void>();
@@ -110,6 +116,52 @@ export class LiveConnection {
   subscribe(fn: (s: LiveSignal) => void): () => void {
     this.signalListeners.add(fn);
     return () => this.signalListeners.delete(fn);
+  }
+
+  /** Every message as parsed JSON (Ask listens for its own events here). */
+  onRaw(fn: (m: RawMessage) => void): () => void {
+    this.rawListeners.add(fn);
+    return () => this.rawListeners.delete(fn);
+  }
+
+  /** Sends one action on the open socket; false when it is not open. */
+  send(message: RawMessage): boolean {
+    const s = this.socket;
+    if (!s || s.readyState !== OPEN) return false;
+    try {
+      s.send(JSON.stringify(message));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** The open socket's connection id, asking the server once per socket; null when it is not open in time. */
+  async whoami(timeoutMs = 4000): Promise<string | null> {
+    const deadline = Date.now() + timeoutMs;
+    while (this.status !== "live" && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+    if (this.status !== "live") return null;
+    if (this.connectionId) return this.connectionId;
+    const socket = this.socket;
+    return new Promise((resolve) => {
+      const left = Math.max(200, deadline - Date.now());
+      const off = this.onRaw((m) => {
+        if (m.type !== "whoami" || typeof m.connectionId !== "string") return;
+        off();
+        clearTimeout(timer);
+        if (this.socket === socket) this.connectionId = m.connectionId;
+        resolve(m.connectionId);
+      });
+      const timer = setTimeout(() => {
+        off();
+        resolve(null);
+      }, left);
+      if (!this.send({ action: "whoami" })) {
+        off();
+        clearTimeout(timer);
+        resolve(null);
+      }
+    });
   }
 
   onStatus(fn: (s: LiveStatus) => void): () => void {
@@ -168,6 +220,7 @@ export class LiveConnection {
   private drop() {
     const s = this.socket;
     this.socket = null;
+    this.connectionId = null;
     if (!s) return;
     s.onopen = s.onmessage = s.onclose = s.onerror = null;
     try {
@@ -222,6 +275,14 @@ export class LiveConnection {
     };
     socket.onmessage = (ev) => {
       if (this.socket !== socket) return;
+      if (this.rawListeners.size && typeof ev.data === "string") {
+        try {
+          const raw: unknown = JSON.parse(ev.data);
+          if (raw && typeof raw === "object" && !Array.isArray(raw)) for (const fn of this.rawListeners) fn(raw as RawMessage);
+        } catch {
+          /* not JSON: nothing for Ask */
+        }
+      }
       const event = parseLiveMessage(ev.data);
       if (event) this.signal({ kind: "event", event });
     };
@@ -229,6 +290,7 @@ export class LiveConnection {
     socket.onclose = () => {
       if (this.socket !== socket) return;
       this.socket = null;
+      this.connectionId = null;
       this.clearTimers();
       if (this.stopped || this.paused) return;
       // Closed before it ever opened: most likely the token was refused (401), so the next try forces a fresh one.
@@ -322,6 +384,11 @@ export function stopLive(): void {
   unhook?.();
   unhook = null;
   for (const fn of hubStatus) fn();
+}
+
+/** The shared connection (Ask streams over it, §28.5), or null when signed out. */
+export function liveConnection(): LiveConnection | null {
+  return current;
 }
 
 export function liveStatus(): LiveStatus {

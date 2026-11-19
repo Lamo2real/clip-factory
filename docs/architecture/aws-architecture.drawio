@@ -4,7 +4,7 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="hdr" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Clip Factory Cloud on AWS. Repo &lt;code&gt;Lamo2real/clip-factory-legal&lt;/code&gt;, branch &lt;code&gt;main&lt;/code&gt;, one AWS account, one environment (&lt;code&gt;prod&lt;/code&gt;, prefix &lt;code&gt;cf-prod&lt;/code&gt;), region &lt;code&gt;eu-north-1&lt;/code&gt;. Backend: Python 3.13. Infrastructure: Terraform in &lt;code&gt;infra/&lt;/code&gt;.&lt;/b&gt;&lt;br&gt;Serverless only: 1 CloudFront distribution &amp;#183; 2 S3 buckets (web, media) &amp;#183; 1 S3 Vectors bucket + index &amp;#183; 1 DynamoDB table + Streams &amp;#183; 3 API Gateway APIs (HTTP, WebSocket, REST) &amp;#183; 9 Lambdas (2 durable functions) · 1 EventBridge rule (stats every 15 min) &amp;#183; 1 AgentCore runtime &amp;#183; Bedrock (Claude Fable 5.1, Amazon Nova 2 Lite EU profile for watching the video, Claude Haiku 5.5 EU profile for help, Titan Embeddings V2) &amp;#183; Transcribe &amp;#183; Cognito &amp;#183; SSM Parameter Store &amp;#183; Secrets Manager (platform keys and tokens) &amp;#183; CloudWatch + SNS &amp;#183; no servers, no containers to run, no VPC &amp;#183; every push to &lt;code&gt;main&lt;/code&gt; deploys through GitHub OIDC" vertex="1">
+        <mxCell id="hdr" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b&gt;Clip Factory Cloud on AWS. Repo &lt;code&gt;Lamo2real/clip-factory-legal&lt;/code&gt;, branch &lt;code&gt;main&lt;/code&gt;, one AWS account, one environment (&lt;code&gt;prod&lt;/code&gt;, prefix &lt;code&gt;cf-prod&lt;/code&gt;), region &lt;code&gt;eu-north-1&lt;/code&gt;. Backend: Python 3.13. Infrastructure: Terraform in &lt;code&gt;infra/&lt;/code&gt;.&lt;/b&gt;&lt;br&gt;Serverless only: 1 CloudFront distribution &amp;#183; 2 S3 buckets (web, media) &amp;#183; 1 S3 Vectors bucket + index &amp;#183; 1 DynamoDB table + Streams &amp;#183; 3 API Gateway APIs (HTTP, WebSocket, REST) &amp;#183; 12 Lambdas (2 durable functions) · 1 EventBridge rule (stats every 15 min) &amp;#183; 1 AgentCore runtime &amp;#183; Bedrock (Claude Fable 5.1, Amazon Nova 2 Lite EU profile for watching the video, Claude Haiku 5.5 EU profile for help, Titan Embeddings V2) &amp;#183; Transcribe &amp;#183; Cognito &amp;#183; SSM Parameter Store &amp;#183; Secrets Manager (platform keys and tokens) &amp;#183; CloudWatch + SNS &amp;#183; no servers, no containers to run, no VPC &amp;#183; every push to &lt;code&gt;main&lt;/code&gt; deploys through GitHub OIDC" vertex="1">
           <mxGeometry x="0" y="-76" width="2760" height="60" as="geometry" />
         </mxCell>
         <mxCell id="frame" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;arcSize=2;fontSize=11;verticalAlign=middle;align=center;" value="" vertex="1">
@@ -633,6 +633,30 @@
         </mxCell>
         <mxCell id="hw12" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=11;" value="&lt;b&gt;11. Ask Clip Factory.&lt;/b&gt; The owner asks how to do something. &lt;code&gt;cf-prod-api&lt;/code&gt; ranks a corpus built from the app's code (fetched from CloudFront, cached 10 min), composes steps and buttons, and lets Claude Haiku 5.5 (EU profile, the owner's skills first, then the rules) reword them only if every button, path and number checks out. Live numbers are read by the browser from the existing routes." vertex="1">
           <mxGeometry x="2820" y="1224" width="520" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="ask" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda;fillColor=#ED7100;" value="" vertex="1">
+          <mxGeometry x="1130" y="130" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="ask_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;cf-prod-ask (Lambda)&lt;/b&gt;&lt;br&gt;&lt;b&gt;12&lt;/b&gt; Ask as a full assistant (§28): started by cf-prod-api (async Invoke, retries 0); skills + knowledge pack + APP STATE; read-only tools; streams &lt;code&gt;ask.*&lt;/code&gt; events to the owner's WebSocket (PostToConnection); reads and deletes &lt;code&gt;ask/&lt;/code&gt; files in cf-prod-media; reads the search key in Secrets Manager" vertex="1">
+          <mxGeometry x="1030" y="190" width="240" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="brask" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock;fillColor=#01A88D;" value="" vertex="1">
+          <mxGeometry x="1642" y="270" width="56" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="brask_t" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=left;verticalAlign=top;rounded=0;fontSize=10;" value="&lt;b style=&quot;font-size:11px&quot;&gt;Amazon Bedrock (Ask)&lt;/b&gt;&lt;br&gt;Claude Opus 5.5 on Mantle, in-Region eu-north-1 (fallback Opus 4.8); streamed; IAM: bedrock-mantle:CreateInference for these two models only" vertex="1">
+          <mxGeometry x="1706" y="270" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="web" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=11;fillColor=none;dashed=0;" value="&lt;b&gt;Brave Search API + public web&lt;/b&gt;&lt;br&gt;web_search (key in Secrets Manager) and web_fetch (SSRF-guarded, links from results only)" vertex="1">
+          <mxGeometry x="2042" y="280" width="280" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e12a" edge="1" parent="1" source="api" target="ask" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;" value="&lt;b&gt;12&lt;/b&gt; Invoke (Event)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12b" edge="1" parent="1" source="ask" target="brask" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;" value="Messages API (stream)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12c" edge="1" parent="1" source="ask" target="web" style="endArrow=classic;html=1;rounded=0;fontSize=10;labelBackgroundColor=default;dashed=1;" value="search / fetch">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1158" y="100" /><mxPoint x="2180" y="100" /></Array></mxGeometry>
         </mxCell>
       </root>
     </mxGraphModel>

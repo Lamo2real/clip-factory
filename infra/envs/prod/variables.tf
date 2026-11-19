@@ -85,3 +85,21 @@ variable "role_permissions_boundary_arn" {
     error_message = "role_permissions_boundary_arn must be empty or an IAM policy ARN (arn:aws:iam::<account>:policy/<name>)."
   }
 }
+
+variable "ask_enabled" {
+  type        = bool
+  default     = true
+  description = "Ask as a full assistant (docs/CONTRACTS.md §28): ASK_ENABLED on cf-prod-api. The kill switch item (HELP/SWITCH assistant) can still turn it off without a deploy."
+}
+
+variable "ask_tokens_alarm_threshold" {
+  type        = number
+  default     = 20000000
+  description = "Ask's new input tokens in 24 hours before the cf-prod-ask-tokens-day alarm tells the owner. It blocks nothing."
+}
+
+variable "ask_eager_tools" {
+  type        = bool
+  default     = true
+  description = "ASK_EAGER_TOOLS on cf-prod-ask: eager_input_streaming on Ask's tools. Set false if Bedrock rejects the field (docs/DEPLOYMENT.md)."
+}

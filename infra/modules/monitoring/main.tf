@@ -182,3 +182,71 @@ resource "aws_cloudwatch_metric_alarm" "help_model_failures" {
   ok_actions          = [aws_sns_topic.alarms.arn]
   tags                = local.tags
 }
+
+# Ask as a full assistant (docs/CONTRACTS.md §28.10, §28.11): cf-prod-ask writes one help.ask line per answer with
+# its token usage and outcome (never the question). Model failures send the panel to the plain §19 answer, so ten in
+# an hour means something is broken (often Bedrock model access, docs/DEPLOYMENT.md). The token alarm blocks
+# nothing: it tells the owner when a day used far more than usual.
+resource "aws_cloudwatch_log_metric_filter" "ask_model_failures" {
+  count          = var.ask_log_group_name == "" ? 0 : 1
+  name           = "${var.name}-ask-model-failures"
+  log_group_name = var.ask_log_group_name
+  pattern        = "{ ($.event = \"help.ask\") && (($.outcome = \"ask_model_error\") || ($.outcome = \"ask_model_timeout\")) }"
+  metric_transformation {
+    namespace     = var.name
+    name          = "AskModelFailures"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "ask_model_failures" {
+  count               = var.ask_log_group_name == "" ? 0 : 1
+  alarm_name          = "${var.name}-ask-model-failures"
+  alarm_description   = "Ask's model (Claude Opus 5.5 on Bedrock) failed or timed out 10 or more times in an hour; the panel gave the plain help answers meanwhile. Query help.ask lines in ${var.ask_log_group_name} by outcome, and see docs/DEPLOYMENT.md (Bedrock model access in Stockholm)."
+  namespace           = var.name
+  metric_name         = "AskModelFailures"
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  threshold           = 10
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  ok_actions          = [aws_sns_topic.alarms.arn]
+  tags                = local.tags
+}
+
+resource "aws_cloudwatch_log_metric_filter" "ask_tokens" {
+  for_each = var.ask_log_group_name == "" ? {} : {
+    AskInputTokens  = { value = "$.usageIn", slug = "ask-input-tokens" }
+    AskOutputTokens = { value = "$.usageOut", slug = "ask-output-tokens" }
+  }
+  name           = "${var.name}-${each.value.slug}"
+  log_group_name = var.ask_log_group_name
+  pattern        = "{ $.event = \"help.ask\" }"
+  metric_transformation {
+    namespace     = var.name
+    name          = each.key
+    value         = each.value.value
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "ask_tokens_day" {
+  count               = var.ask_log_group_name == "" ? 0 : 1
+  alarm_name          = "${var.name}-ask-tokens-day"
+  alarm_description   = "Ask read more than ${var.ask_tokens_alarm_threshold} new input tokens in a day. Nothing is blocked; check help.ask lines in ${var.ask_log_group_name}, and use the kill switch (docs/DEPLOYMENT.md) if it is not you."
+  namespace           = var.name
+  metric_name         = "AskInputTokens"
+  statistic           = "Sum"
+  period              = 86400
+  evaluation_periods  = 1
+  threshold           = var.ask_tokens_alarm_threshold
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  tags                = local.tags
+}

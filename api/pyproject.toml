@@ -6,7 +6,7 @@ requires-python = ">=3.13"
 # Both are vendored into the Lambda zip (scripts/build_lambda.py): the runtime's boto3 can be too old to know
 # "bedrock-agentcore", durable executions or "s3vectors", and AWS recommends bundling the durable execution SDK
 # pinned to one major version. uv.lock pins the exact versions that ship.
-dependencies = ["boto3>=1.43", "aws-durable-execution-sdk-python>=3,<4"]
+dependencies = ["boto3>=1.43", "aws-durable-execution-sdk-python>=3,<4", "anthropic[bedrock]==2.5.0"]
 
 [dependency-groups]
 dev = [
@@ -30,6 +30,8 @@ pythonpath = ["src", "tests"]
 line-length = 120
 target-version = "py313"
 src = ["src", "tests", "scripts"]
+# Ask's library (docs sections the model reads, CONTRACTS §28.2) is generated text, not code to lint or format.
+extend-exclude = ["src/clipfactory_api/ask/library"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "S", "PL", "C4", "PT", "RET"]

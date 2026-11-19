@@ -9,7 +9,9 @@ Every ``src/**/*.py`` file is parsed and ``problems`` lists each way around the 
 - none of these names may appear as a string (``getattr(bedrock, "converse")`` and the like);
 - ``getattr`` / ``operator.attrgetter`` / ``operator.methodcaller`` may only take a plain string name, never a computed
   one (``getattr(bedrock, "con" + "verse")``);
-- ``converse_text`` may only be called, never passed around or aliased (so every call is seen with its ``skills=``).
+- ``converse_text`` may only be called, never passed around or aliased (so every call is seen with its ``skills=``);
+- ``.messages.stream(`` (the Messages API on Claude in Amazon Bedrock, Ask §28) may only be called inside
+  ``learn.stream_messages``, every ``stream_messages(`` call must pass ``skills=``, and ``messages.create`` is not used.
 
 A future model call therefore has to go through the helper. The bypass tests below prove the scan fails on each one.
 """
@@ -25,6 +27,7 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "clipfactory_api"
 STREAMING = {"converse_stream", "invoke_model_with_response_stream"}
 MODEL_CALLS = {"converse", "invoke_model"} | STREAMING
 DYNAMIC_LOOKUPS = {"getattr", "attrgetter", "methodcaller"}
+HELPERS = {"converse_text", "stream_messages"}
 
 
 def _is_embed_model(call: ast.Call) -> bool:
@@ -72,9 +75,19 @@ def _file_problems(rel: str, tree: ast.AST) -> list[str]:
                 out.append(f"{where} {_called_name(node)} with a computed name (it could reach a model call)")
         if isinstance(node, ast.Name) and node.id == "converse_text" and callee_of is None:
             out.append(f"{where} converse_text used without calling it (an alias would hide a missing skills=)")
-        is_helper_call = isinstance(node, ast.Call) and _called_name(node) == "converse_text"
+        is_helper_call = isinstance(node, ast.Call) and _called_name(node) in HELPERS
         if is_helper_call and not any(k.arg == "skills" for k in getattr(node, "keywords", [])):
-            out.append(f"{where} converse_text( without skills=")
+            out.append(f"{where} {_called_name(node)}( without skills=")
+        if isinstance(node, ast.Name) and node.id == "stream_messages" and callee_of is None:
+            out.append(f"{where} stream_messages used without calling it (an alias would hide a missing skills=)")
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr in {"stream", "create"}
+            and isinstance(node.value, ast.Attribute)
+            and node.value.attr == "messages"
+            and not (node.attr == "stream" and callee_of is not None and (rel, func) == ("learn.py", "stream_messages"))
+        ):
+            out.append(f"{where} .messages.{node.attr} outside learn.stream_messages")
         for child in ast.iter_child_nodes(node):
             is_def = isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef)
             name = child.name if is_def and not func else func
@@ -95,6 +108,16 @@ def problems(src_dir: Path) -> list[str]:
 
 def test_no_model_call_skips_the_skills_block() -> None:
     assert problems(SRC) == []
+
+
+def test_the_stream_helper_is_really_used() -> None:
+    calls = [
+        n
+        for p in SRC.rglob("*.py")
+        for n in ast.walk(ast.parse(p.read_text()))
+        if isinstance(n, ast.Call) and _called_name(n) == "stream_messages"
+    ]
+    assert calls, "learn.stream_messages is Ask's one Messages API helper"
 
 
 def test_the_helper_is_really_used() -> None:
@@ -137,6 +160,12 @@ def test_a_clean_sample_has_no_problems(tmp_path: Path) -> None:
     [
         ({"weekly.py": "def ask(b):\n    return b.converse(modelId='m', messages=[])\n"}, "outside learn"),
         ({"weekly.py": "def ask(b):\n    return converse_text(b)\n"}, "without skills="),
+        (
+            {"ask/worker.py": "def go(c):\n    return c.beta.messages.stream(model='m')\n"},
+            "outside learn.stream_messages",
+        ),
+        ({"ask/worker.py": "def go(c):\n    return c.messages.create(model='m')\n"}, "outside learn.stream_messages"),
+        ({"ask/worker.py": "def go(c):\n    return stream_messages(c, model='m')\n"}, "without skills="),
         ({"weekly.py": "def ask(b):\n    send = getattr(b, 'converse')\n    return send()\n"}, "'converse'"),
         ({"weekly.py": "def ask(b):\n    send = b.converse\n    return send(modelId='m')\n"}, "without calling"),
         (

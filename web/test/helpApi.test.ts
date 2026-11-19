@@ -115,7 +115,15 @@ describe("helpClient.ask", () => {
 describe("helpClient.status", () => {
   it("reads on, off and trouble", async () => {
     const on = await helpClient({ transport: async () => ok({ enabled: true, mode: "model", corpusVersion: "abc" }), auth: authOf(["t"]) }).status();
-    expect(on).toEqual({ kind: "ok", status: { enabled: true, mode: "model", corpusVersion: "abc", pictures: false } });
+    expect(on).toEqual({ kind: "ok", status: { enabled: true, mode: "model", corpusVersion: "abc", pictures: false, assistant: { on: false, web: "off", files: false } } });
+    // §28: the assistant's state comes through as it is; anything odd counts as off.
+    const smart = await helpClient({
+      transport: async () => ok({ enabled: true, mode: "model", corpusVersion: "abc", assistant: { on: true, web: "no_key", files: true, limits: {} } }),
+      auth: authOf(["t"]),
+    }).status();
+    expect(smart.kind === "ok" && smart.status.assistant).toEqual({ on: true, web: "no_key", files: true });
+    const odd = await helpClient({ transport: async () => ok({ enabled: true, mode: "model", corpusVersion: "abc", assistant: { on: "yes" } }), auth: authOf(["t"]) }).status();
+    expect(odd.kind === "ok" && odd.status.assistant?.on).toBe(false);
     const withPictures = await helpClient({ transport: async () => ok({ enabled: true, mode: "model", corpusVersion: "abc", pictures: true }), auth: authOf(["t"]) }).status();
     expect(withPictures.kind === "ok" && withPictures.status.pictures).toBe(true);
     // Pictures need the model: a kb answer never says yes.

@@ -1,0 +1,25 @@
+[
+  {
+    "stop_reason": "tool_use",
+    "content": [
+      {"type": "thinking", "thinking": "", "signature": "sig-a"},
+      {"type": "tool_use", "id": "toolu_search", "name": "web_search", "input": {"query": "instagram app review steps", "freshness": "month"}}
+    ]
+  },
+  {
+    "stop_reason": "tool_use",
+    "content": [
+      {"type": "thinking", "thinking": "", "signature": "sig-b"},
+      {"type": "tool_use", "id": "toolu_fetch", "name": "web_fetch", "input": {"url": "https://developers.facebook.com/docs/instagram/review"}}
+    ]
+  },
+  {
+    "stop_reason": "end_turn",
+    "content": [
+      {"type": "thinking", "thinking": "", "signature": "sig-c"},
+      {"type": "text", "text": "Your Meta app is made. Next, ask for review of the publish permission.",
+       "citations": [{"type": "search_result_location", "source": "https://developers.facebook.com/docs/instagram/review", "title": "App Review", "cited_text": "Submit for review", "search_result_index": 0, "start_block_index": 0, "end_block_index": 0}]},
+      {"type": "text", "text": " Then tap **Check it** in Clip Factory."}
+    ]
+  }
+]

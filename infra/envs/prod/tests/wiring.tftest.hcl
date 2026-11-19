@@ -43,7 +43,7 @@ run "whole_stack_plans" {
 
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
-      "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money",
+      "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money", "ask",
     ])
     error_message = "Every function except the WebSocket authorizer is watched for errors."
   }
@@ -239,5 +239,34 @@ run "follow_creators_is_wired" {
   assert {
     condition     = module.monitoring.schedule_alarm_names["follow-tick"] == "cf-prod-follow-tick-failed-invocations"
     error_message = "The follow rule is watched for failed invocations."
+  }
+}
+
+# docs/CONTRACTS.md §28.1 and §28.12: Ask as a full assistant. Claude Opus 5.5 with Opus 4.8 as the refusal fallback,
+# bare Mantle ids in-Region in Stockholm, cf-prod-api starts cf-prod-ask, and the media bucket gets the ask-1-day rule
+# next to the existing ones (an in-place update; the bucket keeps prevent_destroy).
+run "ask_assistant_is_wired" {
+  command = plan
+
+  assert {
+    condition = (local.ask_model_id == "anthropic.claude-opus-5-5" && local.ask_fallback_model_id == "anthropic.claude-opus-4-8" &&
+    local.ask_region == "eu-north-1" && !contains(local.models.clipModels, "opus-4-8"))
+    error_message = "Ask uses the bare Opus 5.5 id (fallback Opus 4.8) in eu-north-1; Opus 4.8 is not a clip model."
+  }
+
+  assert {
+    condition = (one(module.ask.function_names["ask"] == "cf-prod-ask" ? ["ok"] : []) == "ok" &&
+    module.ask.ask_function_arn == "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-ask")
+    error_message = "cf-prod-ask exists and cf-prod-api gets its unqualified ARN."
+  }
+
+  assert {
+    condition     = toset([for r in module.storage.media_lifecycle_rule_ids : r]) == toset(["uploads-14-days", "job-sources-14-days", "ask-1-day", "abort-incomplete-uploads"])
+    error_message = "The media bucket keeps its rules and gains ask-1-day."
+  }
+
+  assert {
+    condition     = local.ask_search_secret_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/ask/search-key-??????"
+    error_message = "The search key permission covers exactly cf-prod/ask/search-key plus the 6-character suffix Secrets Manager adds (no trailing *)."
   }
 }

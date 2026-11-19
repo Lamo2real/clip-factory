@@ -134,6 +134,14 @@ export interface HelpStatus {
   corpusVersion: string;
   /** Pictures can be added to a question (§26): only in model mode with the pictures switch on. */
   pictures?: boolean;
+  /** Ask as a full assistant (§28): on, the web search state and whether files may be added. */
+  assistant?: AssistantStatus;
+}
+
+export interface AssistantStatus {
+  on: boolean;
+  web: "on" | "no_key" | "off";
+  files: boolean;
 }
 
 /** Limits shared with the API (§19.6). */

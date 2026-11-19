@@ -521,3 +521,52 @@ test("the Library tabs stay readable over a white picture, at 390 and 1440 px", 
     await page.locator(".lib-tabs").screenshot({ path: test.info().outputPath(`lib-tabs-white-picture-${width}.png`) });
   }
 });
+
+// Ask as a full assistant (§28, review C14): a file tile's format label, name and size, the status line while an
+// answer thinks, and the sources list under an answer, at 375 and 1440 px in both schemes.
+const ASK_PDF_B64 = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Page >> endobj\ntrailer << >>\n%%EOF\n").toString("base64");
+for (const scheme of SCHEMES) {
+  test(`Ask's file tiles, status line and sources are readable at 375 and 1440 px (${scheme})`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+    const failures: string[] = [];
+    for (const width of [375, 1440]) {
+      await page.setViewportSize({ width, height: width < 768 ? 812 : 900 });
+      await page.goto("/");
+      await settle(page);
+      await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+      const panel = page.locator("#help-panel");
+      await panel.waitFor();
+      await page.evaluate((b64) => {
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const dt = new DataTransfer();
+        dt.items.add(new File([bytes], "report.pdf", { type: "application/pdf" }));
+        const e = new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt });
+        if (!e.dataTransfer) Object.defineProperty(e, "dataTransfer", { value: dt });
+        document.querySelector(".help-panel__log")!.dispatchEvent(e);
+      }, ASK_PDF_B64);
+      await panel.locator(".ask-file__format").first().waitFor();
+      await animationsDone(page);
+      await readable(page, `Ask file tile @${width} ${scheme}`, failures);
+      // The status line while the answer thinks (#slow holds the first words back for 9 s).
+      await panel.getByLabel("Your question").fill("Where do I change my click sound? #slow");
+      await panel.getByRole("button", { name: "Send" }).click();
+      await panel.locator(".ask-status").first().waitFor();
+      await readable(page, `Ask status line @${width} ${scheme}`, failures);
+      // A fresh chat for the answer with web sources.
+      await page.goto("/");
+      await settle(page);
+      await page.getByRole("button", { name: "Ask Clip Factory" }).click();
+      await panel.waitFor();
+      await panel.getByLabel("Your question").fill("I made the Meta app, what now? #search");
+      await panel.getByRole("button", { name: "Send" }).click();
+      await panel.locator(".ask-msg").last().getByRole("button", { name: "Copy answer" }).waitFor({ timeout: 30_000 });
+      await panel.locator(".ask-source__link").first().waitFor();
+      await animationsDone(page);
+      await readable(page, `Ask sources @${width} ${scheme}`, failures);
+    }
+    expect(failures).toEqual([]);
+  });
+}

@@ -1,0 +1,9 @@
+[
+  {
+    "stop_reason": "end_turn",
+    "content": [
+      {"type": "thinking", "thinking": "", "signature": "sig-1"},
+      {"type": "text", "text": "Open **Sounds** and pick a **Click sound**. Tap a card to hear it first."}
+    ]
+  }
+]

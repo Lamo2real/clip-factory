@@ -8,6 +8,8 @@ type Listener = (ev: LiveEvent) => void;
 /** Shared between the mock API (which publishes every change) and the fake sockets (which deliver them). */
 export const mockLive = {
   listeners: new Set<Listener>(),
+  /** Ask's fake worker (api/mock/ask.ts) streams raw messages to one connection id. */
+  raw: new Map<string, (msg: unknown) => void>(),
   sockets: new Set<FakeSocket>(),
   /** Set by the mock API: moves running jobs along and publishes what changed. */
   tick: (() => undefined) as () => void,
@@ -42,6 +44,9 @@ export class FakeSocket implements SocketLike {
     setTimeout(() => this.onmessage?.({ data }), 0);
   };
   private ticker: ReturnType<typeof setInterval> | undefined;
+  private static count = 0;
+  /** Like API Gateway's connectionId, learned with {"action":"whoami"} (§28.5). */
+  readonly connectionId = `mockconn${++FakeSocket.count}=`;
 
   constructor(url: string) {
     const token = new URL(url, "http://mock").searchParams.get("token");
@@ -51,6 +56,9 @@ export class FakeSocket implements SocketLike {
       this.readyState = 1;
       mockLive.sockets.add(this);
       mockLive.listeners.add(this.listener);
+      mockLive.raw.set(this.connectionId, (msg) => {
+        if (this.readyState === 1) setTimeout(() => this.onmessage?.({ data: JSON.stringify(msg) }), 0);
+      });
       // Moves running jobs along about once a second while someone is listening (skipped under automation).
       this.ticker = setInterval(() => mockLive.tick(), 1000);
       this.onopen?.({});
@@ -65,7 +73,12 @@ export class FakeSocket implements SocketLike {
     } catch {
       action = null;
     }
-    const reply = action === "ping" ? { type: "pong", at: new Date().toISOString() } : { type: "error", code: "bad_request" };
+    const reply =
+      action === "ping"
+        ? { type: "pong", at: new Date().toISOString() }
+        : action === "whoami"
+          ? { type: "whoami", connectionId: this.connectionId }
+          : { type: "error", code: "bad_request" };
     setTimeout(() => this.onmessage?.({ data: JSON.stringify(reply) }), 0);
   }
 
@@ -80,6 +93,7 @@ export class FakeSocket implements SocketLike {
     clearInterval(this.ticker);
     mockLive.sockets.delete(this);
     mockLive.listeners.delete(this.listener);
+    mockLive.raw.delete(this.connectionId);
     setTimeout(() => this.onclose?.({ code }), 0);
   }
 }

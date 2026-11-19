@@ -3,6 +3,7 @@
 // fallback: the kill switch means no answers at all.
 import { useSyncExternalStore } from "react";
 import type { HelpClient } from "./helpApi.ts";
+import type { AssistantStatus } from "./types.ts";
 
 export const STATUS_EVERY_MS = 5 * 60_000;
 
@@ -58,6 +59,31 @@ export function usePicturesOn(): boolean {
   );
 }
 
+// Ask as a full assistant (§28): on only when the last check said so; off means the §19 answers.
+let assistant: AssistantStatus = { on: false, web: "off", files: false };
+const assistantListeners = new Set<() => void>();
+
+export function assistantStatus(): AssistantStatus {
+  return assistant;
+}
+
+export function setAssistantStatus(next: AssistantStatus): void {
+  if (next.on === assistant.on && next.web === assistant.web && next.files === assistant.files) return;
+  assistant = next;
+  for (const fn of assistantListeners) fn();
+}
+
+export function useAssistant(): AssistantStatus {
+  return useSyncExternalStore(
+    (fn) => {
+      assistantListeners.add(fn);
+      return () => assistantListeners.delete(fn);
+    },
+    () => assistant,
+    () => assistant,
+  );
+}
+
 let inflight: Promise<HelpSwitch> | null = null;
 
 /** Asks the API once (concurrent calls share one request). */
@@ -67,8 +93,13 @@ export function checkHelpStatus(client: HelpClient): Promise<HelpSwitch> {
     .then((r) => {
       const next: HelpSwitch = r.kind === "ok" ? (r.status.enabled ? "on" : "off") : current === "off" ? "off" : "on";
       // A failed check keeps the last answer about pictures; off turns them off.
-      if (r.kind === "ok") setPicturesOn(r.status.enabled && r.status.pictures === true);
-      else if (next === "off") setPicturesOn(false);
+      if (r.kind === "ok") {
+        setPicturesOn(r.status.enabled && r.status.pictures === true);
+        setAssistantStatus(r.status.enabled && r.status.assistant ? r.status.assistant : { on: false, web: "off", files: false });
+      } else if (next === "off") {
+        setPicturesOn(false);
+        setAssistantStatus({ on: false, web: "off", files: false });
+      }
       setHelpSwitch(next);
       return next;
     })

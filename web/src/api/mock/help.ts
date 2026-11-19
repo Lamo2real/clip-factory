@@ -9,6 +9,7 @@ import { loadCorpus } from "../../features/help/kb.ts";
 import { rank } from "../../features/help/retrieve.ts";
 import { base64Bytes, jpegInfo, PICTURE_BYTES_MAX, PICTURE_TEXT } from "../../features/help/pictures.ts";
 import { HELP_PAGES, PICTURES_MAX, type HelpContext, type HelpPictureResult, type HelpTurn } from "../../features/help/types.ts";
+import { mockAssistantOn } from "./ask.ts";
 import { FAKE_MODEL_MS, fakeModel } from "./helpModel.ts";
 
 export interface MockPictureSeen {
@@ -81,7 +82,19 @@ export function mockHelpTransport(state: MockHelpState = { enabled: true, outcom
       return {
         status: 200,
         retryAfter: null,
-        body: { enabled: state.enabled, mode: state.enabled ? "model" : "off", corpusVersion: corpus.version, pictures: state.enabled && state.pictures !== false },
+        body: {
+          enabled: state.enabled,
+          mode: state.enabled ? "model" : "off",
+          corpusVersion: corpus.version,
+          pictures: state.enabled && state.pictures !== false,
+          // §28: the assistant, unless a test turned it off (localStorage cf-mock-assistant = off).
+          assistant: {
+            on: state.enabled && mockAssistantOn(),
+            web: window.__cfMockAsk?.searchKey === false ? "no_key" : "on",
+            files: true,
+            limits: { filesPerQuestion: 10, bytesPerFile: 25_000_000, bytesPerQuestion: 50_000_000, imagesPerQuestion: 8, questionChars: 4000, pdfPages: 100 },
+          },
+        },
       };
     }
     if (!state.enabled) return off();

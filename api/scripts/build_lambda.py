@@ -6,8 +6,11 @@ too old to know "bedrock-agentcore", durable executions or "s3vectors"), the loc
 built-in skills from the repository's ``skills/`` folder as package
 data (``clipfactory_api/builtin_skills/<name>/SKILL.md``) and ``config/platforms.json`` (the stats limits, §16.4) as
 ``clipfactory_api/config/platforms.json``, ``config/monetization.json`` (§25.2) next to it, and the help corpus the web build commits
-(``web/src/features/help/help-corpus.json``, §19.6) as ``clipfactory_api/help/corpus.json``. Every dependency is pure Python, so the same zip runs on
-arm64. The build is deterministic: same inputs, byte-identical zip (sorted entries, fixed timestamps and modes).
+(``web/src/features/help/help-corpus.json``, §19.6) as ``clipfactory_api/help/corpus.json``. Ask's knowledge pack and library
+(``clipfactory_api/ask/knowledge.json`` and ``ask/library/*.md``, §28.2) are package files already. The Anthropic SDK
+(``anthropic[bedrock]``, for Claude in Amazon Bedrock, §28.1) is vendored too; its two compiled dependencies
+(``pydantic_core`` and ``jiter``) are installed as manylinux aarch64 wheels, the Lambdas' own platform, and are the only
+compiled files allowed in the zip. The build is deterministic: same inputs, byte-identical zip (sorted entries, fixed timestamps and modes).
 
 Run from anywhere:  uv run --project api python api/scripts/build_lambda.py   (needs uv)
 """
@@ -45,9 +48,19 @@ HANDLERS = (
     "clipfactory_api/stats/handler.py",  # cf-prod-stats (§16.5)
     "clipfactory_api/weekly.py",  # cf-prod-learn (§16.6)
     "clipfactory_api/money/handler.py",  # cf-prod-money (§25.6)
+    "clipfactory_api/ask/worker.py",  # cf-prod-ask (§28.5)
 )
-REQUIRED_PACKAGES = ("boto3==", "botocore==", "aws-durable-execution-sdk-python==")
-VENDORED = ("boto3/__init__.py", "botocore/__init__.py", "aws_durable_execution_sdk_python/__init__.py")
+REQUIRED_PACKAGES = ("boto3==", "botocore==", "aws-durable-execution-sdk-python==", "anthropic==")
+VENDORED = (
+    "boto3/__init__.py",
+    "botocore/__init__.py",
+    "aws_durable_execution_sdk_python/__init__.py",
+    "anthropic/__init__.py",
+    "anthropic/lib/bedrock/__init__.py",
+)
+ASK_KNOWLEDGE_IN_ZIP = "clipfactory_api/ask/knowledge.json"
+# The only packages that may carry compiled files, and only for Linux on arm64 (the Lambdas' platform).
+COMPILED_ALLOWED = ("pydantic_core/", "jiter/")
 FIXED_TIME = (1980, 1, 1, 0, 0, 0)
 COMPILED = {".so", ".pyd", ".dylib", ".dll"}
 
@@ -152,6 +165,11 @@ def _copy_help_corpus(dest: Path) -> None:
     print(f"  help corpus: {len(parsed.docs)} docs, version {parsed.version}")
 
 
+def _compiled_ok(name: str) -> bool:
+    """A compiled file is allowed only in ``COMPILED_ALLOWED`` and only when built for Linux on arm64."""
+    return name.startswith(COMPILED_ALLOWED) and name.endswith(".so") and "aarch64-linux" in name
+
+
 def _zip(source: Path, out: Path) -> list[str]:
     files = sorted(
         p
@@ -164,7 +182,7 @@ def _zip(source: Path, out: Path) -> list[str]:
     with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in files:
             name = path.relative_to(source).as_posix()
-            if path.suffix in COMPILED:
+            if path.suffix in COMPILED and not _compiled_ok(name):
                 raise SystemExit(f"compiled file in the package (must stay pure Python): {name}")
             info = zipfile.ZipInfo(name, date_time=FIXED_TIME)
             info.external_attr = 0o100644 << 16
@@ -195,7 +213,14 @@ def main() -> int:
         names = _zip(stage, OUT)
     missing = [
         h
-        for h in (*HANDLERS, *VENDORED, PLATFORMS_CONFIG_IN_ZIP, MONEY_CONFIG_IN_ZIP, HELP_CORPUS_IN_ZIP)
+        for h in (
+            *HANDLERS,
+            *VENDORED,
+            PLATFORMS_CONFIG_IN_ZIP,
+            MONEY_CONFIG_IN_ZIP,
+            HELP_CORPUS_IN_ZIP,
+            ASK_KNOWLEDGE_IN_ZIP,
+        )
         if h not in names
     ]
     if missing:

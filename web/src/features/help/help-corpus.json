@@ -1,5 +1,5 @@
 {
-  "version": "aa97fd9c4e10",
+  "version": "c57853d33ec9",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -56,6 +56,7 @@
     "/settings/look-and-feel/background",
     "/settings/app/get-the-app",
     "/settings/app/updates",
+    "/settings/app/ask",
     "/settings/app/account",
     "/get-app"
   ],
@@ -2423,6 +2424,157 @@
       }
     },
     {
+      "id": "ask-web-setup",
+      "kind": "guide",
+      "route": "/settings/app/ask",
+      "hash": "ask-web-setup",
+      "where": "Settings › App & account › Ask",
+      "title": "Turn on web search for Ask",
+      "keywords": [
+        "web search",
+        "search key",
+        "brave",
+        "internet",
+        "browse",
+        "search the web",
+        "can't search the web",
+        "web",
+        "online",
+        "latest steps"
+      ],
+      "answer": "Ask can read today's web pages once you add a free search key. Get it from Brave Search, paste it in **Settings › App & account › Ask** and tap **Save key**.",
+      "steps": [
+        "Open **Settings**, then **App & account**, then **Ask**.",
+        "Tap **Get a search key** and make a free account. Pick the **Search** plan.",
+        "Copy your key.",
+        "Paste it under **Your search key** and tap **Save key**. A green check says web search is on."
+      ],
+      "actions": [
+        {
+          "id": "ask-web-setup:open",
+          "label": "Turn on web search",
+          "to": "/settings/app/ask#ask-web-setup",
+          "highlight": [
+            "ask-web-setup"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ask-what",
+      "kind": "guide",
+      "route": "/settings/app/ask",
+      "hash": "ask-status",
+      "where": "Ask",
+      "title": "What Ask can do",
+      "keywords": [
+        "what can you do",
+        "ask anything",
+        "assistant",
+        "chat",
+        "claude",
+        "opus",
+        "general question",
+        "help me with",
+        "who are you"
+      ],
+      "answer": "Ask answers any question, not only about Clip Factory. It knows every page and setting, sees your own setup, can search the web and reads the files you add.",
+      "steps": [
+        "Tap **Ask** at the bottom right.",
+        "Type any question, or add a file with the paperclip.",
+        "Tap the paper plane. The answer appears as it is written. Tap **Stop answer** to end it."
+      ],
+      "actions": [
+        {
+          "id": "ask-what:open",
+          "label": "Open Ask settings",
+          "to": "/settings/app/ask#ask-status",
+          "highlight": [
+            "ask-status"
+          ]
+        }
+      ],
+      "suggest": true
+    },
+    {
+      "id": "ask-files",
+      "kind": "guide",
+      "route": "/settings/app/ask",
+      "hash": "ask-status",
+      "where": "Ask",
+      "title": "Add files to Ask",
+      "keywords": [
+        "attach",
+        "file",
+        "pdf",
+        "document",
+        "upload file",
+        "drag",
+        "drop",
+        "paste",
+        "word",
+        "excel",
+        "csv",
+        "paperclip",
+        "spreadsheet"
+      ],
+      "answer": "Add files with the paperclip, drop them on Ask, or paste them. Ask reads pictures, PDFs, text files and Word, Excel and PowerPoint files. It never keeps them.",
+      "steps": [
+        "Open **Ask**.",
+        "Tap the paperclip, or drag files onto Ask, or paste them.",
+        "Each file shows as a tile with its kind and name.",
+        "Ask your question and tap the paper plane."
+      ],
+      "actions": [
+        {
+          "id": "ask-files:open",
+          "label": "Open Ask settings",
+          "to": "/settings/app/ask#ask-status",
+          "highlight": [
+            "ask-status"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ask-markup",
+      "kind": "guide",
+      "route": "/settings/app/ask",
+      "hash": "ask-status",
+      "where": "Ask",
+      "title": "Mark a picture in red",
+      "keywords": [
+        "mark",
+        "draw",
+        "red",
+        "circle",
+        "highlight picture",
+        "arrow",
+        "box",
+        "annotate",
+        "markup",
+        "scribble"
+      ],
+      "answer": "Tap a picture in Ask's tray to mark it. Draw with **Pen**, **Box** or **Arrow** in red, then tap **Save**. Ask sees exactly what you marked.",
+      "steps": [
+        "Add a picture to Ask.",
+        "Tap the picture.",
+        "Pick **Pen**, **Box** or **Arrow** and draw on what you mean.",
+        "Tap **Undo** or **Clear** to fix it.",
+        "Tap **Save**."
+      ],
+      "actions": [
+        {
+          "id": "ask-markup:open",
+          "label": "Open Ask settings",
+          "to": "/settings/app/ask#ask-status",
+          "highlight": [
+            "ask-status"
+          ]
+        }
+      ]
+    },
+    {
       "id": "page-home",
       "kind": "page",
       "route": "/",
@@ -4252,9 +4404,10 @@
       "keywords": [
         "Get the app",
         "Updates",
+        "Ask",
         "Account"
       ],
-      "answer": "The app, updates, and your account. It has Get the app, Updates, Account.",
+      "answer": "The app, updates, and your account. It has Get the app, Updates, Ask, Account.",
       "steps": [
         "Tap **Settings**.",
         "Tap **App & account**."
@@ -4415,6 +4568,102 @@
       ],
       "highlight": [
         "check-updates"
+      ]
+    },
+    {
+      "id": "settings-app-ask",
+      "kind": "page",
+      "route": "/settings/app/ask",
+      "where": "Settings › App & account › Ask",
+      "title": "Ask",
+      "keywords": [
+        "Web search",
+        "What Ask can do"
+      ],
+      "answer": "Web search, and what Ask can do for you.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Ask**."
+      ],
+      "actions": [
+        {
+          "id": "settings-app-ask:open",
+          "label": "Open Ask",
+          "to": "/settings/app/ask"
+        }
+      ]
+    },
+    {
+      "id": "apple-ask-web-setup",
+      "kind": "apple",
+      "route": "/settings/app/ask",
+      "hash": "ask-web-setup",
+      "where": "Settings › App & account › Ask",
+      "title": "Web search",
+      "keywords": [
+        "internet",
+        "search key",
+        "brave",
+        "browse",
+        "web",
+        "google",
+        "online",
+        "key"
+      ],
+      "answer": "Lets Ask read today's web pages, for steps that change.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Ask**.",
+        "Find **Web search**."
+      ],
+      "actions": [
+        {
+          "id": "apple-ask-web-setup:open",
+          "label": "Open Ask",
+          "to": "/settings/app/ask#ask-web-setup",
+          "highlight": [
+            "ask-web-setup"
+          ]
+        }
+      ],
+      "highlight": [
+        "ask-web-setup"
+      ]
+    },
+    {
+      "id": "apple-ask-status",
+      "kind": "apple",
+      "route": "/settings/app/ask",
+      "hash": "ask-status",
+      "where": "Settings › App & account › Ask",
+      "title": "What Ask can do",
+      "keywords": [
+        "assistant",
+        "chat",
+        "claude",
+        "opus",
+        "files",
+        "pictures",
+        "help"
+      ],
+      "answer": "Ask answers any question, knows your app and reads your files.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Ask**.",
+        "Find **What Ask can do**."
+      ],
+      "actions": [
+        {
+          "id": "apple-ask-status:open",
+          "label": "Open Ask",
+          "to": "/settings/app/ask#ask-status",
+          "highlight": [
+            "ask-status"
+          ]
+        }
+      ],
+      "highlight": [
+        "ask-status"
       ]
     },
     {

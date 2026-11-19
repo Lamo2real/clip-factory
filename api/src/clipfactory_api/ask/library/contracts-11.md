@@ -1,0 +1,75 @@
+## 11. Design system (summary; details in docs/UX_DESIGN_SYSTEM.md)
+
+* Colours (owner request 2026-11-18, ADR-43): **Bottle Green `#0F372B`** (the surface), **Bone `#EFE7DA`** (the
+  words and the lines), **Vermilion `#E8392B` (every call to action)**. Every surface is **liquid glass**: bottle-green
+  tints with bone words over a soft animated deep-green mesh with a vermilion glow (or the owner's own background),
+  `backdrop-filter: blur() saturate()`, refractive bone highlight edges. Every action button wears the vermilion CTA;
+  secondary buttons are bone-outlined glass; selected items in a pick-one bar are bone with green words.
+* Type: **Times New Roman** (fallback Tinos, then serif) for display headlines, often italic with a vermilion underline
+  swash; **Inter** for everything else.
+* Layout inspiration: the "Sorrel" restaurant site: big serif italic headline on a green hero card, pill buttons, cards
+  in a row, a rating-style stat block.
+* Navigation: phones (< 768 px): bottom glass tab bar, **icons only** (aria-labels). Larger screens: left glass sidebar,
+  collapsible with a hamburger (collapsed = icons only).
+* Sounds (Web Audio, no files): one **tap** sound on clicks of enabled interactive elements; a different **deny**
+  sound on clicks of disabled ones and on errors. Driven only by the `click` event, so scrolling never makes a sound.
+  Off switch in Settings.
+* Nothing may overflow its box at any width from 320 px up (enforced by Playwright tests).
+* Every visible text run reads at WCAG AA: at least 4.5:1 (3:1 for 24 px, or 18.66 px bold, and up) on the glass and
+  backdrop it can sit on, and no text is smaller than 12 px, on every screen at 320, 375 and 1440 px (enforced by
+  `web/e2e/contrast.spec.ts` with axe-core and a rendered-contrast scan; see [TESTING.md](TESTING.md#contrast-and-text-size)).
+  The desktop app's see-through window (§22.3) is held to the same bar, over stand-ins for the real window glass.
+  Colour and radius tokens are the tables in UX_DESIGN_SYSTEM.md; corners use the `--r-*` scale.
+* **Library** has two views: "All clips" (every kept clip, newest first, each card shows total views when measured)
+  and "This week" (the week's clips sorted by views with a big "Best this week" star each, arrows for earlier weeks,
+  §16.8). Tapping any clip in Library opens its performance page `/clips/{clipId}` (§16.8); on an All clips card the
+  whole top (cover and hook) is the tap target, never just the one-line hook. Each post row says its status with the
+  same words as the clip page's chip (`postStatusLabel` in `web/src/lib/metrics.ts`: a queued post reads "Posting",
+  one waiting for its account "Waiting for connection"); posts waiting for accounts share one row "Waiting for
+  connection. Posts once these accounts are connected.". The "Show" filter's empty list says why it is empty: no kept
+  clips at all → "Nothing kept yet" + Go to Review; "Not posted yet" with every kept clip posted → "Everything is
+  posted!" + Show all; "Posted" with kept clips still on their way → "Nothing posted yet" + Show all.
+* Installable PWA (manifest + service worker) on phone and desktop.
+
+### 11.1 One top line (owner request, 2026-11-19)
+
+Scrolled to the top, every column starts on the same horizontal line: the menu, the setup list (its open card or its
+pill), the settings folders and the page's first panel or title plate. In the macOS desktop window the line sits under
+the traffic lights' band; nothing ever covers the traffic lights.
+
+* **Tokens** (`web/src/styles/tokens.css`): `--titlebar-h` is the desktop window's title bar band (0 everywhere but the
+  macOS window, 28 px there); `--top-safe: max(env(safe-area-inset-top), var(--titlebar-h))` is what nothing may sit in
+  (that band or a phone's status bar); `--top-line` is `--top-safe + 12px` on phones and `+ 14px` from 768 px. Every
+  column reads `--top-line` (the sidebar `top`, the `.shell` `padding-top`, the setup list and its panel `top`, the
+  folders' sticky `top`); none adds a number of its own to the safe area. `env(safe-area-inset-top)` appears only in
+  `tokens.css` (a unit test holds it). From 768 px `.page-head` has no top padding, so the title plate starts on the line (phones keep 6 px of air under their top bar).
+* **The pill shares the line.** While the setup list is folded to its pill (§17.13; under 1440 px, or the list
+  closed; the desktop app's first 1200 x 820 window is one), the pill sits on the line at the page's right edge
+  (`right` = the page gutter) and, **from 940 px**, the page starts on the line too (`--todo-top: 0`). The page's
+  first row leaves the pill room on the right: `--todo-room` (the pill's width, measured by `SetupTodo.tsx` into
+  `--todo-pill-w`, + 20 px) narrows the first `.page-head`'s title plate, pads the settings trail (whose breadcrumbs
+  then keep to one row and end in "…" instead of wrapping, like on phones) and the home hero's side column steps
+  12 px below the pill. The settings folders stick on the line with `z-index: 40`, over the strip's glass bar once the
+  page scrolls, like the menu. What sticks inside the page (a review clip's video) stops below the bar
+  (`--todo-clear`: 72 px). Below 940 px, where that row would be too narrow, and in the settings column from 1024 to
+  1179 px (with the folders beside it), the page starts one strip lower (`--todo-top` / `--todo-clear`: 60 px on
+  phones, 72 px from 768 px), the folders still on the line.
+* **The desktop window** (§12.3) sets `window.__CF_TITLEBAR__` (28 on macOS, 0 elsewhere). `web/src/lib/look.ts`
+  (`titlebarHeight`, `applyTitlebar`, run in `applyLookNow` before the first paint) reads it only when
+  `__CF_DESKTOP__ === true` and the value is a number from 1 to 120, then sets `html[data-titlebar="overlay"]` and
+  `--titlebar-h`. A web page that claims a title bar gets no band.
+* **Dragging the window.** With the title bar laid over the page, `App.tsx` draws `.titlebar-drag`
+  (`data-tauri-drag-region`, `aria-hidden`), shown only on `html[data-titlebar="overlay"]`: fixed at the top, full
+  width, exactly `--titlebar-h` tall (the real title bar, never the 14 px of air below it, where a page control that
+  scrolled up must still take its click),
+  `z-index: 45`, transparent, no border, rim or shadow. Pressing it moves the window; a double click zooms it.
+* **Phones** keep their own top bar under the pill strip (top bar at `--top-line + --todo-top`).
+* **Also on the token:** `html { scroll-padding-top }`, the skip link, the sign-in screen, the small question sheet's
+  scrim, the phone Ask sheet and the setup list's glass bar all clear `--top-safe`.
+* **Tests:** `e2e/top-line.spec.ts` (Chromium and WebKit): the simulated macOS window at 1000 x 650, 1200 x 820 (the
+  pill) and 1440 x 900 on `/`, `/jobs`, `/review`, `/library`, `/settings` and a settings branch puts every column
+  within 1 px of the line (42 px), keeps the 80 x 28 traffic-light corner clear and checks the 28 px drag strip; a tab
+  scrolled up to 30 px (under the line, below the title bar) still takes its click; a Windows or Linux window and a
+  web page claiming a band get the plain line (14 px); browsers at 1440, 1280, 1000, 820 and 390 px wide share their
+  line. The band's 28 lives only in `main.rs` (`MAC_TITLEBAR_HEIGHT`); `look.ts` sets it inline, and a unit test holds
+  that no stylesheet hard-codes it.
