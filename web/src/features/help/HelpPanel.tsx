@@ -491,9 +491,11 @@ export function HelpPanel({
             if (gen !== generation.current) return;
             const id = entryId();
             if (maybe) maybes.current.set(id, maybe);
-            dispatch({ type: "notice", id, tone: "info", text: cantAnswerText(end, null), retry: true, ...(maybe ? { maybe: true } : {}) });
+            // A server that failed too gives its help code, so whoever helps him can find the log line.
+            dispatch({ type: "notice", id, tone: "info", text: cantAnswerText(end, null), retry: true, helpCode: failCode, ...(maybe ? { maybe: true } : {}) });
             giveBack();
           };
+          let failCode: string | null = null;
           if (!short) return cantAnswer();
           const modelTrouble = end.reason === "model" || end.reason === "timeout";
           let answer: HelpAnswer | null = null;
@@ -505,7 +507,7 @@ export function HelpPanel({
             if (result.kind === "answer") {
               answer = result.answer;
               requestId = result.requestId;
-            }
+            } else if (result.kind === "fallback") failCode = result.requestId;
           }
           if (!answer) {
             try {
