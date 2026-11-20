@@ -103,7 +103,7 @@ def test_a_working_job_is_stopped_and_fenced_before_it_goes(
     assert fences, "the job is fenced first"
     values = fences[0]["ExpressionAttributeValues"]
     assert "canceled" in values.values()
-    assert job["sessionId"] not in values.values()
+    assert values[":s0"] != job["sessionId"]  # the new sessionId is set; the old one is only the condition
     assert store.get(job["pk"], job["sk"]) is None
 
 
@@ -272,7 +272,7 @@ def test_delete_several_at_once(call: Call, store: db.Store, s3_client: FakeS3, 
     assert all(r["deleted"] for r in body["results"])
     assert sum(r["clipsDeleted"] for r in body["results"]) == 1
     assert store.get(clip["pk"], clip["sk"]) is None
-    assert agentcore.stopped == [working["sessionId"]]
+    assert working["sessionId"] in agentcore.stopped  # every job's session is stopped, working or not
     listed = call("GET", "/v1/jobs")[1]["jobs"]
     assert [j["jobId"] for j in listed] == [keep["jobId"]]
     assert call("GET", "/v1/me")[1]["counts"]["running"] == 0
@@ -302,3 +302,54 @@ def test_the_job_flow_never_brings_a_deleted_job_back(
     assert out["outcome"] == "missing"  # the flow ends on its own, writing nothing
     assert table.raw(job["pk"], job["sk"]) is None
     assert not [k for k in table.items if k[1].endswith(job["jobId"])]
+
+
+def test_try_again_and_stop_are_refused_while_the_job_is_being_deleted(call: Call, store: db.Store) -> None:
+    job = seed_job(store, status="failed", error="x")
+    store.update(job["pk"], job["sk"], {"deletingAt": "2026-01-01T00:00:00Z"})
+    assert call("POST", f"/v1/jobs/{job['jobId']}/retry")[0] == 409
+    running = seed_job(store, status="running")
+    store.update(running["pk"], running["sk"], {"deletingAt": "2026-01-01T00:00:00Z"})
+    assert call("POST", f"/v1/jobs/{running['jobId']}/cancel")[0] == 409
+    left = store.get(job["pk"], job["sk"])
+    assert left is not None
+    assert left["status"] == "failed"
+
+
+def test_a_failed_jobs_old_session_is_stopped_too(call: Call, store: db.Store, agentcore: FakeAgentCore) -> None:
+    job = seed_job(store, status="failed", error="x")
+    assert call("DELETE", f"/v1/jobs/{job['jobId']}")[0] == 200
+    assert agentcore.stopped == [job["sessionId"]]
+
+
+def test_the_session_that_replaced_ours_meanwhile_is_the_one_stopped(
+    app: Any, store: db.Store, agentcore: FakeAgentCore
+) -> None:
+    job = seed_job(store, status="failed", error="x")
+    real_get = store.get
+    swapped: list[str] = []
+
+    def racing_get(pk: str, sk: str) -> Any:
+        item = real_get(pk, sk)
+        if sk == job["sk"] and not swapped and item is not None:
+            swapped.append("B")  # a Try again lands right after the delete read the job
+            store.update(pk, sk, {"sessionId": "session-B"})
+        return item
+
+    store.get = racing_get  # type: ignore[method-assign]
+    assert job_delete.delete_job(app, USER, job["jobId"], review_clips=False).deleted is True
+    assert "session-B" in agentcore.stopped
+    assert real_get(job["pk"], job["sk"]) is None
+
+
+def test_a_clip_missing_from_the_index_keeps_its_video(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    job = seed_job(store, status="ready")
+    clip = seed_clip(store, s3_client, job_id=job["jobId"], status="review")
+    unindexed = {k: v for k, v in clip.items() if k not in ("gsi1pk", "gsi1sk")}
+    store.put(unindexed)  # the index has not caught up with this clip yet
+    status, body = call("DELETE", f"/v1/jobs/{job['jobId']}")
+    assert status == 200
+    assert body["clipsKept"] == 0
+    assert store.get(clip["pk"], clip["sk"]) is not None
+    assert clip["videoKey"] in s3_client.objects
+    assert clip["coverKey"] in s3_client.objects

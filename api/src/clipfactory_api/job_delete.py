@@ -6,7 +6,8 @@ and Throw away. One job is deleted in this order, so a delete that breaks halfwa
 1. **Fence.** The job gets a fresh ``sessionId`` (a working one also becomes ``canceled``). The agent and the job flow
    condition every write on their own ``sessionId``, so from here on the old run cannot write to the job or add a
    clip (§13, §14.4, §30.6).
-2. **Stop the run.** A job that was working has its runtime session stopped outright (as Try again does): no wind-down
+2. **Stop the run.** The runtime session it had is always stopped outright (as Try again does, also for a failed or
+   stopped job: its container may still be uploading): no wind-down
    that would write again.
 3. **Clips.** Thrown-away clips always go (they are listed nowhere but the job page). Clips waiting in Review go only
    when the owner ticked "Also delete its N clips in Review", and only while they still wait (one kept on another
@@ -36,6 +37,7 @@ REVIEW = "review"
 ALWAYS_GONE = frozenset({"declined"})  # thrown away: no file, no post, shown only on the job page
 MAX_BATCH = 25
 BATCH_WORKERS = 5
+FENCE_TRIES = 5
 
 
 @dataclass(frozen=True)
@@ -84,13 +86,34 @@ def _upload_in_use(app: App, user_id: str, job_id: str, key: str) -> bool:
     return False
 
 
-def _delete_files(app: App, user_id: str, job: Item, kept: list[Item]) -> int:
+def _clip_still_exists(
+    app: App, user_id: str, job_id: str, key: str, *, gone: set[str], asked: dict[str, bool]
+) -> bool:
+    """A file under ``clips/{clipId}/`` stays when that clip's own item still exists. The job's clip list comes from
+    gsi1, which can miss a clip written a moment ago; the owner's own item is read with a strongly consistent get."""
+    head = f"jobs/{job_id}/clips/"
+    if not key.startswith(head):
+        return False
+    clip_id = key[len(head) :].split("/", 1)[0]
+    if not clip_id or clip_id in gone:
+        return False
+    if clip_id not in asked:
+        asked[clip_id] = app.store.get(db.user_pk(user_id), db.clip_sk(clip_id)) is not None
+    return asked[clip_id]
+
+
+def _delete_files(app: App, user_id: str, job: Item, kept: list[Item], gone: set[str]) -> int:
     job_id = str(job["jobId"])
+    asked: dict[str, bool] = {}
     keep: list[str] = []
     for clip in kept:
         keep.append(s3.clip_prefix(job_id, str(clip["clipId"])))
         keep += [str(clip[k]) for k in ("videoKey", "coverKey") if clip.get(k)]
-    count = app.media.delete_prefix_except(f"jobs/{job_id}/", tuple(keep))
+    count = app.media.delete_prefix_except(
+        f"jobs/{job_id}/",
+        tuple(keep),
+        protect=lambda key: _clip_still_exists(app, user_id, job_id, key, gone=gone, asked=asked),
+    )
     source = job.get("source") or {}
     key = source.get("key") if isinstance(source, dict) and source.get("type") == "upload" else None
     if (
@@ -108,30 +131,42 @@ def delete_job(app: App, user_id: str, job_id: str, *, review_clips: bool) -> Ou
     """Deletes one of this owner's jobs (the order is in the module docstring). Idempotent: a job that is not there
     (deleted already, or another owner's: the key is the caller's own) is ``deleted=False`` and nothing changes."""
     pk, sk = db.user_pk(user_id), db.job_sk(job_id)
-    job = app.store.get(pk, sk)
-    if job is None:
-        return Outcome(job_id, False)
-    now = iso(app.clock())
-    old_session = job.get("sessionId")
-    working = job.get("status") in jobs.ACTIVE
-    fence: Item = {"sessionId": new_session_id(job_id), "deletingAt": now, "updatedAt": now}
-    if working:
-        fence["status"] = "canceled"
-    try:
-        app.store.update(pk, sk, fence)
-    except db.ConditionFailed:
-        return Outcome(job_id, False)  # deleted by another request a moment ago
+    job: Item = {}
+    old_session: Any = None
+    working = False
+    for _ in range(FENCE_TRIES):
+        current = app.store.get(pk, sk)
+        if current is None:
+            return Outcome(job_id, False)
+        job = current
+        now = iso(app.clock())
+        old_session = job.get("sessionId")
+        working = job.get("status") in jobs.ACTIVE
+        fence: Item = {"sessionId": new_session_id(job_id), "deletingAt": now, "updatedAt": now}
+        if working:
+            fence["status"] = "canceled"
+        try:
+            # Only if the session read above is still the current one: a Try again or an auto pick-up that got in
+            # between has a newer session, and that is the one to stop (so we read again).
+            app.store.update(pk, sk, fence, expect_in={"sessionId": [old_session]} if old_session else None)
+            break
+        except db.ConditionFailed:
+            continue
+    else:
+        raise RuntimeError("could not fence the job to delete it")
 
     with ThreadPoolExecutor(max_workers=1) as pool:
-        stopping = pool.submit(_stop_run, app, job_id, old_session) if working and old_session else None
+        stopping = pool.submit(_stop_run, app, job_id, str(old_session)) if old_session else None
         items = clips.clips_for_job(app.store, user_id, job_id)
         deleted = 0
+        gone_ids: set[str] = set()
         kept: list[Item] = []
         for clip in items:
             if _gone(clip, review_clips):
                 statuses = [REVIEW] if clip.get("status") == REVIEW else sorted(ALWAYS_GONE)
                 if app.store.delete_if(clip["pk"], clip["sk"], {"status": statuses}):
                     deleted += 1
+                    gone_ids.add(str(clip["clipId"]))
                     if clip.get("status") == REVIEW:
                         _delete_vector(app, user_id, str(clip["clipId"]))
                     continue
@@ -142,7 +177,7 @@ def delete_job(app: App, user_id: str, job_id: str, *, review_clips: bool) -> Ou
             kept.append(clip)
         if stopping is not None:
             stopping.result()  # the run is stopped before its files go, so it cannot write new ones after
-    files = _delete_files(app, user_id, job, kept)
+    files = _delete_files(app, user_id, job, kept, gone_ids)
     app.store.delete(pk, jobs.live_sk(job_id))
     app.store.delete(pk, f"NOTIFYSTEP#{job_id}")
     app.store.delete(pk, sk)

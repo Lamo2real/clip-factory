@@ -6804,12 +6804,15 @@ at once (Select, with Pick all failed). Deleting a job never takes down what was
 1. **Fence.** `sessionId` becomes a new value and a working job becomes `canceled`, with an internal `deletingAt`. The
    agent and `cf-prod-job-flow` condition every write on their own `sessionId` (and the item existing), so the old run
    can no longer write the job or add a clip, and a resume or Try again of the old run ends quietly (`missing` or
-   `superseded`). Canceled sends no notification (§32).
-2. **Stop.** A job that was queued or running has its runtime session stopped outright (`StopRuntimeSession`, like
-   Try again's backstop), not sent a cancel whose wind-down would write again. The stop is awaited before the files go,
+   `superseded`). Canceled sends no notification (§32). The fence only applies to the `sessionId` that was read: if a
+   Try again got in between, the delete reads again and fences (and stops) the newer session. While `deletingAt` is
+   set, Try again and Stop job answer 409.
+2. **Stop.** The job's runtime session, whatever the job's status (a failed job's container may still be uploading),
+   is stopped outright (`StopRuntimeSession`, like Try again's backstop), not sent a cancel whose wind-down would write again. The stop is awaited before the files go,
    so the old container cannot write new ones afterwards. A failed stop is logged; the fence still holds.
 3. **Clips** as in §34.2 (a conditional delete: a Review clip kept on another device a moment ago is kept).
-4. **Files** (`Media.delete_prefix_except`) and the upload.
+4. **Files** (`Media.delete_prefix_except`) and the upload. A file under `clips/{clipId}/` is spared when that clip's own
+   item still exists (a consistent read), because the job's clip list comes from an eventually consistent index.
 5. **Items:** `JOBLIVE#`, `NOTIFYSTEP#`, then the job itself. The stream's `REMOVE` reaches every open screen as
    `{type: "job" | "clip", op: "delete"}` (§14.2), so other devices update at once.
 

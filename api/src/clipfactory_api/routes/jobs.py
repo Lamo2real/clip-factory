@@ -123,6 +123,7 @@ def get_job(app: App, req: Request) -> Response:
 
 def cancel(app: App, req: Request) -> Response:
     job = _job_or_404(app, req)
+    _refuse_if_deleting(job)
     now = iso(app.clock())
     try:
         expect: dict[str, Any] = {"status": jobs.ACTIVE}
@@ -160,8 +161,14 @@ def _end_mac_wait(app: App, job: dict[str, Any]) -> None:
             log("warning", "job.mac_abort_failed", jobId=job["jobId"], error=type(e).__name__)
 
 
+def _refuse_if_deleting(job: dict[str, Any]) -> None:
+    if job.get("deletingAt"):
+        raise conflict("This job is being deleted.")
+
+
 def retry(app: App, req: Request) -> Response:
     job = _job_or_404(app, req)
+    _refuse_if_deleting(job)
     now = iso(app.clock())
     expect: dict[str, Any] = {"status": jobs.RESTARTABLE}
     if job.get("sessionId"):
