@@ -75,11 +75,15 @@ export function tooLongForTikTok(durationSec: number, maxDurationSec: number | n
  * (Only me before TikTok approves the app). Comments, Duet and Stitch: as saved, and off when TikTok turned them off.
  * Commercial content: always off (the owner ticks Your brand or Branded content himself, per clip).
  */
-export function myTikTokChoices(saved: TikTokPreset, creator: TikTokCreator): TikTokChoices {
-  const offered = privacyChoices(creator.privacyOptions, false);
+export function myTikTokChoices(saved: TikTokPreset, creator: TikTokCreator, now: TikTokChoices = NO_TIKTOK_CHOICES): TikTokChoices {
+  // Commercial content is about this one clip: putting his settings back keeps what he ticked (a paid partnership is never dropped).
+  const paid = now.commercial && now.branded;
+  const offered = privacyChoices(creator.privacyOptions, paid);
   const privacy = offered.includes(saved.privacy) ? saved.privacy : offered.includes("PUBLIC_TO_EVERYONE") ? "PUBLIC_TO_EVERYONE" : (offered[0] ?? "");
   return {
-    ...NO_TIKTOK_CHOICES,
+    commercial: now.commercial,
+    yourBrand: now.yourBrand,
+    branded: now.branded,
     privacy,
     comments: saved.comments && !creator.commentDisabled,
     duet: saved.duet && !creator.duetDisabled,

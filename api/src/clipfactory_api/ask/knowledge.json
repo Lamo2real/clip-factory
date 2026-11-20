@@ -1,5 +1,5 @@
 {
- "version": "4afd30eb9eba",
+ "version": "ac06c9e62e40",
  "parts": [
   {
    "id": "app-map",
@@ -99,7 +99,7 @@
    "id": "contracts-12",
    "title": "CONTRACTS: 12. Get the app, updates, and kid-proof UX (added by the owner after the first build)",
    "line": "12.1 \"Get the app\" (sidebar item; on phones a card in Settings plus a one-time banner on Home)",
-   "chars": 19152
+   "chars": 19029
   },
   {
    "id": "contracts-13",
@@ -123,7 +123,7 @@
    "id": "contracts-16",
    "title": "CONTRACTS: 16. Clip performance, stats refresh and weekly best (owner request, 2026-11-16)",
    "line": "The owner's words: \"click on any video and see how they performed for each social media platform ... the video on",
-   "chars": 59491
+   "chars": 59489
   },
   {
    "id": "contracts-17",
@@ -147,7 +147,7 @@
    "id": "contracts-20",
    "title": "CONTRACTS: 20. Action animations (owner request, 2026-11-16)",
    "line": "The owner's words: \"Most buttons in the application should have that: the animation of sending a paper plane or",
-   "chars": 46178
+   "chars": 46170
   },
   {
    "id": "contracts-21",

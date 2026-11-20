@@ -19,6 +19,7 @@ import { goingToLine, UploadToChips } from "./UploadTo.tsx";
 import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAways.ts";
 import { useDeletedJobs } from "../../lib/jobDeletes.ts";
 import { captionsTooLong, PlaceRows, type PlaceRowsHandle } from "./PlaceRows.tsx";
+import { prefersReducedMotion } from "../../lib/prefs.ts";
 import { choicesReady, myTikTokChoices, NO_TIKTOK_CHOICES, tiktokOptions, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
 import { cardOptionsFrom, optionsFor, presetOf, type CardOptions } from "../../lib/preset.ts";
 import { TikTokSheet } from "./TikTokSheet.tsx";
@@ -346,6 +347,11 @@ function ReviewCard({
   }
   // Use my settings was tapped before TikTok answered: its choices go on as soon as the answer comes.
   const applyWhenAsked = useRef(false);
+  // TikTok did not answer after Use my settings: Ask TikTok again then puts his settings on, so the retry is one tap.
+  const retryApplies = useRef(false);
+  const choicesRef = useRef(choices);
+  choicesRef.current = choices;
+  const mySettingsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!ttWanted) return;
     let alive = true;
@@ -362,8 +368,11 @@ function ReviewCard({
       })
       .catch((e) => {
         if (!alive) return;
+        retryApplies.current = retryApplies.current || applyWhenAsked.current;
         applyWhenAsked.current = false;
         setTtError(friendlyMessage(e));
+        // The retry button lives in the TikTok row: open it so it is in sight.
+        rows.current?.open("tiktok");
       });
     return () => {
       alive = false;
@@ -372,8 +381,13 @@ function ReviewCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ttWanted, ttAsk]);
   const askTikTok = () => (ttWanted ? setTtAsk((n) => n + 1) : setTtWanted(true));
+  const askAgain = () => {
+    if (retryApplies.current) applyWhenAsked.current = true;
+    retryApplies.current = false;
+    askTikTok();
+  };
   function applyTikTok(c: TikTokCreator) {
-    const mine = myTikTokChoices(presetRef.current.tiktok, c);
+    const mine = myTikTokChoices(presetRef.current.tiktok, c, choicesRef.current);
     setChoices(mine);
     setApplied(true);
     // Nothing TikTok offers fits (or the clip is too long for TikTok): the row opens to say why.
@@ -385,6 +399,7 @@ function ReviewCard({
     setChanged(false);
     if (!tiktokOn) return;
     if (creator) return applyTikTok(creator);
+    retryApplies.current = false;
     applyWhenAsked.current = true;
     askTikTok();
   }
@@ -500,7 +515,11 @@ function ReviewCard({
     if (tiktokOn) {
       if (!ttReady) {
         keepAct.fail({ sound: false });
-        rows.current?.open("tiktok");
+        if (!creator && !ttError) {
+          // The fix is Use my settings, far above on a phone: take him there.
+          mySettingsRef.current?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+          mySettingsRef.current?.querySelector("button")?.focus({ preventScroll: true });
+        } else rows.current?.open("tiktok");
         toast.error(uploadWhy ?? "Tap Use my settings first.");
         return;
       }
@@ -712,7 +731,7 @@ function ReviewCard({
         )}
 
         {ready && !noneReady && chosen.length ? (
-          <div className="my-settings" data-help="use-my-settings">
+          <div className="my-settings" data-help="use-my-settings" ref={mySettingsRef}>
             <Button
               variant="glass"
               size="lg"
@@ -751,7 +770,7 @@ function ReviewCard({
             creator,
             error: ttError,
             asking: ttAsking,
-            onAskAgain: askTikTok,
+            onAskAgain: askAgain,
             choices,
             onChoices: (patch) => {
               setChoices((c) => ({ ...c, ...patch }));
@@ -813,7 +832,9 @@ function ReviewCard({
             data-help={keepFailed ? "try-again upload" : "upload"}
             data-help-clear=""
             loading={busy === "confirm"}
-            disabled={leaving || !ready || (!noneReady && !chosen.length) || !!uploadWhy}
+            disabled={leaving || !ready || (!noneReady && !chosen.length)}
+            // Held, not dead: a tap takes him to the fix (Use my settings) instead of doing nothing.
+            aria-disabled={leaving || !ready || (!noneReady && !chosen.length) || !!uploadWhy ? true : undefined}
             aria-describedby={ready && !keepFailed && !noneReady ? `going-${clip.clipId}` : undefined}
             onClick={confirm}
           >

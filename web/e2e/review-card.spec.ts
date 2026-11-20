@@ -136,6 +136,31 @@ test.describe("the simple Review card", () => {
     await expect(card.getByRole("button", { name: UPLOAD })).not.toHaveAttribute("aria-disabled", "true");
   });
 
+  test("putting his settings back keeps a paid partnership ticked on this clip", async ({ page }) => {
+    await fourReady(page);
+    const card = page.locator(".review-card").first();
+    await card.getByRole("button", { name: "Use my settings" }).click();
+    const tt = card.locator('[data-place="tiktok"]');
+    await tt.locator("summary").click();
+    await tt.getByRole("switch", { name: "Commercial content" }).click();
+    await tt.getByRole("checkbox", { name: /^Branded content/ }).check();
+    const yt = card.locator('[data-place="youtube"]');
+    await yt.locator("summary").click();
+    await yt.getByRole("radiogroup", { name: "Who can see it on YouTube" }).getByRole("radio", { name: "Link only" }).check();
+    await card.getByRole("button", { name: "Use my settings" }).click();
+    await expect(tt.getByRole("checkbox", { name: /^Branded content/ })).toBeChecked();
+    await expect(tt.locator("summary")).toContainText("Paid partnership");
+    await expect(card.locator(".tt-legal")).toContainText("Branded Content Policy");
+    await expect(card.getByRole("button", { name: UPLOAD })).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("the closed TikTok row names the account he posts as", async ({ page }) => {
+    await fourReady(page);
+    const card = page.locator(".review-card").first();
+    await card.getByRole("button", { name: "Use my settings" }).click();
+    await expect(card.locator('[data-place="tiktok"] summary')).toContainText("Posting as ");
+  });
+
   test("My settings are saved in Settings › Posting and Use my settings puts them on", async ({ page }) => {
     await fourReady(page);
     await page.goto("/settings/posting/my-settings");
@@ -151,6 +176,20 @@ test.describe("the simple Review card", () => {
     await card.getByRole("button", { name: "Use my settings" }).click();
     await expect(card.locator('[data-place="tiktok"] summary')).toContainText("Duet off");
   });
+});
+
+test("on a phone, tapping the held Upload takes him to Use my settings", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await fourReady(page);
+  const card = page.locator(".review-card").first();
+  const upload = card.getByRole("button", { name: UPLOAD });
+  await upload.scrollIntoViewIfNeeded();
+  await expect(upload).toHaveAttribute("aria-disabled", "true");
+  await upload.click({ force: true });
+  const mine = card.getByRole("button", { name: "Use my settings" });
+  await expect(mine).toBeFocused();
+  await expect(mine).toBeInViewport();
+  await expect(page.getByText("Uploading to 4 places!")).toHaveCount(0);
 });
 
 // The owner's screenshot: the round Ask button sat over the right end of "Upload to 4".

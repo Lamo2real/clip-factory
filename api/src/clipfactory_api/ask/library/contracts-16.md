@@ -9,7 +9,7 @@ whatever the lowest limit is for each API."* Where this section and an earlier o
 Platform order everywhere in this section (stacks, arrays, tests): **YouTube, TikTok, Instagram, Facebook, X**
 (`["youtube", "tiktok", "instagram", "facebook", "x"]`, constant `STATS_ORDER`). The web app uses this same order on
 every screen that lists platforms: it is `PLATFORM_ORDER` in `web/src/lib/format.ts` (`STATS_ORDER` is the same
-array), and the Library card rows (`byPlatformOrder`), the Review caption tabs and Settings › Posting › Where clips go
+array), and the Library card rows (`byPlatformOrder`), the Review place rows and Settings › Posting › Where clips go
 all follow it, never the API's row order.
 
 ### 16.1 What the owner gets

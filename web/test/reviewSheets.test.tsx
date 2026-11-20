@@ -13,7 +13,7 @@ vi.mock("../src/api/index.ts", () => ({ api: () => current }));
 
 const { seed } = await import("../src/api/mock/fixtures.ts");
 const { TikTokSheet, tooLongForTikTok } = await import("../src/screens/review/TikTokSheet.tsx");
-const { PlaceRows, placesTooLong, captionsTooLong } = await import("../src/screens/review/PlaceRows.tsx");
+const { PlaceRows, placesTooLong, tiktokNowLine, captionsTooLong } = await import("../src/screens/review/PlaceRows.tsx");
 const { myTikTokChoices, NO_TIKTOK_CHOICES } = await import("../src/lib/tiktokChoices.ts");
 const { cardOptionsFrom, clipOptionsProblem, DEFAULT_PRESET, optionsFor, presetOf, presetProblem } = await import("../src/lib/preset.ts");
 const { reviewCountForJob } = await import("../src/screens/review/Review.tsx");
@@ -371,6 +371,22 @@ describe("Use my settings (§34)", () => {
     // Stitch is off in this creator's TikTok settings: it stays off.
     expect(mine).toEqual({ ...NO_TIKTOK_CHOICES, privacy: "PUBLIC_TO_EVERYONE", comments: true, duet: true, stitch: false });
     expect(myTikTokChoices({ ...DEFAULT_PRESET.tiktok, privacy: "FOLLOWER_OF_CREATOR" }, { ...creator, privacyOptions: ["SELF_ONLY"] }).privacy).toBe("SELF_ONLY");
+  });
+
+  it("putting his settings back again keeps a paid partnership ticked on this clip", () => {
+    const now = { ...NO_TIKTOK_CHOICES, privacy: "PUBLIC_TO_EVERYONE", commercial: true, branded: true, yourBrand: false };
+    const again = myTikTokChoices(DEFAULT_PRESET.tiktok, creator, now);
+    expect(again).toMatchObject({ commercial: true, branded: true, yourBrand: false });
+    // A saved "Only me" cannot go with a paid partnership: privacy waits for his pick instead of dropping the label.
+    const only = myTikTokChoices({ ...DEFAULT_PRESET.tiktok, privacy: "SELF_ONLY" }, { ...creator, privacyOptions: ["SELF_ONLY", "PUBLIC_TO_EVERYONE"] }, now);
+    expect(only.branded).toBe(true);
+    expect(only.privacy).not.toBe("SELF_ONLY");
+  });
+
+  it("the closed TikTok line names the account he posts to", () => {
+    expect(tiktokNowLine(NO_TIKTOK_CHOICES, "Gamer Joe")).toBe("Posting as Gamer Joe · Who can see it: not picked yet");
+    expect(tiktokNowLine({ ...NO_TIKTOK_CHOICES, privacy: "PUBLIC_TO_EVERYONE" }, "Gamer Joe")).toContain("Posting as Gamer Joe · Who can see it:");
+    expect(tiktokNowLine(NO_TIKTOK_CHOICES)).toBe("Who can see it: not picked yet");
   });
 
   it("YouTube, Instagram and X start from My settings; YouTube follows the saved privacy and is never made for kids", () => {

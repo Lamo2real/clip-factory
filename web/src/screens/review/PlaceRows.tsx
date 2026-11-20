@@ -47,14 +47,14 @@ export function placesTooLong(c: Captions, chosen?: readonly Platform[]): Platfo
 }
 
 /** One short line under a closed row: what will be used, so nothing is hidden behind the tap (null: nothing to say). */
-export function nowLine(p: Platform, o: CardOptions, tiktok: TikTokChoices): string | null {
+export function nowLine(p: Platform, o: CardOptions, tiktok: TikTokChoices, nickname?: string): string | null {
   switch (p) {
     case "youtube": {
       const cat = YOUTUBE_CATEGORIES.find((c) => c.id === o.youtube.category)?.label ?? "Gaming";
       return `Who can see it: ${YT_WHO[o.youtube.privacy]} · Made for kids: ${o.youtube.madeForKids ? "Yes" : "No"} · ${cat}`;
     }
     case "tiktok":
-      return tiktokNowLine(tiktok);
+      return tiktokNowLine(tiktok, nickname);
     case "instagram":
       return o.instagram.shareToFeed ? "Reel · also in your feed" : "Reel · not in your feed";
     case "facebook":
@@ -65,11 +65,13 @@ export function nowLine(p: Platform, o: CardOptions, tiktok: TikTokChoices): str
 }
 
 /** One short line under a closed TikTok row: what will be used, so nothing is hidden behind the tap. */
-export function tiktokNowLine(c: TikTokChoices): string {
-  if (!c.privacy) return "Who can see it: not picked yet";
+export function tiktokNowLine(c: TikTokChoices, nickname?: string): string {
+  // TikTok's rules: the account he is posting to is named before he posts.
+  const who = nickname ? `Posting as ${nickname} · ` : "";
+  if (!c.privacy) return `${who}Who can see it: not picked yet`;
   const onOff = (on: boolean) => (on ? "on" : "off");
   const paid = c.commercial && c.branded ? " · Paid partnership" : c.commercial && c.yourBrand ? " · Your brand" : "";
-  return `Who can see it: ${PRIVACY_LABEL[c.privacy] ?? c.privacy} · Comments ${onOff(c.comments)} · Duet ${onOff(c.duet)} · Stitch ${onOff(c.stitch)}${paid}`;
+  return `${who}Who can see it: ${PRIVACY_LABEL[c.privacy] ?? c.privacy} · Comments ${onOff(c.comments)} · Duet ${onOff(c.duet)} · Stitch ${onOff(c.stitch)}${paid}`;
 }
 
 export interface PlaceRowsHandle {
@@ -184,10 +186,10 @@ export function PlaceRows({
 
   if (!shown.length) return null;
   return (
-    <div className="place-rows" data-help="captions">
+    <div className="place-rows" data-help="captions" data-help-dodge="">
       {shown.map((p) => {
         const isOpen = open.has(p);
-        const now = settings ? nowLine(p, options, tiktok.choices) : null;
+        const now = settings ? nowLine(p, options, tiktok.choices, isOpen ? undefined : tiktok.creator?.nickname) : null;
         return (
           <details
             key={p}

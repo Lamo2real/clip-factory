@@ -728,14 +728,12 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   "Show older jobs" shows), `olderJobsFails` (the next N older pages fail), `createJobFails` (the next N Make clips
   fail with a server error). Covered by `web/e2e/audit-shell.spec.ts`.
 * **Review screen** (`web/src/screens/review/`):
-  * A refused Upload (a caption too long for a chosen place) opens the first too-long caption tab, scrolls it into view,
-    focuses it and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then tap
-    Upload.". Every
-    tab whose caption is too long carries `.is-over` (a red dot) and ", too long" in its accessible name, so it shows
-    even while another tab is open.
-  * Caption tabs: all five platforms stay in sight. On a narrow card (`.captions` container under 560 px) tabs that
-    are not open show only their mark (the name stays their accessible name and title); under 360 px the open one
-    does too, and the field label names the platform. The chosen tab is scrolled into view.
+  * A refused Upload (a caption too long for a chosen place) opens the first too-long place row, scrolls it into view,
+    focuses its box and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then
+    tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
+    even while the row is closed.
+  * Place rows (§34.1): one closed row per chosen place, no tab bar. A closed TikTok row also names the account:
+    "Posting as <nickname>" (TikTok's rules). Review's launcher keeps clear of the rows (`data-help-dodge`).
   * The card goes two-column (video left) only when the card itself is at least 820 px wide (container query on
     `.review-list__item`, never a window media query), so the decision column never drops below about 400 px.
     In two columns the video sits on the card's vertical centre line beside the words (`align-self: center`) and
@@ -1308,7 +1306,7 @@ whatever the lowest limit is for each API."* Where this section and an earlier o
 Platform order everywhere in this section (stacks, arrays, tests): **YouTube, TikTok, Instagram, Facebook, X**
 (`["youtube", "tiktok", "instagram", "facebook", "x"]`, constant `STATS_ORDER`). The web app uses this same order on
 every screen that lists platforms: it is `PLATFORM_ORDER` in `web/src/lib/format.ts` (`STATS_ORDER` is the same
-array), and the Library card rows (`byPlatformOrder`), the Review caption tabs and Settings › Posting › Where clips go
+array), and the Library card rows (`byPlatformOrder`), the Review place rows and Settings › Posting › Where clips go
 all follow it, never the API's row order.
 
 ### 16.1 What the owner gets
@@ -4086,7 +4084,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | Review.tsx:476 Throw away | `throw` | the card's leaving motion stays; Undo → `.is-returning` on the card |
 | Review.tsx **Upload** (Vermilion) / Try again | `send` / `retry` | `playOnClick={false}`: plays when an upload really starts, not on the tap that opens the TikTok sheet; a refused Upload (caption too long, nothing picked) only shakes; confetti and leaving card stay; success sound only when the upload succeeds; `fail()` on error (§33) |
 | UploadTo.tsx Upload to chips | `tick` | soft-fill toggle chips with `aria-pressed` and a check mark; the tick plays when a chip turns on |
-| CaptionTabs.tsx:100 caption tabs | `toggle` | label bump |
+| PlaceRows.tsx place rows | `toggle` | chevron turn |
 | TikTokSheet.tsx:93 backdrop, :99 Close, :197 Not now, :174/181 policy links | press | |
 | TikTokSheet.tsx Who can see it (button bar) | `toggle` | the chosen button's label bumps and the glide slides; checkboxes (native) none |
 | TikTokSheet.tsx:152-155 Toggles | none | switch thumb |
@@ -4219,7 +4217,7 @@ Every bar where you pick one of a few things shows its choice with **one** highl
 to the new one, instead of the old pill vanishing and a new one appearing.
 
 * **Where:** every `Segmented` (Paste a link / Upload a video, Pick for me / Exactly, every other segmented bar), the
-  caption tabs on Review, Library's All clips / This week tabs, the sidebar menu (the glass pill and the vermilion bar
+  place rows on Review, Library's All clips / This week tabs, the sidebar menu (the glass pill and the vermilion bar
   move together) and the phone tab bar (the glass tile and the vermilion dot move together).
 * **How:** `components/Glide.tsx` renders one `aria-hidden` element as the first child of the bar and moves it to the
   item matching its `active` selector, measured from the bar (which is `position: relative`), so a scrolling tab row

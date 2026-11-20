@@ -1,5 +1,5 @@
 // The app's own dropdown (never the OS list): a soft-fill button that opens a glass list of choices. Used where a
-// platform's rules ask for a dropdown (TikTok's "Who can see it", §17.8) and in More details. `value` "" shows the
+// platform's rules ask for a dropdown (TikTok's "Who can see it", §17.8) (and wherever a long pick-one list needs one). `value` "" shows the
 // placeholder: nothing is picked until the owner picks.
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Icon } from "./Icon.tsx";
@@ -88,7 +88,9 @@ export function Dropdown({
       setOpen(false);
       button.current?.focus();
     } else if (e.key === "Tab") {
+      // The list unmounts: put focus back on the button first, so Tab moves on from it and never falls to the page.
       setOpen(false);
+      button.current?.focus();
       return;
     } else return;
     e.preventDefault();
