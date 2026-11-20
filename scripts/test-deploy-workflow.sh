@@ -182,6 +182,7 @@ fi
 
 # 12. Bumping a pinned tool never rebuilds the app, and the app build knows where to send the Mac's video.
 plan="$(job desktop-plan)"
+# shellcheck disable=SC2016  # the literal text "$MEDIA_HOST" is what the workflow must contain
 if grep -q "'!desktop/tools/\*\*'" <<<"$plan" && grep -q 'CF_MEDIA_HOST: ' <<<"$desktop" \
   && grep -q '"$MEDIA_HOST"' <<<"$plan"; then
   ok "desktop/tools is left out of the app's source hash, and the app build gets the media bucket host"

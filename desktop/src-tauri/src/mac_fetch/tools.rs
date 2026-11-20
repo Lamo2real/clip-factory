@@ -450,7 +450,7 @@ pub(crate) mod tests {
     fn file_url(name: &str, version: &str, file: &str) -> String {
         format!(
             "https://{TOOLS_HOST}/downloads/tools/{name}/{version}/{}/{file}",
-            platform().unwrap()
+            platform().unwrap_or("macos-aarch64")
         )
     }
 
@@ -473,7 +473,7 @@ pub(crate) mod tests {
             };
             fake.bodies.insert(url, body);
             let mut files = BTreeMap::new();
-            files.insert(platform().unwrap().to_owned(), entry);
+            files.insert(platform().unwrap_or("macos-aarch64").to_owned(), entry);
             tools.insert(
                 name.to_owned(),
                 Tool {
@@ -586,6 +586,9 @@ pub(crate) mod tests {
 
     #[test]
     fn a_wrong_signature_or_key_installs_nothing() {
+        if platform().is_none() {
+            return; // only Mac and Windows install tools
+        }
         let key = test_key();
         let (mut fake, manifest) = signed(1, "2026.10.26", &key);
         let other = SigningKey::from_bytes(&[9u8; 32]);
