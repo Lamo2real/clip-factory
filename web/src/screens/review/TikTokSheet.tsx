@@ -1,15 +1,20 @@
-// The "Post to TikTok" sheet (docs/CONTRACTS.md §17.8, TikTok's Content Sharing Guidelines): opens on Keep when
-// TikTok is connected. Who can see it has no default; Comments, Duet and Stitch start off; Commercial content needs
-// Your brand or Branded content (branded cannot be "Only me"); Keep stays off until a privacy is picked.
+// The "Post to TikTok" sheet (docs/CONTRACTS.md §17.8, §33.5, TikTok's Content Sharing Guidelines): opens on Upload
+// when TikTok is one of the chosen places. Who can see it is the app's own dropdown (never the OS list) with no
+// default, Everyone first; Comments, Duet and Stitch start off and stay visible (one "Turn all on" tap switches them
+// on); Commercial content needs Your brand or Branded content (branded cannot be "Only me"). "Use my settings" puts
+// the owner's own choices in with one tap; it is his tap, so TikTok's "no default" rule still holds. Upload stays off
+// until a privacy is picked.
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Clip, TikTokCreator, TikTokPostOptions } from "../../api/types.ts";
+import type { Clip, TikTokCreator, TikTokPostOptions, TikTokPreset } from "../../api/types.ts";
+import { Dropdown } from "../../components/Dropdown.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { trapTab } from "../../components/Sheet.tsx";
-import { A, Button, Toggle } from "../../components/ui.tsx";
+import { Button, Toggle } from "../../components/ui.tsx";
 import { useAction, type ActionHandle } from "../../lib/motion.ts";
+import { NO_TIKTOK_CHOICES, tiktokFromPreset, tiktokOptions, type TikTokChoices } from "../../lib/preset.ts";
 
 export const PRIVACY_LABEL: Record<string, string> = {
   PUBLIC_TO_EVERYONE: "Everyone",
@@ -18,12 +23,32 @@ export const PRIVACY_LABEL: Record<string, string> = {
   SELF_ONLY: "Only me",
 };
 
-/** The options the sheet may offer: TikTok's list, without "Only me" when the post is branded content. */
+/** One plain line under each choice in the list. */
+const PRIVACY_LINE: Record<string, string> = {
+  PUBLIC_TO_EVERYONE: "Anyone on TikTok",
+  FOLLOWER_OF_CREATOR: "People who follow you",
+  MUTUAL_FOLLOW_FRIENDS: "Followers you follow back",
+  SELF_ONLY: "Just you",
+};
+
+/** The order the list shows: Everyone first, Only me last. Anything TikTok adds later goes at the end. */
+const PRIVACY_ORDER = ["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"];
+
+/**
+ * The options the sheet may offer: TikTok's list (never more), Everyone first, without "Only me" when the post is
+ * branded content.
+ */
 export function privacyChoices(options: string[], branded: boolean): string[] {
-  return options.filter((o) => !(branded && o === "SELF_ONLY"));
+  const rank = (o: string) => (PRIVACY_ORDER.includes(o) ? PRIVACY_ORDER.indexOf(o) : PRIVACY_ORDER.length);
+  return options.filter((o) => !(branded && o === "SELF_ONLY")).sort((a, b) => rank(a) - rank(b));
 }
 
-/** Keep can be pressed: a privacy is picked, and Commercial content (when on) says whose. */
+/** TikTok only lets this creator post as "Only me": the app is not approved (audited) by TikTok yet. */
+export function onlyPrivateAllowed(options: string[]): boolean {
+  return options.length === 1 && options[0] === "SELF_ONLY";
+}
+
+/** Upload can be pressed: a privacy is picked, and Commercial content (when on) says whose. */
 export function sheetReady(o: { privacy: string; commercial: boolean; yourBrand: boolean; branded: boolean }): boolean {
   if (!o.privacy) return false;
   if (o.commercial && !o.yourBrand && !o.branded) return false;
@@ -43,39 +68,47 @@ export function TikTokSheet({
   clip,
   caption,
   onCaption,
-  onKeep,
+  onUpload,
   onClose,
   busy,
-  action = "Keep",
+  action = "Upload",
   act,
+  preset,
+  initial,
 }: {
   clip: Clip;
   caption: string;
-  /** Absent: the caption cannot change any more (Try again on a kept clip), so the box is read-only. */
+  /** Absent: the caption cannot change any more (Try again on an uploaded clip), so the box is read-only. */
   onCaption?: (text: string) => void;
-  onKeep: (options: TikTokPostOptions) => void;
+  onUpload: (options: TikTokPostOptions) => void;
   onClose: () => void;
   busy: boolean;
-  /** The big button's word: Keep, or Try again on a failed clip. */
-  action?: "Keep" | "Try again";
+  /** The big button's word: Upload, or Try again on a clip that did not go up. */
+  action?: "Upload" | "Try again";
   /**
-   * The big button's motion (§20.11 (a)): Keep posts to TikTok, so the plane flies; Try again turns. Pass a handle to
-   * shake it when posting fails (the owner's own error path); without one the sheet uses its own.
+   * The big button's motion (§20.11 (a)): Upload posts to TikTok, so the plane flies; Try again turns. Pass a handle
+   * to shake it when posting fails (the owner's own error path); without one the sheet uses its own.
    */
   act?: ActionHandle;
+  /** The owner's My settings for TikTok (§33.4): the sheet's "Use my settings" button puts them in. */
+  preset?: TikTokPreset;
+  /** Choices the owner already put in with Use my settings on the card (his own tap). Absent: nothing picked. */
+  initial?: TikTokChoices;
 }) {
   const id = useId();
   const dialog = useRef<HTMLDivElement>(null);
-  const ownAct = useAction(action === "Keep" ? "send" : "retry");
+  const ownAct = useAction(action === "Upload" ? "send" : "retry");
   const [creator, setCreator] = useState<TikTokCreator | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [privacy, setPrivacy] = useState("");
-  const [comments, setComments] = useState(false);
-  const [duet, setDuet] = useState(false);
-  const [stitch, setStitch] = useState(false);
-  const [commercial, setCommercial] = useState(false);
-  const [yourBrand, setYourBrand] = useState(false);
-  const [branded, setBranded] = useState(false);
+  const [choices, setChoices] = useState<TikTokChoices>(initial ?? NO_TIKTOK_CHOICES);
+  const { privacy, comments, duet, stitch, commercial, yourBrand, branded } = choices;
+  const set = (patch: Partial<TikTokChoices>) => setChoices((c) => ({ ...c, ...patch }));
+  const setPrivacy = (v: string) => set({ privacy: v });
+  const setComments = (v: boolean) => set({ comments: v });
+  const setDuet = (v: boolean) => set({ duet: v });
+  const setStitch = (v: boolean) => set({ stitch: v });
+  const setCommercial = (v: boolean) => set({ commercial: v });
+  const setYourBrand = (v: boolean) => set({ yourBrand: v });
 
   // Fetched every time the sheet opens: TikTok's rules say the creator's current options must be shown.
   const [asked, setAsked] = useState(0);
@@ -83,7 +116,12 @@ export function TikTokSheet({
     let alive = true;
     api()
       .tiktokCreatorInfo()
-      .then((c) => alive && setCreator(c))
+      .then((c) => {
+        if (!alive) return;
+        setCreator(c);
+        // Choices from the card's Use my settings never hold a privacy TikTok does not offer this creator now.
+        setChoices((now) => (now.privacy && !c.privacyOptions.includes(now.privacy) ? { ...now, privacy: "" } : now));
+      })
       .catch((e) => alive && setError(friendlyMessage(e)));
     return () => {
       alive = false;
@@ -99,7 +137,7 @@ export function TikTokSheet({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
-  // A real modal: focus moves in once on open and goes back to what opened it (the card's Keep) on close.
+  // A real modal: focus moves in once on open and goes back to what opened it (the card's Upload) on close.
   useEffect(() => {
     const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.current?.focus();
@@ -122,9 +160,14 @@ export function TikTokSheet({
   const tooLong = !!creator && tooLongForTikTok(clip.durationSec, creator.maxDurationSec);
 
   function setBrandedOn(on: boolean) {
-    setBranded(on);
-    if (on && privacy === "SELF_ONLY") setPrivacy("");
+    set(on && privacy === "SELF_ONLY" ? { branded: on, privacy: "" } : { branded: on });
   }
+
+  /** Comments, Duet and Stitch on in one tap (each still its own switch); ones TikTok turned off stay off. */
+  function turnAllOn() {
+    set({ comments: !creator?.commentDisabled, duet: !creator?.duetDisabled, stitch: !creator?.stitchDisabled });
+  }
+  const allOn = !!creator && (comments || creator.commentDisabled) && (duet || creator.duetDisabled) && (stitch || creator.stitchDisabled);
 
   // Drawn on document.body: inside the glass review card a fixed backdrop would cover only the card (§17.8).
   return createPortal(
@@ -142,15 +185,12 @@ export function TikTokSheet({
           <div className="tt-sheet__stuck">
             <p className="callout callout--bad" role="alert">
               <Icon name="alert" size={18} />
-              <span>{error} Tap Ask TikTok again. To keep this clip for your other apps now, turn TikTok off in Where clips go, tap Keep, then turn TikTok back on.</span>
+              <span>{error} Tap Ask TikTok again. To upload it to your other places now, turn TikTok off above and tap Upload.</span>
             </p>
             <div className="tt-sheet__stuck-actions">
               <Button icon="retry" act="retry" onClick={askAgain}>
                 Ask TikTok again
               </Button>
-              <A href="/settings/posting/where" className="text-link">
-                Open Where clips go
-              </A>
             </div>
           </div>
         ) : !creator ? (
@@ -178,24 +218,34 @@ export function TikTokSheet({
               </label>
               <textarea id={`${id}-caption`} className="input tt-sheet__caption" rows={3} value={caption} maxLength={2200} readOnly={!onCaption} onChange={(e) => onCaption?.(e.target.value)} />
             </div>
+            {preset ? (
+              <Button variant="glass" icon="sparkle" className="tt-sheet__mine" onClick={() => setChoices(tiktokFromPreset(preset, creator))}>
+                Use my settings
+              </Button>
+            ) : null}
             <div className="field">
-              <label className="field__label" htmlFor={`${id}-privacy`}>
+              <span className="field__label" id={`${id}-privacy`}>
                 Who can see it
-              </label>
-              <select id={`${id}-privacy`} className="input tt-sheet__select" value={privacy} onChange={(e) => setPrivacy(e.target.value)}>
-                <option value="" disabled>
-                  Pick who can see it
-                </option>
-                {options.map((o) => (
-                  <option key={o} value={o}>
-                    {PRIVACY_LABEL[o] ?? o}
-                  </option>
-                ))}
-              </select>
-              {creator.privacyOptions.length === 1 && creator.privacyOptions[0] === "SELF_ONLY" ? (
-                <p className="field__hint">TikTok only allows Only me until it checks the app.</p>
-              ) : null}
+              </span>
+              {options.length ? (
+                <Dropdown
+                  labelledBy={`${id}-privacy`}
+                  value={privacy}
+                  placeholder="Pick who can see it"
+                  options={options.map((o) => ({ value: o, label: PRIVACY_LABEL[o] ?? o, line: PRIVACY_LINE[o] }))}
+                  onChange={setPrivacy}
+                />
+              ) : (
+                <p className="callout callout--bad" role="alert">
+                  <Icon name="alert" size={18} />
+                  <span>Branded content can&apos;t be Only me. Turn off Branded content.</span>
+                </p>
+              )}
+              {onlyPrivateAllowed(creator.privacyOptions) ? <p className="field__hint">TikTok keeps posts private until it approves your app.</p> : null}
             </div>
+            <Button variant="glass" size="sm" icon="check" className="tt-sheet__all-on" disabled={allOn} onClick={turnAllOn}>
+              Turn all on
+            </Button>
             <div className="tt-sheet__switches">
               <Toggle label="Comments" checked={comments && !creator.commentDisabled} disabled={creator.commentDisabled} onChange={setComments} description={creator.commentDisabled ? "Turned off in your TikTok settings." : undefined} />
               <Toggle label="Duet" checked={duet && !creator.duetDisabled} disabled={creator.duetDisabled} onChange={setDuet} description={creator.duetDisabled ? "Turned off in your TikTok settings." : undefined} />
@@ -238,15 +288,10 @@ export function TikTokSheet({
                 <p className="callout callout--bad" role="alert">
                   <Icon name="alert" size={18} />
                   <span>
-                    This clip is longer than TikTok allows for you, so it cannot go to TikTok. To keep it for your other apps, turn TikTok off in
-                    Where clips go, tap Keep, then turn TikTok back on.
+                    This clip is longer than TikTok allows for you, so it cannot go to TikTok. To upload it to your other places now, turn TikTok
+                    off above and tap Upload.
                   </span>
                 </p>
-                <div className="tt-sheet__stuck-actions">
-                  <A href="/settings/posting/where" className="text-link">
-                    Open Where clips go
-                  </A>
-                </div>
               </div>
             ) : null}
           </div>
@@ -258,26 +303,17 @@ export function TikTokSheet({
           <Button
             variant="primary"
             size="lg"
-            icon={action === "Keep" ? "check" : "retry"}
+            icon={action === "Upload" ? "upload" : "retry"}
             act={act ?? ownAct}
             loading={busy}
             disabled={!ready || !creator || tooLong}
-            onClick={() =>
-              onKeep({
-                privacyLevel: privacy,
-                disableComment: !comments || creator!.commentDisabled,
-                disableDuet: !duet || creator!.duetDisabled,
-                disableStitch: !stitch || creator!.stitchDisabled,
-                brandContent: commercial && branded,
-                brandOrganic: commercial && yourBrand,
-              })
-            }
+            onClick={() => onUpload(tiktokOptions(choices, creator!))}
           >
             {action}
           </Button>
         </footer>
         {!ready && creator && !tooLong ? (
-          <p className="tt-sheet__why">{privacy ? `Pick Your brand or Branded content to turn on ${action}.` : `Pick who can see it to turn on ${action}.`}</p>
+          <p className="tt-sheet__why">{privacy ? `Pick Your brand or Branded content to turn on ${action}.` : `Tap who can see it to turn on ${action}.`}</p>
         ) : null}
       </div>
     </div>,

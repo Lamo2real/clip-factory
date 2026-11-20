@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Captions, Clip, TikTokPostOptions } from "../../api/types.ts";
+import type { Captions, Clip, ClipPostOptions, Platform, TikTokPostOptions } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -13,7 +13,10 @@ import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { applyClipEvent, withMedia } from "../../lib/liveCache.ts";
 import { SimilarClips } from "../../components/SimilarClips.tsx";
-import { keepClip, keptMessage, STILL_WORKING } from "../../lib/keep.ts";
+import { defaultUploadTo, placeList, readUploadTo, saveUploadTo, STILL_WORKING, uploadClip, uploadedMessage, uploadLabel } from "../../lib/upload.ts";
+import { clipOptionsFrom, optionsFor, presetOf, tiktokFromPreset, type TikTokChoices } from "../../lib/preset.ts";
+import { useSetup } from "../settings/setup/useSetup.ts";
+import { goingToLine, MoreDetails, UploadToChips } from "./UploadTo.tsx";
 import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAways.ts";
 import { CaptionTabs, captionsTooLong, type CaptionTabsHandle } from "./CaptionTabs.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
@@ -47,7 +50,7 @@ export function Review({ jobId }: { jobId: string | null }) {
   }, [reload]);
 
   // Arriving from a clip link (/review#clip-…) scrolls to that clip once the list is on screen: once per arrival,
-  // so later list changes (Keep, Throw away, Undo, live news) never pull the page back to it.
+  // so later list changes (Upload, Throw away, Undo, live news) never pull the page back to it.
   const scrolledTo = useRef<string | null>(null);
   useEffect(() => {
     if (!data || !location.hash || scrolledTo.current === location.hash) return;
@@ -62,7 +65,7 @@ export function Review({ jobId }: { jobId: string | null }) {
   const thrown = useThrownAway();
   const visible = data ? data.filter((c) => !thrown.has(c.clipId)) : null;
 
-  // Clips being kept right here: their cards leave on their own, and live news about them waits.
+  // Clips being uploaded right here: their cards leave on their own, and live news about them waits.
   const settling = useRef(new Set<string>());
   const settle = (clipId: string, on: boolean) => (on ? settling.current.add(clipId) : settling.current.delete(clipId));
 
@@ -91,7 +94,10 @@ export function Review({ jobId }: { jobId: string | null }) {
 
   const toast = useToast();
   const { me, refresh } = useSession();
-  // Clips kept on this visit: each gets a "See how it does" link once its card has left the list.
+  // The places that are set up (GET /v1/setup, kept fresh by live setup news): only they get an Upload to chip.
+  const setup = useSetup();
+  const ready: Platform[] | null = setup.data ? setup.data.platforms.filter((p) => p.ready).map((p) => p.platform) : setup.error ? [] : null;
+  // Clips uploaded on this visit: each gets a "See how it does" link once its card has left the list.
   const [justKept, setJustKept] = useState<Clip[]>([]);
   const kept = (clip: Clip) => setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
   // Where focus goes when a card leaves while it holds focus: the next card's title (or the one before, or the empty
@@ -102,7 +108,7 @@ export function Review({ jobId }: { jobId: string | null }) {
     const at = document.activeElement;
     if (card && at && at !== document.body && !card.contains(at)) return;
     // Read from the page, not from a list kept by this render: the card's leave runs a moment after the tap, and the
-    // list may have changed since (another card kept, live news).
+    // list may have changed since (another card uploaded, live news).
     const after = (card?.nextElementSibling ?? card?.previousElementSibling) as HTMLElement | null | undefined;
     focusNext.current = after?.id.startsWith("clip-") ? `hook-${after.id.slice("clip-".length)}` : "review-empty";
   };
@@ -167,8 +173,8 @@ export function Review({ jobId }: { jobId: string | null }) {
         }
         lede={
           jobId
-            ? "These clips all come from one job. Tap Keep to post one, or Throw away if you do not like it. Tap Show every job to see the rest."
-            : "Watch each clip. Tap Keep to post it, or Throw away if you do not like it. Nothing posts until you tap Keep."
+            ? "These clips all come from one job. Tap Upload to post one, or Throw away if you do not like it. Tap Show every job to see the rest."
+            : "Watch each clip. Tap Upload to post it, or Throw away if you do not like it. Nothing posts until you tap Upload."
         }
         actions={
           jobId ? (
@@ -182,7 +188,7 @@ export function Review({ jobId }: { jobId: string | null }) {
         <section className="kept-now glass" aria-labelledby="kept-now-title">
           <h2 className="kept-now__title" id="kept-now-title">
             <Icon name="checkCircle" size={20} />
-            Kept just now
+            Uploaded just now
           </h2>
           <ul className="kept-now__list">
             {justKept.map((c) => (
@@ -221,7 +227,7 @@ export function Review({ jobId }: { jobId: string | null }) {
           <ol className="review-list">
             {visible.map((c, i) => (
               <li key={c.clipId} id={`clip-${c.clipId}`} className="review-list__item">
-                <ReviewCard clip={c} next={i === 0} returning={returning.has(c.clipId)} onDone={remove} onKept={kept} onThrowAway={throwAway} onSettling={settle} />
+                <ReviewCard clip={c} ready={ready} next={i === 0} returning={returning.has(c.clipId)} onDone={remove} onKept={kept} onThrowAway={throwAway} onSettling={settle} />
               </li>
             ))}
           </ol>
@@ -251,6 +257,7 @@ type SaveState = "idle" | "saving" | "saved" | "failed";
 
 function ReviewCard({
   clip,
+  ready,
   next,
   returning,
   onDone,
@@ -259,42 +266,63 @@ function ReviewCard({
   onSettling,
 }: {
   clip: Clip;
-  /** The top card: its Keep is the screen's one main (vermilion) button; the cards below get a quiet Keep. */
+  /** The places that are set up (null while loading). */
+  ready: Platform[] | null;
+  /** The top card: its Upload is the screen's one main (vermilion) button; the cards below get a quiet Upload. */
   next: boolean;
   /** Just put back by Undo: the card plays its return (§20.7). */
   returning: boolean;
   onDone: (clipId: string) => void;
-  /** Kept: the list offers a link to the clip's numbers. */
+  /** Uploaded: the list offers a link to the clip's numbers. */
   onKept: (clip: Clip) => void;
   onThrowAway: (clip: Clip) => void;
-  /** Tells the list this card is leaving (or, after a failed Keep, staying after all). */
+  /** Tells the list this card is leaving (or, after a failed Upload, staying after all). */
   onSettling: (clipId: string, on: boolean) => void;
 }) {
   const toast = useToast();
   const { me, refresh } = useSession();
   const [captions, setCaptions] = useState<Captions>(clip.captions);
-  // The Post to TikTok sheet (§17.8) is open: Keep waits for its choices.
+  // The Post to TikTok sheet (§17.8) is open: Upload waits for its choices.
   const [sheet, setSheet] = useState(false);
+  // Where it goes (§33): the owner's taps on this card, else this device's last choice / Where clips go, minus
+  // places that are not set up.
+  const preset = presetOf(me?.settings.postPreset);
+  const [picked, setPicked] = useState<Platform[] | null>(null);
+  const chosen: Platform[] = ready ? (picked ? picked.filter((p) => ready.includes(p)) : defaultUploadTo(ready, readUploadTo(), me?.settings.platforms)) : [];
+  function toggle(p: Platform) {
+    setPicked(chosen.includes(p) ? chosen.filter((x) => x !== p) : [...chosen, p]);
+  }
+  // How it goes: YouTube, Instagram and X start from My settings; TikTok starts empty (its rules) until the owner
+  // taps Use my settings or picks on its sheet.
+  const [options, setOptions] = useState<ClipPostOptions>(() => clipOptionsFrom(preset));
+  const [tiktokPicked, setTiktokPicked] = useState<TikTokChoices | undefined>(undefined);
+  const mine = useAction("tick");
+  function applyMySettings() {
+    setOptions(clipOptionsFrom(preset));
+    setTiktokPicked(tiktokFromPreset(preset.tiktok, null));
+    mine.play();
+    toast.success(chosen.length ? `Your settings are on for ${placeList(chosen)}.` : "Your settings are on.");
+  }
   const [dirty, setDirty] = useState<Partial<Captions>>({});
   const [save, setSave] = useState<SaveState>("idle");
   const [busy, setBusy] = useState<"confirm" | null>(null);
   const [leaving, setLeaving] = useState(false);
-  // The last Keep did not finish: the button becomes "Try again", which asks the server to finish it.
+  // The last Upload did not finish: the button becomes "Try again", which asks the server to finish it.
   const [keepFailed, setKeepFailed] = useState(false);
   const [keepNote, setKeepNote] = useState("");
-  // Keep's heart pops when a keep really starts (Try again's arrow turns once it failed); a Keep that is refused or
-  // does not finish shakes it.
-  // The TikTok sheet's Keep flies its own plane and shakes on its own button when posting fails (§20.11 (a)).
-  const keepAct = useAction(keepFailed ? "retry" : "keep");
+  // Upload's plane flies when an upload really starts (Try again's arrow turns once it failed); an Upload that is
+  // refused or does not finish shakes it.
+  // The TikTok sheet's Upload flies its own plane and shakes on its own button when posting fails (§20.11 (a)).
+  const keepAct = useAction(keepFailed ? "retry" : "send");
   const sheetAct = useAction("send");
-  // The TikTok sheet's choices from the Keep that did not finish: Try again sends them again.
+  // The TikTok sheet's choices from the Upload that did not finish: Try again sends them again.
   const lastTikTok = useRef<TikTokPostOptions | undefined>(undefined);
   const confirmRef = useRef<HTMLDivElement>(null);
   const tabs = useRef<CaptionTabsHandle>(null);
   // Stable, so the open sheet is not re-set-up on every typed letter (§17.8).
   const closeSheet = useCallback(() => setSheet(false), []);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // The latest unsaved edits, and whether the clip was already kept or thrown away (then nothing more is saved).
+  // The latest unsaved edits, and whether the clip was already uploaded or thrown away (then nothing more is saved).
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const settled = useRef(false);
@@ -373,20 +401,33 @@ function ReviewCard({
     void refresh().catch(() => undefined);
   }
 
+  // Nothing is set up yet: Upload saves the clip the old way, and it goes up once a place is set up (§33.1).
+  const noneReady = !!ready && ready.length === 0;
+
   async function confirm() {
-    if (captionsTooLong(captions)) {
+    if (!keepFailed && !noneReady && !chosen.length) {
+      keepAct.fail({ sound: false });
+      toast.error("Pick at least one place to upload to.");
+      return;
+    }
+    if (captionsTooLong(captions, noneReady ? undefined : chosen)) {
       keepAct.fail({ sound: false });
       // Opens the too-long tab (it may be scrolled out of sight) and names the platform.
       const name = tabs.current?.showTooLong();
       toast.error(
         name
-          ? `Your ${name} caption is longer than its platform allows. Make it shorter, then tap Keep.`
-          : "One caption is longer than its platform allows. Make it shorter, then tap Keep.",
+          ? `Your ${name} caption is longer than its platform allows. Make it shorter, then tap Upload.`
+          : "One caption is longer than its platform allows. Make it shorter, then tap Upload.",
       );
       return;
     }
-    // TikTok connected: its rules say the owner picks who can see the post first (§17.8).
-    if (!keepFailed && me?.settings.platforms.includes("tiktok")) {
+    // TikTok is one of the places: its rules say the owner picks who can see the post first, on its sheet (§17.8).
+    if (!keepFailed && chosen.includes("tiktok")) {
+      setSheet(true);
+      return;
+    }
+    // Nothing set up but TikTok connected (a step still waits): TikTok's rules still come first, as before §33.
+    if (!keepFailed && noneReady && me?.settings.platforms.includes("tiktok")) {
       setBusy("confirm");
       const tiktok = await api()
         .listAccounts()
@@ -398,13 +439,13 @@ function ReviewCard({
         return;
       }
     }
-    // The heart (or Try again's arrow) plays only now that a keep really starts: not on the tap that opens the
-    // TikTok sheet, and never on a refused Keep (§20.5, §20.8).
+    // The plane (or Try again's arrow) plays only now that an upload really starts: not on the tap that opens the
+    // TikTok sheet, and never on a refused Upload (§20.5, §20.8).
     keepAct.play();
-    await keep(keepFailed ? lastTikTok.current : undefined);
+    await upload(keepFailed ? lastTikTok.current : undefined);
   }
 
-  async function keep(tiktok?: TikTokPostOptions) {
+  async function upload(tiktok?: TikTokPostOptions) {
     lastTikTok.current = tiktok;
     setBusy("confirm");
     setKeepNote("");
@@ -412,11 +453,19 @@ function ReviewCard({
     settled.current = true;
     onSettling(clip.clipId, true);
     try {
-      const out = await keepClip(api(), clip.clipId, Object.keys(dirty).length || tiktok ? captions : undefined, tiktok);
-      if (out.kind === "kept") {
+      const out = await uploadClip(
+        api(),
+        clip.clipId,
+        Object.keys(dirty).length || tiktok ? captions : undefined,
+        tiktok,
+        chosen.length ? chosen : undefined,
+        chosen.length ? optionsFor(chosen, options) : undefined,
+      );
+      if (out.kind === "uploading") {
+        if (chosen.length) saveUploadTo(chosen);
         setSheet(false);
         burst(centerOf(confirmRef.current), 120);
-        toast.success(keptMessage(out.posts));
+        toast.success(uploadedMessage(out.posts));
         if (tiktok) toast.info("TikTok can take a few minutes to process your clip.");
         onKept(out.clip);
         leave();
@@ -546,23 +595,44 @@ function ReviewCard({
           ) : null}
         </details>
 
+        {ready ? (
+          <>
+            <UploadToChips ready={ready} chosen={chosen} onToggle={toggle} />
+            {chosen.length ? (
+              <div className="upload-mine">
+                <Button variant="glass" icon="sparkle" act={mine} playOnClick={false} data-help="use-my-settings" onClick={applyMySettings}>
+                  Use my settings
+                </Button>
+                <MoreDetails chosen={chosen} options={options} onOptions={setOptions} tiktok={tiktokPicked} />
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <Skeleton className="line-skel" />
+        )}
+
         <div data-help="captions" data-help-dodge="">
-          <CaptionTabs captions={captions} onChange={edit} handle={tabs} />
+          <CaptionTabs captions={captions} onChange={edit} handle={tabs} platforms={ready && !noneReady ? chosen : undefined} />
         </div>
         <p className={`save-state is-${save}`} aria-live="polite">
-          {save === "saving" ? "Saving…" : save === "saved" ? "Captions saved" : save === "failed" ? "Not saved yet. Your changes are saved when you tap Keep." : ""}
+          {save === "saving" ? "Saving…" : save === "saved" ? "Captions saved" : save === "failed" ? "Not saved yet. Your changes are saved when you tap Upload." : ""}
         </p>
 
         {keepFailed ? (
           <div className="keep-again keep-again--review">
             <p className="keep-again__text">
               <Icon name="alert" size={18} />
-              <span>Keeping this clip did not finish. Tap Try again.</span>
+              <span>Uploading this clip did not finish. Tap Try again.</span>
             </p>
             <p className="keep-again__note" role="status">
               {keepNote}
             </p>
           </div>
+        ) : null}
+        {ready && !keepFailed && !noneReady ? (
+          <p className={`upload-going${chosen.length ? "" : " is-none"}`} id={`going-${clip.clipId}`} aria-live="polite">
+            {goingToLine(chosen)}
+          </p>
         ) : null}
         <div className="review-card__actions" ref={confirmRef} data-help-dodge="">
           <Button variant="ghost" icon="trash" act="throw" data-help="throw-away" disabled={busy !== null || leaving} onClick={throwAway}>
@@ -571,15 +641,16 @@ function ReviewCard({
           <Button
             variant={next ? "primary" : "glass"}
             size="lg"
-            icon={keepFailed ? "retry" : "check"}
+            icon={keepFailed ? "retry" : "upload"}
             act={keepAct}
             playOnClick={false}
-            data-help={keepFailed ? "try-again keep" : "keep"}
+            data-help={keepFailed ? "try-again upload" : "upload"}
             loading={busy === "confirm"}
-            disabled={leaving}
+            disabled={leaving || (!keepFailed && (!ready || (!noneReady && !chosen.length)))}
+            aria-describedby={ready && !keepFailed && !noneReady ? `going-${clip.clipId}` : undefined}
             onClick={confirm}
           >
-            {keepFailed ? "Try again" : "Keep"}
+            {keepFailed ? "Try again" : uploadLabel(chosen)}
           </Button>
         </div>
         {sheet ? (
@@ -587,10 +658,12 @@ function ReviewCard({
             clip={{ ...clip, videoUrl, coverUrl }}
             caption={captions.tiktok}
             onCaption={(text) => edit({ tiktok: text })}
-            onKeep={(options) => void keep(options)}
+            onUpload={(tiktok) => void upload(tiktok)}
             onClose={closeSheet}
             busy={busy === "confirm"}
             act={sheetAct}
+            preset={preset.tiktok}
+            initial={tiktokPicked}
           />
         ) : null}
         <A href={`/jobs/${clip.jobId}`} className="text-link small review-card__job">

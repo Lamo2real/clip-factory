@@ -6,7 +6,7 @@ changes one is checked against this list.
 
 **One next step**
 - [ ] Exactly one vermilion button on the screen, and it is the thing to do next. (Only the update bar may add a second.)
-- [ ] The button says what happens, with an icon and a word: "Make clips", "Keep", "Throw away", "Try again".
+- [ ] The button says what happens, with an icon and a word: "Make clips", "Upload", "Throw away", "Try again".
 
 **Big and clear**
 - [ ] Every tap target ≥ 48 × 48 px on phones, with at least 8 px between neighbours.
@@ -20,7 +20,7 @@ changes one is checked against this list.
   | Instead of | Say |
   |---|---|
   | Submit, Start job | Make clips |
-  | Confirm | Keep |
+  | Confirm / Keep | Upload |
   | Decline, Delete | Throw away |
   | Retry | Try again |
   | Upload | Pick a video |

@@ -130,7 +130,7 @@ describe("status and calm copy", () => {
     });
     expect(calmCopy({ ...base, status: "posting" })).toEqual({ text: "Posting now…", spinner: true });
     expect(calmCopy({ ...base, platform: "tiktok", status: "posted_private" })?.text).toBe(
-      "Posted privately. TikTok shows numbers after the app is approved.",
+      "Uploaded privately. TikTok shows numbers after the app is approved.",
     );
     expect(calmCopy({ ...base, status: "posted" })?.text).toBe("Numbers are on the way. Check back in a few minutes.");
     expect(calmCopy({ ...base, status: "posted", metrics: m() })).toBeNull();

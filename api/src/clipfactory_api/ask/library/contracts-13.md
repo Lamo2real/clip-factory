@@ -14,4 +14,4 @@
   `content_filtered` (logged; no Learning written).
 * **TLS.** With the default `*.cloudfront.net` certificate CloudFront's protocol floor cannot be raised; TLS 1.2+ is
   enforced once a custom domain with an ACM certificate is attached (roadmap).
-* **Words in the UI** (§12.4): "Keep" (was Confirm), "Throw away" (was Decline/Delete), "Try again" (was Retry).
+* **Words in the UI** (§12.4): "Upload" (was Keep, before that Confirm; §33), "Throw away" (was Decline/Delete), "Try again" (was Retry).

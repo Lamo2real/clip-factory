@@ -235,11 +235,11 @@ const REACTION_NAME: Record<string, string> = {
 // ---------- Status copy (§16.8 calm states) ----------
 
 export const STATUS_LABEL: Record<PerfStatus, string> = {
-  posted: "Posted",
-  posted_private: "Posted privately",
-  waiting_for_connection: "Waiting for connection",
-  posting: "Posting",
-  failed: "Failed",
+  posted: "Uploaded",
+  posted_private: "Uploaded privately",
+  waiting_for_connection: "Waiting for setup",
+  posting: "Uploading…",
+  failed: "Didn't work",
   not_posted: "Not posted",
 };
 
@@ -266,7 +266,7 @@ export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "m
     case "posting":
       return { text: "Posting now…", spinner: true };
     case "posted_private":
-      return { text: "Posted privately. TikTok shows numbers after the app is approved." };
+      return { text: "Uploaded privately. TikTok shows numbers after the app is approved." };
     case "failed": {
       const why = (p.error ?? "something went wrong").replace(/[.!\s]+$/, "");
       return { text: `Posting failed: ${why}. Go to Library and press Try again.`, link: { href: "/library", label: "Go to Library" } };

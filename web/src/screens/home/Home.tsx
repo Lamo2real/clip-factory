@@ -82,7 +82,7 @@ export function Home() {
           </h1>
           <p className="hero__lede">
             Paste a link to a stream or a video. Clip Factory finds the best moments and makes short clips. You
-            pick the ones to keep.
+            pick the ones to upload.
           </p>
           <NewJobForm />
         </div>
@@ -102,7 +102,7 @@ export function Home() {
               ? "Could not check for new clips."
               : data
               ? data.review.length
-                ? `${plural(data.review.length, "clip")} waiting. Tap Go to Review to keep or throw away each one.`
+                ? `${plural(data.review.length, "clip")} waiting. Tap Go to Review to upload or throw away each one.`
                 : "Nothing to check yet. Paste a link above and tap Make clips."
               : "Checking for new clips…"}
           </p>

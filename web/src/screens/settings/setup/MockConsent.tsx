@@ -31,7 +31,7 @@ export function MockConsent({ platform }: { platform: Platform }) {
           This is a pretend {name} page for testing. The real one asks you to log in and let Clip Factory post for you.
         </p>
         <p className="consent__app">
-          <strong>Clip Factory</strong> wants to post your kept clips and read their numbers.
+          <strong>Clip Factory</strong> wants to post your uploaded clips and read their numbers.
         </p>
         <div className="consent__actions">
           <Button variant="ghost" size="lg" loading={busy === "cancel"} disabled={busy !== null} onClick={() => void answer(false)}>

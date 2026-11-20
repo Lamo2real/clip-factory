@@ -248,6 +248,9 @@ Replaces the publish queue, DLQ, publisher, Scheduler group/role and perf-check.
     is idempotent), 200. With `publishState: "started"` or status `posted` → 200 no-op with the current `{clip, posts}`.
   * `failed` (clip-flow ended with every queued post failed) → "Try again": `flowRun + 1`, failed posts back to
     `queued`, status `confirmed`, `publishState: "pending"`, start `clip-{clipId}-{flowRun}`, 200.
+  * §33: with `platforms`, a `review` clip gets posts for exactly those places (each must be connected) and an
+    internal-but-public `uploadTo`; on a `posted` or `failed` clip `platforms` names the failed posts to try again
+    (a `posted` clip stays `posted`). See §33.3.
   * `declined` → 409 `conflict`.
 * **Start:** `lambda.invoke(FunctionName=CLIP_FLOW_ARN /* alias ...:function:cf-prod-clip-flow:live */,
   InvocationType="Event", DurableExecutionName=f"clip-{clipId}-{flowRun}", Payload=json.dumps({"clipId", "userId",

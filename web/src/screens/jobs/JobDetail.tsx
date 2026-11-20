@@ -21,7 +21,7 @@ import { jobPercent, jobProgress } from "../../lib/jobProgress.ts";
 
 const CLIP_STATUS: Record<ClipStatus, { label: string; tone: Tone }> = {
   review: { label: "Needs a look", tone: "vermilion" },
-  confirmed: { label: "Kept", tone: "success" },
+  confirmed: { label: "Uploading", tone: "success" },
   publishing: { label: "Posting", tone: "success" },
   posted: { label: "Posted", tone: "bone" },
   declined: { label: "Thrown away", tone: "neutral" },

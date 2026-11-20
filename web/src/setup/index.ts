@@ -20,7 +20,7 @@ export const APP_NAME = "Clip Factory";
 /** The Facebook app gets its own name: Meta does not allow two apps with one name in a portfolio. */
 export const FACEBOOK_APP_NAME = "Clip Factory Pages";
 export const APP_DESCRIPTION =
-  "Clip Factory turns my gameplay recordings into short vertical clips and posts them to my own accounts when I press Keep.";
+  "Clip Factory turns my gameplay recordings into short vertical clips and posts them to my own accounts when I press Upload.";
 export const X_USE_CASE =
   "Post my own short video clips to my own X account and read their view and like counts in my personal Clip Factory app.";
 /**
@@ -30,7 +30,7 @@ export const X_USE_CASE =
  */
 export const TIKTOK_REVIEW_TEXT = [
   "user.info.basic (Login Kit): connect my TikTok and show my name and picture in Clip Factory.",
-  "video.publish: post clips I approved with Keep straight to my own TikTok (Direct Post).",
+  "video.publish: post clips I approved with Upload straight to my own TikTok (Direct Post).",
   "video.upload: comes with Content Posting API. Clip Factory does not ask for it; it only uses Direct Post.",
   "video.list: show the views and likes of my own posts on my Clip Factory dashboard.",
   "user.info.stats: show my follower and like totals on my Clip Factory money tile, only after I say OK.",

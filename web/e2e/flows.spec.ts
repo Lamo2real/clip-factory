@@ -45,9 +45,9 @@ test("keep a clip with a celebration, throw another away and undo it", async ({ 
 
   await cards.first().getByRole("tab", { name: "X" }).click();
   await cards.first().getByLabel("X caption").fill("Twelve cars, one bridge #gtarp");
-  await cards.first().getByRole("button", { name: "Keep", exact: true }).click();
+  await cards.first().getByRole("button", { name: /^Upload( to .+)?$/ }).click();
   await expect(page.locator("canvas.confetti")).toHaveCount(1);
-  await expect(page.getByText(/Kept!/)).toBeVisible();
+  await expect(page.getByText(/^(Uploading to|Saved!)/)).toBeVisible();
   await expect(cards).toHaveCount(before - 1);
 
   // Throw away: no scary dialog, the card goes at once, and Undo brings it back.

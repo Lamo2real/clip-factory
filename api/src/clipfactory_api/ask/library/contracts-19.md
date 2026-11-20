@@ -97,9 +97,11 @@ on a platform's setup page) becomes a doc on that page, and the element there ca
 | `job-progress` | where is my job, how long, cancel | Open Jobs `/jobs` |
 | `what-is-clip-factory` | what the app is and what it does, in two sentences | Go to Home `/` → `paste-link` |
 | `job-failed` | job failed → **Try again** (starts over, uses the saved video) | Open Jobs `/jobs` → `failed-job` (the failed row in the Jobs list), `try-again` |
-| `review-keep` | what **Keep** does: it queues the clip for posting to your platforms; nothing posts without Keep | Open Review `/review` → `keep` |
+| `review-keep` | what **Upload** does: it posts the clip to every place picked under Upload to; nothing posts without Upload | Open Review `/review` → `upload` |
+| `review-upload-to` | Upload to many places at once; places not set up do not show | Open Review `/review` → `upload-to` |
+| `review-my-settings` | Use my settings and More details; never made for kids | Open Review `/review` → `use-my-settings`; Open My settings |
 | `review-throw-away` | **Throw away** + 8 s **Undo** | Open Review `/review` → `throw-away` |
-| `review-captions` | change a caption per platform before Keep | Open Review `/review` → `captions` |
+| `review-captions` | change a caption per platform before Upload | Open Review `/review` → `captions` |
 | `clip-posting-failed` | Failed post → **Try again** on Review | Open Review `/review` |
 | `library-where` | "where are my clips / videos": Library holds every clip | Open Library `/library` → `nav-library` |
 | `clip-performance` | see how a clip does (Library → tap the clip) | Open Library `/library` |

@@ -17,7 +17,7 @@ describe("the settings tree", () => {
     expect(TREES.map((t) => t.slug)).toEqual(["clip-making", "posting", "look-and-feel", "app"]);
     expect(TREES.map((t) => t.branches.map((b) => b.slug))).toEqual([
       ["clips", "skills", "learned", "streamers", "youtube"],
-      ["setup", "where", "money"],
+      ["setup", "where", "my-settings", "money"],
       ["sounds", "motion", "background"],
       ["get-the-app", "notifications", "updates", "ask", "account"],
     ]);
@@ -203,7 +203,7 @@ describe("Find a setting", () => {
     const clip = names("clip");
     expect(clip).not.toContain("Sign out");
     expect(clip).not.toContain("Get the app");
-    expect(clip).toEqual(expect.arrayContaining(["How many clips", "Longest video", "Post kept clips to"]));
+    expect(clip).toEqual(expect.arrayContaining(["How many clips", "Longest video", "Upload clips to"]));
     expect(names("factory")).toEqual([]);
     expect(names("clip factory")).toEqual([]);
   });

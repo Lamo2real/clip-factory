@@ -9,7 +9,7 @@ import type { Clip } from "../api/types.ts";
 import type { Toaster } from "../components/Toasts.tsx";
 
 /** Shown when the decline finds the clip already kept or thrown away somewhere else. */
-export const ALREADY_DECIDED = "This clip was already kept or thrown away somewhere else, so there is nothing more to do.";
+export const ALREADY_DECIDED = "This clip was already uploaded or thrown away somewhere else, so there is nothing more to do.";
 
 const hidden = new Set<string>();
 const listeners = new Set<() => void>();

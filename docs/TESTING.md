@@ -234,7 +234,7 @@ CF_E2E_PORT=4185 npx playwright test e2e/motion.spec.ts e2e/motion-*.spec.ts --w
 | Playwright `e2e/motion-library-clip-help.spec.ts` | Library Try again; This week: arrows slide, the newest week's Later week plays `nudge` (not a shake), the star spins on and settles off; Refresh numbers; the clip star; Ask's chips launch the plane, Start over, Copy the help code (and its failure); reduced motion; no overflow at six widths. |
 | Playwright `e2e/motion-settings.spec.ts` | Every Settings, setup and skill control's kind, the pickers playing on the file, the Undo rewinds, the failure paths, reduced motion and no overflow. |
 | Playwright `e2e/motion-shell.spec.ts` | The sidebar turn, Get the app chips / Download / Copy the link (and a blocked clipboard), Reload; sign in: Sign in snaps its link, a wrong password shakes it with one deny, the eye blinks, Start again turns. |
-| Playwright `e2e/sound.spec.ts` | A touch swipe that starts on Review's Keep fires no click, plays no sound and leaves every `.act` at `is-idle`. |
+| Playwright `e2e/sound.spec.ts` | A touch swipe that starts on Review's Upload fires no click, plays no sound and leaves every `.act` at `is-idle`. |
 | Playwright `e2e/overflow.spec.ts` (through `findOverflow` in `e2e/helpers.ts`) | Glyphs inside `.act:not(.is-idle)` are skipped while they play (like the flying plane); an idle `.act` is measured, so a glyph that overflows at rest fails. |
 | Playwright `e2e/screenshots.spec.ts` | `screenshots/motion-mid-{light,dark}-{375,1440}.png`: send, keep, delete, refresh, save and copy paused at 50 % in the gallery. |
 
@@ -721,7 +721,7 @@ its pretend consent page `/mock-oauth/{platform}`.
   fallback, X 4 MB appends and links removed, caption limits); clip flow step and wait names
   `publish-/wait-/check-/finish-{platform}-{n}`, a replay with `publishHandle` creates nothing twice, `maxChecks`
   outcomes, the at-most-once message, `ReconnectNeededError` → failed, private TikTok → no `gsi2`, the TikTok id
-  follow-up; the friendly error table; the X monthly cap; TikTok Keep options required and validated; broadcast
+  follow-up; the friendly error table; the X monthly cap; TikTok Upload options required and validated; broadcast
   `ACCOUNT#` and `SETUP#` → `setup`; `config.load` with the §17.7 values.
 - **Infrastructure** (`terraform test`): the state-key secret uses `secret_string_wo` (no `secret_string`); IAM exactly
   as §17.9 per role (no secrets access for the job flow, realtime or learn); hooks timeout 28 s; environment variables
@@ -743,7 +743,7 @@ its pretend consent page `/mock-oauth/{platform}`.
   → the `denied` sentence; a reload resumes at the first unfinished step; TikTok shows "Works now, but your TikTok posts
   stay private until TikTok says yes."; an expired token shows the vermilion **Connect again**; Disconnect → Undo within
   8 s keeps it, after 8 s it is gone; all five ready → the floating setup list is gone and "5 of 5 ready".
-  `e2e/tiktok-sheet.spec.ts`: Keep stays disabled until a privacy is chosen; branded content hides "Only me".
+  `e2e/tiktok-sheet.spec.ts`: Upload stays disabled until a privacy is picked in the app's own dropdown (no default); Turn all on; branded content hides "Only me". `e2e/upload-to.spec.ts` (§33): only ready places get a chip, X hidden when not set up, several on, all ready on by default, Upload posts to exactly those, per-place results and Try again, caption per place with limits, no "X X", Use my settings, My settings page, the checks row at 320 px.
   **Try again** on a failed clip whose TikTok post needs new privacy choices opens the Post to TikTok sheet first and
   sends `{tiktok: {...}}` in the confirm body; the mock replaces that post's `postOptions`.
   `overflow.spec.ts` covers the setup list, each platform page, `/mock-oauth/youtube`, `/about.html` and the TikTok
@@ -965,14 +965,14 @@ From [CONTRACTS.md §17.13](CONTRACTS.md#1713-the-floating-setup-to-do-list-owne
    Edit it, read it back, delete it and Undo, then delete it for good.
 8. Open **Get the app** on a Mac and on Windows; download, follow the first-open hint, and check that Get the app is
    gone inside the desktop app. On an iPhone, follow the three steps.
-9. Keep a clip and open it from Library: five stacks read "Waiting for connection" with a link to Set up posting; Refresh
+9. Upload a clip and open it from Library: five stacks read "Waiting for connection" with a link to Set up posting; Refresh
    numbers answers without calling any platform. In CloudWatch Logs, `/aws/lambda/cf-prod-stats` shows a `stats.tick`
    line every 15 minutes. In Library › This week, star the clip: "Learning from your picks…" turns into a "Best of
    week" learning within a minute or two.
 10. Set up posting ([SETUP_POSTING.md](SETUP_POSTING.md)): open `{app_url}/about.html`, `/legal/privacy.html` and
    `/legal/terms.html` without signing in. Set up YouTube to the end, press **Check it**, then **Connect YouTube**: you
    come back with confetti and "Connected as …". In Secrets Manager (eu-north-1) you see `cf-prod/platforms/youtube/app`
-   and `…/token`; in DynamoDB the `ACCOUNT#youtube` item has no token. Keep a short clip with **Only me** picked in
+   and `…/token`; in DynamoDB the `ACCOUNT#youtube` item has no token. Upload a short clip with **Only me** picked in
    "Who can see your clips": it appears on the channel as a private Short and the clip page shows its link. Press
    **Disconnect**, wait 8 s: the token secret is gone. Then the other four platforms the same way (X costs a little).
 11. Push a small change with an `Area:` line; within 5 minutes the open app (browser and desktop app) shows the update

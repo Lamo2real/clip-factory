@@ -943,9 +943,13 @@
   display: none;
 }
 .checklist__summary > span:first-child {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
 }
+/* The score never shrinks under its words or slides over the title (§33.2). */
 .checklist__score {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: var(--fs-small);
   color: var(--vermilion-ink);
 }
@@ -1792,4 +1796,241 @@
 }
 .reduce-motion .live-line__text {
   animation: none;
+}
+/* ---------- Review › Upload to many places (§33) ---------- */
+.upload-to {
+  display: grid;
+  gap: 8px;
+}
+.upload-to__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.upload-chip {
+  font: inherit;
+  font-weight: 650;
+  font-size: 0.95rem;
+  color: inherit;
+  border: 0;
+  min-height: 48px;
+  padding: 6px 12px 6px 12px;
+}
+.upload-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.upload-chip__check {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgb(var(--bone-rgb) / 0.14);
+}
+.upload-chip__check.is-on {
+  background: var(--on-bone);
+  color: var(--ink-2);
+}
+.upload-to__hint {
+  justify-self: start;
+}
+.upload-to--none {
+  display: grid;
+  gap: 6px;
+}
+.upload-mine {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+.upload-mine > .btn {
+  min-height: 52px;
+}
+.more-details {
+  width: 100%;
+  border-radius: var(--r-md);
+  background: var(--fill-control);
+}
+.more-details__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 14px;
+  font-weight: 650;
+  list-style: none;
+}
+.more-details__summary::-webkit-details-marker {
+  display: none;
+}
+.more-details__summary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: var(--r-md);
+}
+.more-details__chev {
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.more-details[open] .more-details__chev {
+  transform: rotate(90deg);
+}
+.more-details__body {
+  display: grid;
+  gap: 16px;
+  padding: 0 14px 14px;
+}
+.more-details__place {
+  display: grid;
+  gap: 8px;
+}
+.more-details__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1rem;
+}
+.more-details__fixed {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+/* §33: the checks title wraps inside its own room; the score and chevron stay on its line. */
+.checklist__summary {
+  flex-wrap: nowrap;
+}
+.checklist__chev {
+  flex: 0 0 auto;
+}
+.upload-going {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink-2);
+  text-align: right;
+}
+.upload-going.is-none {
+  color: var(--vermilion-ink);
+}
+
+/* ---------- The app's own dropdown (never the OS list) ---------- */
+.dropdown {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+}
+.dropdown__button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--fill-control);
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+}
+.dropdown__button.is-picked {
+  background: var(--selected);
+  color: var(--on-bone);
+  text-shadow: none;
+}
+.dropdown__button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.dropdown__value.is-empty {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.dropdown__chev {
+  flex: 0 0 auto;
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.dropdown.is-open {
+  z-index: 40;
+}
+.dropdown.is-open .dropdown__chev {
+  transform: rotate(180deg);
+}
+.dropdown__list {
+  position: absolute;
+  z-index: 30;
+  inset-inline: 0;
+  top: calc(100% + 6px);
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border-radius: var(--r-md);
+  /* Solid: a glass list inside the glass sheet cannot blur what is under it, so the switches would show through. */
+  background: rgb(var(--green-rgb));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  isolation: isolate;
+}
+.dropdown__list:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.dropdown__opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-radius: calc(var(--r-md) - 6px);
+}
+.dropdown__opt.is-at {
+  background: rgb(var(--bone-rgb) / 0.12);
+}
+.dropdown__opt.is-on {
+  background: var(--selected);
+  color: var(--on-bone);
+  text-shadow: none;
+}
+.dropdown__text {
+  display: grid;
+  gap: 2px;
+}
+.dropdown__name {
+  font-weight: 650;
+}
+.dropdown__line {
+  font-size: var(--fs-small);
+  opacity: 0.85;
+}
+.tt-sheet__mine {
+  justify-self: start;
+  min-height: 52px;
+}
+.tt-sheet__all-on {
+  justify-self: start;
+}
+
+/* ---------- Settings › Posting › My settings (§33.4) ---------- */
+.my-settings__controls {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+.my-settings__note {
+  margin-bottom: 8px;
+  background: var(--fill-control);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dropdown__chev,
+  .more-details__chev {
+    transition: none;
+  }
 }

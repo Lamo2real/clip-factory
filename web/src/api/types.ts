@@ -114,6 +114,8 @@ export interface Clip {
   pickedFor?: string;
   /** Sum of the posted posts' views; absent when nothing was measured yet. */
   totalViews?: number;
+  /** The places the owner picked on Upload, in STATS_ORDER (§33). Absent on clips uploaded before §33. */
+  uploadTo?: Platform[];
 }
 
 /** One skill (docs/CONTRACTS.md §5, §18). Every skill is always used: there is no on/off switch. */
@@ -199,6 +201,8 @@ export interface Settings {
   followMinMinutes?: number;
   /** Which notifications the owner's devices get (docs/CONTRACTS.md §32.3). Absent on old servers: the defaults. */
   notify?: NotifyChoices;
+  /** My settings (§33.4): the owner's preferred post choices per platform. Absent on old servers: the defaults. */
+  postPreset?: PostPreset;
 }
 
 /** §32.3: "Clips ready", "It stopped" and "Picked up" are on by default; "Every step" is off (each one shows on the phone). */
@@ -224,6 +228,46 @@ export interface PushSubscriptionBody {
   endpoint: string;
   keys: { p256dh: string; auth: string };
   deviceLabel: string;
+}
+
+/** YouTube choices (§33.4). There is no made-for-kids field: Clip Factory never marks a clip as made for kids. */
+export interface YouTubePreset {
+  privacy: YoutubePrivacy;
+  /** A YouTube category id: "20" Gaming (the default), "24", "23", "22", "17". */
+  category: string;
+  embeddable: boolean;
+  notifySubscribers: boolean;
+  /** "Altered or synthetic content": only when it is true of the clip. */
+  syntheticMedia: boolean;
+}
+export interface TikTokPreset {
+  privacy: string;
+  comments: boolean;
+  duet: boolean;
+  stitch: boolean;
+  commercial: boolean;
+  aigc: boolean;
+}
+export interface InstagramPreset {
+  shareToFeed: boolean;
+}
+export type XReplies = "everyone" | "following" | "mentionedUsers" | "verified";
+export interface XPreset {
+  replies: XReplies;
+}
+export interface PostPreset {
+  youtube: YouTubePreset;
+  tiktok: TikTokPreset;
+  instagram: InstagramPreset;
+  /** Facebook Reels on a Page are always public: nothing to choose. */
+  facebook: Record<string, never>;
+  x: XPreset;
+}
+/** Per-clip choices sent with Upload (§33.3). TikTok's come from its own sheet (`tiktok`). */
+export interface ClipPostOptions {
+  youtube?: YouTubePreset;
+  instagram?: InstagramPreset;
+  x?: XPreset;
 }
 
 export type YoutubePrivacy = "public" | "unlisted" | "private";
@@ -352,7 +396,7 @@ export interface TikTokCreator {
   maxDurationSec: number;
 }
 
-/** What the Post to TikTok sheet adds to Keep (§17.8). */
+/** What the Post to TikTok sheet adds to Upload (§17.8). */
 export interface TikTokPostOptions {
   privacyLevel: string;
   disableComment: boolean;
@@ -1015,7 +1059,17 @@ export interface Api {
   getClip(clipId: string): Promise<Clip>;
   updateClip(clipId: string, captions: Partial<Captions>): Promise<Clip>;
   /** `tiktok` carries the Post to TikTok sheet's choices (§17.8). */
-  confirmClip(clipId: string, captions?: Partial<Captions>, tiktok?: TikTokPostOptions): Promise<{ clip: Clip; posts: Post[] }>;
+  /**
+   * Upload a clip (§14.5, §33). `platforms`: exactly where it goes (each must be set up); left out, Settings › Where
+   * clips go decides (older clients). On an uploaded clip, `platforms` names the failed places to try again.
+   */
+  confirmClip(
+    clipId: string,
+    captions?: Partial<Captions>,
+    tiktok?: TikTokPostOptions,
+    platforms?: Platform[],
+    options?: ClipPostOptions,
+  ): Promise<{ clip: Clip; posts: Post[] }>;
   declineClip(clipId: string): Promise<Clip>;
   /** GET /v1/skills: built-ins first, then the owner's, by name (§18.3). */
   listSkills(): Promise<Skill[]>;

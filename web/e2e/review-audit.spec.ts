@@ -23,8 +23,8 @@ test.describe("at 375px", () => {
     await expect(x).toHaveClass(/is-over/);
     await expect(x).toHaveAttribute("aria-selected", "false");
 
-    await card.getByRole("button", { name: "Keep", exact: true }).click();
-    await expect(page.getByText("Your X caption is longer than its platform allows. Make it shorter, then tap Keep.")).toBeVisible();
+    await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
+    await expect(page.getByText("Your X caption is longer than its platform allows. Make it shorter, then tap Upload.")).toBeVisible();
     await expect(x).toHaveAttribute("aria-selected", "true");
     await expect(x).toBeFocused();
     await expect(x).toBeInViewport({ ratio: 1 });
@@ -144,7 +144,7 @@ for (const width of [320, 375, 960, 1024, 1280]) {
 
     // Throw away and Keep: one row, or two rows with the same left edge and width.
     const [a, b] = await Promise.all(
-      ["Throw away", "Keep"].map((name) => card.getByRole("button", { name, exact: true }).boundingBox()),
+      [card.getByRole("button", { name: "Throw away", exact: true }), card.getByRole("button", { name: /^Upload( to .+)?$/ })].map((b) => b.boundingBox()),
     );
     if (Math.abs(a!.y - b!.y) > 20) {
       expect(Math.abs(a!.x - b!.x)).toBeLessThanOrEqual(1);

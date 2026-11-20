@@ -49,7 +49,7 @@ for (const [name, use] of [
       await settle(page);
       const cards = page.locator(".review-card");
       expect(await cards.count()).toBeGreaterThan(1);
-      const keep = (i: number) => cards.nth(i).getByRole("button", { name: "Keep", exact: true });
+      const keep = (i: number) => cards.nth(i).getByRole("button", { name: /^Upload( to .+)?$/ });
       await expect(keep(0)).toHaveClass(/btn--primary/);
       await expect(keep(1)).not.toHaveClass(/btn--primary/);
       await cards.first().getByRole("button", { name: "Throw away" }).click();
@@ -111,7 +111,7 @@ for (const [name, use] of [
       await settle(page);
       const cards = page.locator(".review-card");
       const count = await cards.count();
-      await cards.first().getByRole("button", { name: "Keep", exact: true }).click();
+      await cards.first().getByRole("button", { name: /^Upload( to .+)?$/ }).click();
       await expect(cards).toHaveCount(count - 1);
       await cards.first().getByRole("button", { name: "Throw away" }).click();
       await expect(cards).toHaveCount(count - 2);

@@ -24,6 +24,7 @@ describe("the shared eval file (§19.11)", () => {
       "How many views did my best clip get this week?",
       "How do I add a skill?",
       "What does Keep do?",
+      "What does Upload do?",
     ])
       expect(qs).toContain(q);
     const ids = new Set(corpus.docs.map((d) => d.id));

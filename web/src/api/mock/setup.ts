@@ -244,7 +244,7 @@ export function setupApi({ onAccounts, publish }: SetupDeps = {}) {
 
   return {
     controls,
-    /** Platforms whose account is connected (Keep posts to these). */
+    /** Platforms whose account is connected (Upload posts to these). */
     connected(): Platform[] {
       return SETUP_ORDER.filter((p) => state[p].account.status === "connected");
     },

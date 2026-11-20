@@ -17,7 +17,7 @@ test("a Library card opens the clip's page: five stacks in order, each with its 
   await openClip(page, CLIPS.all);
   await expect(page.getByRole("heading", { level: 1, name: CLIPS.all })).toBeVisible();
   expect(await page.locator("[data-stack]").evaluateAll((els) => els.map((e) => e.getAttribute("data-stack")))).toEqual(ORDER);
-  for (const p of ORDER) await expect(stack(page, p).getByText("Posted", { exact: true })).toBeVisible();
+  for (const p of ORDER) await expect(stack(page, p).getByText("Uploaded", { exact: true })).toBeVisible();
 
   // Each stack is its own platform's numbers.
   await expect(stack(page, "tiktok")).not.toContainText("Saves");
@@ -45,8 +45,8 @@ test("a Library card opens the clip's page: five stacks in order, each with its 
 
 test("each calm state says one plain thing and links to the fix", async ({ page }) => {
   await openClip(page, CLIPS.mixed);
-  await expect(stack(page, "tiktok")).toContainText("Posted privately. TikTok shows numbers after the app is approved.");
-  await expect(stack(page, "tiktok")).toContainText("Posted privately");
+  await expect(stack(page, "tiktok")).toContainText("Uploaded privately. TikTok shows numbers after the app is approved.");
+  await expect(stack(page, "tiktok")).toContainText("Uploaded privately");
   await expect(stack(page, "instagram")).toContainText("Connect Instagram in Settings › Posting › Set up posting.");
   await expect(stack(page, "instagram").getByRole("link", { name: "Set up Instagram" })).toHaveAttribute("href", "/settings/posting/setup/instagram");
   await expect(stack(page, "facebook")).toContainText("Posting failed: Facebook said the video was too long for a Reel. Go to Library and press Try again.");

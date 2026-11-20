@@ -306,7 +306,7 @@ whole application, and for every AI call to use the skills.
   and up to two buttons that open the right page and light up the right control.
 - AC3: These questions are answered correctly: "How do I make clips from a Twitch link?", "Where do I change my click
   sound?", "Why is my clip private on TikTok?", "How do I connect Instagram?", "How many views did my best clip get
-  this week?", "How do I add a skill?", "What does Keep do?", plus the rest of the shared eval file (at least 44).
+  this week?", "How do I add a skill?", "What does Keep do?", "What does Upload do?", plus the rest of the shared eval file (at least 44).
 - AC4: Numbers in an answer (views this week, clips waiting, jobs running) are the owner's real numbers, read by the
   app with the owner's own sign-in; if a number cannot be read, the answer says so and offers the page that shows it.
 - AC5: A question it cannot answer gets "I don't know that one yet. Try other words, or pick a question below." and

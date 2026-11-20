@@ -29,7 +29,7 @@ this is the designer's summary.
   out before the edge; it never looks swallowed.
 - **Moving around and closing stay quiet.** Links, tabs, back, Close, Cancel, Not now keep the press feedback only.
 - **Failure never looks like success.** A failed action shakes its glyph gently (±4 px, vermilion for the first half,
-  320 ms) with the error sound once; no ring, tick, confetti or success sound. A refused action (Keep with a caption
+  320 ms) with the error sound once; no ring, tick, confetti or success sound. A refused action (Upload with a caption
   that is too long) only shakes.
 - **Undo** plays the motion backwards on the button (360 ms), or, when the button is gone, the item that comes back
   fades and grows in (`.is-returning`).
@@ -59,8 +59,8 @@ so its glyph fades out before it reaches the button's words; only the icon-only 
 
 | Kind | Glyph | What it does | Used by (examples) |
 |---|---|---|---|
-| `send` | paper plane or the button's icon | flies off up and right with a trail, a fresh one fades back | Make clips, Ask Send, TikTok Keep, Ask Clip Factory |
-| `keep` | heart | pops and floats up with a bone ring | Review Keep (when the keep really starts) |
+| `send` | paper plane or the button's icon | flies off up and right with a trail, a fresh one fades back | Make clips, Ask Send, Review Upload, TikTok Upload, Ask Clip Factory |
+| `keep` | heart | pops and floats up with a bone ring | (kept for later use; Review Upload plays `send` since §33) |
 | `add` / `remove` | plus / minus | plus turns 90° and pops; minus squashes | steppers, Write a skill |
 | `delete` | bin | tips and drops, fresh one | Remove, skill Delete |
 | `throw` | bin | tossed up and away from the label, fresh one | Throw away |

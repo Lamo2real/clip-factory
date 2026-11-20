@@ -193,7 +193,7 @@ export const instagram: SetupGuide = {
           icon: "play",
           title: "Post one test clip",
           say: [
-            "Keep one clip and wait a few minutes.",
+            "Upload one clip and wait a few minutes.",
             "Instagram can take a few minutes to post. Numbers can take 2 days.",
           ],
           ifYouSee: [

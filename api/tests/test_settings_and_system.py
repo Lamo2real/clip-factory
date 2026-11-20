@@ -28,6 +28,27 @@ DEFAULTS = {
     "followDailyMax": 0,
     "followMinMinutes": 30,
     "notify": {"ready": True, "stopped": True, "resumed": False, "steps": False},
+    # §33.4 My settings: best-practice reach choices per platform, never made for kids.
+    "postPreset": {
+        "youtube": {
+            "privacy": "public",
+            "category": "20",
+            "embeddable": True,
+            "notifySubscribers": True,
+            "syntheticMedia": False,
+        },
+        "tiktok": {
+            "privacy": "PUBLIC_TO_EVERYONE",
+            "comments": True,
+            "duet": True,
+            "stitch": True,
+            "commercial": False,
+            "aigc": False,
+        },
+        "instagram": {"shareToFeed": True},
+        "facebook": {},
+        "x": {"replies": "everyone"},
+    },
 }
 
 

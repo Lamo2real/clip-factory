@@ -22,8 +22,9 @@ function Counter({ value, limit, id }: { value: string; limit: number; id: strin
   );
 }
 
-export function captionsTooLong(c: Captions): boolean {
-  return (Object.keys(LIMITS) as (keyof typeof LIMITS)[]).some((k) => c[k].length > LIMITS[k]);
+/** A caption is longer than its platform allows. With `chosen`, only the chosen places count (§33.2). */
+export function captionsTooLong(c: Captions, chosen?: readonly Tab[]): boolean {
+  return (Object.keys(LIMITS) as (keyof typeof LIMITS)[]).some((k) => c[k].length > LIMITS[k] && (!chosen || chosen.includes(TAB_OF[k])));
 }
 
 /** Which tab holds each caption (YouTube has two: title and description). */
@@ -36,10 +37,10 @@ const TAB_OF: Record<keyof typeof LIMITS, Tab> = {
   x: "x",
 };
 
-/** The tabs with a caption longer than its platform allows, in tab order. */
-export function tabsTooLong(c: Captions): Tab[] {
+/** The tabs with a caption longer than its platform allows, in tab order (only the chosen ones, when given). */
+export function tabsTooLong(c: Captions, chosen?: readonly Tab[]): Tab[] {
   const over = new Set((Object.keys(LIMITS) as (keyof typeof LIMITS)[]).filter((k) => c[k].length > LIMITS[k]).map((k) => TAB_OF[k]));
-  return TABS.map((t) => t.key).filter((k) => over.has(k));
+  return TABS.map((t) => t.key).filter((k) => over.has(k) && (!chosen || chosen.includes(k)));
 }
 
 /** The platform's name for a tab ("X", "YouTube"). */
@@ -52,21 +53,29 @@ export interface CaptionTabsHandle {
   showTooLong(): string | null;
 }
 
-/** Editable captions per platform as ARIA tabs (arrow keys move between them). */
+/**
+ * Editable captions per platform as ARIA tabs (arrow keys move between them). With `platforms`, only those places get
+ * a tab (the places picked for Upload, §33.2); a place turned off keeps its caption for when it comes back.
+ */
 export function CaptionTabs({
   captions,
   onChange,
   readOnly = false,
   handle,
+  platforms,
 }: {
   captions: Captions;
   onChange: (patch: Partial<Captions>) => void;
   readOnly?: boolean;
-  /** Lets Review open the too-long tab when Keep is refused. */
+  /** Lets Review open the too-long tab when Upload is refused. */
   handle?: Ref<CaptionTabsHandle>;
+  platforms?: readonly Tab[];
 }) {
   const id = useId();
-  const [tab, setTab] = useState<Tab>("youtube");
+  const tabs = platforms ? TABS.filter((t) => platforms.includes(t.key)) : TABS;
+  const [picked, setTab] = useState<Tab>("youtube");
+  // The tab being edited went away (its place was turned off): the first place left takes over.
+  const tab: Tab = tabs.some((t) => t.key === picked) ? picked : (tabs[0]?.key ?? picked);
   // The newly chosen tab's name bumps (§20.11 (a) `toggle`), by tap or by arrow key.
   const bump = useAction("toggle");
   const refs = useRef<Record<Tab, HTMLButtonElement | null>>({
@@ -82,11 +91,11 @@ export function CaptionTabs({
     // The strip can be wider than the card: bring the chosen tab into view.
     refs.current[key]?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }
-  const over = tabsTooLong(captions);
+  const over = tabsTooLong(captions, platforms);
 
   useImperativeHandle(handle, () => ({
     showTooLong() {
-      const first = tabsTooLong(captions)[0];
+      const first = tabsTooLong(captions, platforms)[0];
       if (!first) return null;
       choose(first);
       refs.current[first]?.focus();
@@ -95,15 +104,15 @@ export function CaptionTabs({
   }));
 
   function onKey(e: KeyboardEvent) {
-    const i = TABS.findIndex((t) => t.key === tab);
+    const i = tabs.findIndex((t) => t.key === tab);
     let next: number;
-    if (e.key === "ArrowRight") next = (i + 1) % TABS.length;
-    else if (e.key === "ArrowLeft") next = (i - 1 + TABS.length) % TABS.length;
+    if (e.key === "ArrowRight") next = (i + 1) % tabs.length;
+    else if (e.key === "ArrowLeft") next = (i - 1 + tabs.length) % tabs.length;
     else if (e.key === "Home") next = 0;
-    else if (e.key === "End") next = TABS.length - 1;
+    else if (e.key === "End") next = tabs.length - 1;
     else return;
     e.preventDefault();
-    const key = TABS[next]!.key;
+    const key = tabs[next]!.key;
     choose(key);
     refs.current[key]?.focus();
   }
@@ -144,11 +153,12 @@ export function CaptionTabs({
     );
   };
 
+  if (!tabs.length) return null;
   return (
     <div className="captions">
       <div className="tabs" role="tablist" aria-label="Caption per platform" onKeyDown={onKey}>
         <Glide active=".tab.is-on" />
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const tooLong = over.includes(t.key);
           return (
             <button
@@ -169,15 +179,15 @@ export function CaptionTabs({
               onClick={() => choose(t.key)}
             >
               <PlatformMark platform={t.key} size={18} />
-              {tab === t.key ? (
-                <span className={`tab__label act act--toggle act--text is-${bump.phase}`}>
+              {/* The name shows on the open tab only; X's mark already reads "X", so its name is for screen readers
+                  only (no "X X", §33.2). aria-label always carries the name. */}
+              {tab === t.key && t.key !== "x" ? (
+                <span className={`tab__label act act--toggle act--text is-${bump.phase}`} aria-hidden="true">
                   <span className="act__item" key={bump.shot}>
                     {t.label}
                   </span>
                 </span>
-              ) : (
-                <span className="tab__label">{t.label}</span>
-              )}
+              ) : null}
               {tooLong ? <span className="tab__over" aria-hidden="true" /> : null}
             </button>
           );

@@ -682,7 +682,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
 
 ### 12.4 Kid-proof UX (a 6–8-year-old must manage it)
 * One obvious next step per screen (one vermilion CTA), big targets (≥ 48 px on phones), icon + word on buttons
-  (except the phone tab bar), short plain words (no jargon: "Make clips", "Keep", "Throw away"), friendly empty states
+  (except the phone tab bar), short plain words (no jargon: "Make clips", "Upload", "Throw away"), friendly empty states
   that say exactly what to tap, no dead ends, every error says what to do next, destructive actions undoable for 8 s
   (toast with Undo) instead of scary dialogs, forms that can't be submitted wrong (paste button, auto-detect link,
   inline hints), progress always visible, celebrations on success.
@@ -726,8 +726,9 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   "Show older jobs" shows), `olderJobsFails` (the next N older pages fail), `createJobFails` (the next N Make clips
   fail with a server error). Covered by `web/e2e/audit-shell.spec.ts`.
 * **Review screen** (`web/src/screens/review/`):
-  * A refused Keep (a caption too long) opens the first too-long caption tab, scrolls it into view, focuses it and
-    names the platform: "Your X caption is longer than its platform allows. Make it shorter, then tap Keep.". Every
+  * A refused Upload (a caption too long for a chosen place) opens the first too-long caption tab, scrolls it into view,
+    focuses it and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then tap
+    Upload.". Every
     tab whose caption is too long carries `.is-over` (a red dot) and ", too long" in its accessible name, so it shows
     even while another tab is open.
   * Caption tabs: all five platforms stay in sight. On a narrow card (`.captions` container under 560 px) tabs that
@@ -770,7 +771,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   `content_filtered` (logged; no Learning written).
 * **TLS.** With the default `*.cloudfront.net` certificate CloudFront's protocol floor cannot be raised; TLS 1.2+ is
   enforced once a custom domain with an ACM certificate is attached (roadmap).
-* **Words in the UI** (§12.4): "Keep" (was Confirm), "Throw away" (was Decline/Delete), "Try again" (was Retry).
+* **Words in the UI** (§12.4): "Upload" (was Keep, before that Confirm; §33), "Throw away" (was Decline/Delete), "Try again" (was Retry).
 
 ## 14. Serverless expansion: WebSocket API, REST API, durable functions, S3 Vectors
 
@@ -1022,6 +1023,9 @@ Replaces the publish queue, DLQ, publisher, Scheduler group/role and perf-check.
     is idempotent), 200. With `publishState: "started"` or status `posted` → 200 no-op with the current `{clip, posts}`.
   * `failed` (clip-flow ended with every queued post failed) → "Try again": `flowRun + 1`, failed posts back to
     `queued`, status `confirmed`, `publishState: "pending"`, start `clip-{clipId}-{flowRun}`, 200.
+  * §33: with `platforms`, a `review` clip gets posts for exactly those places (each must be connected) and an
+    internal-but-public `uploadTo`; on a `posted` or `failed` clip `platforms` names the failed posts to try again
+    (a `posted` clip stays `posted`). See §33.3.
   * `declined` → 409 `conflict`.
 * **Start:** `lambda.invoke(FunctionName=CLIP_FLOW_ARN /* alias ...:function:cf-prod-clip-flow:live */,
   InvocationType="Event", DurableExecutionName=f"clip-{clipId}-{flowRun}", Payload=json.dumps({"clipId", "userId",
@@ -1321,7 +1325,7 @@ all follow it, never the API's row order.
 `HTTP API` keeps its single `ANY /v1/{proxy+}` route: no API Gateway change.
 
 **GET `/v1/clips/{clipId}/performance`** → `200 ClipPerformance`. 404 `not_found` when the clip is not the caller's
-or its status is `review`/`declined` ("This clip has no numbers yet. Keep it first."). Reads: the Clip, its Posts
+or its status is `review`/`declined` ("This clip has no numbers yet. Upload it first."). Reads: the Clip, its Posts
 (gsi1 `CLIP#{clipId}`), the Accounts, the STAT# snapshots of each post (Query `begins_with(sk, "STAT#{postId}#")`,
 `ScanIndexForward = false`, `Limit 500`, re-sorted oldest first, then downsampled to ≤ 60 points evenly by time,
 the last point always kept).
@@ -2010,7 +2014,7 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   ends (§12.4: undo instead of a scary dialog). **Connect again** keeps the keys.
 * ~~**Home card** "Set up posting · 2 of 5 ready"~~: replaced by the floating setup to-do list (§17.13), which shows
   on every signed-in page, so the owner never sees two competing lists. `screens/home/SetupCard.tsx` is removed.
-* **Review › Keep** with TikTok connected: the **Post to TikTok** sheet (§17.8) must be filled before Keep is enabled.
+* **Review › Upload** with TikTok chosen: the **Post to TikTok** sheet (§17.8) must be filled before Upload is enabled.
 * Kid-proof everywhere (§12.4): ≥ 48 px targets, nothing overflows from 320 to 1920 px, phone bottom bar / desktop
   sidebar unchanged, click sound on click only, success/error sounds, glass, Green/Bone/Vermilion, Inter + Times.
 
@@ -2041,7 +2045,7 @@ export type ValueRef = { ref: "appName" | "appDescription" | "websiteUrl" | "web
 Rules: the steps below are the content contract (ids and titles exact; sentences may be shortened, never lose a
 button name, value or warning). Shared values: `appName` "Clip Factory" (Facebook app: "Clip Factory Pages"),
 `appDescription` "Clip Factory turns my gameplay recordings into short vertical clips and posts them to my own
-accounts when I press Keep.", `xUseCase` "Post my own short video clips to my own X account and read their view and
+accounts when I press Upload.", `xUseCase` "Post my own short video clips to my own X account and read their view and
 like counts in my personal Clip Factory app." Every guide's Get ready part includes `ready-computer` "Use a
 computer" ("The developer websites work best on a computer. Use the same browser for every step."; platform extras
 below are added lines). `/brand/clip-factory-1024.png` is a 1024×1024 PNG < 5 MB of the app icon (web builds it; no
@@ -2110,7 +2114,7 @@ Connect:
 Go public (`gate: app_review`, `posting_audit`):
 | id | title | essentials |
 |---|---|---|
-| `public-demo` | Record the real demo video | Record your screen on Clip Factory, connected in the Sandbox: open Clip Factory, **Connect TikTok**, TikTok's **Authorize** screen, **Keep** on a clip with the **Post to TikTok** sheet, the post arriving on TikTok. Up to 5 videos, 50 MB each. |
+| `public-demo` | Record the real demo video | Record your screen on Clip Factory, connected in the Sandbox: open Clip Factory, **Connect TikTok**, TikTok's **Authorize** screen, **Upload** on a clip with the **Post to TikTok** sheet, the post arriving on TikTok. Up to 5 videos, 50 MB each. |
 | `public-review` | Ask TikTok to check the app | Switch to **Production**. **App review**: check `tiktokReviewText` is there (one line per scope), swap in the real demo video, **Save**, **Submit for review**. Then pick the status here: Draft / In review / Live / Not approved (`PATCH gate app_review`). Not approved: read **Review comments**, fix, submit again. |
 | `public-live-keys` | When it says Live | If the Production keys differ from the Sandbox ones, paste them and press **Connect again**. |
 | `public-audit` | Ask to post publicly | Open developers.tiktok.com/application/content-posting-api and fill in the form. Until it passes, every post is "Only me". TikTok may say no to a tool only you use; then posts stay private. |
@@ -2192,7 +2196,7 @@ credits" — status "Works now. Posts are public straight away." / empty → "Yo
 `tiktokReviewText` (copy chip, five lines, one per scope on the app; connect asks for user.info.basic, video.publish,
 video.list, the money grant adds user.info.stats, and nothing asks for video.upload, so its line says so):
 "user.info.basic (Login Kit): connect my TikTok and show my name and picture in Clip Factory.
-video.publish: post clips I approved with Keep straight to my own TikTok (Direct Post).
+video.publish: post clips I approved with Upload straight to my own TikTok (Direct Post).
 video.upload: comes with Content Posting API. Clip Factory does not ask for it; it only uses Direct Post.
 video.list: show the views and likes of my own posts on my Clip Factory dashboard.
 user.info.stats: show my follower and like totals on my Clip Factory money tile, only after I say OK."
@@ -2490,28 +2494,49 @@ youtube `{ "checkSeconds": 30, "maxChecks": 60, "chunkMb": 8 }`; tiktok `{ "chec
 
 ### 17.8 TikTok "Post to TikTok" sheet (Content Sharing Guidelines; web + api)
 
-On Keep, when TikTok is in `settings.platforms` and connected, a sheet opens before the confirm request: the creator
-nickname (`GET /v1/accounts/tiktok/creator-info`, fetched each time), a privacy dropdown with **no default** (only
-`privacyOptions`; "Only me" when that is all), switches Comments / Duet / Stitch (off by default, greyed when disabled
-by the creator), a **Commercial content** switch (off) with **Your brand** / **Branded content** (one required when on;
+On Upload, when TikTok is one of the chosen places (§33; an older client: in `settings.platforms` and connected), a
+sheet opens before the confirm request: the creator nickname (`GET /v1/accounts/tiktok/creator-info`, fetched each
+time), a **Who can see it** dropdown with **no default** (the app's own dropdown, below), switches Comments / Duet /
+Stitch (off by default, greyed when disabled by the creator, plus one **Turn all on** button), a **Commercial content** switch (off) with **Your brand** / **Branded content** (one required when on;
 label "Promotional content" / "Paid partnership"; branded cannot be "Only me"), the sentence "By posting, you agree to
 TikTok's Music Usage Confirmation" (+ "Branded Content Policy" when branded), a video preview and the editable
-caption. Keep stays disabled until a privacy is chosen. Confirm body gains `"tiktok": { "privacyLevel", "disableComment",
+caption. Upload stays disabled until a privacy is chosen. Confirm body gains `"tiktok": { "privacyLevel", "disableComment",
 "disableDuet", "disableStitch", "brandContent", "brandOrganic" }` (validated; stored on the TikTok Post as internal
-`postOptions`); a `queued` TikTok post without it → 400 "Pick who can see it on TikTok.". After Keep the toast says
+`postOptions`); a `queued` TikTok post without it → 400 "Pick who can see it on TikTok.". After Upload the toast says
 "TikTok can take a few minutes to process your clip." **Try again** on a failed clip whose TikTok post failed with
 "Pick who can see it on TikTok again, then press Try again." opens this sheet first, then sends `{ "tiktok": {...} }`
 in the confirm body; the API replaces that post's `postOptions` (mock `_try_again` does the same).
 
+**Who can see it: the owner's ask and TikTok's rules (owner request, 2026-11-20; ADR-57).** The owner asked for no
+options and Everyone every time, and to hide Comments, Duet and Stitch and force them on. TikTok's Content Sharing
+Guidelines (developers.tiktok.com/doc/content-sharing-guidelines, updated 4 Aug 2026) do not allow that: "Users must
+manually select the privacy status from a dropdown and there should be no default value", the options are exactly
+`privacy_level_options`, and while the app is not audited only `SELF_ONLY` is allowed; Comments, Duet and Stitch must
+be shown and none may be on by default. So the closest thing allowed:
+
+* **Dropdown, the app's own** (`components/Dropdown.tsx`; never the OS list): a soft-fill button showing "Pick who can
+  see it" until the owner picks, opening a glass `listbox` of exactly `privacyOptions` (minus Only me when branded),
+  ordered Everyone ("Anyone on TikTok"), Followers, Friends, Only me ("Just you"). When `SELF_ONLY` is the only option
+  the line "TikTok keeps posts private until it approves your app." shows under it. When Branded content leaves
+  nothing: "Branded content can't be Only me. Turn off Branded content." The hint under the actions reads "Tap who
+  can see it to turn on Upload."
+* **Turn all on** (soft-fill button): switches on Comments, Duet and Stitch in one tap (ones the creator's TikTok turned
+  off stay off). It is the owner's own tap; each switch stays visible and changes on its own.
+* **Use my settings** (soft-fill button, §33.4): puts the owner's TikTok preset in with one tap (privacy only when
+  TikTok offers it now; with only `SELF_ONLY` offered, Only me). Tapping it on the Review card does the same before
+  the sheet opens. Nothing is picked until he taps.
+* Commercial content (off) with Your brand / Branded content ("Paid partnership"), the Branded Content Policy line and
+  the Music Usage Confirmation line are unchanged.
+
 The sheet (and the shared confirm `Sheet` in `components/Sheet.tsx`) is drawn with `createPortal` on `document.body`,
-so its backdrop covers the whole screen (tab bar, sidebar and Ask included; toasts stay on top, so a failed Keep's
+so its backdrop covers the whole screen (tab bar, sidebar and Ask included; toasts stay on top, so a failed Upload's
 error shows) even though the card that opens it is
 glass (`backdrop-filter`); a page keeps no transform of its own (pages have no entrance, §20.16). It
 is a real modal: focus moves in once on open (typing in the caption never loses the caret), Tab and Shift+Tab wrap
-inside it, Escape closes it, and on close the focus goes back to the Keep that opened it. A clip longer than the
+inside it, Escape closes it, and on close the focus goes back to the Upload that opened it. A clip longer than the
 creator's `maxDurationSec` (a limit of 0 means TikTok did not say: it does not block, the publisher checks again)
-or a creator-info error never leaves a dead end: the callout says what to do next ("… To keep it for your other
-apps, turn TikTok off in Where clips go, tap Keep, then turn TikTok back on.") with a link to `/settings/posting/where`, and the error
+or a creator-info error never leaves a dead end: the callout says what to do next ("… To upload it to your other
+places now, turn TikTok off above and tap Upload.", §33), and the error
 callout also has **Ask TikTok again**, which fetches the creator info again.
 
 ### 17.9 Infra (Terraform + scripts)
@@ -3261,9 +3286,11 @@ on a platform's setup page) becomes a doc on that page, and the element there ca
 | `job-progress` | where is my job, how long, cancel | Open Jobs `/jobs` |
 | `what-is-clip-factory` | what the app is and what it does, in two sentences | Go to Home `/` → `paste-link` |
 | `job-failed` | job failed → **Try again** (starts over, uses the saved video) | Open Jobs `/jobs` → `failed-job` (the failed row in the Jobs list), `try-again` |
-| `review-keep` | what **Keep** does: it queues the clip for posting to your platforms; nothing posts without Keep | Open Review `/review` → `keep` |
+| `review-keep` | what **Upload** does: it posts the clip to every place picked under Upload to; nothing posts without Upload | Open Review `/review` → `upload` |
+| `review-upload-to` | Upload to many places at once; places not set up do not show | Open Review `/review` → `upload-to` |
+| `review-my-settings` | Use my settings and More details; never made for kids | Open Review `/review` → `use-my-settings`; Open My settings |
 | `review-throw-away` | **Throw away** + 8 s **Undo** | Open Review `/review` → `throw-away` |
-| `review-captions` | change a caption per platform before Keep | Open Review `/review` → `captions` |
+| `review-captions` | change a caption per platform before Upload | Open Review `/review` → `captions` |
 | `clip-posting-failed` | Failed post → **Try again** on Review | Open Review `/review` |
 | `library-where` | "where are my clips / videos": Library holds every clip | Open Library `/library` → `nav-library` |
 | `clip-performance` | see how a clip does (Library → tap the clip) | Open Library `/library` |
@@ -4060,12 +4087,14 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | Review.tsx:144 See how it does, :159 Make clips, :383 source times, :501 See the job | press | |
 | Review.tsx:428 Checks before posting (summary) | state | chevron turns 90° (points down when open) |
 | Review.tsx:476 Throw away | `throw` | the card's leaving motion stays; Undo → `.is-returning` on the card |
-| Review.tsx:479 **Keep** (Vermilion) / Try again | `keep` / `retry` | `playOnClick={false}`: plays when a keep really starts, not on the tap that opens the TikTok sheet; a refused Keep (caption too long) only shakes; confetti and leaving card stay; success sound only when the keep succeeds; `fail()` on error |
+| Review.tsx **Upload** (Vermilion) / Try again | `send` / `retry` | `playOnClick={false}`: plays when an upload really starts, not on the tap that opens the TikTok sheet; a refused Upload (caption too long, nothing picked) only shakes; confetti and leaving card stay; success sound only when the upload succeeds; `fail()` on error (§33) |
+| UploadTo.tsx Upload to chips | `tick` | soft-fill toggle chips with `aria-pressed` and a check mark; the tick plays when a chip turns on |
+| Review.tsx Use my settings | `tick` | plays with its toast |
 | CaptionTabs.tsx:100 caption tabs | `toggle` | label bump |
 | TikTokSheet.tsx:93 backdrop, :99 Close, :197 Not now, :174/181 policy links | press | |
-| TikTokSheet.tsx:136 Who can see it (select), :159/164 checkboxes (native) | none | native controls |
+| TikTokSheet.tsx Who can see it (app dropdown), Turn all on, Use my settings | press | the dropdown's chevron turns; checkboxes (native) none |
 | TikTokSheet.tsx:152-155 Toggles | none | switch thumb |
-| TikTokSheet.tsx:200 Keep / Try again | `send` / `retry` | it posts to TikTok |
+| TikTokSheet.tsx Upload / Try again | `send` / `retry` | it posts to TikTok |
 
 **APPLY (b): `screens/library`, `screens/clip`, `features/help` (and `lib/markdown.ts` links)**
 
@@ -6500,3 +6529,114 @@ only where notifications can be turned on right there; Not now or turning them o
   failing device, and no secret in the logs.
 * `infra/modules/notify/tests/notify.tftest.hcl`: write-only key, `prevent_destroy`, the filter, no delete rights.
 * `web/test/notifySettings.test.tsx`, `web/test/swPush.test.ts`, `web/test/badge.test.ts`, `web/e2e/notify.spec.ts`.
+## 33. Upload to many places (owner request, 2026-11-20)
+
+The owner, on a Review card: "X isn't set up yet, so X should not be an option there", "I want to select as many as I
+want, and once I hit confirm it should upload to those platforms", "Keep is not a good answer, it should just be
+Upload", and later "every platform I upload to should follow best practice so it is as monetized as possible and shown
+to as many people as possible. I sometimes swear in videos, so NEVER mark anything as made for kids. One button that
+ticks exactly the settings I want, and a More details that opens every option". Decision record: ADR-57.
+
+### 33.1 What it was before
+
+The bar under "Checks before posting" was the caption tab strip (a pick-one `<Glide>` over all five platforms), not a
+destination picker. Keep posted to every platform in Where clips go: connected ones `queued`, the rest
+`pending_integration` (so X got a post that waited forever). One failed platform on an otherwise posted clip had no
+Try again. The X tab showed the X mark and the letter "X" ("X X").
+
+### 33.2 Review card (web)
+
+* **Upload to** (`screens/review/UploadTo.tsx`): one soft-fill toggle chip (`.check-chip.upload-chip`, `aria-pressed`,
+  a check mark when on, no border; not a Glide: more than one can be on) per place that is **set up** (`ready` from
+  `GET /v1/setup`), in STATS_ORDER. A place not set up gets no chip; one quiet link under the row names them all
+  ("Set up X to upload there too.", to `/settings/posting/setup/{first}`), hidden when all five are ready. With
+  nothing set up, the row is a callout ("Nothing is set up yet. Upload saves it, and it goes up once you set up a
+  place.") and Upload works the old way (no `platforms`).
+* **Which start on (per device):** the last Upload's choice in localStorage `cf-upload-to` (saved on Upload, not on
+  each tap) minus places no longer ready; with none saved, Where clips go minus places not ready; if that leaves
+  nothing, every ready place.
+* **Caption tabs** show only the chosen places (still a pick-one Glide tablist: it picks which caption is edited). A
+  place turned off keeps its text. Limits unchanged; the too-long check (`captionsTooLong` / `tabsTooLong`) counts
+  only chosen places. The tab shows its mark, and its name only when open; X's name is screen-reader only (its mark
+  reads "X"). `aria-label` always names the place.
+* **Checks before posting** summary: the title may shrink (`min-width: 0`), the score never does (`flex: 0 0 auto`,
+  `nowrap`), so they never overlap (e2e at 320 px).
+* **Upload** (was Keep): "Upload to 4", or "Upload to YouTube" for one; disabled with "Pick at least one place." when
+  none is on. "Going to: YouTube · TikTok · Instagram · Facebook" sits right above the actions and describes the
+  button (`aria-describedby`). Vermilion on the top card only, bottom right (thumb zone), motion `send`.
+* **Use my settings** (soft-fill button): puts the owner's preset (§33.4) on every chosen place in one tap, TikTok's
+  choices included (his tap, so TikTok's "no default" rule holds). Toast "Your settings are on for …".
+* **More details** (`<details>`): every option for each chosen place, filled from My settings: YouTube (Who can see
+  it as a Glide segmented bar, Category dropdown, Tell my subscribers, Let other sites show it, Made with AI to look
+  real, a fixed "Made for kids: No. Clip Factory never marks a clip as made for kids." line, and the tip "swearing in
+  the first seconds or in the title can limit ads on YouTube"), Instagram (Also show it in my main feed), Facebook
+  (Reels on a Page are public: nothing to pick), X (Who can reply). TikTok's own choices stay on its sheet (§17.8),
+  where TikTok wants them seen each time; More details only sums them up.
+* Toast after Upload: "Uploading to 4 places!" / "Uploading to YouTube!"; with TikTok, also "TikTok can take a few
+  minutes to process your clip."
+
+### 33.3 API (additive)
+
+`POST /v1/clips/{clipId}/confirm` body gains two optional fields:
+
+* `"platforms": string[]` — non-empty, no repeats, known platforms, each with a connected account, else 400 with a
+  plain sentence ("X is not set up yet. Turn it off, then tap Upload.", "Pick at least one place to upload to.",
+  "YouTube is in the list twice. Pick each place once."). It need not be in `settings.platforms`. On a `review` clip
+  the clip gets `uploadTo` (STATS_ORDER; public, read-only) and posts for exactly those places; `create_for_clip`
+  (and so the flow's `ensure-posts`) loops over `uploadTo` when present, `settings.platforms` otherwise. TikTok's
+  sheet choices are needed only when `tiktok` is in the list. On a `posted` or `failed` clip, `platforms` names the
+  failed posts to try again: only those go back to `queued` (fresh `publishHandle`, no `error`), `flowRun + 1`, a
+  `failed` clip becomes `confirmed`, a `posted` one stays `posted`; naming a place with no failed post changes nothing.
+* `"options": { "youtube"?, "instagram"?, "x"? }` — per-clip choices (shapes of §33.4, merged over the defaults,
+  validated; any made-for-kids key → 400 "Clip Factory never marks a clip as made for kids."), stored on that
+  platform's post as internal `postOptions`. Publishers: YouTube `privacyStatus`, `categoryId`, `embeddable`,
+  `containsSyntheticMedia` from them (else the old `youtubePrivacy` / Gaming), `selfDeclaredMadeForKids` always
+  `false`, `notifySubscribers=false` on the upload URL only when turned off; Instagram `share_to_feed`; X
+  `reply_settings` (nothing sent for everyone).
+
+Without either field (older clients) everything works exactly as before. Response unchanged (`{clip, posts}`).
+Types: `Clip.uploadTo?`, `confirmClip(clipId, captions?, tiktok?, platforms?, options?)`, `uploadClip` (was
+`keepClip`). No infrastructure, Terraform or table change: one new attribute on new clip items and new optional
+`postOptions` on new posts. Existing kept and posted clips and their posts are untouched.
+
+### 33.4 My settings (`settings.postPreset`)
+
+Settings › Posting › **My settings** (`/settings/posting/my-settings`), one section per place, X included (used once X
+is set up). Stored in Settings as `postPreset` (additive; an owner who never saved one reads the defaults). Defaults,
+from each platform's own docs, for reach:
+
+| Place | Default | Choices |
+|---|---|---|
+| YouTube | `{ privacy: "public", category: "20" (Gaming), embeddable: true, notifySubscribers: true, syntheticMedia: false }` | privacy public/unlisted/private; category 20/24/23/22/17; three switches. **No made-for-kids field**: always No |
+| TikTok | `{ privacy: "PUBLIC_TO_EVERYONE", comments: true, duet: true, stitch: true, commercial: false, aigc: false }` | used by Use my settings; the sheet still shows every choice and limits privacy to what TikTok offers now |
+| Instagram | `{ shareToFeed: true }` | Reel also in the main feed |
+| Facebook | `{}` | Page Reels are public |
+| X | `{ replies: "everyone" }` | everyone / following / mentionedUsers / verified |
+
+The page says plainly that whether a clip earns money (YouTube Partner Program, TikTok Creator Rewards, …) is up to
+each app, not these switches. `PUT /v1/settings { postPreset }` merges each platform given over the defaults and
+refuses unknown keys and any made-for-kids key.
+
+### 33.5 TikTok sheet
+
+See §17.8: the app's own dropdown with no default (TikTok's guidelines ask for a dropdown and no default), **Turn all
+on**, **Use my settings**, Commercial content with Your brand / Branded content (paid partnership), all visible. The
+big button says **Upload**. The sheet opens only when TikTok is one of the chosen places.
+
+### 33.6 Library and the clip page
+
+Each post row says "Uploading…" (`queued`), "Uploaded" (+ Open), "Didn't work. {reason}" (`failed`, the existing
+friendly sentence) with its own **Try again** (sends `platforms: [p]`; TikTok's "pick again" error opens the sheet
+first), or "Waiting for setup" (`pending_integration`, older clips). Toast "Trying Facebook again!".
+
+### 33.7 Words
+
+"Upload" replaces "Keep" wherever it meant posting (Review, Home's "Nothing gets posted until you tap Upload.",
+Library, Jobs' chip "Uploading", help and Ask, the TikTok app-review text, docs). "Keep it", "Keep editing", "Keep the
+saved keys" and the like stay: they mean something else. Notifications on main say nothing about Keep; the
+`feature/iphone-notifications` branch should say "Uploaded".
+
+### 33.8 Tests
+
+`api/tests/test_upload_to.py`; `web/test/upload.test.ts` (was keep.test.ts), `reviewSheets.test.tsx`;
+`web/e2e/upload-to.spec.ts`, `tiktok-sheet.spec.ts`, and the Review specs.

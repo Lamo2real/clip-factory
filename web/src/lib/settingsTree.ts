@@ -154,7 +154,7 @@ export const TREES: Tree[] = [
   {
     slug: "posting",
     name: "Posting",
-    line: "Where your kept clips go.",
+    line: "Where your clips go, and how.",
     icon: "share",
     branches: [
       {
@@ -194,14 +194,52 @@ export const TREES: Tree[] = [
       {
         slug: "where",
         name: "Where clips go",
-        line: "Pick the places your kept clips are posted.",
+        line: "Pick the places your clips go to first.",
         icon: "check",
         apples: [
           {
             id: "post-to",
-            name: "Post kept clips to",
+            name: "Upload clips to",
             leaf: "Pick at least one place.",
             words: ["platforms", "YouTube", "Instagram", "Facebook", "TikTok", "X"],
+          },
+        ],
+      },
+      {
+        slug: "my-settings",
+        name: "My settings",
+        line: "How each clip goes up: public, open for comments, never made for kids.",
+        icon: "sparkle",
+        apples: [
+          {
+            id: "my-settings-youtube",
+            name: "YouTube",
+            leaf: "Public, Gaming, tells your subscribers. Never made for kids.",
+            words: ["YouTube", "preset", "made for kids", "kids", "category", "public", "subscribers", "embed", "monetize", "money", "ads", "best practice"],
+          },
+          {
+            id: "my-settings-tiktok",
+            name: "TikTok",
+            leaf: "Everyone can see it, comments, Duet and Stitch on. You still tap it in on each clip.",
+            words: ["TikTok", "preset", "privacy", "everyone", "duet", "stitch", "comments", "paid partnership", "branded"],
+          },
+          {
+            id: "my-settings-instagram",
+            name: "Instagram",
+            leaf: "Reels also show in your main feed.",
+            words: ["Instagram", "preset", "feed", "reels", "share to feed"],
+          },
+          {
+            id: "my-settings-facebook",
+            name: "Facebook",
+            leaf: "Reels on your Page are public. Nothing to pick.",
+            words: ["Facebook", "preset", "public", "reels", "page"],
+          },
+          {
+            id: "my-settings-x",
+            name: "X",
+            leaf: "Everyone can reply. Works once X is set up.",
+            words: ["X", "twitter", "preset", "replies", "reply", "everyone"],
           },
         ],
       },

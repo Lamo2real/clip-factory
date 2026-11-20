@@ -10,7 +10,7 @@ this file is the full reference. The code lives in `web/`; tokens are CSS custom
 2. **Glass, never solid.** Every surface lets the backdrop show through.
 3. **Nothing ever overflows.** Text wraps or truncates inside its box at every width from 320 px.
 4. **Delight on the moments that matter.** Confirm, a finished job, a new skill. Not on every click.
-5. **Plain English a child can follow.** Labels say what happens in everyday words: "Keep", "Throw away",
+5. **Plain English a child can follow.** Labels say what happens in everyday words: "Upload", "Throw away",
    "Make clips", never "Submit". See the [kid-proof checklist](#kid-proof-checklist).
 
 ## Colour tokens
@@ -369,7 +369,7 @@ unless its name already says it all.
 | Upload drop zone | Dashed glass area, drag and drop on desktop, tap to pick on phones, progress bar while uploading. |
 | Job progress | The ten steps as a vertical list with status icons; the running step pulses; the overall progress bar on top. |
 | Clip card | 9:16 cover with play, hook, moment-type chip, score, duration, checklist summary. In Library it shows total views when measured and its whole top (cover and hook, never just the one-line hook) opens the clip's [performance page](#clip-performance-page); its post rows list the platforms in the one app-wide order and use the clip page's status words ("Posting", "Waiting for connection"); in Review a kept clip shows "See how it does". |
-| Clip review | Vertical player, captions per platform in tabs (editable), checklist, Keep (primary) and Throw away (ghost). All five caption tabs stay in sight: on a narrow card the tabs that are not open show only their platform mark, and a tab whose caption is too long shows a red dot. Two columns only when the card itself is at least 820 px wide, with the video on the card's vertical centre line, scrolling with the page (never sticky); once Throw away and Keep wrap, each fills the row. Overlays opened from a card (Post to TikTok, the small confirm sheet) are drawn on `document.body`, trap Tab and give the focus back on close (CONTRACTS §12.4, §17.8). |
+| Clip review | Vertical player, checklist, **Upload to** chips (only places that are set up; any number on; §33), **Use my settings** and **More details**, captions per chosen place in tabs (editable), Upload (primary, "Upload to 4") and Throw away (ghost). All five caption tabs stay in sight: on a narrow card the tabs that are not open show only their platform mark, and a tab whose caption is too long shows a red dot. Two columns only when the card itself is at least 820 px wide, with the video on the card's vertical centre line, scrolling with the page (never sticky); once Throw away and Keep wrap, each fills the row. Overlays opened from a card (Post to TikTok, the small confirm sheet) are drawn on `document.body`, trap Tab and give the focus back on close (CONTRACTS §12.4, §17.8). |
 | Skill row | Glass row that opens the skill's page: icon, title, description (two lines), **Always used** badge (green, on every row) and **Built in** badge, then where it came from in words (never ".md" or a size): "Written by you · Changed 16 Nov", "From a file · Changed 16 Nov", "From a file with extra files · Changed 16 Nov" (a `.zip`; its page says "From a file with {n} extra files") or "Comes with Clip Factory". No switch, no delete on the row. See [Skill pages](#skill-pages). |
 | Toggle, select, inputs | 16 px text, glass background, vermilion focus ring `outline: 2px solid var(--vermilion); outline-offset: 2px`. |
 | Toast | Glass, top on desktop, above the tab bar on phones, auto-hides after 4 s, `role="status"`. The Undo toast stays 8 s and shows a shrinking ring around its Undo button. |
@@ -830,7 +830,7 @@ this is the designer's summary.
   out before the edge; it never looks swallowed.
 - **Moving around and closing stay quiet.** Links, tabs, back, Close, Cancel, Not now keep the press feedback only.
 - **Failure never looks like success.** A failed action shakes its glyph gently (±4 px, vermilion for the first half,
-  320 ms) with the error sound once; no ring, tick, confetti or success sound. A refused action (Keep with a caption
+  320 ms) with the error sound once; no ring, tick, confetti or success sound. A refused action (Upload with a caption
   that is too long) only shakes.
 - **Undo** plays the motion backwards on the button (360 ms), or, when the button is gone, the item that comes back
   fades and grows in (`.is-returning`).
@@ -860,8 +860,8 @@ so its glyph fades out before it reaches the button's words; only the icon-only 
 
 | Kind | Glyph | What it does | Used by (examples) |
 |---|---|---|---|
-| `send` | paper plane or the button's icon | flies off up and right with a trail, a fresh one fades back | Make clips, Ask Send, TikTok Keep, Ask Clip Factory |
-| `keep` | heart | pops and floats up with a bone ring | Review Keep (when the keep really starts) |
+| `send` | paper plane or the button's icon | flies off up and right with a trail, a fresh one fades back | Make clips, Ask Send, Review Upload, TikTok Upload, Ask Clip Factory |
+| `keep` | heart | pops and floats up with a bone ring | (kept for later use; Review Upload plays `send` since §33) |
 | `add` / `remove` | plus / minus | plus turns 90° and pops; minus squashes | steppers, Write a skill |
 | `delete` | bin | tips and drops, fresh one | Remove, skill Delete |
 | `throw` | bin | tossed up and away from the label, fresh one | Throw away |
@@ -1179,7 +1179,7 @@ changes one is checked against this list.
 
 **One next step**
 - [ ] Exactly one vermilion button on the screen, and it is the thing to do next. (Only the update bar may add a second.)
-- [ ] The button says what happens, with an icon and a word: "Make clips", "Keep", "Throw away", "Try again".
+- [ ] The button says what happens, with an icon and a word: "Make clips", "Upload", "Throw away", "Try again".
 
 **Big and clear**
 - [ ] Every tap target ≥ 48 × 48 px on phones, with at least 8 px between neighbours.
@@ -1193,7 +1193,7 @@ changes one is checked against this list.
   | Instead of | Say |
   |---|---|
   | Submit, Start job | Make clips |
-  | Confirm | Keep |
+  | Confirm / Keep | Upload |
   | Decline, Delete | Throw away |
   | Retry | Try again |
   | Upload | Pick a video |

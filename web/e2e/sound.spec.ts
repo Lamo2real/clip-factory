@@ -55,8 +55,8 @@ test.describe("on a phone", () => {
   test("a touch scroll that starts on an action button plays neither its motion nor a sound (§20.9)", async ({ page }) => {
     await page.goto("/review");
     await settle(page);
-    const keep = page.locator(".review-card").first().getByRole("button", { name: "Keep", exact: true });
-    await expect(keep).toHaveAttribute("data-act", "keep");
+    const keep = page.locator(".review-card").first().getByRole("button", { name: /^Upload( to .+)?$/ });
+    await expect(keep).toHaveAttribute("data-act", "send");
     await keep.scrollIntoViewIfNeeded();
     const box = (await keep.boundingBox())!;
     await page.evaluate(() => {
@@ -131,7 +131,7 @@ test("enabled controls tap, switched-off controls deny, errors deny", async ({ p
   await card.getByRole("tab", { name: "X" }).click();
   await card.getByLabel("X caption").fill("x".repeat(300));
   await page.evaluate(() => (window.__cfSoundLog = []));
-  await card.getByRole("button", { name: "Keep", exact: true }).click();
+  await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
   await expect(page.getByText(/longer than its platform allows/)).toBeVisible();
   await expect.poll(() => log(page)).toEqual(["tap", "deny"]);
 });

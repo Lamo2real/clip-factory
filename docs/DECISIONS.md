@@ -1426,3 +1426,25 @@ Web Push, the app icon badge and one replaceable notification per video instead 
   notification (iPhone has no silent push); if a real iPhone shows that the same tag does not replace the card, Every
   step stays off by default and the important three still arrive. The Mac app needs a notification plugin in a later
   signed release; Mac Safari and Chrome work now. Push services see only encrypted payloads.
+
+## ADR-57 Upload replaces Keep; the owner picks places per clip; TikTok privacy stays one explicit tap
+
+Upload to many places at once, with the owner's own preset, inside each platform's rules.
+
+- **Context.** The owner read the caption tab strip as a pick-one platform picker, saw X offered though X was not set
+  up, and asked for "Upload" instead of "Keep", for any number of places per clip, for best-practice reach and money
+  settings on every platform with one button ("Use my settings") and every option under "More details", and never
+  "made for kids" (he swears in some clips). On TikTok he asked for no options at all and Everyone every time.
+- **Options.** (1) Keep posting to Where clips go and only rename the button; (2) a per-clip destination list sent
+  with Upload, defaulting to the places that are set up, plus a stored preset; (3) for TikTok, pre-pick Everyone and
+  hide Comments/Duet/Stitch as asked.
+- **Decision.** (CONTRACTS §33) Option 2: `platforms` and per-clip `options` on Confirm (additive; older clients work
+  as before), `uploadTo` on the clip, Try again per place, `settings.postPreset` with best-practice defaults and no
+  made-for-kids field at all (YouTube's flag is always false). Option 3 is not allowed: TikTok's Content Sharing
+  Guidelines (updated 4 Aug 2026) require the creator to pick the privacy from a dropdown with no default value, from
+  `privacy_level_options` (only "Only me" until TikTok audits the app), and to see Comments, Duet and Stitch off by
+  default. So the TikTok sheet keeps a dropdown (the app's own, never the OS list) with nothing picked, adds "Turn all
+  on" and "Use my settings" as the owner's own one-tap actions, and stays visible on every TikTok upload.
+- **Consequences.** One tap more for TikTok than the owner wanted, and Everyone cannot be picked at all until TikTok
+  approves the app; everything else is one tap. Whether clips earn money stays each platform's call; the app says so.
+  No table or infrastructure change; existing clips and posts are untouched.
