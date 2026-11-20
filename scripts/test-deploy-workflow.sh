@@ -148,5 +148,17 @@ else
   not_ok "the Ask check must read ask_enabled = false as off and give the Model catalog steps (expr: ${enabled_expr:-none})"
 fi
 
+# 10. The agent image is built on native ARM64, never under QEMU: its PO token self-check runs Deno, which crashes at
+#     random with SIGILL (exit -4) under emulation. Both the deploy's image build (infra) and CI's (agent) are checked.
+ci="${CI_YML:-${root}/.github/workflows/ci.yml}"
+ci_agent="$(awk '$0 == "  agent:" { on = 1; print; next } on && /^  [A-Za-z0-9_-]+:$/ { exit } on { print }' "$ci")"
+if grep -Eq '^    runs-on: ubuntu-24.04-arm$' <<<"$infra" && ! grep -q 'setup-qemu-action' <<<"$infra" \
+  && grep -Eq '^    runs-on: ubuntu-24.04-arm$' <<<"$ci_agent" && ! grep -q 'setup-qemu-action' <<<"$ci_agent" \
+  && grep -q 'agent/Dockerfile' <<<"$ci_agent" && grep -q '^RUN python -m clipfactory_agent.pot$' "${root}/agent/Dockerfile"; then
+  ok "the agent image (and its PO token self-check) is built on native ARM64 in CI and in the deploy, never under QEMU"
+else
+  not_ok "deploy.yml infra and ci.yml agent must run on ubuntu-24.04-arm without setup-qemu-action, and the Dockerfile must run the PO token self-check"
+fi
+
 echo "${passed} passed, ${failed} failed"
 [ "$failed" -eq 0 ]

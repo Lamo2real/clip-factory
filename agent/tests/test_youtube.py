@@ -666,3 +666,20 @@ def test_redact_urls_googlevideo_and_proxy_login() -> None:
     out = redact_urls("Unable to connect to proxy http://user:s3cret@proxy.example:8080")
     assert "s3cret" not in out and "user:" not in out and "http://<redacted>@proxy.example:8080" in out
     assert redact_urls("https://www.youtube.com/watch?v=abc") == "https://www.youtube.com/watch?v=abc"
+
+
+def test_pot_providers_line_keeps_unavailable_with_its_provider() -> None:
+    # The tag list has a comma of its own: splitting the line on every comma once hid "unavailable" from the check.
+    line = (
+        "[debug] [youtube] [pot] PO Token Providers: bgutil:http-2.0.2 (external), "
+        "bgutil:script-node-2.0.2 (external, unavailable), bgutil:script-deno-2.0.2 (external, unavailable)"
+    )
+    got = pot.providers_of(line)
+    assert got == {
+        "bgutil:http-2.0.2": {"external"},
+        "bgutil:script-node-2.0.2": {"external", "unavailable"},
+        "bgutil:script-deno-2.0.2": {"external", "unavailable"},
+    }
+    ok = pot.providers_of("PO Token Providers: bgutil:http-2.0.2 (external), bgutil:script-deno-2.0.2 (external)")
+    assert "unavailable" not in ok["bgutil:script-deno-2.0.2"]
+    assert pot.providers_of("no providers here") == {}
