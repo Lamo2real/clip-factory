@@ -479,3 +479,32 @@ run "browser_preflight_is_public" {
     error_message = "Every other /v1 route still needs the JWT."
   }
 }
+
+# docs/CONTRACTS.md §32.3: with the VAPID secret, cf-prod-api may only read it (public key, "Send a test").
+run "push_key_is_read_only" {
+  command = plan
+
+  variables {
+    vapid_secret_name = "cf-test/notify/vapid"
+    vapid_secret_arn  = "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/notify/vapid-AbCdEf"
+  }
+
+  assert {
+    condition     = aws_lambda_function.fn["api"].environment[0].variables.PUSH_VAPID_SECRET == "cf-test/notify/vapid" && aws_lambda_function.fn["api"].environment[0].variables.PUSH_SUBJECT == "https://app.example.test"
+    error_message = "cf-test-api gets the VAPID secret's name and the subject."
+  }
+
+  assert {
+    condition     = one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Action if try(s.Sid, "") == "VapidKey"]) == ["secretsmanager:GetSecretValue"]
+    error_message = "cf-test-api may only read the VAPID key."
+  }
+}
+
+run "push_off_without_a_key" {
+  command = plan
+
+  assert {
+    condition     = !contains(keys(aws_lambda_function.fn["api"].environment[0].variables), "PUSH_VAPID_SECRET") && length(regexall("VapidKey", aws_iam_role_policy.fn["api"].policy)) == 0
+    error_message = "Without the VAPID secret there is no push environment and no permission."
+  }
+}

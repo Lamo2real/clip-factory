@@ -46,7 +46,12 @@ DEFAULTS: dict[str, Any] = {
     "followPaused": False,
     "followDailyMax": 0,
     "followMinMinutes": 30,
+    # §32: which notifications the owner's devices get. Step updates are off by default: on an iPhone every push must
+    # show, so only the owner can ask for one each step. "Picked up again" is off too: the job flow resumes a stalled job by
+    # itself (up to 6 times a run) and the owner has nothing to do.
+    "notify": {"ready": True, "stopped": True, "resumed": False, "steps": False},
 }
+NOTIFY_KEYS = ("ready", "stopped", "resumed", "steps")
 # The Clip Factory colours before the bottle-green look (ADR-43). An owner who never changed them has exactly this
 # trio stored; it reads back as today's default so the backdrop follows the new look. Read time only: no migration
 # job; the mapped value is written only when the owner next saves settings, as every default is. Any other choice (a
@@ -131,6 +136,8 @@ def _check_field(field: str, value: Any) -> Any:
             return value
         case "backgroundColours":
             return _colours(value)
+        case "notify":
+            return _notify(value)
         case "clipModel":
             if not isinstance(value, str) or value not in CLIP_MODELS:
                 raise bad_request("Pick one of the AI models in the list.")
@@ -164,6 +171,13 @@ def _colours(value: Any) -> list[str]:
     if not 1 <= len(out) <= MAX_COLOURS:
         raise bad_request(f"Pick 1 to {MAX_COLOURS} colours.")
     return out
+
+
+def _notify(value: Any) -> dict[str, bool]:
+    """``{ready, stopped, steps}`` booleans; a missing one keeps its default."""
+    if not isinstance(value, dict) or any(k not in NOTIFY_KEYS for k in value):
+        raise bad_request("Notifications must say on or off for: clips ready, stopped, picked up, every step.")
+    return {k: validate.boolean(value.get(k, DEFAULTS["notify"][k]), k) for k in NOTIFY_KEYS}
 
 
 def _sound_number(value: Any, label: str) -> int:

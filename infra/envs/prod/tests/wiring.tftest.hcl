@@ -43,7 +43,7 @@ run "whole_stack_plans" {
 
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
-      "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money", "ask",
+      "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money", "ask", "notify",
     ])
     error_message = "Every function except the WebSocket authorizer is watched for errors."
   }
@@ -273,5 +273,16 @@ run "ask_assistant_is_wired" {
   assert {
     condition     = local.youtube_proxy_secret_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/agent/youtube-proxy-??????" && local.youtube_proxy_secret == "cf-prod/agent/youtube-proxy"
     error_message = "The YouTube proxy permission covers exactly cf-prod/agent/youtube-proxy plus the 6-character suffix (docs/CONTRACTS.md §29.8)."
+  }
+}
+
+# docs/CONTRACTS.md §32: notifications. cf-prod-notify reads the stream next to cf-prod-broadcast and signs with the
+# cf-prod/notify/vapid key (its errors alarm is checked in whole_stack_plans).
+run "notifications_are_wired" {
+  command = plan
+
+  assert {
+    condition     = module.notify.notify_function_name == "cf-prod-notify" && module.notify.vapid_secret_name == "cf-prod/notify/vapid"
+    error_message = "cf-prod-notify and the cf-prod/notify/vapid secret exist."
   }
 }

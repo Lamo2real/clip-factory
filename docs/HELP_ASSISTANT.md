@@ -307,6 +307,7 @@ the generator with `--check` and fails when this table is out of date. Do not ed
 | settings | `/settings/look-and-feel/motion` |
 | settings | `/settings/look-and-feel/background` |
 | settings | `/settings/app/get-the-app` |
+| settings | `/settings/app/notifications` |
 | settings | `/settings/app/updates` |
 | settings | `/settings/app/ask` |
 | settings | `/settings/app/account` |

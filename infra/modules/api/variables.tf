@@ -215,6 +215,22 @@ variable "search_secret_arn" {
   }
 }
 
+variable "vapid_secret_name" {
+  type        = string
+  default     = ""
+  description = "cf-prod/notify/vapid (infra/modules/notify). Empty with vapid_secret_arn: the push routes answer 503."
+}
+
+variable "vapid_secret_arn" {
+  type        = string
+  default     = ""
+  description = "The VAPID key's secret ARN: cf-prod-api may only read it (GetSecretValue)."
+  validation {
+    condition     = (var.vapid_secret_arn == "") == (var.vapid_secret_name == "")
+    error_message = "vapid_secret_name and vapid_secret_arn go together: both set or both empty."
+  }
+}
+
 variable "log_retention_days" {
   type    = number
   default = 30

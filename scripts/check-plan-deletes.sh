@@ -32,6 +32,7 @@ hits="$(jq -r '
       "aws_cognito_user_pool": "it holds the owner'"'"'s sign-in",
       "aws_cognito_user": "it is the owner'"'"'s sign-in",
       "aws_secretsmanager_secret": "it holds keys or tokens the app needs",
+      "aws_secretsmanager_secret_version": "it is the key or token the app needs right now",
       "aws_s3_bucket": "it holds the owner'"'"'s videos, skills or the app",
       "aws_s3vectors_vector_bucket": "it holds the memory of the owner'"'"'s clips",
       "aws_s3vectors_index": "it holds the memory of the owner'"'"'s clips"

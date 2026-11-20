@@ -64,3 +64,24 @@ def test_built_in_skills_are_copied_into_the_package(tmp_path: Path) -> None:
     count = build._copy_skills(tmp_path / "builtin_skills")
     assert count >= 1
     assert sorted(p.name for p in (tmp_path / "builtin_skills").glob("*/SKILL.md")) == ["SKILL.md"] * count
+
+
+def _elf(machine: int) -> bytes:
+    return b"\x7fELF" + bytes([2, 1]) + bytes(12) + machine.to_bytes(2, "little") + bytes(40)
+
+
+def test_notify_handler_and_cryptography_ship() -> None:
+    build = _script()
+    assert "clipfactory_api/push/notify.py" in build.HANDLERS  # cf-prod-notify (§32.5)
+    assert "cryptography==" in build.REQUIRED_PACKAGES
+
+
+def test_only_arm64_linux_compiled_files_are_allowed() -> None:
+    build = _script()
+    rust = "cryptography/hazmat/bindings/_rust.abi3.so"
+    assert build._compiled_ok(rust, _elf(183))  # aarch64
+    assert not build._compiled_ok(rust, _elf(62))  # x86-64
+    assert not build._compiled_ok(rust, b"\xcf\xfa\xed\xfe" + bytes(60))  # a macOS file
+    assert build._compiled_ok("_cffi_backend.cpython-313-aarch64-linux-gnu.so")
+    assert not build._compiled_ok("_cffi_backend.cpython-313-darwin.so")
+    assert not build._compiled_ok("other/_thing.abi3.so", _elf(183))

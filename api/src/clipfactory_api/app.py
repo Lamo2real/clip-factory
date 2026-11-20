@@ -18,6 +18,8 @@ from .async_invoke import AsyncInvoker
 from .clock import Clock, utcnow
 from .flow_client import FlowClient
 from .log import log
+from .push.devices import VapidKey
+from .push.transport import Poster, urllib_post
 from .skills import BuiltinSkill, load_builtins
 from .vectors import Vectors
 
@@ -161,6 +163,9 @@ class App:
     ask: AskDeps = field(default_factory=AskDeps)
     # Follow creators (§24): built on first use from ``oauth`` (the same secrets and hooks URL); tests may set it.
     follow: FollowEnv | None = None
+    # Notifications (§32): the VAPID key from Secrets Manager (read on first use) and how a message is posted.
+    push: VapidKey = field(default_factory=VapidKey)
+    push_post: Poster = urllib_post
     _builtin_cache: list[BuiltinSkill] | None = field(default=None, repr=False)
 
     def builtin_skills(self) -> list[BuiltinSkill]:
@@ -252,7 +257,19 @@ def from_env() -> App:
         web_files=web_files,
         help=help_from_env(reg),
         ask=ask_from_env(reg, lambda_client),
+        push=_push_from_env(env, reg),
     )
+
+
+def _push_from_env(env: Any, reg: str) -> VapidKey:
+    """§32: off (every push route answers 503) until the VAPID secret's name is set."""
+    import boto3
+
+    name = env.get("PUSH_VAPID_SECRET", "")
+    if not name:
+        return VapidKey()
+    client = boto3.client("secretsmanager", region_name=reg, config=_short_config())
+    return VapidKey(client, name, env.get("PUSH_SUBJECT") or env.get("APP_URL", ""))
 
 
 def _posting_setup(env: Any, reg: str) -> tuple[OAuthEnv | None, WebFiles | None]:

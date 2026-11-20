@@ -5,6 +5,7 @@ terraform {
   required_providers {
     aws    = { source = "hashicorp/aws", version = ">= 6.68.0, < 7.0.0" }
     random = { source = "hashicorp/random", version = ">= 3.7.0, < 4.0.0" } # the webhook verify token (ephemeral)
+    tls    = { source = "hashicorp/tls", version = ">= 4.1.0, < 5.0.0" }    # the VAPID key (ephemeral, §32.2)
   }
   backend "s3" {}
 }
@@ -301,6 +302,9 @@ module "api" {
   ask_function_arn   = module.ask.ask_function_arn
   search_secret_name = local.ask_search_secret
   search_secret_arn  = local.ask_search_secret_arn
+  # Notifications (§32.3): read the VAPID key (its public half, "Send a test").
+  vapid_secret_name = module.notify.vapid_secret_name
+  vapid_secret_arn  = module.notify.vapid_secret_arn
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
@@ -367,6 +371,22 @@ module "ask" {
   permissions_boundary_arn = var.role_permissions_boundary_arn
 }
 
+# Notifications on the owner's phone and computer (docs/CONTRACTS.md §32): the VAPID key (write-only, never destroyed)
+# and cf-prod-notify, a second reader of the table's stream. Additive: a new secret, function, role, log group and
+# event source mapping; nothing that holds the owner's data is changed.
+module "notify" {
+  source          = "../../modules/notify"
+  name            = local.name
+  lambda_zip_path = var.lambda_zip_path
+  table_name      = module.data.table_name
+  table_arn       = module.data.table_arn
+  stream_arn      = module.data.stream_arn
+  app_url         = module.frontend.app_url
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
+}
+
 module "monitoring" {
   source      = "../../modules/monitoring"
   name        = local.name
@@ -380,6 +400,7 @@ module "monitoring" {
     module.stats.function_names,
     module.money.function_names,
     module.ask.function_names,
+    module.notify.function_names,
   )
   schedule_rule_names    = merge(module.stats.schedule_rule_names, module.money.schedule_rule_names)
   durable_function_names = module.flows.durable_function_names

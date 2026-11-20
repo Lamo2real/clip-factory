@@ -1,5 +1,5 @@
 {
-  "version": "886d14b5b4e1",
+  "version": "35ebc9982e24",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -32,6 +32,7 @@
     "src/screens/review/TikTokSheet.tsx",
     "src/screens/settings/FollowBranch.tsx",
     "src/screens/settings/MoneyBranch.tsx",
+    "src/screens/settings/NotifyBranch.tsx",
     "src/screens/settings/parts.tsx",
     "src/screens/settings/setup/bits.tsx"
   ],
@@ -57,6 +58,7 @@
     "/settings/look-and-feel/motion",
     "/settings/look-and-feel/background",
     "/settings/app/get-the-app",
+    "/settings/app/notifications",
     "/settings/app/updates",
     "/settings/app/ask",
     "/settings/app/account",
@@ -2717,7 +2719,13 @@
         "check",
         "gone",
         "stopping",
-        "stopped"
+        "stopped",
+        "turn",
+        "send",
+        "test",
+        "not",
+        "notifications",
+        "breadcrumb"
       ],
       "answer": "A job's page shows each step as your clips are made. Tap a job in Jobs to open it.",
       "steps": [
@@ -4453,11 +4461,12 @@
       "title": "App & account",
       "keywords": [
         "Get the app",
+        "Notifications",
         "Updates",
         "Ask",
         "Account"
       ],
-      "answer": "The app, updates, and your account. It has Get the app, Updates, Ask, Account.",
+      "answer": "The app, updates, and your account. It has Get the app, Notifications, Updates, Ask, Account.",
       "steps": [
         "Tap **Settings**.",
         "Tap **App & account**."
@@ -4531,6 +4540,315 @@
       "when": {
         "installed": false
       }
+    },
+    {
+      "id": "settings-app-notifications",
+      "kind": "page",
+      "route": "/settings/app/notifications",
+      "where": "Settings › App & account › Notifications",
+      "title": "Notifications",
+      "keywords": [
+        "This device",
+        "Clips ready",
+        "It stopped",
+        "Picked up again",
+        "Every step",
+        "Number on the app icon",
+        "Lock Screen widget",
+        "Send a test"
+      ],
+      "answer": "Get told when your clips are ready, even with the app closed.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**."
+      ],
+      "actions": [
+        {
+          "id": "settings-app-notifications:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications"
+        }
+      ]
+    },
+    {
+      "id": "apple-notify-device",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-device",
+      "where": "Settings › App & account › Notifications",
+      "title": "This device",
+      "keywords": [
+        "notifications",
+        "alerts",
+        "push",
+        "ping",
+        "buzz",
+        "phone",
+        "iphone",
+        "allow",
+        "permission",
+        "turn on",
+        "home screen"
+      ],
+      "answer": "Turn notifications on here. On iPhone, open Clip Factory from your Home Screen first.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **This device**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-device:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-device",
+          "highlight": [
+            "notify-device"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-device"
+      ]
+    },
+    {
+      "id": "apple-notify-ready",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-ready",
+      "where": "Settings › App & account › Notifications",
+      "title": "Clips ready",
+      "keywords": [
+        "done",
+        "finished",
+        "ready",
+        "tell me"
+      ],
+      "answer": "When your clips are done.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **Clips ready**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-ready:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-ready",
+          "highlight": [
+            "notify-ready"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-ready"
+      ]
+    },
+    {
+      "id": "apple-notify-stopped",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-stopped",
+      "where": "Settings › App & account › Notifications",
+      "title": "It stopped",
+      "keywords": [
+        "failed",
+        "error",
+        "stopped",
+        "try again",
+        "broken"
+      ],
+      "answer": "When a video stops and needs Try again.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **It stopped**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-stopped:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-stopped",
+          "highlight": [
+            "notify-stopped"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-stopped"
+      ]
+    },
+    {
+      "id": "apple-notify-resumed",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-resumed",
+      "where": "Settings › App & account › Notifications",
+      "title": "Picked up again",
+      "keywords": [
+        "resume",
+        "resumed",
+        "picking up",
+        "started again",
+        "restart"
+      ],
+      "answer": "When a video that stopped starts again by itself.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **Picked up again**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-resumed:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-resumed",
+          "highlight": [
+            "notify-resumed"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-resumed"
+      ]
+    },
+    {
+      "id": "apple-notify-steps",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-steps",
+      "where": "Settings › App & account › Notifications",
+      "title": "Every step",
+      "keywords": [
+        "progress",
+        "live",
+        "status",
+        "steps",
+        "what it's doing",
+        "lock screen",
+        "updates",
+        "clip 3 of 10"
+      ],
+      "answer": "One card per video that changes as it works: the step and the clip. It can buzz often.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **Every step**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-steps:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-steps",
+          "highlight": [
+            "notify-steps"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-steps"
+      ]
+    },
+    {
+      "id": "apple-notify-badge",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-badge",
+      "where": "Settings › App & account › Notifications",
+      "title": "Number on the app icon",
+      "keywords": [
+        "badge",
+        "icon",
+        "red dot",
+        "count",
+        "working"
+      ],
+      "answer": "Shows how many videos are working right now.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **Number on the app icon**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-badge:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-badge",
+          "highlight": [
+            "notify-badge"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-badge"
+      ]
+    },
+    {
+      "id": "apple-notify-lock-screen",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-lock-screen",
+      "where": "Settings › App & account › Notifications",
+      "title": "Lock Screen widget",
+      "keywords": [
+        "widget",
+        "lock screen",
+        "live activity",
+        "dynamic island",
+        "app store",
+        "always on"
+      ],
+      "answer": "Lock Screen widgets only come with App Store apps. Your notifications show there instead.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **Lock Screen widget**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-lock-screen:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-lock-screen",
+          "highlight": [
+            "notify-lock-screen"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-lock-screen"
+      ]
+    },
+    {
+      "id": "apple-notify-test",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-test",
+      "where": "Settings › App & account › Notifications",
+      "title": "Send a test",
+      "keywords": [
+        "test",
+        "try",
+        "check",
+        "does it work"
+      ],
+      "answer": "Sends one to this device so you can see it work.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **Send a test**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-test:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-test",
+          "highlight": [
+            "notify-test"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-test"
+      ]
     },
     {
       "id": "settings-app-updates",

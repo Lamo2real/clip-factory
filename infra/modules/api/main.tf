@@ -46,13 +46,18 @@ locals {
     },
   ] : []
 
+  # Notifications (docs/CONTRACTS.md §32.3): read the VAPID key for its public half and for "Send a test". Read only.
+  push_on          = var.vapid_secret_arn != ""
+  push_env         = local.push_on ? { PUSH_VAPID_SECRET = var.vapid_secret_name, PUSH_SUBJECT = var.app_url } : {}
+  push_permissions = local.push_on ? [{ Sid = "VapidKey", Action = ["secretsmanager:GetSecretValue"], Resource = [var.vapid_secret_arn] }] : []
+
   # One function; a map so the resource addresses (aws_lambda_function.fn["api"]) stay as they were.
   functions = {
     api = {
       handler = "clipfactory_api.http.handler"
       timeout = 29
       memory  = 512
-      env = merge(local.help_env, local.ask_env, {
+      env = merge(local.help_env, local.ask_env, local.push_env, {
         TABLE_NAME        = var.table_name
         MEDIA_BUCKET      = var.media_bucket
         AGENT_RUNTIME_ARN = var.agent_runtime_arn
@@ -80,7 +85,7 @@ locals {
 
   # What each function may do beyond writing its own logs and traces.
   permissions = {
-    api = concat(local.help_permissions, local.ask_permissions, [
+    api = concat(local.help_permissions, local.ask_permissions, local.push_permissions, [
       # Confirm writes the clip and its posts in one transaction.
       { Sid = "Data", Action = local.data_rw, Resource = local.table_resources },
       # Presigned uploads and downloads, decline (deletes the clip's files), skill and cookie files.

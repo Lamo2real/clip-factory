@@ -5,6 +5,7 @@ import type { Clip, ClipStatus, Job } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { LiveLine } from "./LiveLine.tsx";
+import { NotifyCard } from "../settings/NotifyBranch.tsx";
 import { JobStatusPill, jobTitle, sourceMeta, SourceThumb, StepTimeline } from "../../components/JobBits.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, Pill, Progress, Skeleton, type Tone } from "../../components/ui.tsx";
@@ -254,6 +255,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
               </LinkButton>
             ) : null}
           </div>
+          {working ? <NotifyCard /> : null}
         </section>
 
         <section className="panel glass source-card" aria-labelledby="source-title">
