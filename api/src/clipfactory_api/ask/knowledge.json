@@ -1,5 +1,5 @@
 {
- "version": "87d62685eb8e",
+ "version": "8cdf7dad1ff0",
  "parts": [
   {
    "id": "app-map",
@@ -237,7 +237,7 @@
    "id": "contracts-34",
    "title": "CONTRACTS: 34. Delete jobs (owner request, 2026-11-20)",
    "line": "34.1 The owner's words and what they mean",
-   "chars": 8192
+   "chars": 8638
   },
   {
    "id": "adr-01",
