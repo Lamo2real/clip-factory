@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import math
 import re
+from datetime import datetime
 from typing import Any
 
 from . import db
 from .app import App
+from .clock import parse
 from .log import log
 
 Item = dict[str, Any]
@@ -38,6 +40,8 @@ OPEN_THE_APP = "Open Clip Factory on your Mac to continue"
 GETTING = "Your Mac is getting the video"
 SENDING = "Your Mac is sending the video"
 SENT_NOTE = "Your Mac sent the video."
+# How long after the Mac finished a video file may still win over it (the same moment, with room for a slow upload).
+DONE_RACE_SECONDS = 300
 REPLACED = "Replaced by your video file"
 TIMED_OUT = "Your Mac didn't get the video. Use a video file instead."
 
@@ -97,13 +101,22 @@ def waiting(job: Item) -> bool:
     return isinstance(m, dict) and m.get("state") in WAITING_STATES and job.get("status") in ("queued", "running")
 
 
-def replaceable(job: Item | None) -> bool:
+def replaceable(job: Item | None, now: datetime | None = None) -> bool:
     """A link job a video file may replace (§35.8): still working, and waiting for a Mac, being fetched by one, or
-    already going on with the video a Mac sent a moment ago (the file wins that race)."""
+    already going on with the video a Mac sent a moment ago (the file wins that race). "A moment" is
+    DONE_RACE_SECONDS: a job that went on with the Mac's video long ago is healthy work, not a race, so it stays."""
     if not isinstance(job, dict) or job.get("status") not in ("queued", "running"):
         return False
     m = job.get("macFetch")
-    return isinstance(m, dict) and m.get("state") in (*WAITING_STATES, "done")
+    if not isinstance(m, dict):
+        return False
+    state = m.get("state")
+    if state in WAITING_STATES:
+        return True
+    if state != "done":
+        return False
+    at = parse(m.get("at"))
+    return at is not None and now is not None and (now - at).total_seconds() <= DONE_RACE_SECONDS
 
 
 def upload_key(user_id: str, job_id: str) -> str:

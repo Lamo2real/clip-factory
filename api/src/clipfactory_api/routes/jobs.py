@@ -122,7 +122,7 @@ def _replace_mac_wait(app: App, user_id: str, old_id: str, new_id: str) -> None:
     pk, sk = db.user_pk(user_id), db.job_sk(old_id)
     for _ in range(3):  # the job flow may move the job to a new session between the read and the write
         old = app.store.get(pk, sk)
-        if old is None or not macfetch.replaceable(old) or old.get("deletingAt"):
+        if old is None or not macfetch.replaceable(old, app.clock()) or old.get("deletingAt"):
             return
         now = iso(app.clock())
         expect: dict[str, Any] = {"status": jobs.ACTIVE, "sessionId": [old.get("sessionId")]}

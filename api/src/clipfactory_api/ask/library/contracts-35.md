@@ -160,8 +160,8 @@ the app itself is (no Apple certificates, §12.3).
   sends `replaces: <that jobId>` with the upload (`POST /v1/jobs`; `replaces` must be a job id and only goes with an
   upload source, else 400).
 * The API (`routes/jobs._replace_mac_wait`, `macfetch.replaceable`) stops the old job when it is still queued or
-  running and its `macFetch.state` is `waiting`, `getting`, `sending` or `done` (the Mac's video arrived a moment
-  earlier and the job went on with it): `status: canceled`, `replacedBy: <new jobId>` (public), the job flow's
+  running and its `macFetch.state` is `waiting`, `getting`, `sending` or `done` (the Mac's video arrived within the
+  last 5 minutes and the job went on with it; later, the job is healthy work and stays): `status: canceled`, `replacedBy: <new jobId>` (public), the job flow's
   `mac-done` callback fails with the quiet `Canceled` ("Replaced by your video file"), a half-sent multipart upload is
   aborted, and the run's agent session gets the cancel. Only the owner's own jobs are looked up. Best effort: the new
   job starts anyway.

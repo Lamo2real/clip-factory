@@ -538,7 +538,13 @@ def test_the_file_wins_when_the_flow_moves_the_job_on_at_the_same_moment(
     stale = dict(old)
     # Between the API's read and its write, the job flow turns the job into an upload on a new run (the Mac's video).
     store.update(
-        old["pk"], old["sk"], {"status": "queued", "sessionId": "cfjob-new-run", "macFetch": {"state": "done"}}
+        old["pk"],
+        old["sk"],
+        {
+            "status": "queued",
+            "sessionId": "cfjob-new-run",
+            "macFetch": {"state": "done", "at": "2026-11-15T11:59:00.000Z"},
+        },
     )
     real_get = store.get
     reads = {"n": 0}
@@ -602,3 +608,66 @@ def test_try_again_on_a_replaced_job_forgets_the_replacement(store: db.Store, ca
     status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
     assert status == 200
     assert "replacedBy" not in body["job"]
+
+
+def test_a_job_that_went_on_long_ago_with_the_macs_video_is_not_replaced(
+    store: db.Store, call: Call, s3_client: FakeS3, agentcore: FakeAgentCore
+) -> None:
+    # Healthy work (or a later retry) is not "the same moment": a late file or a stale form leaves it running.
+    for at in ("2026-11-15T11:00:00.000Z", None):
+        macf: dict[str, Any] = {"state": "done", **({"at": at} if at else {})}
+        job = seed_job(store, status="running", macFetch=macf)
+        status, _ = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": job["jobId"]})
+        assert status == 201
+        saved = store.get(job["pk"], job["sk"]) or {}
+        assert (saved["status"], "replacedBy" in saved) == ("running", False), at
+    assert _canceled_runs(agentcore) == []
+
+
+def test_a_job_being_deleted_is_not_replaced(store: db.Store, call: Call, s3_client: FakeS3) -> None:
+    job = seed_job(store, macFetch={"state": "waiting"}, deletingAt="2026-11-15T11:59:30.000Z")
+    status, _ = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": job["jobId"]})
+    assert status == 201
+    saved = store.get(job["pk"], job["sk"]) or {}
+    assert (saved["status"], "replacedBy" in saved) == ("running", False)
+
+
+def test_a_failed_replace_write_still_starts_the_new_job(
+    store: db.Store, call: Call, s3_client: FakeS3, monkeypatch: Any
+) -> None:
+    old = _waiting_job(store)
+    real_update = store.update
+
+    def boom(pk: str, sk: str, *a: Any, **kw: Any) -> Any:
+        if sk == old["sk"]:
+            raise RuntimeError("store down")
+        return real_update(pk, sk, *a, **kw)
+
+    monkeypatch.setattr(store, "update", boom)
+    status, body = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": old["jobId"]})
+    assert status == 201
+    assert body["job"]["status"] in ("queued", "running")
+    saved = store.get(old["pk"], old["sk"]) or {}
+    assert (saved["status"], "replacedBy" in saved) == ("running", False)
+
+
+def test_when_every_try_loses_the_race_the_old_job_is_left_as_it_was(
+    store: db.Store, call: Call, s3_client: FakeS3, agentcore: FakeAgentCore, monkeypatch: Any
+) -> None:
+    old = _waiting_job(store)
+    tries = {"n": 0}
+
+    def always_lost(pk: str, sk: str, *a: Any, **kw: Any) -> Any:
+        if sk == old["sk"]:
+            tries["n"] += 1
+            raise db.ConditionFailed("moved")
+        return real_update(pk, sk, *a, **kw)
+
+    real_update = store.update
+    monkeypatch.setattr(store, "update", always_lost)
+    status, _ = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": old["jobId"]})
+    assert status == 201
+    assert tries["n"] == 3
+    saved = store.get(old["pk"], old["sk"]) or {}
+    assert (saved["status"], "replacedBy" in saved) == ("running", False)
+    assert _canceled_runs(agentcore) == []
