@@ -17,7 +17,9 @@ Started by Confirm (``clip-{clipId}-{flowRun}`` on the alias ``live``) with ``{"
    (``performed`` + the summed performance).
 
 Steps are at-least-once: a publish step reads the post first and never sends a post that is no longer ``queued``,
-and every write is conditional, so a replayed step changes nothing twice.
+and every write is conditional, so a replayed step changes nothing twice. A post carries the run that sends it
+(``flowRun``, set by Confirm, Try again and the release on connect): a run never sends a ``queued`` post of another
+run, so two runs of one clip (Post now for Instagram, then for Facebook) never upload the same video twice.
 """
 
 from __future__ import annotations
@@ -95,6 +97,7 @@ class ClipFlowDeps:
 class Target:
     clip_id: str
     user_id: str
+    run: int | None = None  # the event's run (clip-{clipId}-{run}); None on an event without one
 
     @property
     def pk(self) -> str:
@@ -111,7 +114,8 @@ def parse_event(event: Any) -> Target | None:
     clip_id, user_id = event.get("clipId"), event.get("userId")
     if not (isinstance(clip_id, str) and clip_id and isinstance(user_id, str) and user_id):
         return None
-    return Target(clip_id, user_id)
+    run = event.get("run")
+    return Target(clip_id, user_id, run if isinstance(run, int) and not isinstance(run, bool) else None)
 
 
 def run_clip_flow(ctx: Any, event: Any, deps: ClipFlowDeps) -> dict[str, Any]:
@@ -370,6 +374,9 @@ def publish_step(deps: ClipFlowDeps, target: Target, post_id: str, phase: str) -
         return {"state": "missing"}
     if post.get("status") != "queued":
         return {"state": str(post.get("status"))}
+    owner = post.get("flowRun")
+    if target.run is not None and owner is not None and int(owner) != target.run:
+        return {"state": "other_run"}  # a later Try again or release gave it to another run, or it is an earlier one's
     platform = str(post["platform"])
     clip = _clip(deps, target) or {}
     account = _account(deps, target, platform)
@@ -532,7 +539,10 @@ def settle_clip(deps: ClipFlowDeps, target: Target) -> dict[str, Any]:
 
 
 def _account(deps: ClipFlowDeps, target: Target, platform: str) -> Item | None:
-    account: Item | None = _guard(lambda: posts.connected_account(deps.store, target.user_id, platform))
+    # Strongly consistent: a run started by the release on connect reads the Account written a moment before.
+    account: Item | None = _guard(
+        lambda: posts.connected_account(deps.store, target.user_id, platform, consistent=True)
+    )
     return account
 
 

@@ -4,6 +4,7 @@ the OAuth callback, the Meta account pick, Check it, and Post now (Confirm with 
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -180,8 +181,10 @@ def test_out_of_time_leaves_the_rest_waiting(store: db.Store, table: FakeTable, 
     _connect(store, "instagram")
     clips = [_clip(store, clipId=f"01JAAAAAAAAAAAAAAAAAAAAAB{n}") for n in range(3)]
     ids = [_post(store, c, "instagram", "pending_integration") for c in clips]
-    ticks = iter([0.0, 0.0, 0.5, 2.0, 2.0])
-    assert release.release_waiting(store, flows, USER, "instagram", budget_seconds=1.0, clock=lambda: next(ticks)) == 2
+    # A clip only starts while one slow clip still fits before the answer is due (the caller's deadline).
+    ticks = iter([0.0, 0.5, 1.5])
+    deadline = release.CLIP_SECONDS + 1.0
+    assert release.release_waiting(store, flows, USER, "instagram", deadline=deadline, clock=lambda: next(ticks)) == 2
     assert [(table.raw(PK, db.post_sk(i)) or {})["status"] for i in ids] == ["queued", "queued", "pending_integration"]
 
 
@@ -194,6 +197,116 @@ def test_tiktok_waits_for_the_owners_choice(store: db.Store, table: FakeTable, f
     assert release.release_waiting(store, flows, USER, "tiktok") == 1
     assert (table.raw(PK, db.post_sk(no_choice)) or {})["status"] == "pending_integration"
     assert (table.raw(PK, db.post_sk(with_choice)) or {})["status"] == "queued"
+
+
+def test_the_release_reads_the_account_strongly_consistent(
+    store: db.Store, table: FakeTable, flows: FlowClient
+) -> None:
+    _connect(store, "instagram")
+    clip = _clip(store)
+    _post(store, clip, "instagram", "pending_integration")
+    table.calls.clear()
+    assert release.release_waiting(store, flows, USER, "instagram") == 1
+    account_reads = [
+        kw for name, kw in table.calls if name == "query" and "ACCOUNT#" in kw["ExpressionAttributeValues"].values()
+    ]
+    assert account_reads
+    assert all(kw.get("ConsistentRead") for kw in account_reads)
+
+
+# --- one run per place: two Post now taps never send one video twice ------------------------------------------------
+
+
+def _flow_deps(store: db.Store, adapters: dict[str, Any]) -> Any:
+    from test_flows import _clip_deps
+
+    return _clip_deps(store, adapters)
+
+
+def test_a_second_post_now_starts_a_run_for_its_own_place_only(
+    call: Call, store: db.Store, table: FakeTable, lambda_client: FakeLambda
+) -> None:
+    from clipfactory_api.flows.clip_flow import run_clip_flow
+    from fakes import FakeDurableContext
+    from test_flows import FakeAdapter
+
+    _connect(store, "instagram")
+    _connect(store, "facebook")
+    clip = _clip(store)
+    _post(store, clip, "youtube", "posted")
+    ig = _post(store, clip, "instagram", "pending_integration")
+    fb = _post(store, clip, "facebook", "pending_integration")
+    # Post now, Instagram; a moment later Post now, Facebook, while run 2 is still uploading Instagram.
+    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm", {"platforms": ["instagram"]})[0] == 200
+    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm", {"platforms": ["facebook"]})[0] == 200
+    assert _starts(lambda_client) == [f"clip-{clip['clipId']}-2", f"clip-{clip['clipId']}-3"]
+    assert (table.raw(PK, db.post_sk(ig)) or {})["flowRun"] == 2
+    assert (table.raw(PK, db.post_sk(fb)) or {})["flowRun"] == 3
+    adapters = {"instagram": FakeAdapter("instagram"), "facebook": FakeAdapter("facebook")}
+    event = {"clipId": clip["clipId"], "userId": USER}
+    run_clip_flow(FakeDurableContext(), {**event, "run": 3}, _flow_deps(store, adapters))
+    assert adapters["facebook"].published == [fb]
+    assert adapters["instagram"].published == []  # run 2's post: run 3 leaves it alone
+    assert (table.raw(PK, db.post_sk(ig)) or {})["status"] == "queued"
+    run_clip_flow(FakeDurableContext(), {**event, "run": 2}, _flow_deps(store, adapters))
+    assert adapters["instagram"].published == [ig]
+    assert adapters["facebook"].published == [fb]  # sent once
+
+
+def test_a_run_that_never_started_hands_its_posts_to_the_new_run(
+    call: Call, store: db.Store, table: FakeTable, lambda_client: FakeLambda
+) -> None:
+    _connect(store, "instagram")
+    _connect(store, "facebook")
+    clip = _clip(store)
+    ig = _post(store, clip, "instagram", "pending_integration")
+    fb = _post(store, clip, "facebook", "pending_integration")
+    lambda_client.fail = True
+    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm", {"platforms": ["instagram"]})[0] == 200
+    assert (table.raw(clip["pk"], clip["sk"]) or {})["publishState"] == "pending"  # run 2 never started
+    lambda_client.fail = False
+    code, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm", {"platforms": ["facebook"]})
+    assert code == 200
+    assert "startPending" not in body["clip"]
+    assert (table.raw(PK, db.post_sk(ig)) or {})["flowRun"] == 3  # nobody would ever start run 2
+    assert (table.raw(PK, db.post_sk(fb)) or {})["flowRun"] == 3
+    stored = table.raw(clip["pk"], clip["sk"]) or {}
+    assert (stored["flowRun"], stored["publishState"]) == (3, "started")
+
+
+def test_posts_made_by_upload_belong_to_the_first_run(call: Call, store: db.Store, table: FakeTable) -> None:
+    _connect(store, "instagram")
+    clip = seed_clip(store, status="review")
+    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm", {"platforms": ["instagram"]})[0] == 200
+    made = [i for i in table.all() if i.get("type") == "post" and i.get("clipId") == clip["clipId"]]
+    assert [i["flowRun"] for i in made] == [1]
+    _, listed = call("GET", "/v1/posts", query={"clipId": clip["clipId"]})
+    assert listed["posts"]
+    assert all("flowRun" not in p for p in listed["posts"])
+
+
+# --- a start that did not go through: the Library offers Try again (startPending) ------------------------------------
+
+
+def test_a_stuck_start_shows_as_start_pending_and_try_again_finishes_it(
+    call: Call, store: db.Store, table: FakeTable, lambda_client: FakeLambda
+) -> None:
+    _connect(store, "instagram")
+    clip = _clip(store)
+    _post(store, clip, "youtube", "posted")
+    _post(store, clip, "instagram", "pending_integration")
+    lambda_client.fail = True
+    assert release.release_waiting(store, FlowClient(lambda_client, JOB_FLOW_ARN, CLIP_FLOW_ARN), USER, "instagram")
+    _, got = call("GET", f"/v1/clips/{clip['clipId']}")
+    assert got["clip"]["startPending"] is True
+    assert "publishState" not in got["clip"]
+    lambda_client.fail = False
+    # The big Try again sends no places: on a posted clip it finishes the start of the same run.
+    code, body = call("POST", f"/v1/clips/{clip['clipId']}/confirm", {})
+    assert code == 200
+    assert "startPending" not in body["clip"]
+    assert _starts(lambda_client)[-1] == f"clip-{clip['clipId']}-2"
+    assert (table.raw(clip["pk"], clip["sk"]) or {})["publishState"] == "started"
 
 
 # --- automatic: the OAuth callback, the Meta pick, Check it --------------------------------------------------------
@@ -278,6 +391,29 @@ def test_the_callback_survives_a_failing_flow_start(
     lambda_client.fail = True
     assert _connect_instagram(call, hooks_deps, http, IG_ONE) == "connected"
     assert (table.raw(clip["pk"], clip["sk"]) or {})["publishState"] == "pending"
+
+
+def test_the_callback_deadline_counts_from_the_start_of_the_request(
+    call: Call,
+    store: db.Store,
+    table: FakeTable,
+    hooks_deps: hooks.HooksDeps,
+    http: FakeHttp,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[float] = []
+    real = release.release_waiting
+
+    def spy(*args: Any, deadline: float | None = None, **kwargs: Any) -> int:
+        assert deadline is not None
+        seen.append(deadline - time.monotonic())
+        return real(*args, deadline=deadline, **kwargs)
+
+    monkeypatch.setattr(release, "release_waiting", spy)
+    assert _connect_instagram(call, hooks_deps, http, IG_ONE) == "connected"
+    # The code exchange and the writes ran first: less than the whole answer time is left for the release.
+    assert seen
+    assert 0 < seen[0] < release.ANSWER_SECONDS
 
 
 def test_the_meta_account_pick_releases_waiting_posts(

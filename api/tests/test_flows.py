@@ -733,8 +733,8 @@ def test_clip_flow_try_again_run_publishes_the_reset_posts(store: db.Store, tabl
     youtube = next(
         p for p in posts.posts_for_clip(store, USER, clip["clipId"], consistent=True) if p["platform"] == "youtube"
     )
-    # What "Try again" does in the API: the failed post goes back to queued and the clip to confirmed.
-    store.update(youtube["pk"], youtube["sk"], {"status": "queued"}, remove=["error"])
+    # What "Try again" does in the API: the failed post goes back to queued for run 2 and the clip to confirmed.
+    store.update(youtube["pk"], youtube["sk"], {"status": "queued", "flowRun": 2}, remove=["error"])
     store.update(clip["pk"], clip["sk"], {"status": "confirmed", "flowRun": 2})
     ok = FakeAdapter("youtube")
     out = run_clip_flow(FakeDurableContext(), _event(clip, 2), _clip_deps(store, {"youtube": ok}))

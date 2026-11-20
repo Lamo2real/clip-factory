@@ -58,8 +58,10 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   connected now, else 400 with the same sentence ("Instagram is not set up yet. Turn it off, then tap Upload."), and a
   waiting TikTok post with no stored choice needs `tiktok` ("Pick who can see it on TikTok."), whose choices become its
   `postOptions`.
-  A one-place Try again on a `posted` clip starts a new flow run while the first run may still be waiting for its
-  numbers; no second post can happen (only `queued` posts publish).
+  A one-place Try again or Post now on a `posted` clip starts a new flow run while the first run may still be
+  uploading another place or waiting for its numbers; no second post can happen: only `queued` posts publish, and a run
+  only sends the posts tagged with its own `flowRun` (§17.6 "Release"). On a `confirmed`, `publishing` or `posted`
+  clip whose start did not go through (`startPending`), a Confirm without `platforms` starts it (§14.5).
 
 Without it (older clients) everything works exactly as before. Response unchanged (`{clip, posts}`). Types:
 `Clip.uploadTo?`, `confirmClip(clipId, captions?, tiktok?, platforms?)`, `uploadClip` (was `keepClip`). Publishers are
@@ -92,9 +94,14 @@ as Review's Upload to reads it, kept fresh by live `setup` news) on a clip that 
 "Waiting for setup" group and gets its own row: the place's mark and name, "Ready to post", and a **Post now** button
 (accessible name "Post now, Instagram"; sends `platforms: [p]`; toast "Posting to Instagram!"; motion `send`). TikTok's
 Post now opens the Post to TikTok sheet first (big button "Post now"). Places still not set up stay in the one
-"Waiting for setup" line; while the setup is loading or the check failed, every waiting post stays there. Mock mode
-does the same: a platform that becomes connected (`setup.finish`, the Meta pick, the pretend consent page) releases
-its waiting posts, and Confirm with `platforms` releases a named waiting place that is connected.
+"Waiting for setup" line; while the setup is loading or the check failed, every waiting post stays there. Post now
+stays on a card while another place of it is still uploading: the new run sends only that place (§17.6). The toast
+only says "Posting to Instagram!" when the place really left `pending_integration` and the start went through; when
+the card was out of date and the clip was still uploading, it says "This clip is still uploading. Post it to Instagram
+when that is done." and when the start did not go through, "Still working on it. Try again in a minute." (then the
+card's big Try again, §11). Mock mode does the same: a platform that becomes connected (`setup.finish`, the Meta pick,
+the pretend consent page) releases its waiting posts, Confirm with `platforms` releases a named waiting place that is
+connected, and `__cfMockFaults.startFails` leaves a released or retried clip `startPending`.
 
 ### 33.7 Words
 
@@ -104,6 +111,9 @@ saved keys" and the like stay: they mean something else. Notifications on main s
 
 ### 33.8 Tests
 
-`api/tests/test_upload_to.py`, `test_release.py` (Post now and the release on connect); `web/test/upload.test.ts`
-(was keep.test.ts; the mock's release and Post now), `reviewSheets.test.tsx`; `web/e2e/upload-to.spec.ts` (with the
-Library's Post now row and the release on connect), `tiktok-sheet.spec.ts`, and the Review specs.
+`api/tests/test_upload_to.py`, `test_release.py` (Post now, the release on connect, two Post now taps on one clip
+that never send a video twice, a run that never started handing its posts over, the strongly consistent Account read,
+the callback's deadline, `startPending` and its Try again); `web/test/upload.test.ts` (was keep.test.ts; the mock's
+release and Post now), `reviewSheets.test.tsx`; `web/e2e/upload-to.spec.ts` (with the Library's Post now row, a second
+Post now on one card, the release on connect, and a start that did not go through turning into Try again),
+`tiktok-sheet.spec.ts`, and the Review specs.

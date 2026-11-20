@@ -19,6 +19,7 @@ Its codes (``MONEY_RESULTS``) send the owner back to ``/settings/posting/money?r
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
@@ -78,6 +79,7 @@ def handle_callback(
 ) -> str:
     """The result code (one of ``RESULTS``). On ``connected``, the clips waiting for this place go out
     (``release.release_waiting`` with ``flows``, §17.6); that never changes the result the owner sees."""
+    started = time.monotonic()  # the release must be done before the owner's answer is due
     if platform not in SETUP_ORDER:
         return "error"
     now = env.clock()
@@ -119,7 +121,7 @@ def handle_callback(
         log("warning", "oauth.record_failed", platform=platform, error=type(e).__name__)
     if result == "connected" and flows is not None:
         try:
-            release.release_waiting(store, flows, user_id, platform)
+            release.release_waiting(store, flows, user_id, platform, deadline=started + release.ANSWER_SECONDS)
         except Exception as e:  # the account is connected either way; Post now in the Library is the backup
             log("error", "oauth.release_failed", platform=platform, error=type(e).__name__)
     log("info", "oauth.callback", platform=platform, result=result)

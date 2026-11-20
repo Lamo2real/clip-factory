@@ -180,8 +180,8 @@ def confirm(app: App, req: Request) -> Response:
         raise conflict("This clip changed while you pressed Upload. Please try again.")
     if status == "failed" or (status in {"posted", "confirmed"} and chosen is not None):
         item = _try_again(app, item, tiktok=options, platforms=chosen)
-    elif status in {"confirmed", "publishing"} and item.get("publishState") == clips.PUBLISH_PENDING:
-        item = _start_flow(app, item)  # an earlier Confirm stopped before its flow started
+    elif status in {"confirmed", "publishing", "posted"} and item.get("publishState") == clips.PUBLISH_PENDING:
+        item = _start_flow(app, item)  # an earlier Confirm, Try again or release stopped before its flow started
     return ok({"clip": clips.public_clip(item, app.media), "posts": _posts(app, req.user_id, item["clipId"])})
 
 
@@ -217,7 +217,7 @@ def _try_again(
     if not failed and not waiting:
         # Nothing to send among the named places. A start that did not go through earlier still gets finished.
         return _start_flow(app, clip) if clip.get("publishState") == clips.PUBLISH_PENDING else clip
-    return release.restart(app.store, app.flows, clip, [*failed, *waiting], tiktok=tiktok)
+    return release.restart(app.store, app.flows, clip, [*failed, *waiting], clip_posts=rows, tiktok=tiktok)
 
 
 def decline(app: App, req: Request) -> Response:

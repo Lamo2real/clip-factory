@@ -60,6 +60,8 @@ export interface MockFaults extends StatsFaults {
   jobsPageSize?: number;
   /** The next N "Show older jobs" pages (listJobs with a cursor) fail like a server error. */
   olderJobsFails?: number;
+  /** Posting does not start after a Try again, Post now or connect: the clip stays `startPending` (§14.5). */
+  startFails?: boolean;
   /** The next N job deletes (deleteJob, deleteJobs) fail like a server error (§34). */
   deleteJobFails?: number;
   /** The next N Make clips (createJob) fail like a server error. */
@@ -181,8 +183,11 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     const missing = PLATFORM_ORDER.find((p) => waiting.some((w) => w.platform === p) && !connected.includes(p));
     if (missing) throw bad(`${PLATFORM_LABEL[missing]} is not set up yet. Turn it off, then tap Upload.`);
     if (!tiktok && waiting.some((p) => p.platform === "tiktok" && !postOptions.get(p.postId)?.privacyLevel)) throw bad("Pick who can see it on TikTok.");
-    // Naming nothing to send changes nothing (§33).
-    if (!failed.length && !waiting.length) return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === c.clipId)) };
+    // Naming nothing to send changes nothing (§33), except a start that did not go through earlier: it starts now.
+    if (!failed.length && !waiting.length) {
+      if (c.startPending) started(c);
+      return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === c.clipId)) };
+    }
     for (const p of [...failed, ...waiting]) {
       p.status = "queued";
       delete p.error;
@@ -191,8 +196,15 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     }
     // A failed clip goes back to confirmed; an uploaded one (one place did not work) stays posted (§33).
     if (c.status === "failed") c.status = "confirmed";
-    publishClip(c);
+    started(c);
     return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === c.clipId)) };
+  }
+
+  /** The clip's posting starts, like the API's flow start; with faults.startFails it does not (startPending, §14.5). */
+  function started(c: Clip) {
+    if (faults.startFails) c.startPending = true;
+    else delete c.startPending;
+    publishClip(c);
   }
 
   /**
@@ -212,7 +224,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         publishPost(p);
       }
       if (c.status === "failed") c.status = "confirmed";
-      publishClip(c);
+      started(c);
     }
   }
 
@@ -723,6 +735,11 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         return startPosting();
       }
       if (c.status === "failed" || ((c.status === "posted" || c.status === "confirmed") && chosen)) return tryAgain(c, tiktok, chosen);
+      // A start that did not go through earlier (§14.5): Try again starts it.
+      if (c.startPending && c.status !== "review") {
+        started(c);
+        return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
+      }
       if (c.status !== "review") throw conflict(ALREADY_DECIDED);
       if (captions) c.captions = { ...c.captions, ...captions };
       if (chosen) c.uploadTo = chosen;

@@ -190,14 +190,16 @@ def check(app: App, req: Request) -> Response:
     result: dict[str, Any] = {"at": iso(now), "ok": code == "ok", "code": code, "message": message, "account": "none"}
     account = setup.account_item(app.store, req.user_id, platform) or {}
     if code == "ok" and account.get("status") in {"connected", "needs_reconnect"}:
-        result.update(_check_account(app, env, platform, keys, account))
+        result.update(_check_account(app, env, platform, keys, account, started=req.started))
     elif code == "ok":
         result.update({"code": "not_connected", "message": providers.check_message("not_connected", platform)})
     setup.record(app.store, req.user_id, platform, now, {"check": result})
     return ok({"check": result, "setup": setup.one_setup(app.store, req.user_id, platform, now)})
 
 
-def _check_account(app: App, env: OAuthEnv, platform: str, keys: AppKeys, account: dict[str, Any]) -> dict[str, Any]:
+def _check_account(
+    app: App, env: OAuthEnv, platform: str, keys: AppKeys, account: dict[str, Any], *, started: float
+) -> dict[str, Any]:
     tokens = SecretsTokenProvider(app.store, env)
     try:
         creds = tokens.credentials(platform, account)
@@ -226,7 +228,8 @@ def _check_account(app: App, env: OAuthEnv, platform: str, keys: AppKeys, accoun
     if account.get("status") == "needs_reconnect":
         user_id = str(account.get("userId"))
         setup.mark_account(app.store, user_id, platform, now, remove=["reason"], status="connected")
-        release.release_waiting(app.store, app.flows, user_id, platform)  # connected again: waiting clips go out
+        # Connected again: the waiting clips go out, done before the answer is due (§17.6). Never raises.
+        release.release_waiting(app.store, app.flows, user_id, platform, deadline=started + release.ANSWER_SECONDS)
     return {"account": "ok", "message": f"Everything works. Clip Factory can post to {label(platform)}."}
 
 
@@ -360,7 +363,7 @@ def choose(app: App, req: Request) -> Response:
     callback.save(app.store, env, req.user_id, platform, linked)
     log("info", "setup.chosen", platform=platform)
     # Connected now: the clips waiting for this place go out (§17.6). Never raises.
-    release.release_waiting(app.store, app.flows, req.user_id, platform)
+    release.release_waiting(app.store, app.flows, req.user_id, platform, deadline=req.started + release.ANSWER_SECONDS)
     return _setup_body(app, req, platform)
 
 

@@ -480,7 +480,8 @@ something (conditional on `status = queued`), so a replay resumes instead of cre
 TikTok's `uploadUrl` once uploading is done).
 
 **Clip-flow steps per queued post** (names are contract; replaces §14.5 step 2):
-`publish-{platform}` (start) → while `processing`: `ctx.wait(Duration.from_seconds(check_after),
+`publish-{platform}` (start; first the step reads the post and stops unless it is `queued` and its `flowRun` is this
+run's or absent) → while `processing`: `ctx.wait(Duration.from_seconds(check_after),
 name=f"wait-{platform}-{n}")` + step `check-{platform}-{n}` (n = 1…`maxChecks`) → `ready_to_finish`: step
 `finish-{platform}` (then more checks if it returns `processing`) → `done`: `posts.mark_posted` in that step. Retries:
 3 attempts on `RetryablePublishError`/`TransientError`. `NotConnectedError` (no account) → post `pending_integration`
@@ -496,21 +497,29 @@ accepts the same `tiktok` options as §17.8 and replaces the TikTok post's `post
 it on TikTok again, then press Try again.").
 
 **Release (waiting posts, added 2026-11-20).** The Library promises "Posts once these accounts are connected", so
-connecting keeps it. `release.release_waiting(store, flows, userId, platform)` (`clipfactory_api/release.py`, imported
-by both `cf-prod-api` and `cf-prod-hooks`) runs right after an Account becomes `connected`: the OAuth callback (§17.5),
-the Meta account pick and a Check it that reconnects (§17.4). Only when that Account is `connected`, it reads the
-owner's posts (`Query USER#`/`POST#`, strongly consistent) and, per clip whose status is `posted`, `confirmed` or
-`failed` (never `review`, `publishing` or `declined`), does exactly what Try again does (`release.restart`, shared with
-`routes/clips.py` `_try_again`): one transaction sets that place's `pending_integration` posts to `queued` (REMOVE
-`error`, `publishHandle`; each conditional on `status = pending_integration`) and the clip to `flowRun + 1`,
-`publishState: pending` (REMOVE `flowExecutionArn`; a `failed` clip becomes `confirmed`; conditional on the status and
-`flowRun` read), then starts `clip-{clipId}-{flowRun}` (`release.start_flow`, the same code Confirm uses; on success
-`publishState: started`). A TikTok post with no `postOptions.privacyLevel` is never released on its own (TikTok's rules,
-§17.8): it waits for Post now, which opens the TikTok sheet. Safe to repeat: a second release finds nothing waiting
-and changes nothing; a clip of that place with a `queued` post and `publishState: pending` (an earlier start that
-failed) gets its start finished, so a failed Invoke stays retryable. Per-clip errors are logged (`release.clip_failed`)
-and skipped, never raised; a read failure is `release.read_failed`. The callback answers the owner fast: after 10 s
-(`BUDGET_SECONDS`) no new clip is started (`release.out_of_time`) and the rest wait for Post now or the next release.
+connecting keeps it. `release.release_waiting(store, flows, userId, platform, deadline=…)`
+(`clipfactory_api/release.py`, imported by both `cf-prod-api` and `cf-prod-hooks`) runs right after an Account becomes
+`connected`: the OAuth callback (§17.5), the Meta account pick and a Check it that reconnects (§17.4). Only when that
+Account is `connected` (a strongly consistent read: the caller wrote it a moment ago), it reads the owner's posts
+(`Query USER#`/`POST#`, strongly consistent) and, per clip whose status is `posted`, `confirmed` or `failed` (never
+`review`, `publishing` or `declined`), does exactly what Try again does (`release.restart`, shared with
+`routes/clips.py` `_try_again`): one transaction sets that place's `pending_integration` posts to `queued` with
+`flowRun: run + 1` (REMOVE `error`, `publishHandle`; each conditional on `status = pending_integration`) and the clip to
+`flowRun + 1`, `publishState: pending` (REMOVE `flowExecutionArn`; a `failed` clip becomes `confirmed`; conditional on
+the status and `flowRun` read), then starts `clip-{clipId}-{flowRun}` (`release.start_flow`, the same code Confirm
+uses; on success `publishState: started`). The new run sends only the posts tagged with its number, so a release or a
+second Post now while an earlier run is still uploading another place never sends a video twice (§14.5 step 2). When
+the clip's current run never started (`publishState: pending`), its `queued` posts move to the new run too (`flowRun`
+only, upload handles kept; the clip update is then also conditional on `publishState = pending`). A TikTok post with no
+`postOptions.privacyLevel` is never released on its own (TikTok's rules, §17.8): it waits for Post now, which opens the
+TikTok sheet. Safe to repeat: a second release finds nothing waiting and changes nothing; a clip of that place with a
+`queued` post and `publishState: pending` (an earlier start that failed) gets its start finished, so a failed Invoke
+stays retryable, and the Library shows such a clip's big Try again (`startPending`, §11). Per-clip errors are logged
+(`release.clip_failed`) and skipped, never raised; a read failure is `release.read_failed`. The owner waits for the
+answer, so `deadline` is `ANSWER_SECONDS` (25) after the request began (the callback's start, `Request.started` in the
+API; cf-prod-hooks stops at 28 s, API Gateway waits 29 s): a clip only starts while `CLIP_SECONDS` (18, one clip's
+worst case: two Invoke attempts of 2 s connect + 6 s read, plus its DynamoDB calls) are left (`release.out_of_time`),
+and the rest wait for Post now or the next release.
 
 | Platform | start | check | finish | ids / URL |
 |---|---|---|---|---|

@@ -10,13 +10,13 @@ import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Segmented, Skelet
 import { compact, postStatusLabel, STATUS_LABEL } from "../../lib/metrics.ts";
 import { WeekView } from "./WeekView.tsx";
 import { byPlatformOrder, count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
-import { useLoad } from "../../lib/hooks.ts";
+import { useHeld, useLoad } from "../../lib/hooks.ts";
 import { settingsPath } from "../../lib/settingsTree.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { useAction } from "../../lib/motion.ts";
 import { applyClipEvent, applyLearningEvent, applyPostEvent, withMedia } from "../../lib/liveCache.ts";
 import { SimilarClips } from "../../components/SimilarClips.tsx";
-import { needsTikTokChoices, needsUploadAgain, STILL_WORKING, uploadClip, uploadedMessage } from "../../lib/upload.ts";
+import { needsTikTokChoices, needsUploadAgain, START_GRACE_MS, STILL_WORKING, uploadClip, uploadedMessage } from "../../lib/upload.ts";
 import { TikTokSheet } from "../review/TikTokSheet.tsx";
 import { ClipStatusPill } from "../jobs/JobDetail.tsx";
 import { useSetup } from "../settings/setup/useSetup.ts";
@@ -272,6 +272,9 @@ function LibraryCard({
   const waiting = ordered.filter((p) => p.status === "pending_integration" && !canPostNow(p));
   const totalViews = clip.totalViews ?? posts.reduce((n, p) => n + (p.metrics?.views ?? 0), 0);
   const rest = ordered.filter((p) => p.status !== "pending_integration" || canPostNow(p));
+  // Uploaded, but its posting did not start (the start after a Try again, Post now or connect did not go through,
+  // §14.5): once that lasts past the normal moment, the big Try again starts it.
+  const stuck = useHeld(!!clip.startPending, START_GRACE_MS);
   return (
     <article className="lib-card glass" aria-labelledby={`lib-${clip.clipId}`}>
       <div className="lib-card__top">
@@ -355,15 +358,15 @@ function LibraryCard({
       ) : needsUploadAgain(clip, posts) ? null : (
         <p className="muted small">No posts yet.</p>
       )}
-      {needsUploadAgain(clip, posts) || clip.status === "failed" ? <UploadAgain clip={clip} posts={posts} onKept={onKept} /> : null}
+      {needsUploadAgain(clip, posts) || stuck || clip.status === "failed" ? <UploadAgain clip={clip} posts={posts} onKept={onKept} /> : null}
       <SimilarClips clipId={clip.clipId} />
     </article>
   );
 }
 
 /**
- * An uploaded clip whose posting never started (the Upload stopped half way), or whose posts all failed: one big
- * button tries again. With `platform`, a small Try again for that one place on a clip that went up elsewhere (§33).
+ * An uploaded clip whose posting never started (the Upload stopped half way, or a start that did not go through:
+ * `startPending`), or whose posts all failed: one big button tries again. With `platform`, a small Try again for that one place on a clip that went up elsewhere (§33).
  * When TikTok wants its privacy picked again, the Post to TikTok sheet opens first and its choices go with the Try
  * again (§14.5, §17.8). With `now`, Post now sends a post that waited for `platform` to be set up (§33.6); TikTok's
  * sheet always opens first there, since the owner picks who can see it before anything goes to TikTok.
@@ -402,16 +405,24 @@ export function UploadAgain({
       const out = await uploadClip(api(), clip.clipId, undefined, tiktok, platform ? [platform] : undefined);
       if (out.kind === "uploading") {
         setSheet(false);
-        toast.success(
-          platform
-            ? now
-              ? `Posting to ${PLATFORM_LABEL[platform]}!`
-              : `Trying ${PLATFORM_LABEL[platform]} again!`
-            : failed
-              ? "Trying again! Uploading now."
-              : uploadedMessage(out.posts),
-        );
         onKept(out.clip, out.posts);
+        // Only say it is posting when it is: the start may not have gone through, or (a card that was not up to date)
+        // the clip was still uploading, so the waiting place was not sent.
+        const still = now && out.posts.find((p) => p.platform === platform)?.status === "pending_integration";
+        if (out.clip.startPending) toast.info(STILL_WORKING);
+        else if (still) toast.info(`This clip is still uploading. Post it to ${PLATFORM_LABEL[platform!]} when that is done.`);
+        else {
+          const going = out.posts.filter((p) => p.status === "queued" || p.status === "pending_integration");
+          toast.success(
+            platform
+              ? now
+                ? `Posting to ${PLATFORM_LABEL[platform]}!`
+                : `Trying ${PLATFORM_LABEL[platform]} again!`
+              : failed || !going.length
+                ? "Trying again! Uploading now."
+                : uploadedMessage(going),
+          );
+        }
         return;
       }
       if (out.kind === "busy") setNote(STILL_WORKING);
