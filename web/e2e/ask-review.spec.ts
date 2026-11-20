@@ -229,6 +229,14 @@ test.describe("the composer", () => {
     await expect(panel(page).locator(".ask-msg").last().getByRole("button", { name: "Copy answer" })).toBeVisible({ timeout: 20_000 });
     const drop = panel(page).locator(".ask-carry__drop").first();
     await expect(drop).toBeVisible();
+    // Measure at rest: the panel's entrance (help-in) scales it from 0.98, and a busy CI runner can start that
+    // entrance late, so a measure taken before it ends read 43.12 px (44 x 0.98). Wait for every finite animation on
+    // the button and the boxes around it to finish; a button that is too small at rest still fails.
+    await drop.evaluate(async (el) => {
+      const anims: Animation[] = [];
+      for (let n: Element | null = el; n; n = n.parentElement) anims.push(...n.getAnimations());
+      await Promise.all(anims.filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => {})));
+    });
     const b = (await drop.boundingBox())!;
     expect(b.width).toBeGreaterThanOrEqual(44);
     expect(b.height).toBeGreaterThanOrEqual(44);
