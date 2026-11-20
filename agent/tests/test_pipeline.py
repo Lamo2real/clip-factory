@@ -460,10 +460,9 @@ async def test_ten_steps_and_the_picture_reaches_the_finder(world: World) -> Non
         "nova": "ok",
         "secondLook": "ok",
     }
-    review = next(
-        q for q in world.fable.calls("submit_review") if "Seen (machine-made" in q["messages"][0]["content"][0]["text"]
-    )
-    assert "(seen) crash 9/10" in review["messages"][0]["content"][0]["text"]
+    # the clip checks run side by side, so their order is not fixed: the crash clip's check must carry its notes
+    review_texts = [q["messages"][0]["content"][0]["text"] for q in world.fable.calls("submit_review")]
+    assert any("Seen (machine-made" in t and "(seen) crash 9/10" in t for t in review_texts)
 
 
 def assert_not_watched(world: World, st: JobState, steps: dict[str, dict[str, Any]]) -> None:

@@ -32,20 +32,25 @@ async function idleGap(page: Page): Promise<number> {
 }
 
 /**
- * Taps `item` (a selector inside `list`) and records the glide's painted box on every frame until 900 ms after the
- * slide started (at most 5 s after the tap). The slide starts on the first frame drawn after the tap; on a busy CI
- * runner that frame came up to a second late, and a fixed 900 ms from the tap then ended mid-slide or before it.
+ * Taps `item` (a selector inside `list`) and records the glide's painted box on every frame while its slide animation
+ * is on it, then for 900 ms less the slide's length after it ends (900 ms in all for a slide on time), at most 5 s
+ * after the tap. It follows the animation itself (getAnimations), not a clock: the slide is made in the tap's frame,
+ * held pending on its first keyframe, and given its start time in the app's first animation frame after the tap.
+ * On a busy CI runner that frame came over 900 ms after the tap, and a window counted from the tap, or from "no longer
+ * pending" (only true after this tick, which runs first in that frame), ended right there with the glide still parked
+ * on the old item ("lands on the chosen item ... glide 27.0,91.0 vs item 27.0,143.0").
  */
 async function record(page: Page, list: string, item: string) {
   return page.evaluate(
-    ({ list, item }) =>
+    ({ list, item, tail }) =>
       new Promise<{ frames: [number, number, number, number, number][]; target: number[]; anims: string[]; transitions: string }>((done) => {
         const box = document.querySelector<HTMLElement>(list)!;
         const g = box.querySelector<HTMLElement>(":scope > .glide")!;
         const frames: [number, number, number, number, number][] = [];
         let anims: string[] = [];
         let t0 = 0;
-        let tSlide = -1;
+        let sawSlide = false;
+        let tDone = -1;
         const tick = (now: number) => {
           const r = g.getBoundingClientRect();
           frames.push([now - t0, r.x, r.y, r.width, r.height]);
@@ -58,9 +63,15 @@ async function record(page: Page, list: string, item: string) {
               return `${a.id || (a as CSSTransition).transitionProperty || "?"}:${props.join("+")}`;
             });
           }
-          if (tSlide < 0 && g.getAnimations().some((a) => !a.pending)) tSlide = now;
-          const from = tSlide < 0 ? t0 : tSlide;
-          if (now - from < 900 && now - t0 < 5000) requestAnimationFrame(tick);
+          // Pending, waiting for its start time or moving: the slide is not over while the glide has an animation.
+          if (g.getAnimations().length > 0) {
+            sawSlide = true;
+            tDone = -1;
+          } else if (sawSlide && tDone < 0) tDone = now;
+          // Then a tail long enough to show a creep back or a late jump. With no slide at all (that fails below):
+          // 900 ms from the tap, and never before the app's own first frame after it has run.
+          const more = sawSlide ? tDone < 0 || now - tDone < tail : frames.length < 3 || now - t0 < 900;
+          if (more && now - t0 < 5000) requestAnimationFrame(tick);
           else {
             const on = box.querySelector<HTMLElement>(item)!.getBoundingClientRect();
             done({ frames, target: [on.x, on.y, on.width, on.height], anims, transitions: getComputedStyle(g).transitionProperty });
@@ -79,7 +90,7 @@ async function record(page: Page, list: string, item: string) {
           }),
         );
       }),
-    { list, item },
+    { list, item, tail: 900 - GLIDE_MS },
   );
 }
 
