@@ -2,7 +2,7 @@
 
 Base: `${apiUrl}/v1`. JSON in and out, camelCase. Every route requires the JWT except `GET /v1/health`.
 CORS: allow origins `app_url` and `http://localhost:5173`, methods GET/POST/PUT/PATCH/DELETE/OPTIONS, headers
-`authorization, content-type`. Route `OPTIONS /v1/{proxy+}` is public (`NONE`, no integration) so API Gateway's CORS
+`authorization, content-type`. Route `OPTIONS /v1/{proxy+}` is public (`NONE`, with the API integration attached, as AWS requires; a route with no target is skipped) so API Gateway's CORS
 answers the browser's preflight with 204; without it `ANY /v1/{proxy+}`'s JWT authorizer refused the token-less
 preflight with 401 and every signed-in call failed in every browser. The deploy's smoke job checks it.
 Errors: HTTP 4xx/5xx with body `{ "error": { "code": "snake_case_code", "message": "Plain sentence for the owner.",

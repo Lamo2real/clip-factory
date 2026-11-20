@@ -225,11 +225,14 @@ resource "aws_apigatewayv2_route" "authorized" {
 }
 
 # Browser preflight (CORS). A more specific method than ANY wins, so OPTIONS never reaches the JWT authorizer; with
-# cors_configuration set, API Gateway answers it itself with 204 and the CORS headers, so it needs no integration and
-# the Lambda never runs. Without it the preflight gets 401 and every signed-in call fails in every browser.
+# cors_configuration set, API Gateway answers it itself with 204 and the CORS headers and the Lambda never runs.
+# AWS requires an integration on this route ("attach an integration to the route", HTTP API CORS docs): a route with
+# no target is skipped, and the preflight fell through to the JWT route and got 401 again (deploy of PR #51).
+# Without it every signed-in call fails in every browser.
 resource "aws_apigatewayv2_route" "preflight" {
   api_id             = aws_apigatewayv2_api.http.id
   route_key          = "OPTIONS /v1/{proxy+}"
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
   authorization_type = "NONE"
 }
 

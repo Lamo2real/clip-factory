@@ -443,6 +443,12 @@ run "ask_off_without_a_worker" {
 run "browser_preflight_is_public" {
   command = plan
 
+  override_resource {
+    target          = aws_apigatewayv2_integration.api
+    override_during = plan
+    values          = { id = "integ123" }
+  }
+
   assert {
     condition     = aws_apigatewayv2_route.preflight.route_key == "OPTIONS /v1/{proxy+}"
     error_message = "The HTTP API needs an OPTIONS /v1/{proxy+} route for the browser's CORS preflight."
@@ -454,8 +460,8 @@ run "browser_preflight_is_public" {
   }
 
   assert {
-    condition     = aws_apigatewayv2_route.preflight.target == null
-    error_message = "The preflight route needs no integration: API Gateway's CORS answers it and the Lambda never runs."
+    condition     = aws_apigatewayv2_route.preflight.target == "integrations/integ123"
+    error_message = "The preflight route needs the API integration: AWS skips a route with no target, so OPTIONS falls through to the JWT route and gets 401."
   }
 
   assert {
