@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
-// Upload to many places (docs/CONTRACTS.md §33): only places that are set up get a chip, any number can be on, all
-// ready ones start on, Upload posts to exactly the chosen ones, each place keeps its own caption and limit, results
-// show per place with their own Try again. There are no dropdowns and no extra option panels (the owner said so for
-// every platform), and a failed setup check or a Try again never sends a clip to places nobody picked.
+// Upload to many places (docs/CONTRACTS.md §33, §34): only places that are set up get a chip, any number can be on,
+// all ready ones start on, Upload posts to exactly the chosen ones, each place keeps its own caption and limit in its
+// own row, results show per place with their own Try again. The chips are the only place picker on the card, and a
+// failed setup check or a Try again never sends a clip to places nobody picked.
 
 type Post = { postId: string; platform: string; status: string; error?: string };
 type MockWindow = Window & {
@@ -15,7 +15,7 @@ type MockWindow = Window & {
       settleWithOneFailed(clipId: string, platform: string, reason?: string): void;
     };
   };
-  __cfMockFaults?: { keepStopsAfterSave: number; setupFails?: number };
+  __cfMockFaults?: { keepStopsAfterSave: number; setupFails?: number; resumeAfterMs?: number };
 };
 
 /** YouTube, TikTok, Instagram and Facebook set up; X not started (the owner's own setup, 2026-11-20). */
@@ -49,22 +49,25 @@ test.describe("Upload to many places", () => {
     }
     await expect(card.getByRole("link", { name: "Set up X to upload there too." })).toHaveAttribute("href", "/settings/posting/setup/x");
     await expect(card.getByRole("button", { name: UPLOAD })).toHaveText("Upload to 4");
+    // TikTok needs the owner's tap first (§34); then the line says where it goes.
+    await expect(card.locator(".upload-going")).toHaveText("Tap Use my settings first. TikTok needs your tap.");
+    await card.getByRole("button", { name: "Use my settings" }).click();
     await expect(card.locator(".upload-going")).toHaveText("Going to: YouTube · TikTok · Instagram · Facebook");
-    // X is not a caption tab either, and no tab writes "X X".
-    await expect(card.getByRole("tab")).toHaveCount(4);
-    await expect(card.getByRole("tab", { name: "X" })).toHaveCount(0);
+    // One row per chosen place (§34), no caption tabs, no X row, and nothing writes "X X".
+    await expect(card.getByRole("tab")).toHaveCount(0);
+    await expect(card.locator(".place-row")).toHaveCount(4);
+    await expect(card.locator('.place-row[data-place="x"]')).toHaveCount(0);
     await expect(card.locator(".upload-to")).not.toContainText("X X");
-    await expect(card.locator(".captions")).not.toContainText("X X");
   });
 
-  test("pick several: chips toggle, tabs follow, the label counts, nothing picked turns Upload off", async ({ page }) => {
+  test("pick several: chips toggle, rows follow, the label counts, nothing picked turns Upload off", async ({ page }) => {
     await fourReady(page);
     const card = page.locator(".review-card").first();
     const chip = (name: string) => card.locator(".upload-chip", { hasText: name });
     await chip("TikTok").click();
     await chip("Facebook").click();
     await expect(chip("TikTok")).toHaveAttribute("aria-pressed", "false");
-    await expect(card.getByRole("tab")).toHaveCount(2);
+    await expect(card.locator(".place-row")).toHaveCount(2);
     await expect(card.getByRole("button", { name: UPLOAD })).toHaveText("Upload to 2");
     await chip("Instagram").click();
     await expect(card.getByRole("button", { name: UPLOAD })).toHaveText("Upload to YouTube");
@@ -76,15 +79,15 @@ test.describe("Upload to many places", () => {
   test("each place keeps its own caption and limit; a long caption only blocks when its place is on", async ({ page }) => {
     await fourReady(page);
     const card = page.locator(".review-card").first();
-    await card.getByRole("tab", { name: "Instagram" }).click();
+    await card.locator('[data-place="instagram"] summary').click();
     await card.getByLabel("Instagram caption").fill("i".repeat(2300));
     await expect(card.locator(".counter.is-over")).toContainText("2300 / 2200");
-    await card.getByRole("tab", { name: "TikTok" }).click();
+    await card.locator('[data-place="tiktok"] summary').click();
     await expect(card.getByLabel("TikTok caption")).not.toHaveValue("i".repeat(2300));
-    // Turn Instagram off: its tab goes, the text stays for later, and Upload is not blocked by it.
+    // Turn Instagram off: its row goes, the text stays for later, and Upload is not blocked by it.
     await card.locator(".upload-chip", { hasText: "Instagram" }).click();
     await card.locator(".upload-chip", { hasText: "TikTok" }).click();
-    await expect(card.getByRole("tab", { name: /Instagram/ })).toHaveCount(0);
+    await expect(card.locator('[data-place="instagram"]')).toHaveCount(0);
     await card.getByRole("button", { name: UPLOAD }).click();
     await expect(page.getByText(/longer than its platform allows/)).toHaveCount(0);
     await expect(page.getByText("Uploading to 2 places!")).toBeVisible();
@@ -96,9 +99,9 @@ test.describe("Upload to many places", () => {
     const clipId = (await card.locator("..").getAttribute("id"))!.replace("clip-", "");
     await card.locator(".upload-chip", { hasText: "TikTok" }).click();
     await card.locator(".upload-chip", { hasText: "Instagram" }).click();
-    // Nothing else to pick on the card: no dropdown, no More details, no Use my settings.
-    await expect(card.locator('select, [aria-haspopup="listbox"], .more-details, details.more-details')).toHaveCount(0);
-    await expect(card.getByRole("button", { name: /Use my settings|More details/ })).toHaveCount(0);
+    // The chips are the only place picker: no tab bar, no OS list.
+    await expect(card.getByRole("tab")).toHaveCount(0);
+    await expect(card.locator("select")).toHaveCount(0);
     await card.getByRole("button", { name: UPLOAD }).click();
     await expect(page.getByText("Uploading to 2 places!")).toBeVisible();
 
@@ -130,19 +133,6 @@ test.describe("Upload to many places", () => {
     await settle(page);
     const next = page.locator(".review-card").first();
     await expect(next.locator('.upload-chip[aria-pressed="true"]')).toHaveText(["YouTube"]);
-  });
-
-  test("the TikTok sheet opens with nothing picked, whatever else is on the card", async ({ page }) => {
-    await fourReady(page);
-    const card = page.locator(".review-card").first();
-    await card.getByRole("button", { name: UPLOAD }).click();
-    const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
-    await expect(sheet.getByRole("radiogroup", { name: "Who can see it" }).getByRole("radio", { checked: true })).toHaveCount(0);
-    for (const name of ["Comments", "Duet", "Stitch", "Commercial content"]) await expect(sheet.getByRole("switch", { name })).toHaveAttribute("aria-checked", "false");
-    await sheet.getByRole("radiogroup", { name: "Who can see it" }).getByRole("radio", { name: "Everyone", exact: true }).check();
-    await sheet.getByRole("button", { name: "Upload", exact: true }).click();
-    await expect(page.getByText("Uploading to 4 places!")).toBeVisible();
-    await expect(page.getByText("TikTok can take a few minutes to process your clip.")).toBeVisible();
   });
 
   test("a setup check that fails leaves Upload off and sends nothing; Check again brings the chips back", async ({ page }) => {
@@ -177,7 +167,7 @@ test.describe("Upload to many places", () => {
     await expect(card.getByRole("button", { name: UPLOAD })).toHaveText("Upload to 2");
   });
 
-  test("Try again after a failed Upload still needs a place, and asks TikTok's question when TikTok is on", async ({ page }) => {
+  test("Try again after a failed Upload still needs a place, and TikTok's own choices when TikTok is on", async ({ page }) => {
     await fourReady(page);
     const card = page.locator(".review-card").first();
     await card.locator(".upload-chip", { hasText: "TikTok" }).click();
@@ -187,10 +177,15 @@ test.describe("Upload to many places", () => {
     // All places off: Try again is off, it never falls back to Where clips go.
     for (const name of ["YouTube", "Instagram", "Facebook"]) await card.locator(".upload-chip", { hasText: name }).click();
     await expect(card.getByRole("button", { name: "Try again", exact: true })).toHaveAttribute("aria-disabled", "true");
-    // TikTok turned on after the failure: Try again opens the sheet first.
+    // TikTok turned on after the failure: Try again waits for TikTok's choices (Use my settings), never a sheet.
     await card.locator(".upload-chip", { hasText: "TikTok" }).click();
+    await expect(card.getByRole("button", { name: "Try again", exact: true })).toHaveAttribute("aria-disabled", "true");
+    await card.getByRole("button", { name: "Use my settings" }).click();
+    await expect(card.getByRole("button", { name: "Your settings are on" })).toBeVisible();
+    await expect(card.getByRole("button", { name: "Try again", exact: true })).not.toHaveAttribute("aria-disabled", "true");
+    await page.evaluate(() => ((window as MockWindow).__cfMockFaults!.resumeAfterMs = 0));
     await card.getByRole("button", { name: "Try again", exact: true }).click();
-    await expect(page.getByRole("dialog", { name: "Post to TikTok" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Post to TikTok" })).toHaveCount(0);
   });
 
   test("the checks row never overlaps at 320 px", async ({ page }) => {

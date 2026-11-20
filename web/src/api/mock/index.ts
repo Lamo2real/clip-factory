@@ -1,6 +1,7 @@
 // The whole HTTP API in memory, with fake latency, so the UI runs with no backend (npm run dev:mock, Playwright).
 import { ApiError, networkError } from "../errors.ts";
-import type { Api, Clip, Job, JobDeleteClips, JobDeleted, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
+import type { Api, Clip, ClipPostOptions, Job, JobDeleteClips, JobDeleted, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
+import { clipOptionsProblem, presetOf, presetProblem } from "../../lib/preset.ts";
 import { TIKTOK_PICK_AGAIN } from "../../lib/upload.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 import { MOMENTS, PLATFORMS, STEP_KEYS, coverArt, seed, stepsAt, thumbArt, ulid, type Store } from "./fixtures.ts";
@@ -164,6 +165,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   const claimedAt = new Map<string, number>();
   // The TikTok sheet's choices stored on each TikTok post (the API's postOptions.tiktok, never returned).
   const postOptions = new Map<string, TikTokPostOptions>();
+  // Each place's own choices sent with Upload (§34.3), by post (the API's postOptions, never returned).
+  const clipOptions = new Map<string, object>();
 
   /**
    * Try again on a failed clip (§14.5): failed posts go back to queued and the clip to confirmed. New TikTok sheet
@@ -225,6 +228,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     options(postId: string): TikTokPostOptions | null {
       return clone(postOptions.get(postId) ?? null);
+    },
+    /** §34.3: the YouTube, Instagram or X choices stored on a post. */
+    clipOptions(postId: string): object | null {
+      return clone(clipOptions.get(postId) ?? null);
     },
   };
   if (typeof window !== "undefined") {
@@ -627,8 +634,12 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       publishClip(c);
       return clone(c);
     },
-    async confirmClip(clipId, captions, tiktok, platforms) {
+    async confirmClip(clipId, captions, tiktok, platforms, options) {
       await delay();
+      if (options !== undefined) {
+        const wrong = clipOptionsProblem(options);
+        if (wrong) throw bad(wrong);
+      }
       const c = clip(clipId);
       const connected = setup.connected();
       // The places picked on Upload (§33): known, each once, not empty, and each set up.
@@ -655,6 +666,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
           .map((platform) => ({ postId: ulid(), clipId, platform, status: connected.includes(platform) ? "queued" : "pending_integration" }));
         store.posts.push(...created);
         for (const p of created) if (p.platform === "tiktok" && p.status === "queued" && tiktok) postOptions.set(p.postId, clone(tiktok));
+        for (const p of created) {
+          const own = options?.[p.platform as keyof ClipPostOptions];
+          if (own) clipOptions.set(p.postId, clone(own));
+        }
         publishClip(c);
         for (const p of created) publishPost(p);
         return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
@@ -749,6 +764,12 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       }
       if (next.followMinMinutes !== undefined && !whole(next.followMinMinutes, 10, 240)) throw bad("The shortest video must be a number from 10 to 240 minutes.");
       if (next.followPaused !== undefined && typeof next.followPaused !== "boolean") throw bad("followPaused must be true or false.");
+      if (patch.postPreset !== undefined) {
+        // §34: the same check as the API (never made for kids), each platform merged over the defaults.
+        const wrong = presetProblem(patch.postPreset);
+        if (wrong) throw bad(wrong);
+        next.postPreset = presetOf(patch.postPreset);
+      }
       if (next.backgroundColours !== undefined) {
         const c = next.backgroundColours;
         if (!Array.isArray(c) || c.length < 1 || c.length > MAX_COLOURS || !c.every(isHexColour)) throw bad("Pick 1 to 3 colours.");

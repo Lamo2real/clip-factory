@@ -1,23 +1,37 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
-// The Post to TikTok sheet (docs/CONTRACTS.md §17.8, §33.5): with TikTok chosen, Upload first asks who can see the
-// post, on one bar of buttons (no dropdown) with nothing picked: TikTok's Content Sharing Guidelines.
+// TikTok's choices (docs/CONTRACTS.md §17.8, §34, TikTok's Content Sharing Guidelines). On the Review card they live
+// in the TikTok row: who can see it is the app's own dropdown with nothing picked until the owner picks or taps Use my
+// settings; Comments, Duet and Stitch show and start off; Commercial content needs Your brand or Branded content. The
+// Post to TikTok sheet only opens where there is no row: Try again in the Library when TikTok wants a new pick.
 
-/** The "Who can see it" bar (a pick-one Glide radio group). */
-const bar = (sheet: Locator) => sheet.getByRole("radiogroup", { name: "Who can see it" });
+/** The "Who can see it" dropdown inside `scope`. */
+const dropdown = (scope: Locator) => scope.locator(".dropdown__button").first();
 
-/** Taps a "Who can see it" button. */
-async function pick(sheet: Locator, name: string) {
-  await bar(sheet).getByRole("radio", { name, exact: true }).check();
+/** The names in the open dropdown list. */
+async function choices(scope: Locator): Promise<string[]> {
+  await dropdown(scope).click();
+  const names = await scope.getByRole("option").locator(".dropdown__name").allInnerTexts();
+  await dropdown(scope).click();
+  return names;
+}
+
+/** Picks a "Who can see it" choice. */
+async function pick(scope: Locator, name: string) {
+  await dropdown(scope).click();
+  await scope.getByRole("option", { name, exact: true }).click();
 }
 
 type MockWindow = Window & {
   __cfMock?: {
     setup: { finish(p: string): void; setAudit(passed: boolean): void };
-    posting: { failTikTok(): { clipId: string; postId: string; hook: string }; options(postId: string): { privacyLevel: string } | null };
+    posting: {
+      failTikTok(): { clipId: string; postId: string; hook: string };
+      options(postId: string): { privacyLevel: string } | null;
+      posts(clipId: string): { postId: string; platform: string }[];
+    };
   };
-  __cfMockCalls?: Record<string, number>;
   __cfMockFaults?: { keepStopsAfterSave: number; resumeAfterMs: number };
 };
 
@@ -25,11 +39,14 @@ async function connectTikTok(page: Page, audited: boolean) {
   await page.goto("/");
   await settle(page);
   await page.evaluate((a) => {
+    localStorage.removeItem("cf-upload-to");
     const s = (window as MockWindow).__cfMock!.setup;
     s.finish("tiktok");
     s.setAudit(a);
   }, audited);
 }
+
+const UPLOAD = /^Upload( to .+)?$/;
 
 for (const size of [
   { width: 375, height: 812 },
@@ -38,105 +55,65 @@ for (const size of [
   test.describe(`at ${size.width}px`, () => {
     test.use({ viewport: size });
 
-    test("Upload stays off until a privacy is picked; branded content hides Only me", async ({ page }) => {
+    test("the TikTok row: nothing picked, Upload off until the owner picks; branded content hides Only me", async ({ page }) => {
       await connectTikTok(page, true);
       await page.goto("/review");
       await settle(page);
       const card = page.locator(".review-card").first();
-      await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
-      const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
-      await expect(sheet).toBeVisible();
-      await expect(sheet.getByText("Posting as")).toContainText("Clip Factory");
-      const keep = sheet.getByRole("button", { name: "Upload", exact: true });
-      // One bar of buttons: no dropdown, no OS list, nothing picked.
-      await expect(sheet.locator("select")).toHaveCount(0);
-      await expect(sheet.locator('[aria-haspopup="listbox"], [role="listbox"]')).toHaveCount(0);
-      await expect(bar(sheet).getByRole("radio")).toHaveCount(4);
-      await expect(bar(sheet).getByRole("radio", { checked: true })).toHaveCount(0);
-      await expect(keep).toHaveAttribute("aria-disabled", "true");
-      await expect(sheet.getByText("Tap who can see it to turn on Upload.")).toBeVisible();
-      // Everyone first, exactly TikTok's choices.
-      await expect(bar(sheet).locator("label")).toHaveText(["Everyone", "Followers", "Friends", "Only me"]);
-      // Comments, Duet and Stitch start off; Stitch is switched off in the creator's TikTok settings. No "Turn all on".
-      await expect(sheet.getByRole("switch", { name: "Comments" })).toHaveAttribute("aria-checked", "false");
-      await expect(sheet.getByRole("switch", { name: "Duet" })).toHaveAttribute("aria-checked", "false");
-      await expect(sheet.getByRole("switch", { name: "Stitch" })).toHaveAttribute("aria-disabled", "true");
-      await expect(sheet.getByRole("button", { name: /Turn all on|Use my settings/ })).toHaveCount(0);
+      const upload = card.getByRole("button", { name: UPLOAD });
+      await expect(upload).toHaveAttribute("aria-disabled", "true");
+      await expect(card.locator(".upload-going")).toHaveText("Tap Use my settings first. TikTok needs your tap.");
+      // The Music Usage Confirmation shows near Upload whenever TikTok is ticked.
+      await expect(card.locator(".tt-legal")).toHaveText("By posting, you agree to TikTok's Music Usage Confirmation.");
 
-      await pick(sheet, "Only me");
-      await expect(bar(sheet).getByRole("radio", { checked: true })).toHaveCount(1);
-      await expect(keep).not.toHaveAttribute("aria-disabled", "true");
+      const row = card.locator('[data-place="tiktok"]');
+      await row.locator("summary").click();
+      await expect(row.getByText("Posting as")).toContainText("Clip Factory");
+      // The app's own dropdown, never the OS list, with nothing picked; Everyone first, exactly TikTok's choices.
+      await expect(row.locator("select")).toHaveCount(0);
+      await expect(dropdown(row)).toHaveText("Pick who can see it");
+      expect(await choices(row)).toEqual(["Everyone", "Followers", "Friends", "Only me"]);
+      await expect(upload).toHaveAttribute("aria-disabled", "true");
+      // Comments, Duet and Stitch start off; Stitch is switched off in the creator's TikTok settings.
+      await expect(row.getByRole("switch", { name: "Comments" })).toHaveAttribute("aria-checked", "false");
+      await expect(row.getByRole("switch", { name: "Duet" })).toHaveAttribute("aria-checked", "false");
+      await expect(row.getByRole("switch", { name: "Stitch" })).toHaveAttribute("aria-disabled", "true");
+      await expect(row.getByRole("switch", { name: "Commercial content" })).toHaveAttribute("aria-checked", "false");
 
-      // Commercial content needs whose: Branded content, which cannot be Only me.
-      await sheet.getByRole("switch", { name: "Commercial content" }).click();
-      await expect(keep).toHaveAttribute("aria-disabled", "true");
-      await sheet.getByRole("checkbox", { name: /^Branded content/ }).check();
-      await expect(bar(sheet).getByRole("radio", { checked: true })).toHaveCount(0);
-      await expect(bar(sheet).locator("label")).toHaveText(["Everyone", "Followers", "Friends"]);
-      await expect(sheet).toContainText("By posting, you agree to TikTok's Music Usage Confirmation and Branded Content Policy.");
-      await expect(keep).toHaveAttribute("aria-disabled", "true");
-      await pick(sheet, "Everyone");
-      await expect(keep).not.toHaveAttribute("aria-disabled", "true");
+      await pick(row, "Only me");
+      await expect(dropdown(row)).toHaveText("Only me");
+      await expect(upload).not.toHaveAttribute("aria-disabled", "true");
 
-      await keep.click();
-      await expect(sheet).toHaveCount(0);
+      // Commercial content needs whose: Branded content (paid partnership), which cannot be Only me.
+      await row.getByRole("switch", { name: "Commercial content" }).click();
+      await expect(upload).toHaveAttribute("aria-disabled", "true");
+      await expect(card.locator(".upload-going")).toHaveText("Pick Your brand or Branded content on TikTok first.");
+      await row.getByRole("checkbox", { name: /^Branded content/ }).check();
+      await expect(dropdown(row)).toHaveText("Pick who can see it");
+      expect(await choices(row)).toEqual(["Everyone", "Followers", "Friends"]);
+      await expect(card.locator(".tt-legal")).toHaveText("By posting, you agree to TikTok's Music Usage Confirmation and Branded Content Policy.");
+      await pick(row, "Everyone");
+      await expect(upload).not.toHaveAttribute("aria-disabled", "true");
+      await upload.click();
+      await expect(page.getByRole("dialog", { name: "Post to TikTok" })).toHaveCount(0);
       await expect(page.getByText("TikTok can take a few minutes to process your clip.")).toBeVisible();
       await expect(page.getByText(/^Uploading to TikTok!/)).toBeVisible();
     });
 
-    test("the sheet covers the whole screen, keeps typed letters and traps Tab; Escape gives the focus back to Upload", async ({ page }) => {
-      await connectTikTok(page, true);
-      await page.goto("/review");
-      await settle(page);
-      const keepOnCard = page.locator(".review-card").nth(1).getByRole("button", { name: /^Upload( to .+)?$/ });
-      await keepOnCard.click();
-      const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
-      await expect(sheet.getByText("Posting as")).toBeVisible();
-
-      // F002: drawn on body, the backdrop is the viewport, the title and Close are on screen, the nav is covered.
-      const box = await page.locator(".tt-sheet-backdrop").evaluate((el) => {
-        const r = el.getBoundingClientRect();
-        const bottom = document.elementFromPoint(innerWidth / 2, innerHeight - 4);
-        return { parent: el.parentElement?.tagName, x: r.x, y: r.y, w: r.width, h: r.height, vw: innerWidth, vh: innerHeight, covered: !!bottom?.closest(".tt-sheet-backdrop") };
-      });
-      expect(box).toMatchObject({ parent: "BODY", x: 0, y: 0, w: box.vw, h: box.vh, covered: true });
-      const title = await sheet.getByRole("heading", { name: "Post to TikTok" }).boundingBox();
-      expect(title!.y).toBeGreaterThanOrEqual(0);
-      await expect(sheet.getByRole("button", { name: "Close" })).toBeInViewport();
-
-      // F003: every typed letter stays, and the caret stays in the box.
-      const caption = sheet.getByLabel("Caption");
-      const before = await caption.inputValue();
-      await caption.click();
-      // The end of the whole caption, not of its first line (a long caption wraps in the box).
-      await caption.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(el.value.length, el.value.length));
-      await caption.pressSequentially(" abc", { delay: 40 });
-      await expect(caption).toHaveValue(`${before} abc`);
-      await expect(caption).toBeFocused();
-
-      // F030: Tab never leaves the sheet.
-      for (let i = 0; i < 16; i++) {
-        await page.keyboard.press("Tab");
-        expect(await page.evaluate(() => !!document.activeElement?.closest(".tt-sheet"))).toBe(true);
-      }
-      await page.keyboard.press("Escape");
-      await expect(sheet).toHaveCount(0);
-      await expect(keepOnCard).toBeFocused();
-    });
-
-    test("before TikTok's audit only Only me is offered, and Not now closes the sheet", async ({ page }) => {
+    test("before TikTok's audit only Only me is offered, with the plain line; Use my settings picks it", async ({ page }) => {
       await connectTikTok(page, false);
       await page.goto("/review");
       await settle(page);
-      await page.locator(".review-card").first().getByRole("button", { name: /^Upload( to .+)?$/ }).click();
-      const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
-      await expect(sheet.getByText("TikTok keeps posts private until it approves your app.")).toBeVisible();
-      // One button, still the owner's own tap.
-      await expect(bar(sheet).locator("label")).toHaveText(["Only me"]);
-      await expect(bar(sheet).getByRole("radio", { checked: true })).toHaveCount(0);
-      await sheet.getByRole("button", { name: "Not now" }).click();
-      await expect(sheet).toHaveCount(0);
-      await expect(page.locator(".review-card").first()).toBeVisible();
+      const card = page.locator(".review-card").first();
+      const row = card.locator('[data-place="tiktok"]');
+      await row.locator("summary").click();
+      await expect(row.getByText("TikTok keeps posts private until it approves your app.")).toBeVisible();
+      expect(await choices(row)).toEqual(["Only me"]);
+      // Still the owner's own tap: nothing picked yet.
+      await expect(dropdown(row)).toHaveText("Pick who can see it");
+      await card.getByRole("button", { name: "Use my settings" }).click();
+      await expect(dropdown(row)).toHaveText("Only me");
+      await expect(card.getByRole("button", { name: UPLOAD })).not.toHaveAttribute("aria-disabled", "true");
     });
   });
 }
@@ -144,7 +121,7 @@ for (const size of [
 test("with nothing set up, Upload saves it straight away (no sheet, no Upload to chips)", async ({ page }) => {
   await page.goto("/review");
   await settle(page);
-  await page.locator(".review-card").first().getByRole("button", { name: /^Upload( to .+)?$/ }).click();
+  await page.locator(".review-card").first().getByRole("button", { name: UPLOAD }).click();
   await expect(page.getByText(/Saved! It uploads as soon as your accounts are set up/)).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Post to TikTok" })).toHaveCount(0);
 });
@@ -158,14 +135,36 @@ test("library: Try again on a failed clip whose TikTok post needs new choices op
   await expect(card.getByText("Pick who can see it on TikTok again, then press Try again.")).toBeVisible();
   await expect(card.getByText("Uploading did not work. Tap Try again.")).toBeVisible();
 
-  await card.getByRole("button", { name: "Try again", exact: true }).click();
+  const opener = card.getByRole("button", { name: "Try again", exact: true });
+  await opener.click();
   const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
   await expect(sheet).toBeVisible();
   const again = sheet.getByRole("button", { name: "Try again", exact: true });
   await expect(again).toHaveAttribute("aria-disabled", "true");
+  await expect(dropdown(sheet)).toHaveText("Pick who can see it");
+  await expect(sheet.getByText("Pick who can see it to turn on Try again.")).toBeVisible();
+  for (const name of ["Comments", "Duet", "Commercial content"]) await expect(sheet.getByRole("switch", { name })).toHaveAttribute("aria-checked", "false");
+  await expect(sheet).toContainText("By posting, you agree to TikTok's Music Usage Confirmation.");
+
+  // F002: drawn on body, the backdrop is the viewport and covers the nav.
+  const box = await page.locator(".tt-sheet-backdrop").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const bottom = document.elementFromPoint(innerWidth / 2, innerHeight - 4);
+    return { parent: el.parentElement?.tagName, x: r.x, y: r.y, w: r.width, h: r.height, vw: innerWidth, vh: innerHeight, covered: !!bottom?.closest(".tt-sheet-backdrop") };
+  });
+  expect(box).toMatchObject({ parent: "BODY", x: 0, y: 0, w: box.vw, h: box.vh, covered: true });
+  // F030: Tab never leaves the sheet; Escape gives the focus back.
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => !!document.activeElement?.closest(".tt-sheet"))).toBe(true);
+  }
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+  await expect(opener).toBeFocused();
+
+  await opener.click();
   await pick(sheet, "Friends");
   await again.click();
-
   await expect(sheet).toHaveCount(0);
   await expect(page.getByText("Trying again! Uploading now.")).toBeVisible();
   await expect(card.getByRole("button", { name: "Try again", exact: true })).toHaveCount(0);
@@ -174,7 +173,7 @@ test("library: Try again on a failed clip whose TikTok post needs new choices op
   expect(stored).toMatchObject({ privacyLevel: "MUTUAL_FOLLOW_FRIENDS" });
 });
 
-test("review: an Upload from the TikTok sheet that does not finish shakes the sheet's Upload, then Try again uploads it (F080)", async ({ page }) => {
+test("review: an Upload that does not finish shakes Upload, then Try again uploads with the same TikTok choices (F080)", async ({ page }) => {
   await connectTikTok(page, true);
   await page.goto("/review");
   await settle(page);
@@ -184,34 +183,23 @@ test("review: an Upload from the TikTok sheet that does not finish shakes the sh
     (window as MockWindow).__cfMockFaults!.keepStopsAfterSave = 1;
   });
   const card = cards.first();
-  await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
-  const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
-  await pick(sheet, "Everyone");
-  const sheetKeep = sheet.getByRole("button", { name: "Upload", exact: true });
-  await sheetKeep.click();
+  await card.getByRole("button", { name: "Use my settings" }).click();
+  const upload = card.getByRole("button", { name: UPLOAD });
+  await upload.click();
 
-  // The failure shakes the sheet's own Upload, shows the error toast and no celebration; the card stays with Try again.
-  await expect(sheetKeep.locator(".act")).toHaveClass(/is-fail/);
-  const errorToast = page.locator(".toast", { hasText: "cannot be reached" });
-  await expect(errorToast).toBeVisible();
-  // The toast sits above the sheet's backdrop (the sheet is drawn on body), so the owner can read it.
-  const onTop = await errorToast.evaluate((el) => {
-    const r = el.getBoundingClientRect();
-    return !!document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.closest(".toast");
-  });
-  expect(onTop).toBe(true);
+  // The failure shakes the card's Upload, shows the error toast and no celebration; the card stays with Try again.
+  const again = card.getByRole("button", { name: "Try again", exact: true });
+  await expect(again.locator(".act")).toHaveClass(/is-fail/);
+  await expect(page.locator(".toast", { hasText: "cannot be reached" })).toBeVisible();
   await expect(page.locator("canvas.confetti")).toHaveCount(0);
   await expect(page.getByText(/^(Uploading to|Saved!)/)).toHaveCount(0);
   await expect(card.getByText("Uploading this clip did not finish. Tap Try again.")).toBeVisible();
-  await expect(card.getByRole("button", { name: "Try again", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Post to TikTok" })).toHaveCount(0);
 
-  // Try again (old enough to resume) finishes the keep with the same TikTok choices.
-  await sheet.getByRole("button", { name: "Not now" }).click();
-  await expect(sheet).toHaveCount(0);
   await page.evaluate(() => {
     (window as MockWindow).__cfMockFaults!.resumeAfterMs = 0;
   });
-  await card.getByRole("button", { name: "Try again", exact: true }).click();
+  await again.click();
   await expect(page.getByText(/^(Uploading to|Saved!)/)).toBeVisible();
   await expect(cards).toHaveCount(before - 1);
 });

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Captions, Clip, Platform, TikTokPostOptions } from "../../api/types.ts";
+import type { Captions, Clip, Platform, TikTokCreator, TikTokPostOptions, YoutubePrivacy } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Pill, Skeleton } from "../../components/ui.tsx";
 import { burst, centerOf } from "../../lib/confetti.ts";
-import { MOMENT_LABEL, plural, timecode } from "../../lib/format.ts";
+import { MOMENT_LABEL, PLATFORM_ORDER, plural, timecode } from "../../lib/format.ts";
 import { ACT_REWIND_MS, useAction } from "../../lib/motion.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
@@ -18,7 +18,9 @@ import { useSetup } from "../settings/setup/useSetup.ts";
 import { goingToLine, UploadToChips } from "./UploadTo.tsx";
 import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAways.ts";
 import { useDeletedJobs } from "../../lib/jobDeletes.ts";
-import { CaptionTabs, captionsTooLong, type CaptionTabsHandle } from "./CaptionTabs.tsx";
+import { captionsTooLong, PlaceRows, type PlaceRowsHandle } from "./PlaceRows.tsx";
+import { choicesReady, myTikTokChoices, NO_TIKTOK_CHOICES, tiktokOptions, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
+import { cardOptionsFrom, optionsFor, presetOf, type CardOptions } from "../../lib/preset.ts";
 import { TikTokSheet } from "./TikTokSheet.tsx";
 import { useUnsaved } from "../../features/help/unsaved.ts";
 
@@ -292,7 +294,7 @@ function ReviewCard({
   const toast = useToast();
   const { me, refresh } = useSession();
   const [captions, setCaptions] = useState<Captions>(clip.captions);
-  // The Post to TikTok sheet (§17.8) is open: Upload waits for its choices.
+  // The Post to TikTok sheet (§17.8) is open: only when nothing is set up yet but TikTok is connected (§34.4).
   const [sheet, setSheet] = useState(false);
   // Where it goes (§33): the owner's taps on this card, else this device's last choice / Where clips go, minus
   // places that are not set up.
@@ -316,7 +318,81 @@ function ReviewCard({
   // The TikTok sheet's choices from the Upload that did not finish: Try again sends them again.
   const lastTikTok = useRef<TikTokPostOptions | undefined>(undefined);
   const confirmRef = useRef<HTMLDivElement>(null);
-  const tabs = useRef<CaptionTabsHandle>(null);
+  const rows = useRef<PlaceRowsHandle>(null);
+
+  // TikTok's options live in its row on the card (§34): asked for when the owner taps Use my settings or opens the
+  // TikTok row (TikTok's rules: this creator's current options, every time), never before.
+  const tiktokOn = chosen.includes("tiktok");
+  const [ttWanted, setTtWanted] = useState(false);
+  const [ttAsk, setTtAsk] = useState(0);
+  const [creator, setCreator] = useState<TikTokCreator | null>(null);
+  const [ttError, setTtError] = useState<string | null>(null);
+  const [choices, setChoices] = useState<TikTokChoices>(NO_TIKTOK_CHOICES);
+  // Use my settings was tapped on this card (TikTok's choices are the owner's own tap, never a default).
+  const [applied, setApplied] = useState(false);
+  // My settings (§34), from the server. YouTube, Instagram and X use them from the start (no TikTok-style rule there);
+  // `own` holds this card's changes to them, null until the owner changes one in a row.
+  const youtubePrivacy: YoutubePrivacy = me?.settings.youtubePrivacy ?? "public";
+  const preset = presetOf(me?.settings.postPreset);
+  const presetRef = useRef(preset);
+  presetRef.current = preset;
+  const [own, setOwn] = useState<CardOptions | null>(null);
+  const opts: CardOptions = own ?? cardOptionsFrom(preset, youtubePrivacy);
+  // The owner changed something in a row after My settings went on: the button offers to put his settings back.
+  const [changed, setChanged] = useState(false);
+  function setOpt<K extends keyof CardOptions>(platform: K, patch: Partial<CardOptions[K]>) {
+    setOwn({ ...opts, [platform]: { ...opts[platform], ...patch } });
+    setChanged(true);
+  }
+  // Use my settings was tapped before TikTok answered: its choices go on as soon as the answer comes.
+  const applyWhenAsked = useRef(false);
+  useEffect(() => {
+    if (!ttWanted) return;
+    let alive = true;
+    setTtError(null);
+    api()
+      .tiktokCreatorInfo()
+      .then((c) => {
+        if (!alive) return;
+        setCreator(c);
+        if (applyWhenAsked.current) {
+          applyWhenAsked.current = false;
+          applyTikTok(c);
+        }
+      })
+      .catch((e) => {
+        if (!alive) return;
+        applyWhenAsked.current = false;
+        setTtError(friendlyMessage(e));
+      });
+    return () => {
+      alive = false;
+    };
+    // applyTikTok only reads state setters and the clip.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ttWanted, ttAsk]);
+  const askTikTok = () => (ttWanted ? setTtAsk((n) => n + 1) : setTtWanted(true));
+  function applyTikTok(c: TikTokCreator) {
+    const mine = myTikTokChoices(presetRef.current.tiktok, c);
+    setChoices(mine);
+    setApplied(true);
+    // Nothing TikTok offers fits (or the clip is too long for TikTok): the row opens to say why.
+    if (!choicesReady(mine) || tooLongForTikTok(clip.durationSec, c.maxDurationSec)) rows.current?.open("tiktok");
+  }
+  /** "Use my settings": every ticked place gets the owner's saved settings; TikTok's go on with this one tap. */
+  function useMySettings() {
+    setOwn(null);
+    setChanged(false);
+    if (!tiktokOn) return;
+    if (creator) return applyTikTok(creator);
+    applyWhenAsked.current = true;
+    askTikTok();
+  }
+  const ttTooLong = !!creator && tooLongForTikTok(clip.durationSec, creator.maxDurationSec);
+  const ttReady = !!creator && choicesReady(choices) && !ttTooLong;
+  // The settings are on: places other than TikTok use them from the start; TikTok needs the owner's tap.
+  const settingsOn = !changed && (!tiktokOn || applied);
+  const ttAsking = ttWanted && !creator && !ttError;
   // Stable, so the open sheet is not re-set-up on every typed letter (§17.8).
   const closeSheet = useCallback(() => setSheet(false), []);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -411,8 +487,8 @@ function ReviewCard({
     }
     if (captionsTooLong(captions, noneReady ? undefined : chosen)) {
       keepAct.fail({ sound: false });
-      // Opens the too-long tab (it may be scrolled out of sight) and names the platform.
-      const name = tabs.current?.showTooLong();
+      // Opens the too-long row (it may be scrolled out of sight) and names the platform.
+      const name = rows.current?.showTooLong();
       toast.error(
         name
           ? `Your ${name} caption is longer than its platform allows. Make it shorter, then tap Upload.`
@@ -420,12 +496,23 @@ function ReviewCard({
       );
       return;
     }
-    // TikTok is one of the places: its rules say the owner picks who can see the post first, on its sheet (§17.8).
-    // Try again keeps the choices already made there, but only while TikTok is still one of the places.
+    // TikTok is one of the places: its choices are on the card (Use my settings, or the TikTok row), §34.
+    if (tiktokOn) {
+      if (!ttReady) {
+        keepAct.fail({ sound: false });
+        rows.current?.open("tiktok");
+        toast.error(uploadWhy ?? "Tap Use my settings first.");
+        return;
+      }
+      keepAct.play();
+      await upload(tiktokOptions(choices, creator!));
+      return;
+    }
+    // Nothing set up but TikTok connected (a step still waits): TikTok's own sheet asks first, as before §33.
+    // Try again keeps the choices already made there.
     const haveTikTok = keepFailed && !!lastTikTok.current;
-    let tiktokGoing = chosen.includes("tiktok");
-    // Nothing set up but TikTok connected (a step still waits): TikTok's rules still come first, as before §33.
-    if (!tiktokGoing && noneReady && !haveTikTok && me?.settings.platforms.includes("tiktok")) {
+    let tiktokGoing = false;
+    if (noneReady && !haveTikTok && me?.settings.platforms.includes("tiktok")) {
       setBusy("confirm");
       tiktokGoing = await api()
         .listAccounts()
@@ -433,14 +520,14 @@ function ReviewCard({
         .catch(() => false);
       setBusy(null);
     }
-    if (tiktokGoing && !haveTikTok) {
+    if (tiktokGoing) {
       setSheet(true);
       return;
     }
     // The plane (or Try again's arrow) plays only now that an upload really starts: not on the tap that opens the
     // TikTok sheet, and never on a refused Upload (§20.5, §20.8).
     keepAct.play();
-    await upload(tiktokGoing ? lastTikTok.current : undefined);
+    await upload(haveTikTok ? lastTikTok.current : undefined);
   }
 
   async function upload(tiktok?: TikTokPostOptions) {
@@ -457,6 +544,7 @@ function ReviewCard({
         Object.keys(dirty).length || tiktok ? captions : undefined,
         tiktok,
         chosen.length ? chosen : undefined,
+        chosen.length ? optionsFor(chosen, opts) : undefined,
       );
       if (out.kind === "uploading") {
         if (chosen.length) saveUploadTo(chosen);
@@ -476,13 +564,13 @@ function ReviewCard({
       setKeepFailed(true);
       setKeepNote(STILL_WORKING);
       setBusy(null);
-      (tiktok ? sheetAct : keepAct).fail();
+      (sheet ? sheetAct : keepAct).fail();
     } catch (e) {
       settled.current = false;
       onSettling(clip.clipId, false);
       setKeepFailed(true);
       // The error toast plays the deny sound.
-      (tiktok ? sheetAct : keepAct).fail({ sound: false });
+      (sheet ? sheetAct : keepAct).fail({ sound: false });
       toast.error(friendlyMessage(e));
       setBusy(null);
     }
@@ -496,6 +584,21 @@ function ReviewCard({
   }
 
   const passed = clip.checklist.items.filter((i) => i.pass).length;
+  // Why Upload is off because of TikTok, in plain words (null when TikTok is ready or not ticked).
+  const uploadWhy: string | null = !tiktokOn || ttReady
+    ? null
+    : ttError
+      ? "TikTok did not answer. Tap Ask TikTok again, or untick TikTok."
+      : ttAsking
+        ? "Asking TikTok…"
+        : !creator
+          ? "Tap Use my settings first. TikTok needs your tap."
+          : ttTooLong
+            ? "This clip is too long for TikTok. Untick TikTok to upload it to the rest."
+            : !choices.privacy
+              ? "Pick who can see it on TikTok first."
+              : "Pick Your brand or Branded content on TikTok first.";
+  const placesShown = ready && !noneReady ? chosen : PLATFORM_ORDER;
 
   return (
     <article className={`review-card glass${leaving ? " is-leaving" : returning ? " is-returning" : ""}`} aria-labelledby={`hook-${clip.clipId}`}>
@@ -608,9 +711,57 @@ function ReviewCard({
           <Skeleton className="line-skel" />
         )}
 
-        <div data-help="captions" data-help-dodge="">
-          <CaptionTabs captions={captions} onChange={edit} handle={tabs} platforms={ready && !noneReady ? chosen : undefined} />
-        </div>
+        {ready && !noneReady && chosen.length ? (
+          <div className="my-settings" data-help="use-my-settings">
+            <Button
+              variant="glass"
+              size="lg"
+              block
+              icon={settingsOn ? "checkCircle" : "sliders"}
+              act="tick"
+              className={settingsOn ? "btn--bone my-settings__btn is-on" : "my-settings__btn"}
+              loading={ttAsking && applyWhenAsked.current}
+              aria-describedby={`mine-${clip.clipId}`}
+              data-help-clear=""
+              onClick={useMySettings}
+            >
+              {settingsOn ? "Your settings are on" : "Use my settings"}
+            </Button>
+            <p className="my-settings__note" id={`mine-${clip.clipId}`}>
+              {changed
+                ? "You changed some for this clip. Tap to put yours back."
+                : tiktokOn
+                  ? applied
+                    ? "Every place uses your settings. Tap a place below to change it for this clip."
+                    : "Your other places already use your settings. TikTok needs your tap each time."
+                  : "Every place uses your settings. Tap a place below to change it for this clip."}
+            </p>
+          </div>
+        ) : null}
+
+        <PlaceRows
+          places={placesShown}
+          captions={captions}
+          onChange={edit}
+          handle={rows}
+          settings={!!ready && !noneReady}
+          options={opts}
+          onOptions={setOpt}
+          tiktok={{
+            creator,
+            error: ttError,
+            asking: ttAsking,
+            onAskAgain: askTikTok,
+            choices,
+            onChoices: (patch) => {
+              setChoices((c) => ({ ...c, ...patch }));
+              // Commercial content is about this clip only (never in My settings), so ticking it keeps "Your settings are on".
+              if (applied && ("privacy" in patch || "comments" in patch || "duet" in patch || "stitch" in patch)) setChanged(true);
+            },
+            durationSec: clip.durationSec,
+            onOpen: () => setTtWanted(true),
+          }}
+        />
         <p className={`save-state is-${save}`} aria-live="polite">
           {save === "saving" ? "Saving…" : save === "saved" ? "Captions saved" : save === "failed" ? "Not saved yet. Your changes are saved when you tap Upload." : ""}
         </p>
@@ -627,8 +778,26 @@ function ReviewCard({
           </div>
         ) : null}
         {ready && !keepFailed && !noneReady ? (
-          <p className={`upload-going${chosen.length ? "" : " is-none"}`} id={`going-${clip.clipId}`} aria-live="polite">
-            {goingToLine(chosen)}
+          <p className={`upload-going${chosen.length && !uploadWhy ? "" : " is-none"}`} id={`going-${clip.clipId}`} aria-live="polite">
+            {uploadWhy ?? goingToLine(chosen)}
+          </p>
+        ) : null}
+        {ready && !noneReady && tiktokOn ? (
+          <p className="tt-legal">
+            By posting, you agree to TikTok&apos;s{" "}
+            <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener noreferrer">
+              Music Usage Confirmation
+            </a>
+            {choices.commercial && choices.branded ? (
+              <>
+                {" "}
+                and{" "}
+                <a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener noreferrer">
+                  Branded Content Policy
+                </a>
+              </>
+            ) : null}
+            .
           </p>
         ) : null}
         <div className="review-card__actions" ref={confirmRef} data-help-dodge="">
@@ -642,8 +811,9 @@ function ReviewCard({
             act={keepAct}
             playOnClick={false}
             data-help={keepFailed ? "try-again upload" : "upload"}
+            data-help-clear=""
             loading={busy === "confirm"}
-            disabled={leaving || !ready || (!noneReady && !chosen.length)}
+            disabled={leaving || !ready || (!noneReady && !chosen.length) || !!uploadWhy}
             aria-describedby={ready && !keepFailed && !noneReady ? `going-${clip.clipId}` : undefined}
             onClick={confirm}
           >

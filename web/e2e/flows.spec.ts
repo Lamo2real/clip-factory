@@ -43,7 +43,7 @@ test("keep a clip with a celebration, throw another away and undo it", async ({ 
   const before = await cards.count();
   expect(before).toBeGreaterThan(1);
 
-  await cards.first().getByRole("tab", { name: "X" }).click();
+  await cards.first().locator('[data-place="x"] summary').click();
   await cards.first().getByLabel("X caption").fill("Twelve cars, one bridge #gtarp");
   await cards.first().getByRole("button", { name: /^Upload( to .+)?$/ }).click();
   await expect(page.locator("canvas.confetti")).toHaveCount(1);

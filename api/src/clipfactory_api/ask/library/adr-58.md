@@ -1,21 +1,22 @@
-## ADR-58 Deleting a job: a hard delete behind a client-side Undo, posted clips never touched
+## ADR-58 One simple Review card: Use my settings, one row per place, TikTok's dropdown
 
-- **Context.** The owner wants to delete jobs (failed ones, finished ones). A job owns working files (gigabytes of
-  audio, picture parts and checkpoints) and clips, some of them posted on five platforms with numbers the learning
-  relies on. A running job has an agent container and a durable flow that keep writing to it.
-- **Options.** (1) A server-side soft delete (`deletedAt`, hidden from every read, a TTL purge later): Undo works on
-  every device, but every read must filter it, list pages come back short, and the purge needs a scheduled job or a
-  stream consumer with S3 rights (new infrastructure). (2) A hard delete sent after the 8-second Undo the app already
-  uses for Stop job and Throw away (§16.8, §12.3). (3) A hard delete with only a confirm.
-- **Decision.** (CONTRACTS §34) Option 2, behind one question that says exactly what happens. The server delete is
-  ordered so it is safe to repeat: fence the job with a new `sessionId` (the agent and the flow already condition every
-  write on theirs), stop the run outright, delete thrown-away clips and, only when the owner turns it on (off by
-  default), the clips still in Review, then the files except the kept clips' folders, then the job. Kept and posted
-  clips, their posts and numbers are never deleted: deleting a job is housekeeping, not taking anything down. The
-  Review-clips switch is off by default because those clips have not been looked at yet; Undo covers a slip, the
-  switch covers intent.
-- **Consequences.** No infrastructure change. The Undo lives on the device that deleted (another device sees the job go
-  when the delete is sent, 8 seconds later); a tab closed inside the window still sends it (`pagehide`, `keepalive`),
-  and if that request is lost the job simply stays, never half-deleted. A clip whose job is gone keeps working and its
-  "See the job" link says the job is gone. Select's Pick all failed picks the failed jobs loaded on screen, not older
-  pages.
+Two taps for a standard upload; each platform's options in its own row; TikTok's privacy from a dropdown.
+
+- **Context.** After ADR-57 the owner saw two platform bars on one card (the Upload to chips and the caption tab bar)
+  and asked what the difference was. What he wants: tick the places, one button for his settings, a dropdown per
+  platform (TikTok paid partnership, for example), one button to upload. ADR-57 had also removed the preset he asked
+  for and replaced TikTok's privacy dropdown with a button bar, while TikTok's Content Sharing Guidelines ask for the
+  privacy "from a dropdown" with no default.
+- **Options.** (1) Keep the tab bar and add a preset button; (2) one collapsed row per ticked place holding its words
+  and options, a server-side preset applied by one tap, and TikTok's controls in its row; (3) auto-apply everything,
+  TikTok included, with no tap.
+- **Decision.** (CONTRACTS §34) Option 2. `settings.postPreset` (additive, per owner, defaults: the most reach, never
+  made for kids; the preset can never say made for kids) edited in Settings › Posting › My settings; confirm gains
+  optional per-clip `options` for YouTube, Instagram and X, stored as post options and read by the publishers before
+  the preset. YouTube, Instagram, Facebook and X use the preset from the start; TikTok's choices go on only with the
+  owner's tap on Use my settings (his own action, as TikTok requires), so option 3 is out. TikTok's "Who can see it" is
+  the app's own dropdown with no default, Everyone first. The caption tab bar is gone. The Ask launcher fades whenever
+  it touches Upload or Use my settings.
+- **Consequences.** A standard upload is Use my settings, then Upload to 4. The TikTok sheet stays for Library's Try
+  again only. No table or infrastructure change: the preset is one more attribute on the settings item, written only
+  when the owner saves; existing settings, clips and posts are untouched, and older clients post exactly as before.

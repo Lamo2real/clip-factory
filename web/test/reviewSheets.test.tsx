@@ -2,7 +2,8 @@ import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
-import type { Api, Captions, Clip, TikTokCreator, TikTokPostOptions } from "../src/api/types.ts";
+import type { Api, Captions, Clip, Platform, TikTokCreator, TikTokPostOptions } from "../src/api/types.ts";
+import type { PlaceRowsHandle, TikTokRow } from "../src/screens/review/PlaceRows.tsx";
 import type { Toaster } from "../src/components/Toasts.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -12,7 +13,9 @@ vi.mock("../src/api/index.ts", () => ({ api: () => current }));
 
 const { seed } = await import("../src/api/mock/fixtures.ts");
 const { TikTokSheet, tooLongForTikTok } = await import("../src/screens/review/TikTokSheet.tsx");
-const { CaptionTabs, tabsTooLong } = await import("../src/screens/review/CaptionTabs.tsx");
+const { PlaceRows, placesTooLong, captionsTooLong } = await import("../src/screens/review/PlaceRows.tsx");
+const { myTikTokChoices, NO_TIKTOK_CHOICES } = await import("../src/lib/tiktokChoices.ts");
+const { cardOptionsFrom, clipOptionsProblem, DEFAULT_PRESET, optionsFor, presetOf, presetProblem } = await import("../src/lib/preset.ts");
 const { reviewCountForJob } = await import("../src/screens/review/Review.tsx");
 const { Sheet } = await import("../src/components/Sheet.tsx");
 const { ALREADY_DECIDED, isThrownAway, onClipBack, resetThrownAway, throwAwayWithUndo } = await import("../src/lib/throwAways.ts");
@@ -140,31 +143,41 @@ describe("Post to TikTok sheet", () => {
   });
 
   const uploadButton = (dialog: HTMLElement) => Array.from(dialog.querySelectorAll<HTMLButtonElement>(".tt-sheet__actions button")).pop()!;
-  const privacyBar = (dialog: HTMLElement) => dialog.querySelector<HTMLElement>('.segmented[role="radiogroup"]')!;
-  const privacyNames = (dialog: HTMLElement) => Array.from(privacyBar(dialog).querySelectorAll("label")).map((l) => l.textContent);
-  const privacyOn = (dialog: HTMLElement) => privacyBar(dialog).querySelector<HTMLInputElement>("input:checked")?.closest("label")?.textContent ?? null;
+  const privacyButton = (dialog: HTMLElement) => dialog.querySelector<HTMLButtonElement>('.dropdown__button[aria-haspopup="listbox"]')!;
+  function privacyNames(dialog: HTMLElement) {
+    act(() => privacyButton(dialog).click());
+    const names = Array.from(dialog.querySelectorAll('[role="option"] .dropdown__name')).map((n) => n.textContent);
+    act(() => privacyButton(dialog).click());
+    return names;
+  }
+  const privacyOn = (dialog: HTMLElement) =>
+    privacyButton(dialog).classList.contains("is-picked") ? privacyButton(dialog).querySelector(".dropdown__value")!.textContent : null;
   function pickPrivacy(dialog: HTMLElement, name: string) {
-    const radio = Array.from(privacyBar(dialog).querySelectorAll<HTMLInputElement>("input")).find((i) => i.closest("label")!.textContent === name)!;
-    act(() => radio.click());
+    act(() => privacyButton(dialog).click());
+    const option = Array.from(dialog.querySelectorAll<HTMLElement>('[role="option"]')).find((o) => o.querySelector(".dropdown__name")!.textContent === name)!;
+    act(() => option.click());
   }
 
-  it("asks who can see it with one bar of buttons: no dropdown, no OS list, no default, Everyone first (TikTok's rules)", async () => {
+  it("asks who can see it from the app's own dropdown: no OS list, no default, Everyone first (TikTok's rules)", async () => {
     current = { tiktokCreatorInfo: async () => ({ ...creator, privacyOptions: ["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "PUBLIC_TO_EVERYONE"] }) };
     const { dialog } = await openSheet();
     expect(dialog.querySelector("select")).toBeNull();
-    expect(dialog.querySelector('[aria-haspopup="listbox"], [role="listbox"], [role="option"]')).toBeNull();
-    expect(privacyBar(dialog).getAttribute("aria-label")).toBe("Who can see it");
+    // The list opens only when tapped; its label is the visible "Who can see it".
+    expect(dialog.querySelector('[role="listbox"]')).toBeNull();
+    const labelId = privacyButton(dialog).getAttribute("aria-labelledby")!.split(" ")[0]!;
+    expect(document.getElementById(labelId)!.textContent).toBe("Who can see it");
+    expect(privacyButton(dialog).textContent).toContain("Pick who can see it");
     // Exactly TikTok's list (never more), Everyone first, and nothing picked until the owner picks.
     expect(privacyNames(dialog)).toEqual(["Everyone", "Friends", "Only me"]);
     expect(privacyOn(dialog)).toBeNull();
     expect(uploadButton(dialog).getAttribute("aria-disabled")).toBe("true");
-    expect(dialog.textContent).toContain("Tap who can see it to turn on Upload.");
+    expect(dialog.textContent).toContain("Pick who can see it to turn on Upload.");
     pickPrivacy(dialog, "Everyone");
     expect(privacyOn(dialog)).toBe("Everyone");
     expect(uploadButton(dialog).getAttribute("aria-disabled")).not.toBe("true");
   });
 
-  it("before TikTok approves the app: one button, Only me, a plain line, still the owner's tap", async () => {
+  it("before TikTok approves the app: one choice, Only me, a plain line, still the owner's tap", async () => {
     current = { tiktokCreatorInfo: async () => ({ ...creator, privacyOptions: ["SELF_ONLY"] }) };
     const { dialog } = await openSheet();
     expect(dialog.textContent).toContain("TikTok keeps posts private until it approves your app.");
@@ -271,55 +284,106 @@ describe("Sheet", () => {
   });
 });
 
-describe("caption tabs", () => {
+describe("place rows (§34)", () => {
   const ok: Captions = { ...clip.captions, x: "short", youtubeTitle: "short", youtubeDescription: "", tiktok: "", instagram: "", facebook: "" };
-
-  it("lists the too-long tabs in tab order (F006)", () => {
-    expect(tabsTooLong(ok)).toEqual([]);
-    expect(tabsTooLong({ ...ok, x: "x".repeat(281), youtubeTitle: "y".repeat(101) })).toEqual(
-      expect.arrayContaining(["youtube", "x"]),
+  const cardOpts = cardOptionsFrom(DEFAULT_PRESET, "public");
+  function Rows({ places, captions = ok, handle, tiktok = {} }: { places: Platform[]; captions?: Captions; handle?: { current: PlaceRowsHandle | null }; tiktok?: Partial<TikTokRow> }) {
+    const [opts, setOpts] = useState(cardOpts);
+    return (
+      <PlaceRows
+        places={places}
+        captions={captions}
+        onChange={() => undefined}
+        handle={handle}
+        options={opts}
+        onOptions={(p, patch) => setOpts((o) => ({ ...o, [p]: { ...o[p], ...patch } }))}
+        tiktok={{ creator, error: null, asking: false, onAskAgain: () => undefined, choices: NO_TIKTOK_CHOICES, onChoices: () => undefined, durationSec: 30, onOpen: () => undefined, ...tiktok }}
+      />
     );
-    expect(tabsTooLong({ ...ok, youtubeDescription: "d".repeat(5001) })).toEqual(["youtube"]);
+  }
+  const rowNames = () => Array.from(host.querySelectorAll<HTMLElement>(".place-row")).map((r) => r.dataset.place);
+
+  it("lists the too-long places in their order, counting only the chosen ones", () => {
+    expect(placesTooLong(ok)).toEqual([]);
+    expect(placesTooLong({ ...ok, x: "x".repeat(281), youtubeTitle: "y".repeat(101) })).toEqual(["youtube", "x"]);
+    expect(placesTooLong({ ...ok, x: "x".repeat(281) }, ["youtube", "tiktok"])).toEqual([]);
+    expect(captionsTooLong({ ...ok, x: "x".repeat(281) }, ["youtube", "x"])).toBe(true);
   });
 
-  it("only the chosen places count as too long (§33.2)", () => {
-    const long = { ...ok, x: "x".repeat(281) };
-    expect(tabsTooLong(long, ["youtube", "tiktok"])).toEqual([]);
-    expect(tabsTooLong(long, ["youtube", "x"])).toEqual(["x"]);
+  it("one closed row per chosen place, in order, saying what is inside; no tab bar and no second place picker", () => {
+    act(() => root.render(<Rows places={["x", "tiktok", "youtube"]} />));
+    expect(rowNames()).toEqual(["youtube", "tiktok", "x"]);
+    expect(host.querySelector('[role="tablist"], [role="tab"]')).toBeNull();
+    // The only pick-one bar is YouTube's own "Who can see it", inside its row.
+    expect(Array.from(host.querySelectorAll('[role="radiogroup"]')).map((g) => g.getAttribute("aria-label"))).toEqual(["Who can see it on YouTube"]);
+    expect(Array.from(host.querySelectorAll("details")).every((d) => !d.open)).toBe(true);
+    const yt = host.querySelector<HTMLElement>('[data-place="youtube"] summary')!;
+    expect(yt.textContent).toContain("YouTube · title, description and settings");
+    expect(yt.textContent).toContain("Who can see it: Everyone · Made for kids: No · Gaming");
+    // X's mark reads "X": its name is for screen readers only (never "X X").
+    expect(host.querySelector('[data-place="x"] .place-row__title')!.textContent).toBe("Xcaption and settings");
   });
 
-  it("shows tabs only for the chosen places, keeps a turned-off place's caption, and never writes X twice", () => {
-    const captions = { ...ok, x: "kept x text" };
-    act(() => root.render(<CaptionTabs captions={captions} onChange={() => undefined} platforms={["youtube", "x"]} />));
-    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
-    expect(tabs.map((t) => t.getAttribute("aria-label"))).toEqual(["YouTube", "X"]);
-    const x = tabs[1]!;
-    act(() => x.click());
-    // The X tab shows its mark only: no visible "X" next to the X logo.
-    expect(x.textContent).toBe("");
-    expect(host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("kept x text");
-    act(() => root.render(<CaptionTabs captions={captions} onChange={() => undefined} platforms={["youtube"]} />));
-    expect(Array.from(host.querySelectorAll('[role="tab"]')).map((t) => t.getAttribute("aria-label"))).toEqual(["YouTube"]);
-    act(() => root.render(<CaptionTabs captions={captions} onChange={() => undefined} platforms={["youtube", "x"]} />));
-    act(() => Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))[1]!.click());
-    expect(host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("kept x text");
+  it("opening a row shows that place's words and every option; YouTube starts not made for kids", () => {
+    act(() => root.render(<Rows places={["youtube", "instagram", "x"]} />));
+    act(() => host.querySelector<HTMLElement>('[data-place="youtube"] summary')!.click());
+    const body = host.querySelector<HTMLElement>('[data-place="youtube"] .place-row__body')!;
+    expect(body.querySelector<HTMLInputElement>("input.input")!.value).toBe("short");
+    const kids = Array.from(body.querySelectorAll<HTMLButtonElement>('[role="switch"]')).find((b) => document.getElementById(b.getAttribute("aria-labelledby")!)!.textContent === "Made for kids")!;
+    expect(kids.getAttribute("aria-checked")).toBe("false");
+    expect(body.textContent).toContain("Category");
+    act(() => kids.click());
+    expect(host.querySelector('[data-place="youtube"] summary')!.textContent).toContain("Made for kids: Yes");
+    act(() => host.querySelector<HTMLElement>('[data-place="x"] summary')!.click());
+    expect(host.querySelector('[data-place="x"] .place-row__body')!.textContent).toContain("Who can reply");
   });
 
-  it("marks a too-long tab even when it is not open, and Upload's refusal opens and focuses it (F006)", () => {
-    const handle: { current: { showTooLong(): string | null } | null } = { current: null };
-    act(() => root.render(<CaptionTabs captions={{ ...ok, x: "x".repeat(300) }} onChange={() => undefined} handle={handle} />));
-    const x = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((t) => t.id.endsWith("-tab-x"))!;
+  it("the TikTok row asks TikTok when opened and shows its dropdown with nothing picked", async () => {
+    const onOpen = vi.fn();
+    act(() => root.render(<Rows places={["tiktok"]} tiktok={{ onOpen }} />));
+    expect(host.querySelector('[data-place="tiktok"] summary')!.textContent).toContain("Who can see it: not picked yet");
+    act(() => host.querySelector<HTMLElement>('[data-place="tiktok"] summary')!.click());
+    await flush();
+    expect(onOpen).toHaveBeenCalled();
+    const body = host.querySelector<HTMLElement>('[data-place="tiktok"] .place-row__body')!;
+    expect(body.querySelector(".dropdown__button")!.textContent).toContain("Pick who can see it");
+    expect(body.textContent).toContain("Commercial content");
+  });
+
+  it("Upload's refusal opens the too-long row and focuses its box", () => {
+    const handle: { current: PlaceRowsHandle | null } = { current: null };
+    act(() => root.render(<Rows places={["youtube", "x"]} captions={{ ...ok, x: "x".repeat(300) }} handle={handle} />));
+    const x = host.querySelector<HTMLDetailsElement>('[data-place="x"]')!;
     expect(x.className).toContain("is-over");
-    expect(x.getAttribute("aria-label")).toBe("X, too long");
-    expect(x.getAttribute("aria-selected")).toBe("false");
+    expect(x.open).toBe(false);
     let name: string | null = null;
     act(() => {
       name = handle.current!.showTooLong();
     });
     expect(name).toBe("X");
-    expect(x.getAttribute("aria-selected")).toBe("true");
-    expect(document.activeElement).toBe(x);
-    expect(host.querySelector<HTMLTextAreaElement>("textarea")!.getAttribute("aria-invalid")).toBe("true");
+    expect(x.open).toBe(true);
+  });
+});
+
+describe("Use my settings (§34)", () => {
+  it("puts the owner's TikTok settings on, within what TikTok offers him now; Commercial content stays off", () => {
+    const mine = myTikTokChoices(DEFAULT_PRESET.tiktok, { ...creator, privacyOptions: ["SELF_ONLY", "PUBLIC_TO_EVERYONE"] });
+    // Stitch is off in this creator's TikTok settings: it stays off.
+    expect(mine).toEqual({ ...NO_TIKTOK_CHOICES, privacy: "PUBLIC_TO_EVERYONE", comments: true, duet: true, stitch: false });
+    expect(myTikTokChoices({ ...DEFAULT_PRESET.tiktok, privacy: "FOLLOWER_OF_CREATOR" }, { ...creator, privacyOptions: ["SELF_ONLY"] }).privacy).toBe("SELF_ONLY");
+  });
+
+  it("YouTube, Instagram and X start from My settings; YouTube follows the saved privacy and is never made for kids", () => {
+    const o = cardOptionsFrom(presetOf({ youtube: { category: "23", notifySubscribers: false, embeddable: true } }), "unlisted");
+    expect(o.youtube).toEqual({ privacy: "unlisted", category: "23", madeForKids: false, notifySubscribers: false, embeddable: true });
+    expect(optionsFor(["youtube", "tiktok"], o)).toEqual({ youtube: o.youtube });
+  });
+
+  it("the mock refuses made for kids in My settings, like the API", () => {
+    expect(presetProblem({ youtube: { madeForKids: true } })).toBe("My settings never mark a clip as made for kids.");
+    expect(presetProblem({ tiktok: { duet: false } })).toBeNull();
+    expect(clipOptionsProblem({ youtube: { madeForKids: true } })).toBeNull();
+    expect(clipOptionsProblem({ tiktok: {} })).not.toBeNull();
   });
 });
 

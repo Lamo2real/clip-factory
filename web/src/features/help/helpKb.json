@@ -273,13 +273,17 @@
         "only one platform",
         "x not showing",
         "why is x missing",
-        "set up x"
+        "set up x",
+        "two bars",
+        "bottom bar",
+        "difference",
+        "tabs"
       ],
-      "answer": "On each clip, **Upload to** shows every place that is set up. Turn on as many as you like, then tap **Upload**. A place that is not set up yet does not show; set it up in **Set up posting**.",
+      "answer": "On each clip, **Upload to** shows every place that is set up, all ticked to start. Tap **Use my settings**, then **Upload**. That is the only place picker: each ticked place gets its own row below for its words and options. A place that is not set up yet does not show; set it up in **Set up posting**.",
       "steps": [
         "Tap **Review**.",
-        "Under **Upload to**, tap each place to turn it on or off.",
-        "Tap **Upload**."
+        "Under **Upload to**, tap a place to untick it if it should not go there.",
+        "Tap **Use my settings**, then **Upload**."
       ],
       "actions": [
         {
@@ -288,6 +292,119 @@
           "to": "/review",
           "highlight": [
             "upload-to"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "review-use-my-settings",
+      "route": "/review",
+      "where": "Review › a clip › Use my settings",
+      "title": "Use my settings: upload in two taps",
+      "keywords": [
+        "use my settings",
+        "my settings",
+        "one tap",
+        "standard upload",
+        "settings are on",
+        "preset",
+        "quick upload",
+        "fast upload",
+        "same settings",
+        "every time"
+      ],
+      "answer": "**Use my settings** puts your saved choices on every ticked place: who can see it, comments, duets and stitches, never made for kids. TikTok needs your own tap each time, so tap it, then tap **Upload**. Change a place for one clip in its row.",
+      "steps": [
+        "Tap **Review**.",
+        "Tap **Use my settings**. It says **Your settings are on**.",
+        "Tap **Upload**."
+      ],
+      "actions": [
+        {
+          "id": "review-use-my-settings:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "use-my-settings"
+          ]
+        }
+      ],
+      "suggest": true
+    },
+    {
+      "id": "review-place-rows",
+      "route": "/review",
+      "where": "Review › a clip › a place's row",
+      "title": "Change one place for one clip",
+      "keywords": [
+        "paid partnership",
+        "branded content",
+        "commercial content",
+        "sponsored",
+        "made for kids",
+        "category",
+        "who can reply",
+        "share to feed",
+        "change tiktok",
+        "options",
+        "dropdown",
+        "paid partnership tiktok",
+        "mark as paid partnership",
+        "promotional"
+      ],
+      "answer": "Each ticked place has its own row under **Use my settings**. Tap the row to open its words and options. For a paid partnership, open **TikTok**, turn on **Commercial content** and tick **Branded content**.",
+      "steps": [
+        "Tap **Review**.",
+        "Tap a place's row, like **TikTok · caption and settings**.",
+        "Change what you want, then tap **Upload**."
+      ],
+      "actions": [
+        {
+          "id": "review-place-rows:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "captions"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "my-settings",
+      "route": "/settings/posting/my-settings",
+      "hash": "my-settings-tiktok",
+      "where": "Settings › Posting › My settings",
+      "title": "Change My settings",
+      "keywords": [
+        "change my settings",
+        "edit my settings",
+        "default settings",
+        "preset",
+        "everyone",
+        "public",
+        "duet off",
+        "comments off",
+        "reply",
+        "x replies",
+        "feed",
+        "settings for uploads",
+        "upload settings",
+        "posting settings",
+        "change settings for uploads"
+      ],
+      "answer": "**My settings** are the choices **Use my settings** puts on a clip, one part per place, X too. They start at everyone can see it, comments, duets and stitches on, and never made for kids.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **My settings**.",
+        "Change a place. It saves at once."
+      ],
+      "actions": [
+        {
+          "id": "my-settings:open",
+          "label": "Open My settings",
+          "to": "/settings/posting/my-settings#my-settings-tiktok",
+          "highlight": [
+            "my-settings-tiktok"
           ]
         }
       ]
@@ -347,7 +464,7 @@
       "answer": "Each clip has its own caption for every place it goes. Change them on the clip in **Review** before you tap **Upload**. They save by themselves.",
       "steps": [
         "Tap **Review**.",
-        "Under the clip, tap the place, like **TikTok**.",
+        "Tap the place's row, like **TikTok · caption and settings**.",
         "Type your new caption.",
         "Tap **Upload** when it looks right."
       ],

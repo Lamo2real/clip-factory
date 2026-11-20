@@ -235,6 +235,8 @@ export interface Settings {
   followMinMinutes?: number;
   /** Which notifications the owner's devices get (docs/CONTRACTS.md §32.3). Absent on old servers: the defaults. */
   notify?: NotifyChoices;
+  /** My settings (§34): the owner's own post choices per platform. Absent on old servers: the defaults. */
+  postPreset?: PostPreset;
 }
 
 /** §32.3: "Clips ready", "It stopped" and "Picked up" are on by default; "Every step" is off (each one shows on the phone). */
@@ -263,6 +265,52 @@ export interface PushSubscriptionBody {
 }
 
 export type YoutubePrivacy = "public" | "unlisted" | "private";
+
+/**
+ * My settings (§34), one part per platform. YouTube's "who can see it" is `Settings.youtubePrivacy`, not here. There is
+ * no made-for-kids field: My settings never mark a clip as made for kids. TikTok's Commercial content is per clip only.
+ */
+export interface YouTubePreset {
+  /** A YouTube category id: "20" Gaming (the default), "24", "23", "22", "17". */
+  category: string;
+  notifySubscribers: boolean;
+  embeddable: boolean;
+}
+export interface TikTokPreset {
+  privacy: string;
+  comments: boolean;
+  duet: boolean;
+  stitch: boolean;
+}
+export interface InstagramPreset {
+  shareToFeed: boolean;
+}
+export type XReplies = "everyone" | "following" | "mentionedUsers" | "verified";
+export interface XPreset {
+  replies: XReplies;
+}
+export interface PostPreset {
+  youtube: YouTubePreset;
+  tiktok: TikTokPreset;
+  instagram: InstagramPreset;
+  /** Reels on a Facebook Page are public: nothing to choose. */
+  facebook: Record<string, never>;
+  x: XPreset;
+}
+/** One clip's choices sent with Upload (§34.3). TikTok's go in `tiktok` (§17.8). */
+export interface YouTubeClipOptions {
+  privacy: YoutubePrivacy;
+  category: string;
+  /** YouTube asks every creator; starts off (No). */
+  madeForKids: boolean;
+  notifySubscribers: boolean;
+  embeddable: boolean;
+}
+export interface ClipPostOptions {
+  youtube?: YouTubeClipOptions;
+  instagram?: InstagramPreset;
+  x?: XPreset;
+}
 
 // ---------- Posting setup (docs/CONTRACTS.md §17.4) ----------
 export type AccountStatus = "not_connected" | "connected" | "needs_reconnect" | "choose_account";
@@ -1083,6 +1131,7 @@ export interface Api {
     captions?: Partial<Captions>,
     tiktok?: TikTokPostOptions,
     platforms?: Platform[],
+    options?: ClipPostOptions,
   ): Promise<{ clip: Clip; posts: Post[] }>;
   declineClip(clipId: string): Promise<Clip>;
   /** GET /v1/skills: built-ins first, then the owner's, by name (§18.3). */

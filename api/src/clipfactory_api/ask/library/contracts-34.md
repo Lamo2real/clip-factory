@@ -1,102 +1,129 @@
-## 34. Delete jobs (owner request, 2026-11-20)
+## 34. One simple Review card: Use my settings and one row per place (owner request, 2026-11-20)
 
-### 34.1 The owner's words and what they mean
+The owner, on a Review card after §33: "How can I select platforms on the bottom bar AND tick/untick them under Upload
+to? What's the difference? All I want: select all of them, click one button, upload. Plus one extra button for my
+settings, and a dropdown per platform (e.g. TikTok paid partnership). For a standard upload I should only have to tap
+one button." §33 had also removed the "Use my settings" preset he asked for and put TikTok's "Who can see it" on a bar
+of buttons, although TikTok's rules ask for a dropdown. This section replaces §33.2's caption tabs, §33.4 and §33.5.
+Decision record: ADR-58 (which corrects ADR-57).
 
-"You should also allow me to delete jobs as well." He has failed jobs (a YouTube one that stopped at Find the video)
-and finished ones he no longer needs to see. A job can be deleted from its row in Jobs, from its own page, and several
-at once (Select, with Pick all failed). Deleting a job never takes down what was posted (ADR-58).
+### 34.1 The card, top to bottom
 
-### 34.2 What goes and what stays
+1. Clip info, video and Checks before posting, as before.
+2. **Upload to** chips (§33.2, unchanged): only places that are set up, all ticked to start, remembered per device.
+   They are the only place picker on the card.
+3. **Use my settings**: one big soft-fill button (`.my-settings__btn`, a glass button, full width). It puts My
+   settings on every ticked place. Done state: bone fill, a check, **Your settings are on**. Under it one plain line:
+   "Your other places already use your settings. TikTok needs your tap each time." (before the tap, TikTok ticked),
+   "Every place uses your settings. Tap a place below to change it for this clip." (after, or with TikTok unticked),
+   "You changed some for this clip. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
+   and X use My settings from the start (nothing in their rules asks for a tap); TikTok's choices go on only with this
+   tap (or picks in its row), because TikTok wants the creator's own action and no default. Ticking Commercial content
+   (Your brand / Branded content) is about one clip and keeps "Your settings are on".
+4. **One closed row per ticked place** (`screens/review/PlaceRows.tsx`, a `<details>` with a soft fill and no edges):
+   "YouTube · title, description and settings", "TikTok · caption and settings", "Instagram · caption and
+   settings", "Facebook · caption and settings", "X · caption and settings" (X's name is for screen readers only, its
+   mark reads "X"). Under the title one quiet line says what will be used ("Who can see it: Everyone · Made for kids:
+   No · Gaming"; "Who can see it: Everyone · Comments on · Duet on · Stitch off"; "Reel · also in your feed"; "Reel on
+   your Page · Everyone can see it"; "Who can reply: Everyone"); a too-long caption adds "Too long. Make it shorter."
+   in vermilion ink. Tapping a row opens that place's own words (already written, with their limits) and every option:
+   * YouTube: Title, Description, Who can see it (a `<Glide>` bar: Everyone / Link only / Only me, starting from
+     `settings.youtubePrivacy`), Category (the app's own dropdown, Gaming first), **Made for kids** switch (off = No),
+     Tell my subscribers.
+   * TikTok: Posting as, Caption, **Who can see it** (§34.5), Comments, Duet, Stitch, Commercial content with Your
+     brand (Promotional content) / Branded content (Paid partnership).
+   * Instagram: Caption, Also show it in my feed (Reel).
+   * Facebook: Caption, "Goes up as a Reel on your Page. Everyone can see it." (Page Reels are public; nothing to pick).
+   * X: Caption, Who can reply (the app's own dropdown: Everyone, People you follow, Only people you mention, Verified
+     accounts).
+   With nothing set up (or the check failed) the rows hold the words only. There is no caption tab bar and no second
+   place selector anywhere on the card.
+5. "Going to: YouTube · TikTok · Instagram · Facebook" (or why Upload is off), TikTok's Music Usage Confirmation line
+   (`.tt-legal`, + Branded Content Policy when branded) whenever TikTok is ticked, then **Throw away** and **Upload to
+   4** (bottom right, vermilion on the top card). Upload is off, with one plain line in its place, while TikTok is
+   ticked and not ready: "Tap Use my settings first. TikTok needs your tap.", "Asking TikTok…", "Pick who can see it on
+   TikTok first.", "Pick Your brand or Branded content on TikTok first.", "This clip is too long for TikTok. Untick
+   TikTok to upload it to the rest.", "TikTok did not answer. Tap Ask TikTok again, or untick TikTok."
 
-| | Deleted with the job | Kept |
-|---|---|---|
-| The job, its live status line (`JOBLIVE#`), its notification step (`NOTIFYSTEP#`) | always | |
-| A working job's run | stopped first (§34.3) | |
-| Thrown-away clips (`declined`: no file, shown only on the job page) | always | |
-| Clips waiting in Review | only when the owner turned on "Also delete its N clips in Review" (off by default), and only while they still wait | otherwise; they keep working and still say which job they came from |
-| Kept, posting, posted and post-failed clips, their posts, numbers, Library entries and vectors | never | always: the posts on YouTube, TikTok and the rest stay up |
-| Files under `jobs/{jobId}/` (audio, words, picture, watch answers, checkpoints, cut and checked clips in `source/`, the folders of deleted clips) | always | the `jobs/{jobId}/clips/{clipId}/` folder of every clip that stays |
-| The uploaded video (`uploads/{userId}/…`, a "Use a video file" job) | when no other job uses it | |
-| A deleted Review clip's vector | yes (as Throw away does) | |
+A standard upload is two taps: **Use my settings**, then **Upload to 4**. The TikTok sheet no longer opens from the
+card when places are set up: TikTok's controls are in its row and its legal line is beside Upload.
 
-### 34.3 Order of one delete (`api/src/clipfactory_api/job_delete.py`)
+### 34.2 My settings (API, additive)
 
-1. **Fence.** `sessionId` becomes a new value and a working job becomes `canceled`, with an internal `deletingAt`. The
-   agent and `cf-prod-job-flow` condition every write on their own `sessionId` (and the item existing), so the old run
-   can no longer write the job or add a clip, and a resume or Try again of the old run ends quietly (`missing` or
-   `superseded`). Canceled sends no notification (§32). The fence only applies to the `sessionId` that was read: if a
-   Try again got in between, the delete reads again and fences (and stops) the newer session. While `deletingAt` is
-   set, Try again and Stop job answer 409.
-2. **Stop.** The job's runtime session, whatever the job's status (a failed job's container may still be uploading),
-   is stopped outright (`StopRuntimeSession`, like Try again's backstop), not sent a cancel whose wind-down would write again. The stop is awaited before the files go,
-   so the old container cannot write new ones afterwards. A failed stop is logged; the fence still holds.
-3. **Clips** as in §34.2 (a conditional delete: a Review clip kept on another device a moment ago is kept).
-4. **Files** (`Media.delete_prefix_except`) and the upload. A file under `clips/{clipId}/` is spared when that clip's own
-   item still exists (a consistent read), because the job's clip list comes from an eventually consistent index.
-5. **Items:** `JOBLIVE#`, `NOTIFYSTEP#`, then the job itself. The stream's `REMOVE` reaches every open screen as
-   `{type: "job" | "clip", op: "delete"}` (§14.2), so other devices update at once.
+`Settings.postPreset` (stored in the owner's settings item; GET/PUT `/v1/settings` as every setting; per owner):
 
-A delete that breaks halfway (S3 down) answers an error and leaves the job fenced and stopped; the next delete
-finishes it. Deleting a job that is not there answers `deleted: false`: a second delete, a delete from another device,
-or another owner's job id (the key is always the caller's own, so another owner's job is never read, fenced or
-changed). Several jobs run five at a time, at most 25 per call, well inside the API's 29 seconds.
+```json
+{
+  "youtube":   { "category": "20", "notifySubscribers": true, "embeddable": true },
+  "tiktok":    { "privacy": "PUBLIC_TO_EVERYONE", "comments": true, "duet": true, "stitch": true },
+  "instagram": { "shareToFeed": true },
+  "facebook":  {},
+  "x":         { "replies": "everyone" }
+}
+```
 
-### 34.4 Contract
+These are the defaults (the owner's ask: the most reach on every platform). An owner who never saved one reads them; a
+stored value that no longer validates reads the defaults. A PUT may send any platforms; each one given is merged over
+its defaults (`post_preset.check`). Validation: known platforms and keys only, booleans are booleans, `category` one of
+20, 24, 23, 22, 17, TikTok `privacy` one of TikTok's four levels, `replies` one of the four above. **Made for kids can
+never come from My settings**: `madeForKids` (or `selfDeclaredMadeForKids`, `forKids`) in a preset is refused with
+"My settings never mark a clip as made for kids." YouTube's "who can see it" is not in the preset: it stays
+`settings.youtubePrivacy` (one field, shown in both places). TikTok's Commercial content is not in it either (per clip).
 
-`DELETE /v1/jobs/{jobId}?clips=keep|delete` and `POST /v1/jobs/delete {jobIds, clips}` (§5). The API's IAM already
-lists and deletes under `jobs/*` and `uploads/*`: no infrastructure change, nothing the deploy's delete gate could see.
+**Settings › Posting › My settings** (`/settings/posting/my-settings`, `MySettingsBranch.tsx`): one section per
+platform, X included ("This is used once it is." while X is not set up), each saving as it changes. YouTube's section
+shows "Made for kids: No. My settings never mark a clip as made for kids." TikTok's says Commercial content is picked
+per clip.
 
-### 34.5 Undo (web, `web/src/lib/jobDeletes.ts`)
+### 34.3 Confirm sends each place's options (API, additive)
 
-As for Stop job (§16.8) and Throw away (§12.3), the delete waits 8 seconds: "Job deleted." (or "3 jobs deleted.") with
-Undo. The job leaves every list at once (Jobs, Home's Working now, the job page, which shows "This job is gone"), and
-so do its Review clips when they go too; the running count, the Review badge and "N jobs working" drop at once and stay
-adjusted until the server's own counts arrive. Undo brings everything back and sends nothing. When the toast ends, or
-the page closes (`pagehide`, sent with `keepalive`), the delete is sent: one job with `DELETE`, several with
-`POST /v1/jobs/delete` in batches of 25. A delete that fails brings back the jobs it could not delete with "… The job
-is back in your list." The deleted jobs stay hidden on that device afterwards, so a poll answered a moment earlier
-cannot show one again. Why not a server-side soft delete: ADR-58.
+`POST /v1/clips/{clipId}/confirm` gains optional `"options"`:
 
-### 34.6 What the owner sees
+```json
+{ "youtube":   { "privacy": "public", "category": "20", "madeForKids": false, "notifySubscribers": true, "embeddable": true },
+  "instagram": { "shareToFeed": true },
+  "x":         { "replies": "everyone" } }
+```
 
-* **Jobs:** each row has a bin button at its bottom right (the thumb's corner on a phone; the middle right on wider
-  screens), labelled "Delete job: {title}", quiet until hovered or focused, then the danger colours. It sits beside the
-  row's link, never inside it. Touch screens always show it; with a mouse it shows on the row under the pointer, or
-  when the keyboard is on the row (Tab to the row, Tab again to its bin), so a column of bins never sits under Ask's
-  button and makes it fade (§19.8) and a page change from Jobs stays still (§20.16).
-* **Next to the sidebar** (768–959 px) a row keeps its phone layout, so its words keep their room. **Select** (next to Make clips) turns each row into one big tick box (`role="checkbox"`,
-  Space or Enter toggles it) and shows a bar at the bottom of the screen: "N jobs picked" (or "Tap the jobs to
-  delete"), **Cancel**, **Pick all failed (N)** (the failed jobs on screen) and **Delete N** (danger, at the bottom
-  right). Escape leaves Select.
-* **Job page:** **Delete job** (ghost, bin) first in the actions, so Try again or Check these clips keep the corner.
-  After the question the page goes back to All jobs, where the Undo toast is.
-* **The question** (`DeleteJobsSheet`, a `Sheet`): "Delete this job?" / "Delete 3 jobs?", then what happens:
-  "It is still working, so it stops first." (or "2 are still working, so they stop first."; only when one is),
-  "Its working files go away.", "Clips you kept or posted stay. Your posts stay up too.", a switch "Also delete its
-  4 clips in Review" (only when there are some; off; its note says "They stay in Review." or "They go with the job."),
-  and "You can undo for 8 seconds." **Keep it** is first, focused, and what Escape or a tap outside mean; **Delete job**
-  / **Delete 3 jobs** uses the danger style (never the vermilion of an action).
-* **A clip from a deleted job:** "See the job this clip came from" opens "This job is gone" with "It was deleted, or the
-  link is wrong. Clips you kept from it still work." and See all jobs.
-* No `cursor:` styles, no edges: the tick and the bar are fills; the motions are the existing ones and stop under
-  reduced motion.
+Only YouTube, Instagram and X (TikTok's go in `tiktok`, §17.8; Facebook has none); each key optional, validated like
+the preset (`madeForKids` is allowed here: YouTube asks every creator, and the card's switch starts off). Options for a
+place that is not in `platforms` are dropped. They are stored on that place's post as the internal `postOptions`
+(never returned). Publishers read the clip's option first, then My settings, then the old behaviour: YouTube
+`privacyStatus` (else `youtubePrivacy`), `categoryId` (else preset, else 20), `selfDeclaredMadeForKids` true only when
+the clip says so, `embeddable: false` only when asked, `&notifySubscribers=false` only when asked; Instagram
+`share_to_feed`; X `reply_settings` (nothing sent for everyone). Older clients send no `options` and get exactly the
+old posts. No table, index or infrastructure change; existing settings, clips and posts are untouched (the preset is
+one more attribute on the settings item, written only when the owner saves).
 
-### 34.7 Ask
+### 34.4 Web
 
-The help guide "Delete a job" (`helpKb.json`, highlights Select and the Jobs tab) and the regenerated corpora
-(`node web/scripts/help-corpus.mjs`, `node web/scripts/ask-knowledge.mjs`).
+`lib/preset.ts` (defaults, `presetOf`, `cardOptionsFrom`, `optionsFor`, the mock's checks), `lib/tiktokChoices.ts`
+`myTikTokChoices(preset.tiktok, creator)`: TikTok's privacy is the saved one when TikTok offers it, else Everyone, else
+TikTok's first choice (Only me before the audit); Comments, Duet and Stitch as saved and off where the creator turned
+them off; Commercial content off. TikTok's creator info is asked for when the owner taps Use my settings or opens the
+TikTok row, never before. `uploadClip(..., platforms, options)`; `confirmClip(clipId, captions, tiktok, platforms,
+options)`. Nothing about My settings is kept in localStorage.
 
-### 34.8 Tests
+### 34.5 TikTok's "Who can see it"
 
-* `api/tests/test_job_delete.py`: a failed job and every item and file it leaves; idempotent; another owner's job is
-  never touched (single and batch); input checks; a running or queued job is fenced, canceled and its session stopped
-  (no cancel signal); the old run's conditional writes fail afterwards; a broken delete leaves the job fenced and the
-  next one finishes it; a failed stop does not block; Review clips kept by default and deleted when asked; kept,
-  posting, posted and post-failed clips, their posts and files never deleted; a Review clip kept meanwhile is kept;
-  the upload goes only when no other job uses it; other jobs' and owners' files stay; several at once, each once, the
-  running count after; `cf-prod-job-flow` never brings a deleted job back (finished or timed-out callback).
-* `web/test/jobDeletes.test.ts`: the question's words, Undo sends nothing, one call or batches of 25 with the clip
-  choice, a failed delete brings the job back, the two HTTP calls (`keepalive`).
-* `web/e2e/delete-jobs.spec.ts`: row Delete, the wording, Keep it focused and Escape, Undo, a working job, the Review
-  clips switch, the bin with the keyboard, bins always shown on touch and on the hovered row with a mouse, the job page and a clip's link to a deleted job, Select with Pick all failed and one call, a failed
-  delete, and the fit at 1000×650 and 390×844 (no sideways scroll, a 44 px target, the bar on screen).
+The app's own dropdown (`components/Dropdown.tsx`: a soft-fill button that opens a solid list, keyboard arrows,
+Escape, never the OS list), labelled "Who can see it", with exactly `privacyOptions` (minus Only me when branded),
+Everyone first, and the placeholder "Pick who can see it" until the owner picks or taps Use my settings. When only
+`SELF_ONLY` is allowed: one choice and the line "TikTok keeps posts private until it approves your app." Used in the
+TikTok row and on the Post to TikTok sheet (which still opens for Library's Try again, and on Upload while nothing is
+set up but TikTok is connected).
+
+### 34.6 Ask never covers Upload
+
+The owner's screenshot showed the round Ask button over the right end of "Upload to 4". Upload and Use my settings carry
+`data-help-clear`: the launcher (§19.8) fades out in place whenever it touches them at all (not only when it covers a
+third), so the right end of Upload always takes the tap.
+
+### 34.7 Tests
+
+`api/tests/test_settings_and_system.py` (preset defaults, merge, never made for kids, bad choices),
+`api/tests/test_upload_to.py` (options on posts, dropped for places not going, refused, publishers);
+`web/test/reviewSheets.test.tsx` (rows, dropdown, Use my settings, the mock's checks); `web/e2e/review-card.spec.ts`
+(two-tap standard flow and what is sent, one place picker, rows open per place, paid partnership, My settings page,
+Ask never over Upload at 1000x650, 1440x900 and 390x844), `tiktok-sheet.spec.ts` (TikTok row compliance, before the
+audit, Library's sheet), `upload-to.spec.ts`.

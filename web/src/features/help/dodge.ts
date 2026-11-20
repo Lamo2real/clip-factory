@@ -32,17 +32,23 @@ export interface Box {
   bottom: number;
   left: number;
   right: number;
+  /**
+   * A control marked data-help-clear (Review's Upload and Use my settings, §34.5): the launcher may not touch it at
+   * all, not even its empty end. The owner saw the round Ask button over the right end of "Upload to 4".
+   */
+  clear?: boolean;
 }
 
 /**
  * True when the launcher at `base` makes `control` hard to tap: it covers more than DODGE_COVER of it, or what is
  * left of it beside the launcher (left, right, above or below) is nowhere DODGE_TAP px (or the control's own size,
- * if smaller) each way. A control it does not touch is never hard to tap.
+ * if smaller) each way, or it touches a `clear` control at all. A control it does not touch is never hard to tap.
  */
 export function hardToTap(base: Box, control: Box): boolean {
   const w = Math.min(base.right, control.right) - Math.max(base.left, control.left);
   const h = Math.min(base.bottom, control.bottom) - Math.max(base.top, control.top);
   if (w <= 0 || h <= 0) return false;
+  if (control.clear) return true;
   const cw = control.right - control.left;
   const ch = control.bottom - control.top;
   if ((w * h) / (cw * ch) > DODGE_COVER) return true;
@@ -129,7 +135,7 @@ export function controlBoxes(doc: Document = document, viewportHeight = window.i
     const s = getComputedStyle(el);
     if (s.visibility === "hidden" || s.pointerEvents === "none") return;
     const shown = shownBox(el, r);
-    if (shown) out.push(shown);
+    if (shown) out.push(el.closest("[data-help-clear]") ? { ...shown, clear: true } : shown);
   };
   // A marked block counts by its parts (each choice, each card, the switch and the button of a row), so the empty
   // end of a row is no obstacle; a marked control, or a block with no parts, counts whole.

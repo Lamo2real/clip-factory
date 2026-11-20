@@ -7,7 +7,7 @@ reached by tapping any clip in Library, or "See how it does" on a kept clip in R
 ([CONTRACTS.md §16.8](CONTRACTS.md#168-web), [UX-16](BUSINESS_REQUIREMENTS.md#ux-16-the-performance-page-the-video-on-top-smooth-lines-to-five-stacks)).
 
 The order is always **YouTube, TikTok, Instagram, Facebook, X** (`STATS_ORDER`), on every screen size, in the DOM and
-for screen readers. Every other screen that lists platforms (Library card rows, Review caption tabs, Settings › Posting
+for screen readers. Every other screen that lists platforms (Library card rows, Review place rows, Settings › Posting
 › Where clips go) uses the same order, from the one constant `PLATFORM_ORDER` in `web/src/lib/format.ts`.
 
 ### Anatomy, top to bottom

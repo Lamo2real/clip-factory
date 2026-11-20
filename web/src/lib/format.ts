@@ -13,7 +13,7 @@ export const PLATFORM_LABEL: Record<Platform | "kick" | "twitch" | "upload", str
 
 /**
  * The one platform order every screen uses: YouTube, TikTok, Instagram, Facebook, X (docs/CONTRACTS.md §16.8).
- * Library cards, the clip page, This week, the Review caption tabs and Settings › Where clips go all follow it.
+ * Library cards, the clip page, This week, the Review place rows and Settings › Where clips go all follow it.
  */
 export const PLATFORM_ORDER: readonly Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
 

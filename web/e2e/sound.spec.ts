@@ -128,7 +128,7 @@ test("enabled controls tap, switched-off controls deny, errors deny", async ({ p
   await page.goto("/review");
   await settle(page);
   const card = page.locator(".review-card").first();
-  await card.getByRole("tab", { name: "X" }).click();
+  await card.locator('[data-place="x"] summary').click();
   await card.getByLabel("X caption").fill("x".repeat(300));
   await page.evaluate(() => (window.__cfSoundLog = []));
   await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
