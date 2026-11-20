@@ -3,6 +3,7 @@ and each platform's hard limits, and a plain template stands in if Claude fails.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -156,23 +157,34 @@ tags itself, but you may place them naturally. Write in the language of the clip
 
 
 async def write_captions(
-    bedrock: Bedrock, clips: list[ClipText], *, notes: str, skills: SkillsBlock, skills_text: str, system: str
+    bedrock: Bedrock,
+    clips: list[ClipText],
+    *,
+    notes: str,
+    skills: SkillsBlock,
+    skills_text: str,
+    system: str,
+    answer_seconds: float | None = None,
 ) -> dict[str, dict[str, str]]:
-    """Captions per clip id. Clips Claude leaves out (or all, if it fails) get the template. ``skills`` goes first in
-    the system prompt; ``skills_text`` is every skill's full (uncut) text, read for required tags."""
+    """Captions per clip id. Clips Claude leaves out (or all, if it fails or gives no answer within ``answer_seconds``
+    seconds) get the template. ``skills`` goes first in the system prompt; ``skills_text`` is every skill's full
+    (uncut) text, read for required tags."""
     required = required_tags(notes, skills_text)
     by_id: dict[str, dict[str, Any]] = {}
     if clips:
         try:
-            r = await bedrock.structured(
-                system=system,
-                skills=skills,
-                content=[{"text": prompt(clips, notes)}],
-                tool="submit_captions",
-                description="Submit the captions for every clip.",
-                schema=CAPTIONS_SCHEMA,
+            r = await asyncio.wait_for(
+                bedrock.structured(
+                    system=system,
+                    skills=skills,
+                    content=[{"text": prompt(clips, notes)}],
+                    tool="submit_captions",
+                    description="Submit the captions for every clip.",
+                    schema=CAPTIONS_SCHEMA,
+                ),
+                answer_seconds,
             )
             by_id = {str(c["id"]): c for c in r.get("clips") or []}
-        except ModelError as e:
+        except (ModelError, TimeoutError) as e:
             log("warn", "captions.fallback", error=str(e)[:200])
     return {c.id: finish(by_id[c.id], required) if c.id in by_id else template(c.moment, required) for c in clips}

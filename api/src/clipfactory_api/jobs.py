@@ -118,6 +118,7 @@ def start(store: db.Store, flows: FlowClient, job: Item, now: str) -> Item:
 
 
 RESUME_NOTE = "Picking up where it stopped…"
+WORKING_CAP = 0.99  # the most progress a job not finished yet shows (the agent's cap too)
 
 
 def picked_up_steps(steps: Any) -> list[Item]:
@@ -132,6 +133,26 @@ def picked_up_steps(steps: Any) -> list[Item]:
         else:
             out.append(fresh)
     return out
+
+
+# Steps that run after every clip is cut and checked: a failure there is never the video's fault.
+LATE_STEPS = ("captions", "finalize")
+
+
+def picks_up(job: Item) -> bool:
+    """Whether Try again picks up where the last run stopped (docs/CONTRACTS.md §30.6) instead of starting over: the
+    run stopped partway (``pickUp`` on a failed job); it failed while writing the captions or finishing up, after the
+    clips were cut (owner report 2026-11-20: Finish up failed after 30 minutes of checking, and starting over would
+    cut and check every clip again); or the owner stopped it after the clips were cut."""
+    status = job.get("status")
+    if status == "failed" and job.get("pickUp"):
+        return True
+    steps = {s.get("key"): s.get("status") for s in job.get("steps") or [] if isinstance(s, dict)}
+    if steps.get("render") != "done":
+        return False
+    if status == "failed":
+        return any(steps.get(k) == "failed" for k in LATE_STEPS)
+    return status == "canceled"
 
 
 def restart_fields(
@@ -161,7 +182,8 @@ def restart_fields(
     }
     if pick_up:
         try:
-            done = max(0.0, min(1.0, float(progress or 0)))
+            # Never 100% with steps left: only a finished job shows that (an older run could carry 1.0 over).
+            done = max(0.0, min(WORKING_CAP, float(progress or 0)))
         except (TypeError, ValueError):
             done = 0.0
         fields.update(pickUp=True, note=RESUME_NOTE, steps=picked_up_steps(steps), progress=done)

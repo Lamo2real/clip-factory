@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .retry import is_transient, retry
-from .util import JobSuperseded, now_iso
+from .util import JobSuperseded, log, now_iso
 
 SETTINGS_DEFAULTS: dict[str, Any] = {
     "clipMin": 5,
@@ -71,6 +71,16 @@ def _txn_reasons(e: BaseException) -> list[str]:
     if not isinstance(response, dict) or (response.get("Error") or {}).get("Code") != "TransactionCanceledException":
         return []
     return [str((r or {}).get("Code") or "None") for r in response.get("CancellationReasons") or []]
+
+
+def txn_detail(e: BaseException) -> str:
+    """Each canceled transaction item's code and DynamoDB's own message, for the log ("0 ValidationError: ...")."""
+    response = getattr(e, "response", None)
+    rows = response.get("CancellationReasons") if isinstance(response, dict) else None
+    return "; ".join(
+        f"{i} {(r or {}).get('Code') or 'None'}" + (f": {r['Message']}" if (r or {}).get("Message") else "")
+        for i, r in enumerate(rows or [])
+    )[:600]
 
 
 def _txn_transient(e: BaseException) -> bool:
@@ -194,18 +204,22 @@ class Store:
             raise JobSuperseded()
 
     async def _fenced_write(self, what: str, fence: Fence, op: dict[str, Any]) -> None:
-        """One write (a transaction Put or Delete in low-level form) that only goes through while the job still
-        carries the fence's ``sessionId``; raises JobSuperseded otherwise and writes nothing."""
+        """One write (a transaction Put or Delete) that only goes through while the job still carries the fence's
+        ``sessionId``; raises JobSuperseded otherwise and writes nothing.
+
+        Every value here is a plain Python value, never DynamoDB's typed form (``{"S": ...}``): the table resource's
+        client serializes them itself. Typed values were serialized a second time into maps, so the Job key became a
+        map, DynamoDB refused the check as invalid ("[ValidationError, None]") and no clip was ever written
+        (owner report 2026-11-20, job 01M7T90YCMC2767AR0WJ9XWMKY)."""
         from botocore.exceptions import ClientError
 
-        key = job_key(fence.user_id, fence.job_id)
         check = {
             "ConditionCheck": {
                 "TableName": self.table.name,
-                "Key": {"pk": {"S": key["pk"]}, "sk": {"S": key["sk"]}},
+                "Key": job_key(fence.user_id, fence.job_id),
                 "ConditionExpression": "#sid = :sid",
                 "ExpressionAttributeNames": {"#sid": "sessionId"},
-                "ExpressionAttributeValues": {":sid": {"S": fence.session_id}},
+                "ExpressionAttributeValues": {":sid": fence.session_id},
             }
         }
         client = self.table.meta.client
@@ -219,6 +233,7 @@ class Store:
             reasons = _txn_reasons(e)
             if reasons and reasons[0] == "ConditionalCheckFailed":
                 raise JobSuperseded() from e
+            log("error", "ddb.txn_failed", what=what, job=fence.job_id, reasons=reasons, detail=txn_detail(e))
             raise
 
     async def get_settings(self, user_id: str) -> dict[str, Any]:
@@ -295,17 +310,14 @@ class Store:
         if fence is None:
             await self._call("ddb.put_clip", self.table.put_item, Item=to_ddb(item))
             return
-        from boto3.dynamodb.types import TypeSerializer
-
-        ser = TypeSerializer()
-        put = {"TableName": self.table.name, "Item": {k: ser.serialize(v) for k, v in to_ddb(item).items()}}
+        put = {"TableName": self.table.name, "Item": to_ddb(item)}
         await self._fenced_write("ddb.put_clip", fence, {"Put": put})
 
     async def delete_item(self, pk: str, sk: str, *, fence: Fence | None = None) -> None:
         if fence is None:
             await self._call("ddb.delete", self.table.delete_item, Key={"pk": pk, "sk": sk})
             return
-        delete = {"TableName": self.table.name, "Key": {"pk": {"S": pk}, "sk": {"S": sk}}}
+        delete = {"TableName": self.table.name, "Key": {"pk": pk, "sk": sk}}
         await self._fenced_write("ddb.delete", fence, {"Delete": delete})
 
     # --- S3 --------------------------------------------------------------------------------------------------

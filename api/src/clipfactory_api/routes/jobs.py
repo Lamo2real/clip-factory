@@ -136,7 +136,7 @@ def retry(app: App, req: Request) -> Response:
     if job.get("sessionId"):
         # The run read above must still be current, so two retries never start the same flow name.
         expect["sessionId"] = [job["sessionId"]]
-    pick_up = bool(job.get("pickUp")) and job.get("status") == "failed"  # it stopped partway: pick up (§30.6)
+    pick_up = jobs.picks_up(job)  # it stopped partway, or after its clips were cut: pick up (§30.6)
     try:
         updated = app.store.update(
             job["pk"],

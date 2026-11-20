@@ -3,6 +3,7 @@ automatic fix pass, and spare moments replacing clips that still fail."""
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
@@ -300,27 +301,59 @@ async def check_all(
     cut: Callable[[Moment], Awaitable[Candidate | None]],
     want: int,
     on_progress: Callable[[int, int], None] | None = None,
+    on_swap: Callable[[int], None] | None = None,
+    limit: int = 1,
 ) -> tuple[list[Candidate], list[Outcome]]:
-    """Checks every clip; each failure brings in the next spare (cut and checked in turn) while fewer than ``want``
-    clips could still pass. Returns the passing clips in order and every failed outcome."""
-    pending = list(queue)
+    """Checks every clip, up to ``limit`` at once; each failure brings in the next spare (cut and checked in turn)
+    while fewer than ``want`` clips could still pass. Returns the passing clips in order (the clips first, then the
+    spares in the order they came in) and every failed outcome. ``on_swap`` gets how many spares are being cut so
+    far; ``on_progress`` how many clips are checked out of how many there are now."""
+    order = list(queue)
     spare_list = list(spares)
-    passed: list[Candidate] = []
-    failed: list[Outcome] = []
-    done = 0
-    while pending:
-        c = pending.pop(0)
-        out = await check(c)
-        done += 1
-        if out.ok:
-            passed.append(out.candidate)
-        else:
-            failed.append(out)
-            while spare_list and len(passed) + len(pending) < want:
-                replacement = await cut(spare_list.pop(0))
-                if replacement is not None:
-                    pending.append(replacement)
-                    break
+    outcomes: dict[int, Outcome] = {}
+    sem = asyncio.Semaphore(max(1, limit))
+    swap_lock = asyncio.Lock()  # one spare is cut at a time
+    tasks: list[asyncio.Task[None]] = []
+    swaps = 0
+
+    def could_pass() -> int:
+        return sum(1 for o in outcomes.values() if o.ok) + len(order) - len(outcomes)
+
+    async def run(pos: int) -> None:
+        nonlocal swaps
+        async with sem:
+            out = await check(order[pos])
+        outcomes[pos] = out
+        if not out.ok:
+            async with swap_lock:
+                while spare_list and could_pass() < want:
+                    swaps += 1
+                    if on_swap:
+                        on_swap(swaps)
+                    replacement = await cut(spare_list.pop(0))
+                    if replacement is not None:
+                        order.append(replacement)
+                        tasks.append(asyncio.create_task(run(len(order) - 1)))
+                        break
         if on_progress:
-            on_progress(done, done + len(pending))
-    return passed, failed
+            on_progress(len(outcomes), len(order))
+
+    tasks.extend(asyncio.create_task(run(i)) for i in range(len(order)))
+    try:
+        while True:  # a spare's check joins the list while earlier ones run; a fatal error in any is seen at once
+            pending = [t for t in tasks if not t.done()]
+            if not pending:
+                break
+            done, _ = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for t in done:
+                if t.cancelled():
+                    raise asyncio.CancelledError
+                if t.exception() is not None:
+                    raise t.exception()  # type: ignore[misc]
+    finally:
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    ranked = [outcomes[p] for p in range(len(order)) if p in outcomes]
+    return [o.candidate for o in ranked if o.ok], [o for o in ranked if not o.ok]

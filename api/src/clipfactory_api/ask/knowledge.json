@@ -1,5 +1,5 @@
 {
- "version": "5c034f32af7c",
+ "version": "2e84391d68c6",
  "parts": [
   {
    "id": "app-map",
@@ -207,7 +207,7 @@
    "id": "contracts-30",
    "title": "CONTRACTS: 30. Jobs that never stop partway (owner request, 2026-11-19)",
    "line": "30.1 The owner's words and what they mean",
-   "chars": 8845
+   "chars": 12534
   },
   {
    "id": "adr-01",

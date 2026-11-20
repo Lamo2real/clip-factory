@@ -99,7 +99,8 @@ class Reader:
             row = {
                 "jobId": j.get("jobId"),
                 "status": j.get("status"),
-                "progress": round(float(j.get("progress") or 0) * 100),
+                # 100 only for a finished job: never "100%" with steps left (owner report 2026-11-20).
+                "progress": 100 if j.get("status") == "ready" else min(99, round(float(j.get("progress") or 0) * 100)),
                 "source": source.get("platform") or source.get("type"),
                 "clipCount": j.get("clipCount"),
                 "errorCode": _code(j.get("errorCode")) or ("failed" if j.get("error") else None),

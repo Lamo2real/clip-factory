@@ -11,6 +11,7 @@ import { GetAppBanner } from "../../components/GetApp.tsx";
 import { NewJobForm } from "./NewJobForm.tsx";
 import { MoneyTile } from "./MoneyTile.tsx";
 import { StreamersRow } from "./StreamersRow.tsx";
+import { jobPercent, jobProgress } from "../../lib/jobProgress.ts";
 
 export interface HomeData {
   jobs: Job[];
@@ -178,9 +179,9 @@ function WorkingCard({ jobs, failed, onRetry }: { jobs: Job[] | null; failed: bo
                       {j.status === "queued" ? "Waiting to start" : (step?.message ?? step?.label ?? "Working")}
                     </span>
                   </span>
-                  <span className="working__pct">{Math.round(j.progress * 100)}%</span>
+                  <span className="working__pct">{jobPercent(j)}%</span>
                 </A>
-                <Progress value={j.progress} label={`${j.source.title ?? "Job"} progress`} />
+                <Progress value={jobProgress(j)} label={`${j.source.title ?? "Job"} progress`} />
               </li>
             );
           })}

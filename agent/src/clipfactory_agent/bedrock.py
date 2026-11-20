@@ -32,6 +32,9 @@ from .skills import SkillsBlock, compose_system
 from .util import TransientError, UserFacingError, log
 
 MODEL_THREADS = 16
+# The longest one Converse try may take before it is given up and tried again: far above a slow answer (a long
+# structured answer with adaptive thinking takes a few minutes), below botocore's own retries of its 600 s read time.
+CALL_SECONDS = 12 * 60
 _POOL = ThreadPoolExecutor(MODEL_THREADS, thread_name_prefix="cf-model")
 
 
@@ -64,12 +67,26 @@ _UNAVAILABLE_WORDS = (
 )
 
 
+# What the owner reads when Bedrock refuses the model because it is not turned on for the account (Bedrock model
+# access, not the video's fault): the exact place to turn it on, then Try again.
+MODEL_ACCESS_MESSAGE = (
+    "Claude is not turned on for your AWS account yet. In AWS, open Amazon Bedrock in Stockholm (eu-north-1), "
+    "go to Model catalog, open Claude Opus 5.5 and Claude Opus 4.8, and turn on access. Then tap Try again."
+)
+
+
+_MODEL_OPERATIONS = frozenset({"Converse", "ConverseStream", "InvokeModel", "InvokeModelWithResponseStream"})
+
+
 def model_unavailable(e: BaseException) -> bool:
     """True when Bedrock refused a call because the model cannot be used here (access, existence or offer), not
     because the request or the moment was wrong (docs/DECISIONS.md ADR-42)."""
     response = getattr(e, "response", None)
     if not isinstance(response, dict):
         return False
+    op = getattr(e, "operation_name", None)
+    if op and op not in _MODEL_OPERATIONS:
+        return False  # DynamoDB, Secrets Manager, KMS, S3 ...: an access problem there is not the model's
     err = response.get("Error") or {}
     code = str(err.get("Code") or "")
     if code in _UNAVAILABLE_CODES:
@@ -152,7 +169,9 @@ class Bedrock:
             client = boto3.client(
                 "bedrock-runtime",
                 region_name=region,
-                config=Config(connect_timeout=10, read_timeout=600, retries={"max_attempts": 4, "mode": "adaptive"}),
+                config=Config(
+                    connect_timeout=10, read_timeout=CALL_SECONDS, retries={"max_attempts": 1, "mode": "adaptive"}
+                ),
             )
         self.client = client
         self.forced_tool_choice = True
@@ -168,9 +187,14 @@ class Bedrock:
         return r
 
     async def _call(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        """One Converse answer, tried up to four times on throttling and outages; each try stops waiting after
+        ``CALL_SECONDS`` (a TimeoutError, tried again), so a call that never answers can't hold a step forever. A
+        model that is not turned on (``model_unavailable``) is not tried again."""
         loop = asyncio.get_running_loop()
         return await retry(
-            lambda: loop.run_in_executor(_POOL, self._converse, kwargs), what="bedrock.converse", attempts=4
+            lambda: asyncio.wait_for(loop.run_in_executor(_POOL, self._converse, kwargs), CALL_SECONDS),
+            what="bedrock.converse",
+            attempts=4,
         )
 
     def _log_usage(self, tool: str, r: dict[str, Any]) -> None:

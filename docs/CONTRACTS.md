@@ -6191,6 +6191,7 @@ The PO token sidecar starts the first time a YouTube call needs it, never at app
 |---|---|---|
 | Chosen moments | `moments.json` (`version: 1`, `settings`: hash of notes, clip target and model) | `select` returns "Used the N moments picked last time." without a model call, when `settings` match |
 | Each finished clip | `render/NN/clip.mp4`, `cover.jpg`, `done.json` (written right after the clip, `done.json` last) | `render` downloads it back instead of cutting it, when its moment matches |
+| Checked clips | `checked.json` (`version: 1`, `chosen`: the chosen moments, per passed clip: `index`, `moment`, `items`, `fixes`), written by `checklist`; the clips it re-cut or brought in as spares in `checked/NN/` (same files as `render/NN/`) | with the moments picked last time, `render` brings every checked clip back ("Used the N clips cut and checked last time.") and `checklist` does not run again ("Used the checks from last time for N clips."); without `checked.json` (a run from before it existed) the same from `clips.json`, with the measured checks taken again from the file and Claude's review shown as passed on the run before; a clip whose file was never saved is cut once more from its saved moment |
 | Clip ids and captions | `clips.json` (`version: 1`; per clip index: `id`, `moment`, `captions`), written by `captions` | each clip keeps the id the stopped run gave it; the captions are reused when every clip is the same moment |
 | Earlier steps | as before (audio, words, picture, what was watched) | always |
 
@@ -6201,9 +6202,40 @@ The PO token sidecar starts the first time a YouTube call needs it, never at app
   no `clipCount: 0`. The agent removes `note` and `pickUp` when it writes `ready` or `failed`.
 * **Try again** keeps the job id, so the saved files. After a stop (`pickUp: true` on a failed job) it keeps
   `pickUp`, the done and skipped steps (the stopped step and later ones go back to pending) and `progress`, and shows
-  "Picking up where it stopped…"; after a real failure it removes `pickUp` and starts over as
-  before. `runStartedAt` starts the run's 8 h budget. `pickUp`, `resumes` and `runStartedAt` are internal (not in the API's job JSON); `note` is.
-* Not checkpointed: the checklist (it re-runs, from the reused clips).
+  "Picking up where it stopped…". It picks up the same way (`api/jobs.picks_up`) when the run failed at Write the
+  captions or Finish up (every clip was cut and checked: not the video's fault), and after Stop job once Cut the clips
+  was done. After any other failure it removes `pickUp` and starts over as before. `runStartedAt` starts the run's 8 h budget. `pickUp`, `resumes` and `runStartedAt` are internal (not in the API's job JSON); `note` is.
+* The checklist is saved once it is done (`checked.json`); a run that stops while checking checks again, from the
+  reused clips.
+* The fenced clip writes (§13) pass plain values to the table resource's client, which types them itself. Typed values
+  (`{"S": ...}`) were typed a second time into maps, so DynamoDB refused the job check with `[ValidationError, None]`
+  and Finish up could never write a clip (owner report 2026-11-20). A refused transaction logs `ddb.txn_failed` with
+  each item's code and DynamoDB's message.
+
+### 30.6a Long steps show they are alive, and always end (owner report 2026-11-20)
+
+* Check each clip checks 3 clips at once (`CHECK_CONCURRENCY`); re-cuts and spares share the Cut step's RenderGate.
+  The job page shows what the step is doing under it (`steps[].message` while running, replaced by the final
+  message): "Checking 10 clips…", "Checking clip 4 of 10…", "Swapping 2 clips for better moments. Checked 6 of 10.",
+  "Writing captions for 10 clips…", "Saving clip 3 of 10…", "Getting the 10 checked clips from last time…". The bar
+  moves within a step (between finished checks, and while the captions are written) and stays below 100% until the
+  job is ready.
+* Time limits, far above a slow but healthy run: one Converse try 12 min (`bedrock.CALL_SECONDS`, then tried again,
+  4 tries); one review 12 min (then the measured checks decide, "Claude could not review this clip; check it
+  yourself."); one clip's whole check or one spare's cut 25 min (then it is swapped for a spare like any clip that
+  could not be checked); the captions 15 min (then the plain template). When nothing passed only because nothing
+  could be checked, the clips go on to the owner with one item "Checked: This clip could not be checked; look at it
+  yourself before posting." and the job finishes.
+* The step watchdog (`jobs.STALL_SECONDS`, per step: e.g. checklist 40 min, captions and finalize 30 min): a step with
+  no sign of life (progress or a new note; the bar creeping on its own is none) for that long is ended with
+  "<Step> stopped moving. Tap Try again to pick up where it left off." and `pickUp`, so the heartbeat can never keep a
+  stuck job "working".
+* A model Bedrock refuses as not turned on (`model_unavailable`) ends the job at once with "Claude is not turned on
+  for your AWS account yet. In AWS, open Amazon Bedrock in Stockholm (eu-north-1), go to Model catalog, open Claude
+  Opus 5.5 and Claude Opus 4.8, and turn on access. Then tap Try again." It is never tried again.
+* Logs: `job.step_start`, `job.step_done` (seconds), `job.step_note`, `job.step_stalled`, `checklist.clip_checked`
+  (index, outcome, seconds, fixes), `checklist.clip_timed_out`, `checklist.saved`, `checklist.reused`,
+  `finalize.clip_saved`.
 
 ### 30.7 Deploys wait for running jobs
 
@@ -6225,6 +6257,7 @@ goes on without waiting. A job still running resumes on the new version (§30.2)
 
 ### 30.9 Tests
 
-`agent/tests/test_heartbeat.py`, `test_proc.py`, `test_resume.py`, `test_callback.py`; `api/tests/test_flows.py`
+`agent/tests/test_heartbeat.py`, `test_proc.py`, `test_resume.py`, `test_callback.py`, `test_long_steps.py`,
+`test_progress.py`, `test_session_fence.py`; `api/tests/test_flows.py`
 (resume, never resuming the agent's own outcomes or a canceled job, time left, replay names), `test_jobs.py` (Try
 again); `web/test/jobNote.test.tsx`; `scripts/test-wait-for-jobs.sh`, `scripts/test-deploy-workflow.sh`.

@@ -303,6 +303,14 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       publishJob(j);
       return { jobId: j.jobId, title: j.source.title ?? "" };
     },
+    /** A working job whose record says 100% while steps are left (as a run before the 2026-11-20 fix wrote it). */
+    fullBar(): { jobId: string; title: string } | null {
+      const j = store.jobs.find((x) => x.status === "running");
+      if (!j) return null;
+      j.progress = 1;
+      publishJob(j);
+      return { jobId: j.jobId, title: j.source.title ?? "" };
+    },
   };
   if (typeof window !== "undefined") {
     const w = window as unknown as { __cfMock?: Record<string, unknown> };
