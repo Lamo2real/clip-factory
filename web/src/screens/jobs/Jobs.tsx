@@ -11,6 +11,7 @@ import { plural, relative } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { applyJobEvent } from "../../lib/liveCache.ts";
+import { LiveLine } from "./LiveLine.tsx";
 import { mergeJobs, pollLimit } from "./mergeJobs.ts";
 import { jobPercent, jobProgress } from "../../lib/jobProgress.ts";
 
@@ -147,9 +148,17 @@ function JobRow({ job }: { job: Job }) {
         {working ? (
           <span className="job-row__progress">
             <Progress value={jobProgress(job)} label={`${jobTitle(job)} progress`} tone="success" />
-            <span className="job-row__step clamp-1">
-              {job.status === "queued" ? "Waiting to start" : (step?.label ?? "Working")} · {jobPercent(job)}%
-            </span>
+            <LiveLine
+              job={job}
+              compact
+              className="job-row__step"
+              after={` · ${jobPercent(job)}%`}
+              fallback={
+                <span className="job-row__step clamp-1">
+                  {job.status === "queued" ? "Waiting to start" : (step?.label ?? "Working")} · {jobPercent(job)}%
+                </span>
+              }
+            />
           </span>
         ) : job.status === "failed" && job.error ? (
           <span className="job-row__error user-text">{job.error}</span>

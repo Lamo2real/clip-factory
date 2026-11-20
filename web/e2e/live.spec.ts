@@ -7,6 +7,7 @@ interface LiveControls {
   drop(): void;
   advance(): void;
   setAvailable(on: boolean): void;
+  line(at?: number): void;
 }
 type MockWindow = Window & {
   __cfMockLive?: LiveControls;
@@ -164,3 +165,65 @@ for (const width of WIDTHS) {
     expect(failures, failures.join("\n")).toEqual([]);
   });
 }
+
+// The live status line (docs/CONTRACTS.md §31): what the job is doing right now, in one line, pushed over the socket.
+const pushLine = (page: Page, at: number) => page.evaluate((k) => (window as MockWindow).__cfMockLive!.line(k), at);
+
+test("the job page shows what it is doing right now, and the line moves live", async ({ page }) => {
+  await page.goto("/jobs");
+  await settle(page);
+  await page.locator(".job-row", { hasText: "Ranked grind" }).click();
+  await expect(liveDot(page)).toContainText("Live");
+  const line = page.locator(".live-line");
+  await expect(line).toBeVisible();
+  const polls = await calls(page, "getJob");
+
+  await pushLine(page, 0);
+  await expect(line.locator(".live-line__text")).toHaveText("Cutting clip 3 of 7");
+  await expect(line.locator(".live-line__detail")).toHaveText("0:41 of 0:58");
+  await expect(line.locator(".live-line__tech")).toHaveText("ffmpeg · 1080×1920 · 30 fps");
+  const heard = page.locator('.live-line [role="status"]');
+  await expect(heard).toHaveText("Cutting clip 3 of 7.");
+
+  // The seconds move: the screen changes, a screen reader hears nothing new.
+  await pushLine(page, 1);
+  await expect(line.locator(".live-line__detail")).toHaveText("0:52 of 0:58");
+  await expect(heard).toHaveText("Cutting clip 3 of 7.");
+  // The next clip: heard once.
+  await pushLine(page, 2);
+  await expect(line.locator(".live-line__text")).toHaveText("Cutting clip 4 of 7");
+  await expect(heard).toHaveText("Cutting clip 4 of 7.");
+  // A model call: the web counts the seconds itself.
+  await pushLine(page, 3);
+  await expect(line.locator(".live-line__text")).toHaveText("Checking clip 4 of 7 with Claude");
+  await expect(line.locator(".live-line__detail")).toHaveText(/^1:1\d$/);
+  await expect(line.locator(".live-line__detail")).not.toHaveText(await line.locator(".live-line__detail").innerText());
+  // Only the hidden status is a live region, never the moving words.
+  expect(await line.locator(".live-line__body [aria-live]").count()).toBe(0);
+  expect(await calls(page, "getJob")).toBe(polls);
+});
+
+test("the jobs list and Home's Working now show the same line", async ({ page }) => {
+  await page.goto("/jobs");
+  await settle(page);
+  await expect(liveDot(page)).toBeVisible();
+  const step = page.locator(".job-row", { hasText: "Ranked grind" }).locator(".job-row__step");
+  await pushLine(page, 2);
+  await expect(step).toContainText("Cutting clip 4 of 7");
+  await expect(step).toHaveClass(/clamp-1/);
+
+  await page.goto("/");
+  await settle(page);
+  await expect(liveDot(page)).toBeVisible();
+  const working = page.locator(".working__job", { hasText: "Ranked grind" }).locator(".working__step");
+  await pushLine(page, 0);
+  await expect(working).toContainText("Cutting clip 3 of 7");
+  await pushLine(page, 3);
+  await expect(working).toContainText("Checking clip 4 of 7 with Claude");
+  for (const w of WIDTHS) {
+    await page.setViewportSize({ width: w, height: 900 });
+    const r = await findOverflow(page);
+    expect(r.page, `page scrolls sideways at ${w}px`).toBeLessThanOrEqual(r.viewport);
+    expect(r.items, `something runs out of its box at ${w}px`).toEqual([]);
+  }
+});

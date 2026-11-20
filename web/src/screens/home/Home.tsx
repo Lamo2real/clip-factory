@@ -11,6 +11,7 @@ import { GetAppBanner } from "../../components/GetApp.tsx";
 import { NewJobForm } from "./NewJobForm.tsx";
 import { MoneyTile } from "./MoneyTile.tsx";
 import { StreamersRow } from "./StreamersRow.tsx";
+import { LiveLine } from "../jobs/LiveLine.tsx";
 import { jobPercent, jobProgress } from "../../lib/jobProgress.ts";
 
 export interface HomeData {
@@ -175,9 +176,16 @@ function WorkingCard({ jobs, failed, onRetry }: { jobs: Job[] | null; failed: bo
                   </span>
                   <span className="working__text">
                     <span className="working__name clamp-1">{j.source.title ?? j.source.url ?? "Video"}</span>
-                    <span className="working__step clamp-1">
-                      {j.status === "queued" ? "Waiting to start" : (step?.message ?? step?.label ?? "Working")}
-                    </span>
+                    <LiveLine
+                      job={j}
+                      compact
+                      className="working__step"
+                      fallback={
+                        <span className="working__step clamp-1">
+                          {j.status === "queued" ? "Waiting to start" : (step?.message ?? step?.label ?? "Working")}
+                        </span>
+                      }
+                    />
                   </span>
                   <span className="working__pct">{jobPercent(j)}%</span>
                 </A>

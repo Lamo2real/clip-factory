@@ -4,7 +4,7 @@ import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, ClipStatus, Job } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
-import { JobNote } from "./JobNote.tsx";
+import { LiveLine } from "./LiveLine.tsx";
 import { JobStatusPill, jobTitle, sourceMeta, SourceThumb, StepTimeline } from "../../components/JobBits.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, Pill, Progress, Skeleton, type Tone } from "../../components/ui.tsx";
@@ -216,7 +216,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
               <p className="user-text">{job.error}</p>
             </div>
           ) : null}
-          <JobNote job={job} />
+          <LiveLine job={job} />
           <StepTimeline steps={job.steps} />
           {job.status === "ready" && job.model ? (
             <p className="panel__note job-model" data-help="job-model">

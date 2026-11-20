@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from . import proc
+from . import livestatus, proc
 from .picture import DISK_RESERVE
 from .util import TransientError, UserFacingError, log
 
@@ -285,9 +285,16 @@ async def download_audio(
     ]
     if max_seconds:
         args += ["--download-sections", f"*0-{int(max_seconds)}"]
-    await _run(
-        [*args, url], cookies, time_limit=6 * 3600, on_line=progress_reader(on_progress) if on_progress else None
-    )
+    bar = progress_reader(on_progress) if on_progress else None
+
+    def read(line: str) -> None:
+        if bar is not None:
+            bar(line)
+        seen = livestatus.parse_ytdlp(line)
+        if seen is not None:
+            livestatus.emit("download", **seen)  # "412 MB of 1.2 GB · 34%", "yt-dlp · 4.1 MB/s" (§31)
+
+    await _run([*args, url], cookies, time_limit=6 * 3600, on_line=read)
     out = dest_dir / "audio.m4a"
     if not out.is_file():
         raise UserFacingError("The audio did not download. Try again, or upload the video file instead.")

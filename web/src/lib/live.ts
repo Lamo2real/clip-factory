@@ -54,7 +54,7 @@ export function backoffDelay(attempt: number, random: () => number = Math.random
   return Math.round(base * (0.8 + 0.4 * random()));
 }
 
-const TYPES: readonly LiveItemType[] = ["job", "clip", "post", "learning", "week", "setup", "follow"];
+const TYPES: readonly LiveItemType[] = ["job", "clip", "post", "learning", "week", "setup", "follow", "jobLive"];
 
 /** Reads one server message. Pongs, errors and anything malformed give null (they change nothing on screen). */
 export function parseLiveMessage(data: unknown): LiveEvent | null {
@@ -420,6 +420,15 @@ export function useLiveStatus(): LiveStatus {
  * Hears every live event and every "fetch again" while the calling screen is on screen.
  * The handlers may change between renders; the latest ones are always used.
  */
+/** Hears every live signal for the life of the app (for app-wide stores like the live status lines, §31). Returns
+ * the function that stops it. */
+export function onLiveSignal(fn: (s: LiveSignal) => void): () => void {
+  hubSignals.add(fn);
+  return () => {
+    hubSignals.delete(fn);
+  };
+}
+
 export function useLiveEvents(onEvent: (e: LiveEvent) => void, onResync: () => void): void {
   const ref = useRef({ onEvent, onResync });
   ref.current = { onEvent, onResync };

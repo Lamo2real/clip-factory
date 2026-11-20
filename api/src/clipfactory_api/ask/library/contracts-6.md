@@ -8,6 +8,7 @@ Keys: `pk` (S), `sk` (S); GSI `gsi1` on `gsi1pk`/`gsi1sk` (projection ALL); spar
 |---|---|---|---|---|
 | Settings | `USER#{userId}` | `SETTINGS` | – | Settings fields |
 | Job | `USER#{userId}` | `JOB#{jobId}` | – | Job fields + `type="job"`, `userId`, `sessionId` (AgentCore session), `heartbeatAt`, `flowRun`, `flowExecutionArn` (§14.4) |
+| Job live line | `USER#{userId}` | `JOBLIVE#{jobId}` | – | `type="jobLive"`, `jobId`, `sessionId`, `step`, `text`, `detail?`, `tech?`, `since?`, `i?`, `n?`, `pct?`, `at`, `ttl` (7 days) (§31) |
 | Clip | `USER#{userId}` | `CLIP#{clipId}` | `JOB#{jobId}` / `CLIP#{rank:03d}` | Clip fields (minus URLs, minus computed `totalViews`) + `type="clip"`, `userId`, `videoKey`, `coverKey`, `publishState`, `postsCreated`, `postIds` (§14.5), `flowRun`, `flowExecutionArn` (§14.5), `best`, `bestWeek` (§16) |
 | Connection | `USER#{userId}` | `CONN#{connectionId}` | `CONN#{connectionId}` / `CONN` | `type="conn"`, `userId`, `connectionId`, `connectedAt`, `ttl` (§14.2) |
 | Hook event | `HOOK#{platform}` | `HOOK#{hookId}` | – | `type="hook"`, `platform`, `receivedAt`, `headers`, `body`, `bodyEncoding`, `signature`, `ttl` (§14.3). Twitch and Kick (§24.4): `sk = HOOK#{message id}`, written only if absent, `signature: "valid"` always |

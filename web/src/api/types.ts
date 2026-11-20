@@ -58,6 +58,10 @@ export interface Job {
   error?: string;
   /** A short plain sentence while the job runs, e.g. "Picking up where it stopped…" after a stop (CONTRACTS §30). */
   note?: string;
+  /** A short tag of the run that owns the job; a live line of another run is ignored (CONTRACTS §31). */
+  run?: string;
+  /** The live status line while the job is queued or running, from GET /v1/jobs and /v1/jobs/{id} (CONTRACTS §31). */
+  live?: JobLive;
   /** The AI model that made the clips, a key of config/models.json (ADR-42). Absent on jobs from before it. */
   model?: string;
   /** The model the owner picked when it could not be used and the default model made the clips instead. */
@@ -665,8 +669,34 @@ export interface FollowsView {
 
 export type FollowKeys = { clientId: string; clientSecret: string } | { apiKey: string };
 
+/**
+ * The live status line of a working job (docs/CONTRACTS.md §31): what it is doing right now, in one line. Every word
+ * comes from the agent's fixed templates; never a command line, path, link or key.
+ */
+export interface JobLive {
+  jobId: string;
+  /** The run that wrote it (matches Job.run while it is current). */
+  run?: string;
+  /** The step key (resolve … finalize). */
+  step: string;
+  /** The big plain sentence, e.g. "Cutting clip 3 of 10". */
+  text: string;
+  /** The small grey detail, e.g. "0:41 of 0:58" or "412 MB of 1.2 GB · 34%". */
+  detail?: string;
+  /** The tiny "what is running" line, e.g. "ffmpeg · 1080×1920 · 30 fps" or "Claude Opus 5.5 · thinking". */
+  tech?: string;
+  /** When a model call started: the web counts the seconds itself. */
+  since?: string;
+  /** Clip (or part) i of n. */
+  i?: number;
+  n?: number;
+  pct?: number;
+  /** When the agent wrote it. */
+  at: string;
+}
+
 /** What the live connection pushes (docs/CONTRACTS.md §14.2). One message per changed item. */
-export type LiveItemType = "job" | "clip" | "post" | "learning" | "week" | "setup" | "follow";
+export type LiveItemType = "job" | "clip" | "post" | "learning" | "week" | "setup" | "follow" | "jobLive";
 export type LiveEvent =
   | { type: "job"; op: "upsert"; id: string; item: Job; partial?: undefined }
   | { type: "clip"; op: "upsert"; id: string; item: Clip; partial?: undefined }
@@ -674,6 +704,7 @@ export type LiveEvent =
   | { type: "learning"; op: "upsert"; id: string; item: Learning; partial?: undefined }
   | { type: "week"; op: "upsert"; id: string; item: WeekSummary; partial?: undefined }
   | { type: "follow"; op: "upsert"; id: string; item: Follow; partial?: undefined }
+  | { type: "jobLive"; op: "upsert"; id: string; item: JobLive; partial?: undefined }
   | { type: LiveItemType; op: "delete"; id: string; item?: undefined; partial?: undefined }
   | { type: LiveItemType; op: "upsert"; id: string; partial: true; item?: undefined };
 

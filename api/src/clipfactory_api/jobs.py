@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -79,8 +80,49 @@ def new_steps() -> list[Item]:
     return [{"key": key, "label": label, "status": "pending"} for key, label in STEPS]
 
 
-def public_job(item: Item) -> Item:
-    return db.strip_keys(item, INTERNAL_FIELDS)
+def run_tag(session_id: Any) -> str | None:
+    """A short tag of the run that owns the job (a hash of its ``sessionId``, which itself never leaves the server).
+    The web keeps a live status line only when its ``run`` matches the job's (docs/CONTRACTS.md §31)."""
+    if not isinstance(session_id, str) or not session_id:
+        return None
+    return hashlib.sha256(session_id.encode()).hexdigest()[:10]
+
+
+def public_job(item: Item, live: Item | None = None) -> Item:
+    out = db.strip_keys(item, INTERNAL_FIELDS)
+    run = run_tag(item.get("sessionId"))
+    if run:
+        out["run"] = run
+    if live is not None and item.get("status") in ACTIVE:
+        shown = public_live(live)
+        if shown.get("run") == run:
+            out["live"] = shown
+    return out
+
+
+# The live status line (§31): only these fields of a JOBLIVE# item ever leave the server.
+LIVE_FIELDS = ("jobId", "step", "text", "detail", "tech", "since", "i", "n", "pct", "at")
+
+
+def live_sk(job_id: str) -> str:
+    return f"JOBLIVE#{job_id}"
+
+
+def public_live(item: Item) -> Item:
+    """The public shape of a ``JOBLIVE#`` item: the allowed fields, plus ``run`` in place of its ``sessionId``."""
+    out = {k: item[k] for k in LIVE_FIELDS if item.get(k) not in (None, "")}
+    run = run_tag(item.get("sessionId"))
+    if run:
+        out["run"] = run
+    return out
+
+
+def live_lines(store: db.Store, user_id: str, jobs: list[Item]) -> dict[str, Item]:
+    """The live lines of the jobs still working, by jobId, from one query (none when no job is working)."""
+    if not any(j.get("status") in ACTIVE for j in jobs):
+        return {}
+    rows = store.query_all(db.user_pk(user_id), "JOBLIVE#")
+    return {str(r.get("jobId")): r for r in rows if r.get("jobId")}
 
 
 def start(store: db.Store, flows: FlowClient, job: Item, now: str) -> Item:

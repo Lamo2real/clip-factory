@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from . import livestatus
 from .bedrock import MODEL_ACCESS_MESSAGE, model_unavailable
 from .retry import is_transient, retry
 from .util import JobCanceled, JobSuperseded, UserFacingError, log, now_iso
@@ -126,6 +127,7 @@ class Tracker:
         resume: dict[str, Any] | None = None,
         stall_seconds: dict[str, float] | None = None,
         watch_tick: float = WATCH_TICK,
+        live: livestatus.LiveStatus | None = None,
     ) -> None:
         self.store = store
         self.stall_seconds = {**STALL_SECONDS, **(stall_seconds or {})}
@@ -167,6 +169,23 @@ class Tracker:
         self._loop_task: asyncio.Task[None] | None = None
         self._owner: asyncio.Task[Any] | None = None
         self._lock = asyncio.Lock()
+        # The live status line (§31): its own small item, written about once a second while the words change. A
+        # store without ``put_live`` (the tests' fakes) has none.
+        put_live = getattr(store, "put_live", None)
+        if live is None and callable(put_live):
+            live = livestatus.LiveStatus(functools.partial(put_live, user_id), job_id, session_id)
+        self.live = live
+        if live is not None:
+            live.on_emit = self._touch
+        self._live_token: Any = None
+
+    def _touch(self) -> None:
+        """A live line update is a sign of life for the step watchdog, when it comes from the event loop (a call
+        from a worker thread has no loop time to give and is skipped)."""
+        try:
+            self.last_sign = asyncio.get_running_loop().time()
+        except RuntimeError:
+            return
 
     def step(self, key: str) -> dict[str, Any]:
         return next(s for s in self.steps if s["key"] == key)
@@ -214,6 +233,10 @@ class Tracker:
         self._owner = asyncio.current_task()
         self._signal_alive()
         self._loop_task = asyncio.create_task(self._beat())
+        if self.live is not None:
+            self._live_token = self.live.start()
+            if self.resuming:
+                self.live.emit("resume", done=len(self.restored))
 
     def _signal_alive(self) -> None:
         if self.on_beat is None:
@@ -248,6 +271,8 @@ class Tracker:
         if not self.superseded:
             log("info", "job.superseded_seen", job=self.job_id, session=self.session_id, step=self.current)
         self.superseded = True
+        if self.live is not None:
+            self.live.closed = True
         self.canceled.set()
 
     def _abort(self) -> None:
@@ -265,6 +290,8 @@ class Tracker:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._loop_task
             self._loop_task = None
+        if self.live is not None:
+            await self.live.stop()
 
     def _now(self) -> float:
         try:
@@ -298,6 +325,8 @@ class Tracker:
             s["message"] = note
             self._dirty = True
             log("info", "job.step_note", job=self.job_id, step=key, note=note)
+        if self.live is not None:
+            self.live.emit("note", text=note)
 
     async def check_cancel(self) -> None:
         if self.superseded:
@@ -316,7 +345,11 @@ class Tracker:
         s.update(status="running", startedAt=now_iso())
         s.pop("message", None)
         s.pop("finishedAt", None)
+        if self.live is not None:
+            self.live.emit("step", key=key)
         await self._write({})
+        if self.live is not None:
+            await self.live.flush(force=True)  # a new step shows at once
         await self.check_cancel()
 
     async def done(self, key: str, message: str | None, *, skipped: bool = False) -> None:

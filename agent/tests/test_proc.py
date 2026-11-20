@@ -157,3 +157,23 @@ def test_a_failed_oom_score_write_says_nothing_on_stderr(monkeypatch: pytest.Mon
     r = subprocess.run([*wrapped[:2], script, *wrapped[3:]], capture_output=True, check=True)
     assert r.stdout == b"hi\n"
     assert r.stderr == b""
+
+
+async def test_stdout_lines_reach_on_out_line_for_ffmpeg_progress() -> None:
+    """ffmpeg's ``-progress pipe:1`` lines are read one by one for the live status line (§31) and not kept."""
+    seen: list[str] = []
+    r = await run(
+        ["sh", "-c", "printf 'frame=1\\nout_time_us=41000000\\nprogress=continue\\n'"],
+        time_limit=30,
+        on_out_line=seen.append,
+    )
+    assert seen == ["frame=1", "out_time_us=41000000", "progress=continue"]
+    assert r.stdout == b""
+
+
+async def test_a_failing_out_line_reader_never_stops_the_command() -> None:
+    def boom(line: str) -> None:
+        raise ValueError(line)
+
+    r = await run(["sh", "-c", "echo hi"], time_limit=30, on_out_line=boom)
+    assert r.stderr == ""

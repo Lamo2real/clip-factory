@@ -26,6 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
+from . import livestatus
 from .retry import retry
 from .schema import check
 from .skills import SkillsBlock, compose_system
@@ -191,11 +192,12 @@ class Bedrock:
         ``CALL_SECONDS`` (a TimeoutError, tried again), so a call that never answers can't hold a step forever. A
         model that is not turned on (``model_unavailable``) is not tried again."""
         loop = asyncio.get_running_loop()
-        return await retry(
-            lambda: asyncio.wait_for(loop.run_in_executor(_POOL, self._converse, kwargs), CALL_SECONDS),
-            what="bedrock.converse",
-            attempts=4,
-        )
+        with livestatus.thinking(self.model_id):  # "Claude Opus 5.5 · thinking" on the live line (§31)
+            return await retry(
+                lambda: asyncio.wait_for(loop.run_in_executor(_POOL, self._converse, kwargs), CALL_SECONDS),
+                what="bedrock.converse",
+                attempts=4,
+            )
 
     def _log_usage(self, tool: str, r: dict[str, Any]) -> None:
         usage = r.get("usage") or {}

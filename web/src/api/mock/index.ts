@@ -4,6 +4,7 @@ import type { Api, Clip, Job, Platform, Post, Settings, SimilarClip, TikTokPostO
 import { TIKTOK_PICK_AGAIN } from "../../lib/keep.ts";
 import { MOMENTS, PLATFORMS, STEP_KEYS, coverArt, seed, stepsAt, thumbArt, ulid, type Store } from "./fixtures.ts";
 import { installMockLiveControls, mockLive } from "./live.ts";
+import { lineFor, sampleLine, SCRIPT } from "./jobLive.ts";
 import { setupApi } from "./setup.ts";
 import { statsApi, type StatsFaults } from "./stats.ts";
 import { skillsApi, type MockSkillControls } from "./skills.ts";
@@ -136,6 +137,16 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     const { videoUrl: _v, coverUrl: _c, ...rest } = clone(c);
     mockLive.publish({ type: "clip", op: "upsert", id: c.clipId, item: rest });
   };
+  /** A fetched job carries its live line while it runs, like GET /v1/jobs and /v1/jobs/{id} (§31). */
+  const withLive = (j: Job): Job => {
+    const live = sampleLine(j);
+    return live ? { ...clone(j), live } : clone(j);
+  };
+  const publishLine = (j: Job, frame: (typeof SCRIPT)[number]) => {
+    const item = lineFor(j, frame);
+    mockLive.publish({ type: "jobLive", op: "upsert", id: j.jobId, item });
+  };
+  let scriptAt = 0;
   const publishPost = (p: Post) => mockLive.publish({ type: "post", op: "upsert", id: p.postId, item: clone(p) });
   // When each kept clip's posting was last started (stands in for the API's publishState: "pending" timing).
   const claimedAt = new Map<string, number>();
@@ -257,6 +268,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         job.progress = Math.min(0.99, (done + within) / STEP_KEYS.length);
       }
       job.updatedAt = new Date().toISOString();
+      const live = sampleLine(job);
+      if (live) mockLive.publish({ type: "jobLive", op: "upsert", id: job.jobId, item: live });
       // Like the agent's heartbeats: a message only when the job really moved.
       if (Math.round(job.progress * 100) !== Math.round(before * 100) || job.status !== "running") publishJob(job);
     }
@@ -276,8 +289,16 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     }
     publishJob(j);
   }
+  /** The next scripted live line for the newest running job, pushed live (tests and screenshots, §31). */
+  function line(at?: number) {
+    const j = [...store.jobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).find((x) => x.status === "running");
+    if (!j) return;
+    const k = at ?? scriptAt;
+    scriptAt = k + 1;
+    publishLine(j, SCRIPT[k % SCRIPT.length]!);
+  }
   mockLive.tick = tick;
-  installMockLiveControls(advance);
+  installMockLiveControls(advance, line);
 
   // An empty account (window.__cfMock.jobs.clear()) lasts until the tab closes, so a reload shows the empty states.
   if (emptyAccount()) {
@@ -424,14 +445,14 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       const start = cursor ? Number(cursor) : 0;
       const page = sorted.slice(start, start + limit);
       const next = start + limit < sorted.length ? String(start + limit) : null;
-      return { jobs: clone(page), nextCursor: next };
+      return { jobs: page.map(withLive), nextCursor: next };
     },
     async getJob(jobId) {
       await delay();
       tick();
       const j = job(jobId);
       const clips = store.clips.filter((c) => c.jobId === jobId).sort((a, b) => a.rank - b.rank);
-      return { job: clone(j), clips: clone(clips) };
+      return { job: withLive(j), clips: clone(clips) };
     },
     async cancelJob(jobId) {
       await delay();
