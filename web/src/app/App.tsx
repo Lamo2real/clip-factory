@@ -31,6 +31,7 @@ import { GUIDES } from "../setup/index.ts";
 import { AskClipFactory } from "../features/help/HelpLauncher.tsx";
 import { SetupTodo } from "../components/SetupTodo.tsx";
 import { AppBadge } from "../lib/badge.ts";
+import { MacFetchHost } from "./MacFetchHost.tsx";
 import { forgetDevice } from "../lib/push.ts";
 /**
  * The motion gallery (§20.10): mock builds only. Tested on import.meta.env directly (not isMock) so a real build
@@ -196,6 +197,7 @@ function Shell() {
       <AskClipFactory />
       <SetupTodo />
       <AppBadge />
+      <MacFetchHost />
     </div>
   );
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mac-fetch-upload"
+description = "Enables the mac_fetch_upload command without any pre-configured scope."
+commands.allow = ["mac_fetch_upload"]
+
+[[permission]]
+identifier = "deny-mac-fetch-upload"
+description = "Denies the mac_fetch_upload command without any pre-configured scope."
+commands.deny = ["mac_fetch_upload"]

@@ -32,7 +32,16 @@ STEPS: tuple[tuple[str, str], ...] = (
 )
 ACTIVE = ("queued", "running")
 RESTARTABLE = ("failed", "canceled")
-INTERNAL_FIELDS = ("sessionId", "heartbeatAt", "flowRun", "flowExecutionArn", "pickUp", "resumes", "runStartedAt")
+INTERNAL_FIELDS = (
+    "sessionId",
+    "heartbeatAt",
+    "flowRun",
+    "flowExecutionArn",
+    "pickUp",
+    "resumes",
+    "runStartedAt",
+    "macCallbackId",  # the job flow's mac-done callback (§35); macFetch itself goes out through macfetch.public
+)
 
 START_FAILED = "Could not start. Press Try again."
 
@@ -90,6 +99,12 @@ def run_tag(session_id: Any) -> str | None:
 
 def public_job(item: Item, live: Item | None = None) -> Item:
     out = db.strip_keys(item, INTERNAL_FIELDS)
+    if "macFetch" in out:
+        from . import macfetch
+
+        mac = macfetch.public(out.pop("macFetch"))
+        if mac:
+            out["macFetch"] = mac
     run = run_tag(item.get("sessionId"))
     if run:
         out["run"] = run

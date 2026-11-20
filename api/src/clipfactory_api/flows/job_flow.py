@@ -18,6 +18,14 @@ Started by the API (``job-{jobId}-{flowRun}`` on the alias ``live``) with ``{"jo
    ``agent-done-n`` / ``start-agent-n`` run as in 1-3 on the new session, on the newest runtime version. Only after
    the last resume is the job failed, with words that say Try again picks up where it left off.
 
+5. Mac fetches it (docs/CONTRACTS.md §35): the agent's ``MacFetch`` failure (YouTube blocked the cloud), or a job
+   started from the desktop app (``macFetch.up``, checked by ``start-agent``), does not fail the job. ``mac-wait-n``
+   marks it waiting for the owner's Mac (with the ``mac-done-n`` callback id, 24 h, no compute while waiting);
+   after 2 minutes ``mac-nudge-n`` marks it for the "Open Clip Factory on your Mac" notification if no Mac has
+   claimed it. When the API reports the Mac's upload, ``mac-source-n`` turns the job into an upload job on a new
+   session and the next attempt runs the agent on it. A timeout fails it with "Your Mac didn't get the video. Use a
+   video file instead." Only one Mac fetch per flow run.
+
 Every write is conditional on this run's ``sessionId``, so a superseded run never touches a newer one. The handler
 returns ``{"jobId", "outcome"}`` and never raises for these expected outcomes: ``DurableExecutionFailed`` means a bug.
 """
@@ -39,10 +47,10 @@ from aws_durable_execution_sdk_python import (
 )
 from aws_durable_execution_sdk_python.config import CallbackConfig, Duration
 
-from .. import db
+from .. import db, macfetch
 from ..agent_client import AgentClient, AgentError
 from ..clock import Clock, iso, utcnow
-from ..jobs import ACTIVE, START_FAILED
+from ..jobs import ACTIVE, START_FAILED, picked_up_steps
 from ..log import log
 from . import TransientError, error_message, error_type, retrying, transient
 
@@ -60,6 +68,10 @@ AGENT_STOPPED = "AgentStopped"  # the agent got SIGTERM (a stopped session, a re
 # The whole execution may run 8.5 h (infra/modules/flows: execution_timeout). A resume needs at least this much of the
 # 8 h left, and its callback gets only what is left, so the execution never outlives its timeout with the job running.
 RESUME_MIN_SECONDS = 20 * 60
+MAC_FETCH = "MacFetch"  # the agent's failure type: YouTube blocked the cloud, wait for the owner's Mac (§35)
+MAC_FAILED = "MacFailed"  # the API's failure type: the Mac stopped (its words are the message)
+MAC_TIMEOUT = Duration.from_hours(macfetch.WAIT_HOURS)
+MAC_NUDGE = Duration.from_minutes(macfetch.NUDGE_MINUTES)
 
 Item = dict[str, Any]
 
@@ -103,13 +115,15 @@ def run_job_flow(ctx: Any, event: Any, deps: JobFlowDeps) -> dict[str, Any]:
     first = run
     timeout = CALLBACK_TIMEOUT
     stalled = 0
+    mac_used = False
     for attempt in range(MAX_RESUMES + 1):
-        ended, resumed = _attempt(ctx, deps, run, attempt, timeout, stalled=stalled)
+        ended, resumed = _attempt(ctx, deps, run, attempt, timeout, stalled=stalled, mac_used=mac_used)
         if resumed is None:
             return _done(first, ended or "failed")
         run = Run(run.job_id, run.user_id, str(resumed["sessionId"]))
         timeout = Duration.from_seconds(int(resumed["seconds"]))
         stalled = int(resumed.get("stalled") or 0)
+        mac_used = mac_used or bool(resumed.get("mac"))
     raise AssertionError("the last attempt never resumes")  # pragma: no cover
 
 
@@ -121,7 +135,14 @@ class _Stop:
 
 
 def _attempt(
-    ctx: Any, deps: JobFlowDeps, run: Run, attempt: int, timeout: Duration, *, stalled: int = 0
+    ctx: Any,
+    deps: JobFlowDeps,
+    run: Run,
+    attempt: int,
+    timeout: Duration,
+    *,
+    stalled: int = 0,
+    mac_used: bool = False,
 ) -> tuple[str | None, dict[str, Any] | None]:
     """One agent run on ``run.session_id``: ``(outcome, None)`` when the flow ends, ``(None, resumed)`` to go on with
     the new session ``begin_resume`` gave the job. The first attempt keeps the names it always had ("agent-done",
@@ -142,13 +163,52 @@ def _attempt(
         return ctx.step(lambda _sc: fail(deps, run, None, START_FAILED), name="fail", config=retrying()), None
     if started.get("skipped"):
         return "superseded", None
+    if started.get("mac") and not mac_used and attempt < MAX_RESUMES:
+        # Started from the desktop app: the cloud never asks YouTube; the owner's Mac gets the video (§35.1).
+        return _wait_for_mac(ctx, deps, run, attempt, stop_old=False)
     try:
         raw = callback.result()
     except CallbackError as e:
         stop = _Stop(error_type(e, callback), isinstance(e, CallbackTimeoutError), error_message(e))
+        if stop.kind == MAC_FETCH and not stop.timed_out and not mac_used and attempt < MAX_RESUMES:
+            return _wait_for_mac(ctx, deps, run, attempt, stop_old=True)
         return _stopped(ctx, deps, run, attempt, stop, since=_progress(started.get("progress")), stalled=stalled)
     clip_count = clip_count_from(raw)
     return ctx.step(lambda _sc: finish(deps, run, clip_count), name="finish", config=retrying()), None
+
+
+def _wait_for_mac(
+    ctx: Any, deps: JobFlowDeps, run: Run, attempt: int, *, stop_old: bool
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Waits (no compute) for the owner's Mac to send the video (§35.1), then hands the job to a new session as an
+    upload job: ``(None, resumed)`` to go on with the next attempt, or ``(outcome, None)`` when the flow ends."""
+    suffix = f"-{attempt}" if attempt else ""
+    callback = ctx.create_callback(name=f"mac-done{suffix}", config=CallbackConfig(timeout=MAC_TIMEOUT))
+    callback_id = str(callback.callback_id)
+    began = ctx.step(lambda _sc: begin_mac_wait(deps, run, callback_id), name=f"mac-wait{suffix}", config=retrying())
+    if began.get("outcome"):
+        return str(began["outcome"]), None
+    if stop_old:
+        ctx.step(lambda _sc: stop_session(deps, run), name=f"mac-stop-old{suffix}", config=retrying())
+    ctx.wait(MAC_NUDGE, name=f"mac-nudge-after{suffix}")
+    ctx.step(lambda _sc: nudge_mac(deps, run), name=f"mac-nudge{suffix}", config=retrying())
+    try:
+        raw = callback.result()
+    except CallbackError as e:
+        kind = error_type(e, callback)
+        timed_out = isinstance(e, CallbackTimeoutError)
+        message = macfetch.TIMED_OUT if timed_out or kind != MAC_FAILED else error_message(e)
+        outcome = ctx.step(
+            lambda _sc: fail(deps, run, None if timed_out else kind, message),
+            name=f"mac-fail{suffix}",
+            config=retrying(),
+        )
+        log("info", "job_flow.mac_ended", jobId=run.job_id, timedOut=timed_out, errorType=kind, outcome=outcome)
+        return outcome, None
+    resumed = ctx.step(lambda _sc: switch_to_mac_upload(deps, run, raw), name=f"mac-source{suffix}", config=retrying())
+    if resumed.get("sessionId"):
+        return None, {**resumed, "mac": True}
+    return str(resumed.get("outcome") or "failed"), None
 
 
 def _progress(raw: Any) -> float | None:
@@ -236,6 +296,10 @@ def start_agent(deps: JobFlowDeps, run: Run, callback_id: str) -> dict[str, Any]
         log("info", "job_flow.skip_start", jobId=run.job_id, status=status)
         return {"skipped": True}
     progress = _progress(job.get("progress")) or 0.0  # where this attempt starts (a resume counts what it adds)
+    mac = job.get("macFetch")
+    if isinstance(mac, dict) and mac.get("up") and mac.get("state") in macfetch.WAITING_STATES:
+        log("info", "job_flow.mac_up_front", jobId=run.job_id)
+        return {"skipped": False, "mac": True, "progress": progress}
     if status == "running":
         log("info", "job_flow.already_started", jobId=run.job_id)
         return {"skipped": False, "progress": progress}
@@ -386,6 +450,183 @@ def begin_resume(
         raise transient(e) from e
     log("warning", "job_flow.resumed", jobId=run.job_id, resumes=n, moved=moved, stalled=stalled)
     return {"sessionId": session, "seconds": int(left), "stalled": stalled}
+
+
+def _mac_map(job: Item) -> dict[str, Any]:
+    mac = job.get("macFetch")
+    return dict(mac) if isinstance(mac, dict) else {}
+
+
+def _waiting_step(job: Item) -> str:
+    """The step that waits for the Mac: the one the agent was running when YouTube blocked it, else Find the video."""
+    for s in job.get("steps") or []:
+        if isinstance(s, dict) and s.get("status") == "running":
+            return str(s.get("key"))
+    return "resolve"
+
+
+def begin_mac_wait(deps: JobFlowDeps, run: Run, callback_id: str) -> dict[str, Any]:
+    """Marks the job waiting for the owner's Mac (§35.1): ``macFetch.state`` ``waiting`` (kept when a Mac already
+    claimed it), the callback id the API completes, the waiting step running with "Waiting for your Mac to get the
+    video", and the same words on the live line. ``{}`` to wait, ``{"outcome"}`` when the job already ended."""
+    job = _get(deps, run)
+    known = _state_outcome(job, run)
+    if known is not None or job is None:
+        return {"outcome": known or "missing"}
+    now = iso(deps.clock())
+    old = _mac_map(job)
+    mac = {**old, "since": old.get("since") or now}
+    if mac.get("state") not in ("getting", "sending"):
+        mac["state"] = "waiting"
+    key = _waiting_step(job)
+    steps = []
+    for step in job.get("steps") or []:
+        if isinstance(step, dict) and step.get("key") == key:
+            waiting = {**step, "status": "running", "message": macfetch.WAITING}
+            waiting["startedAt"] = step.get("startedAt") or now
+            waiting.pop("finishedAt", None)
+            steps.append(waiting)
+        else:
+            steps.append(step)
+    try:
+        deps.store.update(
+            run.pk,
+            run.sk,
+            {"status": "running", "macFetch": mac, "macCallbackId": callback_id, "steps": steps, "updatedAt": now},
+            remove=["note"],
+            expect_in={"status": list(ACTIVE), "sessionId": [run.session_id]},
+        )
+    except db.ConditionFailed:
+        return {"outcome": _state_outcome(_get(deps, run), run) or "superseded"}
+    except Exception as e:
+        raise transient(e) from e
+    _live_line(deps, run, key, macfetch.WAITING, now)
+    log("info", "job_flow.mac_waiting", jobId=run.job_id, step=key, upFront=bool(mac.get("up")))
+    return {}
+
+
+def _live_line(deps: JobFlowDeps, run: Run, step: str, text: str, now: str) -> None:
+    """The live status line (§31) says the job waits for the Mac. Best effort: the step's message says it too."""
+    ttl = int(deps.clock().timestamp()) + 7 * 86400
+    try:
+        deps.store.update_expr(
+            run.pk,
+            f"JOBLIVE#{run.job_id}",
+            "SET #type = :type, jobId = :job, sessionId = :session, step = :step, #text = :text, #at = :now, "
+            "lastChange = :now, #ttl = :ttl REMOVE detail, tech, since, i, n, pct",
+            names={"#type": "type", "#text": "text", "#at": "at", "#ttl": "ttl"},
+            values={
+                ":type": "jobLive",
+                ":job": run.job_id,
+                ":session": run.session_id,
+                ":step": step,
+                ":text": text,
+                ":now": now,
+                ":ttl": ttl,
+            },
+        )
+    except Exception as e:
+        log("warning", "job_flow.mac_live_failed", jobId=run.job_id, error=type(e).__name__)
+
+
+def nudge_mac(deps: JobFlowDeps, run: Run) -> dict[str, bool]:
+    """Two minutes in, no Mac has claimed the job: ``macFetch.nudgedAt`` is set, and cf-prod-notify sends "Open Clip
+    Factory on your Mac to continue" (§35.2). Nothing when a Mac is already on it or the job moved on."""
+    job = _get(deps, run)
+    if job is None or _state_outcome(job, run) is not None:
+        return {"nudged": False}
+    mac = _mac_map(job)
+    if mac.get("state") != "waiting" or mac.get("nudgedAt"):
+        return {"nudged": False}
+    now = iso(deps.clock())
+    try:
+        deps.store.update(
+            run.pk,
+            run.sk,
+            {"macFetch": {**mac, "nudgedAt": now}, "updatedAt": now},
+            expect_in={"status": list(ACTIVE), "sessionId": [run.session_id]},
+        )
+    except db.ConditionFailed:
+        return {"nudged": False}
+    except Exception as e:
+        raise transient(e) from e
+    log("info", "job_flow.mac_nudged", jobId=run.job_id)
+    return {"nudged": True}
+
+
+def mac_result(raw: Any, user_id: str, job_id: str) -> dict[str, Any] | None:
+    """The API's success result (``{"key", "size", "title"?, "creator"?, "durationSec"?}``), checked again here."""
+    try:
+        data = json.loads(raw) if isinstance(raw, str | bytes | bytearray) else raw
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or data.get("key") != macfetch.upload_key(user_id, job_id):
+        return None
+    size = data.get("size")
+    if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= macfetch.MAX_SIZE:
+        return None
+    return data
+
+
+def switch_to_mac_upload(deps: JobFlowDeps, run: Run, raw: Any) -> dict[str, Any]:
+    """The Mac's video arrived (§35.3): the job becomes an upload job on a new session. It keeps the link, the title
+    and the creator (``source.url``, ``title``, ``channel``) and says ``fetchedBy: "mac"``; done steps stay done (a
+    Cut-step block keeps its moments), the waiting step and later ones go back to pending, and the new run gets a
+    fresh 8 h. ``{"sessionId", "seconds", "stalled"}``, or ``{"outcome"}``."""
+    job = _get(deps, run)
+    known = _state_outcome(job, run)
+    if known is not None or job is None:
+        return {"outcome": known or "missing"}
+    data = mac_result(raw, run.user_id, run.job_id)
+    if data is None:
+        log("error", "job_flow.mac_bad_result", jobId=run.job_id)
+        return {"outcome": fail(deps, run, None, macfetch.FAILURE_WORDS["send"])}
+    from ..agent_client import new_session_id
+
+    old = dict(job.get("source") or {})
+    source = {
+        **old,
+        "type": "upload",
+        "platform": "upload",
+        "key": data["key"],
+        "filename": "video.mp4",
+        "fetchedBy": "mac",
+        "linkPlatform": old.get("platform") or "youtube",
+    }
+    for field_name, key, limit in (("title", "title", 200), ("channel", "creator", 120)):
+        text = macfetch.clean_text(data.get(key), limit)
+        if text and not old.get(field_name):
+            source[field_name] = text
+    now = iso(deps.clock())
+    mac = {**_mac_map(job), "state": "done", "at": now}
+    for internal in ("deviceId", "uploadId"):
+        mac.pop(internal, None)
+    session = new_session_id(run.job_id)
+    try:
+        deps.store.update(
+            run.pk,
+            run.sk,
+            {
+                "status": "queued",
+                "sessionId": session,
+                "source": source,
+                "macFetch": mac,
+                "steps": picked_up_steps(job.get("steps")),
+                "pickUp": True,
+                "note": macfetch.SENT_NOTE,
+                "runStartedAt": now,
+                "heartbeatAt": now,
+                "updatedAt": now,
+            },
+            remove=["macCallbackId", "error"],
+            expect_in={"status": list(ACTIVE), "sessionId": [run.session_id]},
+        )
+    except db.ConditionFailed:
+        return {"outcome": _state_outcome(_get(deps, run), run) or "superseded"}
+    except Exception as e:
+        raise transient(e) from e
+    log("info", "job_flow.mac_source", jobId=run.job_id, size=data["size"])
+    return {"sessionId": session, "seconds": CALLBACK_HOURS * 3600, "stalled": 0}
 
 
 def stop_session(deps: JobFlowDeps, run: Run) -> dict[str, bool]:

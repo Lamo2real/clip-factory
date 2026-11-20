@@ -5,6 +5,7 @@ import type { Clip, ClipStatus, Job } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { LiveLine } from "./LiveLine.tsx";
+import { MacWait } from "./MacWait.tsx";
 import { NotifyCard } from "../settings/NotifyBranch.tsx";
 import { JobStatusPill, jobTitle, sourceMeta, SourceThumb, StepTimeline } from "../../components/JobBits.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -217,6 +218,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
             </div>
           ) : null}
           <LiveLine job={job} />
+          <MacWait job={job} />
           <StepTimeline steps={job.steps} />
           {job.status === "ready" && job.model ? (
             <p className="panel__note job-model" data-help="job-model">

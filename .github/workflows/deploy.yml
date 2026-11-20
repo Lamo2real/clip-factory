@@ -29,6 +29,13 @@
 #               installer and the signed update bundle to the web bucket under downloads/, and desktop-manifest
 #               rewrites downloads/manifest.json and downloads/latest.json (what installed apps update from, §12.6).
 #               These jobs never fail the deploy: a broken desktop build leaves the previous installers in place.
+#   desktop-tools, desktop-tools-upload - the pinned yt-dlp, Deno and ffmpeg the desktop app runs to fetch a YouTube
+#               video itself (docs/CONTRACTS.md §35.4): desktop-tools downloads each pinned file, checks it against
+#               upstream's own sums and desktop/tools/tools.lock.json, and signs tools.json with CF_TOOLS_SIGNING_KEY
+#               (no OIDC token there); desktop-tools-upload copies the files and the signed manifest to the web bucket
+#               under downloads/tools/. Skipped when the live manifest already has this lock. Never fails the deploy.
+# Secret CF_TOOLS_SIGNING_KEY: the tool manifest's ed25519 key (PEM). Not the updater key; its public half is built
+#   into the app (desktop/src-tauri/src/mac_fetch/tools.rs).
 # Optional secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD: the updater signing key
 #   (desktop/README.md). Without them the installers are still built, but no update bundle, so installed apps
 #   are not updated.
@@ -532,13 +539,16 @@ jobs:
         env:
           WEB_BUCKET: ${{ needs.infra.outputs.web_bucket }}
           APP_URL: ${{ needs.infra.outputs.app_url }}
-          SOURCES_HASH: ${{ hashFiles('desktop/**', '!desktop/**/*.md', 'web/public/icons/icon-512.png') }}
+          # desktop/tools/ (the pinned yt-dlp, Deno and ffmpeg, §35.4) ships through desktop-tools, never a rebuild.
+          SOURCES_HASH: ${{ hashFiles('desktop/**', '!desktop/**/*.md', '!desktop/tools/**', 'web/public/icons/icon-512.png') }}
+          # The media bucket's host is baked into the app (Mac fetches it sends the video there, §35.3).
+          MEDIA_HOST: ${{ format('{0}.s3.{1}.amazonaws.com', fromJSON(needs.infra.outputs.tf_outputs).media_bucket.value, env.AWS_REGION) }}
           # Only whether the key is set; the key itself never reaches this job.
           SIGNING: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
           [ -n "$SOURCES_HASH" ] || { echo "::error::desktop/ not found."; exit 1; }
-          source_hash="$(printf '%s %s' "$SOURCES_HASH" "${APP_URL%/}" | sha256sum | cut -c1-32)"
+          source_hash="$(printf '%s %s %s' "$SOURCES_HASH" "${APP_URL%/}" "$MEDIA_HOST" | sha256sum | cut -c1-32)"
           # Goes up on every run of this workflow (a re-run keeps its number, so a re-built leg matches the others).
           # NSIS needs every part at or below 65535.
           version="1.${RUN_NUMBER}.0"
@@ -659,6 +669,8 @@ jobs:
       - name: build the installer and the signed update bundle
         env:
           CF_APP_URL: ${{ needs.infra.outputs.app_url }}
+          # Where Mac fetches it sends the video's parts (§35.3); build.rs refuses a release without it.
+          CF_MEDIA_HOST: ${{ format('{0}.s3.{1}.amazonaws.com', fromJSON(needs.infra.outputs.tf_outputs).media_bucket.value, env.AWS_REGION) }}
           TAURI_ARGS: ${{ matrix.args }}
           VERSION: ${{ needs.desktop-plan.outputs.version }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -799,6 +811,102 @@ jobs:
             --metadata "source-hash=${SOURCE_HASH},updater=${UPDATER:-false}" \
             --only-show-errors
           echo "Uploaded ${KEY}."
+
+  # The pinned tools of Mac fetches it (docs/CONTRACTS.md §35.4). This job has no OIDC token: it downloads from
+  # GitHub releases (never runs what it downloads), checks every sum, and signs the manifest; desktop-tools-upload
+  # copies the result. Nothing happens when the live manifest already carries this lock's hash.
+  desktop-tools:
+    needs: [preflight, infra, web]
+    if: needs.preflight.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    continue-on-error: true
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.plan.outputs.changed }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: is the live manifest this lock
+        id: plan
+        env:
+          APP_URL: ${{ needs.infra.outputs.app_url }}
+        run: |
+          want="$(python3 -I desktop/tools/build_tools.py lock-hash --lock desktop/tools/tools.lock.json)"
+          live="$(curl -fsS --max-time 20 "${APP_URL%/}/downloads/tools/tools.json" 2>/dev/null | jq -r '.lock // empty' || true)"
+          if [ "$live" = "$want" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Tools are up to date (lock ${want})." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: download, check and lay out the pinned tools
+        if: steps.plan.outputs.changed == 'true'
+        env:
+          APP_URL: ${{ needs.infra.outputs.app_url }}
+        run: |
+          python3 -I desktop/tools/build_tools.py fetch --lock desktop/tools/tools.lock.json \
+            --out "$RUNNER_TEMP/tools" --base-url "${APP_URL%/}/downloads/tools"
+      # The key reaches this step only, through a file only this job can read, removed straight after.
+      - name: sign tools.json
+        if: steps.plan.outputs.changed == 'true'
+        env:
+          CF_TOOLS_SIGNING_KEY: ${{ secrets.CF_TOOLS_SIGNING_KEY }}
+        run: |
+          [ -n "$CF_TOOLS_SIGNING_KEY" ] || { echo "::error::CF_TOOLS_SIGNING_KEY is not set: the tools are not published."; exit 1; }
+          key="$RUNNER_TEMP/tools-key.pem"
+          ( umask 077; printf '%s\n' "$CF_TOOLS_SIGNING_KEY" > "$key" )
+          python3 -I desktop/tools/build_tools.py sign --manifest "$RUNNER_TEMP/tools/tools.json" --key "$key"
+          rm -f "$key"
+          pub="$(grep -oE 'PUBLIC_KEY: &str = "[^"]+"' desktop/src-tauri/src/mac_fetch/tools.rs | cut -d'"' -f2)"
+          python3 -I desktop/tools/build_tools.py verify --manifest "$RUNNER_TEMP/tools/tools.json" --pubkey "$pub"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.plan.outputs.changed == 'true'
+        with:
+          name: desktop-tools
+          path: ${{ runner.temp }}/tools
+          retention-days: 1
+          if-no-files-found: error
+
+  # Copies the checked files first (each key never changes once written), then the signed manifest, then refreshes
+  # CloudFront for the manifest only. Runs no code from the artifact.
+  desktop-tools-upload:
+    needs: [preflight, infra, desktop-tools]
+    if: >-
+      !cancelled()
+      && needs.preflight.outputs.enabled == 'true'
+      && needs.desktop-tools.outputs.changed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: desktop-tools
+          path: ${{ runner.temp }}/tools
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: upload the tools and the signed manifest
+        env:
+          DIR: ${{ runner.temp }}/tools
+          WEB_BUCKET: ${{ needs.infra.outputs.web_bucket }}
+          DISTRIBUTION_ID: ${{ needs.infra.outputs.distribution_id }}
+        run: |
+          [ -s "$DIR/tools.json" ] && [ -s "$DIR/tools.json.sig" ] || { echo "::error::No signed manifest in the artifact."; exit 1; }
+          aws s3 cp "$DIR/files/" "s3://${WEB_BUCKET}/downloads/tools/" --recursive \
+            --cache-control "public, max-age=31536000, immutable" --content-type "application/octet-stream" --only-show-errors
+          aws s3 cp "$DIR/tools.json" "s3://${WEB_BUCKET}/downloads/tools/tools.json" \
+            --cache-control "no-cache" --content-type "application/json" --only-show-errors
+          aws s3 cp "$DIR/tools.json.sig" "s3://${WEB_BUCKET}/downloads/tools/tools.json.sig" \
+            --cache-control "no-cache" --content-type "text/plain" --only-show-errors
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" \
+            --paths "/downloads/tools/tools.json" "/downloads/tools/tools.json.sig" --query Invalidation.Id --output text
+          echo "Published $(jq -r '[.tools | to_entries[] | "\(.key) \(.value.version)"] | join(", ")' "$DIR/tools.json")." >> "$GITHUB_STEP_SUMMARY"
 
   # Lists only the installers that exist in the bucket, so the app never offers a dead link (§12.1), and writes
   # downloads/latest.json, what installed apps update from (§12.6). It runs after every upload, so latest.json

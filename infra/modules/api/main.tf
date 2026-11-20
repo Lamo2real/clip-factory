@@ -95,6 +95,11 @@ locals {
       { Sid = "Agent", Action = ["bedrock-agentcore:InvokeAgentRuntime", "bedrock-agentcore:StopRuntimeSession"], Resource = [var.agent_runtime_arn, "${var.agent_runtime_arn}/*"] },
       # Start durable executions on the live alias (any qualifier of the two flows, never other functions).
       { Sid = "StartFlows", Action = ["lambda:InvokeFunction"], Resource = ["${var.job_flow_arn_prefix}:*", "${var.clip_flow_arn_prefix}:*"] },
+      # Mac fetches it (docs/CONTRACTS.md §35): end the job flow's wait for the owner's Mac (the video arrived, the Mac
+      # stopped, or the owner stopped the job). Callbacks are authorized on the execution ARN (function:NAME:<version>/...).
+      { Sid = "JobFlowMacCallback", Action = ["lambda:SendDurableExecutionCallbackSuccess", "lambda:SendDurableExecutionCallbackFailure"], Resource = ["${var.job_flow_arn_prefix}:*"] },
+      # The Mac's video goes up as a multipart upload under uploads/ (PutObject covers create, parts and complete).
+      { Sid = "MacUploadAbort", Action = ["s3:AbortMultipartUpload"], Resource = ["${var.media_bucket_arn}/uploads/*"] },
       # POST /v1/clips/{id}/stats/refresh and PUT /v1/weeks/{week}/best (InvocationType=Event, unqualified).
       { Sid = "StatsAndLearn", Action = ["lambda:InvokeFunction"], Resource = [var.stats_function_arn, var.learn_function_arn] },
       # POST /v1/money/refresh (§25.5, at most once an hour; InvocationType=Event, unqualified).

@@ -4,6 +4,7 @@
 //! Clip Factory desktop: one native window that shows the deployed web app (docs/CONTRACTS.md §12.3).
 //! It bundles no web UI: the pages update from the website itself, and the wrapper updates itself (update.rs).
 
+mod mac_fetch;
 mod update;
 
 use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
@@ -209,6 +210,14 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(update::LaterInstall::default())
+        // Mac fetches it (§35): the page's four commands, granted below to the app's own address only.
+        .manage(mac_fetch::Fetches::default())
+        .invoke_handler(tauri::generate_handler![
+            mac_fetch::mac_fetch_start,
+            mac_fetch::mac_fetch_status,
+            mac_fetch::mac_fetch_upload,
+            mac_fetch::mac_fetch_cancel
+        ])
         .setup(|app| {
             let app_url = Url::parse(APP_URL)?;
             let handle = app.handle().clone();
@@ -216,6 +225,7 @@ fn main() {
             let glass = Glass::here();
             let version = app.package_info().version.to_string();
             app.add_capability(drag_capability(&app_url))?;
+            app.add_capability(mac_fetch::capability(&app_url, WINDOW_LABEL))?;
 
             let mut window =
                 WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::External(app_url))

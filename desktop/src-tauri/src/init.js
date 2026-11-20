@@ -8,13 +8,38 @@
 // 4. Says how tall the title bar band laid over the page is (window.__CF_TITLEBAR__, in CSS px; set just above this
 //    script by main.rs: 28 on macOS, where the title bar is transparent and the traffic lights float over the page,
 //    0 elsewhere). The web app keeps that band clear and starts every column below it (docs/CONTRACTS.md §11.1).
-// 5. Links to other sites (and window.open) become a plain navigation, which the wrapper catches and opens
+// 5. Mac fetches it (docs/CONTRACTS.md §35): window.__CF_MAC_FETCH__ lets the page ask this app to get a YouTube
+//    video on this computer's own connection and send it to the job. Four commands only (start, status, upload,
+//    cancel), which main.rs grants to the app's own address in this window and nowhere else.
+// 6. Links to other sites (and window.open) become a plain navigation, which the wrapper catches and opens
 //    in the system browser. The page itself never leaves the app. Same-site links open in this window.
 (function () {
   "use strict";
   window.__CF_DESKTOP__ = true;
   if (typeof window.__CF_GLASS__ !== "string") window.__CF_GLASS__ = "none";
   if (typeof window.__CF_TITLEBAR__ !== "number") window.__CF_TITLEBAR__ = 0;
+
+  // Tauri's own bridge is read at call time, so the order of the injected scripts does not matter.
+  var call = function (cmd, args) {
+    var internals = window.__TAURI_INTERNALS__;
+    if (!internals || typeof internals.invoke !== "function") return Promise.reject(new Error("no_bridge"));
+    return internals.invoke(cmd, args);
+  };
+  window.__CF_MAC_FETCH__ = Object.freeze({
+    version: 1,
+    start: function (jobId, url) {
+      return call("mac_fetch_start", { jobId: String(jobId), url: String(url) });
+    },
+    status: function (jobId) {
+      return call("mac_fetch_status", { jobId: String(jobId) });
+    },
+    upload: function (jobId, partSize, parts) {
+      return call("mac_fetch_upload", { jobId: String(jobId), partSize: Number(partSize), parts: parts });
+    },
+    cancel: function (jobId) {
+      return call("mac_fetch_cancel", { jobId: String(jobId) });
+    },
+  });
 
   function parse(href) {
     try {

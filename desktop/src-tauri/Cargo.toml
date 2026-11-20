@@ -20,10 +20,22 @@ tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
+# Mac fetches it (docs/CONTRACTS.md §35): the signed tool manifest (ed25519), file sums, the downloads of the pinned
+# tools and the S3 part uploads (blocking reqwest on the fetch's own thread; rustls, as the updater already uses).
+base64 = "0.22"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+fs4 = { version = "0.13", features = ["sync"] }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
 
 # Which Windows build this is, to pick the window glass it can draw smoothly (already used by tauri itself).
 [target.'cfg(windows)'.dependencies]
 windows-version = "0.1"
+
+# Stops yt-dlp and the ffmpeg it starts as one process group (docs/CONTRACTS.md §35.5).
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.32", default-features = false, features = ["signal"] }
 
 [profile.release]
 codegen-units = 1

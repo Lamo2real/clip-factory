@@ -39,6 +39,38 @@ export interface Source {
   channel?: string;
   durationSec?: number;
   thumbnailUrl?: string;
+  /** "mac": the owner's Mac or Windows app got this video because YouTube blocked the cloud (CONTRACTS §35). */
+  fetchedBy?: "mac";
+  /** Where a Mac-fetched video came from ("youtube"); `url` keeps the link. */
+  linkPlatform?: SourcePlatform;
+}
+
+/** Mac fetches it (CONTRACTS §35): where a YouTube job stands with the owner's Mac. */
+export type MacFetchState = "cloud" | "waiting" | "getting" | "sending" | "done" | "failed";
+
+export interface JobMacFetch {
+  state: MacFetchState;
+  /** Started from the desktop app: the Mac gets the video from the start. */
+  up?: boolean;
+  since?: string;
+  /** The "Open Clip Factory on your Mac" notification went out (no Mac claimed it within 2 minutes). */
+  nudgedAt?: string;
+  pct?: number;
+  at?: string;
+}
+
+/** POST /v1/jobs/{id}/mac-progress (§35.3). */
+export interface MacProgress {
+  deviceId: string;
+  phase: "getting" | "sending" | "failed";
+  pct?: number;
+  error?: string;
+  needGb?: number;
+}
+
+export interface MacUploadParts {
+  partSize: number;
+  parts: { n: number; url: string }[];
 }
 
 export interface ClipTarget {
@@ -66,6 +98,8 @@ export interface Job {
   model?: string;
   /** The model the owner picked when it could not be used and the default model made the clips instead. */
   modelWanted?: string;
+  /** YouTube link jobs only (CONTRACTS §35). */
+  macFetch?: JobMacFetch;
   createdAt: string;
   updatedAt: string;
 }
@@ -757,6 +791,8 @@ export interface NewJob {
   source: NewJobSource;
   clipTarget: ClipTarget;
   notes?: string;
+  /** Made in the desktop app: a YouTube link is fetched by this computer from the start (CONTRACTS §35.1). */
+  macFetch?: boolean;
 }
 
 // ---------- Real earnings (docs/CONTRACTS.md §25) ----------
@@ -1013,6 +1049,13 @@ export interface Api {
   getJob(jobId: string): Promise<{ job: Job; clips: Clip[] }>;
   cancelJob(jobId: string): Promise<Job>;
   retryJob(jobId: string): Promise<Job>;
+  /** Mac fetches it (§35.3): progress, the signed part addresses for the video, and finishing the upload. */
+  macProgress(jobId: string, body: MacProgress): Promise<Job>;
+  macSourceUpload(jobId: string, body: { deviceId: string; size: number }): Promise<MacUploadParts>;
+  macSourceComplete(
+    jobId: string,
+    body: { deviceId: string; parts: { n: number; etag: string }[]; title?: string; creator?: string; durationSec?: number },
+  ): Promise<Job>;
   listClips(query?: { status?: ClipFilter; jobId?: string }): Promise<Clip[]>;
   getClip(clipId: string): Promise<Clip>;
   updateClip(clipId: string, captions: Partial<Captions>): Promise<Clip>;

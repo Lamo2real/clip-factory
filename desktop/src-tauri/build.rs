@@ -27,7 +27,53 @@ fn main() {
     };
 
     println!("cargo:rustc-env=CF_APP_URL_RESOLVED={app_url}");
-    tauri_build::build();
+
+    // Mac fetches it (docs/CONTRACTS.md §35.3): the one host the app sends a video's parts to, the media bucket's
+    // regional address (`<bucket>.s3.<region>.amazonaws.com`). A release build without it fails, like CF_APP_URL.
+    println!("cargo:rerun-if-env-changed=CF_MEDIA_HOST");
+    let media = env::var("CF_MEDIA_HOST").unwrap_or_default();
+    let media = media.trim();
+    if media.is_empty() && release {
+        panic!(
+            "CF_MEDIA_HOST is not set. Set it to the media bucket's regional host, for example \
+             CF_MEDIA_HOST=cf-prod-media-123.s3.eu-north-1.amazonaws.com"
+        );
+    }
+    if !media.is_empty() && !media_host_ok(media) {
+        panic!("CF_MEDIA_HOST {media:?} is not <bucket>.s3.<region>.amazonaws.com");
+    }
+    println!("cargo:rustc-env=CF_MEDIA_HOST_RESOLVED={media}");
+
+    // The page may call exactly these app commands, and only through the runtime capability main.rs adds for the
+    // app's own address (mac_fetch::capability). capabilities/main.json grants none of them.
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+        tauri_build::AppManifest::new().commands(&[
+            "mac_fetch_start",
+            "mac_fetch_status",
+            "mac_fetch_upload",
+            "mac_fetch_cancel",
+        ]),
+    ))
+    .expect("tauri build step");
+}
+
+/// A virtual-hosted S3 address on a regional endpoint: lower-case bucket name, nothing else.
+fn media_host_ok(host: &str) -> bool {
+    let Some((bucket, rest)) = host.split_once(".s3.") else {
+        return false;
+    };
+    let Some(region) = rest.strip_suffix(".amazonaws.com") else {
+        return false;
+    };
+    let bucket_ok = (3..=63).contains(&bucket.len())
+        && bucket
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '.');
+    let region_ok = !region.is_empty()
+        && region
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    bucket_ok && region_ok
 }
 
 /// Accepts https anywhere, and plain http only for this machine (local development).

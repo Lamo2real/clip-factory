@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mac-fetch-start"
+description = "Enables the mac_fetch_start command without any pre-configured scope."
+commands.allow = ["mac_fetch_start"]
+
+[[permission]]
+identifier = "deny-mac-fetch-start"
+description = "Denies the mac_fetch_start command without any pre-configured scope."
+commands.deny = ["mac_fetch_start"]

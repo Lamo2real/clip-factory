@@ -14,6 +14,7 @@ import { checkLink, extractLink, KIND_LABEL, PLATFORM_NAMES } from "../../lib/li
 import { useAction } from "../../lib/motion.ts";
 import { navigate } from "../../lib/router.ts";
 import { useUnsaved } from "../../features/help/unsaved.ts";
+import { canMacFetch } from "../../lib/macFetch.ts";
 
 const MAX_UPLOAD = 5 * 1024 ** 3;
 
@@ -273,7 +274,14 @@ export function NewJobForm() {
         source = { type: "upload", key: up.key, filename: f.name };
       }
       if (!mounted.current) return;
-      const job = await api().createJob({ source, clipTarget: target, ...(notes.trim() ? { notes: notes.trim() } : {}) });
+      // In the desktop app a YouTube link is fetched by this computer from the start (§35.1): no cloud block to hit.
+      const macFirst = source.type === "link" && check.state === "ok" && check.platform === "youtube" && canMacFetch();
+      const job = await api().createJob({
+        source,
+        clipTarget: target,
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
+        ...(macFirst ? { macFetch: true } : {}),
+      });
       toast.success("Started! Your clips show up in Review when they are ready.");
       void refresh().catch(() => undefined);
       if (mounted.current && location.pathname === "/") navigate(`/jobs/${job.jobId}`);

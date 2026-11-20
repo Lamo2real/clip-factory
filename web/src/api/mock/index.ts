@@ -125,6 +125,12 @@ function loadMockLook(): Partial<Settings> {
   }
 }
 
+/** A job waiting for the owner's Mac (§35): blocked by YouTube, or made in the desktop app. */
+function macWaiting(j: Job): boolean {
+  const state = j.macFetch?.state;
+  return (j.status === "queued" || j.status === "running") && (state === "waiting" || state === "getting" || state === "sending");
+}
+
 export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsAfterSave: 0, resumeAfterMs: 60_000 }): Api {
   const calls: MockCalls = {};
   const skipped = loadSkipped();
@@ -276,6 +282,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     if (frozen()) return;
     const now = Date.now();
     for (const job of store.jobs) {
+      // Waiting for the owner's Mac (§35): nothing moves until the Mac reports (macProgress) or sends the video.
+      if (macWaiting(job)) continue;
       if (job.status === "queued" && now - Date.parse(job.createdAt) > 4000) {
         job.status = "running";
         clock.set(job.jobId, { at: now, done: 0 });
@@ -446,6 +454,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         },
         clipTarget: body.clipTarget,
         steps: stepsAt(0, "queued"),
+        // Like the API (§35): every YouTube link job may wait for the Mac; from the desktop app it does from the start.
+        ...(isLink && platform === "youtube"
+          ? { macFetch: body.macFetch ? { state: "waiting" as const, up: true, since: now } : { state: "cloud" as const } }
+          : {}),
         progress: 0,
         clipCount: 0,
         notes: body.notes,
@@ -487,6 +499,61 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       j.steps = j.steps.map((s) => (s.status === "running" ? { ...s, status: "pending", message: undefined } : s));
       clock.delete(jobId);
       j.updatedAt = new Date().toISOString();
+      publishJob(j);
+      return clone(j);
+    },
+    async macProgress(jobId, body) {
+      await delay();
+      const j = job(jobId);
+      if (!macWaiting(j)) throw conflict("This job is not waiting for your Mac.");
+      const now = new Date().toISOString();
+      if (body.phase === "failed") {
+        j.status = "failed";
+        j.error = body.error === "full" ? `Your Mac is full. Free up ${body.needGb ?? 1} GB.` : "Your Mac could not get the video. Tap Try again, or tap Use a video file.";
+        j.macFetch = { ...j.macFetch!, state: "failed", at: now };
+      } else {
+        j.status = "running";
+        j.macFetch = { ...j.macFetch!, state: body.phase, pct: body.pct ?? 0, at: now };
+        const text = body.phase === "getting" ? "Your Mac is getting the video" : "Your Mac is sending the video";
+        mockLive.publish({
+          type: "jobLive",
+          op: "upsert",
+          id: j.jobId,
+          item: { jobId: j.jobId, step: "resolve", text, detail: `${body.pct ?? 0}%`, pct: body.pct ?? 0, at: now, lastChange: now, run: j.run },
+        });
+      }
+      j.updatedAt = now;
+      publishJob(j);
+      return clone(j);
+    },
+    async macSourceUpload(jobId, body) {
+      await delay();
+      const j = job(jobId);
+      if (!macWaiting(j)) throw conflict("This job is not waiting for your Mac.");
+      const partSize = 64 * 1024 * 1024;
+      const count = Math.max(1, Math.ceil(body.size / partSize));
+      j.macFetch = { ...j.macFetch!, state: "sending", pct: 0 };
+      return { partSize, parts: Array.from({ length: count }, (_, i) => ({ n: i + 1, url: `mock://part/${i + 1}` })) };
+    },
+    async macSourceComplete(jobId, body) {
+      await delay();
+      const j = job(jobId);
+      if (!macWaiting(j)) throw conflict("This job stopped waiting for your Mac.");
+      const now = new Date().toISOString();
+      j.source = {
+        ...j.source,
+        type: "upload",
+        platform: "upload",
+        fetchedBy: "mac",
+        linkPlatform: "youtube",
+        title: body.title ?? j.source.title,
+        channel: body.creator ?? j.source.channel,
+      };
+      j.macFetch = { ...j.macFetch!, state: "done", at: now };
+      j.status = "queued";
+      j.note = "Your Mac sent the video.";
+      j.createdAt = now;
+      j.updatedAt = now;
       publishJob(j);
       return clone(j);
     },

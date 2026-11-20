@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..http import Route, route
-from . import ask, clips, follows, help, jobs, lessons, money, performance, push, setup, skills, system, weeks
+from . import ask, clips, follows, help, jobs, lessons, macfetch, money, performance, push, setup, skills, system, weeks
 
 ROUTES: list[Route] = [
     route("GET", "/v1/health", system.health, public=True),
@@ -14,6 +14,9 @@ ROUTES: list[Route] = [
     route("GET", "/v1/jobs/{jobId}", jobs.get_job),
     route("POST", "/v1/jobs/{jobId}/cancel", jobs.cancel),
     route("POST", "/v1/jobs/{jobId}/retry", jobs.retry),
+    route("POST", "/v1/jobs/{jobId}/mac-progress", macfetch.progress),
+    route("POST", "/v1/jobs/{jobId}/source-upload", macfetch.source_upload),
+    route("POST", "/v1/jobs/{jobId}/source-upload/complete", macfetch.complete),
     route("GET", "/v1/clips", clips.list_clips),
     route("GET", "/v1/clips/{clipId}", clips.get_clip),
     route("PATCH", "/v1/clips/{clipId}", clips.patch_clip),

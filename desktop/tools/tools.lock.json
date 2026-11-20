@@ -1,0 +1,107 @@
+{
+  "serial": 1,
+  "note": "Pinned tools the desktop app downloads from our own CloudFront (docs/CONTRACTS.md \u00a733.4). Bump a version, run build_tools.py relock with the new files downloaded, raise serial, open a PR. CI (desktop-tools) checks every sum again.",
+  "tools": {
+    "yt-dlp": {
+      "version": "2026.10.26",
+      "files": {
+        "macos-aarch64": {
+          "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_macos",
+          "name": "yt-dlp",
+          "sha256": "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa",
+          "size": 37466304
+        },
+        "macos-x86_64": {
+          "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_macos",
+          "name": "yt-dlp",
+          "sha256": "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa",
+          "size": 37466304
+        },
+        "windows-x86_64": {
+          "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp.exe",
+          "name": "yt-dlp.exe",
+          "sha256": "f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d",
+          "size": 23575744
+        }
+      }
+    },
+    "deno": {
+      "version": "2.9.8",
+      "files": {
+        "macos-aarch64": {
+          "url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-apple-darwin.zip",
+          "name": "deno",
+          "extract": "deno",
+          "sha256": "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e",
+          "size": 38770795,
+          "file_sha256": "d1e99265e5e6ee096c5780d88ff7d3e6cfdf33b1953a118b4889cab8ca6980ba",
+          "file_size": 81512928
+        },
+        "macos-x86_64": {
+          "url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-apple-darwin.zip",
+          "name": "deno",
+          "extract": "deno",
+          "sha256": "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c",
+          "size": 42797031,
+          "file_sha256": "5d206ba69742549cc161db06e86f1d93c5622e1dbc8ba9d15a618e538fbc92f4",
+          "file_size": 98799200
+        },
+        "windows-x86_64": {
+          "url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip",
+          "name": "deno.exe",
+          "extract": "deno.exe",
+          "sha256": "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf",
+          "size": 42917472,
+          "file_sha256": "924397800533d3eb0ed0c889b20ad70e18b970d93acd8135bc043f425e528266",
+          "file_size": 98081568
+        }
+      }
+    },
+    "ffmpeg": {
+      "version": "6.1.1",
+      "files": {
+        "macos-aarch64": {
+          "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64",
+          "name": "ffmpeg",
+          "sha256": "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584",
+          "size": 45568216
+        },
+        "macos-x86_64": {
+          "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64",
+          "name": "ffmpeg",
+          "sha256": "ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894",
+          "size": 78862176
+        },
+        "windows-x86_64": {
+          "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-win32-x64",
+          "name": "ffmpeg.exe",
+          "sha256": "04e1307997530f9cf2fe35cba2ca7e8875ca91da02f89d6c7243df819c94ad00",
+          "size": 82797568
+        }
+      }
+    },
+    "ffprobe": {
+      "version": "6.1.1",
+      "files": {
+        "macos-aarch64": {
+          "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64",
+          "name": "ffprobe",
+          "sha256": "bb2db6f5d8cef919da12fbf592119a987202a8c060a886f3cab091f9cab90b64",
+          "size": 45528808
+        },
+        "macos-x86_64": {
+          "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-x64",
+          "name": "ffprobe",
+          "sha256": "fa3add0ce901f7241abe0dfc0155d958fc834aca3f8ce61f87cc712ae669c1e0",
+          "size": 78780408
+        },
+        "windows-x86_64": {
+          "url": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-win32-x64",
+          "name": "ffprobe.exe",
+          "sha256": "3a7e2dc003dc2cd1472827e4c7c4f056ae1ae0ae7c5bbc580c99b49827351ba4",
+          "size": 82668032
+        }
+      }
+    }
+  }
+}
