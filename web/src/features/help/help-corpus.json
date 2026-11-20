@@ -1,5 +1,5 @@
 {
-  "version": "dd32e3afea8f",
+  "version": "886d14b5b4e1",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -22,6 +22,7 @@
     "src/screens/jobs/JobDetail.tsx",
     "src/screens/jobs/JobNote.tsx",
     "src/screens/jobs/Jobs.tsx",
+    "src/screens/jobs/LiveLine.tsx",
     "src/screens/jobs/mergeJobs.ts",
     "src/screens/jobs/pendingStops.ts",
     "src/screens/library/Library.tsx",

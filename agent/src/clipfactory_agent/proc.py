@@ -101,9 +101,11 @@ async def run(
     time_limit: float,
     stall_limit: float | None = None,
     on_line: Callable[[str], None] | None = None,
+    on_out_line: Callable[[str], None] | None = None,
     cwd: Path | None = None,
 ) -> Result:
-    """Runs a command; raises CommandError on a non-zero exit. stderr lines go to ``on_line`` as they arrive.
+    """Runs a command; raises CommandError on a non-zero exit. stderr lines go to ``on_line`` as they arrive, and
+    stdout lines to ``on_out_line`` (ffmpeg's ``-progress pipe:1``, for the live status line, §31).
 
     ``time_limit`` is required at every call site (tests/test_proc.py checks): nothing runs unbounded. ``stall_limit``
     also kills a command that prints nothing for that long (for commands that print progress, like yt-dlp)."""
@@ -141,9 +143,21 @@ async def run(
         nonlocal last_output
         assert proc.stdout is not None
         parts: list[bytes] = []
+        buf = b""
         while chunk := await proc.stdout.read(65536):
             last_output = loop.time()
-            parts.append(chunk)
+            if on_out_line is None:
+                parts.append(chunk)
+                continue
+            # Read line by line and not kept: ``-progress`` prints a dozen lines a second for the whole encode.
+            buf += chunk
+            *done, buf = buf.split(b"\n")
+            for raw in done:
+                with contextlib.suppress(Exception):  # a reader's fault never stops the command
+                    on_out_line(raw.decode("utf-8", "replace"))
+        if on_out_line is not None and buf.strip():  # a last line with no newline at its end
+            with contextlib.suppress(Exception):
+                on_out_line(buf.decode("utf-8", "replace"))
         return b"".join(parts)
 
     async def watch_stall() -> None:

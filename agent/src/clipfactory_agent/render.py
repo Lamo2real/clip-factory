@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import loudness, proc
+from . import livestatus, loudness, proc
 from .bedrock import Facecam, FrameLayout
 from .moments import Moment
 
@@ -404,6 +404,12 @@ async def grab_frame(src: Path, at: float, dest: Path, width: int = 1280) -> Pat
     return dest
 
 
+def _cut_progress(line: str, total: float, index: int | None = None) -> None:
+    at = livestatus.parse_ffmpeg_progress(line)
+    if at is not None:
+        livestatus.emit("cut_progress", i=index, at=at, length=total, w=W, h=H, fps=FPS)
+
+
 async def render_clip(
     m: Moment,
     *,
@@ -412,6 +418,7 @@ async def render_clip(
     fetch_section: SectionFetcher,
     detect_layout: LayoutDetector | None,
     known_layout: FrameLayout | None = None,
+    live_index: int | None = None,
 ) -> RenderResult:
     """Cuts ``m`` into ``workdir/clip.mp4`` and ``workdir/cover.jpg``."""
     workdir.mkdir(parents=True, exist_ok=True)
@@ -481,9 +488,14 @@ async def render_clip(
             "-filter_complex",
             filter_graph(segs, parts, ass_file, info.has_audio, tease=bool(tease)),
             *encode_args(total, info.has_audio, silent_input=silent_input),
+            # Where the encode is, once a second on stdout, for the live status line ("0:41 of 0:58", §31).
+            "-progress",
+            "pipe:1",
+            "-nostats",
             str(out),
         ],
         time_limit=30 * 60,
+        on_out_line=lambda line: _cut_progress(line, total, live_index),
     )
     level = await loudness.normalize(out, workdir / "clip.loud.mp4") if info.has_audio else None
     cover = workdir / "cover.jpg"

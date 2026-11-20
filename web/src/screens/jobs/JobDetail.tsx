@@ -4,7 +4,7 @@ import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, ClipStatus, Job } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
-import { JobNote } from "./JobNote.tsx";
+import { LiveLine } from "./LiveLine.tsx";
 import { JobStatusPill, jobTitle, sourceMeta, SourceThumb, StepTimeline } from "../../components/JobBits.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, Pill, Progress, Skeleton, type Tone } from "../../components/ui.tsx";
@@ -165,7 +165,6 @@ export function JobDetail({ jobId }: { jobId: string }) {
     );
   }
 
-  const running = job.steps.find((s) => s.status === "running");
   const pct = jobPercent(job);
 
   return (
@@ -201,7 +200,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
           <Progress value={jobProgress(job)} label="Job progress" tone={job.status === "failed" ? "primary" : "success"} />
           <p className="sr-only" aria-live="polite">
             {job.status === "running"
-              ? `${pct} percent. ${running?.label ?? "Working"}.`
+              ? `${pct} percent.`
               : job.status === "ready"
                 ? `Finished with ${plural(job.clipCount, "clip")}.`
                 : job.status === "failed"
@@ -216,7 +215,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
               <p className="user-text">{job.error}</p>
             </div>
           ) : null}
-          <JobNote job={job} />
+          <LiveLine job={job} />
           <StepTimeline steps={job.steps} />
           {job.status === "ready" && job.model ? (
             <p className="panel__note job-model" data-help="job-model">

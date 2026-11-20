@@ -1727,3 +1727,69 @@
 .page:has(.review-card) {
   --loose-x: calc(clamp(14px, 2.6vw, 24px) + 1px);
 }
+
+/* ---------- The live status line (CONTRACTS §31) ----------
+   What the job is doing right now, under the progress bar: a big plain sentence, a small detail and a tiny "what is
+   running" line. No edges; the words fade in when they change (instantly under reduced motion). */
+.live-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.live-line__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: var(--r-pill);
+  background: var(--green-leaf);
+}
+.live-line.is-stale .live-line__dot {
+  background: rgb(var(--bone-rgb) / 0.55);
+}
+.live-line__body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.live-line__text {
+  font-weight: 700;
+  font-size: var(--fs-body);
+  color: var(--ink);
+  animation: live-line-in 150ms var(--ease-out);
+}
+.live-line__detail {
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.live-line__tech {
+  font: 600 var(--fs-xs) / 1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--ink-3);
+}
+.live-line--compact .live-line__text {
+  font: inherit;
+  color: inherit;
+}
+.live-line--compact .live-line__more {
+  font-variant-numeric: tabular-nums;
+}
+@keyframes live-line-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-line__text {
+    animation: none;
+  }
+}
+.reduce-motion .live-line__text {
+  animation: none;
+}

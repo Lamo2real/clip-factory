@@ -1,6 +1,6 @@
 // Folding live events (docs/CONTRACTS.md §14.2) into what the screens hold. Pure functions, so every screen applies
 // them the same way and the tests can check each case.
-import type { Clip, ClipPerformance, Job, Learning, LiveEvent, PlatformPerformance, Post, WeekView } from "../api/types.ts";
+import type { Clip, ClipPerformance, Job, JobLive, Learning, LiveEvent, PlatformPerformance, Post, WeekView } from "../api/types.ts";
 import { perfStatus, pickBest } from "./metrics.ts";
 
 /** Jobs on screen, newest first. New jobs go on top; `limit` keeps a short list short (Home shows 6). */
@@ -156,4 +156,36 @@ export function applyWeekEvent(view: WeekView, ev: LiveEvent, localPicks = false
   }
   if (ev.type === "learning" && ev.op === "delete" && view.learning?.learningId === ev.id) return { ...view, learning: undefined };
   return view;
+}
+
+// ---------- The live status line (docs/CONTRACTS.md §31) ----------
+
+/** A line belongs to the job's current run (or one of the two does not say which run it is). */
+export function sameRun(job: Pick<Job, "run">, line: Pick<JobLive, "run">): boolean {
+  return !job.run || !line.run || job.run === line.run;
+}
+
+/** Folds a `jobLive` event into the lines held by job id: the newest line of each job wins. */
+export function applyJobLiveEvent(lines: ReadonlyMap<string, JobLive>, ev: LiveEvent): Map<string, JobLive> {
+  const next = new Map(lines);
+  if (ev.type !== "jobLive") return next;
+  if (ev.op === "delete") {
+    next.delete(ev.id);
+    return next;
+  }
+  if (!ev.item) return next;
+  const old = next.get(ev.item.jobId);
+  if (!old || old.run !== ev.item.run || ev.item.at >= old.at) next.set(ev.item.jobId, ev.item);
+  return next;
+}
+
+/**
+ * The line to show for `job`: the newer of the pushed one and the one the last fetch carried, and only while the job
+ * is queued or running and the line belongs to its current run. Null otherwise.
+ */
+export function pickJobLive(job: Pick<Job, "status" | "run" | "live">, pushed: JobLive | undefined): JobLive | null {
+  if (job.status !== "running" && job.status !== "queued") return null;
+  const candidates = [pushed, job.live].filter((l): l is JobLive => !!l && sameRun(job, l));
+  if (!candidates.length) return null;
+  return candidates.reduce((a, b) => (b.at > a.at ? b : a));
 }

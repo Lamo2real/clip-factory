@@ -13,7 +13,11 @@ vi.mock("../src/api/index.ts", async (orig) => ({ ...(await orig<object>()), api
 vi.mock("../src/screens/home/NewJobForm.tsx", () => ({ NewJobForm: () => null }));
 vi.mock("../src/components/GetApp.tsx", () => ({ GetAppBanner: () => null }));
 vi.mock("../src/screens/home/MoneyTile.tsx", () => ({ MoneyTile: () => null }));
-vi.mock("../src/lib/live.ts", () => ({ useLiveEvents: () => undefined, useLivePoll: () => undefined }));
+vi.mock("../src/lib/live.ts", () => ({
+  useLiveEvents: () => undefined,
+  useLivePoll: () => undefined,
+  onLiveSignal: () => () => undefined,
+}));
 
 const { Home } = await import("../src/screens/home/Home.tsx");
 const { seed } = await import("../src/api/mock/fixtures.ts");

@@ -1,7 +1,8 @@
 """``cf-prod-broadcast``: DynamoDB Streams on ``cf-prod-data`` → the owner's open WebSockets (docs/CONTRACTS.md §14.2).
 
 The event source mapping only delivers ``JOB#``, ``CLIP#``, ``POST#``, ``LEARNING#``, ``WEEK#``, ``ACCOUNT#``,
-``SETUP#`` and ``FOLLOW#`` (§24) items (the last two become ``{type: "setup", op: "upsert", id: platform, partial: true}``, §17.4). Per batch the last
+``SETUP#``, ``FOLLOW#`` (§24) and ``JOBLIVE#`` (§31, the live status line, ``{type: "jobLive"}``) items (``ACCOUNT#``
+and ``SETUP#`` become ``{type: "setup", op: "upsert", id: platform, partial: true}``, §17.4). Per batch the last
 record per item wins (job heartbeats coalesce); each becomes one ``LiveEvent``, built by the same public-shape
 functions the HTTP API uses, so internal fields never leave. An event over 24 KB is sent as ``partial: true`` (the
 web refetches). Closed connections (410 Gone) are deleted; other send errors are logged and skipped. Only a
@@ -30,6 +31,7 @@ TYPES = {
     "ACCOUNT#": "setup",
     "SETUP#": "setup",
     "FOLLOW#": "follow",  # §24: a followed creator (name, picture, live badge); FOLLOWKEYS# never matches
+    "JOBLIVE#": "jobLive",  # §31: the live status line of a working job (JOB# never matches it: "JOBL" ≠ "JOB#")
 }
 # Setup changes carry no item: the web refetches GET /v1/setup (§17.4), so keys, hints and tokens never ride along.
 PARTIAL_ONLY = frozenset({"setup"})
@@ -40,6 +42,7 @@ ID_FIELDS = {
     "learning": "learningId",
     "week": "week",
     "follow": "followId",
+    "jobLive": "jobId",
 }
 
 
@@ -54,6 +57,8 @@ def _public(kind: str, item: Item) -> Item:
         return weeks.public_week(item)
     if kind == "follow":
         return follow.public_follow(item)
+    if kind == "jobLive":
+        return jobs.public_live(item)
     return learn.public_learning(item)
 
 

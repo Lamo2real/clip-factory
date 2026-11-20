@@ -97,8 +97,12 @@ def list_jobs(app: App, req: Request) -> Response:
     pk = db.user_pk(req.user_id)
     start = db.decode_cursor(req.query.get("cursor"), pk, "JOB#")
     page = app.store.query_page(pk, "JOB#", newest_first=True, limit=limit, start_key=start)
+    lines = jobs.live_lines(app.store, req.user_id, page.items)
     return ok(
-        {"jobs": [jobs.public_job(i) for i in page.items], "nextCursor": db.encode_cursor(page.last_key)},
+        {
+            "jobs": [jobs.public_job(i, lines.get(str(i.get("jobId")))) for i in page.items],
+            "nextCursor": db.encode_cursor(page.last_key),
+        },
     )
 
 
@@ -106,7 +110,10 @@ def get_job(app: App, req: Request) -> Response:
     job = _job_or_404(app, req)
     items = clips.clips_for_job(app.store, req.user_id, job["jobId"])
     items.sort(key=lambda c: (c.get("rank", 0), c.get("clipId", "")))
-    return ok({"job": jobs.public_job(job), "clips": [clips.public_clip(c, app.media) for c in items]})
+    live = (
+        app.store.get(db.user_pk(req.user_id), jobs.live_sk(job["jobId"])) if job.get("status") in jobs.ACTIVE else None
+    )
+    return ok({"job": jobs.public_job(job, live), "clips": [clips.public_clip(c, app.media) for c in items]})
 
 
 def cancel(app: App, req: Request) -> Response:

@@ -1,5 +1,5 @@
 {
- "version": "2e84391d68c6",
+ "version": "a268e0d5518b",
  "parts": [
   {
    "id": "app-map",
@@ -63,7 +63,7 @@
    "id": "contracts-6",
    "title": "CONTRACTS: 6. DynamoDB (single table `cf-prod-data`, on-demand, PITR on, Streams `NEW_AND_OLD_IMAGES`)",
    "line": "Keys: pk (S), sk (S); GSI gsi1 on gsi1pk/gsi1sk (projection ALL); sparse GSI gsi2 on gsi2pk/gsi2sk",
-   "chars": 3600
+   "chars": 3795
   },
   {
    "id": "contracts-7",
@@ -208,6 +208,12 @@
    "title": "CONTRACTS: 30. Jobs that never stop partway (owner request, 2026-11-19)",
    "line": "30.1 The owner's words and what they mean",
    "chars": 12534
+  },
+  {
+   "id": "contracts-31",
+   "title": "CONTRACTS: 31. The live status line (owner request, 2026-11-20)",
+   "line": "31.1 The owner's words and what they mean",
+   "chars": 8744
   },
   {
    "id": "adr-01",
@@ -532,6 +538,12 @@
    "title": "DECISIONS: ADR-54 Resume, don't fail",
    "line": "Checkpointed jobs, an independent heartbeat thread, and deploys that drain the agent.",
    "chars": 3122
+  },
+  {
+   "id": "adr-55",
+   "title": "DECISIONS: ADR-55 The live status line: a small item of its own, from fixed templates",
+   "line": "Context. The owner wants the line under a job's progress bar to show, in real time and in one line, what the job",
+   "chars": 1812
   },
   {
    "id": "architecture-overview",

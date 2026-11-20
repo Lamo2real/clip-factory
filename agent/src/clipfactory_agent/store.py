@@ -196,6 +196,13 @@ class Store:
             return False
         return True
 
+    async def put_live(self, user_id: str, item: dict[str, Any]) -> None:
+        """The job's live status line (docs/CONTRACTS.md §31): one small ``JOBLIVE#<jobId>`` item, replaced whole on
+        every write (no retries: the next write a second later says it again). Not fenced: a stale run's line carries
+        its own ``sessionId`` and the web ignores it."""
+        row = {"pk": user_pk(user_id), "sk": f"JOBLIVE#{item['jobId']}", "type": "jobLive", **item}
+        await asyncio.to_thread(self.table.put_item, Item=to_ddb(row))
+
     async def _raise_if_superseded(self, user_id: str, job_id: str, session_id: str) -> None:
         """After a refused write: tells "a newer run owns the job" (or the job is gone) from "the owner canceled"."""
         r = await self._call("ddb.get_job", self.table.get_item, Key=job_key(user_id, job_id), ConsistentRead=True)

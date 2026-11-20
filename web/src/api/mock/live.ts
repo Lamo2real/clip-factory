@@ -28,6 +28,8 @@ export interface MockLiveControls {
   advance(): void;
   /** Turns the fake WebSocket API off (new connections are refused) or back on. */
   setAvailable(on: boolean): void;
+  /** Pushes the next scripted live status line (§31) of the newest running job; `at` picks a line of the script. */
+  line(at?: number): void;
 }
 
 let available = true;
@@ -102,7 +104,7 @@ export function createMockSocket(url: string): SocketLike {
   return new FakeSocket(url);
 }
 
-export function installMockLiveControls(advance: () => void): void {
+export function installMockLiveControls(advance: () => void, line: (at?: number) => void = () => undefined): void {
   if (typeof window === "undefined") return;
   const controls: MockLiveControls = {
     open: () => mockLive.sockets.size,
@@ -110,6 +112,7 @@ export function installMockLiveControls(advance: () => void): void {
       for (const s of Array.from(mockLive.sockets)) s.finish(1006);
     },
     advance,
+    line,
     setAvailable: (on) => {
       available = on;
     },

@@ -683,3 +683,36 @@ def test_pot_providers_line_keeps_unavailable_with_its_provider() -> None:
     ok = pot.providers_of("PO Token Providers: bgutil:http-2.0.2 (external), bgutil:script-deno-2.0.2 (external)")
     assert "unavailable" not in ok["bgutil:script-deno-2.0.2"]
     assert pot.providers_of("no providers here") == {}
+
+
+async def test_the_full_video_and_picture_downloads_feed_the_live_line(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The long downloads of the Cut and Watch steps show their progress on the live status line (§31)."""
+    from clipfactory_agent import livestatus
+
+    async def run(cmd: list[str], **kw: Any) -> proc.Result:
+        out = Path(cmd[cmd.index("-o") + 1].replace("%(ext)s", "mp4"))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"x")
+        kw["on_line"]("[download]  25.0% of ~  400.00MiB at    5.00MiB/s ETA 00:20")
+        return proc.Result(b"", "")
+
+    monkeypatch.setattr(proc, "run", run)
+    written: list[dict[str, Any]] = []
+
+    async def write(item: dict[str, Any]) -> None:
+        written.append(item)
+
+    live = livestatus.LiveStatus(write, "J", "S")
+    token = livestatus._CURRENT.set(live)
+    try:
+        live.emit("step", key="render")
+        await sources.download_full(YT, "18", tmp_path / "f" / "full.mp4", est_bytes=100)
+        assert live.state["text"] == "Getting the full video"
+        assert live.state["detail"].endswith("· 25%") and live.state["tech"].startswith("yt-dlp")
+        live.emit("step", key="watch")
+        await sources.download_picture(YT, "135", tmp_path / "p" / "picture.mp4", est_bytes=1, max_seconds=None)
+        assert live.state["text"] == "Getting the video" and live.state["pct"] == 25
+    finally:
+        livestatus._CURRENT.reset(token)

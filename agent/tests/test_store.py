@@ -129,3 +129,29 @@ async def test_clip_statuses_reads_the_owners_clips_and_retries_unprocessed_keys
     keys = client.calls[0]["RequestItems"]["cf-prod-main"]["Keys"]
     assert keys == [{"pk": "USER#U", "sk": f"CLIP#{i}"} for i in "ABC"]
     assert client.calls[1]["RequestItems"] == {"cf-prod-main": {"Keys": [{"pk": "USER#U", "sk": "CLIP#B"}]}}
+
+
+async def test_put_live_writes_one_small_joblive_item_with_the_agents_fields() -> None:
+    puts: list[dict[str, Any]] = []
+
+    class Table:
+        def put_item(self, **kw: Any) -> None:
+            puts.append(kw["Item"])
+
+    store = Store.__new__(Store)
+    store.table = Table()  # type: ignore[assignment]
+    await store.put_live(
+        "U",
+        {
+            "jobId": "J1",
+            "sessionId": "S",
+            "text": "Cutting clip 2 of 10",
+            "pct": 20,
+            "at": "t",
+            "lastChange": "t",
+            "ttl": 5,
+        },
+    )
+    row = puts[0]
+    assert row["pk"] == "USER#U" and row["sk"] == "JOBLIVE#J1" and row["type"] == "jobLive"
+    assert row["text"] == "Cutting clip 2 of 10" and row["lastChange"] == "t"
