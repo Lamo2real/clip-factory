@@ -14,7 +14,7 @@ import { checkLink, extractLink, KIND_LABEL, PLATFORM_NAMES } from "../../lib/li
 import { useAction } from "../../lib/motion.ts";
 import { navigate } from "../../lib/router.ts";
 import { useUnsaved } from "../../features/help/unsaved.ts";
-import { canMacFetch } from "../../lib/macFetch.ts";
+import { canMacFetch, macBridge } from "../../lib/macFetch.ts";
 
 const MAX_UPLOAD = 5 * 1024 ** 3;
 
@@ -281,7 +281,11 @@ export function NewJobForm() {
         clipTarget: target,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         ...(macFirst ? { macFetch: true } : {}),
+        // From a link job (Use a video file): this file replaces it, so its wait for the Mac ends (§35.8).
+        ...(source.type === "upload" && start.from ? { replaces: start.from } : {}),
       });
+      // This computer stops getting that job's video now and removes its copy (the job's stop says so too, a moment later).
+      if (source.type === "upload" && start.from) void macBridge()?.cancel(start.from).catch(() => undefined);
       toast.success("Started! Your clips show up in Review when they are ready.");
       void refresh().catch(() => undefined);
       if (mounted.current && location.pathname === "/") navigate(`/jobs/${job.jobId}`);

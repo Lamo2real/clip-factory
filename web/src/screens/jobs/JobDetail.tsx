@@ -218,6 +218,17 @@ export function JobDetail({ jobId }: { jobId: string }) {
               <p className="user-text">{job.error}</p>
             </div>
           ) : null}
+          {job.status === "canceled" && job.replacedBy ? (
+            <div className="callout callout--info job-replaced" role="status">
+              <Icon name="upload" />
+              <p>
+                Replaced by your video file.{" "}
+                <A className="text-link" href={`/jobs/${job.replacedBy}`}>
+                  Open the new job
+                </A>
+              </p>
+            </div>
+          ) : null}
           <LiveLine job={job} />
           <MacWait job={job} />
           <StepTimeline steps={job.steps} />

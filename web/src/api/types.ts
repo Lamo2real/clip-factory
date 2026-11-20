@@ -100,6 +100,8 @@ export interface Job {
   modelWanted?: string;
   /** YouTube link jobs only (CONTRACTS §35). */
   macFetch?: JobMacFetch;
+  /** Stopped because the owner's video file replaced it (Use a video file, CONTRACTS §35.8): the new job's id. */
+  replacedBy?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -841,6 +843,8 @@ export interface NewJob {
   notes?: string;
   /** Made in the desktop app: a YouTube link is fetched by this computer from the start (CONTRACTS §35.1). */
   macFetch?: boolean;
+  /** Use a video file on a link job (CONTRACTS §35.8): that job stops waiting for the Mac; this file replaces it. */
+  replaces?: string;
 }
 
 // ---------- Real earnings (docs/CONTRACTS.md §25) ----------

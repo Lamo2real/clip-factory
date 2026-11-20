@@ -6776,6 +6776,32 @@ signing part addresses and the app sending to the real bucket, the job flow's 2-
 and the notification. Unsigned and not notarized: the tools are files the app writes itself (no quarantine flag), as
 the app itself is (no Apple certificates, §12.3).
 
+### 35.8 Use a video file ends the Mac's wait (loose end of PR #65)
+
+* The job page's **Use a video file** on a link job opens Home at `/?file=1&from={jobId}`; the job the form makes
+  sends `replaces: <that jobId>` with the upload (`POST /v1/jobs`; `replaces` must be a job id and only goes with an
+  upload source, else 400).
+* The API (`routes/jobs._replace_mac_wait`, `macfetch.replaceable`) stops the old job when it is still queued or
+  running and its `macFetch.state` is `waiting`, `getting`, `sending` or `done` (the Mac's video arrived a moment
+  earlier and the job went on with it): `status: canceled`, `replacedBy: <new jobId>` (public), the job flow's
+  `mac-done` callback fails with the quiet `Canceled` ("Replaced by your video file"), a half-sent multipart upload is
+  aborted, and the run's agent session gets the cancel. Only the owner's own jobs are looked up. Best effort: the new
+  job starts anyway.
+* **Race-safe, the file wins.** The write is conditional on the run read (`status` active and the same `sessionId`);
+  when the job flow moved the job to a new run in between, the API reads again and stops that run (up to 3 tries).
+  A Mac that finishes after the stop gets 409 on `source-upload/complete`, and the flow's `mac-source` step finds the
+  job stopped, so the video is never made into clips twice. Idempotent: a job already stopped is left as it is (the
+  first file keeps `replacedBy`).
+* **The Mac stops at once.** In the desktop window the form calls the app's `mac_fetch_cancel {jobId}` for the old job
+  right after the new job is made (the process group stops, `<app data>/fetch/<jobId>/` is removed). Any other window
+  with the app hears it from the job's stop (the live event, the 30 s list, or 409 on its next report) and cancels the
+  same way (§35.3). No desktop release is needed.
+* Words: the old job's page shows the info callout "Replaced by your video file." with **Open the new job**. Try again
+  on it forgets `replacedBy`.
+* Tests: `api/tests/test_mac_fetch.py` (replace while sending, again, the Mac finishing first, the flow moving the job at
+  the same moment, the flow not going on, only waiting jobs, the checks, Try again); e2e `mac-fetch.spec.ts` (the button
+  flow in the desktop window: the app's cancel, the replaced job).
+
 
 ## 34. Delete jobs (owner request, 2026-11-20)
 

@@ -59,11 +59,12 @@ def _job_or_404(app: App, req: Request) -> dict[str, Any]:
 
 def create(app: App, req: Request) -> Response:
     body = req.json()
-    validate.only_keys(body, {"source", "clipTarget", "notes", "macFetch"})
+    validate.only_keys(body, {"source", "clipTarget", "notes", "macFetch", "replaces"})
     # Started from the desktop app (§35.1): a YouTube link is fetched by the owner's Mac from the start.
     mac_up = validate.boolean(body["macFetch"], "macFetch") if "macFetch" in body else False
     user_settings = settings.load(app.store, req.user_id)
     source = _source(app, req.user_id, body.get("source"))
+    replaces = _replaces(body, source)
     target = _clip_target(body.get("clipTarget"), user_settings)
     notes = validate.string(body, "notes", required=False, max_len=MAX_NOTES)
     now = iso(app.clock())
@@ -93,8 +94,59 @@ def create(app: App, req: Request) -> Response:
         item["macFetch"] = macfetch.new_map(up=mac_up)
     app.store.put(item, if_absent=True)
     log("info", "job.created", jobId=job_id, platform=source["platform"])
+    if replaces:
+        _replace_mac_wait(app, req.user_id, replaces, job_id)
     job = jobs.start(app.store, app.flows, item, now)
     return ok({"job": jobs.public_job(job)}, 201)
+
+
+def _replaces(body: dict[str, Any], source: dict[str, Any]) -> str | None:
+    """Use a video file on a job (§35.8): the link job the owner's file replaces."""
+    value = body.get("replaces")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not is_ulid(value):
+        raise bad_request("replaces must be a job id.", "replaces")
+    if source["type"] != "upload":
+        raise bad_request("Only a video file can replace a job.", "replaces")
+    return value
+
+
+def _replace_mac_wait(app: App, user_id: str, old_id: str, new_id: str) -> None:
+    """The owner's video file replaces a link job that waits for (or is being fetched by) their Mac (§35.8): that job
+    stops as "Replaced by your video file", its Mac wait ends (the job flow's callback, a half-sent upload), and the
+    desktop app sees the job stop (409 on its next report, the live event, the 30 s list) and removes its copy. The
+    file wins a race with the Mac: when the Mac's video arrived a moment earlier and the job already went on with it,
+    that run is stopped too, so the video is never made into clips twice. Best effort: the new job starts anyway.
+    Idempotent: a job that already stopped is left as it is."""
+    pk, sk = db.user_pk(user_id), db.job_sk(old_id)
+    for _ in range(3):  # the job flow may move the job to a new session between the read and the write
+        old = app.store.get(pk, sk)
+        if old is None or not macfetch.replaceable(old) or old.get("deletingAt"):
+            return
+        now = iso(app.clock())
+        expect: dict[str, Any] = {"status": jobs.ACTIVE, "sessionId": [old.get("sessionId")]}
+        try:
+            app.store.update(
+                pk,
+                sk,
+                {"status": "canceled", "replacedBy": new_id, "updatedAt": now},
+                expect_in=expect,
+            )
+        except db.ConditionFailed:
+            continue
+        except Exception as e:
+            log("warning", "job.replace_failed", jobId=old_id, error=type(e).__name__)
+            return
+        macfetch.end_wait(app, old, macfetch.REPLACED)
+        if old.get("sessionId"):
+            try:
+                app.agent.cancel_job(old_id, old["sessionId"])
+            except AgentError as e:
+                log("warning", "job.cancel_signal_failed", jobId=old_id, error=str(e))
+        log("info", "job.replaced", jobId=old_id, by=new_id)
+        return
+    log("warning", "job.replace_raced", jobId=old_id)
 
 
 def list_jobs(app: App, req: Request) -> Response:
@@ -175,7 +227,8 @@ def retry(app: App, req: Request) -> Response:
             job["pk"],
             job["sk"],
             fields,
-            remove=["error", "flowExecutionArn", "macCallbackId"] + ([] if pick_up else ["pickUp", "note"]),
+            remove=["error", "flowExecutionArn", "macCallbackId", "replacedBy"]
+            + ([] if pick_up else ["pickUp", "note"]),
             expect_in=expect,
         )
     except db.ConditionFailed as e:
