@@ -1,4 +1,4 @@
-// My settings (docs/CONTRACTS.md §34): the owner's own post choices per platform, stored in Settings as postPreset,
+// My settings (docs/CONTRACTS.md §36): the owner's own post choices per platform, stored in Settings as postPreset,
 // and the per-clip choices each Review row sends with Upload. My settings never mark a clip as made for kids.
 import type { ClipPostOptions, Platform, PostPreset, XReplies, YouTubeClipOptions, YoutubePrivacy } from "../api/types.ts";
 

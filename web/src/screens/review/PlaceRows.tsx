@@ -1,4 +1,4 @@
-// Review › one clip › one row per place it goes to (docs/CONTRACTS.md §34). Each row starts closed and says what is
+// Review › one clip › one row per place it goes to (docs/CONTRACTS.md §36). Each row starts closed and says what is
 // inside ("YouTube · title, description and settings"); tapping it opens that place's own words (already written)
 // and every option it has. There is no second place picker: the "Upload to" chips above decide where it goes, and
 // these rows follow them.
@@ -109,7 +109,7 @@ export function PlaceRows({
   captions: Captions;
   onChange: (patch: Partial<Captions>) => void;
   handle?: Ref<PlaceRowsHandle>;
-  /** False while nothing is set up (or the check failed): the rows hold the words only, no options (§34.4). */
+  /** False while nothing is set up (or the check failed): the rows hold the words only, no options (§36.4). */
   settings?: boolean;
   /** This clip's choices for YouTube, Instagram and X (from My settings until changed here). */
   options: CardOptions;

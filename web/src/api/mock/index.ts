@@ -165,7 +165,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   const claimedAt = new Map<string, number>();
   // The TikTok sheet's choices stored on each TikTok post (the API's postOptions.tiktok, never returned).
   const postOptions = new Map<string, TikTokPostOptions>();
-  // Each place's own choices sent with Upload (§34.3), by post (the API's postOptions, never returned).
+  // Each place's own choices sent with Upload (§36.3), by post (the API's postOptions, never returned).
   const clipOptions = new Map<string, object>();
 
   /**
@@ -229,7 +229,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     options(postId: string): TikTokPostOptions | null {
       return clone(postOptions.get(postId) ?? null);
     },
-    /** §34.3: the YouTube, Instagram or X choices stored on a post. */
+    /** §36.3: the YouTube, Instagram or X choices stored on a post. */
     clipOptions(postId: string): object | null {
       return clone(clipOptions.get(postId) ?? null);
     },
@@ -765,7 +765,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (next.followMinMinutes !== undefined && !whole(next.followMinMinutes, 10, 240)) throw bad("The shortest video must be a number from 10 to 240 minutes.");
       if (next.followPaused !== undefined && typeof next.followPaused !== "boolean") throw bad("followPaused must be true or false.");
       if (patch.postPreset !== undefined) {
-        // §34: the same check as the API (never made for kids), each platform merged over the defaults.
+        // §36: the same check as the API (never made for kids), each platform merged over the defaults.
         const wrong = presetProblem(patch.postPreset);
         if (wrong) throw bad(wrong);
         next.postPreset = presetOf(patch.postPreset);

@@ -547,7 +547,7 @@ caption. Upload stays disabled until a privacy is chosen. Confirm body gains `"t
 "Pick who can see it on TikTok again, then press Try again." opens this sheet first, then sends `{ "tiktok": {...} }`
 in the confirm body; the API replaces that post's `postOptions` (mock `_try_again` does the same).
 
-**Who can see it: TikTok's rules and the owner's one tap (owner request, 2026-11-20; ADR-58, correcting ADR-57).**
+**Who can see it: TikTok's rules and the owner's one tap (owner request, 2026-11-20; ADR-60, correcting ADR-57).**
 TikTok's Content Sharing Guidelines (developers.tiktok.com/doc/content-sharing-guidelines, updated 4 Aug 2026) require
 that the creator picks the privacy status himself **from a dropdown** with no default value, from exactly
 `privacy_level_options` (while the app is not audited only `SELF_ONLY` is allowed), and that Comments, Duet and Stitch
@@ -558,7 +558,7 @@ are shown and none is on by default; Commercial content is off until the creator
   see it" until the owner picks. When `SELF_ONLY` is the only option it is the one choice, and the line "TikTok keeps
   posts private until it approves your app." shows under it. When Branded content leaves nothing: "Branded content
   can't be Only me. Turn off Branded content." The sheet's hint reads "Pick who can see it to turn on Upload."
-* **Use my settings** on the Review card (§34) is the owner's own action: one tap puts his saved TikTok choices on
+* **Use my settings** on the Review card (§36) is the owner's own action: one tap puts his saved TikTok choices on
   (within what TikTok offers him right now). Nothing is ever on before he taps it or picks in the TikTok row.
 * Commercial content (off) with Your brand / Branded content ("Paid partnership"), the Branded Content Policy line and
   the Music Usage Confirmation line are unchanged; on the Review card the Music Usage line sits right above Upload

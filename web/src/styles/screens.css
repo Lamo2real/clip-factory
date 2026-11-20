@@ -2016,7 +2016,7 @@
   color: var(--vermilion-ink);
 }
 
-/* ---------- Review › Use my settings and one row per place (§34) ---------- */
+/* ---------- Review › Use my settings and one row per place (§36) ---------- */
 .my-settings {
   display: grid;
   gap: 6px;
@@ -2253,7 +2253,7 @@
   font-weight: 600;
 }
 
-/* ---------- Settings › Posting › My settings (§34) ---------- */
+/* ---------- Settings › Posting › My settings (§36) ---------- */
 .preset-page__controls {
   display: grid;
   gap: 8px;

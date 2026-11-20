@@ -1,5 +1,5 @@
 """Upload to many places (docs/CONTRACTS.md §33): the chosen platforms, old clients, and one place's Try again; and
-each place's own options sent with Upload, over the owner's My settings (§34)."""
+each place's own options sent with Upload, over the owner's My settings (§36)."""
 
 from __future__ import annotations
 
@@ -219,7 +219,7 @@ def test_flow_treats_a_posted_clip_with_queued_posts_as_decided() -> None:
 # --- My settings (postPreset) --------------------------------------------------------------------------------------
 
 
-# --- Each place's own options (§34.3) ------------------------------------------------------------------------------
+# --- Each place's own options (§36.3) ------------------------------------------------------------------------------
 
 
 def test_per_clip_options_go_on_their_posts(call: Call, store: db.Store, table: FakeTable) -> None:

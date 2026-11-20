@@ -1,5 +1,5 @@
-// The "Post to TikTok" sheet (docs/CONTRACTS.md §17.8, §34.5, TikTok's Content Sharing Guidelines). On the Review
-// card TikTok's choices live in its own row (§34), so this sheet only opens where there is no row: Upload while nothing
+// The "Post to TikTok" sheet (docs/CONTRACTS.md §17.8, §36.5, TikTok's Content Sharing Guidelines). On the Review
+// card TikTok's choices live in its own row (§36), so this sheet only opens where there is no row: Upload while nothing
 // is set up yet but TikTok is connected, and Try again on a clip whose TikTok post needs a new privacy pick. Who can
 // see it is the app's own dropdown with no default, Everyone first; Comments, Duet and Stitch start off and stay
 // visible; Commercial content needs Your brand or Branded content (branded cannot be "Only me").

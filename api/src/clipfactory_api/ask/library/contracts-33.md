@@ -3,8 +3,8 @@
 The owner, on a Review card: "X isn't set up yet, so X should not be an option there", "I want to select as many as I
 want, and once I hit confirm it should upload to those platforms", "Keep is not a good answer, it should just be
 Upload", and, about every place: "No dropdown ... and that goes for YouTube, TikTok, Instagram, Facebook, X, all of
-them". This first build had no dropdowns and no option panels; **§34 replaces that** with the card the owner then
-asked for (Use my settings, one row per place with its options, TikTok's dropdown). Decision records: ADR-57, ADR-58.
+them". This first build had no dropdowns and no option panels; **§36 replaces that** with the card the owner then
+asked for (Use my settings, one row per place with its options, TikTok's dropdown). Decision records: ADR-57, ADR-60.
 
 ### 33.1 What it was before
 
@@ -26,7 +26,7 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
 * **Which start on (per device):** the last Upload's choice in localStorage `cf-upload-to` (saved on Upload, not on
   each tap) minus places no longer ready; with none saved, Where clips go minus places not ready; if that leaves
   nothing, every ready place.
-* **Caption tabs** (replaced by one row per place, §34.1) showed only the chosen places. A place turned off keeps its
+* **Caption tabs** (replaced by one row per place, §36.1) showed only the chosen places. A place turned off keeps its
   text. Limits unchanged; the too-long check (`captionsTooLong` / `tabsTooLong`) counts
   only chosen places. The tab shows its mark, and its name only when open; X's name is screen-reader only (its mark
   reads "X"). `aria-label` always names the place.
@@ -37,7 +37,7 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   actions and describes the button (`aria-describedby`). Vermilion on the top card only, bottom right (thumb zone),
   motion `send`. **Try again** (after an Upload that did not finish) runs the same checks as Upload: at least one
   place, and the TikTok sheet when TikTok is one of the places and its choices are not already made on this card.
-* (Replaced by §34: "Use my settings" and each place's options in its own row.)
+* (Replaced by §36: "Use my settings" and each place's options in its own row.)
 * Toast after Upload: "Uploading to 4 places!" / "Uploading to YouTube!"; with TikTok, also "TikTok can take a few
   minutes to process your clip."
 
@@ -63,15 +63,15 @@ or table change: one new attribute on new clip items. Existing kept and posted c
 
 ### 33.4 My settings
 
-Replaced by §34.2 and §34.3: `settings.postPreset`, Settings › Posting › My settings and per-clip `options`. The owner's
+Replaced by §36.2 and §36.3: `settings.postPreset`, Settings › Posting › My settings and per-clip `options`. The owner's
 YouTube choice (`youtubePrivacy`) still decides who can see the uploads unless a clip's own row changes it.
 
 ### 33.5 TikTok sheet
 
-See §17.8 and §34.5: who can see it is the app's own dropdown (no default, Everyone first; when TikTok allows only
+See §17.8 and §36.5: who can see it is the app's own dropdown (no default, Everyone first; when TikTok allows only
 Only me, that is the one choice), then Comments, Duet and Stitch (off to start), Commercial
 content with Your brand / Branded content (paid partnership), all visible. On the Review card the same controls are
-in the TikTok row (§34), so the sheet opens only for Library's Try again and while nothing is set up.
+in the TikTok row (§36), so the sheet opens only for Library's Try again and while nothing is set up.
 
 ### 33.6 Library and the clip page
 

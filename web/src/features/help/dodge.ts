@@ -33,7 +33,7 @@ export interface Box {
   left: number;
   right: number;
   /**
-   * A control marked data-help-clear (Review's Upload and Use my settings, §34.5): the launcher may not touch it at
+   * A control marked data-help-clear (Review's Upload and Use my settings, §36.5): the launcher may not touch it at
    * all, not even its empty end. The owner saw the round Ask button over the right end of "Upload to 4".
    */
   clear?: boolean;

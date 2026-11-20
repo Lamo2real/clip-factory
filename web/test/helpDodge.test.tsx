@@ -247,7 +247,7 @@ describe("shownBox and controlBoxes: only what shows counts", () => {
   });
 });
 
-describe("controls the launcher may not touch at all (§34.6)", () => {
+describe("controls the launcher may not touch at all (§36.6)", () => {
   // The owner's screenshot: the round Ask button over the right end of "Upload to 4".
   const upload = { top: 600, bottom: 654, left: 700, right: 960 };
   const launcher = { top: 604, bottom: 650, left: 900, right: 990 };

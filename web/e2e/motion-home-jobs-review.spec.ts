@@ -184,7 +184,7 @@ test.describe("motion: Review (APPLY a)", () => {
 
   test("a place row's chevron turns when it opens; the checks chevron turns with the state", async ({ page }) => {
     const card = page.locator(".review-card").first();
-    // One row per place (§34), no caption tabs: opening a row turns its chevron.
+    // One row per place (§36), no caption tabs: opening a row turns its chevron.
     await expect(card.getByRole("tab")).toHaveCount(0);
     const x = card.locator('[data-place="x"]');
     const rowChev = x.locator(".place-row__chev");
@@ -247,7 +247,7 @@ test.describe("motion: no overflow while Home and Review animate (APPLY a)", () 
       await page.goto("/review");
       await settle(page);
       const card = page.locator(".review-card").last();
-      // Opening a place row (§34) makes the card taller, so the chevron turn is compared with the page once the row is
+      // Opening a place row (§36) makes the card taller, so the chevron turn is compared with the page once the row is
       // open, and Throw away with the page after that.
       await card.locator('[data-place="tiktok"] summary').click();
       await pauseActs(page, 0.5);

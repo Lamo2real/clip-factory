@@ -1,4 +1,4 @@
-// Settings › Posting › My settings (docs/CONTRACTS.md §34): the owner's own choices for each place, put on a clip by
+// Settings › Posting › My settings (docs/CONTRACTS.md §36): the owner's own choices for each place, put on a clip by
 // "Use my settings" on Review. One section per platform, X included. Saved on the server, so every device has them.
 // My settings never mark a clip as made for kids, and TikTok's Commercial content is picked per clip only.
 import type { PostPreset, XReplies, YoutubePrivacy } from "../../api/types.ts";

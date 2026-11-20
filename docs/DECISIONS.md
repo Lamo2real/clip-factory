@@ -1429,7 +1429,7 @@ Web Push, the app icon badge and one replaceable notification per video instead 
 
 ## ADR-57 Upload replaces Keep; the owner picks places per clip; no dropdowns, no extra options
 
-**Corrected by ADR-58.** The "no preset, no options, button bar for TikTok" part below was a misreading: the owner asked
+**Corrected by ADR-60.** The "no preset, no options, button bar for TikTok" part below was a misreading: the owner asked
 for a one-tap preset of his own settings and options per platform, and TikTok's rules ask for a dropdown. The Upload,
 `platforms` and per-place Try again parts stand.
 
@@ -1514,7 +1514,7 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
 - **Options.** (1) Keep the tab bar and add a preset button; (2) one collapsed row per ticked place holding its words
   and options, a server-side preset applied by one tap, and TikTok's controls in its row; (3) auto-apply everything,
   TikTok included, with no tap.
-- **Decision.** (CONTRACTS §34) Option 2. `settings.postPreset` (additive, per owner, defaults: the most reach, never
+- **Decision.** (CONTRACTS §36) Option 2. `settings.postPreset` (additive, per owner, defaults: the most reach, never
   made for kids; the preset can never say made for kids) edited in Settings › Posting › My settings; confirm gains
   optional per-clip `options` for YouTube, Instagram and X, stored as post options and read by the publishers before
   the preset. YouTube, Instagram, Facebook and X use the preset from the start; TikTok's choices go on only with the

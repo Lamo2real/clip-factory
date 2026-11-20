@@ -284,7 +284,7 @@ describe("Sheet", () => {
   });
 });
 
-describe("place rows (§34)", () => {
+describe("place rows (§36)", () => {
   const ok: Captions = { ...clip.captions, x: "short", youtubeTitle: "short", youtubeDescription: "", tiktok: "", instagram: "", facebook: "" };
   const cardOpts = cardOptionsFrom(DEFAULT_PRESET, "public");
   function Rows({ places, captions = ok, handle, tiktok = {} }: { places: Platform[]; captions?: Captions; handle?: { current: PlaceRowsHandle | null }; tiktok?: Partial<TikTokRow> }) {
@@ -365,7 +365,7 @@ describe("place rows (§34)", () => {
   });
 });
 
-describe("Use my settings (§34)", () => {
+describe("Use my settings (§36)", () => {
   it("puts the owner's TikTok settings on, within what TikTok offers him now; Commercial content stays off", () => {
     const mine = myTikTokChoices(DEFAULT_PRESET.tiktok, { ...creator, privacyOptions: ["SELF_ONLY", "PUBLIC_TO_EVERYONE"] });
     // Stitch is off in this creator's TikTok settings: it stays off.

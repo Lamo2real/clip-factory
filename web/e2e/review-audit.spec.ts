@@ -127,7 +127,7 @@ test.describe("at 375px", () => {
 });
 
 for (const width of [320, 375, 960, 1024, 1280]) {
-  test(`at ${width}px all five place rows are in sight and the actions line up (F021, F028, F034, §34)`, async ({ page }) => {
+  test(`at ${width}px all five place rows are in sight and the actions line up (F021, F028, F034, §36)`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await openReview(page);
     const card = page.locator(".review-card").first();

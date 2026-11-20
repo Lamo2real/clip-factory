@@ -264,7 +264,7 @@ for (const width of WIDTHS) {
 
     await page.goto("/review");
     await settle(page);
-    // TikTok's choices live in its row on the card (§34): open it with every option showing.
+    // TikTok's choices live in its row on the card (§36): open it with every option showing.
     const card = page.locator(".review-card").first();
     await card.getByRole("button", { name: "Use my settings" }).click();
     const row = card.locator('[data-place="tiktok"]');

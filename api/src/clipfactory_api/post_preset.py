@@ -1,4 +1,4 @@
-"""My settings: the owner's own post choices per platform, and the per-clip options sent with Upload (CONTRACTS §34).
+"""My settings: the owner's own post choices per platform, and the per-clip options sent with Upload (CONTRACTS §36).
 
 One preset per owner, stored in Settings as ``postPreset`` (additive: an owner who never saved one reads the defaults
 below, so nothing he already saved changes). The defaults are the owner's ask: the most reach on every platform
@@ -41,7 +41,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "x": {"replies": "everyone"},
 }
 
-# What one clip's options may say, per place (§34.3). TikTok's per-clip choices go in ``tiktok`` (§17.8), not here.
+# What one clip's options may say, per place (§36.3). TikTok's per-clip choices go in ``tiktok`` (§17.8), not here.
 CLIP_KEYS: dict[str, frozenset[str]] = {
     "youtube": frozenset({"privacy", "category", "madeForKids", "notifySubscribers", "embeddable"}),
     "instagram": frozenset({"shareToFeed"}),
@@ -98,7 +98,7 @@ def check(raw: Any) -> dict[str, dict[str, Any]]:
 
 
 def clip_options(raw: Any) -> dict[str, dict[str, Any]]:
-    """The confirm body's per-clip ``options`` (§34.3) for YouTube, Instagram and X. Only what is given is stored; the
+    """The confirm body's per-clip ``options`` (§36.3) for YouTube, Instagram and X. Only what is given is stored; the
     publisher falls back to the saved setup for anything missing."""
     body = validate.obj(raw, "options")
     validate.only_keys(body, CLIP_KEYS.keys())

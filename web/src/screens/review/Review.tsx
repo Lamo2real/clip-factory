@@ -295,7 +295,7 @@ function ReviewCard({
   const toast = useToast();
   const { me, refresh } = useSession();
   const [captions, setCaptions] = useState<Captions>(clip.captions);
-  // The Post to TikTok sheet (§17.8) is open: only when nothing is set up yet but TikTok is connected (§34.4).
+  // The Post to TikTok sheet (§17.8) is open: only when nothing is set up yet but TikTok is connected (§36.4).
   const [sheet, setSheet] = useState(false);
   // Where it goes (§33): the owner's taps on this card, else this device's last choice / Where clips go, minus
   // places that are not set up.
@@ -321,7 +321,7 @@ function ReviewCard({
   const confirmRef = useRef<HTMLDivElement>(null);
   const rows = useRef<PlaceRowsHandle>(null);
 
-  // TikTok's options live in its row on the card (§34): asked for when the owner taps Use my settings or opens the
+  // TikTok's options live in its row on the card (§36): asked for when the owner taps Use my settings or opens the
   // TikTok row (TikTok's rules: this creator's current options, every time), never before.
   const tiktokOn = chosen.includes("tiktok");
   const [ttWanted, setTtWanted] = useState(false);
@@ -331,7 +331,7 @@ function ReviewCard({
   const [choices, setChoices] = useState<TikTokChoices>(NO_TIKTOK_CHOICES);
   // Use my settings was tapped on this card (TikTok's choices are the owner's own tap, never a default).
   const [applied, setApplied] = useState(false);
-  // My settings (§34), from the server. YouTube, Instagram and X use them from the start (no TikTok-style rule there);
+  // My settings (§36), from the server. YouTube, Instagram and X use them from the start (no TikTok-style rule there);
   // `own` holds this card's changes to them, null until the owner changes one in a row.
   const youtubePrivacy: YoutubePrivacy = me?.settings.youtubePrivacy ?? "public";
   const preset = presetOf(me?.settings.postPreset);
@@ -511,7 +511,7 @@ function ReviewCard({
       );
       return;
     }
-    // TikTok is one of the places: its choices are on the card (Use my settings, or the TikTok row), §34.
+    // TikTok is one of the places: its choices are on the card (Use my settings, or the TikTok row), §36.
     if (tiktokOn) {
       if (!ttReady) {
         keepAct.fail({ sound: false });

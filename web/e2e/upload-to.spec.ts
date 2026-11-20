@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
-// Upload to many places (docs/CONTRACTS.md §33, §34): only places that are set up get a chip, any number can be on,
+// Upload to many places (docs/CONTRACTS.md §33, §36): only places that are set up get a chip, any number can be on,
 // all ready ones start on, Upload posts to exactly the chosen ones, each place keeps its own caption and limit in its
 // own row, results show per place with their own Try again. The chips are the only place picker on the card, and a
 // failed setup check or a Try again never sends a clip to places nobody picked.
@@ -49,11 +49,11 @@ test.describe("Upload to many places", () => {
     }
     await expect(card.getByRole("link", { name: "Set up X to upload there too." })).toHaveAttribute("href", "/settings/posting/setup/x");
     await expect(card.getByRole("button", { name: UPLOAD })).toHaveText("Upload to 4");
-    // TikTok needs the owner's tap first (§34); then the line says where it goes.
+    // TikTok needs the owner's tap first (§36); then the line says where it goes.
     await expect(card.locator(".upload-going")).toHaveText("Tap Use my settings first. TikTok needs your tap.");
     await card.getByRole("button", { name: "Use my settings" }).click();
     await expect(card.locator(".upload-going")).toHaveText("Going to: YouTube · TikTok · Instagram · Facebook");
-    // One row per chosen place (§34), no caption tabs, no X row, and nothing writes "X X".
+    // One row per chosen place (§36), no caption tabs, no X row, and nothing writes "X X".
     await expect(card.getByRole("tab")).toHaveCount(0);
     await expect(card.locator(".place-row")).toHaveCount(4);
     await expect(card.locator('.place-row[data-place="x"]')).toHaveCount(0);

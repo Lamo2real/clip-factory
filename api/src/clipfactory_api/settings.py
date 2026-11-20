@@ -51,7 +51,7 @@ DEFAULTS: dict[str, Any] = {
     # show, so only the owner can ask for one each step. "Picked up again" is off too: the job flow resumes a stalled job by
     # itself (up to 6 times a run) and the owner has nothing to do.
     "notify": {"ready": True, "stopped": True, "resumed": False, "steps": False},
-    # §34 My settings: the owner's own post choices per platform (Everyone, comments, duets and stitches on, Reels in
+    # §36 My settings: the owner's own post choices per platform (Everyone, comments, duets and stitches on, Reels in
     # the feed, everyone can reply; never made for kids). Additive: an owner who never saved one reads these defaults.
     "postPreset": post_preset.defaults(),
 }

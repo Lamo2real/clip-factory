@@ -235,7 +235,7 @@ export interface Settings {
   followMinMinutes?: number;
   /** Which notifications the owner's devices get (docs/CONTRACTS.md §32.3). Absent on old servers: the defaults. */
   notify?: NotifyChoices;
-  /** My settings (§34): the owner's own post choices per platform. Absent on old servers: the defaults. */
+  /** My settings (§36): the owner's own post choices per platform. Absent on old servers: the defaults. */
   postPreset?: PostPreset;
 }
 
@@ -267,7 +267,7 @@ export interface PushSubscriptionBody {
 export type YoutubePrivacy = "public" | "unlisted" | "private";
 
 /**
- * My settings (§34), one part per platform. YouTube's "who can see it" is `Settings.youtubePrivacy`, not here. There is
+ * My settings (§36), one part per platform. YouTube's "who can see it" is `Settings.youtubePrivacy`, not here. There is
  * no made-for-kids field: My settings never mark a clip as made for kids. TikTok's Commercial content is per clip only.
  */
 export interface YouTubePreset {
@@ -297,7 +297,7 @@ export interface PostPreset {
   facebook: Record<string, never>;
   x: XPreset;
 }
-/** One clip's choices sent with Upload (§34.3). TikTok's go in `tiktok` (§17.8). */
+/** One clip's choices sent with Upload (§36.3). TikTok's go in `tiktok` (§17.8). */
 export interface YouTubeClipOptions {
   privacy: YoutubePrivacy;
   category: string;

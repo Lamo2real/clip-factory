@@ -85,7 +85,7 @@ def _captions(job: PublishJob) -> dict[str, Any]:
 
 
 def _preset(job: PublishJob, platform: str) -> dict[str, Any]:
-    """My settings for one platform (§34), from the owner's Settings; {} when there are none."""
+    """My settings for one platform (§36), from the owner's Settings; {} when there are none."""
     preset = job.settings.get("postPreset")
     part = preset.get(platform) if isinstance(preset, dict) else None
     return part if isinstance(part, dict) else {}
@@ -179,7 +179,7 @@ class YouTubePublisher:
         captions = _captions(job)
         title = strip_angles(str(captions.get("youtubeTitle") or job.clip.get("hook") or "Clip")).strip()[:100]
         description = cut_bytes(strip_angles(str(captions.get("youtubeDescription") or "")), 5000)
-        # This clip's choices from its YouTube row (§34.3) win; then My settings; a post without them keeps the old
+        # This clip's choices from its YouTube row (§36.3) win; then My settings; a post without them keeps the old
         # behaviour (the saved youtubePrivacy, Gaming, not made for kids).
         opts = job.options
         preset = _preset(job, "youtube")
@@ -187,7 +187,7 @@ class YouTubePublisher:
         category = str(opts.get("category") or preset.get("category") or YOUTUBE_CATEGORY_GAMING)
         status: dict[str, Any] = {
             "privacyStatus": privacy if privacy in {"public", "unlisted", "private"} else "public",
-            # Only this clip's own switch can say made for kids; My settings never do (§34.2).
+            # Only this clip's own switch can say made for kids; My settings never do (§36.2).
             "selfDeclaredMadeForKids": opts.get("madeForKids") is True,
             "containsSyntheticMedia": False,
         }
@@ -204,7 +204,7 @@ class YouTubePublisher:
 
     @staticmethod
     def upload_url(job: PublishJob) -> str:
-        """The resumable upload URL; ``notifySubscribers=false`` only when the owner turned the bell off (§34)."""
+        """The resumable upload URL; ``notifySubscribers=false`` only when the owner turned the bell off (§36)."""
         off = _choice_of(job.options, _preset(job, "youtube"), "notifySubscribers") is False
         return YOUTUBE_UPLOAD + ("&notifySubscribers=false" if off else "")
 
@@ -516,7 +516,7 @@ class InstagramPublisher(_Graph):
             params = {
                 "media_type": "REELS",
                 "caption": instagram_caption(str(_captions(job).get("instagram") or "")),
-                # Reels shared to the main feed reach more people; off only when the owner says so (§34).
+                # Reels shared to the main feed reach more people; off only when the owner says so (§36).
                 "share_to_feed": "false"
                 if _choice_of(job.options, _preset(job, "instagram"), "shareToFeed") is False
                 else "true",
@@ -784,7 +784,7 @@ class XPublisher:
             tweet: dict[str, Any] = {"text": text, "media": {"media_ids": [str(handle["mediaId"])]}}
             replies = _choice_of(job.options, _preset(job, "x"), "replies")
             if replies in {"following", "mentionedUsers", "verified"}:
-                tweet["reply_settings"] = replies  # "everyone" sends nothing: X's default (§34)
+                tweet["reply_settings"] = replies  # "everyone" sends nothing: X's default (§36)
             data = self._post_json(job, f"{X_API}/tweets", tweet, "tweet")
             tweet_id = str((data.get("data") or {}).get("id") or "")
             if not tweet_id:

@@ -732,7 +732,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
     focuses its box and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then
     tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
     even while the row is closed.
-  * Place rows (§34.1): one closed row per chosen place, no tab bar. A closed TikTok row also names the account:
+  * Place rows (§36.1): one closed row per chosen place, no tab bar. A closed TikTok row also names the account:
     "Posting as <nickname>" (TikTok's rules). Review's launcher keeps clear of the rows (`data-help-dodge`).
   * The card goes two-column (video left) only when the card itself is at least 820 px wide (container query on
     `.review-list__item`, never a window media query), so the decision column never drops below about 400 px.
@@ -2507,7 +2507,7 @@ caption. Upload stays disabled until a privacy is chosen. Confirm body gains `"t
 "Pick who can see it on TikTok again, then press Try again." opens this sheet first, then sends `{ "tiktok": {...} }`
 in the confirm body; the API replaces that post's `postOptions` (mock `_try_again` does the same).
 
-**Who can see it: TikTok's rules and the owner's one tap (owner request, 2026-11-20; ADR-58, correcting ADR-57).**
+**Who can see it: TikTok's rules and the owner's one tap (owner request, 2026-11-20; ADR-60, correcting ADR-57).**
 TikTok's Content Sharing Guidelines (developers.tiktok.com/doc/content-sharing-guidelines, updated 4 Aug 2026) require
 that the creator picks the privacy status himself **from a dropdown** with no default value, from exactly
 `privacy_level_options` (while the app is not audited only `SELF_ONLY` is allowed), and that Comments, Duet and Stitch
@@ -2518,7 +2518,7 @@ are shown and none is on by default; Commercial content is off until the creator
   see it" until the owner picks. When `SELF_ONLY` is the only option it is the one choice, and the line "TikTok keeps
   posts private until it approves your app." shows under it. When Branded content leaves nothing: "Branded content
   can't be Only me. Turn off Branded content." The sheet's hint reads "Pick who can see it to turn on Upload."
-* **Use my settings** on the Review card (§34) is the owner's own action: one tap puts his saved TikTok choices on
+* **Use my settings** on the Review card (§36) is the owner's own action: one tap puts his saved TikTok choices on
   (within what TikTok offers him right now). Nothing is ever on before he taps it or picks in the TikTok row.
 * Commercial content (off) with Your brand / Branded content ("Paid partnership"), the Branded Content Policy line and
   the Music Usage Confirmation line are unchanged; on the Review card the Music Usage line sits right above Upload
@@ -6528,8 +6528,8 @@ only where notifications can be turned on right there; Not now or turning them o
 The owner, on a Review card: "X isn't set up yet, so X should not be an option there", "I want to select as many as I
 want, and once I hit confirm it should upload to those platforms", "Keep is not a good answer, it should just be
 Upload", and, about every place: "No dropdown ... and that goes for YouTube, TikTok, Instagram, Facebook, X, all of
-them". This first build had no dropdowns and no option panels; **§34 replaces that** with the card the owner then
-asked for (Use my settings, one row per place with its options, TikTok's dropdown). Decision records: ADR-57, ADR-58.
+them". This first build had no dropdowns and no option panels; **§36 replaces that** with the card the owner then
+asked for (Use my settings, one row per place with its options, TikTok's dropdown). Decision records: ADR-57, ADR-60.
 
 ### 33.1 What it was before
 
@@ -6551,7 +6551,7 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
 * **Which start on (per device):** the last Upload's choice in localStorage `cf-upload-to` (saved on Upload, not on
   each tap) minus places no longer ready; with none saved, Where clips go minus places not ready; if that leaves
   nothing, every ready place.
-* **Caption tabs** (replaced by one row per place, §34.1) showed only the chosen places. A place turned off keeps its
+* **Caption tabs** (replaced by one row per place, §36.1) showed only the chosen places. A place turned off keeps its
   text. Limits unchanged; the too-long check (`captionsTooLong` / `tabsTooLong`) counts
   only chosen places. The tab shows its mark, and its name only when open; X's name is screen-reader only (its mark
   reads "X"). `aria-label` always names the place.
@@ -6562,7 +6562,7 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   actions and describes the button (`aria-describedby`). Vermilion on the top card only, bottom right (thumb zone),
   motion `send`. **Try again** (after an Upload that did not finish) runs the same checks as Upload: at least one
   place, and the TikTok sheet when TikTok is one of the places and its choices are not already made on this card.
-* (Replaced by §34: "Use my settings" and each place's options in its own row.)
+* (Replaced by §36: "Use my settings" and each place's options in its own row.)
 * Toast after Upload: "Uploading to 4 places!" / "Uploading to YouTube!"; with TikTok, also "TikTok can take a few
   minutes to process your clip."
 
@@ -6588,15 +6588,15 @@ or table change: one new attribute on new clip items. Existing kept and posted c
 
 ### 33.4 My settings
 
-Replaced by §34.2 and §34.3: `settings.postPreset`, Settings › Posting › My settings and per-clip `options`. The owner's
+Replaced by §36.2 and §36.3: `settings.postPreset`, Settings › Posting › My settings and per-clip `options`. The owner's
 YouTube choice (`youtubePrivacy`) still decides who can see the uploads unless a clip's own row changes it.
 
 ### 33.5 TikTok sheet
 
-See §17.8 and §34.5: who can see it is the app's own dropdown (no default, Everyone first; when TikTok allows only
+See §17.8 and §36.5: who can see it is the app's own dropdown (no default, Everyone first; when TikTok allows only
 Only me, that is the one choice), then Comments, Duet and Stitch (off to start), Commercial
 content with Your brand / Branded content (paid partnership), all visible. On the Review card the same controls are
-in the TikTok row (§34), so the sheet opens only for Library's Try again and while nothing is set up.
+in the TikTok row (§36), so the sheet opens only for Library's Try again and while nothing is set up.
 
 ### 33.6 Library and the clip page
 
@@ -6884,7 +6884,7 @@ to? What's the difference? All I want: select all of them, click one button, upl
 settings, and a dropdown per platform (e.g. TikTok paid partnership). For a standard upload I should only have to tap
 one button." §33 had also removed the "Use my settings" preset he asked for and put TikTok's "Who can see it" on a bar
 of buttons, although TikTok's rules ask for a dropdown. This section replaces §33.2's caption tabs, §33.4 and §33.5.
-Decision record: ADR-58 (which corrects ADR-57).
+Decision record: ADR-60 (which corrects ADR-57).
 
 ### 34.1 The card, top to bottom
 
@@ -6909,7 +6909,7 @@ Decision record: ADR-58 (which corrects ADR-57).
    * YouTube: Title, Description, Who can see it (a `<Glide>` bar: Everyone / Link only / Only me, starting from
      `settings.youtubePrivacy`), Category (the app's own dropdown, Gaming first), **Made for kids** switch (off = No),
      Tell my subscribers.
-   * TikTok: Posting as, Caption, **Who can see it** (§34.5), Comments, Duet, Stitch, Commercial content with Your
+   * TikTok: Posting as, Caption, **Who can see it** (§36.5), Comments, Duet, Stitch, Commercial content with Your
      brand (Promotional content) / Branded content (Paid partnership).
    * Instagram: Caption, Also show it in my feed (Reel).
    * Facebook: Caption, "Goes up as a Reel on your Page. Everyone can see it." (Page Reels are public; nothing to pick).

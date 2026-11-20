@@ -127,7 +127,7 @@ def confirm(app: App, req: Request) -> Response:
     patch = clips.caption_patch(body["captions"]) if body.get("captions") is not None else {}
     options = tiktok_options(body["tiktok"]) if body.get("tiktok") is not None else None
     chosen = upload_platforms(body["platforms"]) if body.get("platforms") is not None else None
-    # Per-clip choices for YouTube, Instagram and X from the card's rows (§34.3); only the places that go keep theirs.
+    # Per-clip choices for YouTube, Instagram and X from the card's rows (§36.3); only the places that go keep theirs.
     per_clip = post_preset.clip_options(body["options"]) if body.get("options") is not None else {}
     item = _clip_or_404(app, req)
     if item.get("status") == "review":

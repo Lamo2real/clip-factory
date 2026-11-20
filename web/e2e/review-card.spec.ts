@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
-// The simple Review card (docs/CONTRACTS.md §34), the owner's ask: "select all of them, click one button, upload",
+// The simple Review card (docs/CONTRACTS.md §36), the owner's ask: "select all of them, click one button, upload",
 // plus one button for his settings and each platform's own options in its own row. A standard upload is two taps:
 // Use my settings, then Upload to 4. There is one place picker only (the Upload to chips), and the round Ask button
 // never covers Upload.

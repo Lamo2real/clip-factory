@@ -1,4 +1,4 @@
-// TikTok's "Who can see it" (TikTok's Content Sharing Guidelines, CONTRACTS §17.8 and §34): the app's own dropdown
+// TikTok's "Who can see it" (TikTok's Content Sharing Guidelines, CONTRACTS §17.8 and §36): the app's own dropdown
 // (never the OS list) with exactly the choices TikTok offers this creator, Everyone first, and nothing picked until
 // the owner picks one or taps Use my settings. Used in the TikTok row on the Review card and on the TikTok sheet.
 import { useId } from "react";

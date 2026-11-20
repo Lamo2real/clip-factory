@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
-// TikTok's choices (docs/CONTRACTS.md §17.8, §34, TikTok's Content Sharing Guidelines). On the Review card they live
+// TikTok's choices (docs/CONTRACTS.md §17.8, §36, TikTok's Content Sharing Guidelines). On the Review card they live
 // in the TikTok row: who can see it is the app's own dropdown with nothing picked until the owner picks or taps Use my
 // settings; Comments, Duet and Stitch show and start off; Commercial content needs Your brand or Branded content. The
 // Post to TikTok sheet only opens where there is no row: Try again in the Library when TikTok wants a new pick.

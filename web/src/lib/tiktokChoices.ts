@@ -67,7 +67,7 @@ export function tooLongForTikTok(durationSec: number, maxDurationSec: number | n
   return !!maxDurationSec && maxDurationSec > 0 && durationSec > maxDurationSec;
 }
 
-// ---- My settings (docs/CONTRACTS.md §34) ----
+// ---- My settings (docs/CONTRACTS.md §36) ----
 
 /**
  * The choices "Use my settings" puts on TikTok, from the owner's saved TikTok settings and what TikTok offers this

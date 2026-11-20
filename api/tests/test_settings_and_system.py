@@ -28,7 +28,7 @@ DEFAULTS = {
     "followDailyMax": 0,
     "followMinMinutes": 30,
     "notify": {"ready": True, "stopped": True, "resumed": False, "steps": False},
-    # §34 My settings: the owner's own post choices per platform, never made for kids.
+    # §36 My settings: the owner's own post choices per platform, never made for kids.
     "postPreset": {
         "youtube": {"category": "20", "notifySubscribers": True, "embeddable": True},
         "tiktok": {"privacy": "PUBLIC_TO_EVERYONE", "comments": True, "duet": True, "stitch": True},

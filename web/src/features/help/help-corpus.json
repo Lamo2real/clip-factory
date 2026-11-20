@@ -1,5 +1,5 @@
 {
-  "version": "05a21a66beab",
+  "version": "a37b13806831",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -20,6 +20,7 @@
     "src/screens/home/MoneyTile.tsx",
     "src/screens/home/NewJobForm.tsx",
     "src/screens/home/StreamersRow.tsx",
+    "src/screens/jobs/DeleteJobsSheet.tsx",
     "src/screens/jobs/JobDetail.tsx",
     "src/screens/jobs/JobNote.tsx",
     "src/screens/jobs/Jobs.tsx",
@@ -365,6 +366,43 @@
           "highlight": [
             "failed-job",
             "try-again",
+            "nav-jobs"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "delete-job",
+      "kind": "guide",
+      "route": "/jobs",
+      "where": "Jobs",
+      "title": "Delete a job",
+      "keywords": [
+        "delete job",
+        "delete jobs",
+        "remove job",
+        "get rid of",
+        "clear jobs",
+        "failed jobs",
+        "clean up",
+        "trash",
+        "bin",
+        "delete several",
+        "delete all failed"
+      ],
+      "answer": "Tap the bin on a job in **Jobs**, or tap **Delete job** on its page. Clip Factory asks first and says what happens. A job still working stops first. Clips you kept or posted stay, and your posts stay up. Its clips waiting in Review go too only if you turn on **Also delete its clips in Review**. You can undo for 8 seconds.",
+      "steps": [
+        "Tap **Jobs**.",
+        "Tap the bin on the job, or tap **Select** to pick several (**Pick all failed** picks every failed one).",
+        "Tap **Delete job**."
+      ],
+      "actions": [
+        {
+          "id": "delete-job:jobs",
+          "label": "Open Jobs",
+          "to": "/jobs",
+          "highlight": [
+            "jobs-select",
             "nav-jobs"
           ]
         }
@@ -2844,11 +2882,16 @@
       "title": "Jobs",
       "keywords": [
         "jobs list",
+        "keep",
+        "select",
         "make",
+        "cancel",
         "show",
         "older",
         "no",
-        "yet"
+        "yet",
+        "delete",
+        "picked"
       ],
       "answer": "Every link or video you add is one job. Tap one to watch it being made, step by step.",
       "steps": [
@@ -2874,9 +2917,11 @@
       "keywords": [
         "job steps",
         "job page",
+        "keep",
         "loading",
         "progress",
         "source",
+        "delete",
         "stop",
         "use",
         "video",

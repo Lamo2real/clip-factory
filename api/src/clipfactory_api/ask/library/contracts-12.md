@@ -173,7 +173,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
     focuses its box and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then
     tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
     even while the row is closed.
-  * Place rows (§34.1): one closed row per chosen place, no tab bar. A closed TikTok row also names the account:
+  * Place rows (§36.1): one closed row per chosen place, no tab bar. A closed TikTok row also names the account:
     "Posting as <nickname>" (TikTok's rules). Review's launcher keeps clear of the rows (`data-help-dodge`).
   * The card goes two-column (video left) only when the card itself is at least 820 px wide (container query on
     `.review-list__item`, never a window media query), so the decision column never drops below about 400 px.
