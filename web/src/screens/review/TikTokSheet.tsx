@@ -34,8 +34,8 @@ export function TikTokSheet({
   onUpload: (options: TikTokPostOptions) => void;
   onClose: () => void;
   busy: boolean;
-  /** The big button's word: Upload, or Try again on a clip that did not go up. */
-  action?: "Upload" | "Try again";
+  /** The big button's word: Upload, Try again on a clip that did not go up, or Post now for a place set up since. */
+  action?: "Upload" | "Try again" | "Post now";
   /**
    * The big button's motion (§20.11 (a)): Upload posts to TikTok, so the plane flies; Try again turns. Pass a handle
    * to shake it when posting fails (the owner's own error path); without one the sheet uses its own.
@@ -44,7 +44,7 @@ export function TikTokSheet({
 }) {
   const id = useId();
   const dialog = useRef<HTMLDivElement>(null);
-  const ownAct = useAction(action === "Upload" ? "send" : "retry");
+  const ownAct = useAction(action === "Try again" ? "retry" : "send");
   const [creator, setCreator] = useState<TikTokCreator | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [choices, setChoices] = useState<TikTokChoices>(NO_TIKTOK_CHOICES);
@@ -211,7 +211,7 @@ export function TikTokSheet({
           <Button
             variant="primary"
             size="lg"
-            icon={action === "Upload" ? "upload" : "retry"}
+            icon={action === "Try again" ? "retry" : "upload"}
             act={act ?? ownAct}
             loading={busy}
             disabled={!ready || !creator || tooLong}

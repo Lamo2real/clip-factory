@@ -5,6 +5,8 @@
 2. ``error`` in the query → ``denied`` (the owner pressed cancel) or ``error``.
 3. Exchange the code server side with the stored redirect URI and the app keys (``providers.exchange``).
 4. Write the token secret (or the ``pending`` secret and the choices), then the Account and SETUP items.
+5. ``connected``: the clips whose posts wait for this place go out (``release.release_waiting``, §17.6). A failure
+   there is logged; the owner still lands on ``result=connected``.
 
 The caller always redirects to ``{APP_URL}/settings/posting/setup/{platform}?result={code}``: a fixed path and a
 code from ``RESULTS`` only, so nothing from the request is reflected (no open redirect). The query, the code, the
@@ -21,7 +23,7 @@ from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
 
-from .. import db
+from .. import db, release
 from ..clock import iso
 from ..log import log
 from . import MONEY_GRANT, PKCE, SETUP_ORDER, OAuthEnv, providers, setup, state
@@ -67,8 +69,15 @@ def consume(store: db.Store, nonce: str) -> dict[str, Any] | None:
     return store.delete_once(setup.oauth_pk(nonce), setup.OAUTH_SK)
 
 
-def handle_callback(platform: str, query: Mapping[str, str], store: db.Store, env: OAuthEnv) -> str:
-    """The result code (one of ``RESULTS``)."""
+def handle_callback(
+    platform: str,
+    query: Mapping[str, str],
+    store: db.Store,
+    env: OAuthEnv,
+    flows: release.ClipFlowStarter | None = None,
+) -> str:
+    """The result code (one of ``RESULTS``). On ``connected``, the clips waiting for this place go out
+    (``release.release_waiting`` with ``flows``, §17.6); that never changes the result the owner sees."""
     if platform not in SETUP_ORDER:
         return "error"
     now = env.clock()
@@ -108,6 +117,11 @@ def handle_callback(platform: str, query: Mapping[str, str], store: db.Store, en
         setup.record(store, user_id, platform, env.clock(), {"lastResult": result})
     except Exception as e:  # the result is shown either way
         log("warning", "oauth.record_failed", platform=platform, error=type(e).__name__)
+    if result == "connected" and flows is not None:
+        try:
+            release.release_waiting(store, flows, user_id, platform)
+        except Exception as e:  # the account is connected either way; Post now in the Library is the backup
+            log("error", "oauth.release_failed", platform=platform, error=type(e).__name__)
     log("info", "oauth.callback", platform=platform, result=result)
     return result
 

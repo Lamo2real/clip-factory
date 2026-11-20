@@ -38,6 +38,9 @@ variables {
   table_name      = "cf-test-data"
   table_arn       = "arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"
   app_url         = "https://app.example.test"
+
+  clip_flow_alias_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
+  clip_flow_arn_prefix = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow"
 }
 
 run "routes_and_validation" {
@@ -146,8 +149,9 @@ run "verify_token_and_lambda" {
       VERIFY_TOKEN_PARAM = "/cf-test/hooks/verify-token"
       SECRET_PREFIX      = "cf-test/platforms/"
       OAUTH_STATE_SECRET = "cf-test/oauth/state-key"
+      CLIP_FLOW_ARN      = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
     })
-    error_message = "cf-prod-hooks environment must match docs/CONTRACTS.md §9 and §17.9 (SECRET_PREFIX, OAUTH_STATE_SECRET)."
+    error_message = "cf-prod-hooks environment must match docs/CONTRACTS.md §9, §17.9 (SECRET_PREFIX, OAUTH_STATE_SECRET) and §17.6 (CLIP_FLOW_ARN)."
   }
 
   assert {
@@ -162,8 +166,28 @@ run "verify_token_and_lambda" {
       "dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query",
       "secretsmanager:GetSecretValue", "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue",
       "secretsmanager:DescribeSecret", "secretsmanager:DeleteSecret", "secretsmanager:TagResource",
+      "dynamodb:TransactWriteItems", "lambda:InvokeFunction",
     ])
-    error_message = "cf-prod-hooks may only store hook events, read the verify token, handle OAuth items and the platform secrets (§17.9), and set followed creators' live state (§24.4)."
+    error_message = "cf-prod-hooks may only store hook events, read the verify token, handle OAuth items and the platform secrets (§17.9), set followed creators' live state (§24.4), and release waiting posts with a clip flow start (§17.6)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "ReleaseWaitingPosts" && toset(s.Action) == toset(["dynamodb:GetItem", "dynamodb:Query", "dynamodb:UpdateItem", "dynamodb:TransactWriteItems"]) &&
+      s.Resource == ["arn:aws:dynamodb:eu-north-1:123456789012:table/cf-test-data"] &&
+      s.Condition == { "ForAllValues:StringLike" = { "dynamodb:LeadingKeys" = ["USER#*"] } }
+    ])
+    error_message = "§17.6: releasing waiting posts reads and updates the owner's USER# items only (no PutItem, no DeleteItem, no indexes)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn.policy).Statement :
+      s.Sid == "StartClipFlow" && s.Action == ["lambda:InvokeFunction"] &&
+      s.Resource == ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:*"]
+    ])
+    error_message = "§17.6: cf-prod-hooks may start the clip flow (any qualifier of clip-flow) and no other function."
   }
 
   assert {

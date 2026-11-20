@@ -162,7 +162,8 @@ owner reads it from the console when registering Meta webhooks.
 * `GET /oauth/{platform}/callback`: the real OAuth callback of §17.5 (`302` to
   `{APP_URL}/settings/posting/setup/{platform}?result={code}`; query never logged). The phase-1 `coming_soon` redirect is gone.
 * IAM: `dynamodb:PutItem` on the table; `ssm:GetParameter` on
-  `arn:aws:ssm:{region}:{acct}:parameter/cf-prod/hooks/verify-token` (the `aws/ssm` key needs no IAM statement).
+  `arn:aws:ssm:{region}:{acct}:parameter/cf-prod/hooks/verify-token` (the `aws/ssm` key needs no IAM statement). The
+  OAuth callback's statements are §17.9 (with the release of waiting posts and the clip-flow start, §17.6).
 
 ### 14.4 Durable function `cf-prod-job-flow` (Terraform module `flows`)
 
@@ -259,7 +260,8 @@ Replaces the publish queue, DLQ, publisher, Scheduler group/role and perf-check.
 * **Steps** (names are contract; every step is idempotent because steps are at-least-once):
   1. `ensure-posts`: `posts.create_for_clip` (no-op when `postsCreated`; the same function the API uses), then if any
      post is `queued` set the clip `publishing`. Returns `[{postId, platform, status}]`.
-  2. `publish-{platform}` for each `queued` post only (`pending_integration` posts are skipped, no step): adapter
+  2. `publish-{platform}` for each `queued` post only (`pending_integration` posts are skipped, no step; a connect
+     releases them into a new flow run, §17.6 "Release"): adapter
      `publish(post, idempotency_key=postId)`; retry 3 attempts, exponential backoff, `retryable_error_types =
      [RetryablePublishError]`, `StepSemantics.AT_LEAST_ONCE_PER_RETRY` (an adapter whose platform has no idempotency
      key uses `AT_MOST_ONCE_PER_RETRY`). Post update conditional on `status = queued`: `posted`, `url`, `postedAt`,

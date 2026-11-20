@@ -19,6 +19,7 @@ import { SimilarClips } from "../../components/SimilarClips.tsx";
 import { needsTikTokChoices, needsUploadAgain, STILL_WORKING, uploadClip, uploadedMessage } from "../../lib/upload.ts";
 import { TikTokSheet } from "../review/TikTokSheet.tsx";
 import { ClipStatusPill } from "../jobs/JobDetail.tsx";
+import { useSetup } from "../settings/setup/useSetup.ts";
 
 interface LibraryData {
   clips: Clip[];
@@ -88,6 +89,10 @@ function AllClips() {
         : d,
     );
   const [filter, setFilter] = useState<Filter>("all");
+  // The places that are set up (GET /v1/setup, kept fresh by live setup news, as on Review): a post still waiting
+  // for one of them gets its own Post now. Unknown (loading, or the check failed): every waiting post stays grouped.
+  const setup = useSetup();
+  const ready: Platform[] = setup.data ? setup.data.platforms.filter((p) => p.ready).map((p) => p.platform) : [];
 
   // Live: kept clips arrive, posts change state and get their numbers, new learnings appear.
   useLiveEvents(
@@ -196,7 +201,7 @@ function AllClips() {
             <ul className="library-grid">
               {clips.map((c) => (
                 <li key={c.clipId}>
-                  <LibraryCard clip={c} posts={data.posts.filter((p) => p.clipId === c.clipId)} onKept={kept} />
+                  <LibraryCard clip={c} posts={data.posts.filter((p) => p.clipId === c.clipId)} ready={ready} onKept={kept} />
                 </li>
               ))}
             </ul>
@@ -247,13 +252,26 @@ function LibraryEmpty({ filter, anyKept, onShowAll }: { filter: Filter; anyKept:
   );
 }
 
-function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKept: (clip: Clip, posts: Post[]) => void }) {
+function LibraryCard({
+  clip,
+  posts,
+  ready = [],
+  onKept,
+}: {
+  clip: Clip;
+  posts: Post[];
+  /** Places that are set up now: a post still waiting for one of them gets its own row with Post now (§33.6). */
+  ready?: readonly Platform[];
+  onKept: (clip: Clip, posts: Post[]) => void;
+}) {
   // Posts still waiting for an account read as one line, not five identical rows.
   // Every row and mark follows the one app-wide platform order (YouTube, TikTok, Instagram, Facebook, X).
   const ordered = byPlatformOrder(posts);
-  const waiting = ordered.filter((p) => p.status === "pending_integration");
+  // A waiting post whose place is set up since can go now (a clip still publishing finishes its run first).
+  const canPostNow = (p: Post) => p.status === "pending_integration" && ready.includes(p.platform) && clip.status !== "publishing";
+  const waiting = ordered.filter((p) => p.status === "pending_integration" && !canPostNow(p));
   const totalViews = clip.totalViews ?? posts.reduce((n, p) => n + (p.metrics?.views ?? 0), 0);
-  const rest = ordered.filter((p) => p.status !== "pending_integration");
+  const rest = ordered.filter((p) => p.status !== "pending_integration" || canPostNow(p));
   return (
     <article className="lib-card glass" aria-labelledby={`lib-${clip.clipId}`}>
       <div className="lib-card__top">
@@ -298,12 +316,14 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
               <span className="post__text">
                 <span className="post__name">{PLATFORM_LABEL[p.platform]}</span>
                 <span className="post__status clamp-2">
-                  {p.status === "failed" && p.error ? `${postStatusLabel(p)}. ${p.error}` : postStatusLabel(p)}
+                  {canPostNow(p) ? "Ready to post" : p.status === "failed" && p.error ? `${postStatusLabel(p)}. ${p.error}` : postStatusLabel(p)}
                   {p.status === "posted" && !p.metrics && p.perfCheckAt ? ` · numbers ${relative(p.perfCheckAt)}` : ""}
                 </span>
               </span>
               {/* One place did not work on an uploaded clip: Try again for that place only (§33). */}
               {p.status === "failed" && clip.status === "posted" ? <UploadAgain clip={clip} posts={posts} platform={p.platform} onKept={onKept} /> : null}
+              {/* Waiting for a place that is set up now: send it there (§33.6). */}
+              {canPostNow(p) ? <UploadAgain clip={clip} posts={posts} platform={p.platform} now onKept={onKept} /> : null}
               {p.metrics ? (
                 <span className="post__metrics">
                   {/* A plain span cannot carry an aria-label: the numbers are read from this text instead. */}
@@ -345,17 +365,20 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
  * An uploaded clip whose posting never started (the Upload stopped half way), or whose posts all failed: one big
  * button tries again. With `platform`, a small Try again for that one place on a clip that went up elsewhere (§33).
  * When TikTok wants its privacy picked again, the Post to TikTok sheet opens first and its choices go with the Try
- * again (§14.5, §17.8).
+ * again (§14.5, §17.8). With `now`, Post now sends a post that waited for `platform` to be set up (§33.6); TikTok's
+ * sheet always opens first there, since the owner picks who can see it before anything goes to TikTok.
  */
 export function UploadAgain({
   clip,
   posts,
   platform,
+  now = false,
   onKept,
 }: {
   clip: Clip;
   posts: Post[];
   platform?: Platform;
+  now?: boolean;
   onKept: (clip: Clip, posts: Post[]) => void;
 }) {
   const toast = useToast();
@@ -364,11 +387,11 @@ export function UploadAgain({
   const [sheet, setSheet] = useState(false);
   const failed = clip.status === "failed" || !!platform;
   // §20: the retry turn plays at the tap; an error (already said by the toast) shakes it, without a second deny.
-  const act = useAction("retry");
+  const act = useAction(now ? "send" : "retry");
   const mine = platform ? posts.filter((p) => p.platform === platform) : posts;
 
   function press() {
-    if (failed && needsTikTokChoices(mine)) setSheet(true);
+    if (now ? platform === "tiktok" : failed && needsTikTokChoices(mine)) setSheet(true);
     else void tryAgain();
   }
 
@@ -379,7 +402,15 @@ export function UploadAgain({
       const out = await uploadClip(api(), clip.clipId, undefined, tiktok, platform ? [platform] : undefined);
       if (out.kind === "uploading") {
         setSheet(false);
-        toast.success(platform ? `Trying ${PLATFORM_LABEL[platform]} again!` : failed ? "Trying again! Uploading now." : uploadedMessage(out.posts));
+        toast.success(
+          platform
+            ? now
+              ? `Posting to ${PLATFORM_LABEL[platform]}!`
+              : `Trying ${PLATFORM_LABEL[platform]} again!`
+            : failed
+              ? "Trying again! Uploading now."
+              : uploadedMessage(out.posts),
+        );
         onKept(out.clip, out.posts);
         return;
       }
@@ -397,13 +428,28 @@ export function UploadAgain({
   }
 
   const sheetEl = sheet ? (
-    <TikTokSheet clip={clip} caption={clip.captions.tiktok} action="Try again" onUpload={(options) => void tryAgain(options)} onClose={() => setSheet(false)} busy={busy} />
+    <TikTokSheet
+      clip={clip}
+      caption={clip.captions.tiktok}
+      action={now ? "Post now" : "Try again"}
+      onUpload={(options) => void tryAgain(options)}
+      onClose={() => setSheet(false)}
+      busy={busy}
+    />
   ) : null;
   if (platform)
     return (
       <span className="post__retry">
-        <Button size="sm" variant="glass" icon="retry" act={act} loading={busy && !sheet} onClick={press} aria-label={`Try again, ${PLATFORM_LABEL[platform]}`}>
-          Try again
+        <Button
+          size="sm"
+          variant="glass"
+          icon={now ? "upload" : "retry"}
+          act={act}
+          loading={busy && !sheet}
+          onClick={press}
+          aria-label={`${now ? "Post now" : "Try again"}, ${PLATFORM_LABEL[platform]}`}
+        >
+          {now ? "Post now" : "Try again"}
         </Button>
         {note ? (
           <span className="sr-only" role="status">

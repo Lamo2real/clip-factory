@@ -170,13 +170,20 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
 
   /**
    * Try again on a failed clip (§14.5): failed posts go back to queued and the clip to confirmed. New TikTok sheet
-   * choices replace the failed TikTok post's postOptions, like the API's _try_again.
+   * choices replace the failed TikTok post's postOptions, like the API's _try_again. Named places still waiting go
+   * too once they are set up (Post now, §33.6); one not set up is the API's plain 400.
    */
   function tryAgain(c: Clip, tiktok?: TikTokPostOptions, platforms?: Platform[]) {
-    const failed = store.posts.filter((p) => p.clipId === c.clipId && p.status === "failed" && (!platforms || platforms.includes(p.platform)));
-    // Naming no failed place changes nothing (§33).
-    if (!failed.length) return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === c.clipId)) };
-    for (const p of failed) {
+    const named = store.posts.filter((p) => p.clipId === c.clipId && (!platforms || platforms.includes(p.platform)));
+    const failed = named.filter((p) => p.status === "failed");
+    const waiting = platforms ? named.filter((p) => p.status === "pending_integration") : [];
+    const connected = setup.connected();
+    const missing = PLATFORM_ORDER.find((p) => waiting.some((w) => w.platform === p) && !connected.includes(p));
+    if (missing) throw bad(`${PLATFORM_LABEL[missing]} is not set up yet. Turn it off, then tap Upload.`);
+    if (!tiktok && waiting.some((p) => p.platform === "tiktok" && !postOptions.get(p.postId)?.privacyLevel)) throw bad("Pick who can see it on TikTok.");
+    // Naming nothing to send changes nothing (§33).
+    if (!failed.length && !waiting.length) return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === c.clipId)) };
+    for (const p of [...failed, ...waiting]) {
       p.status = "queued";
       delete p.error;
       if (tiktok && p.platform === "tiktok") postOptions.set(p.postId, clone(tiktok));
@@ -186,6 +193,27 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     if (c.status === "failed") c.status = "confirmed";
     publishClip(c);
     return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === c.clipId)) };
+  }
+
+  /**
+   * A place was just connected: every uploaded clip's post waiting for it goes out, like the API's release (§17.6).
+   * Clips still in review or still publishing are left alone; TikTok waits for the owner's choice (Post now).
+   */
+  function releaseWaiting(platform: Platform) {
+    for (const c of store.clips) {
+      if (c.status !== "posted" && c.status !== "confirmed" && c.status !== "failed") continue;
+      const waiting = store.posts.filter(
+        (p) => p.clipId === c.clipId && p.platform === platform && p.status === "pending_integration" && (platform !== "tiktok" || !!postOptions.get(p.postId)?.privacyLevel),
+      );
+      if (!waiting.length) continue;
+      for (const p of waiting) {
+        p.status = "queued";
+        delete p.error;
+        publishPost(p);
+      }
+      if (c.status === "failed") c.status = "confirmed";
+      publishClip(c);
+    }
   }
 
   /** Test knob (window.__cfMock.posting): a kept clip whose TikTok post failed because its privacy choice is gone. */
@@ -386,6 +414,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       store.accounts = accounts;
     },
     publish: (platform) => mockLive.publish({ type: "setup", op: "upsert", id: platform, partial: true }),
+    onConnected: releaseWaiting,
   });
 
   const job = (jobId: string) => {
@@ -693,7 +722,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         claimedAt.set(clipId, Date.now());
         return startPosting();
       }
-      if (c.status === "failed" || (c.status === "posted" && chosen)) return tryAgain(c, tiktok, chosen);
+      if (c.status === "failed" || ((c.status === "posted" || c.status === "confirmed") && chosen)) return tryAgain(c, tiktok, chosen);
       if (c.status !== "review") throw conflict(ALREADY_DECIDED);
       if (captions) c.captions = { ...c.captions, ...captions };
       if (chosen) c.uploadTo = chosen;

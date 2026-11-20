@@ -26,7 +26,8 @@
   whole top (cover and hook) is the tap target, never just the one-line hook. Each post row says its status with the
   same words as the clip page's chip (`postStatusLabel` in `web/src/lib/metrics.ts`: a queued post reads "Posting",
   one waiting for its account "Waiting for connection"); posts waiting for accounts share one row "Waiting for
-  connection. Posts once these accounts are connected.". The "Show" filter's empty list says why it is empty: no kept
+  connection. Posts once these accounts are connected.", except one whose place is set up now: it gets its own row
+  "Ready to post" with **Post now** (§33.6). The "Show" filter's empty list says why it is empty: no kept
   clips at all → "Nothing kept yet" + Go to Review; "Not posted yet" with every kept clip posted → "Everything is
   posted!" + Show all; "Posted" with kept clips still on their way → "Nothing posted yet" + Show all.
 * Installable PWA (manifest + service worker) on phone and desktop.

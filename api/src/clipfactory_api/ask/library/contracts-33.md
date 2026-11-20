@@ -53,6 +53,11 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   sheet choices are needed only when `tiktok` is in the list. On a `posted` or `failed` clip, `platforms` names the
   failed posts to try again: only those go back to `queued` (fresh `publishHandle`, no `error`), `flowRun + 1`, a
   `failed` clip becomes `confirmed`, a `posted` one stays `posted`; naming a place with no failed post changes nothing.
+  On a `posted`, `failed` or `confirmed` clip, `platforms` also releases that clip's `pending_integration` posts for the
+  named places (**Post now**, §33.6), the same way (`release.restart`, §17.6): each named waiting place must be
+  connected now, else 400 with the same sentence ("Instagram is not set up yet. Turn it off, then tap Upload."), and a
+  waiting TikTok post with no stored choice needs `tiktok` ("Pick who can see it on TikTok."), whose choices become its
+  `postOptions`.
   A one-place Try again on a `posted` clip starts a new flow run while the first run may still be waiting for its
   numbers; no second post can happen (only `queued` posts publish).
 
@@ -81,6 +86,16 @@ voice command "Try again" finds it; TikTok's "pick again" error opens the sheet 
 (`pending_integration`, older clips). Toast "Trying Facebook again!". A place that was disconnected since simply fails
 again with its plain reason. The Jobs chip says "Uploading" for both `confirmed` and `publishing`.
 
+**Post now (added 2026-11-20).** Connecting a place releases its waiting posts by itself (§17.6 "Release"); Post now is
+the backup. On a Library card, a `pending_integration` post whose place is set up (`ready` from `GET /v1/setup`, read
+as Review's Upload to reads it, kept fresh by live `setup` news) on a clip that is not `publishing` leaves the
+"Waiting for setup" group and gets its own row: the place's mark and name, "Ready to post", and a **Post now** button
+(accessible name "Post now, Instagram"; sends `platforms: [p]`; toast "Posting to Instagram!"; motion `send`). TikTok's
+Post now opens the Post to TikTok sheet first (big button "Post now"). Places still not set up stay in the one
+"Waiting for setup" line; while the setup is loading or the check failed, every waiting post stays there. Mock mode
+does the same: a platform that becomes connected (`setup.finish`, the Meta pick, the pretend consent page) releases
+its waiting posts, and Confirm with `platforms` releases a named waiting place that is connected.
+
 ### 33.7 Words
 
 "Upload" replaces "Keep" wherever it meant posting (Review, Home's "Nothing gets posted until you tap Upload.",
@@ -89,5 +104,6 @@ saved keys" and the like stay: they mean something else. Notifications on main s
 
 ### 33.8 Tests
 
-`api/tests/test_upload_to.py`; `web/test/upload.test.ts` (was keep.test.ts), `reviewSheets.test.tsx`;
-`web/e2e/upload-to.spec.ts`, `tiktok-sheet.spec.ts`, and the Review specs.
+`api/tests/test_upload_to.py`, `test_release.py` (Post now and the release on connect); `web/test/upload.test.ts`
+(was keep.test.ts; the mock's release and Post now), `reviewSheets.test.tsx`; `web/e2e/upload-to.spec.ts` (with the
+Library's Post now row and the release on connect), `tiktok-sheet.spec.ts`, and the Review specs.

@@ -321,6 +321,10 @@ module "hooks" {
   table_arn                  = module.data.table_arn
   app_url                    = module.frontend.app_url
   manage_api_gateway_account = var.manage_api_gateway_account
+  # §17.6: a connect releases the owner's waiting posts and starts the clip flow for them (flows → hooks reads only
+  # the hooks module's names, so there is no cycle).
+  clip_flow_alias_arn  = module.flows.clip_flow_alias_arn
+  clip_flow_arn_prefix = module.flows.function_arns["clip-flow"]
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn

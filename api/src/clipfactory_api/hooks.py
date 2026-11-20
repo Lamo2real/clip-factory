@@ -9,6 +9,8 @@
   stored once by message id, then the creator's live state changes (``follow.webhooks``).
 * ``GET /oauth/{platform}/callback``: the OAuth callback of §17.5 (``oauth.callback``). It always answers ``302`` to
   ``{APP_URL}/settings/posting/setup/{platform}?result={code}`` (a fixed path and a listed code: no open redirect).
+  On ``connected`` the clips waiting for that place go out (``release``, §17.6): it starts the clip flow on the alias
+  in ``CLIP_FLOW_ARN``.
 
 Query strings (OAuth ``code``/``state``, Meta's verify token) and bodies are never logged.
 """
@@ -37,6 +39,7 @@ from .settings import PLATFORMS
 if TYPE_CHECKING:
     from .follow.platforms import FollowEnv
     from .follow.webhooks import KickKeys
+    from .release import ClipFlowStarter
 
 MAX_BODY_BYTES = 256 * 1024
 MAX_CHALLENGE_CHARS = 512
@@ -83,6 +86,7 @@ class HooksDeps:
     oauth: OAuthEnv | None = None  # None: the callback answers result=error (secrets not configured)
     follow: FollowEnv | None = None  # §24: Twitch's EventSub secret; None: every Twitch delivery is a 401
     kick_keys: KickKeys | None = None  # §24: Kick's public key; None: every Kick delivery is a 401
+    flows: ClipFlowStarter | None = None  # §17.6: starts the clip flow for posts released on connect; None: none
 
 
 def ssm_token_reader(client: Any, name: str, now: Callable[[], float] = time.time) -> Callable[[], str]:
@@ -175,7 +179,7 @@ def _oauth_callback(platform: str, event: Mapping[str, Any], deps: HooksDeps) ->
     result = "error"
     if deps.oauth is not None:
         try:
-            result = callback.handle_callback(platform, _query(event), deps.store, deps.oauth)
+            result = callback.handle_callback(platform, _query(event), deps.store, deps.oauth, deps.flows)
         except Exception as e:  # the owner always lands on the setup page with a plain sentence
             log("error", "hooks.oauth_failed", platform=platform, error=type(e).__name__)
             result = "error"
@@ -310,6 +314,11 @@ def _from_env() -> HooksDeps:
     follow_sm = boto3.client(
         "secretsmanager", region_name=region(), config=Config(retries={"mode": "standard"}, read_timeout=5)
     )
+    flows = None
+    if env.get("CLIP_FLOW_ARN"):
+        from .flow_client import FlowClient, make_client
+
+        flows = FlowClient(make_client(region()), "", env["CLIP_FLOW_ARN"])  # the clip flow only, never the job flow
     return HooksDeps(
         store=store,
         app_url=env["APP_URL"],
@@ -319,6 +328,7 @@ def _from_env() -> HooksDeps:
             secrets=Secrets(follow_sm, env.get("SECRET_PREFIX") or PREFIX), hooks_url=env.get("HOOKS_URL", "")
         ),
         kick_keys=KickKeys(urllib_client),
+        flows=flows,
     )
 
 

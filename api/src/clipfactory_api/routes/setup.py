@@ -9,7 +9,7 @@ import re
 from datetime import timedelta
 from typing import Any
 
-from .. import posts, validate
+from .. import posts, release, validate
 from ..app import App
 from ..clock import iso
 from ..errors import ApiError, bad_request, conflict, not_found
@@ -224,7 +224,9 @@ def _check_account(app: App, env: OAuthEnv, platform: str, keys: AppKeys, accoun
     if verdict == "platform_down":
         return {"ok": False, "code": "platform_down", "message": providers.check_message("platform_down", platform)}
     if account.get("status") == "needs_reconnect":
-        setup.mark_account(app.store, str(account.get("userId")), platform, now, remove=["reason"], status="connected")
+        user_id = str(account.get("userId"))
+        setup.mark_account(app.store, user_id, platform, now, remove=["reason"], status="connected")
+        release.release_waiting(app.store, app.flows, user_id, platform)  # connected again: waiting clips go out
     return {"account": "ok", "message": f"Everything works. Clip Factory can post to {label(platform)}."}
 
 
@@ -357,6 +359,8 @@ def choose(app: App, req: Request) -> Response:
         raise gone from e
     callback.save(app.store, env, req.user_id, platform, linked)
     log("info", "setup.chosen", platform=platform)
+    # Connected now: the clips waiting for this place go out (§17.6). Never raises.
+    release.release_waiting(app.store, app.flows, req.user_id, platform)
     return _setup_body(app, req, platform)
 
 

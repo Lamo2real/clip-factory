@@ -19,6 +19,16 @@ variable "app_url" {
   description = "The web app's origin: OAuth callbacks redirect back to its Settings screen."
 }
 
+variable "clip_flow_alias_arn" {
+  type        = string
+  description = "cf-prod-clip-flow alias live (CLIP_FLOW_ARN): a connect starts publish executions for waiting posts on it (§17.6)."
+}
+
+variable "clip_flow_arn_prefix" {
+  type        = string
+  description = "Unqualified ARN of clip-flow; IAM grants NAME:*."
+}
+
 variable "manage_api_gateway_account" {
   type        = bool
   default     = true

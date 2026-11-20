@@ -417,6 +417,10 @@ platform, partial: true }` (the web refetches `GET /v1/setup`). `LiveEvent` gain
 4. Write the token secret (or `pending` + SETUP `choices` for `choose`), then UpdateItem `ACCOUNT#{platform}`
    (`connected` or `choose_account`) and SETUP. Token endpoint 401/`invalid_client` → `keys_wrong`;
    `redirect_uri_mismatch`/"redirect_uri is not matched" → `redirect_wrong`; 5xx/network → `platform_down`.
+   On `connected`, release the owner's posts waiting for this place (§17.6 "Release"; `cf-prod-hooks` starts the clip
+   flow on `CLIP_FLOW_ARN`). A release failure is logged (`oauth.release_failed`) and never changes the result: the
+   owner still lands on `result=connected`. The Meta pick (`POST /v1/accounts/{platform}/choose`) and a Check it that
+   turns `needs_reconnect` back into `connected` (§17.4) release the same way in `cf-prod-api`.
 5. Always `302 Location: {APP_URL}/settings/posting/setup/{platform}?result={code}` (fixed path, code from the list
    below only; nothing else from the request is reflected; no open redirect), `Cache-Control: no-store`,
    `Referrer-Policy: no-referrer`. Never log `code`, `state`, tokens or the query.
@@ -480,7 +484,7 @@ TikTok's `uploadUrl` once uploading is done).
 name=f"wait-{platform}-{n}")` + step `check-{platform}-{n}` (n = 1…`maxChecks`) → `ready_to_finish`: step
 `finish-{platform}` (then more checks if it returns `processing`) → `done`: `posts.mark_posted` in that step. Retries:
 3 attempts on `RetryablePublishError`/`TransientError`. `NotConnectedError` (no account) → post `pending_integration`
-as today; `ReconnectNeededError` → post `failed` "Connect {Platform} again in Settings › Posting › Set up posting, then
+(released once the place is connected, "Release" below); `ReconnectNeededError` → post `failed` "Connect {Platform} again in Settings › Posting › Set up posting, then
 press Try again."; `PublishError` → `failed` with the mapped sentence. Platforms run one after another (waits cost
 nothing). Over `maxChecks`: YouTube and TikTok are marked posted anyway (the platform finishes alone); the others
 fail with "{Platform} could not finish this video. Press Try again." An at-most-once step interrupted mid-call fails
@@ -490,6 +494,23 @@ contract): `posted-{platform}` marks YouTube/TikTok posted when checks run out; 
 internal `publishHandle` so a failed upload is started fresh, not resumed. Confirm on a failed clip (Try again)
 accepts the same `tiktok` options as §17.8 and replaces the TikTok post's `postOptions` (needed after "Pick who can see
 it on TikTok again, then press Try again.").
+
+**Release (waiting posts, added 2026-11-20).** The Library promises "Posts once these accounts are connected", so
+connecting keeps it. `release.release_waiting(store, flows, userId, platform)` (`clipfactory_api/release.py`, imported
+by both `cf-prod-api` and `cf-prod-hooks`) runs right after an Account becomes `connected`: the OAuth callback (§17.5),
+the Meta account pick and a Check it that reconnects (§17.4). Only when that Account is `connected`, it reads the
+owner's posts (`Query USER#`/`POST#`, strongly consistent) and, per clip whose status is `posted`, `confirmed` or
+`failed` (never `review`, `publishing` or `declined`), does exactly what Try again does (`release.restart`, shared with
+`routes/clips.py` `_try_again`): one transaction sets that place's `pending_integration` posts to `queued` (REMOVE
+`error`, `publishHandle`; each conditional on `status = pending_integration`) and the clip to `flowRun + 1`,
+`publishState: pending` (REMOVE `flowExecutionArn`; a `failed` clip becomes `confirmed`; conditional on the status and
+`flowRun` read), then starts `clip-{clipId}-{flowRun}` (`release.start_flow`, the same code Confirm uses; on success
+`publishState: started`). A TikTok post with no `postOptions.privacyLevel` is never released on its own (TikTok's rules,
+§17.8): it waits for Post now, which opens the TikTok sheet. Safe to repeat: a second release finds nothing waiting
+and changes nothing; a clip of that place with a `queued` post and `publishState: pending` (an earlier start that
+failed) gets its start finished, so a failed Invoke stays retryable. Per-clip errors are logged (`release.clip_failed`)
+and skipped, never raised; a read failure is `release.read_failed`. The callback answers the owner fast: after 10 s
+(`BUDGET_SECONDS`) no new clip is started (`release.out_of_time`) and the rest wait for Post now or the next release.
 
 | Platform | start | check | finish | ids / URL |
 |---|---|---|---|---|
@@ -597,6 +618,10 @@ callout also has **Ask TikTok again**, which fetches the creator info again.
   (the `{platform}/token` secrets only; `-*` covers the random ARN suffix) (so the secret names are defined once). The
   hooks Lambda does not need `HOOKS_URL` (the callback uses the
   `redirectUri` saved at Connect). The REST resources are unchanged (callback route exists).
+  Release of waiting posts (§17.6, additive): env `CLIP_FLOW_ARN` (= `module.flows.clip_flow_alias_arn`); IAM
+  `ReleaseWaitingPosts` (`dynamodb:GetItem`, `Query`, `UpdateItem`, `TransactWriteItems` on the table, `USER#*` only)
+  and `StartClipFlow` (`lambda:InvokeFunction` on `{clip_flow_arn_prefix}:*`, like the API's `StartFlows`). New inputs
+  `clip_flow_alias_arn`, `clip_flow_arn_prefix` (from `module.flows`; flows reads only names from hooks: no cycle).
 * **api**: env `HOOKS_URL` (= `module.hooks.hooks_url`), `SECRET_PREFIX`, `OAUTH_STATE_SECRET`, `WEB_BUCKET`,
   `DISTRIBUTION_ID`; IAM: the secrets set above on the prefix, `GetSecretValue` on the state key,
   `s3:PutObject`/`s3:DeleteObject` on `${web_bucket_arn}/tiktok*`, `cloudfront:CreateInvalidation` on the distribution
@@ -667,7 +692,10 @@ Shared names: `oauth.state.sign(key, platform, nonce, exp)`, `oauth.state.verify
   `FakeDurableContext`: step and wait names `publish-/wait-/check-/finish-{platform}-{n}`, replay with `publishHandle`
   makes no second create, `maxChecks` outcomes, at-most-once interruption message, `ReconnectNeededError` → failed,
   TikTok private → no gsi2, TikTok id follow-up sets `statsId`; friendly error mapping table; X monthly cap; TikTok
-  confirm options required and validated; broadcast `ACCOUNT#`/`SETUP#` → `setup` partial; `config.load` §17.7 values.
+  confirm options required and validated; broadcast `ACCOUNT#`/`SETUP#` → `setup` partial; `config.load` §17.7 values;
+  `test_release.py`: release (released, not connected, `review`/`publishing` untouched, repeat no-op, failed start
+  retryable, one broken clip, time budget, TikTok waits for its choice), the callback, Meta pick and Check it release,
+  the callback stays `connected` when the release fails, Post now through Confirm.
 * **infra** (`terraform test`, mock providers): state-key secret uses `secret_string_wo` (no `secret_string`); IAM
   statements exactly §17.9 per role (no secrets access on api beyond the prefix and state key; none on job-flow,
   realtime, learn); hooks timeout 28; envs on api/hooks/flows/stats; ESM filter has seven prefixes; output
