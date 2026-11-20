@@ -340,10 +340,9 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | Review.tsx:476 Throw away | `throw` | the card's leaving motion stays; Undo → `.is-returning` on the card |
 | Review.tsx **Upload** (Vermilion) / Try again | `send` / `retry` | `playOnClick={false}`: plays when an upload really starts, not on the tap that opens the TikTok sheet; a refused Upload (caption too long, nothing picked) only shakes; confetti and leaving card stay; success sound only when the upload succeeds; `fail()` on error (§33) |
 | UploadTo.tsx Upload to chips | `tick` | soft-fill toggle chips with `aria-pressed` and a check mark; the tick plays when a chip turns on |
-| Review.tsx Use my settings | `tick` | plays with its toast |
 | CaptionTabs.tsx:100 caption tabs | `toggle` | label bump |
 | TikTokSheet.tsx:93 backdrop, :99 Close, :197 Not now, :174/181 policy links | press | |
-| TikTokSheet.tsx Who can see it (app dropdown), Turn all on, Use my settings | press | the dropdown's chevron turns; checkboxes (native) none |
+| TikTokSheet.tsx Who can see it (button bar) | `toggle` | the chosen button's label bumps and the glide slides; checkboxes (native) none |
 | TikTokSheet.tsx:152-155 Toggles | none | switch thumb |
 | TikTokSheet.tsx Upload / Try again | `send` / `retry` | it posts to TikTok |
 

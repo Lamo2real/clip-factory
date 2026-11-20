@@ -167,29 +167,15 @@ class YouTubePublisher:
         captions = _captions(job)
         title = strip_angles(str(captions.get("youtubeTitle") or job.clip.get("hook") or "Clip")).strip()[:100]
         description = cut_bytes(strip_angles(str(captions.get("youtubeDescription") or "")), 5000)
-        # Per-clip choices (My settings / More details, §33.4) win; a post without them keeps the old behaviour.
-        opts = job.options
-        privacy = str(opts.get("privacy") or job.settings.get("youtubePrivacy") or "public")
-        category = str(opts.get("category") or YOUTUBE_CATEGORY_GAMING)
+        privacy = str(job.settings.get("youtubePrivacy") or "public")
         return {
-            "snippet": {
-                "title": title or "Clip",
-                "description": description,
-                "categoryId": category if category.isdigit() else YOUTUBE_CATEGORY_GAMING,
-            },
+            "snippet": {"title": title or "Clip", "description": description, "categoryId": YOUTUBE_CATEGORY_GAMING},
             "status": {
                 "privacyStatus": privacy if privacy in {"public", "unlisted", "private"} else "public",
-                # Never made for kids, whatever is asked (§33.4): the owner swears in some clips.
                 "selfDeclaredMadeForKids": False,
-                "embeddable": opts.get("embeddable", True) is not False,
-                "containsSyntheticMedia": opts.get("syntheticMedia") is True,
+                "containsSyntheticMedia": False,
             },
         }
-
-    @staticmethod
-    def upload_url(job: PublishJob) -> str:
-        """The resumable upload URL; ``notifySubscribers=false`` only when the owner turned the bell off (§33.4)."""
-        return YOUTUBE_UPLOAD + ("&notifySubscribers=false" if job.options.get("notifySubscribers") is False else "")
 
     def start(self, job: PublishJob) -> Progress:
         handle = job.handle
@@ -217,7 +203,7 @@ class YouTubePublisher:
                     "X-Upload-Content-Type": "video/mp4",
                 },
             )
-            resp = _send(job, self.platform, HttpRequest("POST", self.upload_url(job), headers, body))
+            resp = _send(job, self.platform, HttpRequest("POST", YOUTUBE_UPLOAD, headers, body))
             _ok(self.platform, resp, "init")
             session = resp.headers.get("location", "")
             if not session.startswith("https://"):
@@ -499,8 +485,7 @@ class InstagramPublisher(_Graph):
             params = {
                 "media_type": "REELS",
                 "caption": instagram_caption(str(_captions(job).get("instagram") or "")),
-                # Reels shared to the main feed reach more people; off only when the owner says so (§33.4).
-                "share_to_feed": "false" if job.options.get("shareToFeed") is False else "true",
+                "share_to_feed": "true",
             }
             if source == "video_url":
                 params["video_url"] = job.video.presigned_url(3600)
@@ -762,11 +747,9 @@ class XPublisher:
     def finish(self, job: PublishJob, handle: dict[str, Any]) -> Progress:
         if not handle.get("tweetId"):
             text = x_text(str(_captions(job).get("x") or ""))
-            tweet: dict[str, Any] = {"text": text, "media": {"media_ids": [str(handle["mediaId"])]}}
-            replies = job.options.get("replies")
-            if replies in {"following", "mentionedUsers", "verified"}:
-                tweet["reply_settings"] = replies  # "everyone" sends nothing: X's default (§33.4)
-            data = self._post_json(job, f"{X_API}/tweets", tweet, "tweet")
+            data = self._post_json(
+                job, f"{X_API}/tweets", {"text": text, "media": {"media_ids": [str(handle["mediaId"])]}}, "tweet"
+            )
             tweet_id = str((data.get("data") or {}).get("id") or "")
             if not tweet_id:
                 raise errors.down(self.platform)

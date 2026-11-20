@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import clips, db, post_preset, posts, s3, settings, validate, vectors
+from .. import clips, db, posts, s3, settings, validate, vectors
 from ..app import App
 from ..clock import iso
 from ..errors import bad_request, conflict, not_found
@@ -123,12 +123,10 @@ def confirm(app: App, req: Request) -> Response:
     exactly where the clip goes; without it (older clients) Settings › Where clips go decides, as before. On a
     ``posted`` or ``failed`` clip, ``platforms`` names the failed posts to try again (one platform's Try again)."""
     body = req.json()
-    validate.only_keys(body, {"captions", "tiktok", "platforms", "options"})
+    validate.only_keys(body, {"captions", "tiktok", "platforms"})
     patch = clips.caption_patch(body["captions"]) if body.get("captions") is not None else {}
     options = tiktok_options(body["tiktok"]) if body.get("tiktok") is not None else None
     chosen = upload_platforms(body["platforms"]) if body.get("platforms") is not None else None
-    # Per-clip choices for YouTube, Instagram and X (My settings or More details, §33.4).
-    per_clip = post_preset.clip_options(body["options"]) if body.get("options") is not None else {}
     item = _clip_or_404(app, req)
     if item.get("status") == "review":
         now = iso(app.clock())
@@ -160,7 +158,7 @@ def confirm(app: App, req: Request) -> Response:
                 now,
                 clip_fields=fields,
                 expect_status=["review"],
-                post_options={**per_clip, **({"tiktok": options} if options else {})} or None,
+                post_options={"tiktok": options} if options else None,
             )
         except db.ConditionFailed:
             # Another Confirm (or a Decline) won the race: carry on from the clip's current state.

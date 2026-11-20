@@ -13,7 +13,6 @@
     { "q": "What does Keep do?", "expect": "review-keep" },
     { "q": "Can I upload to all my platforms at once?", "expect": "review-upload-to" },
     { "q": "Why can I not pick X?", "expect": "review-upload-to" },
-    { "q": "What does Use my settings do?", "expect": "review-my-settings" },
     { "q": "make clips from youtube", "expect": "make-clips-link" },
     { "q": "paste a kick link", "expect": "make-clips-link" },
     { "q": "upload my own video", "expect": "make-clips-upload" },

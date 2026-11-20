@@ -536,8 +536,8 @@ youtube `{ "checkSeconds": 30, "maxChecks": 60, "chunkMb": 8 }`; tiktok `{ "chec
 
 On Upload, when TikTok is one of the chosen places (§33; an older client: in `settings.platforms` and connected), a
 sheet opens before the confirm request: the creator nickname (`GET /v1/accounts/tiktok/creator-info`, fetched each
-time), a **Who can see it** dropdown with **no default** (the app's own dropdown, below), switches Comments / Duet /
-Stitch (off by default, greyed when disabled by the creator, plus one **Turn all on** button), a **Commercial content** switch (off) with **Your brand** / **Branded content** (one required when on;
+time), a **Who can see it** bar of buttons with **no default** (a `<Glide>` radio group, below), switches Comments / Duet /
+Stitch (off by default, greyed when disabled by the creator), a **Commercial content** switch (off) with **Your brand** / **Branded content** (one required when on;
 label "Promotional content" / "Paid partnership"; branded cannot be "Only me"), the sentence "By posting, you agree to
 TikTok's Music Usage Confirmation" (+ "Branded Content Policy" when branded), a video preview and the editable
 caption. Upload stays disabled until a privacy is chosen. Confirm body gains `"tiktok": { "privacyLevel", "disableComment",
@@ -548,23 +548,20 @@ caption. Upload stays disabled until a privacy is chosen. Confirm body gains `"t
 in the confirm body; the API replaces that post's `postOptions` (mock `_try_again` does the same).
 
 **Who can see it: the owner's ask and TikTok's rules (owner request, 2026-11-20; ADR-57).** The owner asked for no
-options and Everyone every time, and to hide Comments, Duet and Stitch and force them on. TikTok's Content Sharing
-Guidelines (developers.tiktok.com/doc/content-sharing-guidelines, updated 4 Aug 2026) do not allow that: "Users must
-manually select the privacy status from a dropdown and there should be no default value", the options are exactly
-`privacy_level_options`, and while the app is not audited only `SELF_ONLY` is allowed; Comments, Duet and Stitch must
-be shown and none may be on by default. So the closest thing allowed:
+dropdown and no extra options, on every platform. TikTok's Content Sharing Guidelines
+(developers.tiktok.com/doc/content-sharing-guidelines, updated 4 Aug 2026) still require that the creator picks the
+privacy status himself with no default value, from exactly `privacy_level_options`, and while the app is not audited
+only `SELF_ONLY` is allowed; Comments, Duet and Stitch must be shown and none may be on by default. The guidelines
+speak of a dropdown; the app meets the rule with one bar of buttons instead, because the owner said no dropdown, and
+asks TikTok at app review whether a button bar is accepted. So:
 
-* **Dropdown, the app's own** (`components/Dropdown.tsx`; never the OS list): a soft-fill button showing "Pick who can
-  see it" until the owner picks, opening a glass `listbox` of exactly `privacyOptions` (minus Only me when branded),
-  ordered Everyone ("Anyone on TikTok"), Followers, Friends, Only me ("Just you"). When `SELF_ONLY` is the only option
-  the line "TikTok keeps posts private until it approves your app." shows under it. When Branded content leaves
-  nothing: "Branded content can't be Only me. Turn off Branded content." The hint under the actions reads "Tap who
-  can see it to turn on Upload."
-* **Turn all on** (soft-fill button): switches on Comments, Duet and Stitch in one tap (ones the creator's TikTok turned
-  off stay off). It is the owner's own tap; each switch stays visible and changes on its own.
-* **Use my settings** (soft-fill button, §33.4): puts the owner's TikTok preset in with one tap (privacy only when
-  TikTok offers it now; with only `SELF_ONLY` offered, Only me). Tapping it on the Review card does the same before
-  the sheet opens. Nothing is picked until he taps.
+* **One bar of buttons** (`Segmented`, a `<Glide>` radio group labelled "Who can see it"): exactly `privacyOptions`
+  (minus Only me when branded), ordered Everyone, Followers, Friends, Only me, nothing picked until the owner taps one.
+  When `SELF_ONLY` is the only option it is one button, and the line "TikTok keeps posts private until it approves your
+  app." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off Branded
+  content." The hint under the actions reads "Tap who can see it to turn on Upload."
+* **No Turn all on and no Use my settings**: each switch is its own tap, and nothing is pre-set (a card-level preset
+  would have opened the sheet with privacy and all three switches already on, against the no-default rule).
 * Commercial content (off) with Your brand / Branded content ("Paid partnership"), the Branded Content Policy line and
   the Music Usage Confirmation line are unchanged.
 

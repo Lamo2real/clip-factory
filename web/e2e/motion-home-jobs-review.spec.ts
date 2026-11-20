@@ -114,7 +114,7 @@ test.describe("motion: Jobs (APPLY a)", () => {
 
   test("Try again on a failed job turns its arrow and the job restarts at the tap", async ({ page }) => {
     await openJob(page, "Charity marathon");
-    const retry = page.getByRole("button", { name: "Try again" });
+    const retry = page.getByRole("button", { name: "Try again", exact: true });
     await expect(retry).toHaveAttribute("data-act", "retry");
     const before = await calls(page, "retryJob");
     const { cls } = await tapAct(retry);
@@ -160,7 +160,7 @@ test.describe("motion: Review (APPLY a)", () => {
     });
     const card = page.locator(".review-card").first();
     await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
-    const again = card.getByRole("button", { name: "Try again" });
+    const again = card.getByRole("button", { name: "Try again", exact: true });
     await expect(again).toHaveAttribute("data-act", "retry");
     await expect(again.locator(".act")).toHaveClass(/is-fail/);
     // No success visuals on failure.

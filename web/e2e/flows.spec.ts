@@ -78,7 +78,7 @@ test("retry a failed job and stop a running one", async ({ page }) => {
   await page.locator(".job-row", { hasText: "Charity marathon" }).click();
   await settle(page);
   await expect(page.getByRole("alert").filter({ hasText: "YouTube blocked" })).toBeVisible();
-  await page.getByRole("button", { name: "Try again" }).click();
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(page.getByText("Starting again from the beginning.")).toBeVisible();
 
   await page.goto("/jobs");

@@ -3,7 +3,8 @@ import { settle } from "./helpers.ts";
 
 // Upload to many places (docs/CONTRACTS.md §33): only places that are set up get a chip, any number can be on, all
 // ready ones start on, Upload posts to exactly the chosen ones, each place keeps its own caption and limit, results
-// show per place with their own Try again, and "Use my settings" / More details carry the owner's preset.
+// show per place with their own Try again. There are no dropdowns and no extra option panels (the owner said so for
+// every platform), and a failed setup check or a Try again never sends a clip to places nobody picked.
 
 type Post = { postId: string; platform: string; status: string; error?: string };
 type MockWindow = Window & {
@@ -11,10 +12,10 @@ type MockWindow = Window & {
     setup: { finish(p: string): void; setAudit(passed: boolean): void };
     posting: {
       posts(clipId: string): Post[];
-      options(postId: string): Record<string, unknown> | null;
       settleWithOneFailed(clipId: string, platform: string, reason?: string): void;
     };
   };
+  __cfMockFaults?: { keepStopsAfterSave: number; setupFails?: number };
 };
 
 /** YouTube, TikTok, Instagram and Facebook set up; X not started (the owner's own setup, 2026-11-20). */
@@ -89,25 +90,20 @@ test.describe("Upload to many places", () => {
     await expect(page.getByText("Uploading to 2 places!")).toBeVisible();
   });
 
-  test("Upload posts to exactly the chosen places, with My settings, and results show per place", async ({ page }) => {
+  test("Upload posts to exactly the chosen places, and results show per place", async ({ page }) => {
     await fourReady(page);
     const card = page.locator(".review-card").first();
     const clipId = (await card.locator("..").getAttribute("id"))!.replace("clip-", "");
     await card.locator(".upload-chip", { hasText: "TikTok" }).click();
     await card.locator(".upload-chip", { hasText: "Instagram" }).click();
-    // More details: YouTube's choices, never made for kids.
-    await card.getByText("More details").click();
-    await expect(card.getByText("Made for kids: No. Clip Factory never marks a clip as made for kids.")).toBeVisible();
-    await card.getByRole("switch", { name: "Tell my subscribers" }).click();
+    // Nothing else to pick on the card: no dropdown, no More details, no Use my settings.
+    await expect(card.locator('select, [aria-haspopup="listbox"], .more-details, details.more-details')).toHaveCount(0);
+    await expect(card.getByRole("button", { name: /Use my settings|More details/ })).toHaveCount(0);
     await card.getByRole("button", { name: UPLOAD }).click();
     await expect(page.getByText("Uploading to 2 places!")).toBeVisible();
 
     const posts = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.posts(id), clipId);
     expect(posts.map((p) => p.platform).sort()).toEqual(["facebook", "youtube"]);
-    const yt = posts.find((p) => p.platform === "youtube")!;
-    const options = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.options(id), yt.postId);
-    expect(options).toMatchObject({ privacy: "public", category: "20", notifySubscribers: false });
-    expect(options).not.toHaveProperty("madeForKids");
 
     // One place did not work: its row says so with the reason and its own Try again; the other is up.
     await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.settleWithOneFailed(id, "facebook", "Facebook said no this time."), clipId);
@@ -117,7 +113,7 @@ test.describe("Upload to many places", () => {
     const lib = page.locator(`.lib-card[aria-labelledby="lib-${clipId}"]`);
     await expect(lib.getByText("Uploaded", { exact: true })).toBeVisible();
     await expect(lib.getByText("Didn't work. Facebook said no this time.")).toBeVisible();
-    await lib.getByRole("button", { name: "Try Facebook again" }).click();
+    await lib.getByRole("button", { name: "Try again, Facebook" }).click();
     await expect(page.getByText("Trying Facebook again!")).toBeVisible();
     const after = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.posts(id), clipId);
     expect(after.find((p) => p.platform === "youtube")!.status).toBe("posted");
@@ -136,20 +132,65 @@ test.describe("Upload to many places", () => {
     await expect(next.locator('.upload-chip[aria-pressed="true"]')).toHaveText(["YouTube"]);
   });
 
-  test("Use my settings fills TikTok's sheet with the owner's own tap; the sheet still shows every TikTok choice", async ({ page }) => {
+  test("the TikTok sheet opens with nothing picked, whatever else is on the card", async ({ page }) => {
     await fourReady(page);
     const card = page.locator(".review-card").first();
-    await card.getByRole("button", { name: "Use my settings" }).click();
-    await expect(page.getByText(/Your settings are on for YouTube, TikTok, Instagram and Facebook\./)).toBeVisible();
     await card.getByRole("button", { name: UPLOAD }).click();
     const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
-    await expect(sheet.getByRole("button", { name: /^Who can see it/ })).toContainText("Everyone");
-    for (const name of ["Comments", "Duet", "Stitch", "Commercial content"]) await expect(sheet.getByRole("switch", { name })).toBeVisible();
-    await expect(sheet.getByRole("switch", { name: "Comments" })).toHaveAttribute("aria-checked", "true");
-    await expect(sheet.getByRole("switch", { name: "Commercial content" })).toHaveAttribute("aria-checked", "false");
+    await expect(sheet.getByRole("radiogroup", { name: "Who can see it" }).getByRole("radio", { checked: true })).toHaveCount(0);
+    for (const name of ["Comments", "Duet", "Stitch", "Commercial content"]) await expect(sheet.getByRole("switch", { name })).toHaveAttribute("aria-checked", "false");
+    await sheet.getByRole("radiogroup", { name: "Who can see it" }).getByRole("radio", { name: "Everyone", exact: true }).check();
     await sheet.getByRole("button", { name: "Upload", exact: true }).click();
     await expect(page.getByText("Uploading to 4 places!")).toBeVisible();
     await expect(page.getByText("TikTok can take a few minutes to process your clip.")).toBeVisible();
+  });
+
+  test("a setup check that fails leaves Upload off and sends nothing; Check again brings the chips back", async ({ page }) => {
+    // The first setup checks fail (set before the app starts, so nothing is remembered from an earlier page).
+    await page.addInitScript(() => {
+      let faults: Record<string, unknown> | undefined;
+      Object.defineProperty(window, "__cfMockFaults", {
+        configurable: true,
+        get: () => faults,
+        set: (v: Record<string, unknown>) => {
+          faults = v;
+          v.setupFails = 5;
+        },
+      });
+    });
+    await page.goto("/review");
+    await settle(page);
+    const card = page.locator(".review-card").first();
+    await expect(card.getByText("Could not check your places. Check again, then tap Upload.")).toBeVisible();
+    await expect(card.getByText("Nothing is set up yet")).toHaveCount(0);
+    await expect(card.getByRole("button", { name: UPLOAD })).toHaveAttribute("aria-disabled", "true");
+    // Check again while the server is still failing: still no guess.
+    await card.getByRole("button", { name: "Check again" }).click();
+    await expect(card.getByText("Could not check your places. Check again, then tap Upload.")).toBeVisible();
+    // The server answers again: the places come back (live setup news or Check again).
+    await page.evaluate(() => {
+      const w = window as MockWindow;
+      w.__cfMockFaults!.setupFails = 0;
+      for (const p of ["youtube", "instagram"]) w.__cfMock!.setup.finish(p);
+    });
+    await expect(card.locator(".upload-chip")).toHaveCount(2);
+    await expect(card.getByRole("button", { name: UPLOAD })).toHaveText("Upload to 2");
+  });
+
+  test("Try again after a failed Upload still needs a place, and asks TikTok's question when TikTok is on", async ({ page }) => {
+    await fourReady(page);
+    const card = page.locator(".review-card").first();
+    await card.locator(".upload-chip", { hasText: "TikTok" }).click();
+    await page.evaluate(() => ((window as MockWindow).__cfMockFaults!.keepStopsAfterSave = 1));
+    await card.getByRole("button", { name: UPLOAD }).click();
+    await expect(card.getByRole("button", { name: "Try again", exact: true })).toBeVisible();
+    // All places off: Try again is off, it never falls back to Where clips go.
+    for (const name of ["YouTube", "Instagram", "Facebook"]) await card.locator(".upload-chip", { hasText: name }).click();
+    await expect(card.getByRole("button", { name: "Try again", exact: true })).toHaveAttribute("aria-disabled", "true");
+    // TikTok turned on after the failure: Try again opens the sheet first.
+    await card.locator(".upload-chip", { hasText: "TikTok" }).click();
+    await card.getByRole("button", { name: "Try again", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Post to TikTok" })).toBeVisible();
   });
 
   test("the checks row never overlaps at 320 px", async ({ page }) => {
@@ -160,16 +201,4 @@ test.describe("Upload to many places", () => {
     const overlap = label!.x < score!.x + score!.width && score!.x < label!.x + label!.width && label!.y < score!.y + score!.height && score!.y < label!.y + label!.height;
     expect(overlap).toBe(false);
   });
-});
-
-test("Settings › Posting › My settings: one section per place, X included, never made for kids", async ({ page }) => {
-  await page.goto("/settings/posting/my-settings");
-  await settle(page);
-  for (const name of ["YouTube", "TikTok", "Instagram", "Facebook", "X"]) await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
-  await expect(page.getByText("Made for kids: No, always. Clip Factory never marks a clip as made for kids.")).toBeVisible();
-  await expect(page.getByText("Tip: swearing in the first seconds or in the title can limit ads on YouTube.")).toBeVisible();
-  await expect(page.getByText(/Whether a clip earns money is up to each app/)).toBeVisible();
-  await page.getByRole("button", { name: /^Who can reply/ }).click();
-  await page.getByRole("option", { name: "People you follow" }).click();
-  await expect(page.getByRole("button", { name: /^Who can reply/ })).toContainText("People you follow");
 });

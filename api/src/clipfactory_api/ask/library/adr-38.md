@@ -2,7 +2,7 @@
 
 - **Context.** The owner wants a helper that answers "how do I…" and "where is…" in steps a child can follow and then
   shows the button. The knowledge is small (a few hundred short docs generated from the app's own code plus about 40
-  guides), English only, full of exact UI words (**Keep**, **Throw away**, **Click sound**), and it changes with every
+  guides), English only, full of exact UI words (**Upload**, **Throw away**, **Click sound**), and it changes with every
   UI change. A wrong answer ("press Publish", a page that does not exist) is worse than "I don't know".
 - **Decision.** Retrieval is an in-memory **BM25** ranker (k1 1.2, b 0.75; title and keywords weighted highest; shared
   synonyms, a light stemmer and one-edit typo matching), implemented twice with the same rules (Python in the API,

@@ -268,7 +268,7 @@ for (const width of WIDTHS) {
     await keep.evaluate((el) => el.scrollIntoView({ block: "center" }));
     await keep.click();
     const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
-    await sheet.getByRole("button", { name: /^Who can see it/ }).waitFor();
+    await sheet.getByRole("radiogroup", { name: "Who can see it" }).waitFor();
     await sheet.getByRole("switch", { name: "Commercial content" }).click();
     await sheet.getByRole("checkbox", { name: /^Branded content/ }).check();
     await check("/review (Post to TikTok sheet)");

@@ -257,49 +257,6 @@
       ]
     },
     {
-      "id": "review-my-settings",
-      "route": "/review",
-      "where": "Review › a clip",
-      "title": "Use my settings and More details",
-      "keywords": [
-        "use my settings",
-        "my settings",
-        "preset",
-        "more details",
-        "made for kids",
-        "kids",
-        "public",
-        "paid partnership",
-        "branded content",
-        "best settings",
-        "monetize",
-        "monetization",
-        "most views"
-      ],
-      "answer": "Tap **Use my settings** on a clip to put in your own choices for every place you picked: public, comments on, never made for kids. Tap **More details** to change one place. A paid partnership is ticked on the TikTok sheet. Change your settings in **Settings › Posting › My settings**.",
-      "steps": [
-        "Tap **Review**.",
-        "Tap **Use my settings**.",
-        "Tap **More details** to check or change a place.",
-        "Tap **Upload**."
-      ],
-      "actions": [
-        {
-          "id": "review-my-settings:review",
-          "label": "Open Review",
-          "to": "/review",
-          "highlight": [
-            "use-my-settings"
-          ]
-        },
-        {
-          "id": "review-my-settings:settings",
-          "label": "Open My settings",
-          "to": "/settings/posting/my-settings"
-        }
-      ]
-    },
-    {
       "id": "review-throw-away",
       "route": "/review",
       "where": "Review",

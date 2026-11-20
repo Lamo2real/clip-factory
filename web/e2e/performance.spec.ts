@@ -49,7 +49,7 @@ test("each calm state says one plain thing and links to the fix", async ({ page 
   await expect(stack(page, "tiktok")).toContainText("Uploaded privately");
   await expect(stack(page, "instagram")).toContainText("Connect Instagram in Settings › Posting › Set up posting.");
   await expect(stack(page, "instagram").getByRole("link", { name: "Set up Instagram" })).toHaveAttribute("href", "/settings/posting/setup/instagram");
-  await expect(stack(page, "facebook")).toContainText("Posting failed: Facebook said the video was too long for a Reel. Go to Library and press Try again.");
+  await expect(stack(page, "facebook")).toContainText("Facebook said the video was too long for a Reel. Go to Library and tap Try again.");
   await expect(stack(page, "facebook").getByRole("link", { name: "Go to Library" })).toHaveAttribute("href", "/library");
   await expect(stack(page, "x")).toContainText("Not posted here. Turn on X in Settings › Posting › Where clips go.");
   await expect(stack(page, "x").getByRole("link", { name: "Open Where clips go" })).toHaveAttribute("href", "/settings/posting/where");

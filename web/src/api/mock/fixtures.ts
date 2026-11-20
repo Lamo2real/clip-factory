@@ -1,7 +1,6 @@
 // Realistic demo data for mock mode: jobs in every state, clips waiting for review, posts with 48-hour numbers.
 import type { Account, Captions, Clip, Job, Learning, MomentType, Platform, Post, SeriesPoint, Settings, Step, StepKey } from "../types.ts";
 import { isoWeek, weekRange, shiftWeek, weekStart } from "../../lib/week.ts";
-import { presetOf } from "../../lib/preset.ts";
 import { coverArt, thumbArt } from "./art.ts";
 import type { MockSkill } from "./skills.ts";
 import { growth, metricsFor, type WeekItem } from "./statsData.ts";
@@ -539,7 +538,6 @@ export function seed(): Store {
       followDailyMax: 0,
       followMinMinutes: 30,
       notify: { ready: true, stopped: true, resumed: true, steps: false },
-      postPreset: presetOf(undefined),
     },
     accounts: PLATFORMS.map((platform) => ({ platform, status: "not_connected" })),
   };

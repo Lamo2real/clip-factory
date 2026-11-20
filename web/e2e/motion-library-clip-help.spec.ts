@@ -22,7 +22,7 @@ test.describe("motion: library, clip and help (APPLY b)", () => {
     await page.getByRole("radio", { name: "All", exact: true }).check({ force: true });
 
     const card = page.locator(".lib-card", { hasText: "This clip has not started uploading yet." });
-    const again = card.getByRole("button", { name: "Try again" });
+    const again = card.getByRole("button", { name: "Try again", exact: true });
     await expect(again).toHaveAttribute("data-act", "retry");
     const { cls } = await tapAct(again);
     expect(cls.split(" ")).toEqual(expect.arrayContaining(["act--retry", "is-play"]));

@@ -1,9 +1,8 @@
 // The whole HTTP API in memory, with fake latency, so the UI runs with no backend (npm run dev:mock, Playwright).
 import { ApiError, networkError } from "../errors.ts";
-import type { Api, Clip, ClipPostOptions, Job, Platform, Post, PostPreset, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
+import type { Api, Clip, Job, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
 import { TIKTOK_PICK_AGAIN } from "../../lib/upload.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
-import { presetOf, presetProblem } from "../../lib/preset.ts";
 import { MOMENTS, PLATFORMS, STEP_KEYS, coverArt, seed, stepsAt, thumbArt, ulid, type Store } from "./fixtures.ts";
 import { installMockLiveControls, mockLive } from "./live.ts";
 import { lineFor, sampleLine, SCRIPT } from "./jobLive.ts";
@@ -62,6 +61,8 @@ export interface MockFaults extends StatsFaults {
   olderJobsFails?: number;
   /** The next N Make clips (createJob) fail like a server error. */
   createJobFails?: number;
+  /** The next N setup checks (getSetup) fail like a server error (Review must not guess where a clip goes). */
+  setupFails?: number;
   /** Every answer takes this long (ms), like a slow connection to the cloud (a page change must not blink meanwhile). */
   latencyMs?: number;
   /** Settings › What it learned shows the never-checked ("empty") or not-enough-clips ("needs-more") state. */
@@ -154,7 +155,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   // When each kept clip's posting was last started (stands in for the API's publishState: "pending" timing).
   const claimedAt = new Map<string, number>();
   // The TikTok sheet's choices stored on each TikTok post (the API's postOptions.tiktok, never returned).
-  const postOptions = new Map<string, TikTokPostOptions | ClipPostOptions[keyof ClipPostOptions]>();
+  const postOptions = new Map<string, TikTokPostOptions>();
 
   /**
    * Try again on a failed clip (§14.5): failed posts go back to queued and the clip to confirmed. New TikTok sheet
@@ -214,7 +215,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     posts(clipId: string): Post[] {
       return clone(store.posts.filter((p) => p.clipId === clipId));
     },
-    options(postId: string): TikTokPostOptions | ClipPostOptions[keyof ClipPostOptions] | null {
+    options(postId: string): TikTokPostOptions | null {
       return clone(postOptions.get(postId) ?? null);
     },
   };
@@ -527,17 +528,9 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       publishClip(c);
       return clone(c);
     },
-    async confirmClip(clipId, captions, tiktok, platforms, options) {
+    async confirmClip(clipId, captions, tiktok, platforms) {
       await delay();
       const c = clip(clipId);
-      // Per-clip choices for YouTube, Instagram and X (§33.4), checked like the API; never made for kids.
-      if (options !== undefined) {
-        for (const [platform, value] of Object.entries(options)) {
-          if (!["youtube", "instagram", "x"].includes(platform)) throw bad(`Unknown field: ${platform}.`);
-          const problem = presetProblem(platform, value);
-          if (problem) throw bad(problem);
-        }
-      }
       const connected = setup.connected();
       // The places picked on Upload (§33): known, each once, not empty, and each set up.
       let chosen: Platform[] | undefined;
@@ -563,11 +556,6 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
           .map((platform) => ({ postId: ulid(), clipId, platform, status: connected.includes(platform) ? "queued" : "pending_integration" }));
         store.posts.push(...created);
         for (const p of created) if (p.platform === "tiktok" && p.status === "queued" && tiktok) postOptions.set(p.postId, clone(tiktok));
-        // YouTube, Instagram and X keep their per-clip choices (§33.4), like the API's postOptions.
-        for (const p of created) {
-          const own = p.platform === "youtube" || p.platform === "instagram" || p.platform === "x" ? options?.[p.platform] : undefined;
-          if (own) postOptions.set(p.postId, clone(own));
-        }
         publishClip(c);
         for (const p of created) publishPost(p);
         return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
@@ -646,16 +634,6 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         next.setupSkipped = PLATFORMS.filter((p) => next.setupSkipped!.includes(p));
         saveSkipped(next.setupSkipped);
       }
-      if (patch.postPreset !== undefined) {
-        // Like the API (§33.4): each platform given is merged over the defaults; never made for kids.
-        const raw: unknown = patch.postPreset;
-        if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw bad("My settings must be a JSON object.");
-        for (const [platform, value] of Object.entries(raw)) {
-          const problem = presetProblem(platform, value);
-          if (problem) throw bad(problem);
-        }
-        next.postPreset = presetOf(raw as Partial<PostPreset>);
-      }
       if (next.backgroundMode !== undefined && !isBackgroundMode(next.backgroundMode)) throw bad("Pick See-through, Picture or Colours.");
       if (next.glassStrength !== undefined && !isGlassStrength(next.glassStrength)) throw bad("Pick Clear or Frosted.");
       if (next.clipModel !== undefined && !isClipModel(next.clipModel)) throw bad("Pick one of the AI models in the list.");
@@ -715,6 +693,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     async getSetup() {
       await delay();
+      if ((faults.setupFails ?? 0) > 0) {
+        faults.setupFails!--;
+        throw serverDown();
+      }
       return setup.overview();
     },
     async getPlatformSetup(platform) {

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import copy
 import math
 import re
 from collections.abc import Mapping
 from typing import Any
 
-from . import db, post_preset, validate
+from . import db, validate
 from .errors import bad_request
 
 PLATFORMS: tuple[str, ...] = ("youtube", "instagram", "facebook", "tiktok", "x")
@@ -51,9 +50,6 @@ DEFAULTS: dict[str, Any] = {
     # show, so only the owner can ask for one each step. "Picked up again" is off too: the job flow resumes a stalled job by
     # itself (up to 6 times a run) and the owner has nothing to do.
     "notify": {"ready": True, "stopped": True, "resumed": False, "steps": False},
-    # §33.4 My settings: the owner's preferred post choices per platform (public, open to comments and remixes,
-    # never made for kids). Additive: an owner who never saved one reads these defaults.
-    "postPreset": post_preset.defaults(),
 }
 NOTIFY_KEYS = ("ready", "stopped", "resumed", "steps")
 # The Clip Factory colours before the bottle-green look (ADR-43). An owner who never changed them has exactly this
@@ -82,7 +78,9 @@ READ_ONLY = frozenset({"hasYoutubeCookies"})
 
 def with_defaults(stored: Mapping[str, Any] | None) -> dict[str, Any]:
     """Stored values over defaults; anything unknown or malformed in storage falls back to the default."""
-    out: dict[str, Any] = {k: copy.deepcopy(v) for k, v in DEFAULTS.items()}
+    out: dict[str, Any] = {
+        k: (list(v) if isinstance(v, list) else dict(v) if isinstance(v, dict) else v) for k, v in DEFAULTS.items()
+    }
     for field in EDITABLE:
         if stored and field in stored:
             try:
@@ -109,8 +107,6 @@ def _check_field(field: str, value: Any) -> Any:
             )
         case "soundEnabled" | "reduceMotion" | "followPaused":
             return validate.boolean(value, field)
-        case "postPreset":
-            return post_preset.check(value)
         case "clickSound" | "errorSound":
             return _sound_number(value, SOUND_LABELS[field])
         case "youtubePrivacy":

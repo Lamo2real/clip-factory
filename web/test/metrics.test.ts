@@ -135,7 +135,7 @@ describe("status and calm copy", () => {
     expect(calmCopy({ ...base, status: "posted" })?.text).toBe("Numbers are on the way. Check back in a few minutes.");
     expect(calmCopy({ ...base, status: "posted", metrics: m() })).toBeNull();
     expect(calmCopy({ ...base, status: "failed", error: "The video was too long." })).toEqual({
-      text: "Posting failed: The video was too long. Go to Library and press Try again.",
+      text: "The video was too long. Go to Library and tap Try again.",
       link: { href: "/library", label: "Go to Library" },
     });
   });

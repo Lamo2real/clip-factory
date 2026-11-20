@@ -2496,8 +2496,8 @@ youtube `{ "checkSeconds": 30, "maxChecks": 60, "chunkMb": 8 }`; tiktok `{ "chec
 
 On Upload, when TikTok is one of the chosen places (§33; an older client: in `settings.platforms` and connected), a
 sheet opens before the confirm request: the creator nickname (`GET /v1/accounts/tiktok/creator-info`, fetched each
-time), a **Who can see it** dropdown with **no default** (the app's own dropdown, below), switches Comments / Duet /
-Stitch (off by default, greyed when disabled by the creator, plus one **Turn all on** button), a **Commercial content** switch (off) with **Your brand** / **Branded content** (one required when on;
+time), a **Who can see it** bar of buttons with **no default** (a `<Glide>` radio group, below), switches Comments / Duet /
+Stitch (off by default, greyed when disabled by the creator), a **Commercial content** switch (off) with **Your brand** / **Branded content** (one required when on;
 label "Promotional content" / "Paid partnership"; branded cannot be "Only me"), the sentence "By posting, you agree to
 TikTok's Music Usage Confirmation" (+ "Branded Content Policy" when branded), a video preview and the editable
 caption. Upload stays disabled until a privacy is chosen. Confirm body gains `"tiktok": { "privacyLevel", "disableComment",
@@ -2508,23 +2508,20 @@ caption. Upload stays disabled until a privacy is chosen. Confirm body gains `"t
 in the confirm body; the API replaces that post's `postOptions` (mock `_try_again` does the same).
 
 **Who can see it: the owner's ask and TikTok's rules (owner request, 2026-11-20; ADR-57).** The owner asked for no
-options and Everyone every time, and to hide Comments, Duet and Stitch and force them on. TikTok's Content Sharing
-Guidelines (developers.tiktok.com/doc/content-sharing-guidelines, updated 4 Aug 2026) do not allow that: "Users must
-manually select the privacy status from a dropdown and there should be no default value", the options are exactly
-`privacy_level_options`, and while the app is not audited only `SELF_ONLY` is allowed; Comments, Duet and Stitch must
-be shown and none may be on by default. So the closest thing allowed:
+dropdown and no extra options, on every platform. TikTok's Content Sharing Guidelines
+(developers.tiktok.com/doc/content-sharing-guidelines, updated 4 Aug 2026) still require that the creator picks the
+privacy status himself with no default value, from exactly `privacy_level_options`, and while the app is not audited
+only `SELF_ONLY` is allowed; Comments, Duet and Stitch must be shown and none may be on by default. The guidelines
+speak of a dropdown; the app meets the rule with one bar of buttons instead, because the owner said no dropdown, and
+asks TikTok at app review whether a button bar is accepted. So:
 
-* **Dropdown, the app's own** (`components/Dropdown.tsx`; never the OS list): a soft-fill button showing "Pick who can
-  see it" until the owner picks, opening a glass `listbox` of exactly `privacyOptions` (minus Only me when branded),
-  ordered Everyone ("Anyone on TikTok"), Followers, Friends, Only me ("Just you"). When `SELF_ONLY` is the only option
-  the line "TikTok keeps posts private until it approves your app." shows under it. When Branded content leaves
-  nothing: "Branded content can't be Only me. Turn off Branded content." The hint under the actions reads "Tap who
-  can see it to turn on Upload."
-* **Turn all on** (soft-fill button): switches on Comments, Duet and Stitch in one tap (ones the creator's TikTok turned
-  off stay off). It is the owner's own tap; each switch stays visible and changes on its own.
-* **Use my settings** (soft-fill button, §33.4): puts the owner's TikTok preset in with one tap (privacy only when
-  TikTok offers it now; with only `SELF_ONLY` offered, Only me). Tapping it on the Review card does the same before
-  the sheet opens. Nothing is picked until he taps.
+* **One bar of buttons** (`Segmented`, a `<Glide>` radio group labelled "Who can see it"): exactly `privacyOptions`
+  (minus Only me when branded), ordered Everyone, Followers, Friends, Only me, nothing picked until the owner taps one.
+  When `SELF_ONLY` is the only option it is one button, and the line "TikTok keeps posts private until it approves your
+  app." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off Branded
+  content." The hint under the actions reads "Tap who can see it to turn on Upload."
+* **No Turn all on and no Use my settings**: each switch is its own tap, and nothing is pre-set (a card-level preset
+  would have opened the sheet with privacy and all three switches already on, against the no-default rule).
 * Commercial content (off) with Your brand / Branded content ("Paid partnership"), the Branded Content Policy line and
   the Music Usage Confirmation line are unchanged.
 
@@ -3201,7 +3198,7 @@ can follow, then **takes you there** and lights up the right button. This sectio
   "How do I connect Instagram?", "How many views did my best clip get this week?", "How do I add a skill?",
   "What does Keep do?".
 * Every answer: one or two short sentences, then numbered steps (≤ 6, each ≤ 1 line, exact button and field names as
-  the UI writes them, in bold: **Make clips**, **Keep**, **Throw away**, **Try again**, **Click sound**), then up to two
+  the UI writes them, in bold: **Make clips**, **Upload**, **Throw away**, **Try again**, **Click sound**), then up to two
   buttons that **navigate and spotlight** the control (`data-help` anchors, §19.8). Numbers (views, clips waiting) are
   fetched by the browser with the owner's own token and filled in (§19.7).
 * It works **without the model**: retrieval plus a composer always gives a complete answer. The model (Claude Haiku,
@@ -3288,7 +3285,6 @@ on a platform's setup page) becomes a doc on that page, and the element there ca
 | `job-failed` | job failed → **Try again** (starts over, uses the saved video) | Open Jobs `/jobs` → `failed-job` (the failed row in the Jobs list), `try-again` |
 | `review-keep` | what **Upload** does: it posts the clip to every place picked under Upload to; nothing posts without Upload | Open Review `/review` → `upload` |
 | `review-upload-to` | Upload to many places at once; places not set up do not show | Open Review `/review` → `upload-to` |
-| `review-my-settings` | Use my settings and More details; never made for kids | Open Review `/review` → `use-my-settings`; Open My settings |
 | `review-throw-away` | **Throw away** + 8 s **Undo** | Open Review `/review` → `throw-away` |
 | `review-captions` | change a caption per platform before Upload | Open Review `/review` → `captions` |
 | `clip-posting-failed` | Failed post → **Try again** on Review | Open Review `/review` |
@@ -3718,7 +3714,7 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   mock number appears; refused question; `#429` notice and disabled Ask; `#503` → local answer + copy-code link;
   `#off` → launcher gone; Escape returns focus to the launcher; reduced motion → no animations
   (`getAnimations()` empty, the send button included); dodge hides on scroll down and returns on scroll up; no
-  launcher over **Keep** on Review before any scroll (375 and 1440); after an answer button, the spotlit control is
+  launcher over **Upload** on Review before any scroll (375 and 1440); after an answer button, the spotlit control is
   the element at its centre (`elementFromPoint`); the conversation is kept after Close and reopen; Tab stays inside
   the phone sheet; the settled phone launcher covers no control at 320, 375, 390 and 430 px, with and without
   `?update=1`; the send button flies on send and only fades with reduced motion. `overflow.spec.ts`
@@ -4089,10 +4085,9 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | Review.tsx:476 Throw away | `throw` | the card's leaving motion stays; Undo → `.is-returning` on the card |
 | Review.tsx **Upload** (Vermilion) / Try again | `send` / `retry` | `playOnClick={false}`: plays when an upload really starts, not on the tap that opens the TikTok sheet; a refused Upload (caption too long, nothing picked) only shakes; confetti and leaving card stay; success sound only when the upload succeeds; `fail()` on error (§33) |
 | UploadTo.tsx Upload to chips | `tick` | soft-fill toggle chips with `aria-pressed` and a check mark; the tick plays when a chip turns on |
-| Review.tsx Use my settings | `tick` | plays with its toast |
 | CaptionTabs.tsx:100 caption tabs | `toggle` | label bump |
 | TikTokSheet.tsx:93 backdrop, :99 Close, :197 Not now, :174/181 policy links | press | |
-| TikTokSheet.tsx Who can see it (app dropdown), Turn all on, Use my settings | press | the dropdown's chevron turns; checkboxes (native) none |
+| TikTokSheet.tsx Who can see it (button bar) | `toggle` | the chosen button's label bumps and the glide slides; checkboxes (native) none |
 | TikTokSheet.tsx:152-155 Toggles | none | switch thumb |
 | TikTokSheet.tsx Upload / Try again | `send` / `retry` | it posts to TikTok |
 
@@ -6533,9 +6528,10 @@ only where notifications can be turned on right there; Not now or turning them o
 
 The owner, on a Review card: "X isn't set up yet, so X should not be an option there", "I want to select as many as I
 want, and once I hit confirm it should upload to those platforms", "Keep is not a good answer, it should just be
-Upload", and later "every platform I upload to should follow best practice so it is as monetized as possible and shown
-to as many people as possible. I sometimes swear in videos, so NEVER mark anything as made for kids. One button that
-ticks exactly the settings I want, and a More details that opens every option". Decision record: ADR-57.
+Upload", and, about every place: "No dropdown ... and that goes for YouTube, TikTok, Instagram, Facebook, X, all of
+them". So there are **no dropdowns and no extra option panels anywhere**: each place uses its own saved setup (YouTube:
+Settings › Set up posting › YouTube › who can see it), and the one thing a platform's own rules make the owner pick
+every time, TikTok's "Who can see it", is one bar of buttons. Decision record: ADR-57.
 
 ### 33.1 What it was before
 
@@ -6551,7 +6547,9 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   `GET /v1/setup`), in STATS_ORDER. A place not set up gets no chip; one quiet link under the row names them all
   ("Set up X to upload there too.", to `/settings/posting/setup/{first}`), hidden when all five are ready. With
   nothing set up, the row is a callout ("Nothing is set up yet. Upload saves it, and it goes up once you set up a
-  place.") and Upload works the old way (no `platforms`).
+  place.") and Upload works the old way (no `platforms`). While the setup is still loading, or when the check
+  failed (callout "Could not check your places. Check again, then tap Upload." and a **Check again** button),
+  `ready` is unknown: Upload stays off, so a failed check can never send the clip to places nobody picked.
 * **Which start on (per device):** the last Upload's choice in localStorage `cf-upload-to` (saved on Upload, not on
   each tap) minus places no longer ready; with none saved, Where clips go minus places not ready; if that leaves
   nothing, every ready place.
@@ -6559,25 +6557,20 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   place turned off keeps its text. Limits unchanged; the too-long check (`captionsTooLong` / `tabsTooLong`) counts
   only chosen places. The tab shows its mark, and its name only when open; X's name is screen-reader only (its mark
   reads "X"). `aria-label` always names the place.
-* **Checks before posting** summary: the title may shrink (`min-width: 0`), the score never does (`flex: 0 0 auto`,
-  `nowrap`), so they never overlap (e2e at 320 px).
-* **Upload** (was Keep): "Upload to 4", or "Upload to YouTube" for one; disabled with "Pick at least one place." when
-  none is on. "Going to: YouTube · TikTok · Instagram · Facebook" sits right above the actions and describes the
-  button (`aria-describedby`). Vermilion on the top card only, bottom right (thumb zone), motion `send`.
-* **Use my settings** (soft-fill button): puts the owner's preset (§33.4) on every chosen place in one tap, TikTok's
-  choices included (his tap, so TikTok's "no default" rule holds). Toast "Your settings are on for …".
-* **More details** (`<details>`): every option for each chosen place, filled from My settings: YouTube (Who can see
-  it as a Glide segmented bar, Category dropdown, Tell my subscribers, Let other sites show it, Made with AI to look
-  real, a fixed "Made for kids: No. Clip Factory never marks a clip as made for kids." line, and the tip "swearing in
-  the first seconds or in the title can limit ads on YouTube"), Instagram (Also show it in my main feed), Facebook
-  (Reels on a Page are public: nothing to pick), X (Who can reply). TikTok's own choices stay on its sheet (§17.8),
-  where TikTok wants them seen each time; More details only sums them up.
+* **Checks before posting** summary: the title may wrap (`min-width: 0`), the score never shrinks (`flex: 0 0 auto`,
+  `nowrap`), so they never overlap.
+* **Upload** (was Keep): "Upload to 4", or "Upload to YouTube" for one (never wraps onto two lines; the two buttons
+  stack instead); disabled when none is on. "Going to: YouTube · TikTok · Instagram · Facebook" sits right above the
+  actions and describes the button (`aria-describedby`). Vermilion on the top card only, bottom right (thumb zone),
+  motion `send`. **Try again** (after an Upload that did not finish) runs the same checks as Upload: at least one
+  place, and the TikTok sheet when TikTok is one of the places and its choices are not already made on this card.
+* There is no "Use my settings", no "More details", and no per-clip options: nothing else to pick on the card.
 * Toast after Upload: "Uploading to 4 places!" / "Uploading to YouTube!"; with TikTok, also "TikTok can take a few
   minutes to process your clip."
 
 ### 33.3 API (additive)
 
-`POST /v1/clips/{clipId}/confirm` body gains two optional fields:
+`POST /v1/clips/{clipId}/confirm` body gains one optional field:
 
 * `"platforms": string[]` — non-empty, no repeats, known platforms, each with a connected account, else 400 with a
   plain sentence ("X is not set up yet. Turn it off, then tap Upload.", "Pick at least one place to upload to.",
@@ -6587,54 +6580,39 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   sheet choices are needed only when `tiktok` is in the list. On a `posted` or `failed` clip, `platforms` names the
   failed posts to try again: only those go back to `queued` (fresh `publishHandle`, no `error`), `flowRun + 1`, a
   `failed` clip becomes `confirmed`, a `posted` one stays `posted`; naming a place with no failed post changes nothing.
-* `"options": { "youtube"?, "instagram"?, "x"? }` — per-clip choices (shapes of §33.4, merged over the defaults,
-  validated; any made-for-kids key → 400 "Clip Factory never marks a clip as made for kids."), stored on that
-  platform's post as internal `postOptions`. Publishers: YouTube `privacyStatus`, `categoryId`, `embeddable`,
-  `containsSyntheticMedia` from them (else the old `youtubePrivacy` / Gaming), `selfDeclaredMadeForKids` always
-  `false`, `notifySubscribers=false` on the upload URL only when turned off; Instagram `share_to_feed`; X
-  `reply_settings` (nothing sent for everyone).
+  A one-place Try again on a `posted` clip starts a new flow run while the first run may still be waiting for its
+  numbers; no second post can happen (only `queued` posts publish).
 
-Without either field (older clients) everything works exactly as before. Response unchanged (`{clip, posts}`).
-Types: `Clip.uploadTo?`, `confirmClip(clipId, captions?, tiktok?, platforms?, options?)`, `uploadClip` (was
-`keepClip`). No infrastructure, Terraform or table change: one new attribute on new clip items and new optional
-`postOptions` on new posts. Existing kept and posted clips and their posts are untouched.
+Without it (older clients) everything works exactly as before. Response unchanged (`{clip, posts}`). Types:
+`Clip.uploadTo?`, `confirmClip(clipId, captions?, tiktok?, platforms?)`, `uploadClip` (was `keepClip`). Publishers are
+unchanged: YouTube still follows `settings.youtubePrivacy` (never made for kids, always). No infrastructure, Terraform
+or table change: one new attribute on new clip items. Existing kept and posted clips and their posts are untouched.
 
-### 33.4 My settings (`settings.postPreset`)
+### 33.4 Nothing else to pick
 
-Settings › Posting › **My settings** (`/settings/posting/my-settings`), one section per place, X included (used once X
-is set up). Stored in Settings as `postPreset` (additive; an owner who never saved one reads the defaults). Defaults,
-from each platform's own docs, for reach:
-
-| Place | Default | Choices |
-|---|---|---|
-| YouTube | `{ privacy: "public", category: "20" (Gaming), embeddable: true, notifySubscribers: true, syntheticMedia: false }` | privacy public/unlisted/private; category 20/24/23/22/17; three switches. **No made-for-kids field**: always No |
-| TikTok | `{ privacy: "PUBLIC_TO_EVERYONE", comments: true, duet: true, stitch: true, commercial: false, aigc: false }` | used by Use my settings; the sheet still shows every choice and limits privacy to what TikTok offers now |
-| Instagram | `{ shareToFeed: true }` | Reel also in the main feed |
-| Facebook | `{}` | Page Reels are public |
-| X | `{ replies: "everyone" }` | everyone / following / mentionedUsers / verified |
-
-The page says plainly that whether a clip earns money (YouTube Partner Program, TikTok Creator Rewards, …) is up to
-each app, not these switches. `PUT /v1/settings { postPreset }` merges each platform given over the defaults and
-refuses unknown keys and any made-for-kids key.
+There is no "My settings" page, no `settings.postPreset`, and no per-clip `options`. Each place keeps using its saved
+setup, so the owner's YouTube choice under Set up posting › YouTube still decides who can see the uploads.
 
 ### 33.5 TikTok sheet
 
-See §17.8: the app's own dropdown with no default (TikTok's guidelines ask for a dropdown and no default), **Turn all
-on**, **Use my settings**, Commercial content with Your brand / Branded content (paid partnership), all visible. The
-big button says **Upload**. The sheet opens only when TikTok is one of the chosen places.
+See §17.8: who can see it is one bar of buttons (a `<Glide>` radio group, no dropdown, no default, Everyone first;
+when TikTok allows only Only me, that is one button), then Comments, Duet and Stitch (off to start), Commercial
+content with Your brand / Branded content (paid partnership), all visible. The big button says **Upload**. The sheet
+opens only when TikTok is one of the chosen places.
 
 ### 33.6 Library and the clip page
 
 Each post row says "Uploading…" (`queued`), "Uploaded" (+ Open), "Didn't work. {reason}" (`failed`, the existing
-friendly sentence) with its own **Try again** (sends `platforms: [p]`; TikTok's "pick again" error opens the sheet
-first), or "Waiting for setup" (`pending_integration`, older clips). Toast "Trying Facebook again!".
+friendly sentence) with its own **Try again** (sends `platforms: [p]`; its accessible name is "Try again, {place}" so a
+voice command "Try again" finds it; TikTok's "pick again" error opens the sheet first), or "Waiting for setup"
+(`pending_integration`, older clips). Toast "Trying Facebook again!". A place that was disconnected since simply fails
+again with its plain reason. The Jobs chip says "Uploading" for both `confirmed` and `publishing`.
 
 ### 33.7 Words
 
 "Upload" replaces "Keep" wherever it meant posting (Review, Home's "Nothing gets posted until you tap Upload.",
 Library, Jobs' chip "Uploading", help and Ask, the TikTok app-review text, docs). "Keep it", "Keep editing", "Keep the
-saved keys" and the like stay: they mean something else. Notifications on main say nothing about Keep; the
-`feature/iphone-notifications` branch should say "Uploaded".
+saved keys" and the like stay: they mean something else. Notifications on main say nothing about Keep.
 
 ### 33.8 Tests
 

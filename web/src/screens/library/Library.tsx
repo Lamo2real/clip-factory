@@ -402,7 +402,7 @@ export function UploadAgain({
   if (platform)
     return (
       <span className="post__retry">
-        <Button size="sm" variant="glass" icon="retry" act={act} loading={busy && !sheet} onClick={press} aria-label={`Try ${PLATFORM_LABEL[platform]} again`}>
+        <Button size="sm" variant="glass" icon="retry" act={act} loading={busy && !sheet} onClick={press} aria-label={`Try again, ${PLATFORM_LABEL[platform]}`}>
           Try again
         </Button>
         {note ? (

@@ -269,7 +269,7 @@ export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "m
       return { text: "Uploaded privately. TikTok shows numbers after the app is approved." };
     case "failed": {
       const why = (p.error ?? "something went wrong").replace(/[.!\s]+$/, "");
-      return { text: `Posting failed: ${why}. Go to Library and press Try again.`, link: { href: "/library", label: "Go to Library" } };
+      return { text: `${why}. Go to Library and tap Try again.`, link: { href: "/library", label: "Go to Library" } };
     }
     case "posted":
       return p.metrics ? null : { text: "Numbers are on the way. Check back in a few minutes." };

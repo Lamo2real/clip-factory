@@ -1,5 +1,4 @@
-"""Upload to many places (docs/CONTRACTS.md §33): the chosen platforms, old clients, one place's Try again, and the
-owner's My settings preset (never made for kids)."""
+"""Upload to many places (docs/CONTRACTS.md §33): the chosen platforms, old clients, and one place's Try again."""
 
 from __future__ import annotations
 
@@ -8,12 +7,10 @@ from typing import Any
 
 import pytest
 
-from clipfactory_api import db, post_preset, posts
+from clipfactory_api import db, posts
 from clipfactory_api.flows import clip_flow
-from clipfactory_api.platforms.publishers import InstagramPublisher, XPublisher, YouTubePublisher
 from conftest import CLIP_FLOW_ARN, USER, Call, seed_clip
-from fakes import FakeHttp, FakeLambda, FakeTable
-from test_publishers import form, make_job
+from fakes import FakeLambda, FakeTable
 
 TIKTOK = {
     "privacyLevel": "PUBLIC_TO_EVERYONE",
@@ -217,149 +214,3 @@ def test_flow_treats_a_posted_clip_with_queued_posts_as_decided() -> None:
 
 
 # --- My settings (postPreset) --------------------------------------------------------------------------------------
-
-
-def test_settings_carry_the_best_practice_preset(call: Call) -> None:
-    status, body = call("GET", "/v1/settings")
-    assert status == 200
-    preset = body["settings"]["postPreset"] if "settings" in body else body["postPreset"]
-    assert preset["youtube"] == {
-        "privacy": "public",
-        "category": "20",
-        "embeddable": True,
-        "notifySubscribers": True,
-        "syntheticMedia": False,
-    }
-    assert preset["tiktok"]["privacy"] == "PUBLIC_TO_EVERYONE"
-    assert (preset["tiktok"]["comments"], preset["tiktok"]["duet"], preset["tiktok"]["stitch"]) == (True, True, True)
-    assert (preset["tiktok"]["commercial"], preset["tiktok"]["aigc"]) == (False, False)
-    assert preset["instagram"] == {"shareToFeed": True}
-    assert preset["x"] == {"replies": "everyone"}
-    for platform in preset.values():
-        assert not post_preset.KIDS_KEYS & set(platform)
-
-
-def test_preset_is_stored_and_merged_over_defaults(call: Call) -> None:
-    status, _ = call(
-        "PUT", "/v1/settings", {"postPreset": {"youtube": {"privacy": "unlisted"}, "x": {"replies": "following"}}}
-    )
-    assert status == 200
-    _, body = call("GET", "/v1/settings")
-    preset = body["settings"]["postPreset"] if "settings" in body else body["postPreset"]
-    assert preset["youtube"]["privacy"] == "unlisted"
-    assert preset["youtube"]["notifySubscribers"] is True
-    assert preset["x"]["replies"] == "following"
-    assert preset["tiktok"]["privacy"] == "PUBLIC_TO_EVERYONE"
-
-
-@pytest.mark.parametrize("key", ["madeForKids", "selfDeclaredMadeForKids"])
-def test_preset_can_never_be_made_for_kids(call: Call, key: str) -> None:
-    status, body = call("PUT", "/v1/settings", {"postPreset": {"youtube": {key: True}}})
-    assert status == 400
-    assert body["error"]["message"] == "Clip Factory never marks a clip as made for kids."
-    status, body = call("PUT", "/v1/settings", {"postPreset": {"youtube": {key: False}}})
-    assert status == 400
-
-
-@pytest.mark.parametrize(
-    "preset",
-    [
-        {"youtube": {"privacy": "everyone"}},
-        {"youtube": {"category": "99"}},
-        {"tiktok": {"privacy": "EVERYONE"}},
-        {"x": {"replies": "nobody"}},
-        {"instagram": {"shareToFeed": "yes"}},
-        {"myspace": {}},
-        "public",
-    ],
-)
-def test_bad_presets_are_refused(call: Call, preset: object) -> None:
-    assert call("PUT", "/v1/settings", {"postPreset": preset})[0] == 400
-
-
-def test_per_clip_options_go_on_their_posts(call: Call, store: db.Store, table: FakeTable) -> None:
-    _connect(store, "youtube", "instagram", "x")
-    clip = seed_clip(store)
-    options = {"youtube": {"privacy": "unlisted", "notifySubscribers": False}, "x": {"replies": "following"}}
-    status, body = _confirm(call, clip["clipId"], {"platforms": ["youtube", "instagram", "x"], "options": options})
-    assert status == 200
-    stored = {p["platform"]: p for p in table.all() if p.get("type") == "post"}
-    assert stored["youtube"]["postOptions"] == {**post_preset.DEFAULTS["youtube"], **options["youtube"]}
-    assert stored["x"]["postOptions"] == {"replies": "following"}
-    assert "postOptions" not in stored["instagram"]
-    assert all("postOptions" not in p for p in body["posts"])
-
-
-@pytest.mark.parametrize(
-    "options",
-    [{"youtube": {"madeForKids": True}}, {"tiktok": {"privacy": "PUBLIC_TO_EVERYONE"}}, {"youtube": {"privacy": "x"}}],
-)
-def test_bad_per_clip_options_are_refused(call: Call, store: db.Store, options: object) -> None:
-    _connect(store, "youtube")
-    clip = seed_clip(store)
-    assert _confirm(call, clip["clipId"], {"platforms": ["youtube"], "options": options})[0] == 400
-
-
-# --- Publishers follow the per-clip options ------------------------------------------------------------------------
-
-
-def test_youtube_never_made_for_kids_and_follows_the_options() -> None:
-    job, _, _ = make_job(
-        "youtube",
-        FakeHttp(),
-        options={
-            "privacy": "unlisted",
-            "category": "24",
-            "embeddable": False,
-            "syntheticMedia": True,
-            "madeForKids": True,
-        },
-    )
-    meta = YouTubePublisher().metadata(job)
-    assert meta["status"] == {
-        "privacyStatus": "unlisted",
-        "selfDeclaredMadeForKids": False,
-        "embeddable": False,
-        "containsSyntheticMedia": True,
-    }
-    assert meta["snippet"]["categoryId"] == "24"
-
-
-def test_youtube_without_options_keeps_the_old_choices() -> None:
-    job, _, _ = make_job("youtube", FakeHttp(), settings={"youtubePrivacy": "private"})
-    meta = YouTubePublisher().metadata(job)
-    assert meta["status"]["privacyStatus"] == "private"
-    assert meta["status"]["selfDeclaredMadeForKids"] is False
-    assert meta["snippet"]["categoryId"] == "20"
-    assert "notifySubscribers" not in YouTubePublisher.upload_url(job)
-
-
-def test_youtube_bell_off_only_when_asked() -> None:
-    job, _, _ = make_job("youtube", FakeHttp(), options={"notifySubscribers": False})
-    assert YouTubePublisher.upload_url(job).endswith("&notifySubscribers=false")
-    job, _, _ = make_job("youtube", FakeHttp(), options={"notifySubscribers": True})
-    assert "notifySubscribers" not in YouTubePublisher.upload_url(job)
-
-
-def test_instagram_share_to_feed_follows_the_option() -> None:
-    http = FakeHttp(
-        (200, "publish/instagram_limit"), (200, "publish/instagram_container"), (200, "publish/instagram_upload")
-    )
-    job, _, _ = make_job("instagram", http, data={"igUserId": "1784"}, options={"shareToFeed": False})
-    InstagramPublisher().start(job)
-    assert form(http.calls[1])["share_to_feed"] == ["false"]
-
-
-def test_x_reply_settings_follow_the_option() -> None:
-    http = FakeHttp((201, "publish/x_tweet"))
-    job, _, _ = make_job(
-        "x", http, handle={"mediaId": "m1", "finalized": True}, data={"username": "o"}, options={"replies": "following"}
-    )
-    XPublisher().finish(job, job.handle)
-    assert json.loads(http.calls[0].body)["reply_settings"] == "following"
-    http = FakeHttp((201, "publish/x_tweet"))
-    job, _, _ = make_job(
-        "x", http, handle={"mediaId": "m1", "finalized": True}, data={"username": "o"}, options={"replies": "everyone"}
-    )
-    XPublisher().finish(job, job.handle)
-    assert "reply_settings" not in json.loads(http.calls[0].body)

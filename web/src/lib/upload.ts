@@ -1,5 +1,5 @@
 import { ApiError, friendlyMessage } from "../api/errors.ts";
-import type { Api, Captions, Clip, ClipPostOptions, Platform, Post, TikTokPostOptions } from "../api/types.ts";
+import type { Api, Captions, Clip, Platform, Post, TikTokPostOptions } from "../api/types.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER, plural } from "./format.ts";
 
 /** Shown when Upload is pressed again while the first Upload may still be finishing (the API answers 409). */
@@ -38,10 +38,9 @@ export async function uploadClip(
   captions?: Partial<Captions>,
   tiktok?: TikTokPostOptions,
   platforms?: Platform[],
-  options?: ClipPostOptions,
 ): Promise<UploadOutcome> {
   try {
-    const { clip, posts } = await a.confirmClip(clipId, captions, tiktok, platforms, options);
+    const { clip, posts } = await a.confirmClip(clipId, captions, tiktok, platforms);
     return { kind: "uploading", clip, posts };
   } catch (e) {
     if (!(e instanceof ApiError) || e.status !== 409) throw e;

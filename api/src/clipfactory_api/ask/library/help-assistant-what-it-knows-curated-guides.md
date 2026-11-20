@@ -5,7 +5,7 @@
 | About the app | `what-is-clip-factory` | Go to Home, lights up the link box |
 | Making clips | `make-clips-link`, `make-clips-upload` | Go to Home, lights up **Paste**, **Make clips** or the upload box |
 | Jobs | `job-progress`, `job-failed`, `jobs-running` | Open Jobs; `job-failed` lights up the failed row in the Jobs list (`failed-job`) and **Try again** |
-| Review | `review-keep`, `review-upload-to`, `review-my-settings`, `review-throw-away`, `review-captions`, `review-waiting`, `clip-posting-failed` | Open Review, lights up **Upload**, **Throw away** or the captions |
+| Review | `review-keep`, `review-upload-to`, `review-throw-away`, `review-captions`, `review-waiting`, `clip-posting-failed` | Open Review, lights up **Upload**, **Throw away** or the captions |
 | Library | `library-where` ("where are my clips / videos") | Open Library, lights up Library in the navigation |
 | Clip numbers | `clip-performance`, `refresh-numbers`, `this-week-best`, `best-clip-week-views` | Open Library or This week, lights up the **Best this week** star |
 | Posting | `posting-setup-{youtube,instagram,facebook,tiktok,x}`, `tiktok-private`, `where-clips-go`, `x-costs` ("What X charges for numbers"), `accounts-connected` | Open Set up posting `/settings/posting/setup` (lights up the platform's card `setup-{platform}`), that platform's steps `/settings/posting/setup/{platform}`, X setup (lights up **What X costs**), or Where clips go; `tiktok-private` opens Library |

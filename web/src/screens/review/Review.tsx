@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Captions, Clip, ClipPostOptions, Platform, TikTokPostOptions } from "../../api/types.ts";
+import type { Captions, Clip, Platform, TikTokPostOptions } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -13,10 +13,9 @@ import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { applyClipEvent, withMedia } from "../../lib/liveCache.ts";
 import { SimilarClips } from "../../components/SimilarClips.tsx";
-import { defaultUploadTo, placeList, readUploadTo, saveUploadTo, STILL_WORKING, uploadClip, uploadedMessage, uploadLabel } from "../../lib/upload.ts";
-import { clipOptionsFrom, optionsFor, presetOf, tiktokFromPreset, type TikTokChoices } from "../../lib/preset.ts";
+import { defaultUploadTo, readUploadTo, saveUploadTo, STILL_WORKING, uploadClip, uploadedMessage, uploadLabel } from "../../lib/upload.ts";
 import { useSetup } from "../settings/setup/useSetup.ts";
-import { goingToLine, MoreDetails, UploadToChips } from "./UploadTo.tsx";
+import { goingToLine, UploadToChips } from "./UploadTo.tsx";
 import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAways.ts";
 import { CaptionTabs, captionsTooLong, type CaptionTabsHandle } from "./CaptionTabs.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
@@ -96,7 +95,10 @@ export function Review({ jobId }: { jobId: string | null }) {
   const { me, refresh } = useSession();
   // The places that are set up (GET /v1/setup, kept fresh by live setup news): only they get an Upload to chip.
   const setup = useSetup();
-  const ready: Platform[] | null = setup.data ? setup.data.platforms.filter((p) => p.ready).map((p) => p.platform) : setup.error ? [] : null;
+  // Not known yet (loading), or the check failed: then `ready` stays null and Upload waits, so a failed check can never
+  // send a clip to places nobody picked.
+  const ready: Platform[] | null = setup.data ? setup.data.platforms.filter((p) => p.ready).map((p) => p.platform) : null;
+  const setupFailed = !setup.data && !!setup.error;
   // Clips uploaded on this visit: each gets a "See how it does" link once its card has left the list.
   const [justKept, setJustKept] = useState<Clip[]>([]);
   const kept = (clip: Clip) => setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
@@ -227,7 +229,7 @@ export function Review({ jobId }: { jobId: string | null }) {
           <ol className="review-list">
             {visible.map((c, i) => (
               <li key={c.clipId} id={`clip-${c.clipId}`} className="review-list__item">
-                <ReviewCard clip={c} ready={ready} next={i === 0} returning={returning.has(c.clipId)} onDone={remove} onKept={kept} onThrowAway={throwAway} onSettling={settle} />
+                <ReviewCard clip={c} ready={ready} setupFailed={setupFailed} onCheckAgain={() => void setup.reload()} next={i === 0} returning={returning.has(c.clipId)} onDone={remove} onKept={kept} onThrowAway={throwAway} onSettling={settle} />
               </li>
             ))}
           </ol>
@@ -258,6 +260,8 @@ type SaveState = "idle" | "saving" | "saved" | "failed";
 function ReviewCard({
   clip,
   ready,
+  setupFailed,
+  onCheckAgain,
   next,
   returning,
   onDone,
@@ -268,6 +272,9 @@ function ReviewCard({
   clip: Clip;
   /** The places that are set up (null while loading). */
   ready: Platform[] | null;
+  /** The check of what is set up did not work: the card says so and offers to check again. */
+  setupFailed: boolean;
+  onCheckAgain: () => void;
   /** The top card: its Upload is the screen's one main (vermilion) button; the cards below get a quiet Upload. */
   next: boolean;
   /** Just put back by Undo: the card plays its return (§20.7). */
@@ -286,22 +293,10 @@ function ReviewCard({
   const [sheet, setSheet] = useState(false);
   // Where it goes (§33): the owner's taps on this card, else this device's last choice / Where clips go, minus
   // places that are not set up.
-  const preset = presetOf(me?.settings.postPreset);
   const [picked, setPicked] = useState<Platform[] | null>(null);
   const chosen: Platform[] = ready ? (picked ? picked.filter((p) => ready.includes(p)) : defaultUploadTo(ready, readUploadTo(), me?.settings.platforms)) : [];
   function toggle(p: Platform) {
     setPicked(chosen.includes(p) ? chosen.filter((x) => x !== p) : [...chosen, p]);
-  }
-  // How it goes: YouTube, Instagram and X start from My settings; TikTok starts empty (its rules) until the owner
-  // taps Use my settings or picks on its sheet.
-  const [options, setOptions] = useState<ClipPostOptions>(() => clipOptionsFrom(preset));
-  const [tiktokPicked, setTiktokPicked] = useState<TikTokChoices | undefined>(undefined);
-  const mine = useAction("tick");
-  function applyMySettings() {
-    setOptions(clipOptionsFrom(preset));
-    setTiktokPicked(tiktokFromPreset(preset.tiktok, null));
-    mine.play();
-    toast.success(chosen.length ? `Your settings are on for ${placeList(chosen)}.` : "Your settings are on.");
   }
   const [dirty, setDirty] = useState<Partial<Captions>>({});
   const [save, setSave] = useState<SaveState>("idle");
@@ -405,7 +400,8 @@ function ReviewCard({
   const noneReady = !!ready && ready.length === 0;
 
   async function confirm() {
-    if (!keepFailed && !noneReady && !chosen.length) {
+    // Also on Try again: a place picked, or none turned off, is checked every time.
+    if (!noneReady && !chosen.length) {
       keepAct.fail({ sound: false });
       toast.error("Pick at least one place to upload to.");
       return;
@@ -422,27 +418,26 @@ function ReviewCard({
       return;
     }
     // TikTok is one of the places: its rules say the owner picks who can see the post first, on its sheet (§17.8).
-    if (!keepFailed && chosen.includes("tiktok")) {
-      setSheet(true);
-      return;
-    }
+    // Try again keeps the choices already made there, but only while TikTok is still one of the places.
+    const haveTikTok = keepFailed && !!lastTikTok.current;
+    let tiktokGoing = chosen.includes("tiktok");
     // Nothing set up but TikTok connected (a step still waits): TikTok's rules still come first, as before §33.
-    if (!keepFailed && noneReady && me?.settings.platforms.includes("tiktok")) {
+    if (!tiktokGoing && noneReady && !haveTikTok && me?.settings.platforms.includes("tiktok")) {
       setBusy("confirm");
-      const tiktok = await api()
+      tiktokGoing = await api()
         .listAccounts()
         .then((all) => all.find((a) => a.platform === "tiktok")?.status === "connected")
         .catch(() => false);
       setBusy(null);
-      if (tiktok) {
-        setSheet(true);
-        return;
-      }
+    }
+    if (tiktokGoing && !haveTikTok) {
+      setSheet(true);
+      return;
     }
     // The plane (or Try again's arrow) plays only now that an upload really starts: not on the tap that opens the
     // TikTok sheet, and never on a refused Upload (§20.5, §20.8).
     keepAct.play();
-    await upload(keepFailed ? lastTikTok.current : undefined);
+    await upload(tiktokGoing ? lastTikTok.current : undefined);
   }
 
   async function upload(tiktok?: TikTokPostOptions) {
@@ -459,7 +454,6 @@ function ReviewCard({
         Object.keys(dirty).length || tiktok ? captions : undefined,
         tiktok,
         chosen.length ? chosen : undefined,
-        chosen.length ? optionsFor(chosen, options) : undefined,
       );
       if (out.kind === "uploading") {
         if (chosen.length) saveUploadTo(chosen);
@@ -596,17 +590,17 @@ function ReviewCard({
         </details>
 
         {ready ? (
-          <>
-            <UploadToChips ready={ready} chosen={chosen} onToggle={toggle} />
-            {chosen.length ? (
-              <div className="upload-mine">
-                <Button variant="glass" icon="sparkle" act={mine} playOnClick={false} data-help="use-my-settings" onClick={applyMySettings}>
-                  Use my settings
-                </Button>
-                <MoreDetails chosen={chosen} options={options} onOptions={setOptions} tiktok={tiktokPicked} />
-              </div>
-            ) : null}
-          </>
+          <UploadToChips ready={ready} chosen={chosen} onToggle={toggle} />
+        ) : setupFailed ? (
+          <div className="upload-to upload-to--none">
+            <p className="callout callout--bad" role="alert">
+              <Icon name="alert" size={18} />
+              <span>Could not check your places. Check again, then tap Upload.</span>
+            </p>
+            <Button variant="glass" icon="retry" act="retry" onClick={onCheckAgain}>
+              Check again
+            </Button>
+          </div>
         ) : (
           <Skeleton className="line-skel" />
         )}
@@ -646,7 +640,7 @@ function ReviewCard({
             playOnClick={false}
             data-help={keepFailed ? "try-again upload" : "upload"}
             loading={busy === "confirm"}
-            disabled={leaving || (!keepFailed && (!ready || (!noneReady && !chosen.length)))}
+            disabled={leaving || !ready || (!noneReady && !chosen.length)}
             aria-describedby={ready && !keepFailed && !noneReady ? `going-${clip.clipId}` : undefined}
             onClick={confirm}
           >
@@ -662,8 +656,6 @@ function ReviewCard({
             onClose={closeSheet}
             busy={busy === "confirm"}
             act={sheetAct}
-            preset={preset.tiktok}
-            initial={tiktokPicked}
           />
         ) : null}
         <A href={`/jobs/${clip.jobId}`} className="text-link small review-card__job">

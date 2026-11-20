@@ -59,7 +59,7 @@ for (const [name, use] of [
     test("a job that is gone offers a way back, not a Try again that cannot work", async ({ page }) => {
       await page.goto("/jobs/01JOBTHATDOESNOTEXIST00000");
       await expect(page.getByText("This job is gone")).toBeVisible();
-      await expect(page.getByRole("button", { name: "Try again" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Try again", exact: true })).toHaveCount(0);
       await page.getByRole("link", { name: "See all jobs" }).click();
       await expect(page).toHaveURL(/\/jobs$/);
       await expect(page.locator(".job-row").first()).toBeVisible();

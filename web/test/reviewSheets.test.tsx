@@ -2,7 +2,7 @@ import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
-import type { Api, Captions, Clip, TikTokCreator, TikTokPostOptions, TikTokPreset } from "../src/api/types.ts";
+import type { Api, Captions, Clip, TikTokCreator, TikTokPostOptions } from "../src/api/types.ts";
 import type { Toaster } from "../src/components/Toasts.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -62,7 +62,7 @@ function press(key: string, shiftKey = false) {
 }
 
 /** Opens the sheet from an Upload button and re-renders on every caption change, the way Review does. */
-function Harness({ onClose, onUpload, preset }: { onClose?: () => void; onUpload?: (o: TikTokPostOptions) => void; preset?: TikTokPreset }) {
+function Harness({ onClose, onUpload }: { onClose?: () => void; onUpload?: (o: TikTokPostOptions) => void }) {
   const [open, setOpen] = useState(false);
   const [caption, setCaption] = useState("Twelve cars");
   return (
@@ -76,7 +76,6 @@ function Harness({ onClose, onUpload, preset }: { onClose?: () => void; onUpload
           caption={caption}
           onCaption={setCaption}
           onUpload={(o) => onUpload?.(o)}
-          preset={preset}
           // A new function on every render, like Review's inline arrow before the fix.
           onClose={() => {
             onClose?.();
@@ -89,7 +88,7 @@ function Harness({ onClose, onUpload, preset }: { onClose?: () => void; onUpload
   );
 }
 
-async function openSheet(onClose?: () => void, more: { onUpload?: (o: TikTokPostOptions) => void; preset?: TikTokPreset } = {}) {
+async function openSheet(onClose?: () => void, more: { onUpload?: (o: TikTokPostOptions) => void } = {}) {
   act(() => root.render(<Harness onClose={onClose} {...more} />));
   const keep = host.querySelector<HTMLButtonElement>("#keep")!;
   keep.focus();
@@ -140,59 +139,53 @@ describe("Post to TikTok sheet", () => {
     expect(document.activeElement).toBe(keep);
   });
 
-  const privacyButton = (dialog: HTMLElement) => dialog.querySelector<HTMLButtonElement>('.dropdown__button[aria-haspopup="listbox"]')!;
   const uploadButton = (dialog: HTMLElement) => Array.from(dialog.querySelectorAll<HTMLButtonElement>(".tt-sheet__actions button")).pop()!;
+  const privacyBar = (dialog: HTMLElement) => dialog.querySelector<HTMLElement>('.segmented[role="radiogroup"]')!;
+  const privacyNames = (dialog: HTMLElement) => Array.from(privacyBar(dialog).querySelectorAll("label")).map((l) => l.textContent);
+  const privacyOn = (dialog: HTMLElement) => privacyBar(dialog).querySelector<HTMLInputElement>("input:checked")?.closest("label")?.textContent ?? null;
   function pickPrivacy(dialog: HTMLElement, name: string) {
-    act(() => privacyButton(dialog).click());
-    const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((o) => o.querySelector(".dropdown__name")!.textContent === name)!;
-    act(() => option.click());
+    const radio = Array.from(privacyBar(dialog).querySelectorAll<HTMLInputElement>("input")).find((i) => i.closest("label")!.textContent === name)!;
+    act(() => radio.click());
   }
 
-  it("asks who can see it in the app's own dropdown: no OS list, no default, Everyone first (TikTok's rules)", async () => {
+  it("asks who can see it with one bar of buttons: no dropdown, no OS list, no default, Everyone first (TikTok's rules)", async () => {
     current = { tiktokCreatorInfo: async () => ({ ...creator, privacyOptions: ["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "PUBLIC_TO_EVERYONE"] }) };
     const { dialog } = await openSheet();
     expect(dialog.querySelector("select")).toBeNull();
-    const button = privacyButton(dialog);
-    expect(button.getAttribute("aria-labelledby")!.split(" ").map((i) => document.getElementById(i)!.textContent)[0]).toBe("Who can see it");
-    // Nothing picked until the owner picks.
-    expect(button.textContent).toContain("Pick who can see it");
-    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(dialog.querySelector('[aria-haspopup="listbox"], [role="listbox"], [role="option"]')).toBeNull();
+    expect(privacyBar(dialog).getAttribute("aria-label")).toBe("Who can see it");
+    // Exactly TikTok's list (never more), Everyone first, and nothing picked until the owner picks.
+    expect(privacyNames(dialog)).toEqual(["Everyone", "Friends", "Only me"]);
+    expect(privacyOn(dialog)).toBeNull();
     expect(uploadButton(dialog).getAttribute("aria-disabled")).toBe("true");
     expect(dialog.textContent).toContain("Tap who can see it to turn on Upload.");
-    act(() => button.click());
-    const names = Array.from(document.querySelectorAll('[role="option"] .dropdown__name')).map((n) => n.textContent);
-    // Exactly TikTok's list (never more), Everyone first.
-    expect(names).toEqual(["Everyone", "Friends", "Only me"]);
-    expect(document.querySelectorAll('[role="option"][aria-selected="true"]')).toHaveLength(0);
-    act(() => (document.querySelector('[role="option"]') as HTMLElement).click());
-    expect(privacyButton(dialog).textContent).toContain("Everyone");
+    pickPrivacy(dialog, "Everyone");
+    expect(privacyOn(dialog)).toBe("Everyone");
     expect(uploadButton(dialog).getAttribute("aria-disabled")).not.toBe("true");
   });
 
-  it("before TikTok approves the app: only Only me, a plain line, still the owner's pick", async () => {
+  it("before TikTok approves the app: one button, Only me, a plain line, still the owner's tap", async () => {
     current = { tiktokCreatorInfo: async () => ({ ...creator, privacyOptions: ["SELF_ONLY"] }) };
     const { dialog } = await openSheet();
     expect(dialog.textContent).toContain("TikTok keeps posts private until it approves your app.");
-    expect(privacyButton(dialog).textContent).toContain("Pick who can see it");
-    act(() => privacyButton(dialog).click());
-    expect(Array.from(document.querySelectorAll('[role="option"] .dropdown__name')).map((n) => n.textContent)).toEqual(["Only me"]);
+    expect(privacyNames(dialog)).toEqual(["Only me"]);
+    expect(privacyOn(dialog)).toBeNull();
+    expect(uploadButton(dialog).getAttribute("aria-disabled")).toBe("true");
+    pickPrivacy(dialog, "Only me");
+    expect(uploadButton(dialog).getAttribute("aria-disabled")).not.toBe("true");
   });
 
-  it("Comments, Duet and Stitch start off and visible; Turn all on switches on the ones TikTok allows", async () => {
+  it("Comments, Duet and Stitch start off and visible, each its own switch, with no Turn all on", async () => {
     const { dialog } = await openSheet();
     const sw = (name: string) => Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="switch"]')).find((b) => document.getElementById(b.getAttribute("aria-labelledby")!)!.textContent === name)!;
     for (const name of ["Comments", "Duet", "Stitch", "Commercial content"]) expect(sw(name).getAttribute("aria-checked")).toBe("false");
-    const allOn = Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Turn all on")!;
-    act(() => allOn.click());
-    expect(sw("Comments").getAttribute("aria-checked")).toBe("true");
+    expect(Array.from(dialog.querySelectorAll("button")).some((b) => /turn all on|use my settings/i.test(b.textContent ?? ""))).toBe(false);
+    act(() => sw("Duet").click());
     expect(sw("Duet").getAttribute("aria-checked")).toBe("true");
-    // Stitch is off in the creator's TikTok settings: it stays off and greyed.
-    expect(sw("Stitch").getAttribute("aria-checked")).toBe("false");
-    expect(sw("Stitch").getAttribute("aria-disabled")).toBe("true");
-    expect(sw("Commercial content").getAttribute("aria-checked")).toBe("false");
-    // Each switch still changes on its own.
     act(() => sw("Duet").click());
     expect(sw("Duet").getAttribute("aria-checked")).toBe("false");
+    // Stitch is off in the creator's TikTok settings: it stays off and greyed.
+    expect(sw("Stitch").getAttribute("aria-disabled")).toBe("true");
   });
 
   it("Branded content (paid partnership) takes Only me away and adds the Branded Content Policy line", async () => {
@@ -204,34 +197,21 @@ describe("Post to TikTok sheet", () => {
     const branded = Array.from(dialog.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))[1]!;
     expect(branded.closest("label")!.textContent).toContain("Paid partnership");
     act(() => branded.click());
-    expect(privacyButton(dialog).textContent).toContain("Pick who can see it");
-    act(() => privacyButton(dialog).click());
-    expect(Array.from(document.querySelectorAll('[role="option"] .dropdown__name')).map((n) => n.textContent)).toEqual(["Everyone"]);
-    act(() => (document.querySelector('[role="option"]') as HTMLElement).click());
+    expect(privacyOn(dialog)).toBeNull();
+    expect(privacyNames(dialog)).toEqual(["Everyone"]);
+    pickPrivacy(dialog, "Everyone");
     expect(dialog.textContent).toContain("Branded Content Policy");
     expect(uploadButton(dialog).getAttribute("aria-disabled")).not.toBe("true");
   });
 
-  it("Use my settings puts the owner's TikTok choices in with his one tap, within what TikTok allows", async () => {
+  it("sends exactly what the owner tapped (nothing is on unless he turned it on)", async () => {
     const sent: TikTokPostOptions[] = [];
-    const preset: TikTokPreset = { privacy: "PUBLIC_TO_EVERYONE", comments: true, duet: true, stitch: true, commercial: false, aigc: false };
-    const { dialog } = await openSheet(undefined, { onUpload: (o) => sent.push(o), preset });
-    expect(privacyButton(dialog).textContent).toContain("Pick who can see it");
-    const mine = Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Use my settings")!;
-    act(() => mine.click());
-    expect(privacyButton(dialog).textContent).toContain("Everyone");
+    const { dialog } = await openSheet(undefined, { onUpload: (o) => sent.push(o) });
+    pickPrivacy(dialog, "Everyone");
     act(() => uploadButton(dialog).click());
     expect(sent).toEqual([
-      { privacyLevel: "PUBLIC_TO_EVERYONE", disableComment: false, disableDuet: false, disableStitch: true, brandContent: false, brandOrganic: false },
+      { privacyLevel: "PUBLIC_TO_EVERYONE", disableComment: true, disableDuet: true, disableStitch: true, brandContent: false, brandOrganic: false },
     ]);
-  });
-
-  it("Use my settings on an app TikTok has not approved picks Only me, the one choice there is", async () => {
-    current = { tiktokCreatorInfo: async () => ({ ...creator, privacyOptions: ["SELF_ONLY"] }) };
-    const preset: TikTokPreset = { privacy: "PUBLIC_TO_EVERYONE", comments: true, duet: true, stitch: true, commercial: false, aigc: false };
-    const { dialog } = await openSheet(undefined, { preset });
-    act(() => Array.from(dialog.querySelectorAll("button")).find((b) => b.textContent === "Use my settings")!.click());
-    expect(privacyButton(dialog).textContent).toContain("Only me");
   });
 
   it("a clip too long for TikTok says what to do next; a limit of 0 does not block (F022)", async () => {

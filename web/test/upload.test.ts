@@ -123,18 +123,16 @@ describe("which places start on (§33)", () => {
 });
 
 describe("Upload to the chosen places (mock, like the API)", () => {
-  it("posts to exactly the chosen places, stores uploadTo, and keeps each place's choices", async () => {
+  it("posts to exactly the chosen places and stores uploadTo", async () => {
     sessionStorage.clear();
     const { store, api } = setup();
     (window as unknown as { __cfMock: { setup: { finish(p: string): void } } }).__cfMock.setup.finish("youtube");
     const c = reviewClip(store);
-    const out = await uploadClip(api, c.clipId, undefined, undefined, ["youtube"], { youtube: { privacy: "unlisted", category: "20", embeddable: true, notifySubscribers: false, syntheticMedia: false } });
+    const out = await uploadClip(api, c.clipId, undefined, undefined, ["youtube"]);
     expect(out.kind).toBe("uploading");
     if (out.kind !== "uploading") return;
     expect(out.posts.map((p) => p.platform)).toEqual(["youtube"]);
     expect(out.clip.uploadTo).toEqual(["youtube"]);
-    const mock = (window as unknown as { __cfMock: { posting: { options(postId: string): unknown } } }).__cfMock.posting;
-    expect(mock.options(out.posts[0]!.postId)).toMatchObject({ privacy: "unlisted", notifySubscribers: false });
   });
 
   it("refuses a place that is not set up", async () => {
@@ -146,24 +144,9 @@ describe("Upload to the chosen places (mock, like the API)", () => {
     });
   });
 
-  it("refuses a place that is not set up, an empty list, and made for kids", async () => {
+  it("refuses an empty list", async () => {
     const { store, api } = setup();
-    const c = reviewClip(store);
-    await expect(api.confirmClip(c.clipId, undefined, undefined, [])).rejects.toMatchObject({ status: 400 });
-    await expect(
-      api.confirmClip(c.clipId, undefined, undefined, ["youtube"], { youtube: { madeForKids: true } as never }),
-    ).rejects.toMatchObject({ status: 400, message: "Clip Factory never marks a clip as made for kids." });
-  });
-
-  it("refuses made for kids in My settings", async () => {
-    const { api } = setup();
-    await expect(api.putSettings({ postPreset: { youtube: { selfDeclaredMadeForKids: true } } as never })).rejects.toMatchObject({
-      message: "Clip Factory never marks a clip as made for kids.",
-    });
-    const saved = await api.putSettings({ postPreset: { x: { replies: "following" } } as never });
-    expect(saved.postPreset?.x.replies).toBe("following");
-    expect(saved.postPreset?.youtube.privacy).toBe("public");
-    expect(Object.keys(saved.postPreset!.youtube)).not.toContain("madeForKids");
+    await expect(api.confirmClip(reviewClip(store).clipId, undefined, undefined, [])).rejects.toMatchObject({ status: 400 });
   });
 });
 
