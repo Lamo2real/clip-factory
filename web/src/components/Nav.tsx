@@ -4,6 +4,7 @@ import { Glide } from "./Glide.tsx";
 import { setPrefs, usePrefs } from "../lib/prefs.ts";
 import { section, useRoute } from "../lib/router.ts";
 import { plural } from "../lib/format.ts";
+import { useDeletedJobs } from "../lib/jobDeletes.ts";
 import { useInstall } from "../lib/pwa.ts";
 import { LiveDot } from "./LiveDot.tsx";
 import { Icon, type IconName } from "./Icon.tsx";
@@ -29,8 +30,10 @@ function useNavState() {
   const route = useRoute();
   const { me } = useSession();
   const active = section(route);
-  const review = me?.counts.review ?? 0;
-  const running = me?.counts.running ?? 0;
+  // A job deleted here comes off the counts at once, until the server's own counts include it (§34.5).
+  const gone = useDeletedJobs();
+  const review = Math.max(0, (me?.counts.review ?? 0) - gone.reviewClips);
+  const running = Math.max(0, (me?.counts.running ?? 0) - gone.working);
   const accessible = (item: Item) =>
     item.key === "review" && review > 0 ? `${item.label}, ${plural(review, "clip")} waiting` : item.label;
   return { active, review, running, accessible };

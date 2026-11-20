@@ -1,6 +1,6 @@
 // The whole HTTP API in memory, with fake latency, so the UI runs with no backend (npm run dev:mock, Playwright).
 import { ApiError, networkError } from "../errors.ts";
-import type { Api, Clip, Job, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
+import type { Api, Clip, Job, JobDeleteClips, JobDeleted, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
 import { TIKTOK_PICK_AGAIN } from "../../lib/upload.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 import { MOMENTS, PLATFORMS, STEP_KEYS, coverArt, seed, stepsAt, thumbArt, ulid, type Store } from "./fixtures.ts";
@@ -59,6 +59,8 @@ export interface MockFaults extends StatsFaults {
   jobsPageSize?: number;
   /** The next N "Show older jobs" pages (listJobs with a cursor) fail like a server error. */
   olderJobsFails?: number;
+  /** The next N job deletes (deleteJob, deleteJobs) fail like a server error (§34). */
+  deleteJobFails?: number;
   /** The next N Make clips (createJob) fail like a server error. */
   createJobFails?: number;
   /** The next N setup checks (getSetup) fail like a server error (Review must not guess where a clip goes). */
@@ -389,6 +391,19 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     if (!c) throw notFound("clip");
     return c;
   };
+  /** Deletes one job like the API (§34): thrown-away clips always, Review clips only with "delete", never others. */
+  const removeJob = (jobId: string, clips: JobDeleteClips): JobDeleted => {
+    const j = store.jobs.find((x) => x.jobId === jobId);
+    if (!j) return { jobId, deleted: false, clipsDeleted: 0, clipsKept: 0 };
+    const mine = store.clips.filter((c) => c.jobId === jobId);
+    const gone = mine.filter((c) => c.status === "declined" || (clips === "delete" && c.status === "review"));
+    store.clips = store.clips.filter((c) => !gone.includes(c));
+    store.jobs = store.jobs.filter((x) => x !== j);
+    clock.delete(jobId);
+    for (const c of gone) mockLive.publish({ type: "clip", op: "delete", id: c.clipId });
+    mockLive.publish({ type: "job", op: "delete", id: jobId });
+    return { jobId, deleted: true, clipsDeleted: gone.length, clipsKept: mine.length - gone.length };
+  };
   const skills = skillsApi(store, delay);
   const lessons = lessonsApi(() => store.clips, () => faults.lessons, () => delay());
   const follows = followsApi((ev) => mockLive.publish(ev), () => delay());
@@ -571,6 +586,23 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       j.updatedAt = j.createdAt;
       publishJob(j);
       return clone(j);
+    },
+    async deleteJob(jobId, clips = "keep") {
+      await delay();
+      if ((faults.deleteJobFails ?? 0) > 0) {
+        faults.deleteJobFails!--;
+        throw serverDown();
+      }
+      return removeJob(jobId, clips);
+    },
+    async deleteJobs(jobIds, clips = "keep") {
+      await delay();
+      if ((faults.deleteJobFails ?? 0) > 0) {
+        faults.deleteJobFails!--;
+        throw serverDown();
+      }
+      if (!jobIds.length || jobIds.length > 25) throw bad("jobIds must list 1 to 25 jobs.");
+      return [...new Set(jobIds)].map((id) => removeJob(id, clips));
     },
     async listClips({ status = "review", jobId } = {}) {
       await delay();

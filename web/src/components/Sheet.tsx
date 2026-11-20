@@ -32,7 +32,8 @@ export function trapTab(e: { key: string; shiftKey: boolean; preventDefault(): v
 /**
  * A small glass question over the page ("Delete this skill?", "Leave without saving?"). It is a real dialog: focus
  * moves into it and comes back afterwards, Tab stays inside, Escape or a tap outside closes it (as the safe answer).
- * Used only where an 8-second Undo cannot help (§18.5, §18.7). It is drawn on document.body (a portal), so its scrim
+ * Used where an 8-second Undo cannot help (§18.5, §18.7), or where there is a real choice to make first (Delete job
+ * asks whether the clips in Review go too, §34.6). It is drawn on document.body (a portal), so its scrim
  * covers the whole screen even when the page that asks sits inside a glass card or a moving page.
  */
 export function Sheet({

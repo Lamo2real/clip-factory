@@ -1039,6 +1039,16 @@ export type MoneyResult =
   | "money_wrong_account"
   | "money_error";
 
+/** §34: what happens to a deleted job's clips still waiting in Review ("keep" unless the owner ticked the box). */
+export type JobDeleteClips = "keep" | "delete";
+/** §34: one deleted job. Kept, posting and posted clips are never deleted and count in `clipsKept`. */
+export interface JobDeleted {
+  jobId: string;
+  deleted: boolean;
+  clipsDeleted: number;
+  clipsKept: number;
+}
+
 /** Everything the screens need from the backend. The HTTP client and the mock both implement it. */
 export interface Api {
   health(): Promise<{ ok: boolean; version: string }>;
@@ -1056,6 +1066,10 @@ export interface Api {
     jobId: string,
     body: { deviceId: string; parts: { n: number; etag: string }[]; title?: string; creator?: string; durationSec?: number },
   ): Promise<Job>;
+  /** DELETE /v1/jobs/{jobId} (§34): a working job is stopped first; idempotent (`deleted: false` when not there). */
+  deleteJob(jobId: string, clips?: JobDeleteClips): Promise<JobDeleted>;
+  /** POST /v1/jobs/delete (§34): up to 25 jobs at once, one result each, in order. */
+  deleteJobs(jobIds: string[], clips?: JobDeleteClips): Promise<JobDeleted[]>;
   listClips(query?: { status?: ClipFilter; jobId?: string }): Promise<Clip[]>;
   getClip(clipId: string): Promise<Clip>;
   updateClip(clipId: string, captions: Partial<Captions>): Promise<Clip>;

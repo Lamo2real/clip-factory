@@ -1,10 +1,14 @@
-import { useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Job } from "../../api/types.ts";
 import { JobStatusPill, jobTitle, sourceMeta, SourceThumb } from "../../components/JobBits.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Progress, Skeleton } from "../../components/ui.tsx";
+import { Icon } from "../../components/Icon.tsx";
+import { useSession } from "../../app/session.tsx";
+import { deleteWithUndo, useDeletedJobs } from "../../lib/jobDeletes.ts";
+import { DeleteJobsSheet, isWorking } from "./DeleteJobsSheet.tsx";
 import { burst } from "../../lib/confetti.ts";
 import { useAction } from "../../lib/motion.ts";
 import { plural, relative } from "../../lib/format.ts";
@@ -26,8 +30,55 @@ export function Jobs() {
   // Show older jobs: the chevron steps on (§20.11 (a)); a page that does not load shakes it instead.
   const older = useAction("next");
 
-  const jobs = data?.jobs ?? [];
-  const active = jobs.some((j) => j.status === "running" || j.status === "queued");
+  const { refresh } = useSession();
+  const deleted = useDeletedJobs();
+  // Select several (§34.6): the rows become tick boxes and a bar at the bottom deletes the ones picked.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
+  const [asking, setAsking] = useState<Job[] | null>(null);
+
+  // A deleted job leaves at once (Undo brings it back), wherever the news came from.
+  const jobs = (data?.jobs ?? []).filter((j) => !deleted.jobs.has(j.jobId));
+  const active = jobs.some(isWorking);
+  const failed = jobs.filter((j) => j.status === "failed");
+  const chosen = jobs.filter((j) => picked.has(j.jobId));
+
+  function stopSelecting() {
+    setSelecting(false);
+    setPicked(new Set());
+  }
+  function toggle(jobId: string) {
+    setPicked((p) => {
+      const next = new Set(p);
+      if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return next;
+    });
+  }
+  // Escape leaves Select (the sheet takes Escape for itself while it is open).
+  useEffect(() => {
+    if (!selecting || asking) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") stopSelecting();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selecting, asking]);
+  // Leaving the list empty (everything deleted) ends Select too.
+  useEffect(() => {
+    if (selecting && data && jobs.length === 0) stopSelecting();
+  }, [selecting, data, jobs.length]);
+
+  function remove(list: Job[], clips: "keep" | "delete", review: Record<string, number>) {
+    setAsking(null);
+    stopSelecting();
+    deleteWithUndo(
+      list.map((j) => ({ jobId: j.jobId, working: isWorking(j), reviewClips: review[j.jobId] ?? 0 })),
+      clips,
+      toast,
+      { onDeleted: () => refresh() },
+    );
+  }
 
   /** A job that just finished gets a small celebration, whether the news came by poll or live. */
   function celebrate(fresh: Job[]) {
@@ -85,9 +136,16 @@ export function Jobs() {
         lede="Every link or video you add is one job. Tap one to watch it being made, step by step."
         actions={
           jobs.length ? (
-            <LinkButton href="/" variant="primary" icon="scissors">
-              Make clips
-            </LinkButton>
+            <>
+              {selecting ? null : (
+                <Button variant="ghost" icon="check" className="jobs-select" data-help="jobs-select" onClick={() => setSelecting(true)}>
+                  Select
+                </Button>
+              )}
+              <LinkButton href="/" variant="primary" icon="scissors">
+                Make clips
+              </LinkButton>
+            </>
           ) : undefined
         }
       />
@@ -113,13 +171,62 @@ export function Jobs() {
         </Empty>
       ) : null}
       {jobs.length ? (
-        <ul className="job-list">
+        <ul className={`job-list${selecting ? " is-selecting" : ""}`} aria-label={selecting ? "Pick jobs to delete" : undefined}>
           {jobs.map((j) => (
-            <li key={j.jobId}>
-              <JobRow job={j} />
+            <li key={j.jobId} className="job-item">
+              {selecting ? (
+                <PickRow job={j} on={picked.has(j.jobId)} onToggle={() => toggle(j.jobId)} />
+              ) : (
+                <>
+                  <JobRow job={j} />
+                  <button
+                    type="button"
+                    className="icon-btn job-item__delete"
+                    aria-label={`Delete job: ${jobTitle(j)}`}
+                    data-tip="Delete job"
+                    onClick={() => setAsking([j])}
+                  >
+                    <Icon name="trash" size={20} />
+                  </button>
+                </>
+              )}
             </li>
           ))}
         </ul>
+      ) : null}
+      {selecting ? (
+        <div className="select-bar glass" role="toolbar" aria-label="Picked jobs">
+          <p className="select-bar__count" aria-live="polite">
+            {chosen.length ? `${plural(chosen.length, "job")} picked` : "Tap the jobs to delete"}
+          </p>
+          <Button variant="ghost" size="sm" icon="x" className="select-bar__cancel" onClick={stopSelecting}>
+            Cancel
+          </Button>
+          {failed.length ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon="alert"
+              className="select-bar__failed"
+              onClick={() => setPicked(new Set(failed.map((j) => j.jobId)))}
+            >
+              {`Pick all failed (${failed.length})`}
+            </Button>
+          ) : null}
+          <Button
+            variant="danger"
+            size="sm"
+            icon="trash"
+            className="select-bar__delete"
+            disabled={!chosen.length}
+            onClick={() => setAsking(chosen)}
+          >
+            {chosen.length ? `Delete ${chosen.length}` : "Delete"}
+          </Button>
+        </div>
+      ) : null}
+      {asking ? (
+        <DeleteJobsSheet jobs={asking} onClose={() => setAsking(null)} onDelete={(clips, review) => remove(asking, clips, review)} />
       ) : null}
       {data?.nextCursor ? (
         <div className="center-row">
@@ -132,11 +239,38 @@ export function Jobs() {
   );
 }
 
+/** In Select, a row is one big tick box: tap anywhere on it to pick it or let it go. */
+function PickRow({ job, on, onToggle }: { job: Job; on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={on}
+      aria-label={jobTitle(job)}
+      className={`job-row job-row--pick glass${on ? " is-on" : ""}`}
+      onClick={onToggle}
+    >
+      <RowParts job={job} />
+      <span className="job-row__tick" aria-hidden="true">
+        {on ? <Icon name="check" size={18} /> : null}
+      </span>
+    </button>
+  );
+}
+
 function JobRow({ job }: { job: Job }) {
-  const working = job.status === "running" || job.status === "queued";
-  const step = job.steps.find((s) => s.status === "running");
   return (
     <A href={`/jobs/${job.jobId}`} className="job-row glass" data-help={job.status === "failed" ? "failed-job" : undefined}>
+      <RowParts job={job} />
+    </A>
+  );
+}
+
+function RowParts({ job }: { job: Job }) {
+  const working = isWorking(job);
+  const step = job.steps.find((s) => s.status === "running");
+  return (
+    <>
       <SourceThumb job={job} className="job-row__thumb" />
       <span className="job-row__body">
         <span className="job-row__title clamp-2 user-text">{jobTitle(job)}</span>
@@ -168,6 +302,6 @@ function JobRow({ job }: { job: Job }) {
         <JobStatusPill status={job.status} />
         {job.status === "ready" ? <span className="job-row__count">{plural(job.clipCount, "clip")}</span> : null}
       </span>
-    </A>
+    </>
   );
 }

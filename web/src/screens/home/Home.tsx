@@ -5,6 +5,7 @@ import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A, Button, ErrorPanel, LinkButton, Progress, Skeleton, Swash } from "../../components/ui.tsx";
 import { count, MOMENT_LABEL, plural, timecode } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
+import { useDeletedJobs } from "../../lib/jobDeletes.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { applyClipEvent, applyJobEvent, withMedia } from "../../lib/liveCache.ts";
 import { GetAppBanner } from "../../components/GetApp.tsx";
@@ -47,7 +48,12 @@ export function Home() {
   const { data, error, setData, reload } = useLoad(loadHome, "", "home");
   // Nothing loaded and the last try failed: say so and offer Try again, instead of skeletons forever (§12.4).
   const failed = !data && error ? error : null;
-  const working = data?.jobs.filter((j) => j.status === "running" || j.status === "queued") ?? [];
+  // Deleted jobs (and their Review clips, when those go too) leave at once; Undo brings them back (§34.5).
+  const gone = useDeletedJobs();
+  const view = data
+    ? { ...data, jobs: data.jobs.filter((j) => !gone.jobs.has(j.jobId)), review: data.review.filter((c) => !gone.reviewJobs.has(c.jobId)) }
+    : data;
+  const working = view?.jobs.filter((j) => j.status === "running" || j.status === "queued") ?? [];
   const inReview = (c: Clip) => c.status === "review";
   useLiveEvents(
     (e) => {
@@ -87,8 +93,8 @@ export function Home() {
           <NewJobForm />
         </div>
         <div className="hero__side">
-          <WorkingCard jobs={data?.jobs ?? null} failed={failed !== null} onRetry={() => void reload()} />
-          <CoverStack clips={data?.review ?? []} />
+          <WorkingCard jobs={view?.jobs ?? null} failed={failed !== null} onRetry={() => void reload()} />
+          <CoverStack clips={view?.review ?? []} />
         </div>
       </section>
 
@@ -100,9 +106,9 @@ export function Home() {
           <p className="muted">
             {failed
               ? "Could not check for new clips."
-              : data
-              ? data.review.length
-                ? `${plural(data.review.length, "clip")} waiting. Tap Go to Review to upload or throw away each one.`
+              : view
+              ? view.review.length
+                ? `${plural(view.review.length, "clip")} waiting. Tap Go to Review to upload or throw away each one.`
                 : "Nothing to check yet. Paste a link above and tap Make clips."
               : "Checking for new clips…"}
           </p>
@@ -115,8 +121,8 @@ export function Home() {
             <div className="home-row__error">
               <ErrorPanel message={failed} onRetry={() => void reload()} />
             </div>
-          ) : data ? (
-            data.review.slice(0, 3).map((c) => <ClipTeaser key={c.clipId} clip={c} />)
+          ) : view ? (
+            view.review.slice(0, 3).map((c) => <ClipTeaser key={c.clipId} clip={c} />)
           ) : (
             <>
               <Skeleton className="teaser-skel" />
@@ -124,7 +130,7 @@ export function Home() {
               <Skeleton className="teaser-skel" />
             </>
           )}
-          {data && data.review.length === 0 ? (
+          {view && view.review.length === 0 ? (
             <div className="teaser teaser--empty glass">
               <Icon name="review" size={26} />
               <p>All done here.</p>
