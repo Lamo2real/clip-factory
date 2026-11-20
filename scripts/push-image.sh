@@ -3,7 +3,8 @@
 # AgentCore runtime is created, so one apply can deploy from nothing. Builds the agent image for ARM64
 # and pushes it. The tag is a hash of agent/**, skills/** and config/** (deploy.yml), and an image that
 # is already in ECR is left alone, so pushes that do not touch the agent do not rebuild it.
-# Needs Docker with buildx (plus QEMU on x86 runners; deploy.yml sets both up before the apply).
+# Needs Docker with buildx on an ARM64 host (deploy.yml runs the apply on ubuntu-24.04-arm): the image's PO token
+# self-check runs Deno, which crashes at random with SIGILL under QEMU's arm64 emulation.
 #   REPO_URL     ECR repository URL (<account>.dkr.ecr.<region>.amazonaws.com/<name>)
 #   IMAGE_TAG    tag to push
 #   AWS_REGION   region of the repository

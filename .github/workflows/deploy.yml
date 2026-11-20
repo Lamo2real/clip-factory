@@ -155,9 +155,10 @@ jobs:
   infra:
     needs: [preflight, build]
     if: needs.preflight.outputs.enabled == 'true'
-    runs-on: ubuntu-24.04
-    # The first apply builds the ARM64 agent image under QEMU (up to 90 minutes); the drain before it waits at most 25
+    # Native ARM64: terraform apply builds the agent image (scripts/push-image.sh), and its PO token self-check runs
+    # Deno, which dies at random with SIGILL under QEMU's arm64 emulation. The drain before the apply waits at most 25
     # minutes (its step stops at 27), so the apply always has its whole budget and is never killed partway.
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
     permissions:
       contents: read
@@ -195,10 +196,7 @@ jobs:
         env:
           STATE_BUCKET: ${{ env.TF_STATE_BUCKET }}
         run: bash scripts/ensure-state-bucket.sh
-      # terraform apply runs scripts/push-image.sh, which needs buildx and ARM64 emulation.
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
-        with:
-          platforms: arm64
+      # terraform apply runs scripts/push-image.sh, which needs buildx (native ARM64 here, no emulation).
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:

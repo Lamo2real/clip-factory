@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import re
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -172,6 +173,18 @@ async def ready(within: float = 10.0) -> bool:
     return ok
 
 
+_PROVIDER = re.compile(r"([\w.-]+:[\w.-]+)(?:\s*\(([^)]*)\))?")
+
+
+def providers_of(line: str) -> dict[str, set[str]]:
+    """yt-dlp's ``PO Token Providers: a-1 (external), b-2 (external, unavailable)`` line as {name: tags}. A tag list
+    holds commas of its own, so the line is read provider by provider, never split on every comma."""
+    listed = line.split("PO Token Providers:", 1)[1] if "PO Token Providers:" in line else ""
+    return {
+        m.group(1): {t.strip() for t in (m.group(2) or "").split(",") if t.strip()} for m in _PROVIDER.finditer(listed)
+    }
+
+
 async def self_check(env: Mapping[str, str] | None = None) -> list[str]:
     """What the image build checks (``python -m clipfactory_agent.pot``): yt-dlp lists both bgutil providers as usable,
     and the server starts and answers /ping. Returns the problems found; none means it works. Never reaches YouTube:
@@ -203,11 +216,13 @@ async def self_check(env: Mapping[str, str] | None = None) -> list[str]:
     out, _ = await asyncio.wait_for(run.communicate(), 120)
     line = next((ln for ln in out.decode("utf-8", "replace").splitlines() if "PO Token Providers:" in ln), "")
     print(line.strip() or "yt-dlp printed no PO Token Providers line")
-    providers = {p.strip() for p in line.split("PO Token Providers:", 1)[-1].split(",")}
-    if not any(p.startswith("bgutil:http-") for p in providers):
-        problems.append("yt-dlp does not list bgutil:http")
-    if not any(p.startswith("bgutil:script-deno-") and "unavailable" not in p for p in providers):
-        problems.append("yt-dlp lists bgutil:script-deno as unavailable")
+    providers = providers_of(line)
+    if not any(name.startswith("bgutil:http-") and "unavailable" not in tags for name, tags in providers.items()):
+        problems.append("yt-dlp does not list bgutil:http as usable")
+    if not any(
+        name.startswith("bgutil:script-deno-") and "unavailable" not in tags for name, tags in providers.items()
+    ):
+        problems.append("yt-dlp lists bgutil:script-deno as unavailable (or not at all)")
     server = from_env(e)
     if server is None:
         problems.append("no PO token server (CF_POT=off or no src/main.ts)")
