@@ -274,6 +274,29 @@ class Store:
     def delete(self, pk: str, sk: str) -> None:
         self._table.delete_item(Key={"pk": pk, "sk": sk})
 
+    def delete_if(self, pk: str, sk: str, expect_in: Mapping[str, Iterable[Any]]) -> bool:
+        """Deletes the item only while each named field holds one of the given values; False when it did not (the
+        item is gone, or changed meanwhile: a clip kept on another device while its job was being deleted)."""
+        names: dict[str, str] = {}
+        values: dict[str, Any] = {}
+        conditions = ["attribute_exists(pk)"]
+        for i, (field, allowed) in enumerate(expect_in.items()):
+            names[f"#c{i}"] = field
+            placeholders = []
+            for j, value in enumerate(allowed):
+                values[f":c{i}_{j}"] = to_dynamo(value)
+                placeholders.append(f":c{i}_{j}")
+            conditions.append(f"#c{i} IN ({', '.join(placeholders)})")
+        kwargs: dict[str, Any] = {"Key": {"pk": pk, "sk": sk}, "ConditionExpression": " AND ".join(conditions)}
+        if names:
+            kwargs["ExpressionAttributeNames"] = names
+            kwargs["ExpressionAttributeValues"] = values
+        try:
+            self._call(self._table.delete_item, **kwargs)
+        except ConditionFailed:
+            return False
+        return True
+
     def delete_once(self, pk: str, sk: str) -> Item | None:
         """Deletes an existing item and returns it; None when it was already gone (single-use tokens, §17.5)."""
         try:

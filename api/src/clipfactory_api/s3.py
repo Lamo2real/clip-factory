@@ -205,6 +205,26 @@ class Media:
                 return deleted
             token = out.get("NextContinuationToken")
 
+    def delete_prefix_except(self, prefix: str, keep: tuple[str, ...] = ()) -> int:
+        """Deletes every object under ``prefix`` except those that start with one of ``keep`` (a deleted job's
+        files without the files of the clips it keeps, §34.4); returns how many."""
+        if not prefix.endswith("/") or not is_safe_key(prefix.rstrip("/")):
+            raise ValueError("refusing to delete an unsafe prefix")
+        deleted = 0
+        token: str | None = None
+        while True:
+            kwargs: dict[str, Any] = {"Bucket": self.bucket, "Prefix": prefix}
+            if token:
+                kwargs["ContinuationToken"] = token
+            out = self._s3.list_objects_v2(**kwargs)
+            keys = [{"Key": o["Key"]} for o in out.get("Contents", []) if not str(o["Key"]).startswith(keep)]
+            if keys:  # a listing page holds at most 1000 keys, as many as DeleteObjects takes
+                self._s3.delete_objects(Bucket=self.bucket, Delete={"Objects": keys, "Quiet": True})
+            deleted += len(keys)
+            if not out.get("IsTruncated"):
+                return deleted
+            token = out.get("NextContinuationToken")
+
 
 def _code(e: Exception) -> str | None:
     response = getattr(e, "response", None) or {}
