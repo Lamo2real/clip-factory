@@ -287,12 +287,12 @@ def test_settings_notify_choices(call: Call) -> None:
     assert call("GET", "/v1/settings")[1]["settings"]["notify"] == {
         "ready": True,
         "stopped": True,
-        "resumed": True,
+        "resumed": False,
         "steps": False,
     }
     status, body = call("PUT", "/v1/settings", {"notify": {"steps": True}})
     assert status == 200
-    assert body["settings"]["notify"] == {"ready": True, "stopped": True, "resumed": True, "steps": True}
+    assert body["settings"]["notify"] == {"ready": True, "stopped": True, "resumed": False, "steps": True}
     assert call("PUT", "/v1/settings", {"notify": {"loud": True}})[0] == 400
     assert call("PUT", "/v1/settings", {"notify": {"ready": "yes"}})[0] == 400
 
@@ -437,16 +437,70 @@ def test_a_new_clip_updates_the_card_with_its_number(
     ]
 
 
-def test_picked_up_after_a_stop_is_on_by_default(
-    deps: notify.NotifyDeps, job: dict[str, Any], service: PushService
+def test_picked_up_again_is_off_by_default(deps: notify.NotifyDeps, job: dict[str, Any], service: PushService) -> None:
+    stopped = {**job, "status": "failed", "pickUp": True, "sessionId": "run-1"}
+    again = {**job, "status": "queued", "pickUp": True, "sessionId": "run-2"}
+    notify.process({"Records": [_record(stopped, again)]}, deps)
+    assert service.shown == []
+
+
+def test_picked_up_again_when_asked_is_quiet_and_replaceable(
+    deps: notify.NotifyDeps, job: dict[str, Any], service: PushService, store: db.Store
 ) -> None:
+    settings.save(store, USER, {"notify": {"resumed": True}}, "2026-11-15T12:00:00.000Z")
     stopped = {**job, "status": "failed", "pickUp": True, "sessionId": "run-1"}
     again = {**job, "status": "queued", "pickUp": True, "sessionId": "run-2", "note": "Picking up where it stopped…"}
     notify.process({"Records": [_record(stopped, again)]}, deps)
     notify.process({"Records": [_record(again, {**again, "status": "running"})]}, deps)  # same run: nothing new
-    assert [(s["body"], s["tag"], s["badge"]) for s in service.shown] == [
-        ("Picking up where it stopped.", job["jobId"], 1)
+    assert [(s["body"], s["tag"], s["badge"], s["quiet"]) for s in service.shown] == [
+        ("Picking up where it stopped.", job["jobId"], 1, True)
     ]
+    assert service.received[0][1]["Topic"] == f"job{job['jobId']}"[:32]
+
+
+def test_a_step_held_back_inside_the_gap_is_sent_by_the_next_write_after_it(
+    deps: notify.NotifyDeps, job: dict[str, Any], service: PushService, store: db.Store, clock: Clock
+) -> None:
+    settings.save(store, USER, {"notify": {"steps": True}}, "2026-11-15T12:00:00.000Z")
+    a, b, c = ({**job, "status": "running", "steps": _steps(k)} for k in ("select", "render", "checklist"))
+    notify.process({"Records": [_record(a, b)]}, deps)  # sent
+    clock.now += timedelta(seconds=60)
+    notify.process({"Records": [_record(b, c)]}, deps)  # inside the gap: held back
+    assert len(service.shown) == 1
+    # Nothing changes any more: only heartbeats follow. Once the gap is over the next one shows the new step.
+    notify.process({"Records": [_record(c, {**c, "heartbeatAt": "1"})]}, deps)
+    assert len(service.shown) == 1
+    clock.now += timedelta(seconds=61)
+    beat = {**c, "heartbeatAt": "2"}
+    notify.process({"Records": [_record(c, beat)]}, deps)
+    assert [s["body"] for s in service.shown][-1] == "Checking each clip · step 8 of 10"
+    # ...and once only: the same step again (a heartbeat, or a stream retry) sends nothing.
+    clock.now += timedelta(minutes=5)
+    notify.process({"Records": [_record(c, beat), _record(c, {**c, "heartbeatAt": "3"})]}, deps)
+    assert len(service.shown) == 2
+
+
+def test_a_dropped_card_does_not_use_up_the_slot(
+    deps: notify.NotifyDeps, job: dict[str, Any], service: PushService, store: db.Store, clock: Clock
+) -> None:
+    settings.save(store, USER, {"notify": {"steps": True}}, "2026-11-15T12:00:00.000Z")
+    store.put({**job, "status": "running"})
+    b = {**job, "status": "running", "steps": _steps("render")}
+    # A step card for a job whose owner has no device sends nothing and leaves no mark behind.
+    store.update(db.user_pk(USER), devices.sub_sk("phone-12345678"), {"gone": True})
+    notify.process({"Records": [_record(job, b)]}, deps)
+    assert store.get(db.user_pk(USER), f"NOTIFYSTEP#{job['jobId']}") is None
+
+
+def test_many_auto_resumes_in_one_run_send_nothing_by_default(
+    deps: notify.NotifyDeps, job: dict[str, Any], service: PushService
+) -> None:
+    before = {**job, "status": "running", "pickUp": True, "sessionId": "run-0"}
+    for n in range(1, 7):
+        after = {**before, "sessionId": f"run-{n}"}
+        notify.process({"Records": [_record(before, after)]}, deps)
+        before = after
+    assert service.shown == []
 
 
 def test_the_badge_counts_every_working_job(
@@ -507,3 +561,17 @@ def test_nothing_secret_is_logged(
     assert "notify.device_gone" in out
     for secret in ("PRIVATE KEY", APPLE, "QGuQyavXutnMH7vvR", webpush.b64u(b"0123456789abcdef")):
         assert secret not in out
+
+
+def test_the_same_phone_under_two_device_ids_is_one_device(
+    push_app: App, call: Call, store: db.Store, deps: notify.NotifyDeps, job: dict[str, Any], service: PushService
+) -> None:
+    # Cleared storage (or the Home Screen app and Safari keeping separate storage) makes a new id for the same phone.
+    phone = service.browsers[APPLE]
+    assert call("PUT", "/v1/push/devices/second-id-1234", phone.json())[0] in (200, 204)
+    assert [d["deviceId"] for d in devices.active(store, USER)] == ["second-id-1234"]
+    notify.process({"Records": [_record(job, {**job, "status": "ready"})]}, deps)
+    assert len(service.received) == 1  # one buzz, not two
+    # Saving it again (the page re-sends it when it opens) changes nothing.
+    assert call("PUT", "/v1/push/devices/second-id-1234", phone.json())[0] in (200, 204)
+    assert [d["deviceId"] for d in devices.active(store, USER)] == ["second-id-1234"]

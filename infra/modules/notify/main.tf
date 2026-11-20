@@ -50,6 +50,11 @@ resource "aws_secretsmanager_secret_version" "vapid" {
   secret_id                = aws_secretsmanager_secret.vapid.id
   secret_string_wo         = ephemeral.tls_private_key.vapid.private_key_pem
   secret_string_wo_version = 1 # never bumped: every device would have to turn notifications on again
+
+  # Destroying or replacing the version removes the current key just like the secret would: same rule.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # ---------- cf-prod-notify ----------

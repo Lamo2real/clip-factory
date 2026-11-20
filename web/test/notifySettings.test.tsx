@@ -33,7 +33,7 @@ const current: Partial<Api> = {
 vi.mock("../src/api/index.ts", async (orig) => ({ ...(await orig<object>()), api: () => current as Api }));
 
 const saveSettings = vi.fn(async (patch: Partial<Settings>) => patch);
-const me = { user: { id: "u", email: "a@b.c" }, settings: { notify: { ready: true, stopped: true, resumed: true, steps: false } } } as unknown as Me;
+const me = { user: { id: "u", email: "a@b.c" }, settings: { notify: { ready: true, stopped: true, resumed: false, steps: false } } } as unknown as Me;
 vi.mock("../src/app/session.tsx", () => ({ useSession: () => ({ me, saveSettings }) }));
 
 const { NotifyBranch, NotifyCard } = await import("../src/screens/settings/NotifyBranch.tsx");
@@ -171,8 +171,75 @@ describe("Settings › Notifications", () => {
     const steps = host.querySelector<HTMLButtonElement>('button[aria-labelledby="notify-steps-name"]');
     expect(steps?.getAttribute("aria-checked")).toBe("false");
     act(() => steps!.click());
-    expect(saveSettings).toHaveBeenCalledWith({ notify: { ready: true, stopped: true, resumed: true, steps: true } });
+    expect(saveSettings).toHaveBeenCalledWith({ notify: { ready: true, stopped: true, resumed: false, steps: true } });
     expect(text()).toContain("Lock Screen widgets only come with App Store apps.");
+  });
+});
+
+describe("keeping \"On\" true", () => {
+  let clock = Date.now();
+  beforeEach(() => {
+    clock += 3_600_000; // past the once-a-minute throttle of every earlier test
+    vi.spyOn(Date, "now").mockReturnValue(clock);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  function subscribed() {
+    permission = "granted";
+    subscription = { endpoint: "https://web.push.apple.com/abc", toJSON: () => ({ endpoint: "https://web.push.apple.com/abc", keys: { p256dh: "p", auth: "a" } }), unsubscribe: vi.fn(async () => true) };
+  }
+
+  it("says the subscription to the server again when Settings opens", async () => {
+    device(IPHONE, true);
+    subscribed();
+    await render(<NotifyBranch />);
+    expect(savePushDevice).toHaveBeenCalledTimes(1);
+    expect(text()).toContain("This device gets them");
+  });
+
+  it("shows Off with Turn on when the server cannot take it", async () => {
+    device(IPHONE, true);
+    subscribed();
+    savePushDevice.mockRejectedValueOnce(new Error("offline"));
+    await render(<NotifyBranch />);
+    expect(button("Turn on")).toBeDefined();
+    expect(text()).not.toContain("This device gets them");
+  });
+
+  it("a test the server answers 404 to says it again and tells the owner", async () => {
+    device(IPHONE, true);
+    subscribed();
+    await render(<NotifyBranch />);
+    (current.sendTestPush as ReturnType<typeof vi.fn>).mockRejectedValueOnce(Object.assign(new Error("none"), { status: 404 }));
+    savePushDevice.mockClear();
+    act(() => button("Send a test")!.click());
+    await flush();
+    await flush();
+    expect(savePushDevice).toHaveBeenCalled();
+    expect(text()).toContain("Fixed it. Tap Send a test again.");
+  });
+
+  it("signing out forgets this device on the server and in the browser", async () => {
+    device(IPHONE, true);
+    subscribed();
+    const sub = subscription!;
+    await push.forgetDevice();
+    expect(current.deletePushDevice).toHaveBeenCalledTimes(1);
+    expect(sub.unsubscribe).toHaveBeenCalled();
+  });
+
+  it("signing out with nothing on does nothing", async () => {
+    device(IPHONE, true);
+    await push.forgetDevice();
+    expect(current.deletePushDevice).not.toHaveBeenCalled();
+  });
+
+  it("the blocked help sits in the announced status region", async () => {
+    device(IPHONE, true);
+    permission = "denied";
+    await render(<NotifyBranch />);
+    const status = host.querySelector(".notify-device [role=status]");
+    expect(status?.textContent).toContain("Settings > Notifications > Clip Factory.");
   });
 });
 

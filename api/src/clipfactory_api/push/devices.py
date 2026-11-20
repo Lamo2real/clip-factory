@@ -7,8 +7,10 @@ A subscription's endpoint and keys are kept only here and are never sent back to
 
 from __future__ import annotations
 
+import contextlib
 import re
 import threading
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -121,7 +123,20 @@ def save(store: db.Store, user_id: str, device_id: str, sub: Item, now: str) -> 
         "updatedAt": now,
     }
     store.put(item)  # a whole new item: any earlier "gone" mark goes with the old one
+    _retire_same_endpoint(store, pk, device_id, sub["endpoint"])
     return item
+
+
+def _retire_same_endpoint(store: db.Store, pk: str, device_id: str, endpoint: str) -> None:
+    """The same phone saved under another device id (cleared storage, or the Home Screen app and Safari keeping
+    separate storage) would get every notification twice: the older rows are marked gone (the table's TTL removes
+    them). Nothing is deleted here."""
+    ttl = int(time.time()) + GONE_TTL_SECONDS
+    for other in store.query_all(pk, PREFIX):
+        if other.get("sk") == sub_sk(device_id) or other.get("gone") or other.get("endpoint") != endpoint:
+            continue
+        with contextlib.suppress(db.ConditionFailed):
+            store.update(pk, str(other["sk"]), {"gone": True, "ttl": ttl}, expect_present=["endpoint"])
 
 
 def subscription(item: Mapping[str, Any]) -> webpush.Subscription:

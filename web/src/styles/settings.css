@@ -2319,8 +2319,15 @@ ol.md__list {
   font-size: var(--fs-small);
   color: var(--ink-2);
 }
+/* Empty, the note stays in the page (hidden to the eye, not display:none) so a screen reader hears the text the
+   moment it is put in. */
 .notify-device__note:empty {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 .notify-card {
   display: grid;

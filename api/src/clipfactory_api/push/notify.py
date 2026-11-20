@@ -5,16 +5,19 @@ after the write and sends at most one notification:
 
 - **ready**: the job became ``ready`` ("Your clips are ready. Tap to look."), when ``notify.ready`` is on;
 - **stopped**: it became ``failed`` ("It stopped. Tap Try again."), when ``notify.stopped`` is on;
-- **resumed**: a stopped run is picked up again (a new run with ``pickUp``), when ``notify.resumed`` is on;
-- **step**: a running job started another step or another clip ("Cutting the clips · step 7 of 10 · clip 3 of 10"),
-  when ``notify.steps`` is on (off by default), at most once every 2 minutes per job.
+- **resumed**: a stopped run is picked up again (a new run with ``pickUp``), when ``notify.resumed`` is on (off by
+  default: the job flow resumes by itself, up to 6 times a run, and the owner has nothing to do); it is quiet;
+- **step**: a running job is on another step or another clip than the last card showed ("Cutting the clips · step 7
+  of 10 · clip 3 of 10"), when ``notify.steps`` is on (off by default), at most once every 2 minutes per job. The
+  step last shown is kept in ``NOTIFYSTEP#<jobId>``, so a change held back inside the 2 minutes is still sent by the
+  job's next write once the gap is over.
 
 Every notification of one job carries the same tag (the job id), so the newest replaces the one before it: one
 live card per job on the lock screen, not a pile. Each also carries ``badge``, how many jobs are working now, for the
 app icon's badge (the Badging API, §32.6).
 
 Stream retries can deliver a record twice, so each notification first writes ``NOTIFIED#<jobId>#<run>#<event>``
-once (2-day TTL). A device the push service calls gone (404, 410) is marked ``gone`` with a TTL; nothing here ever
+once (2-day TTL); a step card is deduped by its ``NOTIFYSTEP#`` write instead. A device the push service calls gone (404, 410) is marked ``gone`` with a TTL; nothing here ever
 deletes an item. Sending is best effort: a failure is logged (status codes and ids only) and never retried, so one
 bad device can never hold up the stream.
 """
@@ -38,6 +41,7 @@ Item = dict[str, Any]
 
 TITLE_MAX = 40
 STEP_GAP_SECONDS = 120
+BADGE_JOBS = 50
 DEDUPE_DAYS = 2
 READY = "Your clips are ready. Tap to look."
 STOPPED = "It stopped. Tap Try again."
@@ -99,13 +103,13 @@ def event_for(old: Mapping[str, Any], new: Mapping[str, Any]) -> str | None:
         return "resumed"
     if status != "running":
         return None
-    now, was = running_step(new), running_step(old)
+    # The step now running. Whether it was already shown is decided against what was last sent (``_step_allowed``),
+    # not against the old item, so a change held back inside the 2-minute gap is sent by a later write.
+    now = running_step(new)
     if not now:
         return None
-    clip, clip_was = clip_of(new), clip_of(old)
-    if was is None or was[0] != now[0] or (clip and clip != clip_was):
-        return f"step:{now[0]}" + (f":{clip[0]}" if clip else "")
-    return None
+    clip = clip_of(new)
+    return f"step:{now[0]}" + (f":{clip[0]}" if clip else "")
 
 
 def step_line(job: Mapping[str, Any]) -> str:
@@ -130,7 +134,9 @@ def message_for(event: str, job: Mapping[str, Any], badge: int | None = None) ->
     if event == "stopped":
         return webpush.Message(title, STOPPED, job_id, url, ttl=24 * 3600, urgency="high", badge=badge)
     if event == "resumed":
-        return webpush.Message(title, RESUMED, job_id, url, ttl=3600, urgency="normal", badge=badge)
+        return webpush.Message(
+            title, RESUMED, job_id, url, ttl=3600, urgency="normal", topic=f"job{job_id}"[:32], quiet=True, badge=badge
+        )
     # A progress card: it replaces the last one quietly. One not delivered yet is replaced by the next (Topic), and
     # it is worth nothing after 10 minutes.
     return webpush.Message(
@@ -148,7 +154,9 @@ def message_for(event: str, job: Mapping[str, Any], badge: int | None = None) ->
 
 def working_count(store: db.Store, user_id: str) -> int:
     """How many of the owner's jobs are queued or running (the app icon's badge)."""
-    return sum(1 for j in store.query_all(db.user_pk(user_id), "JOB#") if j.get("status") in ACTIVE)
+    # The newest 50 jobs, as the web reads them: a count that never grows with every job the owner ever made.
+    newest = store.query_all(db.user_pk(user_id), "JOB#", newest_first=True, cap=BADGE_JOBS)
+    return sum(1 for j in newest if j.get("status") in ACTIVE)
 
 
 def wanted(prefs: Mapping[str, Any], event: str) -> bool:
@@ -157,7 +165,7 @@ def wanted(prefs: Mapping[str, Any], event: str) -> bool:
     if event == "stopped":
         return bool(prefs.get("stopped"))
     if event == "resumed":
-        return bool(prefs.get("resumed", True))
+        return bool(prefs.get("resumed", False))
     return bool(prefs.get("steps"))
 
 
@@ -223,22 +231,25 @@ def _first_time(deps: NotifyDeps, pk: str, job: Mapping[str, Any], event: str) -
     return True
 
 
-def _step_allowed(deps: NotifyDeps, pk: str, job_id: str) -> bool:
-    """At most one step notification every 2 minutes per job (one conditional write)."""
+def _step_allowed(deps: NotifyDeps, pk: str, job_id: str, shown: str) -> bool:
+    """One conditional write decides a step card: it is sent when it shows something other than the last card
+    (``shown``: the run, step and clip) and 2 minutes have passed since that card. It also dedupes a stream retry
+    (the same ``shown`` again) and never uses up the slot unless the card goes out."""
     now = deps.clock()
     cutoff = iso(now - timedelta(seconds=STEP_GAP_SECONDS))
     try:
         deps.store.update_expr(
             pk,
             f"NOTIFYSTEP#{job_id}",
-            "SET #at = :now, #ttl = :ttl, #type = :type",
-            condition="attribute_not_exists(pk) OR #at <= :cutoff",
-            names={"#at": "at", "#ttl": "ttl", "#type": "type"},
+            "SET #at = :now, #ttl = :ttl, #type = :type, #shown = :shown",
+            condition="attribute_not_exists(pk) OR (#shown <> :shown AND #at <= :cutoff)",
+            names={"#at": "at", "#ttl": "ttl", "#type": "type", "#shown": "shown"},
             values={
                 ":now": iso(now),
                 ":cutoff": cutoff,
                 ":ttl": int((now + timedelta(days=1)).timestamp()),
                 ":type": "notifystep",
+                ":shown": shown,
             },
         )
     except db.ConditionFailed:
@@ -260,9 +271,11 @@ def handle_change(deps: NotifyDeps, old: Mapping[str, Any], new: Mapping[str, An
     if not subs:
         return None
     pk = db.user_pk(user_id)
-    if event.startswith("step:") and not _step_allowed(deps, pk, job_id):
-        return None
-    if not _first_time(deps, pk, new, event):
+    if event.startswith("step:"):
+        run = str(new.get("sessionId") or new.get("flowRun") or "")
+        if not _step_allowed(deps, pk, job_id, f"{run}|{event}"):
+            return None
+    elif not _first_time(deps, pk, new, event):
         return None
     try:
         badge: int | None = working_count(deps.store, user_id)

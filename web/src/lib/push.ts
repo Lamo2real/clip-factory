@@ -131,7 +131,10 @@ function publish(next: PushState) {
 }
 
 export async function refreshPushState(): Promise<PushState> {
-  const next = pushState(await readEnv());
+  listenForChange();
+  let next = pushState(await readEnv());
+  // "On" must mean the server has this device too: say it again (once a minute at most), and show "Off" when it cannot.
+  if (next === "on" && !(await syncPush())) next = "off";
   publish(next);
   return next;
 }
@@ -182,15 +185,71 @@ export async function turnOn(): Promise<TurnOnResult> {
   if (!reg) return "unsupported";
   const existing = await reg.pushManager.getSubscription();
   const sub = existing ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(got.k) }));
+  await api().savePushDevice(deviceId(), subscriptionBody(sub));
+  syncedAt = Date.now();
+  publish("on");
+  return "on";
+}
+
+function subscriptionBody(sub: PushSubscription): PushSubscriptionBody {
   const json = sub.toJSON();
-  const body: PushSubscriptionBody = {
+  return {
     endpoint: sub.endpoint,
     keys: { p256dh: json.keys?.p256dh ?? "", auth: json.keys?.auth ?? "" },
     deviceLabel: deviceLabel(currentOs(), typeof navigator === "undefined" ? "" : navigator.userAgent),
   };
-  await api().savePushDevice(deviceId(), body);
-  publish("on");
-  return "on";
+}
+
+const SYNC_EVERY_MS = 60_000;
+let syncedAt = 0;
+let listening = false;
+
+/**
+ * Says again to the server what this device is subscribed to (the PUT is idempotent). Without it, "On" here could be
+ * a lie: the phone's endpoint changed, or the server marked the device gone. Never throws; at most once a minute
+ * unless `force`. Resolves true when the server has the subscription.
+ */
+export async function syncPush(force = false): Promise<boolean> {
+  if (!force && Date.now() - syncedAt < SYNC_EVERY_MS) return true;
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return false;
+    const sub = await (await registration())?.pushManager.getSubscription();
+    if (!sub) return false;
+    await api().savePushDevice(deviceId(), subscriptionBody(sub));
+    syncedAt = Date.now();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function listenForChange() {
+  if (listening || typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  listening = true;
+  try {
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if ((event.data as { type?: string } | null)?.type === "PUSH_SUBSCRIPTION_CHANGED") void syncPush(true).then(() => refreshPushState());
+    });
+  } catch {
+    // No messages from the worker here: the next start still says it again.
+  }
+}
+
+/**
+ * Signing out: this device stops getting this account's notifications (the server forgets it and the browser
+ * unsubscribes), so the next account here starts clean. Never throws and never holds the sign-out up for long.
+ */
+export async function forgetDevice(): Promise<void> {
+  try {
+    const sub = await (await registration())?.pushManager.getSubscription();
+    if (!sub) return;
+    await api().deletePushDevice(deviceId()).catch(() => undefined);
+    await sub.unsubscribe().catch(() => false);
+    syncedAt = 0;
+    publish("off");
+  } catch {
+    // Nothing to forget, or the browser would not say: signing out goes on.
+  }
 }
 
 /** Turns notifications off on this device: the browser forgets the subscription and so does the server. */

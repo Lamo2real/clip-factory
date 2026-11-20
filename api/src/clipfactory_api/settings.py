@@ -47,8 +47,9 @@ DEFAULTS: dict[str, Any] = {
     "followDailyMax": 0,
     "followMinMinutes": 30,
     # §32: which notifications the owner's devices get. Step updates are off by default: on an iPhone every push must
-    # show, so only the owner can ask for one each step.
-    "notify": {"ready": True, "stopped": True, "resumed": True, "steps": False},
+    # show, so only the owner can ask for one each step. "Picked up again" is off too: the job flow resumes a stalled job by
+    # itself (up to 6 times a run) and the owner has nothing to do.
+    "notify": {"ready": True, "stopped": True, "resumed": False, "steps": False},
 }
 NOTIFY_KEYS = ("ready", "stopped", "resumed", "steps")
 # The Clip Factory colours before the bottle-green look (ADR-43). An owner who never changed them has exactly this

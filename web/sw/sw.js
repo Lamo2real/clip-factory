@@ -88,7 +88,8 @@ self.addEventListener("fetch", (event) => {
 // where the device allows. "badge" is how many videos are working: the number on the app icon.
 // Only same-origin paths are ever opened, so a message can never send the owner anywhere else.
 function safePath(url) {
-  if (typeof url !== "string" || !url.startsWith("/") || url.startsWith("//")) return "/";
+  // Only plain paths like /jobs/<id>: no "//", no backslash (browsers read "/\\host" as "//host"), no scheme.
+  if (typeof url !== "string" || !/^\/[A-Za-z0-9/_-]*$/.test(url) || url.startsWith("//")) return "/";
   return url;
 }
 
@@ -126,6 +127,24 @@ async function showPush(data) {
 
 self.addEventListener("push", (event) => {
   event.waitUntil(showPush(readPush(event)));
+});
+
+// The push service gave this device a new subscription. The worker has no sign-in, so it cannot tell the server
+// itself: it subscribes again with the same key and asks every open page to send the new one (the page also
+// re-sends it each time the app opens, so a closed app catches up at its next start).
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const key = event.oldSubscription && event.oldSubscription.options && event.oldSubscription.options.applicationServerKey;
+        if (key) await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      } catch {
+        // The page's next start asks again.
+      }
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      windows.forEach((w) => w.postMessage({ type: "PUSH_SUBSCRIPTION_CHANGED" }));
+    })(),
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {

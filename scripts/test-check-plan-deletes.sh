@@ -47,6 +47,12 @@ expect "replacing the user pool stops the deploy" 1 "${work}/pool.json" "the own
 plan "${work}/secret.json" 'module.hooks.aws_secretsmanager_secret.state_key' aws_secretsmanager_secret '["delete"]'
 expect "deleting a secret stops the deploy" 1 "${work}/secret.json" "aws_secretsmanager_secret"
 
+plan "${work}/secret-version.json" 'module.notify.aws_secretsmanager_secret_version.vapid' aws_secretsmanager_secret_version '["delete","create"]'
+expect "replacing a secret's current value stops the deploy" 1 "${work}/secret-version.json" "aws_secretsmanager_secret_version"
+
+plan "${work}/secret-version-update.json" 'module.notify.aws_secretsmanager_secret_version.vapid' aws_secretsmanager_secret_version '["update"]'
+expect "an in-place update of a secret version goes through" 0 "${work}/secret-version-update.json"
+
 plan "${work}/bucket.json" 'module.storage.aws_s3_bucket.this["media"]' aws_s3_bucket '["delete"]'
 expect "deleting the media bucket stops the deploy" 1 "${work}/bucket.json" 'aws_s3_bucket.this["media"]'
 

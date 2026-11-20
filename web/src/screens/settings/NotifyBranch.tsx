@@ -11,10 +11,10 @@ import { useToast } from "../../components/Toasts.tsx";
 import { Button, Pill, Skeleton } from "../../components/ui.tsx";
 import { currentOs } from "../../lib/device.ts";
 import { badgeSupported } from "../../lib/badge.ts";
-import { blockedHelp, deviceId, hideNotifyCard, notifyCardHidden, turnOff, turnOn, usePushState, type PushState } from "../../lib/push.ts";
+import { blockedHelp, deviceId, hideNotifyCard, notifyCardHidden, refreshPushState, syncPush, turnOff, turnOn, usePushState, type PushState } from "../../lib/push.ts";
 import { Apple, AppleSwitch, Panel } from "./parts.tsx";
 
-export const NOTIFY_DEFAULTS: NotifyChoices = { ready: true, stopped: true, resumed: true, steps: false };
+export const NOTIFY_DEFAULTS: NotifyChoices = { ready: true, stopped: true, resumed: false, steps: false };
 
 const STATE_PILL: Record<PushState, { text: string; tone: "success" | "neutral" }> = {
   on: { text: "On", tone: "success" },
@@ -95,6 +95,13 @@ export function NotifyBranch() {
       toast.success("Sent. Look for it in a few seconds.");
       return true;
     } catch (e) {
+      if ((e as { status?: number })?.status === 404) {
+        // The server has no working copy of this device: say it again, and show what is true.
+        const fixed = await syncPush(true);
+        await refreshPushState();
+        toast.info(fixed ? "Fixed it. Tap Send a test again." : "Notifications are off here. Tap Turn on.");
+        return false;
+      }
       toast.error(friendlyMessage(e));
       return false;
     } finally {
@@ -119,7 +126,6 @@ export function NotifyBranch() {
               </>
             ) : null}
             {state === "unsupported" ? <p className="notify-device__note">{inDesktopApp() ? DESKTOP_TEXT : UNSUPPORTED_TEXT}</p> : null}
-            {state === "blocked" ? <p className="notify-device__note">{blockedHelp(os)}</p> : null}
             {state === "off" ? (
               <div className="notify-device__row">
                 <Button variant="primary" size="lg" icon="bell" loading={busy} onClick={() => start()}>
@@ -141,7 +147,7 @@ export function NotifyBranch() {
               </>
             ) : null}
             <p className="notify-device__note" role="status">
-              {state === "blocked" ? null : note}
+              {state === "blocked" ? (note ?? blockedHelp(os)) : note}
             </p>
           </div>
         </Apple>
@@ -160,13 +166,7 @@ export function NotifyBranch() {
         </Apple>
       </Panel>
       <Panel>
-        <Apple id="notify-lock-screen" wide>
-          <p className="notify-device__note">
-            {os === "ios"
-              ? "On your iPhone, each video gets one notification on the Lock Screen. Turn on Every step and it changes as the video is made."
-              : "Each video gets one notification. Turn on Every step and it changes as the video is made."}
-          </p>
-        </Apple>
+        <Apple id="notify-lock-screen" wide />
       </Panel>
     </>
   );

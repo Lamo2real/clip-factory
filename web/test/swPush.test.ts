@@ -21,7 +21,7 @@ function loadWorker() {
     .replace("__CF_VERSION__", JSON.stringify("test"))
     .replace("__CF_PRECACHE__", "[]");
   new Function("self", "caches", "fetch", source)(self, {}, () => {});
-  const listeners = { push: all.push!, notificationclick: all.notificationclick! };
+  const listeners = { push: all.push!, notificationclick: all.notificationclick!, change: all.pushsubscriptionchange! };
   return { listeners, self, windows };
 }
 
@@ -59,8 +59,24 @@ describe("push", () => {
     expect(w.self.registration.showNotification).toHaveBeenCalledWith("Clip Factory", expect.objectContaining({ data: { url: "/" } }));
     await fire(w.listeners.push, pushOf({ title: "x", url: "https://evil.example/" }));
     await fire(w.listeners.push, pushOf({ title: "x", url: "//evil.example/" }));
+    await fire(w.listeners.push, pushOf({ title: "x", url: "/\\evil.example" }));
+    await fire(w.listeners.push, pushOf({ title: "x", url: "/\t/evil.example" }));
+    await fire(w.listeners.push, pushOf({ title: "x", url: "/jobs/J1?next=//evil.example" }));
     const urls = w.self.registration.showNotification.mock.calls.map((c) => (c as unknown as [string, { data: { url: string } }])[1].data.url);
-    expect(urls).toEqual(["/", "/", "/"]);
+    expect(urls).toEqual(["/", "/", "/", "/", "/", "/"]);
+  });
+});
+
+describe("a new subscription from the push service", () => {
+  it("subscribes again with the same key and asks every open page to send it", async () => {
+    const key = new Uint8Array([4, 1, 2]);
+    const subscribe = vi.fn(async () => ({}));
+    (w.self.registration as unknown as { pushManager: unknown }).pushManager = { subscribe };
+    const post = vi.fn();
+    w.windows.push({ url: "https://app.example/", postMessage: post } as never);
+    await fire(w.listeners.change, { oldSubscription: { options: { applicationServerKey: key } } });
+    expect(subscribe).toHaveBeenCalledWith({ userVisibleOnly: true, applicationServerKey: key });
+    expect(post).toHaveBeenCalledWith({ type: "PUSH_SUBSCRIPTION_CHANGED" });
   });
 });
 
