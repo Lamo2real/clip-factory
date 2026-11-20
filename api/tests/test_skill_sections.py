@@ -279,7 +279,8 @@ def test_a_file_with_a_bom_and_windows_lines_keeps_every_byte_he_wrote() -> None
     mine = his_copy().replace("\n", "\r\n")
     at, added = insertion(mine, PART, CHAT)  # type: ignore[arg-type]
     new = mine[:at] + added + mine[at:]
-    assert "\r\n" in added and "\n" not in added.replace("\r\n", "")  # the part follows his line ends
+    assert "\r\n" in added  # the part follows his line ends
+    assert "\n" not in added.replace("\r\n", "")
     assert new.replace("\r\n", "\n") == insert_section(his_copy(), PART, CHAT)  # type: ignore[arg-type]
     assert remove_section(new, at, added) == mine
 
@@ -292,7 +293,8 @@ def test_add_and_undo_keep_a_byte_order_mark_and_crlf(call: Call, s3_client: Fak
     path = f"/v1/skills/{skill_id}/sections"
     assert call("POST", path, {"key": CHAT.key, "action": "add", "version": 1})[0] == 200
     added = _stored(s3_client, skill_id)
-    assert added.startswith(b"\xef\xbb\xbf") and b"\n" not in added.replace(b"\r\n", b"")
+    assert added.startswith(b"\xef\xbb\xbf")
+    assert b"\n" not in added.replace(b"\r\n", b"")
     assert call("POST", path, {"key": CHAT.key, "action": "undo", "version": 2})[0] == 200
     assert _stored(s3_client, skill_id) == raw
 
