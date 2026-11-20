@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
-from . import clips, db, jobs, s3
+from . import clips, db, jobs, macfetch, s3
 from .agent_client import new_session_id
 from .app import App
 from .clock import iso
@@ -155,6 +155,7 @@ def delete_job(app: App, user_id: str, job_id: str, *, review_clips: bool) -> Ou
     else:
         raise RuntimeError("could not fence the job to delete it")
 
+    macfetch.end_wait(app, job)  # a job waiting for the owner's Mac: end the wait, drop a half-sent video (§35)
     with ThreadPoolExecutor(max_workers=1) as pool:
         stopping = pool.submit(_stop_run, app, job_id, str(old_session)) if old_session else None
         items = clips.clips_for_job(app.store, user_id, job_id)

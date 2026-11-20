@@ -353,3 +353,16 @@ def test_a_clip_missing_from_the_index_keeps_its_video(call: Call, store: db.Sto
     assert store.get(clip["pk"], clip["sk"]) is not None
     assert clip["videoKey"] in s3_client.objects
     assert clip["coverKey"] in s3_client.objects
+
+
+def test_a_job_waiting_for_the_owners_mac_has_its_wait_ended(
+    app: Any, store: db.Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job = seed_job(
+        store, status="running", macCallbackId="cb-mac", macFetch={"state": "waiting", "since": "2026-11-15T11:59:00Z"}
+    )
+    ended: list[str] = []
+    monkeypatch.setattr(app.flows, "mac_stopped", lambda cb, kind, msg: ended.append(cb))
+    assert job_delete.delete_job(app, USER, job["jobId"], review_clips=False).deleted is True
+    assert ended == ["cb-mac"]
+    assert store.get(job["pk"], job["sk"]) is None

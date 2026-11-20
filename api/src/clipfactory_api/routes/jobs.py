@@ -132,7 +132,7 @@ def cancel(app: App, req: Request) -> Response:
         updated = app.store.update(job["pk"], job["sk"], {"status": "canceled", "updatedAt": now}, expect_in=expect)
     except db.ConditionFailed as e:
         raise conflict("Only a queued or running job can be stopped.") from e
-    _end_mac_wait(app, job)
+    macfetch.end_wait(app, job)
     if job.get("sessionId"):
         try:
             app.agent.cancel_job(job["jobId"], job["sessionId"])
@@ -141,24 +141,6 @@ def cancel(app: App, req: Request) -> Response:
             log("warning", "job.cancel_signal_failed", jobId=job["jobId"], error=str(e))
     log("info", "job.canceled", jobId=job["jobId"])
     return ok({"job": jobs.public_job(updated)})
-
-
-def _end_mac_wait(app: App, job: dict[str, Any]) -> None:
-    """A job waiting for the owner's Mac (§35) is stopped: the job flow's wait ends now (not after 24 h) and a half-sent
-    video is dropped. Best effort: the job is already canceled in the table, and the bucket's lifecycle rule removes a
-    forgotten upload."""
-    callback_id = job.get("macCallbackId")
-    if isinstance(callback_id, str) and callback_id:
-        try:
-            app.flows.mac_stopped(callback_id, "Canceled", "The job was canceled.")
-        except Exception as e:
-            log("warning", "job.mac_cancel_signal_failed", jobId=job["jobId"], error=type(e).__name__)
-    mac = job.get("macFetch")
-    if isinstance(mac, dict) and mac.get("uploadId") and mac.get("key"):
-        try:
-            app.media.abort_multipart(str(mac["key"]), str(mac["uploadId"]))
-        except Exception as e:
-            log("warning", "job.mac_abort_failed", jobId=job["jobId"], error=type(e).__name__)
 
 
 def _refuse_if_deleting(job: dict[str, Any]) -> None:
