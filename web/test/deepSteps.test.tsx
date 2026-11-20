@@ -101,6 +101,12 @@ describe("why a clip was picked", () => {
     expect(line.textContent).toBe("Why: Loud laugh + Fast action");
   });
 
+  it("says when the chat went wild", () => {
+    act(() => root.render(<WhyPicked text="Chat went wild + Loud laugh" />));
+    expect(host.querySelector(".review-card__why")!.textContent).toBe("Why: Chat went wild + Loud laugh");
+    expect(seed().clips.some((c) => c.pickedFor === "Chat went wild + Loud laugh")).toBe(true);
+  });
+
   it("shows nothing at all without them", () => {
     act(() => root.render(<WhyPicked text={undefined} />));
     expect(host.innerHTML).toBe("");

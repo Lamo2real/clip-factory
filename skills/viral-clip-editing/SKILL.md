@@ -58,6 +58,13 @@ Trust a moment most when **several signals land at the same second**. One signal
 
 **Viewers:** the "most replayed" peaks show what people already went back to watch.
 
+**Chat** (the "Chat spikes" line): the live chat suddenly going much faster than usual, or many people typing the same thing (W, LUL, KEKW, OMEGALUL, LMAO, 💀, "?????", "CLIP IT"), is the audience telling you something just happened. It is the crowd's own loudness spike.
+- Chat lags: it reacts 2 to 10 seconds *after* the moment. The "moment ~" range points at where it happened; the moment is there, so the usual start rule applies (a second or two before the trigger), never at the burst.
+- Chat alone is a hint, never a clip: something must be seen or heard in that range. Chat plus a loudness spike plus a picture event at the same second is among the strongest signs there are; score it high when the payoff is clear.
+- What chat spams tells the type: laughing (KEKW, LUL, 💀) is chaos or funny; "?????" or "what" is no_way or first_reaction; "W" or "LETS GO" is no_way or a win; "L" is a fail; "CLIP IT" means viewers already think it is a clip.
+- Ignore bursts from raids and hosts ("maybe a raid"), giveaways and drops, !commands, bot spam, subscription or gift trains ("subs"), and chat memes, copy-pastes or replies to another chatter, a donation or a poll that are unrelated to what is on screen.
+- Never quote chatters' names, and never put chat text in the hook unless it is one clean word.
+
 ### Skip these
 - Anything that needs earlier context.
 - Long talking with no change in energy.

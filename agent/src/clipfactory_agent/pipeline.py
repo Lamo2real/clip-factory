@@ -26,7 +26,8 @@ from typing import Any
 from botocore.exceptions import ClientError
 
 from . import captions as captions_mod
-from . import learnings, livestatus, loudness, nova, pot, proc, sources, verify, watch
+from . import chat as chat_mod
+from . import chatfetch, chatscreen, learnings, livestatus, loudness, nova, pot, proc, sources, verify, watch
 from . import picture as picture_mod
 from . import signals as signals_mod
 from . import vectors as vectors_mod
@@ -67,6 +68,7 @@ from .util import (
     now_iso,
     ulid,
 )
+from .watch import TrackResult
 
 RENDER_CONCURRENCY = 2  # the ceiling: a second clip is cut alongside only when memory allows (RenderGate)
 PARALLEL_FREE = 3 * 1024**3  # free memory a second render needs (a 1080p clip's two ffmpeg runs, with room to spare)
@@ -244,6 +246,16 @@ def prep_deadline(seconds: float) -> float:
     return picture_mod.time_limit(seconds)
 
 
+def chat_deadline(seconds: float) -> float:
+    """How long the chat replay may take (§37): 3 minutes plus 2 per hour of video, at most 12."""
+    return min(12 * 60.0, 3 * 60.0 + 2 * 60.0 * max(0.0, seconds) / 3600)
+
+
+CHAT_GRACE = 30.0  # the analyze step waits this much past the fetcher's own deadline before giving up on it
+SCREEN_CHAT_BELOW = 0.5  # the chat box in the picture is read when the replay covers less than this share
+SCREEN_CHAT_WAIT = 10 * 60.0  # after the watchers finish, the chat box speed gets at most this much longer
+
+
 def watch_deadline(seconds: float) -> float:
     """How long the two watchers get. It grows with the source: a long video is never sampled, it gets more time."""
     return max(25 * 60.0, 0.2 * seconds)
@@ -299,6 +311,12 @@ class JobState:
     signals: signals_mod.Signals | None = None
     speakers: list[list[Any]] | None = None
     second_look: list[dict[str, Any]] = field(default_factory=list)
+    # Chat hype (§37): the replay fetched in the background from download on, and the signal from it (or from the
+    # chat box in the picture). Both may stay empty; the job never waits on them for long or fails over them.
+    chat_task: asyncio.Task[chat_mod.RawChat | None] | None = None
+    chat_started: float = 0.0
+    chat_count: int = 0
+    chat: chat_mod.ChatSignal | None = None
     # The model that makes this job's clips (docs/DECISIONS.md ADR-42), picked in resolve from the owner's
     # ``clipModel`` setting: its key in config/models.json, the id it is called with and its client. ``model_wanted``
     # is the owner's pick when it could not be used and the default model took over.
@@ -504,8 +522,19 @@ class Pipeline:
             raise UserFacingError("This stream is still live or has not started. Try again once it has ended.")
         st.source.update(sources.source_fields(info, platform))
         st.meta["heatmap"] = sources.heatmap(info)
+        self._chat_source(st, info, platform)
         st.meta["webpageUrl"] = info.get("webpage_url") or url
         st.meta["picture"] = self._pick_picture(st, info)
+
+    def _chat_source(self, st: JobState, info: dict[str, Any], platform: str) -> None:
+        """Where the chat replay can come from (``meta.chatSource``); YouTube's info is kept for yt-dlp to reuse."""
+        try:
+            st.meta["chatSource"] = chatfetch.source_meta(info, platform)
+            if (st.meta["chatSource"] or {}).get("platform") == "youtube":
+                (st.workdir / "chat-info.json").write_text(json.dumps(info), encoding="utf-8")
+        except Exception as e:
+            log("warn", "chat.source_failed", job=st.job_id, error=type(e).__name__)
+            st.meta["chatSource"] = None
 
     async def _youtube_proxy(self, st: JobState) -> str | None:
         """The optional YouTube proxy from Secrets Manager (§29.8). No secret, no access or an odd value: no proxy, and
@@ -568,6 +597,7 @@ class Pipeline:
         picture start preparing in the background (``_picture_prep``), so it overlaps the transcription."""
         done = await self._download_audio(st, tr)
         await self._start_picture(st)
+        await self._start_chat(st)
         return done
 
     async def _download_audio(self, st: JobState, tr: Tracker) -> StepDone:
@@ -742,14 +772,105 @@ class Pipeline:
         return pic
 
     async def close(self, st: JobState) -> None:
-        """The run is over, however it ended: the background picture preparation stops (its yt-dlp or ffmpeg is
-        killed by ``proc.run``). Called by the server in its ``finally``."""
-        task = st.picture_task
-        if task is not None and not task.done():
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await task
+        """The run is over, however it ended: the background picture preparation and the chat replay stop (their
+        yt-dlp or ffmpeg is killed by ``proc.run``). Called by the server in its ``finally``."""
+        for task in (st.picture_task, st.chat_task):
+            if task is not None and not task.done():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
         self._drop_full(st)
+
+    # --- the chat replay, fetched in the background (§37) ----------------------------------------------------
+
+    async def _start_chat(self, st: JobState) -> None:
+        """Starts the chat replay fetch when this video has one we can read and no earlier run saved it. Never
+        raises."""
+        try:
+            if st.chat_task is not None or st.source.get("type") == "upload":
+                return
+            meta = st.meta.get("chatSource")
+            if not meta or not chatfetch.enabled(str(meta.get("platform") or "")):
+                return
+            if await self.store.exists(st.key("chat.json")):
+                return
+            st.chat_started = asyncio.get_running_loop().time()
+
+            def counted(n: int) -> None:
+                st.chat_count = n
+
+            st.chat_task = asyncio.create_task(
+                chatfetch.fetch(
+                    meta,
+                    url=str(st.meta.get("webpageUrl") or st.source.get("url") or ""),
+                    duration=st.duration,
+                    workdir=st.workdir,
+                    cookies=st.cookies,
+                    proxy=st.proxy,
+                    time_limit=chat_deadline(st.duration),
+                    on_count=counted,
+                ),
+                name=f"chat-{st.job_id}",
+            )
+        except Exception as e:
+            log("warn", "chat.start_failed", job=st.job_id, error=type(e).__name__)
+
+    async def _read_chat(self, st: JobState, tr: Tracker) -> None:
+        """``st.chat``: from an earlier run's ``chat.json``, else from the replay (waited for up to its deadline, with
+        the live line counting the messages). Never raises but for a cancel; no chat is never a problem."""
+        try:
+            saved = chat_mod.ChatSignal.from_json(await self._saved_json(st.key("chat.json")))
+            if saved is not None:
+                st.chat = saved
+                return
+            await self._start_chat(st)  # a picked-up job whose download step was already done
+            task = st.chat_task
+            if task is None:
+                return
+            source = str((st.meta.get("chatSource") or {}).get("platform") or "")
+            limit = chat_deadline(st.duration) + CHAT_GRACE
+            loop = asyncio.get_running_loop()
+            livestatus.emit("chat", n=st.chat_count, source=source)
+            while not task.done():
+                await tr.check_cancel()
+                if loop.time() - st.chat_started > limit:
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await task
+                    log("warn", "chat.deadline", job=st.job_id)
+                    return
+                await asyncio.wait({task}, timeout=2.0)
+                livestatus.emit("chat", n=st.chat_count, source=source)
+            raw = task.result()
+            if raw is None:
+                return
+            livestatus.emit("chat", n=raw.count, source=source)
+            loud = [float(x.t) for x in loudness.spikes(st.loud, limit=10_000)]
+            st.chat = await asyncio.to_thread(chat_mod.analyze, raw, st.duration, loud)
+            await self._save_chat(st)
+        except (JobCanceled, asyncio.CancelledError):
+            raise
+        except Exception as e:
+            log("warn", "chat.read_failed", job=st.job_id, error=type(e).__name__)
+            st.chat = None
+
+    async def _save_chat(self, st: JobState) -> None:
+        if st.chat is None:
+            return
+        try:
+            await self.store.put_json(st.key("chat.json"), st.chat.to_json())
+        except Exception as e:
+            log("warn", "chat.save_failed", job=st.job_id, error=type(e).__name__)
+        log(
+            "info",
+            "chat.ready",
+            job=st.job_id,
+            source=st.chat.source,
+            messages=st.chat.messages,
+            coverage=st.chat.coverage,
+            spikes=len(st.chat.spikes),
+            lag=st.chat.lag,
+        )
 
     async def _local_audio(self, st: JobState) -> Path:
         local = st.workdir / "source" / "audio.m4a"
@@ -854,6 +975,8 @@ class Pipeline:
             await self.store.put_json(st.key("loudness.json"), st.loud)
         if st.speakers is None and self.cfg.deep_enabled:
             st.speakers = await self._saved_json(st.key("speakers.json")) or None
+        tr.report(0.5)
+        await self._read_chat(st, tr)
         tr.report(0.6)
         # A failure to read the skill rows fails the step (and its normal retry runs): never a job without them.
         st.skills = await prepare_skills(
@@ -876,7 +999,9 @@ class Pipeline:
         )
         unread = len(st.skills.skipped)
         note = f" {count(unread, 'skill')} could not be read." if unread else ""
-        return f"Found {count(spikes, 'loud moment')}.{note}"
+        wild = chat_mod.summary(st.chat)
+        crowd = f" Chat went wild {count(wild, 'time')}." if wild else ""
+        return f"Found {count(spikes, 'loud moment')}.{crowd}{note}"
 
     async def _similar(self, st: JobState) -> list[vectors_mod.Hit]:
         """The owner's past clips most like this video, for "What worked before" (never fails the job)."""
@@ -924,6 +1049,7 @@ class Pipeline:
                 speakers=st.speakers,
                 visual_log=visual_log,
                 motion=st.picture.motion if st.picture else None,
+                chat=st.chat,
             )
             return st.signals.to_json() if st.signals else None
         except Exception as e:
@@ -971,6 +1097,82 @@ class Pipeline:
         tr.report(0.2)
         frames = self._use_frames(st)
         assert frames is not None
+        found = await self._chat_box(st, pic, frames)
+        speed_task = (
+            asyncio.create_task(self._chat_speed(st, pic, frames, found), name=f"chat-screen-{st.job_id}")
+            if found is not None
+            else None
+        )
+        try:
+            fable, second = await self._watchers(st, tr, pic, frames, found)
+        except BaseException:
+            if speed_task is not None:
+                speed_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await speed_task
+            raise
+        if speed_task is not None and found is not None:
+            await self._screen_chat(st, found, speed_task, fable.ok)
+        return await self._watched(st, pic, fable, second)
+
+    def _wants_screen_chat(self, st: JobState) -> bool:
+        return chatfetch.enabled("screen") and (st.chat is None or st.chat.coverage < SCREEN_CHAT_BELOW)
+
+    async def _part_files(
+        self, pic: picture_mod.Picture, frames: picture_mod.Frames, *, sample: bool = False
+    ) -> list[tuple[float, Path]]:
+        parts = chatscreen.sample_parts(pic.parts) if sample else pic.parts  # finding the box reads only a few
+        return [(p.start, await frames.file(p)) for p in parts]
+
+    async def _chat_box(
+        self, st: JobState, pic: picture_mod.Picture, frames: picture_mod.Frames
+    ) -> chatscreen.Found | None:
+        """A chat box shown in the picture, when the replay is missing or thin. Never raises but for a cancel."""
+        if not self._wants_screen_chat(st):
+            return None
+        try:
+            return await chatscreen.find(await self._part_files(pic, frames, sample=True))
+        except (JobCanceled, asyncio.CancelledError):
+            raise
+        except Exception as e:
+            log("warn", "chatscreen.failed", job=st.job_id, error=type(e).__name__, detail=str(e)[:200])
+            return None
+
+    async def _chat_speed(
+        self, st: JobState, pic: picture_mod.Picture, frames: picture_mod.Frames, found: chatscreen.Found
+    ) -> list[float | None]:
+        return await chatscreen.speed(await self._part_files(pic, frames), found, pic.seconds, pic.scene or None)
+
+    async def _screen_chat(
+        self,
+        st: JobState,
+        found: chatscreen.Found,
+        task: asyncio.Task[list[float | None]],
+        chunks: list[dict[str, Any]],
+    ) -> None:
+        """``st.chat`` from the chat box's speed and the words the watcher read in it. Never raises but for a
+        cancel; a failure keeps whatever chat the job had."""
+        try:
+            lines = await asyncio.wait_for(task, SCREEN_CHAT_WAIT)  # cancels the reader when it is too slow
+            loud = [float(x.t) for x in loudness.spikes(st.loud, limit=10_000)]
+            words = [(float(w[0]), str(w[1])) for c in chunks for w in c.get("chatWords") or []]
+            sig = chat_mod.from_screen(lines, box=found.box.picture_box(), loud_times=loud, words=words)
+            if sig is not None and (st.chat is None or st.chat.coverage < SCREEN_CHAT_BELOW):
+                st.chat = sig
+                await self._save_chat(st)
+        except (JobCanceled, asyncio.CancelledError):
+            raise
+        except Exception as e:
+            log("warn", "chatscreen.failed", job=st.job_id, error=type(e).__name__, detail=str(e)[:200])
+
+    async def _watchers(
+        self,
+        st: JobState,
+        tr: Tracker,
+        pic: picture_mod.Picture,
+        frames: picture_mod.Frames,
+        found: chatscreen.Found | None,
+    ) -> tuple[TrackResult, TrackResult]:
         units = watch.plan(pic.seconds)
         deadline = Deadline(watch_deadline(st.duration))
         share = {"fable": 0.0, "nova": 0.0}
@@ -1014,6 +1216,7 @@ class Pipeline:
                 load=loader("chunk"),
                 save=saver("chunk"),
                 on_progress=lambda f: progress("fable", f),
+                chat_box=found.box.picture_box() if found is not None else None,
             ),
             nova.watch_parts(
                 pic.parts,
@@ -1028,6 +1231,13 @@ class Pipeline:
                 on_progress=lambda f: progress("nova", f),
             ),
         )
+        return fable, second
+
+    async def _watched(
+        self, st: JobState, pic: picture_mod.Picture, fable: TrackResult, second: TrackResult
+    ) -> StepDone:
+        units = watch.plan(pic.seconds)
+        log_key = st.key("visual_log.json")
         self._deep(st, "fable", **_status(fable))
         self._deep(st, "nova", **_status(second))
         visual_log = signals_mod.make_visual_log(fable.ok, second.ok, fable.failures() + second.failures())
@@ -1096,6 +1306,7 @@ class Pipeline:
             similar=st.similar,
             signals=st.signals,
             speakers=st.speakers,
+            chat=st.chat,
         )
 
     def _moments_hash(self, st: JobState) -> str:
@@ -1193,6 +1404,7 @@ class Pipeline:
                 loud=st.loud,
                 heatmap=list(st.meta.get("heatmap") or []),
                 speakers=st.speakers,
+                chat=st.chat,
             )
         except Exception as e:
             log("warn", "signals.picked_for_failed", job=st.job_id, error=type(e).__name__)

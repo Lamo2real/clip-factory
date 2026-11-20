@@ -1,0 +1,14 @@
+{
+ "id": "abc123def45",
+ "extractor_key": "Youtube",
+ "subtitles": {
+  "live_chat": [
+   {
+    "url": "https://www.youtube.com/watch?v=abc123def45",
+    "ext": "json",
+    "protocol": "youtube_live_chat_replay"
+   }
+  ]
+ },
+ "duration": 7200
+}

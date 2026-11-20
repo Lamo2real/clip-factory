@@ -89,7 +89,7 @@ const MOMENTS: { hook: string; summary: string; type: MomentType; score: number;
   { hook: "He finally lost it at 3 a.m.", summary: "The sixth failed heist ends with a desk slam.", type: "rage", score: 6 },
   { hook: "Police chase in reverse", summary: "The whole chase is driven backwards, on purpose.", type: "no_way", score: 8 },
   { hook: "This is why we don't trust Marco", summary: "Marco sells out the crew for 200 dollars.", type: "interaction", score: 7 },
-  { hook: "Wait for the jump", summary: "A ramp jump over the river lands on a moving train.", type: "no_way", score: 9 },
+  { hook: "Wait for the jump", summary: "A ramp jump over the river lands on a moving train.", type: "no_way", score: 9, why: "Chat went wild + Loud laugh" },
 ];
 
 function checklist(score: number) {

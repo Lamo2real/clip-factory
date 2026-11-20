@@ -566,3 +566,31 @@ async def test_model_calls_run_in_their_own_pool_and_log_their_tokens(capsys: py
             "cacheWriteInputTokens": 0,
         }
     ]
+
+
+# --- chat hype (docs/CONTRACTS.md §37): the chat box sentence and the words read in it -----------------------------
+
+
+def test_the_chat_sentence_is_only_there_with_a_chat_box() -> None:
+    args: dict[str, Any] = {"words": [], "speakers": None, "loud": [], "motion": []}
+    plain = watch.chunk_text(0, 150, **args)
+    assert "chat" not in plain.lower()
+    assert watch.chunk_text(0, 150, chat_box=None, **args) == plain
+    box = {"x": 576, "y": 40, "w": 192, "h": 360}
+    with_box = watch.chunk_text(0, 150, chat_box=box, **args)
+    assert with_box.startswith(plain) and "(576, 40, 192, 360)" in with_box and "'chat: KEKW'" in with_box
+
+
+def test_chat_words_are_lifted_out_of_the_on_screen_text() -> None:
+    raw = {
+        "scene": "x",
+        "events": [
+            event(10, 14, text_on_screen="chat: KEKW"),
+            event(20, 24, text_on_screen="WASTED"),
+            event(30, 34, text_on_screen="Chat:   "),
+        ],
+    }
+    out = watch.clean(raw, 0, 150)
+    assert out["chatWords"] == [[10, "KEKW"]]
+    assert [e["text"] for e in out["events"]] == ["WASTED"]  # a chat line is never a picture event
+    assert "chatWords" not in watch.clean({"scene": "x", "events": [event(1, 2)]}, 0, 10)

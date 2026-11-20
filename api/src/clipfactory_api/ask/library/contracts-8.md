@@ -123,7 +123,8 @@
     fail or death screen → "Big fail", win → "Big win", glitch → "Weird glitch", jump scare → "Jump scare", a face
     reaction or any face that is not calm → "Big reaction", a loudness spike with a laughing face → "Loud laugh", a
     loudness spike alone → "Loud moment", a motion spike → "Fast action", a most-replayed peak → "People rewatch
-    this", two speakers trading lines → "Back and forth". Left out when nothing matches.
+    this", two speakers trading lines → "Back and forth", a chat spike whose moment is inside the clip and that
+    nothing flags → "Chat went wild" (§37). Left out when nothing matches.
   * *Other steps*: `render` cuts no pauses out of a moment that has no words inside it; the checklist review prompt
     gains a "Seen:" block (picture events inside the clip) when there are any; the measured `captions` item passes
     with "No speech to caption." when no source word lies inside the clip.
@@ -140,7 +141,8 @@
                     failed: [{start, end, src, reason}],
                     events: [{t0, t1, kind, what, intensity, silent, face, text, src: ("fable" | "nova")[]}]}
     signals.json   {version: 1, coverage: {picture, fable, nova, motion, speakers},   // 0..1 of the source
-                    hotspots: [{t, score, silent, sources: [], reasons: []}]}
+                    hotspots: [{t, score, silent, sources: [], reasons: []}]}  // sources may include "chat" (§37)
+    chat.json      §37.4: the chat hype signal (replay or chat box), no names or messages
     moments.json   {chosen: […], spares: […], secondLook: […]}                        // for debugging a job
     ```
   * *Limits* (technical only; there is no cost ceiling, ADR-40): `CHUNK_SECONDS` 150, `CHUNK_OVERLAP` 6,

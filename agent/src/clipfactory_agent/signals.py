@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from . import loudness, picture, transcript
+from .chat import ChatSignal
 from .moments import Moment
 from .util import hms
 
@@ -28,7 +29,14 @@ MAX_HOTSPOTS = 25
 MAX_PICKED_FOR = 40
 FABLE_WEIGHT, NOVA_WEIGHT = 3.0, 2.0
 QUIET_KINDS = ("calm", "menu_or_loading")
-SOURCE_WORDS = {"fable": "seen", "nova": "seen", "loud": "loud", "motion": "fast picture", "replayed": "rewatched"}
+SOURCE_WORDS = {
+    "fable": "seen",
+    "nova": "seen",
+    "loud": "loud",
+    "motion": "fast picture",
+    "replayed": "rewatched",
+    "chat": "chat went wild",
+}
 
 # Why a clip was picked, in words an 8-year-old can read (docs/CONTRACTS.md §5 `pickedFor`).
 KIND_WORDS = {
@@ -44,13 +52,14 @@ KIND_WORDS = {
     "jump_scare": "Jump scare",
     "face_reaction": "Big reaction",
 }
-REACTION, LOUD_LAUGH, LOUD, FAST, REWATCH, TALK = (
+REACTION, LOUD_LAUGH, LOUD, FAST, REWATCH, TALK, CHAT = (
     "Big reaction",
     "Loud laugh",
     "Loud moment",
     "Fast action",
     "People rewatch this",
     "Back and forth",
+    "Chat went wild",
 )
 
 
@@ -264,9 +273,11 @@ def hot_spots(
     loud: list[float],
     motion: list[float],
     heatmap: Sequence[dict[str, float]],
+    chat: ChatSignal | None = None,
 ) -> list[HotSpot]:
     """Moments where several independent signals agree. Each source's strongest point within NEAR_SECONDS adds its
-    weight; two or more independent sources add 1; hot spots within HOTSPOT_MERGE_SECONDS become one."""
+    weight; two or more independent sources add 1; hot spots within HOTSPOT_MERGE_SECONDS become one. A chat spike
+    counts at the moment it points to (its time minus the chat's lag), and only when nothing flags it."""
     points: list[tuple[float, float, str]] = []  # (time, weight, source)
     for e in events:
         if e.kind in QUIET_KINDS:
@@ -276,6 +287,8 @@ def hot_spots(
     points += [(float(s.t), min(s.jump / 7, 2.0), "loud") for s in loudness.spikes(loud, limit=10_000)]
     points += [(float(s.t), min(s.lift / 2.5, 2.0), "motion") for s in picture.motion_spikes(motion, limit=10_000)]
     points += [(float(h["start"]), 1.0, "replayed") for h in _peaks(heatmap)]
+    if chat is not None:
+        points += [(s.t, min(s.strength, 2.0), "chat") for s in chat.spikes if s.counts]
     points.sort()
 
     starts = [float(w[0]) for w in words]
@@ -323,6 +336,7 @@ def build(
     speakers: Sequence[Sequence[Any]] | None,
     visual_log: dict[str, Any] | None,
     motion: list[float] | None,
+    chat: ChatSignal | None = None,
 ) -> Signals | None:
     """The merged signals, or None when there is no picture data at all (then the finder works as it always did)."""
     raw = (visual_log or {}).get("events") or []
@@ -343,7 +357,7 @@ def build(
         "motion": round(min(1.0, len(motion) / total), 4),
         "speakers": 1.0 if speakers else 0.0,
     }
-    spots = hot_spots(events, words=words, loud=loud, motion=motion, heatmap=heatmap)
+    spots = hot_spots(events, words=words, loud=loud, motion=motion, heatmap=heatmap, chat=chat)
     return Signals(duration=duration, events=events, hotspots=spots, motion=motion, coverage=coverage)
 
 
@@ -429,9 +443,11 @@ def picked_for(
     loud: list[float],
     heatmap: Sequence[dict[str, float]],
     speakers: Sequence[Sequence[Any]] | None,
+    chat: ChatSignal | None = None,
 ) -> str | None:
     """The top two reasons joined with " + " ("Loud laugh + Fast action"), built by code from the evidence inside
-    the clip, never by a model. None when nothing matches."""
+    the clip, never by a model. None when nothing matches. Chat counts when the moment a spike points to is inside
+    the clip, even when the burst itself comes after the clip ends."""
     found: dict[str, float] = {}
 
     def add(label: str, strength: float) -> None:
@@ -461,6 +477,10 @@ def picked_for(
         add(REWATCH, 1.0)
     if _trading_lines(speakers, m.start, m.end):
         add(TALK, 0.9)
+    if chat is not None:
+        for c in chat.spikes_in(m.start, m.end):
+            if c.counts:
+                add(CHAT, min(c.strength, 2.0))
     if loud_laugh:
         found.pop(LOUD, None)
     top = sorted(found, key=lambda k: -found[k])[:2]

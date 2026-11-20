@@ -535,3 +535,48 @@ async def test_a_silent_window_with_a_strong_picture_event_is_read() -> None:
 
     spot = with_picture(quiet_brief(), hotspots=[HotSpot(900, 2.0, True, ["motion"], ["fast picture"])])
     assert worth_reading(spot, 0, 1800, "") is True  # a hot spot with nobody talking is read too
+
+
+# --- chat hype (docs/CONTRACTS.md §37): only there when chat is ---------------------------------------------------
+
+from clipfactory_agent.chat import CHAT_NOTE, ChatSignal, ChatSpike  # noqa: E402
+
+
+def chat_signal(*spikes: ChatSpike) -> ChatSignal:
+    return ChatSignal("twitch", 0.97, 48211, 5, [], list(spikes))
+
+
+def chat_spike(t: float, **kw: Any) -> ChatSpike:
+    base: dict[str, Any] = {"t": t, "onset": t + 5, "peak": t + 9, "z": 8.0, "lift": 6.0, "strength": 2.4}
+    base.update(kw)
+    return ChatSpike(window=(t - 5, t + 3), **base)
+
+
+def test_with_chat_the_finder_is_told_and_reads_the_spikes() -> None:
+    b = brief()
+    b.chat = chat_signal(chat_spike(700, spam="kekw", mood="laugh"))
+    s = system_prompt(b)
+    assert CHAT_NOTE in s and "Picture notes" not in s and OPEN_RULE in s  # chat alone never brings picture rules
+    assert 'Chat spikes: 0:11:45 (x6, chat laughing, spam "kekw", moment ~0:11:35–0:11:43)' in hints(b, 0, 1800)
+    read = MomentTools(b).read_transcript({"start": 0, "end": 1800})[0]
+    assert "Chat spikes:" in read
+    assert "Chat spikes:" in MomentTools(b).list_spikes({})[0]
+    assert "Chat spikes:" not in hints(b, 1800, 3600)
+    assert brief_json(b)["chat"] == {"source": "twitch", "coveragePercent": 97, "messages": 48211}
+
+
+def test_a_strong_chat_spike_opens_a_quiet_window() -> None:
+    b = brief()
+    b.chat = chat_signal(chat_spike(700))
+    assert worth_reading(b, 0, 1800, "") is True
+    b.chat = chat_signal(chat_spike(700, flag="raid", strength=0.7))
+    assert worth_reading(b, 0, 1800, "") is False
+    b.chat = chat_signal(chat_spike(700, strength=1.0))
+    assert worth_reading(b, 0, 1800, "") is False
+
+
+def test_no_chat_changes_nothing() -> None:
+    b = brief()
+    b.chat = None
+    assert CHAT_NOTE not in system_prompt(b) and "chat" not in brief_json(b)
+    assert "Chat spikes" not in hints(b, 0, 4000)

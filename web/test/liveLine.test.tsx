@@ -64,6 +64,16 @@ describe("LiveLine", () => {
     expect(text(".live-line__tech")).toBe("ffmpeg · 1080×1920 · 30 fps");
   });
 
+  it("says how much of the chat it has read", () => {
+    const chat = line({ step: "analyze", text: "Reading the chat", detail: "12,430 messages", tech: "Twitch chat replay" });
+    act(() => root.render(<LiveLine job={running({ live: chat })} />));
+    expect(text(".live-line__text")).toBe("Reading the chat");
+    expect(text(".live-line__detail")).toBe("12,430 messages");
+    expect(text(".live-line__tech")).toBe("Twitch chat replay");
+    act(() => root.render(<LiveLine job={running({ live: chat })} compact className="job-row__step" />));
+    expect(host.textContent).toBe("Reading the chat · 12,430 messages");
+  });
+
   it("updates when a new line arrives over the live connection", () => {
     const job = running({ live: line() });
     act(() => root.render(<LiveLine job={job} />));

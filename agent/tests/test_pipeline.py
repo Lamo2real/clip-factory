@@ -79,7 +79,7 @@ from typing import Any  # noqa: E402
 
 import pytest  # noqa: E402
 
-from clipfactory_agent import loudness, proc, sources  # noqa: E402
+from clipfactory_agent import chatscreen, loudness, proc, sources  # noqa: E402
 from clipfactory_agent import picture as picture_mod  # noqa: E402
 from clipfactory_agent import pipeline as pipeline_mod  # noqa: E402
 from clipfactory_agent import signals as signals_mod  # noqa: E402
@@ -257,6 +257,8 @@ class World:
         self.prepare_delay = 0.0
         self.download_error: Exception | None = None
         self.motion = [0.01] * int(SECONDS)
+        self.chat_box: Any = None  # the chat box in the picture: none unless a test puts one there
+        self.chat_box_looks = 0
         builtin = tmp_path / "builtin"
         (builtin / "playbook").mkdir(parents=True)
         (builtin / "playbook" / "SKILL.md").write_text("---\nname: playbook\n---\nCore")
@@ -357,6 +359,12 @@ class World:
         mp.setattr(pipeline_mod, "render_clip", render_clip)
         mp.setattr(pipeline_mod, "measure", measure)
         mp.setattr(pipeline_mod.shutil, "disk_usage", lambda p: SimpleNamespace(free=self.free))
+
+        async def find_chat_box(parts: Any) -> Any:
+            self.chat_box_looks += 1
+            return self.chat_box
+
+        mp.setattr(chatscreen, "find", find_chat_box)
 
     def pipeline(self) -> Pipeline:
         def client(c: ToolClient, **kw: Any) -> Bedrock:
@@ -956,3 +964,152 @@ async def test_a_part_over_the_part_limit_is_encoded_smaller_once(
     status, _st, steps = await world.run()
     assert_ready(status, steps)
     assert shrunk == ["part-0001.mp4"] and world.store.json("picture.json")["parts"][1]["bytes"] == 7
+
+
+# --- chat hype (docs/CONTRACTS.md §37): best effort, never a reason to fail ----------------------------------------
+
+from clipfactory_agent import chatfetch  # noqa: E402
+from clipfactory_agent.chat import RawChat  # noqa: E402
+
+WITH_CHAT = {**INFO, "subtitles": {"live_chat": [{"url": "x", "ext": "json"}]}}
+
+
+def burst_chat(at: float = 112.0) -> RawChat:
+    raw = RawChat("youtube", [[0.0, SECONDS]])
+    for s in range(int(SECONDS)):
+        raw.collector.add(s + 0.5, f"regular{s % 30}", f"talk {s}")
+    for j in range(60):
+        raw.collector.add(at + 5 + j * 0.1, f"fan{j % 25}", "KEKW")  # chat reacts 5 seconds after the moment
+    return raw
+
+
+def fetch_with(world: World, monkeypatch: pytest.MonkeyPatch, answer: Any) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
+
+    async def fetch(meta: Any, **kw: Any) -> Any:
+        calls.append({"meta": meta, **kw})
+        if isinstance(answer, BaseException):
+            raise answer
+        if answer == "slow":
+            await asyncio.sleep(3600)
+        return answer
+
+    monkeypatch.setattr(chatfetch, "fetch", fetch)
+    return calls
+
+
+@pytest.mark.parametrize("answer", [None, RuntimeError("chat broke"), "slow"])
+async def test_chat_missing_changes_nothing(world: World, monkeypatch: pytest.MonkeyPatch, answer: Any) -> None:
+    world.info = WITH_CHAT
+    calls = fetch_with(world, monkeypatch, answer)
+    if answer == "slow":
+        monkeypatch.setattr(pipeline_mod, "chat_deadline", lambda s: 0.05)
+        monkeypatch.setattr(pipeline_mod, "CHAT_GRACE", 0.0)
+    if isinstance(answer, BaseException):
+        # chatfetch.fetch never raises; this proves the pipeline would survive it anyway
+        pass
+    status, st, steps = await world.run()
+    assert_ready(status, steps)
+    assert len(calls) == 1 and calls[0]["meta"] == {"platform": "youtube"}
+    assert steps["analyze"]["message"] == "Found 1 loud moment."
+    assert not world.store.has("chat.json") and st.chat is None and world.briefs[0].chat is None
+
+
+async def test_chat_reaches_the_finder_and_the_clip(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    world.info = WITH_CHAT
+    calls = fetch_with(world, monkeypatch, burst_chat(at=315))
+    status, st, steps = await world.run()
+    assert_ready(status, steps)
+    assert calls[0]["url"] == "https://www.youtube.com/watch?v=abc" and calls[0]["cookies"] is None
+    assert (st.workdir / "chat-info.json").is_file()  # yt-dlp reuses resolve's info
+    assert steps["analyze"]["message"] == "Found 1 loud moment. Chat went wild 1 time."
+    saved = world.store.json("chat.json")
+    assert saved["version"] == 1 and saved["source"] == "youtube" and saved["coverage"] == 1.0
+    assert saved["spikes"][0]["spam"] == "kekw" and saved["spikes"][0]["mood"] == "laugh"
+    assert "KEKW" not in json.dumps(saved["rate"]) and "fan" not in json.dumps(saved)  # no names, no messages
+    b = world.briefs[0]
+    assert b.chat is not None and b.chat.spikes and b.signals is not None
+    assert any("chat went wild" in h.reasons for h in b.signals.hotspots)
+    assert "Chat went wild" in (world.store.clips[1]["pickedFor"] or "")  # the clip at 300-330
+    assert world.chat_box_looks == 0  # the replay covers the video: the picture's chat box is not read
+
+
+async def test_try_again_reuses_the_saved_chat(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    world.info = WITH_CHAT
+    fetch_with(world, monkeypatch, burst_chat())
+    await world.run()
+    calls = fetch_with(world, monkeypatch, RuntimeError("must not fetch again"))
+    status, st, steps = await world.run()
+    assert_ready(status, steps)
+    assert calls == [] and st.chat is not None and "Chat went wild" in steps["analyze"]["message"]
+
+
+async def test_an_upload_never_fetches_chat_but_reads_the_chat_box(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world.store.job["source"] = {"type": "upload", "key": "uploads/u/video.mp4", "filename": "v.mp4"}
+    world.store.files["uploads/u/video.mp4"] = b"mp4"
+    calls = fetch_with(world, monkeypatch, burst_chat())
+
+    async def run(args: list[str], **kw: Any) -> proc.Result:
+        Path(args[-1]).write_bytes(b"audio")
+        return proc.Result(b"", "")
+
+    monkeypatch.setattr(proc, "run", run)
+    box = chatscreen.Found(chatscreen.Box(288, 0, 96, 216), 8)
+    world.chat_box = box
+    lines: list[float | None] = [0.5] * int(SECONDS)
+    for t in range(320, 328):
+        lines[t] = 4.0
+
+    async def speed(parts: Any, found: Any, seconds: float, scene: Any = None) -> list[float | None]:
+        assert found is box and len(parts) == 2
+        return lines
+
+    monkeypatch.setattr(chatscreen, "speed", speed)
+    status, st, steps = await world.run()
+    assert_ready(status, steps)
+    assert calls == [] and world.chat_box_looks == 1
+    assert st.chat is not None and st.chat.source == "screen" and st.chat.box == box.box.picture_box()
+    assert world.store.json("chat.json")["source"] == "screen"
+    # Fable was told where the chat box is
+    texts = [
+        " ".join(b.get("text", "") for b in c["messages"][0]["content"]) for c in world.fable.calls("report_scenes")
+    ]
+    assert texts and all("A chat box is on screen at (576, 0, 192, 432)" in t for t in texts)
+    assert "Chat went wild" in (world.store.clips[1]["pickedFor"] or "")
+
+
+async def test_a_failing_chat_box_reader_changes_nothing(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def broken(parts: Any) -> Any:
+        raise OSError("ffmpeg died")
+
+    monkeypatch.setattr(chatscreen, "find", broken)
+    status, st, steps = await world.run()
+    assert_ready(status, steps)
+    assert st.chat is None and steps["watch"]["message"] == "Watched all 0:10:00. Saw 6 big things."
+
+
+async def test_deep_off_still_delivers_the_chat_replay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    world = World(tmp_path, monkeypatch, deep_enabled=False)
+    world.info = WITH_CHAT
+    fetch_with(world, monkeypatch, burst_chat())
+    status, _st, steps = await world.run()
+    assert_ready(status, steps, watch="skipped")
+    b = world.briefs[0]
+    assert b.signals is None and b.chat is not None and world.chat_box_looks == 0
+    assert "Chat went wild" in (world.store.clips[0]["pickedFor"] or "")  # no picture: chat and loud only
+
+
+async def test_the_chat_kill_switch(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CF_CHAT", "off")
+    world.info = WITH_CHAT
+    calls = fetch_with(world, monkeypatch, burst_chat())
+    status, st, _ = await world.run()
+    assert status == "ready" and calls == [] and st.chat is None and world.chat_box_looks == 0
+
+
+def test_the_chat_deadline_grows_with_the_video_up_to_twelve_minutes() -> None:
+    assert pipeline_mod.chat_deadline(0) == 180
+    assert pipeline_mod.chat_deadline(3600) == 300
+    assert pipeline_mod.chat_deadline(6 * 3600) == 720

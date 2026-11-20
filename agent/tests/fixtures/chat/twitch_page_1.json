@@ -1,0 +1,142 @@
+[
+ {
+  "data": {
+   "video": {
+    "id": "123456789",
+    "creator": {
+     "id": "1",
+     "channel": {
+      "id": "1"
+     }
+    },
+    "comments": {
+     "edges": [
+      {
+       "cursor": "c0",
+       "node": {
+        "id": "m0000",
+        "commenter": {
+         "id": "u1",
+         "login": "viewer1",
+         "displayName": "Viewer1"
+        },
+        "contentOffsetSeconds": 0,
+        "createdAt": "2026-11-01T20:00:00Z",
+        "message": {
+         "fragments": [
+          {
+           "text": "hi chat",
+           "emote": null
+          }
+         ],
+         "userBadges": [],
+         "userColor": "#FF0000"
+        }
+       }
+      },
+      {
+       "cursor": "c1",
+       "node": {
+        "id": "m0001",
+        "commenter": {
+         "id": "u2",
+         "login": "viewer2",
+         "displayName": "Viewer2"
+        },
+        "contentOffsetSeconds": 2,
+        "createdAt": "2026-11-01T20:00:00Z",
+        "message": {
+         "fragments": [
+          {
+           "text": "LUL",
+           "emote": null
+          }
+         ],
+         "userBadges": [],
+         "userColor": "#FF0000"
+        }
+       }
+      },
+      {
+       "cursor": "c2",
+       "node": {
+        "id": "m0002",
+        "commenter": {
+         "id": "u3",
+         "login": "viewer3",
+         "displayName": "Viewer3"
+        },
+        "contentOffsetSeconds": 4,
+        "createdAt": "2026-11-01T20:00:00Z",
+        "message": {
+         "fragments": [
+          {
+           "text": "!uptime",
+           "emote": null
+          }
+         ],
+         "userBadges": [],
+         "userColor": "#FF0000"
+        }
+       }
+      },
+      {
+       "cursor": "c3",
+       "node": {
+        "id": "m0003",
+        "commenter": {
+         "id": "u4",
+         "login": "viewer4",
+         "displayName": "Viewer4"
+        },
+        "contentOffsetSeconds": 5,
+        "createdAt": "2026-11-01T20:00:00Z",
+        "message": {
+         "fragments": [
+          {
+           "text": "W W W",
+           "emote": null
+          }
+         ],
+         "userBadges": [],
+         "userColor": "#FF0000"
+        }
+       }
+      },
+      {
+       "cursor": "c4",
+       "node": {
+        "id": "m0004",
+        "commenter": {
+         "id": "u5",
+         "login": "viewer5",
+         "displayName": "Viewer5"
+        },
+        "contentOffsetSeconds": 7,
+        "createdAt": "2026-11-01T20:00:00Z",
+        "message": {
+         "fragments": [
+          {
+           "text": "KEKW KEKW",
+           "emote": null
+          }
+         ],
+         "userBadges": [],
+         "userColor": "#FF0000"
+        }
+       }
+      }
+     ],
+     "pageInfo": {
+      "hasNextPage": true,
+      "hasPreviousPage": false
+     }
+    }
+   }
+  },
+  "extensions": {
+   "durationMilliseconds": 40,
+   "operationName": "VideoCommentsByOffsetOrCursor"
+  }
+ }
+]

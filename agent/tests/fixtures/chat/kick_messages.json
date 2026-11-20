@@ -1,0 +1,67 @@
+{
+ "status": {
+  "error": false,
+  "code": 200,
+  "message": "SUCCESS"
+ },
+ "data": {
+  "messages": [
+   {
+    "id": "k1",
+    "chat_id": 668,
+    "user_id": 11,
+    "content": "W",
+    "type": "message",
+    "metadata": null,
+    "created_at": "2026-11-01T20:00:05Z",
+    "sender": {
+     "id": 11,
+     "slug": "fan11",
+     "username": "fan11",
+     "identity": {
+      "color": "#fff",
+      "badges": []
+     }
+    }
+   },
+   {
+    "id": "k2",
+    "chat_id": 668,
+    "user_id": 12,
+    "content": "LETS GOOO",
+    "type": "message",
+    "metadata": null,
+    "created_at": "2026-11-01T20:00:06Z",
+    "sender": {
+     "id": 12,
+     "slug": "fan12",
+     "username": "fan12",
+     "identity": {
+      "color": "#fff",
+      "badges": []
+     }
+    }
+   },
+   {
+    "id": "k3",
+    "chat_id": 668,
+    "user_id": 13,
+    "content": "fan13 subscribed",
+    "type": "celebration",
+    "metadata": null,
+    "created_at": "2026-11-01T20:00:07Z",
+    "sender": {
+     "id": 13,
+     "slug": "fan13",
+     "username": "fan13",
+     "identity": {
+      "color": "#fff",
+      "badges": []
+     }
+    }
+   }
+  ],
+  "cursor": "1785000000000",
+  "pinned_message": null
+ }
+}

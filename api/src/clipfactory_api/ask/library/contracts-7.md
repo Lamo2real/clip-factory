@@ -3,7 +3,7 @@
 | Prefix | What | Lifecycle |
 |---|---|---|
 | `uploads/{userId}/{uploadId}/{safeFilename}` | uploaded source videos | expire after 14 days |
-| `jobs/{jobId}/source/` | `audio.m4a`, `video.mp4` (uploads only), `transcript.json` (Transcribe output), `words.json` (`[[start, end, word], …]`), `loudness.json` (dB per second), `meta.json`, and the deep-analysis files below (§8 "Watch") | expire after 14 days |
+| `jobs/{jobId}/source/` | `audio.m4a`, `video.mp4` (uploads only), `transcript.json` (Transcribe output), `words.json` (`[[start, end, word], …]`), `loudness.json` (dB per second), `meta.json`, `chat.json` (chat hype, §37.4), and the deep-analysis files below (§8 "Watch") | expire after 14 days |
 | `jobs/{jobId}/source/picture/part-NNNN.mp4` | the picture for watching: 768×432, 2 fps, no sound, 300 seconds per part | expire after 14 days |
 | `jobs/{jobId}/source/watch/chunk-NNNN.json`, `watch/nova-NNNN.json` | one watcher answer each, saved at once: `{i, start, end, ok, scene, events[]}` | expire after 14 days |
 | `jobs/{jobId}/clips/{clipId}/` | `clip.mp4`, `cover.jpg` | kept |

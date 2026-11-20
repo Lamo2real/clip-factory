@@ -1,0 +1,96 @@
+[
+ {
+  "data": {
+   "video": {
+    "id": "123456789",
+    "creator": {
+     "id": "1",
+     "channel": {
+      "id": "1"
+     }
+    },
+    "comments": {
+     "edges": [
+      {
+       "cursor": "c4",
+       "node": {
+        "id": "m0004",
+        "commenter": {
+         "id": "u5",
+         "login": "viewer5",
+         "displayName": "Viewer5"
+        },
+        "contentOffsetSeconds": 7,
+        "createdAt": "2026-11-01T20:00:00Z",
+        "message": {
+         "fragments": [
+          {
+           "text": "KEKW KEKW",
+           "emote": null
+          }
+         ],
+         "userBadges": [],
+         "userColor": "#FF0000"
+        }
+       }
+      },
+      {
+       "cursor": "c5",
+       "node": {
+        "id": "m0005",
+        "commenter": {
+         "id": "u6",
+         "login": "viewer6",
+         "displayName": "Viewer6"
+        },
+        "contentOffsetSeconds": 9,
+        "createdAt": "2026-11-01T20:00:00Z",
+        "message": {
+         "fragments": [
+          {
+           "text": "OMEGALUL",
+           "emote": null
+          }
+         ],
+         "userBadges": [],
+         "userColor": "#FF0000"
+        }
+       }
+      },
+      {
+       "cursor": "c6",
+       "node": {
+        "id": "m0006",
+        "commenter": {
+         "id": "u7",
+         "login": "nightbot",
+         "displayName": "Viewer7"
+        },
+        "contentOffsetSeconds": 11,
+        "createdAt": "2026-11-01T20:00:00Z",
+        "message": {
+         "fragments": [
+          {
+           "text": "nightbot says hi",
+           "emote": null
+          }
+         ],
+         "userBadges": [],
+         "userColor": "#FF0000"
+        }
+       }
+      }
+     ],
+     "pageInfo": {
+      "hasNextPage": false,
+      "hasPreviousPage": true
+     }
+    }
+   }
+  },
+  "extensions": {
+   "durationMilliseconds": 35,
+   "operationName": "VideoCommentsByOffsetOrCursor"
+  }
+ }
+]
