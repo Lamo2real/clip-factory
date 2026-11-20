@@ -13,22 +13,25 @@ const hooks = (page: Page) => page.locator(".review-card__hook").allInnerTexts()
 test.describe("at 375px", () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  test("a refused Keep opens the too-long tab, marks it red and names the platform (F006)", async ({ page }) => {
+  test("a refused Upload opens the too-long place row, marks it red and names the platform (F006)", async ({ page }) => {
     await openReview(page);
     const card = page.locator(".review-card").first();
-    await card.getByRole("tab", { name: "X" }).click();
+    const x = card.locator('[data-place="x"]');
+    await x.locator("summary").click();
     await card.getByLabel("X caption").fill("x".repeat(350));
-    await card.getByRole("tab", { name: "YouTube" }).click();
-    const x = card.getByRole("tab", { name: "X, too long" });
+    // Closed again: the row still says it is too long.
+    await x.locator("summary").click();
     await expect(x).toHaveClass(/is-over/);
-    await expect(x).toHaveAttribute("aria-selected", "false");
+    await expect(x.locator("summary")).toContainText("Too long. Make it shorter.");
+    await expect(x).not.toHaveAttribute("open", "");
 
     await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
     await expect(page.getByText("Your X caption is longer than its platform allows. Make it shorter, then tap Upload.")).toBeVisible();
-    await expect(x).toHaveAttribute("aria-selected", "true");
-    await expect(x).toBeFocused();
-    await expect(x).toBeInViewport({ ratio: 1 });
-    await expect(card.getByLabel("X caption")).toHaveAttribute("aria-invalid", "true");
+    await expect(x).toHaveAttribute("open", "");
+    const box = card.getByLabel("X caption");
+    await expect(box).toBeFocused();
+    await expect(box).toBeInViewport();
+    await expect(box).toHaveAttribute("aria-invalid", "true");
   });
 
   test("a clip thrown away stays gone when you leave Review and come back inside the Undo time (F007)", async ({ page }) => {
@@ -124,19 +127,19 @@ test.describe("at 375px", () => {
 });
 
 for (const width of [320, 375, 960, 1024, 1280]) {
-  test(`at ${width}px all five caption tabs are in sight and the actions line up (F021, F028, F034)`, async ({ page }) => {
+  test(`at ${width}px all five place rows are in sight and the actions line up (F021, F028, F034, §36)`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await openReview(page);
     const card = page.locator(".review-card").first();
-    const strip = card.locator(".captions .tabs");
-    const fit = await strip.evaluate((el) => {
+    const fit = await card.locator(".place-rows").evaluate((el) => {
       const box = el.getBoundingClientRect();
-      const tabs = Array.from(el.querySelectorAll('[role="tab"]')).map((t) => t.getBoundingClientRect());
-      return { tabs: tabs.length, inside: tabs.every((t) => t.left >= box.left - 1 && t.right <= box.right + 1), over: el.scrollWidth - el.clientWidth };
+      const rows = Array.from(el.querySelectorAll(".place-row")).map((t) => t.getBoundingClientRect());
+      return { rows: rows.length, inside: rows.every((t) => t.left >= box.left - 1 && t.right <= box.right + 1), over: el.scrollWidth - el.clientWidth };
     });
-    expect(fit.tabs).toBe(5);
+    expect(fit.rows).toBe(5);
     expect(fit.inside).toBe(true);
     expect(fit.over).toBeLessThanOrEqual(1);
+    await expect(card.getByRole("tab")).toHaveCount(0);
 
     // The decision column is never squeezed: stacked, or at least 400px wide beside the video.
     const body = await card.locator(".review-card__body").evaluate((el) => el.getBoundingClientRect().width);

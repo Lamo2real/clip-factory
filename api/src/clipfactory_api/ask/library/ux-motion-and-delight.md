@@ -75,7 +75,7 @@ so its glyph fades out before it reaches the button's words; only the icon-only 
 | `play` / `stop` | volume / stop | sound rings / the square shrinks | sound cards / Stop job |
 | `next` / `prev` | chevrons | slides out the way it points, fresh one in (down for Show older jobs) | week arrows, Show older jobs |
 | `nudge` | chevron | 4 px and back: "nothing further that way" | Later week on the newest week |
-| `toggle` | the chosen label | bumps 1.06 | Segmented, caption tabs, device chips |
+| `toggle` | the chosen label | bumps 1.06 | Segmented, device chips |
 | `blink` | eye | closes and opens | Show / Hide password |
 
 State-driven turns (no kind): expand chevrons turn 90° and the sidebar icon 180°, 240 ms, both ways.
@@ -94,7 +94,7 @@ hand-roll a new animation per button; add a kind to `motion.css` and `lib/motion
 
 ### Sliding highlights and the cursor
 
-* **Glide.** In every pick-one bar (segmented bars, caption tabs, Library's view tabs, the sidebar, the phone tab
+* **Glide.** In every pick-one bar (segmented bars, Library's view tabs, the sidebar, the phone tab
   bar) the chosen highlight slides to the new choice on a spring and stretches a little on the way (CONTRACTS §20.13).
   It never slides on resize, and jumps under Reduce motion.
 * **The cursor is always the arrow.** Never `cursor: pointer`, never an I-beam, never a wait or not-allowed cursor.

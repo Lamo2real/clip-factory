@@ -369,7 +369,7 @@ unless its name already says it all.
 | Upload drop zone | Dashed glass area, drag and drop on desktop, tap to pick on phones, progress bar while uploading. |
 | Job progress | The ten steps as a vertical list with status icons; the running step pulses; the overall progress bar on top. |
 | Clip card | 9:16 cover with play, hook, moment-type chip, score, duration, checklist summary. In Library it shows total views when measured and its whole top (cover and hook, never just the one-line hook) opens the clip's [performance page](#clip-performance-page); its post rows list the platforms in the one app-wide order and use the clip page's status words ("Posting", "Waiting for connection"); in Review a kept clip shows "See how it does". |
-| Clip review | Vertical player, checklist, **Upload to** chips (only places that are set up; any number on; §33), captions per chosen place in tabs (editable), Upload (primary, "Upload to 4") and Throw away (ghost). All five caption tabs stay in sight: on a narrow card the tabs that are not open show only their platform mark, and a tab whose caption is too long shows a red dot. Two columns only when the card itself is at least 820 px wide, with the video on the card's vertical centre line, scrolling with the page (never sticky); once Throw away and Keep wrap, each fills the row. Overlays opened from a card (Post to TikTok, the small confirm sheet) are drawn on `document.body`, trap Tab and give the focus back on close (CONTRACTS §12.4, §17.8). |
+| Clip review | Vertical player, checklist, **Upload to** chips (only places that are set up; any number on; §33), **Use my settings** (one big soft-fill button; done: bone with a check, "Your settings are on"), one collapsed row per chosen place with its words and options (§36; no caption tab bar, no second place picker), Upload (primary, "Upload to 4") and Throw away (ghost). A row whose caption is too long says so in vermilion ink. Two columns only when the card itself is at least 820 px wide, with the video on the card's vertical centre line, scrolling with the page (never sticky); once Throw away and Keep wrap, each fills the row. Overlays opened from a card (Post to TikTok, the small confirm sheet) are drawn on `document.body`, trap Tab and give the focus back on close (CONTRACTS §12.4, §17.8). |
 | Skill row | Glass row that opens the skill's page: icon, title, description (two lines), **Always used** badge (green, on every row) and **Built in** badge, then where it came from in words (never ".md" or a size): "Written by you · Changed 16 Nov", "From a file · Changed 16 Nov", "From a file with extra files · Changed 16 Nov" (a `.zip`; its page says "From a file with {n} extra files") or "Comes with Clip Factory". No switch, no delete on the row. See [Skill pages](#skill-pages). |
 | Toggle, select, inputs | 16 px text, glass background, vermilion focus ring `outline: 2px solid var(--vermilion); outline-offset: 2px`. |
 | Toast | Glass, top on desktop, above the tab bar on phones, auto-hides after 4 s, `role="status"`. The Undo toast stays 8 s and shows a shrinking ring around its Undo button. |
@@ -493,7 +493,7 @@ reached by tapping any clip in Library, or "See how it does" on a kept clip in R
 ([CONTRACTS.md §16.8](CONTRACTS.md#168-web), [UX-16](BUSINESS_REQUIREMENTS.md#ux-16-the-performance-page-the-video-on-top-smooth-lines-to-five-stacks)).
 
 The order is always **YouTube, TikTok, Instagram, Facebook, X** (`STATS_ORDER`), on every screen size, in the DOM and
-for screen readers. Every other screen that lists platforms (Library card rows, Review caption tabs, Settings › Posting
+for screen readers. Every other screen that lists platforms (Library card rows, Review place rows, Settings › Posting
 › Where clips go) uses the same order, from the one constant `PLATFORM_ORDER` in `web/src/lib/format.ts`.
 
 ### Anatomy, top to bottom
@@ -876,7 +876,7 @@ so its glyph fades out before it reaches the button's words; only the icon-only 
 | `play` / `stop` | volume / stop | sound rings / the square shrinks | sound cards / Stop job |
 | `next` / `prev` | chevrons | slides out the way it points, fresh one in (down for Show older jobs) | week arrows, Show older jobs |
 | `nudge` | chevron | 4 px and back: "nothing further that way" | Later week on the newest week |
-| `toggle` | the chosen label | bumps 1.06 | Segmented, caption tabs, device chips |
+| `toggle` | the chosen label | bumps 1.06 | Segmented, device chips |
 | `blink` | eye | closes and opens | Show / Hide password |
 
 State-driven turns (no kind): expand chevrons turn 90° and the sidebar icon 180°, 240 ms, both ways.
@@ -895,7 +895,7 @@ hand-roll a new animation per button; add a kind to `motion.css` and `lib/motion
 
 ### Sliding highlights and the cursor
 
-* **Glide.** In every pick-one bar (segmented bars, caption tabs, Library's view tabs, the sidebar, the phone tab
+* **Glide.** In every pick-one bar (segmented bars, Library's view tabs, the sidebar, the phone tab
   bar) the chosen highlight slides to the new choice on a spring and stretches a little on the way (CONTRACTS §20.13).
   It never slides on resize, and jumps under Reduce motion.
 * **The cursor is always the arrow.** Never `cursor: pointer`, never an I-beam, never a wait or not-allowed cursor.

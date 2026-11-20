@@ -43,7 +43,7 @@ for (const width of WIDTHS) {
     await page.goto("/review");
     await settle(page);
     await page.locator(".checklist__summary").first().click();
-    await page.getByRole("tab", { name: "X" }).first().click();
+    await page.locator('.review-card [data-place="x"] summary').first().click();
     await page.getByRole("button", { name: "Throw away" }).first().click();
     await page.getByRole("button", { name: "Undo" }).waitFor();
     state = await findOverflow(page);
@@ -205,10 +205,10 @@ for (const width of [320, 375, 600, 768, 1024, 1440, 1920]) {
 }
 
 // The posting setup (docs/CONTRACTS.md §17.12): every platform page with a step open, a wrong key, the account
-// picker, a connected platform with "When it's done", a result card, and the Post to TikTok sheet.
+// picker, a connected platform with "When it's done", a result card, and the Review card's place rows.
 type SetupKnobs = { finish(p: string): void; askToChoose(p: string): void; setAudit(a: boolean): void };
 for (const width of WIDTHS) {
-  test(`the posting setup and the TikTok sheet fit at ${width}px`, async ({ page }) => {
+  test(`the posting setup and the Review place rows fit at ${width}px`, async ({ page }) => {
     // A long walk through many screens: on CI's machines the widest sizes take close to 2 minutes, so the
     // usual 2-minute limit would cut a passing run short.
     test.setTimeout(300_000);
@@ -264,16 +264,18 @@ for (const width of WIDTHS) {
 
     await page.goto("/review");
     await settle(page);
-    const keep = page.locator(".review-card").first().getByRole("button", { name: /^Upload( to .+)?$/ });
-    await keep.evaluate((el) => el.scrollIntoView({ block: "center" }));
-    await keep.click();
-    const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
-    await sheet.getByRole("radiogroup", { name: "Who can see it" }).waitFor();
-    await sheet.getByRole("switch", { name: "Commercial content" }).click();
-    await sheet.getByRole("checkbox", { name: /^Branded content/ }).check();
-    await check("/review (Post to TikTok sheet)");
-    const box = await sheet.boundingBox();
-    if (box && (box.x < 0 || box.x + box.width > width + 0.5)) failures.push("/review: the TikTok sheet leaves the screen");
+    // TikTok's choices live in its row on the card (§36): open it with every option showing.
+    const card = page.locator(".review-card").first();
+    await card.getByRole("button", { name: "Use my settings" }).click();
+    const row = card.locator('[data-place="tiktok"]');
+    await row.locator("summary").evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await row.locator("summary").click();
+    await row.getByRole("switch", { name: "Commercial content" }).click();
+    await row.getByRole("checkbox", { name: /^Branded content/ }).check();
+    await row.locator(".dropdown__button").click();
+    await check("/review (TikTok row, dropdown open)");
+    for (const p of ["youtube", "x"]) await card.locator(`[data-place="${p}"] summary`).click();
+    await check("/review (place rows open)");
     expect(failures, failures.join("\n")).toEqual([]);
   });
 }

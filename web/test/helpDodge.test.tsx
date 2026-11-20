@@ -2,7 +2,7 @@
 import { act, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { controlBoxes, DODGE_HOLD_MS, DODGE_RETURN_MS, DODGE_SETTLE_MS, shownBox, useDodge } from "../src/features/help/dodge.ts";
+import { controlBoxes, DODGE_HOLD_MS, DODGE_RETURN_MS, DODGE_SETTLE_MS, hardToTap, shownBox, useDodge } from "../src/features/help/dodge.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -244,5 +244,25 @@ describe("shownBox and controlBoxes: only what shows counts", () => {
     ]);
     // Without a column every control on screen is returned (the open panel's scrim stays chrome).
     expect(controlBoxes(document, 600)).toHaveLength(3);
+  });
+});
+
+describe("controls the launcher may not touch at all (§36.6)", () => {
+  // The owner's screenshot: the round Ask button over the right end of "Upload to 4".
+  const upload = { top: 600, bottom: 654, left: 700, right: 960 };
+  const launcher = { top: 604, bottom: 650, left: 900, right: 990 };
+  it("a plain control with plenty left beside the launcher stays easy to tap", () => {
+    expect(hardToTap(launcher, upload)).toBe(false);
+  });
+  it("a data-help-clear control (Upload, Use my settings) is hard to tap as soon as the launcher touches it", () => {
+    expect(hardToTap(launcher, { ...upload, clear: true })).toBe(true);
+    expect(hardToTap({ ...launcher, left: 970, right: 1050 }, { ...upload, clear: true })).toBe(false);
+  });
+  it("controlBoxes marks what sits inside data-help-clear", () => {
+    document.body.innerHTML = '<div data-help-clear=""><button>Upload to 4</button></div><button>Other</button>';
+    for (const b of Array.from(document.querySelectorAll("button"))) b.getBoundingClientRect = () => ({ top: 10, bottom: 50, left: 10, right: 200, width: 190, height: 40, x: 10, y: 10, toJSON: () => ({}) }) as DOMRect;
+    const boxes = controlBoxes(document, 800);
+    expect(boxes.map((b) => !!b.clear)).toEqual([true, false]);
+    document.body.innerHTML = "";
   });
 });

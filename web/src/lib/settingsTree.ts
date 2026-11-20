@@ -206,6 +206,44 @@ export const TREES: Tree[] = [
         ],
       },
       {
+        slug: "my-settings",
+        name: "My settings",
+        line: "How each clip goes up: public, open for comments, never made for kids.",
+        icon: "sparkle",
+        apples: [
+          {
+            id: "my-settings-youtube",
+            name: "YouTube",
+            leaf: "Everyone can see it, Gaming, tells your subscribers. Never made for kids.",
+            words: ["YouTube", "preset", "use my settings", "made for kids", "kids", "category", "public", "subscribers", "embed", "monetize", "ads"],
+          },
+          {
+            id: "my-settings-tiktok",
+            name: "TikTok",
+            leaf: "Everyone can see it; comments, Duet and Stitch on. You still tap Use my settings on each clip.",
+            words: ["TikTok", "preset", "use my settings", "privacy", "everyone", "duet", "stitch", "comments"],
+          },
+          {
+            id: "my-settings-instagram",
+            name: "Instagram",
+            leaf: "Reels also show in your feed.",
+            words: ["Instagram", "preset", "feed", "reels", "share to feed"],
+          },
+          {
+            id: "my-settings-facebook",
+            name: "Facebook",
+            leaf: "Reels on your Page are public. Nothing to pick.",
+            words: ["Facebook", "preset", "public", "reels", "page"],
+          },
+          {
+            id: "my-settings-x",
+            name: "X",
+            leaf: "Everyone can reply. Used once X is set up.",
+            words: ["X", "twitter", "preset", "replies", "reply", "everyone"],
+          },
+        ],
+      },
+      {
         slug: "money",
         name: "Money",
         line: "How close you are to getting paid, and real money each app reports.",

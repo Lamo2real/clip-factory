@@ -3,9 +3,8 @@
 The owner, on a Review card: "X isn't set up yet, so X should not be an option there", "I want to select as many as I
 want, and once I hit confirm it should upload to those platforms", "Keep is not a good answer, it should just be
 Upload", and, about every place: "No dropdown ... and that goes for YouTube, TikTok, Instagram, Facebook, X, all of
-them". So there are **no dropdowns and no extra option panels anywhere**: each place uses its own saved setup (YouTube:
-Settings › Set up posting › YouTube › who can see it), and the one thing a platform's own rules make the owner pick
-every time, TikTok's "Who can see it", is one bar of buttons. Decision record: ADR-57.
+them". This first build had no dropdowns and no option panels; **§36 replaces that** with the card the owner then
+asked for (Use my settings, one row per place with its options, TikTok's dropdown). Decision records: ADR-57, ADR-60.
 
 ### 33.1 What it was before
 
@@ -27,8 +26,8 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
 * **Which start on (per device):** the last Upload's choice in localStorage `cf-upload-to` (saved on Upload, not on
   each tap) minus places no longer ready; with none saved, Where clips go minus places not ready; if that leaves
   nothing, every ready place.
-* **Caption tabs** show only the chosen places (still a pick-one Glide tablist: it picks which caption is edited). A
-  place turned off keeps its text. Limits unchanged; the too-long check (`captionsTooLong` / `tabsTooLong`) counts
+* **Caption tabs** (replaced by one row per place, §36.1) showed only the chosen places. A place turned off keeps its
+  text. Limits unchanged; the too-long check (`captionsTooLong` / `tabsTooLong`) counts
   only chosen places. The tab shows its mark, and its name only when open; X's name is screen-reader only (its mark
   reads "X"). `aria-label` always names the place.
 * **Checks before posting** summary: the title may wrap (`min-width: 0`), the score never shrinks (`flex: 0 0 auto`,
@@ -38,7 +37,7 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   actions and describes the button (`aria-describedby`). Vermilion on the top card only, bottom right (thumb zone),
   motion `send`. **Try again** (after an Upload that did not finish) runs the same checks as Upload: at least one
   place, and the TikTok sheet when TikTok is one of the places and its choices are not already made on this card.
-* There is no "Use my settings", no "More details", and no per-clip options: nothing else to pick on the card.
+* (Replaced by §36: "Use my settings" and each place's options in its own row.)
 * Toast after Upload: "Uploading to 4 places!" / "Uploading to YouTube!"; with TikTok, also "TikTok can take a few
   minutes to process your clip."
 
@@ -62,17 +61,17 @@ Without it (older clients) everything works exactly as before. Response unchange
 unchanged: YouTube still follows `settings.youtubePrivacy` (never made for kids, always). No infrastructure, Terraform
 or table change: one new attribute on new clip items. Existing kept and posted clips and their posts are untouched.
 
-### 33.4 Nothing else to pick
+### 33.4 My settings
 
-There is no "My settings" page, no `settings.postPreset`, and no per-clip `options`. Each place keeps using its saved
-setup, so the owner's YouTube choice under Set up posting › YouTube still decides who can see the uploads.
+Replaced by §36.2 and §36.3: `settings.postPreset`, Settings › Posting › My settings and per-clip `options`. The owner's
+YouTube choice (`youtubePrivacy`) still decides who can see the uploads unless a clip's own row changes it.
 
 ### 33.5 TikTok sheet
 
-See §17.8: who can see it is one bar of buttons (a `<Glide>` radio group, no dropdown, no default, Everyone first;
-when TikTok allows only Only me, that is one button), then Comments, Duet and Stitch (off to start), Commercial
-content with Your brand / Branded content (paid partnership), all visible. The big button says **Upload**. The sheet
-opens only when TikTok is one of the chosen places.
+See §17.8 and §36.5: who can see it is the app's own dropdown (no default, Everyone first; when TikTok allows only
+Only me, that is the one choice), then Comments, Duet and Stitch (off to start), Commercial
+content with Your brand / Branded content (paid partnership), all visible. On the Review card the same controls are
+in the TikTok row (§36), so the sheet opens only for Library's Try again and while nothing is set up.
 
 ### 33.6 Library and the clip page
 

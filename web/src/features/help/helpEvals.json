@@ -145,6 +145,9 @@
     { "q": "What does Upload do?", "expect": "review-keep", "history": [{ "role": "user", "text": "Why is my clip private on TikTok?" }, { "role": "assistant", "text": "(the answer)" }] },
     { "q": "What does Upload do?", "expect": "review-keep", "history": [{ "role": "user", "text": "How do I connect Instagram?" }, { "role": "assistant", "text": "(the answer)" }] },
     { "q": "What does Upload do?", "expect": "review-keep", "history": [{ "role": "user", "text": "How many views did my best clip get this week?" }, { "role": "assistant", "text": "(the answer)" }] },
-    { "q": "What does Upload do?", "expect": "review-keep", "history": [{ "role": "user", "text": "How do I add a skill?" }, { "role": "assistant", "text": "(the answer)" }] }
+    { "q": "What does Upload do?", "expect": "review-keep", "history": [{ "role": "user", "text": "How do I add a skill?" }, { "role": "assistant", "text": "(the answer)" }] },
+    { "q": "How do I upload with my settings in one tap?", "expect": "review-use-my-settings" },
+    { "q": "How do I mark a TikTok as a paid partnership?", "expect": "review-place-rows" },
+    { "q": "Where do I change my settings for uploads?", "expect": "my-settings" }
   ]
 }

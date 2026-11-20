@@ -1,5 +1,6 @@
 // Realistic demo data for mock mode: jobs in every state, clips waiting for review, posts with 48-hour numbers.
 import type { Account, Captions, Clip, Job, Learning, MomentType, Platform, Post, SeriesPoint, Settings, Step, StepKey } from "../types.ts";
+import { presetOf } from "../../lib/preset.ts";
 import { isoWeek, weekRange, shiftWeek, weekStart } from "../../lib/week.ts";
 import { coverArt, thumbArt } from "./art.ts";
 import type { MockSkill } from "./skills.ts";
@@ -527,6 +528,7 @@ export function seed(): Store {
       hasYoutubeCookies: false,
       platforms: [...PLATFORMS],
       youtubePrivacy: "public",
+      postPreset: presetOf(undefined),
       earningsRates: {},
       earningsPaid: {},
       setupSkipped: [],

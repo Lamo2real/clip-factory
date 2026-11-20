@@ -169,14 +169,12 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   "Show older jobs" shows), `olderJobsFails` (the next N older pages fail), `createJobFails` (the next N Make clips
   fail with a server error). Covered by `web/e2e/audit-shell.spec.ts`.
 * **Review screen** (`web/src/screens/review/`):
-  * A refused Upload (a caption too long for a chosen place) opens the first too-long caption tab, scrolls it into view,
-    focuses it and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then tap
-    Upload.". Every
-    tab whose caption is too long carries `.is-over` (a red dot) and ", too long" in its accessible name, so it shows
-    even while another tab is open.
-  * Caption tabs: all five platforms stay in sight. On a narrow card (`.captions` container under 560 px) tabs that
-    are not open show only their mark (the name stays their accessible name and title); under 360 px the open one
-    does too, and the field label names the platform. The chosen tab is scrolled into view.
+  * A refused Upload (a caption too long for a chosen place) opens the first too-long place row, scrolls it into view,
+    focuses its box and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then
+    tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
+    even while the row is closed.
+  * Place rows (§36.1): one closed row per chosen place, no tab bar. A closed TikTok row also names the account:
+    "Posting as <nickname>" (TikTok's rules). Review's launcher keeps clear of the rows (`data-help-dodge`).
   * The card goes two-column (video left) only when the card itself is at least 820 px wide (container query on
     `.review-list__item`, never a window media query), so the decision column never drops below about 400 px.
     In two columns the video sits on the card's vertical centre line beside the words (`align-self: center`) and

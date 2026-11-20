@@ -28,6 +28,14 @@ DEFAULTS = {
     "followDailyMax": 0,
     "followMinMinutes": 30,
     "notify": {"ready": True, "stopped": True, "resumed": False, "steps": False},
+    # §36 My settings: the owner's own post choices per platform, never made for kids.
+    "postPreset": {
+        "youtube": {"category": "20", "notifySubscribers": True, "embeddable": True},
+        "tiktok": {"privacy": "PUBLIC_TO_EVERYONE", "comments": True, "duet": True, "stitch": True},
+        "instagram": {"shareToFeed": True},
+        "facebook": {},
+        "x": {"replies": "everyone"},
+    },
 }
 
 
@@ -538,3 +546,52 @@ def test_old_default_colours_are_saved_as_the_new_default_on_the_next_save(call:
 )
 def test_other_colour_choices_are_kept(chosen: list[str]) -> None:
     assert settings.with_defaults({"backgroundColours": chosen})["backgroundColours"] == chosen
+
+
+def test_post_preset_saves_per_platform_and_keeps_the_rest(call: Call) -> None:
+    status, body = call(
+        "PUT", "/v1/settings", {"postPreset": {"tiktok": {"duet": False}, "x": {"replies": "following"}}}
+    )
+    assert status == 200
+    preset = body["settings"]["postPreset"]
+    assert preset["tiktok"] == {**DEFAULTS["postPreset"]["tiktok"], "duet": False}  # type: ignore[index]
+    assert preset["x"] == {"replies": "following"}
+    assert preset["youtube"] == DEFAULTS["postPreset"]["youtube"]  # type: ignore[index]
+    # Other saved settings are untouched by a preset save.
+    assert body["settings"]["youtubePrivacy"] == "public"
+    assert call("GET", "/v1/settings")[1] == body
+
+
+@pytest.mark.parametrize(
+    "preset",
+    [
+        {"youtube": {"madeForKids": True}},
+        {"youtube": {"madeForKids": False}},
+        {"youtube": {"selfDeclaredMadeForKids": True}},
+    ],
+)
+def test_post_preset_can_never_say_made_for_kids(call: Call, preset: dict[str, object]) -> None:
+    status, body = call("PUT", "/v1/settings", {"postPreset": preset})
+    assert status == 400
+    assert body["error"]["message"] == "My settings never mark a clip as made for kids."
+
+
+@pytest.mark.parametrize(
+    "preset",
+    [
+        {"tiktok": {"privacy": "EVERYONE"}},
+        {"tiktok": {"commercial": True}},
+        {"youtube": {"category": "99"}},
+        {"x": {"replies": "nobody"}},
+        {"instagram": {"shareToFeed": "yes"}},
+        {"threads": {}},
+        "public",
+    ],
+)
+def test_post_preset_refuses_bad_choices(call: Call, preset: object) -> None:
+    assert call("PUT", "/v1/settings", {"postPreset": preset})[0] == 400
+
+
+def test_stored_bad_preset_reads_the_defaults() -> None:
+    out = settings.with_defaults({"postPreset": {"youtube": {"madeForKids": True}}})
+    assert out["postPreset"] == DEFAULTS["postPreset"]

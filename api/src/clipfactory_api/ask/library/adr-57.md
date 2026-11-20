@@ -1,5 +1,9 @@
 ## ADR-57 Upload replaces Keep; the owner picks places per clip; no dropdowns, no extra options
 
+**Corrected by ADR-60.** The "no preset, no options, button bar for TikTok" part below was a misreading: the owner asked
+for a one-tap preset of his own settings and options per platform, and TikTok's rules ask for a dropdown. The Upload,
+`platforms` and per-place Try again parts stand.
+
 Upload to many places at once, nothing else to pick, inside each platform's rules.
 
 - **Context.** The owner read the caption tab strip as a pick-one platform picker, saw X offered though X was not set

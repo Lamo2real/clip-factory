@@ -40,6 +40,7 @@ import { LearnedBranch } from "./LearnedBranch.tsx";
 import { FollowBranch } from "./FollowBranch.tsx";
 import { SoundsBranch } from "./SoundsBranch.tsx";
 import { MoneyBranch } from "./MoneyBranch.tsx";
+import { MySettingsBranch } from "./MySettingsBranch.tsx";
 import { AskBranch } from "./AskBranch.tsx";
 import { NotifyBranch } from "./NotifyBranch.tsx";
 import { SetupList } from "./setup/SetupList.tsx";
@@ -56,6 +57,7 @@ const BRANCHES: Record<string, () => ReactNode> = {
   "clip-making/youtube": () => <YoutubeBranch />,
   "posting/setup": () => <SetupList />,
   "posting/where": () => <WhereBranch />,
+  "posting/my-settings": () => <MySettingsBranch />,
   "posting/money": () => <MoneyBranch />,
   "look-and-feel/sounds": () => <SoundsBranch />,
   "look-and-feel/motion": () => <MotionBranch />,

@@ -145,7 +145,7 @@ test.describe("motion: Review (APPLY a)", () => {
 
   test("a refused Upload (caption too long) only shakes: never the plane", async ({ page }) => {
     const card = page.locator(".review-card").first();
-    await card.getByRole("tab", { name: "X" }).click();
+    await card.locator('[data-place="x"] summary').click();
     await card.getByLabel("X caption").fill("x".repeat(300));
     const keep = card.getByRole("button", { name: /^Upload( to .+)?$/ });
     const phases = (await recordAct(keep, 200)).join(" ");
@@ -182,19 +182,18 @@ test.describe("motion: Review (APPLY a)", () => {
     await expect(back).not.toHaveClass(/is-returning/, { timeout: ACT_REWIND_MS + 400 });
   });
 
-  test("caption tabs bump the chosen name; the checks chevron turns with the state", async ({ page }) => {
+  test("a place row's chevron turns when it opens; the checks chevron turns with the state", async ({ page }) => {
     const card = page.locator(".review-card").first();
-    const tiktok = card.getByRole("tab", { name: "TikTok" });
-    await expect(tiktok).toHaveAttribute("data-act", "toggle");
-    const { cls } = await tapAct(tiktok);
-    expect(cls.split(" ")).toEqual(expect.arrayContaining(["act--toggle", "is-play"]));
-    await expect(tiktok).toHaveAttribute("aria-selected", "true");
-    const x = card.getByRole("tab", { name: "X" });
-    await x.click();
-    await expect(x).toHaveAttribute("aria-selected", "true");
-    // X's mark already reads "X": no visible "X X", and the name is still the tab's accessible name.
-    await expect(x.locator(".tab__label")).toHaveCount(0);
-    await expect(x).toHaveAttribute("aria-label", "X");
+    // One row per place (§36), no caption tabs: opening a row turns its chevron.
+    await expect(card.getByRole("tab")).toHaveCount(0);
+    const x = card.locator('[data-place="x"]');
+    const rowChev = x.locator(".place-row__chev");
+    await expect(rowChev).toHaveClass(/act-turn/);
+    await x.locator("summary").click();
+    await expect(x).toHaveAttribute("open", "");
+    await expect.poll(() => rowChev.evaluate((el) => getComputedStyle(el).transform)).not.toBe("none");
+    // X's mark already reads "X": no visible "X X".
+    await expect(x.locator("summary")).not.toContainText("X X");
 
     const chev = card.locator(".checklist__chev");
     await expect(chev).toHaveClass(/act-turn/);
@@ -248,9 +247,9 @@ test.describe("motion: no overflow while Home and Review animate (APPLY a)", () 
       await page.goto("/review");
       await settle(page);
       const card = page.locator(".review-card").last();
-      // Choosing a caption tab shows its name (the chosen tab is wider on purpose), so the tab bump is compared with
-      // the tabs once it ends, and Throw away with the page after the choice.
-      await tapAct(card.getByRole("tab", { name: "TikTok" }));
+      // Opening a place row (§36) makes the card taller, so the chevron turn is compared with the page once the row is
+      // open, and Throw away with the page after that.
+      await card.locator('[data-place="tiktok"] summary').click();
       await pauseActs(page, 0.5);
       const midTab = await actWidths(page);
       await page.evaluate(() => {

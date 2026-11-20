@@ -536,7 +536,7 @@ youtube `{ "checkSeconds": 30, "maxChecks": 60, "chunkMb": 8 }`; tiktok `{ "chec
 
 On Upload, when TikTok is one of the chosen places (§33; an older client: in `settings.platforms` and connected), a
 sheet opens before the confirm request: the creator nickname (`GET /v1/accounts/tiktok/creator-info`, fetched each
-time), a **Who can see it** bar of buttons with **no default** (a `<Glide>` radio group, below), switches Comments / Duet /
+time), a **Who can see it** dropdown (the app's own) with **no default** (below), switches Comments / Duet /
 Stitch (off by default, greyed when disabled by the creator), a **Commercial content** switch (off) with **Your brand** / **Branded content** (one required when on;
 label "Promotional content" / "Paid partnership"; branded cannot be "Only me"), the sentence "By posting, you agree to
 TikTok's Music Usage Confirmation" (+ "Branded Content Policy" when branded), a video preview and the editable
@@ -547,23 +547,22 @@ caption. Upload stays disabled until a privacy is chosen. Confirm body gains `"t
 "Pick who can see it on TikTok again, then press Try again." opens this sheet first, then sends `{ "tiktok": {...} }`
 in the confirm body; the API replaces that post's `postOptions` (mock `_try_again` does the same).
 
-**Who can see it: the owner's ask and TikTok's rules (owner request, 2026-11-20; ADR-57).** The owner asked for no
-dropdown and no extra options, on every platform. TikTok's Content Sharing Guidelines
-(developers.tiktok.com/doc/content-sharing-guidelines, updated 4 Aug 2026) still require that the creator picks the
-privacy status himself with no default value, from exactly `privacy_level_options`, and while the app is not audited
-only `SELF_ONLY` is allowed; Comments, Duet and Stitch must be shown and none may be on by default. The guidelines
-speak of a dropdown; the app meets the rule with one bar of buttons instead, because the owner said no dropdown, and
-asks TikTok at app review whether a button bar is accepted. So:
+**Who can see it: TikTok's rules and the owner's one tap (owner request, 2026-11-20; ADR-60, correcting ADR-57).**
+TikTok's Content Sharing Guidelines (developers.tiktok.com/doc/content-sharing-guidelines, updated 4 Aug 2026) require
+that the creator picks the privacy status himself **from a dropdown** with no default value, from exactly
+`privacy_level_options` (while the app is not audited only `SELF_ONLY` is allowed), and that Comments, Duet and Stitch
+are shown and none is on by default; Commercial content is off until the creator turns it on. So:
 
-* **One bar of buttons** (`Segmented`, a `<Glide>` radio group labelled "Who can see it"): exactly `privacyOptions`
-  (minus Only me when branded), ordered Everyone, Followers, Friends, Only me, nothing picked until the owner taps one.
-  When `SELF_ONLY` is the only option it is one button, and the line "TikTok keeps posts private until it approves your
-  app." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off Branded
-  content." The hint under the actions reads "Tap who can see it to turn on Upload."
-* **No Turn all on and no Use my settings**: each switch is its own tap, and nothing is pre-set (a card-level preset
-  would have opened the sheet with privacy and all three switches already on, against the no-default rule).
+* **The app's own dropdown** (`components/Dropdown.tsx`, never the OS list) labelled "Who can see it": exactly
+  `privacyOptions` (minus Only me when branded), ordered Everyone, Followers, Friends, Only me, showing "Pick who can
+  see it" until the owner picks. When `SELF_ONLY` is the only option it is the one choice, and the line "TikTok keeps
+  posts private until it approves your app." shows under it. When Branded content leaves nothing: "Branded content
+  can't be Only me. Turn off Branded content." The sheet's hint reads "Pick who can see it to turn on Upload."
+* **Use my settings** on the Review card (§36) is the owner's own action: one tap puts his saved TikTok choices on
+  (within what TikTok offers him right now). Nothing is ever on before he taps it or picks in the TikTok row.
 * Commercial content (off) with Your brand / Branded content ("Paid partnership"), the Branded Content Policy line and
-  the Music Usage Confirmation line are unchanged.
+  the Music Usage Confirmation line are unchanged; on the Review card the Music Usage line sits right above Upload
+  whenever TikTok is ticked.
 
 The sheet (and the shared confirm `Sheet` in `components/Sheet.tsx`) is drawn with `createPortal` on `document.body`,
 so its backdrop covers the whole screen (tab bar, sidebar and Ask included; toasts stay on top, so a failed Upload's

@@ -369,7 +369,8 @@ stay private until TikTok approves the app.
 #### 21. Record the real demo video
 - Record your screen while you use Clip Factory, connected in the Sandbox. Show:
   open Clip Factory, press **Connect TikTok**, TikTok's **Authorize** screen,
-  press **Upload** on a clip, pick in the **Post to TikTok** sheet, and Upload,
+  on a clip tap **Use my settings**, open the **TikTok** row to show who can see it (a dropdown), the
+  Comments, Duet and Stitch switches and Commercial content, then press **Upload**,
   then the post arriving on your TikTok.
 - You can send up to 5 videos, 50 MB each.
 
@@ -406,9 +407,11 @@ stay private until TikTok approves the app.
 | "TikTok did not answer. Try again in a few minutes." | Wait, then press **Connect TikTok**. |
 | "Finish the TikTok review steps to post outside the Sandbox." | Do steps 21 to 23. |
 
-**Every time you press Upload** with TikTok picked, a **Post to TikTok** sheet opens first. Pick who can see it on
-TikTok (there is no default, TikTok's rule), choose the Comments, Duet and Stitch switches, and say if the clip is
-promotional. Then Upload. TikTok can take a few minutes to process your clip.
+**Every clip with TikTok ticked** waits for your tap: press **Use my settings** (it puts your saved TikTok choices on),
+or open the **TikTok** row and pick who can see it there (there is no default, TikTok's rule). The row also has the
+Comments, Duet and Stitch switches and Commercial content (tick **Branded content** for a paid partnership). Then press
+**Upload**. TikTok can take a few minutes to process your clip. Your saved choices live in Settings › Posting › My
+settings.
 
 If a clip says "Pick who can see it on TikTok again, then press Try again.", press **Try again** on the clip. The
 **Post to TikTok** sheet opens first. Pick again, then press the vermilion-red button on the sheet.

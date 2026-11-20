@@ -340,7 +340,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | Review.tsx:476 Throw away | `throw` | the card's leaving motion stays; Undo → `.is-returning` on the card |
 | Review.tsx **Upload** (Vermilion) / Try again | `send` / `retry` | `playOnClick={false}`: plays when an upload really starts, not on the tap that opens the TikTok sheet; a refused Upload (caption too long, nothing picked) only shakes; confetti and leaving card stay; success sound only when the upload succeeds; `fail()` on error (§33) |
 | UploadTo.tsx Upload to chips | `tick` | soft-fill toggle chips with `aria-pressed` and a check mark; the tick plays when a chip turns on |
-| CaptionTabs.tsx:100 caption tabs | `toggle` | label bump |
+| PlaceRows.tsx place rows | `toggle` | chevron turn |
 | TikTokSheet.tsx:93 backdrop, :99 Close, :197 Not now, :174/181 policy links | press | |
 | TikTokSheet.tsx Who can see it (button bar) | `toggle` | the chosen button's label bumps and the glide slides; checkboxes (native) none |
 | TikTokSheet.tsx:152-155 Toggles | none | switch thumb |
@@ -473,7 +473,7 @@ Every bar where you pick one of a few things shows its choice with **one** highl
 to the new one, instead of the old pill vanishing and a new one appearing.
 
 * **Where:** every `Segmented` (Paste a link / Upload a video, Pick for me / Exactly, every other segmented bar), the
-  caption tabs on Review, Library's All clips / This week tabs, the sidebar menu (the glass pill and the vermilion bar
+  place rows on Review, Library's All clips / This week tabs, the sidebar menu (the glass pill and the vermilion bar
   move together) and the phone tab bar (the glass tile and the vermilion dot move together).
 * **How:** `components/Glide.tsx` renders one `aria-hidden` element as the first child of the bar and moves it to the
   item matching its `active` selector, measured from the bar (which is `position: relative`), so a scrolling tab row
