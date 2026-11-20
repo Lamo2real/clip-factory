@@ -1,5 +1,5 @@
 {
- "version": "d450bdfd3e81",
+ "version": "58c0a33c30d0",
  "parts": [
   {
    "id": "app-map",
@@ -255,7 +255,7 @@
    "id": "contracts-38",
    "title": "CONTRACTS: 38. New parts of a built-in skill, for the owner's own copy of it (owner request, 2026-11-20)",
    "line": "38.1 The problem and the rule",
-   "chars": 5122
+   "chars": 5563
   },
   {
    "id": "adr-01",
