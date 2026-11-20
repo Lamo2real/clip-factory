@@ -37,7 +37,7 @@ for (const size of [
       const offer = card(page);
       await expect(offer).toBeVisible();
       await expect(offer).toContainText("Add it to My clip rules? All your own words stay.");
-      await expect(offer).toContainText("Until you add it, Clip Factory still uses the built-in Chat went wild part for your clips.");
+      await expect(offer).toContainText("Until you add it, Clip Factory still uses the built-in's Chat went wild part.");
       // only his copy gets a card
       await expect(page.locator(".skill-offer")).toHaveCount(1);
 

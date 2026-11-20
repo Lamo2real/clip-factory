@@ -21,7 +21,7 @@ export interface SectionResult {
 export const OFFER_WORDS = {
   heading: (o: SectionOffer) => `New in the built-in skill: ${o.title}`,
   ask: (skill: Skill) => `Add it to ${skill.title}? All your own words stay.`,
-  meanwhile: (o: SectionOffer) => `Until you add it, Clip Factory still uses the built-in ${o.title} part for your clips.`,
+  meanwhile: (o: SectionOffer) => `Until you add it, Clip Factory still uses the built-in's ${o.title} part.`,
   added: (o: SectionOffer, skill: Skill) => `Added ${o.title} to ${skill.title}.`,
   notNow: "Okay. You can still add it from the skill's page.",
 } as const;

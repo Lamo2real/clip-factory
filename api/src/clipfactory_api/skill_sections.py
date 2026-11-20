@@ -170,16 +170,18 @@ def insertion(owner_text: str, part: str, section: BuiltinSection) -> tuple[int,
     """Where the part goes in his text and exactly what is added there (the part with the blank lines around it).
     Nothing of his is changed or moved: only these characters are put in at that place."""
     at = _place(owner_text, section)
+    eol = "\r\n" if "\r\n" in owner_text else "\n"  # a Windows file gets Windows line ends, his own stay as they are
+    part = part.replace("\n", eol)
     if at is None:
-        if owner_text == "" or owner_text.endswith("\n\n"):
+        if owner_text == "" or owner_text.endswith(eol * 2):
             sep = ""
         elif owner_text.endswith("\n"):
-            sep = "\n"
+            sep = eol
         else:
-            sep = "\n\n"
-        return len(owner_text), sep + part + "\n"
-    sep = "" if at == 0 or owner_text[:at].endswith("\n\n") else "\n"
-    return at, sep + part + "\n\n"
+            sep = eol * 2
+        return len(owner_text), sep + part + eol
+    sep = "" if at == 0 or owner_text[:at].endswith(eol * 2) else eol
+    return at, sep + part + eol * 2
 
 
 def insert_section(owner_text: str, part: str, section: BuiltinSection) -> str:
@@ -208,13 +210,14 @@ def preview(owner_text: str, section: BuiltinSection) -> dict[str, list[str]]:
 
 NOTE = (
     'The owner\'s skill "{owner}" is his own copy of the built-in skill "{skill}", made before the built-in gained '
-    'its "{title}" part. Until he adds it to his copy, use that part from the built-in skill too. Where his own '
-    "words say something different, his words win."
+    'its "{title}" part. Until he adds it to his copy, also follow that part of the built-in skill "{skill}" above '
+    "(the part that begins {start!r}). Where his own words say something different, his words win."
 )
 
 
 def skill_note(owner: str, missing: Missing) -> str:
-    """The small separate note that goes right after his skill in the skills block (§38.4)."""
+    """The small separate note that goes right after his skill in the skills block (§38.4). It only points at the
+    part: the built-in skill is in every model call already, so the part's text is not sent a second time."""
     s = missing.section
-    words = NOTE.format(owner=owner, skill=s.skill, title=s.title)
-    return f'<skill_note skill="{escape(owner)}" part="{escape(s.key)}">\n{words}\n{missing.text}\n</skill_note>'
+    words = NOTE.format(owner=owner, skill=s.skill, title=s.title, start=s.start)
+    return f'<skill_note skill="{escape(owner)}" part="{escape(s.key)}">\n{words}\n</skill_note>'

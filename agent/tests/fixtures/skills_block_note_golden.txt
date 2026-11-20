@@ -1,9 +1,3 @@
 <skill_note skill="my-clip-rules" part="viral-clip-editing/chat@1">
-The owner's skill "my-clip-rules" is his own copy of the built-in skill "viral-clip-editing", made before the built-in gained its "Chat went wild" part. Until he adds it to his copy, use that part from the built-in skill too. Where his own words say something different, his words win.
-**Chat** (the "Chat spikes" line): the live chat suddenly going much faster than usual, or many people typing the same thing (W, LUL, KEKW, OMEGALUL, LMAO, 💀, "?????", "CLIP IT"), is the audience telling you something just happened. It is the crowd's own loudness spike.
-- Chat lags: it reacts 2 to 10 seconds *after* the moment. The "moment ~" range points at where it happened; the moment is there, so the usual start rule applies (a second or two before the trigger), never at the burst.
-- Chat alone is a hint, never a clip: something must be seen or heard in that range. Chat plus a loudness spike plus a picture event at the same second is among the strongest signs there are; score it high when the payoff is clear.
-- What chat spams tells the type: laughing (KEKW, LUL, 💀) is chaos or funny; "?????" or "what" is no_way or first_reaction; "W" or "LETS GO" is no_way or a win; "L" is a fail; "CLIP IT" means viewers already think it is a clip.
-- Ignore bursts from raids and hosts ("maybe a raid"), giveaways and drops, !commands, bot spam, subscription or gift trains ("subs"), and chat memes, copy-pastes or replies to another chatter, a donation or a poll that are unrelated to what is on screen.
-- Never quote chatters' names, and never put chat text in the hook unless it is one clean word.
+The owner's skill "my-clip-rules" is his own copy of the built-in skill "viral-clip-editing", made before the built-in gained its "Chat went wild" part. Until he adds it to his copy, also follow that part of the built-in skill "viral-clip-editing" above (the part that begins '**Chat** ('). Where his own words say something different, his words win.
 </skill_note>

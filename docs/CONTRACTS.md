@@ -7181,20 +7181,23 @@ Both skills block builders (§18.6) put, right after his `</skill>` and only whi
 ```
 <skill_note skill="{his name}" part="viral-clip-editing/chat@1">
 The owner's skill "{his name}" is his own copy of the built-in skill "viral-clip-editing", made before the built-in
-gained its "Chat went wild" part. Until he adds it to his copy, use that part from the built-in skill too. Where his
-own words say something different, his words win.
-{the part}
+gained its "Chat went wild" part. Until he adds it to his copy, also follow that part of the built-in skill
+"viral-clip-editing" above (the part that begins '**Chat** ('). Where his own words say something different, his words win.
 </skill_note>
 ```
-It is not a skill (`count` and `included` are unchanged); `counts.notes` counts it. With no such copy every block is
+The note only points at the part (the built-in skill is in every call already, so its text is not sent twice), and it
+counts against the 120,000-character budget. It is not a skill (`count` and `included` are unchanged); `counts.notes` counts it. With no such copy every block is
 byte for byte what it was (the §18.6 golden file); the note has its own shared golden file
 (`tests/fixtures/skills_block_note_golden.txt` in both packages). Not now does not remove the note.
+
+Add also checks the skill is a copy (`409` if not), keeps a byte order mark at the start of his file, and follows his
+line ends (a Windows file gets Windows line ends in the added part). Not now on a skill deleted meanwhile is a `404`.
 
 ### 38.5 Web
 
 * **Settings › Clip making › Skills**, top of **Your skills**: a glass card per offer, "New in the built-in skill: Chat
   went wild" · "Add it to {his title}? All your own words stay." · "Until you add it, Clip Factory still uses the
-  built-in Chat went wild part for your clips." with vermilion **Add** (act `add`, tap sound and a small burst, then an
+  built-in's Chat went wild part." with vermilion **Add** (act `add`, tap sound and a small burst, then an
   Undo toast for 8 s, "Added Chat went wild to {title}.", with a plus picture), ghost **Not now** (toast "Okay. You can
   still add it from the skill's page.") and ghost **See what changes** (his lines before, the new part tagged "New",
   his lines after, all drawn as safe markdown).

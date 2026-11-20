@@ -80,7 +80,9 @@ def skills_block(docs: Iterable[SkillDoc], *, where: str = "") -> SkillsBlock:
         parts.append(f'<skill name="{escape(doc.name)}" source="{source}">\n{text}\n</skill>')
         if not doc.builtin:  # his copy of a built-in that gained a part since: a small separate note (§38.4)
             for gap in skill_sections.missing_sections(builtins, doc.text):
-                parts.append(skill_sections.skill_note(doc.name, gap))
+                note = skill_sections.skill_note(doc.name, gap)
+                left = max(0, left - len(note))  # a note counts against the same budget (§38.4)
+                parts.append(note)
                 notes += 1
     if not parts and not omitted:
         body = '<owner_skills count="0"></owner_skills>'

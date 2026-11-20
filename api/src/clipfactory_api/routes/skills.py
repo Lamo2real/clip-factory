@@ -7,6 +7,7 @@ uploaded as a SKILL.md or a zip. Every saved file gets its own revision key, so 
 
 from __future__ import annotations
 
+import codecs
 import zipfile
 from typing import Any
 
@@ -191,6 +192,7 @@ def list_skills(app: App, req: Request) -> Response:
 
 SECTION_ACTIONS = ("add", "undo", "not_now")
 ALREADY_HAS = "Your skill already has this part."
+NOT_A_COPY = "Your skill is not a copy of that built-in skill, so this part cannot be added to it."
 CANNOT_UNDO = "Your skill changed since, so this cannot be undone here. Open it and tap Edit to take the part out."
 
 
@@ -269,6 +271,10 @@ def skill_section(app: App, req: Request) -> Response:
     _check_version(item, version)
     part = _builtin_part(app, section)
     old_data, old_text = _read_file(app, item)
+    if action == "add" and section.key not in {o["key"] for o in _offers(app, item, old_text)}:
+        if skill_sections.has_section(old_text, section):
+            raise conflict(ALREADY_HAS)
+        raise conflict(NOT_A_COPY)
     text, added = _changed_text(item, old_text, part, section, action)
     fmt = "zip" if item.get("format") == "zip" else "md"
     data = _packed(old_data, text, fmt)
@@ -287,7 +293,10 @@ def skill_section(app: App, req: Request) -> Response:
 def _not_now(app: App, item: dict[str, Any], section: skill_sections.BuiltinSection) -> Response:
     not_now = [k for k in (item.get("sectionsNotNow") or []) if isinstance(k, str)]
     if section.key not in not_now:
-        item = app.store.update(item["pk"], item["sk"], {"sectionsNotNow": [*not_now, section.key]})
+        try:
+            item = app.store.update(item["pk"], item["sk"], {"sectionsNotNow": [*not_now, section.key]})
+        except db.ConditionFailed as e:  # he deleted the skill meanwhile
+            raise not_found(NOT_FOUND) from e
     log("info", "skill.section_not_now", skillId=item.get("skillId"), part=section.key)
     _, text = _read_file(app, item)
     return ok({"skill": _public(item), "newSections": _offers(app, item, text)})
@@ -316,7 +325,10 @@ def _changed_text(
 
 def _packed(old_data: bytes, text: str, fmt: str) -> bytes:
     if fmt != "zip":
-        return text.encode()
+        bom = (
+            codecs.BOM_UTF8 if old_data.startswith(codecs.BOM_UTF8) else b""
+        )  # his file's first bytes stay as they were
+        return bom + text.encode()
     try:
         data = skills.replace_skill_md_in_zip(old_data, text)
     except skills.SkillTooLarge as e:

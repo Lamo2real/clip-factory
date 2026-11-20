@@ -52,7 +52,7 @@ async def test_a_job_gets_the_chat_note_after_his_copy(tmp_path: Path) -> None:
     note = text.index('<skill_note skill="my-clip-rules" part="viral-clip-editing/chat@1">')
     assert mine < note < text.index("</owner_skills>")
     note_text = text[note : text.index("</skill_note>") + len("</skill_note>")]
-    assert PART in note_text and "his words win" in note_text
+    assert PART not in note_text and "his words win" in note_text  # a pointer: the built-in is in the call already
     # the same note, byte for byte, as the API's builder (shared golden file)
     assert note_text == NOTE_GOLDEN.read_text("utf-8")
     # his own words are all still there, untouched

@@ -145,7 +145,7 @@ def test_the_note_goes_after_his_skill_only_while_he_lacks_the_part() -> None:
     mine = block.text.index('<skill name="my-clip-rules" source="owner">')
     note = block.text.index('<skill_note skill="my-clip-rules" part="viral-clip-editing/chat@1">')
     assert mine < note
-    assert PART in block.text[note:]
+    assert PART not in block.text[note:]  # a pointer: the built-in's own Chat part is in the block already
     assert "his words win" in block.text[note:]
     assert NOTE_GOLDEN.read_text("utf-8") == block.text[note : block.text.index("</skill_note>") + len("</skill_note>")]
     added = insert_section(his_copy(), PART, CHAT)  # type: ignore[arg-type]
@@ -256,3 +256,84 @@ def test_section_rules(call: Call, s3_client: FakeS3) -> None:
         == 409
     )
     assert call("POST", f"/v1/skills/{'0' * 26}/sections", {"key": CHAT.key, "action": "add", "version": 1})[0] == 404
+
+
+def test_a_note_counts_against_the_budget_and_each_copy_gets_one() -> None:
+    docs = [
+        SkillDoc("viral-clip-editing", True, BUILTIN, "builtin-viral-clip-editing"),
+        SkillDoc("my-clip-rules", False, his_copy(), "01"),
+        SkillDoc("my-other-rules", False, his_copy(rename="my-other-rules"), "02"),
+    ]
+    block = skills_block(docs)
+    assert block.counts["notes"] == 2
+    assert block.text.count("<skill_note ") == 2
+    assert len(block.text) < 2 * len(his_copy()) + len(BUILTIN) + 2_000  # pointers only, not the part twice more
+    # the notes use up budget: a big owner skill after the built-in is cut a little shorter for each one
+    big = SkillDoc("zz-big", False, "x" * 39_000, "03")
+    plain = skills_block([docs[0], big])
+    with_note = skills_block([docs[0], docs[1], big])
+    assert with_note.counts["chars"] - plain.counts["chars"] < len(his_copy()) + 1_000
+
+
+def test_a_file_with_a_bom_and_windows_lines_keeps_every_byte_he_wrote() -> None:
+    mine = his_copy().replace("\n", "\r\n")
+    at, added = insertion(mine, PART, CHAT)  # type: ignore[arg-type]
+    new = mine[:at] + added + mine[at:]
+    assert "\r\n" in added and "\n" not in added.replace("\r\n", "")  # the part follows his line ends
+    assert new.replace("\r\n", "\n") == insert_section(his_copy(), PART, CHAT)  # type: ignore[arg-type]
+    assert remove_section(new, at, added) == mine
+
+
+def test_add_and_undo_keep_a_byte_order_mark_and_crlf(call: Call, s3_client: FakeS3) -> None:
+    raw = b"\xef\xbb\xbf" + his_copy().replace("\n", "\r\n").encode()
+    status, body = _upload(call, s3_client, "SKILL.md", raw)
+    assert status == 201, body
+    skill_id = str(body["skill"]["skillId"])  # type: ignore[index]
+    path = f"/v1/skills/{skill_id}/sections"
+    assert call("POST", path, {"key": CHAT.key, "action": "add", "version": 1})[0] == 200
+    added = _stored(s3_client, skill_id)
+    assert added.startswith(b"\xef\xbb\xbf") and b"\n" not in added.replace(b"\r\n", b"")
+    assert call("POST", path, {"key": CHAT.key, "action": "undo", "version": 2})[0] == 200
+    assert _stored(s3_client, skill_id) == raw
+
+
+def test_add_is_refused_for_a_skill_that_is_not_a_copy(call: Call, s3_client: FakeS3) -> None:
+    other = "---\nname: my-notes\ndescription: Mine.\n---\n\nPick the loud parts.\n"
+    status, body = _upload(call, s3_client, "SKILL.md", other.encode())
+    skill_id = str(body["skill"]["skillId"])  # type: ignore[index]
+    before = _stored(s3_client, skill_id)
+    status, out = call("POST", f"/v1/skills/{skill_id}/sections", {"key": CHAT.key, "action": "add", "version": 1})
+    assert status == 409, out
+    assert _stored(s3_client, skill_id) == before
+
+
+def test_undo_is_refused_after_he_edited_the_skill(call: Call, s3_client: FakeS3) -> None:
+    skill_id = _his(call, s3_client)
+    path = f"/v1/skills/{skill_id}/sections"
+    assert call("POST", path, {"key": CHAT.key, "action": "add", "version": 1})[0] == 200
+    _, detail = call("GET", f"/v1/skills/{skill_id}")
+    edited = (detail["content"] + "\nOne more rule of mine inside.\n").replace(PART, PART + " Mine too.")  # type: ignore[operator]
+    _, presign = _upload(call, s3_client, "SKILL.md", edited.encode(), skill_id=skill_id)
+    status, body = call("PUT", f"/v1/skills/{skill_id}", {"version": 2, "key": presign["key"]})
+    assert status == 200, body
+    status, out = call("POST", path, {"key": CHAT.key, "action": "undo", "version": 3})
+    assert status == 409, out
+    assert "cannot be undone" in out["error"]["message"]
+
+
+def test_add_is_refused_when_the_part_would_make_it_too_long(call: Call, s3_client: FakeS3) -> None:
+    from clipfactory_api import skills
+
+    mine = his_copy()
+    big = mine + "\n" + "x" * (skills.MD_MAX_BYTES - len(mine.encode()) - 100)
+    status, body = _upload(call, s3_client, "SKILL.md", big.encode())
+    assert status == 201, body
+    skill_id = str(body["skill"]["skillId"])  # type: ignore[index]
+    before = _stored(s3_client, skill_id)
+    status, out = call("POST", f"/v1/skills/{skill_id}/sections", {"key": CHAT.key, "action": "add", "version": 1})
+    assert status == 413, out
+    assert _stored(s3_client, skill_id) == before
+
+
+def test_not_now_for_a_skill_deleted_meanwhile_is_a_plain_404(call: Call, s3_client: FakeS3) -> None:
+    assert call("POST", f"/v1/skills/{'0' * 26}/sections", {"key": CHAT.key, "action": "not_now"})[0] == 404
