@@ -55,7 +55,10 @@ class FakeTracker:
         if self.canceled:
             raise JobCanceled()
 
-    def report(self, fraction: float) -> None:
+    def report(self, fraction: float, *, alive: bool = True) -> None:
+        pass
+
+    def say(self, note: str) -> None:
         pass
 
 

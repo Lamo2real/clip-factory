@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -125,12 +127,13 @@ async def test_fenced_clip_put_and_delete_are_transactions_with_a_job_check() ->
     await store.delete_item("USER#U", "CLIP#OLD", fence=fence)
     (check, put), (check2, delete) = table.client.transactions
     assert check == check2
-    assert check["ConditionCheck"]["Key"] == {"pk": {"S": "USER#U"}, "sk": {"S": "JOB#J"}}
+    # Plain values: the table resource's client serializes them (typed ones were serialized twice, see below).
+    assert check["ConditionCheck"]["Key"] == {"pk": "USER#U", "sk": "JOB#J"}
     assert check["ConditionCheck"]["ConditionExpression"] == "#sid = :sid"
-    assert check["ConditionCheck"]["ExpressionAttributeValues"] == {":sid": {"S": S1}}
+    assert check["ConditionCheck"]["ExpressionAttributeValues"] == {":sid": S1}
     assert put["Put"]["TableName"] == "table"
-    assert put["Put"]["Item"]["score"] == {"N": "7.5"} and put["Put"]["Item"]["rank"] == {"N": "1"}
-    assert delete == {"Delete": {"TableName": "table", "Key": {"pk": {"S": "USER#U"}, "sk": {"S": "CLIP#OLD"}}}}
+    assert put["Put"]["Item"]["score"] == Decimal("7.5") and put["Put"]["Item"]["rank"] == 1
+    assert delete == {"Delete": {"TableName": "table", "Key": {"pk": "USER#U", "sk": "CLIP#OLD"}}}
 
 
 async def test_fenced_write_of_a_stale_run_raises_superseded(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -150,6 +153,67 @@ async def test_fenced_write_of_a_stale_run_raises_superseded(monkeypatch: pytest
     table.client.fail = [txn_canceled("None", "ValidationError")]
     with pytest.raises(ClientError):
         await store.delete_item("USER#U", "CLIP#C", fence=fence)
+
+
+def wire_store() -> tuple[Store, list[dict[str, Any]]]:
+    """A Store on a real boto3 table resource whose requests are caught before they leave (no network, no AWS)."""
+    import boto3
+    from botocore.awsrequest import AWSResponse
+
+    session = boto3.session.Session(region_name="eu-north-1", aws_access_key_id="x", aws_secret_access_key="y")
+    store = Store("cf-test-data", "bucket", "eu-north-1", session=session)
+    sent: list[dict[str, Any]] = []
+
+    def catch(request: Any, **_: Any) -> AWSResponse:
+        sent.append(json.loads(request.body))
+        response = AWSResponse(request.url, 200, {}, None)
+        response._content = b"{}"
+        return response
+
+    store.table.meta.client.meta.events.register("before-send.dynamodb", catch)
+    return store, sent
+
+
+async def test_fenced_writes_reach_dynamodb_with_string_keys() -> None:
+    """The owner's job 01M7T90YCMC2767AR0WJ9XWMKY failed at Finish up with "[ValidationError, None]": the fence's
+    typed values were serialized a second time by the table resource's client, so the Job key went out as a map
+    (``{"M": {"S": {"S": ...}}}``) and DynamoDB refused the check. This reads what really goes over the wire."""
+    store, sent = wire_store()
+    fence = Fence("U", "J", S1)
+    clip = {"pk": "USER#U", "sk": "CLIP#C", "gsi1pk": "JOB#J", "gsi1sk": "CLIP#001", "score": 7.5, "rank": 1}
+    await store.put_clip(clip, fence=fence)
+    await store.delete_item("USER#U", "CLIP#OLD", fence=fence)
+    (put_txn, delete_txn) = (body["TransactItems"] for body in sent)
+    for check, _ in (put_txn, delete_txn):
+        assert check["ConditionCheck"]["Key"] == {"pk": {"S": "USER#U"}, "sk": {"S": "JOB#J"}}
+        assert check["ConditionCheck"]["ExpressionAttributeValues"] == {":sid": {"S": S1}}
+    item = put_txn[1]["Put"]["Item"]
+    assert item["pk"] == {"S": "USER#U"} and item["sk"] == {"S": "CLIP#C"}
+    assert item["gsi1pk"] == {"S": "JOB#J"} and item["gsi1sk"] == {"S": "CLIP#001"}
+    assert item["score"] == {"N": "7.5"} and item["rank"] == {"N": "1"}
+    assert delete_txn[1]["Delete"]["Key"] == {"pk": {"S": "USER#U"}, "sk": {"S": "CLIP#OLD"}}
+
+
+async def test_a_refused_transaction_logs_each_reason_and_message(capsys: pytest.CaptureFixture[str]) -> None:
+    table = FakeTable(S1)
+    store = make_store(table)
+    table.client.fail = [
+        ClientError(
+            {
+                "Error": {"Code": "TransactionCanceledException"},
+                "CancellationReasons": [
+                    {"Code": "ValidationError", "Message": "The provided key element does not match the schema"},
+                    {"Code": "None"},
+                ],
+            },
+            "TransactWriteItems",
+        )
+    ]
+    with pytest.raises(ClientError):
+        await store.put_clip({"pk": "USER#U", "sk": "CLIP#C"}, fence=Fence("U", "J", S1))
+    line = next(json.loads(x) for x in capsys.readouterr().out.splitlines() if "ddb.txn_failed" in x)
+    assert line["reasons"] == ["ValidationError", "None"]
+    assert line["detail"] == "0 ValidationError: The provided key element does not match the schema; 1 None"
 
 
 # --- pipeline -----------------------------------------------------------------------------------------------------
@@ -186,7 +250,10 @@ class FakePipelineStore:
 
 
 class NoTracker:
-    def report(self, fraction: float) -> None:
+    def report(self, fraction: float, *, alive: bool = True) -> None:
+        pass
+
+    def say(self, note: str) -> None:
         pass
 
     async def check_cancel(self) -> None:

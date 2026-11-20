@@ -38,7 +38,10 @@ class FakeTracker:
     async def check_cancel(self) -> None:
         pass
 
-    def report(self, fraction: float) -> None:
+    def report(self, fraction: float, *, alive: bool = True) -> None:
+        pass
+
+    def say(self, note: str) -> None:
         pass
 
 

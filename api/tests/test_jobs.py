@@ -354,6 +354,58 @@ def test_try_again_never_carries_100_percent_with_steps_left(call: Call, store: 
     assert float(stored["progress"]) < 1
 
 
+def late_steps(failed_at: str | None) -> list[dict[str, Any]]:
+    """Every step up to Cut the clips done, Check each clip done too unless it is the one that failed."""
+    from clipfactory_api.jobs import new_steps
+
+    steps = new_steps()
+    for s in steps:
+        if s["key"] == failed_at:
+            s.update(status="failed", message="Something went wrong while trying to finish up.")
+            break
+        s.update(status="done", message="ok")
+    return steps
+
+
+def test_try_again_after_finish_up_failed_picks_up_with_the_clips(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    """Owner report 2026-11-20 (job 01M7T90YCMC2767AR0WJ9XWMKY): Finish up failed after every clip was cut, checked
+    and captioned, with no ``pickUp``. Try again picks up: the done steps stay, only Finish up runs again."""
+    job = seed_job(store, status="failed", error="Something went wrong.", steps=late_steps("finalize"), progress=1)
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    assert body["job"]["note"] == "Picking up where it stopped…"
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    assert stored["pickUp"] is True
+    assert [s["status"] for s in stored["steps"]] == ["done"] * 9 + ["pending"]
+    assert 0.9 < float(stored["progress"]) < 1
+
+
+def test_try_again_after_a_stop_with_the_clips_cut_picks_up(call: Call, store: db.Store, table: FakeTable) -> None:
+    steps = late_steps("checklist")
+    steps[7].update(status="running")
+    job = seed_job(store, status="canceled", steps=steps, progress=0.9)
+    status, _ = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    assert stored["pickUp"] is True
+    assert [s["status"] for s in stored["steps"]] == ["done"] * 7 + ["pending"] * 3
+
+
+def test_try_again_after_the_checklist_failed_starts_over(call: Call, store: db.Store, table: FakeTable) -> None:
+    """ "No clip passed the checklist" is about the moments: Try again picks new ones, as before."""
+    job = seed_job(store, status="failed", error="No clip passed the checklist.", steps=late_steps("checklist"))
+    status, _ = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    assert "pickUp" not in stored
+    assert {s["status"] for s in stored["steps"]} == {"pending"}
+
+
 def test_try_again_after_a_real_failure_starts_over(call: Call, store: db.Store, table: FakeTable) -> None:
     job = seed_job(store, status="failed", error="No clip passed the checklist.", note="old", flowRun=1)
     status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")

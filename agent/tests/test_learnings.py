@@ -213,7 +213,7 @@ async def test_the_captions_get_prior_learnings(tmp_path: Path) -> None:
     st.skills = SimpleNamespace(full_text="", docs=[])  # type: ignore[assignment]
     r = RenderResult(tmp_path / "c.mp4", tmp_path / "c.jpg", 30.0, [(100, 130)], [], "full", False)
     st.candidates = [Candidate(make_moment(), r)]
-    await pipe.write_captions(st, SimpleNamespace())  # type: ignore[arg-type]
+    await pipe.write_captions(st, SimpleNamespace(report=lambda f, alive=True: None, say=lambda n: None))  # type: ignore[arg-type]
     _assert_prior_after_block(client.requests, block)
     assert "You write social captions" in client.requests[0]["system"][-1]["text"]
 

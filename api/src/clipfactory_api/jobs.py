@@ -135,6 +135,26 @@ def picked_up_steps(steps: Any) -> list[Item]:
     return out
 
 
+# Steps that run after every clip is cut and checked: a failure there is never the video's fault.
+LATE_STEPS = ("captions", "finalize")
+
+
+def picks_up(job: Item) -> bool:
+    """Whether Try again picks up where the last run stopped (docs/CONTRACTS.md §30.6) instead of starting over: the
+    run stopped partway (``pickUp`` on a failed job); it failed while writing the captions or finishing up, after the
+    clips were cut (owner report 2026-11-20: Finish up failed after 30 minutes of checking, and starting over would
+    cut and check every clip again); or the owner stopped it after the clips were cut."""
+    status = job.get("status")
+    if status == "failed" and job.get("pickUp"):
+        return True
+    steps = {s.get("key"): s.get("status") for s in job.get("steps") or [] if isinstance(s, dict)}
+    if steps.get("render") != "done":
+        return False
+    if status == "failed":
+        return any(steps.get(k) == "failed" for k in LATE_STEPS)
+    return status == "canceled"
+
+
 def restart_fields(
     job_id: str,
     now: str,

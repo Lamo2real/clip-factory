@@ -5,13 +5,16 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
+import math
 import shutil
 import threading
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from .bedrock import MODEL_ACCESS_MESSAGE, model_unavailable
 from .retry import is_transient, retry
 from .util import JobCanceled, JobSuperseded, UserFacingError, log, now_iso
 
@@ -39,6 +42,32 @@ SHUTDOWN = threading.Event()
 RESUME_NOTE_FIELDS = ("note", "pickUp")  # what a run that ends (ready or failed) clears
 # The most the bar shows while any step is left: 100% only once the job is ready (``finish_ready``).
 WORKING_CAP = 0.99
+# The step watchdog: a step that shows no sign of life (no progress, no new note) for this long is ended with a plain
+# message instead of hanging while the heartbeat keeps the job "running" (owner report 2026-11-20). Every limit is
+# far above the longest quiet stretch a healthy step has: each step reports at least per clip, per chunk or per
+# download tick, and every call inside has its own, shorter time limit (ffmpeg 30 min, a model call 20 min, a clip
+# check 25 min). Seconds.
+STALL_SECONDS: dict[str, float] = {
+    "resolve": 60 * 60,
+    "download": 90 * 60,
+    "transcribe": 120 * 60,
+    "analyze": 60 * 60,
+    "watch": 120 * 60,
+    "select": 90 * 60,
+    "render": 75 * 60,
+    "checklist": 40 * 60,
+    "captions": 30 * 60,
+    "finalize": 30 * 60,
+}
+WATCH_TICK = 30.0
+
+
+class StepStalled(UserFacingError):
+    """The step watchdog ended a step that showed no sign of life for too long."""
+
+
+def stalled_message(key: str) -> str:
+    return f"{LABELS.get(key, 'This step')} stopped moving. Tap Try again to pick up where it left off."
 
 
 def _steps_ceiling(steps: list[dict[str, Any]]) -> float:
@@ -94,8 +123,14 @@ class Tracker:
         flush: float = FLUSH_SECONDS,
         on_beat: Callable[[], None] | None = None,
         resume: dict[str, Any] | None = None,
+        stall_seconds: dict[str, float] | None = None,
+        watch_tick: float = WATCH_TICK,
     ) -> None:
         self.store = store
+        self.stall_seconds = {**STALL_SECONDS, **(stall_seconds or {})}
+        self.watch_tick = watch_tick
+        self.last_sign = 0.0  # loop time of the running step's last sign of life (start, progress, a note)
+        self._step_began = 0.0
         self.on_beat = on_beat
         self.error: str | None = None  # the plain-sentence error written with status failed
         self.user_id = user_id
@@ -230,13 +265,38 @@ class Tracker:
                 await self._loop_task
             self._loop_task = None
 
-    def report(self, fraction: float) -> None:
-        """Progress within the current step (0..1); written by the heartbeat loop shortly after."""
+    def _now(self) -> float:
+        try:
+            return asyncio.get_running_loop().time()
+        except RuntimeError:
+            return 0.0
+
+    def report(self, fraction: float, *, alive: bool = True) -> None:
+        """Progress within the current step (0..1); written by the heartbeat loop shortly after. ``alive`` False is
+        the bar creeping on its own while one long call runs (``creep``): it moves the bar but is no sign of life
+        for the step watchdog."""
+        if alive:
+            self.last_sign = self._now()
         self._fraction = max(self._fraction, min(1.0, fraction))
         new = self._compute()
         if new > self.progress:
             self.progress = new
             self._dirty = True
+
+    def say(self, note: str) -> None:
+        """What the running step is doing now, in plain words ("Checked 4 of 10 clips."), shown under the step on the
+        job page while it runs; the step's final message replaces it. A sign of life for the watchdog. A step
+        reloaded from a run that stopped keeps its old message."""
+        key = self.current
+        if key is None or key in self.restored:
+            return
+        self.last_sign = self._now()
+        s = self.step(key)
+        note = note[:300]
+        if s.get("message") != note:
+            s["message"] = note
+            self._dirty = True
+            log("info", "job.step_note", job=self.job_id, step=key, note=note)
 
     async def check_cancel(self) -> None:
         if self.superseded:
@@ -247,6 +307,8 @@ class Tracker:
     async def start(self, key: str) -> None:
         await self.check_cancel()
         self.current, self._fraction = key, 0.0
+        self.last_sign = self._step_began = self._now()
+        log("info", "job.step_start", job=self.job_id, step=key, reloaded=key in self.restored)
         if key in self.restored:
             return  # done in the run that stopped: the step reloads what it saved, the owner sees it stay done
         s = self.step(key)
@@ -257,12 +319,22 @@ class Tracker:
         await self.check_cancel()
 
     async def done(self, key: str, message: str | None, *, skipped: bool = False) -> None:
+        log(
+            "info",
+            "job.step_done",
+            job=self.job_id,
+            step=key,
+            skipped=skipped,
+            seconds=round(self._now() - self._step_began, 1),
+            detail=(message or "")[:300],
+        )
         if key in self.restored:
             self._fraction = 1.0
             self.current = None
             return
         s = self.step(key)
         s.update(status="skipped" if skipped else "done", finishedAt=now_iso())
+        s.pop("message", None)  # a live note ("Checked 4 of 10 clips.") never outlives the step
         if message:
             s["message"] = message[:300]
         self._fraction = 1.0
@@ -274,13 +346,18 @@ class Tracker:
         self.progress = 1.0
         await self._write({"status": "ready", "clipCount": clip_count}, remove=RESUME_NOTE_FIELDS)
 
-    async def finish_failed(self, message: str) -> None:
+    async def finish_failed(self, message: str, *, pick_up: bool = False) -> None:
+        """``pick_up``: the step was ended by the watchdog, not by a fault of the video, so Try again picks up where it
+        stopped with the moments and clips already saved (``pickUp`` stays on the job, docs/CONTRACTS.md §30.6)."""
         if self.superseded:
             return
         if self.current:
             s = self.step(self.current)
             s.update(status="failed", message=message[:300], finishedAt=now_iso())
         self.error = message[:500]
+        if pick_up:
+            await self._write({"status": "failed", "error": self.error, "pickUp": True}, remove=("note",))
+            return
         await self._write({"status": "failed", "error": self.error}, remove=RESUME_NOTE_FIELDS)
 
     async def finish_canceled(self) -> None:
@@ -295,13 +372,79 @@ class Tracker:
         await self._write({"status": "canceled"}, unless_canceled=False)
 
 
+@contextlib.asynccontextmanager
+async def creep(
+    report: Callable[..., None], start: float, end: float, expected: float, *, every: float = 5.0
+) -> AsyncIterator[None]:
+    """Moves the bar smoothly from ``start`` toward ``end`` while one long call runs (a model answer, a cut): fast at
+    first, slower as it nears ``end``, never reaching it (``expected`` seconds gets about two thirds of the way).
+    It is no sign of life for the watchdog (``alive=False``): a call that hangs still gets caught."""
+    loop = asyncio.get_running_loop()
+    t0 = loop.time()
+
+    async def tick() -> None:
+        while True:
+            await asyncio.sleep(every)
+            done = 1 - math.exp(-(loop.time() - t0) / max(1.0, expected))
+            report(start + (end - start) * done, alive=False)
+
+    task = asyncio.create_task(tick())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+def _causes(e: BaseException) -> list[BaseException]:
+    out: list[BaseException] = []
+    cur: BaseException | None = e
+    while cur is not None and cur not in out and len(out) < 8:
+        out.append(cur)
+        cur = cur.__cause__ or cur.__context__
+    return out
+
+
 def failure_message(step: str | None, e: BaseException) -> str:
+    if any(model_unavailable(x) for x in _causes(e)):
+        # The model is not turned on for this account (Bedrock model access): one plain sentence with the exact step.
+        return MODEL_ACCESS_MESSAGE
     if isinstance(e, UserFacingError):
         return str(e)
     what = LABELS.get(step or "", "this step").lower()
     if is_transient(e):
         return f"A service was busy while trying to {what} and did not recover. Tap Try again."
     return f"Something went wrong while trying to {what}. Tap Try again; if it happens again, try another video."
+
+
+async def watched(tr: Tracker, key: str, fn: StepFn) -> StepDone | str | None:
+    """Runs one step under the watchdog: a step with no sign of life (``Tracker.report``, ``say``) for
+    ``tr.stall_seconds[key]`` is stopped and raises StepStalled with a plain message. A cancel of the run stops the
+    step too."""
+    limit = tr.stall_seconds.get(key)
+    if not limit:
+        return await fn()
+    loop = asyncio.get_running_loop()
+    tr.last_sign = loop.time()  # a step tried again starts its quiet time afresh
+    task: asyncio.Future[StepDone | str | None] = asyncio.ensure_future(fn())
+    try:
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=min(tr.watch_tick, limit))
+            if task in done:
+                return task.result()
+            quiet = loop.time() - tr.last_sign
+            if quiet >= limit:
+                log("error", "job.step_stalled", job=tr.job_id, step=key, seconds=round(quiet))
+                task.cancel()
+                with contextlib.suppress(BaseException):
+                    await task
+                raise StepStalled(stalled_message(key))
+    finally:
+        if not task.done():
+            task.cancel()
+            with contextlib.suppress(BaseException):
+                await task
 
 
 async def run_job(
@@ -317,7 +460,9 @@ async def run_job(
         await tracker.begin()
         for key, fn in steps:
             await tracker.start(key)
-            result = await retry(fn, what=f"step.{key}", attempts=step_attempts, base=5.0)
+            result = await retry(
+                functools.partial(watched, tracker, key, fn), what=f"step.{key}", attempts=step_attempts, base=5.0
+            )
             done = result if isinstance(result, StepDone) else StepDone(message=result)
             await tracker.done(key, done.message, skipped=done.skipped)
             await tracker.check_cancel()
@@ -353,7 +498,7 @@ async def run_job(
         )
         await tracker.stop()
         try:
-            await tracker.finish_failed(failure_message(tracker.current, e))
+            await tracker.finish_failed(failure_message(tracker.current, e), pick_up=isinstance(e, StepStalled))
         except JobSuperseded:
             log("info", "job.superseded", job=tracker.job_id, step=tracker.current)
             return "superseded"

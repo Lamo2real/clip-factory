@@ -23,13 +23,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from botocore.exceptions import ClientError
+
 from . import captions as captions_mod
 from . import learnings, loudness, nova, pot, proc, sources, verify, watch
 from . import picture as picture_mod
 from . import signals as signals_mod
 from . import vectors as vectors_mod
 from .agent import Brief, find_moments
-from .bedrock import Bedrock, Facecam, FrameLayout, ModelError
+from .bedrock import Bedrock, Facecam, FrameLayout, ModelError, model_unavailable
 from .checklist import (
     REVIEW_SCHEMA,
     Candidate,
@@ -47,7 +49,7 @@ from .config import Config
 from .creators import creator_keys, creator_name
 from .guard import Deadline, fable_budget, nova_budget
 from .heartbeat import free_memory
-from .jobs import StepDone, StepFn, Tracker
+from .jobs import StepDone, StepFn, Tracker, creep
 from .moments import Moment, length_target
 from .render import RenderResult, render_clip
 from .skills import SkillsBlock, SkillSet, prepare_skills, skills_block
@@ -68,6 +70,17 @@ MOMENTS_VERSION = 1
 # A clip that was being cut when this many earlier runs died is not tried again: the rest of the job finishes without
 # it (§30.4). A clip in flight during one death is cut last, alone.
 MAX_CLIP_DEATHS = 2
+# Check each clip (owner report 2026-11-20: ten clips took 30 minutes, one after the other, with no sign of life).
+# Three clips are checked at once (three review calls in flight; their re-cuts share the RenderGate). The time limits
+# are far above a slow but healthy check: a review answer takes about a minute (at most a few), one clip's whole
+# check (review, measuring, one re-cut) 1-4 minutes. A clip whose check can't finish is swapped for a spare like any
+# clip that can't be checked; the job always goes on to Write the captions and Finish up.
+CHECK_CONCURRENCY = 3
+CHECK_CLIP_SECONDS = 25 * 60
+REVIEW_SECONDS = 12 * 60
+CHECK_EXPECTED = 120.0  # how long one clip's check usually takes: moves the bar between finished checks
+CAPTIONS_SECONDS = 15 * 60
+UNCHECKED = "This clip could not be checked; look at it yourself before posting."
 SPOKEN_CHARS = 1000  # the start of what a clip says, for the daily second look (§16.12)
 FEW_WORDS = 20
 NOT_WATCHED = "Could not watch the video this time. Picking from the words and the sound."
@@ -252,6 +265,8 @@ class JobState:
     captions: dict[str, dict[str, str]] = field(default_factory=dict)
     clip_ids: dict[int, str] = field(default_factory=dict)
     ids_saved: bool = False  # clips.json holds this run's clip ids: a newer run picking up reuses them (§30.6)
+    moments_reused: bool = False  # select reused the stopped run's moments.json (§30.6)
+    checked: bool = False  # render reloaded the stopped run's checked clips: the checklist does not run again
     # The deep analysis (ADR-40); every one of these may stay empty and the job still makes its clips.
     picture_task: asyncio.Task[None] | None = None  # the background picture preparation started by download
     picture_started: float = 0.0  # loop time the preparation started (the watch step's wait counts from here)
@@ -1084,6 +1099,7 @@ class Pipeline:
         saved = await self._saved_moments(st)
         if saved is not None:
             st.chosen, st.spares = saved
+            st.moments_reused = True
             log("info", "select.reused", job=st.job_id, chosen=len(st.chosen), spares=len(st.spares))
             return f"Used the {count(len(st.chosen), 'moment')} picked last time."
         # The check that used to end the transcribe step: almost no words is only the end when the picture has
@@ -1442,12 +1458,13 @@ class Pipeline:
         )
         return Candidate(m, r, index=index)
 
-    def _render_key(self, st: JobState, index: int, name: str) -> str:
-        return st.key(f"render/{index:02d}/{name}")
+    def _render_key(self, st: JobState, index: int, name: str, folder: str = "render") -> str:
+        return st.key(f"{folder}/{index:02d}/{name}")
 
-    async def _save_clip(self, st: JobState, c: Candidate) -> None:
+    async def _save_clip(self, st: JobState, c: Candidate, folder: str = "render") -> None:
         """The finished clip, its cover and what it is (``render/NN/``, §30.6), right after it is cut: a run that
-        stops later picks it up instead of cutting it again. Never fails the clip."""
+        stops later picks it up instead of cutting it again. The checklist keeps the clips it re-cut or brought in
+        as spares in ``checked/NN/``. Never fails the clip."""
         r = c.render
         try:
             fl = r.frame_layout
@@ -1462,20 +1479,20 @@ class Pipeline:
                 "frameLayout": {"scene": fl.scene, "facecam": vars(fl.facecam) if fl.facecam else None} if fl else None,
                 "extra": r.extra,
             }
-            await self.store.upload(r.video, self._render_key(st, c.index, "clip.mp4"), "video/mp4")
-            await self.store.upload(r.cover, self._render_key(st, c.index, "cover.jpg"), "image/jpeg")
-            await self.store.put_json(self._render_key(st, c.index, "done.json"), done)  # last: it marks it whole
+            await self.store.upload(r.video, self._render_key(st, c.index, "clip.mp4", folder), "video/mp4")
+            await self.store.upload(r.cover, self._render_key(st, c.index, "cover.jpg", folder), "image/jpeg")
+            await self.store.put_json(self._render_key(st, c.index, "done.json", folder), done)  # last: marks it whole
         except (JobCanceled, asyncio.CancelledError):
             raise
         except Exception as e:
             log("warn", "render.save_failed", job=st.job_id, index=c.index, error=type(e).__name__)
 
-    async def _saved_clip(self, st: JobState, m: Moment, index: int) -> Candidate | None:
+    async def _saved_clip(self, st: JobState, m: Moment, index: int, folder: str = "render") -> Candidate | None:
         """The clip a run that stopped partway already cut for this moment, downloaded back, or None."""
         if not st.pick_up:
             return None
         try:
-            done = await self._saved_json(self._render_key(st, index, "done.json"))
+            done = await self._saved_json(self._render_key(st, index, "done.json", folder))
             if not isinstance(done, dict) or done.get("version") != MOMENTS_VERSION:
                 return None
             if Moment.from_dict(done["moment"]).to_dict() != m.to_dict():
@@ -1483,8 +1500,8 @@ class Pipeline:
             workdir = st.workdir / "clips" / f"{index:02d}"
             workdir.mkdir(parents=True, exist_ok=True)
             video, cover = workdir / "clip.mp4", workdir / "cover.jpg"
-            await self.store.download(self._render_key(st, index, "clip.mp4"), video)
-            await self.store.download(self._render_key(st, index, "cover.jpg"), cover)
+            await self.store.download(self._render_key(st, index, "clip.mp4", folder), video)
+            await self.store.download(self._render_key(st, index, "cover.jpg", folder), cover)
             fl = done.get("frameLayout")
             layout = (
                 FrameLayout(Facecam(**fl["facecam"]) if fl.get("facecam") else None, str(fl.get("scene") or "other"))
@@ -1544,6 +1561,8 @@ class Pipeline:
             log("warn", "render.mark_failed", job=st.job_id, index=index, error=type(e).__name__)
 
     async def render(self, st: JobState, tr: Tracker) -> str:
+        if await self._reload_checked(st, tr):
+            return f"Used the {count(len(st.candidates), 'clip')} cut and checked last time."
         if st.source.get("type") != "upload" and st.source.get("platform") == "youtube":
             # One extraction for every clip (§29.4): the sections read the formats from this file.
             await self._save_info(st)
@@ -1638,30 +1657,43 @@ class Pipeline:
 
     async def _review(self, st: JobState, c: Candidate) -> dict[str, Any]:
         try:
-            return await self.claude(st).structured(
-                # The review can write a new hook, so it gets "Prior learnings" too (§16.12).
-                system=learnings.with_prior(
-                    st.prior, "You review short vertical clips before they are posted, strictly but fairly."
+            return await asyncio.wait_for(
+                self.claude(st).structured(
+                    # The review can write a new hook, so it gets "Prior learnings" too (§16.12).
+                    system=learnings.with_prior(
+                        st.prior, "You review short vertical clips before they are posted, strictly but fairly."
+                    ),
+                    skills=st.block,
+                    content=[
+                        {
+                            "text": review_prompt(
+                                c.moment,
+                                c.render,
+                                st.notes,
+                                seen=signals_mod.seen_block(st.signals, c.moment.start, c.moment.end),
+                            )
+                        }
+                    ],
+                    tool="submit_review",
+                    description="Submit the checklist review of this clip.",
+                    schema=REVIEW_SCHEMA,
+                    max_tokens=8000,
                 ),
-                skills=st.block,
-                content=[
-                    {
-                        "text": review_prompt(
-                            c.moment,
-                            c.render,
-                            st.notes,
-                            seen=signals_mod.seen_block(st.signals, c.moment.start, c.moment.end),
-                        )
-                    }
-                ],
-                tool="submit_review",
-                description="Submit the checklist review of this clip.",
-                schema=REVIEW_SCHEMA,
-                max_tokens=8000,
+                REVIEW_SECONDS,
             )
-        except ModelError as e:
-            # No judgement available: the measured checks decide, and the owner reviews every clip anyway.
-            log("warn", "checklist.review_failed", error=str(e)[:200])
+        except Exception as e:
+            if model_unavailable(e) or not isinstance(e, ModelError | TimeoutError | TransientError | ClientError):
+                raise  # the model is not turned on: the job ends with the plain way to turn it on (jobs.py)
+            # No judgement available (a bad answer, no answer in time, the service busy): the measured checks
+            # decide, and the owner reviews every clip anyway.
+            log(
+                "warn",
+                "checklist.review_failed",
+                job=st.job_id,
+                index=c.index,
+                error=type(e).__name__,
+                detail=str(e)[:200],
+            )
             note = "Claude could not review this clip; check it yourself."
             return {
                 "zero_context": True,
@@ -1676,7 +1708,7 @@ class Pipeline:
                 "verdict": "keep",
             }
 
-    async def _check_one(self, st: JobState, c: Candidate, index: int) -> Outcome:
+    async def _check_one(self, st: JobState, c: Candidate, index: int, gate: RenderGate | None = None) -> Outcome:
         review = await self._review(st, c)
         items = measured_items(
             c.moment, c.render, await measure(c.render.video), st.length, has_speech=self._has_speech(st, c.moment)
@@ -1689,7 +1721,8 @@ class Pipeline:
                 c.moment, items, review, length=st.length, first_loud=lambda t: loudness.first_loud_second(st.loud, t)
             )
             if fixes:
-                c = await self._cut(st, fixed, index, layout=c.render.frame_layout)
+                async with gate or contextlib.nullcontext():
+                    c = await self._cut(st, fixed, index, layout=c.render.frame_layout)
                 measured = measured_items(
                     c.moment,
                     c.render,
@@ -1711,41 +1744,240 @@ class Pipeline:
         return Outcome(bad is None, cand, f"{bad.label} {bad.note}" if bad else "")
 
     async def checklist(self, st: JobState, tr: Tracker) -> str:
+        if st.checked:
+            # Cut the clips brought back the clips the stopped run had already checked (§30.6).
+            return f"Used the checks from last time for {count(len(st.candidates), 'clip')}."
+        loop = asyncio.get_running_loop()
         next_index = len(st.chosen)
+        originals = list(st.candidates)
+        gate = RenderGate(RENDER_CONCURRENCY, lambda: self._can_parallel(st))
+        if st.pick_up:
+            gate.serial = True
+        running: dict[int, float] = {}  # clip index -> loop time its check began
+        state = {"done": 0, "total": len(originals), "swaps": 0}
+
+        def say() -> None:
+            done, total = state["done"], state["total"]
+            if state["swaps"] and running:
+                n = state["swaps"]
+                tr.say(f"Swapping {n} {'clip' if n == 1 else 'clips'} for better moments. Checked {done} of {total}.")
+            elif done < total:
+                tr.say(f"Checking clip {min(total, done + 1)} of {total}…")
+
+        def bar(*, alive: bool) -> None:
+            # Finished checks, plus each running one's likely share so far (never a whole clip until it is done).
+            now = loop.time()
+            partial = sum(min(0.9, (now - t0) / CHECK_EXPECTED) for t0 in running.values())
+            tr.report((state["done"] + partial) / max(1, state["total"]), alive=alive)
+
+        async def ticking() -> None:
+            while True:
+                await asyncio.sleep(5)
+                bar(alive=False)
 
         async def check(c: Candidate) -> Outcome:
             await tr.check_cancel()
+            running[c.index] = t0 = loop.time()
+            say()
             try:
-                return await self._check_one(st, c, c.index)
+                out = await asyncio.wait_for(self._check_one(st, c, c.index, gate), CHECK_CLIP_SECONDS)
+            except TimeoutError:
+                log("warn", "checklist.clip_timed_out", job=st.job_id, index=c.index, seconds=CHECK_CLIP_SECONDS)
+                out = Outcome(False, c, "The clip could not be checked in time.")
             except (UserFacingError, TransientError, ModelError, proc.CommandError, OSError, ValueError) as e:
                 # One clip that can't be checked or re-cut is replaced by a spare; it never fails the job.
-                log("warn", "checklist.clip_failed", index=c.index, error=type(e).__name__, detail=str(e)[:400])
-                return Outcome(False, c, "The clip could not be checked.")
+                log(
+                    "warn",
+                    "checklist.clip_failed",
+                    job=st.job_id,
+                    index=c.index,
+                    error=type(e).__name__,
+                    detail=str(e)[:400],
+                )
+                out = Outcome(False, c, "The clip could not be checked.")
+            finally:
+                running.pop(c.index, None)
+            state["done"] += 1
+            log(
+                "info",
+                "checklist.clip_checked",
+                job=st.job_id,
+                index=c.index,
+                outcome="passed" if out.ok else "failed",
+                seconds=round(loop.time() - t0, 1),
+                fixes=len(out.candidate.fixes),
+                detail=out.reason[:200],
+            )
+            bar(alive=True)
+            say()
+            return out
 
         async def cut(m: Moment) -> Candidate | None:
             nonlocal next_index
             next_index += 1
             try:
-                return await self._cut(st, m, next_index - 1)
+                async with gate:
+                    c = await asyncio.wait_for(self._cut(st, m, next_index - 1), CHECK_CLIP_SECONDS)
+                log("info", "checklist.spare_cut", job=st.job_id, index=c.index)
+                return c
+            except JobCanceled:
+                raise
             except Exception as e:
-                log("warn", "checklist.spare_failed", error=type(e).__name__, detail=str(e)[:300])
+                log("warn", "checklist.spare_failed", job=st.job_id, error=type(e).__name__, detail=str(e)[:300])
                 return None
 
-        passed, failed = await check_all(
-            st.candidates,
-            st.spares,
-            check=check,
-            cut=cut,
-            want=len(st.chosen),
-            on_progress=lambda d, n: tr.report(d / max(1, n)),
-        )
+        def swapped(n: int) -> None:
+            state["swaps"] = n
+            say()
+
+        def progress(done: int, total: int) -> None:
+            state["total"] = total
+
+        tr.say(f"Checking {count(len(originals), 'clip')}…")
+        ticker = asyncio.create_task(ticking())
+        try:
+            passed, failed = await check_all(
+                originals,
+                st.spares,
+                check=check,
+                cut=cut,
+                want=len(st.chosen),
+                on_progress=progress,
+                on_swap=swapped,
+                limit=CHECK_CONCURRENCY,
+            )
+        finally:
+            ticker.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await ticker
         if not passed:
-            reasons = "; ".join(sorted({o.reason for o in failed if o.reason}))[:200]
-            raise UserFacingError(f"No clip passed the checklist ({reasons}). Try another video or add notes.")
+            unchecked = [o.candidate for o in failed if o.reason.startswith("The clip could not be checked")]
+            if not unchecked:
+                reasons = "; ".join(sorted({o.reason for o in failed if o.reason}))[:200]
+                raise UserFacingError(f"No clip passed the checklist ({reasons}). Try another video or add notes.")
+            # Nothing passed only because nothing could be checked (not because the clips are bad): the clips go
+            # on to the owner as they are, each saying so, rather than the job failing with nothing.
+            log("warn", "checklist.kept_unchecked", job=st.job_id, clips=len(unchecked))
+            passed = [
+                Candidate(c.moment, c.render, [Item("checked", "Checked", False, UNCHECKED)], [], index=c.index)
+                for c in unchecked
+            ]
         st.candidates = passed
+        await self._save_checked(st)
         replaced = sum(1 for c in passed if c.index >= len(st.chosen))
         msg = f"{count(len(passed), 'clip')} passed"
         return msg + (f"; {replaced} swapped for other moments." if replaced else ".")
+
+    async def _save_checked(self, st: JobState) -> None:
+        """``checked.json`` and ``checked/NN/`` (§30.6): the checked clips, so a run picking up after the checklist
+        reuses them (and their checks) instead of cutting and checking again. Clips the checklist re-cut or brought
+        in as spares are saved; the others are already in ``render/NN/``. Never fails the step."""
+        chosen = [m.to_dict() for m in st.chosen]
+        try:
+            fresh = [c for c in st.candidates if c.index >= len(chosen) or c.moment.to_dict() != chosen[c.index]]
+            await gather_all(*(self._save_clip(st, c, "checked") for c in fresh))
+            await self.store.put_json(
+                st.key("checked.json"),
+                {
+                    "version": MOMENTS_VERSION,
+                    "chosen": chosen,
+                    "clips": [
+                        {
+                            "index": c.index,
+                            "moment": c.moment.to_dict(),
+                            "items": [i.public() for i in c.items],
+                            "fixes": c.fixes,
+                        }
+                        for c in st.candidates
+                    ],
+                },
+            )
+            log("info", "checklist.saved", job=st.job_id, clips=len(st.candidates), recut=len(fresh))
+        except (JobCanceled, asyncio.CancelledError):
+            raise
+        except Exception as e:
+            log("warn", "checklist.save_failed", job=st.job_id, error=type(e).__name__)
+
+    async def _reload_checked(self, st: JobState, tr: Tracker) -> bool:
+        """Picking up after the checklist had finished (§30.6): the checked clips come back from S3, so neither
+        Cut the clips nor Check each clip runs again. From ``checked.json``; for a run from before that file
+        existed, from ``clips.json`` (written by the captions step, so every clip in it had passed), with the
+        measured checks taken again from the file (seconds, no model). A clip whose file is gone (a re-cut that was
+        never saved) is cut once more from its saved moment. Only with the moments the stopped run picked."""
+        if not (st.pick_up and st.moments_reused):
+            return False
+        saved = await self._saved_json(st.key("checked.json"))
+        with_items = (
+            isinstance(saved, dict)
+            and saved.get("version") == MOMENTS_VERSION
+            and saved.get("chosen") == [m.to_dict() for m in st.chosen]
+        )
+        if with_items:
+            rows = [r for r in saved.get("clips") or [] if isinstance(r, dict)]
+        else:
+            ids = await self._saved_clip_ids(st)
+            rows = [ids[k] for k in sorted(ids)]
+        try:
+            clips = [(int(r["index"]), Moment.from_dict(r["moment"]), r) for r in rows]
+        except (KeyError, TypeError, ValueError) as e:
+            log("warn", "checklist.reuse_failed", job=st.job_id, error=type(e).__name__)
+            return False
+        if not clips:
+            return False
+        n = len(clips)
+        tr.say(f"Getting the {count(n, 'checked clip')} from last time…")
+        out: list[Candidate] = []
+        recut = 0
+        for k, (i, m, row) in enumerate(clips):
+            await tr.check_cancel()
+            c = await self._saved_clip(st, m, i, "checked") or await self._saved_clip(st, m, i)
+            if c is None:
+                tr.say(f"Cutting clip {k + 1} of {n} again; the rest come from last time…")
+                try:
+                    if st.source.get("type") != "upload" and st.source.get("platform") == "youtube":
+                        await self._save_info(st)
+                    c = await self._cut(st, m, i)
+                except JobCanceled:
+                    raise
+                except Exception as e:
+                    log(
+                        "warn",
+                        "checklist.recut_failed",
+                        job=st.job_id,
+                        index=i,
+                        error=type(e).__name__,
+                        detail=str(e)[:300],
+                    )
+                    continue
+                await self._save_clip(st, c, "checked")
+                recut += 1
+            if with_items:
+                c.items = [
+                    Item(str(x["key"]), str(x["label"]), bool(x["pass"]), str(x.get("note") or ""))
+                    for x in row.get("items") or []
+                    if isinstance(x, dict) and "key" in x
+                ]
+                c.fixes = [str(f) for f in row.get("fixes") or []]
+            else:
+                c.items = await self._items_again(st, c)
+            out.append(c)
+            tr.report((k + 1) / n)
+        if not out:
+            return False
+        st.candidates, st.checked = out, True
+        log("info", "checklist.reused", job=st.job_id, clips=len(out), recut=recut, items=with_items)
+        return True
+
+    async def _items_again(self, st: JobState, c: Candidate) -> list[Item]:
+        """The checks of a clip that passed in an earlier run whose results were not saved: the measured ones again,
+        and Claude's review as passed (it did, or the clip would not be in ``clips.json``)."""
+        passed = Item("review", "Claude's review", True, "Passed Claude's review on the run before.")
+        try:
+            got = await measure(c.render.video)
+        except (proc.CommandError, OSError, ValueError) as e:
+            log("warn", "checklist.measure_failed", job=st.job_id, index=c.index, error=type(e).__name__)
+            return [passed]
+        return [*measured_items(c.moment, c.render, got, st.length, has_speech=self._has_speech(st, c.moment)), passed]
 
     # --- captions --------------------------------------------------------------------------------------------
 
@@ -1778,19 +2010,23 @@ class Pipeline:
         )
         if same:
             st.captions = {st.clip_ids[id(c)]: dict(saved[c.index]["captions"]) for c in st.candidates}
+            log("info", "captions.reused", job=st.job_id, clips=len(st.candidates))
         else:
+            tr.say(f"Writing captions for {count(len(st.candidates), 'clip')}…")
             texts = [
                 captions_mod.ClipText(st.clip_ids[id(c)], c.moment, " ".join(x["text"] for x in c.render.captions))
                 for c in st.candidates
             ]
-            st.captions = await captions_mod.write_captions(
-                self.claude(st),
-                texts,
-                notes=st.notes,
-                skills=st.block,
-                skills_text=st.skills.full_text,
-                system=learnings.with_prior(st.prior, "You write social captions for short clips."),
-            )
+            async with creep(tr.report, 0.05, 0.9, expected=60.0):
+                st.captions = await captions_mod.write_captions(
+                    self.claude(st),
+                    texts,
+                    notes=st.notes,
+                    skills=st.block,
+                    skills_text=st.skills.full_text,
+                    system=learnings.with_prior(st.prior, "You write social captions for short clips."),
+                    answer_seconds=CAPTIONS_SECONDS,
+                )
         rows = [
             {
                 "index": c.index,
@@ -1843,8 +2079,9 @@ class Pipeline:
         # rewrites (Keep) or the API deletes (Decline) its vector. A later put here would undo that.
         await tr.check_cancel()
         await self._put_vectors(st, [i for _, i in pairs])
-        for c, item in pairs:
+        for k, (c, item) in enumerate(pairs, start=1):
             await tr.check_cancel()
+            tr.say(f"Saving clip {k} of {len(pairs)}…")
             await self.store.upload(c.render.video, item["videoKey"], "video/mp4")
             await self.store.upload(c.render.cover, item["coverKey"], "image/jpeg")
             try:
@@ -1858,7 +2095,8 @@ class Pipeline:
                     except Exception as e:
                         log("warn", "finalize.cleanup_failed", job=st.job_id, error=type(e).__name__)
                 raise
-            tr.report(item["rank"] / len(items))
+            log("info", "finalize.clip_saved", job=st.job_id, index=c.index)
+            tr.report(k / len(pairs))
         return f"{count(len(st.candidates), 'clip')} ready for review."
 
     async def _put_vectors(self, st: JobState, items: list[dict[str, Any]]) -> None:
