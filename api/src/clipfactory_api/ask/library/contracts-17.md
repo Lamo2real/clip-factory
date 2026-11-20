@@ -49,6 +49,10 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   motion), success sound, a big card "Connected as **@name**" with the avatar, ring fills, toast. Any other result →
   error sound, a calm card with the plain sentence for that result and the step to go back to (§17.5 table), no
   vermilion colour except its one action. The `?result` query is removed with `history.replaceState` after reading.
+  In the desktop app (§12.1) the platform opens in the system browser and this page stays, so the Connect spinner
+  (`useConnecting.ts`) stops by itself once the platform page has opened: when the account changes (live `setup`
+  event), when the owner comes back to the window, or when the page is shown again from the browser's cache (Back).
+  While the platform address is still being fetched only an error or an account change stops it.
 * **Choose** (Meta with several Pages / Instagram accounts): a picker of big avatar cards; tapping one connects it.
 * **Disconnect**: tapping shows an 8 s toast "Disconnecting YouTube… Undo"; the `DELETE` is sent only when the toast
   ends (§12.4: undo instead of a scary dialog). **Connect again** keeps the keys.

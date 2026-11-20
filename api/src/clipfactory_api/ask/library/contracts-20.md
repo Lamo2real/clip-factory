@@ -414,7 +414,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | KeyForm.tsx:246, SetupPlatform.tsx:466 Check it | `check` | `fail()` when the check fails |
 | VerificationUpload.tsx:90 Pick the file | `upload` | |
 | VerificationUpload.tsx:101 Remove \<file\> | `delete` | handle; `rewind()` on Undo |
-| SetupPlatform.tsx:242 **Connect \<Platform\>** (Vermilion), :464 Connect again | `connect` | OAuth leaves the page at once; confetti + success on return stay |
+| SetupPlatform.tsx:242 **Connect \<Platform\>** (Vermilion), :464 Connect again | `connect` | OAuth leaves the page at once (desktop app: the spinner stops on return, §17.1); confetti + success on return stay |
 | SetupPlatform.tsx:450 Who can see (segmented) | `toggle` | via Segmented |
 | SetupPlatform.tsx:468 Disconnect | `disconnect` | handle; `rewind()` on Undo |
 | ChooseAccount.tsx:42 account card | `connect` | spinner after the motion; confetti + success stay |
