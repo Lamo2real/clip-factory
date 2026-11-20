@@ -12,7 +12,7 @@ import { animationsDone, CLIPS, looseText, MIXED_SETUP, mixedSetup, openClip, re
 // look the same), on every route in ROUTES:
 //   1. axe-core's color-contrast rule finds no violation;
 //   2. every visible text run, and what a field shows (typed words, or its placeholder), reaches 4.5:1 (3:1 for
-//      24 px, or 18.66 px bold, and up) against every background it can sit on: its ancestors' colours and glass
+//      a placeholder, which is a faded hint, and for 24 px, or 18.66 px bold, and up) against every background it can sit on: its ancestors' colours and glass
 //      gradients composited over the backdrop it can scroll across;
 //   3. no visible text is smaller than 12 px.
 // Reduced motion parks the drifting backdrop and finishes entrance fades, so every run measures the same picture.

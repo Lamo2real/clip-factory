@@ -301,6 +301,7 @@ describe("the stylesheets and the text colour list stay in step", () => {
     "var(--green-deep)": "deep green words on a solid leaf fill of their own",
     "#0a64d8": "Safari's blue in the Get the app drawings, on their own bone card",
     "#ffeec4": "the warn pill's words, on the fill and amber ring of their own",
+    "var(--placeholder)": "hint text in an empty field, faded on purpose: 3:1 on the lightest field (checked in styleFloors)",
     inherit: "takes the colour around it",
     "var(--kind-text)": "a sound group's tint colour: --green-text or --vermilion-ink (checked below)",
     "var(--kind-on)": "words on a sound group's own solid fill (checked below)",

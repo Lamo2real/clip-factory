@@ -254,3 +254,16 @@ main[tabindex="-1"]:focus-visible {
 *::after {
   cursor: default !important;
 }
+
+/* Every hint in every field: faded grey-green, never the colour of typed words. Firefox dims placeholders on its own,
+   so opacity is pinned to 1 and the colour carries the fade. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--placeholder);
+  opacity: 1;
+}
+input::-webkit-input-placeholder,
+textarea::-webkit-input-placeholder {
+  color: var(--placeholder);
+  opacity: 1;
+}

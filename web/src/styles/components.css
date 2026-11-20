@@ -349,7 +349,8 @@
   box-shadow: var(--focus);
 }
 .input::placeholder {
-  color: var(--ink-3);
+  color: var(--placeholder);
+  opacity: 1;
 }
 .input:hover {
   background: rgb(var(--green-deep-rgb) / 0.38);
@@ -475,7 +476,8 @@
   text-overflow: ellipsis;
 }
 .linkbox__input::placeholder {
-  color: var(--ink-3);
+  color: var(--placeholder);
+  opacity: 1;
 }
 .linkbox__input:focus-visible {
   outline: none;

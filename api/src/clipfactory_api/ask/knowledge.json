@@ -1,5 +1,5 @@
 {
- "version": "757c1e7531e5",
+ "version": "5c034f32af7c",
  "parts": [
   {
    "id": "app-map",
@@ -699,7 +699,7 @@
    "id": "testing-contrast-and-text-size",
    "title": "TESTING: Contrast and text size",
    "line": "web/e2e/contrast.spec.ts (Playwright, mock mode, audit F081) opens every route in ROUTES (web/e2e/helpers.ts) at",
-   "chars": 3981
+   "chars": 4018
   },
   {
    "id": "testing-action-motion",

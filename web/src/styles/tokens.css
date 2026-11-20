@@ -30,6 +30,7 @@
   --ink: #efe7da;
   --ink-2: #efe7da;
   --ink-3: #efe7da;
+  --placeholder: #8ea99d; /* hint text in empty fields: a muted grey-green, clearly not typed words (3.3:1 on the lightest glass field, 5.7:1 on the usual one) */
   --vermilion-ink: #ffe2dc; /* error and warning words, always with a vermilion icon or dot */
   --green-ink: #e4f2da; /* success words and icons */
   --green-text: #e4f2da; /* words on the success tint */
