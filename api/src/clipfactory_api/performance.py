@@ -21,7 +21,7 @@ Item = dict[str, Any]
 MAX_SNAPSHOTS = 500
 MAX_POINTS = 60
 NO_NUMBERS_STATUSES = frozenset({"review", "declined"})
-NO_NUMBERS_YET = "This clip has no numbers yet. Keep it first."
+NO_NUMBERS_YET = "This clip has no numbers yet. Upload it first."
 TOTAL_FIELDS = ("views", "likes", "comments", "shares")
 
 

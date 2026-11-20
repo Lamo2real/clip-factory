@@ -21,13 +21,13 @@ test.describe("motion: library, clip and help (APPLY b)", () => {
     await expect(page.locator(".segmented__opt.is-on .act")).toHaveClass(/act--toggle/);
     await page.getByRole("radio", { name: "All", exact: true }).check({ force: true });
 
-    const card = page.locator(".lib-card", { hasText: "This clip has not started posting yet." });
-    const again = card.getByRole("button", { name: "Try again" });
+    const card = page.locator(".lib-card", { hasText: "This clip has not started uploading yet." });
+    const again = card.getByRole("button", { name: "Try again", exact: true });
     await expect(again).toHaveAttribute("data-act", "retry");
     const { cls } = await tapAct(again);
     expect(cls.split(" ")).toEqual(expect.arrayContaining(["act--retry", "is-play"]));
     // The keep happens at the tap; the motion never holds it up.
-    await expect(page.getByText(/Kept! It posts as soon as your accounts are connected/)).toBeVisible();
+    await expect(page.getByText(/Saved! It uploads as soon as your accounts are set up/)).toBeVisible();
   });
 
   test("This week: the arrows slide, the newest week only nudges, the star spins on and settles off", async ({ page }) => {

@@ -2,7 +2,7 @@ import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
-import type { Api, Captions, Clip, TikTokCreator } from "../src/api/types.ts";
+import type { Api, Captions, Clip, TikTokCreator, TikTokPostOptions } from "../src/api/types.ts";
 import type { Toaster } from "../src/components/Toasts.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -61,21 +61,21 @@ function press(key: string, shiftKey = false) {
   });
 }
 
-/** Opens the sheet from a Keep button and re-renders on every caption change, the way Review does. */
-function Harness({ onClose }: { onClose?: () => void }) {
+/** Opens the sheet from an Upload button and re-renders on every caption change, the way Review does. */
+function Harness({ onClose, onUpload }: { onClose?: () => void; onUpload?: (o: TikTokPostOptions) => void }) {
   const [open, setOpen] = useState(false);
   const [caption, setCaption] = useState("Twelve cars");
   return (
     <>
       <button type="button" id="keep" onClick={() => setOpen(true)}>
-        Keep
+        Upload
       </button>
       {open ? (
         <TikTokSheet
           clip={clip}
           caption={caption}
           onCaption={setCaption}
-          onKeep={() => undefined}
+          onUpload={(o) => onUpload?.(o)}
           // A new function on every render, like Review's inline arrow before the fix.
           onClose={() => {
             onClose?.();
@@ -88,8 +88,8 @@ function Harness({ onClose }: { onClose?: () => void }) {
   );
 }
 
-async function openSheet(onClose?: () => void) {
-  act(() => root.render(<Harness onClose={onClose} />));
+async function openSheet(onClose?: () => void, more: { onUpload?: (o: TikTokPostOptions) => void } = {}) {
+  act(() => root.render(<Harness onClose={onClose} {...more} />));
   const keep = host.querySelector<HTMLButtonElement>("#keep")!;
   keep.focus();
   act(() => keep.click());
@@ -116,7 +116,7 @@ describe("Post to TikTok sheet", () => {
     expect(box.value).toBe("Twelve cars abc");
   });
 
-  it("traps Tab inside, closes on Escape and gives the focus back to Keep (F030)", async () => {
+  it("traps Tab inside, closes on Escape and gives the focus back to Upload (F030)", async () => {
     const closed = vi.fn();
     const { keep, dialog } = await openSheet(closed);
     expect(document.activeElement).toBe(dialog);
@@ -139,15 +139,89 @@ describe("Post to TikTok sheet", () => {
     expect(document.activeElement).toBe(keep);
   });
 
+  const uploadButton = (dialog: HTMLElement) => Array.from(dialog.querySelectorAll<HTMLButtonElement>(".tt-sheet__actions button")).pop()!;
+  const privacyBar = (dialog: HTMLElement) => dialog.querySelector<HTMLElement>('.segmented[role="radiogroup"]')!;
+  const privacyNames = (dialog: HTMLElement) => Array.from(privacyBar(dialog).querySelectorAll("label")).map((l) => l.textContent);
+  const privacyOn = (dialog: HTMLElement) => privacyBar(dialog).querySelector<HTMLInputElement>("input:checked")?.closest("label")?.textContent ?? null;
+  function pickPrivacy(dialog: HTMLElement, name: string) {
+    const radio = Array.from(privacyBar(dialog).querySelectorAll<HTMLInputElement>("input")).find((i) => i.closest("label")!.textContent === name)!;
+    act(() => radio.click());
+  }
+
+  it("asks who can see it with one bar of buttons: no dropdown, no OS list, no default, Everyone first (TikTok's rules)", async () => {
+    current = { tiktokCreatorInfo: async () => ({ ...creator, privacyOptions: ["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "PUBLIC_TO_EVERYONE"] }) };
+    const { dialog } = await openSheet();
+    expect(dialog.querySelector("select")).toBeNull();
+    expect(dialog.querySelector('[aria-haspopup="listbox"], [role="listbox"], [role="option"]')).toBeNull();
+    expect(privacyBar(dialog).getAttribute("aria-label")).toBe("Who can see it");
+    // Exactly TikTok's list (never more), Everyone first, and nothing picked until the owner picks.
+    expect(privacyNames(dialog)).toEqual(["Everyone", "Friends", "Only me"]);
+    expect(privacyOn(dialog)).toBeNull();
+    expect(uploadButton(dialog).getAttribute("aria-disabled")).toBe("true");
+    expect(dialog.textContent).toContain("Tap who can see it to turn on Upload.");
+    pickPrivacy(dialog, "Everyone");
+    expect(privacyOn(dialog)).toBe("Everyone");
+    expect(uploadButton(dialog).getAttribute("aria-disabled")).not.toBe("true");
+  });
+
+  it("before TikTok approves the app: one button, Only me, a plain line, still the owner's tap", async () => {
+    current = { tiktokCreatorInfo: async () => ({ ...creator, privacyOptions: ["SELF_ONLY"] }) };
+    const { dialog } = await openSheet();
+    expect(dialog.textContent).toContain("TikTok keeps posts private until it approves your app.");
+    expect(privacyNames(dialog)).toEqual(["Only me"]);
+    expect(privacyOn(dialog)).toBeNull();
+    expect(uploadButton(dialog).getAttribute("aria-disabled")).toBe("true");
+    pickPrivacy(dialog, "Only me");
+    expect(uploadButton(dialog).getAttribute("aria-disabled")).not.toBe("true");
+  });
+
+  it("Comments, Duet and Stitch start off and visible, each its own switch, with no Turn all on", async () => {
+    const { dialog } = await openSheet();
+    const sw = (name: string) => Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="switch"]')).find((b) => document.getElementById(b.getAttribute("aria-labelledby")!)!.textContent === name)!;
+    for (const name of ["Comments", "Duet", "Stitch", "Commercial content"]) expect(sw(name).getAttribute("aria-checked")).toBe("false");
+    expect(Array.from(dialog.querySelectorAll("button")).some((b) => /turn all on|use my settings/i.test(b.textContent ?? ""))).toBe(false);
+    act(() => sw("Duet").click());
+    expect(sw("Duet").getAttribute("aria-checked")).toBe("true");
+    act(() => sw("Duet").click());
+    expect(sw("Duet").getAttribute("aria-checked")).toBe("false");
+    // Stitch is off in the creator's TikTok settings: it stays off and greyed.
+    expect(sw("Stitch").getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("Branded content (paid partnership) takes Only me away and adds the Branded Content Policy line", async () => {
+    const { dialog } = await openSheet();
+    pickPrivacy(dialog, "Only me");
+    const sw = Array.from(dialog.querySelectorAll<HTMLButtonElement>('[role="switch"]')).find((b) => document.getElementById(b.getAttribute("aria-labelledby")!)!.textContent === "Commercial content")!;
+    act(() => sw.click());
+    expect(uploadButton(dialog).getAttribute("aria-disabled")).toBe("true");
+    const branded = Array.from(dialog.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))[1]!;
+    expect(branded.closest("label")!.textContent).toContain("Paid partnership");
+    act(() => branded.click());
+    expect(privacyOn(dialog)).toBeNull();
+    expect(privacyNames(dialog)).toEqual(["Everyone"]);
+    pickPrivacy(dialog, "Everyone");
+    expect(dialog.textContent).toContain("Branded Content Policy");
+    expect(uploadButton(dialog).getAttribute("aria-disabled")).not.toBe("true");
+  });
+
+  it("sends exactly what the owner tapped (nothing is on unless he turned it on)", async () => {
+    const sent: TikTokPostOptions[] = [];
+    const { dialog } = await openSheet(undefined, { onUpload: (o) => sent.push(o) });
+    pickPrivacy(dialog, "Everyone");
+    act(() => uploadButton(dialog).click());
+    expect(sent).toEqual([
+      { privacyLevel: "PUBLIC_TO_EVERYONE", disableComment: true, disableDuet: true, disableStitch: true, brandContent: false, brandOrganic: false },
+    ]);
+  });
+
   it("a clip too long for TikTok says what to do next; a limit of 0 does not block (F022)", async () => {
     expect(tooLongForTikTok(32, 5)).toBe(true);
     expect(tooLongForTikTok(32, 600)).toBe(false);
     expect(tooLongForTikTok(32, 0)).toBe(false);
     current = { tiktokCreatorInfo: async () => ({ ...creator, maxDurationSec: 5 }) };
     const { dialog } = await openSheet();
-    expect(dialog.textContent).toContain("turn TikTok off in Where clips go, tap Keep, then turn TikTok back on");
-    expect(dialog.querySelector('a[href="/settings/posting/where"]')).not.toBeNull();
-    expect(dialog.textContent).not.toContain("Pick who can see it to turn on Keep.");
+    expect(dialog.textContent).toContain("To upload it to your other places now, turn TikTok off above and tap Upload.");
+    expect(dialog.textContent).not.toContain("Tap who can see it to turn on Upload.");
   });
 
   it("a creator-info error offers Ask TikTok again, which asks again (F022)", async () => {
@@ -208,7 +282,30 @@ describe("caption tabs", () => {
     expect(tabsTooLong({ ...ok, youtubeDescription: "d".repeat(5001) })).toEqual(["youtube"]);
   });
 
-  it("marks a too-long tab even when it is not open, and Keep's refusal opens and focuses it (F006)", () => {
+  it("only the chosen places count as too long (§33.2)", () => {
+    const long = { ...ok, x: "x".repeat(281) };
+    expect(tabsTooLong(long, ["youtube", "tiktok"])).toEqual([]);
+    expect(tabsTooLong(long, ["youtube", "x"])).toEqual(["x"]);
+  });
+
+  it("shows tabs only for the chosen places, keeps a turned-off place's caption, and never writes X twice", () => {
+    const captions = { ...ok, x: "kept x text" };
+    act(() => root.render(<CaptionTabs captions={captions} onChange={() => undefined} platforms={["youtube", "x"]} />));
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    expect(tabs.map((t) => t.getAttribute("aria-label"))).toEqual(["YouTube", "X"]);
+    const x = tabs[1]!;
+    act(() => x.click());
+    // The X tab shows its mark only: no visible "X" next to the X logo.
+    expect(x.textContent).toBe("");
+    expect(host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("kept x text");
+    act(() => root.render(<CaptionTabs captions={captions} onChange={() => undefined} platforms={["youtube"]} />));
+    expect(Array.from(host.querySelectorAll('[role="tab"]')).map((t) => t.getAttribute("aria-label"))).toEqual(["YouTube"]);
+    act(() => root.render(<CaptionTabs captions={captions} onChange={() => undefined} platforms={["youtube", "x"]} />));
+    act(() => Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]'))[1]!.click());
+    expect(host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("kept x text");
+  });
+
+  it("marks a too-long tab even when it is not open, and Upload's refusal opens and focuses it (F006)", () => {
     const handle: { current: { showTooLong(): string | null } | null } = { current: null };
     act(() => root.render(<CaptionTabs captions={{ ...ok, x: "x".repeat(300) }} onChange={() => undefined} handle={handle} />));
     const x = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((t) => t.id.endsWith("-tab-x"))!;

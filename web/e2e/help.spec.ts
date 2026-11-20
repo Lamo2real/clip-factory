@@ -127,9 +127,9 @@ for (const size of SIZES) {
     test("the launcher never sits on Keep on Review, even before any scroll", async ({ page }) => {
       await page.goto("/review");
       await settle(page);
-      await page.locator('[data-help~="keep"]').first().waitFor();
+      await page.locator('[data-help~="upload"]').first().waitFor();
       await launcherSettled(page);
-      const keep = (await page.locator('[data-help~="keep"]').first().boundingBox())!;
+      const keep = (await page.locator('[data-help~="upload"]').first().boundingBox())!;
       const b = await shownLauncher(page);
       if (b) {
         const apart = b.right <= keep.x || b.left >= keep.x + keep.width || b.bottom <= keep.y || b.top >= keep.y + keep.height;
@@ -145,7 +145,7 @@ for (const size of SIZES) {
       await expect(answer.locator(".help-steps li")).toHaveCount(3);
       await answer.getByRole("button", { name: "Open Review" }).click();
       await expect(page).toHaveURL(/\/review$/);
-      await expect(page.locator('[data-help-spotlit][data-help~="keep"]')).toBeVisible();
+      await expect(page.locator('[data-help-spotlit][data-help~="upload"]')).toBeVisible();
       // The ring stays lit for its full time once Keep has scrolled in, however long the scroll takes on this machine.
       await expect.poll(() => spotlitIsReachable(page), { timeout: SPOT_ARRIVE_CAP_MS }).toBe("ok");
       // Open it again: the question and its steps are still there (memory only).
@@ -333,7 +333,7 @@ for (const size of SIZES) {
       await open(page);
       await ask(page, "#503 What does Keep do?");
       const answer = panel(page).locator(".help-msg--bot").last();
-      await expect(answer).toContainText("Keep");
+      await expect(answer).toContainText("Upload");
       await expect(answer.getByRole("button", { name: "Open Review" })).toBeVisible();
       await expect(answer.getByRole("button", { name: "Something went wrong? Copy the help code" })).toBeVisible();
     });

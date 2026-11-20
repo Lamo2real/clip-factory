@@ -105,7 +105,7 @@ the two from getting in each other's way.
 ### Part 4: Go public
 
 #### 12. Post one test clip
-- Keep one clip. Instagram may take a few minutes to show it.
+- Upload one clip. Instagram may take a few minutes to show it.
 - Numbers can take 2 days.
 - Status: "Works now."
 - If you see your Reels missing for other people: tell Clip Factory support; Meta may want the app Live.

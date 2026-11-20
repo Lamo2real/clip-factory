@@ -510,7 +510,7 @@ export function NewJobForm() {
         >
           Make clips
         </Button>
-        <p className="newjob__hint">Nothing gets posted until you tap Keep.</p>
+        <p className="newjob__hint">Nothing gets posted until you tap Upload.</p>
       </div>
 
       <p className="sr-only" role="status">

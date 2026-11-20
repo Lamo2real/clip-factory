@@ -33,10 +33,11 @@ describe("tab title for This week (F083)", () => {
 });
 
 describe("Library empty list (F082)", () => {
-  it("only asks to keep clips when nothing is kept", () => {
-    expect(libraryEmptyCopy("all", false)).toMatchObject({ title: "Nothing kept yet", action: "review" });
-    expect(libraryEmptyCopy("waiting", false)).toMatchObject({ title: "Nothing kept yet", action: "review" });
-    expect(libraryEmptyCopy("posted", false)).toMatchObject({ title: "Nothing posted yet", action: "review" });
+  it("only asks to upload clips when nothing is uploaded", () => {
+    expect(libraryEmptyCopy("all", false)).toMatchObject({ title: "Nothing uploaded yet", action: "review" });
+    expect(libraryEmptyCopy("waiting", false)).toMatchObject({ title: "Nothing uploaded yet", action: "review" });
+    expect(libraryEmptyCopy("posted", false)).toMatchObject({ title: "Nothing uploaded yet", action: "review" });
+    expect(libraryEmptyCopy("all", false).body).toContain("tap Upload");
   });
   it("says everything is posted when 'Not posted yet' is empty but clips are kept", () => {
     const c = libraryEmptyCopy("waiting", true);
@@ -53,11 +54,12 @@ describe("Library empty list (F082)", () => {
 describe("one name per post state (F085)", () => {
   it("Library rows use the clip page's chip words", () => {
     expect(postStatusLabel({ status: "queued" })).toBe(STATUS_LABEL.posting);
-    expect(postStatusLabel({ status: "queued" })).toBe("Posting");
-    expect(postStatusLabel({ status: "pending_integration" })).toBe("Waiting for connection");
-    expect(postStatusLabel({ status: "posted" })).toBe("Posted");
-    expect(postStatusLabel({ status: "posted", privacy: "private" })).toBe("Posted privately");
-    expect(postStatusLabel({ status: "failed" })).toBe("Failed");
+    // §33: the per-place rows say Uploading…, Uploaded, Didn't work, Waiting for setup.
+    expect(postStatusLabel({ status: "queued" })).toBe("Uploading…");
+    expect(postStatusLabel({ status: "pending_integration" })).toBe("Waiting for setup");
+    expect(postStatusLabel({ status: "posted" })).toBe("Uploaded");
+    expect(postStatusLabel({ status: "posted", privacy: "private" })).toBe("Uploaded privately");
+    expect(postStatusLabel({ status: "failed" })).toBe("Didn't work");
   });
   it("Library no longer has its own status words", () => {
     const src = read("src", "screens", "library", "Library.tsx");

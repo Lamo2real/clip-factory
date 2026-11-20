@@ -109,6 +109,17 @@ describe("the Post to TikTok sheet's rules (§17.8)", () => {
     expect(privacyChoices(["PUBLIC_TO_EVERYONE", "SELF_ONLY"], true)).toEqual(["PUBLIC_TO_EVERYONE"]);
   });
 
+  it("puts Everyone first and Only me last, and never offers more than TikTok does", () => {
+    expect(privacyChoices(["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "PUBLIC_TO_EVERYONE"], false)).toEqual([
+      "PUBLIC_TO_EVERYONE",
+      "FOLLOWER_OF_CREATOR",
+      "MUTUAL_FOLLOW_FRIENDS",
+      "SELF_ONLY",
+    ]);
+    expect(privacyChoices(["SELF_ONLY"], false)).toEqual(["SELF_ONLY"]);
+    expect(privacyChoices(["SELF_ONLY"], true)).toEqual([]);
+  });
+
   it("keeps Keep off until a privacy is picked, and Commercial content says whose", () => {
     const base = { privacy: "", commercial: false, yourBrand: false, branded: false };
     expect(sheetReady(base)).toBe(false);

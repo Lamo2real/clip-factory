@@ -12,7 +12,7 @@ can follow, then **takes you there** and lights up the right button. This sectio
   "How do I connect Instagram?", "How many views did my best clip get this week?", "How do I add a skill?",
   "What does Keep do?".
 * Every answer: one or two short sentences, then numbered steps (≤ 6, each ≤ 1 line, exact button and field names as
-  the UI writes them, in bold: **Make clips**, **Keep**, **Throw away**, **Try again**, **Click sound**), then up to two
+  the UI writes them, in bold: **Make clips**, **Upload**, **Throw away**, **Try again**, **Click sound**), then up to two
   buttons that **navigate and spotlight** the control (`data-help` anchors, §19.8). Numbers (views, clips waiting) are
   fetched by the browser with the owner's own token and filled in (§19.7).
 * It works **without the model**: retrieval plus a composer always gives a complete answer. The model (Claude Haiku,
@@ -97,9 +97,10 @@ on a platform's setup page) becomes a doc on that page, and the element there ca
 | `job-progress` | where is my job, how long, cancel | Open Jobs `/jobs` |
 | `what-is-clip-factory` | what the app is and what it does, in two sentences | Go to Home `/` → `paste-link` |
 | `job-failed` | job failed → **Try again** (starts over, uses the saved video) | Open Jobs `/jobs` → `failed-job` (the failed row in the Jobs list), `try-again` |
-| `review-keep` | what **Keep** does: it queues the clip for posting to your platforms; nothing posts without Keep | Open Review `/review` → `keep` |
+| `review-keep` | what **Upload** does: it posts the clip to every place picked under Upload to; nothing posts without Upload | Open Review `/review` → `upload` |
+| `review-upload-to` | Upload to many places at once; places not set up do not show | Open Review `/review` → `upload-to` |
 | `review-throw-away` | **Throw away** + 8 s **Undo** | Open Review `/review` → `throw-away` |
-| `review-captions` | change a caption per platform before Keep | Open Review `/review` → `captions` |
+| `review-captions` | change a caption per platform before Upload | Open Review `/review` → `captions` |
 | `clip-posting-failed` | Failed post → **Try again** on Review | Open Review `/review` |
 | `library-where` | "where are my clips / videos": Library holds every clip | Open Library `/library` → `nav-library` |
 | `clip-performance` | see how a clip does (Library → tap the clip) | Open Library `/library` |
@@ -527,7 +528,7 @@ in the signed-in shell of `app/App.tsx`. Open from anywhere: `window.dispatchEve
   mock number appears; refused question; `#429` notice and disabled Ask; `#503` → local answer + copy-code link;
   `#off` → launcher gone; Escape returns focus to the launcher; reduced motion → no animations
   (`getAnimations()` empty, the send button included); dodge hides on scroll down and returns on scroll up; no
-  launcher over **Keep** on Review before any scroll (375 and 1440); after an answer button, the spotlit control is
+  launcher over **Upload** on Review before any scroll (375 and 1440); after an answer button, the spotlit control is
   the element at its centre (`elementFromPoint`); the conversation is kept after Close and reopen; Tab stays inside
   the phone sheet; the settled phone launcher covers no control at 320, 375, 390 and 430 px, with and without
   `?update=1`; the send button flies on send and only fades with reduced motion. `overflow.spec.ts`

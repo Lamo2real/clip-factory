@@ -125,7 +125,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
 
 ### 12.4 Kid-proof UX (a 6–8-year-old must manage it)
 * One obvious next step per screen (one vermilion CTA), big targets (≥ 48 px on phones), icon + word on buttons
-  (except the phone tab bar), short plain words (no jargon: "Make clips", "Keep", "Throw away"), friendly empty states
+  (except the phone tab bar), short plain words (no jargon: "Make clips", "Upload", "Throw away"), friendly empty states
   that say exactly what to tap, no dead ends, every error says what to do next, destructive actions undoable for 8 s
   (toast with Undo) instead of scary dialogs, forms that can't be submitted wrong (paste button, auto-detect link,
   inline hints), progress always visible, celebrations on success.
@@ -169,8 +169,9 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   "Show older jobs" shows), `olderJobsFails` (the next N older pages fail), `createJobFails` (the next N Make clips
   fail with a server error). Covered by `web/e2e/audit-shell.spec.ts`.
 * **Review screen** (`web/src/screens/review/`):
-  * A refused Keep (a caption too long) opens the first too-long caption tab, scrolls it into view, focuses it and
-    names the platform: "Your X caption is longer than its platform allows. Make it shorter, then tap Keep.". Every
+  * A refused Upload (a caption too long for a chosen place) opens the first too-long caption tab, scrolls it into view,
+    focuses it and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then tap
+    Upload.". Every
     tab whose caption is too long carries `.is-over` (a red dot) and ", too long" in its accessible name, so it shows
     even while another tab is open.
   * Caption tabs: all five platforms stay in sight. On a narrow card (`.captions` container under 560 px) tabs that
@@ -178,6 +179,8 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
     does too, and the field label names the platform. The chosen tab is scrolled into view.
   * The card goes two-column (video left) only when the card itself is at least 820 px wide (container query on
     `.review-list__item`, never a window media query), so the decision column never drops below about 400 px.
+    In two columns the video sits on the card's vertical centre line beside the words (`align-self: center`) and
+    scrolls with the page: never sticky, never fixed (owner request, 2026-11-20). Phones keep it at the top.
     Throw away and Keep share the row; once they wrap, each fills the row (`flex: 1 1 140px`, at most 260 px), so
     they line up. The source line's link icon sits inside the link and stays beside its words.
   * Thrown-away clips are kept in a module-level store (`web/src/lib/throwAways.ts`) while their 8 s Undo runs and

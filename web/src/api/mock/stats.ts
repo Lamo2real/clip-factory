@@ -55,7 +55,7 @@ interface Deps {
   automated: () => boolean;
 }
 
-const notFound = () => new ApiError(404, "not_found", "This clip has no numbers yet. Keep it first.");
+const notFound = () => new ApiError(404, "not_found", "This clip has no numbers yet. Upload it first.");
 const badWeek = () => new ApiError(400, "bad_request", "That week does not look right. Go back to This week.");
 
 export function statsApi({ store, publish, faults, automated }: Deps) {

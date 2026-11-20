@@ -34,7 +34,7 @@ them. `{app}` is your Clip Factory address and `{hooks}` is its sign-in return a
 | Name on the card | What it is |
 |---|---|
 | App name | `Clip Factory` (Facebook: `Clip Factory Pages`) |
-| Description | "Clip Factory turns my gameplay recordings into short vertical clips and posts them to my own accounts when I press Keep." |
+| Description | "Clip Factory turns my gameplay recordings into short vertical clips and posts them to my own accounts when I press Upload." |
 | Website | `{app}/about.html` |
 | Website prefix (TikTok) | `{app}/` |
 | Privacy Policy | `{app}/legal/privacy.html` |

@@ -211,7 +211,7 @@ describe("the five setup guides (§17.2)", () => {
     expect(say("key-scopes")).toMatch(/Add scopes/);
     for (const scope of ["user.info.basic", "video.publish", "video.list", "user.info.stats"]) expect(say("key-scopes")).toContain(scope);
     // The real demo shows the whole path TikTok's reviewers ask for.
-    expect(say("public-demo")).toMatch(/Connect TikTok.*Authorize.*Keep.*arriving/);
+    expect(say("public-demo")).toMatch(/Connect TikTok.*Authorize.*Upload.*arriving/);
     expect(say("sandbox-make")).toMatch(/Sandbox first.*private/);
   });
 

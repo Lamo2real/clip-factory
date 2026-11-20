@@ -1,7 +1,16 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
-// The Post to TikTok sheet (docs/CONTRACTS.md §17.8): with TikTok connected, Keep first asks who can see the post.
+// The Post to TikTok sheet (docs/CONTRACTS.md §17.8, §33.5): with TikTok chosen, Upload first asks who can see the
+// post, on one bar of buttons (no dropdown) with nothing picked: TikTok's Content Sharing Guidelines.
+
+/** The "Who can see it" bar (a pick-one Glide radio group). */
+const bar = (sheet: Locator) => sheet.getByRole("radiogroup", { name: "Who can see it" });
+
+/** Taps a "Who can see it" button. */
+async function pick(sheet: Locator, name: string) {
+  await bar(sheet).getByRole("radio", { name, exact: true }).check();
+}
 
 type MockWindow = Window & {
   __cfMock?: {
@@ -29,50 +38,57 @@ for (const size of [
   test.describe(`at ${size.width}px`, () => {
     test.use({ viewport: size });
 
-    test("Keep stays off until a privacy is picked; branded content hides Only me", async ({ page }) => {
+    test("Upload stays off until a privacy is picked; branded content hides Only me", async ({ page }) => {
       await connectTikTok(page, true);
       await page.goto("/review");
       await settle(page);
       const card = page.locator(".review-card").first();
-      await card.getByRole("button", { name: "Keep", exact: true }).click();
+      await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
       const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
       await expect(sheet).toBeVisible();
       await expect(sheet.getByText("Posting as")).toContainText("Clip Factory");
-      const keep = sheet.getByRole("button", { name: "Keep", exact: true });
-      const privacy = sheet.getByLabel("Who can see it");
-      // No default.
-      await expect(privacy).toHaveValue("");
+      const keep = sheet.getByRole("button", { name: "Upload", exact: true });
+      // One bar of buttons: no dropdown, no OS list, nothing picked.
+      await expect(sheet.locator("select")).toHaveCount(0);
+      await expect(sheet.locator('[aria-haspopup="listbox"], [role="listbox"]')).toHaveCount(0);
+      await expect(bar(sheet).getByRole("radio")).toHaveCount(4);
+      await expect(bar(sheet).getByRole("radio", { checked: true })).toHaveCount(0);
       await expect(keep).toHaveAttribute("aria-disabled", "true");
-      await expect(sheet.getByText("Pick who can see it to turn on Keep.")).toBeVisible();
-      // Comments, Duet and Stitch start off; Stitch is switched off in the creator's TikTok settings.
+      await expect(sheet.getByText("Tap who can see it to turn on Upload.")).toBeVisible();
+      // Everyone first, exactly TikTok's choices.
+      await expect(bar(sheet).locator("label")).toHaveText(["Everyone", "Followers", "Friends", "Only me"]);
+      // Comments, Duet and Stitch start off; Stitch is switched off in the creator's TikTok settings. No "Turn all on".
       await expect(sheet.getByRole("switch", { name: "Comments" })).toHaveAttribute("aria-checked", "false");
+      await expect(sheet.getByRole("switch", { name: "Duet" })).toHaveAttribute("aria-checked", "false");
       await expect(sheet.getByRole("switch", { name: "Stitch" })).toHaveAttribute("aria-disabled", "true");
+      await expect(sheet.getByRole("button", { name: /Turn all on|Use my settings/ })).toHaveCount(0);
 
-      await privacy.selectOption({ label: "Only me" });
+      await pick(sheet, "Only me");
+      await expect(bar(sheet).getByRole("radio", { checked: true })).toHaveCount(1);
       await expect(keep).not.toHaveAttribute("aria-disabled", "true");
 
       // Commercial content needs whose: Branded content, which cannot be Only me.
       await sheet.getByRole("switch", { name: "Commercial content" }).click();
       await expect(keep).toHaveAttribute("aria-disabled", "true");
       await sheet.getByRole("checkbox", { name: /^Branded content/ }).check();
-      await expect(privacy.locator("option", { hasText: "Only me" })).toHaveCount(0);
-      await expect(privacy).toHaveValue("");
+      await expect(bar(sheet).getByRole("radio", { checked: true })).toHaveCount(0);
+      await expect(bar(sheet).locator("label")).toHaveText(["Everyone", "Followers", "Friends"]);
       await expect(sheet).toContainText("By posting, you agree to TikTok's Music Usage Confirmation and Branded Content Policy.");
       await expect(keep).toHaveAttribute("aria-disabled", "true");
-      await privacy.selectOption({ label: "Everyone" });
+      await pick(sheet, "Everyone");
       await expect(keep).not.toHaveAttribute("aria-disabled", "true");
 
       await keep.click();
       await expect(sheet).toHaveCount(0);
       await expect(page.getByText("TikTok can take a few minutes to process your clip.")).toBeVisible();
-      await expect(page.getByText(/^Kept! Posting to 1 platform\./)).toBeVisible();
+      await expect(page.getByText(/^Uploading to TikTok!/)).toBeVisible();
     });
 
-    test("the sheet covers the whole screen, keeps typed letters and traps Tab; Escape gives the focus back to Keep", async ({ page }) => {
+    test("the sheet covers the whole screen, keeps typed letters and traps Tab; Escape gives the focus back to Upload", async ({ page }) => {
       await connectTikTok(page, true);
       await page.goto("/review");
       await settle(page);
-      const keepOnCard = page.locator(".review-card").nth(1).getByRole("button", { name: "Keep", exact: true });
+      const keepOnCard = page.locator(".review-card").nth(1).getByRole("button", { name: /^Upload( to .+)?$/ });
       await keepOnCard.click();
       const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
       await expect(sheet.getByText("Posting as")).toBeVisible();
@@ -112,10 +128,12 @@ for (const size of [
       await connectTikTok(page, false);
       await page.goto("/review");
       await settle(page);
-      await page.locator(".review-card").first().getByRole("button", { name: "Keep", exact: true }).click();
+      await page.locator(".review-card").first().getByRole("button", { name: /^Upload( to .+)?$/ }).click();
       const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
-      await expect(sheet.getByText("TikTok only allows Only me until it checks the app.")).toBeVisible();
-      await expect(sheet.getByLabel("Who can see it").locator("option:not([disabled])")).toHaveText(["Only me"]);
+      await expect(sheet.getByText("TikTok keeps posts private until it approves your app.")).toBeVisible();
+      // One button, still the owner's own tap.
+      await expect(bar(sheet).locator("label")).toHaveText(["Only me"]);
+      await expect(bar(sheet).getByRole("radio", { checked: true })).toHaveCount(0);
       await sheet.getByRole("button", { name: "Not now" }).click();
       await expect(sheet).toHaveCount(0);
       await expect(page.locator(".review-card").first()).toBeVisible();
@@ -123,11 +141,11 @@ for (const size of [
   });
 }
 
-test("without TikTok connected, Keep keeps straight away (no sheet)", async ({ page }) => {
+test("with nothing set up, Upload saves it straight away (no sheet, no Upload to chips)", async ({ page }) => {
   await page.goto("/review");
   await settle(page);
-  await page.locator(".review-card").first().getByRole("button", { name: "Keep", exact: true }).click();
-  await expect(page.getByText(/Kept! It posts as soon as your accounts are connected/)).toBeVisible();
+  await page.locator(".review-card").first().getByRole("button", { name: /^Upload( to .+)?$/ }).click();
+  await expect(page.getByText(/Saved! It uploads as soon as your accounts are set up/)).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Post to TikTok" })).toHaveCount(0);
 });
 
@@ -138,25 +156,25 @@ test("library: Try again on a failed clip whose TikTok post needs new choices op
   const { clipId, postId } = await page.evaluate(() => (window as MockWindow).__cfMock!.posting.failTikTok());
   const card = page.locator(`.lib-card[aria-labelledby="lib-${clipId}"]`);
   await expect(card.getByText("Pick who can see it on TikTok again, then press Try again.")).toBeVisible();
-  await expect(card.getByText("Posting did not work. Tap Try again.")).toBeVisible();
+  await expect(card.getByText("Uploading did not work. Tap Try again.")).toBeVisible();
 
-  await card.getByRole("button", { name: "Try again" }).click();
+  await card.getByRole("button", { name: "Try again", exact: true }).click();
   const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
   await expect(sheet).toBeVisible();
-  const again = sheet.getByRole("button", { name: "Try again" });
+  const again = sheet.getByRole("button", { name: "Try again", exact: true });
   await expect(again).toHaveAttribute("aria-disabled", "true");
-  await sheet.getByLabel("Who can see it").selectOption({ label: "Friends" });
+  await pick(sheet, "Friends");
   await again.click();
 
   await expect(sheet).toHaveCount(0);
-  await expect(page.getByText("Trying again! Posting now.")).toBeVisible();
-  await expect(card.getByRole("button", { name: "Try again" })).toHaveCount(0);
+  await expect(page.getByText("Trying again! Uploading now.")).toBeVisible();
+  await expect(card.getByRole("button", { name: "Try again", exact: true })).toHaveCount(0);
   // The new choices went with the confirm and replaced the TikTok post's options.
   const stored = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.options(id), postId);
   expect(stored).toMatchObject({ privacyLevel: "MUTUAL_FOLLOW_FRIENDS" });
 });
 
-test("review: a Keep from the TikTok sheet that does not finish shakes the sheet's Keep, then Try again keeps it (F080)", async ({ page }) => {
+test("review: an Upload from the TikTok sheet that does not finish shakes the sheet's Upload, then Try again uploads it (F080)", async ({ page }) => {
   await connectTikTok(page, true);
   await page.goto("/review");
   await settle(page);
@@ -166,13 +184,13 @@ test("review: a Keep from the TikTok sheet that does not finish shakes the sheet
     (window as MockWindow).__cfMockFaults!.keepStopsAfterSave = 1;
   });
   const card = cards.first();
-  await card.getByRole("button", { name: "Keep", exact: true }).click();
+  await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
   const sheet = page.getByRole("dialog", { name: "Post to TikTok" });
-  await sheet.getByLabel("Who can see it").selectOption({ label: "Everyone" });
-  const sheetKeep = sheet.getByRole("button", { name: "Keep", exact: true });
+  await pick(sheet, "Everyone");
+  const sheetKeep = sheet.getByRole("button", { name: "Upload", exact: true });
   await sheetKeep.click();
 
-  // The failure shakes the sheet's own Keep, shows the error toast and no celebration; the card stays with Try again.
+  // The failure shakes the sheet's own Upload, shows the error toast and no celebration; the card stays with Try again.
   await expect(sheetKeep.locator(".act")).toHaveClass(/is-fail/);
   const errorToast = page.locator(".toast", { hasText: "cannot be reached" });
   await expect(errorToast).toBeVisible();
@@ -183,9 +201,9 @@ test("review: a Keep from the TikTok sheet that does not finish shakes the sheet
   });
   expect(onTop).toBe(true);
   await expect(page.locator("canvas.confetti")).toHaveCount(0);
-  await expect(page.getByText(/^Kept!/)).toHaveCount(0);
-  await expect(card.getByText("Keeping this clip did not finish. Tap Try again.")).toBeVisible();
-  await expect(card.getByRole("button", { name: "Try again" })).toBeVisible();
+  await expect(page.getByText(/^(Uploading to|Saved!)/)).toHaveCount(0);
+  await expect(card.getByText("Uploading this clip did not finish. Tap Try again.")).toBeVisible();
+  await expect(card.getByRole("button", { name: "Try again", exact: true })).toBeVisible();
 
   // Try again (old enough to resume) finishes the keep with the same TikTok choices.
   await sheet.getByRole("button", { name: "Not now" }).click();
@@ -193,7 +211,7 @@ test("review: a Keep from the TikTok sheet that does not finish shakes the sheet
   await page.evaluate(() => {
     (window as MockWindow).__cfMockFaults!.resumeAfterMs = 0;
   });
-  await card.getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByText(/^Kept!/)).toBeVisible();
+  await card.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByText(/^(Uploading to|Saved!)/)).toBeVisible();
   await expect(cards).toHaveCount(before - 1);
 });

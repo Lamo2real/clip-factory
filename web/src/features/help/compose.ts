@@ -63,7 +63,7 @@ export function compose(ranked: Ranked): HelpAnswer {
 
 export const SUGGESTIONS = {
   twitch: "How do I make clips from a Twitch link?",
-  keep: "What does Keep do?",
+  keep: "What does Upload do?",
   bestViews: "How many views did my best clip get this week?",
   clickSound: "Where do I change my click sound?",
   tiktokPrivate: "Why is my clip private on TikTok?",

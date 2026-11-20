@@ -162,6 +162,10 @@ def set_stats_id(store: db.Store, post: Mapping[str, Any], stats_id: str, now: d
     )
 
 
+# The order the owner sees the platforms in everywhere (STATS_ORDER in the web app).
+UPLOAD_ORDER: tuple[str, ...] = ("youtube", "tiktok", "instagram", "facebook", "x")
+
+
 def create_for_clip(
     store: db.Store,
     user_id: str,
@@ -173,7 +177,8 @@ def create_for_clip(
     expect_status: Iterable[str] | None = None,
     post_options: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[Item]:
-    """Creates the clip's Posts, one per enabled platform, and returns all its posts (public shape).
+    """Creates the clip's Posts, one per chosen platform (the clip's ``uploadTo``, §33) or, when the clip has none,
+    one per platform enabled in settings, and returns all its posts (public shape).
 
     One transaction writes the missing posts together with ``postsCreated: true`` (plus ``clip_fields``) on the
     clip, conditional on the flag not being set yet (and on the clip's status being in ``expect_status``), so the
@@ -191,7 +196,10 @@ def create_for_clip(
     connected = {a["platform"] for a in accounts(store, user_id) if a["status"] == "connected"}
     created: list[Item] = []
     items: list[Item] = []
-    for platform in settings.get("platforms", PLATFORMS):
+    # The places the owner picked on this clip's Upload (§33), else Settings › Where clips go (older clients).
+    chosen = (clip_fields or {}).get("uploadTo") or clip.get("uploadTo")
+    targets = [p for p in UPLOAD_ORDER if p in chosen] if chosen else settings.get("platforms", PLATFORMS)
+    for platform in targets:
         if platform in have or platform not in PLATFORMS:
             continue
         post_id = ulid()

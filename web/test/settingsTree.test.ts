@@ -203,7 +203,7 @@ describe("Find a setting", () => {
     const clip = names("clip");
     expect(clip).not.toContain("Sign out");
     expect(clip).not.toContain("Get the app");
-    expect(clip).toEqual(expect.arrayContaining(["How many clips", "Longest video", "Post kept clips to"]));
+    expect(clip).toEqual(expect.arrayContaining(["How many clips", "Longest video", "Upload clips to"]));
     expect(names("factory")).toEqual([]);
     expect(names("clip factory")).toEqual([]);
   });

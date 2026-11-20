@@ -154,7 +154,7 @@ export const TREES: Tree[] = [
   {
     slug: "posting",
     name: "Posting",
-    line: "Where your kept clips go.",
+    line: "Where your clips go.",
     icon: "share",
     branches: [
       {
@@ -194,12 +194,12 @@ export const TREES: Tree[] = [
       {
         slug: "where",
         name: "Where clips go",
-        line: "Pick the places your kept clips are posted.",
+        line: "Pick the places your clips go.",
         icon: "check",
         apples: [
           {
             id: "post-to",
-            name: "Post kept clips to",
+            name: "Upload clips to",
             leaf: "Pick at least one place.",
             words: ["platforms", "YouTube", "Instagram", "Facebook", "TikTok", "X"],
           },

@@ -54,7 +54,7 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   ends (§12.4: undo instead of a scary dialog). **Connect again** keeps the keys.
 * ~~**Home card** "Set up posting · 2 of 5 ready"~~: replaced by the floating setup to-do list (§17.13), which shows
   on every signed-in page, so the owner never sees two competing lists. `screens/home/SetupCard.tsx` is removed.
-* **Review › Keep** with TikTok connected: the **Post to TikTok** sheet (§17.8) must be filled before Keep is enabled.
+* **Review › Upload** with TikTok chosen: the **Post to TikTok** sheet (§17.8) must be filled before Upload is enabled.
 * Kid-proof everywhere (§12.4): ≥ 48 px targets, nothing overflows from 320 to 1920 px, phone bottom bar / desktop
   sidebar unchanged, click sound on click only, success/error sounds, glass, Green/Bone/Vermilion, Inter + Times.
 
@@ -85,7 +85,7 @@ export type ValueRef = { ref: "appName" | "appDescription" | "websiteUrl" | "web
 Rules: the steps below are the content contract (ids and titles exact; sentences may be shortened, never lose a
 button name, value or warning). Shared values: `appName` "Clip Factory" (Facebook app: "Clip Factory Pages"),
 `appDescription` "Clip Factory turns my gameplay recordings into short vertical clips and posts them to my own
-accounts when I press Keep.", `xUseCase` "Post my own short video clips to my own X account and read their view and
+accounts when I press Upload.", `xUseCase` "Post my own short video clips to my own X account and read their view and
 like counts in my personal Clip Factory app." Every guide's Get ready part includes `ready-computer` "Use a
 computer" ("The developer websites work best on a computer. Use the same browser for every step."; platform extras
 below are added lines). `/brand/clip-factory-1024.png` is a 1024×1024 PNG < 5 MB of the app icon (web builds it; no
@@ -154,7 +154,7 @@ Connect:
 Go public (`gate: app_review`, `posting_audit`):
 | id | title | essentials |
 |---|---|---|
-| `public-demo` | Record the real demo video | Record your screen on Clip Factory, connected in the Sandbox: open Clip Factory, **Connect TikTok**, TikTok's **Authorize** screen, **Keep** on a clip with the **Post to TikTok** sheet, the post arriving on TikTok. Up to 5 videos, 50 MB each. |
+| `public-demo` | Record the real demo video | Record your screen on Clip Factory, connected in the Sandbox: open Clip Factory, **Connect TikTok**, TikTok's **Authorize** screen, **Upload** on a clip with the **Post to TikTok** sheet, the post arriving on TikTok. Up to 5 videos, 50 MB each. |
 | `public-review` | Ask TikTok to check the app | Switch to **Production**. **App review**: check `tiktokReviewText` is there (one line per scope), swap in the real demo video, **Save**, **Submit for review**. Then pick the status here: Draft / In review / Live / Not approved (`PATCH gate app_review`). Not approved: read **Review comments**, fix, submit again. |
 | `public-live-keys` | When it says Live | If the Production keys differ from the Sandbox ones, paste them and press **Connect again**. |
 | `public-audit` | Ask to post publicly | Open developers.tiktok.com/application/content-posting-api and fill in the form. Until it passes, every post is "Only me". TikTok may say no to a tool only you use; then posts stay private. |
@@ -236,7 +236,7 @@ credits" — status "Works now. Posts are public straight away." / empty → "Yo
 `tiktokReviewText` (copy chip, five lines, one per scope on the app; connect asks for user.info.basic, video.publish,
 video.list, the money grant adds user.info.stats, and nothing asks for video.upload, so its line says so):
 "user.info.basic (Login Kit): connect my TikTok and show my name and picture in Clip Factory.
-video.publish: post clips I approved with Keep straight to my own TikTok (Direct Post).
+video.publish: post clips I approved with Upload straight to my own TikTok (Direct Post).
 video.upload: comes with Content Posting API. Clip Factory does not ask for it; it only uses Direct Post.
 video.list: show the views and likes of my own posts on my Clip Factory dashboard.
 user.info.stats: show my follower and like totals on my Clip Factory money tile, only after I say OK."
@@ -534,28 +534,46 @@ youtube `{ "checkSeconds": 30, "maxChecks": 60, "chunkMb": 8 }`; tiktok `{ "chec
 
 ### 17.8 TikTok "Post to TikTok" sheet (Content Sharing Guidelines; web + api)
 
-On Keep, when TikTok is in `settings.platforms` and connected, a sheet opens before the confirm request: the creator
-nickname (`GET /v1/accounts/tiktok/creator-info`, fetched each time), a privacy dropdown with **no default** (only
-`privacyOptions`; "Only me" when that is all), switches Comments / Duet / Stitch (off by default, greyed when disabled
-by the creator), a **Commercial content** switch (off) with **Your brand** / **Branded content** (one required when on;
+On Upload, when TikTok is one of the chosen places (§33; an older client: in `settings.platforms` and connected), a
+sheet opens before the confirm request: the creator nickname (`GET /v1/accounts/tiktok/creator-info`, fetched each
+time), a **Who can see it** bar of buttons with **no default** (a `<Glide>` radio group, below), switches Comments / Duet /
+Stitch (off by default, greyed when disabled by the creator), a **Commercial content** switch (off) with **Your brand** / **Branded content** (one required when on;
 label "Promotional content" / "Paid partnership"; branded cannot be "Only me"), the sentence "By posting, you agree to
 TikTok's Music Usage Confirmation" (+ "Branded Content Policy" when branded), a video preview and the editable
-caption. Keep stays disabled until a privacy is chosen. Confirm body gains `"tiktok": { "privacyLevel", "disableComment",
+caption. Upload stays disabled until a privacy is chosen. Confirm body gains `"tiktok": { "privacyLevel", "disableComment",
 "disableDuet", "disableStitch", "brandContent", "brandOrganic" }` (validated; stored on the TikTok Post as internal
-`postOptions`); a `queued` TikTok post without it → 400 "Pick who can see it on TikTok.". After Keep the toast says
+`postOptions`); a `queued` TikTok post without it → 400 "Pick who can see it on TikTok.". After Upload the toast says
 "TikTok can take a few minutes to process your clip." **Try again** on a failed clip whose TikTok post failed with
 "Pick who can see it on TikTok again, then press Try again." opens this sheet first, then sends `{ "tiktok": {...} }`
 in the confirm body; the API replaces that post's `postOptions` (mock `_try_again` does the same).
 
+**Who can see it: the owner's ask and TikTok's rules (owner request, 2026-11-20; ADR-57).** The owner asked for no
+dropdown and no extra options, on every platform. TikTok's Content Sharing Guidelines
+(developers.tiktok.com/doc/content-sharing-guidelines, updated 4 Aug 2026) still require that the creator picks the
+privacy status himself with no default value, from exactly `privacy_level_options`, and while the app is not audited
+only `SELF_ONLY` is allowed; Comments, Duet and Stitch must be shown and none may be on by default. The guidelines
+speak of a dropdown; the app meets the rule with one bar of buttons instead, because the owner said no dropdown, and
+asks TikTok at app review whether a button bar is accepted. So:
+
+* **One bar of buttons** (`Segmented`, a `<Glide>` radio group labelled "Who can see it"): exactly `privacyOptions`
+  (minus Only me when branded), ordered Everyone, Followers, Friends, Only me, nothing picked until the owner taps one.
+  When `SELF_ONLY` is the only option it is one button, and the line "TikTok keeps posts private until it approves your
+  app." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off Branded
+  content." The hint under the actions reads "Tap who can see it to turn on Upload."
+* **No Turn all on and no Use my settings**: each switch is its own tap, and nothing is pre-set (a card-level preset
+  would have opened the sheet with privacy and all three switches already on, against the no-default rule).
+* Commercial content (off) with Your brand / Branded content ("Paid partnership"), the Branded Content Policy line and
+  the Music Usage Confirmation line are unchanged.
+
 The sheet (and the shared confirm `Sheet` in `components/Sheet.tsx`) is drawn with `createPortal` on `document.body`,
-so its backdrop covers the whole screen (tab bar, sidebar and Ask included; toasts stay on top, so a failed Keep's
+so its backdrop covers the whole screen (tab bar, sidebar and Ask included; toasts stay on top, so a failed Upload's
 error shows) even though the card that opens it is
 glass (`backdrop-filter`); a page keeps no transform of its own (pages have no entrance, §20.16). It
 is a real modal: focus moves in once on open (typing in the caption never loses the caret), Tab and Shift+Tab wrap
-inside it, Escape closes it, and on close the focus goes back to the Keep that opened it. A clip longer than the
+inside it, Escape closes it, and on close the focus goes back to the Upload that opened it. A clip longer than the
 creator's `maxDurationSec` (a limit of 0 means TikTok did not say: it does not block, the publisher checks again)
-or a creator-info error never leaves a dead end: the callout says what to do next ("… To keep it for your other
-apps, turn TikTok off in Where clips go, tap Keep, then turn TikTok back on.") with a link to `/settings/posting/where`, and the error
+or a creator-info error never leaves a dead end: the callout says what to do next ("… To upload it to your other
+places now, turn TikTok off above and tap Upload.", §33), and the error
 callout also has **Ask TikTok again**, which fetches the creator info again.
 
 ### 17.9 Infra (Terraform + scripts)
@@ -753,7 +771,7 @@ over the page:
   top of the page, there (`is-scrolled`, and it takes the taps) as soon as the page scrolls, so the page slides under
   glass and the pill stays on screen at every scroll position; it never steps aside. `html` gets `scroll-padding-top`
   below the bar's fade (`--todo-bar-h` + `--todo-feather` + 8 px), so Tab, a `#part` link
-  and `scrollIntoView` stop below it; sticky parts of pages add `--todo-top` (Review's video, Settings' folder panel);
+  and `scrollIntoView` stop below it; sticky parts of pages add `--todo-top` (Settings' folder panel; Review's video is not sticky, §12);
   the clip page's video is shorter by `--todo-top` (`performance.css`), so the stacks (desktop) and the winner and five
   chips (phones) still start on the first screen. Tapping the pill opens the list as a glass panel dropping from the
   top (phones: full width, stopping above the tab bar; tablets and the clip page: 380 px at the right) over a light

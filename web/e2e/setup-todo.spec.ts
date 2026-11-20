@@ -741,7 +741,8 @@ test.describe("the floating setup list on a phone", () => {
     await page.goto("/library");
     await settle(page);
     const under = await page.evaluate(async () => {
-      const all = Array.from(document.querySelectorAll<HTMLElement>("main a[href], main button")).filter((e) => e.getBoundingClientRect().height > 0);
+      // Only controls Tab can reach (a card's cover link is tabindex -1 and would be skipped).
+      const all = Array.from(document.querySelectorAll<HTMLElement>("main a[href], main button")).filter((e) => e.getBoundingClientRect().height > 0 && e.tabIndex >= 0);
       const target = all[Math.floor(all.length / 2)]!;
       // Cards may still be settling in: put it 20 px from the top until it stays there.
       for (let i = 0; i < 20 && Math.abs(target.getBoundingClientRect().top - 20) > 1; i++) {

@@ -114,7 +114,7 @@ test.describe("motion: Jobs (APPLY a)", () => {
 
   test("Try again on a failed job turns its arrow and the job restarts at the tap", async ({ page }) => {
     await openJob(page, "Charity marathon");
-    const retry = page.getByRole("button", { name: "Try again" });
+    const retry = page.getByRole("button", { name: "Try again", exact: true });
     await expect(retry).toHaveAttribute("data-act", "retry");
     const before = await calls(page, "retryJob");
     const { cls } = await tapAct(retry);
@@ -131,36 +131,36 @@ test.describe("motion: Review (APPLY a)", () => {
     await settle(page);
   });
 
-  test("Keep pops its heart, keeps its confetti and the card leaves", async ({ page }) => {
+  test("Upload flies its plane, keeps its confetti and the card leaves", async ({ page }) => {
     const cards = page.locator(".review-card");
     const before = await cards.count();
-    const keep = cards.first().getByRole("button", { name: "Keep", exact: true });
-    await expect(keep).toHaveAttribute("data-act", "keep");
-    // The heart plays once the keep really starts (after the TikTok check), not on a tap that only opens a sheet.
+    const keep = cards.first().getByRole("button", { name: /^Upload( to .+)?$/ });
+    await expect(keep).toHaveAttribute("data-act", "send");
+    // The plane flies once the upload really starts (after the TikTok check), not on a tap that only opens a sheet.
     const seen = await recordAct(keep, 1200);
-    expect(seen.join(" ")).toMatch(/act--keep is-play/);
+    expect(seen.join(" ")).toMatch(/act--send is-play/);
     await expect(page.locator("canvas.confetti")).toHaveCount(1);
     await expect(cards).toHaveCount(before - 1);
   });
 
-  test("a refused Keep (caption too long) only shakes: never the heart", async ({ page }) => {
+  test("a refused Upload (caption too long) only shakes: never the plane", async ({ page }) => {
     const card = page.locator(".review-card").first();
     await card.getByRole("tab", { name: "X" }).click();
     await card.getByLabel("X caption").fill("x".repeat(300));
-    const keep = card.getByRole("button", { name: "Keep", exact: true });
+    const keep = card.getByRole("button", { name: /^Upload( to .+)?$/ });
     const phases = (await recordAct(keep, 200)).join(" ");
     expect(phases).toContain("is-fail");
     expect(phases).not.toContain("is-play");
     await expect(page.getByText(/longer than its platform allows/)).toBeVisible();
   });
 
-  test("a Keep that does not finish shakes the Try again glyph", async ({ page }) => {
+  test("an Upload that does not finish shakes the Try again glyph", async ({ page }) => {
     await page.evaluate(() => {
       (window as MockWindow).__cfMockFaults!.keepStopsAfterSave = 1;
     });
     const card = page.locator(".review-card").first();
-    await card.getByRole("button", { name: "Keep", exact: true }).click();
-    const again = card.getByRole("button", { name: "Try again" });
+    await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
+    const again = card.getByRole("button", { name: "Try again", exact: true });
     await expect(again).toHaveAttribute("data-act", "retry");
     await expect(again.locator(".act")).toHaveClass(/is-fail/);
     // No success visuals on failure.
@@ -184,13 +184,17 @@ test.describe("motion: Review (APPLY a)", () => {
 
   test("caption tabs bump the chosen name; the checks chevron turns with the state", async ({ page }) => {
     const card = page.locator(".review-card").first();
-    const x = card.getByRole("tab", { name: "X" });
-    await expect(x).toHaveAttribute("data-act", "toggle");
-    const { cls } = await tapAct(x);
+    const tiktok = card.getByRole("tab", { name: "TikTok" });
+    await expect(tiktok).toHaveAttribute("data-act", "toggle");
+    const { cls } = await tapAct(tiktok);
     expect(cls.split(" ")).toEqual(expect.arrayContaining(["act--toggle", "is-play"]));
+    await expect(tiktok).toHaveAttribute("aria-selected", "true");
+    const x = card.getByRole("tab", { name: "X" });
+    await x.click();
     await expect(x).toHaveAttribute("aria-selected", "true");
-    // The name stays readable to screen readers.
-    await expect(x.locator(".tab__label")).not.toHaveAttribute("aria-hidden", "true");
+    // X's mark already reads "X": no visible "X X", and the name is still the tab's accessible name.
+    await expect(x.locator(".tab__label")).toHaveCount(0);
+    await expect(x).toHaveAttribute("aria-label", "X");
 
     const chev = card.locator(".checklist__chev");
     await expect(chev).toHaveClass(/act-turn/);

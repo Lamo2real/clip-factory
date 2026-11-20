@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../../api/index.ts";
 import { Glide } from "../../components/Glide.tsx";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Clip, Learning, Post, TikTokPostOptions } from "../../api/types.ts";
+import type { Clip, Learning, Platform, Post, TikTokPostOptions } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -16,7 +16,7 @@ import { useLiveEvents } from "../../lib/live.ts";
 import { useAction } from "../../lib/motion.ts";
 import { applyClipEvent, applyLearningEvent, applyPostEvent, withMedia } from "../../lib/liveCache.ts";
 import { SimilarClips } from "../../components/SimilarClips.tsx";
-import { keepClip, keptMessage, needsKeepAgain, needsTikTokChoices, STILL_WORKING } from "../../lib/keep.ts";
+import { needsTikTokChoices, needsUploadAgain, STILL_WORKING, uploadClip, uploadedMessage } from "../../lib/upload.ts";
 import { TikTokSheet } from "../review/TikTokSheet.tsx";
 import { ClipStatusPill } from "../jobs/JobDetail.tsx";
 
@@ -55,7 +55,7 @@ export function Library({ view = "all", week = null }: { view?: "all" | "week"; 
         lede={
           view === "week"
             ? "This week's clips, most views first. Star the ones that did best, and Clip Factory learns how to make more like them."
-            : "Clips you kept and posted. Tap a clip to see how it did on each app."
+            : "Clips you uploaded. Tap a clip to see how it did on each app."
         }
       />
       <nav className="lib-tabs" aria-label="Library views">
@@ -215,13 +215,13 @@ function AllClips() {
 export function libraryEmptyCopy(filter: Filter, anyKept: boolean): { title: string; body: string; action: "review" | "all" | null } {
   if (!anyKept) {
     return {
-      title: filter === "posted" ? "Nothing posted yet" : "Nothing kept yet",
-      body: "Clips you keep show up here. Tap Go to Review and tap Keep on the ones you like.",
+      title: "Nothing uploaded yet",
+      body: "Clips you upload show up here. Tap Go to Review and tap Upload on the ones you like.",
       action: "review",
     };
   }
-  if (filter === "waiting") return { title: "Everything is posted!", body: "Every clip you kept is out. Nice! Tap Show all to see them.", action: "all" };
-  return { title: "Nothing posted yet", body: "Your kept clips show up here once they are posted. Tap Show all to see how they are doing.", action: "all" };
+  if (filter === "waiting") return { title: "Everything is posted!", body: "Every clip you uploaded is out. Nice! Tap Show all to see them.", action: "all" };
+  return { title: "Nothing posted yet", body: "Your clips show up here once they are uploaded. Tap Show all to see how they are doing.", action: "all" };
 }
 
 function LibraryEmpty({ filter, anyKept, onShowAll }: { filter: Filter; anyKept: boolean; onShowAll: () => void }) {
@@ -268,7 +268,7 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
           </h3>
           <span className="muted small">
             {MOMENT_LABEL[clip.momentType]}
-            {clip.decidedAt ? ` · kept ${relative(clip.decidedAt)}` : ""}
+            {clip.decidedAt ? ` · uploaded ${relative(clip.decidedAt)}` : ""}
           </span>
           <ClipStatusPill status={clip.status} />
         </div>
@@ -298,10 +298,12 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
               <span className="post__text">
                 <span className="post__name">{PLATFORM_LABEL[p.platform]}</span>
                 <span className="post__status clamp-2">
-                  {p.status === "failed" && p.error ? p.error : postStatusLabel(p)}
+                  {p.status === "failed" && p.error ? `${postStatusLabel(p)}. ${p.error}` : postStatusLabel(p)}
                   {p.status === "posted" && !p.metrics && p.perfCheckAt ? ` · numbers ${relative(p.perfCheckAt)}` : ""}
                 </span>
               </span>
+              {/* One place did not work on an uploaded clip: Try again for that place only (§33). */}
+              {p.status === "failed" && clip.status === "posted" ? <UploadAgain clip={clip} posts={posts} platform={p.platform} onKept={onKept} /> : null}
               {p.metrics ? (
                 <span className="post__metrics">
                   {/* A plain span cannot carry an aria-label: the numbers are read from this text instead. */}
@@ -330,31 +332,43 @@ function LibraryCard({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKep
             </li>
           ))}
         </ul>
-      ) : needsKeepAgain(clip, posts) ? null : (
+      ) : needsUploadAgain(clip, posts) ? null : (
         <p className="muted small">No posts yet.</p>
       )}
-      {needsKeepAgain(clip, posts) || clip.status === "failed" ? <KeepAgain clip={clip} posts={posts} onKept={onKept} /> : null}
+      {needsUploadAgain(clip, posts) || clip.status === "failed" ? <UploadAgain clip={clip} posts={posts} onKept={onKept} /> : null}
       <SimilarClips clipId={clip.clipId} />
     </article>
   );
 }
 
 /**
- * A kept clip whose posting never started (the Keep stopped half way), or whose posts all failed: one big button
- * tries again. When TikTok wants its privacy picked again, the Post to TikTok sheet opens first and its choices go
- * with the Try again (§14.5, §17.8).
+ * An uploaded clip whose posting never started (the Upload stopped half way), or whose posts all failed: one big
+ * button tries again. With `platform`, a small Try again for that one place on a clip that went up elsewhere (§33).
+ * When TikTok wants its privacy picked again, the Post to TikTok sheet opens first and its choices go with the Try
+ * again (§14.5, §17.8).
  */
-export function KeepAgain({ clip, posts, onKept }: { clip: Clip; posts: Post[]; onKept: (clip: Clip, posts: Post[]) => void }) {
+export function UploadAgain({
+  clip,
+  posts,
+  platform,
+  onKept,
+}: {
+  clip: Clip;
+  posts: Post[];
+  platform?: Platform;
+  onKept: (clip: Clip, posts: Post[]) => void;
+}) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [sheet, setSheet] = useState(false);
-  const failed = clip.status === "failed";
+  const failed = clip.status === "failed" || !!platform;
   // §20: the retry turn plays at the tap; an error (already said by the toast) shakes it, without a second deny.
   const act = useAction("retry");
+  const mine = platform ? posts.filter((p) => p.platform === platform) : posts;
 
   function press() {
-    if (failed && needsTikTokChoices(posts)) setSheet(true);
+    if (failed && needsTikTokChoices(mine)) setSheet(true);
     else void tryAgain();
   }
 
@@ -362,10 +376,10 @@ export function KeepAgain({ clip, posts, onKept }: { clip: Clip; posts: Post[]; 
     setBusy(true);
     setNote("");
     try {
-      const out = await keepClip(api(), clip.clipId, undefined, tiktok);
-      if (out.kind === "kept") {
+      const out = await uploadClip(api(), clip.clipId, undefined, tiktok, platform ? [platform] : undefined);
+      if (out.kind === "uploading") {
         setSheet(false);
-        toast.success(failed ? "Trying again! Posting now." : keptMessage(out.posts));
+        toast.success(platform ? `Trying ${PLATFORM_LABEL[platform]} again!` : failed ? "Trying again! Uploading now." : uploadedMessage(out.posts));
         onKept(out.clip, out.posts);
         return;
       }
@@ -382,11 +396,28 @@ export function KeepAgain({ clip, posts, onKept }: { clip: Clip; posts: Post[]; 
     }
   }
 
+  const sheetEl = sheet ? (
+    <TikTokSheet clip={clip} caption={clip.captions.tiktok} action="Try again" onUpload={(options) => void tryAgain(options)} onClose={() => setSheet(false)} busy={busy} />
+  ) : null;
+  if (platform)
+    return (
+      <span className="post__retry">
+        <Button size="sm" variant="glass" icon="retry" act={act} loading={busy && !sheet} onClick={press} aria-label={`Try again, ${PLATFORM_LABEL[platform]}`}>
+          Try again
+        </Button>
+        {note ? (
+          <span className="sr-only" role="status">
+            {note}
+          </span>
+        ) : null}
+        {sheetEl}
+      </span>
+    );
   return (
     <div className="keep-again">
       <p className="keep-again__text">
         <Icon name="alert" size={18} />
-        <span>{failed ? "Posting did not work. Tap Try again." : "This clip has not started posting yet. Tap Try again."}</span>
+        <span>{clip.status === "failed" ? "Uploading did not work. Tap Try again." : "This clip has not started uploading yet. Tap Try again."}</span>
       </p>
       <Button variant="primary" icon="retry" act={act} loading={busy && !sheet} onClick={press} aria-describedby={`keep-note-${clip.clipId}`}>
         Try again
@@ -394,16 +425,7 @@ export function KeepAgain({ clip, posts, onKept }: { clip: Clip; posts: Post[]; 
       <p className="keep-again__note" id={`keep-note-${clip.clipId}`} role="status">
         {note}
       </p>
-      {sheet ? (
-        <TikTokSheet
-          clip={clip}
-          caption={clip.captions.tiktok}
-          action="Try again"
-          onKeep={(options) => void tryAgain(options)}
-          onClose={() => setSheet(false)}
-          busy={busy}
-        />
-      ) : null}
+      {sheetEl}
     </div>
   );
 }

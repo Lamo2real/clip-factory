@@ -16,14 +16,14 @@
    Edit it, read it back, delete it and Undo, then delete it for good.
 8. Open **Get the app** on a Mac and on Windows; download, follow the first-open hint, and check that Get the app is
    gone inside the desktop app. On an iPhone, follow the three steps.
-9. Keep a clip and open it from Library: five stacks read "Waiting for connection" with a link to Set up posting; Refresh
+9. Upload a clip and open it from Library: five stacks read "Waiting for connection" with a link to Set up posting; Refresh
    numbers answers without calling any platform. In CloudWatch Logs, `/aws/lambda/cf-prod-stats` shows a `stats.tick`
    line every 15 minutes. In Library › This week, star the clip: "Learning from your picks…" turns into a "Best of
    week" learning within a minute or two.
 10. Set up posting ([SETUP_POSTING.md](SETUP_POSTING.md)): open `{app_url}/about.html`, `/legal/privacy.html` and
    `/legal/terms.html` without signing in. Set up YouTube to the end, press **Check it**, then **Connect YouTube**: you
    come back with confetti and "Connected as …". In Secrets Manager (eu-north-1) you see `cf-prod/platforms/youtube/app`
-   and `…/token`; in DynamoDB the `ACCOUNT#youtube` item has no token. Keep a short clip with **Only me** picked in
+   and `…/token`; in DynamoDB the `ACCOUNT#youtube` item has no token. Upload a short clip with **Only me** picked in
    "Who can see your clips": it appears on the channel as a private Short and the clip page shows its link. Press
    **Disconnect**, wait 8 s: the token secret is gone. Then the other four platforms the same way (X costs a little).
 11. Push a small change with an `Area:` line; within 5 minutes the open app (browser and desktop app) shows the update

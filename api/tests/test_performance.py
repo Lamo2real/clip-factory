@@ -215,7 +215,7 @@ def test_performance_404_before_keep_or_after_throw_away(call: Call, store: db.S
     clip = seed_clip(store, status=status)
     code, body = call("GET", f"/v1/clips/{clip['clipId']}/performance")
     assert code == 404
-    assert body["error"] == {"code": "not_found", "message": "This clip has no numbers yet. Keep it first."}
+    assert body["error"] == {"code": "not_found", "message": "This clip has no numbers yet. Upload it first."}
     code, _ = call("POST", f"/v1/clips/{clip['clipId']}/stats/refresh", {})
     assert code == 404
 

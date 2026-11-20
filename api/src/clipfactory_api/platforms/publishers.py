@@ -342,7 +342,7 @@ class TikTokPublisher:
             limit = creator.get("max_video_post_duration_sec")
             duration = job.clip.get("durationSec")
             if isinstance(limit, int | float) and isinstance(duration, int | float) and duration > limit:
-                raise PublishError("This clip is longer than TikTok allows for your account. Keep a shorter one.")
+                raise PublishError("This clip is longer than TikTok allows for your account. Upload a shorter one.")
             size = job.video.size
             chunk_size, count = tiktok_chunks(size)
             data = self._post(

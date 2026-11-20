@@ -28,7 +28,7 @@ all follow it, never the API's row order.
 `HTTP API` keeps its single `ANY /v1/{proxy+}` route: no API Gateway change.
 
 **GET `/v1/clips/{clipId}/performance`** → `200 ClipPerformance`. 404 `not_found` when the clip is not the caller's
-or its status is `review`/`declined` ("This clip has no numbers yet. Keep it first."). Reads: the Clip, its Posts
+or its status is `review`/`declined` ("This clip has no numbers yet. Upload it first."). Reads: the Clip, its Posts
 (gsi1 `CLIP#{clipId}`), the Accounts, the STAT# snapshots of each post (Query `begins_with(sk, "STAT#{postId}#")`,
 `ScanIndexForward = false`, `Limit 500`, re-sorted oldest first, then downsampled to ≤ 60 points evenly by time,
 the last point always kept).

@@ -65,7 +65,7 @@ them. `{app}` is your Clip Factory address and `{hooks}` is its sign-in return a
 | Name on the card | What it is |
 |---|---|
 | App name | `Clip Factory` (Facebook: `Clip Factory Pages`) |
-| Description | "Clip Factory turns my gameplay recordings into short vertical clips and posts them to my own accounts when I press Keep." |
+| Description | "Clip Factory turns my gameplay recordings into short vertical clips and posts them to my own accounts when I press Upload." |
 | Website | `{app}/about.html` |
 | Website prefix (TikTok) | `{app}/` |
 | Privacy Policy | `{app}/legal/privacy.html` |
@@ -317,7 +317,7 @@ video.** So fill in steps 7 to 13 first, and press Save only in step 13.
 #### 13. Fill in App review, then Save
 - Open **App review**. Copy the TikTok review text from Clip Factory and paste it. It says, one line per permission:
   "user.info.basic (Login Kit): connect my TikTok and show my name and picture in Clip Factory.
-  video.publish: post clips I approved with Keep straight to my own TikTok (Direct Post).
+  video.publish: post clips I approved with Upload straight to my own TikTok (Direct Post).
   video.upload: comes with Content Posting API. Clip Factory does not ask for it; it only uses Direct Post.
   video.list: show the views and likes of my own posts on my Clip Factory dashboard.
   user.info.stats: show my follower and like totals on my Clip Factory money tile, only after I say OK."
@@ -369,7 +369,7 @@ stay private until TikTok approves the app.
 #### 21. Record the real demo video
 - Record your screen while you use Clip Factory, connected in the Sandbox. Show:
   open Clip Factory, press **Connect TikTok**, TikTok's **Authorize** screen,
-  press **Keep** on a clip, pick in the **Post to TikTok** sheet, and Keep,
+  press **Upload** on a clip, pick in the **Post to TikTok** sheet, and Upload,
   then the post arriving on your TikTok.
 - You can send up to 5 videos, 50 MB each.
 
@@ -406,9 +406,9 @@ stay private until TikTok approves the app.
 | "TikTok did not answer. Try again in a few minutes." | Wait, then press **Connect TikTok**. |
 | "Finish the TikTok review steps to post outside the Sandbox." | Do steps 21 to 23. |
 
-**Every time you press Keep** with TikTok connected, a **Post to TikTok** sheet opens first. Pick who can see it on
+**Every time you press Upload** with TikTok picked, a **Post to TikTok** sheet opens first. Pick who can see it on
 TikTok (there is no default, TikTok's rule), choose the Comments, Duet and Stitch switches, and say if the clip is
-promotional. Then Keep. TikTok can take a few minutes to process your clip.
+promotional. Then Upload. TikTok can take a few minutes to process your clip.
 
 If a clip says "Pick who can see it on TikTok again, then press Try again.", press **Try again** on the clip. The
 **Post to TikTok** sheet opens first. Pick again, then press the vermilion-red button on the sheet.
@@ -522,7 +522,7 @@ the two from getting in each other's way.
 ### Part 4: Go public
 
 #### 12. Post one test clip
-- Keep one clip. Instagram may take a few minutes to show it.
+- Upload one clip. Instagram may take a few minutes to show it.
 - Numbers can take 2 days.
 - Status: "Works now."
 - If you see your Reels missing for other people: tell Clip Factory support; Meta may want the app Live.

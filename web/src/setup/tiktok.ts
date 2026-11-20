@@ -253,7 +253,7 @@ export const tiktok: SetupGuide = {
           say: [
             "Record your screen while you use Clip Factory, connected in the Sandbox.",
             "Show: open Clip Factory, press **Connect TikTok**, TikTok's **Authorize** screen.",
-            "Then press **Keep** on a clip, pick in the **Post to TikTok** sheet, and Keep.",
+            "Then press **Upload** on a clip, pick in the **Post to TikTok** sheet, and Upload.",
             "Then show the post arriving on your TikTok.",
           ],
           copy: [{ label: "About page", value: { ref: "websiteUrl" } }],

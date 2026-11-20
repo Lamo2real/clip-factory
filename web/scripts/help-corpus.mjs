@@ -260,7 +260,7 @@ const PAGES = [
     blurb: "A job's page shows each step as your clips are made. Tap a job in Jobs to open it.",
   },
   { name: "review", path: "/review", nav: "review", title: "Review", words: ["check clips"], blurb: "Review is where you check new clips." },
-  { name: "library", path: "/library", nav: "library", title: "Library", words: ["kept clips", "posted clips"], blurb: "Library has every clip you kept." },
+  { name: "library", path: "/library", nav: "library", title: "Library", words: ["kept clips", "posted clips"], blurb: "Library has every clip you uploaded." },
   {
     name: "clip",
     path: "/library",

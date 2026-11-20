@@ -70,7 +70,7 @@ it's slow in and slow out, but in the middle, it's really quick ... so that the 
 - AC1: Every screen has one obvious next step: exactly one main vermilion button (the update bar's Reload is the only extra).
 - AC2: Tap targets are at least 48 × 48 px on phones.
 - AC3: Buttons show an icon **and** a word (the phone tab bar is the one icon-only place, UX-06).
-- AC4: Words are short and everyday: "Make clips", "Keep", "Throw away", "Try again". No jargon on screen.
+- AC4: Words are short and everyday: "Make clips", "Upload", "Throw away", "Try again". No jargon on screen.
 - AC5: Empty screens say exactly what to tap ("Nothing here yet. Tap **Make clips** to start.").
 - AC6: No dead ends: every screen has a way forward or back, and every error says what to do next.
 - AC7: Throwing something away shows a toast with **Undo** for 8 seconds instead of an "Are you sure?" dialog; the

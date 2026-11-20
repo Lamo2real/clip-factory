@@ -228,7 +228,7 @@ describe("mock stats", () => {
     for (const want of ["posted+numbers", "posted", "posted_private", "waiting_for_connection", "posting", "failed", "not_posted"])
       expect(states).toContain(want);
     const review = store.clips.find((c) => c.status === "review")!;
-    expect(() => s.performance(review.clipId)).toThrow(/Keep it first/);
+    expect(() => s.performance(review.clipId)).toThrow(/Upload it first/);
   });
 
   it("refreshes, then says too soon until the cooldown passes; numbers arrive as post events", () => {

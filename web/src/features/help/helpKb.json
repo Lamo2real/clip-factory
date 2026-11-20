@@ -190,21 +190,25 @@
       "id": "review-keep",
       "route": "/review",
       "where": "Review",
-      "title": "What Keep does",
+      "title": "What Upload does",
       "keywords": [
+        "upload",
+        "what does upload do",
         "keep",
         "what does keep do",
         "approve",
         "confirm",
         "save clip",
         "post clip",
-        "yes"
+        "yes",
+        "post to many",
+        "post everywhere"
       ],
-      "answer": "**Keep** says yes to a clip. It goes in line to be posted to the places you picked. Nothing is posted until you tap **Keep**.",
+      "answer": "**Upload** says yes to a clip. It goes up to every place you picked under **Upload to**, each with its own caption. Nothing is posted until you tap **Upload**.",
       "steps": [
         "Tap **Review**.",
-        "Watch the clip.",
-        "Tap **Keep** to post it, or **Throw away** if you do not like it."
+        "Under **Upload to**, turn on each place you want.",
+        "Tap **Upload** to post it, or **Throw away** if you do not like it."
       ],
       "actions": [
         {
@@ -212,11 +216,45 @@
           "label": "Open Review",
           "to": "/review",
           "highlight": [
-            "keep"
+            "upload"
           ]
         }
       ],
       "suggest": true
+    },
+    {
+      "id": "review-upload-to",
+      "route": "/review",
+      "where": "Review › a clip › Upload to",
+      "title": "Upload to many places at once",
+      "keywords": [
+        "upload to",
+        "many places",
+        "all platforms",
+        "select platforms",
+        "pick platforms",
+        "more than one",
+        "only one platform",
+        "x not showing",
+        "why is x missing",
+        "set up x"
+      ],
+      "answer": "On each clip, **Upload to** shows every place that is set up. Turn on as many as you like, then tap **Upload**. A place that is not set up yet does not show; set it up in **Set up posting**.",
+      "steps": [
+        "Tap **Review**.",
+        "Under **Upload to**, tap each place to turn it on or off.",
+        "Tap **Upload**."
+      ],
+      "actions": [
+        {
+          "id": "review-upload-to:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "upload-to"
+          ]
+        }
+      ]
     },
     {
       "id": "review-throw-away",
@@ -257,7 +295,7 @@
       "id": "review-captions",
       "route": "/review",
       "where": "Review › a clip › captions",
-      "title": "Change a caption before Keep",
+      "title": "Change a caption before Upload",
       "keywords": [
         "caption",
         "captions",
@@ -270,12 +308,12 @@
         "tiktok caption",
         "instagram caption"
       ],
-      "answer": "Each clip has its own caption for every place it posts. Change them on the clip in **Review** before you tap **Keep**. They save by themselves.",
+      "answer": "Each clip has its own caption for every place it goes. Change them on the clip in **Review** before you tap **Upload**. They save by themselves.",
       "steps": [
         "Tap **Review**.",
         "Under the clip, tap the place, like **TikTok**.",
         "Type your new caption.",
-        "Tap **Keep** when it looks right."
+        "Tap **Upload** when it looks right."
       ],
       "actions": [
         {
@@ -301,7 +339,7 @@
         "new clips",
         "review count"
       ],
-      "answer": "New clips wait in **Review** until you **Keep** or **Throw away** each one.",
+      "answer": "New clips wait in **Review** until you **Upload** or **Throw away** each one.",
       "steps": [
         "Tap **Review** to check them one by one."
       ],
@@ -322,31 +360,31 @@
     },
     {
       "id": "clip-posting-failed",
-      "route": "/review",
-      "where": "Review",
-      "title": "Posting a kept clip failed",
+      "route": "/library",
+      "where": "Library",
+      "title": "Uploading a clip did not work",
       "keywords": [
         "posting failed",
         "post failed",
         "did not post",
         "not posted",
         "keep failed",
-        "keeping did not finish"
+        "keeping did not finish",
+        "upload failed",
+        "did not upload",
+        "try again one place"
       ],
-      "answer": "If posting a kept clip fails, its page says so. Go to **Review** and tap **Try again** on that clip.",
+      "answer": "If one place did not work, the clip in **Library** says **Didn't work** with the reason, and that place has its own **Try again**.",
       "steps": [
-        "Tap **Review**.",
-        "Find the clip that says it did not finish.",
-        "Tap **Try again**."
+        "Tap **Library**.",
+        "Find the place that says **Didn't work**.",
+        "Tap **Try again** next to it."
       ],
       "actions": [
         {
           "id": "clip-posting-failed:review",
-          "label": "Open Review",
-          "to": "/review",
-          "highlight": [
-            "try-again"
-          ]
+          "label": "Open Library",
+          "to": "/library"
         }
       ]
     },
@@ -644,7 +682,7 @@
         "total clips",
         "kept clips"
       ],
-      "answer": "**Library** lists every clip you kept and posted.",
+      "answer": "**Library** lists every clip you uploaded.",
       "steps": [
         "Tap **Library**."
       ],
@@ -959,7 +997,7 @@
       "answer": "TikTok shows posts from Clip Factory privately until Clip Factory's TikTok app is approved. Your clip is posted, only you can see it for now, and its numbers come after.",
       "steps": [
         "Open the clip in **Library**.",
-        "TikTok says **Posted privately**. That is normal for now."
+        "TikTok says **Uploaded privately**. That is normal for now."
       ],
       "actions": [
         {
@@ -1301,7 +1339,7 @@
       "route": "/settings/posting/where",
       "hash": "post-to",
       "where": "Settings › Posting › Where clips go",
-      "title": "Where kept clips get posted",
+      "title": "Which places start switched on",
       "keywords": [
         "where clips go",
         "choose platforms",
@@ -1311,7 +1349,7 @@
         "platforms",
         "where posted"
       ],
-      "answer": "In **Where clips go** you pick the places your kept clips are posted. Pick at least one.",
+      "answer": "In **Where clips go** you pick the places that start switched on for new clips. On each clip you can still turn places on or off under **Upload to**.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Where clips go**.",
@@ -2108,7 +2146,7 @@
         "about clip factory",
         "what is this"
       ],
-      "answer": "Clip Factory turns your long streams and videos into short clips. You check each clip, tap **Keep**, and it posts them for you.",
+      "answer": "Clip Factory turns your long streams and videos into short clips. You check each clip, tap **Upload**, and it posts them for you.",
       "steps": [
         "Paste a link on **Home** and tap **Make clips**.",
         "Check your new clips in **Review**."
@@ -2142,7 +2180,7 @@
         "see my clips",
         "see my videos"
       ],
-      "answer": "Every clip you kept is in **Library**. New clips you have not checked yet wait in **Review**.",
+      "answer": "Every clip you uploaded is in **Library**. New clips you have not checked yet wait in **Review**.",
       "steps": [
         "Tap **Library**.",
         "Tap a clip to see how it does."

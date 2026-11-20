@@ -114,6 +114,8 @@ export interface Clip {
   pickedFor?: string;
   /** Sum of the posted posts' views; absent when nothing was measured yet. */
   totalViews?: number;
+  /** The places the owner picked on Upload, in STATS_ORDER (§33). Absent on clips uploaded before §33. */
+  uploadTo?: Platform[];
 }
 
 /** One skill (docs/CONTRACTS.md §5, §18). Every skill is always used: there is no on/off switch. */
@@ -352,7 +354,7 @@ export interface TikTokCreator {
   maxDurationSec: number;
 }
 
-/** What the Post to TikTok sheet adds to Keep (§17.8). */
+/** What the Post to TikTok sheet adds to Upload (§17.8). */
 export interface TikTokPostOptions {
   privacyLevel: string;
   disableComment: boolean;
@@ -1015,7 +1017,16 @@ export interface Api {
   getClip(clipId: string): Promise<Clip>;
   updateClip(clipId: string, captions: Partial<Captions>): Promise<Clip>;
   /** `tiktok` carries the Post to TikTok sheet's choices (§17.8). */
-  confirmClip(clipId: string, captions?: Partial<Captions>, tiktok?: TikTokPostOptions): Promise<{ clip: Clip; posts: Post[] }>;
+  /**
+   * Upload a clip (§14.5, §33). `platforms`: exactly where it goes (each must be set up); left out, Settings › Where
+   * clips go decides (older clients). On an uploaded clip, `platforms` names the failed places to try again.
+   */
+  confirmClip(
+    clipId: string,
+    captions?: Partial<Captions>,
+    tiktok?: TikTokPostOptions,
+    platforms?: Platform[],
+  ): Promise<{ clip: Clip; posts: Post[] }>;
   declineClip(clipId: string): Promise<Clip>;
   /** GET /v1/skills: built-ins first, then the owner's, by name (§18.3). */
   listSkills(): Promise<Skill[]>;

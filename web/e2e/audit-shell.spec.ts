@@ -37,9 +37,9 @@ test.describe("job page", () => {
     await expect(page.locator(".toast--error")).toHaveCount(0);
   });
 
-  test("F023: kept tiles open the clip's page and a thrown-away tile is not a link", async ({ page }) => {
+  test("F023: uploading tiles open the clip's page and a thrown-away tile is not a link", async ({ page }) => {
     await openJob(page, "Heist night");
-    const kept = page.locator("a.clip-tile", { hasText: "Kept" }).first();
+    const kept = page.locator("a.clip-tile", { hasText: "Uploading" }).first();
     await expect(kept).toHaveAttribute("href", /^\/clips\/[0-9A-Z]{26}$/);
     const thrown = page.locator(".clip-tile", { hasText: "Thrown away" }).first();
     await expect(thrown).toHaveJSProperty("tagName", "DIV");
