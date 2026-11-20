@@ -75,12 +75,18 @@ MODEL_ACCESS_MESSAGE = (
 )
 
 
+_MODEL_OPERATIONS = frozenset({"Converse", "ConverseStream", "InvokeModel", "InvokeModelWithResponseStream"})
+
+
 def model_unavailable(e: BaseException) -> bool:
     """True when Bedrock refused a call because the model cannot be used here (access, existence or offer), not
     because the request or the moment was wrong (docs/DECISIONS.md ADR-42)."""
     response = getattr(e, "response", None)
     if not isinstance(response, dict):
         return False
+    op = getattr(e, "operation_name", None)
+    if op and op not in _MODEL_OPERATIONS:
+        return False  # DynamoDB, Secrets Manager, KMS, S3 ...: an access problem there is not the model's
     err = response.get("Error") or {}
     code = str(err.get("Code") or "")
     if code in _UNAVAILABLE_CODES:
@@ -163,7 +169,9 @@ class Bedrock:
             client = boto3.client(
                 "bedrock-runtime",
                 region_name=region,
-                config=Config(connect_timeout=10, read_timeout=600, retries={"max_attempts": 4, "mode": "adaptive"}),
+                config=Config(
+                    connect_timeout=10, read_timeout=CALL_SECONDS, retries={"max_attempts": 1, "mode": "adaptive"}
+                ),
             )
         self.client = client
         self.forced_tool_choice = True

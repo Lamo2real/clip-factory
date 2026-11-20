@@ -340,10 +340,16 @@ async def check_all(
 
     tasks.extend(asyncio.create_task(run(i)) for i in range(len(order)))
     try:
-        i = 0
-        while i < len(tasks):  # a spare's check joins the list while earlier ones run
-            await tasks[i]
-            i += 1
+        while True:  # a spare's check joins the list while earlier ones run; a fatal error in any is seen at once
+            pending = [t for t in tasks if not t.done()]
+            if not pending:
+                break
+            done, _ = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for t in done:
+                if t.cancelled():
+                    raise asyncio.CancelledError
+                if t.exception() is not None:
+                    raise t.exception()  # type: ignore[misc]
     finally:
         for t in tasks:
             if not t.done():

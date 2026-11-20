@@ -76,8 +76,11 @@ MAX_CLIP_DEATHS = 2
 # check (review, measuring, one re-cut) 1-4 minutes. A clip whose check can't finish is swapped for a spare like any
 # clip that can't be checked; the job always goes on to Write the captions and Finish up.
 CHECK_CONCURRENCY = 3
-CHECK_CLIP_SECONDS = 25 * 60
-REVIEW_SECONDS = 12 * 60
+# A clip's check is timed in two parts: the review and measuring (``CHECK_CLIP_SECONDS``), and each cut, which starts
+# only once a cutting slot is taken and may wait out the whole-video download (``CUT_SECONDS``, above its 90 min).
+CHECK_CLIP_SECONDS = 35 * 60
+CUT_SECONDS = 100 * 60
+REVIEW_SECONDS = 24 * 60  # two Converse tries (bedrock.CALL_SECONDS), well below the clip limit
 CHECK_EXPECTED = 120.0  # how long one clip's check usually takes: moves the bar between finished checks
 CAPTIONS_SECONDS = 15 * 60
 UNCHECKED = "This clip could not be checked; look at it yourself before posting."
@@ -1709,10 +1712,14 @@ class Pipeline:
             }
 
     async def _check_one(self, st: JobState, c: Candidate, index: int, gate: RenderGate | None = None) -> Outcome:
-        review = await self._review(st, c)
-        items = measured_items(
-            c.moment, c.render, await measure(c.render.video), st.length, has_speech=self._has_speech(st, c.moment)
-        ) + judged_items(review)
+        async def first() -> tuple[dict[str, Any], list[Item]]:
+            review = await self._review(st, c)
+            items = measured_items(
+                c.moment, c.render, await measure(c.render.video), st.length, has_speech=self._has_speech(st, c.moment)
+            ) + judged_items(review)
+            return review, items
+
+        review, items = await asyncio.wait_for(first(), CHECK_CLIP_SECONDS)
         if review.get("verdict") == "drop":
             return Outcome(False, Candidate(c.moment, c.render, items, index=index), "Claude judged it unfixable.")
         fixes: list[str] = []
@@ -1722,14 +1729,18 @@ class Pipeline:
             )
             if fixes:
                 async with gate or contextlib.nullcontext():
-                    c = await self._cut(st, fixed, index, layout=c.render.frame_layout)
-                measured = measured_items(
-                    c.moment,
-                    c.render,
-                    await measure(c.render.video),
-                    st.length,
-                    has_speech=self._has_speech(st, c.moment),
-                )
+                    # The timer starts once the slot is taken: waiting for one is not the cut's time.
+                    async def recut() -> tuple[Candidate, list[Item]]:
+                        cut = await self._cut(st, fixed, index, layout=c.render.frame_layout)
+                        return cut, measured_items(
+                            cut.moment,
+                            cut.render,
+                            await measure(cut.render.video),
+                            st.length,
+                            has_speech=self._has_speech(st, cut.moment),
+                        )
+
+                    c, measured = await asyncio.wait_for(recut(), CUT_SECONDS)
                 # Claude's judgement stands, except for what the fix addressed.
                 judged = judged_items(
                     {
@@ -1780,9 +1791,9 @@ class Pipeline:
             running[c.index] = t0 = loop.time()
             say()
             try:
-                out = await asyncio.wait_for(self._check_one(st, c, c.index, gate), CHECK_CLIP_SECONDS)
+                out = await self._check_one(st, c, c.index, gate)
             except TimeoutError:
-                log("warn", "checklist.clip_timed_out", job=st.job_id, index=c.index, seconds=CHECK_CLIP_SECONDS)
+                log("warn", "checklist.clip_timed_out", job=st.job_id, index=c.index, seconds=round(loop.time() - t0))
                 out = Outcome(False, c, "The clip could not be checked in time.")
             except (UserFacingError, TransientError, ModelError, proc.CommandError, OSError, ValueError) as e:
                 # One clip that can't be checked or re-cut is replaced by a spare; it never fails the job.
@@ -1817,7 +1828,7 @@ class Pipeline:
             next_index += 1
             try:
                 async with gate:
-                    c = await asyncio.wait_for(self._cut(st, m, next_index - 1), CHECK_CLIP_SECONDS)
+                    c = await asyncio.wait_for(self._cut(st, m, next_index - 1), CUT_SECONDS)
                 log("info", "checklist.spare_cut", job=st.job_id, index=c.index)
                 return c
             except JobCanceled:
@@ -1858,10 +1869,14 @@ class Pipeline:
             # Nothing passed only because nothing could be checked (not because the clips are bad): the clips go
             # on to the owner as they are, each saying so, rather than the job failing with nothing.
             log("warn", "checklist.kept_unchecked", job=st.job_id, clips=len(unchecked))
+            unchecked = sorted(unchecked, key=lambda c: c.index)[: len(st.chosen)]  # the clips first, then spares
             passed = [
                 Candidate(c.moment, c.render, [Item("checked", "Checked", False, UNCHECKED)], [], index=c.index)
                 for c in unchecked
             ]
+            st.candidates = passed
+            await self._save_checked(st)
+            return f"{count(len(passed), 'clip')} could not be checked; look at each one before posting."
         st.candidates = passed
         await self._save_checked(st)
         replaced = sum(1 for c in passed if c.index >= len(st.chosen))
@@ -1971,7 +1986,7 @@ class Pipeline:
     async def _items_again(self, st: JobState, c: Candidate) -> list[Item]:
         """The checks of a clip that passed in an earlier run whose results were not saved: the measured ones again,
         and Claude's review as passed (it did, or the clip would not be in ``clips.json``)."""
-        passed = Item("review", "Claude's review", True, "Passed Claude's review on the run before.")
+        passed = Item("review", "Claude's review", True, "Kept by the check on the run before.")
         try:
             got = await measure(c.render.video)
         except (proc.CommandError, OSError, ValueError) as e:

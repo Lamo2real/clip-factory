@@ -45,8 +45,9 @@ WORKING_CAP = 0.99
 # The step watchdog: a step that shows no sign of life (no progress, no new note) for this long is ended with a plain
 # message instead of hanging while the heartbeat keeps the job "running" (owner report 2026-11-20). Every limit is
 # far above the longest quiet stretch a healthy step has: each step reports at least per clip, per chunk or per
-# download tick, and every call inside has its own, shorter time limit (ffmpeg 30 min, a model call 20 min, a clip
-# check 25 min). Seconds.
+# download tick, and every call inside has its own time limit (ffmpeg 30 min, one model try 12 min, a review 24 min,
+# a clip check 35 min, a clip's cut 100 min, the whole-video download 90 min). The Cut steps wait out that download without a sign, so
+# their limit is above it. Seconds.
 STALL_SECONDS: dict[str, float] = {
     "resolve": 60 * 60,
     "download": 90 * 60,
@@ -54,8 +55,8 @@ STALL_SECONDS: dict[str, float] = {
     "analyze": 60 * 60,
     "watch": 120 * 60,
     "select": 90 * 60,
-    "render": 75 * 60,
-    "checklist": 40 * 60,
+    "render": 100 * 60,
+    "checklist": 100 * 60,
     "captions": 30 * 60,
     "finalize": 30 * 60,
 }
@@ -418,6 +419,19 @@ def failure_message(step: str | None, e: BaseException) -> str:
     return f"Something went wrong while trying to {what}. Tap Try again; if it happens again, try another video."
 
 
+async def _stop(task: asyncio.Future[Any]) -> None:
+    """Cancels ``task`` and waits for it to end. Its own cancel or error is dropped; a cancel sent to the caller
+    meanwhile is not."""
+    task.cancel()
+    try:
+        with contextlib.suppress(Exception):
+            await task
+    except asyncio.CancelledError:
+        cur = asyncio.current_task()
+        if cur is not None and cur.cancelling():
+            raise
+
+
 async def watched(tr: Tracker, key: str, fn: StepFn) -> StepDone | str | None:
     """Runs one step under the watchdog: a step with no sign of life (``Tracker.report``, ``say``) for
     ``tr.stall_seconds[key]`` is stopped and raises StepStalled with a plain message. A cancel of the run stops the
@@ -436,15 +450,11 @@ async def watched(tr: Tracker, key: str, fn: StepFn) -> StepDone | str | None:
             quiet = loop.time() - tr.last_sign
             if quiet >= limit:
                 log("error", "job.step_stalled", job=tr.job_id, step=key, seconds=round(quiet))
-                task.cancel()
-                with contextlib.suppress(BaseException):
-                    await task
+                await _stop(task)
                 raise StepStalled(stalled_message(key))
     finally:
         if not task.done():
-            task.cancel()
-            with contextlib.suppress(BaseException):
-                await task
+            await _stop(task)
 
 
 async def run_job(

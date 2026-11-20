@@ -382,3 +382,64 @@ def test_a_resumed_ten_clip_job_fits_dynamodb_with_room_to_spare() -> None:
         s.update(status="done", message="m" * 300, startedAt="2026-11-20T04:18:13.041Z", finishedAt="x" * 24)
     job = {"steps": tr.steps, "source": st.source, "error": "e" * 500, "note": "n" * 100, "progress": 0.99}
     assert len(json.dumps(job)) < 16_000
+
+
+# --- review fixes ---------------------------------------------------------------------------------------------------
+
+
+def test_access_denied_outside_bedrock_is_not_blamed_on_the_model() -> None:
+    err = ClientError({"Error": {"Code": "AccessDeniedException", "Message": "no access"}}, "GetSecretValue")
+    assert bedrock_mod.model_unavailable(err) is False
+    assert failure_message("captions", err) != MODEL_ACCESS_MESSAGE
+    assert bedrock_mod.model_unavailable(access_denied()) is True
+
+
+async def test_nothing_checked_says_so(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    Counts(world, monkeypatch)
+
+    async def stuck(video: Path) -> Measured:
+        await asyncio.sleep(3600)
+        raise AssertionError("unreachable")
+
+    monkeypatch.setattr(pipeline_mod, "measure", stuck)
+    monkeypatch.setattr(pipeline_mod, "CHECK_CLIP_SECONDS", 0.05)
+    status, _, steps = await world.run()
+    assert status == "ready", steps
+    msg = steps["checklist"]["message"]
+    assert "could not be checked" in msg and "passed" not in msg and "swapped" not in msg
+
+
+async def test_a_fatal_error_in_a_later_check_is_seen_at_once() -> None:
+    from clipfactory_agent.checklist import Outcome, check_all
+
+    async def check(c: Any) -> Outcome:
+        if c == 2:
+            raise ValueError("fatal")
+        await asyncio.sleep(3600)
+        raise AssertionError("unreachable")
+
+    async def cut(m: Any) -> Any:
+        return None
+
+    t0 = time.monotonic()
+    with pytest.raises(ValueError):
+        await asyncio.wait_for(check_all([0, 1, 2], [], check=check, cut=cut, want=3, limit=3), 5)  # type: ignore[arg-type]
+    assert time.monotonic() - t0 < 2
+
+
+async def test_cancelling_the_run_while_a_stalled_step_is_stopped_is_not_swallowed() -> None:
+    async def stubborn() -> StepDone:
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            await asyncio.sleep(0.3)  # slow cleanup
+            raise
+        return StepDone("x")
+
+    store = FakeStore()
+    tr = quick(store, 0.05)
+    t = asyncio.ensure_future(jobs_mod.watched(tr, "resolve", stubborn))
+    await asyncio.sleep(0.15)  # the watchdog is now waiting on the stubborn step's cleanup
+    t.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await t
