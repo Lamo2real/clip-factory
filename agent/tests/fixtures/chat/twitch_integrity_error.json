@@ -1,0 +1,19 @@
+[
+ {
+  "errors": [
+   {
+    "message": "failed integrity check",
+    "path": [
+     "video",
+     "comments"
+    ]
+   }
+  ],
+  "data": {
+   "video": null
+  },
+  "extensions": {
+   "operationName": "VideoCommentsByOffsetOrCursor"
+  }
+ }
+]

@@ -204,7 +204,7 @@ later, agent and API) gets the **skills block** as the **first** part of its sys
 | Moment selection fallback (Converse, `submit_moments`) | `agent.find_with_converse` | `bedrock.structured(..., skills=block)` |
 | Facecam / layout vision | `bedrock.detect_layout(jpeg, w, h, *, skills)` | pipeline passes `functools.partial(self.bedrock.detect_layout, skills=st.skills_block)` to `render_clip` |
 | Checklist judgement (incl. the hook check and `new_hook` rewrite) | `pipeline._review` | `structured(..., skills=block)` |
-| Watching the picture, Fable on frames (ADR-40, §8) | `watch.watch_chunks` | `structured(..., skills=block)`, tool `report_scenes` |
+| Watching the picture, Fable on frames (ADR-40, §8) | `watch.watch_chunks` | `structured(..., skills=block)`, tool `report_scenes`; with a chat box on screen its prompt gets one more sentence (§37.6) |
 | Watching the picture, Nova 2 Lite on video (ADR-40, §8) | `nova.watch_parts` | `structured(..., skills=block)` on the second `Bedrock` client (`cache_points=False`: the block is sent uncached) |
 | The second look at each picked moment (ADR-40, §8) | `verify.second_look` | `structured(..., skills=block)`, tool `check_moment` |
 | Captions (all platforms) | `captions.write_captions(..., skills=block)` | `structured(..., skills=block)` |

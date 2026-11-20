@@ -313,3 +313,50 @@ def test_picked_for_works_without_any_picture() -> None:
         picked_for(make_moment(start=100, end=130), signals=None, loud=loud, heatmap=[], speakers=None) == "Loud moment"
     )
     assert picked_for(make_moment(start=100, end=130), signals=None, loud=quiet(600), heatmap=[], speakers=None) is None
+
+
+# --- chat hype (docs/CONTRACTS.md §37) ----------------------------------------------------------------------------
+
+from clipfactory_agent.chat import ChatSignal, ChatSpike  # noqa: E402
+
+
+def cspike(t: float, **kw: Any) -> ChatSpike:
+    base: dict[str, Any] = {"t": t, "onset": t + 5, "peak": t + 9, "z": 9.0, "lift": 6.0, "strength": 2.4}
+    base.update(kw)
+    return ChatSpike(window=(t - 5, t + 3), **base)
+
+
+def crowd(*spikes: ChatSpike) -> ChatSignal:
+    return ChatSignal("twitch", 1.0, 1000, 5, [], list(spikes))
+
+
+def test_chat_with_loud_scores_higher_and_says_chat_went_wild() -> None:
+    loud = quiet()
+    loud[500] = -10.0
+    alone = hot_spots([], words=[], loud=loud, motion=still(), heatmap=[])
+    both = hot_spots([], words=[], loud=loud, motion=still(), heatmap=[], chat=crowd(cspike(502)))
+    assert len(alone) == len(both) == 1
+    assert both[0].score > alone[0].score + 2  # chat's own weight plus the bonus for two sources
+    assert sorted(both[0].reasons) == ["chat went wild", "loud"]
+
+
+def test_a_flagged_chat_spike_adds_no_hot_spot_and_no_reason() -> None:
+    flagged = crowd(cspike(502, flag="raid", strength=0.7))
+    assert hot_spots([], words=[], loud=quiet(), motion=still(), heatmap=[], chat=flagged) == []
+    m = make_moment(start=495, end=530)
+    assert picked_for(m, signals=None, loud=quiet(), heatmap=[], speakers=None, chat=flagged) is None
+
+
+def test_picked_for_says_chat_went_wild_when_the_moment_is_inside() -> None:
+    loud = quiet(600)
+    loud[112] = -10.0
+    m = make_moment(start=100, end=130)
+    # the burst comes after the clip ends (t + 5 = 133), but the moment it points to is inside
+    text = picked_for(m, signals=None, loud=loud, heatmap=[], speakers=None, chat=crowd(cspike(128)))
+    assert text is not None and sorted(text.split(" + ")) == ["Chat went wild", "Loud moment"]
+    assert picked_for(m, signals=None, loud=quiet(600), heatmap=[], speakers=None, chat=crowd(cspike(200))) is None
+
+
+def test_chat_went_wild_with_a_loud_laugh_fits() -> None:
+    assert len("Chat went wild + Loud laugh") <= signals.MAX_PICKED_FOR
+    assert signals.SOURCE_WORDS["chat"] == "chat went wild" and signals.CHAT == "Chat went wild"

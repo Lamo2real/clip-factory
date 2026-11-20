@@ -362,3 +362,18 @@ async def test_two_writes_at_once_land_in_order_and_the_newest_is_last() -> None
     gate.set()
     await asyncio.gather(first, second)
     assert order == ["Cutting the clips", "Checking the clips with Claude"]
+
+
+async def test_the_chat_line() -> None:
+    ls, _ = live()
+    ls.emit("step", key="analyze")
+    ls.emit("chat", n=12430, source="twitch")
+    assert (ls.state["text"], ls.state["detail"], ls.state["tech"]) == (
+        "Reading the chat",
+        "12,430 messages",
+        "Twitch chat replay",
+    )
+    ls.emit("chat", n=1, source="youtube", text="https://evil.example/x", detail="free text")
+    assert (ls.state["detail"], ls.state["tech"]) == ("1 message", "YouTube chat replay")
+    ls.emit("chat", n=0, source="irc")
+    assert ls.state == {"step": "analyze", "text": "Reading the chat"}

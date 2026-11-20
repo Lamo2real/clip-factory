@@ -14,6 +14,8 @@ dependencies = [
   # The PO token plugin for yt-dlp (docs/CONTRACTS.md §29.2). Its server is built into the image from the same tag
   # (agent/Dockerfile, BGUTIL_VERSION): bump the two together.
   "bgutil-ytdlp-pot-provider==2.0.2",
+  # Chat hype (docs/CONTRACTS.md §37): the chat box in the picture is measured with numpy, about 20 MB in the image.
+  "numpy>=2.2",
 ]
 
 [dependency-groups]

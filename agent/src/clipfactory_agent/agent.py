@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
+from . import chat as chat_mod
 from . import loudness, transcript
 from . import signals as signals_mod
 from .bedrock import Bedrock, ModelError
@@ -55,6 +56,8 @@ class Brief:
     # with neither every prompt is exactly what it was before the picture was watched.
     signals: signals_mod.Signals | None = None  # picture events, motion and hot spots
     speakers: list[list[Any]] | None = None  # [start, end, "S1"] turns from Transcribe's speaker labels
+    # Chat hype (docs/CONTRACTS.md §37): kept apart from ``signals`` so chat alone never brings in the picture rules.
+    chat: chat_mod.ChatSignal | None = None
 
     @property
     def wanted(self) -> int:
@@ -86,7 +89,9 @@ def system_prompt(b: Brief) -> str:
     similar = prompt_section(b.similar)
     seen = PICTURE_RULES if b.signals is not None else ""
     who = SPEAKER_NOTE if b.speakers else ""
-    return with_prior(b.prior, _rules(b) + "".join(f"\n\n{part}" for part in (seen, who, taught, similar) if part))
+    crowd = chat_mod.CHAT_NOTE if b.chat is not None else ""
+    parts = (seen, who, crowd, taught, similar)
+    return with_prior(b.prior, _rules(b) + "".join(f"\n\n{part}" for part in parts if part))
 
 
 def _rules(b: Brief) -> str:
@@ -124,6 +129,8 @@ def brief_json(b: Brief) -> dict[str, Any]:
     }
     if b.signals is not None:
         out["picture"] = {"watched": b.signals.watched, "coveragePercent": b.signals.coverage_percent}
+    if b.chat is not None:
+        out["chat"] = {"source": b.chat.source, "coveragePercent": b.chat.coverage_percent, "messages": b.chat.messages}
     return out
 
 
@@ -135,13 +142,18 @@ def hints(b: Brief, start: float, end: float) -> str:
     if peaks:
         text += "\nMost replayed: " + ", ".join(f"{hms(h['start'])}–{hms(h['end'])}" for h in peaks)
     more = signals_mod.extra_hints(b, start, end)
-    return f"{text}\n{more}" if more else text
+    crowd = b.chat.hint_line(start, end) if b.chat is not None else ""
+    return "\n".join(part for part in (text, more, crowd) if part)
 
 
 def worth_reading(b: Brief, start: float, end: float, text: str) -> bool:
     """The Converse gate: a window is read when it has enough words, or (new) when the picture alone could carry a
-    clip there: a strong picture event or a hot spot with nobody talking."""
-    return len(text) >= 400 or (b.signals is not None and b.signals.strong_in(start, end))
+    clip there: a strong picture event or a hot spot with nobody talking, or a strong chat spike nothing flags."""
+    return (
+        len(text) >= 400
+        or (b.signals is not None and b.signals.strong_in(start, end))
+        or (b.chat is not None and b.chat.strong_in(start, end))
+    )
 
 
 class MomentTools:

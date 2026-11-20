@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import socket
 from typing import Any
 
 import pytest
@@ -13,6 +14,20 @@ def _no_track_pauses(monkeypatch: pytest.MonkeyPatch) -> None:
     """The watchers' growing pauses before trying a busy unit again (5 s, 10 s, ...) are zero in tests; the test
     of the pauses themselves sets them back."""
     monkeypatch.setattr(watch, "RETRY_BASE", 0.0)
+
+
+@pytest.fixture(autouse=True)
+def _no_network_in_chat_tests(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The chat tests (test_chat*.py) never reach the network: any real connection fails the test."""
+    if not request.module.__name__.rsplit(".", 1)[-1].startswith("test_chat"):
+        return
+
+    def refuse(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("a chat test tried to reach the network")
+
+    monkeypatch.setattr(socket.socket, "connect", refuse)
+    monkeypatch.setattr(socket.socket, "connect_ex", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
 
 
 def make_moment(**kw: Any) -> Moment:

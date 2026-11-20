@@ -37,7 +37,8 @@ One line under the bar: a big plain sentence, a small grey detail and a tiny "wh
   (with its `steps`) is not rewritten every second. `ttl` is 7 days after each write. `lastChange` is when the words last really changed.
 * Agent (`agent/src/clipfactory_agent/livestatus.py`): `LiveStatus.emit(kind, **numbers)`. Kinds are a fixed list
   (`step`, `note`, `resume`, `download`, `transcribe_part`, `watch_part`, `bedrock`, `bedrock_done`, `cut`,
-  `cut_progress`, `cut_done`, `check`, `captions`, `save`); an unknown kind and any extra field are ignored. Every value passes
+  `cut_progress`, `cut_done`, `check`, `captions`, `save`, `chat`: "Reading the chat" · "12,430 messages" · "Twitch
+  chat replay", only while the analyze step waits for the chat, §37.2); an unknown kind and any extra field are ignored. Every value passes
   `scrub` (`util.redact_urls`, then links, paths and key-like strings removed; one line; sentence ≤ 80 characters,
   detail and tech ≤ 60).
 * The render step cuts clips several at a time: each ffmpeg reports with its own clip number (`cut_progress` carries

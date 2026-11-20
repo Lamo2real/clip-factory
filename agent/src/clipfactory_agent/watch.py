@@ -199,6 +199,7 @@ def chunk_text(
     speakers: Sequence[Sequence[Any]] | None,
     loud: list[float],
     motion: list[float],
+    chat_box: dict[str, int] | None = None,
 ) -> str:
     said = transcript.lines(words, lo, hi, speakers) or "(nobody talks in this part)"
     sp = loudness.spikes(loud, lo, hi)
@@ -209,6 +210,20 @@ def chunk_text(
         f"Loud seconds: {', '.join(f'{s.t} s (+{s.jump:.0f} dB)' for s in sp) or 'none'}\n"
         f"Fast picture: {', '.join(f'{s.t} s (x{s.lift:.0f})' for s in fast) or 'none'}\n\n"
         f"Report what is seen. Every start and end must lie between {lo:g} and {hi:g} seconds."
+        + (chat_sentence(chat_box) if chat_box else "")
+    )
+
+
+CHAT_WORD_CHARS = 24
+
+
+def chat_sentence(box: dict[str, int]) -> str:
+    """The one sentence the watcher gets when a chat box is on screen (docs/CONTRACTS.md §37): it may read the word
+    the chat floods with. Only then; never otherwise."""
+    return (
+        f"\nA chat box is on screen at ({box['x']}, {box['y']}, {box['w']}, {box['h']}) (x, y, width, height in "
+        "pixels of the frame). If it floods or many lines repeat one word or emote, report an event there with that "
+        "word in text_on_screen as 'chat: KEKW'."
     )
 
 
@@ -216,6 +231,7 @@ def clean(raw: dict[str, Any], lo: float, hi: float, offset: float = 0.0) -> dic
     """The model's answer as checkpoint content: times shifted by ``offset`` and clamped to ``lo..hi``, at most
     MAX_EVENTS events, and calm or menu events below intensity 4 dropped."""
     events: list[dict[str, Any]] = []
+    chat_words: list[list[Any]] = []
     for e in (raw.get("events") or [])[:MAX_EVENTS]:
         if not isinstance(e, dict):
             continue
@@ -231,6 +247,13 @@ def clean(raw: dict[str, Any], lo: float, hi: float, offset: float = 0.0) -> dic
         if kind in ("calm", "menu_or_loading") and intensity < 4:
             continue
         face = str(e.get("face"))
+        text = " ".join(str(e.get("text_on_screen") or "").split())[:120]
+        if text.lower().startswith("chat:"):
+            # What the chat floods with is the crowd's word, not text the game shows: kept apart for chat hype.
+            word = text[5:].strip()[:CHAT_WORD_CHARS]
+            if word:
+                chat_words.append([round(t0, 1), word])
+            continue  # never an event of its own: chat is counted by chat hype, and chat alone is not a picture event
         events.append(
             {
                 "t0": round(t0, 1),
@@ -240,10 +263,13 @@ def clean(raw: dict[str, Any], lo: float, hi: float, offset: float = 0.0) -> dic
                 "intensity": intensity,
                 "silent": bool(e.get("silent")),
                 "face": face if face in FACES else "none",
-                "text": " ".join(str(e.get("text_on_screen") or "").split())[:120],
+                "text": text,
             }
         )
-    return {"scene": " ".join(str(raw.get("scene") or "").split())[:300], "events": events}
+    out: dict[str, Any] = {"scene": " ".join(str(raw.get("scene") or "").split())[:300], "events": events}
+    if chat_words:
+        out["chatWords"] = chat_words
+    return out
 
 
 # --- the loop both watchers share ----------------------------------------------------------------------------------
@@ -518,8 +544,10 @@ async def watch_chunks(
     load: Callable[[Unit], Awaitable[dict[str, Any] | None]] | None = None,
     save: Callable[[Unit, dict[str, Any]], Awaitable[None]] | None = None,
     on_progress: Callable[[float], None] | None = None,
+    chat_box: dict[str, int] | None = None,
 ) -> TrackResult:
-    """Fable watches every chunk. Returns what it saw and what it could not watch; never raises but for a cancel."""
+    """Fable watches every chunk. Returns what it saw and what it could not watch; never raises but for a cancel.
+    With ``chat_box`` (a chat shown in the picture) it also reads the word the chat floods with (``chatWords``)."""
     pacer = Pacer(WATCH_CONCURRENCY)
     seen: dict[tuple[float, float], dict[str, Any]] = {}  # pieces already answered, kept across a unit's tries
 
@@ -537,7 +565,11 @@ async def watch_chunks(
                     skills=skills,
                     content=[
                         *frame_blocks(shown),
-                        {"text": chunk_text(lo, hi, words=words, speakers=speakers, loud=loud, motion=motion)},
+                        {
+                            "text": chunk_text(
+                                lo, hi, words=words, speakers=speakers, loud=loud, motion=motion, chat_box=chat_box
+                            )
+                        },
                     ],
                     tool=TOOL,
                     description=TOOL_DESCRIPTION,
@@ -579,10 +611,14 @@ async def watch_chunks(
             if busy is not None or not answers:
                 raise busy or errors[0]
             log("warn", "watch.piece_failed", start=lo, end=hi, failed=len(errors), of=len(groups))
-        return {
+        joined: dict[str, Any] = {
             "scene": next((a["scene"] for a in answers if a.get("scene")), ""),
             "events": [e for a in answers for e in a["events"]],
         }
+        words = [w for a in answers for w in a.get("chatWords") or []]
+        if words:
+            joined["chatWords"] = words
+        return joined
 
     async def look(u: Unit) -> dict[str, Any]:
         lo, hi = u.lead, u.end

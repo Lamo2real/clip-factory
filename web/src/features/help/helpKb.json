@@ -480,6 +480,40 @@
       ]
     },
     {
+      "id": "review-chat-went-wild",
+      "route": "/review",
+      "where": "Review",
+      "title": "What Chat went wild means",
+      "keywords": [
+        "chat went wild",
+        "why",
+        "why line",
+        "chat",
+        "spam",
+        "chat spam",
+        "kekw",
+        "w in chat",
+        "chat hype",
+        "why was this picked",
+        "reason"
+      ],
+      "answer": "Each clip card says **Why:** it was picked. **Chat went wild** means the stream's chat suddenly went much faster than usual, or lots of people typed the same thing, right after this moment. Clip Factory only trusts it when something is also seen or heard there.",
+      "steps": [
+        "Tap **Review**.",
+        "Look under the clip for **Why:**.",
+        "**Chat went wild** means the viewers loved this moment."
+      ],
+      "actions": [
+        {
+          "id": "review-chat-went-wild:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": []
+        }
+      ],
+      "suggest": false
+    },
+    {
       "id": "review-waiting",
       "route": "/review",
       "where": "Review",

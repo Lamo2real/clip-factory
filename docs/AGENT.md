@@ -73,6 +73,7 @@ found.
 | What is seen | Claude Fable 5.1 on frames of the whole source | Events with a kind, a strength 1–10, the streamer's face, text on screen. |
 | What is seen, again | Amazon Nova 2 Lite on the video parts | An independent second opinion; fills the gaps Fable leaves; agreement makes a hot spot stronger. |
 | Most replayed | YouTube | Where viewers rewind (as before). |
+| Chat hype | Twitch, YouTube or Kick chat replay; else the chat box shown in the picture | Where the stream's chat suddenly went much faster or flooded with one word ("KEKW", "W", "CLIP IT"), shifted back by the chat's lag; raids, giveaways, sub trains and bots are flagged and never count. On a clip it reads "Chat went wild". Off with `CF_CHAT=off` ([CONTRACTS §37](CONTRACTS.md#36-chat-hype-the-crowd-as-a-signal-owner-request-2026-11-20), [ADR-61](DECISIONS.md#adr-60-chat-hype-from-replay-where-it-is-public-from-the-picture-where-it-is-not-never-a-reason-to-fail)). |
 
 **Nothing is sampled away.** Every second of the source is in a chunk; a longer source gets more chunks, more time
 and the same coverage. The only limits are technical ones (below).

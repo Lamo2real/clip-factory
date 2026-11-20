@@ -46,6 +46,14 @@ STEP_TEXT: dict[str, str] = {
     "finalize": "Saving the clips",
 }
 
+# Where the chat came from, in words (chat.TECH; a copy here so this module stays free of the chat maths).
+CHAT_TECH = {
+    "twitch": "Twitch chat replay",
+    "youtube": "YouTube chat replay",
+    "kick": "Kick chat",
+    "screen": "chat on screen",
+}
+
 KINDS = frozenset(
     {
         "step",  # a step started: its STEP_TEXT
@@ -62,6 +70,7 @@ KINDS = frozenset(
         "check",  # the checklist step checks clip i of n
         "captions",  # captions for clip i of n
         "save",  # saving clip i of n
+        "chat",  # the analyze step reads the stream's chat: how many messages so far, and from where (§37)
     }
 )
 
@@ -225,6 +234,18 @@ class LiveStatus:
                         s.pop("tech", None)
             elif kind in ("cut", "cut_progress", "cut_done"):
                 self._cut_event(s, kind, v)
+            elif kind == "chat":
+                n = _int(v.get("n"))
+                s["text"] = "Reading the chat"
+                if n is not None and n > 0:
+                    s["detail"] = f"{n:,} {'message' if n == 1 else 'messages'}"
+                else:
+                    s.pop("detail", None)
+                tech = CHAT_TECH.get(str(v.get("source") or ""))
+                if tech:
+                    s["tech"] = tech
+                else:
+                    s.pop("tech", None)
             elif kind in ("check", "captions", "save"):
                 i, n = _int(v.get("i")), _int(v.get("n"))
                 if i and n:
