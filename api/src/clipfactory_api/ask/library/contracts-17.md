@@ -66,7 +66,7 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
 
 ```ts
 // web/src/setup/types.ts
-export interface SetupGuide { platform: Platform; name: string; checkedOn: string /* "YYYY-MM-DD"; TikTok "2026-11-19", the rest "2026-11-16" */; minutes: number;
+export interface SetupGuide { platform: Platform; name: string; checkedOn: string /* "YYYY-MM-DD"; TikTok "2026-11-21", the rest "2026-11-19" */; minutes: number;
   cost: string /* "Free" | "About 1.5 cents per clip" */; parts: GuidePart[] }
 export interface GuidePart { id: "ready" | "key" | "connect" | "public"; title: string; steps: GuideStep[] }
 export interface GuideStep {
@@ -124,9 +124,11 @@ with the link / Only me, shown inside the card; default Everyone; YouTube policy
 (Open button "Open Google's ask-for-more form" → Google's Audit and Quota Extension Form; not needed to start). Status
 line: "Works now. Your clips go up for everyone."
 
-**TikTok** (about 40 min + TikTok's review time, Free; `checkedOn` 2026-11-19, from what the owner met on TikTok for
+**TikTok** (about 40 min + TikTok's review time, Free; `checkedOn` 2026-11-21, from what the owner met on TikTok for
 Developers: the app page has one **Save** that stays off until **App review** has its text and a video; Display API is
-no longer a product, its scopes come with Login Kit's **Add scopes**; Platforms is Web only). Get ready:
+no longer a product, its scopes come with Login Kit's **Add scopes**; Platforms is Web only. Go public checked again on
+21 Nov 2026 against TikTok's Content Sharing Guidelines and applicants' reports of the Direct Post audit form: App
+review must say Live before **Apply** shows next to Direct Post). Get ready:
 | id | title | essentials |
 |---|---|---|
 | `ready-account` | Have your TikTok account | The account your clips go on. |
@@ -158,11 +160,11 @@ Connect:
 Go public (`gate: app_review`, `posting_audit`):
 | id | title | essentials |
 |---|---|---|
-| `public-demo` | Record the real demo video | Record your screen on Clip Factory, connected in the Sandbox: open Clip Factory, **Connect TikTok**, TikTok's **Authorize** screen, **Upload** on a clip with the **Post to TikTok** sheet, the post arriving on TikTok. Up to 5 videos, 50 MB each. |
+| `public-demo` | Record the real demo video | On a computer, connected in the Sandbox with the TikTok account still private, address bar in sight. Copy chip **Shot list** (`TIKTOK_DEMO_SHOTS` in `tiktok.ts`, 18 numbered shots in order): About page with Privacy and Terms › **Connect TikTok** › TikTok's **Authorize** screen with every scope › connected › the clip's source › Review card preview (no watermark) › the **TikTok** row: "Asking TikTok…", "Posting as" + picture › edit the TikTok caption › Upload held ("Pick who can see it on TikTok first.") and **Who can see it** with nothing picked › Comments, Duet, Stitch all off (grey "Turned off in your TikTok settings." when the creator turned one off) › **Commercial content** on (Upload off, TikTok's "You need to indicate if your content promotes yourself, a third party, or both.") › **Your brand** ("Promotional content") › **Branded content** ("Paid partnership", Branded Content Policy line, Only me grey) › untick it, pick **Only me** by hand (Branded content grey), Commercial content off › Music Usage Confirmation line above **Upload** › **Upload** and "TikTok can take a few minutes to process your clip." › **Library**: on its way, then Posted › the private post on TikTok as picked › **Money** (video.list, user.info.stats) › last, on another clip with nothing on, **Use my settings** (the owner's own tap) and the TikTok row with every option. About 1 min, MP4, under 50 MB (up to 5 videos). Hints: a line Clip Factory does not show yet → wait for the update, then record; a secret or code on screen → cut it out. The same video goes to App review and the audit form. |
 | `public-review` | Ask TikTok to check the app | Switch to **Production**. **App review**: check `tiktokReviewText` is there (one line per scope), swap in the real demo video, **Save**, **Submit for review**. Then pick the status here: Draft / In review / Live / Not approved (`PATCH gate app_review`). Not approved: read **Review comments**, fix, submit again. |
 | `public-live-keys` | When it says Live | If the Production keys differ from the Sandbox ones, paste them and press **Connect again**. |
-| `public-audit` | Ask to post publicly | Open developers.tiktok.com/application/content-posting-api and fill in the form. Until it passes, every post is "Only me". TikTok may say no to a tool only you use; then posts stay private. |
-| `public-unprivate` | Make your account public again | Only after the audit: turn **Private account** off. |
+| `public-audit` | Ask to post publicly | Only after **App review** says **Live**: **Production** › **Content Posting API** › **Apply** next to **Direct Post** (Open button: developers.tiktok.com/application/content-posting-api). The form has 4 pages (General Information, API client information, Supporting documents, Review) and does not save: paste each answer into the box with the same name. Copy chips: Organization name `appName`, Organization website `websiteUrl`, Organization description `TIKTOK_AUDIT_DESCRIPTION`, How you use Direct Post `TIKTOK_AUDIT_DIRECT_POST`, How you got the number `TIKTOK_AUDIT_USAGE` (pick the smallest users choice), Data you store `TIKTOK_AUDIT_DATA` (all literal strings in `tiktok.ts`; every one literally true today: one creator's own clipping tool, invite-only, one user, other creators' streams and paid clipping campaigns said plainly, no company, no wide audience). Upload the demo video, read and tick the 3 boxes, **Next**. "TikTok may say no, because Clip Factory is a tool for one creator. Then your posts stay private, but they still post." Hints: **Your full name** → type your own; app ID → the number after /app/ in the app page's address bar; no **Apply** → wait for Live; spinner after **Next** → the video is uploading (up to 2 min); **Under review** → done for now, often 1 to 3 weeks; a no with empty **Review comments** → ask TikTok support first. Until it passes, every post is "Only me". |
+| `public-unprivate` | Make your account public again | Only after the audit: turn **Private account** off. Posts from before stay private: change each to **Everyone** in the TikTok app. TikTok still allows about 15 posts a day. |
 Status lines: `posting_audit` limited → "Works now, but your TikTok posts stay private until TikTok says yes.";
 `app_review` draft/not approved → "Finish the TikTok review steps to post outside the Sandbox."; in review → "TikTok
 is checking your app. This can take days."
