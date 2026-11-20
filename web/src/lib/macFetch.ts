@@ -94,6 +94,11 @@ function randomId(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Codes worth trying again (a network hiccup, a full try that ran out); the others (blocked, gone, live, full) are final. */
+const RETRYABLE = new Set(["failed", "send", "tools"]);
+/** The waits between tries, in ms. Each is shorter than the 2 minutes after which another Mac may take the job. */
+export const RETRY_WAITS = [3_000, 10_000, 30_000, 60_000];
+
 /** How often the app is asked where it is, and how often that goes to the API. */
 export const POLL_MS = 1000;
 export const REPORT_MS = 5000;
@@ -158,15 +163,38 @@ export class MacFetcher {
     const { api, bridge, deviceId } = this.deps;
     const jobId = job.jobId;
     let status = await bridge.status(jobId);
-    if (!status || (status.phase === "failed" && status.size === undefined)) {
+    if (!status || (status.phase === "failed" && status.size === undefined && !RETRYABLE.has(status.error ?? ""))) {
       status = await bridge.start(jobId, job.source.url!);
     }
     let reported = -Infinity;
     let uploading = false;
+    let failures = 0;
     for (;;) {
       if (run.stop) return;
       if (status.phase === "failed") {
         if (status.error === "canceled") return;
+        // A dropped connection or a hiccup is not the end: the app keeps what it has (the downloaded parts, the sent
+        // parts), so it tries again a few times, slowly, before the job is failed. The claim stays fresh meanwhile.
+        if (RETRYABLE.has(status.error ?? "") && failures < RETRY_WAITS.length) {
+          const wait = RETRY_WAITS[failures++]!;
+          const sendingAgain = status.size !== undefined;
+          if (!(await this.report(jobId, { deviceId, phase: sendingAgain ? "sending" : "getting", pct: status.pct }))) {
+            run.stop = true;
+            await bridge.cancel(jobId);
+            return;
+          }
+          reported = this.now();
+          await this.sleep(wait);
+          if (run.stop) return;
+          if (sendingAgain) {
+            // Fresh addresses (the old ones may have run out); the same upload, so the parts already sent stay sent.
+            status = { ...status, phase: "ready", error: undefined };
+            uploading = false;
+          } else {
+            status = await bridge.start(jobId, job.source.url!);
+          }
+          continue;
+        }
         await this.report(jobId, { deviceId, phase: "failed", error: status.error ?? "failed", needGb: status.needGb });
         await bridge.cancel(jobId);
         return;
@@ -175,6 +203,7 @@ export class MacFetcher {
         const parts = await api.macSourceUpload(jobId, { deviceId, size: status.size ?? 0 });
         status = await bridge.upload(jobId, parts.partSize, parts.parts);
         uploading = true;
+        failures = 0; // the video is whole on this computer: sending has its own tries
         continue;
       }
       if (status.phase === "sent") {
@@ -205,13 +234,14 @@ export class MacFetcher {
     }
   }
 
-  /** Sends progress; false when the job no longer waits for this computer (stopped, or another Mac has it). */
+  /** Sends progress; false when the job no longer waits for this computer (stopped, deleted, or another Mac has it). */
   private async report(jobId: string, body: Parameters<Api["macProgress"]>[1]): Promise<boolean> {
     try {
       await this.deps.api.macProgress(jobId, body);
       return true;
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409) return false;
+      // 409: stopped, or another Mac has it. 404: the job was deleted. Either way nothing waits for this computer.
+      if (e instanceof ApiError && (e.status === 409 || e.status === 404)) return false;
       return true; // a busy server or a 429: the next report says the same
     }
   }

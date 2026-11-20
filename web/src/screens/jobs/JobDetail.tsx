@@ -6,6 +6,7 @@ import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { LiveLine } from "./LiveLine.tsx";
 import { MacWait } from "./MacWait.tsx";
+import { wantsMac } from "../../lib/macFetch.ts";
 import { NotifyCard } from "../settings/NotifyBranch.tsx";
 import { JobStatusPill, jobTitle, sourceMeta, SourceThumb, StepTimeline } from "../../components/JobBits.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -246,7 +247,9 @@ export function JobDetail({ jobId }: { jobId: string }) {
                 Try again
               </Button>
             ) : null}
-            {job.status === "failed" && job.source.type === "link" ? (
+            {/* Also while the job waits for a Mac (nobody may have the app, a PC user reads "your Mac") and after Stop:
+                a link job never leaves the owner without a way out (§35.5). */}
+            {(job.status === "failed" || job.status === "canceled" || wantsMac(job)) && job.source.type === "link" ? (
               <LinkButton href={`/?file=1&from=${job.jobId}`} variant="ghost" icon="upload">
                 Use a video file
               </LinkButton>

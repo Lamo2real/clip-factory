@@ -6647,9 +6647,13 @@ but keep the app open, which he usually has. No cookies, no extra cost. Windows 
   go back to pending, `pickUp`, the note "Your Mac sent the video.", a fresh 8 h (`runStartedAt`). The next attempt
   runs the agent on it through the upload path (§29.7, PR #48).
 * **Ends.** 24 h with no video: failed, "Your Mac didn't get the video. Use a video file instead." (the source stays a
-  link, so Try again and Use a video file both work). The Mac stopping: failed with its words (§35.5). Stop job: the
+  link, so Try again and Use a video file both work). The job page shows Use a video file also while the job waits and
+  after Stop, so nobody (a Windows PC, a Mac without the app) has to wait the 24 h. The Mac stopping: failed with its words (§35.5). Stop job: the
   cancel route sends the callback failure `Canceled` (a quiet `canceled`) and aborts a half-sent upload.
 * The job flow's execution timeout is 149,400 s (8.5 h + 24 h + 8.5 h), changed in place.
+* **Try again** (`routes/jobs.retry`, `macfetch.restarted`): a leftover wait never carries into the new run. `macFetch`
+  goes back to `{state: "cloud"}` (or `{state: "waiting", up: true}` for a job made in the desktop app), so the claim,
+  the upload id, `nudgedAt` and `macCallbackId` are forgotten; a video the Mac already sent (`done`) stays.
 
 ### 35.2 The desktop app (`desktop/src-tauri/src/mac_fetch/`)
 
@@ -6670,6 +6674,20 @@ but keep the app open, which he usually has. No cookies, no extra cost. Windows 
 * The download: one `-J` (details and sizes; a live or upcoming stream is refused), then the first of 1080p, 720p,
   480p (H.264 first) whose estimate + 10% leaves 3 GB free, else "Your Mac is full. Free up N GB.". `--continue` with
   `.part` files resumes; the result is `video.mp4`. Progress from `--progress-template` (bytes per format).
+* **Room for the merge.** yt-dlp saves the video and the sound as two files and merges them into a third, so a rung
+  needs twice its estimate (+10%) plus 3 GB free; "Free up N GB" uses the same number.
+* **Tries.** The page does not fail the job on the first stumble. `failed`, `send` and `tools` are tried again 4 times
+  (after 3, 10, 30 and 60 s, each shorter than the 2 minutes after which another Mac may claim the job, with a progress
+  report before every wait). A download carries on from its `.part` files; a send asks `source-upload` again for fresh
+  addresses (same `uploadId`, so sent parts stay sent) and the app skips the parts it has (`parts.json`). Only after the
+  tries run out is `failed` reported. `blocked`, `gone`, `live` and `full` are final. A 404 on a report (job deleted)
+  stops the fetch and removes the copy, like a 409.
+* **The window keeps working in the background.** The window is built with background throttling off, because the
+  fetch is driven by page timers (the 30 s look at the jobs, the 1 s poll, the reports).
+* **Leftovers.** At start-up a thread removes `<app data>/fetch/<jobId>/` folders not touched for 3 days (a job stopped
+  or deleted while the app was closed); a job waits at most 24 h, so nothing live is that old.
+* **One install at a time.** `tools::ensure` takes an exclusive lock on `<app data>/tools/.install.lock`, so two fetches
+  starting together never write the same temp file.
 * yt-dlp's text stays on the computer; the page only gets codes: `blocked`, `gone`, `live`, `full` (+ `needGb`),
   `tools`, `failed`, `send`, `canceled`.
 

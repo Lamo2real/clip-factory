@@ -396,6 +396,53 @@ def test_stopping_a_waiting_job_ends_the_wait_and_drops_the_half_sent_video(
     assert s3_client.multipart["up-1"]["aborted"] is True
 
 
+def test_try_again_forgets_the_last_wait_for_a_mac(store: db.Store, call: Call) -> None:
+    job = seed_job(
+        store,
+        status="failed",
+        error="Your Mac didn't get the video. Use a video file instead.",
+        macCallbackId="cb-old",
+        macFetch={
+            "state": "waiting",
+            "since": "2026-11-14T11:59:00.000Z",
+            "nudgedAt": "2026-11-14T12:01:00.000Z",
+            "deviceId": DEVICE,
+            "uploadId": "up-old",
+            "key": "uploads/old",
+            "size": 9,
+            "pct": 40,
+        },
+    )
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    assert body["job"]["macFetch"] == {"state": "cloud"}  # the cloud goes first again; nothing waits for a Mac
+    saved = store.get(job["pk"], job["sk"]) or {}
+    assert saved["macFetch"] == {"state": "cloud"}
+    assert "macCallbackId" not in saved
+    assert not macfetch.waiting(saved)
+
+
+def test_try_again_on_a_desktop_job_goes_to_the_mac_again_with_a_clean_slate(store: db.Store, call: Call) -> None:
+    job = seed_job(
+        store,
+        status="failed",
+        macCallbackId="cb-old",
+        macFetch={"state": "failed", "up": True, "nudgedAt": "2026-11-14T12:01:00.000Z", "uploadId": "up-old"},
+    )
+    status, _ = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    saved = store.get(job["pk"], job["sk"]) or {}
+    assert saved["macFetch"] == {"state": "waiting", "up": True}
+    assert "macCallbackId" not in saved
+
+
+def test_try_again_keeps_a_video_the_mac_already_sent(store: db.Store, call: Call) -> None:
+    job = seed_job(store, status="failed", macFetch={"state": "done", "at": "2026-11-14T12:01:00.000Z"})
+    status, _ = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    assert (store.get(job["pk"], job["sk"]) or {})["macFetch"]["state"] == "done"
+
+
 # --- the notification -----------------------------------------------------------------------------------------
 
 

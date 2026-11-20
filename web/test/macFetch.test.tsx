@@ -11,6 +11,7 @@ import {
   macDeviceId,
   MacFetcher,
   macWaitWords,
+  RETRY_WAITS,
   wantsMac,
   type MacBridge,
   type MacStatus,
@@ -175,6 +176,76 @@ describe("MacFetcher", () => {
     await settle(fetcher);
     expect(bridge.calls.at(-1)).toBe(`cancel ${JOB_ID}`);
     expect(fetcher.active()).toEqual([]);
+  });
+
+  it("sends again, with fresh addresses, when the connection drops while sending", async () => {
+    const bridge = fakeBridge([
+      { phase: "getting", pct: 5 },
+      { phase: "ready", pct: 100, size: 1234 },
+      { phase: "failed", pct: 40, size: 1234, error: "send" },
+      { phase: "sent", pct: 100, size: 1234, etags: [{ n: 1, etag: '"e1"' }] },
+    ]);
+    const { api, seen } = fakeApi();
+    const fetcher = new MacFetcher({ api, bridge, deviceId: "mac-device-0001", sleep: async () => {} });
+    fetcher.consider(job());
+    await settle(fetcher);
+    expect(seen.uploads).toEqual([1234, 1234]); // asked for new addresses; the same upload, so sent parts stay sent
+    expect(bridge.calls.filter((c) => c.startsWith("upload"))).toHaveLength(2);
+    expect(seen.complete).toHaveLength(1);
+    expect(seen.progress.some((p) => p.phase === "failed")).toBe(false); // the job was never failed
+  });
+
+  it("starts the download again (it carries on from what it has) after a hiccup", async () => {
+    const bridge = fakeBridge([
+      { phase: "getting", pct: 5 },
+      { phase: "failed", pct: 5, error: "failed" },
+      { phase: "getting", pct: 20 },
+      { phase: "ready", pct: 100, size: 99 },
+      { phase: "sent", pct: 100, size: 99, etags: [{ n: 1, etag: '"e"' }] },
+    ]);
+    const { api, seen } = fakeApi();
+    const fetcher = new MacFetcher({ api, bridge, deviceId: "mac-device-0001", sleep: async () => {} });
+    fetcher.consider(job());
+    await settle(fetcher);
+    expect(bridge.calls.filter((c) => c.startsWith("start"))).toHaveLength(2);
+    expect(seen.complete).toHaveLength(1);
+    expect(seen.progress.some((p) => p.phase === "failed")).toBe(false);
+  });
+
+  it("fails the job only after the tries run out, and never retries what no retry can fix", async () => {
+    const stuck = fakeBridge([{ phase: "getting", pct: 5 }, { phase: "failed", pct: 5, error: "failed" }]);
+    const one = fakeApi();
+    const waits: number[] = [];
+    const fetcher = new MacFetcher({
+      api: one.api,
+      bridge: stuck,
+      deviceId: "mac-device-0001",
+      sleep: async (ms) => void waits.push(ms),
+    });
+    fetcher.consider(job());
+    await settle(fetcher);
+    expect(stuck.calls.filter((c) => c.startsWith("start"))).toHaveLength(1 + RETRY_WAITS.length);
+    expect(waits.filter((w) => w > 1000)).toEqual(RETRY_WAITS);
+    expect(one.seen.progress.at(-1)).toMatchObject({ phase: "failed", error: "failed" });
+    expect(stuck.calls.at(-1)).toBe(`cancel ${JOB_ID}`);
+
+    const blocked = fakeBridge([{ phase: "getting", pct: 0 }, { phase: "failed", pct: 0, error: "blocked" }]);
+    const two = fakeApi();
+    const f2 = new MacFetcher({ api: two.api, bridge: blocked, deviceId: "mac-device-0001", sleep: async () => {} });
+    f2.consider(job());
+    await settle(f2);
+    expect(blocked.calls.filter((c) => c.startsWith("start"))).toHaveLength(1);
+    expect(two.seen.progress.at(-1)).toMatchObject({ phase: "failed", error: "blocked" });
+  });
+
+  it("stops and deletes its copy when the job was deleted (404)", async () => {
+    const bridge = fakeBridge([{ phase: "getting", pct: 1 }]);
+    const { api } = fakeApi(() => new ApiError(404, "not_found", "No such job."));
+    const fetcher = new MacFetcher({ api, bridge, deviceId: "mac-device-0001", sleep: async () => {} });
+    fetcher.consider(job());
+    await settle(fetcher);
+    expect(bridge.calls.at(-1)).toBe(`cancel ${JOB_ID}`);
+    expect(bridge.calls.filter((c) => c === "status")).toHaveLength(1); // no more polling after it
   });
 
   it("cancels the app's fetch when the owner stops the job", async () => {

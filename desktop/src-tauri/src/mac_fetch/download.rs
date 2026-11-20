@@ -163,16 +163,18 @@ pub fn estimate(info: &Value, height: u32) -> u64 {
     video_bytes + audio_bytes
 }
 
-/// The first rung whose estimate plus 10% leaves `RESERVE` free; else how many GB to free (at least 1).
+/// The first rung whose room leaves `RESERVE` free; else how many GB to free (at least 1). yt-dlp downloads the
+/// video and the sound as two files and then merges them into a third, so the peak is about twice the estimate
+/// (plus 10%); the returned number is the estimate the progress bar counts against.
 pub fn choose(info: &Value, free: u64) -> Result<(u32, u64), Failure> {
     for h in RUNGS {
         let need = estimate(info, h) + estimate(info, h) / 10;
-        if need + RESERVE <= free {
+        if need * 2 + RESERVE <= free {
             return Ok((h, need));
         }
     }
     let lowest = estimate(info, 480);
-    let need = lowest + lowest / 10 + RESERVE;
+    let need = (lowest + lowest / 10) * 2 + RESERVE;
     Err(Failure::Full(
         (need.saturating_sub(free).div_ceil(GB)).max(1) as u32,
     ))
@@ -224,6 +226,11 @@ pub fn parse_progress(line: &str) -> Option<(String, u64, Option<u64>)> {
 pub struct Running(Mutex<Option<u32>>);
 
 impl Running {
+    /// The process has ended: nothing is left to stop.
+    pub fn clear(&self) {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
     pub fn stop(&self) {
         if let Some(pid) = *self.0.lock().unwrap_or_else(|e| e.into_inner()) {
             kill_tree(pid);
@@ -314,7 +321,10 @@ pub fn probe(
         .take(256 * 1024 * 1024)
         .read_to_end(&mut out)
         .map_err(|_| Failure::Failed)?;
-    let status = child.wait().map_err(|_| Failure::Failed)?;
+    let status = child.wait();
+    // The process is gone: forget its id, so a later cancel never signals a group that now belongs to someone else.
+    running.clear();
+    let status = status.map_err(|_| Failure::Failed)?;
     let tail = stderr.join().unwrap_or_default();
     if cancel.load(Ordering::SeqCst) {
         return Err(Failure::Canceled);
@@ -353,7 +363,7 @@ pub fn download(
         }
     }
     let status = child.wait().map_err(|_| Failure::Failed)?;
-    *running.0.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    running.clear();
     let tail = stderr.join().unwrap_or_default();
     if cancel.load(Ordering::SeqCst) {
         return Err(Failure::Canceled);
@@ -413,11 +423,17 @@ mod tests {
         let i = info(3600.0, Some(20 * GB));
         let roomy = 200 * GB;
         assert_eq!(choose(&i, roomy).unwrap().0, 1080);
-        // 1080p needs 22 GB + 3 GB; 720p 11 GB + 3 GB.
-        assert_eq!(choose(&i, 15 * GB).unwrap().0, 720);
-        assert_eq!(choose(&i, 9 * GB).unwrap().0, 480);
+        // The merge writes a second copy, so the room is twice the estimate plus 3 GB: 1080p about 44 + 3 GB,
+        // 720p about 22 + 3 GB, 480p about 11 + 3 GB.
+        assert_eq!(choose(&i, 48 * GB).unwrap().0, 1080);
+        assert_eq!(
+            choose(&i, 30 * GB).unwrap().0,
+            720,
+            "the video alone would fit 1080p, the merge would not"
+        );
+        assert_eq!(choose(&i, 16 * GB).unwrap().0, 480);
         match choose(&i, 4 * GB) {
-            Err(Failure::Full(gb)) => assert_eq!(gb, 5), // 480p: 5 GB + 0.5 GB + 3 GB = 8.5 GB, 4 GB free
+            Err(Failure::Full(gb)) => assert!((10..=11).contains(&gb), "{gb}"), // about 14 GB room, 4 GB free
             other => panic!("{other:?}"),
         }
         assert!(matches!(choose(&i, 0), Err(Failure::Full(_))));
@@ -480,6 +496,15 @@ mod tests {
         );
         assert_eq!(parse_progress("[download] 34.2% of ~1.20GiB"), None);
         assert_eq!(parse_progress("CFP NA NA NA 1"), None);
+    }
+
+    #[test]
+    fn a_finished_process_is_forgotten_so_a_cancel_signals_nothing() {
+        let running = Running::default();
+        *running.0.lock().unwrap() = Some(4_000_000);
+        running.clear();
+        assert!(running.0.lock().unwrap().is_none());
+        running.stop(); // returns at once: no group to signal
     }
 
     #[cfg(unix)]

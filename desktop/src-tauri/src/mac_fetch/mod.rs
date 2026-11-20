@@ -144,6 +144,45 @@ fn job_dir(fetch_root: &Path, job_id: &str) -> PathBuf {
     fetch_root.join(job_id)
 }
 
+/// A job's folder this old is left from a run that never finished (a job stopped or deleted while the app was closed,
+/// an app that quit mid-download). A job waits at most 24 hours for its video, so nothing live is this old.
+pub const LEFTOVER: std::time::Duration = std::time::Duration::from_secs(3 * 24 * 3600);
+
+/// Removes the job folders under `root` that nothing has touched for `max_age`. Returns how many went. Only folders
+/// named like a job id are looked at.
+pub fn sweep_old(root: &Path, now: std::time::SystemTime, max_age: std::time::Duration) -> usize {
+    let Ok(entries) = fs::read_dir(root) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        if !name.to_str().is_some_and(check::job_id_ok) {
+            continue;
+        }
+        let old = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| now.duration_since(t).ok())
+            .is_some_and(|age| age >= max_age);
+        if old && fs::remove_dir_all(entry.path()).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
+/// At start-up: clears the leftovers (in the background, so the window is not kept waiting).
+pub fn sweep(app: &AppHandle) {
+    let Ok((_, fetch_root)) = folders(app) else {
+        return;
+    };
+    std::thread::spawn(move || {
+        sweep_old(&fetch_root, std::time::SystemTime::now(), LEFTOVER);
+    });
+}
+
 #[tauri::command]
 pub fn mac_fetch_start(
     app: AppHandle,
@@ -507,6 +546,30 @@ mod tests {
             assert!(!video.exists());
             println!("deleted {}", work.display());
         }
+    }
+
+    #[test]
+    fn old_job_folders_are_swept_and_young_ones_and_strangers_are_kept() {
+        let root = std::env::temp_dir().join(format!("cf-sweep-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let old = root.join("01JABCDEFGHJKMNPQRSTVWXYZ0");
+        let young = root.join("01JABCDEFGHJKMNPQRSTVWXYZ1");
+        let stranger = root.join("keep-me");
+        for d in [&old, &young, &stranger] {
+            fs::create_dir_all(d).unwrap();
+            fs::write(d.join("video.mp4"), b"x").unwrap();
+        }
+        // "Now" is a week on: every folder is a week old, so only the 3-day rule decides, and the stranger is not
+        // named like a job.
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(7 * 24 * 3600);
+        assert_eq!(sweep_old(&root, later, LEFTOVER), 2);
+        assert!(!old.exists() && !young.exists());
+        assert!(stranger.exists());
+        // Nothing is older than a day yet.
+        fs::create_dir_all(&young).unwrap();
+        assert_eq!(sweep_old(&root, std::time::SystemTime::now(), LEFTOVER), 0);
+        assert!(young.exists());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

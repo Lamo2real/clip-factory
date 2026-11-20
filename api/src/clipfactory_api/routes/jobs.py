@@ -168,19 +168,25 @@ def retry(app: App, req: Request) -> Response:
         # The run read above must still be current, so two retries never start the same flow name.
         expect["sessionId"] = [job["sessionId"]]
     pick_up = jobs.picks_up(job)  # it stopped partway, or after its clips were cut: pick up (§30.6)
+    fields = jobs.restart_fields(
+        job["jobId"],
+        now,
+        int(job.get("flowRun") or 1),
+        pick_up=pick_up,
+        steps=job.get("steps"),
+        progress=job.get("progress"),
+    )
+    # The last run's wait for a Mac (§35) ends with it: its claim, upload, notification and callback must not make
+    # this run look like it still waits (the Mac would download the video while the cloud runs too).
+    fresh_mac = macfetch.restarted(job.get("macFetch"))
+    if fresh_mac is not None:
+        fields["macFetch"] = fresh_mac
     try:
         updated = app.store.update(
             job["pk"],
             job["sk"],
-            jobs.restart_fields(
-                job["jobId"],
-                now,
-                int(job.get("flowRun") or 1),
-                pick_up=pick_up,
-                steps=job.get("steps"),
-                progress=job.get("progress"),
-            ),
-            remove=["error", "flowExecutionArn"] + ([] if pick_up else ["pickUp", "note"]),
+            fields,
+            remove=["error", "flowExecutionArn", "macCallbackId"] + ([] if pick_up else ["pickUp", "note"]),
             expect_in=expect,
         )
     except db.ConditionFailed as e:

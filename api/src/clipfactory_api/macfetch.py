@@ -70,6 +70,17 @@ def new_map(*, up: bool) -> Item:
     return {"state": "waiting", "up": True} if up else {"state": "cloud"}
 
 
+def restarted(value: Any) -> Item | None:
+    """The map for a new run (Try again): a leftover wait is forgotten, so the old claim, upload and notification
+    never carry over. The cloud tries first again (or the Mac, when the job was made in the desktop app); a video the
+    Mac already sent (``done``) stays as it is. ``None`` when the job has no map (nothing to change)."""
+    if not isinstance(value, dict):
+        return None
+    if value.get("state") in ("cloud", "done"):
+        return None
+    return new_map(up=bool(value.get("up")))
+
+
 def public(value: Any) -> Item | None:
     """What the web sees of ``macFetch``: never the device, the upload id or the key."""
     if not isinstance(value, dict):

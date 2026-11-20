@@ -263,8 +263,29 @@ const SAVED_SIG: &str = "tools.json.sig";
 /// Makes sure every tool for this computer is installed in `dir` and matches the signed manifest; returns where they
 /// are. `public_key` is `PUBLIC_KEY` in the app (tests pass their own).
 pub fn ensure(dir: &Path, source: &dyn Source, public_key: &str) -> Result<ToolPaths, ToolError> {
-    let platform = platform().ok_or(ToolError::Unsupported)?;
+    use fs4::fs_std::FileExt;
+    platform().ok_or(ToolError::Unsupported)?;
     fs::create_dir_all(dir)?;
+    // Two fetches may start together (the page starts every waiting job at once): one installs while the other
+    // waits, so neither reads a half-written temp file or renames one that the other is still filling. The lock is
+    // let go when the file closes, also when this process stops.
+    let lock = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(dir.join(".install.lock"))?;
+    lock.lock_exclusive()?;
+    let result = ensure_locked(dir, source, public_key);
+    let _ = FileExt::unlock(&lock);
+    result
+}
+
+fn ensure_locked(
+    dir: &Path,
+    source: &dyn Source,
+    public_key: &str,
+) -> Result<ToolPaths, ToolError> {
+    let platform = platform().ok_or(ToolError::Unsupported)?;
     let saved = read_saved(dir, public_key);
     let fresh = source.get(MANIFEST_URL, MAX_MANIFEST).and_then(|bytes| {
         let sig = source.get(&format!("{MANIFEST_URL}.sig"), 1024)?;
@@ -479,6 +500,64 @@ pub(crate) mod tests {
         let d = std::env::temp_dir().join(format!("cf-tools-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         d
+    }
+
+    /// A source that can be shared by two threads and is slow in the middle of every file, so two unlocked installs
+    /// would overlap on the same temp file.
+    struct Slow {
+        bodies: HashMap<String, Vec<u8>>,
+        fetched: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl Source for Slow {
+        fn get(&self, url: &str, max: u64) -> Result<Vec<u8>, String> {
+            let mut out = Vec::new();
+            self.get_to(url, &mut out, max)?;
+            Ok(out)
+        }
+        fn get_to(&self, url: &str, to: &mut dyn Write, max: u64) -> Result<u64, String> {
+            self.fetched.lock().unwrap().push(url.to_owned());
+            let body = self.bodies.get(url).ok_or("offline")?;
+            if body.len() as u64 > max {
+                return Err("too large".into());
+            }
+            let half = body.len() / 2;
+            to.write_all(&body[..half]).map_err(|e| e.to_string())?;
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            to.write_all(&body[half..]).map_err(|e| e.to_string())?;
+            Ok(body.len() as u64)
+        }
+    }
+
+    #[test]
+    fn two_fetches_starting_together_install_once_and_both_get_good_tools() {
+        if platform().is_none() {
+            return;
+        }
+        let key = test_key();
+        let (fake, _) = signed(3, "2026.10.26", &key);
+        let slow = Slow {
+            bodies: fake.bodies,
+            fetched: Default::default(),
+        };
+        let dir = tmp("together");
+        let public = public_b64(&key);
+        let (a, b) = std::thread::scope(|s| {
+            let one = s.spawn(|| ensure(&dir, &slow, &public));
+            let two = s.spawn(|| ensure(&dir, &slow, &public));
+            (one.join().unwrap(), two.join().unwrap())
+        });
+        let (a, b) = (a.expect("first"), b.expect("second"));
+        assert_eq!(a.yt_dlp, b.yt_dlp);
+        assert_eq!(
+            fs::read_to_string(&a.yt_dlp).unwrap(),
+            "#!/bin/sh\necho yt-dlp 2026.10.26\n",
+            "a whole file, never a half-written one"
+        );
+        // The four files were downloaded once (the one that waited found them in place); each run read the manifest.
+        let fetched = slow.fetched.lock().unwrap();
+        let files = fetched.iter().filter(|u| !u.contains("tools.json")).count();
+        assert_eq!(files, 4, "{fetched:?}");
     }
 
     #[test]

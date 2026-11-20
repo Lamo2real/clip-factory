@@ -7,6 +7,7 @@
 mod mac_fetch;
 mod update;
 
+use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
 use tauri::{Manager, RunEvent, Theme, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
@@ -226,6 +227,8 @@ fn main() {
             let version = app.package_info().version.to_string();
             app.add_capability(drag_capability(&app_url))?;
             app.add_capability(mac_fetch::capability(&app_url, WINDOW_LABEL))?;
+            // Videos left on this computer by a job that never finished are cleared at start-up.
+            mac_fetch::sweep(app.handle());
 
             let mut window =
                 WebviewWindowBuilder::new(app, WINDOW_LABEL, WebviewUrl::External(app_url))
@@ -241,6 +244,10 @@ fn main() {
                     // drops from the page, so it is turned off: the page handles drops, and drops anywhere else are
                     // ignored by the page (web/src/features/help/HelpLauncher.tsx).
                     .disable_drag_drop_handler()
+                    // The page drives Mac fetches with timers (the 30 s look at the jobs, the 1 s poll, the
+                    // progress reports). A window that is minimized or covered must not have them slowed or
+                    // paused, or a job started from the phone would wait while the app sits behind other windows.
+                    .background_throttling(BackgroundThrottlingPolicy::Disabled)
                     .initialization_script(init_script(glass, &version, titlebar_height()));
             // macOS: the title bar is laid over the page, clear and without its title, so there is no white strip and
             // the traffic lights float on the app's own glass (the page keeps their band clear, §11.1). The title
