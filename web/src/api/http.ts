@@ -9,6 +9,7 @@ import type {
   KeyCheck,
   Follow,
   Lesson,
+  MacUploadParts,
   PlatformSetup,
   Post,
   PushDevice,
@@ -85,6 +86,10 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     getJob: (jobId) => call("GET", `/jobs/${id(jobId)}`),
     cancelJob: async (jobId) => (await call<{ job: Job }>("POST", `/jobs/${id(jobId)}/cancel`)).job,
     retryJob: async (jobId) => (await call<{ job: Job }>("POST", `/jobs/${id(jobId)}/retry`)).job,
+    macProgress: async (jobId, body) => (await call<{ job: Job }>("POST", `/jobs/${id(jobId)}/mac-progress`, body)).job,
+    macSourceUpload: (jobId, body) => call<MacUploadParts>("POST", `/jobs/${id(jobId)}/source-upload`, body),
+    macSourceComplete: async (jobId, body) =>
+      (await call<{ job: Job }>("POST", `/jobs/${id(jobId)}/source-upload/complete`, body)).job,
     listClips: async (query = {}) =>
       (await call<{ clips: Clip[] }>("GET", `/clips${q({ status: query.status, jobId: query.jobId })}`)).clips,
     getClip: async (clipId) => (await call<{ clip: Clip }>("GET", `/clips/${id(clipId)}`)).clip,

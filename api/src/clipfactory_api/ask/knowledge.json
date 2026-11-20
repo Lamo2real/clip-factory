@@ -1,5 +1,5 @@
 {
- "version": "1d3803b5325a",
+ "version": "0c60d0b93951",
  "parts": [
   {
    "id": "app-map",
@@ -226,6 +226,12 @@
    "title": "CONTRACTS: 33. Upload to many places (owner request, 2026-11-20)",
    "line": "The owner, on a Review card: \"X isn't set up yet, so X should not be an option there\", \"I want to select as many as I",
    "chars": 7220
+  },
+  {
+   "id": "contracts-35",
+   "title": "CONTRACTS: 35. Mac fetches it (owner decision, 2026-11-20)",
+   "line": "When YouTube blocks the cloud (the bot check, \"cookies ran out\", a 403 that the §29.4 fallback cannot get past), the",
+   "chars": 13719
   },
   {
    "id": "adr-01",
@@ -568,6 +574,12 @@
    "title": "DECISIONS: ADR-57 Upload replaces Keep; the owner picks places per clip; no dropdowns, no extra options",
    "line": "Upload to many places at once, nothing else to pick, inside each platform's rules.",
    "chars": 2057
+  },
+  {
+   "id": "adr-59",
+   "title": "DECISIONS: ADR-59 Mac fetches it: the owner's desktop app downloads what YouTube refuses the cloud",
+   "line": "The desktop app gets the YouTube video on the owner's home connection and sends it to the job, up front for jobs",
+   "chars": 2364
   },
   {
    "id": "architecture-overview",

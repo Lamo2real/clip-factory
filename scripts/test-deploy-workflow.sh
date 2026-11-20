@@ -7,6 +7,9 @@
 #   - the updater signing key reaches only the desktop build job (which has no OIDC token), and latest.json is
 #     written by desktop-manifest, which runs after desktop-upload (§12.6).
 #   - the smoke job checks that the deployed Ask model reads a picture (ADR-53).
+#   - the tool manifest's key (CF_TOOLS_SIGNING_KEY) reaches only desktop-tools, which has no OIDC token; the pinned
+#     tools never rebuild the app (desktop-plan's hash leaves out desktop/tools), and the app build gets the media
+#     bucket's host (§35).
 # Run: bash scripts/test-deploy-workflow.sh   (ci.yml runs it on every push)
 set -euo pipefail
 
@@ -158,6 +161,33 @@ if grep -Eq '^    runs-on: ubuntu-24.04-arm$' <<<"$infra" && ! grep -q 'setup-qe
   ok "the agent image (and its PO token self-check) is built on native ARM64 in CI and in the deploy, never under QEMU"
 else
   not_ok "deploy.yml infra and ci.yml agent must run on ubuntu-24.04-arm without setup-qemu-action, and the Dockerfile must run the PO token self-check"
+fi
+
+# 11. Mac fetches it (§35.4): the tool manifest's signing key reaches only desktop-tools, which cannot mint an OIDC
+#     token and is never the updater key's job; desktop-tools-upload assumes the role but never sees the key.
+tools="$(job desktop-tools)"
+tools_upload="$(job desktop-tools-upload)"
+tool_key_users=()
+while IFS= read -r name; do
+  if job "$name" | grep -q 'secrets\.CF_TOOLS_SIGNING_KEY'; then tool_key_users+=("$name"); fi
+done < <(grep -E '^  [A-Za-z0-9_-]+:$' "$deploy" | sed -E 's/^  ([^:]+):$/\1/')
+if [ "${tool_key_users[*]:-}" = "desktop-tools" ] \
+  && ! grep -Eq '^\s+id-token:' <<<"$tools" && ! grep -q 'configure-aws-credentials' <<<"$tools" \
+  && ! grep -q 'TAURI_SIGNING' <<<"$tools" \
+  && grep -q 'id-token: write' <<<"$tools_upload" && ! grep -q 'CF_TOOLS_SIGNING_KEY' <<<"$tools_upload"; then
+  ok "the tool manifest key reaches only desktop-tools (no OIDC token there), never the updater key"
+else
+  not_ok "CF_TOOLS_SIGNING_KEY must be used only in desktop-tools, which must have no id-token (users: ${tool_key_users[*]:-none})"
+fi
+
+# 12. Bumping a pinned tool never rebuilds the app, and the app build knows where to send the Mac's video.
+plan="$(job desktop-plan)"
+# shellcheck disable=SC2016  # the literal text "$MEDIA_HOST" is what the workflow must contain
+if grep -q "'!desktop/tools/\*\*'" <<<"$plan" && grep -q 'CF_MEDIA_HOST: ' <<<"$desktop" \
+  && grep -q '"$MEDIA_HOST"' <<<"$plan"; then
+  ok "desktop/tools is left out of the app's source hash, and the app build gets the media bucket host"
+else
+  not_ok "desktop-plan must hash desktop/** without desktop/tools/** and the desktop build must set CF_MEDIA_HOST"
 fi
 
 echo "${passed} passed, ${failed} failed"

@@ -17,7 +17,7 @@ from typing import Any, Protocol
 from . import livestatus
 from .bedrock import MODEL_ACCESS_MESSAGE, model_unavailable
 from .retry import is_transient, retry
-from .util import JobCanceled, JobSuperseded, UserFacingError, log, now_iso
+from .util import JobCanceled, JobSuperseded, NeedsMac, UserFacingError, log, now_iso
 
 # The ten steps, their owner-facing labels (kid-proof words) and their share of the progress bar. The keys and labels
 # are the same list in api/src/clipfactory_api/jobs.py and web/src/api/mock/fixtures.ts (tests/test_jobs.py checks).
@@ -394,6 +394,19 @@ class Tracker:
             return
         await self._write({"status": "failed", "error": self.error}, remove=RESUME_NOTE_FIELDS)
 
+    async def wait_for_mac(self, note: str) -> None:
+        """YouTube blocked the cloud (§35.1): the job stays ``running`` and the step that was blocked says it waits for
+        the owner's Mac. The job flow takes it from here (it waits for the Mac's upload, then starts a new run)."""
+        if self.superseded:
+            return
+        if self.current:
+            s = self.step(self.current)
+            s.update(status="running", message=note[:300])
+            s.pop("finishedAt", None)
+        if self.live is not None:
+            self.live.emit("note", text=note)
+        await self._write({}, remove=("note",))
+
     async def finish_canceled(self) -> None:
         if self.superseded:
             return
@@ -530,6 +543,18 @@ async def run_job(
             log("info", "job.superseded", job=tracker.job_id, step=tracker.current)
             return "superseded"
         return "canceled"
+    except NeedsMac as e:
+        log("info", "job.needs_mac", job=tracker.job_id, step=tracker.current, reason=e.reason)
+        await tracker.stop()
+        try:
+            await tracker.wait_for_mac(str(e))
+        except JobSuperseded:
+            log("info", "job.superseded", job=tracker.job_id, step=tracker.current)
+            return "superseded"
+        except Exception as e2:
+            log("error", "job.mac_write_failed", job=tracker.job_id, error=type(e2).__name__)
+        tracker.error = str(e)
+        return "mac"
     except Exception as e:
         log(
             "error",

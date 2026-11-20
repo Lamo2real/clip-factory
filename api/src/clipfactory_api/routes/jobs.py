@@ -5,7 +5,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from .. import clips, db, jobs, s3, settings, validate
+from .. import clips, db, jobs, macfetch, s3, settings, validate
 from ..agent_client import AgentError, new_session_id
 from ..app import App
 from ..clock import iso
@@ -59,7 +59,9 @@ def _job_or_404(app: App, req: Request) -> dict[str, Any]:
 
 def create(app: App, req: Request) -> Response:
     body = req.json()
-    validate.only_keys(body, {"source", "clipTarget", "notes"})
+    validate.only_keys(body, {"source", "clipTarget", "notes", "macFetch"})
+    # Started from the desktop app (§35.1): a YouTube link is fetched by the owner's Mac from the start.
+    mac_up = validate.boolean(body["macFetch"], "macFetch") if "macFetch" in body else False
     user_settings = settings.load(app.store, req.user_id)
     source = _source(app, req.user_id, body.get("source"))
     target = _clip_target(body.get("clipTarget"), user_settings)
@@ -86,6 +88,9 @@ def create(app: App, req: Request) -> Response:
     }
     if notes:
         item["notes"] = notes
+    if source["type"] == "link" and source["platform"] == "youtube":
+        # Blocked by YouTube, the job waits for the owner's Mac instead of failing (§35); the agent checks for this map.
+        item["macFetch"] = macfetch.new_map(up=mac_up)
     app.store.put(item, if_absent=True)
     log("info", "job.created", jobId=job_id, platform=source["platform"])
     job = jobs.start(app.store, app.flows, item, now)
@@ -126,6 +131,7 @@ def cancel(app: App, req: Request) -> Response:
         updated = app.store.update(job["pk"], job["sk"], {"status": "canceled", "updatedAt": now}, expect_in=expect)
     except db.ConditionFailed as e:
         raise conflict("Only a queued or running job can be stopped.") from e
+    _end_mac_wait(app, job)
     if job.get("sessionId"):
         try:
             app.agent.cancel_job(job["jobId"], job["sessionId"])
@@ -136,6 +142,24 @@ def cancel(app: App, req: Request) -> Response:
     return ok({"job": jobs.public_job(updated)})
 
 
+def _end_mac_wait(app: App, job: dict[str, Any]) -> None:
+    """A job waiting for the owner's Mac (§35) is stopped: the job flow's wait ends now (not after 24 h) and a half-sent
+    video is dropped. Best effort: the job is already canceled in the table, and the bucket's lifecycle rule removes a
+    forgotten upload."""
+    callback_id = job.get("macCallbackId")
+    if isinstance(callback_id, str) and callback_id:
+        try:
+            app.flows.mac_stopped(callback_id, "Canceled", "The job was canceled.")
+        except Exception as e:
+            log("warning", "job.mac_cancel_signal_failed", jobId=job["jobId"], error=type(e).__name__)
+    mac = job.get("macFetch")
+    if isinstance(mac, dict) and mac.get("uploadId") and mac.get("key"):
+        try:
+            app.media.abort_multipart(str(mac["key"]), str(mac["uploadId"]))
+        except Exception as e:
+            log("warning", "job.mac_abort_failed", jobId=job["jobId"], error=type(e).__name__)
+
+
 def retry(app: App, req: Request) -> Response:
     job = _job_or_404(app, req)
     now = iso(app.clock())
@@ -144,19 +168,25 @@ def retry(app: App, req: Request) -> Response:
         # The run read above must still be current, so two retries never start the same flow name.
         expect["sessionId"] = [job["sessionId"]]
     pick_up = jobs.picks_up(job)  # it stopped partway, or after its clips were cut: pick up (§30.6)
+    fields = jobs.restart_fields(
+        job["jobId"],
+        now,
+        int(job.get("flowRun") or 1),
+        pick_up=pick_up,
+        steps=job.get("steps"),
+        progress=job.get("progress"),
+    )
+    # The last run's wait for a Mac (§35) ends with it: its claim, upload, notification and callback must not make
+    # this run look like it still waits (the Mac would download the video while the cloud runs too).
+    fresh_mac = macfetch.restarted(job.get("macFetch"))
+    if fresh_mac is not None:
+        fields["macFetch"] = fresh_mac
     try:
         updated = app.store.update(
             job["pk"],
             job["sk"],
-            jobs.restart_fields(
-                job["jobId"],
-                now,
-                int(job.get("flowRun") or 1),
-                pick_up=pick_up,
-                steps=job.get("steps"),
-                progress=job.get("progress"),
-            ),
-            remove=["error", "flowExecutionArn"] + ([] if pick_up else ["pickUp", "note"]),
+            fields,
+            remove=["error", "flowExecutionArn", "macCallbackId"] + ([] if pick_up else ["pickUp", "note"]),
             expect_in=expect,
         )
     except db.ConditionFailed as e:

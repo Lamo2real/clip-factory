@@ -50,8 +50,8 @@ run "both_flows_are_durable_with_alias_live" {
   }
 
   assert {
-    condition     = one(aws_lambda_function.fn["job-flow"].durable_config).execution_timeout == 30600
-    error_message = "job-flow execution_timeout must be 30600 s (8 h callback + start and finish)."
+    condition     = one(aws_lambda_function.fn["job-flow"].durable_config).execution_timeout == 149400
+    error_message = "job-flow execution_timeout must be 149400 s (8 h run + 24 h waiting for the Mac + 8 h run, §35)."
   }
 
   assert {

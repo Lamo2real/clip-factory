@@ -61,6 +61,19 @@ class UserFacingError(Exception):
     """A failure whose message is written for the owner and shown on the job as is."""
 
 
+class NeedsMac(UserFacingError):
+    """YouTube blocked the cloud (the bot check, run-out cookies, or a 403 the Cut step's fallback could not get past):
+    the job does not fail. It waits for the owner's Mac or Windows app to get the video on its own connection and send
+    it (docs/CONTRACTS.md §35). The message is the step's note while it waits."""
+
+    def __init__(self, reason: str = "blocked") -> None:
+        super().__init__(WAITING_FOR_MAC)
+        self.reason = reason
+
+
+WAITING_FOR_MAC = "Waiting for your Mac to get the video"
+
+
 class TransientError(Exception):
     """A failure worth retrying (throttling, a network blip, a 5xx)."""
 

@@ -129,6 +129,36 @@ class Media:
         )
         return url
 
+    # --- multipart: the Mac's video (docs/CONTRACTS.md §35.3) -------------------------------------------------------
+
+    def create_multipart(self, key: str, content_type: str) -> str:
+        out = self._s3.create_multipart_upload(Bucket=self.bucket, Key=key, ContentType=content_type)
+        return str(out["UploadId"])
+
+    def presign_part(self, key: str, upload_id: str, part: int, seconds: int) -> str:
+        url: str = self._s3.generate_presigned_url(
+            "upload_part",
+            Params={"Bucket": self.bucket, "Key": key, "UploadId": upload_id, "PartNumber": part},
+            ExpiresIn=seconds,
+        )
+        return url
+
+    def complete_multipart(self, key: str, upload_id: str, parts: list[dict[str, Any]]) -> None:
+        self._s3.complete_multipart_upload(
+            Bucket=self.bucket,
+            Key=key,
+            UploadId=upload_id,
+            MultipartUpload={"Parts": [{"PartNumber": p["n"], "ETag": p["etag"]} for p in parts]},
+        )
+
+    def abort_multipart(self, key: str, upload_id: str) -> None:
+        """Best effort: an upload already completed or aborted is fine (the bucket's lifecycle rule is the backstop)."""
+        try:
+            self._s3.abort_multipart_upload(Bucket=self.bucket, Key=key, UploadId=upload_id)
+        except Exception as e:
+            if _code(e) not in {"NoSuchUpload", "404"} and _status(e) != 404:
+                raise
+
     def head(self, key: str) -> dict[str, Any] | None:
         """The object's metadata, or None when it does not exist."""
         try:

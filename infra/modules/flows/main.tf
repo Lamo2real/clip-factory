@@ -1,5 +1,6 @@
 # The two durable Lambda functions of docs/CONTRACTS.md §14.4 and §14.5:
-#   cf-prod-job-flow   starts the agent for one job and waits (no compute) for its callback, up to 8.5 hours. A
+#   cf-prod-job-flow   starts the agent for one job and waits (no compute) for its callback, up to 8.5 hours (41.5
+#                      with a wait of up to 24 h for the owner's Mac when YouTube blocks the cloud, §35). A
 #                      missed heartbeat (15 minutes) fails the job. Replaces the watchdog.
 #   cf-prod-clip-flow  publishes a kept clip (start/check/finish per platform with the owner's tokens from Secrets
 #                      Manager, §17.6), waits 48 hours (no compute), reads metrics, distils a learning and
@@ -25,10 +26,13 @@ locals {
 
   functions = {
     job-flow = {
-      handler           = "clipfactory_api.flows.job_flow.handler"
-      memory            = 256
-      timeout           = 120   # one replay of the handler; waiting for the callback costs nothing
-      execution_timeout = 30600 # 8 h agent callback timeout + start and finish steps (8.5 h)
+      handler = "clipfactory_api.flows.job_flow.handler"
+      memory  = 256
+      timeout = 120 # one replay of the handler; waiting for the callback costs nothing
+      # 8 h agent run, then (Mac fetches it, docs/CONTRACTS.md §35) up to 24 h waiting for the owner's Mac and a
+      # second 8 h run on its video, with start and finish steps around each (41.5 h). Raised in place: Terraform
+      # replaces a function only when durable_config is added or removed; running executions keep their own timeout.
+      execution_timeout = 149400
       env = {
         TABLE_NAME        = var.table_name
         AGENT_RUNTIME_ARN = var.agent_runtime_arn

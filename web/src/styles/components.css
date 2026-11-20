@@ -1457,3 +1457,18 @@
   flex: none;
   color: var(--green-ink);
 }
+/* Mac fetches it (§35.5): the job waits for the owner's Mac. Same flat fill as every info callout: no edges. */
+.mac-wait__words {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.mac-wait__title,
+.mac-wait__hint {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.mac-wait__hint {
+  font-weight: 500;
+  color: var(--ink-2);
+}

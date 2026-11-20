@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -67,6 +68,40 @@ class FlowClient:
     def start_clip_flow(self, clip_id: str, user_id: str, run: int) -> Started:
         payload = {"clipId": clip_id, "userId": user_id, "run": run}
         return self._start(self.clip_flow_arn, clip_flow_name(clip_id, run), payload)
+
+    # --- the job flow's mac-done callback (docs/CONTRACTS.md §35) -----------------------------------------------------
+
+    def mac_done(self, callback_id: str, result: dict[str, Any]) -> bool:
+        """Tells the job flow the Mac's video is in S3. False when the callback is already closed (timed out, or
+        completed by an earlier try of the same request)."""
+        return self._callback(
+            lambda: self._client.send_durable_execution_callback_success(
+                CallbackId=callback_id, Result=json.dumps(result, sort_keys=True).encode()
+            )
+        )
+
+    def mac_stopped(self, callback_id: str, error_type: str, message: str) -> bool:
+        """Ends the job flow's wait: ``MacFailed`` (the Mac stopped; ``message`` is the owner's words) or
+        ``Canceled`` (the owner stopped the job)."""
+        return self._callback(
+            lambda: self._client.send_durable_execution_callback_failure(
+                CallbackId=callback_id, Error={"ErrorType": error_type, "ErrorMessage": message[:256]}
+            )
+        )
+
+    @staticmethod
+    def _callback(send: Callable[[], Any]) -> bool:
+        try:
+            send()
+        except Exception as e:
+            code = getattr(e, "response", {}).get("Error", {}).get("Code")
+            text = str(e).lower()
+            if code in {"ResourceNotFoundException", "CallbackTimeoutException"} or any(
+                w in text for w in ("closed", "completed", "already", "timed out", "not found", "expired")
+            ):
+                return False
+            raise FlowStartError(f"callback failed: {code or type(e).__name__}") from e
+        return True
 
     def _start(self, arn: str, name: str, payload: dict[str, Any]) -> Started:
         if not _ALIAS_ARN.match(arn or ""):

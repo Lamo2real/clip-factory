@@ -55,7 +55,18 @@ from .render import RenderResult, render_clip
 from .skills import SkillsBlock, SkillSet, prepare_skills, skills_block
 from .store import Fence, Store, clip_prefix, cookies_key, source_prefix
 from .transcribe import PART_SECONDS, Transcriber, job_name, language_of, parse_items, parse_speakers
-from .util import JobCanceled, JobSuperseded, TransientError, UserFacingError, gather_all, hms, log, now_iso, ulid
+from .util import (
+    JobCanceled,
+    JobSuperseded,
+    NeedsMac,
+    TransientError,
+    UserFacingError,
+    gather_all,
+    hms,
+    log,
+    now_iso,
+    ulid,
+)
 
 RENDER_CONCURRENCY = 2  # the ceiling: a second clip is cut alongside only when memory allows (RenderGate)
 PARALLEL_FREE = 3 * 1024**3  # free memory a second render needs (a 1080p clip's two ffmpeg runs, with room to spare)
@@ -137,6 +148,15 @@ def cut_failure(reasons: list[str]) -> str:
         if preferred in reasons:
             return preferred
     return reasons[0] if reasons else sources.CUT_FAILED
+
+
+def needs_mac(st: JobState, why: str, full_error: BaseException | None) -> bool:
+    """When no clip of a YouTube link could be cut because YouTube refused the cloud (blocked, cookies ran out) or the
+    one full download of §29.4 step 4 failed too, the owner's Mac gets the video instead (§35.1)."""
+    source = st.source
+    if not st.mac_ok or source.get("type") == "upload" or source.get("platform") != "youtube":
+        return False
+    return why in (sources.CUT_BLOCKED, sources.COOKIES_EXPIRED) or full_error is not None
 
 
 # The full-download fallback (§29.4) keeps this much video around the clips' range, in seconds: the cut takes a
@@ -248,6 +268,7 @@ class JobState:
     full_source: Path | None = None
     full_offset: float = 0.0  # where full_source starts in the video (a range download starts after 0)
     full_error: UserFacingError | None = None
+    mac_ok: bool = False  # blocked by YouTube, wait for the owner's Mac instead of failing (§35.1)
     full_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     # An upload is copied to the disk once for the Cut step and cut locally (§30.4); None: cut from S3.
     upload_source: Path | None = None
@@ -428,6 +449,8 @@ class Pipeline:
             raise UserFacingError("This job no longer exists.")
         st.job = job
         st.pick_up = bool(job.get("pickUp"))  # a run that stopped partway: its moments and clips are reused (§30)
+        # The API gives every YouTube link job made since §35 a ``macFetch`` map: blocked, it waits for the owner's Mac.
+        st.mac_ok = isinstance(job.get("macFetch"), dict)
         st.settings = await self.store.get_settings(st.user_id)
         self.pick_model(st)
         st.source = dict(job.get("source") or {})
@@ -476,7 +499,7 @@ class Pipeline:
         try:
             info = await sources.video_info(url, st.cookies, proxy=st.proxy)
         except proc.CommandError as e:
-            raise sources.explain(e, platform, st.cookies is not None) from e
+            raise sources.explain_or_mac(e, platform, st.cookies is not None, mac_ok=st.mac_ok) from e
         if info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming"):
             raise UserFacingError("This stream is still live or has not started. Try again once it has ended.")
         st.source.update(sources.source_fields(info, platform))
@@ -593,7 +616,7 @@ class Pipeline:
                     on_progress=lambda f: tr.report(0.9 * f),
                 )
             except proc.CommandError as e:
-                raise sources.explain(e, platform, st.cookies is not None) from e
+                raise sources.explain_or_mac(e, platform, st.cookies is not None, mac_ok=st.mac_ok) from e
         info = await proc.probe(str(local))
         if info.duration < 10:
             raise UserFacingError("The video is too short to clip (under 10 seconds of audio).")
@@ -1572,8 +1595,15 @@ class Pipeline:
         if await self._reload_checked(st, tr):
             return f"Used the {count(len(st.candidates), 'clip')} cut and checked last time."
         if st.source.get("type") != "upload" and st.source.get("platform") == "youtube":
-            # One extraction for every clip (§29.4): the sections read the formats from this file.
-            await self._save_info(st)
+            # One extraction for every clip (§29.4): the sections read the formats from this file. Blocked here, the
+            # owner's Mac gets the video instead (§35.1).
+            try:
+                await self._save_info(st)
+            except UserFacingError as e:
+                if needs_mac(st, str(e), None):
+                    log("info", "render.needs_mac", job=st.job_id, why=str(e)[:80])
+                    raise NeedsMac("cut") from e
+                raise
         gate = RenderGate(RENDER_CONCURRENCY, lambda: self._can_parallel(st))
         if st.pick_up:
             gate.serial = True  # the run before stopped partway: one clip at a time, the safest way (§30.4)
@@ -1660,7 +1690,11 @@ class Pipeline:
             log("info", "render.reused", job=st.job_id, clips=reused, given_up=given_up)
         if not st.candidates:
             self._drop_full(st)
-            raise UserFacingError(cut_failure(reasons))
+            why = cut_failure(reasons)
+            if needs_mac(st, why, st.full_error):
+                log("info", "render.needs_mac", job=st.job_id, why=why[:80])
+                raise NeedsMac("cut")
+            raise UserFacingError(why)
         failed = len(st.chosen) - len(st.candidates)
         return f"Cut {count(len(st.candidates), 'clip')}" + (f"; {failed} could not be cut." if failed else ".")
 

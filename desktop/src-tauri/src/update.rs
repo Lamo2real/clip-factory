@@ -21,7 +21,7 @@ use tauri_plugin_updater::UpdaterExt;
 /// The one place updates come from. tauri.conf.json names the same address (a test keeps the two in step).
 pub const MANIFEST_URL: &str = "https://dglrbjmf28m6c.cloudfront.net/downloads/latest.json";
 /// The host both the manifest and the bundles must be on.
-const UPDATE_HOST: &str = "dglrbjmf28m6c.cloudfront.net";
+pub const UPDATE_HOST: &str = "dglrbjmf28m6c.cloudfront.net";
 
 /// Long enough for the window and the page to settle first.
 const FIRST_CHECK_AFTER: Duration = Duration::from_secs(5);

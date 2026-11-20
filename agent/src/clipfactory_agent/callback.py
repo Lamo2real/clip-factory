@@ -5,7 +5,8 @@ The job flow passes a ``callbackId`` in ``process_job`` and waits, with no compu
 * a heartbeat every 2 minutes while the job runs, from its own thread (heartbeat.py; the flow's heartbeat timeout is
   6 minutes, so a container that died or froze is noticed in minutes and the job resumes, §30);
 * success, after finalize wrote the Job ``ready``: ``{"jobId", "clipCount"}``;
-* failure: ``JobFailed`` (the agent wrote the Job ``failed``), ``Canceled`` (the owner canceled), ``Superseded``
+* failure: ``MacFetch`` (YouTube blocked the cloud; the job stays running and waits for the owner's Mac, §35),
+  ``JobFailed`` (the agent wrote the Job ``failed``), ``Canceled`` (the owner canceled), ``Superseded``
   (a retry gave the job a new session, §13 "One run per job") or ``AgentStopped`` (the container is shutting down,
   SIGTERM: the flow resumes the job at once, §30), with the Job's plain-sentence error.
 
@@ -31,6 +32,7 @@ JOB_FAILED = "JobFailed"
 CANCELED = "Canceled"
 SUPERSEDED = "Superseded"
 AGENT_STOPPED = "AgentStopped"
+MAC_FETCH = "MacFetch"
 
 CANCELED_MESSAGE = "The job was canceled."
 SUPERSEDED_MESSAGE = "A newer run of this job took over."
@@ -208,5 +210,8 @@ async def report(cb: DurableCallback | None, status: str, *, job_id: str, clip_c
         await cb.fail(SUPERSEDED, SUPERSEDED_MESSAGE)
     elif status == "stopped":
         await cb.fail(AGENT_STOPPED, STOPPED_MESSAGE)
+    elif status == "mac":
+        # YouTube blocked the cloud: the job flow waits for the owner's Mac to send the video (§35.1).
+        await cb.fail(MAC_FETCH, error or "Waiting for your Mac to get the video")
     else:
         await cb.fail(JOB_FAILED, error or GENERIC_FAILURE)

@@ -19,12 +19,15 @@ the installed apps **update themselves** (see "How installed apps update" below)
 | Updates itself | `tauri-plugin-updater`, from Rust (`src-tauri/src/update.rs`): 5 s after start and every 6 hours it reads `downloads/latest.json` on the app's CloudFront, downloads a newer signed version in the background and asks once, "Clip Factory updated / Restart to use the newest version.", **Restart now** or **Later** (`tauri-plugin-dialog`). Later = the next start. Errors are silent. |
 | Tells the web app its version | `window.__CF_DESKTOP_VERSION__` (`1.<n>.0`), so the page can tell copies apart. A copy with no `window.__CF_GLASS__` is from before 2026-11-16 and gets an "Update the app" button in the page. |
 | Icon | Generated from `web/public/icons/icon-512.png` by `scripts/make-icons.sh` (also run by every CI build). |
+| Gets YouTube videos the cloud cannot (Mac fetches it) | When YouTube blocks the cloud, or for a YouTube link started in this window, the page asks the app (`window.__CF_MAC_FETCH__`, four commands) to download the video on this computer's own connection and send it to the job (docs/CONTRACTS.md §35). The app downloads pinned yt-dlp, Deno and ffmpeg from the app's own CloudFront the first time, checks the ed25519-signed manifest (`downloads/tools/tools.json`) with the public key in `src/mac_fetch/tools.rs` and every file's SHA-256, and keeps them in its data folder. No cookies. Bumping a tool: `tools/tools.lock.json` (see `tools/build_tools.py`), no app release. |
 | Installers | Mac: universal `.dmg` (Apple silicon and Intel). Windows: NSIS `-setup.exe`, installs for the current user only and fetches the WebView2 runtime if missing. |
 
 ### Security
 
-The page inside the window is a remote website, so it gets **no native access at all**: the only capability
-(`src-tauri/capabilities/main.json`) grants nothing, `withGlobalTauri` is off, and there is no file system or
+The page inside the window is a remote website, so it gets **almost no native access**: the only capability file
+(`src-tauri/capabilities/main.json`) grants nothing; at start-up `main.rs` grants the app's own address (main window
+only) the title-bar drag and the four Mac fetches it commands, which check every link, job id and upload address
+themselves (`src-tauri/src/mac_fetch/check.rs`); `withGlobalTauri` is off, and there is no file system or
 shell plugin. Opening links, saving the window state, checking for updates and the restart question happen in Rust. The window glass is chosen and applied in
 Rust too; the page only reads `window.__CF_GLASS__`.
 

@@ -334,3 +334,9 @@ jobs:
       - name: tauri.conf.json and the capability are valid JSON
         working-directory: desktop
         run: jq -e . src-tauri/tauri.conf.json src-tauri/capabilities/*.json package.json >/dev/null
+      # Mac fetches it (§35.4): the pinned tools' lock and the manifest signing, with a throwaway key, no network.
+      - name: the desktop tools lock and its signing
+        working-directory: .
+        run: |
+          python3 desktop/tools/test_build_tools.py
+          jq -e . desktop/tools/tools.lock.json >/dev/null

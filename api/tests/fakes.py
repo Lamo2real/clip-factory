@@ -406,6 +406,7 @@ class FakeS3:
         self.put_types: dict[str, str] = {}
         self.read_errors: dict[str, list[Exception]] = {}  # key -> errors raised by the next get_object calls
         self.puts: list[dict[str, Any]] = []
+        self.multipart: dict[str, dict[str, Any]] = {}
 
     def generate_presigned_url(self, op: str, Params: dict[str, Any], ExpiresIn: int) -> str:
         self.presigned.append((op, Params, ExpiresIn))
@@ -435,6 +436,37 @@ class FakeS3:
     def delete_object(self, Bucket: str, Key: str) -> dict[str, Any]:
         self.objects.pop(Key, None)
         self.deleted.append(Key)
+        return {}
+
+    # Multipart (docs/CONTRACTS.md §35.3): parts are "sent" by the test through ``send_part``.
+    def create_multipart_upload(self, Bucket: str, Key: str, ContentType: str) -> dict[str, Any]:
+        upload_id = f"up-{len(self.multipart) + 1}"
+        self.multipart[upload_id] = {"key": Key, "parts": {}, "aborted": False}
+        return {"UploadId": upload_id}
+
+    def send_part(self, upload_id: str, n: int, body: bytes) -> str:
+        etag = f'"etag-{upload_id}-{n}"'
+        self.multipart[upload_id]["parts"][n] = (etag, body)
+        return etag
+
+    def complete_multipart_upload(self, Bucket: str, Key: str, UploadId: str, MultipartUpload: Any) -> dict[str, Any]:
+        up = self.multipart.get(UploadId)
+        if up is None or up["aborted"] or up["key"] != Key:
+            raise client_error("NoSuchUpload", 404)
+        body = b""
+        for p in MultipartUpload["Parts"]:
+            etag, data = up["parts"][p["PartNumber"]]
+            if etag != p["ETag"]:
+                raise client_error("InvalidPart", 400)
+            body += data
+        self.objects[Key] = body
+        return {}
+
+    def abort_multipart_upload(self, Bucket: str, Key: str, UploadId: str) -> dict[str, Any]:
+        up = self.multipart.get(UploadId)
+        if up is None:
+            raise client_error("NoSuchUpload", 404)
+        up["aborted"] = True
         return {}
 
     def list_objects_v2(self, Bucket: str, Prefix: str, **_: Any) -> dict[str, Any]:
@@ -506,6 +538,20 @@ class FakeLambda:
         self.calls: list[dict[str, Any]] = []
         self.started: dict[str, str] = {}  # execution name -> payload
         self.fail = False
+        self.callbacks: list[tuple[str, dict[str, Any]]] = []  # the job flow's callbacks the API sent (§35)
+        self.closed_callbacks: set[str] = set()
+
+    def send_durable_execution_callback_success(self, **kw: Any) -> dict[str, Any]:
+        return self._callback("success", kw)
+
+    def send_durable_execution_callback_failure(self, **kw: Any) -> dict[str, Any]:
+        return self._callback("failure", kw)
+
+    def _callback(self, kind: str, kw: dict[str, Any]) -> dict[str, Any]:
+        if kw["CallbackId"] in self.closed_callbacks:
+            raise client_error("ResourceNotFoundException", 404)
+        self.callbacks.append((kind, kw))
+        return {}
 
     def invoke(self, **kw: Any) -> dict[str, Any]:
         payload = kw["Payload"].decode() if isinstance(kw["Payload"], bytes) else kw["Payload"]

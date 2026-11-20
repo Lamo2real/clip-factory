@@ -212,6 +212,27 @@ run "permissions" {
   assert {
     condition = anytrue([
       for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement :
+      s.Sid == "JobFlowMacCallback" && s.Action == [
+        "lambda:SendDurableExecutionCallbackSuccess",
+        "lambda:SendDurableExecutionCallbackFailure",
+        ] && s.Resource == [
+        "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-job-flow:*",
+      ]
+    ])
+    error_message = "The API may end only the job flow's callbacks (the wait for the owner's Mac, §35), and never heartbeat them."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement :
+      s.Sid == "MacUploadAbort" && s.Action == ["s3:AbortMultipartUpload"] && s.Resource == ["arn:aws:s3:::cf-test-media/uploads/*"]
+    ])
+    error_message = "The API may abort only multipart uploads under uploads/ (the Mac's video, §35)."
+  }
+
+  assert {
+    condition = anytrue([
+      for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement :
       s.Sid == "StatsAndLearn" && s.Action == ["lambda:InvokeFunction"] && s.Resource == [
         "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-stats",
         "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-learn",

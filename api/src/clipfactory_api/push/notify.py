@@ -47,6 +47,7 @@ READY = "Your clips are ready. Tap to look."
 STOPPED = "It stopped. Tap Try again."
 TEST_TITLE = "Clip Factory"
 RESUMED = "Picking up where it stopped."
+MAC = "Open Clip Factory on your Mac to continue."  # docs/CONTRACTS.md §35.2
 TEST_BODY = "Notifications are on 🎉"
 ACTIVE = ("queued", "running")
 CLIP_OF = re.compile(r"\bclip (\d+) of (\d+)\b", re.IGNORECASE)
@@ -101,6 +102,8 @@ def event_for(old: Mapping[str, Any], new: Mapping[str, Any]) -> str | None:
         return "stopped"
     if status in ACTIVE and new.get("pickUp") and new.get("sessionId") != old.get("sessionId"):
         return "resumed"
+    if status in ACTIVE and _nudged(new) and not _nudged(old):
+        return "mac"
     if status != "running":
         return None
     # The step now running. Whether it was already shown is decided against what was last sent (``_step_allowed``),
@@ -110,6 +113,12 @@ def event_for(old: Mapping[str, Any], new: Mapping[str, Any]) -> str | None:
         return None
     clip = clip_of(new)
     return f"step:{now[0]}" + (f":{clip[0]}" if clip else "")
+
+
+def _nudged(job: Mapping[str, Any]) -> bool:
+    """The job flow marked a job no Mac claimed within 2 minutes (docs/CONTRACTS.md §35.2)."""
+    mac = job.get("macFetch")
+    return isinstance(mac, Mapping) and bool(mac.get("nudgedAt"))
 
 
 def step_line(job: Mapping[str, Any]) -> str:
@@ -133,6 +142,8 @@ def message_for(event: str, job: Mapping[str, Any], badge: int | None = None) ->
         return webpush.Message(title, READY, job_id, url, ttl=24 * 3600, urgency="high", badge=badge)
     if event == "stopped":
         return webpush.Message(title, STOPPED, job_id, url, ttl=24 * 3600, urgency="high", badge=badge)
+    if event == "mac":
+        return webpush.Message(title, MAC, job_id, url, ttl=24 * 3600, urgency="high", badge=badge)
     if event == "resumed":
         return webpush.Message(
             title, RESUMED, job_id, url, ttl=3600, urgency="normal", topic=f"job{job_id}"[:32], quiet=True, badge=badge
@@ -166,6 +177,9 @@ def wanted(prefs: Mapping[str, Any], event: str) -> bool:
         return bool(prefs.get("stopped"))
     if event == "resumed":
         return bool(prefs.get("resumed", False))
+    if event == "mac":
+        # The job needs the owner (open the app on the Mac), like "It stopped", so it follows that choice.
+        return bool(prefs.get("stopped"))
     return bool(prefs.get("steps"))
 
 

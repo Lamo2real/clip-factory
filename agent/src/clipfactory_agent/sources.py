@@ -15,7 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from . import livestatus, proc
 from .picture import DISK_RESERVE
-from .util import TransientError, UserFacingError, log
+from .util import NeedsMac, TransientError, UserFacingError, log
 
 _HOSTS: dict[str, re.Pattern[str]] = {
     "youtube": re.compile(r"(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com)$"),
@@ -153,6 +153,27 @@ def explain(e: proc.CommandError, platform: str, has_cookies: bool, *, section: 
         ),
         "other",
     )
+
+
+def mac_can_help(e: BaseException, platform: str | None, tail: str = "") -> bool:
+    """Whether the owner's own computer can get this video when the cloud could not (docs/CONTRACTS.md §35.1): only
+    for YouTube, and only when YouTube refused the cloud (the bot check, run-out cookies) or a download stayed
+    forbidden (a 403). A private, removed or live video is the same everywhere, so it fails as before."""
+    if platform != "youtube":
+        return False
+    if kind_of(e) in ("blocked", "cookies"):
+        return True
+    return "http error 403" in tail.lower()
+
+
+def explain_or_mac(e: proc.CommandError, platform: str, has_cookies: bool, *, mac_ok: bool) -> Exception:
+    """``explain``, except that, for a job the owner's Mac may fetch (``mac_ok``), a failure the Mac can get past
+    becomes ``NeedsMac`` (§35.1)."""
+    err = explain(e, platform, has_cookies)
+    if mac_ok and mac_can_help(err, platform, e.tail):
+        log("info", "download.needs_mac", platform=platform, kind=kind_of(err))
+        return NeedsMac(kind_of(err))
+    return err
 
 
 def _cookie_args(cookies: Path | None) -> list[str]:
