@@ -47,6 +47,8 @@ RUPLOAD = "https://rupload.facebook.com"
 X_API = "https://api.x.com/2"
 X_MAX_CHARS = 280
 CAPTION_MAX = 2200
+# TikTok's rule: branded content (a paid partnership) is only for Everyone or Friends (§17.8).
+BRANDED_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS")
 HASHTAGS_MAX = 30
 _URL = re.compile(r"(https?://\S+|www\.\S+)", re.IGNORECASE)
 _HASHTAG = re.compile(r"#\w+")
@@ -352,6 +354,9 @@ class TikTokPublisher:
         privacy = options.get("privacyLevel")
         allowed = [str(o) for o in creator.get("privacy_level_options") or []]
         if not isinstance(privacy, str) or privacy not in allowed:
+            raise PublishError("Pick who can see it on TikTok again, then press Try again.")
+        # TikTok's rule: branded content (a paid partnership) is only for Everyone or Friends.
+        if options.get("brandContent") and privacy not in BRANDED_PRIVACY:
             raise PublishError("Pick who can see it on TikTok again, then press Try again.")
         caption = str(_captions(job).get("tiktok") or "")
         return {

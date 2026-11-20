@@ -494,6 +494,7 @@ def test_keep_stores_the_tiktok_choices_on_the_tiktok_post(call: Call, store: db
     [
         {"privacyLevel": "EVERYONE"},
         {**TIKTOK, "privacyLevel": "SELF_ONLY", "brandContent": True},
+        {**TIKTOK, "privacyLevel": "FOLLOWER_OF_CREATOR", "brandContent": True},
         {**TIKTOK, "disableDuet": "no"},
         {**TIKTOK, "extra": 1},
         "public",

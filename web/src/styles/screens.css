@@ -1423,6 +1423,12 @@
 .check-chip:active {
   transform: scale(0.95);
 }
+.check-chip:has(input:disabled) {
+  opacity: 0.5;
+}
+.check-chip:has(input:disabled):active {
+  transform: none;
+}
 .check-chip:has(input:focus-visible) {
   box-shadow: var(--focus);
 }
@@ -2219,6 +2225,10 @@
   background: var(--selected);
   color: var(--on-bone);
   text-shadow: none;
+}
+.dropdown__opt.is-disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .dropdown__text {
   display: grid;

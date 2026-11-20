@@ -76,6 +76,8 @@ def patch_clip(app: App, req: Request) -> Response:
 
 
 TIKTOK_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY")
+# TikTok's rule: branded content (a paid partnership) is only for Everyone or Friends.
+TIKTOK_BRANDED_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS")
 TIKTOK_SWITCHES = ("disableComment", "disableDuet", "disableStitch", "brandContent", "brandOrganic")
 
 
@@ -89,8 +91,8 @@ def tiktok_options(raw: Any) -> dict[str, Any]:
     out: dict[str, Any] = {"privacyLevel": privacy}
     for name in TIKTOK_SWITCHES:
         out[name] = validate.boolean(body.get(name, False), name)
-    if out["brandContent"] and privacy == "SELF_ONLY":
-        raise bad_request("Branded content cannot be posted as Only me on TikTok. Pick who can see it.")
+    if out["brandContent"] and privacy not in TIKTOK_BRANDED_PRIVACY:
+        raise bad_request("Branded content can only be seen by Everyone or Friends on TikTok. Pick who can see it.")
     return out
 
 
