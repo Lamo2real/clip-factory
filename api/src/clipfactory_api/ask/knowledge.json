@@ -1,5 +1,5 @@
 {
- "version": "6ce7c7660f28",
+ "version": "5f605710ae2f",
  "parts": [
   {
    "id": "app-map",
@@ -219,7 +219,7 @@
    "id": "contracts-32",
    "title": "CONTRACTS: 32. Notifications on the owner's phone and computer (owner request, 2026-11-20)",
    "line": "The owner adds Clip Factory to his iPhone's Home Screen (Share > Add to Home Screen) and wants to be told when clips",
-   "chars": 8875
+   "chars": 10163
   },
   {
    "id": "adr-01",

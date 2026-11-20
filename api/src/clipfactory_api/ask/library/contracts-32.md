@@ -33,7 +33,7 @@ See ADR-56.
 |---|---|
 | `GET /v1/push/key` | `{publicKey}` (65 bytes, base64url). 503 "Notifications are not set up yet. Try again after the next update." until the key exists |
 | `GET /v1/push/devices` | `{devices: [{deviceId, kind: "webpush", deviceLabel, createdAt, updatedAt}]}`: never the endpoint or keys |
-| `PUT /v1/push/devices/{deviceId}` | `PushSubscription.toJSON()` plus `deviceLabel`. Idempotent; keeps `createdAt` |
+| `PUT /v1/push/devices/{deviceId}` | `PushSubscription.toJSON()` plus `deviceLabel`. Idempotent; keeps `createdAt`. Another device id of this owner with the same endpoint is marked `gone` (one phone is one device) |
 | `DELETE /v1/push/devices/{deviceId}` | 204, also when already gone |
 | `POST /v1/push/test` | `{deviceId?}`: "Notifications are on 🎉" to this device or every device; 429 within 10 s |
 
@@ -46,7 +46,7 @@ See ADR-56.
   `updatedAt`, and `gone` + `ttl` once a push service says it is gone). `PUSHSUB#` is not a broadcast prefix (§14.2),
   so subscriptions never travel over the WebSocket. `PUSHTEST`, `NOTIFIED#…` and `NOTIFYSTEP#…` are short-lived
   marks with a `ttl`.
-* Settings gain `notify: {ready: true, stopped: true, resumed: true, steps: false}`. Unknown keys or non-booleans are
+* Settings gain `notify: {ready: true, stopped: true, resumed: false, steps: false}` ("picked up again" is off: the job flow resumes by itself up to 6 times a run and the owner has nothing to do). Unknown keys or non-booleans are
   400 "Notifications must say on or off for: clips ready, stopped, picked up, every step."; a missing key keeps its
   default.
 
@@ -68,15 +68,18 @@ items, `LATEST`, records older than 10 minutes dropped. It compares the job befo
 |---|---|---|---|
 | ready | status became `ready` | `ready` | "Your clips are ready. Tap to look." |
 | stopped | status became `failed` | `stopped` | "It stopped. Tap Try again." |
-| resumed | a new run (`sessionId` changed) with `pickUp`, queued or running | `resumed` | "Picking up where it stopped." |
-| step | a running job started another step, or its live line names another clip | `steps` | "Cutting the clips · step 7 of 10 · clip 3 of 10" |
+| resumed | a new run (`sessionId` changed) with `pickUp`, queued or running | `resumed` (off by default; quiet, with a `Topic`) | "Picking up where it stopped." |
+| step | a running job is on another step or clip than the last card showed | `steps` | "Cutting the clips · step 7 of 10 · clip 3 of 10" |
 
 * The title is the video's name cut to 40 characters, never a link. The tag is the job id; `url` is `/jobs/<id>`.
 * The clip number comes from the running step's `message` (§30.6a, "Cutting clip 3 of 10…"); there is no extra write.
-* Step cards: at most one every 2 minutes per job (`NOTIFYSTEP#<jobId>`), `TTL` 600, `quiet: true`.
-* Each event is sent once per run: a conditional put on `NOTIFIED#<jobId>#<sessionId>#<event>` (2-day TTL) stops a
+* Step cards: at most one every 2 minutes per job, `TTL` 600, `quiet: true`. `NOTIFYSTEP#<jobId>` keeps the run,
+  step and clip last shown and when; one conditional write sends a card only when the job now shows something else
+  and 2 minutes have passed. A change held back inside the gap is sent by the job's next write (a heartbeat
+  included) after it, once. The same conditional write dedupes a stream retry and is made only when the card goes out.
+* Every other event is sent once per run: a conditional put on `NOTIFIED#<jobId>#<sessionId>#<event>` (2-day TTL) stops a
   stream retry from sending twice.
-* `badge` is how many of the owner's jobs are queued or running after the change.
+* `badge` is how many of the owner's newest 50 jobs are queued or running after the change.
 * A 404 or 410 marks the device `gone` with a 1-day TTL; the role has no `DeleteItem`. Any other failure is logged
   (device id and status only) and never retried; one bad device never holds up the others or the stream.
 
@@ -84,7 +87,12 @@ items, `LATEST`, records older than 10 minutes dropped. It compares the job befo
 
 * `web/sw/sw.js` `push`: shows `title`/`body` with `tag`; a `quiet` card uses `renotify: false, silent: true`, the
   others `renotify: true`. A message that cannot be read still shows "Clip Factory" (iPhone requires it). `badge`
-  sets or clears the app icon's number.
+  sets or clears the app icon's number. iOS ignores `silent`, so a step card may still buzz there.
+* `pushsubscriptionchange`: the worker has no sign-in, so it subscribes again with the old key and asks every open page
+  to send the new subscription (`PUT`); the page also sends it again each time the app opens (at most once a minute).
+  "On" shows only while the server accepted that copy; a `404` from Send a test sends it again.
+* Signing out turns this device off first (`DELETE` the device, then unsubscribe), so notifications never reach a
+  device for a signed-out account.
 * `notificationclick`: focuses an open Clip Factory window and moves it to the job, or opens one. Only same-origin
   paths are ever opened.
 * While the app is open, `AppBadge` (`web/src/lib/badge.ts`) keeps the number right from the job list and live job
@@ -100,10 +108,10 @@ them on in Clip Factory on your phone, or in Safari or Chrome." Native notificat
 
 | Apple | What it shows |
 |---|---|
-| This device | iPhone in a Safari tab: "Add Clip Factory to your Home Screen first. Then open it from there and tap Turn on." and the Home Screen pictures (never a permission prompt). Can ask: a vermilion **Turn on** that asks for permission inside the tap, then subscribes and saves the device. On: "This device gets them, even when Clip Factory is closed." and Turn off here. Refused on iPhone: "Notifications are off for Clip Factory. Turn them on in Settings > Notifications > Clip Factory." |
+| This device | iPhone in a Safari tab: "Add Clip Factory to your Home Screen first. Then open it from there and tap Turn on." and the Home Screen pictures (never a permission prompt). Can ask: a vermilion **Turn on** that asks for permission inside the tap, then subscribes and saves the device. On: "This device gets them, even when Clip Factory is closed." and Turn off here. Refused on iPhone: "Notifications are off for Clip Factory. Turn them on in Settings > Notifications > Clip Factory." (in the status line, which a screen reader reads) |
 | Clips ready, It stopped, Picked up again, Every step | On/off switches (`notify`) |
 | Number on the app icon | On, With notifications, or Not here |
-| Lock Screen widget | "Lock Screen widgets only come with App Store apps. Your notifications show there instead." and how Every step makes one card that changes |
+| Lock Screen widget | "Lock Screen widgets only come with App Store apps. Your notifications show there instead." nothing more: whether iOS replaces a card with the same tag is not verified on a real iPhone, so no one-card promise is made |
 | Send a test | Sends "Notifications are on 🎉" to this device |
 
 A working job's page shows "Get told when your clips are ready, even with the app closed." with Turn on and Not now,
