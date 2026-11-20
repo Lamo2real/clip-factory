@@ -490,6 +490,17 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       };
       store.jobs.unshift(j);
       publishJob(j);
+      // Like the API (§35.8): the file replaces the link job it came from, and that job's wait for the Mac ends.
+      const old = body.replaces && body.source.type === "upload" ? store.jobs.find((o) => o.jobId === body.replaces) : undefined;
+      const oldState = old?.macFetch?.state;
+      if (old && (old.status === "queued" || old.status === "running") && oldState && oldState !== "cloud" && oldState !== "failed") {
+        old.status = "canceled";
+        old.replacedBy = j.jobId;
+        old.steps = old.steps.map((s) => (s.status === "running" ? { ...s, status: "pending", message: undefined } : s));
+        clock.delete(old.jobId);
+        old.updatedAt = now;
+        publishJob(old);
+      }
       return clone(j);
     },
     async listJobs({ limit = 20, cursor } = {}) {
@@ -585,6 +596,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (j.status !== "failed" && j.status !== "canceled") throw conflict("Only a failed or canceled job can be retried.");
       j.status = "queued";
       j.error = undefined;
+      j.replacedBy = undefined;
       j.steps = stepsAt(0, "queued");
       j.progress = 0;
       j.model = currentClipModel(store.settings.clipModel);

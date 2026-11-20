@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import math
 import re
+from datetime import datetime
 from typing import Any
 
 from . import db
 from .app import App
+from .clock import parse
 from .log import log
 
 Item = dict[str, Any]
@@ -38,6 +40,9 @@ OPEN_THE_APP = "Open Clip Factory on your Mac to continue"
 GETTING = "Your Mac is getting the video"
 SENDING = "Your Mac is sending the video"
 SENT_NOTE = "Your Mac sent the video."
+# How long after the Mac finished a video file may still win over it (the same moment, with room for a slow upload).
+DONE_RACE_SECONDS = 300
+REPLACED = "Replaced by your video file"
 TIMED_OUT = "Your Mac didn't get the video. Use a video file instead."
 
 # What the Mac may report when it stops, and the words the owner reads (every one names a real next step).
@@ -96,6 +101,24 @@ def waiting(job: Item) -> bool:
     return isinstance(m, dict) and m.get("state") in WAITING_STATES and job.get("status") in ("queued", "running")
 
 
+def replaceable(job: Item | None, now: datetime | None = None) -> bool:
+    """A link job a video file may replace (§35.8): still working, and waiting for a Mac, being fetched by one, or
+    already going on with the video a Mac sent a moment ago (the file wins that race). "A moment" is
+    DONE_RACE_SECONDS: a job that went on with the Mac's video long ago is healthy work, not a race, so it stays."""
+    if not isinstance(job, dict) or job.get("status") not in ("queued", "running"):
+        return False
+    m = job.get("macFetch")
+    if not isinstance(m, dict):
+        return False
+    state = m.get("state")
+    if state in WAITING_STATES:
+        return True
+    if state != "done":
+        return False
+    at = parse(m.get("at"))
+    return at is not None and now is not None and (now - at).total_seconds() <= DONE_RACE_SECONDS
+
+
 def upload_key(user_id: str, job_id: str) -> str:
     """Where the Mac's video goes: the uploads prefix (S3 lifecycle aborts a forgotten multipart upload)."""
     return f"uploads/{user_id}/mac-{job_id}/video.mp4"
@@ -137,14 +160,14 @@ def live_item(user_id: str, job: Item, phase: str, pct: int, *, now: str, ttl: i
     }
 
 
-def end_wait(app: App, job: dict[str, Any]) -> None:
+def end_wait(app: App, job: dict[str, Any], words: str = "The job was canceled.") -> None:
     """A job waiting for the owner's Mac (§35) is stopped: the job flow's wait ends now (not after 24 h) and a half-sent
     video is dropped. Best effort: the job is already canceled in the table, and the bucket's lifecycle rule removes a
     forgotten upload."""
     callback_id = job.get("macCallbackId")
     if isinstance(callback_id, str) and callback_id:
         try:
-            app.flows.mac_stopped(callback_id, "Canceled", "The job was canceled.")
+            app.flows.mac_stopped(callback_id, "Canceled", words)
         except Exception as e:
             log("warning", "job.mac_cancel_signal_failed", jobId=job["jobId"], error=type(e).__name__)
     mac = job.get("macFetch")

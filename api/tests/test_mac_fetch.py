@@ -455,3 +455,219 @@ def test_no_mac_after_two_minutes_sends_open_the_app() -> None:
     assert msg.body == "Open Clip Factory on your Mac to continue."
     assert notify.wanted({"stopped": True}, "mac")
     assert not notify.wanted({"stopped": False}, "mac")
+
+
+# --- Use a video file on a job that waits for the Mac (§35.8) -----------------------------------------------------
+
+
+def _canceled_runs(agentcore: FakeAgentCore) -> list[str]:
+    return [c["runtimeSessionId"] for c in agentcore.calls if c["payload"].get("action") == "cancel"]
+
+
+def _file(s3_client: FakeS3, name: str = "match.mp4") -> dict[str, Any]:
+    key = f"uploads/{USER}/01JABCDEFGHJKMNPQRSTVWXYZ0/{name}"
+    s3_client.objects[key] = b"video"
+    return {"type": "upload", "key": key, "filename": name}
+
+
+def test_a_video_file_replaces_a_job_the_mac_is_sending(
+    store: db.Store, call: Call, lambda_client: FakeLambda, s3_client: FakeS3, agentcore: FakeAgentCore
+) -> None:
+    old = _waiting_job(store)
+    call("POST", f"/v1/jobs/{old['jobId']}/source-upload", {"deviceId": DEVICE, "size": 5})
+    tag = s3_client.send_part("up-1", 1, b"12345")
+    status, body = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": old["jobId"]})
+    assert status == 201
+    new_id = body["job"]["jobId"]
+    saved = store.get(old["pk"], old["sk"]) or {}
+    assert (saved["status"], saved["replacedBy"]) == ("canceled", new_id)
+    # The job flow's wait ends now (quietly: the job is already stopped), the half-sent video goes, the run stops.
+    assert (
+        "failure",
+        {"CallbackId": "cb-mac", "Error": {"ErrorType": "Canceled", "ErrorMessage": "Replaced by your video file"}},
+    ) in lambda_client.callbacks
+    assert s3_client.multipart["up-1"]["aborted"] is True
+    assert old["sessionId"] in _canceled_runs(agentcore)
+    # The Mac hears it on its next report or when it finishes: 409, so the app stops and removes its copy.
+    status, _ = call("POST", f"/v1/jobs/{old['jobId']}/mac-progress", {"deviceId": DEVICE, "phase": "sending"})
+    assert status == 409
+    done = {"deviceId": DEVICE, "parts": [{"n": 1, "etag": tag}]}
+    status, _ = call("POST", f"/v1/jobs/{old['jobId']}/source-upload/complete", done)
+    assert status == 409
+    assert not any(kind == "success" for kind, _ in lambda_client.callbacks)
+    # The web sees which job replaced it.
+    status, body = call("GET", f"/v1/jobs/{old['jobId']}")
+    assert body["job"]["replacedBy"] == new_id
+    assert body["job"]["status"] == "canceled"
+
+
+def test_replacing_again_changes_nothing(
+    store: db.Store, call: Call, lambda_client: FakeLambda, s3_client: FakeS3
+) -> None:
+    old = _waiting_job(store)
+    _, first = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": old["jobId"]})
+    signals = len(lambda_client.callbacks)
+    status, _ = call("POST", "/v1/jobs", {"source": _file(s3_client, "again.mp4"), "replaces": old["jobId"]})
+    assert status == 201
+    saved = store.get(old["pk"], old["sk"]) or {}
+    assert saved["replacedBy"] == first["job"]["jobId"]  # the first file keeps it
+    assert len(lambda_client.callbacks) == signals
+
+
+def test_the_file_wins_when_the_mac_finished_a_moment_before(
+    store: db.Store, call: Call, s3_client: FakeS3, agentcore: FakeAgentCore
+) -> None:
+    # The Mac's video arrived first: the job flow already moved the job on to a new run with it.
+    old = seed_job(
+        store,
+        status="queued",
+        source={"type": "upload", "platform": "upload", "key": "uploads/mac", "fetchedBy": "mac", "url": YT},
+        macFetch={"state": "done", "at": "2026-11-15T11:59:00.000Z"},
+    )
+    status, body = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": old["jobId"]})
+    assert status == 201
+    saved = store.get(old["pk"], old["sk"]) or {}
+    assert (saved["status"], saved["replacedBy"]) == ("canceled", body["job"]["jobId"])
+    assert old["sessionId"] in _canceled_runs(agentcore)  # the run on the Mac's video stops: the video is made once
+
+
+def test_the_file_wins_when_the_flow_moves_the_job_on_at_the_same_moment(
+    store: db.Store, call: Call, s3_client: FakeS3, agentcore: FakeAgentCore, monkeypatch: Any
+) -> None:
+    old = _waiting_job(store)
+    stale = dict(old)
+    # Between the API's read and its write, the job flow turns the job into an upload on a new run (the Mac's video).
+    store.update(
+        old["pk"],
+        old["sk"],
+        {
+            "status": "queued",
+            "sessionId": "cfjob-new-run",
+            "macFetch": {"state": "done", "at": "2026-11-15T11:59:00.000Z"},
+        },
+    )
+    real_get = store.get
+    reads = {"n": 0}
+
+    def get_once_stale(pk: str, sk: str, **kw: Any) -> Any:
+        if sk == old["sk"]:
+            reads["n"] += 1
+            if reads["n"] == 1:
+                return stale
+        return real_get(pk, sk, **kw)
+
+    monkeypatch.setattr(store, "get", get_once_stale)
+    status, body = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": old["jobId"]})
+    assert status == 201
+    saved = real_get(old["pk"], old["sk"]) or {}
+    assert (saved["status"], saved["replacedBy"]) == ("canceled", body["job"]["jobId"])
+    assert _canceled_runs(agentcore) == ["cfjob-new-run"]
+
+
+def test_the_mac_flow_does_not_go_on_with_a_replaced_job(store: db.Store, agentcore: FakeAgentCore) -> None:
+    # The Mac's video arrived just after the file replaced the job: the flow's switch finds it stopped.
+    from clipfactory_api.flows.job_flow import Run, switch_to_mac_upload
+
+    job = seed_job(store, status="canceled", replacedBy="01JABCDEFGHJKMNPQRSTVWXYZ1", macFetch={"state": "sending"})
+    raw = json.dumps({"key": macfetch.upload_key(USER, job["jobId"]), "size": 5})
+    out = switch_to_mac_upload(_deps(store, agentcore), Run(job["jobId"], USER, job["sessionId"]), raw)
+    assert out == {"outcome": "canceled"}
+    assert (store.get(job["pk"], job["sk"]) or {})["status"] == "canceled"
+
+
+def test_only_a_job_waiting_for_the_mac_is_replaced(store: db.Store, call: Call, s3_client: FakeS3) -> None:
+    for fields in (
+        {"status": "running", "macFetch": {"state": "cloud"}},  # the cloud is getting it, no Mac involved
+        {"status": "ready", "macFetch": {"state": "done"}},
+        {"status": "failed", "macFetch": {"state": "failed"}},
+        {"status": "running"},  # a Twitch or Kick job
+    ):
+        job = seed_job(store, **fields)
+        status, _ = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": job["jobId"]})
+        assert status == 201
+        saved = store.get(job["pk"], job["sk"]) or {}
+        assert saved["status"] == fields["status"], fields
+        assert "replacedBy" not in saved, fields
+    # Another person's job is never touched (it is looked up under this owner only).
+    theirs = seed_job(store, user="someone-else", macFetch={"state": "waiting"})
+    call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": theirs["jobId"]})
+    assert (store.get(theirs["pk"], theirs["sk"]) or {})["status"] == "running"
+
+
+def test_replaces_is_checked(store: db.Store, call: Call, s3_client: FakeS3) -> None:
+    old = _waiting_job(store)
+    status, _ = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": "../x"})
+    assert status == 400
+    status, _ = call("POST", "/v1/jobs", {"source": {"type": "link", "url": YT}, "replaces": old["jobId"]})
+    assert status == 400
+    assert (store.get(old["pk"], old["sk"]) or {})["status"] == "running"
+
+
+def test_try_again_on_a_replaced_job_forgets_the_replacement(store: db.Store, call: Call) -> None:
+    job = seed_job(store, status="canceled", replacedBy="01JABCDEFGHJKMNPQRSTVWXYZ1", macFetch={"state": "waiting"})
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    assert "replacedBy" not in body["job"]
+
+
+def test_a_job_that_went_on_long_ago_with_the_macs_video_is_not_replaced(
+    store: db.Store, call: Call, s3_client: FakeS3, agentcore: FakeAgentCore
+) -> None:
+    # Healthy work (or a later retry) is not "the same moment": a late file or a stale form leaves it running.
+    for at in ("2026-11-15T11:00:00.000Z", None):
+        macf: dict[str, Any] = {"state": "done", **({"at": at} if at else {})}
+        job = seed_job(store, status="running", macFetch=macf)
+        status, _ = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": job["jobId"]})
+        assert status == 201
+        saved = store.get(job["pk"], job["sk"]) or {}
+        assert (saved["status"], "replacedBy" in saved) == ("running", False), at
+    assert _canceled_runs(agentcore) == []
+
+
+def test_a_job_being_deleted_is_not_replaced(store: db.Store, call: Call, s3_client: FakeS3) -> None:
+    job = seed_job(store, macFetch={"state": "waiting"}, deletingAt="2026-11-15T11:59:30.000Z")
+    status, _ = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": job["jobId"]})
+    assert status == 201
+    saved = store.get(job["pk"], job["sk"]) or {}
+    assert (saved["status"], "replacedBy" in saved) == ("running", False)
+
+
+def test_a_failed_replace_write_still_starts_the_new_job(
+    store: db.Store, call: Call, s3_client: FakeS3, monkeypatch: Any
+) -> None:
+    old = _waiting_job(store)
+    real_update = store.update
+
+    def boom(pk: str, sk: str, *a: Any, **kw: Any) -> Any:
+        if sk == old["sk"]:
+            raise RuntimeError("store down")
+        return real_update(pk, sk, *a, **kw)
+
+    monkeypatch.setattr(store, "update", boom)
+    status, body = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": old["jobId"]})
+    assert status == 201
+    assert body["job"]["status"] in ("queued", "running")
+    saved = store.get(old["pk"], old["sk"]) or {}
+    assert (saved["status"], "replacedBy" in saved) == ("running", False)
+
+
+def test_when_every_try_loses_the_race_the_old_job_is_left_as_it_was(
+    store: db.Store, call: Call, s3_client: FakeS3, agentcore: FakeAgentCore, monkeypatch: Any
+) -> None:
+    old = _waiting_job(store)
+    tries = {"n": 0}
+
+    def always_lost(pk: str, sk: str, *a: Any, **kw: Any) -> Any:
+        if sk == old["sk"]:
+            tries["n"] += 1
+            raise db.ConditionFailed("moved")
+        return real_update(pk, sk, *a, **kw)
+
+    real_update = store.update
+    monkeypatch.setattr(store, "update", always_lost)
+    status, _ = call("POST", "/v1/jobs", {"source": _file(s3_client), "replaces": old["jobId"]})
+    assert status == 201
+    assert tries["n"] == 3
+    saved = store.get(old["pk"], old["sk"]) or {}
+    assert (saved["status"], "replacedBy" in saved) == ("running", False)
+    assert _canceled_runs(agentcore) == []

@@ -14,7 +14,7 @@ import { checkLink, extractLink, KIND_LABEL, PLATFORM_NAMES } from "../../lib/li
 import { useAction } from "../../lib/motion.ts";
 import { navigate } from "../../lib/router.ts";
 import { useUnsaved } from "../../features/help/unsaved.ts";
-import { canMacFetch } from "../../lib/macFetch.ts";
+import { canMacFetch, macBridge } from "../../lib/macFetch.ts";
 
 const MAX_UPLOAD = 5 * 1024 ** 3;
 
@@ -29,6 +29,21 @@ export function fileStart(search: string): { file: boolean; from: string | null 
   const q = new URLSearchParams(search);
   const from = q.get("from");
   return { file: q.get("file") === "1", from: from && /^[A-Za-z0-9_-]{1,64}$/.test(from) ? from : null };
+}
+
+/** After a video file replaced a link job: this computer stops getting that job's video, but only when the job is
+ * now stopped by this file (the server's replace is best effort; a job still waiting for the Mac keeps its download). */
+export async function stopMacCopy(from: string, newJobId: string): Promise<boolean> {
+  const bridge = macBridge();
+  if (!bridge) return false;
+  try {
+    const { job } = await api().getJob(from);
+    if (job.status !== "canceled" || job.replacedBy !== newJobId) return false;
+    await bridge.cancel(from);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function NewJobForm() {
@@ -281,7 +296,12 @@ export function NewJobForm() {
         clipTarget: target,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
         ...(macFirst ? { macFetch: true } : {}),
+        // From a link job (Use a video file): this file replaces it, so its wait for the Mac ends (§35.8).
+        ...(source.type === "upload" && start.from ? { replaces: start.from } : {}),
       });
+      // This computer stops getting that job's video now and removes its copy (the job's stop says so too, a moment later).
+      // Only when the server really stopped that job: its replace is best effort, and a job still waiting keeps its download.
+      if (source.type === "upload" && start.from) void stopMacCopy(start.from, job.jobId);
       toast.success("Started! Your clips show up in Review when they are ready.");
       void refresh().catch(() => undefined);
       if (mounted.current && location.pathname === "/") navigate(`/jobs/${job.jobId}`);

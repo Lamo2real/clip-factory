@@ -1,5 +1,5 @@
 {
- "version": "a93addf4b74d",
+ "version": "762168c096ea",
  "parts": [
   {
    "id": "app-map",
@@ -231,7 +231,7 @@
    "id": "contracts-35",
    "title": "CONTRACTS: 35. Mac fetches it (owner decision, 2026-11-20)",
    "line": "When YouTube blocks the cloud (the bot check, \"cookies ran out\", a 403 that the §29.4 fallback cannot get past), the",
-   "chars": 13719
+   "chars": 16060
   },
   {
    "id": "contracts-34",
