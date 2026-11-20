@@ -266,9 +266,21 @@ test.describe("Ask as a full assistant", () => {
 
   test("falls back to the plain answer when the assistant is off", async ({ page }) => {
     await open(page);
-    await ask(page, "Where do I change my click sound? #off");
-    await expect(panel(page).locator(".help-msg--bot").last()).toBeVisible({ timeout: 15_000 });
+    // §28.5: the assistant was on when the panel opened and is switched off before he asks, so the start gets 403
+    // help_off while the short help (§19) is still on. A question that truly matches gets the §19 answer, settled:
+    // not the thinking dots or the brief empty assistant bubble (both are .help-msg--bot too, which let an older
+    // version of this check pass on a passing glimpse in Chromium and miss it in WebKit). "#off" is not used: it turns
+    // the short help off as well, and then nothing may answer (§28.5, never a canned guess).
+    await page.evaluate(() => localStorage.setItem("cf-mock-assistant", "off"));
+    await ask(page, "Where do I change my click sound?");
+    const plain = panel(page).locator(".help-msg--bot:not(.ask-msg):not(.help-thinking)");
+    await expect(plain).toHaveCount(1, { timeout: 15_000 });
+    await expect(plain).toContainText(/sound/i);
+    await expect(panel(page).locator(".help-thinking")).toHaveCount(0);
     await expect(answers(page)).toHaveCount(0);
+    await expect(panel(page).locator(".help-msg--notice")).toHaveCount(0);
+    // The 403 made the panel check again and leave the assistant: the paperclip for any file goes.
+    await expect(panel(page).getByRole("button", { name: "Add a file" })).toHaveCount(0);
   });
 });
 
