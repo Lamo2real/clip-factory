@@ -802,10 +802,10 @@
     row-gap: 14px;
     align-items: start;
   }
+  /* The video sits still in the middle of its card, on the card's vertical centre line beside the words, and scrolls
+     with the page like everything else: never sticky, never fixed (owner, 2026-11-20). Phones keep it at the top. */
   .review-card__media {
-    position: sticky;
-    /* Below the setup list's glass bar while it shows (§17.13). */
-    top: calc(var(--top-line) + 10px + var(--todo-clear, 0px));
+    align-self: center;
   }
 }
 .player {

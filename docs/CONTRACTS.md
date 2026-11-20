@@ -735,6 +735,8 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
     does too, and the field label names the platform. The chosen tab is scrolled into view.
   * The card goes two-column (video left) only when the card itself is at least 820 px wide (container query on
     `.review-list__item`, never a window media query), so the decision column never drops below about 400 px.
+    In two columns the video sits on the card's vertical centre line beside the words (`align-self: center`) and
+    scrolls with the page: never sticky, never fixed (owner request, 2026-11-20). Phones keep it at the top.
     Throw away and Keep share the row; once they wrap, each fills the row (`flex: 1 1 140px`, at most 260 px), so
     they line up. The source line's link icon sits inside the link and stays beside its words.
   * Thrown-away clips are kept in a module-level store (`web/src/lib/throwAways.ts`) while their 8 s Undo runs and
@@ -2707,7 +2709,7 @@ over the page:
   top of the page, there (`is-scrolled`, and it takes the taps) as soon as the page scrolls, so the page slides under
   glass and the pill stays on screen at every scroll position; it never steps aside. `html` gets `scroll-padding-top`
   below the bar's fade (`--todo-bar-h` + `--todo-feather` + 8 px), so Tab, a `#part` link
-  and `scrollIntoView` stop below it; sticky parts of pages add `--todo-top` (Review's video, Settings' folder panel);
+  and `scrollIntoView` stop below it; sticky parts of pages add `--todo-top` (Settings' folder panel; Review's video is not sticky, §12);
   the clip page's video is shorter by `--todo-top` (`performance.css`), so the stacks (desktop) and the winner and five
   chips (phones) still start on the first screen. Tapping the pill opens the list as a glass panel dropping from the
   top (phones: full width, stopping above the tab bar; tablets and the clip page: 380 px at the right) over a light

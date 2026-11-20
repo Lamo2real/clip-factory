@@ -168,3 +168,63 @@ test("the shared confirm sheet dims the whole screen, not just the form (F002)",
   });
   expect(box).toMatchObject({ parent: "BODY", x: 0, y: 0, w: box.vw, h: box.vh, covered: true });
 });
+
+// Owner request (2026-11-20): the video sits still in the middle of its card, on the card's vertical centre line, and
+// scrolls with the page: never sticky, never fixed. Narrow cards (phones, and windows where the card is under 820 px)
+// stack it under the title instead (CONTRACTS §12.4).
+async function videoPlacement(page: Page) {
+  const card = page.locator(".review-card").first();
+  return card.evaluate((c) => {
+    const box = (sel: string) => c.querySelector(sel)!.getBoundingClientRect();
+    const m = box(".review-card__media");
+    const k = c.getBoundingClientRect();
+    return {
+      twoColumns: getComputedStyle(c).gridTemplateColumns.trim().split(/\s+/).length === 2,
+      position: getComputedStyle(c.querySelector(".review-card__media")!).position,
+      offCentre: Math.abs(m.y + m.height / 2 - (k.y + k.height / 2)),
+      left: m.x + m.width <= k.x + k.width / 2,
+      topInCard: m.y - k.y,
+      headBottom: box(".review-card__head").bottom,
+      bodyTop: box(".review-card__body").top,
+      mediaTop: m.top,
+      mediaBottom: m.bottom,
+    };
+  });
+}
+
+for (const size of [
+  { width: 1000, height: 650 },
+  { width: 1440, height: 900 },
+  { width: 1700, height: 1000 },
+]) {
+  test(`review at ${size.width}x${size.height}: the video is never sticky; beside the words it is centred in its card`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await openReview(page);
+    const before = await videoPlacement(page);
+    expect(["static", "relative"]).toContain(before.position);
+    if (size.width >= 1700) expect(before.twoColumns).toBe(true);
+    if (before.twoColumns) {
+      expect(before.left).toBe(true);
+      expect(before.offCentre).toBeLessThanOrEqual(4);
+    } else {
+      expect(before.mediaTop).toBeGreaterThanOrEqual(before.headBottom - 1);
+      expect(before.mediaBottom).toBeLessThanOrEqual(before.bodyTop + 1);
+    }
+    // Scrolling moves the video with its card, never pins it.
+    await page.mouse.move(size.width / 2, size.height / 2);
+    await page.mouse.wheel(0, 400);
+    await page.waitForTimeout(500);
+    const after = await videoPlacement(page);
+    expect(Math.abs(after.topInCard - before.topInCard)).toBeLessThanOrEqual(1);
+    if (after.twoColumns) expect(after.offCentre).toBeLessThanOrEqual(4);
+  });
+}
+
+test("review at 390x844: the video stays at the top of the card, under its title", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openReview(page);
+  const at = await videoPlacement(page);
+  expect(at.twoColumns).toBe(false);
+  expect(at.mediaTop).toBeGreaterThanOrEqual(at.headBottom - 1);
+  expect(at.mediaBottom).toBeLessThanOrEqual(at.bodyTop + 1);
+});
