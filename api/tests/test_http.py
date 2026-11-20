@@ -216,6 +216,9 @@ def test_every_contract_route_is_registered() -> None:
         ("PUT", "/v1/push/devices/phone-12345678"),
         ("DELETE", "/v1/push/devices/phone-12345678"),
         ("POST", "/v1/push/test"),
+        # §34: delete jobs
+        ("DELETE", "/v1/jobs/01J0000000000000000000000A"),
+        ("POST", "/v1/jobs/delete"),
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)

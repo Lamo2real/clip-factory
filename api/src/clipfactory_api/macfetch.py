@@ -20,6 +20,8 @@ import re
 from typing import Any
 
 from . import db
+from .app import App
+from .log import log
 
 Item = dict[str, Any]
 
@@ -133,3 +135,21 @@ def live_item(user_id: str, job: Item, phase: str, pct: int, *, now: str, ttl: i
         "lastChange": now,
         "ttl": ttl,
     }
+
+
+def end_wait(app: App, job: dict[str, Any]) -> None:
+    """A job waiting for the owner's Mac (§35) is stopped: the job flow's wait ends now (not after 24 h) and a half-sent
+    video is dropped. Best effort: the job is already canceled in the table, and the bucket's lifecycle rule removes a
+    forgotten upload."""
+    callback_id = job.get("macCallbackId")
+    if isinstance(callback_id, str) and callback_id:
+        try:
+            app.flows.mac_stopped(callback_id, "Canceled", "The job was canceled.")
+        except Exception as e:
+            log("warning", "job.mac_cancel_signal_failed", jobId=job["jobId"], error=type(e).__name__)
+    mac = job.get("macFetch")
+    if isinstance(mac, dict) and mac.get("uploadId") and mac.get("key"):
+        try:
+            app.media.abort_multipart(str(mac["key"]), str(mac["uploadId"]))
+        except Exception as e:
+            log("warning", "job.mac_abort_failed", jobId=job["jobId"], error=type(e).__name__)

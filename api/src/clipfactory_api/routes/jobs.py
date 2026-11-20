@@ -1,11 +1,11 @@
-"""/v1/jobs: create, list, read, cancel and retry."""
+"""/v1/jobs: create, list, read, cancel, retry and delete (§34)."""
 
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from .. import clips, db, jobs, macfetch, s3, settings, validate
+from .. import clips, db, job_delete, jobs, macfetch, s3, settings, validate
 from ..agent_client import AgentError, new_session_id
 from ..app import App
 from ..clock import iso
@@ -123,6 +123,7 @@ def get_job(app: App, req: Request) -> Response:
 
 def cancel(app: App, req: Request) -> Response:
     job = _job_or_404(app, req)
+    _refuse_if_deleting(job)
     now = iso(app.clock())
     try:
         expect: dict[str, Any] = {"status": jobs.ACTIVE}
@@ -131,7 +132,7 @@ def cancel(app: App, req: Request) -> Response:
         updated = app.store.update(job["pk"], job["sk"], {"status": "canceled", "updatedAt": now}, expect_in=expect)
     except db.ConditionFailed as e:
         raise conflict("Only a queued or running job can be stopped.") from e
-    _end_mac_wait(app, job)
+    macfetch.end_wait(app, job)
     if job.get("sessionId"):
         try:
             app.agent.cancel_job(job["jobId"], job["sessionId"])
@@ -142,26 +143,14 @@ def cancel(app: App, req: Request) -> Response:
     return ok({"job": jobs.public_job(updated)})
 
 
-def _end_mac_wait(app: App, job: dict[str, Any]) -> None:
-    """A job waiting for the owner's Mac (§35) is stopped: the job flow's wait ends now (not after 24 h) and a half-sent
-    video is dropped. Best effort: the job is already canceled in the table, and the bucket's lifecycle rule removes a
-    forgotten upload."""
-    callback_id = job.get("macCallbackId")
-    if isinstance(callback_id, str) and callback_id:
-        try:
-            app.flows.mac_stopped(callback_id, "Canceled", "The job was canceled.")
-        except Exception as e:
-            log("warning", "job.mac_cancel_signal_failed", jobId=job["jobId"], error=type(e).__name__)
-    mac = job.get("macFetch")
-    if isinstance(mac, dict) and mac.get("uploadId") and mac.get("key"):
-        try:
-            app.media.abort_multipart(str(mac["key"]), str(mac["uploadId"]))
-        except Exception as e:
-            log("warning", "job.mac_abort_failed", jobId=job["jobId"], error=type(e).__name__)
+def _refuse_if_deleting(job: dict[str, Any]) -> None:
+    if job.get("deletingAt"):
+        raise conflict("This job is being deleted.")
 
 
 def retry(app: App, req: Request) -> Response:
     job = _job_or_404(app, req)
+    _refuse_if_deleting(job)
     now = iso(app.clock())
     expect: dict[str, Any] = {"status": jobs.RESTARTABLE}
     if job.get("sessionId"):
@@ -211,3 +200,36 @@ def _stop_old_session(app: App, job_id: str, session_id: str) -> None:
         app.agent.stop_session(session_id)
     except Exception as e:  # best effort: the sessionId fence is what keeps the old run out
         log("warning", "job.retry_stop_old_failed", jobId=job_id, error=str(e))
+
+
+def _clip_choice(value: Any, field: str) -> bool:
+    """``"delete"``: the job's clips still waiting in Review go too; ``"keep"`` (the default): they stay."""
+    if value is None:
+        return False
+    if value not in job_delete.CLIP_CHOICES:
+        raise bad_request(f'{field} must be "keep" or "delete".')
+    return bool(value == "delete")
+
+
+def delete(app: App, req: Request) -> Response:
+    """DELETE /v1/jobs/{jobId}?clips=keep|delete (§34). Idempotent: a job that is not there answers ``deleted:
+    false``. Only the caller's own jobs can be reached (the key is theirs)."""
+    job_id = req.params["jobId"]
+    if not is_ulid(job_id):
+        raise not_found("We could not find that job.")
+    review_clips = _clip_choice(req.query.get("clips"), "clips")
+    return ok(job_delete.delete_job(app, req.user_id, job_id, review_clips=review_clips).public())
+
+
+def delete_many(app: App, req: Request) -> Response:
+    """POST /v1/jobs/delete ``{"jobIds": [...], "clips"?: "keep" | "delete"}``: up to 25 jobs at once (§34)."""
+    body = req.json()
+    validate.only_keys(body, {"jobIds", "clips"})
+    ids = body.get("jobIds")
+    if not isinstance(ids, list) or not ids or len(ids) > job_delete.MAX_BATCH:
+        raise bad_request(f"jobIds must list 1 to {job_delete.MAX_BATCH} jobs.", "jobIds")
+    if not all(isinstance(i, str) and is_ulid(i) for i in ids):
+        raise bad_request("jobIds must hold job ids.", "jobIds")
+    review_clips = _clip_choice(body.get("clips"), "clips")
+    outcomes = job_delete.delete_jobs(app, req.user_id, list(dict.fromkeys(ids)), review_clips=review_clips)
+    return ok({"results": [o.public() for o in outcomes]})

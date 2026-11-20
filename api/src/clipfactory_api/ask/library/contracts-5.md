@@ -26,6 +26,8 @@ try again in a minute, §17.4), `internal`.
 | GET `/v1/jobs/{jobId}` | – | `{ "job": Job, "clips": Clip[] }` |
 | POST `/v1/jobs/{jobId}/cancel` | – | `{ "job": Job }` (only queued/running) |
 | POST `/v1/jobs/{jobId}/retry` | – | `{ "job": Job }` (only failed/canceled; restarts from the beginning, cached source reused) |
+| DELETE `/v1/jobs/{jobId}` | query `clips` (`keep` default \| `delete`) | `{ "jobId", "deleted": bool, "clipsDeleted": n, "clipsKept": n }` (§34; a working job is stopped first; idempotent: `deleted: false` when not there) |
+| POST `/v1/jobs/delete` | `{ "jobIds": string[] (1–25), "clips"?: "keep" \| "delete" }` | `{ "results": [{ "jobId", "deleted", "clipsDeleted", "clipsKept" }] }` (§34, in order, each id once) |
 | GET `/v1/clips` | query `status` (`review`\|`confirmed`\|`posted`\|`declined`\|`all`, default `review`), `jobId?` | `{ "clips": Clip[] }` |
 | GET `/v1/clips/{clipId}` | – | `{ "clip": Clip }` |
 | PATCH `/v1/clips/{clipId}` | `{ "captions": Partial<Captions> }` (only while `review`) | `{ "clip": Clip }` |

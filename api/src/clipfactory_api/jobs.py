@@ -41,6 +41,7 @@ INTERNAL_FIELDS = (
     "resumes",
     "runStartedAt",
     "macCallbackId",  # the job flow's mac-done callback (§35); macFetch itself goes out through macfetch.public
+    "deletingAt",  # §34: a delete fenced the job and is still removing its clips and files
 )
 
 START_FAILED = "Could not start. Press Try again."

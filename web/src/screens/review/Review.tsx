@@ -17,6 +17,7 @@ import { defaultUploadTo, readUploadTo, saveUploadTo, STILL_WORKING, uploadClip,
 import { useSetup } from "../settings/setup/useSetup.ts";
 import { goingToLine, UploadToChips } from "./UploadTo.tsx";
 import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAways.ts";
+import { useDeletedJobs } from "../../lib/jobDeletes.ts";
 import { CaptionTabs, captionsTooLong, type CaptionTabsHandle } from "./CaptionTabs.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
 import { useUnsaved } from "../../features/help/unsaved.ts";
@@ -62,7 +63,9 @@ export function Review({ jobId }: { jobId: string | null }) {
   // Thrown away (Undo still counting down, or already declined): left out of the list, even after leaving Review and
   // coming back while the server still lists the clip as waiting (the store outlives this screen).
   const thrown = useThrownAway();
-  const visible = data ? data.filter((c) => !thrown.has(c.clipId)) : null;
+  // Clips of a job deleted with its Review clips leave the same way (§34.5).
+  const goneJobs = useDeletedJobs().reviewJobs;
+  const visible = data ? data.filter((c) => !thrown.has(c.clipId) && !goneJobs.has(c.jobId)) : null;
 
   // Clips being uploaded right here: their cards leave on their own, and live news about them waits.
   const settling = useRef(new Set<string>());

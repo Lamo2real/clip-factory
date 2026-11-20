@@ -6,6 +6,7 @@ import type {
   Clip,
   ClipPerformance,
   Job,
+  JobDeleted,
   KeyCheck,
   Follow,
   Lesson,
@@ -32,7 +33,7 @@ interface Deps {
 
 /** The contract's HTTP API (docs/CONTRACTS.md §5) with the owner's access token on every call. */
 export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps): Api {
-  async function send(method: Method, path: string, token: string | null, body?: unknown): Promise<Response> {
+  async function send(method: Method, path: string, token: string | null, body?: unknown, keep = false): Promise<Response> {
     const headers: Record<string, string> = {};
     if (token) headers.authorization = `Bearer ${token}`;
     if (body !== undefined) headers["content-type"] = "application/json";
@@ -44,19 +45,20 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
         body: json,
         cache: "no-store",
         // Small changes (a caption edit saved as the app closes) must still reach the server after the page goes.
-        ...(method === "PATCH" && (json?.length ?? 0) < 60_000 ? { keepalive: true } : {}),
+        // So must a delete sent as its Undo runs out while the page closes (§34.5).
+        ...((method === "PATCH" || keep) && (json?.length ?? 0) < 60_000 ? { keepalive: true } : {}),
       });
     } catch {
       throw networkError();
     }
   }
 
-  async function call<T>(method: Method, path: string, body?: unknown): Promise<T> {
-    let res = await send(method, path, await auth.accessToken(), body);
+  async function call<T>(method: Method, path: string, body?: unknown, keep = false): Promise<T> {
+    let res = await send(method, path, await auth.accessToken(), body, keep);
     // One forced refresh covers a token that expired between Amplify's check and the request.
     if (res.status === 401) {
       const fresh = await auth.accessToken(true);
-      if (fresh) res = await send(method, path, fresh, body);
+      if (fresh) res = await send(method, path, fresh, body, keep);
     }
     if (res.status === 204) return undefined as T;
     const parsed: unknown = await res.json().catch(() => null);
@@ -90,6 +92,9 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     macSourceUpload: (jobId, body) => call<MacUploadParts>("POST", `/jobs/${id(jobId)}/source-upload`, body),
     macSourceComplete: async (jobId, body) =>
       (await call<{ job: Job }>("POST", `/jobs/${id(jobId)}/source-upload/complete`, body)).job,
+    deleteJob: (jobId, clips = "keep") => call("DELETE", `/jobs/${id(jobId)}${q({ clips })}`, undefined, true),
+    deleteJobs: async (jobIds, clips = "keep") =>
+      (await call<{ results: JobDeleted[] }>("POST", "/jobs/delete", { jobIds, clips }, true)).results,
     listClips: async (query = {}) =>
       (await call<{ clips: Clip[] }>("GET", `/clips${q({ status: query.status, jobId: query.jobId })}`)).clips,
     getClip: async (clipId) => (await call<{ clip: Clip }>("GET", `/clips/${id(clipId)}`)).clip,

@@ -19,6 +19,9 @@ import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { applyClipEvent, byRank, withMedia } from "../../lib/liveCache.ts";
 import { stopWithUndo, useStopping } from "./pendingStops.ts";
+import { DeleteJobsSheet } from "./DeleteJobsSheet.tsx";
+import { deleteWithUndo, onJobsBack, useDeletedJobs } from "../../lib/jobDeletes.ts";
+import { navigate } from "../../lib/router.ts";
 import { jobPercent, jobProgress } from "../../lib/jobProgress.ts";
 
 const CLIP_STATUS: Record<ClipStatus, { label: string; tone: Tone }> = {
@@ -49,8 +52,21 @@ export function JobDetail({ jobId }: { jobId: string }) {
   const stopAct = useAction("stop");
   const retryAct = useAction("retry");
 
+  const [asking, setAsking] = useState(false);
+  const deleted = useDeletedJobs().jobs.has(jobId);
+
   const job = data?.job;
   const working = job?.status === "running" || job?.status === "queued";
+
+  /** Delete job (§34): the page goes back to All jobs at once; Undo on the toast brings the job back there. */
+  function remove(clips: "keep" | "delete", review: Record<string, number>) {
+    if (!job) return;
+    setAsking(false);
+    deleteWithUndo([{ jobId, working, reviewClips: review[jobId] ?? 0 }], clips, toast, { onDeleted: () => refresh() });
+    navigate("/jobs");
+  }
+  // Deleted on this device but the page is still open (Back, or a second tab): show it gone; Undo shows it again.
+  useEffect(() => onJobsBack((ids) => ids.includes(jobId) && void refetch().catch(() => undefined)));
 
   /** The job just finished: a small celebration, once. */
   function celebrate(next: Job) {
@@ -130,24 +146,8 @@ export function JobDetail({ jobId }: { jobId: string }) {
     });
   }
 
-  if (error && !data && missing) {
-    return (
-      <div className="page">
-        <BackLink />
-        <Empty
-          icon="info"
-          heading="h1"
-          title="This job is gone"
-          action={
-            <LinkButton href="/jobs" variant="primary" icon="chevronLeft">
-              See all jobs
-            </LinkButton>
-          }
-        >
-          It may have been removed. Tap See all jobs to pick another one.
-        </Empty>
-      </div>
-    );
+  if ((error && !data && missing) || deleted) {
+    return <JobGone />;
   }
   if (error && !data) {
     return (
@@ -231,6 +231,10 @@ export function JobDetail({ jobId }: { jobId: string }) {
             </p>
           ) : null}
           <div className="panel__actions">
+            {/* First, so the job's own next step (Try again, Check these clips) keeps the thumb's corner. */}
+            <Button variant="ghost" icon="trash" className="job-delete" data-help="delete-job" onClick={() => setAsking(true)}>
+              Delete job
+            </Button>
             {working && !stopping ? (
               <Button variant="ghost" icon="stop" act={stopAct} onClick={stop}>
                 Stop job
@@ -261,6 +265,14 @@ export function JobDetail({ jobId }: { jobId: string }) {
             ) : null}
           </div>
           {working ? <NotifyCard /> : null}
+          {asking ? (
+            <DeleteJobsSheet
+              jobs={[job]}
+              reviewCounts={{ [jobId]: data.clips.filter((c) => c.status === "review").length }}
+              onClose={() => setAsking(false)}
+              onDelete={remove}
+            />
+          ) : null}
         </section>
 
         <section className="panel glass source-card" aria-labelledby="source-title">
@@ -355,6 +367,30 @@ function ClipTile({ clip }: { clip: Clip }) {
     </A>
   ) : (
     <div className="clip-tile clip-tile--static glass">{body}</div>
+  );
+}
+
+/**
+ * A job that is not there: deleted (here or on another device), or a wrong link. A clip that came from a deleted job
+ * links here ("See the job this clip came from"), so the words say the clips still work (§34.7).
+ */
+export function JobGone() {
+  return (
+    <div className="page">
+      <BackLink />
+      <Empty
+        icon="info"
+        heading="h1"
+        title="This job is gone"
+        action={
+          <LinkButton href="/jobs" variant="primary" icon="chevronLeft">
+            See all jobs
+          </LinkButton>
+        }
+      >
+        It was deleted, or the link is wrong. Clips you kept from it still work.
+      </Empty>
+    </div>
   );
 }
 
