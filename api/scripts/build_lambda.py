@@ -49,18 +49,22 @@ HANDLERS = (
     "clipfactory_api/weekly.py",  # cf-prod-learn (§16.6)
     "clipfactory_api/money/handler.py",  # cf-prod-money (§25.6)
     "clipfactory_api/ask/worker.py",  # cf-prod-ask (§28.5)
+    "clipfactory_api/push/notify.py",  # cf-prod-notify (§32.5)
 )
-REQUIRED_PACKAGES = ("boto3==", "botocore==", "aws-durable-execution-sdk-python==", "anthropic==")
+REQUIRED_PACKAGES = ("boto3==", "botocore==", "aws-durable-execution-sdk-python==", "anthropic==", "cryptography==")
 VENDORED = (
     "boto3/__init__.py",
     "botocore/__init__.py",
     "aws_durable_execution_sdk_python/__init__.py",
     "anthropic/__init__.py",
     "anthropic/lib/bedrock/__init__.py",
+    "cryptography/hazmat/primitives/asymmetric/ec.py",
 )
 ASK_KNOWLEDGE_IN_ZIP = "clipfactory_api/ask/knowledge.json"
 # The only packages that may carry compiled files, and only for Linux on arm64 (the Lambdas' platform).
-COMPILED_ALLOWED = ("pydantic_core/", "jiter/")
+# cryptography (with cffi) signs and encrypts Web Push messages (docs/CONTRACTS.md §32.4); its Rust module is one
+# abi3 file whose name carries no platform, so its ELF header must say Linux on arm64 instead.
+COMPILED_ALLOWED = ("pydantic_core/", "jiter/", "cryptography/", "_cffi_backend.")
 FIXED_TIME = (1980, 1, 1, 0, 0, 0)
 COMPILED = {".so", ".pyd", ".dylib", ".dll"}
 
@@ -165,9 +169,26 @@ def _copy_help_corpus(dest: Path) -> None:
     print(f"  help corpus: {len(parsed.docs)} docs, version {parsed.version}")
 
 
-def _compiled_ok(name: str) -> bool:
+ELF_AARCH64 = 183  # e_machine of an ELF file built for arm64
+
+
+def _elf_aarch64(data: bytes) -> bool:
+    """A 64-bit little-endian ELF file for arm64 (what an abi3 ``.so`` for Lambda on arm64 must be)."""
+    return (
+        data[:4] == b"\x7fELF"
+        and data[4] == 2
+        and data[5] == 1
+        and int.from_bytes(data[18:20], "little") == ELF_AARCH64
+    )
+
+
+def _compiled_ok(name: str, data: bytes = b"") -> bool:
     """A compiled file is allowed only in ``COMPILED_ALLOWED`` and only when built for Linux on arm64."""
-    return name.startswith(COMPILED_ALLOWED) and name.endswith(".so") and "aarch64-linux" in name
+    if not (name.startswith(COMPILED_ALLOWED) and name.endswith(".so")):
+        return False
+    if name.endswith(".abi3.so"):
+        return _elf_aarch64(data)
+    return "aarch64-linux" in name
 
 
 def _zip(source: Path, out: Path) -> list[str]:
@@ -182,7 +203,7 @@ def _zip(source: Path, out: Path) -> list[str]:
     with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in files:
             name = path.relative_to(source).as_posix()
-            if path.suffix in COMPILED and not _compiled_ok(name):
+            if path.suffix in COMPILED and not _compiled_ok(name, path.read_bytes()):
                 raise SystemExit(f"compiled file in the package (must stay pure Python): {name}")
             info = zipfile.ZipInfo(name, date_time=FIXED_TIME)
             info.external_attr = 0o100644 << 16

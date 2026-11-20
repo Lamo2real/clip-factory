@@ -207,6 +207,12 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/help/asks/0b7c3c1e-1d2f-4a5b-8c9d-0e1f2a3b4c5d/stop"),
         ("PUT", "/v1/help/search-key"),
         ("DELETE", "/v1/help/search-key"),
+        # §32: notifications
+        ("GET", "/v1/push/key"),
+        ("GET", "/v1/push/devices"),
+        ("PUT", "/v1/push/devices/phone-12345678"),
+        ("DELETE", "/v1/push/devices/phone-12345678"),
+        ("POST", "/v1/push/test"),
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)

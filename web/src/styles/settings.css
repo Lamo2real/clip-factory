@@ -2283,3 +2283,50 @@ ol.md__list {
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------- Notifications (docs/CONTRACTS.md §32.8) ---------- */
+.notify-device {
+  display: grid;
+  gap: 12px;
+}
+.notify-device__lead,
+.notify-device__on,
+.notify-card__text {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-weight: 600;
+}
+.notify-device__lead .icon,
+.notify-device__on .icon,
+.notify-card__text .icon {
+  flex: none;
+  margin-top: 2px;
+}
+.notify-device__on .icon {
+  color: var(--green-ink);
+}
+.notify-device__row,
+.notify-card__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.notify-device__note {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.notify-device__note:empty {
+  display: none;
+}
+.notify-card {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}

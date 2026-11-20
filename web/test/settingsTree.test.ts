@@ -13,14 +13,30 @@ import { BRANCH_ROUTES } from "../src/screens/settings/Settings.tsx";
 import { titleFor } from "../src/app/App.tsx";
 
 describe("the settings tree", () => {
-  it("has the four trees and fifteen branches of §15.1, §16.12, §21, §24 and §28, in order", () => {
+  it("has the four trees and sixteen branches of §15.1, §16.12, §21, §24, §28 and §32, in order", () => {
     expect(TREES.map((t) => t.slug)).toEqual(["clip-making", "posting", "look-and-feel", "app"]);
     expect(TREES.map((t) => t.branches.map((b) => b.slug))).toEqual([
       ["clips", "skills", "learned", "streamers", "youtube"],
       ["setup", "where", "money"],
       ["sounds", "motion", "background"],
-      ["get-the-app", "updates", "ask", "account"],
+      ["get-the-app", "notifications", "updates", "ask", "account"],
     ]);
+  });
+
+  it("§32: App & account › Notifications has this device, the choices, the badge, the lock screen and a test", () => {
+    const n = TREES.find((t) => t.slug === "app")!.branches.find((b) => b.slug === "notifications")!;
+    expect(n.apples.map((a) => a.id)).toEqual([
+      "notify-device",
+      "notify-ready",
+      "notify-stopped",
+      "notify-resumed",
+      "notify-steps",
+      "notify-badge",
+      "notify-lock-screen",
+      "notify-test",
+    ]);
+    expect(searchSettings("widget").map((h) => h.apple.id)).toContain("notify-lock-screen");
+    expect(searchSettings("notifications").map((h) => h.apple.id)).toContain("notify-device");
   });
 
   it("§28: App & account › Ask has Web search and What Ask can do, with their data-help anchors", () => {

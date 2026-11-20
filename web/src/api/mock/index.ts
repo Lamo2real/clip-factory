@@ -11,6 +11,7 @@ import { skillsApi, type MockSkillControls } from "./skills.ts";
 import { lessonsApi, type LessonsFault } from "./lessons.ts";
 import { followsApi } from "./follows.ts";
 import { mockMoneyGrant, moneyApi } from "./money.ts";
+import { pushApi } from "./push.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
 import { currentClipModel, isClipModel } from "../../lib/models.ts";
@@ -555,6 +556,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     ...lessons,
     ...follows.api,
     ...money.api,
+    ...pushApi(),
     async getSettings() {
       await delay();
       return clone(store.settings);
@@ -599,6 +601,14 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       // §24: the same ranges as the API (0 is "no limit").
       const whole = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
       if (next.followDailyMax !== undefined && !whole(next.followDailyMax, 0, 20)) throw bad("How many a day must be a number from 1 to 20.");
+      if (next.notify !== undefined) {
+        // §32.3: the same rule as the API: known keys only, each on or off; a missing one keeps its default.
+        const n = next.notify as unknown as Record<string, unknown>;
+        const keys = ["ready", "stopped", "resumed", "steps"];
+        if (typeof n !== "object" || n === null || Object.keys(n).some((k) => !keys.includes(k)) || Object.values(n).some((v) => typeof v !== "boolean"))
+          throw bad("Notifications must say on or off for: clips ready, stopped, picked up, every step.");
+        next.notify = { ready: true, stopped: true, resumed: true, steps: false, ...(n as Partial<Settings["notify"] & object>) };
+      }
       if (next.followMinMinutes !== undefined && !whole(next.followMinMinutes, 10, 240)) throw bad("The shortest video must be a number from 10 to 240 minutes.");
       if (next.followPaused !== undefined && typeof next.followPaused !== "boolean") throw bad("followPaused must be true or false.");
       if (next.backgroundColours !== undefined) {

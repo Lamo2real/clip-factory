@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..http import Route, route
-from . import ask, clips, follows, help, jobs, lessons, money, performance, setup, skills, system, weeks
+from . import ask, clips, follows, help, jobs, lessons, money, performance, push, setup, skills, system, weeks
 
 ROUTES: list[Route] = [
     route("GET", "/v1/health", system.health, public=True),
@@ -82,4 +82,10 @@ ROUTES: list[Route] = [
     route("POST", "/v1/help/asks/{askId}/stop", ask.stop),
     route("PUT", "/v1/help/search-key", ask.put_search_key),
     route("DELETE", "/v1/help/search-key", ask.delete_search_key),
+    # §32: notifications on the owner's phone and computer (Web Push).
+    route("GET", "/v1/push/key", push.get_key),
+    route("GET", "/v1/push/devices", push.list_devices),
+    route("PUT", "/v1/push/devices/{deviceId}", push.put_device),
+    route("DELETE", "/v1/push/devices/{deviceId}", push.delete_device),
+    route("POST", "/v1/push/test", push.send_test),
 ]

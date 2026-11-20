@@ -372,6 +372,62 @@ export const TREES: Tree[] = [
         ],
       },
       {
+        slug: "notifications",
+        name: "Notifications",
+        line: "Get told when your clips are ready, even with the app closed.",
+        icon: "bell",
+        apples: [
+          {
+            id: "notify-device",
+            name: "This device",
+            leaf: "Turn notifications on here. On iPhone, open Clip Factory from your Home Screen first.",
+            words: ["notifications", "alerts", "push", "ping", "buzz", "phone", "iphone", "allow", "permission", "turn on", "home screen"],
+          },
+          {
+            id: "notify-ready",
+            name: "Clips ready",
+            leaf: "When your clips are done.",
+            words: ["done", "finished", "ready", "tell me"],
+          },
+          {
+            id: "notify-stopped",
+            name: "It stopped",
+            leaf: "When a video stops and needs Try again.",
+            words: ["failed", "error", "stopped", "try again", "broken"],
+          },
+          {
+            id: "notify-resumed",
+            name: "Picked up again",
+            leaf: "When a video that stopped starts again by itself.",
+            words: ["resume", "resumed", "picking up", "started again", "restart"],
+          },
+          {
+            id: "notify-steps",
+            name: "Every step",
+            leaf: "One card per video that changes as it works: the step and the clip. It can buzz often.",
+            words: ["progress", "live", "status", "steps", "what it's doing", "lock screen", "updates", "clip 3 of 10"],
+          },
+          {
+            id: "notify-badge",
+            name: "Number on the app icon",
+            leaf: "Shows how many videos are working right now.",
+            words: ["badge", "icon", "red dot", "count", "working"],
+          },
+          {
+            id: "notify-lock-screen",
+            name: "Lock Screen widget",
+            leaf: "Lock Screen widgets only come with App Store apps. Your notifications show there instead.",
+            words: ["widget", "lock screen", "live activity", "dynamic island", "app store", "always on"],
+          },
+          {
+            id: "notify-test",
+            name: "Send a test",
+            leaf: "Sends one to this device so you can see it work.",
+            words: ["test", "try", "check", "does it work"],
+          },
+        ],
+      },
+      {
         slug: "updates",
         name: "Updates",
         line: "Your version, and checking for a new one.",

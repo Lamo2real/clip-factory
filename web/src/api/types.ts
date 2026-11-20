@@ -197,6 +197,33 @@ export interface Settings {
   followDailyMax?: number;
   /** The shortest finished stream or video (minutes, 10 to 240) that counts. Absent on old servers: 30. */
   followMinMinutes?: number;
+  /** Which notifications the owner's devices get (docs/CONTRACTS.md §32.3). Absent on old servers: the defaults. */
+  notify?: NotifyChoices;
+}
+
+/** §32.3: "Clips ready", "It stopped" and "Picked up" are on by default; "Every step" is off (each one shows on the phone). */
+export interface NotifyChoices {
+  ready: boolean;
+  stopped: boolean;
+  /** A stopped run picked up again. Absent on servers before it: on. */
+  resumed: boolean;
+  steps: boolean;
+}
+
+/** A device that gets notifications (GET /v1/push/devices). Its address and keys never leave the server. */
+export interface PushDevice {
+  deviceId: string;
+  kind: "webpush";
+  deviceLabel: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** PUT /v1/push/devices/{deviceId}: `PushSubscription.toJSON()` and a plain device name. */
+export interface PushSubscriptionBody {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  deviceLabel: string;
 }
 
 export type YoutubePrivacy = "public" | "unlisted" | "private";
@@ -1005,6 +1032,17 @@ export interface Api {
   deleteSkill(skillId: string): Promise<void>;
   getSettings(): Promise<Settings>;
   putSettings(patch: Partial<Settings>): Promise<Settings>;
+  // Notifications (§32.3)
+  /** GET /v1/push/key: the public key for `pushManager.subscribe`. 503 until the deploy made one. */
+  pushKey(): Promise<string>;
+  /** GET /v1/push/devices. */
+  listPushDevices(): Promise<PushDevice[]>;
+  /** PUT /v1/push/devices/{deviceId}: idempotent. */
+  savePushDevice(deviceId: string, body: PushSubscriptionBody): Promise<PushDevice>;
+  /** DELETE /v1/push/devices/{deviceId}. */
+  deletePushDevice(deviceId: string): Promise<void>;
+  /** POST /v1/push/test: "Notifications are on 🎉" to this device (or every device). 429 within 10 s. */
+  sendTestPush(deviceId?: string): Promise<{ sent: number; devices: number }>;
   createCookiesUpload(filename: string): Promise<PresignedPut>;
   deleteCookies(): Promise<void>;
   listAccounts(): Promise<Account[]>;

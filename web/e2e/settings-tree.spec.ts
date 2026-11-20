@@ -347,9 +347,9 @@ test.describe("on a desktop", () => {
     await trees.nth(3).click();
     await expect(page).toHaveURL(/\/settings\/app$/);
     const branches = page.getByRole("list", { name: "App & account sections" }).getByRole("link");
-    await expect(branches).toHaveText([/Get the app/, /Updates/, /Ask/, /Account/]);
+    await expect(branches).toHaveText([/Get the app/, /Notifications/, /Updates/, /Ask/, /Account/]);
 
-    await branches.nth(1).click();
+    await branches.nth(2).click();
     await expect(page.locator("#this-version")).toBeVisible();
     await page.getByRole("button", { name: "Check for updates" }).click();
     await expect(page.getByText("You have the newest version.")).toBeVisible();

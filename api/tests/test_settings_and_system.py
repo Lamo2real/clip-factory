@@ -27,6 +27,7 @@ DEFAULTS = {
     "followPaused": False,
     "followDailyMax": 0,
     "followMinMinutes": 30,
+    "notify": {"ready": True, "stopped": True, "resumed": True, "steps": False},
 }
 
 

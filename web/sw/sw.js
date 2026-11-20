@@ -81,3 +81,66 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(request));
   }
 });
+
+// ---------- Notifications (docs/CONTRACTS.md §32) ----------
+// Every push shows a notification (iPhone requires it). One job's notifications share its tag, so the newest
+// replaces the last: one card per video on the lock screen. A progress card ("quiet") replaces it without a buzz
+// where the device allows. "badge" is how many videos are working: the number on the app icon.
+// Only same-origin paths are ever opened, so a message can never send the owner anywhere else.
+function safePath(url) {
+  if (typeof url !== "string" || !url.startsWith("/") || url.startsWith("//")) return "/";
+  return url;
+}
+
+function readPush(event) {
+  try {
+    return event.data ? event.data.json() : {};
+  } catch {
+    return {};
+  }
+}
+
+async function showPush(data) {
+  const title = typeof data.title === "string" && data.title ? data.title.slice(0, 80) : "Clip Factory";
+  const body = typeof data.body === "string" ? data.body.slice(0, 200) : "";
+  const tag = typeof data.tag === "string" && data.tag ? data.tag.slice(0, 64) : "clip-factory";
+  const quiet = data.quiet === true;
+  if (typeof data.badge === "number" && Number.isFinite(data.badge) && self.navigator.setAppBadge) {
+    try {
+      if (data.badge > 0) await self.navigator.setAppBadge(Math.round(data.badge));
+      else await self.navigator.clearAppBadge();
+    } catch {
+      // No badge on this device: the notification still shows.
+    }
+  }
+  await self.registration.showNotification(title, {
+    body,
+    tag,
+    renotify: !quiet,
+    silent: quiet,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data: { url: safePath(data.url) },
+  });
+}
+
+self.addEventListener("push", (event) => {
+  event.waitUntil(showPush(readPush(event)));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const path = safePath(event.notification.data && event.notification.data.url);
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const own = windows.find((w) => new URL(w.url).origin === self.location.origin);
+      if (own) {
+        await own.focus();
+        if ("navigate" in own) await own.navigate(path).catch(() => {});
+        return;
+      }
+      await self.clients.openWindow(path);
+    })(),
+  );
+});

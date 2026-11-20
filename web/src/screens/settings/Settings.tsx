@@ -41,6 +41,7 @@ import { FollowBranch } from "./FollowBranch.tsx";
 import { SoundsBranch } from "./SoundsBranch.tsx";
 import { MoneyBranch } from "./MoneyBranch.tsx";
 import { AskBranch } from "./AskBranch.tsx";
+import { NotifyBranch } from "./NotifyBranch.tsx";
 import { SetupList } from "./setup/SetupList.tsx";
 import { SetupPlatform } from "./setup/SetupPlatform.tsx";
 import { openHelp } from "../../features/help/context.ts";
@@ -60,6 +61,7 @@ const BRANCHES: Record<string, () => ReactNode> = {
   "look-and-feel/motion": () => <MotionBranch />,
   "look-and-feel/background": () => <BackgroundBranch />,
   "app/get-the-app": () => <GetAppBranch />,
+  "app/notifications": () => <NotifyBranch />,
   "app/ask": () => <AskBranch />,
   "app/updates": () => <UpdatesBranch />,
   "app/account": () => <AccountBranch />,

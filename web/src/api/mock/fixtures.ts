@@ -537,6 +537,7 @@ export function seed(): Store {
       followPaused: false,
       followDailyMax: 0,
       followMinMinutes: 30,
+      notify: { ready: true, stopped: true, resumed: true, steps: false },
     },
     accounts: PLATFORMS.map((platform) => ({ platform, status: "not_connected" })),
   };
