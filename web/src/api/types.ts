@@ -56,6 +56,8 @@ export interface Job {
   clipCount: number;
   notes?: string;
   error?: string;
+  /** A short plain sentence while the job runs, e.g. "Picking up where it stopped…" after a stop (CONTRACTS §30). */
+  note?: string;
   /** The AI model that made the clips, a key of config/models.json (ADR-42). Absent on jobs from before it. */
   model?: string;
   /** The model the owner picked when it could not be used and the default model made the clips instead. */

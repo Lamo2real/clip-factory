@@ -259,6 +259,8 @@ jobs:
         run: bash scripts/test-deploy-workflow.sh
       - name: the delete gate refuses plans that delete or replace the owner's data
         run: bash scripts/test-check-plan-deletes.sh
+      - name: the deploy drain waits for running jobs only when the agent changes (fake aws)
+        run: bash scripts/test-wait-for-jobs.sh
 
   changes:
     runs-on: ubuntu-24.04

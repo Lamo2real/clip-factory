@@ -2,11 +2,12 @@
 
 The job flow passes a ``callbackId`` in ``process_job`` and waits, with no compute, until the agent sends:
 
-* a heartbeat at most once every 5 minutes while the job runs (the flow's heartbeat timeout is 15 minutes, so a
-  container that died is noticed without any scan);
+* a heartbeat every 2 minutes while the job runs, from its own thread (heartbeat.py; the flow's heartbeat timeout is
+  6 minutes, so a container that died or froze is noticed in minutes and the job resumes, §30);
 * success, after finalize wrote the Job ``ready``: ``{"jobId", "clipCount"}``;
-* failure: ``JobFailed`` (the agent wrote the Job ``failed``), ``Canceled`` (the owner canceled) or ``Superseded``
-  (a retry gave the job a new session, §13 "One run per job"), with the Job's plain-sentence error.
+* failure: ``JobFailed`` (the agent wrote the Job ``failed``), ``Canceled`` (the owner canceled), ``Superseded``
+  (a retry gave the job a new session, §13 "One run per job") or ``AgentStopped`` (the container is shutting down,
+  SIGTERM: the flow resumes the job at once, §30), with the Job's plain-sentence error.
 
 Every send retries throttling and 5xx errors 3 times. A callback that is already closed, timed out or unknown is
 ignored, and no send ever fails the job: a lost message ends the flow through its heartbeat timeout instead."""
@@ -14,25 +15,26 @@ ignored, and no send ever fails the job: a lost message ends the flow through it
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import time
 from collections.abc import Callable
 from typing import Any
 
+from .heartbeat import HEARTBEAT_SECONDS, HeartbeatThread, Liveness
 from .retry import is_transient, retry
 from .util import log
 
-HEARTBEAT_SECONDS = 300.0  # at most once per 5 minutes; the flow's heartbeat timeout is 15
 SEND_ATTEMPTS = 4  # the first try plus 3 retries
 MAX_MESSAGE = 256
 
 JOB_FAILED = "JobFailed"
 CANCELED = "Canceled"
 SUPERSEDED = "Superseded"
+AGENT_STOPPED = "AgentStopped"
 
 CANCELED_MESSAGE = "The job was canceled."
 SUPERSEDED_MESSAGE = "A newer run of this job took over."
+STOPPED_MESSAGE = "Picking up where it stopped…"
 GENERIC_FAILURE = "Something went wrong while making the clips. Tap Try again."
 
 # Errors that mean the callback can no longer be completed: the flow already ended (success, failure or timeout).
@@ -71,8 +73,8 @@ def lambda_client(region: str) -> Any:
 
 
 class DurableCallback:
-    """One run's callback. ``beat()`` is cheap and safe to call often (from the job heartbeat loop): it sends at most
-    once per ``heartbeat_every`` seconds, in the background. Exactly one of ``succeed``/``fail`` is sent per run."""
+    """One run's callback. ``start_heartbeat()`` starts the heartbeat thread (heartbeat.py); ``beat()`` is kept as a
+    no-op for callers of the old loop heartbeat. Exactly one of ``succeed``/``fail`` is sent per run."""
 
     def __init__(
         self,
@@ -82,15 +84,18 @@ class DurableCallback:
         heartbeat_every: float = HEARTBEAT_SECONDS,
         clock: Callable[[], float] = time.monotonic,
         retry_base: float = 1.0,
+        new_client: Callable[[], Any] | None = None,
     ) -> None:
         self.callback_id = callback_id
         self.client = client
         self.heartbeat_every = heartbeat_every
         self.clock = clock
         self.retry_base = retry_base
+        self.new_client = new_client  # the heartbeat thread's own client; None: the shared one
         self.closed = False  # a terminal message was sent, or the flow no longer waits for one
-        self._last_beat: float | None = None
-        self._beat_task: asyncio.Task[bool] | None = None
+        self._last_beat: float | None = None  # set only after a heartbeat went through
+        self._thread: HeartbeatThread | None = None
+        self._beat_client: Any = None
 
     @property
     def ref(self) -> str:
@@ -111,39 +116,57 @@ class DurableCallback:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            if is_closed(e):
-                log("info", "callback.closed", what=what, callback=self.ref, error=_code(e) or type(e).__name__)
-                self.closed = True
-            else:
-                log("warn", "callback.send_failed", what=what, callback=self.ref, error=_code(e) or type(e).__name__)
+            self._failed(what, e)
             return False
 
-    # --- heartbeat ------------------------------------------------------------------------------------------------
+    def _failed(self, what: str, e: BaseException) -> None:
+        if is_closed(e):
+            log("info", "callback.closed", what=what, callback=self.ref, error=_code(e) or type(e).__name__)
+            self.closed = True
+        else:
+            log("warn", "callback.send_failed", what=what, callback=self.ref, error=_code(e) or type(e).__name__)
 
-    def due(self) -> bool:
-        return not self.closed and (self._last_beat is None or self.clock() - self._last_beat >= self.heartbeat_every)
+    # --- heartbeat (its own thread) -------------------------------------------------------------------------------
 
-    def beat(self) -> None:
-        """Starts a heartbeat in the background when one is due and none is in flight."""
-        if not self.due() or (self._beat_task is not None and not self._beat_task.done()):
-            return
-        self._last_beat = self.clock()
-        self._beat_task = asyncio.get_running_loop().create_task(self.heartbeat(), name="callback-heartbeat")
-
-    async def heartbeat(self) -> bool:
+    def send_heartbeat(self) -> bool:
+        """One heartbeat, sent from the heartbeat thread (blocking). True when the flow received it; the thread tries
+        again after 20 seconds otherwise. ``_last_beat`` is set only on success."""
         if self.closed:
             return False
-        ok = await self._send("heartbeat", self.client.send_durable_execution_callback_heartbeat)
-        if ok:
-            log("info", "callback.heartbeat", callback=self.ref)
-        return ok
+        if self._beat_client is None:
+            self._beat_client = self.new_client() if self.new_client else self.client
+        try:
+            self._beat_client.send_durable_execution_callback_heartbeat(CallbackId=self.callback_id)
+        except Exception as e:
+            self._failed("heartbeat", e)
+            return False
+        self._last_beat = self.clock()
+        log("info", "callback.heartbeat", callback=self.ref)
+        return True
+
+    def start_heartbeat(self, liveness: Liveness, **kwargs: Any) -> HeartbeatThread:
+        """Starts the heartbeat thread (once); it beats while ``liveness`` shows the event loop is alive."""
+        if self._thread is None:
+            self._thread = HeartbeatThread(
+                self.send_heartbeat,
+                liveness,
+                closed=lambda: self.closed,
+                every=self.heartbeat_every,
+                clock=self.clock,
+                ref=self.ref,
+                **kwargs,
+            )
+            self._thread.start()
+        return self._thread
+
+    def beat(self) -> None:
+        """Kept for callers of the old loop heartbeat: the thread beats now."""
 
     async def _stop_beat(self) -> None:
-        task, self._beat_task = self._beat_task, None
-        if task is not None and not task.done():
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
+        thread, self._thread = self._thread, None
+        if thread is not None:
+            thread.stop()
+            await asyncio.to_thread(thread.join, 30)
 
     # --- outcome ------------------------------------------------------------------------------------------------
 
@@ -173,7 +196,8 @@ class DurableCallback:
 
 
 async def report(cb: DurableCallback | None, status: str, *, job_id: str, clip_count: int, error: str | None) -> None:
-    """Sends the run's final status (``ready``, ``failed``, ``canceled`` or ``superseded``) to the job flow."""
+    """Sends the run's final status (``ready``, ``failed``, ``canceled``, ``superseded`` or ``stopped``: the container
+    is shutting down) to the job flow."""
     if cb is None:
         return
     if status == "ready":
@@ -182,5 +206,7 @@ async def report(cb: DurableCallback | None, status: str, *, job_id: str, clip_c
         await cb.fail(CANCELED, CANCELED_MESSAGE)
     elif status == "superseded":
         await cb.fail(SUPERSEDED, SUPERSEDED_MESSAGE)
+    elif status == "stopped":
+        await cb.fail(AGENT_STOPPED, STOPPED_MESSAGE)
     else:
         await cb.fail(JOB_FAILED, error or GENERIC_FAILURE)

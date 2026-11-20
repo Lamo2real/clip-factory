@@ -181,7 +181,8 @@ wrapper around `run_job_flow(ctx, event, deps)` so tests drive it with a fake co
 * **Steps** (names are contract; all DynamoDB writes are conditional on `sessionId = :sessionId`, so a superseded run
   never overwrites a newer one, and on the job not already being in the target state):
   1. `cb = context.create_callback(name="agent-done", config=CallbackConfig(timeout=Duration.from_hours(8),
-     heartbeat_timeout=Duration.from_minutes(15)))`.
+     heartbeat_timeout=Duration.from_minutes(6)))`. A resumed attempt `n` (§30.1) uses `agent-done-n`,
+     `start-agent-n` and the time left of the 8 h; the first attempt keeps these names so old executions replay.
   2. Step `start-agent` (retry: 3 attempts, exponential backoff, retryable on throttling/5xx/connection errors):
      GetItem the Job. Missing, another `sessionId`, or a terminal status (canceled or retried meanwhile) → return
      `{"skipped": true}` and the flow ends with outcome `superseded` without waiting. Already `running` with this
@@ -191,16 +192,19 @@ wrapper around `run_job_flow(ctx, event, deps)` so tests drive it with a fake co
      The agent ignores a duplicate `process_job` (at-least-once step).
   3. `result = cb.result()` (no compute while waiting). Success → step `finish`: if the Job is not `ready`, set
      `ready` and `clipCount` from the result. Outcome `ready`.
-  4. `CallbackError` → step `fail`: if the Job is `queued`/`running` with this `sessionId`, set `failed` with `error` =
-     the agent's `ErrorMessage` when `ErrorType == "JobFailed"`, else "Making the clips stopped partway. Tap Try again."
-     (timeout or missed heartbeat); then step `stop-session` (`StopRuntimeSession`, errors ignored). `ErrorType`
+  4. `CallbackError` with a timeout, a missed heartbeat or `ErrorType == "AgentStopped"` → resume (§30.1: steps
+     `resume-n`, `stop-old-n`, then 1-3 again on the new session), at most twice. Otherwise, or after the last resume,
+     step `fail`: if the Job is `queued`/`running` with this `sessionId`, set `failed` with `error` =
+     the agent's `ErrorMessage` when `ErrorType == "JobFailed"`, else "Making the clips stopped. Tap Try again to pick
+     up where it left off." (and `pickUp: true`, §30.6); then step `stop-session` (`StopRuntimeSession`, errors ignored). `ErrorType`
      `Canceled` / `Superseded` → no write (the API or the newer run already set the state). Outcome `failed` /
      `canceled` / `superseded`.
   The handler returns `{"jobId", "outcome"}` and never raises for these expected outcomes, so `DurableExecutionFailed`
   means a bug.
 * **Agent side of the callback** (`agent/src/clipfactory_agent/callback.py`, boto3 `lambda` client in `CF_REGION`):
-  * Heartbeat: `send_durable_execution_callback_heartbeat(CallbackId=...)` from the existing job heartbeat loop, at most
-    once per 5 minutes (timeout is 15). Failures are logged, never fatal.
+  * Heartbeat: `send_durable_execution_callback_heartbeat(CallbackId=...)` every 2 minutes from its own thread with its
+    own client, only while the event loop is alive (timeout is 6 minutes; §30.3). Failures are logged, tried again
+    after 20 s, never fatal.
   * Success after `finalize` wrote the Job `ready`: `send_durable_execution_callback_success(CallbackId=...,
     Result=json.dumps({"jobId", "clipCount"}).encode())`.
   * Failure: `send_durable_execution_callback_failure(CallbackId=..., Error={"ErrorType": "JobFailed" | "Canceled" |
@@ -442,7 +446,7 @@ Shared function names across builders: `posts.create_for_clip(store, user_id, cl
   24 KB → `partial`, internal fields absent; hooks: Meta challenge ok/403, YouTube challenge, tiktok/x 501, POST stores
   a HOOK item with 14-day `ttl`, 413 over 256 KB, OAuth callback per §17.12 (was the `coming_soon` 302), unknown
   platform 404, query string never logged.
-* **agent**: `callbackId` → heartbeat ≤ every 5 min, success after `ready`, `JobFailed`/`Canceled`/`Superseded`
+* **agent**: `callbackId` → heartbeat every 2 min from a thread (§30.3), success after `ready`, `JobFailed`/`Canceled`/`Superseded`
   failures, closed-callback errors ignored, no callback without `callbackId`; duplicate `process_job` ignored; finalize
   puts vectors with the §14.6 metadata; query fallback (< 3 performed hits) and skip on error.
 * **web** (Vitest + Playwright mock mode): backoff sequence and fresh token per attempt, cache merge of each event

@@ -167,6 +167,10 @@ class MemStore:
     async def put_clip(self, item: dict[str, Any], fence: Any = None) -> None:
         self.clips.append(item)
 
+    async def clip_statuses(self, user_id: str, clip_ids: Any) -> dict[str, str]:
+        ids = set(clip_ids)
+        return {c["clipId"]: str(c.get("status")) for c in self.clips if c.get("clipId") in ids}
+
     def presign(self, key: str, seconds: int = 3600) -> str:
         return f"https://s3.test/{key}"
 

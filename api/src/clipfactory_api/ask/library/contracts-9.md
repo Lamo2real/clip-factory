@@ -20,5 +20,6 @@ the SQS publish queue and the EventBridge resources: §14.
   ones through the platform adapter (adapters arrive in phase 2; today every platform is `pending_integration`), waits
   48 hours, reads metrics (through the shared stats refresh, §16.5) and updates the clip's vector (the one-sentence
   48-hour Learning is retired, §16.12). Between and after those steps `cf-prod-stats` keeps every posted post's numbers fresh for 30 days (§16).
-* A `running` job whose agent stops sending heartbeats for 15 minutes becomes `failed` ("Making the clips
-  stopped partway. Tap Try again.") through the job-flow callback heartbeat timeout (§14.4), not a scan.
+* A `running` job whose agent stops sending heartbeats for 6 minutes is resumed on a new session (as long as it keeps
+  moving forward, §30.2) through the job-flow callback heartbeat timeout (§14.4), not a scan; only after that does it become `failed`
+  ("Making the clips stopped. Tap Try again to pick up where it left off.").

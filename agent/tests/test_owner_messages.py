@@ -78,7 +78,7 @@ async def test_run_redacts_the_url_in_a_real_failure() -> None:
     """F071: end to end through proc.run, as jobs.py and pipeline.py then log str(e)."""
     script = f"import sys; print({PRESIGNED + ': Server returned 403 Forbidden'!r}, file=sys.stderr); sys.exit(1)"
     with pytest.raises(CommandError) as info:
-        await run(["python3", "-c", script])
+        await run(["python3", "-c", script], time_limit=30)
     for s in SECRETS:
         assert s not in str(info.value)
 

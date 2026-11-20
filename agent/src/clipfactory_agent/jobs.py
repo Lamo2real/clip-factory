@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import shutil
+import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +32,11 @@ STEPS: list[tuple[str, str, float]] = [
 LABELS = {k: label for k, label, _ in STEPS}
 HEARTBEAT_SECONDS = 30.0  # the contract asks for at most 60
 FLUSH_SECONDS = 5.0
+# Set when the container is shutting down (SIGTERM from AgentCore: a stopped session or a retired version). A run
+# cancelled then is not "canceled by the owner": it ends ``stopped``, writes nothing, and tells the job flow, which
+# resumes the job on a new session (docs/CONTRACTS.md §30).
+SHUTDOWN = threading.Event()
+RESUME_NOTE_FIELDS = ("note", "pickUp")  # what a run that ends (ready or failed) clears
 
 
 class JobStore(Protocol):
@@ -74,6 +80,7 @@ class Tracker:
         heartbeat: float = HEARTBEAT_SECONDS,
         flush: float = FLUSH_SECONDS,
         on_beat: Callable[[], None] | None = None,
+        resume: dict[str, Any] | None = None,
     ) -> None:
         self.store = store
         self.on_beat = on_beat
@@ -86,6 +93,21 @@ class Tracker:
         self.flush = flush
         self.steps: list[dict[str, Any]] = [{"key": k, "label": label, "status": "pending"} for k, label, _ in STEPS]
         self.progress = 0.0
+        # Picking up a job that stopped partway (§30): the steps it already finished stay done (the pipeline still
+        # runs them, quietly, to load what they saved) and the progress bar does not go back.
+        self.restored: set[str] = set()
+        self.resuming = bool(resume and resume.get("pickUp"))
+        if resume and self.resuming:
+            saved = {s.get("key"): s for s in resume.get("steps") or [] if isinstance(s, dict)}
+            for s in self.steps:
+                old = saved.get(s["key"])
+                if old and old.get("status") in ("done", "skipped"):
+                    s.update({k: v for k, v in old.items() if k in ("status", "message", "startedAt", "finishedAt")})
+                    self.restored.add(s["key"])
+            try:
+                self.progress = max(0.0, min(1.0, float(resume.get("progress") or 0)))
+            except (TypeError, ValueError):
+                self.progress = 0.0
         self.current: str | None = None
         self.canceled = asyncio.Event()
         self._fraction = 0.0
@@ -129,7 +151,9 @@ class Tracker:
         return ok
 
     async def begin(self) -> None:
-        if not await self._write({"status": "running", "clipCount": 0}, remove=("error",)):
+        # A resumed run keeps the clip count and the steps already done; it never resets them.
+        fields: dict[str, Any] = {"status": "running"} if self.resuming else {"status": "running", "clipCount": 0}
+        if not await self._write(fields, remove=("error",)):
             raise JobCanceled()
         self._owner = asyncio.current_task()
         self._signal_alive()
@@ -146,6 +170,7 @@ class Tracker:
     async def _beat(self) -> None:
         while True:
             await asyncio.sleep(self.flush)
+            self._signal_alive()  # the loop is alive, whatever the write below does
             due = asyncio.get_running_loop().time() - self._last_write >= self.heartbeat
             if self._dirty or due:
                 try:
@@ -202,6 +227,8 @@ class Tracker:
     async def start(self, key: str) -> None:
         await self.check_cancel()
         self.current, self._fraction = key, 0.0
+        if key in self.restored:
+            return  # done in the run that stopped: the step reloads what it saved, the owner sees it stay done
         s = self.step(key)
         s.update(status="running", startedAt=now_iso())
         s.pop("message", None)
@@ -210,6 +237,10 @@ class Tracker:
         await self.check_cancel()
 
     async def done(self, key: str, message: str | None, *, skipped: bool = False) -> None:
+        if key in self.restored:
+            self._fraction = 1.0
+            self.current = None
+            return
         s = self.step(key)
         s.update(status="skipped" if skipped else "done", finishedAt=now_iso())
         if message:
@@ -221,7 +252,7 @@ class Tracker:
 
     async def finish_ready(self, clip_count: int) -> None:
         self.progress = 1.0
-        await self._write({"status": "ready", "clipCount": clip_count})
+        await self._write({"status": "ready", "clipCount": clip_count}, remove=RESUME_NOTE_FIELDS)
 
     async def finish_failed(self, message: str) -> None:
         if self.superseded:
@@ -230,7 +261,7 @@ class Tracker:
             s = self.step(self.current)
             s.update(status="failed", message=message[:300], finishedAt=now_iso())
         self.error = message[:500]
-        await self._write({"status": "failed", "error": self.error})
+        await self._write({"status": "failed", "error": self.error}, remove=RESUME_NOTE_FIELDS)
 
     async def finish_canceled(self) -> None:
         if self.superseded:
@@ -274,6 +305,11 @@ async def run_job(
         return "ready"
     except (JobCanceled, asyncio.CancelledError) as e:
         await tracker.stop()
+        if SHUTDOWN.is_set() and not isinstance(e, JobCanceled):
+            # The container is going away, not the owner canceling: leave the job as it is (its saved steps and
+            # clips are the checkpoint) and let the job flow resume it on a new session.
+            log("info", "job.stopped_by_shutdown", job=tracker.job_id, step=tracker.current)
+            return "stopped"
         if isinstance(e, JobSuperseded):
             tracker.mark_superseded()
         if tracker.superseded:
@@ -359,6 +395,18 @@ class JobRunner:
 
         task.add_done_callback(forget)
         return True
+
+    async def shutdown(self, within: float = 20.0) -> None:
+        """The container is shutting down (SIGTERM): every running job stops as ``stopped`` (not canceled) and tells
+        the job flow, which resumes it on a new session. Waits at most ``within`` seconds."""
+        SHUTDOWN.set()
+        running = [t for t in self.tasks.values() if not t.done()]
+        if not running:
+            return
+        log("warn", "runtime.shutdown", jobs=len(running))
+        for t in running:
+            t.cancel()
+        await asyncio.wait(running, timeout=within)
 
     def cancel(self, job_id: str, session_id: str | None = None) -> bool:
         """Cancels the job's run here; a cancel addressed to another run (another session) is ignored."""

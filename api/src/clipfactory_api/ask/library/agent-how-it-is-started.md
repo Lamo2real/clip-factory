@@ -12,8 +12,10 @@ The durable `cf-prod-job-flow` (step `start-agent`) invokes the runtime with the
 
 While a job runs, `GET /ping` answers `HealthyBusy`, so AgentCore keeps the session alive; it answers `Healthy` when
 idle. The agent writes `heartbeatAt` at least every 60 seconds and, from the same loop, sends a callback heartbeat to the
-job flow at most every 5 minutes. If those stop for 15 minutes the job flow marks the job failed ("Making the clips
-stopped partway. Tap Try again."). When the job ends the agent sends the callback: **success** after `finalize` wrote the job
+job flow every 2 minutes from its own thread, only while the event loop is alive (CONTRACTS §30.3). If those stop for
+6 minutes, or the container gets SIGTERM (it then sends `AgentStopped`), the job flow resumes the job on a new session
+from what it saved, at most twice; only then is it failed ("Making the clips stopped. Tap Try again to pick up where it
+left off."). When the job ends the agent sends the callback: **success** after `finalize` wrote the job
 `ready`, or a **failure** with `JobFailed` (with the job's plain error), `Canceled` or `Superseded` (a retry started a
 newer session). Callback errors are retried 3 times and never fail the job; without a `callbackId` (local runs, tests)
 nothing is sent.
