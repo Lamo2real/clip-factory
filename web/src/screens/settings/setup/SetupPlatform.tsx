@@ -38,6 +38,7 @@ import { Rich } from "./bits.tsx";
 import { ChooseAccount } from "./ChooseAccount.tsx";
 import { CheckIt, KeyForm } from "./KeyForm.tsx";
 import { StepCard } from "./StepCard.tsx";
+import { useConnecting } from "./useConnecting.ts";
 import { useSetup } from "./useSetup.ts";
 import { VerificationUpload } from "./VerificationUpload.tsx";
 
@@ -75,7 +76,6 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
   const [opened, setOpened] = useState<Set<string>>(new Set());
   const [closed, setClosed] = useState<Set<string>>(new Set());
   const [busyStep, setBusyStep] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [review, setReview] = useState<ReviewState | null>(null);
   const celebrated = useRef(false);
@@ -84,6 +84,8 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
   // Kept here: Disconnect plays at the tap and rewinds if Undo is tapped (§20.7).
   const disconnectAct = useAction("disconnect");
 
+  // Stops by itself in the desktop app, where the platform opens in the system browser and this page stays.
+  const { connecting, start: startConnecting, opened: openedPlatform, stop: stopConnecting } = useConnecting(setup?.account);
   const progress = progressOf(guide, setup);
   const reconnect = setup?.account.status === "needs_reconnect";
   const choosing = setup?.account.status === "choose_account" && (setup.account.choices?.length ?? 0) > 0;
@@ -216,16 +218,17 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
       toast.info(`Paste your ${guide.name} keys first (step ${stepNumber(guide, "key-paste")}).`);
       return false;
     }
-    setConnecting(true);
+    startConnecting();
     try {
       const { authorizeUrl } = await api().connectAccount(platform);
       // Only the platform's own https page (or the mock's pretend page) is ever opened.
       if (!/^https:\/\//.test(authorizeUrl) && !authorizeUrl.startsWith("/mock-oauth/")) throw new Error("bad authorize url");
       location.assign(authorizeUrl);
+      openedPlatform();
       return true;
     } catch (e) {
       toast.error(friendlyMessage(e));
-      setConnecting(false);
+      stopConnecting();
       return false;
     }
   }
