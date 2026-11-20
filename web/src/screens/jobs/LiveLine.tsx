@@ -14,7 +14,8 @@ type LiveJob = Pick<Job, "jobId" | "status" | "run" | "live" | "note" | "steps">
  * `compact`: one line with an ellipsis, no "what is running" line, for the Jobs list and Home's "Working now". It
  * takes the row's own class, shows `fallback` (the step label) until a line arrives, and adds `after` (" · 34%").
  *
- * The visible words are not a live region (the seconds would be read out every second). A separate hidden status
+ * On the job page this is the one place that speaks the step (the progress panel says only the percent); in the
+ * compact rows it stays quiet (`aria-live="off"` inside Home's live list). The visible words are not a live region (the seconds would be read out every second). A separate hidden status
  * says only the sentence, and only when the step or the clip number changes.
  */
 export function LiveLine({
@@ -44,10 +45,12 @@ export function LiveLine({
   if (compact) {
     // The detail (seconds, MB) is hidden from screen readers: Home's list is a live region and would read it out.
     return (
-      <span className={`${className} live-line--compact clamp-1${words.stale ? " is-stale" : ""}`} data-live-line="">
-        <span className="live-line__text" key={words.text}>
-          {words.text}
-        </span>
+      <span
+        className={`${className} live-line--compact clamp-1${words.stale ? " is-stale" : ""}`}
+        data-live-line=""
+        aria-live="off"
+      >
+        <span className="live-line__text">{words.text}</span>
         {words.detail ? <span className="live-line__more" aria-hidden="true">{` · ${words.detail}`}</span> : null}
         {after}
       </span>

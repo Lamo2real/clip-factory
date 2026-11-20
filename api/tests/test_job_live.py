@@ -24,7 +24,7 @@ def sent(store: db.Store) -> tuple[broadcast.BroadcastDeps, FakeManagement]:
     ), management
 
 
-LIVE_ONLY = {"jobId", "step", "text", "detail", "tech", "since", "i", "n", "pct", "at", "run"}
+LIVE_ONLY = {"jobId", "step", "text", "detail", "tech", "since", "i", "n", "pct", "at", "lastChange", "run"}
 
 
 def _live(job: dict[str, Any], **fields: Any) -> dict[str, Any]:
@@ -42,6 +42,7 @@ def _live(job: dict[str, Any], **fields: Any) -> dict[str, Any]:
         "i": 3,
         "n": 10,
         "at": "2026-11-15T11:59:30.000Z",
+        "lastChange": "2026-11-15T11:58:00.000Z",
         "ttl": 1_800_000_000,
         **fields,
     }
@@ -56,6 +57,7 @@ def test_public_live_keeps_only_the_allowed_fields_and_hides_the_session() -> No
     assert out["run"] == jobs.run_tag("cfjob-J1-secret")
     assert len(out["run"]) == 10
     assert "secret" not in str(out)
+    assert out["lastChange"] == "2026-11-15T11:58:00.000Z"  # when the words last really changed
 
 
 def test_broadcast_sends_joblive_as_its_own_type(sent: tuple[broadcast.BroadcastDeps, FakeManagement]) -> None:

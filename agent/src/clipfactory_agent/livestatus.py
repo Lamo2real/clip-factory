@@ -57,7 +57,8 @@ KINDS = frozenset(
         "bedrock",  # a model call started (sets ``since``; the web counts the seconds)
         "bedrock_done",  # every model call ended
         "cut",  # the render step started on clip i of n
-        "cut_progress",  # ffmpeg: where the encode is, out of the clip's length
+        "cut_progress",  # ffmpeg: where the encode is, out of the clip's length (with the clip's own number)
+        "cut_done",  # clip i is no longer being cut
         "check",  # the checklist step checks clip i of n
         "captions",  # captions for clip i of n
         "save",  # saving clip i of n
@@ -151,6 +152,12 @@ class LiveStatus:
         self._dirty = False
         self._last_write: float | None = None
         self._thinking = 0  # model calls in flight
+        # Clips being cut right now (the render step cuts several at once): clip index → (seconds done, length) or
+        # None before ffmpeg reports. The line follows the lowest index, so two clips' numbers never mix.
+        self._cuts: dict[int, tuple[float, float] | None] = {}
+        self._cut_n = 0
+        self._changed_at = now_iso()  # when the words last really changed (the refresh does not count)
+        self._write_lock: asyncio.Lock | None = None
         self.closed = False
         self._task: asyncio.Task[None] | None = None
         self.writes = 0
@@ -167,6 +174,7 @@ class LiveStatus:
                 key = str(v.get("key") or "")
                 s = {"step": key, "text": STEP_TEXT.get(key, "Working")}
                 self._thinking = 0
+                self._cuts.clear()
             elif kind == "note":
                 s["text"] = str(v.get("text") or "").rstrip("…. ")
                 s.pop("detail", None)
@@ -183,7 +191,7 @@ class LiveStatus:
                 pct = _int(v.get("pct"))
                 if pct is None and total > 0:
                     pct = int(100 * got / total)
-                s["text"] = "Getting the video"
+                s["text"] = "Getting the full video" if v.get("full") else "Getting the video"
                 parts = []
                 if got and total:
                     parts.append(f"{size(got)} of {size(total)}")
@@ -195,14 +203,14 @@ class LiveStatus:
                 s["tech"] = f"yt-dlp · {size(speed)}/s" if speed > 0 else "yt-dlp"
             elif kind == "transcribe_part":
                 i, n = _int(v.get("i")), _int(v.get("n"))
-                if i and n and n > 1:
-                    s["detail"] = f"part {i} of {n}"
+                if i is not None and n and n > 1:
+                    s["detail"] = f"{i} of {n} parts done"
                     s["i"], s["n"] = i, n
                 s["tech"] = "Amazon Transcribe"
             elif kind == "watch_part":
                 i, n = _int(v.get("i")), _int(v.get("n"))
-                if i and n and n > 1:
-                    s["detail"] = f"part {i} of {n}"
+                if i is not None and n and n > 1:
+                    s["detail"] = f"{i} of {n} parts done"
                     s["i"], s["n"] = i, n
             elif kind == "bedrock":
                 self._thinking += 1
@@ -215,19 +223,8 @@ class LiveStatus:
                     s.pop("since", None)
                     if str(s.get("tech", "")).endswith("thinking"):
                         s.pop("tech", None)
-            elif kind == "cut":
-                i, n = _int(v.get("i")), _int(v.get("n"))
-                if i and n:
-                    s["text"] = f"Cutting clip {i} of {n}"
-                    s["i"], s["n"] = i, n
-                s.pop("detail", None)
-                s.pop("pct", None)
-            elif kind == "cut_progress":
-                at, length = _num(v.get("at")), _num(v.get("length"))
-                if length > 0:
-                    s["detail"] = f"{clock(min(at, length))} of {clock(length)}"
-                    s["pct"] = max(0, min(100, int(100 * at / length)))
-                s["tech"] = "ffmpeg · 1080×1920 · 30 fps"
+            elif kind in ("cut", "cut_progress", "cut_done"):
+                self._cut_event(s, kind, v)
             elif kind in ("check", "captions", "save"):
                 i, n = _int(v.get("i")), _int(v.get("n"))
                 if i and n:
@@ -245,9 +242,52 @@ class LiveStatus:
             self.state = s
             if changed:
                 self._dirty = True
+                self._changed_at = now_iso()
         if self.on_emit is not None:
             with contextlib.suppress(Exception):
                 self.on_emit()
+
+    def _cut_event(self, s: dict[str, Any], kind: str, v: dict[str, Any]) -> None:
+        """Clips are cut several at a time. Each one's numbers are kept apart, and the line shows the lowest clip
+        still being cut with that clip's own progress. ``cut_progress`` without a clip number belongs to it."""
+        i = _int(v.get("i"))
+        if kind == "cut":
+            n = _int(v.get("n"))
+            if i is not None and n:
+                self._cuts[i] = None
+                self._cut_n = n
+        elif kind == "cut_done":
+            self._cuts.pop(i if i is not None else -1, None)
+        else:
+            at, length = _num(v.get("at")), _num(v.get("length"))
+            if length > 0:
+                if i is None and self._cuts:
+                    i = min(self._cuts)
+                if i is not None and i in self._cuts:
+                    self._cuts[i] = (min(at, length), length)
+                elif i is None and not self._cuts:
+                    self._cuts[0] = (min(at, length), length)  # no clip number was ever given
+                    self._cut_n = 0
+                s["tech"] = self._ffmpeg_tech(v)
+        if not self._cuts:
+            return
+        lead = min(self._cuts)
+        if self._cut_n:
+            s["text"] = f"Cutting clip {lead} of {self._cut_n}"
+            s["i"], s["n"] = lead, self._cut_n
+        prog = self._cuts[lead]
+        if prog is None:
+            s.pop("detail", None)
+            s.pop("pct", None)
+        else:
+            at, length = prog
+            s["detail"] = f"{clock(at)} of {clock(length)}"
+            s["pct"] = max(0, min(100, int(100 * at / length)))
+
+    @staticmethod
+    def _ffmpeg_tech(v: dict[str, Any]) -> str:
+        w, h, fps = _int(v.get("w")), _int(v.get("h")), _int(v.get("fps"))
+        return f"ffmpeg · {w}×{h} · {fps} fps" if w and h and fps else "ffmpeg"
 
     @staticmethod
     def _clean(s: dict[str, Any]) -> dict[str, Any]:
@@ -279,6 +319,7 @@ class LiveStatus:
             "text": s.get("text") or "Working",
             **{k: s[k] for k in ("detail", "tech", "since", "i", "n", "pct") if k in s},
             "at": now_iso(),
+            "lastChange": self._changed_at,
             "ttl": int(time.time()) + TTL_DAYS * 86400,
         }
 
@@ -293,14 +334,20 @@ class LiveStatus:
         """Writes the line when it is due (or ``force``). True when it wrote. Never raises."""
         if self.closed or not self.state or not (force or self.due()):
             return False
-        item = self.item()
-        self._dirty = False
-        self._last_write = self._now()
-        try:
-            await self._write(item)
-        except Exception as e:
-            log("warn", "job.live_write_failed", job=self.job_id, error=type(e).__name__)
-            return False
+        if self._write_lock is None:
+            self._write_lock = asyncio.Lock()
+        async with self._write_lock:  # one write at a time, newest state last: a late older write cannot win
+            if self.closed:
+                return False
+            item = self.item()
+            self._dirty = False
+            self._last_write = self._now()
+            try:
+                await self._write(item)
+            except Exception as e:
+                self._dirty = True  # tried again after ``min_gap``, not left until the next refresh
+                log("warn", "job.live_write_failed", job=self.job_id, error=type(e).__name__)
+                return False
         self.writes += 1
         return True
 

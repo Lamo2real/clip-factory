@@ -1,5 +1,5 @@
 {
- "version": "bdd4df50e7d7",
+ "version": "a268e0d5518b",
  "parts": [
   {
    "id": "app-map",
@@ -213,7 +213,7 @@
    "id": "contracts-31",
    "title": "CONTRACTS: 31. The live status line (owner request, 2026-11-20)",
    "line": "31.1 The owner's words and what they mean",
-   "chars": 6967
+   "chars": 8744
   },
   {
    "id": "adr-01",

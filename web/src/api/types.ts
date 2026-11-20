@@ -693,6 +693,8 @@ export interface JobLive {
   pct?: number;
   /** When the agent wrote it. */
   at: string;
+  /** When the words last really changed (`at` also moves with the 30-second refresh). */
+  lastChange?: string;
 }
 
 /** What the live connection pushes (docs/CONTRACTS.md §14.2). One message per changed item. */

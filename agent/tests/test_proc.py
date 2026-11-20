@@ -177,3 +177,9 @@ async def test_a_failing_out_line_reader_never_stops_the_command() -> None:
 
     r = await run(["sh", "-c", "echo hi"], time_limit=30, on_out_line=boom)
     assert r.stderr == ""
+
+
+async def test_a_last_stdout_line_without_a_newline_is_not_dropped() -> None:
+    seen: list[str] = []
+    await run(["sh", "-c", "printf 'a=1\\nout_time_us=5000000'"], time_limit=30, on_out_line=seen.append)
+    assert seen == ["a=1", "out_time_us=5000000"]

@@ -101,7 +101,7 @@ def public_job(item: Item, live: Item | None = None) -> Item:
 
 
 # The live status line (§31): only these fields of a JOBLIVE# item ever leave the server.
-LIVE_FIELDS = ("jobId", "step", "text", "detail", "tech", "since", "i", "n", "pct", "at")
+LIVE_FIELDS = ("jobId", "step", "text", "detail", "tech", "since", "i", "n", "pct", "at", "lastChange")
 
 
 def live_sk(job_id: str) -> str:

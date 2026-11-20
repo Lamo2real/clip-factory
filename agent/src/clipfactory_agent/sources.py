@@ -258,6 +258,17 @@ def progress_reader(on_progress: Callable[[float], None]) -> Callable[[str], Non
     return read
 
 
+def _live_reader(*, full: bool = False) -> Callable[[str], None]:
+    """yt-dlp's progress lines to the live status line ("412 MB of 1.2 GB · 34%", §31)."""
+
+    def read(line: str) -> None:
+        seen = livestatus.parse_ytdlp(line)
+        if seen is not None:
+            livestatus.emit("download", full=full, **seen)
+
+    return read
+
+
 async def download_audio(
     url: str,
     dest_dir: Path,
@@ -431,7 +442,7 @@ async def download_full(
         args += ["--download-sections", f"*{section[0]:.2f}-{section[1]:.2f}"]
     elif est_bytes > 0:
         args += ["--max-filesize", str(int(est_bytes * 1.5))]
-    await _run([*args, *source], cookies, time_limit=FULL_TIME_LIMIT)
+    await _run([*args, *source], cookies, time_limit=FULL_TIME_LIMIT, on_line=_live_reader(full=True))
     for ext in (".mp4", ".mkv", ".webm"):
         f = stem.with_suffix(ext)
         if f.is_file() and f.stat().st_size > 0:
@@ -528,7 +539,7 @@ async def download_picture(
         args += ["--max-filesize", str(int(est_bytes * 1.5))]
     if max_seconds:
         args += ["--download-sections", f"*0-{int(max_seconds)}"]
-    await _run([*args, url], cookies, time_limit=PICTURE_TIME_LIMIT)
+    await _run([*args, url], cookies, time_limit=PICTURE_TIME_LIMIT, on_line=_live_reader())
     for f in sorted(stem.parent.glob(stem.name + ".*")):
         if f.suffix not in (".part", ".ytdl") and f.is_file() and f.stat().st_size > 0:
             return f

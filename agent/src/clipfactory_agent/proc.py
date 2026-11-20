@@ -155,6 +155,9 @@ async def run(
             for raw in done:
                 with contextlib.suppress(Exception):  # a reader's fault never stops the command
                     on_out_line(raw.decode("utf-8", "replace"))
+        if on_out_line is not None and buf.strip():  # a last line with no newline at its end
+            with contextlib.suppress(Exception):
+                on_out_line(buf.decode("utf-8", "replace"))
         return b"".join(parts)
 
     async def watch_stall() -> None:

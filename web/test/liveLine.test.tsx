@@ -90,19 +90,41 @@ describe("LiveLine", () => {
   });
 
   it("counts the seconds of a model call itself, without new writes", () => {
-    const l = line({ step: "checklist", text: "Checking clip 4 of 10 with Claude", detail: undefined, since: iso(72_000), tech: "Claude Opus 5.5 · thinking" });
+    const l = line({ step: "checklist", text: "Checking clip 4 of 10 with Claude", detail: undefined, since: iso(72_000), at: iso(0), tech: "Claude Opus 5.5 · thinking" });
     act(() => root.render(<LiveLine job={running({ live: l })} />));
     expect(text(".live-line__detail")).toBe("1:12");
     act(() => vi.advanceTimersByTime(3000));
     expect(text(".live-line__detail")).toBe("1:15");
   });
 
-  it("says it is still working, with the step's name, after a minute without news", () => {
-    act(() => root.render(<LiveLine job={running({ live: line({ at: iso(STALE_MS + 70_000) }) })} />));
+  it("says it is still working, with the step's name, after a minute without a new line", () => {
+    act(() => root.render(<LiveLine job={running({ live: line({ at: iso(0) }) })} />));
+    expect(text(".live-line__text")).toBe("Cutting clip 3 of 10");
+    act(() => vi.advanceTimersByTime(STALE_MS + 70_000));
     expect(text(".live-line__text")).toBe("Still working: Cut the clips");
     expect(text(".live-line__detail")).toBe("last update 2 min ago");
     expect(host.querySelector(".live-line.is-stale")).not.toBeNull();
     expect(host.querySelector(".live-line__tech")).toBeNull();
+  });
+
+  it("says it too when lines keep coming but the words have not changed for five minutes", () => {
+    const stuck = line({ at: iso(0), lastChange: iso(6 * 60_000) });
+    act(() => root.render(<LiveLine job={running({ live: stuck })} />));
+    expect(text(".live-line__text")).toBe("Still working: Cut the clips");
+    expect(text(".live-line__detail")).toBe("last update 6 min ago");
+    push(line({ at: iso(0), lastChange: iso(0), text: "Cutting clip 4 of 10" })); // news: alive again
+    expect(text(".live-line__text")).toBe("Cutting clip 4 of 10");
+  });
+
+  it("does not depend on the phone's clock: the ages come from the agent's own times", () => {
+    // The agent's clock is 10 minutes ahead of this phone's: a line "from the future" is not stale, and a call
+    // that began 20 s before the line shows 20 s, never a negative or a huge number.
+    const ahead = new Date(NOW + 600_000).toISOString();
+    const l = line({ at: ahead, lastChange: ahead, since: new Date(NOW + 580_000).toISOString(), detail: undefined });
+    act(() => root.render(<LiveLine job={running({ live: l })} />));
+    expect(text(".live-line__text")).toBe("Cutting clip 3 of 10");
+    expect(text(".live-line__detail")).toBe("0:20");
+    expect(lineWords(line({ at: iso(0), since: new Date(NOW + 5000).toISOString(), detail: undefined }), NOW, "x").detail).toBe("0:00");
   });
 
   it("the visible words are no live region; the hidden status speaks only when the step or clip changes", () => {
@@ -132,6 +154,7 @@ describe("LiveLine", () => {
     expect(el?.querySelector(".live-line__more")?.getAttribute("aria-hidden")).toBe("true");
     expect(host.querySelector(".live-line__tech")).toBeNull();
     expect(host.querySelector('[role="status"]')).toBeNull();
+    expect(el?.getAttribute("aria-live")).toBe("off"); // quiet inside Home's live list
   });
 });
 
@@ -144,7 +167,7 @@ describe("live line helpers", () => {
   });
 
   it("lineWords never shows the seconds to a screen reader", () => {
-    const w = lineWords(line({ since: iso(21_000), detail: undefined }), NOW, "Cut the clips");
+    const w = lineWords(line({ since: iso(21_000), at: iso(0), detail: undefined }), NOW, "Cut the clips");
     expect(w.detail).toBe("0:21");
     expect(w.say).toBe("Cutting clip 3 of 10.");
   });

@@ -779,8 +779,8 @@ class Pipeline:
         def progress(i: int, f: float) -> None:
             done[i] = f
             tr.report(sum(done) / len(done))
-            if len(done) > 1:  # "part 3 of 8" on the live line (§31)
-                livestatus.emit("transcribe_part", i=min(len(done), sum(1 for d in done if d >= 0.95) + 1), n=len(done))
+            if len(done) > 1:  # "3 of 8 parts done" on the live line (§31): the parts run at the same time
+                livestatus.emit("transcribe_part", i=sum(1 for d in done if d >= 0.95), n=len(done))
 
         async def one(
             i: int, key: str, offset: float, seconds: float
@@ -955,8 +955,8 @@ class Pipeline:
         def progress(who: str, f: float) -> None:
             share[who] = f
             tr.report(0.2 + 0.75 * (0.8 * share["fable"] + 0.2 * share["nova"]))
-            if who == "fable" and len(units) > 1:  # "part 2 of 5" on the live line (§31)
-                livestatus.emit("watch_part", i=min(len(units), round(f * len(units)) + 1), n=len(units))
+            if who == "fable" and len(units) > 1:  # "2 of 5 parts done" on the live line (§31)
+                livestatus.emit("watch_part", i=min(len(units), round(f * len(units))), n=len(units))
 
         def loader(prefix: str) -> Any:
             async def load(u: watch.Unit) -> dict[str, Any] | None:
@@ -1462,6 +1462,7 @@ class Pipeline:
             fetch_section=fetch,
             detect_layout=functools.partial(self.claude(st).detect_layout, skills=st.block),
             known_layout=layout,
+            live_index=index + 1,
         )
         return Candidate(m, r, index=index)
 
@@ -1617,6 +1618,8 @@ class Pipeline:
                             detail=str(e)[:600],
                         )
                         break
+                    finally:
+                        livestatus.emit("cut_done", i=i + 1)
             if results[i] is not None:
                 await self._save_clip(st, results[i])  # type: ignore[arg-type]
             else:

@@ -165,7 +165,6 @@ export function JobDetail({ jobId }: { jobId: string }) {
     );
   }
 
-  const running = job.steps.find((s) => s.status === "running");
   const pct = jobPercent(job);
 
   return (
@@ -201,7 +200,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
           <Progress value={jobProgress(job)} label="Job progress" tone={job.status === "failed" ? "primary" : "success"} />
           <p className="sr-only" aria-live="polite">
             {job.status === "running"
-              ? `${pct} percent. ${running?.label ?? "Working"}.`
+              ? `${pct} percent.`
               : job.status === "ready"
                 ? `Finished with ${plural(job.clipCount, "clip")}.`
                 : job.status === "failed"

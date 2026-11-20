@@ -59,8 +59,29 @@ export function useNow(active: boolean, ms = 1000): number {
   return now;
 }
 
-/** After this long without a new line it reads "Still working: Cut the clips" (CONTRACTS §31.5). */
+/** No new line for this long (the agent writes one at least every 30 s): the agent is not answering. */
 export const STALE_MS = 60_000;
+/** A line that keeps coming but with the same words for this long: the step may be stuck. */
+export const QUIET_MS = 5 * 60_000;
+
+// When this device got each line. Ages are worked out from the agent's own times (their difference) plus the time
+// since the line came in, so a phone clock that is wrong changes nothing.
+const received = new WeakMap<JobLive, number>();
+
+function sinceReceived(line: JobLive, now: number): number {
+  let at = received.get(line);
+  if (at === undefined) {
+    at = now;
+    received.set(line, at);
+  }
+  return Math.max(0, now - at);
+}
+
+function gap(later: string | undefined, earlier: string | undefined): number {
+  const a = later ? Date.parse(later) : NaN;
+  const b = earlier ? Date.parse(earlier) : NaN;
+  return Number.isFinite(a) && Number.isFinite(b) ? Math.max(0, a - b) : 0;
+}
 
 /** Seconds as "0:21" or "1:02:03". */
 export function clockText(totalSec: number): string {
@@ -82,10 +103,11 @@ export interface LineWords {
 
 /** The words on screen for a line at time `now`. `label` is the running step's label ("Cut the clips"). */
 export function lineWords(line: JobLive, now: number, label: string | undefined): LineWords {
-  const at = Date.parse(line.at);
-  const stale = Number.isFinite(at) && now - at > STALE_MS;
+  const waited = sinceReceived(line, now);
+  const quiet = gap(line.at, line.lastChange) + waited; // how long the words have stayed the same
+  const stale = waited > STALE_MS || quiet > QUIET_MS;
   if (stale) {
-    const mins = Math.max(1, Math.floor((now - at) / 60_000));
+    const mins = Math.max(1, Math.floor(Math.max(waited, quiet) / 60_000));
     return {
       text: label ? `Still working: ${label}` : "Still working",
       detail: `last update ${mins} min ago`,
@@ -95,7 +117,8 @@ export function lineWords(line: JobLive, now: number, label: string | undefined)
     };
   }
   const parts = line.detail ? [line.detail] : [];
-  const since = line.since ? Date.parse(line.since) : NaN;
-  if (Number.isFinite(since)) parts.push(clockText((now - since) / 1000));
+  if (line.since && Number.isFinite(Date.parse(line.since))) {
+    parts.push(clockText((gap(line.at, line.since) + waited) / 1000));
+  }
   return { text: line.text, detail: parts.join(" · "), tech: line.tech ?? "", stale: false, say: `${line.text}.` };
 }

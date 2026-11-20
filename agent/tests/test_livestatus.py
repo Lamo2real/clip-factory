@@ -41,7 +41,7 @@ async def test_each_kind_fills_its_fixed_template() -> None:
     assert ls.state["tech"] == "yt-dlp · 4 MB/s"
     ls.emit("step", key="render")
     ls.emit("cut", i=3, n=10)
-    ls.emit("cut_progress", at=41.2, length=58)
+    ls.emit("cut_progress", i=3, at=41.2, length=58, w=1080, h=1920, fps=30)
     assert (ls.state["text"], ls.state["detail"], ls.state["i"], ls.state["n"]) == (
         "Cutting clip 3 of 10",
         "0:41 of 0:58",
@@ -57,10 +57,10 @@ async def test_each_kind_fills_its_fixed_template() -> None:
     assert (ls.state["text"], ls.state["i"], ls.state["n"]) == ("Checking clip 5 of 10", 5, 10)
     ls.emit("step", key="transcribe")
     ls.emit("transcribe_part", i=3, n=8)
-    assert ls.state["detail"] == "part 3 of 8"
+    assert ls.state["detail"] == "3 of 8 parts done"
     ls.emit("step", key="watch")
     ls.emit("watch_part", i=2, n=5)
-    assert (ls.state["text"], ls.state["detail"]) == ("Watching the video with Claude", "part 2 of 5")
+    assert (ls.state["text"], ls.state["detail"]) == ("Watching the video with Claude", "2 of 5 parts done")
     ls.emit("resume", done=6)
     assert ls.state["text"] == "Picking up where it stopped" and ls.state["detail"] == "6 steps already done"
 
@@ -158,7 +158,21 @@ async def test_the_item_carries_the_job_session_time_and_ttl() -> None:
     assert item["jobId"] == "J1" and item["sessionId"] == "S1" and item["step"] == "render"
     assert item["i"] == 2 and item["n"] == 5 and item["at"].endswith("Z")
     assert item["ttl"] > 0
-    assert set(item) <= {"jobId", "sessionId", "step", "text", "detail", "tech", "since", "i", "n", "pct", "at", "ttl"}
+    assert set(item) <= {
+        "jobId",
+        "sessionId",
+        "step",
+        "text",
+        "detail",
+        "tech",
+        "since",
+        "i",
+        "n",
+        "pct",
+        "at",
+        "lastChange",
+        "ttl",
+    }
 
 
 async def test_a_failed_write_is_logged_and_never_raises() -> None:
@@ -250,3 +264,101 @@ async def test_a_store_without_put_live_has_no_line() -> None:
     tr = Tracker(FakeStore(), "U", "J")
     assert tr.live is None
     tr.say("anything")  # no error
+
+
+async def test_clips_cut_at_the_same_time_never_mix_their_numbers() -> None:
+    ls, _ = live()
+    ls.emit("step", key="render")
+    ls.emit("cut", i=2, n=10)
+    ls.emit("cut", i=3, n=10)
+    ls.emit("cut_progress", i=2, at=12, length=58, w=1080, h=1920, fps=30)
+    ls.emit("cut_progress", i=3, at=40, length=45, w=1080, h=1920, fps=30)  # not on the line: kept, not shown
+    assert (ls.state["text"], ls.state["detail"], ls.state["pct"]) == ("Cutting clip 2 of 10", "0:12 of 0:58", 20)
+    assert ls.state["tech"] == "ffmpeg · 1080×1920 · 30 fps"
+    ls.emit("cut_done", i=2)  # clip 3 takes the line with its own numbers
+    assert (ls.state["text"], ls.state["detail"], ls.state["pct"]) == ("Cutting clip 3 of 10", "0:40 of 0:45", 88)
+    ls.emit("cut", i=4, n=10)
+    assert ls.state["text"] == "Cutting clip 3 of 10"  # the lowest clip still being cut stays on the line
+    ls.emit("cut_done", i=3)
+    assert ls.state["text"] == "Cutting clip 4 of 10" and "detail" not in ls.state
+
+
+async def test_the_ffmpeg_words_come_from_the_render_size() -> None:
+    ls, _ = live()
+    ls.emit("cut", i=1, n=2)
+    ls.emit("cut_progress", i=1, at=1, length=10, w=720, h=1280, fps=24)
+    assert ls.state["tech"] == "ffmpeg · 720×1280 · 24 fps"
+    ls.emit("cut_progress", i=1, at=2, length=10)
+    assert ls.state["tech"] == "ffmpeg"
+
+
+async def test_the_full_video_download_has_its_own_words() -> None:
+    ls, _ = live()
+    ls.emit("step", key="render")
+    ls.emit("download", full=True, pct=10.0, got=1e8, total=1e9, speed=2e6)
+    assert ls.state["text"] == "Getting the full video"
+    assert ls.state["detail"] == "100 MB of 1.0 GB · 10%"
+    ls.emit("download", pct=10.0, got=1e8, total=1e9, speed=2e6)
+    assert ls.state["text"] == "Getting the video"
+
+
+async def test_parts_are_counted_as_done_not_as_the_one_being_worked_on() -> None:
+    ls, _ = live()
+    ls.emit("transcribe_part", i=0, n=8)
+    assert ls.state["detail"] == "0 of 8 parts done"
+    ls.emit("watch_part", i=2, n=5)
+    assert ls.state["detail"] == "2 of 5 parts done"
+
+
+async def test_the_item_says_when_the_words_last_really_changed() -> None:
+    ls, written = live()
+    ls.emit("step", key="select")
+    first = ls._changed_at
+    await ls.flush(force=True)
+    await asyncio.sleep(1.1)
+    await ls.flush(force=True)  # the refresh: a new ``at``, the same ``lastChange``
+    assert written[1]["lastChange"] == written[0]["lastChange"] == first
+    assert written[1]["at"] >= written[0]["at"]
+    await asyncio.sleep(1.1)
+    ls.emit("note", text="Picking clip 2 of 4")
+    await ls.flush(force=True)
+    assert written[2]["lastChange"] > first
+
+
+async def test_a_failed_write_is_tried_again_not_lost() -> None:
+    clock = Clock()
+    calls: list[str] = []
+
+    async def flaky(item: dict[str, Any]) -> None:
+        calls.append(item["text"])
+        if len(calls) == 1:
+            raise RuntimeError("throttled")
+
+    ls = LiveStatus(flaky, "J1", "S1", now=clock)
+    ls.emit("step", key="render")
+    assert await ls.flush() is False  # failed
+    assert await ls.flush() is False  # retry waits one gap
+    clock.t += 1.0
+    assert await ls.flush() is True  # and then goes out, long before the 30 s refresh
+    assert calls == ["Cutting the clips", "Cutting the clips"]
+
+
+async def test_two_writes_at_once_land_in_order_and_the_newest_is_last() -> None:
+    order: list[str] = []
+    gate = asyncio.Event()
+
+    async def slow(item: dict[str, Any]) -> None:
+        if item["text"] == "Cutting the clips":
+            await gate.wait()  # the first write is slow
+        order.append(item["text"])
+
+    ls = LiveStatus(slow, "J1", "S1", now=Clock())
+    ls.emit("step", key="render")
+    first = asyncio.create_task(ls.flush(force=True))
+    await asyncio.sleep(0.05)
+    ls.emit("step", key="checklist")
+    second = asyncio.create_task(ls.flush(force=True))
+    await asyncio.sleep(0.05)
+    gate.set()
+    await asyncio.gather(first, second)
+    assert order == ["Cutting the clips", "Checking the clips with Claude"]
