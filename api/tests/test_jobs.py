@@ -338,6 +338,22 @@ def test_try_again_after_a_stop_keeps_the_done_steps_and_the_progress(
     assert "runStartedAt" not in body["job"]
 
 
+def test_try_again_never_carries_100_percent_with_steps_left(call: Call, store: db.Store, table: FakeTable) -> None:
+    """Owner report 2026-11-20: a run that showed 100% before it stopped must not hand 100% to the next run."""
+    from clipfactory_api.jobs import new_steps
+
+    steps = new_steps()
+    for s in steps[:7]:
+        s.update(status="done", message="ok")
+    steps[7].update(status="failed", message="Checking stopped.")
+    job = seed_job(store, status="failed", pickUp=True, steps=steps, progress=1, flowRun=1)
+    status, _ = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200
+    stored = table.raw(job["pk"], job["sk"])
+    assert stored is not None
+    assert float(stored["progress"]) < 1
+
+
 def test_try_again_after_a_real_failure_starts_over(call: Call, store: db.Store, table: FakeTable) -> None:
     job = seed_job(store, status="failed", error="No clip passed the checklist.", note="old", flowRun=1)
     status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")

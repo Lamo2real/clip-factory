@@ -16,6 +16,7 @@ import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { applyClipEvent, byRank, withMedia } from "../../lib/liveCache.ts";
 import { stopWithUndo, useStopping } from "./pendingStops.ts";
+import { jobPercent, jobProgress } from "../../lib/jobProgress.ts";
 
 const CLIP_STATUS: Record<ClipStatus, { label: string; tone: Tone }> = {
   review: { label: "Needs a look", tone: "vermilion" },
@@ -165,7 +166,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
   }
 
   const running = job.steps.find((s) => s.status === "running");
-  const pct = Math.round(job.progress * 100);
+  const pct = jobPercent(job);
 
   return (
     <div className="page job-detail">
@@ -197,7 +198,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
               {pct}%
             </span>
           </div>
-          <Progress value={job.progress} label="Job progress" tone={job.status === "failed" ? "primary" : "success"} />
+          <Progress value={jobProgress(job)} label="Job progress" tone={job.status === "failed" ? "primary" : "success"} />
           <p className="sr-only" aria-live="polite">
             {job.status === "running"
               ? `${pct} percent. ${running?.label ?? "Working"}.`

@@ -118,6 +118,7 @@ def start(store: db.Store, flows: FlowClient, job: Item, now: str) -> Item:
 
 
 RESUME_NOTE = "Picking up where it stopped…"
+WORKING_CAP = 0.99  # the most progress a job not finished yet shows (the agent's cap too)
 
 
 def picked_up_steps(steps: Any) -> list[Item]:
@@ -161,7 +162,8 @@ def restart_fields(
     }
     if pick_up:
         try:
-            done = max(0.0, min(1.0, float(progress or 0)))
+            # Never 100% with steps left: only a finished job shows that (an older run could carry 1.0 over).
+            done = max(0.0, min(WORKING_CAP, float(progress or 0)))
         except (TypeError, ValueError):
             done = 0.0
         fields.update(pickUp=True, note=RESUME_NOTE, steps=picked_up_steps(steps), progress=done)

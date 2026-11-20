@@ -12,6 +12,7 @@ import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { applyJobEvent } from "../../lib/liveCache.ts";
 import { mergeJobs, pollLimit } from "./mergeJobs.ts";
+import { jobPercent, jobProgress } from "../../lib/jobProgress.ts";
 
 /** Show older jobs loads more below: its chevron points and steps down (§20.3 `--act-dir`). */
 const DOWN = { "--act-dir-in": "90deg" } as CSSProperties;
@@ -145,9 +146,9 @@ function JobRow({ job }: { job: Job }) {
         </span>
         {working ? (
           <span className="job-row__progress">
-            <Progress value={job.progress} label={`${jobTitle(job)} progress`} tone="success" />
+            <Progress value={jobProgress(job)} label={`${jobTitle(job)} progress`} tone="success" />
             <span className="job-row__step clamp-1">
-              {job.status === "queued" ? "Waiting to start" : (step?.label ?? "Working")} · {Math.round(job.progress * 100)}%
+              {job.status === "queued" ? "Waiting to start" : (step?.label ?? "Working")} · {jobPercent(job)}%
             </span>
           </span>
         ) : job.status === "failed" && job.error ? (

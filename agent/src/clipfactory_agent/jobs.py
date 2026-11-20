@@ -37,6 +37,19 @@ FLUSH_SECONDS = 5.0
 # resumes the job on a new session (docs/CONTRACTS.md §30).
 SHUTDOWN = threading.Event()
 RESUME_NOTE_FIELDS = ("note", "pickUp")  # what a run that ends (ready or failed) clears
+# The most the bar shows while any step is left: 100% only once the job is ready (``finish_ready``).
+WORKING_CAP = 0.99
+
+
+def _steps_ceiling(steps: list[dict[str, Any]]) -> float:
+    """The most progress the step list allows: the finished steps' share plus the whole share of the first step not
+    finished yet (the one that was running), never above ``WORKING_CAP``. A carried-over progress above this is not
+    real (an older run counted a reloaded step twice) and is brought back down to it."""
+    total = sum(w for _, _, w in STEPS)
+    status = {s.get("key"): s.get("status") for s in steps}
+    done = sum(w for k, _, w in STEPS if status.get(k) in ("done", "skipped"))
+    nxt = next((w for k, _, w in STEPS if status.get(k) not in ("done", "skipped")), 0.0)
+    return min(WORKING_CAP, round((done + nxt) / total, 4))
 
 
 class JobStore(Protocol):
@@ -105,9 +118,11 @@ class Tracker:
                     s.update({k: v for k, v in old.items() if k in ("status", "message", "startedAt", "finishedAt")})
                     self.restored.add(s["key"])
             try:
-                self.progress = max(0.0, min(1.0, float(resume.get("progress") or 0)))
+                carried = float(resume.get("progress") or 0)
             except (TypeError, ValueError):
-                self.progress = 0.0
+                carried = 0.0
+            # Keeps what the stopped run had (the bar never goes back), but never more than its steps allow.
+            self.progress = max(0.0, min(carried, _steps_ceiling(self.steps)))
         self.current: str | None = None
         self.canceled = asyncio.Event()
         self._fraction = 0.0
@@ -121,10 +136,15 @@ class Tracker:
         return next(s for s in self.steps if s["key"] == key)
 
     def _compute(self) -> float:
+        """Finished steps' shares plus the running step's share times how far it is. A step already in the finished
+        shares (just marked done, or reloaded from the run that stopped) adds nothing more: counting it twice pushed
+        the bar to 100% with steps left (owner report 2026-11-20). Below 100% until the job is ready; never lower
+        than before."""
         total = sum(w for _, _, w in STEPS)
         done = sum(w for k, _, w in STEPS if self.step(k)["status"] in ("done", "skipped"))
-        cur = next((w for k, _, w in STEPS if k == self.current), 0.0)
-        return max(self.progress, min(1.0, round((done + cur * self._fraction) / total, 4)))
+        counted = self.current is None or self.step(self.current)["status"] in ("done", "skipped")
+        cur = 0.0 if counted else next((w for k, _, w in STEPS if k == self.current), 0.0)
+        return max(self.progress, min(WORKING_CAP, round((done + cur * self._fraction) / total, 4)))
 
     async def _write(
         self, fields: dict[str, Any], *, unless_canceled: bool = True, remove: tuple[str, ...] = ()
