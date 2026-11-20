@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import clips, db, post_preset, posts, s3, settings, validate, vectors
+from .. import clips, db, post_preset, posts, release, s3, settings, validate, vectors
 from ..app import App
 from ..clock import iso
 from ..errors import bad_request, conflict, not_found
-from ..flow_client import FlowStartError
 from ..http import Request, Response, ok
 from ..ids import is_ulid
 from ..log import log
@@ -121,7 +120,8 @@ def confirm(app: App, req: Request) -> Response:
     ``cf-prod-clip-flow`` start is idempotent on its execution name. With TikTok going (connected and chosen, or
     enabled in settings when nothing is chosen), the TikTok sheet's choices are required (§17.8). ``platforms`` picks
     exactly where the clip goes; without it (older clients) Settings › Where clips go decides, as before. On a
-    ``posted`` or ``failed`` clip, ``platforms`` names the failed posts to try again (one platform's Try again)."""
+    ``posted``, ``failed`` or ``confirmed`` clip, ``platforms`` names the failed posts to try again (one platform's
+    Try again) and the waiting posts to send now that their place is connected (Post now, §33.6)."""
     body = req.json()
     validate.only_keys(body, {"captions", "tiktok", "platforms", "options"})
     patch = clips.caption_patch(body["captions"]) if body.get("captions") is not None else {}
@@ -178,10 +178,10 @@ def confirm(app: App, req: Request) -> Response:
         raise conflict(ALREADY_DECLINED)
     if status == "review":
         raise conflict("This clip changed while you pressed Upload. Please try again.")
-    if status == "failed" or (status == "posted" and chosen is not None):
+    if status == "failed" or (status in {"posted", "confirmed"} and chosen is not None):
         item = _try_again(app, item, tiktok=options, platforms=chosen)
-    elif status in {"confirmed", "publishing"} and item.get("publishState") == clips.PUBLISH_PENDING:
-        item = _start_flow(app, item)  # an earlier Confirm stopped before its flow started
+    elif status in {"confirmed", "publishing", "posted"} and item.get("publishState") == clips.PUBLISH_PENDING:
+        item = _start_flow(app, item)  # an earlier Confirm, Try again or release stopped before its flow started
     return ok({"clip": clips.public_clip(item, app.media), "posts": _posts(app, req.user_id, item["clipId"])})
 
 
@@ -190,78 +190,34 @@ def _posts(app: App, user_id: str, clip_id: str) -> list[dict[str, Any]]:
 
 
 def _start_flow(app: App, clip: dict[str, Any]) -> dict[str, Any]:
-    """Starts ``clip-{clipId}-{flowRun}``; on success the clip becomes ``publishState: started``. A failed start
-    leaves it ``pending``, so the next Confirm starts it again."""
-    run = int(clip.get("flowRun") or 1)
-    try:
-        started = app.flows.start_clip_flow(clip["clipId"], clip["userId"], run)
-    except (FlowStartError, ValueError) as e:
-        log("error", "clip.flow_start_failed", clipId=clip["clipId"], run=run, error=str(e))
-        return clip
-    fields: dict[str, Any] = {"publishState": clips.PUBLISH_STARTED, "flowRun": run}
-    if started.execution_arn:
-        fields["flowExecutionArn"] = started.execution_arn
-    expect: dict[str, Any] = {"publishState": [clips.PUBLISH_PENDING]}
-    if clip.get("flowRun"):
-        expect["flowRun"] = [run]  # a clip kept before flow runs existed has none yet
-    try:
-        updated = app.store.update(clip["pk"], clip["sk"], fields, expect_in=expect)
-    except db.ConditionFailed:
-        return app.store.get(clip["pk"], clip["sk"]) or clip
-    log("info", "clip.flow_started", clipId=clip["clipId"], flow=started.name, existed=started.execution_arn is None)
-    return updated
+    """Starts ``clip-{clipId}-{flowRun}`` (``release.start_flow``, shared with the OAuth callback)."""
+    return release.start_flow(app.store, app.flows, clip)
 
 
 def _try_again(
     app: App, clip: dict[str, Any], *, tiktok: dict[str, Any] | None = None, platforms: list[str] | None = None
 ) -> dict[str, Any]:
-    """Failed posts go back to ``queued`` and a new flow run starts. Without ``platforms`` (a ``failed`` clip, whose
-    every post failed) all failed posts are tried again; with it only the named ones, which also works on a ``posted``
-    clip where one place did not work (§33). A ``failed`` clip becomes ``confirmed``; a ``posted`` one stays
-    ``posted``. Naming no failed post changes nothing. New TikTok sheet choices (``tiktok``) replace the failed TikTok
-    post's ``postOptions``, so a privacy TikTok no longer offers can be picked again."""
-    run = int(clip.get("flowRun") or 1)
-    failed = [
-        p
-        for p in posts.posts_for_clip(app.store, clip["userId"], clip["clipId"], consistent=True)
-        if p.get("status") == "failed" and (platforms is None or p.get("platform") in platforms)
-    ]
-    status = str(clip.get("status"))
-    if not failed:
-        # Nothing failed among the named places. A start that did not go through earlier still gets finished.
-        return _start_flow(app, clip) if clip.get("publishState") == clips.PUBLISH_PENDING else clip
-    clip_update = db.update_request(
-        clip["pk"],
-        clip["sk"],
-        {
-            "status": "confirmed" if status == "failed" else status,
-            "publishState": clips.PUBLISH_PENDING,
-            "flowRun": run + 1,
-        },
-        remove=["flowExecutionArn"],
-        expect_in={"status": [status], "flowRun": [run]} if clip.get("flowRun") else {"status": [status]},
-    )
-    post_updates = [
-        # A fresh publishHandle: Try again starts a new upload instead of resuming the one that failed (§17.6).
-        db.update_request(
-            p["pk"],
-            p["sk"],
-            {"status": "queued", **({"postOptions": tiktok} if tiktok and p.get("platform") == "tiktok" else {})},
-            remove=["error", "publishHandle"],
-            expect_in={"status": ["failed"]},
+    """Failed posts go back to ``queued`` and a new flow run starts (``release.restart``). Without ``platforms`` (a
+    ``failed`` clip, whose every post failed) all failed posts are tried again; with it only the named ones, which also
+    works on a ``posted`` clip where one place did not work (§33). Named places still ``pending_integration`` are
+    released the same way once they are connected (Post now, §33.6); one not connected yet is a 400 with the plain
+    sentence Upload uses. A ``failed`` clip becomes ``confirmed``; a ``posted`` one stays ``posted``. Naming nothing
+    to send changes nothing. New TikTok sheet choices (``tiktok``) replace the TikTok post's ``postOptions``, so a
+    privacy TikTok no longer offers can be picked again."""
+    rows = posts.posts_for_clip(app.store, clip["userId"], clip["clipId"], consistent=True)
+    named = [p for p in rows if platforms is None or p.get("platform") in platforms]
+    failed = [p for p in named if p.get("status") == "failed"]
+    waiting = [p for p in named if platforms is not None and p.get("status") == "pending_integration"]
+    if waiting:
+        _require_set_up(
+            app, clip["userId"], [p for p in posts.UPLOAD_ORDER if any(w["platform"] == p for w in waiting)]
         )
-        for p in failed
-    ]
-    try:
-        app.store.transact(updates=[clip_update, *post_updates])
-    except db.ConditionFailed:
-        current = app.store.get(clip["pk"], clip["sk"]) or clip
-        if current.get("status") in {"confirmed", "posted"} and current.get("publishState") == clips.PUBLISH_PENDING:
-            return _start_flow(app, current)  # a parallel Try again reset it; finish its start
-        return current
-    log("info", "clip.try_again", clipId=clip["clipId"], run=run + 1, posts=len(failed))
-    refreshed = app.store.get(clip["pk"], clip["sk"]) or clip
-    return _start_flow(app, refreshed)
+        if tiktok is None and any(p["platform"] == "tiktok" and not release.has_tiktok_choice(p) for p in waiting):
+            raise bad_request("Pick who can see it on TikTok.")
+    if not failed and not waiting:
+        # Nothing to send among the named places. A start that did not go through earlier still gets finished.
+        return _start_flow(app, clip) if clip.get("publishState") == clips.PUBLISH_PENDING else clip
+    return release.restart(app.store, app.flows, clip, [*failed, *waiting], clip_posts=rows, tiktok=tiktok)
 
 
 def decline(app: App, req: Request) -> Response:

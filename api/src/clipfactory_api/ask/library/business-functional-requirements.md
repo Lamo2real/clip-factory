@@ -81,6 +81,8 @@ structure." ([CONTRACTS.md §18](CONTRACTS.md#18-skills-full-create-read-update-
 Upload to X, Meta (Facebook and Instagram) and YouTube; TikTok is added because the existing Clip Factory and its
 legal pages already cover it.
 - AC1 (phase 1): Confirmed posts are stored with status `pending_integration` and the app says "Waiting for the account connection".
+- AC1b: A waiting post goes out once its account is connected (no tap needed), and the Library gives a place that is
+  set up since its own **Post now** ([CONTRACTS.md §17.6, §33.6](CONTRACTS.md#176-tokens-and-real-posting)).
 - AC2 (phase 2): A queued post is uploaded through the platform's official API and gets its public URL.
 - AC3: Every upload is sent from Clip Factory as a file; a retried step never posts twice; when posting fails the clip
   says why in one sentence and what to press ([CONTRACTS.md §17.6](CONTRACTS.md#176-tokens-and-real-posting)).

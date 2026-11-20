@@ -152,6 +152,9 @@ export interface Clip {
   totalViews?: number;
   /** The places the owner picked on Upload, in STATS_ORDER (§33). Absent on clips uploaded before §33. */
   uploadTo?: Platform[];
+  /** Uploaded, but its posting has not started yet: the start after an Upload, Try again, Post now or connect did not go
+   * through (§14.5). Confirm starts it. Absent otherwise. */
+  startPending?: boolean;
 }
 
 /** One skill (docs/CONTRACTS.md §5, §18). Every skill is always used: there is no on/off switch. */

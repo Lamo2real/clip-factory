@@ -43,6 +43,8 @@ INTERNAL_FIELDS = (
 )
 PUBLISH_PENDING = "pending"
 PUBLISH_STARTED = "started"
+# Uploaded clips whose flow start Confirm finishes when it is still pending (§14.5): the public ``startPending``.
+STARTABLE = ("confirmed", "publishing", "posted")
 
 
 def public_clip(
@@ -54,9 +56,12 @@ def public_clip(
 ) -> Item:
     """The Clip shape of §5. With ``media`` it carries 1-hour ``coverUrl`` (and, unless ``video=False``,
     ``videoUrl``) links; without (the live WebSocket events) it carries none, and the web keeps the links it already
-    has. With the clip's ``posts`` it carries ``totalViews`` (absent when nothing was measured)."""
+    has. With the clip's ``posts`` it carries ``totalViews`` (absent when nothing was measured). ``startPending: true``
+    when the clip was uploaded but its flow has not started (``publishState: pending``, §14.5)."""
     clip = db.strip_keys(item, INTERNAL_FIELDS)
     clip.pop("totalViews", None)
+    if item.get("publishState") == PUBLISH_PENDING and item.get("status") in STARTABLE:
+        clip["startPending"] = True  # uploaded, but its flow has not started yet: the Library offers Try again
     if media is not None and item.get("status") != "declined":
         if video and item.get("videoKey"):
             clip["videoUrl"] = media.presign_get(item["videoKey"])

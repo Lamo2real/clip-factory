@@ -86,6 +86,20 @@ export function useLoad<T>(load: () => Promise<T>, key: string = "", cache?: str
   return { data, error, missing, loading, reload, setData };
 }
 
+/** True once `on` has stayed true for `ms` (a state that normally passes in a moment only counts when it lasts). */
+export function useHeld(on: boolean, ms: number): boolean {
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (!on) return;
+    const timer = setTimeout(() => setHeld(true), ms);
+    return () => {
+      clearTimeout(timer);
+      setHeld(false);
+    };
+  }, [on, ms]);
+  return on && held;
+}
+
 /**
  * Calls `tick` every `interval` ms while `active`, pausing while the app is hidden. Failures back off
  * (doubling, up to 30 s or four intervals, never faster than `interval`) so a flaky connection is not hammered;

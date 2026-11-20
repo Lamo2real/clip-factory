@@ -24,9 +24,12 @@
   and "This week" (the week's clips sorted by views with a big "Best this week" star each, arrows for earlier weeks,
   §16.8). Tapping any clip in Library opens its performance page `/clips/{clipId}` (§16.8); on an All clips card the
   whole top (cover and hook) is the tap target, never just the one-line hook. Each post row says its status with the
-  same words as the clip page's chip (`postStatusLabel` in `web/src/lib/metrics.ts`: a queued post reads "Posting",
-  one waiting for its account "Waiting for connection"); posts waiting for accounts share one row "Waiting for
-  connection. Posts once these accounts are connected.". The "Show" filter's empty list says why it is empty: no kept
+  same words as the clip page's chip (`postStatusLabel` in `web/src/lib/metrics.ts`: a queued post reads
+  "Uploading…", one waiting for its account "Waiting for setup"); posts waiting for accounts share one row "Waiting for
+  setup. Posts once these accounts are connected.", except one whose place is set up now: it gets its own row
+  "Ready to post" with **Post now** (§33.6). A clip whose posting did not start (`startPending` for more than 4 s,
+  `START_GRACE_MS`: the start after a Try again, Post now or connect did not go through) shows "This clip has not started
+  uploading yet. Tap Try again." with the big **Try again**, which sends Confirm and starts it (§14.5). The "Show" filter's empty list says why it is empty: no kept
   clips at all → "Nothing kept yet" + Go to Review; "Not posted yet" with every kept clip posted → "Everything is
   posted!" + Show all; "Posted" with kept clips still on their way → "Nothing posted yet" + Show all.
 * Installable PWA (manifest + service worker) on phone and desktop.

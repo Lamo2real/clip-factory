@@ -92,7 +92,9 @@ interface Clip { clipId: string; jobId: string; rank: number; status: ClipStatus
                                        built by agent code from evidence inside the clip (§8), never by a model;
                                        absent on older clips and when nothing stood out */;
                  best?: boolean /* starred "Best this week" (§16) */; bestWeek?: string /* "yyyy-Www" */;
-                 totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */ }
+                 totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */;
+                 startPending?: true /* uploaded, but its flow has not started (internal publishState "pending" on a
+                                        confirmed, publishing or posted clip, §14.5): Confirm starts it */ }
 interface Skill { skillId: string; name: string /* frontmatter slug */; title: string /* shown name, §18.2 */;
                   description: string; builtin: boolean; source: "builtin" | "written" | "upload";
                   format: "md" | "zip"; size: number; createdAt: string; updatedAt: string;

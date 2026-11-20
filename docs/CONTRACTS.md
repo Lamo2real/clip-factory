@@ -183,7 +183,9 @@ interface Clip { clipId: string; jobId: string; rank: number; status: ClipStatus
                                        built by agent code from evidence inside the clip (§8), never by a model;
                                        absent on older clips and when nothing stood out */;
                  best?: boolean /* starred "Best this week" (§16) */; bestWeek?: string /* "yyyy-Www" */;
-                 totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */ }
+                 totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */;
+                 startPending?: true /* uploaded, but its flow has not started (internal publishState "pending" on a
+                                        confirmed, publishing or posted clip, §14.5): Confirm starts it */ }
 interface Skill { skillId: string; name: string /* frontmatter slug */; title: string /* shown name, §18.2 */;
                   description: string; builtin: boolean; source: "builtin" | "written" | "upload";
                   format: "md" | "zip"; size: number; createdAt: string; updatedAt: string;
@@ -240,7 +242,7 @@ Keys: `pk` (S), `sk` (S); GSI `gsi1` on `gsi1pk`/`gsi1sk` (projection ALL); spar
 | Follow, reverse index, creator, noticed video, follow keys, tick lease, YouTube meter | see §24.2 | | – | §24 Follow creators |
 | Account snapshot, money state, reported revenue, money prefs, money owners | see §25.6 | | – | §25 Real earnings (`ACCTSTAT#` has `ttl`) |
 | Skill | `USER#{userId}` | `SKILL#{skillId}` | – | Skill fields + `type="skill"`, `key` (S3, current revision, §18.1); a legacy `enabled` attribute is ignored and removed on the next write |
-| Post | `USER#{userId}` | `POST#{postId}` | `CLIP#{clipId}` / `POST#{platform}`; gsi2 `STATS` / `{statsDueAt}#{postId}` while polled | Post fields + internal `platformPostId`, `statsId`, `statsDueAt`, `insightsDueAt`, `refreshStartedAt`, `lastSnapshotAt` (§16.3) |
+| Post | `USER#{userId}` | `POST#{postId}` | `CLIP#{clipId}` / `POST#{platform}`; gsi2 `STATS` / `{statsDueAt}#{postId}` while polled | Post fields + internal `platformPostId`, `statsId`, `statsDueAt`, `insightsDueAt`, `refreshStartedAt`, `lastSnapshotAt` (§16.3), `flowRun` (the clip-flow run that sends it, §17.6), `publishHandle`, `postOptions` (§17.6, §17.8) |
 | Stat snapshot | `USER#{userId}` | `STAT#{postId}#{iso}` | – | `type="stat"`, `postId`, `clipId`, `platform`, `at`, `views`, `likes`, `comments`, `shares`, `final?`, `ttl` (90 days) (§16.3) |
 | Week | `USER#{userId}` | `WEEK#{yyyy-Www}` | – | `type="week"`, WeekView fields without `clips` + `revision`, `unpickedClipIds` (§16.3) |
 | Rate budget | `RATE#{platform}` | `BUDGET` | – | `type="rate"`, per-platform counters, `blockedUntil` (§16.4) |
@@ -448,16 +450,18 @@ watcher, `watchModel` in `config/models.json`; unset and absent from the file �
 | `cf-prod-ws-authorizer` | `clipfactory_api.realtime.authorizer.handler` | WebSocket `$connect` REQUEST authorizer | `USER_POOL_ID`, `USER_POOL_CLIENT_ID` |
 | `cf-prod-ws` | `clipfactory_api.realtime.ws.handler` | WebSocket routes `$connect`, `$disconnect`, `$default` | `TABLE_NAME`, `WS_ENDPOINT`, `CONN_TTL_SECONDS=7200` |
 | `cf-prod-broadcast` | `clipfactory_api.realtime.broadcast.handler` | DynamoDB Streams on `cf-prod-data` (filtered) | `TABLE_NAME`, `WS_ENDPOINT` |
-| `cf-prod-hooks` | `clipfactory_api.hooks.handler` | REST API `cf-prod-hooks` (all routes) | `TABLE_NAME`, `APP_URL`, `VERIFY_TOKEN_PARAM=/cf-prod/hooks/verify-token`, `SECRET_PREFIX`, `OAUTH_STATE_SECRET` (§17.9) |
+| `cf-prod-hooks` | `clipfactory_api.hooks.handler` | REST API `cf-prod-hooks` (all routes) | `TABLE_NAME`, `APP_URL`, `VERIFY_TOKEN_PARAM=/cf-prod/hooks/verify-token`, `SECRET_PREFIX`, `OAUTH_STATE_SECRET` (§17.9), `CLIP_FLOW_ARN` (alias `live`, releases waiting posts, §17.6) |
 
 Details of every new function, and what replaced `cf-prod-publisher`, `cf-prod-perf-check`, `cf-prod-watchdog`,
 the SQS publish queue and the EventBridge resources: §14.
 
 * Confirm → API writes one `Post` per enabled platform (`pending_integration` while no account is connected for that
   platform, `queued` when connected) and starts the durable `cf-prod-clip-flow` (§14.5), which publishes the `queued`
-  ones through the platform adapter (adapters arrive in phase 2; today every platform is `pending_integration`), waits
+  ones through the platform adapter, waits
   48 hours, reads metrics (through the shared stats refresh, §16.5) and updates the clip's vector (the one-sentence
   48-hour Learning is retired, §16.12). Between and after those steps `cf-prod-stats` keeps every posted post's numbers fresh for 30 days (§16).
+  A `pending_integration` post goes out once its place is connected: the connect releases it (§17.6 "Release"), and
+  the Library's **Post now** is the manual backup (§33.6).
 * A `running` job whose agent stops sending heartbeats for 6 minutes is resumed on a new session (as long as it keeps
   moving forward, §30.2) through the job-flow callback heartbeat timeout (§14.4), not a scan; only after that does it become `failed`
   ("Making the clips stopped. Tap Try again to pick up where it left off.").
@@ -504,9 +508,12 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
   and "This week" (the week's clips sorted by views with a big "Best this week" star each, arrows for earlier weeks,
   §16.8). Tapping any clip in Library opens its performance page `/clips/{clipId}` (§16.8); on an All clips card the
   whole top (cover and hook) is the tap target, never just the one-line hook. Each post row says its status with the
-  same words as the clip page's chip (`postStatusLabel` in `web/src/lib/metrics.ts`: a queued post reads "Posting",
-  one waiting for its account "Waiting for connection"); posts waiting for accounts share one row "Waiting for
-  connection. Posts once these accounts are connected.". The "Show" filter's empty list says why it is empty: no kept
+  same words as the clip page's chip (`postStatusLabel` in `web/src/lib/metrics.ts`: a queued post reads
+  "Uploading…", one waiting for its account "Waiting for setup"); posts waiting for accounts share one row "Waiting for
+  setup. Posts once these accounts are connected.", except one whose place is set up now: it gets its own row
+  "Ready to post" with **Post now** (§33.6). A clip whose posting did not start (`startPending` for more than 4 s,
+  `START_GRACE_MS`: the start after a Try again, Post now or connect did not go through) shows "This clip has not started
+  uploading yet. Tap Try again." with the big **Try again**, which sends Confirm and starts it (§14.5). The "Show" filter's empty list says why it is empty: no kept
   clips at all → "Nothing kept yet" + Go to Review; "Not posted yet" with every kept clip posted → "Everything is
   posted!" + Show all; "Posted" with kept clips still on their way → "Nothing posted yet" + Show all.
 * Installable PWA (manifest + service worker) on phone and desktop.
@@ -939,7 +946,8 @@ owner reads it from the console when registering Meta webhooks.
 * `GET /oauth/{platform}/callback`: the real OAuth callback of §17.5 (`302` to
   `{APP_URL}/settings/posting/setup/{platform}?result={code}`; query never logged). The phase-1 `coming_soon` redirect is gone.
 * IAM: `dynamodb:PutItem` on the table; `ssm:GetParameter` on
-  `arn:aws:ssm:{region}:{acct}:parameter/cf-prod/hooks/verify-token` (the `aws/ssm` key needs no IAM statement).
+  `arn:aws:ssm:{region}:{acct}:parameter/cf-prod/hooks/verify-token` (the `aws/ssm` key needs no IAM statement). The
+  OAuth callback's statements are §17.9 (with the release of waiting posts and the clip-flow start, §17.6).
 
 ### 14.4 Durable function `cf-prod-job-flow` (Terraform module `flows`)
 
@@ -1021,22 +1029,33 @@ Replaces the publish queue, DLQ, publisher, Scheduler group/role and perf-check.
     fall back to a strongly consistent read of every page of the owner's posts. Owner-wide reads (`Store.query_all`:
     weeks, stats, `/v1/me` counts, YouTube forget) follow every page with no silent item cap. Then start the flow; on success set
     `publishState: "started"` (+ `flowExecutionArn`). Response `{clip, posts}`.
-  * `confirmed`/`publishing` with `publishState: "pending"` → start the flow again at once (same name and payload, so it
-    is idempotent), 200. With `publishState: "started"` or status `posted` → 200 no-op with the current `{clip, posts}`.
+  * `confirmed`/`publishing`/`posted` without `platforms` and with `publishState: "pending"` (the public
+    `startPending`) → start the flow again at once (same name and payload, so it is idempotent), 200. Without
+    `platforms` and with `publishState: "started"` (or a `posted` clip) → 200 no-op with the current `{clip, posts}`.
   * `failed` (clip-flow ended with every queued post failed) → "Try again": `flowRun + 1`, failed posts back to
-    `queued`, status `confirmed`, `publishState: "pending"`, start `clip-{clipId}-{flowRun}`, 200.
+    `queued` (tagged with the new run, `flowRun` on the post), status `confirmed`, `publishState: "pending"`, start
+    `clip-{clipId}-{flowRun}`, 200.
   * §33: with `platforms`, a `review` clip gets posts for exactly those places (each must be connected) and an
-    internal-but-public `uploadTo`; on a `posted` or `failed` clip `platforms` names the failed posts to try again
-    (a `posted` clip stays `posted`). See §33.3.
+    internal-but-public `uploadTo`; on a `posted`, `failed` or `confirmed` clip `platforms` names the failed posts to try
+    again and the `pending_integration` posts to send now that their place is connected (Post now, §33.6): both go
+    to a new run (`release.restart`, §17.6 "Release"; a `posted` clip stays `posted`). A named waiting place that is not
+    connected is a 400 "{Platform} is not set up yet. Turn it off, then tap Upload."; a waiting TikTok post needs the
+    `tiktok` choices (400 "Pick who can see it on TikTok."). Naming nothing to send finishes a pending start (as above)
+    or changes nothing. See §33.3, §33.6.
   * `declined` → 409 `conflict`.
 * **Start:** `lambda.invoke(FunctionName=CLIP_FLOW_ARN /* alias ...:function:cf-prod-clip-flow:live */,
   InvocationType="Event", DurableExecutionName=f"clip-{clipId}-{flowRun}", Payload=json.dumps({"clipId", "userId",
   "run": flowRun}, sort_keys=True))`; `DurableExecutionAlreadyStartedException` = no-op. Names stay ≤ 64 chars of
   `[A-Za-z0-9-_]` (ULIDs qualify).
 * **Steps** (names are contract; every step is idempotent because steps are at-least-once):
-  1. `ensure-posts`: `posts.create_for_clip` (no-op when `postsCreated`; the same function the API uses), then if any
-     post is `queued` set the clip `publishing`. Returns `[{postId, platform, status}]`.
-  2. `publish-{platform}` for each `queued` post only (`pending_integration` posts are skipped, no step): adapter
+  1. `ensure-posts`: `posts.create_for_clip` (no-op when `postsCreated`; the same function the API uses; new posts
+     carry `flowRun` = the clip's run), then if any post is `queued` set the clip `publishing`. Returns
+     `[{postId, platform, status}]`.
+  2. `publish-{platform}` for each `queued` post only (`pending_integration` posts are skipped, no step; a connect
+     releases them into a new flow run, §17.6 "Release"). A run sends only its own posts: a `queued` post whose
+     `flowRun` is another run's (a later Try again, Post now or release gave it to a newer run, or an older run still
+     has it) is left alone (the step answers `other_run`); a post without `flowRun` (older items) goes with any run:
+     adapter
      `publish(post, idempotency_key=postId)`; retry 3 attempts, exponential backoff, `retryable_error_types =
      [RetryablePublishError]`, `StepSemantics.AT_LEAST_ONCE_PER_RETRY` (an adapter whose platform has no idempotency
      key uses `AT_MOST_ONCE_PER_RETRY`). Post update conditional on `status = queued`: `posted`, `url`, `postedAt`,
@@ -2379,6 +2398,10 @@ platform, partial: true }` (the web refetches `GET /v1/setup`). `LiveEvent` gain
 4. Write the token secret (or `pending` + SETUP `choices` for `choose`), then UpdateItem `ACCOUNT#{platform}`
    (`connected` or `choose_account`) and SETUP. Token endpoint 401/`invalid_client` → `keys_wrong`;
    `redirect_uri_mismatch`/"redirect_uri is not matched" → `redirect_wrong`; 5xx/network → `platform_down`.
+   On `connected`, release the owner's posts waiting for this place (§17.6 "Release"; `cf-prod-hooks` starts the clip
+   flow on `CLIP_FLOW_ARN`). A release failure is logged (`oauth.release_failed`) and never changes the result: the
+   owner still lands on `result=connected`. The Meta pick (`POST /v1/accounts/{platform}/choose`) and a Check it that
+   turns `needs_reconnect` back into `connected` (§17.4) release the same way in `cf-prod-api`.
 5. Always `302 Location: {APP_URL}/settings/posting/setup/{platform}?result={code}` (fixed path, code from the list
    below only; nothing else from the request is reflected; no open redirect), `Cache-Control: no-store`,
    `Referrer-Policy: no-referrer`. Never log `code`, `state`, tokens or the query.
@@ -2438,11 +2461,12 @@ something (conditional on `status = queued`), so a replay resumes instead of cre
 TikTok's `uploadUrl` once uploading is done).
 
 **Clip-flow steps per queued post** (names are contract; replaces §14.5 step 2):
-`publish-{platform}` (start) → while `processing`: `ctx.wait(Duration.from_seconds(check_after),
+`publish-{platform}` (start; first the step reads the post and stops unless it is `queued` and its `flowRun` is this
+run's or absent) → while `processing`: `ctx.wait(Duration.from_seconds(check_after),
 name=f"wait-{platform}-{n}")` + step `check-{platform}-{n}` (n = 1…`maxChecks`) → `ready_to_finish`: step
 `finish-{platform}` (then more checks if it returns `processing`) → `done`: `posts.mark_posted` in that step. Retries:
 3 attempts on `RetryablePublishError`/`TransientError`. `NotConnectedError` (no account) → post `pending_integration`
-as today; `ReconnectNeededError` → post `failed` "Connect {Platform} again in Settings › Posting › Set up posting, then
+(released once the place is connected, "Release" below); `ReconnectNeededError` → post `failed` "Connect {Platform} again in Settings › Posting › Set up posting, then
 press Try again."; `PublishError` → `failed` with the mapped sentence. Platforms run one after another (waits cost
 nothing). Over `maxChecks`: YouTube and TikTok are marked posted anyway (the platform finishes alone); the others
 fail with "{Platform} could not finish this video. Press Try again." An at-most-once step interrupted mid-call fails
@@ -2452,6 +2476,31 @@ contract): `posted-{platform}` marks YouTube/TikTok posted when checks run out; 
 internal `publishHandle` so a failed upload is started fresh, not resumed. Confirm on a failed clip (Try again)
 accepts the same `tiktok` options as §17.8 and replaces the TikTok post's `postOptions` (needed after "Pick who can see
 it on TikTok again, then press Try again.").
+
+**Release (waiting posts, added 2026-11-20).** The Library promises "Posts once these accounts are connected", so
+connecting keeps it. `release.release_waiting(store, flows, userId, platform, deadline=…)`
+(`clipfactory_api/release.py`, imported by both `cf-prod-api` and `cf-prod-hooks`) runs right after an Account becomes
+`connected`: the OAuth callback (§17.5), the Meta account pick and a Check it that reconnects (§17.4). Only when that
+Account is `connected` (a strongly consistent read: the caller wrote it a moment ago), it reads the owner's posts
+(`Query USER#`/`POST#`, strongly consistent) and, per clip whose status is `posted`, `confirmed` or `failed` (never
+`review`, `publishing` or `declined`), does exactly what Try again does (`release.restart`, shared with
+`routes/clips.py` `_try_again`): one transaction sets that place's `pending_integration` posts to `queued` with
+`flowRun: run + 1` (REMOVE `error`, `publishHandle`; each conditional on `status = pending_integration`) and the clip to
+`flowRun + 1`, `publishState: pending` (REMOVE `flowExecutionArn`; a `failed` clip becomes `confirmed`; conditional on
+the status and `flowRun` read), then starts `clip-{clipId}-{flowRun}` (`release.start_flow`, the same code Confirm
+uses; on success `publishState: started`). The new run sends only the posts tagged with its number, so a release or a
+second Post now while an earlier run is still uploading another place never sends a video twice (§14.5 step 2). When
+the clip's current run never started (`publishState: pending`), its `queued` posts move to the new run too (`flowRun`
+only, upload handles kept; the clip update is then also conditional on `publishState = pending`). A TikTok post with no
+`postOptions.privacyLevel` is never released on its own (TikTok's rules, §17.8): it waits for Post now, which opens the
+TikTok sheet. Safe to repeat: a second release finds nothing waiting and changes nothing; a clip of that place with a
+`queued` post and `publishState: pending` (an earlier start that failed) gets its start finished, so a failed Invoke
+stays retryable, and the Library shows such a clip's big Try again (`startPending`, §11). Per-clip errors are logged
+(`release.clip_failed`) and skipped, never raised; a read failure is `release.read_failed`. The owner waits for the
+answer, so `deadline` is `ANSWER_SECONDS` (25) after the request began (the callback's start, `Request.started` in the
+API; cf-prod-hooks stops at 28 s, API Gateway waits 29 s): a clip only starts while `CLIP_SECONDS` (18, one clip's
+worst case: two Invoke attempts of 2 s connect + 6 s read, plus its DynamoDB calls) are left (`release.out_of_time`),
+and the rest wait for Post now or the next release.
 
 | Platform | start | check | finish | ids / URL |
 |---|---|---|---|---|
@@ -2559,6 +2608,10 @@ callout also has **Ask TikTok again**, which fetches the creator info again.
   (the `{platform}/token` secrets only; `-*` covers the random ARN suffix) (so the secret names are defined once). The
   hooks Lambda does not need `HOOKS_URL` (the callback uses the
   `redirectUri` saved at Connect). The REST resources are unchanged (callback route exists).
+  Release of waiting posts (§17.6, additive): env `CLIP_FLOW_ARN` (= `module.flows.clip_flow_alias_arn`); IAM
+  `ReleaseWaitingPosts` (`dynamodb:GetItem`, `Query`, `UpdateItem`, `TransactWriteItems` on the table, `USER#*` only)
+  and `StartClipFlow` (`lambda:InvokeFunction` on `{clip_flow_arn_prefix}:*`, like the API's `StartFlows`). New inputs
+  `clip_flow_alias_arn`, `clip_flow_arn_prefix` (from `module.flows`; flows reads only names from hooks: no cycle).
 * **api**: env `HOOKS_URL` (= `module.hooks.hooks_url`), `SECRET_PREFIX`, `OAUTH_STATE_SECRET`, `WEB_BUCKET`,
   `DISTRIBUTION_ID`; IAM: the secrets set above on the prefix, `GetSecretValue` on the state key,
   `s3:PutObject`/`s3:DeleteObject` on `${web_bucket_arn}/tiktok*`, `cloudfront:CreateInvalidation` on the distribution
@@ -2629,7 +2682,10 @@ Shared names: `oauth.state.sign(key, platform, nonce, exp)`, `oauth.state.verify
   `FakeDurableContext`: step and wait names `publish-/wait-/check-/finish-{platform}-{n}`, replay with `publishHandle`
   makes no second create, `maxChecks` outcomes, at-most-once interruption message, `ReconnectNeededError` → failed,
   TikTok private → no gsi2, TikTok id follow-up sets `statsId`; friendly error mapping table; X monthly cap; TikTok
-  confirm options required and validated; broadcast `ACCOUNT#`/`SETUP#` → `setup` partial; `config.load` §17.7 values.
+  confirm options required and validated; broadcast `ACCOUNT#`/`SETUP#` → `setup` partial; `config.load` §17.7 values;
+  `test_release.py`: release (released, not connected, `review`/`publishing` untouched, repeat no-op, failed start
+  retryable, one broken clip, time budget, TikTok waits for its choice), the callback, Meta pick and Check it release,
+  the callback stays `connected` when the release fails, Post now through Confirm.
 * **infra** (`terraform test`, mock providers): state-key secret uses `secret_string_wo` (no `secret_string`); IAM
   statements exactly §17.9 per role (no secrets access on api beyond the prefix and state key; none on job-flow,
   realtime, learn); hooks timeout 28; envs on api/hooks/flows/stats; ESM filter has seven prefixes; output
@@ -6585,8 +6641,15 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   sheet choices are needed only when `tiktok` is in the list. On a `posted` or `failed` clip, `platforms` names the
   failed posts to try again: only those go back to `queued` (fresh `publishHandle`, no `error`), `flowRun + 1`, a
   `failed` clip becomes `confirmed`, a `posted` one stays `posted`; naming a place with no failed post changes nothing.
-  A one-place Try again on a `posted` clip starts a new flow run while the first run may still be waiting for its
-  numbers; no second post can happen (only `queued` posts publish).
+  On a `posted`, `failed` or `confirmed` clip, `platforms` also releases that clip's `pending_integration` posts for the
+  named places (**Post now**, §33.6), the same way (`release.restart`, §17.6): each named waiting place must be
+  connected now, else 400 with the same sentence ("Instagram is not set up yet. Turn it off, then tap Upload."), and a
+  waiting TikTok post with no stored choice needs `tiktok` ("Pick who can see it on TikTok."), whose choices become its
+  `postOptions`.
+  A one-place Try again or Post now on a `posted` clip starts a new flow run while the first run may still be
+  uploading another place or waiting for its numbers; no second post can happen: only `queued` posts publish, and a run
+  only sends the posts tagged with its own `flowRun` (§17.6 "Release"). On a `confirmed`, `publishing` or `posted`
+  clip whose start did not go through (`startPending`), a Confirm without `platforms` starts it (§14.5).
 
 Without it (older clients) everything works exactly as before. Response unchanged (`{clip, posts}`). Types:
 `Clip.uploadTo?`, `confirmClip(clipId, captions?, tiktok?, platforms?)`, `uploadClip` (was `keepClip`). Publishers are
@@ -6613,6 +6676,21 @@ voice command "Try again" finds it; TikTok's "pick again" error opens the sheet 
 (`pending_integration`, older clips). Toast "Trying Facebook again!". A place that was disconnected since simply fails
 again with its plain reason. The Jobs chip says "Uploading" for both `confirmed` and `publishing`.
 
+**Post now (added 2026-11-20).** Connecting a place releases its waiting posts by itself (§17.6 "Release"); Post now is
+the backup. On a Library card, a `pending_integration` post whose place is set up (`ready` from `GET /v1/setup`, read
+as Review's Upload to reads it, kept fresh by live `setup` news) on a clip that is not `publishing` leaves the
+"Waiting for setup" group and gets its own row: the place's mark and name, "Ready to post", and a **Post now** button
+(accessible name "Post now, Instagram"; sends `platforms: [p]`; toast "Posting to Instagram!"; motion `send`). TikTok's
+Post now opens the Post to TikTok sheet first (big button "Post now"). Places still not set up stay in the one
+"Waiting for setup" line; while the setup is loading or the check failed, every waiting post stays there. Post now
+stays on a card while another place of it is still uploading: the new run sends only that place (§17.6). The toast
+only says "Posting to Instagram!" when the place really left `pending_integration` and the start went through; when
+the card was out of date and the clip was still uploading, it says "This clip is still uploading. Post it to Instagram
+when that is done." and when the start did not go through, "Still working on it. Try again in a minute." (then the
+card's big Try again, §11). Mock mode does the same: a platform that becomes connected (`setup.finish`, the Meta pick,
+the pretend consent page) releases its waiting posts, Confirm with `platforms` releases a named waiting place that is
+connected, and `__cfMockFaults.startFails` leaves a released or retried clip `startPending`.
+
 ### 33.7 Words
 
 "Upload" replaces "Keep" wherever it meant posting (Review, Home's "Nothing gets posted until you tap Upload.",
@@ -6621,8 +6699,12 @@ saved keys" and the like stay: they mean something else. Notifications on main s
 
 ### 33.8 Tests
 
-`api/tests/test_upload_to.py`; `web/test/upload.test.ts` (was keep.test.ts), `reviewSheets.test.tsx`;
-`web/e2e/upload-to.spec.ts`, `tiktok-sheet.spec.ts`, and the Review specs.
+`api/tests/test_upload_to.py`, `test_release.py` (Post now, the release on connect, two Post now taps on one clip
+that never send a video twice, a run that never started handing its posts over, the strongly consistent Account read,
+the callback's deadline, `startPending` and its Try again); `web/test/upload.test.ts` (was keep.test.ts; the mock's
+release and Post now), `reviewSheets.test.tsx`; `web/e2e/upload-to.spec.ts` (with the Library's Post now row, a second
+Post now on one card, the release on connect, and a start that did not go through turning into Try again),
+`tiktok-sheet.spec.ts`, and the Review specs.
 
 ## 35. Mac fetches it (owner decision, 2026-11-20)
 

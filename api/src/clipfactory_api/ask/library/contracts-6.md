@@ -15,7 +15,7 @@ Keys: `pk` (S), `sk` (S); GSI `gsi1` on `gsi1pk`/`gsi1sk` (projection ALL); spar
 | Follow, reverse index, creator, noticed video, follow keys, tick lease, YouTube meter | see §24.2 | | – | §24 Follow creators |
 | Account snapshot, money state, reported revenue, money prefs, money owners | see §25.6 | | – | §25 Real earnings (`ACCTSTAT#` has `ttl`) |
 | Skill | `USER#{userId}` | `SKILL#{skillId}` | – | Skill fields + `type="skill"`, `key` (S3, current revision, §18.1); a legacy `enabled` attribute is ignored and removed on the next write |
-| Post | `USER#{userId}` | `POST#{postId}` | `CLIP#{clipId}` / `POST#{platform}`; gsi2 `STATS` / `{statsDueAt}#{postId}` while polled | Post fields + internal `platformPostId`, `statsId`, `statsDueAt`, `insightsDueAt`, `refreshStartedAt`, `lastSnapshotAt` (§16.3) |
+| Post | `USER#{userId}` | `POST#{postId}` | `CLIP#{clipId}` / `POST#{platform}`; gsi2 `STATS` / `{statsDueAt}#{postId}` while polled | Post fields + internal `platformPostId`, `statsId`, `statsDueAt`, `insightsDueAt`, `refreshStartedAt`, `lastSnapshotAt` (§16.3), `flowRun` (the clip-flow run that sends it, §17.6), `publishHandle`, `postOptions` (§17.6, §17.8) |
 | Stat snapshot | `USER#{userId}` | `STAT#{postId}#{iso}` | – | `type="stat"`, `postId`, `clipId`, `platform`, `at`, `views`, `likes`, `comments`, `shares`, `final?`, `ttl` (90 days) (§16.3) |
 | Week | `USER#{userId}` | `WEEK#{yyyy-Www}` | – | `type="week"`, WeekView fields without `clips` + `revision`, `unpickedClipIds` (§16.3) |
 | Rate budget | `RATE#{platform}` | `BUDGET` | – | `type="rate"`, per-platform counters, `blockedUntil` (§16.4) |

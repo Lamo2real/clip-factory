@@ -101,13 +101,15 @@ ACCOUNT_FIELDS = ("handle", "name", "avatarUrl", "connectedAt", "missing", "reas
 ACCOUNT_STATUSES = ("connected", "needs_reconnect", "choose_account")
 
 
-def account_items(store: db.Store, user_id: str) -> list[Item]:
-    return store.query_all(db.user_pk(user_id), "ACCOUNT#")
+def account_items(store: db.Store, user_id: str, *, consistent: bool = False) -> list[Item]:
+    return store.query_all(db.user_pk(user_id), "ACCOUNT#", consistent=consistent)
 
 
-def connected_account(store: db.Store, user_id: str, platform: str) -> Item | None:
-    """The platform's connected Account item (internal fields included: ``accountId`` for the adapters)."""
-    for item in account_items(store, user_id):
+def connected_account(store: db.Store, user_id: str, platform: str, *, consistent: bool = False) -> Item | None:
+    """The platform's connected Account item (internal fields included: ``accountId`` for the adapters).
+    ``consistent`` is for callers that run moments after the Account was written (the release on connect, §17.6, and
+    the clip flow it starts)."""
+    for item in account_items(store, user_id, consistent=consistent):
         if item.get("platform") == platform and item.get("status") == "connected":
             return item
     return None
@@ -198,6 +200,8 @@ def create_for_clip(
     items: list[Item] = []
     # The places the owner picked on this clip's Upload (§33), else Settings › Where clips go (older clients).
     chosen = (clip_fields or {}).get("uploadTo") or clip.get("uploadTo")
+    # The flow run that sends these posts (§17.6): a later run started by Try again or a release leaves them alone.
+    run = int((clip_fields or {}).get("flowRun") or clip.get("flowRun") or 1)
     targets = [p for p in UPLOAD_ORDER if p in chosen] if chosen else settings.get("platforms", PLATFORMS)
     for platform in targets:
         if platform in have or platform not in PLATFORMS:
@@ -219,6 +223,7 @@ def create_for_clip(
                 "type": "post",
                 "userId": user_id,
                 "createdAt": now,
+                "flowRun": run,
                 **post,
                 **({"postOptions": dict(post_options[platform])} if post_options and platform in post_options else {}),
             }
