@@ -764,7 +764,8 @@ holds the Instagram account id, the Page id and that Page's access token, which 
 
 **Gates.** What each platform still has to allow is a gate on the setup: YouTube `published_app` (the Google app must
 be **In production**, or tokens die after 7 days), TikTok `app_review` and `posting_audit` (until both pass, posts are
-"Only me"), Facebook `app_live` (Reels stay visible to the owner until the app is Live), X `credits`. A platform is
+"Only me"), Instagram and Facebook `app_live` (Reels stay visible to the owner until each Meta app is Live), X
+`credits`. A platform is
 **ready** when it is connected and no gate needs the owner.
 
 **Posting.** The clip flow ([flow 7](#7-clip-flow-publish-wait-48-hours-learn)) asks `SecretsTokenProvider` for the

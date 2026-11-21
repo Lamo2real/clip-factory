@@ -2155,7 +2155,7 @@ v27.0; system-user tokens are for Tech Providers only). Get ready:
 | id | title | essentials |
 |---|---|---|
 | `ready-pro` | Make Instagram a pro account | Instagram app › your picture › menu › **Account type and tools** › **Switch to professional account** › **Creator** or **Business**. Personal accounts cannot connect. |
-| `ready-page` | Link Instagram to a Facebook Page | In the Instagram app, tap **Edit profile**, then **Page** (under Public business information). Pick your Facebook Page, or press **Create a Facebook Page**. No Page yet? Make one first in the Facebook setup, step 1. If you see **Manage connection** on Facebook: already linked; check the name, close it, **I did this**, never **Disconnect**. Wrong Instagram there: **Disconnect**, then **Connect account**. |
+| `ready-page` | Link Instagram to a Facebook Page | In the Instagram app, tap **Edit profile**, then **Page** (under Public business information). Pick your Facebook Page, or press **Create a Facebook Page**. No Page yet? Make one first in the Facebook setup, step 1. Facebook shows a banner asking you to confirm who runs the Page (Page Publishing Authorization)? Do it now. If you see **Manage connection** on Facebook: already linked; check the name, close it, **I did this**, never **Disconnect**. Wrong Instagram there: **Disconnect**, then **Connect account**. |
 | `ready-computer` | Use a computer | Log in to facebook.com with the Facebook account that will own the app. Wrong account? Log out first. |
 | `ready-portfolio` | Business portfolio, if Meta asks | (optional since 19 Nov 2026: only if Meta asks or the Instagram is already in one) Open business.facebook.com, **Create a business portfolio** (name, your name, email), **Create**. **Settings** › **Accounts** › **Instagram accounts** › **Add**, log in to Instagram. Already in a portfolio? Use that one. |
 Make your Instagram key:
@@ -2163,22 +2163,26 @@ Make your Instagram key:
 |---|---|---|
 | `key-developer` | Become a Meta developer | Open developers.facebook.com/async/registration, **Next**, type the codes Meta sends, pick **Creator**. |
 | `key-app` | Create the app | developers.facebook.com/apps › **Create app**. App name `appName`, your email, **Next**. Use case **Manage messaging & content on Instagram**, **Next**. Pick your portfolio, or skip it. **Next** / **Go to dashboard**. Never ask for a review. |
-| `key-basic` | Fill in Basic settings | **App settings** › **Basic**: Privacy Policy URL `privacyUrl`, Terms of Service URL `termsUrl`, User data deletion › **Data deletion instructions URL** `dataDeletionUrl`, a Category. **Save changes**. |
-| `key-config` | Make the Instagram login setup | **Use cases** › **Customize** (Instagram) › open the tab **API setup with Facebook login**. Press **Create new configuration** (under Facebook Login for Business › Configurations). Token type: **User access token**, the longest expiry. Assets: your Page and Instagram account. **Edit permissions**: tick instagram_basic, instagram_manage_insights, instagram_content_publish, pages_show_list, pages_read_engagement (instagram_manage_insights is not ticked by default); untick the ad ones. **Use this configuration**. Redirect URL `redirectUri`, **Save**. |
+| `key-basic` | Fill in Basic settings | **App settings** › **Basic**: App domains `appDomain`, Privacy Policy URL `privacyUrl`, Terms of Service URL `termsUrl`, User data deletion › **Data deletion instructions URL** `dataDeletionUrl`, a Category, App icon (download), Contact email (already filled in). In the EU: Data Protection Officer = your name and email. **Save changes**. Meta needs all of this to make the app Live. |
+| `key-config` | Make the Instagram login setup | **Use cases** › **Customize** (Instagram) › open the tab **API setup with Facebook login**. Press **Create new configuration** (under Facebook Login for Business › Configurations). Token type: **User access token**, the longest expiry. Assets: your Page and Instagram account. **Edit permissions**: tick instagram_basic, instagram_manage_insights, instagram_content_publish, pages_show_list, pages_read_engagement (instagram_manage_insights is not ticked by default). Page in a business portfolio? Also tick ads_management and ads_read (Meta needs them when the Page role comes through Business Manager). **Use this configuration**. Redirect URL `redirectUri`, **Save**. |
 | `key-redirect-check` | Double-check the return address | If you see **Facebook Login for Business** › **Settings**: put `redirectUri` in **Valid OAuth Redirect URIs**, **Enforce HTTPS** on, **Save changes**. No such page: skip. (optional) |
 | `key-paste` | Paste the 3 values | **App ID**, **App secret** (**Show**, Facebook may ask your password), **Configuration ID** (or paste the whole **Login URL**: Clip Factory finds the ID). **Save keys** (`auto: keys`). |
 Connect: `connect` **Connect Instagram**: log in with the same Facebook account, tick your Page and your Instagram
 account, leave every switch on, confirm. Several accounts → pick in Clip Factory. Not listed → it is still personal
-(`ready-pro`), not linked to a Page (`ready-page`) or in another portfolio (`ready-portfolio`). Go public:
-`public-try` "Post one test clip" (Instagram may take a few minutes;
-numbers can take 2 days). Status: "Works now." If you see your Reels missing for other people: "Tell Clip Factory
-support; Meta may want the app Live." If Facebook asks to confirm who runs the Page (Page Publishing Authorization):
-"Do it. Instagram will not post until you do."
+(`ready-pro`), not linked to a Page (`ready-page`) or in another portfolio (`ready-portfolio`). Go public
+(`gate: app_live`, like Facebook: Development-mode posts are seen only by the app's role users): `public-live` "Make
+the app Live": "Until the app is Live, only you can see your Reels." Left menu **Publish**, check the list, **Go live**
+at the bottom right (no **Publish**: the **App Mode** switch → **Live**); press **I did this** when the top bar says
+**Live**. If you see **App Review** or **Advanced access**: "You do not need it for your own account. Skip it. Press
+**Go live**. Meta still says no? It lists what is missing. Go back to Fill in Basic settings." Then `public-try` "Post
+one test clip" (Instagram may take a few minutes; numbers can take 2 days). If you see your Reels missing for other
+people: "Do the step before: make the app Live." If Facebook asks to confirm who runs the Page (Page Publishing
+Authorization): "Do it. Instagram will not post until you do."
 
 **Facebook** (about 25 min, Free; Page Reels, Facebook Login for Business, Graph v27.0). Get ready:
 | id | title | essentials |
 |---|---|---|
-| `ready-page` | Have a Facebook Page | Open facebook.com/pages/?category=your_pages; none → **Create new Page**. Profiles cannot post Reels through apps. You need **Content** or **Full control** access on the Page. Tap your picture and switch back to your own profile; do not change Page settings. If you see **Manage connection** after **Edit profile**: Instagram is already linked, close it, never **Disconnect**. **People who help manage your Page**: leave as is. |
+| `ready-page` | Have a Facebook Page | Open facebook.com/pages/?category=your_pages; none → **Create new Page**. Profiles cannot post Reels through apps. You need **Content** or **Full control** access on the Page. Tap your picture and switch back to your own profile; do not change Page settings. If you see **Manage connection** after **Edit profile**: Instagram is already linked, close it, never **Disconnect**. **People who help manage your Page**: leave as is. Page in a business portfolio: keep your own access too (Page **Settings** › **Page access**, **Full control**). |
 | `ready-computer` | Use a computer | |
 Make your Facebook key:
 | id | title | essentials |
@@ -2194,10 +2198,11 @@ Make your Facebook key:
 | `key-paste` | Paste the 3 values | **App ID**, **App secret**, **Configuration ID**. **Save keys**. |
 Connect: `connect` **Connect Facebook**: **Continue**, tick your clip Page, leave every switch ON (one off and Facebook
 gives nothing), **Save**, **Got it**. Several Pages → pick in Clip Factory.
-Go public (`gate: app_live`): `public-live` "Make the app Live": left menu **Publish**, check the list, **Publish** at the bottom right (no
-**Publish**: the **App Mode** switch → **Live**). Missing info → back to `key-basic`. If Meta asks for **App Review** first: "Your Reels stay
-visible only to you for now. Tell Clip Factory support." Status before: "Works now, but only you can see your
-Facebook Reels until the app is Live."
+Go public (`gate: app_live`): `public-live` "Make the app Live": left menu **Publish**, check the list, **Go live** at the bottom right (no
+**Publish**: the **App Mode** switch → **Live**). Missing info → back to `key-basic`. Press **I did this** when the top bar says **Live**.
+If you see **App Review** or **Advanced access**: "You do not need it for your own Page. Skip it. Press **Go live**. Meta still says
+no? It lists what is missing. Go back to Fill in Basic settings." (A role-only app on Standard Access needs no App Review.) Status
+before: "Works now, but only you can see your Facebook Reels until the app is Live."
 
 **X** (about 15 min, **costs money**: $0.015 per clip, "about $1.50 for 100 clips"). Get ready:
 | id | title | essentials |
@@ -2296,8 +2301,8 @@ interface SetupValues { appName: string; websiteUrl: string; websitePrefix: stri
 Gates per platform: youtube `published_app` (`ok` when step `key-publish` is ticked, else `action`); tiktok
 `app_review` (owner-picked: draft / not_approved → `limited` (Sandbox only), in_review → `waiting`, live → `ok`) and
 `posting_audit` (from `creator_info.privacy_level_options`: only
-`SELF_ONLY` → `limited`, else `ok`; `unknown` before connect); instagram none; facebook `app_live` (`ok` when
-`public-live` is ticked, else `limited`); x `credits` (`action` after a credits error, `ok` after the next success).
+`SELF_ONLY` → `limited`, else `ok`; `unknown` before connect); instagram and facebook `app_live` (`ok` when
+`public-live` is ticked, else `limited`; the gate line names "Instagram Reels" / "Facebook Reels"); x `credits` (`action` after a credits error, `ok` after the next success).
 
 **Key formats** (trimmed; quotes and zero-width characters removed; same regexes in `oauth/formats.py` and
 `web/src/lib/keyFormats.ts`; friendly 400 messages say what the value looks like):
@@ -2508,8 +2513,8 @@ and the rest wait for Post now or the next release.
 |---|---|---|---|---|
 | youtube (start at-least-once) | POST `https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status` (`X-Upload-Content-Length`, `X-Upload-Content-Type: video/mp4`) body `{snippet:{title: youtubeTitle ≤ 100 chars no "<>", description ≤ 5000 bytes no "<>", categoryId: "20"}, status:{privacyStatus: settings.youtubePrivacy, selfDeclaredMadeForKids: false, containsSyntheticMedia: false}}` → save session URI; PUT bytes in 8 MB chunks (multiples of 256 KB, `Content-Range`); 308 continue; on resume `PUT Content-Range: bytes */{size}` | `GET /youtube/v3/videos?part=status,processingDetails&id=` until `uploadStatus` `processed` (`rejected`/`failed` → PublishError with reason); every 30 s, `maxChecks` 60 | – | `platformPostId = statsId = videoId`; `https://www.youtube.com/shorts/{id}` |
 | tiktok (start at-most-once) | `creator_info/query` (spam errors → PublishError; clip longer than `max_video_post_duration_sec` → PublishError); `POST /v2/post/publish/video/init/` `post_info {title: tiktok caption ≤ 2200, privacy_level: post options (must be in `privacy_level_options`), disable_comment/duet/stitch, brand_content_toggle, brand_organic_toggle, is_aigc: false}`, `source_info {source: "FILE_UPLOAD", video_size, chunk_size, total_chunk_count}` (≤ 64 MB: one chunk = size; else 10 MB chunks, `floor(size/chunk)`, last carries the rest) → save `publish_id`; PUT chunks to `upload_url` (`Content-Range`) | `POST /v2/post/publish/status/fetch/` every 15 s, `maxChecks` 80: `PUBLISH_COMPLETE` → done; `FAILED` → PublishError by `fail_reason` (`internal` retryable) | – | `platformPostId = publish_id`; private (`SELF_ONLY`) → `privacy "private"`, no statsId, url `https://www.tiktok.com/@{username}`; public → `statsId = publicaly_available_post_id[0]` when present, else a follow-up loop `tiktok-id-{n}` (wait 10 min, ≤ 12) sets it via `posts.set_stats_id`; url `https://www.tiktok.com/@{username}/video/{id}` |
-| instagram (start at-least-once) | `GET /{ig}/content_publishing_limit?fields=config,quota_usage` (full → PublishError "Instagram's daily limit is reached. Press Try again tomorrow."); `POST /{ig}/media media_type=REELS&upload_type=resumable&caption&share_to_feed=true` → save container id; `POST https://rupload.facebook.com/ig-api-upload/v27.0/{container}` (`Authorization: OAuth {token}`, `offset: 0`, `file_size`, binary body). Fallback `publish.source = "video_url"`: `video_url` = presigned GET | `GET /{container}?fields=status_code` every 60 s, `maxChecks` 15: `FINISHED` → ready_to_finish; `ERROR`/`EXPIRED` → PublishError | at-most-once: `POST /{ig}/media_publish creation_id` → media id; `GET /{id}?fields=permalink` | `platformPostId = statsId = media id`; `permalink` |
-| facebook (start at-least-once) | `POST /{pageId}/video_reels upload_phase=start` → save `video_id`; `POST https://rupload.facebook.com/video-upload/v27.0/{video_id}` (`Authorization: OAuth {pageToken}`, `offset: 0`, `file_size`, binary; resume from `bytes_transfered`). Fallback `file_url` header with a presigned GET | `GET /{video_id}?fields=status` every 30 s, `maxChecks` 40: uploading done → ready_to_finish; after finish wait for `publishing_phase.status=completed` and `video_status=ready`; `error`/`upload_failed`/`expired` → PublishError | at-least-once: `POST /{pageId}/video_reels upload_phase=finish&video_id&video_state=PUBLISHED&description` (if Meta rejects the value, retry once with `complete`) | `statsId = video_id`, `platformPostId = post_id` if returned else video_id; url `permalink_url` (absolute) else `https://www.facebook.com/reel/{video_id}` |
+| instagram (start at-least-once) | `GET /{ig}/content_publishing_limit?fields=config,quota_usage` (full → PublishError "Instagram's daily limit is reached. Press Try again tomorrow."); `POST /{ig}/media media_type=REELS&upload_type=resumable&caption&share_to_feed=true` → save container id; `POST https://rupload.facebook.com/ig-api-upload/v27.0/{container}` (`Authorization: OAuth {token}`, `offset: 0`, `file_size`, binary body). Fallback `publish.source = "video_url"`: `video_url` = presigned GET | `GET /{container}?fields=status_code,status` every 60 s, `maxChecks` 15: `FINISHED` → ready_to_finish; `ERROR` → "Instagram did not like this video file." (`status`, Meta's reason, is logged); `EXPIRED` → "Instagram waited too long for this upload. Press Try again." (Try again starts a fresh container); `PUBLISHED` (a cut-off finish) → never `media_publish` again: look up the Reel (below) → done | at-most-once: save `publishing: true`, then `POST /{ig}/media_publish creation_id` → media id; `GET /{id}?fields=permalink`. A finish that finds `publishing` set and no `mediaId`, or whose `media_publish` fails (timeout, 5xx, any Meta error), first reads `GET /{container}?fields=status_code`: `PUBLISHED` → look up the Reel, never publish twice. Look-up: `GET /{ig}/media?fields=id,permalink,timestamp,caption&limit=5`, the one row whose caption is the caption sent and whose `timestamp` is after the container's `containerAt` (2 min slack); none or several → "Instagram may have posted this already. Look on Instagram before you press Try again." (never a guess) | `platformPostId = statsId = media id`; `permalink` |
+| facebook (start at-least-once) | clip `durationSec` outside 3-90 s → "Facebook Reels must be 3 to 90 seconds long." before any call; `POST /{pageId}/video_reels upload_phase=start` → save `video_id`; `POST https://rupload.facebook.com/video-upload/v27.0/{video_id}` (`Authorization: OAuth {pageToken}`, `offset: 0`, `file_size`, binary; resume from `bytes_transfered`). Fallback `file_url` header with a presigned GET | `GET /{video_id}?fields=status` every 30 s, `maxChecks` 40: uploading done (`uploading_phase.status` `complete` or `completed`, or `video_status=upload_complete`) → ready_to_finish; after finish wait for `publishing_phase.status=completed` and `video_status=ready`; `error`/`upload_failed`/`expired` → PublishError (each phase's `error` object, or `errors` list, is logged) | at-least-once: `POST /{pageId}/video_reels upload_phase=finish&video_id&video_state=PUBLISHED&description` (one call; `video_state` takes only DRAFT, SCHEDULED or PUBLISHED) | `statsId = video_id`, `platformPostId = post_id` if returned else video_id; url `permalink_url` (absolute) else `https://www.facebook.com/reel/{video_id}` |
 | x (start at-least-once) | `POST /2/media/upload/initialize {media_type: "video/mp4", total_bytes, media_category: "tweet_video"}`; `POST /2/media/upload/{id}/append` multipart (`segment_index`, `media`, 4 MB); `POST /2/media/upload/{id}/finalize` → save media id | `GET /2/media/upload?command=STATUS&media_id=` after `check_after_secs` (≤ 60), `maxChecks` 20: `succeeded` → ready_to_finish; `failed` → PublishError | at-most-once: `POST /2/tweets {text: x caption with every URL removed, ≤ 280 chars cut at a word + "…", media:{media_ids}}` | `platformPostId = statsId = tweet id`; `https://x.com/{username}/status/{id}` |
 
 **Friendly errors** (`platforms/errors.py`, `friendly(platform, status, body) -> (retryable, sentence)`): quota/rate
@@ -2522,11 +2527,20 @@ YouTube `forbidden`/`uploadLimitExceeded` channel → "YouTube did not accept th
 Studio."; file checks (`file_format_check_failed`, `duration_check_failed`, Meta 2207026 …) → "{Platform} did not like
 this video file."; X 402 or a `CreditsDepleted`/"credits" problem → gate `credits` `action`, "Your X credits ran out.
 Buy more in console.x.com › Billing › Credits, then press Try again."; X 403 duplicate → "X already has this post.";
-5xx/network → retryable "{Platform} did not answer.". Unknown → "Posting to {Platform} did not work. Press Try again."
+5xx/network → retryable "{Platform} did not answer.". Meta (`code/subcode` is `Problem.code`, e.g. `190/460`; subcode, `type`, `error_user_title` and `fbtrace_id`
+are logged): 190/492 → "Your Facebook account is no longer an admin of the Page. Make it an admin, then connect
+again.", other 190 → Connect again; 10 and 200-299 → "{Platform} is missing a permission. Connect {Platform} again in
+Settings › Posting › Set up posting and tick every box." (both `needs_reconnect`); 4/2207051 (spam) → "{Platform} is
+not letting this account post right now."; 25/2207050 → "Open the Instagram app and clear any warning. Then press Try
+again."; 368 → "Meta paused posting for now. Wait a day, then press Try again."; -1, -2, 1, 2, 9007 and subcodes
+2207001/2207003/2207008/2207027/2207032 → retryable "{Platform} did not answer."; 2207020/2207053 → "{Platform} lost
+this upload. Press Try again."; Facebook Reels specs 1363040/1363127/1363129 → bad file, 1363128 → "Facebook Reels
+must be 3 to 90 seconds long.". Unknown → "Posting to {Platform} did not work. Press Try again."
 Raw platform messages go to logs (no tokens), never to the owner.
 
 **Stats.** `cf-prod-stats` and the clip-flow `metrics` step use `SecretsTokenProvider`; `ReconnectNeededError` = skipped
-like `not_connected`. New handler event `{"action": "forget", "userId", "platform": "youtube"}` (sent async by
+like `not_connected`. A Meta stats read answered with code 190 sets the Account `needs_reconnect` (`reason: token_dead`)
+and skips like `not_connected` (Meta never says a token died), so Settings shows Connect again before the next Upload. New handler event `{"action": "forget", "userId", "platform": "youtube"}` (sent async by
 `DELETE /v1/accounts/youtube`): REMOVE `metrics` and gsi2 attributes from YouTube posts and delete their `STAT#` items
 (YouTube Developer Policies: delete API data after revocation).
 

@@ -146,6 +146,7 @@ function gatesOf(p: Platform, s: MockPlatform): Gate[] {
         { key: "posting_audit", state: !connected ? "unknown" : s.audited ? "ok" : "limited" },
       ];
     }
+    case "instagram":
     case "facebook":
       return [{ key: "app_live", state: s.stepsDone.includes("public-live") ? "ok" : "limited" }];
     case "x":

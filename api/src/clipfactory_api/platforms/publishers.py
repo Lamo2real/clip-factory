@@ -16,10 +16,11 @@ import json
 import re
 import secrets
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from ..clock import iso
+from ..clock import iso, parse
 from ..log import log
 from . import errors
 from .base import (
@@ -52,6 +53,7 @@ BRANDED_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS")
 HASHTAGS_MAX = 30
 _URL = re.compile(r"(https?://\S+|www\.\S+)", re.IGNORECASE)
 _HASHTAG = re.compile(r"#\w+")
+LOOKUP_SLACK = timedelta(minutes=2)  # clock drift between Clip Factory and Meta
 
 
 # --- shared helpers ----------------------------------------------------------------------------------------------
@@ -101,6 +103,10 @@ def _choice_of(options: dict[str, Any], preset: dict[str, Any], key: str) -> Any
 
 def _now(job: PublishJob) -> str:
     return iso(job.now())
+
+
+def _same_text(text: str) -> str:
+    return " ".join(text.split())
 
 
 def strip_angles(text: str) -> str:
@@ -520,7 +526,8 @@ class InstagramPublisher(_Graph):
             if isinstance(used, int) and isinstance(total, int) and used >= total:
                 raise PublishError("Instagram's daily limit is reached. Press Try again tomorrow.")
             container = self._container(job, ig, source)
-            handle = {"container": container}
+            # When the container was made: the Reel it becomes can only be newer (see _already_published).
+            handle = {"container": container, "containerAt": _now(job)}
             job.save(handle)
             if source == "video_url":
                 handle = {**handle, "uploaded": True}
@@ -540,7 +547,7 @@ class InstagramPublisher(_Graph):
             # rupload.facebook.com sometimes answers 5xx for a good file (seen in prod, 21 Nov 2026). Instagram can
             # fetch the same file itself: start a new container from the media bucket's link instead.
             log("warning", "publish.instagram_upload_fallback", status=resp.status)
-            handle = {"container": self._container(job, ig, "video_url"), "uploaded": True}
+            handle = {"container": self._container(job, ig, "video_url"), "containerAt": _now(job), "uploaded": True}
             job.save(handle)
             return Progress("processing", handle, self._every(job))
         _ok(self.platform, resp, "upload")
@@ -574,26 +581,91 @@ class InstagramPublisher(_Graph):
     def check(self, job: PublishJob, handle: dict[str, Any]) -> Progress:
         if handle.get("mediaId"):
             return Progress("done", handle, published=self._published(job, handle))
-        data = self._get(job, str(handle["container"]), {"fields": "status_code"}, "check")
+        data = self._get(job, str(handle["container"]), {"fields": "status_code,status"}, "check")
         code = str(data.get("status_code") or "")
         if code == "FINISHED":
             return Progress("ready_to_finish", handle, 0)
         if code in {"ERROR", "EXPIRED"}:
-            raise PublishError("Instagram did not like this video file.")
-        if code == "PUBLISHED":
-            return Progress("ready_to_finish", handle, 0)
+            # ``status`` holds Meta's reason ("Error: ... 2207026"); it goes to the logs, never to the owner.
+            log(
+                "warning",
+                "publish.container_failed",
+                platform=self.platform,
+                code=code,
+                status=str(data.get("status") or "")[:300],
+            )
+            if code == "EXPIRED":  # not published within 24 h: Try again starts a fresh upload (§17.6)
+                raise errors.PlatformProblem(
+                    errors.Problem("other", False, "Instagram waited too long for this upload. Press Try again.", code)
+                )
+            raise errors.PlatformProblem(errors.Problem("file", False, "Instagram did not like this video file.", code))
+        if code == "PUBLISHED":  # already posted (a finish that was cut off): never publish it twice
+            return self._already_published(job, handle)
         return Progress("processing", handle, self._every(job))
 
+    def _already_published(self, job: PublishJob, handle: dict[str, Any]) -> Progress:
+        """Find the Reel a published container became. Meta has no container → media link, so the newest few
+        posts are matched on the caption that was sent and on being newer than the container; never a guess."""
+        fields = {"fields": "id,permalink,timestamp,caption", "limit": "5"}
+        found = self._get(job, f"{self._ig(job)}/media", fields, "lookup")
+        sent = _same_text(instagram_caption(str(_captions(job).get("instagram") or "")))
+        made = parse(handle.get("containerAt"))
+        matches = []
+        for row in found.get("data") or []:
+            if not isinstance(row, dict) or not row.get("id") or _same_text(str(row.get("caption") or "")) != sent:
+                continue
+            posted = parse(row.get("timestamp"))
+            if made is not None and (posted is None or posted < made - LOOKUP_SLACK):
+                continue
+            matches.append(row)
+        if len(matches) != 1:
+            log("warning", "publish.lookup_unmatched", platform=self.platform, rows=len(found.get("data") or []))
+            raise errors.PlatformProblem(
+                errors.Problem(
+                    "other",
+                    False,
+                    "Instagram may have posted this already. Look on Instagram before you press Try again.",
+                    "lookup",
+                )
+            )
+        row = matches[0]
+        handle = {**handle, "mediaId": str(row["id"]), "permalink": str(row.get("permalink") or "")}
+        job.save(handle)
+        return Progress("done", handle, published=self._published(job, handle))
+
+    def _status_code(self, job: PublishJob, handle: dict[str, Any]) -> str:
+        data = self._get(job, str(handle["container"]), {"fields": "status_code"}, "check")
+        return str(data.get("status_code") or "")
+
     def finish(self, job: PublishJob, handle: dict[str, Any]) -> Progress:
-        if not handle.get("mediaId"):
-            ig = self._ig(job)
-            resp = self._post(job, f"{ig}/media_publish", {"creation_id": str(handle["container"])}, "publish")
+        if handle.get("mediaId"):
+            return Progress("done", handle, published=self._published(job, handle))
+        if handle.get("publishing"):
+            # An earlier publish call lost its answer: Meta may have posted it. Look before publishing again.
+            if self._status_code(job, handle) == "PUBLISHED":
+                return self._already_published(job, handle)
+        else:
+            handle = {**handle, "publishing": True}
+            job.save(handle)
+        try:
+            resp = self._post(
+                job, f"{self._ig(job)}/media_publish", {"creation_id": str(handle["container"])}, "publish"
+            )
             data = _ok(self.platform, resp, "publish")
             media_id = str(data.get("id") or "")
             if not media_id:
                 raise errors.down(self.platform)
-            handle = {**handle, "mediaId": media_id}
-            job.save(handle)
+        except PublishError:
+            # Timeouts, 5xx and "already published" answers can all come after Meta posted the Reel.
+            try:
+                published = self._status_code(job, handle) == "PUBLISHED"
+            except PublishError:
+                published = False
+            if published:
+                return self._already_published(job, handle)
+            raise
+        handle = {**handle, "mediaId": media_id}
+        job.save(handle)
         return Progress("done", handle, published=self._published(job, handle))
 
     def _published(self, job: PublishJob, handle: dict[str, Any]) -> Published:
@@ -630,6 +702,11 @@ class FacebookPublisher(_Graph):
             return Progress("processing", handle, self._every(job))
         page = self._page(job)
         offset = 0
+        duration = job.clip.get("durationSec")
+        if not handle.get("videoId") and isinstance(duration, int | float) and not 3 <= duration <= 90:
+            raise errors.PlatformProblem(
+                errors.Problem("file", False, "Facebook Reels must be 3 to 90 seconds long.", "duration")
+            )
         if not handle.get("videoId"):
             data = _ok(
                 self.platform, self._post(job, f"{page}/video_reels", {"upload_phase": "start"}, "start"), "start"
@@ -674,9 +751,19 @@ class FacebookPublisher(_Graph):
             for p in ("uploading_phase", "processing_phase", "publishing_phase")
         ]
         if video in {"error", "upload_failed", "expired"} or "error" in phases:
-            raise PublishError("Facebook did not like this video file.")
+            # Meta's reason ("Resolution too low...") goes to the logs, never to the owner.
+            # Meta's docs show one ``error`` object per phase; some answers carry an ``errors`` list: read both.
+            found = [
+                f"{e.get('code')}: {e.get('message')}"
+                for p in ("uploading_phase", "processing_phase", "publishing_phase")
+                for e in [obj(status.get(p)).get("error"), *(obj(status.get(p)).get("errors") or [])]
+                if isinstance(e, dict)
+            ]
+            log("warning", "publish.video_failed", platform=self.platform, video=video, errors="; ".join(found)[:300])
+            raise errors.PlatformProblem(errors.Problem("file", False, "Facebook did not like this video file.", video))
         if not handle.get("finished"):
-            if phases[0] == "complete":
+            # The docs list "completed"; their samples (and real answers) say "complete": take both.
+            if phases[0] in {"complete", "completed"} or video == "upload_complete":
                 return Progress("ready_to_finish", handle, 0)
             return Progress("processing", handle, self._every(job))
         if phases[2] in {"complete", "completed"} and video in {"ready", "published", ""}:
@@ -693,10 +780,7 @@ class FacebookPublisher(_Graph):
             "video_state": "PUBLISHED",
             "description": str(_captions(job).get("facebook") or "")[:CAPTION_MAX],
         }
-        resp = self._post(job, f"{page}/video_reels", params, "finish")
-        if resp.status >= 400 and "video_state" in resp.body.decode("utf-8", "ignore"):
-            resp = self._post(job, f"{page}/video_reels", {**params, "video_state": "complete"}, "finish")
-        data = _ok(self.platform, resp, "finish")
+        data = _ok(self.platform, self._post(job, f"{page}/video_reels", params, "finish"), "finish")
         handle = {**handle, "finished": True}
         if data.get("post_id"):
             handle["postId"] = str(data["post_id"])
