@@ -166,8 +166,9 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
 ### NFR-19 Content Rewards is safe, additive and switched on only when complete
 ([CONTRACTS.md §38.8–§38.16](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21),
 [SECURITY.md](SECURITY.md#content-rewards-contracts-38), [DEPLOYMENT.md](DEPLOYMENT.md#content-rewards-contracts-38))
-- AC1: Only Content Rewards' official sign-in and tools are used (no browser automation, no scraping); the public
-  campaign page is read only when the owner acts, never on a schedule.
+- AC1: Sign-in, membership, sending and money use only Content Rewards' official sign-in and tools (no browser
+  automation). The public campaign data (its JSON, else the page's Open Graph line or a group page's campaign links)
+  is read only when the owner acts, never on a schedule.
 - AC2: The Content Rewards token lives only in Secrets Manager and is used only by the cloud; the browser never calls
   Content Rewards and the Mac app only passes a one-time code, once. The function that reads brand text has no
   secret access.

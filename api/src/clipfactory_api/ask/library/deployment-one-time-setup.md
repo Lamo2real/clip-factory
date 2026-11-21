@@ -300,8 +300,9 @@ Content Rewards, with the last step in the Mac app ([SETUP_POSTING.md](SETUP_POS
 switched off until all its parts have merged ([Content Rewards](#content-rewards-contracts-38)).
 
 What this deploy changes for posting: `cf-prod-hooks` runs up to **28 s** (the code exchange calls the platform),
-`cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **16 secrets** (the
-state key, plus an app, token and short-lived pending secret per platform) at $0.40 each, so about $6 a month at most
+`cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **18 secrets** (the
+state key, an app, token and short-lived pending secret per platform, and Content Rewards' app and token) at $0.40
+each, so about $7 a month at most
 ([ARCHITECTURE.md](ARCHITECTURE.md#lambda-functions)).
 
 For webhooks (not built yet), a platform console would need:

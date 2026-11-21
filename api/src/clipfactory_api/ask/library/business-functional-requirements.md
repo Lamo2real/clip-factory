@@ -342,8 +342,11 @@ how to navigate it". ([the steps](SETUP_POSTING.md#content-rewards),
   never in the floating setup list, which keeps exactly five rows.
 - AC2: Setup is **3 steps**: make a Content Rewards account, connect the same accounts inside Content Rewards, then
   "Connect Content Rewards" in the Mac app (sign in, allow). Only if Content Rewards says the account can't connect
-  apps, one more: "Open email" sends a ready email; until it says yes, Clip Factory reads campaigns and money and
-  reminds the owner after each post (and every 3 days, at most 5 times, to try Connect again).
+  apps, one more: "Open email" sends a ready email. If Content Rewards lets Clip Factory look but not send (read
+  only), Clip Factory reads campaigns and money and reminds the owner after each post. If it refuses the sign-in,
+  there is no connection: the owner checks each campaign himself ("It says Submit clip", paste the rules) and sends
+  each clip by hand, and the Money part waits for Connect. Every 3 days (at most 5 times) Clip Factory asks him to try
+  Connect again.
 - AC3: Each campaign is **3 steps**, **5 at most**: join it on Content Rewards (**Join Campaign**, or **Apply** →
   **Submit application**), copy its link (share icon → **Copy campaign link**), then "Paste" and "Add campaign" in
   Clip Factory (on Home or the Campaigns page). The extras are "Add the logo" when the brief needs one, and either

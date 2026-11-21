@@ -880,7 +880,7 @@ brand text and outside links, and has no secret access).
 | `id.contentrewards.com` | OAuth: `/oauth2/register` (RFC 7591, once per install, `client_name` "Clip Factory", five loopback redirects, no secret), `/oauth2/authorize` (in the owner's system browser), `/oauth2/token`, `/oauth2/revoke` | `cf-prod-api` (register, code exchange, revoke); the three Lambdas (refresh, under the lease) |
 | `mcp.contentrewards.com/mcp` | MCP JSON-RPC: `get_me`, `list_my_campaigns`, `create_my_submission`, `list_my_submissions`, `get_my_submission`, `get_my_balance`, `list_my_payouts`, `send_feedback`; headers `Api-Version: 2026-10-01`, `MCP-Protocol-Version: 2025-11-25`, `Mcp-Name`, never `Origin`; at most 2 calls a second per container | `cf-prod-api`, `cf-prod-clip-flow`, `cf-prod-stats` |
 | `contentrewards.com/api/campaign/campaigns/{uuid}` | the public campaign JSON (undocumented): a preview for the card, read only when the owner acts (add, Check now, a card older than 10 minutes, a job's start), at most 6 a minute, cached on the item, never on a schedule and never to submit | `cf-prod-api` |
-| `crusercontent.com`, `docs.google.com`, Google Drive, Dropbox | the brand's picture (copied once), the Google Docs a brief links to, logo links; every hop through the `ask/fetch.py` SSRF guard | `cf-prod-campaigns` |
+| `crusercontent.com`, `docs.google.com`, Google Drive, Dropbox | the brand's picture (copied once, only `https://crusercontent.com/…`, ≤ 1 MB), the Google Docs a brief links to, logo links; the Google Docs and logo links go through the `ask/fetch.py` SSRF guard on every hop | `cf-prod-campaigns` |
 
 **Sign-in: the desktop app's one-shot door.** CR's sign-in only returns to `http://127.0.0.1` (no https), so the
 Mac app listens once on the computer, and the cloud keeps everything else.
@@ -906,7 +906,7 @@ sequenceDiagram
   O->>D: cr_connect_open {url} (host, S256, resource and this port checked)
   D->>B: open the URL
   B->>ID: sign in, allow
-  ID-->>B: 302 [hidden])
+  ID-->>B: 302 to the door on 127.0.0.1 with code, state and iss
   B->>D: GET / (Host and state checked in constant time)
   D-->>B: "Done! Go back to Clip Factory. You can close this tab."
   O->>D: cr_connect_result every 500 ms: {status: done, code, state, iss}

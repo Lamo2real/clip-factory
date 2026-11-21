@@ -57,8 +57,11 @@
   and Google deletes OAuth clients unused for 6 months; X charges per post.
 - **Clips kept before a platform was connected** are not posted automatically after Connect
   ([roadmap](ROADMAP.md#phase-2-social-integrations)).
-- **Content Rewards' sign-in is an alpha and a pilot.** Until CR grants the owner's account `my_submissions:write`,
-  Clip Factory only reads campaigns and money and reminds him to send each clip himself. The API version is pinned
+- **Content Rewards' sign-in is an alpha and a pilot.** Until CR lets the owner's account in, there are two cases. If
+  the sign-in works without `my_submissions:write` (`read_only`), Clip Factory reads campaigns and money and reminds
+  him to send each clip himself. If CR refuses the sign-in (`not_allowed`), there is no `CRCONN` connection: nothing
+  is read, membership is "Check it yourself" (he looks for **Submit clip** and pastes the rules), every clip is sent
+  by hand, and Money says "Connect Content Rewards to see your campaign money." The API version is pinned
   (`2026-10-01`) and unknown fields are tolerated; what is still unverified until the first real Connect is in
   [CONTRACTS.md §38.21](CONTRACTS.md#3821-not-verified-live-each-is-checked-at-the-owners-first-connect-or-first-campaign-post).
 - **Content Rewards Connect needs the Mac app** (CR only returns to `127.0.0.1`; the door is macOS only), and a sign-in

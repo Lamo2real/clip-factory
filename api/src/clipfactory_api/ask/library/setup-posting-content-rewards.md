@@ -8,27 +8,28 @@ the length, the hashtags and tags, "#Ad" first in the caption, "Paid partnership
 videos you may clip, and the places the campaign pays for. After each post, Clip Factory sends the clip to Content
 Rewards for you. Whop is the website where Content Rewards sends your money. From there it goes to your bank.
 
-Content Rewards is **not** one of the five places above. In **Settings › Posting › Set up posting** it has its own
+Content Rewards is **not** one of the five places above. In Settings › Posting › Set up posting it has its own
 card under the five, in a part called "Get paid by brands". It never counts in "2 of 5 ready" and is never in the
-floating Set up posting list. Your campaigns live on the **Campaigns** page (`/campaigns`, also a row on Home), and
-the campaign money on the **Money** page (`/money#content-rewards`). Until the feature is switched on for your app,
+floating Set up posting list. Your campaigns live on the "Campaigns" page (`/campaigns`, also a row on Home), and
+the campaign money on the "Money" page (`/money#content-rewards`). Until the feature is switched on for your app,
 the card says "Coming soon".
 
 How many steps each thing takes. Waiting is never a step: Clip Factory watches and tells you.
 
 | When | Your steps | What Clip Factory does by itself |
 |---|---|---|
-| Set up, once | **3**: make a Content Rewards account, connect the same accounts there, then "Connect Content Rewards" in the Mac app. (+1 only if Content Rewards says your account can't connect apps: send the email.) | Keeps you signed in. Warns you a week before you must sign in again (every 90 days). |
+| Set up, once | **3**: make a Content Rewards account, connect the same accounts there, then "Connect Content Rewards" in the Mac app. (+1 only if Content Rewards says your account can't connect apps: send the email.) | Keeps you signed in. Warns you a week before you must sign in again (every 90 days). Reminds you every 3 days to try Connect again while the email waits. |
 | Each campaign | **3**: join it on Content Rewards, copy its link, then "Paste" and "Add campaign" in Clip Factory. **5 at most**: +1 when it needs a logo ("Add the logo"), and +1 "Yes, I applied" (optional) or, only while Content Rewards doesn't let Clip Factory look, "I'm in. Read these rules". | Reads the pay and the rules. Checks by itself whether you are in. Says "You're in!" |
 | Each video | **3**: "Make clips for this campaign", paste or pick the video, "Make clips". | Follows the rules on every clip. |
 | Each clip | **2**: "Use my settings", then "Upload to 2". | Paid partnership on. Only the places the campaign pays for. |
-| Checking each clip | **0**: just look. | Sends the clip within 30 minutes. Shows Sent, Waiting, Approved or Not approved, the views and the money. |
+| Checking each clip | **0**: just look. If Clip Factory can't send it: **4** ("Copy and open", **Submit clip**, paste in **Clip link**, tick the box and **Submit clip**). Only when the brief asks for proof: **3** (open the views, record the screen, send it). | Sends the clip within 30 minutes. Shows Sent, Waiting, Approved or Not approved, the views and the money. |
+| Ask again (a clip not approved) | **4**: "Ask again", **Rejected** and tap the clip, **Start appeal**, paste in **Appeal explanation** and **Start appeal**. | Shows the brand's answer when it comes. |
 | Am I in? | **0** (you can tap "Check now"). | Checks every 15 minutes for 7 days, then every 6 hours until day 30. |
 | Getting paid | Once **3**, then **2** each time. | Shows only Content Rewards' own numbers. Celebrates when money arrives. |
 
-**Words on the other sites.** A word in **bold** is the exact label on Content Rewards' own screen (or Whop's,
-YouTube Studio's, Instagram's or Facebook's). Clip Factory's own buttons are in quotes. Content Rewards' help pages
-sometimes use older names:
+**Words on the other sites.** A button, tab or menu name in **bold** is the exact label on Content Rewards' own
+screen (or Whop's, YouTube Studio's, TikTok's, Instagram's or Facebook's). Clip Factory's own buttons, pages and parts
+are in quotes. Content Rewards' help pages sometimes use older names:
 
 | The app shows | Its help pages say |
 |---|---|
@@ -51,8 +52,9 @@ Whop's screens were not seen; those steps say "Whop may show this a little diffe
 | – | Link your Whop account (you said No to **Finance**) | Get paid |
 | – | Move money to Whop | Get paid |
 | – | Add your bank on Whop (you said No to **Finance**) | Get paid |
-| – | Get it to your bank | Get paid |
+| – | Get it to your bank (you said No to **Finance**) | Get paid |
 | – | Set up payouts (you said Yes to **Finance**) | Get paid |
+| – | Get it to your bank (you said Yes to **Finance**) | Get paid |
 
 Only the three setup steps have numbers, and the ring counts only them. The other cards are helpers: they show on
 the Campaigns page and in the Money page's Content Rewards part.
@@ -175,8 +177,8 @@ The email, written for Content Rewards' support team (Clip Factory fills it in):
 - "Check it" asks Content Rewards if the sign-in still works and says so in one sentence.
 - "Connect again" signs in again (on your Mac).
 - "Disconnect" shows "Disconnecting Content Rewards… Undo" for 8 seconds. Your campaigns, clips and money stay in
-  Clip Factory, and nothing changes on Content Rewards. To remove Clip Factory on Content Rewards too: Settings,
-  **Connected apps**, **Disconnect**.
+  Clip Factory, and your campaigns and clips on Content Rewards stay too. To remove Clip Factory on Content Rewards
+  too: Settings, **Connected apps**, **Disconnect**.
 - **Sign in again every 90 days.** From a week before, a card says "Sign in to Content Rewards again by Fri 19 Feb. It
   takes one minute." Tap "Connect again" on your Mac. Your phone gets a reminder too.
 - No campaign yet? Tap "Add a campaign".
@@ -233,25 +235,25 @@ red button is "Open Content Rewards". Once a campaign link is in the box, "Add c
 
 #### The campaign card
 From top to bottom:
-- **The head**: the brand's picture, the campaign name, one chip that says where you are ("You're in", "Not joined
+- At the top: the brand's picture, the campaign name, one chip that says where you are ("You're in", "Not joined
   yet", "Waiting for the brand"…), "Checked 2 min ago" and "Check now".
-- **Next step**: the one thing to do, with the screen's only red button (on a phone it sits at the bottom right).
-- **Pay**: Content Rewards' own rates, for example "$1.00 per 1,000 views · up to $200.00 a clip · a clip starts
+- "Next step": the one thing to do, with the screen's only red button (on a phone it sits at the bottom right).
+- "Pay": Content Rewards' own rates, for example "$1.00 per 1,000 views · up to $200.00 a clip · a clip starts
   paying once it has earned $2.00", the money left ("Money left: $7,890 of $8,500"), and "Pays for: YouTube,
   Instagram". These are the rates Content Rewards publishes, never a guess of what a clip will earn.
-- **Rules I'll follow**: what Clip Factory does on every clip, each with a tick (for example "Clips are 15 to 60
+- "Rules I'll follow": what Clip Factory does on every clip, each with a tick (for example "Clips are 15 to 60
   seconds long.", "#Ad goes at the start of each caption.", "'Paid partnership' shows on the video for the first 3
   seconds.").
-- **Things you do**: what only you can do, with a hand icon (for example "Keep each clip up for 30 days. Don't delete
+- "Things you do": what only you can do, with a hand icon (for example "Keep each clip up for 30 days. Don't delete
   it.").
-- **I couldn't tell**: "I'm not sure about these. Read them on the campaign page."
-- **Rules missing?** On the campaign page, copy everything under **Brief** and **Content requirements**. Paste it in
+- "I couldn't tell": "I'm not sure about these. Read them on the campaign page."
+- "Rules missing?" On the campaign page, copy everything under **Brief** and **Content requirements**. Paste it in
   the box, then tap "Read these rules". Reading takes about 30 seconds. Open campaigns hide their rules until you
   join: "You'll see the rules once you join." Clip Factory reads them by itself when you're in.
-- **Logo** (only when the campaign needs one), see below.
-- **Videos to clip** (when the brief gives videos or channels): "Make clips from this" on a YouTube, Twitch or Kick
+- "Logo" (only when the campaign needs one), see below.
+- "Videos to clip" (when the brief gives videos or channels): "Make clips from this" on a YouTube, Twitch or Kick
   link; "Open FaZe's YouTube" chips with "Pick a video there. Copy its link. Come back and tap Paste."
-- **Your clips for this campaign**: "3 approved · 2 waiting · 1 not approved", then one line per clip (Part 4).
+- "Your clips for this campaign": "3 approved · 2 waiting · 1 not approved", then one line per clip (Part 4).
 - At the bottom: "Remove from Clip Factory" (8 seconds to Undo). It never touches Content Rewards, your posts or what
   was sent.
 
@@ -289,7 +291,8 @@ Clip Factory checks by itself and tells you, with confetti and a notification: "
 
 See it yourself: open the campaign on Content Rewards. **Submit clip** means you're in. **Pending review** means you
 wait. **Not eligible** means the brand said no. **Limit reached**, **Post limit reached** or **Clip limit reached** also
-means you're in: the brand must check your clips first. Your list is under **Campaigns**.
+means you're in: the brand must check your clips first. Your list is under **Campaigns** in Content Rewards'
+menu.
 
 Every answer you give ("Yes, I applied", "It says Submit clip", "It says Not eligible") can be undone for 8 seconds
 and changes only Clip Factory.
@@ -332,7 +335,7 @@ the red button is "Make clips anyway".
 **On the Review card** of a campaign clip:
 - A strip at the top: "For **FaZe Clips** · Content Rewards" with ticks for "Paid partnership", "#Ad at the start"
   and "Logo on".
-- **Upload to** shows only the places this campaign pays for: "Only places this campaign pays for."
+- "Upload to" shows only the places this campaign pays for: "Only places this campaign pays for."
 - TikTok is left out for now: "Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't
   earn."
 - A place Content Rewards doesn't know yet: "Link YouTube inside Content Rewards first." Tap "Open Content Rewards
@@ -340,6 +343,9 @@ the red button is "Make clips anyway".
 - Tap "Use my settings". Campaign clips are public, never made for kids, and marked as paid. On YouTube that is Who can
   see it **Everyone**, Made for kids **No** and Paid promotion on, shown locked. X gets "Paid partnership: on".
   Instagram and Facebook don't let apps turn on Paid partnership, so "#Ad" and the words on the video tell viewers.
+- TikTok, once TikTok has checked Clip Factory: "Use my settings" picks **Everyone** (the list has no default, and any
+  other pick says "Campaign clips must be public. Pick Everyone.") and turns on Commercial content with **Branded
+  content** ticked. That tap is yours.
 - Deleted "#Ad" or a tag? "I put #Ad and the campaign's tags back when it uploads."
 - Above the button: "After it posts, Clip Factory sends it to Content Rewards by itself." (or, when you send by hand:
   "After it posts, send its link to Content Rewards within 30 minutes. I'll remind you.")
@@ -367,13 +373,16 @@ card. Content Rewards only takes a clip in its first 30 minutes, so Clip Factory
 | "Content Rewards took this clip off the campaign. It earns nothing more." | Nothing to do. |
 | "The post is gone from YouTube, so it stops earning." | Nothing to do. |
 
+If the line says "YouTube didn't take the Paid promotion switch. #Ad and the words on the video still tell viewers.",
+nothing to do.
+
 Views on the line are Content Rewards' count of the post's views. They are not the views a campaign pays for. Money
 on the line is only what Content Rewards itself reports, never a rate times views.
 
 #### Send a clip yourself
 Only when Clip Factory can't send it (not connected, the "can only look" sign-in, a campaign you said you're in by
-hand, or an error that isn't yours). Your phone gets "Send this to Content Rewards now (25 min left)". Tap it: the
-clip opens with the steps.
+hand, an error that isn't yours, or Content Rewards still couldn't see the post after 25 minutes of trying). Your
+phone gets "Send this to Content Rewards now (25 min left)". Tap it: the clip opens with the steps.
 
 1. Tap "Copy and open". It copies the link and opens the campaign. ("Link copied. Paste it on Content Rewards.")
 2. Tap **Submit clip**.
@@ -429,10 +438,10 @@ The Money page has a Content Rewards part. Whop is the website where Content Rew
 goes to your bank.
 
 It shows three tiles, all Content Rewards' own numbers, never a guess:
-- **Still earning**: clips still earning. The amount can still change. (On Content Rewards: **Queued** and
+- "Still earning": clips still earning. The amount can still change. (On Content Rewards: **Queued** and
   **Arriving**.)
-- **On its way**: moving to your Whop balance.
-- **Ready to move**: you can move this to Whop now. (On Content Rewards: **Balance**.)
+- "On its way": moving to your Whop balance.
+- "Ready to move": you can move this to Whop now. (On Content Rewards: **Balance**.)
 
 Then "Content Rewards paid you $62.40 so far · last money Tue 18 Nov", a line per campaign, and "Content Rewards'
 numbers · checked 20 min ago". While it reads everything for the first time the total says "Checking…". Clips the
@@ -490,7 +499,7 @@ answer" asks again. When "Ready to move" is $1.00 or more, "Move your money to W
 - "Your details are in review with Whop": nothing to do, wait a day or two. "Setup session expired": tap **Continue on
   Whop** again. "Payouts are turned off": ask Content Rewards support.
 
-Then **Move money to Whop** (above), each time.
+Then "Move money to Whop" (above), each time.
 
 #### Get it to your bank (each time, with Finance)
 - Tap **Finance**. Look under Recent withdrawals.
