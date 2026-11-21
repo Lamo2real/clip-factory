@@ -250,3 +250,38 @@ resource "aws_cloudwatch_metric_alarm" "ask_tokens_day" {
   alarm_actions       = [aws_sns_topic.alarms.arn]
   tags                = local.tags
 }
+
+# Lamo Stories' agent runtime (docs/CONTRACTS.md §45.15): it writes one JSON line per event, like the clip agent
+# ({"level": "error", "event": ...}), to its own log group. Five error lines in an hour mean its jobs, tasks or chat
+# answers keep failing (often Bedrock model access, docs/DEPLOYMENT.md), not a blip. Lamo Stories' API Lambda is
+# watched like every other function (function_names). Clip Factory's alarms are not touched.
+resource "aws_cloudwatch_log_metric_filter" "stories_agent_errors" {
+  count          = var.stories_agent_alarm_enabled ? 1 : 0
+  name           = "${var.name}-stories-agent-errors"
+  log_group_name = var.stories_agent_log_group_name
+  pattern        = "{ $.level = \"error\" }"
+  metric_transformation {
+    namespace     = var.name
+    name          = "StoriesAgentErrors"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "stories_agent_errors" {
+  count               = var.stories_agent_alarm_enabled ? 1 : 0
+  alarm_name          = "${var.name}-stories-agent-errors"
+  alarm_description   = "Lamo Stories' agent (cf_prod_story_agent) logged 5 or more errors in an hour. Query its error lines (level = error) in ${var.stories_agent_log_group_name}; Clip Factory is not affected."
+  namespace           = var.name
+  metric_name         = "StoriesAgentErrors"
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  threshold           = 5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alarms.arn]
+  ok_actions          = [aws_sns_topic.alarms.arn]
+  tags                = local.tags
+}

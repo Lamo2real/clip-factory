@@ -11,9 +11,16 @@ mock_provider "aws" {
   }
 }
 
+# Lamo Stories' Nova Reel bucket provider (us-east-1, §45.31): mocked too, so no plan ever configures a real provider.
+mock_provider "aws" {
+  alias = "us_east_1"
+}
+
 variables {
   owner_email     = "owner@example.test"
   agent_image_tag = "test"
+  # §45.15: Lamo Stories' agent image tag (deploy.yml passes stories-agent-<hash>).
+  stories_agent_image_tag = "stories-agent-test"
   # Any existing file: the stack only hashes it.
   lambda_zip_path = "main.tf"
 }
@@ -44,7 +51,7 @@ run "whole_stack_plans" {
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
       "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money", "ask", "notify",
-      "campaigns",
+      "campaigns", "story-flow", "stories-api",
     ])
     error_message = "Every function except the WebSocket authorizer is watched for errors."
   }
@@ -288,6 +295,165 @@ run "notifications_are_wired" {
   }
 }
 
+# docs/CONTRACTS.md §45.15, §45.24 and ADR-76: Lamo Stories is its own application. Its runtime cf_prod_story_agent,
+# its API Lambda cf-prod-stories-api behind its own routes, and its publisher cf-prod-story-flow are wired; each is
+# watched; the hooks forward targets Lamo Stories' own callback; its secrets live under cf-prod/workspaces/, which no
+# Clip Factory pattern reaches and which reaches no Clip Factory token. Clip Factory's agent, cf-prod-api and
+# config/models.json are not touched (their own tests and the deploy's scripted plan check). IAM patterns are checked
+# as globs against sample ARNs: "*" becomes ".*" and "?" becomes "." in an anchored regex, dots escaped.
+run "lamo_stories_is_wired" {
+  command = plan
+
+  override_resource {
+    target          = module.flows.aws_lambda_alias.live["story-flow"]
+    override_during = plan
+    values          = { arn = "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-story-flow:live" }
+  }
+
+  override_resource {
+    target          = module.stories_agent.aws_bedrockagentcore_agent_runtime.agent
+    override_during = plan
+    values = {
+      agent_runtime_arn = "arn:aws:bedrock-agentcore:eu-north-1:123456789012:runtime/cf_prod_story_agent-AbCdEf1234"
+      agent_runtime_id  = "cf_prod_story_agent-AbCdEf1234"
+    }
+  }
+
+  # Known at plan here so the runtime's image (and so stories_agent_image_tag) is known too.
+  override_resource {
+    target          = module.stories_agent.aws_ecr_repository.agent
+    override_during = plan
+    values = {
+      repository_url = "123456789012.dkr.ecr.eu-north-1.amazonaws.com/cf-prod-stories-agent"
+      arn            = "arn:aws:ecr:eu-north-1:123456789012:repository/cf-prod-stories-agent"
+    }
+  }
+
+  override_resource {
+    target          = module.api.aws_apigatewayv2_api.http
+    override_during = plan
+    values = {
+      api_endpoint  = "https://http123.execute-api.eu-north-1.amazonaws.com"
+      execution_arn = "arn:aws:execute-api:eu-north-1:123456789012:http123"
+    }
+  }
+
+  assert {
+    condition = (module.stories_agent.runtime_name == "cf_prod_story_agent" && module.agent.runtime_name == "cf_prod_clip_agent" &&
+      output.stories_agent_runtime_arn == "arn:aws:bedrock-agentcore:eu-north-1:123456789012:runtime/cf_prod_story_agent-AbCdEf1234" &&
+    module.stories_agent.log_group_name == "/aws/bedrock-agentcore/runtimes/cf_prod_story_agent-AbCdEf1234-DEFAULT")
+    error_message = "Lamo Stories has its own runtime, cf_prod_story_agent, beside Clip Factory's cf_prod_clip_agent."
+  }
+
+  assert {
+    condition = (output.stories_agent_image_tag == "stories-agent-test" && output.stories_agent_image_tag != var.agent_image_tag &&
+    output.stories_ecr_repository_url == "123456789012.dkr.ecr.eu-north-1.amazonaws.com/cf-prod-stories-agent")
+    error_message = "deploy.yml reads stories_agent_image_tag (the tag Lamo Stories' runtime runs) before the plan; it is never Clip Factory's tag."
+  }
+
+  assert {
+    condition = (output.stories_api_function_name == "cf-prod-stories-api" && module.api.function_names == { api = "cf-prod-api" } &&
+    module.stories_api.function_names == { stories-api = "cf-prod-stories-api" })
+    error_message = "Lamo Stories has its own API Lambda, cf-prod-stories-api; cf-prod-api stays the only function of module.api."
+  }
+
+  assert {
+    condition = (module.flows.function_names["story-flow"] == "cf-prod-story-flow" &&
+    output.story_flow_alias_arn == "arn:aws:lambda:eu-north-1:123456789012:function:cf-prod-story-flow:live")
+    error_message = "cf-prod-story-flow exists with its alias live (cf-prod-stories-api's STORY_FLOW_ARN)."
+  }
+
+  assert {
+    condition = module.api.stories_route_keys == toset([
+      "ANY /v1/workspaces", "ANY /v1/workspaces/{proxy+}", "OPTIONS /v1/workspaces", "OPTIONS /v1/workspaces/{proxy+}",
+      "GET /v1/stories-oauth/{platform}/callback",
+    ])
+    error_message = "The HTTP API gets Lamo Stories' five routes (§45.15)."
+  }
+
+  assert {
+    condition = (output.stories_callback_base == "https://http123.execute-api.eu-north-1.amazonaws.com/v1/stories-oauth" &&
+    output.stories_callback_base == "${output.api_url}/v1/stories-oauth")
+    error_message = "storiesCallbackBase is {apiUrl}/v1/stories-oauth (the hooks forward target and own apps' redirect URI base)."
+  }
+
+  assert {
+    condition = (module.monitoring.alarm_names["stories-api"] == "cf-prod-stories-api-errors" &&
+      module.monitoring.alarm_names["story-flow"] == "cf-prod-story-flow-errors" &&
+      module.monitoring.stories_agent_alarm_name == "cf-prod-stories-agent-errors" &&
+      toset([for k, v in module.monitoring.durable_alarm_names : v]) == toset([
+        "cf-prod-job-flow-durable-failed", "cf-prod-job-flow-durable-timed-out",
+        "cf-prod-clip-flow-durable-failed", "cf-prod-clip-flow-durable-timed-out",
+        "cf-prod-story-flow-durable-failed", "cf-prod-story-flow-durable-timed-out",
+    ]))
+    error_message = "cf-prod-stories-api and cf-prod-story-flow are watched for errors (and the flow's failed and timed-out executions), the story runtime for error lines."
+  }
+
+  assert {
+    condition = (local.ws_secret_prefix == "cf-prod/workspaces/" &&
+      local.workspace_secrets_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/workspaces/*" &&
+      local.workspace_token_secrets_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/workspaces/*/token*" &&
+    local.workspace_provider_secrets_arn == "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/workspaces/*/providers/*")
+    error_message = "Lamo Stories' secrets live under cf-prod/workspaces/ (§45.13.1)."
+  }
+
+  # What Clip Factory's functions read and write (cf-prod/platforms/*, …/token-*, the clip agent's YouTube proxy and
+  # Ask's search key) never reaches a Lamo Stories secret.
+  assert {
+    condition = alltrue([
+      for r in [module.hooks.platform_secrets_arn, module.hooks.platform_token_secrets_arn, local.youtube_proxy_secret_arn, local.ask_search_secret_arn] :
+      !can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/workspaces/stories/youtube/token-AbC123"))
+    ])
+    error_message = "…:secret:cf-prod/workspaces/stories/youtube/token-AbC123 must match none of Clip Factory's secret patterns."
+  }
+
+  # And Lamo Stories' patterns never reach Clip Factory's tokens or pending choices.
+  assert {
+    condition = alltrue(flatten([
+      for r in [local.workspace_secrets_arn, local.workspace_token_secrets_arn, local.workspace_provider_secrets_arn] : [
+        for sample in [
+          "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/platforms/youtube/token-AbC123",
+          "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/platforms/youtube/pending-AbC123",
+          "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-prod/platforms/youtube/token",
+        ] : !can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", sample))
+      ]
+    ]))
+    error_message = "…:secret:cf-prod/platforms/youtube/token-AbC123 and …/pending-AbC123 must match no Lamo Stories secret pattern."
+  }
+
+  # The story agent's model grants come from stories/config/models.json, never from Clip Factory's config/models.json.
+  assert {
+    condition = (contains(module.stories_agent.model_invoke_arns, "arn:aws:bedrock:eu-north-1:123456789012:inference-profile/global.anthropic.claude-opus-5-5") &&
+      module.stories_agent.image_model_arn == "arn:aws:bedrock:eu-west-1::foundation-model/amazon.nova-canvas-v1:0" &&
+    !contains(keys(local.models), "imageModel") && !contains(keys(local.models), "videoModel"))
+    error_message = "Lamo Stories' models come from stories/config/models.json (Nova Canvas in eu-west-1); config/models.json gains nothing (§45.11.4)."
+  }
+
+  assert {
+    condition     = var.stories_video_us_bucket == false && module.stories_agent.video_bucket == ""
+    error_message = "Nova Reel's us-east-1 bucket is off until the owner allows it (§45.31)."
+  }
+}
+
+run "lamo_stories_nova_reel_switch_plans" {
+  command = plan
+
+  variables {
+    stories_video_us_bucket = true
+  }
+
+  assert {
+    condition     = module.stories_agent.video_bucket == "cf-prod-stories-video-123456789012-us"
+    error_message = "With the switch on, the us-east-1 bucket is cf-prod-stories-video-<account>-us."
+  }
+
+  assert {
+    condition = (output.table_name == "cf-prod-data" && output.media_bucket == "cf-prod-media-123456789012" &&
+    output.vector_bucket == "cf-prod-vectors-123456789012" && output.web_bucket == "cf-prod-web-123456789012")
+    error_message = "The table and the buckets that hold the owner's data keep their names."
+  }
+}
+
 # docs/CONTRACTS.md §38.16: Content Rewards. cf-prod-campaigns is planned and watched, the switch defaults to on (every
 # builder's part has merged), the api and the stats tick get its unqualified ARN, and the stack still plans with it off.
 run "content_rewards_is_wired_and_on" {
@@ -395,7 +561,7 @@ run "cr_finder_switch_on_plans" {
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
       "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money", "ask", "notify",
-      "campaigns",
+      "campaigns", "story-flow", "stories-api",
     ])
     error_message = "No new function: the finder runs in cf-prod-campaigns, started by the stats tick and the api."
   }

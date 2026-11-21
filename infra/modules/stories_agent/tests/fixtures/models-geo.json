@@ -1,0 +1,12 @@
+{
+  "$comment": "Test fixture: one global profile, one geo profile and one model called in-Region (no profile).",
+  "defaultModel": "g",
+  "defaultEffort": "high",
+  "models": [
+    { "key": "g", "label": "G", "modelId": "anthropic.claude-g", "profile": "global.anthropic.claude-g", "regions": ["*"], "efforts": ["high"] },
+    { "key": "e", "label": "E", "modelId": "anthropic.claude-e", "profile": "eu.anthropic.claude-e", "regions": ["eu-west-1", "eu-north-1"], "efforts": [] },
+    { "key": "r", "label": "R", "modelId": "amazon.r-v1:0", "profile": null, "regions": ["eu-north-1"], "efforts": [] }
+  ],
+  "imageModel": { "label": "Amazon Nova Canvas", "modelId": "amazon.nova-canvas-v1:0", "region": "eu-west-1" },
+  "videoModel": { "label": "Amazon Nova Reel 1.1", "modelId": "amazon.nova-reel-v1:1", "region": "us-east-1" }
+}

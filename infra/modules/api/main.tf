@@ -141,6 +141,21 @@ locals {
       { Sid = "Invalidate", Action = ["cloudfront:CreateInvalidation"], Resource = [var.distribution_arn] },
     ])
   }
+
+  # Lamo Stories (docs/CONTRACTS.md §45.5, §45.13.3, §45.15): its own Lambda, cf-prod-stories-api, behind these routes
+  # only. The signed-in routes take the same JWT authorizer. The public OPTIONS routes are needed because the more
+  # specific /v1/workspaces paths would otherwise catch the browser's token-less preflight (the §5 CORS lesson; with
+  # cors_configuration set, API Gateway answers them itself). The OAuth callback is public (platforms cannot send a
+  # token) and gets its own low route throttle. Every other path still reaches cf-prod-api through the routes above.
+  stories_on             = var.stories_routes_enabled
+  stories_callback_route = "GET /v1/stories-oauth/{platform}/callback"
+  stories_routes = local.stories_on ? {
+    "ANY /v1/workspaces"              = "JWT"
+    "ANY /v1/workspaces/{proxy+}"     = "JWT"
+    "OPTIONS /v1/workspaces"          = "NONE"
+    "OPTIONS /v1/workspaces/{proxy+}" = "NONE"
+    (local.stories_callback_route)    = "NONE"
+  } : {}
 }
 
 # ---------- Lambdas ----------
@@ -276,6 +291,26 @@ resource "aws_apigatewayv2_route" "health" {
   authorization_type = "NONE"
 }
 
+# Lamo Stories' own Lambda (§45.15). New resources only: the routes, the integration and the invoke permission above
+# for cf-prod-api are not touched.
+resource "aws_apigatewayv2_integration" "stories" {
+  count                  = local.stories_on ? 1 : 0
+  api_id                 = aws_apigatewayv2_api.http.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = var.stories_api_invoke_arn
+  payload_format_version = "2.0"
+  timeout_milliseconds   = 29000
+}
+
+resource "aws_apigatewayv2_route" "stories" {
+  for_each           = local.stories_routes
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = each.key
+  target             = "integrations/${aws_apigatewayv2_integration.stories[0].id}"
+  authorization_type = each.value
+  authorizer_id      = each.value == "JWT" ? aws_apigatewayv2_authorizer.jwt.id : null
+}
+
 resource "aws_apigatewayv2_stage" "http" {
   api_id      = aws_apigatewayv2_api.http.id
   name        = "$default"
@@ -283,6 +318,15 @@ resource "aws_apigatewayv2_stage" "http" {
   default_route_settings {
     throttling_burst_limit = 50
     throttling_rate_limit  = 20
+  }
+  # Lamo Stories' public OAuth callback (§45.13.3): 5 per second, burst 10. Only with the Lamo Stories routes.
+  dynamic "route_settings" {
+    for_each = local.stories_on ? [aws_apigatewayv2_route.stories[local.stories_callback_route].route_key] : []
+    content {
+      route_key              = route_settings.value
+      throttling_rate_limit  = 5
+      throttling_burst_limit = 10
+    }
   }
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.http.arn
@@ -302,6 +346,15 @@ resource "aws_lambda_permission" "http" {
   statement_id  = "http-api"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.fn["api"].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "stories" {
+  count         = local.stories_on ? 1 : 0
+  statement_id  = "http-api"
+  action        = "lambda:InvokeFunction"
+  function_name = var.stories_api_function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
 }
