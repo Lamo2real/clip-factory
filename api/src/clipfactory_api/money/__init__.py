@@ -2,8 +2,9 @@
 
 The rule: Clip Factory shows only money a platform's API reported about the owner's account. It never calculates,
 guesses, converts or accepts typed-in money. Every money figure is labelled as that platform's estimate (every API
-number is one: YouTube's ``estimatedRevenue``, Meta's earnings metrics), and paid-out money lives only on the
-platform's own payout page, which the app links to.
+number is one: YouTube's ``estimatedRevenue``, Meta's earnings metrics). Paid-out money lives on the platform's own
+payout page, which the app links to, except what AdSense ``payments`` and Whop ``payouts`` report as sent toward the
+bank: "Sent to your bank by Google/Whop" (§40.4, ``getpaid.sent``).
 
 * ``rules``: ``config/monetization.json`` (goals with official sources, countries, labels).
 * ``sources``: the platform reads (YouTube Data and Analytics, Meta Graph, TikTok, X), through the shared token

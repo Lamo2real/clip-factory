@@ -15,6 +15,13 @@ state and every token stay out of the logs.
 "Allow money reading" (§25.4: the state item carries ``grant: "money"``) goes through ``save_money_grant`` instead
 of ``save``: it merges the new token and scopes into the existing connection and never replaces the Account item.
 Its codes (``MONEY_RESULTS``) send the owner back to ``/settings/posting/money?result={code}&platform={platform}``.
+
+Get paid (§40.6) adds two more, each handed to ``getpaid.grants`` and never to ``save`` or ``save_money_grant``:
+"Allow payment reading" (a YouTube state with ``grant: "payments"``: its own AdSense token, never the YouTube
+connection; back to ``/settings/posting/getpaid/youtube?result={code}``) and "Connect Whop" (the platform ``whop``,
+served on this callback only; back to ``/settings/posting/getpaid/contentrewards?result={code}#whop``). A payments
+state is signed for ``youtube:payments`` (``state_label``), so one that is expired, used already or fails on the way
+(a Secrets Manager or DynamoDB error) still lands on Get paid with ``payments_error``, never on the YouTube setup page.
 """
 
 from __future__ import annotations
@@ -26,8 +33,9 @@ from typing import Any
 
 from .. import db, release
 from ..clock import iso
+from ..getpaid import grants
 from ..log import log
-from . import MONEY_GRANT, PKCE, SETUP_ORDER, OAuthEnv, providers, setup, state
+from . import MONEY_GRANT, PAYMENTS_GRANT, PKCE, SETUP_ORDER, OAuthEnv, providers, setup, state, state_label
 from .providers import AppKeys, Linked
 
 RESULTS = (
@@ -53,16 +61,33 @@ MONEY_RESULTS = (
     "money_wrong_account",
     "money_error",
 )
+PAYMENTS_RESULTS = grants.PAYMENTS_RESULTS
+WHOP_RESULTS = grants.WHOP_RESULTS
+WHOP = "whop"  # §40.6: Connect Whop's callback (never a posting platform, never /hooks/whop)
 DENIED = frozenset({"access_denied", "user_denied", "user_cancelled", "cancelled", "consent_required"})
 CHOICES_TTL = timedelta(minutes=30)
 MAX_CODE_CHARS = 2048
 
 
 def location(app_url: str, platform: str, result: str) -> str:
+    if platform == WHOP:
+        code = result if result in WHOP_RESULTS else "whop_expired" if result == "expired" else "whop_error"
+        return f"{app_url.rstrip('/')}/settings/posting/getpaid/contentrewards?result={code}#whop"
+    if result in PAYMENTS_RESULTS and platform == "youtube":
+        return f"{app_url.rstrip('/')}/settings/posting/getpaid/youtube?result={result}"
     if result in MONEY_RESULTS and platform in SETUP_ORDER:
         return f"{app_url.rstrip('/')}/settings/posting/money?result={result}&platform={platform}"
     code = result if result in RESULTS else "error"
     return f"{app_url.rstrip('/')}/settings/posting/setup/{platform}?result={code}"
+
+
+def _signed_for(key: bytes, label: str, raw: str) -> bool:
+    """Whether ``raw`` carries a good signature for ``label``, expired or not (any real ``exp`` is after 0)."""
+    try:
+        state.verify(key, label, raw, 0)
+    except state.StateError:
+        return False
+    return True
 
 
 def consume(store: db.Store, nonce: str) -> dict[str, Any] | None:
@@ -80,18 +105,51 @@ def handle_callback(
     """The result code (one of ``RESULTS``). On ``connected``, the clips waiting for this place go out
     (``release.release_waiting`` with ``flows``, §17.6); that never changes the result the owner sees."""
     started = time.monotonic()  # the release must be done before the owner's answer is due
-    if platform not in SETUP_ORDER:
+    if platform not in SETUP_ORDER and platform != WHOP:
         return "error"
     now = env.clock()
+    raw = str(query.get("state") or "")
     try:
         key = env.state_key()
-        nonce = state.verify(key, platform, str(query.get("state") or ""), int(now.timestamp()))
     except state.StateError:
         return "expired"
-    saved = consume(store, nonce)
+    # "Allow payment reading" signs its state for its own label (§40.6): a failed one goes back to Get paid, never
+    # to the YouTube setup page ("Press Connect YouTube again" would send him to the wrong button).
+    payments = platform == "youtube" and _signed_for(key, state_label(platform, PAYMENTS_GRANT), raw)
+    failed = "payments_error" if payments else "expired"
+    signed_for = state_label(platform, PAYMENTS_GRANT if payments else None)
+    try:
+        nonce = state.verify(key, signed_for, raw, int(now.timestamp()))
+        saved = consume(store, nonce)
+    except state.StateError:
+        return failed
+    except Exception as e:
+        if not payments:
+            raise
+        log("error", "oauth.payments_failed", error=type(e).__name__)
+        return failed
     if saved is None or saved.get("platform") != platform or not saved.get("userId"):
-        return "expired"
+        return failed
+    if payments and saved.get("grant") != PAYMENTS_GRANT:
+        return failed
     user_id = str(saved["userId"])
+    if platform == WHOP or (platform == "youtube" and saved.get("grant") == PAYMENTS_GRANT):
+        handoff = grants.whop_result if platform == WHOP else grants.payments_result
+        try:
+            paid = handoff(
+                query,
+                store,
+                env,
+                user_id=user_id,
+                nonce=nonce,
+                key=key,
+                redirect_uri=str(saved.get("redirectUri") or ""),
+            )
+        except Exception as e:  # a Secrets Manager or DynamoDB error: back to Get paid with a plain sentence
+            log("error", "oauth.getpaid_failed", platform=platform, error=type(e).__name__)
+            paid = "whop_error" if platform == WHOP else "payments_error"
+        log("info", "oauth.callback", platform=platform, result=paid)
+        return paid
     if saved.get("grant") == MONEY_GRANT:
         money = _money_result(
             platform,

@@ -1,5 +1,5 @@
 {
-  "$comment": "Stats refresh limits, scopes and posting settings per platform (docs/CONTRACTS.md §16.4, §17.7). scopes: what Connect asks for (required, unchanged). moneyScopes: asked for only by Allow money reading (§25.4), never by Connect. Change values here only.",
+  "$comment": "Stats refresh limits, scopes and posting settings per platform (docs/CONTRACTS.md §16.4, §17.7). scopes: what Connect asks for (required, unchanged). moneyScopes: asked for only by Allow money reading (§25.4), never by Connect. paymentScopes: asked for only by Allow payment reading (§40.6), on their own, never by Connect or Allow money reading. Change values here only.",
   "graphApiVersion": "v27.0",
   "pollWindowDays": 30,
   "snapshotTtlDays": 90,
@@ -15,6 +15,7 @@
       "scopes": ["https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/yt-analytics.readonly",
                  "https://www.googleapis.com/auth/youtube.upload"],
       "moneyScopes": ["https://www.googleapis.com/auth/yt-analytics-monetary.readonly"],
+      "paymentScopes": ["https://www.googleapis.com/auth/adsense.readonly"],
       "budget": { "kind": "daily_units", "dailyUnits": 10000, "reserveUnits": 500, "unitsPerCall": 1,
                   "blockOn": ["quotaExceeded", "rateLimitExceeded"] },
       "publish": { "checkSeconds": 30, "maxChecks": 60, "chunkMb": 8 }

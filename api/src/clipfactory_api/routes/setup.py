@@ -18,6 +18,7 @@ from ..ids import ulid
 from ..log import log
 from ..oauth import (
     MONEY_GRANT,
+    PAYMENTS_GRANT,
     PKCE,
     SETUP_ORDER,
     STATE_SECONDS,
@@ -29,6 +30,7 @@ from ..oauth import (
     providers,
     setup,
     state,
+    state_label,
 )
 from ..oauth.providers import AppKeys
 from ..oauth.tokens import ReconnectNeededError, SecretsTokenProvider
@@ -295,11 +297,18 @@ def connect(app: App, req: Request) -> Response:
     body = req.json()
     validate.only_keys(body, {"grant"})
     grant = body.get("grant")
-    if grant is not None and grant != MONEY_GRANT:
-        raise bad_request('grant can only be "money".')
+    if grant is not None and grant not in (MONEY_GRANT, PAYMENTS_GRANT):
+        raise bad_request('grant can be "money" or "payments".')
     money = grant == MONEY_GRANT
+    payments = grant == PAYMENTS_GRANT
     keys = _keys(env, platform)
-    if keys is None or (platform in {"instagram", "facebook"} and not keys.config_id):
+    if payments:
+        # §40.6 "Allow payment reading": YouTube only, with its saved keys; YouTube need not be connected.
+        if not env.payment_scopes.get(platform):
+            raise bad_request(f"{label(platform)} does not share payments with apps, so there is nothing to allow.")
+        if keys is None:
+            raise conflict("Paste your YouTube keys first. Tap Set up YouTube.")
+    elif keys is None or (platform in {"instagram", "facebook"} and not keys.config_id):
         raise conflict(f"Paste your {label(platform)} keys first.")
     if money:
         # §25.4 "Allow money reading": only where it means something, and only on top of a working connection.
@@ -313,7 +322,7 @@ def connect(app: App, req: Request) -> Response:
     exp = int(now.timestamp()) + STATE_SECONDS
     key = env.state_key()
     nonce = state.new_nonce()
-    signed = state.sign(key, platform, nonce, exp)
+    signed = state.sign(key, state_label(platform, grant), nonce, exp)  # payments: its own label (§40.6)
     app.store.put(
         {
             "pk": setup.oauth_pk(nonce),
@@ -324,13 +333,17 @@ def connect(app: App, req: Request) -> Response:
             "redirectUri": env.redirect_uri(platform),
             "createdAt": iso(now),
             "ttl": exp + 300,
-            **({"grant": MONEY_GRANT} if money else {}),
+            **({"grant": grant} if grant else {}),
         },
         if_absent=True,
     )
     challenge = state.pkce(key, nonce)[1] if PKCE.get(platform) else None
-    rerequest = not money and setup.item(app.store, req.user_id, platform).get("lastResult") == "missing_permissions"
-    url = providers.authorize_url(env, platform, keys, signed, challenge, rerequest=rerequest, money=money)
+    rerequest = (
+        grant is None and setup.item(app.store, req.user_id, platform).get("lastResult") == "missing_permissions"
+    )
+    url = providers.authorize_url(
+        env, platform, keys, signed, challenge, rerequest=rerequest, money=money, payments=payments
+    )
     log("info", "setup.connect_started", platform=platform, grant=grant or "connect")
     return ok({"authorizeUrl": url, "expiresAt": iso(now + timedelta(seconds=STATE_SECONDS))})
 

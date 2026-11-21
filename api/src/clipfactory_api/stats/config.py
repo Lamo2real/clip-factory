@@ -69,6 +69,8 @@ class PlatformConfig:
     scopes: tuple[str, ...] = ()
     # §25.4: asked for only by "Allow money reading" (grant=money), never by a normal Connect.
     money_scopes: tuple[str, ...] = ()
+    # §40.6: asked for only by "Allow payment reading" (grant=payments), on their own; never by Connect.
+    payment_scopes: tuple[str, ...] = ()
     publish: dict[str, Any] | None = None  # §17.7
 
     @property
@@ -112,6 +114,15 @@ def _money_scopes(raw: Any, scopes: list[str], where: str) -> tuple[str, ...]:
         raise ConfigError(f"{where}.moneyScopes must be a list of scope names")
     if set(raw) & set(scopes):
         raise ConfigError(f"{where}.moneyScopes must not repeat a Connect scope")
+    return tuple(raw)
+
+
+def _payment_scopes(raw: Any, scopes: list[str], money: tuple[str, ...], where: str) -> tuple[str, ...]:
+    """§40.6: the scopes "Allow payment reading" asks for; never one Connect or Allow money reading asks for."""
+    if not isinstance(raw, list) or not all(isinstance(s, str) and s for s in raw):
+        raise ConfigError(f"{where}.paymentScopes must be a list of scope names")
+    if set(raw) & (set(scopes) | set(money)):
+        raise ConfigError(f"{where}.paymentScopes must not repeat a Connect or money scope")
     return tuple(raw)
 
 
@@ -160,6 +171,7 @@ def parse(raw: Any) -> PlatformsConfig:
         scopes = entry.get("scopes", [])
         if not isinstance(scopes, list) or not all(isinstance(s, str) and s for s in scopes):
             raise ConfigError(f"{where}.scopes must be a list of scope names")
+        money = _money_scopes(entry.get("moneyScopes", []), scopes, where)
         if name == "x" and "usdPerPost" in budget:
             usd = budget["usdPerPost"]
             if isinstance(usd, bool) or not isinstance(usd, int | float) or not 0 <= usd <= 1:
@@ -177,7 +189,8 @@ def parse(raw: Any) -> PlatformsConfig:
             if non_public is not None
             else None,
             scopes=tuple(scopes),
-            money_scopes=_money_scopes(entry.get("moneyScopes", []), scopes, where),
+            money_scopes=money,
+            payment_scopes=_payment_scopes(entry.get("paymentScopes", []), scopes, money, where),
             publish=_publish(name, entry.get("publish"), where),
         )
     return PlatformsConfig(
