@@ -630,21 +630,26 @@ function PilotCard({
   const [saved, setSaved] = useState(() => crLoginEmail());
   const [draft, setDraft] = useState(saved);
   const [editing, setEditing] = useState(!saved);
-  // He tapped Open email before typing his email: the box says so.
-  const [nudge, setNudge] = useState(false);
+  // He tapped Open email before typing his email: the box says so. Kept with whether it was sent then, so a tap from
+  // before "I sent it" never brings the email question back after it.
+  const [nudgedAt, setNudgedAt] = useState<"before" | "after" | null>(null);
   const box = useRef<HTMLInputElement>(null);
   const boxId = useId();
   const done = conn.canSubmit;
   const sent = !!conn.pilotSentAt;
+  const phase = sent ? "after" : "before";
+  const nudge = nudgedAt === phase;
   const email = conn.pilotEmail;
   const from = looksLikeEmail(draft) ? draft.trim() : saved;
   const target = pilotOpen(from, email);
   // Once sent, only what comes next (CR_PILOT_AFTER). Before that, only its first line: the box and the bold
   // "Send it from …" say where from (the guide's "Check the From line" would say it a third time).
   const lines = sent ? [] : CR_PILOT.say.slice(0, 1);
-  // Once sent, no email question: the box comes back only when he taps Open email with no email kept here.
+  // Once sent, no email question: the box comes back only when he taps Open email with no email kept here, and folds
+  // again once Open email opens it. Never the "Send it from" line or Change after sending.
   const askBox = !sent || nudge;
-  const describedBy = [nudge && !from ? `${boxId}-first` : "", from ? `${boxId}-from` : ""].filter(Boolean).join(" ") || undefined;
+  const fromLine = !sent && !!from;
+  const describedBy = [nudge && !from ? `${boxId}-first` : "", fromLine ? `${boxId}-from` : ""].filter(Boolean).join(" ") || undefined;
   const first = cant && !sent;
   // Open email is the vermilion only while the email waits; once sent it stays glass.
   const emailMain = main && !sent;
@@ -711,7 +716,7 @@ function PilotCard({
                   <strong>{CR_LOGIN_FIRST}</strong>
                 </p>
               ) : null}
-              {askBox && from ? (
+              {fromLine ? (
                 <div className="cr-login__from">
                   <p id={`${boxId}-from`}>
                     <strong>
@@ -744,6 +749,7 @@ function PilotCard({
                 onClick={() => {
                   keep();
                   setEditing(false);
+                  setNudgedAt(null);
                 }}
                 {...(target.gmail ? { target: "_blank", rel: "noopener noreferrer" } : {})}
               >
@@ -759,7 +765,7 @@ function PilotCard({
                 data-help-clear={emailMain ? "" : undefined}
                 data-cr="open-email"
                 onClick={() => {
-                  setNudge(true);
+                  setNudgedAt(phase);
                   box.current?.focus();
                 }}
               >

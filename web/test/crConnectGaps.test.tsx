@@ -624,6 +624,65 @@ describe("the Connect leftovers (final check of the Connect fixes)", () => {
     expect(open()!.tagName).toBe("A");
     expect(new URL(open()!.getAttribute("href")!).searchParams.get("authuser")).toBe("faze.clips@gmail.com");
     expect(open()!.className).toContain("btn--glass");
+    // Still no "Send it from" line or Change after sending; the box folds once Open email opens it.
+    expect(pilot().textContent).not.toContain("Send it from");
+    expect(button("Change")).toBeUndefined();
+    host.addEventListener("click", (e) => e.preventDefault());
+    await click(open());
+    expect(pilot().querySelector("input[type='email']")).toBeNull();
+    expect(pilot().querySelector("[data-cr='login']")).toBeNull();
+    expect(button("Change")).toBeUndefined();
+    expect(open()!.className).toContain("btn--glass");
+  });
+
+  it("he tapped Open email before typing, then sent it from Gmail: no email question after I sent it", async () => {
+    fakeApi(conn({ lastResult: "not_allowed", stepsDone: ["ready-account"] }));
+    await draw(<CrSetup />);
+    await click(open());
+    expect(pilot().querySelector("[role='alert']")!.textContent).toBe(CR_LOGIN_FIRST);
+    await type(pilot().querySelector<HTMLInputElement>("input[type='email']")!, "faze.clips@gmail.com");
+    host.addEventListener("click", (e) => e.preventDefault());
+    await click(open());
+    await click(button("I sent it"));
+    expect(pilot().textContent).toContain("Content Rewards will email you back.");
+    expect(pilot().querySelector("input[type='email']")).toBeNull();
+    expect(pilot().querySelector("[data-cr='login']")).toBeNull();
+    expect(pilot().querySelector("[role='alert']")).toBeNull();
+    expect(pilot().textContent).not.toContain("Send it from");
+    expect(button("Change")).toBeUndefined();
+    expect(open()!.tagName).toBe("A");
+    expect(open()!.className).toContain("btn--glass");
+    expect(new URL(open()!.getAttribute("href")!).searchParams.get("authuser")).toBe("faze.clips@gmail.com");
+  });
+
+  it("he tapped Open email before typing, typed another address, then I sent it: no box, only the Check the From line", async () => {
+    fakeApi(conn({ lastResult: "not_allowed", stepsDone: ["ready-account"] }));
+    await draw(<CrSetup />);
+    await click(open());
+    await type(pilot().querySelector<HTMLInputElement>("input[type='email']")!, "faze.clips@outlook.com");
+    await click(button("I sent it"));
+    expect(pilot().querySelector("input[type='email']")).toBeNull();
+    expect(pilot().textContent).not.toContain(CR_LOGIN_ASK);
+    expect(pilot().textContent).not.toContain("Send it from");
+    expect(button("Change")).toBeUndefined();
+    expect([...pilot().querySelectorAll("strong")].map((x) => x.textContent)).toEqual(["Check the From line says faze.clips@outlook.com."]);
+    expect(open()!.getAttribute("href")).toBe(guide.pilotMailto());
+    expect(open()!.className).toContain("btn--glass");
+  });
+
+  it("he tapped Open email before typing, then I sent it with no email typed: no box until he taps Open email again", async () => {
+    fakeApi(conn({ lastResult: "not_allowed", stepsDone: ["ready-account"] }));
+    await draw(<CrSetup />);
+    await click(open());
+    expect(pilot().querySelector("[role='alert']")!.textContent).toBe(CR_LOGIN_FIRST);
+    await click(button("I sent it"));
+    expect(pilot().querySelector("input[type='email']")).toBeNull();
+    expect(pilot().querySelector("[role='alert']")).toBeNull();
+    expect(pilot().textContent).not.toContain(CR_LOGIN_FIRST);
+    await click(open());
+    const box = pilot().querySelector<HTMLInputElement>("input[type='email']")!;
+    expect(document.activeElement).toBe(box);
+    expect(pilot().querySelector("[role='alert']")!.textContent).toBe(CR_LOGIN_FIRST);
   });
 
   it("Change is a glass button, at least 48 px tall, that shows the box again", async () => {

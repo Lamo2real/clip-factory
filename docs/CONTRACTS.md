@@ -7500,7 +7500,9 @@ from" line, no "Change"), no vermilion and no line asking him to send it again; 
 email" stays where it was, glass, built the same way from the email kept on this device (Gmail's compose page for an
 `@gmail.com` or `@googlemail.com` address; any other the `mailto` with the bold **"Check the From line says {email}"**),
 so he can send it again if Content Rewards never answers. With no email kept on this device (he sent it from another
-one), tapping it shows the box and "Type the email you use for Content Rewards first." the same way.
+one), tapping it shows the box and "Type the email you use for Content Rewards first." the same way, still with no "Send
+it from" line and no "Change"; the box folds again once "Open email" opens the email. A tap on "Open email" before "I
+sent it" never brings the box back after it.
 
 The email (literal in `contentrewards.ts` as `CR_PILOT_EMAIL`, also served as `connection.pilotEmail`): To
 `support@contentrewards.com`; Subject "Please let my account connect apps (MCP sign-in pilot)"; Body "Hi! Please let
