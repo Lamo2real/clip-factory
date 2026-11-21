@@ -713,6 +713,57 @@ def test_try_again_never_touches_a_running_job_or_one_without_a_campaign(
     assert not [k for k in s3_client.objects if k.startswith(f"jobs/{plain['jobId']}/")]
 
 
+def test_try_again_starts_when_the_campaign_cannot_be_read(
+    call: Call, cr_on: Any, s3_client: FakeS3, table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The logo copy is best effort: a failed read of the campaign never turns Try again into an error."""
+    key = f"campaigns/{USER}/{CAMPAIGN_ID}/logo-1.png"
+    s3_client.objects[key] = b"\x89PNG logo"
+    _ready(cr_on, logoKey=key, logo={"needed": True, "state": "ready"})
+    job = _logo_job(cr_on.store)
+    before = (table.raw(job["pk"], job["sk"]) or {})["campaign"]
+    real_get = db.Store.get
+
+    def campaign_down(self: db.Store, pk: str, sk: str) -> dict[str, Any] | None:
+        if sk == db.campaign_sk(CAMPAIGN_ID):
+            raise RuntimeError("table busy")
+        return real_get(self, pk, sk)
+
+    monkeypatch.setattr(db.Store, "get", campaign_down)
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200, body
+    assert body["job"]["status"] == "queued"
+    assert (table.raw(job["pk"], job["sk"]) or {})["campaign"] == before
+    assert not [k for k in s3_client.objects if k.startswith(f"jobs/{job['jobId']}/")]
+
+
+def test_try_again_that_picks_up_keeps_the_jobs_own_logo(
+    call: Call, cr_on: Any, s3_client: FakeS3, table: FakeTable
+) -> None:
+    """§30.6: a run that picks up keeps the clips already cut, so it keeps the logo they carry, even when the owner
+    changed the campaign's logo since. A pick-up job without its own copy still gets one."""
+    key = f"campaigns/{USER}/{CAMPAIGN_ID}/logo-2.png"
+    s3_client.objects[key] = b"\x89PNG new logo"
+    _ready(cr_on, logoKey=key, logo={"needed": True, "state": "ready"})
+    job = _logo_job(cr_on.store, error="Finding the moments took too long.", pickUp=True)
+    own = f"jobs/{job['jobId']}/source/campaign-logo.png"
+    s3_client.objects[own] = b"\x89PNG old logo"
+    cr_on.store.update(job["pk"], job["sk"], {"campaign": {**job["campaign"], "logoKey": own}})
+    before = (table.raw(job["pk"], job["sk"]) or {})["campaign"]
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200, body
+    stored = table.raw(job["pk"], job["sk"]) or {}
+    assert stored["pickUp"] is True
+    assert stored["campaign"] == before
+    assert s3_client.objects[own] == b"\x89PNG old logo"
+    bare = _logo_job(cr_on.store, error="Finding the moments took too long.", pickUp=True)
+    status, body = call("POST", f"/v1/jobs/{bare['jobId']}/retry")
+    assert status == 200, body
+    copy = f"jobs/{bare['jobId']}/source/campaign-logo.png"
+    assert s3_client.objects[copy] == b"\x89PNG new logo"
+    assert (table.raw(bare["pk"], bare["sk"]) or {})["campaign"]["logoKey"] == copy
+
+
 def _ready(cr_on: Any, **fields: Any) -> None:
     from clipfactory_api.contentrewards import campaigns
 

@@ -93,19 +93,26 @@ def copy_logo(media: s3.Media | None, item: Mapping[str, Any], job_id: str) -> s
     return target
 
 
-def logo_again(store: db.Store, media: s3.Media | None, user_id: str, job: Mapping[str, Any]) -> Item | None:
+def logo_again(
+    store: db.Store, media: s3.Media | None, user_id: str, job: Mapping[str, Any], *, pick_up: bool = False
+) -> Item | None:
     """Try again on a campaign job: the campaign's logo as it is now is copied onto the job again (the same copy as
     the job's start), so "Add it on the campaign page, then tap Try again" works. The job's ``campaign`` with the new
     ``logoKey``, or None when there is nothing to copy (not a campaign job, no logo needed or added, the campaign
-    removed). Best effort: a failed copy keeps the job's own copy and the retry goes on."""
+    removed). ``pick_up`` (§30.6): a run that picks up keeps the job's own copy, so the clips it cuts carry the same
+    logo as the clips it keeps (a missing logo stops the run before any clip is cut, so that retry never picks up).
+    Best effort: a failed read or copy keeps the job's own copy and the retry goes on."""
     snapshot = job.get("campaign")
     campaign_id = job.get("campaignId")
     if not isinstance(snapshot, Mapping) or not isinstance(campaign_id, str) or not links.UUID.match(campaign_id):
         return None
-    item = store.get(db.user_pk(user_id), db.campaign_sk(campaign_id))
-    if not isinstance(item, Mapping) or not (gates.logo_needed(item) or gates.logo_needed(snapshot)):
+    own = logo.job_logo_key(str(job["jobId"]), "")  # "jobs/{jobId}/source/campaign-logo."
+    if pick_up and str(snapshot.get("logoKey") or "").startswith(own):
         return None
     try:
+        item = store.get(db.user_pk(user_id), db.campaign_sk(campaign_id))
+        if not isinstance(item, Mapping) or not (gates.logo_needed(item) or gates.logo_needed(snapshot)):
+            return None
         target = copy_logo(media, item, str(job["jobId"]))
     except Exception as e:
         log("warning", "cr.retry_logo_failed", jobId=job.get("jobId"), error=type(e).__name__)
