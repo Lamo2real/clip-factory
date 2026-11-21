@@ -1,11 +1,19 @@
-"""Who makes what (docs/CONTRACTS.md §45.11.6, ADR-75): a static mirror of the agent's provider registry.
+"""Who makes what (docs/CONTRACTS.md §45.11.6, §45.31, ADR-75, ADR-80): a static mirror of the agent's provider
+registry (``stories/agent/src/lamostories_agent/providers.py``), so ``GET …/providers`` answers without the agent.
 
-``agent/src/clipfactory_agent/stories/providers.py`` is the registry the pipeline calls; this mirror lists the same
-kinds and ids so ``GET …/providers`` can answer without the agent. A provider shows ``on`` only after a real call
-succeeded, with ``checkedAt``; nothing is shown as working because it was configured. The proof is the
-``PROVIDER#{kind}#{providerId}`` item the agent writes after a real call (Nova Canvas, after a portrait), or, for a
-built-in provider, a story job's own step for it that finished with real work (the writer: ``storyboard``; the
-characters: ``scenes``; the animation: ``animation``; the sounds: ``sound``), at that step's ``finishedAt``.
+States, as §45.11.6's table gives them:
+
+* the built-in animator, sounds and characters (``builtin-2d``, ``builtin-synth``, ``builtin-rig``) are code in Lamo
+  Stories' own image with nothing to set up: ``on`` while picked, with ``checkedAt`` the last time a story job's step
+  made by it finished with real work; a later failure the agent recorded (``PROVIDER#``) shows instead;
+* the writer (``bedrock-claude``) is ``on`` only after a model answered: a ``MODELSTATUS#`` item with ``ok`` (Check
+  models, or any real call) or a finished storyboard step; until then it says to tap Check models;
+* Amazon Nova Canvas and Nova Reel are ``off`` until the owner picks them, then ``needs_setup`` until the agent's
+  real call answers (``PROVIDER#{kind}#{id}`` with ``state = on`` and ``checkedAt``). Nothing is shown as working
+  because it was configured.
+
+``StoriesConfig.providers`` names the kinds ``images``, ``video`` and ``audio``; ``ProviderStatus.kind`` calls the
+video kind ``animation`` (the registry's name).
 """
 
 from __future__ import annotations
@@ -17,6 +25,7 @@ from typing import Any, Final
 from . import types as ws
 
 KINDS: Final = ("writer", "images", "animation", "audio")
+CONFIG_KEY: Final = {"images": "images", "animation": "video", "audio": "audio"}
 
 
 @dataclass(frozen=True)
@@ -27,7 +36,6 @@ class Provider:
     builtin: bool
     line_on: str
     line_unchecked: str
-    unavailable: str = ""  # a sentence when it cannot be used at all (interface only)
 
 
 REGISTRY: Final[tuple[Provider, ...]] = (
@@ -35,17 +43,17 @@ REGISTRY: Final[tuple[Provider, ...]] = (
         "writer",
         "bedrock-claude",
         "Claude on Amazon Bedrock",
-        True,
-        "Writes every story with the model picked in Settings.",
-        "Not checked yet. It is checked when the first story is written.",
+        False,
+        "Writes every story with the model and effort picked in Lamo Stories › Settings › AI.",
+        "Not checked yet. Tap Check models in Lamo Stories › Settings › AI.",
     ),
     Provider(
         "images",
         "builtin-rig",
         "Built-in characters",
         True,
-        "Draws your characters the same way in every video.",
-        "Not checked yet. It is checked when the first video is made.",
+        "Built in: draws your characters the same way in every video. Nothing to set up.",
+        "",
     ),
     Provider(
         "images",
@@ -61,31 +69,29 @@ REGISTRY: Final[tuple[Provider, ...]] = (
         "builtin-2d",
         "Built-in animation",
         True,
-        "Animates every scene at 1080 by 1920, 30 frames a second.",
-        "Not checked yet. It is checked when the first video is made.",
+        "Built in: animates every scene at 1080 by 1920, 30 frames a second. Nothing to set up.",
+        "",
     ),
     Provider(
         "animation",
         "nova-reel",
-        "Amazon Nova Reel (AI video)",
+        "Amazon Nova Reel 1.1 (AI video)",
         False,
-        "",
-        "",
-        unavailable=(
-            "Not available: Nova Reel saves its videos in a United States bucket this app does not have, and its "
-            "realistic clips would need AI labels that the posts do not set."
-        ),
+        "Makes 6-second AI shots for backgrounds. Videos that use them are posted with the platforms' AI labels.",
+        "Needs a storage bucket in the United States (N. Virginia), which is switched off, and Amazon Nova Reel "
+        "enabled for your account. Until then the built-in animation makes your videos.",
     ),
     Provider(
         "audio",
         "builtin-synth",
         "Built-in sounds and music",
         True,
-        "Makes every sound effect, character noise and music track itself.",
-        "Not checked yet. It is checked when the first video is made.",
+        "Built in: makes every sound effect, character noise and music track itself. Nothing to set up.",
+        "",
     ),
 )
 OFF_LINE: Final = "Off. Pick it in Lamo Stories › Settings to use it."
+WRITER_FAILED: Final = "No model has answered yet. Tap Check models in Lamo Stories › Settings › AI to see why."
 PROOF_STEP: Final = {"writer": "storyboard", "images": "scenes", "animation": "animation", "audio": "sound"}
 NOTHING_MADE: Final = "Nothing changed"  # the agent's message for a step that had nothing to (re)make
 JOBS_READ: Final = 200  # the newest story jobs looked at for proof
@@ -101,23 +107,26 @@ def _selected(p: Provider, config: Mapping[str, Any]) -> bool:
         return True
     if p.kind == "images" and p.id == "builtin-rig":
         return True  # the rig always draws the characters in videos; the images choice is about portraits
-    return (chosen or {}).get(p.kind) == p.id
+    return (chosen or {}).get(CONFIG_KEY[p.kind]) == p.id
 
 
-def _builtin_used(p: Provider, job: Mapping[str, Any]) -> bool:
-    """Whether the job made this kind with this built-in provider (the job's ``meta.providers``, built-in when unset;
-    the characters in a video are always drawn by the rig, whatever makes portraits)."""
+def _used(p: Provider, job: Mapping[str, Any]) -> bool:
+    """Whether the job made this kind with this provider (the job's ``meta.providers``; the characters in a video
+    are always drawn by the rig, whatever makes portraits)."""
     if p.kind == "images":
         return p.id == "builtin-rig"
+    if p.kind == "writer":
+        return True
     meta = job.get("meta") if isinstance(job.get("meta"), Mapping) else {}
     chosen = (meta or {}).get("providers") if isinstance((meta or {}).get("providers"), Mapping) else {}
-    return str((chosen or {}).get(p.kind) or p.id) == p.id
+    default = "builtin-2d" if p.kind == "animation" else "builtin-synth"
+    found = (chosen or {}).get(p.kind) or (chosen or {}).get(CONFIG_KEY.get(p.kind, p.kind)) or default
+    return str(found) == p.id
 
 
 def proven(jobs: Iterable[Mapping[str, Any]]) -> dict[str, str]:
-    """``PROVIDER#`` sort key → when a story job's step made by that built-in provider last finished with real work.
-    Only steps the job ran count (the others show ``done`` for files made before), and never a step that had nothing
-    to make."""
+    """``PROVIDER#`` sort key → when a story job's step made by that provider last finished with real work. Only
+    steps the job ran count (the others show ``done`` for files made before), and never a step with nothing to do."""
     out: dict[str, str] = {}
     for job in jobs:
         if job.get("contentType") != "animation":
@@ -127,9 +136,9 @@ def proven(jobs: Iterable[Mapping[str, Any]]) -> dict[str, str]:
         steps = {str(s.get("key")): s for s in job.get("steps") or [] if isinstance(s, Mapping)}
         for p in REGISTRY:
             step = steps.get(PROOF_STEP[p.kind])
-            if not p.builtin or step is None or step.get("key") not in run or step.get("status") != "done":
+            if step is None or step.get("key") not in run or step.get("status") != "done":
                 continue
-            if str(step.get("message") or "").startswith(NOTHING_MADE) or not _builtin_used(p, job):
+            if str(step.get("message") or "").startswith(NOTHING_MADE) or not _used(p, job):
                 continue
             at = str(step.get("finishedAt") or job.get("updatedAt") or "")
             key = provider_sk(p.kind, p.id)
@@ -138,25 +147,42 @@ def proven(jobs: Iterable[Mapping[str, Any]]) -> dict[str, str]:
     return out
 
 
+def _writer_ok(model_statuses: Sequence[Mapping[str, Any]]) -> str | None:
+    """When a model last answered (``MODELSTATUS#`` with ``ok``), else None."""
+    times = [str(m.get("checkedAt") or "") for m in model_statuses if m.get("status") == "ok"]
+    times = [t for t in times if t]
+    return max(times) if times else None
+
+
 def status(
-    p: Provider, config: Mapping[str, Any], record: Mapping[str, Any] | None, proven_at: str | None = None
+    p: Provider,
+    config: Mapping[str, Any],
+    record: Mapping[str, Any] | None,
+    proven_at: str | None = None,
+    model_statuses: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"kind": p.kind, "id": p.id, "label": p.label}
-    if p.unavailable:
-        return {**out, "state": "unavailable", "line": p.unavailable}
     if not _selected(p, config):
         return {**out, "state": "off", "line": OFF_LINE}
     state = (record or {}).get("state")
     checked = (record or {}).get("checkedAt")
+    checked = checked if isinstance(checked, str) and checked else None
     error = (record or {}).get("lastError")
-    if state == "on" and isinstance(checked, str) and checked:
-        out.update(state="on", line=p.line_on, checkedAt=max(checked, proven_at or ""))
-        return out
-    if p.builtin and proven_at and not (isinstance(checked, str) and checked > proven_at):
-        out.update(state="on", line=p.line_on, checkedAt=proven_at)  # a newer real call than any recorded failure
-        return out
+    if p.kind == "writer":
+        answered = max([t for t in (_writer_ok(model_statuses), proven_at) if t], default=None)
+        if answered:
+            return {**out, "state": "on", "line": p.line_on, "checkedAt": answered}
+        line = WRITER_FAILED if model_statuses else p.line_unchecked
+        return {**out, "state": "needs_setup", "line": line}
+    if state == "on" and checked:
+        return {**out, "state": "on", "line": p.line_on, "checkedAt": max(checked, proven_at or "")}
+    if p.builtin:
+        failed_later = state not in (None, "on") and checked and checked > (proven_at or "")
+        if not failed_later:
+            on = {**out, "state": "on", "line": p.line_on}
+            return {**on, "checkedAt": proven_at} if proven_at else on
     out.update(state="needs_setup", line=str(error) if error else p.line_unchecked)
-    if isinstance(checked, str) and checked:
+    if checked:
         out["checkedAt"] = checked
     if error:
         out["lastError"] = str(error)
@@ -164,10 +190,20 @@ def status(
 
 
 def statuses(
-    config: Mapping[str, Any], records: Sequence[Mapping[str, Any]], jobs: Iterable[Mapping[str, Any]] = ()
+    config: Mapping[str, Any],
+    records: Sequence[Mapping[str, Any]],
+    jobs: Iterable[Mapping[str, Any]] = (),
+    model_statuses: Sequence[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
     by_key = {str(r.get("sk")): r for r in records}
     proof = proven(jobs)
     return [
-        status(p, config, by_key.get(provider_sk(p.kind, p.id)), proof.get(provider_sk(p.kind, p.id))) for p in REGISTRY
+        status(
+            p,
+            config,
+            by_key.get(provider_sk(p.kind, p.id)),
+            proof.get(provider_sk(p.kind, p.id)),
+            model_statuses,
+        )
+        for p in REGISTRY
     ]

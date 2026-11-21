@@ -14,10 +14,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Final
 
-from .. import clips, validate
+from .. import validate
 from ..errors import bad_request, conflict
 from ..ids import is_ulid
-from . import catalog, shapes
+from . import captions, catalog, overrides, shapes
 from .ideas import LOGLINE_MAX, TITLE_MAX, character_ids
 from .jobs import valid_stale_scenes
 
@@ -33,6 +33,7 @@ DEFAULT_MOOD: Final = {
     "explainer": "wonder",
 }
 MAX_SECONDS = 89.5  # Facebook Reels' 90 s limit, with room for the audio tail (§45.9)
+MAX_REFERENCES = 3  # reference videos per story (§45.28)
 MAX_CAPTIONS = 40
 MAX_SFX = 40
 NOTE_MAX = 500
@@ -63,9 +64,34 @@ def _int_or_float(value: float) -> int | float:
 # --- create ---------------------------------------------------------------------------------------------------
 
 
+def reference_ids(value: Any) -> list[str]:
+    """``referenceIds`` (≤ 3 reference video ids, §45.28); the route checks each is this workspace's ``REFVID#``."""
+    if not isinstance(value, list) or not all(isinstance(v, str) and is_ulid(v) for v in value):
+        raise bad_request("referenceIds must be a list of reference video ids.", "referenceIds")
+    ids = list(dict.fromkeys(value))
+    if len(ids) > MAX_REFERENCES:
+        raise bad_request(f"Pick at most {MAX_REFERENCES} reference videos.", "referenceIds")
+    return ids
+
+
+STORY_KEYS: Final = (
+    "ideaId",
+    "brief",
+    "title",
+    "characterIds",
+    "durationSec",
+    "captionsOn",
+    "musicMood",
+    "referenceIds",
+    "ai",
+    "override",
+)
+
+
 def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
-    """StoryInput (§45.6): an idea or a short brief, 1 to 3 characters, the length, captions and music."""
-    validate.only_keys(body, {"ideaId", "brief", "title", "characterIds", "durationSec", "captionsOn", "musicMood"})
+    """StoryInput (§45.6): an idea or a short brief, 1 to 3 characters, the length, captions and music, the reference
+    videos, the video's own model and effort (``ai``, kept), and ``override`` (the first job only, never kept)."""
+    validate.only_keys(body, STORY_KEYS)
     out: dict[str, Any] = {}
     has_idea, has_brief = body.get("ideaId") is not None, body.get("brief") is not None
     if has_idea == has_brief:
@@ -98,6 +124,9 @@ def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
         if body["musicMood"] not in catalog.MUSIC_MOODS:
             raise bad_request("musicMood is not one of the music moods.")
         out["musicMood"] = body["musicMood"]
+    out["referenceIds"] = reference_ids(body["referenceIds"]) if body.get("referenceIds") is not None else []
+    out["ai"] = overrides.ai_setting(body["ai"]) if body.get("ai") is not None else overrides.empty_setting()
+    out["override"] = overrides.model_override(body.get("override"))
     return out
 
 
@@ -108,8 +137,11 @@ def has_script(story: Mapping[str, Any]) -> bool:
     return bool(story.get("scriptKey")) and int(story.get("scriptVersion") or 0) > 0
 
 
-def produce_input(body: Mapping[str, Any], story: Mapping[str, Any]) -> tuple[str | None, list[str] | None]:
-    validate.only_keys(body, {"from", "sceneIds"})
+def produce_input(
+    body: Mapping[str, Any], story: Mapping[str, Any]
+) -> tuple[str | None, list[str] | None, dict[str, str] | None]:
+    """(``from``, ``sceneIds``, the override for this job only)."""
+    validate.only_keys(body, {"from", "sceneIds", "override"})
     from_step = body.get("from")
     if from_step is not None and from_step not in shapes.STEP_ORDER:
         raise bad_request("from must be one of the steps.")
@@ -118,7 +150,7 @@ def produce_input(body: Mapping[str, Any], story: Mapping[str, Any]) -> tuple[st
         if from_step not in SCENE_STEPS:
             raise bad_request('sceneIds only go with from "scenes" or "animation".')
         scene_ids = scene_list(scene_ids, story)
-    return from_step, scene_ids
+    return from_step, scene_ids, overrides.model_override(body.get("override"))
 
 
 def scene_list(value: Any, story: Mapping[str, Any]) -> list[str]:
@@ -197,8 +229,11 @@ def done_steps(story: Mapping[str, Any]) -> list[str]:
     return list(shapes.STEP_ORDER) if has_script(story) else []
 
 
-def changes_input(body: Mapping[str, Any], story: Mapping[str, Any]) -> tuple[str | None, list[str] | None]:
-    validate.only_keys(body, {"note", "sceneIds"})
+def changes_input(
+    body: Mapping[str, Any], story: Mapping[str, Any]
+) -> tuple[str | None, list[str] | None, dict[str, str] | None]:
+    """(the note, the scenes, the override for this job only)."""
+    validate.only_keys(body, {"note", "sceneIds", "override"})
     note = body.get("note")
     if note is not None:
         if not isinstance(note, str):
@@ -209,7 +244,7 @@ def changes_input(body: Mapping[str, Any], story: Mapping[str, Any]) -> tuple[st
     scene_ids = scene_list(body["sceneIds"], story) if body.get("sceneIds") is not None else None
     if not note and not scene_ids:
         raise bad_request("Write what to change, or pick a scene to remake.")
-    return note or None, scene_ids
+    return note or None, scene_ids, overrides.model_override(body.get("override"))
 
 
 # --- approve --------------------------------------------------------------------------------------------------
@@ -230,6 +265,8 @@ def approve_problem(story: Mapping[str, Any]) -> str | None:
         return NOT_YET
     if safety.get("status") == "ok" and safety.get("checkedScriptVersion") == story.get("scriptVersion"):
         return None
+    if safety.get("status") == "skipped" and story.get("category") != "driving_safety":
+        return None  # the quality agent is off ("Quality check is off", §45.33); never for driving safety
     return _facts(story) or NOT_YET
 
 
@@ -238,7 +275,7 @@ def carried_check(story: Mapping[str, Any], new_version: int) -> dict[str, Any] 
     length: the captions, scene captions and the actions stay word for word), or None when there is nothing to carry
     (no check, a check that is due anyway, or one made on another version)."""
     safety = story.get("safety")
-    if not isinstance(safety, Mapping) or safety.get("status") not in ("ok", "problems"):
+    if not isinstance(safety, Mapping) or safety.get("status") not in ("ok", "problems", "skipped"):
         return None
     if "safety" in (story.get("stale") or []):
         return None
@@ -294,12 +331,19 @@ def _unique_ids(items: list[dict[str, Any]], what: str) -> None:
 
 def patch_input(body: Mapping[str, Any]) -> dict[str, Any]:
     """StoryPatch (§45.6), checked."""
-    validate.only_keys(body, {"version", "title", "postCaptions", "captions", "musicMood", "captionsOn", "scenes"})
+    validate.only_keys(
+        body,
+        {"version", "title", "postCaptions", "captions", "musicMood", "captionsOn", "scenes", "ai", "referenceIds"},
+    )
     out: dict[str, Any] = {"version": validate.integer(body.get("version"), "version", lo=1, hi=10**9)}
     if "title" in body:
         out["title"] = validate.required_string(body, "title", max_len=TITLE_MAX)
     if "postCaptions" in body:
-        out["postCaptions"] = clips.caption_patch(body["postCaptions"])
+        out["postCaptions"] = captions.patch(body["postCaptions"])
+    if "ai" in body:
+        out["ai"] = overrides.ai_setting(body["ai"]) if body["ai"] is not None else overrides.empty_setting()
+    if "referenceIds" in body:
+        out["referenceIds"] = reference_ids(body["referenceIds"] if body["referenceIds"] is not None else [])
     if "captions" in body:
         raw = body["captions"]
         if not isinstance(raw, list) or len(raw) > MAX_CAPTIONS:
@@ -313,36 +357,39 @@ def patch_input(body: Mapping[str, Any]) -> dict[str, Any]:
     if "captionsOn" in body:
         out["captionsOn"] = validate.boolean(body["captionsOn"], "captionsOn")
     if "scenes" in body:
-        raw_scenes = body["scenes"]
-        if not isinstance(raw_scenes, list) or not raw_scenes:
-            raise bad_request("scenes must be a list of scene edits.")
-        edits = []
-        for n, raw_edit in enumerate(raw_scenes):
-            where = f"scenes[{n}]"
-            edit = validate.obj(raw_edit, where)
-            validate.only_keys(edit, {"sceneId", "caption", "durationSec", "sfx"})
-            clean: dict[str, Any] = {"sceneId": validate.required_string(edit, "sceneId", max_len=60)}
-            if "caption" in edit:
-                caption = edit["caption"]
-                if caption is not None and not isinstance(caption, str):
-                    raise bad_request(f"{where}.caption must be text or null.")
-                text = (caption or "").strip()
-                if len(text) > 60:
-                    raise bad_request("A scene caption can be at most 60 characters.")
-                clean["caption"] = text or None
-            if "durationSec" in edit:
-                clean["durationSec"] = _number(edit["durationSec"], f"{where}.durationSec", 2, 15)
-            if "sfx" in edit:
-                sfx = edit["sfx"]
-                if not isinstance(sfx, list) or len(sfx) > MAX_SFX:
-                    raise bad_request(f"{where}.sfx must be a list of at most {MAX_SFX} sound effects.")
-                clean["sfx"] = [_sfx_cue(c, f"{where}.sfx[{k}]") for k, c in enumerate(sfx)]
-                _unique_ids(clean["sfx"], "sound effects")
-            edits.append(clean)
-        if len({e["sceneId"] for e in edits}) != len(edits):
-            raise bad_request("Each scene can be edited once per change.")
-        out["scenes"] = edits
+        out["scenes"] = _scene_edits(body["scenes"])
     return out
+
+
+def _scene_edits(raw_scenes: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_scenes, list) or not raw_scenes:
+        raise bad_request("scenes must be a list of scene edits.")
+    edits = []
+    for n, raw_edit in enumerate(raw_scenes):
+        where = f"scenes[{n}]"
+        edit = validate.obj(raw_edit, where)
+        validate.only_keys(edit, {"sceneId", "caption", "durationSec", "sfx"})
+        clean: dict[str, Any] = {"sceneId": validate.required_string(edit, "sceneId", max_len=60)}
+        if "caption" in edit:
+            caption = edit["caption"]
+            if caption is not None and not isinstance(caption, str):
+                raise bad_request(f"{where}.caption must be text or null.")
+            text = (caption or "").strip()
+            if len(text) > 60:
+                raise bad_request("A scene caption can be at most 60 characters.")
+            clean["caption"] = text or None
+        if "durationSec" in edit:
+            clean["durationSec"] = _number(edit["durationSec"], f"{where}.durationSec", 2, 15)
+        if "sfx" in edit:
+            sfx = edit["sfx"]
+            if not isinstance(sfx, list) or len(sfx) > MAX_SFX:
+                raise bad_request(f"{where}.sfx must be a list of at most {MAX_SFX} sound effects.")
+            clean["sfx"] = [_sfx_cue(c, f"{where}.sfx[{k}]") for k, c in enumerate(sfx)]
+            _unique_ids(clean["sfx"], "sound effects")
+        edits.append(clean)
+    if len({e["sceneId"] for e in edits}) != len(edits):
+        raise bad_request("Each scene can be edited once per change.")
+    return edits
 
 
 SCRIPT_FIELDS: Final = ("captions", "musicMood", "captionsOn", "scenes")
@@ -384,9 +431,13 @@ class _Edit:
 def _story_fields(edit: _Edit, story: Mapping[str, Any], patch: Mapping[str, Any]) -> None:
     if "title" in patch and patch["title"] != story.get("title"):
         edit.sets["title"] = patch["title"]
+    if "ai" in patch and patch["ai"] != shapes.ai_setting(story.get("ai")):
+        edit.sets["ai"] = patch["ai"]  # for the next jobs only: nothing in the video changes
+    if "referenceIds" in patch and patch["referenceIds"] != list(story.get("referenceIds") or []):
+        edit.sets["referenceIds"] = patch["referenceIds"]  # read by the next storyboard: nothing becomes stale
     if "postCaptions" in patch:
-        merged = clips.merged_captions(story.get("postCaptions"), patch["postCaptions"])
-        if merged != clips.merged_captions(story.get("postCaptions"), {}):
+        merged = captions.merged(story.get("postCaptions"), patch["postCaptions"])
+        if merged != captions.merged(story.get("postCaptions"), {}):
             edit.sets["postCaptions"] = merged
             edit.stale.update(STALE_POST)
             edit.owner["postCaptions"] = sorted(patch["postCaptions"])
@@ -494,7 +545,7 @@ def apply_patch(
     new["scenes"] = scenes
     if "captions" in patch:
         _captions(edit, new, patch["captions"], total)
-    if not edit.stale - set(STALE_POST) and not set(edit.sets) - {"title", "postCaptions"}:
+    if not edit.stale - set(STALE_POST) and not set(edit.sets) - {"title", "postCaptions", "ai", "referenceIds"}:
         return None, edit.sets, edit.stale, edit.stale_scenes, edit.owner
     edit.sets["scenes"] = [
         {"sceneId": str(s.get("sceneId")), "title": str(s.get("title") or ""), "durationSec": s.get("durationSec")}

@@ -5,8 +5,11 @@ too old to know "bedrock-agentcore", durable executions or "s3vectors"), the loc
 ``aws-durable-execution-sdk-python`` (AWS recommends bundling it rather than relying on the runtime's copy) and the
 built-in skills from the repository's ``skills/`` folder as package
 data (``clipfactory_api/builtin_skills/<name>/SKILL.md``) and ``config/platforms.json`` (the stats limits, §16.4) as
-``clipfactory_api/config/platforms.json``, ``config/monetization.json`` (§25.2) and ``config/stories-guidance.json`` (Lamo
-Stories' checked driving-safety guidance, §45.11.5) next to it, and the help corpus the web build commits
+``clipfactory_api/config/platforms.json``, ``config/monetization.json`` (§25.2) next to it, Lamo Stories' own
+configuration (the whole ``stories/config/`` folder: its checked driving-safety guidance, models, agents, workspace
+defaults and resolver cases, §45.11.5, §45.25) as ``clipfactory_api/stories_config/`` and its built-in skills
+(``stories/skills/<name>/SKILL.md``, §45.26) as ``clipfactory_api/stories_skills/``, each validated first, and the help
+corpus the web build commits
 (``web/src/features/help/help-corpus.json``, §19.6) as ``clipfactory_api/help/corpus.json``. Ask's knowledge pack and library
 (``clipfactory_api/ask/knowledge.json`` and ``ask/library/*.md``, §28.2) are package files already. The Anthropic SDK
 (``anthropic[bedrock]``, for Claude in Amazon Bedrock, §28.1) is vendored too; its two compiled dependencies
@@ -34,8 +37,10 @@ PLATFORMS_CONFIG = ROOT / "config" / "platforms.json"
 PLATFORMS_CONFIG_IN_ZIP = "clipfactory_api/config/platforms.json"
 MONEY_CONFIG = ROOT / "config" / "monetization.json"
 MONEY_CONFIG_IN_ZIP = "clipfactory_api/config/monetization.json"
-STORIES_GUIDANCE = ROOT / "config" / "stories-guidance.json"
-STORIES_GUIDANCE_IN_ZIP = "clipfactory_api/config/stories-guidance.json"
+STORIES_CONFIG = ROOT / "stories" / "config"
+STORIES_CONFIG_IN_ZIP = "clipfactory_api/stories_config"
+STORIES_SKILLS = ROOT / "stories" / "skills"
+STORIES_SKILLS_IN_ZIP = "clipfactory_api/stories_skills"
 HELP_CORPUS = ROOT / "web" / "src" / "features" / "help" / "help-corpus.json"
 HELP_CORPUS_IN_ZIP = "clipfactory_api/help/corpus.json"
 OUT = API / "dist" / "lambda.zip"
@@ -155,23 +160,114 @@ def _copy_money_config(dest: Path) -> None:
     print(f"  money config: {len(cfg.platforms)} platforms, checked {cfg.as_of.isoformat()}")
 
 
-def _copy_stories_guidance(dest: Path) -> None:
-    """``config/stories-guidance.json`` → ``clipfactory_api/config/stories-guidance.json``, validated first: every
-    topic, step and dont must name its checked sources (docs/CONTRACTS.md §45.11.5), so a bad edit fails the build."""
-    if not STORIES_GUIDANCE.is_file():
-        raise SystemExit(f"missing {STORIES_GUIDANCE.relative_to(ROOT)} (docs/CONTRACTS.md §45.11.5)")
-    sys.path.insert(0, str(API / "src"))
-    from clipfactory_api.workspaces import guidance
+def _check_stories_models(data: dict[str, object]) -> int:
+    """``models.json``: every model has a key, a label, a model id and only known efforts; the defaults are listed."""
+    efforts = {"low", "medium", "high", "xhigh", "max"}
+    models = data.get("models")
+    if not isinstance(models, list) or not models:
+        raise ValueError("models must be a non-empty list")
+    keys = []
+    for n, m in enumerate(models):
+        if not isinstance(m, dict) or not all(isinstance(m.get(k), str) and m[k] for k in ("key", "label", "modelId")):
+            raise ValueError(f"models[{n}] needs a key, a label and a modelId")
+        offered = m.get("efforts")
+        if not isinstance(offered, list) or not set(offered) <= efforts:
+            raise ValueError(f"models[{n}].efforts holds an unknown effort")
+        keys.append(m["key"])
+    if len(keys) != len(set(keys)):
+        raise ValueError("two models share a key")
+    if data.get("defaultModel") not in keys or data.get("defaultEffort") not in efforts:
+        raise ValueError("defaultModel must be a listed model and defaultEffort a known effort")
+    return len(keys)
 
-    try:
-        parsed = guidance.load(STORIES_GUIDANCE)
-    except (guidance.GuidanceError, ValueError) as e:
-        raise SystemExit(f"{STORIES_GUIDANCE.relative_to(ROOT)} is not usable guidance: {e}") from e
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(STORIES_GUIDANCE, dest)
-    print(
-        f"  stories guidance: {len(parsed.topics)} topics, {len(parsed.sources)} sources, checked {parsed.checked_at}"
-    )
+
+def _check_stories_agents(data: dict[str, object]) -> int:
+    """``agents.json``: the five built-in agents, each with its tasks and instructions."""
+    wanted = {"creative_director", "video_analysis", "storyboard", "character", "quality_assurance"}
+    agents = data.get("agents")
+    if not isinstance(agents, list):
+        raise ValueError("agents must be a list")
+    found = set()
+    for n, a in enumerate(agents):
+        if not isinstance(a, dict) or not isinstance(a.get("instructions"), str) or not a.get("tasks"):
+            raise ValueError(f"agents[{n}] needs instructions and tasks")
+        found.add(a.get("agentId"))
+    if found != wanted:
+        raise ValueError(f"the agents must be exactly {sorted(wanted)}")
+    return len(found)
+
+
+def _copy_stories_config(dest: Path) -> list[str]:
+    """``stories/config/*.json`` → ``clipfactory_api/stories_config/``, validated first: the guidance's every topic,
+    step and dont names its checked sources (§45.11.5), the models and agents are usable (§45.25, §45.26), and every
+    file is a JSON object, so a bad edit fails the build, never a request. Clip Factory's ``config/`` is not read."""
+    import json
+
+    sys.path.insert(0, str(API / "src"))
+    from clipfactory_api.workspaces import config, guidance
+
+    names = []
+    for name in config.FILES:
+        path = STORIES_CONFIG / name
+        if not path.is_file():
+            raise SystemExit(f"missing {path.relative_to(ROOT)} (docs/CONTRACTS.md §45.24)")
+    for path in sorted(STORIES_CONFIG.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError("it must hold one JSON object")
+            if path.name == "guidance.json":
+                parsed = guidance.parse(data)
+                print(f"  stories guidance: {len(parsed.topics)} topics, {len(parsed.sources)} sources")
+            elif path.name == "models.json":
+                print(f"  stories models: {_check_stories_models(data)}")
+            elif path.name == "agents.json":
+                print(f"  stories agents: {_check_stories_agents(data)}")
+        except (guidance.GuidanceError, ValueError) as e:
+            raise SystemExit(f"{path.relative_to(ROOT)} is not usable: {e}") from e
+        dest.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, dest / path.name)
+        names.append(f"{STORIES_CONFIG_IN_ZIP}/{path.name}")
+    return names
+
+
+def _stories_skill_name(text: str) -> str:
+    """The ``name`` of a Lamo Stories ``SKILL.md``: front matter between ``---`` lines with a name and a description."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---" or "---" not in [line.strip() for line in lines[1:]]:
+        raise ValueError("it must start with front matter between two --- lines")
+    end = [line.strip() for line in lines[1:]].index("---") + 1
+    fields = {}
+    for line in lines[1:end]:
+        key, sep, value = line.partition(":")
+        if sep:
+            fields[key.strip()] = value.strip().strip('"')
+    if not fields.get("name") or not fields.get("description"):
+        raise ValueError("its front matter needs a name and a description")
+    return fields["name"]
+
+
+def _copy_stories_skills(dest: Path) -> list[str]:
+    """``stories/skills/<name>/**`` → ``clipfactory_api/stories_skills/<name>/``: Lamo Stories' built-in skills (never
+    Clip Factory's ``skills/``), each with a readable ``SKILL.md`` whose front matter names it after its folder."""
+    names = []
+    for skill_md in sorted(STORIES_SKILLS.glob("*/SKILL.md")):
+        folder = skill_md.parent
+        try:
+            name = _stories_skill_name(skill_md.read_text(encoding="utf-8"))
+        except (UnicodeDecodeError, ValueError) as e:
+            raise SystemExit(f"{skill_md.relative_to(ROOT)} is not a usable skill: {e}") from e
+        if name != folder.name:
+            raise SystemExit(f"{skill_md.relative_to(ROOT)} is named {name}, not {folder.name}")
+        for path in sorted(p for p in folder.rglob("*") if p.is_file()):
+            target = dest / folder.name / path.relative_to(folder)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, target)
+            names.append(f"{STORIES_SKILLS_IN_ZIP}/{folder.name}/{path.relative_to(folder).as_posix()}")
+        print(f"  stories skill: {name}")
+    if not names:
+        raise SystemExit(f"no Lamo Stories skills in {STORIES_SKILLS.relative_to(ROOT)} (docs/CONTRACTS.md §45.26)")
+    return names
 
 
 def _copy_help_corpus(dest: Path) -> None:
@@ -254,7 +350,8 @@ def main() -> int:
         skills = _copy_skills(stage / "clipfactory_api" / "builtin_skills")
         _copy_platforms_config(stage / PLATFORMS_CONFIG_IN_ZIP)
         _copy_money_config(stage / MONEY_CONFIG_IN_ZIP)
-        _copy_stories_guidance(stage / STORIES_GUIDANCE_IN_ZIP)
+        stories_files = _copy_stories_config(stage / STORIES_CONFIG_IN_ZIP)
+        stories_files += _copy_stories_skills(stage / STORIES_SKILLS_IN_ZIP)
         _copy_help_corpus(stage / HELP_CORPUS_IN_ZIP)
         names = _zip(stage, OUT)
     missing = [
@@ -264,7 +361,7 @@ def main() -> int:
             *VENDORED,
             PLATFORMS_CONFIG_IN_ZIP,
             MONEY_CONFIG_IN_ZIP,
-            STORIES_GUIDANCE_IN_ZIP,
+            *stories_files,
             HELP_CORPUS_IN_ZIP,
             ASK_KNOWLEDGE_IN_ZIP,
         )

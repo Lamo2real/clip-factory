@@ -11,14 +11,15 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App
-from clipfactory_api.routes.workspaces import core
 from clipfactory_api.workspaces import guidance, jobs
+from clipfactory_api.workspaces.routes import core
 from conftest import USER, Call
 from fakes import FakeAgentCore, FakeS3, FakeTable
 from ws_support import (
     BASE,
     agent_end,
     agent_step,
+    caller,
     install,
     pk,
     prefix,
@@ -27,9 +28,17 @@ from ws_support import (
     seed_idea,
     seed_item,
     seed_job,
+    seed_refvid,
     seed_story,
     story_key,
 )
+
+
+@pytest.fixture
+def call(app: App) -> Call:
+    """Through Lamo Stories' own route table (its own Lambda), not Clip Factory's."""
+    return caller(app)
+
 
 ALL = ["storyboard", "safety", "scenes", "animation", "sound", "captions", "assemble", "preview"]
 
@@ -548,7 +557,7 @@ def test_cancel_puts_the_story_back_and_fences_the_run(
     assert body["story"]["stale"] == ["sound", "assemble", "preview"]  # as it was
     assert body["story"]["currentJobId"] is None
     assert _job(store, job["jobId"])["sessionId"] != old_session
-    assert agentcore.calls[-1]["payload"] == {"action": "cancel_story", "jobId": job["jobId"]}
+    assert agentcore.calls[-1]["payload"] == {"action": "cancel", "id": job["jobId"]}
     assert agentcore.calls[-1]["runtimeSessionId"] == old_session
     assert agentcore.stopped == [old_session]
     # Nothing to cancel: the same answer again.
@@ -599,9 +608,7 @@ def test_a_cancel_after_the_storyboard_leaves_the_rest_to_make(
     assert body["job"]["jobType"] == "produce"
 
 
-def test_a_canceled_whole_remake_never_approves_the_older_video(
-    call: Call, store: db.Store, s3_client: FakeS3
-) -> None:
+def test_a_canceled_whole_remake_never_approves_the_older_video(call: Call, store: db.Store, s3_client: FakeS3) -> None:
     story = seed_story(store, s3_client)
     sid = story["storyId"]
     job = call("POST", f"{BASE}/stories/{sid}/produce", {"from": "storyboard"})[1]["job"]
@@ -865,3 +872,223 @@ def test_a_failed_script_write_leaves_the_story_as_it_was(call: Call, store: db.
     assert stored["stale"] == []
     assert stored["captionsOn"] is True
     assert "ownerEdits" not in stored
+
+
+# --- the owner's model and effort, reference videos, Write them again (§45.25, §45.28, §45.11.2) ------------------
+
+
+def test_create_keeps_the_videos_own_setting_and_references_and_the_first_jobs_override(
+    call: Call, store: db.Store, hero: dict[str, Any]
+) -> None:
+    ref = seed_refvid(store)
+    body = {
+        "brief": {"title": "Toast", "logline": "Toast flies.", "category": "comedy"},
+        "characterIds": [hero["characterId"]],
+        "referenceIds": [ref["refId"]],
+        "ai": {"model": "fable-5-2", "effort": "high"},
+        "override": {"effort": "max"},
+    }
+    status, out = call("POST", f"{BASE}/stories", body)
+    assert status == 201
+    story, job = out["story"], out["job"]
+    assert story["ai"] == {"model": "fable-5-2", "effort": "high"}  # kept with the video (level 2)
+    assert story["referenceIds"] == [ref["refId"]]
+    # The override is for this job only: on its configuration, for the agent, and never on the story.
+    stored = _job(store, job["jobId"])
+    assert stored["configuration"]["override"] == {"effort": "max"}
+    assert stored["configuration"]["referenceIds"] == [ref["refId"]]
+    assert "override" not in _story(store, story["storyId"])
+    assert job["configuration"] == {"run": ALL, "from": None, "sceneIds": None, "note": None}
+    assert job["meta"]["models"] == []
+    plain = call("POST", f"{BASE}/stories", {**body, "ai": None, "override": None, "referenceIds": None})[1]
+    assert plain["story"]["ai"] == {"model": None, "effort": None}
+    assert plain["story"]["referenceIds"] == []
+    assert "override" not in _job(store, plain["job"]["jobId"])["configuration"]
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"referenceIds": ["01J0000000000000000000000Z"]},
+        {"referenceIds": ["x"]},
+        {"referenceIds": [f"01J000000000000000000000{n}0" for n in range(4)]},
+        {"ai": {"model": "gpt-9", "effort": None}},
+        {"ai": {"model": "opus-5-5"}, "override": {"effort": "extreme"}},
+        {"ai": {"model": "opus-5-5", "effort": "high", "temperature": 0}},
+        {"override": {"model": "opus-5-5", "effort": "high", "seed": 1}},
+    ],
+)
+def test_bad_references_or_models_are_400(
+    call: Call, store: db.Store, hero: dict[str, Any], agentcore: FakeAgentCore, extra: dict[str, Any]
+) -> None:
+    body = {"brief": {"title": "T", "logline": "L", "category": "comedy"}, "characterIds": [hero["characterId"]]}
+    assert call("POST", f"{BASE}/stories", {**body, **extra})[0] == 400
+    assert agentcore.calls == []
+
+
+def test_another_owners_reference_video_cannot_be_used(call: Call, store: db.Store, hero: dict[str, Any]) -> None:
+    theirs = seed_refvid(store, user="99999999-8888-7777-6666-555555555555")
+    wrong = seed_refvid(store, workspaceId="01J0000000000000000000000Q")
+    for ref in (theirs, wrong):
+        body = {
+            "brief": {"title": "T", "logline": "L", "category": "comedy"},
+            "characterIds": [hero["characterId"]],
+            "referenceIds": [ref["refId"]],
+        }
+        status, out = call("POST", f"{BASE}/stories", body)
+        assert status == 400
+        assert out["error"]["message"] == "We could not find one of those reference videos. Pick them again."
+
+
+def test_produce_and_changes_carry_an_override_for_that_job_only(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    story = seed_story(store, s3_client, stale=["sound"], referenceIds=[])
+    sid = story["storyId"]
+    job = call("POST", f"{BASE}/stories/{sid}/produce", {"override": {"model": "sonnet-5-5", "effort": "low"}})[1]
+    assert _job(store, job["job"]["jobId"])["configuration"]["override"] == {"model": "sonnet-5-5", "effort": "low"}
+    agent_end(store, sid, job["job"]["jobId"])
+    again = call("POST", f"{BASE}/stories/{sid}/changes", {"note": "Faster", "override": {"model": "haiku-5-5"}})[1]
+    stored = _job(store, again["job"]["jobId"])
+    assert stored["configuration"]["override"] == {"model": "haiku-5-5"}
+    assert stored["configuration"]["note"] == "Faster"
+    assert _story(store, sid).get("ai") is None  # never saved as a setting
+    agent_end(store, sid, again["job"]["jobId"])
+    third = call("POST", f"{BASE}/stories/{sid}/produce", {"from": "assemble"})[1]
+    assert "override" not in _job(store, third["job"]["jobId"])["configuration"]
+    assert call("POST", f"{BASE}/stories/{sid}/produce", {"override": {"model": "nope"}})[0] == 400
+
+
+def test_patch_sets_the_videos_model_and_references_and_makes_nothing_stale(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    story = seed_story(store, s3_client)
+    ref = seed_refvid(store)
+    status, body = _patch(call, story, ai={"model": "opus-5-5", "effort": "xhigh"}, referenceIds=[ref["refId"]])
+    assert status == 200
+    out = body["story"]
+    assert out["ai"] == {"model": "opus-5-5", "effort": "xhigh"}
+    assert out["referenceIds"] == [ref["refId"]]
+    assert out["stale"] == []
+    assert out["scriptVersion"] == 1  # no new script
+    assert call("POST", f"{BASE}/stories/{story['storyId']}/approve", {"version": out["version"]})[0] == 200
+    other = seed_story(store, s3_client)
+    assert _patch(call, other, referenceIds=["01J0000000000000000000000Z"])[0] == 400
+    assert _patch(call, other, ai={"model": "gpt-9", "effort": None})[0] == 400
+    cleared = _patch(call, other, ai=None, referenceIds=None)[1]["story"]
+    assert (cleared["ai"], cleared["referenceIds"]) == ({"model": None, "effort": None}, [])
+
+
+def test_an_owner_edited_storyboard_is_the_librarys_current_one(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    story = seed_story(store, s3_client)
+    first = seed_asset(store, None, kind="storyboard", storyId=story["storyId"], key=story["scriptKey"], version=1)
+    assert _patch(call, story, musicMood="calm")[0] == 200
+    boards = [a for a in store.query_all(pk(), "ASSET#") if a["kind"] == "storyboard"]
+    newest = next(a for a in boards if a["assetId"] != first["assetId"])
+    assert newest["key"] == story_key(story["storyId"], "script/v2.json")
+    assert newest["version"] == 2
+    assert newest["meta"] == {"current": 1, "by": "owner"}
+    assert next(a for a in boards if a["assetId"] == first["assetId"])["meta"]["current"] == 0
+    listed = call("GET", f"{BASE}/library", query={"kind": "storyboard"})[1]["items"]
+    assert [(i["version"], i["meta"]["current"]) for i in listed] == [(2, 1), (1, 0)]
+
+
+def test_write_them_again_is_a_captions_task_of_the_storyboard_agent(
+    call: Call, store: db.Store, s3_client: FakeS3, agentcore: FakeAgentCore
+) -> None:
+    story = seed_story(store, s3_client)
+    status, body = call("POST", f"{BASE}/stories/{story['storyId']}/captions", {"override": {"effort": "low"}})
+    assert status == 202
+    task = body["task"]
+    assert task["kind"] == "captions"
+    stored = store.get(pk(), f"TASK#{task['taskId']}")
+    assert stored is not None
+    assert stored["input"] == {"storyId": story["storyId"], "scriptVersion": 1}
+    assert stored["agentId"] == "storyboard"
+    assert stored["override"] == {"effort": "low"}
+    assert agentcore.calls[-1]["payload"]["action"] == "run_task"
+    # The story is not touched: the draft is saved only through PATCH.
+    assert _story(store, story["storyId"])["version"] == story["version"]
+    draft = seed_story(store, s3_client, made=False, status="failed")
+    assert call("POST", f"{BASE}/stories/{draft['storyId']}/captions", {})[0] == 409
+
+
+def test_approve_accepts_a_skipped_quality_check_except_for_driving_safety(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    skipped = {"topicId": None, "status": "skipped", "problems": [], "checkedScriptVersion": 1, "citations": []}
+    comedy = seed_story(store, s3_client, safety=skipped)
+    shown = call("GET", f"{BASE}/stories/{comedy['storyId']}")[1]["story"]
+    assert shown["safety"]["status"] == "skipped"
+    assert call("POST", f"{BASE}/stories/{comedy['storyId']}/approve", {"version": 3})[0] == 200
+    safety_story = seed_story(
+        store, s3_client, category="driving_safety", safetyTopicId="skid-recovery", safety=skipped
+    )
+    status, body = call("POST", f"{BASE}/stories/{safety_story['storyId']}/approve", {"version": 3})
+    assert status == 409
+    assert body["error"]["message"] == "Your changes aren't in the video yet. Tap Remake first."
+
+
+def test_each_steps_model_and_effort_show_on_the_job(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    story = seed_story(store, s3_client)
+    job = seed_job(
+        store,
+        story,
+        status="ready",
+        meta={
+            "writerModel": "fable-5-2",
+            "models": [
+                {
+                    "step": "storyboard",
+                    "agentId": "storyboard",
+                    "model": "fable-5-2",
+                    "effort": "high",
+                    "effortApplied": True,
+                },
+                {
+                    "step": "safety",
+                    "agentId": "quality_assurance",
+                    "model": "opus-5-5",
+                    "effort": None,
+                    "effortApplied": False,
+                },
+                "junk",
+            ],
+        },
+    )
+    (shown,) = call("GET", f"{BASE}/stories/{story['storyId']}/jobs")[1]["jobs"]
+    assert shown["jobId"] == job["jobId"]
+    assert shown["meta"]["writerModel"] == "fable-5-2"
+    assert shown["meta"]["models"] == [
+        {"step": "storyboard", "agentId": "storyboard", "model": "fable-5-2", "effort": "high", "effortApplied": True},
+        {"step": "safety", "agentId": "quality_assurance", "model": "opus-5-5", "effort": None, "effortApplied": False},
+    ]
+
+
+def test_a_switched_off_storyboard_agent_refuses_runs_that_write_the_story(
+    call: Call, store: db.Store, s3_client: FakeS3, hero: dict[str, Any], agentcore: FakeAgentCore
+) -> None:
+    store.put(
+        {
+            "pk": pk(),
+            "sk": "AGENT#storyboard",
+            "type": "ws_agent",
+            "userId": USER,
+            "workspaceId": "stories",
+            "agentId": "storyboard",
+            "name": "Storyboard",
+            "active": False,
+        }
+    )
+    sentence = "Storyboard is switched off. Switch it on in Lamo Stories › Settings › Agents."
+    body = {"brief": {"title": "T", "logline": "L", "category": "comedy"}, "characterIds": [hero["characterId"]]}
+    status, out = call("POST", f"{BASE}/stories", body)
+    assert (status, out["error"]["message"]) == (409, sentence)
+    assert store.query_all(pk(), "STORY#") == []
+    story = seed_story(store, s3_client, stale=["sound"])
+    assert call("POST", f"{BASE}/stories/{story['storyId']}/produce", {"from": "storyboard"})[0] == 409
+    assert call("POST", f"{BASE}/stories/{story['storyId']}/changes", {"note": "x"})[0] == 409
+    assert _story(store, story["storyId"])["status"] == "review"
+    # A remake that writes nothing new (only the sounds here) still runs.
+    assert call("POST", f"{BASE}/stories/{story['storyId']}/produce", {})[0] == 202
+    assert [c["payload"]["action"] for c in agentcore.calls] == ["process_story"]

@@ -1,4 +1,5 @@
-"""Production jobs (``PJOB#``): creation, the stale-heartbeat fence, a failed start and cancel (CONTRACTS §45.9.1).
+"""Production jobs (``PJOB#``), AI tasks (``TASK#``) and chat answers (``MSG#``): creation, the stale-heartbeat fence,
+a failed start and cancel (CONTRACTS §45.9.1).
 
 The API writes the job item (every step, ``configuration.run``, ``sessionId``, ``heartbeatAt = createdAt``,
 ``status = queued``); the agent then writes each step, ``progress``, ``heartbeatAt``, ``status``, ``error`` and
@@ -6,13 +7,18 @@ The API writes the job item (every step, ``configuration.run``, ``sessionId``, `
 a job: a job ``queued`` with a heartbeat older than 3 minutes, or ``running`` older than 6, is failed in one
 transaction (a new ``sessionId`` fences the old run out), then the old session is stopped (best effort). A refused
 condition means someone wrote meanwhile: the stored item is read again and returned.
+
+Tasks and chat answers are fenced the same way on their own item (``settle_task``, ``settle_message``): a task
+``queued`` for more than 3 minutes or ``running`` for more than 6 without a heartbeat, and an answer ``pending`` or
+``streaming`` for more than 3, is failed with a new ``sessionId`` (so the agent's next write is refused), then its
+session is stopped (best effort).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Final
 
 from .. import db
 from ..clock import iso, parse
@@ -30,7 +36,9 @@ NOT_SET_UP = "The video maker is not switched on yet, so making the video did no
 PORTRAIT_STOPPED = "Making the picture stopped. Tap Try again."
 PORTRAIT_NOT_STARTED = "Making the picture did not start. Tap Try again."
 PORTRAIT_NOT_SET_UP = "The picture maker is not switched on yet, so making the picture did not start."
+REFERENCE_STOPPED = "Looking at the video stopped. Tap Try again."
 CANCELED_STEP = "You stopped it."
+STOPPED_BY_KIND: Final = {"animation": STOPPED, "character": PORTRAIT_STOPPED, "reference": REFERENCE_STOPPED}
 
 Item = dict[str, Any]
 Stop = Callable[[str], None]
@@ -70,9 +78,13 @@ def new_job(
     note: str | None = None,
     meta: Mapping[str, Any] | None = None,
     story_version: int | None = None,
+    override: Mapping[str, Any] | None = None,
+    reference_ids: list[str] | None = None,
 ) -> Item:
     """``story_version``: the story's ``version`` once this job is launched. The agent's every story write adds 1, so
-    a cancel can tell whether the run already changed the story (``cancel``)."""
+    a cancel can tell whether the run already changed the story (``cancel``). ``override``: the owner's model and
+    effort for this job only (``configuration.override``, §45.25 level 1, never saved as a setting);
+    ``reference_ids``: the reference videos whose analyses the writer reads (§45.28)."""
     at = iso(now)
     configuration: Item = {"run": list(run)}
     if from_step:
@@ -81,6 +93,10 @@ def new_job(
         configuration["sceneIds"] = list(scene_ids)
     if note:
         configuration["note"] = note
+    if override:
+        configuration["override"] = dict(override)
+    if reference_ids:
+        configuration["referenceIds"] = list(reference_ids)
     item: Item = {
         "pk": ws.workspace_pk(user_id, workspace_id),
         "sk": job_sk(job_id),
@@ -236,7 +252,7 @@ def settle(
         return dict(job)
     if story is None and job.get("contentType") == "animation":
         story = store.get(str(job["pk"]), story_sk(str(job.get("contentId"))))
-    message = STOPPED if job.get("contentType") == "animation" else PORTRAIT_STOPPED
+    message = STOPPED_BY_KIND.get(str(job.get("contentType")), STOPPED)
     if _fail(store, job, now, message, story=story, expect_status=[str(job.get("status"))]):
         log("info", "stories.job_fenced", jobId=job.get("jobId"), was=job.get("status"))
         stop_quietly(stop, job.get("sessionId"))
@@ -304,3 +320,90 @@ def cancel(
 
 def active(job: Mapping[str, Any] | None) -> bool:
     return bool(job) and (job or {}).get("status") in shapes.JOB_ACTIVE
+
+
+# --- AI tasks (TASK#) and chat answers (MSG#) -------------------------------------------------------------------
+
+TASK_ACTIVE: Final = frozenset({"queued", "running"})
+MESSAGE_ACTIVE: Final = frozenset({"pending", "streaming"})
+MESSAGE_LIMIT = timedelta(minutes=3)
+TASK_STOPPED = "The helper stopped. Tap Try again."
+TASK_NOT_STARTED = "The helper did not start. Tap Try again."
+TASK_NOT_SET_UP = "The AI helper is not switched on yet, so it could not start."
+MESSAGE_STOPPED = "The answer stopped. Tap Try again."
+
+
+def _beat(item: Mapping[str, Any]) -> datetime | None:
+    return parse(item.get("heartbeatAt")) or parse(item.get("createdAt"))
+
+
+def task_is_stale(task: Mapping[str, Any], now: datetime) -> bool:
+    status = task.get("status")
+    if status not in TASK_ACTIVE:
+        return False
+    beat = _beat(task)
+    limit = QUEUED_LIMIT if status == "queued" else RUNNING_LIMIT
+    return beat is None or now - beat > limit
+
+
+def message_is_stale(message: Mapping[str, Any], now: datetime) -> bool:
+    if message.get("status") not in MESSAGE_ACTIVE:
+        return False
+    beat = _beat(message)
+    return beat is None or now - beat > MESSAGE_LIMIT
+
+
+def _fence(
+    store: db.Store, item: Mapping[str, Any], now: datetime, message: str, *, expect: Iterable[str], item_id: str
+) -> bool:
+    """``failed`` with the sentence and a new ``sessionId``, conditional on what was read. False when refused."""
+    update = Update(
+        str(item["pk"]),
+        str(item["sk"]),
+        sets={"status": "failed", "error": message, "sessionId": new_session_id(item_id), "updatedAt": iso(now)},
+    )
+    update.one_of("status", list(expect)).equals("sessionId", item.get("sessionId"))
+    if item.get("heartbeatAt") is not None:
+        update.equals("heartbeatAt", item["heartbeatAt"])
+    try:
+        update.run(store)
+    except db.ConditionFailed:
+        return False
+    return True
+
+
+def settle_task(
+    store: db.Store, task: Mapping[str, Any] | None, now: datetime, *, stop: Stop | None = None
+) -> Item | None:
+    """The task as it really is: a stale ``queued``/``running`` task becomes ``failed`` ("The helper stopped.")."""
+    if task is None:
+        return None
+    if not task_is_stale(task, now):
+        return dict(task)
+    status = str(task.get("status"))
+    if _fence(store, task, now, TASK_STOPPED, expect=[status], item_id=str(task.get("taskId"))):
+        log("info", "stories.task_fenced", taskId=task.get("taskId"), was=status)
+        stop_quietly(stop, task.get("sessionId"))
+    return _reread(store, task)
+
+
+def fail_task_start(store: db.Store, task: Mapping[str, Any], now: datetime, message: str) -> Item:
+    """The agent did not take the task: ``failed`` with a plain sentence, conditional on ``status = queued``."""
+    _fence(store, task, now, message, expect=["queued"], item_id=str(task.get("taskId")))
+    return _reread(store, task)
+
+
+def settle_message(
+    store: db.Store, message: Mapping[str, Any] | None, now: datetime, *, stop: Stop | None = None
+) -> Item | None:
+    """The chat answer as it really is: ``pending`` or ``streaming`` with no heartbeat for 3 minutes becomes
+    ``failed`` ("The answer stopped. Tap Try again."). Builder A2's chat routes call it on every read."""
+    if message is None:
+        return None
+    if not message_is_stale(message, now):
+        return dict(message)
+    status = str(message.get("status"))
+    if _fence(store, message, now, MESSAGE_STOPPED, expect=[status], item_id=str(message.get("msgId"))):
+        log("info", "stories.message_fenced", msgId=message.get("msgId"), was=status)
+        stop_quietly(stop, message.get("sessionId"))
+    return _reread(store, message)

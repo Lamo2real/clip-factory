@@ -13,7 +13,14 @@ from clipfactory_api.app import App
 from clipfactory_api.workspaces import catalog
 from conftest import USER, Call
 from fakes import FakeAgentCore, FakeS3, FakeTable
-from ws_support import BASE, character_body, install, pk, prefix, seed_character, seed_job, seed_story
+from ws_support import BASE, caller, character_body, install, pk, prefix, seed_character, seed_job, seed_story
+
+
+@pytest.fixture
+def call(app: App) -> Call:
+    """Through Lamo Stories' own route table (its own Lambda), not Clip Factory's."""
+    return caller(app)
+
 
 ROOT = Path(__file__).resolve().parents[2]
 ENGINE = ROOT / "web" / "src" / "stories" / "engine"
@@ -297,3 +304,122 @@ def test_the_api_vocabulary_mirrors_the_engine() -> None:
     assert list(catalog.PATTERNS) == _ts_union("pattern")
     assert list(catalog.ACCESSORIES) == _ts_union("accessory")
     assert list(catalog.VOICE_STYLES) == _ts_union("  style")
+
+
+# --- "Design with AI" (§45.5): a picture, then a task of the character agent ------------------------------------
+
+
+def test_design_with_ai_uploads_a_hidden_picture_and_asks_the_character_agent(
+    call: Call, store: db.Store, s3_client: FakeS3, agentcore: FakeAgentCore
+) -> None:
+    status, up = call(
+        "POST", f"{BASE}/characters/design/uploads", {"filename": "cat.webp", "contentType": "image/webp", "size": 2048}
+    )
+    assert status == 200
+    key = f"{prefix()}design/{up['assetId']}.webp"
+    assert up["headers"] == {"Content-Type": "image/webp"}
+    assert key in up["uploadUrl"]
+    asset = store.get(pk(), f"ASSET#{up['assetId']}")
+    assert asset is not None
+    assert (asset["kind"], asset["key"], asset["bytes"]) == ("design_ref", key, 2048)
+    # The Library hides it.
+    assert call("GET", f"{BASE}/library")[1]["items"] == []
+    # Before the picture arrives the task is refused; after, the character agent gets it.
+    body = {"description": "A tall orange cat in a raincoat", "referenceAssetId": up["assetId"]}
+    status, refused = call("POST", f"{BASE}/characters/design", body)
+    assert status == 400
+    assert refused["error"]["message"] == "The picture did not finish sending. Send it again."
+    s3_client.objects[key] = b"webp"
+    status, out = call("POST", f"{BASE}/characters/design", {**body, "override": {"model": "fable-5-1"}})
+    assert status == 202
+    task = out["task"]
+    assert task["kind"] == "character_design"
+    stored = store.get(pk(), f"TASK#{task['taskId']}")
+    assert stored is not None
+    assert stored["agentId"] == "character"
+    assert stored["input"] == {
+        "description": "A tall orange cat in a raincoat",
+        "referenceAssetId": up["assetId"],
+        "referenceKey": key,
+        "referenceContentType": "image/webp",
+    }
+    assert stored["override"] == {"model": "fable-5-1"}
+    assert agentcore.calls[-1]["payload"]["action"] == "run_task"
+    # The draft comes back as the task's result; nothing is saved until the owner taps Save.
+    draft = character_body("Marmalade")
+    store.update(pk(), f"TASK#{task['taskId']}", {"status": "done", "result": {"character": draft}})
+    shown = call("GET", f"{BASE}/tasks/{task['taskId']}")[1]["task"]
+    assert shown["result"]["character"] == draft
+    assert call("GET", f"{BASE}/characters")[1]["characters"] == []
+
+
+def test_design_takes_a_characters_own_reference_too_but_only_of_this_workspace(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    hero = seed_character(store, name="Lamo")
+    ref_key = f"{prefix()}characters/{hero['characterId']}/refs/01J0000000000000000000000R.png"
+    s3_client.objects[ref_key] = b"png"
+    store.put(
+        {
+            "pk": pk(),
+            "sk": "ASSET#01J0000000000000000000000R",
+            "type": "ws_asset",
+            "userId": USER,
+            "workspaceId": "stories",
+            "assetId": "01J0000000000000000000000R",
+            "kind": "character_ref",
+            "characterId": hero["characterId"],
+            "key": ref_key,
+            "contentType": "image/png",
+            "bytes": 3,
+        }
+    )
+    assert call("POST", f"{BASE}/characters/design", {"referenceAssetId": "01J0000000000000000000000R"})[0] == 202
+    story = seed_story(store, s3_client)
+    video = {
+        "pk": pk(),
+        "sk": "ASSET#01J0000000000000000000000V",
+        "type": "ws_asset",
+        "userId": USER,
+        "workspaceId": "stories",
+        "assetId": "01J0000000000000000000000V",
+        "kind": "final_video",
+        "storyId": story["storyId"],
+        "key": story["videoKey"],
+    }
+    store.put(video)
+    other = {
+        **video,
+        "sk": "ASSET#01J0000000000000000000000W",
+        "assetId": "01J0000000000000000000000W",
+        "kind": "design_ref",
+        "userId": "99999999-8888-7777-6666-555555555555",
+    }
+    store.put(other)
+    for asset_id in ("01J0000000000000000000000V", "01J0000000000000000000000W", "01J0000000000000000000000Z", "x"):
+        status, body = call("POST", f"{BASE}/characters/design", {"referenceAssetId": asset_id})
+        assert status == 404, asset_id
+        assert body["error"]["message"] == "We could not find that picture."
+    assert len(store.query_all(pk(), "TASK#")) == 1  # only the one good task above
+
+
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("design", {}),
+        ("design", {"description": "x" * 601}),
+        ("design", {"description": "a cat", "colour": "red"}),
+        ("design", {"description": "a cat", "override": {"effort": "huge"}}),
+        ("design/uploads", {"filename": "a.gif", "contentType": "image/gif", "size": 3}),
+        ("design/uploads", {"filename": "a.png", "contentType": "image/png", "size": 0}),
+        ("design/uploads", {"filename": "a.png", "contentType": "image/png"}),
+    ],
+)
+def test_design_bodies_are_checked(call: Call, store: db.Store, path: str, body: dict[str, Any]) -> None:
+    assert call("POST", f"{BASE}/characters/{path}", body)[0] == 400
+    assert store.query_all(pk(), "TASK#") == []
+
+
+def test_a_too_big_design_picture_is_413(call: Call) -> None:
+    body = {"filename": "a.png", "contentType": "image/png", "size": 10 * 1024 * 1024 + 1}
+    assert call("POST", f"{BASE}/characters/design/uploads", body)[0] == 413

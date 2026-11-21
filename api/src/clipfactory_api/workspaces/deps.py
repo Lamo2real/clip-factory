@@ -35,7 +35,7 @@ def from_env(app: Any) -> WsDeps:
     return WsDeps(
         story_flow_arn=os.environ.get("STORY_FLOW_ARN", ""),
         ws_secret_prefix=os.environ.get("WS_SECRET_PREFIX", ws.WS_SECRET_PREFIX),
-        agent=agent.from_env(),  # None until AGENT_RUNTIME_ARN is set; its client is made on first use
+        agent=agent.from_env(),  # Lamo Stories' own runtime: None until STORIES_AGENT_RUNTIME_ARN is set
     )
 
 

@@ -10,13 +10,20 @@ from typing import Any
 import pytest
 
 from clipfactory_api import db
-from clipfactory_api.agent_client import AgentError
 from clipfactory_api.app import App
 from clipfactory_api.workspaces import agent as story_agent
 from clipfactory_api.workspaces import jobs, shapes
+from clipfactory_api.workspaces.agent import StoriesAgentError as AgentError
 from conftest import NOW, Call, Clock
 from fakes import FakeAgentCore, FakeS3, FakeTable, client_error
-from ws_support import ARN, BASE, install, pk, seed_character, seed_job, seed_story
+from ws_support import ARN, BASE, caller, install, pk, seed_character, seed_job, seed_story
+
+
+@pytest.fixture
+def call(app: App) -> Call:
+    """Through Lamo Stories' own route table (its own Lambda), not Clip Factory's."""
+    return caller(app)
+
 
 STOPPED = "Making the video stopped. Tap Try again."
 
@@ -211,7 +218,7 @@ def test_two_attempts_on_a_retryable_error_one_on_others() -> None:
     assert len(hard.calls) == 1
     twice = FlakyAgentCore([client_error("ThrottlingException", 429)] * 3)
     with pytest.raises(AgentError):
-        story_agent.StoryAgent(twice, ARN).cancel_story("j", "x")
+        story_agent.StoryAgent(twice, ARN).cancel("j", "x")
     assert len(twice.calls) == 2
 
 
@@ -222,7 +229,7 @@ def test_stop_session_treats_a_gone_session_as_done() -> None:
     core.fail = True
     with pytest.raises(AgentError):
         story_agent.StoryAgent(core, ARN).stop_session("cfstory-x")
-    with pytest.raises(AgentError, match="AGENT_RUNTIME_ARN"):
+    with pytest.raises(AgentError, match="STORIES_AGENT_RUNTIME_ARN"):
         story_agent.StoryAgent(FakeAgentCore(), "").start_story(
             user_id="u", workspace_id="w", story_id="s", job_id="j", session_id="x"
         )
@@ -238,13 +245,16 @@ def test_the_client_is_made_on_first_use(monkeypatch: pytest.MonkeyPatch) -> Non
 
     agent = story_agent.StoryAgent(factory, ARN)
     assert made == []
-    agent.cancel_story("j", "s")
-    agent.cancel_story("j", "s")
+    agent.cancel("j", "s")
+    agent.cancel("j", "s")
     assert made == [1]
     assert len(core.calls) == 2
-    monkeypatch.delenv("AGENT_RUNTIME_ARN", raising=False)
+    assert core.calls[0]["payload"] == {"action": "cancel", "id": "j"}
+    monkeypatch.delenv("STORIES_AGENT_RUNTIME_ARN", raising=False)
+    # Clip Factory's runtime ARN is never used: Lamo Stories stays off without its own.
+    monkeypatch.setenv("AGENT_RUNTIME_ARN", "arn:aws:bedrock-agentcore:eu-north-1:123:runtime/cf_prod_clip_agent")
     assert story_agent.from_env() is None
-    monkeypatch.setenv("AGENT_RUNTIME_ARN", ARN)
+    monkeypatch.setenv("STORIES_AGENT_RUNTIME_ARN", ARN)
     found = story_agent.from_env()
     assert found is not None
     assert found.runtime_arn == ARN
@@ -285,5 +295,91 @@ def test_no_second_try_after_a_slow_failure(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(story_agent.time, "monotonic", lambda: next(ticks))
     slow = FlakyAgentCore([client_error("RequestTimeout", 408), client_error("RequestTimeout", 408)])
     with pytest.raises(AgentError):
-        story_agent.StoryAgent(slow, ARN).cancel_story("j", "x")
+        story_agent.StoryAgent(slow, ARN).cancel("j", "x")
     assert len(slow.calls) == 1
+
+
+def test_every_action_names_its_item_on_lamo_stories_own_runtime() -> None:
+    core = FakeAgentCore()
+    agent = story_agent.StoryAgent(core, ARN)
+    agent.start_story(user_id="u", workspace_id="w", story_id="s", job_id="j", session_id="x1")
+    agent.start_portrait(user_id="u", workspace_id="w", character_id="c", job_id="j", session_id="x2")
+    agent.start_reference(user_id="u", workspace_id="w", ref_id="r", job_id="j", session_id="x3")
+    agent.start_task(user_id="u", workspace_id="w", task_id="t", kind="brainstorm", session_id="x4")
+    agent.start_task(user_id="u", workspace_id="w", task_id="t", kind="check_models", session_id="x5")
+    agent.start_chat_turn(user_id="u", workspace_id="w", conv_id="c", msg_id="m", session_id="x6")
+    agent.cancel("j", "x1")
+    base = {"userId": "u", "workspaceId": "w"}
+    assert [c["payload"] for c in core.calls] == [
+        {"action": "process_story", **base, "storyId": "s", "jobId": "j"},
+        {"action": "process_portrait", **base, "characterId": "c", "jobId": "j"},
+        {"action": "process_reference", **base, "refId": "r", "jobId": "j"},
+        {"action": "run_task", **base, "taskId": "t"},
+        {"action": "check_models", **base, "taskId": "t"},
+        {"action": "chat_turn", **base, "convId": "c", "msgId": "m"},
+        {"action": "cancel", "id": "j"},
+    ]
+    assert {c["agentRuntimeArn"] for c in core.calls} == {ARN}
+    assert [c["runtimeSessionId"] for c in core.calls] == ["x1", "x2", "x3", "x4", "x5", "x6", "x1"]
+    core.reply = {"accepted": False}
+    with pytest.raises(AgentError):
+        agent.start_task(user_id="u", workspace_id="w", task_id="t", kind="captions", session_id="x7")
+
+
+def test_the_stories_agent_client_never_reaches_clip_factorys_runtime() -> None:
+    """``workspaces/agent.py`` reads only ``STORIES_AGENT_RUNTIME_ARN`` and imports nothing of Clip Factory's agent
+    client (CONTRACTS §45.5, ADR-76)."""
+    import ast
+    from pathlib import Path
+
+    source = Path(story_agent.__file__).read_text()
+    tree = ast.parse(source)
+    imported = {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)} | {
+        a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names
+    }
+    assert not [m for m in imported if "agent_client" in m]
+    strings = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+    assert "AGENT_RUNTIME_ARN" not in strings
+    assert "STORIES_AGENT_RUNTIME_ARN" in strings
+    assert "cf_prod_clip_agent" not in source
+    assert story_agent.SESSION_PREFIX == "cfstory-"
+
+
+def test_a_stale_chat_answer_is_failed_and_its_session_stopped(store: db.Store, clock: Clock) -> None:
+    """``jobs.settle_message`` (for builder A2's chat routes): pending or streaming for 3 minutes without a heartbeat."""
+    core = FakeAgentCore()
+    agent = story_agent.StoryAgent(core, ARN)
+
+    def message(msg_id: str, status: str, beat: str) -> dict[str, Any]:
+        item = {
+            "pk": pk(),
+            "sk": f"MSG#01J0000000000000000000000C#{msg_id}",
+            "type": "ws_msg",
+            "userId": "u",
+            "workspaceId": "stories",
+            "convId": "01J0000000000000000000000C",
+            "msgId": msg_id,
+            "role": "assistant",
+            "status": status,
+            "sessionId": f"cfstory-{msg_id}-abcdefgh",
+            "heartbeatAt": beat,
+            "createdAt": beat,
+        }
+        store.put(item)
+        return item
+
+    old = message("01J0000000000000000000000D", "streaming", "2026-11-15T11:56:30.000Z")
+    fresh = message("01J0000000000000000000000E", "pending", "2026-11-15T11:58:30.000Z")
+    done = message("01J0000000000000000000000F", "done", "2026-11-15T11:00:00.000Z")
+    settled = jobs.settle_message(store, old, NOW, stop=agent.stop_session)
+    assert settled is not None
+    assert settled["status"] == "failed"
+    assert settled["error"] == "The answer stopped. Tap Try again."
+    assert settled["sessionId"] != old["sessionId"]
+    assert core.stopped == [old["sessionId"]]
+    assert jobs.settle_message(store, fresh, NOW) == fresh
+    assert jobs.settle_message(store, done, NOW) == done
+    assert jobs.settle_message(store, None, NOW) is None
+    # The agent wrote meanwhile: the fence is refused and what is stored is returned.
+    store.update(fresh["pk"], fresh["sk"], {"heartbeatAt": "2026-11-15T11:59:59.000Z"})
+    assert jobs.settle_message(store, fresh, NOW + timedelta(minutes=10))["status"] == "pending"

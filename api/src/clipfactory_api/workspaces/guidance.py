@@ -1,8 +1,8 @@
 """The checked guidance list for driving-safety stories (docs/CONTRACTS.md §45.11.5, ADR-74).
 
-``config/stories-guidance.json`` is bundled into the API zip as ``clipfactory_api/config/stories-guidance.json``
-(``scripts/build_lambda.py`` validates it with ``parse``); the repository copy is the fallback in tests. Topic
-matching happens once, here: an idea or story of category ``driving_safety`` gets ``safetyTopicId`` from the topics'
+``stories/config/guidance.json`` (Lamo Stories' own configuration, never Clip Factory's ``config/``) is bundled into the
+API zip as ``clipfactory_api/stories_config/guidance.json`` (``scripts/build_lambda.py`` validates it with ``parse``) and
+read through ``workspaces/config.py``; the repository copy is read in tests. Topic matching happens once, here: an idea or story of category ``driving_safety`` gets ``safetyTopicId`` from the topics'
 ``keywords`` (and the model's pick, checked against the list); with no match it ``needsGuidance`` and cannot be made.
 """
 
@@ -13,17 +13,17 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import cache
-from importlib import resources
 from pathlib import Path
 from typing import Any
 
-_PARENTS = Path(__file__).resolve().parents
-REPO_FILE = (_PARENTS[4] if len(_PARENTS) > 4 else Path("/nonexistent")) / "config" / "stories-guidance.json"
+from . import config
+
+FILE_NAME = "guidance.json"
 NO_GUIDANCE = "Lamo Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet."
 
 
 class GuidanceError(ValueError):
-    """``stories-guidance.json`` is missing a value or holds one the app cannot use."""
+    """``guidance.json`` is missing a value or holds one the app cannot use."""
 
 
 @dataclass(frozen=True)
@@ -75,7 +75,7 @@ def _lines(raw: Mapping[str, Any], key: str, where: str, sources: Mapping[str, A
 def parse(data: Any) -> Guidance:
     """Validates the whole file: every topic, step, dont and source. A bad edit fails the build, never a request."""
     if not isinstance(data, dict):
-        raise GuidanceError("stories-guidance.json must hold one object")
+        raise GuidanceError("guidance.json must hold one object")
     sources = data.get("sources")
     if not isinstance(sources, dict) or not sources:
         raise GuidanceError("sources must be a non-empty object")
@@ -120,12 +120,10 @@ def parse(data: Any) -> Guidance:
 
 
 def _read_text() -> str:
-    packaged = resources.files("clipfactory_api").joinpath("config", "stories-guidance.json")
-    if packaged.is_file():
-        return packaged.read_text(encoding="utf-8")
-    if REPO_FILE.is_file():
-        return REPO_FILE.read_text(encoding="utf-8")
-    raise GuidanceError("config/stories-guidance.json was not found")
+    path = config.config_dir() / FILE_NAME
+    if not path.is_file():
+        raise GuidanceError(f"stories/config/{FILE_NAME} was not found")
+    return path.read_text(encoding="utf-8")
 
 
 def load(path: Path | None = None) -> Guidance:

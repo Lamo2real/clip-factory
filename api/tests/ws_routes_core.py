@@ -1,4 +1,5 @@
-"""The ``/v1/workspaces`` core routes test_http.py expects (docs/CONTRACTS.md §45.5). Builder A fills this set."""
+"""The ``/v1/workspaces`` core routes Lamo Stories' own Lambda serves (docs/CONTRACTS.md §45.5), checked by
+test_ws_http.py (Clip Factory's route table has none of them). Builder A fills this set."""
 
 from __future__ import annotations
 
@@ -6,6 +7,7 @@ W = "/v1/workspaces/stories"
 IDEA = f"{W}/ideas/01J0000000000000000000000A"
 CHAR = f"{W}/characters/01J0000000000000000000000B"
 STORY = f"{W}/stories/01J0000000000000000000000C"
+TASK = f"{W}/tasks/01J0000000000000000000000E"
 
 EXPECTED: set[tuple[str, str]] = {
     ("GET", "/v1/workspaces"),
@@ -20,8 +22,11 @@ EXPECTED: set[tuple[str, str]] = {
     ("DELETE", IDEA),
     ("POST", f"{IDEA}/expand"),
     ("POST", f"{IDEA}/variations"),
+    ("GET", TASK),
     ("GET", f"{W}/characters"),
     ("POST", f"{W}/characters"),
+    ("POST", f"{W}/characters/design/uploads"),
+    ("POST", f"{W}/characters/design"),
     ("GET", CHAR),
     ("PUT", CHAR),
     ("DELETE", CHAR),
@@ -40,6 +45,7 @@ EXPECTED: set[tuple[str, str]] = {
     ("POST", f"{STORY}/approve"),
     ("POST", f"{STORY}/reject"),
     ("POST", f"{STORY}/changes"),
+    ("POST", f"{STORY}/captions"),
     ("GET", f"{STORY}/download"),
     ("GET", f"{W}/library"),
     ("GET", f"{W}/providers"),

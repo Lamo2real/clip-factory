@@ -1,8 +1,10 @@
-"""Workspaces, dashboard, ideas, characters, stories, library, providers and guidance (docs/CONTRACTS.md §45.5).
+"""Workspaces, dashboard, ideas, characters, stories, tasks, library, providers and guidance (docs/CONTRACTS.md §45.5).
 
-Every key is built from the JWT's ``sub`` and the path's workspace id (``guard.require_workspace``: another owner's
-workspace is a 404, Lamo Clips on a Lamo Stories page a 409), and every item read is checked again with
-``guard.owned``. Nothing here reads or writes ``USER#{userId}`` (Lamo Clips' partition) or a Lamo Clips S3 prefix.
+Served only by Lamo Stories' own Lambda (``workspaces/http.py``). Every key is built from the JWT's ``sub`` and the
+path's workspace id (``guard.require_workspace``: another owner's workspace is a 404, Lamo Clips on a Lamo Stories page
+a 409), and every item read is checked again with ``guard.owned``. Nothing here reads or writes ``USER#{userId}``
+(Lamo Clips' partition) or a Lamo Clips S3 prefix, and nothing here calls a model: AI work is a task or a job of
+Lamo Stories' own runtime (``workspaces/agent.py``).
 """
 
 from __future__ import annotations
@@ -15,14 +17,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from ... import db, settings, validate
+from ... import db, validate
 from ...app import App
 from ...clock import iso, parse
 from ...errors import ApiError, bad_request, conflict, not_found, too_large
 from ...http import Request, Response, Route, no_content, ok, route
 from ...ids import is_ulid, ulid
 from ...log import log
-from ...skill_prompt import SkillsBlock, load_block
 from ...workspaces import (
     activity,
     characters,
@@ -34,9 +35,11 @@ from ...workspaces import (
     jobs,
     library,
     media,
+    overrides,
     providers,
     shapes,
     stories,
+    tasks,
 )
 from ...workspaces import types as ws
 from ...workspaces.expr import Update
@@ -49,6 +52,8 @@ NO_IDEA = "We could not find that idea."
 NO_CHARACTER = "We could not find that character."
 NO_STORY = "We could not find that story."
 NO_PICTURE = "We could not find that picture."
+NO_TASK = "We could not find that helper task."
+NO_REFERENCE_VIDEO = "We could not find one of those reference videos. Pick them again."
 SETTINGS_CHANGED = "These settings changed on another screen. Reload and try again."
 CHARACTER_CHANGED = "This character changed on another screen. Reload it and try again."
 IMAGES_OFF = "AI pictures are off. Turn them on in Lamo Stories › Settings."
@@ -213,13 +218,27 @@ CONFIG_CHOICES: dict[str, tuple[str, ...]] = {
 }
 PROVIDER_CHOICES: dict[str, tuple[str, ...]] = {
     "images": ("builtin-rig", "nova-canvas"),
-    "animation": ("builtin-2d",),
+    "video": ("builtin-2d", "nova-reel"),
     "audio": ("builtin-synth",),
 }
+QUALITIES = ("standard", "high", "best")
+X_LIMIT_MAX = 10_000
+
+
+def _merge_section(current: Mapping[str, Any], value: Any, name: str) -> Item:
+    chosen = validate.obj(value, f"configuration.{name}")
+    validate.only_keys(chosen, current.keys())
+    return {**dict(current), **chosen}
+
+
+def _money(value: Any, field: str) -> int | float:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not 0 <= value <= X_LIMIT_MAX:
+        raise bad_request(f"{field} must be a number of dollars from 0 to {X_LIMIT_MAX}.")
+    return value if isinstance(value, int) or not float(value).is_integer() else int(value)
 
 
 def _config_patch(current: Mapping[str, Any], value: Any) -> Item:
-    """Partial<StoriesConfig> (§45.6) merged onto the current configuration."""
+    """Partial<StoriesConfig> (§45.6) merged onto the current configuration; each section may be partial too."""
     body = validate.obj(value, "configuration")
     validate.only_keys(body, current.keys())
     out = dict(current)
@@ -228,19 +247,36 @@ def _config_patch(current: Mapping[str, Any], value: Any) -> Item:
             out[key] = validate.integer(v, "configuration.defaultDurationSec", lo=15, hi=90)
         elif key in {"captionsOn", "musicOn"}:
             out[key] = validate.boolean(v, f"configuration.{key}")
-        elif key == "storyModel":
-            if v != "" and v not in settings.CLIP_MODELS:
-                raise bad_request("configuration.storyModel is not one of the models.", "storyModel")
-            out[key] = v
         elif key == "providers":
-            chosen = validate.obj(v, "configuration.providers")
-            validate.only_keys(chosen, PROVIDER_CHOICES)
-            merged = dict(current.get("providers") or {})
-            for kind, provider_id in chosen.items():
-                if provider_id not in PROVIDER_CHOICES[kind]:
+            merged = _merge_section(current.get("providers") or {}, v, key)
+            for kind, provider_id in merged.items():
+                if provider_id not in PROVIDER_CHOICES.get(kind, ()):
                     raise bad_request(f"configuration.providers.{kind} is not a provider of that kind.")
-                merged[kind] = provider_id
             out[key] = merged
+        elif key == "video":
+            merged = _merge_section(current.get("video") or {}, v, key)
+            if merged.get("resolution") != "1080x1920" or merged.get("fps") != 30:
+                raise bad_request("The built-in animator makes 1080 by 1920 at 30 frames a second only.")
+            if merged.get("aspect") != "9:16":
+                raise bad_request("Only 9:16 works with the built-in animator for now.")
+            if merged.get("quality") not in QUALITIES:
+                raise bad_request("configuration.video.quality must be standard, high or best.")
+            out[key] = merged
+        elif key == "production":
+            merged = _merge_section(current.get("production") or {}, v, key)
+            merged["burnCaptions"] = validate.boolean(
+                merged.get("burnCaptions"), "configuration.production.burnCaptions"
+            )
+            merged["scenesAtOnce"] = validate.integer(
+                merged.get("scenesAtOnce"), "configuration.production.scenesAtOnce", lo=1, hi=3
+            )
+            if merged.get("keepVersions") != "all":
+                merged["keepVersions"] = validate.integer(
+                    merged.get("keepVersions"), "configuration.production.keepVersions", lo=1, hi=10
+                )
+            out[key] = merged
+        elif key == "xMonthlyLimitUsd":
+            out[key] = None if v is None else _money(v, "configuration.xMonthlyLimitUsd")
         elif key in CONFIG_CHOICES:
             if v not in CONFIG_CHOICES[key]:
                 raise bad_request(f"configuration.{key} must be one of: {', '.join(CONFIG_CHOICES[key])}.")
@@ -356,98 +392,101 @@ def delete_idea(app: App, req: Request) -> Response:
     return no_content()
 
 
-def _model(app: App) -> ideas.Model:
-    if not app.help.model_id or app.help.bedrock is None:
-        raise ApiError(503, "unavailable", ideas.OFF)
-    return ideas.Model(app.help.bedrock(), app.help.model_id)
-
-
-def _skills(ctx: Ctx) -> SkillsBlock:
-    """The owner's skills block (§18.6): the model is never asked without it."""
-    try:
-        return load_block(
-            ctx.store, ctx.app.media, ctx.user_id, where="api.stories.ideas", builtins=ctx.app.builtin_skills
-        )
-    except Exception as e:
-        log("warning", "stories.skills_failed", error=type(e).__name__)
-        raise ApiError(503, "platform_down", ideas.BUSY) from e
-
-
-def _time_left(req: Request) -> Callable[[], float]:
-    return lambda: ideas.BUDGET_SECONDS - (time.monotonic() - req.started)
+def _task_reply(ctx: Ctx, kind: str, task_input: Mapping[str, Any], override: Mapping[str, Any] | None) -> Response:
+    """Writes the task and asks Lamo Stories' runtime to do it: ``202 { task }`` (a refused start is a failed task)."""
+    tasks.refuse_if_off(ctx.store, ctx.user_id, ctx.ws_id, kind)
+    task = tasks.new_task(ctx.user_id, ctx.ws_id, kind=kind, task_input=task_input, override=override, now=ctx.now)
+    started = tasks.start(ctx.store, ctx.deps.agent, task, ctx.now, started=ctx.req.started, stop=ctx.stop())
+    return ok({"task": tasks.public_task(started)}, 202)
 
 
 def generate_ideas(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
-    body = req.json()
-    validate.only_keys(body, {"topic", "category", "count"})
-    topic = validate.string(body, "topic", required=False, max_len=200)
-    category = body.get("category")
-    if category is not None and category not in shapes.CATEGORIES:
-        raise bad_request("category must be driving_safety, everyday_skills, comedy or explainer.")
-    count = validate.integer(body.get("count", 4), "count", lo=1, hi=6)
-    model = _model(app)
-    drafts = ideas.generate(
-        model,
-        _skills(ctx),
-        guidance.load(),
-        topic=topic,
-        category=category,
-        count=count,
-        characters=_all(ctx, ws.CHAR_SK, ws.TYPE_CHARACTER),
-        time_left=_time_left(req),
-    )
-    return ok({"drafts": drafts})
+    task_input, override = ideas.generate_body(req.json())
+    return _task_reply(ctx, "brainstorm", task_input, override)
 
 
 def expand_idea(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     idea = _get(ctx, ws.IDEA_SK, _id(req, "ideaId", NO_IDEA), ws.TYPE_IDEA, NO_IDEA)
-    body = req.json()
-    validate.only_keys(body, {"durationSec"})
-    concept = idea.get("concept") if isinstance(idea.get("concept"), Mapping) else {}
-    default = (concept or {}).get("durationSec") or ctx.config["defaultDurationSec"]
-    duration = validate.integer(body.get("durationSec", default), "durationSec", lo=15, hi=90)
-    model = _model(app)
-    g = guidance.load()
-    found, pick = ideas.expand(
-        model,
-        _skills(ctx),
-        g,
-        idea,
-        duration=duration,
-        characters=_all(ctx, ws.CHAR_SK, ws.TYPE_CHARACTER),
-        time_left=_time_left(req),
-    )
-    safety = ideas.safety_fields(g, {**idea, "concept": found}, pick)
-    update = Update(ctx.pk, idea["sk"], sets={"concept": found, **safety, "updatedAt": ctx.at()})
-    update.sets = {k: v for k, v in update.sets.items() if v is not None}
-    if safety["safetyTopicId"] is None:
-        update.removes.append("safetyTopicId")
-    try:
-        item = update.equals("userId", ctx.user_id).equals("workspaceId", ctx.ws_id).run(ctx.store)
-    except db.ConditionFailed as e:
-        raise not_found(NO_IDEA) from e
-    return ok({"idea": shapes.public_idea(item)})
+    task_input, override = ideas.expand_body(req.json(), idea, int(ctx.config["defaultDurationSec"]))
+    return _task_reply(ctx, "expand_idea", task_input, override)
 
 
 def idea_variations(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     idea = _get(ctx, ws.IDEA_SK, _id(req, "ideaId", NO_IDEA), ws.TYPE_IDEA, NO_IDEA)
-    body = req.json()
-    validate.only_keys(body, {"count"})
-    count = validate.integer(body.get("count", 3), "count", lo=1, hi=4)
-    model = _model(app)
-    drafts = ideas.variations(
-        model,
-        _skills(ctx),
-        guidance.load(),
-        idea,
-        count=count,
-        characters=_all(ctx, ws.CHAR_SK, ws.TYPE_CHARACTER),
-        time_left=_time_left(req),
-    )
-    return ok({"drafts": drafts})
+    task_input, override = ideas.variations_body(req.json(), idea)
+    return _task_reply(ctx, "variations", task_input, override)
+
+
+# --- tasks ----------------------------------------------------------------------------------------------------
+
+
+def _apply_expand(ctx: Ctx, task: Item, result: Item) -> Item:
+    """A finished Expand: the concept goes on the idea once (keeping its title) and the topic match runs here, in
+    the API (§45.7); ``result.idea`` is the idea as it is now. The agent may have written the concept itself."""
+    idea_id = (task.get("input") or {}).get("ideaId") if isinstance(task.get("input"), Mapping) else None
+    idea = ctx.owned(ctx.store.get(ctx.pk, f"{ws.IDEA_SK}{idea_id}"), ws.TYPE_IDEA) if is_ulid(idea_id) else None
+    if idea is None:
+        return {k: v for k, v in result.items() if k != "idea"}
+    if not task.get("applied"):
+        found = ideas.expanded(result)
+        pick = found[1] if found else result.get("topicId")
+        merged = {**idea, "concept": found[0]} if found else idea
+        safety = ideas.safety_fields(guidance.load(), merged, pick if isinstance(pick, str) else None)
+        update = Update(ctx.pk, idea["sk"], sets={"needsGuidance": safety["needsGuidance"], "updatedAt": ctx.at()})
+        if found:
+            update.sets["concept"] = found[0]
+        if safety["safetyTopicId"] is None:
+            update.removes.append("safetyTopicId")
+        else:
+            update.sets["safetyTopicId"] = safety["safetyTopicId"]
+        mark = Update(ctx.pk, str(task["sk"]), sets={"applied": True}).equals("status", "done")
+        mark.absent_or_null("applied")
+        # Refused: applied already by another read, or the idea is gone. Either way, show what is stored.
+        with contextlib.suppress(db.ConditionFailed):
+            ctx.store.transact(updates=[update.equals("userId", ctx.user_id).request(), mark.request()])
+        idea = ctx.owned(ctx.store.get(ctx.pk, idea["sk"]), ws.TYPE_IDEA) or idea
+    return {**result, "idea": shapes.public_idea(idea)}
+
+
+def _task_result(ctx: Ctx, task: Item) -> Item:
+    """What the web shows of a finished task: drafts checked like ideas the owner types, a concept put on its idea."""
+    out = tasks.public_task(task)
+    result = out.get("result")
+    if task.get("status") != "done" or not isinstance(result, dict):
+        return out
+    kind = task.get("kind")
+    task_input = task.get("input") if isinstance(task.get("input"), Mapping) else {}
+    if kind in ("brainstorm", "variations"):
+        known = [c["characterId"] for c in _all(ctx, ws.CHAR_SK, ws.TYPE_CHARACTER)]
+        parent = None
+        category = (task_input or {}).get("category") if kind == "brainstorm" else None
+        if kind == "variations":
+            parent_id = (task_input or {}).get("ideaId")
+            parent = ctx.owned(ctx.store.get(ctx.pk, f"{ws.IDEA_SK}{parent_id}"), ws.TYPE_IDEA)
+            category = (parent or {}).get("category")
+        result["drafts"] = ideas.drafts(
+            result.get("drafts"),
+            known_characters=known,
+            source="variation" if kind == "variations" else "ai",
+            category=str(category) if category else None,
+            parent_id=str(parent["ideaId"]) if parent else None,
+            limit=int((task_input or {}).get("count") or 6),
+        )
+    elif kind == "expand_idea":
+        result = _apply_expand(ctx, task, result)
+    out["result"] = result
+    return out
+
+
+def get_task(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    task_id = _id(req, "taskId", NO_TASK)
+    found = _get(ctx, ws.TASK_SK, task_id, ws.TYPE_TASK, NO_TASK)
+    task = jobs.settle_task(ctx.store, found, ctx.now, stop=ctx.stop()) or found
+    return ok({"task": _task_result(ctx, task)})
 
 
 # --- characters -----------------------------------------------------------------------------------------------
@@ -611,16 +650,7 @@ def _refs_update(ctx: Ctx, item: Mapping[str, Any]) -> Update:
 def reference_upload(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     item = _character(ctx)
-    body = req.json()
-    validate.only_keys(body, {"filename", "contentType", "size"})
-    validate.required_string(body, "filename", max_len=255)
-    content_type = str(body.get("contentType") or "").lower()
-    if content_type not in characters.REFERENCE_TYPES:
-        raise bad_request("Pick a PNG, JPEG or WebP picture.", "contentType")
-    size = body.get("size")
-    if isinstance(size, int) and not isinstance(size, bool) and size > characters.MAX_REFERENCE_BYTES:
-        raise too_large("The picture is larger than 10 MB. Pick a smaller one.")
-    size = validate.integer(size, "size", lo=1, hi=characters.MAX_REFERENCE_BYTES)
+    content_type, size = _picture_body(req.json())
     pending = _pending(item, ctx.now)
     if len(item.get("references") or []) + len(pending) >= characters.MAX_REFERENCES:
         raise conflict("A character can have at most 8 pictures. Delete one first.")
@@ -766,6 +796,99 @@ def make_portrait(app: App, req: Request) -> Response:
     return ok({"job": shapes.public_job(job)}, 202)
 
 
+# --- "Design with AI" ----------------------------------------------------------------------------------------
+
+DESIGN_MAX = 600
+DESIGN_KINDS = ("design_ref", "character_ref")
+DESIGN_UNFINISHED = "The picture did not finish sending. Send it again."
+
+
+def _picture_body(body: Mapping[str, Any]) -> tuple[str, int]:
+    """``{ filename, contentType: png | jpeg | webp, size ≤ 10 MB }`` → (the type, the size)."""
+    validate.only_keys(body, {"filename", "contentType", "size"})
+    validate.required_string(body, "filename", max_len=255)
+    content_type = str(body.get("contentType") or "").lower()
+    if content_type not in characters.REFERENCE_TYPES:
+        raise bad_request("Pick a PNG, JPEG or WebP picture.", "contentType")
+    size = body.get("size")
+    if isinstance(size, int) and not isinstance(size, bool) and size > characters.MAX_REFERENCE_BYTES:
+        raise too_large("The picture is larger than 10 MB. Pick a smaller one.")
+    return content_type, validate.integer(size, "size", lo=1, hi=characters.MAX_REFERENCE_BYTES)
+
+
+def design_upload(app: App, req: Request) -> Response:
+    """A picture for "Design with AI": an ``ASSET#`` of kind ``design_ref`` at ``ws/{u}/{ws}/design/{assetId}.{ext}``
+    (the Library hides it) and a presigned PUT that signs its type and length (15 minutes)."""
+    ctx = _ctx(app, req)
+    content_type, size = _picture_body(req.json())
+    asset_id = ulid()
+    key = f"{ws.s3_prefix(ctx.user_id, ctx.ws_id)}design/{asset_id}.{characters.REFERENCE_TYPES[content_type]}"
+    asset = {
+        "pk": ctx.pk,
+        "sk": f"{ws.ASSET_SK}{asset_id}",
+        "type": ws.TYPE_ASSET,
+        "userId": ctx.user_id,
+        "workspaceId": ctx.ws_id,
+        "assetId": asset_id,
+        "kind": "design_ref",
+        "storyId": None,
+        "characterId": None,
+        "key": key,
+        "contentType": content_type,
+        "bytes": size,
+        "meta": {"current": 1},
+        "createdAt": ctx.at(),
+    }
+    ctx.store.put(asset, if_absent=True)
+    url = app.media.presign_put_sized(key, content_type, size, seconds=characters.UPLOAD_SECONDS)
+    return ok({"assetId": asset_id, "uploadUrl": url, "headers": {"Content-Type": content_type}})
+
+
+def _design_picture(ctx: Ctx, asset_id: Any) -> Item:
+    """A ``design_ref`` or ``character_ref`` asset of this workspace only (else 404), whose file has arrived."""
+    if not isinstance(asset_id, str) or not is_ulid(asset_id):
+        raise not_found(NO_PICTURE)
+    asset = ctx.owned(ctx.store.get(ctx.pk, f"{ws.ASSET_SK}{asset_id}"), ws.TYPE_ASSET)
+    key = (asset or {}).get("key")
+    if (
+        asset is None
+        or asset.get("kind") not in DESIGN_KINDS
+        or not isinstance(key, str)
+        or not key.startswith(ws.s3_prefix(ctx.user_id, ctx.ws_id))
+    ):
+        raise not_found(NO_PICTURE)
+    head = ctx.app.media.head(key)
+    if head is None:
+        raise bad_request(DESIGN_UNFINISHED, "referenceAssetId")
+    if not 0 < int(head.get("ContentLength") or 0) <= characters.MAX_REFERENCE_BYTES:
+        raise bad_request("That picture could not be used. Pick a PNG, JPEG or WebP under 10 MB.", "referenceAssetId")
+    return asset
+
+
+def design_character(app: App, req: Request) -> Response:
+    """The character agent suggests a CharacterInput from words and/or a picture: ``202 { task }`` (a draft)."""
+    ctx = _ctx(app, req)
+    body = req.json()
+    validate.only_keys(body, {"description", "referenceAssetId", "override"})
+    description = validate.string(body, "description", required=False, max_len=DESIGN_MAX)
+    override = overrides.model_override(body.get("override"))
+    task_input: Item = {}
+    if description:
+        task_input["description"] = description
+    if body.get("referenceAssetId") is not None:
+        asset = _design_picture(ctx, body["referenceAssetId"])
+        task_input.update(
+            {
+                "referenceAssetId": asset["assetId"],
+                "referenceKey": asset["key"],
+                "referenceContentType": asset.get("contentType"),
+            }
+        )
+    if not task_input:
+        raise bad_request("Describe the character, or add a picture of it.")
+    return _task_reply(ctx, "character_design", task_input, override)
+
+
 # --- stories --------------------------------------------------------------------------------------------------
 
 
@@ -820,13 +943,19 @@ def _require_topic(story: Mapping[str, Any]) -> None:
 
 
 def _meta(ctx: Ctx, story: Mapping[str, Any]) -> Item:
-    config = ctx.config
+    """What the API knows when a job starts; the agent adds the writer model, engine version, seed, actual length and
+    each step's model and effort (``meta.models``) as it goes."""
+    chosen = dict(ctx.config.get("providers") or {})
     return {
-        "writerModel": config.get("storyModel") or None,
         "scriptVersion": int(story.get("scriptVersion") or 0) or None,
         "targetSec": story.get("durationSec"),
         "safetyTopicId": story.get("safetyTopicId"),
-        "providers": {"writer": "bedrock-claude", **dict(config.get("providers") or {})},
+        "providers": {
+            "writer": "bedrock-claude",
+            "images": "builtin-rig",
+            "animation": str(chosen.get("video") or "builtin-2d"),
+            "audio": str(chosen.get("audio") or "builtin-synth"),
+        },
     }
 
 
@@ -840,6 +969,7 @@ def _story_job(
     scene_ids: list[str] | None,
     note: str | None,
     story_version: int,
+    override: Mapping[str, Any] | None = None,
 ) -> Item:
     return jobs.new_job(
         ctx.user_id,
@@ -856,6 +986,8 @@ def _story_job(
         note=note,
         meta=_meta(ctx, story),
         story_version=story_version,
+        override=override,
+        reference_ids=[str(r) for r in story.get("referenceIds") or []],
     )
 
 
@@ -896,8 +1028,15 @@ def _start(ctx: Ctx, story: Item, job: Item) -> tuple[Item, Item]:
     return story, job
 
 
+def _writer_on(ctx: Ctx, run: list[str]) -> None:
+    """A run that writes the story needs the storyboard agent: switched off, it is refused at once (§45.26)."""
+    if "storyboard" in run:
+        tasks.refuse_if_off(ctx.store, ctx.user_id, ctx.ws_id, "storyboard")
+
+
 def _launch(ctx: Ctx, story: Item, job: Item, *, note: str | None = None) -> tuple[Item, Item]:
     """Moves the story to ``producing`` with the new job, in one transaction with the job's item, then starts it."""
+    _writer_on(ctx, list((job.get("configuration") or {}).get("run") or []))
     sets: Item = {
         "status": "producing",
         "statusBefore": story.get("status") or "draft",
@@ -937,10 +1076,21 @@ def list_stories(app: App, req: Request) -> Response:
     return ok({"stories": out, "nextCursor": cursor})
 
 
+def _check_references(ctx: Ctx, ids: list[str]) -> None:
+    """Each reference video is this workspace's own ``REFVID#`` (builder A2's items, only read here)."""
+    if not ids:
+        return
+    found = ctx.store.batch_get([(ctx.pk, f"{ws.REFVID_SK}{r}") for r in ids])
+    owned = {i.get("refId") for i in (ctx.owned(f, ws.TYPE_REFVID) for f in found) if i is not None}
+    if any(r not in owned for r in ids):
+        raise bad_request(NO_REFERENCE_VIDEO, "referenceIds")
+
+
 def create_story(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     fields = stories.story_input(req.json())
     cast = _check_characters(ctx, fields["characterIds"])
+    _check_references(ctx, fields["referenceIds"])
     config = ctx.config
     g = guidance.load()
     idea: Item | None = None
@@ -953,6 +1103,8 @@ def create_story(app: App, req: Request) -> Response:
     else:
         brief = dict(fields["brief"])
         topic = guidance.match(g, [brief["title"], brief["logline"]]) if brief["category"] == "driving_safety" else None
+    if idea is not None and idea.get("category") == "driving_safety" and not topic:
+        topic = guidance.match(g, ideas.idea_texts(idea))  # the concept's words count too (an Expand put them there)
     category = str(brief.get("category") or "explainer")
     if category == "driving_safety" and not topic:
         raise ApiError(409, "conflict", guidance.NO_GUIDANCE, extra={"topics": guidance.topic_choices(g)})
@@ -983,13 +1135,24 @@ def create_story(app: App, req: Request) -> Response:
         "safetyTopicId": topic,
         "posted": [],
         "brief": brief,
+        "ai": fields["ai"],
+        "referenceIds": fields["referenceIds"],
         "version": 1,
         "createdAt": ctx.at(),
         "updatedAt": ctx.at(),
     }
     run = list(shapes.STEP_ORDER)
+    _writer_on(ctx, run)
     job = _story_job(
-        ctx, story, job_type="produce", run=run, from_step=None, scene_ids=None, note=None, story_version=1
+        ctx,
+        story,
+        job_type="produce",
+        run=run,
+        from_step=None,
+        scene_ids=None,
+        note=None,
+        story_version=1,
+        override=fields["override"],
     )
     story.update(
         {"status": "producing", "statusBefore": "draft", "currentJobId": job["jobId"], "lastJobId": job["jobId"]}
@@ -1043,6 +1206,8 @@ def patch_story(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     story = _story(ctx)
     patch = stories.patch_input(req.json())
+    if "referenceIds" in patch:
+        _check_references(ctx, patch["referenceIds"])
     story, job = _settled(ctx, story)
     if jobs.active(job) or story.get("currentJobId") or story.get("status") == "producing":
         raise conflict(stories.BUSY)
@@ -1068,14 +1233,7 @@ def patch_story(app: App, req: Request) -> Response:
         carried = stories.carried_check(story, int(update.sets["scriptVersion"]))
         if carried is not None:
             update.sets["safety"] = carried
-    if stale_scenes:
-        known = jobs.valid_stale_scenes(story)
-        whole = "animation" in (story.get("stale") or []) and not known
-        if not whole:
-            update.sets["staleScenes"] = sorted(set(known) | stale_scenes)
-    edits = _merge_owner(story, owner)
-    if edits is not None:
-        update.sets["ownerEdits"] = edits
+    _edit_bookkeeping(update, story, stale_scenes, owner)
     update.bump().equals("version", patch["version"]).one_of("status", stories.EDIT_STATUSES)
     update.absent_or_null("currentJobId")
     try:
@@ -1092,6 +1250,20 @@ def patch_story(app: App, req: Request) -> Response:
             raise ApiError(503, "platform_down", "We could not save the change just now. Try again.") from e
         _register_script(ctx, story, key, int(item.get("scriptVersion") or 0), len(data))
     return ok({"story": _public_story(ctx, item), "script": new_script or script or _read_script(ctx, item)})
+
+
+def _edit_bookkeeping(
+    update: Update, story: Mapping[str, Any], stale_scenes: set[str], owner: Mapping[str, list[str]]
+) -> None:
+    """The scenes whose animation the edit made stale, and the ids of the text the owner wrote himself."""
+    if stale_scenes:
+        known = jobs.valid_stale_scenes(story)
+        whole = "animation" in (story.get("stale") or []) and not known
+        if not whole:
+            update.sets["staleScenes"] = sorted(set(known) | stale_scenes)
+    edits = _merge_owner(story, owner)
+    if edits is not None:
+        update.sets["ownerEdits"] = edits
 
 
 def _register_script(ctx: Ctx, story: Mapping[str, Any], key: str, number: int, size: int) -> None:
@@ -1170,7 +1342,7 @@ def _stop_job(ctx: Ctx, story: Item, job: Item | None) -> tuple[Item, Item | Non
         if agent is not None and getattr(agent, "ready", False):
             session_id, job_id = str(canceled["sessionId"]), str(canceled["jobId"])
             calls: list[Callable[[], None]] = [
-                lambda: agent.cancel_story(job_id, session_id),
+                lambda: agent.cancel(job_id, session_id),
                 lambda: agent.stop_session(session_id),
             ]
             for call in calls:
@@ -1219,7 +1391,7 @@ def _ready_to_remake(ctx: Ctx, story: Item) -> tuple[Item, Item | None]:
 def produce(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     story = _story(ctx)
-    from_step, scene_ids = stories.produce_input(req.json(), story)
+    from_step, scene_ids, override = stories.produce_input(req.json(), story)
     story, last = _ready_to_remake(ctx, story)
     again = stories.changes_again(story, last) if from_step is None else None
     if again is not None:  # "Try again" after an "Ask for changes" or "Remake this scene" that did not finish
@@ -1233,6 +1405,7 @@ def produce(app: App, req: Request) -> Response:
             scene_ids=chosen,
             note=note,
             story_version=int(story.get("version") or 0) + 1,
+            override=override,
         )
         story, job = _launch(ctx, story, job, note=note)
         return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
@@ -1246,6 +1419,7 @@ def produce(app: App, req: Request) -> Response:
         scene_ids=scenes,
         note=None,
         story_version=int(story.get("version") or 0) + 1,
+        override=override,
     )
     story, job = _launch(ctx, story, job)
     return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
@@ -1254,7 +1428,7 @@ def produce(app: App, req: Request) -> Response:
 def request_changes(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     story = _story(ctx)
-    note, scene_ids = stories.changes_input(req.json(), story)
+    note, scene_ids, override = stories.changes_input(req.json(), story)
     story, _ = _ready_to_remake(ctx, story)
     if not stories.has_script(story):
         raise conflict(stories.NO_SCRIPT)
@@ -1267,10 +1441,25 @@ def request_changes(app: App, req: Request) -> Response:
         scene_ids=scene_ids,
         note=note,
         story_version=int(story.get("version") or 0) + 1,
+        override=override,
     )
     story, job = _launch(ctx, story, job, note=note)
     activity.record(ctx.store, ctx.user_id, ctx.ws_id, "changes", story, now=ctx.now)
     return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
+
+
+def story_captions(app: App, req: Request) -> Response:
+    """Review's **Write them again** (§45.11.2): the storyboard agent drafts the six post captions from the current
+    script, ``202 { task }``; the draft is in ``result.captions`` and is saved only through PATCH (``postCaptions``)."""
+    ctx = _ctx(app, req)
+    story = _story(ctx)
+    body = req.json()
+    validate.only_keys(body, {"override"})
+    override = overrides.model_override(body.get("override"))
+    if not stories.has_script(story):
+        raise conflict(stories.NO_SCRIPT)
+    task_input = {"storyId": story["storyId"], "scriptVersion": int(story.get("scriptVersion") or 0)}
+    return _task_reply(ctx, "captions", task_input, override)
 
 
 def cancel_story(app: App, req: Request) -> Response:
@@ -1365,7 +1554,8 @@ def get_providers(app: App, req: Request) -> Response:
     records = _all(ctx, ws.PROVIDER_SK, ws.TYPE_PROVIDER)
     found = ctx.store.query_all(ctx.pk, ws.PJOB_SK, newest_first=True, cap=providers.JOBS_READ)
     story_jobs = [j for j in (ctx.owned(x, ws.TYPE_PJOB) for x in found) if j is not None]
-    return ok({"providers": providers.statuses(ctx.config, records, story_jobs)})
+    model_statuses = _all(ctx, ws.MODELSTATUS_SK, ws.TYPE_MODELSTATUS)
+    return ok({"providers": providers.statuses(ctx.config, records, story_jobs, model_statuses)})
 
 
 def get_guidance(app: App, req: Request) -> Response:
@@ -1414,8 +1604,12 @@ ROUTES: list[Route] = [
     route("DELETE", W + "/ideas/{ideaId}", delete_idea),
     route("POST", W + "/ideas/{ideaId}/expand", expand_idea),
     route("POST", W + "/ideas/{ideaId}/variations", idea_variations),
+    route("GET", W + "/tasks/{taskId}", get_task),
     route("GET", W + "/characters", list_characters),
     route("POST", W + "/characters", create_character),
+    # Before "/characters/{characterId}…" so "design" never reads as a character id.
+    route("POST", W + "/characters/design/uploads", design_upload),
+    route("POST", W + "/characters/design", design_character),
     route("GET", W + "/characters/{characterId}", get_character),
     route("PUT", W + "/characters/{characterId}", put_character),
     route("DELETE", W + "/characters/{characterId}", delete_character),
@@ -1434,6 +1628,7 @@ ROUTES: list[Route] = [
     route("POST", W + "/stories/{storyId}/approve", approve),
     route("POST", W + "/stories/{storyId}/reject", reject),
     route("POST", W + "/stories/{storyId}/changes", request_changes),
+    route("POST", W + "/stories/{storyId}/captions", story_captions),
     route("GET", W + "/stories/{storyId}/download", download),
     route("GET", W + "/library", get_library),
     route("GET", W + "/providers", get_providers),

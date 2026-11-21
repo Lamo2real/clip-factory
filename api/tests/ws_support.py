@@ -1,33 +1,50 @@
 """Shared helpers for the Lamo Stories core tests (docs/CONTRACTS.md §45.19). Offline only: the repo's fakes, no AWS.
 
-``install`` puts the story agent (over ``FakeAgentCore``) and the download S3 client (``FakeS3``) on the app through
-``workspaces.deps``; ``FakeModel`` answers the idea helper's Converse calls from a queue; the ``seed_*`` helpers write
-items exactly as the API, the agent or the story flow would.
+``caller`` dispatches through **Lamo Stories' own** route table (``workspaces.routes.ROUTES``, the table of its own
+Lambda ``cf-prod-stories-api``); Clip Factory's table (conftest's ``call``) has none of these routes. ``install`` puts
+Lamo Stories' agent client (over ``FakeAgentCore``, with the ``cf_prod_story_agent`` ARN) and the download S3 client
+(``FakeS3``) on the app through ``workspaces.deps``. The ``seed_*`` helpers write items exactly as the API, the agent
+or the story flow would. The API runs no model, so there is no model fake here.
 """
 
 from __future__ import annotations
 
 import copy
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from clipfactory_api import db
-from clipfactory_api.app import App, HelpDeps
+from clipfactory_api.app import App
+from clipfactory_api.http import dispatch
 from clipfactory_api.ids import ulid
 from clipfactory_api.workspaces import deps, guard
 from clipfactory_api.workspaces import types as ws
 from clipfactory_api.workspaces.agent import StoryAgent
 from clipfactory_api.workspaces.expr import Update
-from conftest import USER
+from clipfactory_api.workspaces.routes import ROUTES as STORIES_ROUTES
+from conftest import USER, make_event
 from fakes import FakeAgentCore, FakeS3
 
 WS = "stories"
 BASE = f"/v1/workspaces/{WS}"
-ARN = "arn:aws:bedrock-agentcore:eu-north-1:123:runtime/cf_prod_clip_agent"
+ARN = "arn:aws:bedrock-agentcore:eu-north-1:123:runtime/cf_prod_story_agent"
 BUCKET = "cf-prod-media-123"
-HELP_MODEL = "eu.anthropic.claude-haiku-5-5"
 AT = "2026-11-15T11:00:00.000Z"
+
+Caller = Callable[..., tuple[int, Any]]
+
+
+def caller(app: App, routes: list[Any] | None = None) -> Caller:
+    """``call(method, path, body, query=..., sub=...)`` through Lamo Stories' own route table (or ``routes``)."""
+    table = STORIES_ROUTES if routes is None else routes
+
+    def _call(method: str, path: str, body: Any = None, **kw: Any) -> tuple[int, Any]:
+        out = dispatch(make_event(method, path, body, **kw), app, table)
+        return out["statusCode"], (json.loads(out["body"]) if out["body"] else None)
+
+    return _call
+
 
 LOOK: dict[str, Any] = {
     "body": "bean",
@@ -64,39 +81,6 @@ def install(app: App, agentcore: FakeAgentCore | None, s3_client: FakeS3) -> dep
     """The story agent over the fake AgentCore (None: making videos not switched on) and the download client."""
     agent = StoryAgent(agentcore, ARN) if agentcore is not None else None
     return deps.install(app, deps.WsDeps(agent=agent, s3=s3_client))
-
-
-class FakeModel:
-    """The idea helper's Bedrock client: Converse answers from a queue (text, or an exception to raise)."""
-
-    def __init__(self, *answers: Any, stop_reason: str = "end_turn") -> None:
-        self.answers = list(answers)
-        self.stop_reason = stop_reason
-        self.calls: list[dict[str, Any]] = []
-
-    def converse(self, **kw: Any) -> dict[str, Any]:
-        self.calls.append(kw)
-        assert self.answers, "the model was asked more often than the test expected"
-        answer = self.answers.pop(0)
-        if isinstance(answer, BaseException):
-            raise answer
-        text = answer if isinstance(answer, str) else json.dumps(answer)
-        return {
-            "output": {"message": {"role": "assistant", "content": [{"text": text}]}},
-            "stopReason": self.stop_reason,
-            "usage": {"inputTokens": 10, "outputTokens": 20},
-        }
-
-    def system_texts(self, n: int = -1) -> list[str]:
-        return [b["text"] for b in self.calls[n]["system"] if "text" in b]
-
-    def user_text(self, n: int = -1) -> str:
-        return str(self.calls[n]["messages"][0]["content"][-1]["text"])
-
-
-def use_model(app: App, model: FakeModel) -> FakeModel:
-    app.help = HelpDeps(model_id=HELP_MODEL, bedrock=lambda: model)
-    return model
 
 
 # --- seeds ----------------------------------------------------------------------------------------------------
@@ -327,6 +311,53 @@ def seed_job(
     return item
 
 
+def seed_task(store: db.Store, user: str = USER, workspace_id: str = WS, **fields: Any) -> dict[str, Any]:
+    """A ``TASK#`` as the API writes it (then the agent's fields on top)."""
+    task_id = fields.pop("taskId", None) or ulid()
+    item = {
+        "pk": pk(user, workspace_id),
+        "sk": f"{ws.TASK_SK}{task_id}",
+        "type": ws.TYPE_TASK,
+        "userId": user,
+        "workspaceId": workspace_id,
+        "taskId": task_id,
+        "kind": "brainstorm",
+        "status": "running",
+        "model": None,
+        "effort": None,
+        "effortApplied": None,
+        "result": None,
+        "input": {"count": 4},
+        "sessionId": f"cfstory-{task_id}-abcdefgh",
+        "heartbeatAt": "2026-11-15T11:59:00.000Z",
+        "createdAt": AT,
+        "updatedAt": AT,
+        **fields,
+    }
+    store.put(item)
+    return item
+
+
+def seed_refvid(store: db.Store, user: str = USER, workspace_id: str = WS, **fields: Any) -> dict[str, Any]:
+    """A reference video (builder A2's ``REFVID#``), only as much as the core routes read."""
+    ref_id = fields.pop("refId", None) or ulid()
+    item = {
+        "pk": pk(user, workspace_id),
+        "sk": f"{ws.REFVID_SK}{ref_id}",
+        "type": ws.TYPE_REFVID,
+        "userId": user,
+        "workspaceId": workspace_id,
+        "refId": ref_id,
+        "title": "A funny skid",
+        "status": "analyzed",
+        "createdAt": AT,
+        "updatedAt": AT,
+        **fields,
+    }
+    store.put(item)
+    return item
+
+
 def seed_asset(
     store: db.Store,
     s3_client: FakeS3 | None = None,
@@ -380,15 +411,14 @@ def agent_step(
     """What the agent writes when a step finishes (§45.9.1): the step's result on the story with the step taken out
     of ``stale`` (``version`` + 1, only while the story points at the job), then the step ``done`` on the job."""
     story = store.get(pk(user, workspace_id), f"{ws.STORY_SK}{story_id}")
-    assert story is not None and story.get("currentJobId") == job_id
+    assert story is not None
+    assert story.get("currentJobId") == job_id
     sets = {**story_set, "stale": [s for s in story.get("stale") or [] if s != key], "updatedAt": AT}
     Update(str(story["pk"]), str(story["sk"]), sets=sets).bump().equals("currentJobId", job_id).run(store)
     job = store.get(pk(user, workspace_id), f"{ws.PJOB_SK}{job_id}")
     assert job is not None
     steps = [
-        {**s, "status": "done", "finishedAt": AT, **({"message": message} if message else {})}
-        if s["key"] == key
-        else s
+        {**s, "status": "done", "finishedAt": AT, **({"message": message} if message else {})} if s["key"] == key else s
         for s in job["steps"]
     ]
     store.update(str(job["pk"]), str(job["sk"]), {"status": "running", "steps": steps})
@@ -407,7 +437,9 @@ def agent_end(
     every later step of the run added to ``stale``; ``currentJobId`` cleared."""
     story = store.get(pk(user, workspace_id), f"{ws.STORY_SK}{story_id}")
     job = store.get(pk(user, workspace_id), f"{ws.PJOB_SK}{job_id}")
-    assert story is not None and job is not None and story.get("currentJobId") == job_id
+    assert story is not None
+    assert job is not None
+    assert story.get("currentJobId") == job_id
     order = ["storyboard", "safety", "scenes", "animation", "sound", "captions", "assemble", "preview"]
     run = list(job["configuration"]["run"])
     stale = list(story.get("stale") or [])
@@ -434,7 +466,20 @@ def outside(keys: Iterable[str], user: str = USER, workspace_id: str = WS) -> li
     return [k for k in keys if not k.startswith(prefix(user, workspace_id))]
 
 
-INTERNAL = ("scriptKey", "videoKey", "coverKey", "stillKeys", "sessionId", "heartbeatAt", "pendingRefs", "statusBefore")
+INTERNAL = (
+    "scriptKey",
+    "videoKey",
+    "coverKey",
+    "stillKeys",
+    "sessionId",
+    "heartbeatAt",
+    "pendingRefs",
+    "statusBefore",
+    "override",
+    "input",
+    "referenceKey",
+    "applied",
+)
 
 
 def leaked(responses: Iterable[Any]) -> list[str]:

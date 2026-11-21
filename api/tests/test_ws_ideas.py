@@ -1,23 +1,29 @@
-"""Ideas: the owner's own, AI ideas, Expand and Variations, with the skills block first (CONTRACTS §45.7, ADR-74)."""
+"""Ideas: the owner's own, and AI ideas, Expand and Variations as tasks of Lamo Stories' own agent (CONTRACTS §45.5,
+§45.7, ADR-74, ADR-78). The API runs no model: it writes a ``TASK#``, invokes ``run_task`` on Lamo Stories' runtime and
+serves the task; topic matching happens once, in the API."""
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App
-from clipfactory_api.workspaces import ideas
-from conftest import Call
-from fakes import FakeS3, client_error
-from ws_support import BASE, FakeModel, install, seed_character, seed_idea, use_model
+from conftest import OTHER, USER, Call
+from fakes import FakeAgentCore, FakeS3
+from ws_support import ARN, BASE, caller, install, pk, seed_character, seed_idea, seed_task
 
 
 @pytest.fixture(autouse=True)
-def wired(app: App, s3_client: FakeS3) -> None:
-    install(app, None, s3_client)
+def wired(app: App, agentcore: FakeAgentCore, s3_client: FakeS3) -> None:
+    install(app, agentcore, s3_client)
+
+
+@pytest.fixture
+def call(app: App) -> Call:
+    """Through Lamo Stories' own route table (its own Lambda), not Clip Factory's."""
+    return caller(app)
 
 
 def test_manual_ideas_are_saved_listed_patched_and_deleted(call: Call, store: db.Store) -> None:
@@ -83,143 +89,272 @@ def test_bad_ideas_are_refused(call: Call, body: dict[str, Any]) -> None:
     assert call("POST", f"{BASE}/ideas", body)[0] == 400
 
 
-def _drafts(*ideas_: dict[str, Any]) -> str:
-    return json.dumps({"ideas": list(ideas_)})
+def _task(store: db.Store, task_id: str) -> dict[str, Any]:
+    found = store.get(pk(), f"TASK#{task_id}")
+    assert found is not None
+    return found
 
 
-def _draft(
-    title: str, logline: str, category: str = "comedy", topic: str = "", characters: list[str] | None = None
-) -> dict[str, Any]:
-    return {"title": title, "logline": logline, "category": category, "topicId": topic, "characters": characters or []}
+def _finish(store: db.Store, task_id: str, result: dict[str, Any]) -> None:
+    """What Lamo Stories' agent writes when the task is done (its model, effort and answer)."""
+    store.update(
+        pk(),
+        f"TASK#{task_id}",
+        {"status": "done", "model": "opus-5-5", "effort": "medium", "effortApplied": True, "result": result},
+    )
 
 
-def test_ai_ideas_send_the_skills_block_first_then_the_house_brief(call: Call, app: App, store: db.Store) -> None:
-    hero = seed_character(store, name="Lamo", personality="Brave but clumsy")
-    model = use_model(app, FakeModel(_drafts(_draft("Oops, the toast", "Lamo fights a toaster.", characters=["lamo"]))))
-    status, body = call("POST", f"{BASE}/ideas/generate", {"topic": "kitchen", "count": 2})
+def test_ai_ideas_are_a_task_of_lamo_stories_own_agent(call: Call, store: db.Store, agentcore: FakeAgentCore) -> None:
+    status, body = call(
+        "POST",
+        f"{BASE}/ideas/generate",
+        {"topic": "kitchen", "category": "comedy", "count": 2, "override": {"model": "fable-5-2", "effort": "low"}},
+    )
+    assert status == 202
+    task = body["task"]
+    assert task["kind"] == "brainstorm"
+    assert task["status"] == "queued"
+    assert task["model"] is None
+    assert task["result"] is None
+    assert set(task) == {
+        "taskId",
+        "kind",
+        "status",
+        "model",
+        "effort",
+        "effortApplied",
+        "result",
+        "createdAt",
+        "updatedAt",
+    }
+    stored = _task(store, task["taskId"])
+    assert stored["input"] == {"topic": "kitchen", "category": "comedy", "count": 2}
+    assert stored["override"] == {"model": "fable-5-2", "effort": "low"}  # this request only, never a setting
+    assert stored["agentId"] == "creative_director"
+    assert stored["heartbeatAt"] == stored["createdAt"]
+    assert stored["ttl"] > 0
+    assert stored["sessionId"].startswith(f"cfstory-{task['taskId']}-")
+    assert len(stored["sessionId"]) >= 33
+    (sent,) = agentcore.calls
+    assert sent["agentRuntimeArn"] == ARN
+    assert sent["agentRuntimeArn"].endswith("/cf_prod_story_agent")
+    assert sent["runtimeSessionId"] == stored["sessionId"]
+    assert sent["payload"] == {
+        "action": "run_task",
+        "userId": stored["userId"],
+        "workspaceId": "stories",
+        "taskId": task["taskId"],
+    }
+    # Nothing is saved: the drafts are the task's answer.
+    assert store.query_all(pk(), "IDEA#") == []
+
+
+def test_finished_drafts_are_checked_like_typed_ideas(call: Call, store: db.Store) -> None:
+    hero = seed_character(store, name="Lamo")
+    task = call("POST", f"{BASE}/ideas/generate", {"count": 3})[1]["task"]
+    assert call("GET", f"{BASE}/tasks/{task['taskId']}")[1]["task"]["status"] == "queued"
+    _finish(
+        store,
+        task["taskId"],
+        {
+            "drafts": [
+                {
+                    "title": "Oops, the toast",
+                    "logline": "Lamo fights a toaster.",
+                    "category": "comedy",
+                    "characterIds": [hero["characterId"], "01J0000000000000000000000Z"],
+                },
+                {"title": "", "logline": "no title", "category": "comedy"},
+                {"title": "Black ice", "logline": "Lamo's car slides on black ice.", "category": "driving_safety"},
+                "not a draft",
+            ]
+        },
+    )
+    status, body = call("GET", f"{BASE}/tasks/{task['taskId']}")
     assert status == 200
-    assert body["drafts"] == [
+    done = body["task"]
+    assert done["status"] == "done"
+    assert (done["model"], done["effort"], done["effortApplied"]) == ("opus-5-5", "medium", True)
+    assert done["result"]["drafts"] == [
         {
             "title": "Oops, the toast",
             "logline": "Lamo fights a toaster.",
             "category": "comedy",
-            "source": "ai",
             "characterIds": [hero["characterId"]],
-        }
+            "source": "ai",
+        },
+        {
+            "title": "Black ice",
+            "logline": "Lamo's car slides on black ice.",
+            "category": "driving_safety",
+            "source": "ai",
+        },
     ]
-    sent = model.calls[0]
-    assert sent["modelId"] == "eu.anthropic.claude-haiku-5-5"
-    texts = model.system_texts()
-    assert texts[0].startswith('<owner_skills count="1">')
-    assert "short-form-video-playbook" in texts[0]
-    assert texts[-1].startswith(ideas.HOUSE_BRIEF)
-    assert "no voice-over" in texts[-1]
-    assert "Never made for children" in texts[-1]
-    assert sent["outputConfig"]["textFormat"]["type"] == "json_schema"
-    data = json.loads(model.user_text().split("\n", 1)[1])
-    assert data["characters"][0]["name"] == "Lamo"
-    assert data["characters"][0]["personality"] == "Brave but clumsy"
-    assert {"id": "skid-recovery", "title": data["guidance"][0]["title"]} == data["guidance"][0]
-    assert store.query_all(f"USER#{hero['userId']}#WS#stories", "IDEA#") == []  # nothing saved
+    # Saving a draft runs the topic match here, in the API.
+    saved = call("POST", f"{BASE}/ideas", done["result"]["drafts"][1])[1]["idea"]
+    assert saved["safetyTopicId"] == "skid-recovery"
+    assert saved["source"] == "ai"
 
 
-def test_a_bad_answer_is_asked_once_more_then_the_helper_is_busy(call: Call, app: App) -> None:
-    good = _drafts(
-        _draft(
-            "Skid school", "Lamo learns what to do when the car is sliding on ice.", "driving_safety", "skid-recovery"
-        )
+def test_expand_puts_the_concept_on_the_idea_once_with_the_topic_match(
+    call: Call, store: db.Store, agentcore: FakeAgentCore
+) -> None:
+    idea = seed_idea(
+        store,
+        title="Slippery",
+        logline="Lamo drives on a winter morning.",
+        category="driving_safety",
+        needsGuidance=True,
     )
-    model = use_model(app, FakeModel("not json", good))
-    status, body = call("POST", f"{BASE}/ideas/generate", {"category": "driving_safety"})
-    assert status == 200
-    assert body["drafts"][0]["category"] == "driving_safety"
-    assert "broke these rules" in model.user_text(1)
-    # A driving-safety idea that no checked topic covers is refused, then the second answer too.
-    lava = _drafts(_draft("Lava road", "Escape a volcano by car.", "driving_safety", "volcano"))
-    use_model(app, FakeModel(lava, lava))
-    status, body = call("POST", f"{BASE}/ideas/generate", {"category": "driving_safety"})
-    assert status == 503
-    assert body["error"] == {"code": "platform_down", "message": "The idea helper is busy. Try again in a minute."}
-
-
-def test_bedrock_errors_and_the_time_limit_end_in_busy(call: Call, app: App, monkeypatch: pytest.MonkeyPatch) -> None:
-    model = use_model(
-        app, FakeModel(client_error("ThrottlingException", 429), client_error("ThrottlingException", 429))
-    )
-    assert call("POST", f"{BASE}/ideas/generate", {})[0] == 503
-    assert len(model.calls) == 2
-    monkeypatch.setattr(ideas, "BUDGET_SECONDS", 5.0)  # less than one call needs: no call at all
-    late = use_model(app, FakeModel())
-    assert call("POST", f"{BASE}/ideas/generate", {})[0] == 503
-    assert late.calls == []
-
-
-def test_the_helper_off_is_a_plain_503(call: Call) -> None:
-    status, body = call("POST", f"{BASE}/ideas/generate", {})
-    assert status == 503
-    assert body["error"]["code"] == "unavailable"
-
-
-def test_generate_checks_its_body(call: Call, app: App) -> None:
-    use_model(app, FakeModel())
-    assert call("POST", f"{BASE}/ideas/generate", {"count": 7})[0] == 400
-    assert call("POST", f"{BASE}/ideas/generate", {"topic": "x" * 201})[0] == 400
-    assert call("POST", f"{BASE}/ideas/generate", {"category": "horror"})[0] == 400
-    assert call("POST", f"{BASE}/ideas/generate", {"kids": True})[0] == 400
-
-
-def _concept(**extra: Any) -> dict[str, Any]:
-    return {
-        "premise": "Lamo drives to the shop on an icy morning.",
-        "beats": ["Lamo gets in the car", "The car slides", "Lamo eases off and steers", "Lamo cheers"],
-        "lesson": "Ease off the accelerator and steer where you want to go.",
-        "ending": "Lamo parks safely and does a happy dance.",
+    status, body = call("POST", f"{BASE}/ideas/{idea['ideaId']}/expand", {"durationSec": 40})
+    assert status == 202
+    task = body["task"]
+    assert task["kind"] == "expand_idea"
+    assert _task(store, task["taskId"])["input"] == {"ideaId": idea["ideaId"], "durationSec": 40}
+    concept = {
+        "premise": "Lamo's car starts sliding on black ice.",
+        "beats": ["Lamo drives", "The car slides", "Lamo steers gently"],
+        "lesson": "Ease off and steer where you want to go.",
+        "ending": "Lamo smiles, safe.",
         "tone": "tense_then_relief",
-        "durationSec": 80,
-        "onScreenText": ["Ease off the accelerator", "Steer where you want to go"],
-        "topicId": "skid-recovery",
-        **extra,
+        "durationSec": 40,
+        "onScreenText": ["Ease off the accelerator"],
+    }
+    _finish(store, task["taskId"], {"concept": concept, "topicId": "skid-recovery"})
+    done = call("GET", f"{BASE}/tasks/{task['taskId']}")[1]["task"]
+    shown = done["result"]["idea"]
+    assert shown["title"] == "Slippery"  # the title is kept
+    assert shown["concept"] == concept
+    assert shown["safetyTopicId"] == "skid-recovery"
+    assert shown["needsGuidance"] is False
+    stored = store.get(pk(), idea["sk"])
+    assert stored is not None
+    assert stored["concept"] == concept
+    # Applied once: an owner's later edit of the concept is not overwritten by reading the task again.
+    edited = {**concept, "ending": "Lamo waves."}
+    assert call("PATCH", f"{BASE}/ideas/{idea['ideaId']}", {"concept": edited})[0] == 200
+    again = call("GET", f"{BASE}/tasks/{task['taskId']}")[1]["task"]
+    assert again["result"]["idea"]["concept"]["ending"] == "Lamo waves."
+
+
+def test_expand_with_a_bad_concept_changes_nothing_but_the_topic_match(call: Call, store: db.Store) -> None:
+    idea = seed_idea(store)
+    task = call("POST", f"{BASE}/ideas/{idea['ideaId']}/expand", {})[1]["task"]
+    assert _task(store, task["taskId"])["input"]["durationSec"] == 45  # the workspace's default length
+    _finish(store, task["taskId"], {"concept": {"premise": "p", "beats": ["a"]}})
+    shown = call("GET", f"{BASE}/tasks/{task['taskId']}")[1]["task"]["result"]["idea"]
+    assert "concept" not in shown
+
+
+def test_variations_keep_the_category_and_the_parent(call: Call, store: db.Store) -> None:
+    idea = seed_idea(store)
+    task = call("POST", f"{BASE}/ideas/{idea['ideaId']}/variations", {"count": 2})[1]["task"]
+    assert task["kind"] == "variations"
+    assert _task(store, task["taskId"])["input"] == {"ideaId": idea["ideaId"], "count": 2}
+    _finish(
+        store,
+        task["taskId"],
+        {"drafts": [{"title": "Toast 2", "logline": "The toaster strikes back.", "category": "explainer"}]},
+    )
+    (draft,) = call("GET", f"{BASE}/tasks/{task['taskId']}")[1]["task"]["result"]["drafts"]
+    assert draft == {
+        "title": "Toast 2",
+        "logline": "The toaster strikes back.",
+        "category": "comedy",
+        "source": "variation",
+        "parentIdeaId": idea["ideaId"],
     }
 
 
-def test_expand_fills_the_concept_and_keeps_the_title(call: Call, app: App, store: db.Store) -> None:
-    idea = seed_idea(
-        store, title="Icy morning", logline="Lamo has to drive to work.", category="driving_safety", needsGuidance=True
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("generate", {"count": 7}),
+        ("generate", {"count": 0}),
+        ("generate", {"category": "horror"}),
+        ("generate", {"topic": "x" * 201}),
+        ("generate", {"model": "opus-5-5"}),
+        ("generate", {"override": {"model": "gpt-9"}}),
+        ("generate", {"override": {"effort": "turbo"}}),
+        ("generate", {"override": {"model": "opus-5-5", "temperature": 1}}),
+        ("expand", {"durationSec": 91}),
+        ("variations", {"count": 5}),
+    ],
+)
+def test_task_bodies_are_checked(call: Call, store: db.Store, agentcore: FakeAgentCore, path: str, body: Any) -> None:
+    idea = seed_idea(store)
+    url = f"{BASE}/ideas/generate" if path == "generate" else f"{BASE}/ideas/{idea['ideaId']}/{path}"
+    assert call("POST", url, body)[0] == 400
+    assert agentcore.calls == []
+    assert store.query_all(pk(), "TASK#") == []
+
+
+def test_an_unknown_idea_is_404_and_writes_no_task(call: Call, store: db.Store) -> None:
+    for path in ("expand", "variations"):
+        assert call("POST", f"{BASE}/ideas/01J0000000000000000000000Z/{path}", {})[0] == 404
+    assert store.query_all(pk(), "TASK#") == []
+
+
+def test_the_helper_off_or_refused_is_a_failed_task_with_a_plain_sentence(
+    call: Call, app: App, store: db.Store, agentcore: FakeAgentCore, s3_client: FakeS3
+) -> None:
+    agentcore.reply = {"accepted": False}
+    task = call("POST", f"{BASE}/ideas/generate", {})[1]["task"]
+    assert task["status"] == "failed"
+    assert task["error"] == "The helper did not start. Tap Try again."
+    assert agentcore.stopped == [agentcore.calls[0]["runtimeSessionId"]]  # the session the refusal opened is ended
+    agentcore.fail = True
+    assert call("POST", f"{BASE}/ideas/generate", {})[1]["task"]["status"] == "failed"
+    install(app, None, s3_client)
+    task = call("POST", f"{BASE}/ideas/generate", {})[1]["task"]
+    assert task["status"] == "failed"
+    assert task["error"] == "The AI helper is not switched on yet, so it could not start."
+
+
+def test_a_switched_off_agent_refuses_its_tasks(call: Call, store: db.Store, agentcore: FakeAgentCore) -> None:
+    store.put(
+        {
+            "pk": pk(),
+            "sk": "AGENT#creative_director",
+            "type": "ws_agent",
+            "userId": USER,
+            "workspaceId": "stories",
+            "agentId": "creative_director",
+            "name": "Creative director",
+            "active": False,
+        }
     )
-    model = use_model(app, FakeModel(json.dumps(_concept())))
-    status, body = call("POST", f"{BASE}/ideas/{idea['ideaId']}/expand", {"durationSec": 40})
-    assert status == 200
-    out = body["idea"]
-    assert out["title"] == "Icy morning"
-    assert out["concept"]["durationSec"] == 40  # the owner's length wins over the model's
-    assert out["concept"]["beats"][1] == "The car slides"
-    assert out["safetyTopicId"] == "skid-recovery"  # the concept's words (and the model's pick) found the topic
-    assert out["needsGuidance"] is False
-    data = json.loads(model.user_text().split("\n", 1)[1])
-    shown = data["guidance"][0]["steps"]
-    assert "Remove the cause: release the brake." not in " ".join(str(s) for g in data["guidance"] for s in g["steps"])
-    assert shown, "the writer gets the shown steps only"
+    status, body = call("POST", f"{BASE}/ideas/generate", {})
+    assert status == 409
+    assert body["error"]["message"] == (
+        "Creative director is switched off. Switch it on in Lamo Stories › Settings › Agents."
+    )
+    assert agentcore.calls == []
 
 
-def test_expand_refuses_a_bad_concept_twice(call: Call, app: App, store: db.Store) -> None:
-    idea = seed_idea(store)
-    bad = json.dumps(_concept(beats=["only one"], topicId=""))
-    use_model(app, FakeModel(bad, bad))
-    assert call("POST", f"{BASE}/ideas/{idea['ideaId']}/expand", {})[0] == 503
-    assert "concept" not in store.get(idea["pk"], idea["sk"])  # type: ignore[operator]
+def test_a_task_without_a_heartbeat_is_failed_on_read(call: Call, store: db.Store, agentcore: FakeAgentCore) -> None:
+    queued = seed_task(store, status="queued", heartbeatAt="2026-11-15T11:56:30.000Z")  # 3.5 min before NOW
+    running = seed_task(store, status="running", heartbeatAt="2026-11-15T11:55:00.000Z")  # 5 min: still fine
+    late = seed_task(store, status="running", heartbeatAt="2026-11-15T11:53:30.000Z")  # 6.5 min
+    for found, expected in ((queued, "failed"), (running, "running"), (late, "failed")):
+        task = call("GET", f"{BASE}/tasks/{found['taskId']}")[1]["task"]
+        assert task["status"] == expected
+        stored = _task(store, found["taskId"])
+        if expected == "failed":
+            assert task["error"] == "The helper stopped. Tap Try again."
+            assert stored["sessionId"] != found["sessionId"]  # the agent's next write is refused
+            assert found["sessionId"] in agentcore.stopped
+        else:
+            assert stored["sessionId"] == found["sessionId"]
 
 
-def test_variations_are_drafts_from_the_idea(call: Call, app: App, store: db.Store) -> None:
-    idea = seed_idea(store)
-    use_model(app, FakeModel(_drafts(_draft("Toast 2", "The toaster strikes back."), _draft("Toast 3", "Toast rain."))))
-    status, body = call("POST", f"{BASE}/ideas/{idea['ideaId']}/variations", {"count": 2})
-    assert status == 200
-    assert [d["source"] for d in body["drafts"]] == ["variation", "variation"]
-    assert {d["parentIdeaId"] for d in body["drafts"]} == {idea["ideaId"]}
-    # A variation of another category is not a variation of this idea.
-    use_model(app, FakeModel(_drafts(_draft("Off", "x", "explainer")), _drafts(_draft("Off", "x", "explainer"))))
-    assert call("POST", f"{BASE}/ideas/{idea['ideaId']}/variations", {})[0] == 503
-    assert call("POST", f"{BASE}/ideas/{idea['ideaId']}/variations", {"count": 5})[0] == 400
+def test_another_owners_task_is_404(call: Call, store: db.Store) -> None:
+    theirs = seed_task(store, user=OTHER)
+    assert call("GET", f"{BASE}/tasks/{theirs['taskId']}")[0] == 404
+    assert call("GET", f"{BASE}/tasks/{theirs['taskId']}", sub=OTHER)[0] == 200
+    wrong = seed_task(store, workspaceId="01J0000000000000000000000Q")  # the item disagrees with its key
+    assert call("GET", f"{BASE}/tasks/{wrong['taskId']}")[0] == 404
+    assert call("GET", f"{BASE}/tasks/not-an-id")[0] == 404
 
 
 def test_saving_a_draft_keeps_its_source_and_parent(call: Call, store: db.Store) -> None:

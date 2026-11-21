@@ -5,10 +5,18 @@ from __future__ import annotations
 import pytest
 
 from clipfactory_api import db
+from clipfactory_api.app import App
+from clipfactory_api.workspaces import config
 from clipfactory_api.workspaces import types as ws
 from conftest import OTHER, USER, Call
 from fakes import FakeTable
-from ws_support import BASE, seed_workspace
+from ws_support import BASE, caller, seed_workspace
+
+
+@pytest.fixture
+def call(app: App) -> Call:
+    """Through Lamo Stories' own route table (its own Lambda), not Clip Factory's."""
+    return caller(app)
 
 
 def test_list_puts_lamo_clips_first_and_makes_lamo_stories_once(call: Call, table: FakeTable) -> None:
@@ -28,9 +36,11 @@ def test_list_puts_lamo_clips_first_and_makes_lamo_stories_once(call: Call, tabl
     assert second["workspaceType"] == "stories"
     assert second["builtin"] is False
     assert second["configuration"]["defaultDurationSec"] == 45
+    # The one source of the defaults: stories/config/workspace-defaults.json (§45.33).
+    assert second["configuration"] == config.workspace_defaults()
     assert second["configuration"]["providers"] == {
         "images": "builtin-rig",
-        "animation": "builtin-2d",
+        "video": "builtin-2d",
         "audio": "builtin-synth",
     }
     puts = [c for c in table.calls if c[0] == "put_item"]
@@ -85,7 +95,9 @@ def test_patch_merges_the_configuration_with_a_version(call: Call) -> None:
             "configuration": {
                 "defaultDurationSec": 30,
                 "providers": {"images": "nova-canvas"},
-                "storyModel": "opus-5-5",
+                "video": {"quality": "best"},
+                "production": {"scenesAtOnce": 3, "keepVersions": 4},
+                "xMonthlyLimitUsd": 12.5,
             },
         },
     )
@@ -96,10 +108,20 @@ def test_patch_merges_the_configuration_with_a_version(call: Call) -> None:
     assert w["configuration"]["defaultDurationSec"] == 30
     assert w["configuration"]["providers"] == {
         "images": "nova-canvas",
-        "animation": "builtin-2d",
+        "video": "builtin-2d",
         "audio": "builtin-synth",
     }
+    assert w["configuration"]["video"] == {"resolution": "1080x1920", "aspect": "9:16", "quality": "best", "fps": 30}
+    assert w["configuration"]["production"] == {"burnCaptions": True, "scenesAtOnce": 3, "keepVersions": 4}
+    assert w["configuration"]["xMonthlyLimitUsd"] == 12.5
     assert w["configuration"]["captionsOn"] is True
+    again = call(
+        "PATCH",
+        BASE,
+        {"version": w["version"], "configuration": {"production": {"keepVersions": "all"}, "xMonthlyLimitUsd": None}},
+    )[1]["workspace"]["configuration"]
+    assert again["production"] == {"burnCaptions": True, "scenesAtOnce": 3, "keepVersions": "all"}
+    assert again["xMonthlyLimitUsd"] is None
     stale = call("PATCH", BASE, {"version": version, "configuration": {"musicOn": False}})
     assert stale[0] == 409
 
@@ -109,9 +131,20 @@ def test_patch_merges_the_configuration_with_a_version(call: Call) -> None:
     [
         {"defaultDurationSec": 10},
         {"defaultDurationSec": 91},
-        {"storyModel": "gpt-9"},
+        {"storyModel": "opus-5-5"},
         {"providers": {"animation": "nova-reel"}},
         {"providers": {"images": "midjourney"}},
+        {"providers": {"video": "sora"}},
+        {"video": {"aspect": "16:9"}},
+        {"video": {"fps": 60}},
+        {"video": {"resolution": "1920x1080"}},
+        {"video": {"quality": "ultra"}},
+        {"video": {"codec": "av1"}},
+        {"production": {"scenesAtOnce": 4}},
+        {"production": {"keepVersions": 11}},
+        {"production": {"burnCaptions": "yes"}},
+        {"xMonthlyLimitUsd": -1},
+        {"xMonthlyLimitUsd": "50"},
         {"youtubeCategory": "20"},
         {"youtubePrivacy": "secret"},
         {"captionsOn": "yes"},

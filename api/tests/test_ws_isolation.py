@@ -16,6 +16,7 @@ import pytest
 import ws_routes_core
 from clipfactory_api import db
 from clipfactory_api.app import App
+from clipfactory_api.routes import ROUTES as CLIPS_ROUTES
 from clipfactory_api.workspaces import types as ws
 from conftest import CAPTIONS, OTHER, USER, Call, seed_clip
 from conftest import seed_job as seed_clip_job
@@ -23,7 +24,7 @@ from fakes import FakeAgentCore, FakeS3, FakeTable
 from test_ws_keys import stream_prefixes
 from ws_support import (
     BASE,
-    FakeModel,
+    caller,
     character_body,
     install,
     leaked,
@@ -36,11 +37,24 @@ from ws_support import (
     seed_idea,
     seed_item,
     seed_job,
+    seed_refvid,
     seed_story,
     seed_workspace,
     story_key,
-    use_model,
 )
+
+
+@pytest.fixture
+def call(app: App) -> Call:
+    """Through Lamo Stories' own route table (its own Lambda), not Clip Factory's."""
+    return caller(app)
+
+
+@pytest.fixture
+def clips_call(app: App) -> Call:
+    """Through Clip Factory's own route table (``cf-prod-api``), unchanged."""
+    return caller(app, CLIPS_ROUTES)
+
 
 NOT_FOUND = "We could not find that workspace."
 NOT_STORIES = "That is a Lamo Stories page. Switch to Lamo Stories first."
@@ -57,6 +71,8 @@ WS_TYPES = {
     ws.TYPE_PUBJOB,
     ws.TYPE_ACTIVITY,
     ws.TYPE_PROVIDER,
+    ws.TYPE_TASK,
+    ws.TYPE_REFVID,
 }
 
 
@@ -194,10 +210,10 @@ def _seed_lamo_clips(store: db.Store, s3_client: FakeS3) -> None:
     )
 
 
-def _clips_view(call: Call) -> dict[str, Any]:
+def _clips_view(clips_call: Call) -> dict[str, Any]:
     view = {}
     for path in CLIPS_READS:
-        status, body = call("GET", path, query={"status": "all"} if path == "/v1/clips" else None)
+        status, body = clips_call("GET", path, query={"status": "all"} if path == "/v1/clips" else None)
         view[path] = (status, body)
     return view
 
@@ -234,26 +250,34 @@ def _flow(call: Call, app: App, store: db.Store, s3_client: FakeS3) -> list[Any]
         f"{BASE}/ideas",
         {"title": "Black ice", "logline": "The car slides on black ice.", "category": "driving_safety"},
     )["idea"]
-    use_model(
-        app,
-        FakeModel(
-            json.dumps(
-                {
-                    "ideas": [
-                        {
-                            "title": "Toast",
-                            "logline": "Toast flies.",
-                            "category": "comedy",
-                            "topicId": "",
-                            "characters": ["Lamo"],
-                        }
-                    ]
-                }
-            )
-        ),
+    task = go("POST", f"{BASE}/ideas/generate", {"count": 1, "override": {"model": "haiku-5-5"}})["task"]
+    store.update(
+        pk(),
+        f"TASK#{task['taskId']}",
+        {"status": "done", "result": {"drafts": [{"title": "Toast", "logline": "Toast flies.", "category": "comedy"}]}},
     )
-    go("POST", f"{BASE}/ideas/generate", {"count": 1})
-    created = go("POST", f"{BASE}/stories", {"ideaId": idea["ideaId"], "characterIds": [cid]})
+    go("GET", f"{BASE}/tasks/{task['taskId']}")
+    expand = go("POST", f"{BASE}/ideas/{idea['ideaId']}/expand", {})["task"]
+    go("POST", f"{BASE}/ideas/{idea['ideaId']}/variations", {})
+    store.update(pk(), f"TASK#{expand['taskId']}", {"status": "done", "result": {"topicId": "skid-recovery"}})
+    go("GET", f"{BASE}/tasks/{expand['taskId']}")
+    picture = go(
+        "POST", f"{BASE}/characters/design/uploads", {"filename": "a.png", "contentType": "image/png", "size": 3}
+    )
+    s3_client.objects[f"{prefix()}design/{picture['assetId']}.png"] = b"png"
+    go("POST", f"{BASE}/characters/design", {"description": "A tall cat", "referenceAssetId": picture["assetId"]})
+    reference = seed_refvid(store)
+    created = go(
+        "POST",
+        f"{BASE}/stories",
+        {
+            "ideaId": idea["ideaId"],
+            "characterIds": [cid],
+            "referenceIds": [reference["refId"]],
+            "ai": {"model": "fable-5-2", "effort": None},
+            "override": {"effort": "max"},
+        },
+    )
     sid, job_id = created["story"]["storyId"], created["job"]["jobId"]
     # The agent makes the video (its writes, faked here as they land in the table and the bucket).
     from ws_support import script as make_script
@@ -308,7 +332,8 @@ def _flow(call: Call, app: App, store: db.Store, s3_client: FakeS3) -> list[Any]
         f"{BASE}/stories/{sid}",
         {"version": story["version"], "captions": [{"id": "c1", "at": 0, "dur": 2, "text": "Ease off"}]},
     )["story"]
-    go("POST", f"{BASE}/stories/{sid}/produce", {})
+    go("POST", f"{BASE}/stories/{sid}/captions", {})
+    go("POST", f"{BASE}/stories/{sid}/produce", {"override": {"model": "sonnet-5-5"}})
     go("POST", f"{BASE}/stories/{sid}/cancel")
     store.update(
         pk(),
@@ -345,15 +370,15 @@ def _flow(call: Call, app: App, store: db.Store, s3_client: FakeS3) -> list[Any]
 
 
 def test_lamo_clips_lists_are_exactly_the_same_before_and_after(
-    call: Call, app: App, store: db.Store, s3_client: FakeS3, table: FakeTable
+    call: Call, clips_call: Call, app: App, store: db.Store, s3_client: FakeS3, table: FakeTable
 ) -> None:
     _seed_lamo_clips(store, s3_client)
-    before = _clips_view(call)
+    before = _clips_view(clips_call)
     partition = _clips_partition(table)
     clips_objects = {k: v for k, v in s3_client.objects.items() if not k.startswith("ws/")}
     _flow(call, app, store, s3_client)
     assert _clips_partition(table) == partition  # Lamo Stories wrote nothing into USER#{userId}
-    assert _clips_view(call) == before
+    assert _clips_view(clips_call) == before
     assert {k: v for k, v in s3_client.objects.items() if not k.startswith("ws/")} == clips_objects
     assert before["/v1/me"][1]["counts"] == {"review": 1, "running": 0, "posted": 1}
     assert [a["status"] for a in before["/v1/accounts"][1]["accounts"] if a["platform"] == "youtube"] == ["connected"]
@@ -397,3 +422,49 @@ def test_no_presigned_url_or_key_outside_the_workspace(
         text = json.dumps(body)
         for url in [w for w in text.split('"') if w.startswith("https://") and ".amazonaws.com/" in w]:
             assert f".amazonaws.com/{prefix()}" in url, url  # every presigned link is a file of this workspace
+
+
+def _keys_touched(table: FakeTable) -> list[str]:
+    """Every partition key a DynamoDB call named (reads and writes)."""
+    out: list[str] = []
+    for op, kw in table.calls:
+        if op in {"get_item", "delete_item", "update_item"}:
+            out.append(kw["Key"]["pk"])
+        elif op == "put_item":
+            out.append(kw["Item"]["pk"])
+        elif op == "query":
+            out.append(kw["ExpressionAttributeValues"][":pk"])
+        elif op == "batch_get_item":
+            out += [k["pk"] for request in kw["RequestItems"].values() for k in request["Keys"]]
+    return out
+
+
+def test_every_key_the_core_routes_touch_is_lamo_stories_own(
+    call: Call, app: App, store: db.Store, s3_client: FakeS3, table: FakeTable, agentcore: FakeAgentCore
+) -> None:
+    """The separation test for the core routes (§45.19, §45.32 #20): every DynamoDB key and S3 key they touch is
+    ``USER#{u}#WS#…``, ``USER#{u}#WSREG`` or ``ws/{u}/…``, and they only ever invoke Lamo Stories' own runtime."""
+    _seed_lamo_clips(store, s3_client)
+    table.calls.clear()
+    s3_client.reads.clear()
+    _flow(call, app, store, s3_client)
+    touched = set(_keys_touched(table))
+    assert touched
+    allowed = {ws.registry_pk(USER)}
+    assert {k for k in touched if k not in allowed and not k.startswith(f"USER#{USER}#WS#")} == set()
+    files = [p["Key"] for p in s3_client.puts] + list(s3_client.deleted) + list(s3_client.reads)
+    files += presigned_keys(s3_client)
+    assert files
+    assert [k for k in files if not k.startswith(f"ws/{USER}/")] == []
+    assert agentcore.calls
+    assert {c["agentRuntimeArn"] for c in agentcore.calls} == {
+        "arn:aws:bedrock-agentcore:eu-north-1:123:runtime/cf_prod_story_agent"
+    }
+    assert all(c["runtimeSessionId"].startswith("cfstory-") for c in agentcore.calls)
+
+
+def test_clip_factorys_route_table_never_serves_lamo_stories(clips_call: Call, call: Call) -> None:
+    assert clips_call("GET", "/v1/workspaces")[0] == 404
+    assert clips_call("GET", f"{BASE}/dashboard")[0] == 404
+    assert call("GET", "/v1/jobs")[0] == 404
+    assert call("GET", "/v1/workspaces")[0] == 200

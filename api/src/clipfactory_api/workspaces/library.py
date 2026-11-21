@@ -1,7 +1,7 @@
 """Library lists and filtered pages (docs/CONTRACTS.md §45.12).
 
 The Library lists only ``ASSET#`` items of its workspace (never S3 listings), newest first, filtered by kind, story or
-character, with presigned links. ``filtered_page`` pages through one sort-key prefix keeping only the items a filter
+character, with presigned links; "Design with AI" pictures (``design_ref``) are left out unless asked for by kind. ``filtered_page`` pages through one sort-key prefix keeping only the items a filter
 accepts; its cursor is the key of the last item returned, checked by ``db.decode_cursor`` to be the caller's own.
 """
 
@@ -77,6 +77,8 @@ def asset_filter(
             return False
         if kind and item.get("kind") != kind:
             return False
+        if not kind and item.get("kind") in shapes.LIBRARY_HIDDEN:
+            return False  # "Design with AI" pictures are not Library files (§45.6)
         if story_id and item.get("storyId") != story_id:
             return False
         return not (character_id and item.get("characterId") != character_id)

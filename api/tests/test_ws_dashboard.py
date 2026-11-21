@@ -8,7 +8,13 @@ from clipfactory_api import db
 from clipfactory_api.app import App
 from conftest import OTHER, Call
 from fakes import FakeS3
-from ws_support import BASE, install, pk, seed_item, seed_job, seed_story
+from ws_support import BASE, caller, install, pk, seed_item, seed_job, seed_story
+
+
+@pytest.fixture
+def call(app: App) -> Call:
+    """Through Lamo Stories' own route table (its own Lambda), not Clip Factory's."""
+    return caller(app)
 
 
 @pytest.fixture(autouse=True)

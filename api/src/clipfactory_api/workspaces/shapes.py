@@ -10,8 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Final
 
-from .. import clips
-from . import guard
+from . import captions, guard
 from . import types as ws
 
 STEP_ORDER: Final = ("storyboard", "safety", "scenes", "animation", "sound", "captions", "assemble", "preview")
@@ -38,7 +37,10 @@ ASSET_KINDS: Final = (
     "portrait",
     "audio",
     "captions",
+    "design_ref",  # a picture for "Design with AI" (§45.5); the Library hides it
 )
+LIBRARY_HIDDEN: Final = frozenset({"design_ref"})
+SAFETY_STATUSES: Final = ("pending", "ok", "problems", "skipped")
 JOB_ACTIVE: Final = frozenset({"queued", "running"})
 STEP_DONE: Final = frozenset({"done", "skipped"})
 
@@ -68,9 +70,11 @@ def public_workspace(item: Mapping[str, Any]) -> dict[str, Any]:
     stored = item.get("configuration")
     if isinstance(stored, Mapping):
         for key, value in stored.items():
-            if key == "providers" and isinstance(value, Mapping):
-                config["providers"] = {**config["providers"], **dict(value)}
-            elif key in config:
+            if key not in config:
+                continue  # an older key no longer in StoriesConfig is never shown
+            if isinstance(config[key], Mapping) and isinstance(value, Mapping):
+                config[key] = {**config[key], **{k: v for k, v in value.items() if k in config[key]}}
+            elif not isinstance(config[key], Mapping):
                 config[key] = value
     out: dict[str, Any] = {
         "workspaceId": str(item["workspaceId"]),
@@ -176,7 +180,7 @@ def public_character(
 
 
 def empty_captions() -> dict[str, str]:
-    return clips.merged_captions(None, {})
+    return captions.empty()
 
 
 def storage_location(bucket: str, user_id: str, workspace_id: str, story_id: str) -> str:
@@ -226,7 +230,7 @@ def public_story(item: Mapping[str, Any], presign: Presign, user_id: str, bucket
         "actualDurationSec": item.get("actualDurationSec"),
         "captionsOn": bool(item.get("captionsOn", True)),
         "musicMood": str(item.get("musicMood") or "none"),
-        "postCaptions": clips.merged_captions(item.get("postCaptions"), {}),
+        "postCaptions": captions.merged(item.get("postCaptions"), {}),
         "scenes": scenes,
         "scriptVersion": int(item.get("scriptVersion") or 0),
         "storageLocation": storage_location(bucket, user_id, workspace_id, story_id),
@@ -235,6 +239,8 @@ def public_story(item: Mapping[str, Any], presign: Presign, user_id: str, bucket
         "safety": _safety(item.get("safety")),
         "reviewNote": item.get("reviewNote") or None,
         "currentJobId": item.get("currentJobId") or None,
+        "ai": ai_setting(item.get("ai")),
+        "referenceIds": [str(r) for r in item.get("referenceIds") or [] if isinstance(r, str)],
         "posted": posted,
         "version": int(item.get("version") or 1),
         "createdAt": str(item.get("createdAt") or ""),
@@ -252,13 +258,23 @@ def public_story(item: Mapping[str, Any], presign: Presign, user_id: str, bucket
     return out
 
 
+def ai_setting(value: Any) -> dict[str, Any]:
+    """A video's own model and effort (``Story.ai``), ``{model: null, effort: null}`` when it has none."""
+    stored = value if isinstance(value, Mapping) else {}
+    model, effort = stored.get("model"), stored.get("effort")
+    return {
+        "model": model if isinstance(model, str) and model else None,
+        "effort": effort if isinstance(effort, str) and effort else None,
+    }
+
+
 def _safety(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
         return None
     status = value.get("status")
     return {
         "topicId": value.get("topicId") or None,
-        "status": status if status in {"pending", "ok", "problems"} else "pending",
+        "status": status if status in SAFETY_STATUSES else "pending",
         "problems": [str(p) for p in value.get("problems") or []],
         "checkedScriptVersion": value.get("checkedScriptVersion"),
         "citations": [dict(c) for c in value.get("citations") or [] if isinstance(c, Mapping)],
@@ -307,6 +323,25 @@ def _step(raw: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _models(value: Any) -> list[dict[str, Any]]:
+    """``meta.models`` (§45.25 "Recorded"): per step, the model, effort and whether the effort was really sent."""
+    out = []
+    for entry in value if isinstance(value, list) else []:
+        if not isinstance(entry, Mapping) or not isinstance(entry.get("model"), str):
+            continue
+        effort = entry.get("effort")
+        out.append(
+            {
+                "step": str(entry.get("step") or ""),
+                "agentId": str(entry.get("agentId") or ""),
+                "model": str(entry["model"]),
+                "effort": effort if isinstance(effort, str) else None,
+                "effortApplied": bool(entry.get("effortApplied")),
+            }
+        )
+    return out
+
+
 def public_job(item: Mapping[str, Any]) -> dict[str, Any]:
     steps = [_step(s) for s in item.get("steps") or [] if isinstance(s, Mapping)]
     raw_config = item.get("configuration") if isinstance(item.get("configuration"), Mapping) else {}
@@ -315,6 +350,7 @@ def public_job(item: Mapping[str, Any]) -> dict[str, Any]:
     meta: dict[str, Any] = {k: (raw_meta or {}).get(k) for k in META_KEYS}
     providers = (raw_meta or {}).get("providers")
     meta["providers"] = {str(k): str(v) for k, v in providers.items()} if isinstance(providers, Mapping) else {}
+    meta["models"] = _models((raw_meta or {}).get("models"))
     out: dict[str, Any] = {
         "jobId": str(item["jobId"]),
         "workspaceId": str(item["workspaceId"]),
