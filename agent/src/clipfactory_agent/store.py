@@ -53,8 +53,16 @@ def cookies_key(user_id: str) -> str:
     return f"private/{user_id}/youtube-cookies.txt"
 
 
-# Fields §39.3 adds to every job (additive only): the language Transcribe heard (BCP 47, public) and every name and
-# handle of the video's channel inside ``source`` (``source.channelKeys``, public). The API's fit check reads them.
+def kept_video_keys(user_id: str, job_id: str) -> tuple[str, str]:
+    """Where a job's whole video may still be kept (docs/CONTRACTS.md §39.3, a campaign copy's ``sourceKey``): the
+    job's own copy of an upload, then the file the owner's Mac sent (§35.1). Nothing else is ever read as one."""
+    return source_prefix(job_id) + "video.mp4", f"uploads/{user_id}/mac-{job_id}/video.mp4"
+
+
+# Fields §39.3 adds (additive only): the campaign copy a clip is (``remakeOf {clipId, jobId}``, public, on the Clip
+# item) and, on every job, the language Transcribe heard (BCP 47, public) and every name and handle of the video's
+# channel inside ``source`` (``source.channelKeys``, public). The API's fit check reads them from the items.
+REMAKE_OF = "remakeOf"
 SOURCE_LANGUAGE = "sourceLanguage"
 CHANNEL_KEYS = "channelKeys"
 
