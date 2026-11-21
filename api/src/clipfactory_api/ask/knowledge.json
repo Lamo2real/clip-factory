@@ -1,5 +1,5 @@
 {
- "version": "7b3ff74a780f",
+ "version": "6870c5107965",
  "parts": [
   {
    "id": "app-map",
@@ -974,14 +974,14 @@
   {
    "id": "ux-money-dashboard-and-the-bottom-right-dock",
    "title": "UX_DESIGN_SYSTEM: Money dashboard and the bottom-right dock",
-   "line": "Contract: docs/CONTRACTS.md §27, ADR-50. Monthly MRR is the main card (display-size number, counts up once); Weekly",
-   "chars": 2078
+   "line": "Contract: docs/CONTRACTS.md §27, ADR-50. Monthly MRR is the main card of the apps (display-size number, counts up",
+   "chars": 2437
   },
   {
    "id": "ux-content-rewards-campaigns",
    "title": "UX_DESIGN_SYSTEM: Content Rewards campaigns",
-   "line": "Contract: [CONTRACTS.md §38.1](CONTRACTS.md#381-words-and-rules-every-new-screen-follows) and the screens of §38.3–§38.7",
-   "chars": 7316
+   "line": "Contract: [CONTRACTS.md §38.1](CONTRACTS.md#381-words-and-rules-every-new-screen-follows) and the screens of §38.3–§38.7,",
+   "chars": 19563
   },
   {
    "id": "ux-kid-proof-checklist",

@@ -1,8 +1,12 @@
 ## Money dashboard and the bottom-right dock
 
-Contract: docs/CONTRACTS.md §27, ADR-50. Monthly MRR is the main card (display-size number, counts up once); Weekly
-and Daily share a row; Yearly always says "At this pace for a year". Every amount carries its tag ("YouTube's
-estimate"). Apps that never share money are named once in a note with "Not shared" chips, never shown as $0.
+Contract: docs/CONTRACTS.md §27, ADR-50. Monthly MRR is the main card of the apps (display-size number, counts up
+once); Weekly and Daily share a row; Yearly always says "At this pace for a year". Every amount carries its tag
+("YouTube's estimate"). Apps that never share money are named once in a note with "Not shared" chips, never shown as
+$0. Since [§39.2](CONTRACTS.md#392-all-your-money-in-one-place) the page opens with
+[All your money](#all-your-money) above the Apps chips and period band: its total is the biggest number on the page,
+Monthly's is one size smaller and its sub line says "Apps only. Content Rewards is in All your money." while the
+Content Rewards row is on that card.
 
 - **The dock (a page pattern).** On phones and touch tablets a page whose controls the thumb needs often keeps them in
   a glass dock at the bottom right, above the tab bar: two right-aligned rows, the most-used row nearest the thumb,
