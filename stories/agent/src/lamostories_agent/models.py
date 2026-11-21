@@ -1,8 +1,9 @@
 """Model and effort resolution and the one model client (docs/CONTRACTS.md §45.25, §45.33, ADR-77).
 
-SCAFFOLD (Phase 1): the contract every Lamo Stories AI call goes through. Builder E implements ``ModelClient`` (Bedrock
-Converse with ``additionalModelRequestFields={"output_config": {"effort": ...}}``, refusals, MODELSTATUS# and USAGE#);
-builder E2's chat, tasks and analysis call it. Precedence, strongest first, model and effort merged separately: the
+The contract every Lamo Stories AI call goes through. ``BedrockModels`` implements ``ModelClient`` (Bedrock Converse
+and ConverseStream with ``additionalModelRequestFields={"output_config": {"effort": ...}}`` exactly when the model
+offers efforts, adaptive thinking left to the model, refusals, MODELSTATUS# and USAGE#); the pipeline, the chat, the
+tasks and the reference analysis call it. Precedence, strongest first, model and effort merged separately: the
 per-request override, the conversation's or the project's setting, the task's, the agent's, the workspace default.
 There is never an automatic fallback to another model, and an effort the model does not offer is refused, never
 swapped. ``stories/config/resolve-cases.json`` holds the shared cases (the API's resolver passes the same ones).
@@ -10,13 +11,25 @@ swapped. ``stories/config/resolve-cases.json`` holds the shared cases (the API's
 
 from __future__ import annotations
 
+import contextlib
+import functools
+import json
+import math
+import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any, Protocol
 
-from . import config
+from . import config, keys
+from .agents import Workspace
+from .jsonschema import check
+from .retry import retry_sync
+from .util import log, now_iso, ulid
 
 LEVELS = ("request", "conversation", "project", "task", "agent")
+EFFORT_WORDS = {"low": "Low", "medium": "Medium", "high": "High", "xhigh": "Extra high", "max": "Maximum"}
 
 
 class ModelUnavailable(Exception):
@@ -73,7 +86,7 @@ def resolve(
         return Choice(model_key, None, False, source)
     if effort not in offered:
         raise EffortUnavailable(
-            f"{info['label']} does not offer the effort '{effort}'. Pick another level in Lamo Stories › Settings › AI."
+            f"{info['label']} does not offer {EFFORT_WORDS.get(effort, effort)}. Pick another level."
         )
     return Choice(model_key, effort, True, source)
 
@@ -121,3 +134,501 @@ class ModelClient(Protocol):
         """Resolves the model and effort itself, builds the system blocks (the agent's instructions, its enabled skills,
         the workspace memory), sends the request, writes MODELSTATUS# and USAGE#. Called from a worker thread."""
         ...
+
+
+# --- the Bedrock client (builder E) ------------------------------------------------------------------------------
+
+ANSWER_TOOL = "submit_answer"
+ANSWER_NUDGE = f"Answer only by calling the {ANSWER_TOOL} tool once, with every required field."
+NO_EFFORT_LINE = "This model has no effort setting; it runs at its own level."
+UNAVAILABLE = (
+    "{label} isn't available right now: {reason}. Pick another model in Lamo Stories › Settings › AI, or try again."
+)
+REFUSED = (
+    "{label} said no to this request. Change the wording a little and try again, or pick another model in "
+    "Lamo Stories › Settings › AI."
+)
+AGENT_OFF = "{name} is switched off. Switch it on in Lamo Stories › Settings › Agents."
+STATUS_LINES = {
+    "ok": "It answered.",
+    "denied": "Bedrock says this AWS account may not use it.",
+    "not_found": "Bedrock cannot find it from here.",
+    "error": "The last call failed.",
+}
+_MODEL_WORDS = ("model", "profile", "identifier", "retention")
+CALL_ATTEMPTS = 3
+READ_TIMEOUT = 15 * 60  # a long structured answer with adaptive thinking can take minutes
+
+
+class AgentOff(Exception):
+    """The agent of this task is switched off (§45.26); the message is the owner's sentence."""
+
+
+class ModelRefused(Exception):
+    """The model declined the request (``stopReason`` refusal); no other model is tried (§45.25)."""
+
+
+class AnswerInvalid(Exception):
+    """The answer did not fit the schema, also after being asked once more."""
+
+    def __init__(self, problems: list[str]) -> None:
+        super().__init__("The answer did not fit: " + "; ".join(problems[:5]))
+        self.problems = problems
+
+
+def _code(e: BaseException) -> str:
+    response = getattr(e, "response", None)
+    return str(((response or {}).get("Error") or {}).get("Code") or "") if isinstance(response, dict) else ""
+
+
+def _message(e: BaseException) -> str:
+    response = getattr(e, "response", None)
+    msg = ((response or {}).get("Error") or {}).get("Message") if isinstance(response, dict) else None
+    return str(msg or e)
+
+
+def unavailable(e: BaseException) -> tuple[str, str] | None:
+    """``(status, reason)`` when Bedrock refused the model itself (access, Region, model id or quota), else None."""
+    code, msg = _code(e), _message(e).lower()
+    if code == "AccessDeniedException":
+        if "retention" in msg:
+            return "denied", "Bedrock needs this AWS account's data-retention opt-in for it first"
+        return "denied", "Bedrock says this AWS account may not use it"
+    if code == "ResourceNotFoundException":
+        return "not_found", "Bedrock cannot find it from this Region"
+    if code == "ValidationException" and any(w in msg for w in _MODEL_WORDS):
+        if any(w in msg for w in ("tool", "cache", "image", "token", "schema")):
+            return None
+        if "retention" in msg:
+            return "denied", "Bedrock needs this AWS account's data-retention opt-in for it first"
+        return "not_found", "Bedrock does not accept this model id here"
+    if code in ("ThrottlingException", "ServiceQuotaExceededException", "TooManyRequestsException"):
+        return "error", "its Bedrock limit is used up for now"
+    return None
+
+
+def price_of(model_key: str, ai: dict[str, Any]) -> dict[str, Any] | None:
+    """The owner's price for the model (Settings › AI) or else the list price in ``stories/config/models.json``."""
+    owner = (ai.get("prices") or {}).get(model_key)
+    if isinstance(owner, dict) and owner.get("inputPer1M") is not None:
+        return {**owner, "source": owner.get("source") or "owner"}
+    info = config.model(model_key) or {}
+    pricing = info.get("pricing")
+    return dict(pricing) if isinstance(pricing, dict) else None
+
+
+def cost_of(usage: dict[str, int], price: dict[str, Any] | None) -> float | None:
+    """An estimate in the price's currency, or None when no price is known. Cache reads and writes use their own
+    prices when known, else the input price."""
+    if not price:
+        return None
+    inp, out = float(price.get("inputPer1M") or 0), float(price.get("outputPer1M") or 0)
+    total_in = usage.get("input", 0) + usage.get("cacheRead", 0) + usage.get("cacheWrite", 0)
+    long = price.get("longContext")
+    if isinstance(long, dict) and total_in > int(long.get("aboveInputTokens") or 0):
+        inp, out = float(long.get("inputPer1M") or inp), float(long.get("outputPer1M") or out)
+    read = price.get("cacheReadPer1M")
+    write = price.get("cacheWritePer1M")
+    cost = (
+        usage.get("input", 0) * inp
+        + usage.get("output", 0) * out
+        + usage.get("cacheRead", 0) * (float(read) if read is not None else inp)
+        + usage.get("cacheWrite", 0) * (float(write) if write is not None else inp)
+    ) / 1_000_000
+    return round(cost, 6)
+
+
+def tool_spec(tool: dict[str, Any]) -> dict[str, Any]:
+    """A tool as Converse takes it: ``{"toolSpec": ...}`` as is, or ``{name, description, input_schema | schema}``."""
+    if "toolSpec" in tool:
+        return tool
+    schema = tool.get("input_schema") or tool.get("inputSchema") or tool.get("schema") or {"type": "object"}
+    if isinstance(schema, dict) and "json" in schema and len(schema) == 1:
+        schema = schema["json"]
+    return {
+        "toolSpec": {"name": str(tool["name"]), "description": str(tool.get("description") or tool["name"]),
+                     "inputSchema": {"json": schema}}
+    }  # fmt: skip
+
+
+def _usage(raw: dict[str, Any] | None) -> dict[str, int]:
+    raw = raw or {}
+    return {
+        "input": int(raw.get("inputTokens") or 0),
+        "output": int(raw.get("outputTokens") or 0),
+        "cacheRead": int(raw.get("cacheReadInputTokens") or 0),
+        "cacheWrite": int(raw.get("cacheWriteInputTokens") or 0),
+    }
+
+
+def _add(a: dict[str, int], b: dict[str, int]) -> dict[str, int]:
+    return {k: a.get(k, 0) + b.get(k, 0) for k in {*a, *b}}
+
+
+@dataclass
+class _Answer:
+    content: list[dict[str, Any]]
+    stop_reason: str
+    usage: dict[str, int]
+
+
+class BedrockModels:
+    """``ModelClient`` on Amazon Bedrock Converse (§45.25, §45.33).
+
+    ``client`` is a ``bedrock-runtime`` client (made on first use in ``CF_REGION`` when not given); ``table`` is the
+    workspace table (a boto3 ``Table`` or a factory of one per thread); ``get_bytes`` reads an owner skill's file under
+    ``ws/``. The request never carries ``thinking`` (the models think adaptively and refuse a budget), never a forced
+    ``toolChoice`` (refused by these models) and never another model than the one resolved."""
+
+    def __init__(
+        self,
+        *,
+        table: Any,
+        get_bytes: Callable[[str], bytes],
+        client: Any = None,
+        region: str | None = None,
+        sleep: Callable[[float], None] | None = None,
+    ) -> None:
+        self._table = table
+        self._get_bytes = get_bytes
+        self._client = client
+        self._region = region
+        self._sleep = sleep
+        self._local = threading.local()
+        self._lock = threading.Lock()
+        self.cache_points = True
+
+    # --- plumbing ------------------------------------------------------------------------------------------------
+
+    @property
+    def client(self) -> Any:
+        with self._lock:
+            if self._client is None:
+                import boto3
+                from botocore.config import Config
+
+                cfg = Config(read_timeout=READ_TIMEOUT, connect_timeout=10, retries={"max_attempts": 1})
+                self._client = boto3.client("bedrock-runtime", region_name=self._region, config=cfg)
+            return self._client
+
+    def table(self) -> Any:
+        if not callable(self._table) or hasattr(self._table, "get_item"):
+            return self._table
+        t = getattr(self._local, "table", None)
+        if t is None:
+            t = self._local.table = self._table()
+        return t
+
+    def workspace(self, ctx: CallContext) -> Workspace:
+        return Workspace(self.table(), self._get_bytes, ctx.user_id, ctx.workspace_id)
+
+    # --- the call ------------------------------------------------------------------------------------------------
+
+    def complete(
+        self,
+        ctx: CallContext,
+        *,
+        task: str,
+        messages: list[dict[str, Any]],
+        override: dict[str, Any] | None = None,
+        schema: dict[str, Any] | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        max_tokens: int = 16000,
+        on_text: Callable[[str], None] | None = None,
+        allow_inactive: bool = False,
+    ) -> Reply:
+        """One model call for ``ctx``'s agent (see ``ModelClient``). ``on_text`` gets the answer's text so far while
+        it streams (ConverseStream); without it the call is a plain Converse. ``allow_inactive`` lets the quality
+        agent's fact check of a driving-safety story run while the agent is off (§45.26)."""
+        ws = self.workspace(ctx)
+        profile = ws.agent(ctx.agent_id)
+        if task not in profile.tasks:
+            log("warn", "stories.task_agent_mismatch", task=task, agent=ctx.agent_id)
+        if not profile.active and not allow_inactive:
+            raise AgentOff(AGENT_OFF.format(name=profile.name))
+        stored, conversation, project = ws.levels(
+            job_id=ctx.job_id, task_id=ctx.task_id, conv_id=ctx.conv_id, msg_id=ctx.msg_id
+        )
+        ai = ws.ai()
+        choice = resolve(
+            task=task,
+            agent={"model": profile.model, "effort": profile.effort},
+            ai=ai,
+            override=override if override is not None else stored,
+            conversation=conversation,
+            project=project,
+        )
+        info = config.model(choice.model) or {}
+        system = ws.system_blocks(profile)
+        msgs = [dict(m) for m in messages]
+        tool_list = [tool_spec(t) for t in tools or []]
+        if schema is not None:
+            tool_list.append(
+                {"toolSpec": {"name": ANSWER_TOOL, "description": "Give your answer.", "inputSchema": {"json": schema}}}
+            )
+            msgs = _nudge(msgs)
+        total: dict[str, int] = {}
+        for attempt in (1, 2):
+            answer = self._send(ctx, task, choice, info, system, msgs, tool_list, max_tokens, on_text, ai)
+            total = _add(total, answer.usage)
+            text = "".join(str(b.get("text") or "") for b in answer.content if "text" in b)
+            calls = [
+                {"id": b["toolUse"].get("toolUseId"), "name": b["toolUse"].get("name"), "input": _json(b["toolUse"])}
+                for b in answer.content
+                if "toolUse" in b
+            ]
+            if answer.stop_reason == "refusal":
+                raise ModelRefused(REFUSED.format(label=info.get("label") or choice.model))
+            data: dict[str, Any] | None = None
+            if schema is not None:
+                use = next((c for c in calls if c["name"] == ANSWER_TOOL), None)
+                value = use["input"] if use else _json_text(text)
+                problems = check(schema, value) if isinstance(value, dict) else [f"You did not call {ANSWER_TOOL}."]
+                if problems:
+                    if attempt == 2 or answer.stop_reason == "max_tokens":
+                        raise AnswerInvalid(problems)
+                    msgs = _ask_again(msgs, answer.content, use, problems)
+                    continue
+                assert isinstance(value, dict)
+                data = value
+            return Reply(
+                text=text,
+                data=data,
+                tool_calls=calls,
+                content=answer.content,
+                stop_reason=answer.stop_reason,
+                model=choice.model,
+                effort=choice.effort,
+                effort_applied=choice.effort_applied,
+                usage=total,
+            )
+        raise AssertionError("unreachable")
+
+    def request(
+        self,
+        choice: Choice,
+        info: dict[str, Any],
+        system: list[str],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        max_tokens: int,
+    ) -> dict[str, Any]:
+        """The Converse request body (a test records it): the model's profile, the system blocks, the effort exactly
+        when the model offers efforts, never ``thinking``, tools with automatic choice only."""
+        blocks: list[dict[str, Any]] = [{"text": b} for b in system if b.strip()]
+        if self.cache_points and blocks:
+            blocks.append({"cachePoint": {"type": "default"}})
+        body: dict[str, Any] = {
+            "modelId": str(info.get("profile") or info.get("modelId")),
+            "system": blocks,
+            "messages": messages,
+            "inferenceConfig": {"maxTokens": int(max_tokens)},
+        }
+        if choice.effort_applied and choice.effort:
+            body["additionalModelRequestFields"] = {"output_config": {"effort": choice.effort}}
+        if tools:
+            body["toolConfig"] = {"tools": tools, "toolChoice": {"auto": {}}}
+        return body
+
+    def _send(
+        self,
+        ctx: CallContext,
+        task: str,
+        choice: Choice,
+        info: dict[str, Any],
+        system: list[str],
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        max_tokens: int,
+        on_text: Callable[[str], None] | None,
+        ai: dict[str, Any],
+    ) -> _Answer:
+        label = str(info.get("label") or choice.model)
+        while True:
+            body = self.request(choice, info, system, messages, tools, max_tokens)
+            try:
+                send = (
+                    functools.partial(self._stream, body, on_text)
+                    if on_text
+                    else functools.partial(self._converse, body)
+                )
+                answer = retry_sync(
+                    send,
+                    what="bedrock.converse",
+                    attempts=CALL_ATTEMPTS,
+                    sleep=self._sleep or time.sleep,
+                )
+            except Exception as e:
+                msg = _message(e).lower()
+                if self.cache_points and _code(e) == "ValidationException" and "cache" in msg:
+                    log("info", "stories.cache_points_off", model=choice.model)
+                    self.cache_points = False
+                    continue
+                found = unavailable(e)
+                status = found[0] if found else "error"
+                line = f"{STATUS_LINES[status]} {found[1].capitalize()}." if found else STATUS_LINES["error"]
+                self._model_status(ctx, choice.model, status, line)
+                log("warn", "stories.model_failed", model=choice.model, task=task, code=_code(e), detail=msg[:300])
+                if found:
+                    raise ModelUnavailable(UNAVAILABLE.format(label=label, reason=found[1])) from e
+                raise
+            self._model_status(ctx, choice.model, "ok", STATUS_LINES["ok"])
+            self._usage(ctx, task, choice, answer.usage, ai)
+            return answer
+
+    def _converse(self, body: dict[str, Any]) -> _Answer:
+        r = self.client.converse(**body)
+        content = list(((r.get("output") or {}).get("message") or {}).get("content") or [])
+        return _Answer(content, str(r.get("stopReason") or ""), _usage(r.get("usage")))
+
+    def _stream(self, body: dict[str, Any], on_text: Callable[[str], None]) -> _Answer:
+        r = self.client.converse_stream(**body)
+        blocks: dict[int, dict[str, Any]] = {}
+        tool_json: dict[int, str] = {}
+        text = ""
+        stop = ""
+        usage: dict[str, int] = {}
+        for event in r.get("stream") or []:
+            if "contentBlockStart" in event:
+                start = event["contentBlockStart"]
+                i = int(start.get("contentBlockIndex") or 0)
+                use = (start.get("start") or {}).get("toolUse")
+                if use:
+                    blocks[i] = {"toolUse": {"toolUseId": use.get("toolUseId"), "name": use.get("name"), "input": {}}}
+                    tool_json[i] = ""
+            elif "contentBlockDelta" in event:
+                d = event["contentBlockDelta"]
+                i = int(d.get("contentBlockIndex") or 0)
+                delta = d.get("delta") or {}
+                if "text" in delta:
+                    blocks.setdefault(i, {"text": ""})
+                    blocks[i]["text"] = str(blocks[i].get("text") or "") + str(delta["text"])
+                    text += str(delta["text"])
+                    with contextlib.suppress(Exception):  # a writer's fault never stops the answer
+                        on_text(text)
+                elif "toolUse" in delta:
+                    tool_json[i] = tool_json.get(i, "") + str((delta["toolUse"] or {}).get("input") or "")
+                elif "reasoningContent" in delta:
+                    rc = blocks.setdefault(i, {"reasoningContent": {"reasoningText": {"text": ""}}})
+                    part = delta["reasoningContent"]
+                    rt = rc["reasoningContent"].setdefault("reasoningText", {"text": ""})
+                    if "text" in part:
+                        rt["text"] = str(rt.get("text") or "") + str(part["text"])
+                    if "signature" in part:
+                        rt["signature"] = part["signature"]
+                    if "redactedContent" in part:
+                        rc["reasoningContent"] = {"redactedContent": part["redactedContent"]}
+            elif "messageStop" in event:
+                stop = str(event["messageStop"].get("stopReason") or "")
+            elif "metadata" in event:
+                usage = _usage(event["metadata"].get("usage"))
+        for i, raw in tool_json.items():
+            blocks[i]["toolUse"]["input"] = _json_text(raw) or {}
+        return _Answer([blocks[i] for i in sorted(blocks)], stop, usage)
+
+    # --- what every call writes ----------------------------------------------------------------------------------
+
+    def _put(self, item: dict[str, Any]) -> None:
+        try:
+            self.table().put_item(Item=_to_ddb(item))
+        except Exception as e:  # a bookkeeping write never fails the call it records
+            log("warn", "stories.bookkeeping_failed", sk=item.get("sk"), error=type(e).__name__)
+
+    def _model_status(self, ctx: CallContext, model_key: str, status: str, line: str) -> None:
+        self._put(
+            {
+                "pk": keys.ws_pk(ctx.user_id, ctx.workspace_id),
+                "sk": keys.modelstatus_sk(model_key),
+                "type": keys.TYPE_MODELSTATUS,
+                "userId": ctx.user_id,
+                "workspaceId": ctx.workspace_id,
+                "model": model_key,
+                "status": status,
+                "line": line,
+                "checkedAt": now_iso(),
+            }
+        )
+
+    def _usage(self, ctx: CallContext, task: str, choice: Choice, usage: dict[str, int], ai: dict[str, Any]) -> None:
+        price = price_of(choice.model, ai)
+        at, item_id = now_iso(), ulid()
+        item: dict[str, Any] = {
+            "pk": keys.ws_pk(ctx.user_id, ctx.workspace_id),
+            "sk": keys.usage_sk(at[:10], item_id),
+            "type": keys.TYPE_USAGE,
+            "userId": ctx.user_id,
+            "workspaceId": ctx.workspace_id,
+            "kind": "model",
+            "usageId": item_id,
+            "day": at[:10],
+            "at": at,
+            "model": choice.model,
+            "modelId": str((config.model(choice.model) or {}).get("profile") or ""),
+            "task": task,
+            "agentId": ctx.agent_id,
+            "input": usage.get("input", 0),
+            "output": usage.get("output", 0),
+            "cacheRead": usage.get("cacheRead", 0),
+            "cacheWrite": usage.get("cacheWrite", 0),
+            "effort": choice.effort,
+            "effortApplied": choice.effort_applied,
+            "cost": cost_of(usage, price),
+            "currency": (price or {}).get("currency"),
+            "priceSource": (price or {}).get("source"),
+            "ttl": int(time.time()) + keys.USAGE_DAYS * 86400,
+        }
+        for name, value in (("jobId", ctx.job_id), ("taskId", ctx.task_id), ("convId", ctx.conv_id),
+                            ("msgId", ctx.msg_id)):  # fmt: skip
+            if value:
+                item[name] = value
+        self._put(item)
+
+
+def _nudge(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The last user message ends with the instruction to answer through ``submit_answer`` (tool choice stays
+    automatic: these models refuse a forced one)."""
+    out = [dict(m) for m in messages]
+    for m in reversed(out):
+        if m.get("role") == "user":
+            m["content"] = [*list(m.get("content") or []), {"text": ANSWER_NUDGE}]
+            return out
+    return [*out, {"role": "user", "content": [{"text": ANSWER_NUDGE}]}]
+
+
+def _ask_again(
+    messages: list[dict[str, Any]], content: list[dict[str, Any]], use: dict[str, Any] | None, problems: list[str]
+) -> list[dict[str, Any]]:
+    """The model's own answer back, with exactly what is wrong (asked once more, §45.7)."""
+    feedback = "Problems: " + "; ".join(problems[:20]) + " " + ANSWER_NUDGE
+    out = [*messages, {"role": "assistant", "content": content or [{"text": "(no answer)"}]}]
+    if use is not None and use.get("id"):
+        result = {"toolResult": {"toolUseId": use["id"], "content": [{"text": feedback}], "status": "error"}}
+        return [*out, {"role": "user", "content": [result]}]
+    return [*out, {"role": "user", "content": [{"text": feedback}]}]
+
+
+def _json(use: dict[str, Any]) -> Any:
+    value = use.get("input")
+    return _json_text(value) if isinstance(value, str) else value
+
+
+def _json_text(text: str) -> Any:
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`").removeprefix("json").strip()
+    try:
+        return json.loads(text) if text else None
+    except ValueError:
+        return None
+
+
+def _to_ddb(value: Any) -> Any:
+    if isinstance(value, bool) or value is None:
+        return value
+    if isinstance(value, float):
+        return Decimal(str(round(value, 6))) if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: _to_ddb(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_to_ddb(v) for v in value]
+    return value
