@@ -291,7 +291,11 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
 
   function finish(job: Job) {
     const count = job.clipTarget.min + Math.floor(Math.random() * (job.clipTarget.max - job.clipTarget.min + 1));
-    const tags = job.notes?.match(/#\w+/g)?.join(" ") ?? "#clips";
+    // A campaign job's clips, as the agent writes them (§38.13): #Ad first and every required tag, the marks on the video.
+    const campaign = job.campaignId ? cr.served().find((x) => x.campaignId === job.campaignId) : undefined;
+    const campaignTags = campaign ? [...(campaign.rules?.requiredHashtags ?? []), ...(campaign.rules?.requiredTags ?? [])].join(" ") : "";
+    const ad = campaign ? `${campaign.rules?.disclosure.caption ?? "#Ad"} ` : "";
+    const tags = [job.notes?.match(/#\w+/g)?.join(" ") ?? (campaign ? "" : "#clips"), campaignTags].filter(Boolean).join(" ");
     for (let i = 0; i < count; i++) {
       const m = MOMENTS[(i + job.jobId.charCodeAt(25)) % MOMENTS.length]!;
       const layout = i % 3 === 0 ? "blur_fill" : "facecam_top";
@@ -310,14 +314,26 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         layout,
         coverUrl: coverArt(i + 2, m.hook, layout),
         captions: {
-          youtubeTitle: `${m.hook} ${tags}`,
-          youtubeDescription: m.summary,
-          instagram: `${m.hook}\n${tags}`,
-          facebook: m.hook,
-          tiktok: `${m.hook} ${tags}`,
-          x: `${m.hook} ${tags}`,
+          youtubeTitle: campaign ? m.hook : `${m.hook} ${tags}`,
+          youtubeDescription: campaign ? `${ad}${m.summary} ${tags}` : m.summary,
+          instagram: `${ad}${m.hook}\n${tags}`,
+          facebook: campaign ? `${ad}${m.hook} ${tags}` : m.hook,
+          tiktok: `${ad}${m.hook} ${tags}`,
+          x: `${ad}${m.hook} ${tags}`,
         },
-        checklist: { items: [{ key: "hook_3s", label: "Hook lands in the first 3 seconds", pass: true }], fixes: [] },
+        checklist: {
+          items: [
+            { key: "hook_3s", label: "Hook lands in the first 3 seconds", pass: true },
+            ...(campaign
+              ? [
+                  { key: "disclosure", label: "“Paid partnership” shows for the first 3 seconds", pass: true },
+                  ...(campaign.logo.needed ? [{ key: "logo", label: "The campaign's logo is on the whole clip", pass: true }] : []),
+                  { key: "campaign_rules", label: "Follows the campaign's rules", pass: true },
+                ]
+              : []),
+          ],
+          fixes: [],
+        },
         score: m.score,
         pickedFor: m.why,
         createdAt: new Date().toISOString(),
@@ -394,6 +410,14 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   }
   /** Test knob (window.__cfMock.jobs): a finished job as it was saved before the "watch" step existed (nine steps). */
   const jobKnobs = {
+    /** One check of a clip passes or fails (tests: "Paid partnership" not on the video makes a campaign clip need a copy). */
+    checklist(clipId: string, key: string, pass: boolean): void {
+      const c = store.clips.find((x) => x.clipId === clipId);
+      if (!c) return;
+      const items = c.checklist.items.filter((i) => i.key !== key);
+      c.checklist = { ...c.checklist, items: [...items, { key, label: key, pass }] };
+      publishClip(c);
+    },
     /** The newest queued or working job finishes now: its clips wait in Review (tests: "the job runs"). */
     finish(jobId?: string): string | null {
       const j = jobId ? store.jobs.find((x) => x.jobId === jobId) : [...store.jobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).find((x) => x.status === "queued" || x.status === "running");
@@ -637,6 +661,14 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     async getMoneyEverywhere() {
       await delay();
+      // An API from before §39 (tests): GET /v1/money/everywhere is not there.
+      let before39 = false;
+      try {
+        before39 = sessionStorage.getItem("cf-mock-money-everywhere") === "404";
+      } catch {
+        /* no storage: the route is there */
+      }
+      if (before39) throw notFound("page");
       const scenario = money.controls.scenario();
       const data = dashData(scenario);
       const items = cr.moneyItems();
@@ -700,6 +732,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       const url = isLink ? (body.source as { url: string }).url : undefined;
       const platform = !isLink ? "upload" : /twitch\.tv/.test(url!) ? "twitch" : /kick\.com/.test(url!) ? "kick" : "youtube";
       const filename = body.source.type === "upload" ? body.source.filename : undefined;
+      // A campaign job's video, as yt-dlp would read it: from the campaign's own channel (the fit's source check).
+      const channel = body.campaignId && isLink ? cr.served().find((x) => x.campaignId === body.campaignId)?.rules?.allowedSources.channels[0]?.name : undefined;
       const j: Job = {
         jobId: ulid(),
         status: "queued",
@@ -710,6 +744,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
           key: body.source.type === "upload" ? body.source.key : undefined,
           filename,
           title: filename ?? "Reading the link…",
+          ...(channel ? { channel } : {}),
           thumbnailUrl: thumbArt(store.jobs.length, platform === "upload" ? "Upload" : platform),
         },
         clipTarget: body.clipTarget,
