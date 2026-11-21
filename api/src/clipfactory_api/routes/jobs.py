@@ -279,6 +279,9 @@ def retry(app: App, req: Request) -> Response:
     fresh_mac = macfetch.restarted(job.get("macFetch"))
     if fresh_mac is not None:
         fields["macFetch"] = fresh_mac
+    campaign = _campaign_logo_again(app, req.user_id, job)
+    if campaign is not None:
+        fields["campaign"] = campaign
     try:
         updated = app.store.update(
             job["pk"],
@@ -303,6 +306,17 @@ def retry(app: App, req: Request) -> Response:
         started = jobs.start(app.store, app.flows, updated, now)
         stopping.result()
     return ok({"job": jobs.public_job(started)})
+
+
+def _campaign_logo_again(app: App, user_id: str, job: dict[str, Any]) -> dict[str, Any] | None:
+    """A campaign job's Try again copies the campaign's logo onto the job again (§38.11), so a logo added (or
+    changed) on the campaign page after the job failed is the one this run uses. Only for a stopped job: a running
+    job's own copy is never replaced under it. A job without a campaign is untouched."""
+    if not isinstance(job.get("campaign"), dict) or job.get("status") not in jobs.RESTARTABLE:
+        return None
+    from ..contentrewards import jobs as cr_jobs
+
+    return cr_jobs.logo_again(app.store, app.media, user_id, job)
 
 
 def _stop_old_session(app: App, job_id: str, session_id: str) -> None:

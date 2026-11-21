@@ -614,6 +614,105 @@ def test_campaign_job_copies_the_logo(call: Call, cr_on: Any, s3_client: FakeS3)
     assert (status, body["error"]["message"]) == (409, "This campaign needs its logo on every clip. Add it below.")
 
 
+LOGO_MISSING = "The campaign's logo is missing. Add it on the campaign page, then tap Try again."
+
+
+def _logo_job(store: db.Store, **fields: Any) -> dict[str, Any]:
+    """A campaign job that needs the logo and stopped without it (the agent's LOGO_MISSING)."""
+    from clipfactory_api.contentrewards import rules
+
+    snapshot = {
+        "campaignId": CAMPAIGN_ID,
+        "name": "FaZe Clips",
+        "brand": "FaZe",
+        "rules": {**rules.empty(), "logo": {"required": True, "rules": None}},
+        "plainRules": ["Put the brand's logo on every clip."],
+        "rulesVersion": 2,
+    }
+    return seed_job(
+        store, **{"status": "failed", "error": LOGO_MISSING, "campaignId": CAMPAIGN_ID, "campaign": snapshot, **fields}
+    )
+
+
+def test_try_again_copies_the_logo_added_on_the_campaign_page(
+    call: Call, cr_on: Any, s3_client: FakeS3, table: FakeTable
+) -> None:
+    """The agent's "Add it on the campaign page, then tap Try again" (§38.11): Try again copies the campaign's logo
+    onto the job again, the same copy as the job's start, and the job's rules stay as they were."""
+    from clipfactory_api.contentrewards import rules
+
+    job = _logo_job(cr_on.store)
+    key = f"campaigns/{USER}/{CAMPAIGN_ID}/logo-1.webp"
+    s3_client.objects[key] = b"RIFF\x00\x00\x00\x00WEBPVP8 logo"
+    _ready(
+        cr_on,
+        logoKey=key,
+        logo={"needed": True, "state": "ready"},
+        rules={**rules.empty(), "logo": {"required": True, "rules": None}, "requiredHashtags": ["#New"]},
+    )
+    before = (table.raw(job["pk"], job["sk"]) or {})["campaign"]
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200, body
+    assert body["job"]["status"] == "queued"
+    assert "campaign" not in body["job"]
+    copy = f"jobs/{job['jobId']}/source/campaign-logo.webp"
+    assert s3_client.objects[copy] == b"RIFF\x00\x00\x00\x00WEBPVP8 logo"
+    stored = table.raw(job["pk"], job["sk"]) or {}
+    assert stored["campaign"] == {**before, "logoKey": copy}  # only the logo: the rules the job started with
+    assert stored["campaignId"] == CAMPAIGN_ID
+
+
+def test_try_again_copies_a_changed_logo_over_the_jobs_own_copy(
+    call: Call, cr_on: Any, s3_client: FakeS3, table: FakeTable
+) -> None:
+    job = _logo_job(cr_on.store)
+    own = f"jobs/{job['jobId']}/source/campaign-logo.png"
+    s3_client.objects[own] = b"not a picture"
+    cr_on.store.update(job["pk"], job["sk"], {"campaign": {**job["campaign"], "logoKey": own}})
+    key = f"campaigns/{USER}/{CAMPAIGN_ID}/logo-2.png"
+    s3_client.objects[key] = b"\x89PNG new logo"
+    _ready(cr_on, logoKey=key, logo={"needed": True, "state": "ready"})
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200, body
+    assert s3_client.objects[own] == b"\x89PNG new logo"
+    assert (table.raw(job["pk"], job["sk"]) or {})["campaign"]["logoKey"] == own
+
+
+def test_try_again_without_a_logo_keeps_the_job_as_it_was(
+    call: Call, cr_on: Any, s3_client: FakeS3, table: FakeTable
+) -> None:
+    """No logo on the campaign yet (or it can't be read): the retry still starts, and the agent says what to do."""
+    job = _logo_job(cr_on.store)
+    before = (table.raw(job["pk"], job["sk"]) or {})["campaign"]
+    _ready(cr_on, logoKey=None, logo={"needed": True, "state": "none"})
+    status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
+    assert status == 200, body
+    assert (table.raw(job["pk"], job["sk"]) or {})["campaign"] == before
+    assert not [k for k in s3_client.objects if k.startswith(f"jobs/{job['jobId']}/")]
+    again = _logo_job(cr_on.store)
+    _ready(cr_on, logoKey=f"campaigns/{USER}/{CAMPAIGN_ID}/logo-9.png", logo={"needed": True, "state": "ready"})
+    status, body = call("POST", f"/v1/jobs/{again['jobId']}/retry")  # the file is gone from the bucket
+    assert status == 200, body
+    assert (table.raw(again["pk"], again["sk"]) or {})["campaign"] == before
+
+
+def test_try_again_never_touches_a_running_job_or_one_without_a_campaign(
+    call: Call, cr_on: Any, s3_client: FakeS3, table: FakeTable
+) -> None:
+    key = f"campaigns/{USER}/{CAMPAIGN_ID}/logo-1.png"
+    s3_client.objects[key] = b"\x89PNG logo"
+    _ready(cr_on, logoKey=key, logo={"needed": True, "state": "ready"})
+    running = _logo_job(cr_on.store, status="running")
+    status, _ = call("POST", f"/v1/jobs/{running['jobId']}/retry")
+    assert status == 409
+    assert f"jobs/{running['jobId']}/source/campaign-logo.png" not in s3_client.objects
+    plain = seed_job(cr_on.store, status="failed", error="Boom")
+    status, _ = call("POST", f"/v1/jobs/{plain['jobId']}/retry")
+    assert status == 200
+    assert "campaign" not in (table.raw(plain["pk"], plain["sk"]) or {})
+    assert not [k for k in s3_client.objects if k.startswith(f"jobs/{plain['jobId']}/")]
+
+
 def _ready(cr_on: Any, **fields: Any) -> None:
     from clipfactory_api.contentrewards import campaigns
 
