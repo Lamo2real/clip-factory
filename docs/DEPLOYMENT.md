@@ -322,10 +322,11 @@ switched on: it shipped off and the switch PR #88 turned it on once all its part
 ([Content Rewards](#content-rewards-contracts-38)).
 
 What this deploy changes for posting: `cf-prod-hooks` runs up to **28 s** (the code exchange calls the platform),
-`cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **18 secrets** (the
-state key, an app, token and short-lived pending secret per platform, and Content Rewards' app and token) at $0.40
-each, so about $7 a month at most
-([ARCHITECTURE.md](ARCHITECTURE.md#lambda-functions)).
+`cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **22 secrets** in all
+(the state key, the push key, an app and a token secret per platform, Instagram's and Facebook's short-lived pending
+choice, Content Rewards' app and token, the four badge keys, Ask's search key and the optional YouTube proxy) at
+$0.40 each, so about $9 a month at most
+([ARCHITECTURE.md](ARCHITECTURE.md#lambda-functions), [ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)).
 
 For webhooks (not built yet), a platform console would need:
 

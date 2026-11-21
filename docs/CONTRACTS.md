@@ -2664,7 +2664,8 @@ callout also has **Ask TikTok again**, which fetches the creator info again.
   `/oauth`) from `oauth_callback_base`; `test-write-web-config.sh` covers it; `upload-web.sh` excludes `tiktok*.txt`
   from deletes. §4 config gains `"oauthCallbackBase"`; the web treats it as optional (mock mode) and uses it only
   until `GET /v1/setup` answers.
-* **Cost**: ≤ 16 secrets × $0.40/month.
+* **Cost**: ≤ 16 secrets × $0.40/month for this change (the state key and three per platform); about 22 in all today
+  (ADR-34).
 
 ### 17.10 Web mock mode (offline, `VITE_MOCK=1`)
 
@@ -8434,41 +8435,82 @@ Check now (`POST …/campaigns/{id}/read`) runs step 3 for one campaign synchron
 
 ### 38.14 Publishers and Confirm (`platforms/**`, `posts.py`, `routes/clips.py`)
 
-* **Confirm** for a clip whose job has a `campaign` (the same checks run in `_try_again`, so Try again and Post now
-  can't skip them):
-  * `platforms` is required (400 "Pick where it goes, then tap Upload."; the Settings › Where clips go fallback is not
-    used for campaign clips);
-  * `platforms` must be inside the campaign's places by the §38.8 rule, read from the live `CAMPAIGN#.platformsPaid`
-    (the job's `campaign.platformsPaid` only when that item has none), `SETUP#tiktok.gates.posting_audit` and
-    `CRCONN.crLinked`, else 400 "This campaign doesn't pay for X. Turn it off, then tap Upload.";
-  * `CAMPAIGN#` must be `in` or `manual`, not `held`, `paused` or `ended` (409 with the stop's sentence; a missing
-    `CAMPAIGN#` item → 409 "Add the campaign again on the Campaigns page.");
-  * YouTube `options.youtube.privacy` must be public (400 "Campaign clips must be public. Pick Everyone.");
-    `madeForKids: true` is refused (400 "Campaign clips are never made for kids.");
-  * TikTok needs `tiktok.privacy: "PUBLIC_TO_EVERYONE"` (400 "Campaign clips must be public. Pick Everyone.") and
-    `tiktok.brandContent: true` (400 "Turn on Branded content on TikTok for campaign clips.").
-  Each campaign post gets `campaignId` and the internal `postOptions.campaign = {paidPartnership: true, disclosure:
-  rules.disclosure.caption, required: [hashtags, tags, phrase…]}` from the job's rules. A clip without a campaign is
-  unchanged. B reads `CAMPAIGN#`, `CRCONN` and `SETUP#tiktok` with literal keys.
-* **Paid partnership** (`postOptions.campaign.paidPartnership`):
-  * YouTube: `part=snippet,status,paidProductPlacementDetails` with `paidProductPlacementDetails:
-    {hasPaidProductPlacement: true}`; `status.privacyStatus: "public"`; `selfDeclaredMadeForKids: false`. A 400 that
-    names `paidProductPlacementDetails` → the start is sent once more without it (no video is sent before the session
-    exists) and logged `publish.youtube_paid_refused`; the post gets the public `paidLabel: "not_set"` (the post line
-    says so, §38.6).
+* **Which clips.** `routes/clips.campaign_clip` finds a clip's campaign: its job's `campaign` (the rules copied at
+  `POST /v1/jobs`), else, for a clip that outlived its job, the clip's or its posts' `campaignId` with the rules of the
+  `CAMPAIGN#` item. The paid places are the live `CAMPAIGN#.platformsPaid` (the job's `campaign.platformsPaid` only
+  when that item has none). A clip without a campaign is unchanged and never asks the fit (§39.3). The items are read
+  by their literal keys (`CAMPAIGN#{uuid}`, `CRCONN`, the `SETUP#` items through `platform_setup.all_setups`).
+* **Confirm** of a campaign clip in `review`, in this order:
+  * `platforms` is required (400 "Pick where it goes, then tap Upload."; Settings › Where clips go never decides for
+    a campaign clip). Then the normal checks: every chosen place has a connected account (400 "{Platform} is not set
+    up yet. Turn it off, then tap Upload.") and TikTok's choices come with TikTok (400 "Pick who can see it on
+    TikTok.").
+  * The campaign takes clips, else 409 `conflict`: no `CAMPAIGN#` item → "Add the campaign again on the Campaigns
+    page."; `state` `ended` or `paused` → its §38.4 stop sentence; `membership` not `in` or `manual` → that
+    membership's sentence (`unknown`, `not_joined`, `apply_first`, `waiting`, `left`, `not_accepted`; anything else
+    reads as `unknown`, "Connect Content Rewards so I can see if you're in."); `held` set (until the poller clears it,
+    §38.12) → "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post
+    again."
+  * Every chosen place is one of the clip's places (the §38.8 `uploadPlaces` rule), else 400 with the first refusal:
+    not paid → "This campaign doesn't pay for {Platform}. Turn it off, then tap Upload."; not `ready` on Set up
+    posting → "{Platform} is not set up yet. Turn it off, then tap Upload."; TikTok before its `posting_audit` gate is
+    `ok` → "TikTok keeps Clip Factory's posts private until TikTok checks the app, and private posts can't earn. Turn
+    TikTok off, then tap Upload."; `CRCONN.crLinked[place]` is `false` → "Add {Platform} in Content Rewards first.
+    Then tap I added it, or turn {Platform} off and tap Upload."
+  * YouTube: `options.youtube.privacy` other than `public` → 400 "Campaign clips must be public. Pick Everyone.";
+    `madeForKids: true` → 400 "Campaign clips are never made for kids."; the post keeps `privacy: "public"` and
+    `madeForKids: false`.
+  * TikTok: `tiktok.privacyLevel` must be `PUBLIC_TO_EVERYONE` (400 "Campaign clips must be public. Pick Everyone.")
+    and `tiktok.brandContent` `true` (400 "Turn on Branded content on TikTok for campaign clips."). Nothing is picked
+    for him (§17.8).
+  * Last, only while Content Rewards is on, the fit gate (§39.3): 409 with the first `no`, `remake` or `todo` item's
+    words.
+  Each campaign post gets the public `campaignId` and the internal `postOptions.campaign` =
+  `campaign_caption.campaign_options(rules)`: `{paidPartnership: true, disclosure, required}`, where `disclosure` is
+  `rules.disclosure.caption` when it is one of `#Ad`, `#ad`, `#Sponsored`, `#sponsored`, `#PaidPartnership` (else
+  `#Ad`) and `required` is `required_items(rules)`: the required hashtags, then the tags, then the required caption
+  text with placeholders (`[…]`, `{…}`, `<…>`) taken out (a text of only `#`/`@` tokens adds each token), each once,
+  case-insensitive.
+* **Try again and Post now** (`_try_again`: a `failed` clip, or a `posted` or `confirmed` one with `platforms`) run
+  the same 409s, place rule and fit gate on the posts they send (the failed and the waiting ones), with sentences that
+  name the buttons those screens have (no switch, no Upload): "This campaign doesn't pay for {Platform} any more. Tap
+  Try again on another place.", "{Platform} is not set up yet. Set it up in Settings › Posting › Set up posting, then
+  tap Try again.", "TikTok keeps Clip Factory's posts private until TikTok checks the app, and private posts can't
+  earn. Tap Try again on another place." and "Add {Platform} in Content Rewards first, then tap Try again." TikTok's
+  public and Branded content rule runs when new TikTok choices come with it; they replace the TikTok post's
+  `postOptions` but its `campaign` part goes along unchanged. A waiting campaign post is never released by itself when
+  its account comes back (`release.release_waiting`): it waits for Post now (§39.3).
+* **Paid partnership** (`postOptions.campaign.paidPartnership`). A switch the platform refuses is sent once more
+  without it only when the answer is a 400 or 403 whose body names the field (YouTube also: a 400 with reason
+  `unexpectedPart` or `invalidPart`); any other error is the normal error (§17.6). A refused switch leaves
+  `paidLabel: "not_set"` in the post's handle, and `posts.mark_posted` writes it as the post's public `paidLabel`
+  (the post line says so, §38.6); `postOptions.campaign` never leaves the API.
+  * YouTube: the upload URL's `part=snippet,status,paidProductPlacementDetails` with `paidProductPlacementDetails:
+    {hasPaidProductPlacement: true}`; every campaign post is `status.privacyStatus: "public"` and
+    `selfDeclaredMadeForKids: false`, whatever its options say. On a refusal the start is sent once more without the
+    part (no video is sent before the session exists), logged `publish.youtube_paid_refused`; a resumed upload keeps
+    the label.
   * X: `paid_partnership: true` on `POST /2/tweets` (in X's API reference, "Disclose that the tweet is a paid
-    partnership"). A 400 naming it → once more without it, logged, `paidLabel: "not_set"`.
+    partnership"). On a refusal: once more without it (a refused call made no post, so it can't post twice), logged
+    `publish.x_paid_refused`.
   * Instagram and Facebook: Meta's Reels publishing has no paid-partnership field for this kind of app (Meta's
-    branded-content tag needs the brand's own approval), so nothing is sent; the disclosure is the caption's `#Ad`
-    first and "Paid partnership" on the video, which CR's FTC page accepts. The Review row says "Instagram doesn't let
-    apps turn on Paid partnership. #Ad and the words on the video tell viewers."
-  * TikTok: `brand_content_toggle: true` from the owner's own tap (Use my settings or the row), privacy
-    `PUBLIC_TO_EVERYONE`, exactly as §17.8.
-* **Captions** (`platforms/campaign_caption.py`, pure, used by every publisher just before sending):
-  `campaign_caption(platform, text, campaign)` puts the disclosure first (same rule as the agent) and appends any
-  missing required item, inside each platform's limits (Instagram 2,200 characters and 30 hashtags: required ones are
-  never the ones dropped; X 280: free text shortened, never a tag; YouTube description 5,000 bytes). So a caption the
-  owner edited still qualifies.
+    branded-content tag needs the brand's own approval), so nothing extra is sent; the disclosure is the caption's
+    `#Ad` first and "Paid partnership" on the video, which CR's FTC page accepts. The Review row says "Instagram
+    doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers."
+  * TikTok: `brand_content_toggle` is the owner's own `brandContent` (Use my settings or the row), privacy
+    `PUBLIC_TO_EVERYONE`, exactly as §17.8 (the publisher still refuses Branded content for anyone but Everyone or
+    Friends).
+* **Captions.** `publishers.caption(job, platform)` runs `campaign_caption(platform, text, postOptions.campaign)` just
+  before sending (and for Instagram's lookup), then each platform's own trim: YouTube's description (angle brackets
+  out, 5,000 bytes), Instagram (`instagram_caption`: 2,200 characters, 30 hashtags), X (links out first, then
+  `x_text`), TikTok and Facebook (2,200 characters). `campaign_caption` (pure, no I/O) puts the disclosure first
+  unless an `#ad`-like tag already starts within the first 30 characters (only the brand's own tag counts when it
+  asked for another, so a typed `#ad` never stands in for `#Sponsored`), appends every required item the caption
+  lacks (`has_item`: a whole `#`/`@` token, case-insensitive, or a phrase with its spaces folded), then fits the
+  limits without ever cutting a required item: Instagram drops other hashtags past 30 first, the last ones first;
+  over the place's length (2,200 characters for Instagram, TikTok and Facebook, X's 280 by X's own count with emoji,
+  CJK and most other scripts counting twice, YouTube's 5,000 bytes) the free text is shortened at a word with "…",
+  never a tag. So a caption the owner edited still qualifies.
 * **Made for kids** is false on every campaign post, whatever any option says.
 * **Delete never takes a campaign post down.** No publisher or adapter has a delete or unpublish call (a test reads
   them); job delete (§34) already keeps posted clips and posts, and also keeps `CRSUB#` items; removing a campaign from

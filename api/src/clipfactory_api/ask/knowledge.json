@@ -1,5 +1,5 @@
 {
- "version": "b90e56a42a77",
+ "version": "0576376511b3",
  "parts": [
   {
    "id": "app-map",
@@ -129,7 +129,7 @@
    "id": "contracts-17",
    "title": "CONTRACTS: 17. Posting setup: a setup list per platform, real Connect, real posting (owner request, 2026-11-16)",
    "line": "The owner's words: \"Facebook, Instagram, YouTube, TikTok and X should each be a step to connect to in order for this",
-   "chars": 105194
+   "chars": 105283
   },
   {
    "id": "contracts-18",
@@ -255,7 +255,7 @@
    "id": "contracts-38",
    "title": "CONTRACTS: 38. Content Rewards campaigns (owner request, 2026-11-21)",
    "line": "The owner's words: \"browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip",
-   "chars": 161630
+   "chars": 165888
   },
   {
    "id": "contracts-39",
@@ -465,7 +465,7 @@
    "id": "adr-34",
    "title": "DECISIONS: ADR-34 OAuth with a signed single-use state, tokens only in Secrets Manager",
    "line": "Context. Connect sends the owner to the platform and back to the public REST API (GET",
-   "chars": 2494
+   "chars": 2990
   },
   {
    "id": "adr-35",
@@ -651,7 +651,7 @@
    "id": "architecture-services-and-why-each-one",
    "title": "ARCHITECTURE: Services and why each one",
    "line": "Only managed, pay-per-use services. Nothing runs while the app is idle except storage. Why each choice was made is in",
-   "chars": 15875
+   "chars": 16066
   },
   {
    "id": "architecture-data-flows",
@@ -669,7 +669,7 @@
    "id": "architecture-cost-notes",
    "title": "ARCHITECTURE: Cost notes",
    "line": "Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything else is close to free tier.",
-   "chars": 3721
+   "chars": 3936
   },
   {
    "id": "architecture-limits",
@@ -681,7 +681,7 @@
    "id": "deployment-one-time-setup",
    "title": "DEPLOYMENT: One-time setup",
    "line": "1. GitHub OIDC identity provider (once per AWS account)",
-   "chars": 16848
+   "chars": 17070
   },
   {
    "id": "deployment-what-a-deploy-does",
