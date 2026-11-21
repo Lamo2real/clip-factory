@@ -128,8 +128,9 @@ export function CrConnectControls({ run, primary, label = "Connect Content Rewar
   );
 }
 
-/** The card after a Connect (§38.3): confetti already played for `connected`. */
-export function CrResultCard({ result, onClose }: { result: CrConnectResult; onClose: () => void }) {
+/** The card after a Connect (§38.3): confetti already played for `connected`. `next`: "Next: back to FaZe Clips."
+ * when the page was opened with a way back (§39.1). */
+export function CrResultCard({ result, onClose, next }: { result: CrConnectResult; onClose: () => void; next?: string }) {
   const ok = result === "connected";
   return (
     <section className={`result-card${ok ? " result-card--ok" : ""} glass`} role={ok ? "status" : "alert"} data-result={result}>
@@ -137,6 +138,7 @@ export function CrResultCard({ result, onClose }: { result: CrConnectResult; onC
       <div className="result-card__text">
         <h2 className="result-card__title">{ok ? "Connected!" : result === "read_only" ? "Connected, almost" : "Not connected yet"}</h2>
         <p>{CONNECT_RESULT_TEXT[result]}</p>
+        {next ? <p className="result-card__next">{next}</p> : null}
         <Button size="sm" variant="ghost" icon="x" onClick={onClose}>
           Close
         </Button>

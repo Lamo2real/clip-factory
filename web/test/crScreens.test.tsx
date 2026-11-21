@@ -260,10 +260,11 @@ describe("the post line", () => {
     expect(host.textContent).not.toContain("min left");
   });
 
-  it("not linked: Open Content Rewards settings and I linked it", async () => {
+  it("not added there: Open Content Rewards settings and I added it (§39.1)", async () => {
     await draw(<CrPostLines subs={[sub({ state: "not_sent", reason: { code: "not_linked", text: "" } })]} onChange={() => undefined} />);
     expect(host.textContent).toContain("Content Rewards didn't take it: Content Rewards doesn't know this YouTube account.");
     expect(host.textContent).toContain("Open Content Rewards settings");
-    expect(host.textContent).toContain("I linked it");
+    expect(host.textContent).toContain("I added it");
+    expect(host.textContent).not.toContain("I linked it");
   });
 });

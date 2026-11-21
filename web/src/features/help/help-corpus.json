@@ -1,5 +1,5 @@
 {
-  "version": "2d66302fe9f0",
+  "version": "d672e0ac72b5",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -18,6 +18,7 @@
     "src/lib/settingsTree.ts",
     "src/screens/campaigns/CampaignPaste.tsx",
     "src/screens/campaigns/bits.tsx",
+    "src/screens/clip/ClipFit.tsx",
     "src/screens/clip/ClipPerformance.tsx",
     "src/screens/home/CampaignsRow.tsx",
     "src/screens/home/Home.tsx",
@@ -34,7 +35,9 @@
     "src/screens/jobs/pendingStops.ts",
     "src/screens/library/Library.tsx",
     "src/screens/library/WeekView.tsx",
+    "src/screens/review/CampaignFit.tsx",
     "src/screens/review/CampaignStrip.tsx",
+    "src/screens/review/FitSuggestion.tsx",
     "src/screens/review/PlaceRows.tsx",
     "src/screens/review/Review.tsx",
     "src/screens/review/TikTokCommercial.tsx",
@@ -3381,10 +3384,11 @@
         "review",
         "working",
         "money",
-        "make",
-        "new",
         "cancel",
         "upload",
+        "make",
+        "normal",
+        "instead",
         "source",
         "clear",
         "link",
@@ -3395,8 +3399,7 @@
         "streamers",
         "follow",
         "find",
-        "ask",
-        "copy"
+        "ask"
       ],
       "answer": "Paste a link to a stream or a video. Clip Factory finds the best moments and makes short clips. You pick the ones to upload.",
       "steps": [
@@ -3511,6 +3514,7 @@
         "not",
         "done",
         "yet",
+        "fix",
         "ask",
         "tiktok",
         "made",
@@ -3626,9 +3630,11 @@
         "not",
         "done",
         "yet",
+        "review",
         "loading",
         "check",
-        "views"
+        "views",
+        "fix"
       ],
       "answer": "A clip's page shows how it does on each app. Tap a clip in Library to open it.",
       "steps": [

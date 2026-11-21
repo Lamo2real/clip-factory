@@ -37,7 +37,7 @@ export function UploadToChips({
   onToggle: (p: Platform) => void;
   /**
    * A campaign clip (§38.5): only the places it pays for (`ready` is already limited to them), its lines, and the
-   * places Content Rewards refused as not linked, with "I linked it".
+   * places Content Rewards refused as not added there, with "I added it".
    */
   campaign?: { lines: string[]; unlinked: Platform[]; onRelinked: (p: Platform) => unknown };
 }) {
@@ -86,7 +86,7 @@ export function UploadToChips({
   );
 }
 
-/** "Only places this campaign pays for.", the TikTok line, and "Link YouTube inside Content Rewards first." */
+/** "Only places this campaign pays for.", the TikTok line, and "Add YouTube in Content Rewards first." */
 function CampaignLines({ campaign }: { campaign: NonNullable<Parameters<typeof UploadToChips>[0]["campaign"]> }) {
   return (
     <div className="cr-places">
@@ -97,14 +97,14 @@ function CampaignLines({ campaign }: { campaign: NonNullable<Parameters<typeof U
       ))}
       {campaign.unlinked.map((p) => (
         <div key={p} className="cr-places__unlinked">
-          <p className="small">Link {PLATFORM_LABEL[p]} inside Content Rewards first.</p>
+          <p className="small">Add {PLATFORM_LABEL[p]} in Content Rewards first.</p>
           <div className="cr-line__actions">
             <OpenButton label="Open Content Rewards settings" href={CR_SETTINGS} size="sm" />
             <GreenButton size="sm" onClick={() => campaign.onRelinked(p)}>
-              I linked it
+              I added it
             </GreenButton>
           </div>
-          <p className="small">Then tap I linked it. The next clip will go.</p>
+          <p className="small">Then tap I added it. The next clip will go.</p>
         </div>
       ))}
     </div>

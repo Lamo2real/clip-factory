@@ -293,7 +293,7 @@ export function CrPostLine({ sub, onChange, compact = false, now = Date.now() }:
             <>
               <OpenButton label="Open Content Rewards settings" href={CR_SETTINGS} />
               <GreenButton onClick={relinked} loading={busy === "relink"}>
-                I linked it
+                I added it
               </GreenButton>
             </>
           ) : sub.reason.code === "not_on_application" ? (

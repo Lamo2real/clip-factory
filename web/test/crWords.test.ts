@@ -79,7 +79,8 @@ describe("the words", () => {
       ...REASON_CODES.map((c) => reasonText(c, "youtube", "Logo missing.", 30)),
     ];
     expect(CONNECT_RESULTS).toHaveLength(9);
-    expect(STOP_CODES).toHaveLength(25);
+    // §39.3 added overlay_needed (a hard stop, like sound_needed).
+    expect(STOP_CODES).toHaveLength(26);
     expect(REASON_CODES).toHaveLength(23);
     for (const t of all) {
       expect(t.trim(), t).not.toBe("");
@@ -97,7 +98,7 @@ describe("the words", () => {
     expect(stopText("low_rate", { bestPer1kCents: 50 })).toBe("It pays only $0.50 per 1,000 views. Most campaigns pay $1 or more. You can still make clips, or pick another one.");
     expect(stopText("no_place", { platformsPaid: ["youtube", "instagram"] })).toBe("Set up YouTube first. This campaign pays for YouTube and Instagram.");
     expect(reasonText("not_linked", "youtube")).toBe(
-      "Content Rewards doesn't know this YouTube account. Open Content Rewards settings, tap **Accounts**, and connect it. Then tap I linked it.",
+      "Content Rewards doesn't know this YouTube account. Open Content Rewards settings, tap **Accounts**, and add it. Then tap I added it.",
     );
     expect(MEMBERSHIP_CHIP.apply_first).toBe("Applied?");
   });
@@ -178,11 +179,14 @@ describe("the next step: one vermilion button, or none while he only waits (§38
     expect(check.asks?.map((a) => a.label)).toEqual(["It says Submit clip"]);
   });
 
-  it("application campaigns offer the quiet asks; a phone gets no Connect button", () => {
+  it("application campaigns offer the quiet asks; a phone's vermilion is Set up Content Rewards (§39.1)", () => {
     const apply = nextStepFor(gate({ membership: "apply_first", access: "application" }));
     expect(apply.asks?.map((a) => a.label)).toEqual(["It says Not eligible", "It says Submit clip"]);
-    const phone = forDevice(nextStepFor(gate({ membership: "unknown", connection: conn({ status: "not_connected", canSubmit: false }) })), true);
-    expect(phone.button).toBeUndefined();
+    const step = nextStepFor(gate({ membership: "unknown", connection: conn({ status: "not_connected", canSubmit: false }) }));
+    const phone = forDevice(step, true);
+    // The same setup page, with the way back to this campaign's card (steps 1 and 2 work on a phone).
+    expect(phone.button).toEqual({ label: "Set up Content Rewards", href: step.button!.href, external: false });
+    expect(phone.button!.href).toMatch(/^\/settings\/posting\/setup\/contentrewards\?back=\/campaigns\/[0-9a-f-]{36}$/);
     expect(phone.text).toBe("Connect Content Rewards on your Mac, so I can see if you're in.");
   });
 

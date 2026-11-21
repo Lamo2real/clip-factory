@@ -1,12 +1,14 @@
-// Your Content Rewards campaigns (/campaigns, docs/CONTRACTS.md §38.4): the paste box, then one card per campaign
-// (name, brand picture, one state chip, the next step in one line). With none yet: the three "join" steps first, then
-// the box. While the box is empty the screen's vermilion is "Open Content Rewards"; once a campaign link is in it,
-// "Add campaign". Paste itself is glass here.
+// Your Content Rewards campaigns (/campaigns, docs/CONTRACTS.md §38.4, §39.1): the paste box, then one card per
+// campaign (name, brand picture, one state chip, the next step in one line). With none yet: the three "join" steps
+// first, then the box. In time order: while Content Rewards is not connected, "Set up Content Rewards" comes first and
+// is the vermilion ("Then join a campaign" follows, its Open glass); once connected, while the box is empty the
+// vermilion is "Open Content Rewards"; once a campaign link is in the box, "Add campaign". Paste itself is glass.
 import { useState } from "react";
 import type { GroupChoice } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
-import { A, ErrorPanel, PageHeader, Skeleton } from "../../components/ui.tsx";
+import { A, ErrorPanel, LinkButton, PageHeader, Skeleton } from "../../components/ui.tsx";
 import { CR_SETUP_PATH, COMING_SOON, campaignPath, signedIn, useCr } from "../../lib/contentRewards.ts";
+import { withBack } from "../../lib/backLink.ts";
 import { crPart } from "../../setup/contentrewards.ts";
 import { useSetup } from "../settings/setup/useSetup.ts";
 import { Rich } from "../settings/setup/bits.tsx";
@@ -90,16 +92,35 @@ export function CampaignsPage() {
 
   const campaigns = data?.campaigns ?? [];
   const connected = signedIn(data?.connection);
+  // Not connected yet: setting up comes first (§39.1 change 10), and is the vermilion while the box is empty.
+  const setupFirst = !!data && !connected;
   return (
     <div className="page page--narrow cr-campaigns">
       <PageHeader title="Your campaigns" lede="Join a campaign on Content Rewards. Paste its link here. I check the rules and if you're in." />
       {/* None yet: the three join steps come first, so step 1's Open Content Rewards is on the first screen. */}
+      {setupFirst ? (
+        <section className="cr-setup-first glass" aria-labelledby="cr-setup-first-title" data-cr="setup-first">
+          <h2 className="cr-section__title" id="cr-setup-first-title">
+            First, set up Content Rewards
+          </h2>
+          <p>Connect Content Rewards so I can see if you&apos;re in.</p>
+          <LinkButton
+            href={withBack(CR_SETUP_PATH, "/campaigns")}
+            variant={!typed && !group ? "primary" : "glass"}
+            size="lg"
+            icon="link"
+            data-help-clear={!typed && !group ? "" : undefined}
+          >
+            Set up Content Rewards
+          </LinkButton>
+        </section>
+      ) : null}
       {data && !campaigns.length ? (
         <section className="setup-part" aria-labelledby="cr-join-title">
           <h2 className="setup-part__title" id="cr-join-title">
-            Join a campaign
+            {setupFirst ? "Then join a campaign" : "Join a campaign"}
           </h2>
-          <JoinSteps primaryOpen={!typed && !group} boxBelow />
+          <JoinSteps primaryOpen={!typed && !group && !setupFirst} boxBelow />
         </section>
       ) : null}
       <CampaignPasteBox
@@ -116,17 +137,6 @@ export function CampaignsPage() {
           <Skeleton className="setup-skel" />
           <Skeleton className="setup-skel" />
         </>
-      ) : null}
-      {data && !connected ? (
-        <p className="callout callout--info">
-          <Icon name="info" size={18} />
-          <span>
-            Connect Content Rewards so I can see if you&apos;re in.{" "}
-            <A href={CR_SETUP_PATH} className="text-link">
-              Set it up
-            </A>
-          </span>
-        </p>
       ) : null}
       {campaigns.length ? (
         <ul className="cr-cards" aria-label="Your campaigns">
