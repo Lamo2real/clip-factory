@@ -81,15 +81,16 @@ export function clockTime(iso: string | undefined): string {
  * place's not-available line. Amounts are only formatted, one per currency, never added across.
  */
 export function sentText(sent: SentLine): string {
-  const more = sent.button || sent.where?.button ? ` ${MORE_IN_GETPAID}` : "";
+  // The server's headlines and tags have no full stop: one goes in before the next sentence.
+  const dot = (s: string) => (/[.!?…]$/.test(s) ? s : `${s}.`);
+  const more = (text: string) => (sent.button || sent.where?.button ? `${dot(text)} ${MORE_IN_GETPAID}` : text);
   if (sent.state === "number") {
     const amounts = sent.amounts.map((a) => formatMoney(a.amountMicros, a.currency)).join(" · ");
-    return [`${sent.headline}${amounts ? `: ${amounts} so far` : ""}`, sent.tag, amounts ? null : sent.notAdded].filter(Boolean).join(" · ") + more;
+    return more([`${sent.headline}${amounts ? `: ${amounts} so far` : ""}`, sent.tag, amounts ? null : sent.notAdded].filter(Boolean).join(" · "));
   }
   const where = sent.where?.text;
   const label = /sent to your bank/i.test(sent.headline) ? "" : `${SENT_LABEL} `;
-  const head = /[.!?…]$/.test(sent.headline) || !where ? sent.headline : `${sent.headline}.`;
-  return `${label}${where ? `${head} ${where}` : head}${more}`;
+  return more(`${label}${where ? `${dot(sent.headline)} ${where}` : sent.headline}`);
 }
 
 /** The Content Rewards row's small lines, in money's time order; each number only when Content Rewards reported it.

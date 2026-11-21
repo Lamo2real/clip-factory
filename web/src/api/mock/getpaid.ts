@@ -5,11 +5,15 @@
 // (kept in sessionStorage, so a reload or the trip through Allow payment reading keeps it). The amounts are fixtures
 // for the pretend app only: the real app shows only what Google or Whop reported. Only bundled into mock builds.
 import { ApiError } from "../errors.ts";
-import type { Account, CrConnection, GetPaid, GetPaidCard, GetPaidNext, GetPaidPlace, GetPaidStatus, KnownBy, MoneyPlaceId, PayConn, PayoutRow, Platform, SentLine } from "../types.ts";
+import type { Account, CrConnection, GetPaid, GetPaidCard, GetPaidNext, GetPaidPlace, GetPaidStatus, KnownBy, PayConn, PayoutRow, Platform, SentLine } from "../types.ts";
 import { GETPAID_GUIDES, numberedSteps, stepNumber } from "../../getpaid/index.ts";
 import type { GetPaidStep } from "../../getpaid/types.ts";
 import { usd } from "../../lib/contentRewards.ts";
 import { crPart } from "../../setup/contentrewards.ts";
+import type { EverywhereInput } from "./moneyEverywhere.ts";
+
+/** What All your money's server copy reads for the sent lines (§40.4). */
+export type SentInputs = Pick<EverywhereInput, "payouts" | "payconns" | "paystates" | "whopOn">;
 
 /** §38.7's once-steps for his Finance answer (the ring counts these; the each-time steps never). */
 function crOnceSteps(finance: boolean | undefined) {
@@ -701,7 +705,7 @@ export interface GetPaidControls {
   reset(): void;
 }
 
-export function getPaidMockApi(wait: () => Promise<void>, deps: GetPaidMockDeps): { api: GetPaidApi; controls: GetPaidControls; sentLines: () => Record<MoneyPlaceId, SentLine>; connectPayments: () => { authorizeUrl: string; expiresAt: string } } {
+export function getPaidMockApi(wait: () => Promise<void>, deps: GetPaidMockDeps): { api: GetPaidApi; controls: GetPaidControls; sentInputs: () => SentInputs; connectPayments: () => { authorizeUrl: string; expiresAt: string } } {
   const view = (): GetPaid => {
     const s = load();
     const i = inputs(s, deps);
@@ -843,48 +847,26 @@ export function getPaidMockApi(wait: () => Promise<void>, deps: GetPaidMockDeps)
     },
   };
 
-  /** Each place's sent line and the block, for All your money while the server's copy (K's) is not in the mock yet. */
-  function sentLines(): Record<MoneyPlaceId, SentLine> {
+  /** The pretend PAYOUT#, PAYCONN# and PAYSTATE# items, so All your money's sent lines come from the server's copy
+   * (moneyEverywhere.ts, line for line with getpaid/sent.py). */
+  function sentInputs(): SentInputs {
     const s = load();
-    const i = inputs(s, deps);
-    return Object.fromEntries([...ORDER, "contentrewards" as const].map((p) => [p, sentLine(p, i)])) as Record<MoneyPlaceId, SentLine>;
+    return {
+      payouts: {
+        youtube: s.payments.map((r) => ({ date: r.date, amountText: r.text, state: r.gone ? "gone" : "sent" })),
+        contentrewards: s.whopPayouts.map((r) => ({ date: r.date, state: r.state, amountMicros: r.amountMicros, currency: r.currency, ...(r.arriveBy ? { estimatedArrival: r.arriveBy } : {}) })),
+      },
+      payconns: {
+        adsense: { status: s.adsense.status, ...(s.adsense.connectedAt ? { connectedAt: s.adsense.connectedAt } : {}) },
+        whop: { status: s.whop.status, ...(s.whop.connectedAt ? { connectedAt: s.whop.connectedAt } : {}) },
+      },
+      paystates: {
+        youtube: { firstReadDone: !!s.adsense.firstReadDone, ...(s.adsense.lastCheckedAt ? { lastCheckedAt: s.adsense.lastCheckedAt } : {}), ...(s.adsense.lastError ? { lastError: s.adsense.lastError } : {}) },
+        contentrewards: { firstReadDone: !!s.whop.firstReadDone, ...(s.whop.lastCheckedAt ? { lastCheckedAt: s.whop.lastCheckedAt } : {}) },
+      },
+      whopOn: s.whopOn,
+    };
   }
 
-  return { api, controls, sentLines, connectPayments };
-}
-
-/** The "Sent to your bank, so far" block from the places' sent lines (the mock's copy of the server's sums). */
-export function sentBlock(lines: Partial<Record<MoneyPlaceId, SentLine>>, order: readonly MoneyPlaceId[]): NonNullable<import("../types.ts").MoneyEverywhere["sent"]> {
-  const totals: { currency: string; amountMicros: number; places: MoneyPlaceId[]; names: string }[] = [];
-  const notCounted: string[] = [];
-  let unread: string | undefined;
-  let any = false;
-  for (const p of order) {
-    const line = lines[p];
-    if (!line) continue;
-    if (line.state !== "number") {
-      if (line.state === "not_available" && p !== "contentrewards") notCounted.push(NAMES[p]);
-      continue;
-    }
-    any = true;
-    if (line.notAdded && !line.amounts.length) unread = line.notAdded;
-    else if (line.notAdded) unread = line.notAdded;
-    for (const a of line.amounts) {
-      const name = p === "contentrewards" ? "Whop (all your Whop money, Content Rewards too)" : NAMES[p];
-      const t = totals.find((x) => x.currency === a.currency);
-      if (t) {
-        t.amountMicros += a.amountMicros;
-        t.places.push(p);
-        t.names = `${t.names} + ${name}`;
-      } else totals.push({ currency: a.currency, amountMicros: a.amountMicros, places: [p], names: name });
-    }
-  }
-  return {
-    totals,
-    tag: "Google and Whop say they sent it.",
-    ...(unread ? { notAdded: unread } : {}),
-    ...(notCounted.length ? { notCountedText: `Not in this: ${names(notCounted)} (not available).` } : {}),
-    bankText: "Clip Factory can't see your bank. Look in your bank's app to see what arrived.",
-    ...(any ? {} : { empty: "Nothing sent to your bank yet." }),
-  };
+  return { api, controls, sentInputs, connectPayments };
 }

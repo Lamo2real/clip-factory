@@ -233,6 +233,10 @@ describe("All your money's sent lines (§40.4)", () => {
     // Its Allow payment reading is on YouTube's Get paid page; the row's one button stays the row's own.
     expect(row(0).querySelector(".cr-all__sent")!.textContent).toBe("Sent to your bank: Clip Factory can't see YouTube payments yet. More in Get paid below.");
     expect(row(0).querySelectorAll(".btn").length).toBeLessThanOrEqual(1);
+    // getpaid/sent.py writes its headlines without a full stop: one goes in before "More in Get paid below."
+    expect(sentText({ ...SENT.youtubeNoReading, headline: "Clip Factory can't see YouTube payments yet" })).toBe(
+      "Sent to your bank: Clip Factory can't see YouTube payments yet. More in Get paid below.",
+    );
   });
 
   it("an API from before §40: no sent line and no block", async () => {

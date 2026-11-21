@@ -122,9 +122,10 @@ test.describe("All your money", () => {
     await expect(block.locator("h3")).toHaveText("Sent to your bank, so far");
     await expect(block.locator("li")).toHaveCount(1);
     await expect(block.locator("li")).toHaveText(/^SEK\s2,468\.00 · YouTube$/);
-    await expect(block).toContainText("Google and Whop say they sent it.");
+    // The server's words (getpaid/sent.py): only Google sent money here, and Whop is not connected.
+    await expect(block).toContainText("Google says it sent it.");
     await expect(block).toContainText("Different money, like dollars and kronor, is never added together.");
-    await expect(block).toContainText("Not in this: TikTok, Instagram, Facebook and X (not available).");
+    await expect(block).toContainText("Not in this: TikTok, Instagram, Facebook, X and Content Rewards (not available).");
     await expect(block).toContainText("Clip Factory can't see your bank. Look in your bank's app to see what arrived.");
     await expect(block).not.toContainText("Nothing sent to your bank yet.");
     // It comes after the 30-day total and is never added to it.

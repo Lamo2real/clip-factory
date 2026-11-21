@@ -18,7 +18,7 @@ import { pushApi } from "./push.ts";
 import { crMockApi } from "./contentrewards.ts";
 import { clipFit, fitOne, remakeRefusal, sourceKept, uploadRefusal, type FitInputs } from "./fit.ts";
 import { everywhere, MONETARY_SCOPE } from "./moneyEverywhere.ts";
-import { getPaidMockApi, sentBlock } from "./getpaid.ts";
+import { getPaidMockApi } from "./getpaid.ts";
 import { adFirst, hasItem, liveFit } from "../../lib/crFit.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
@@ -725,7 +725,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         if (st?.connected) accounts[p] = { platform: p, status: "connected", scopes: p === "youtube" && st.moneyScope ? [MONETARY_SCOPE] : [] };
         if (st) states[p] = { state: ["not_yet", "goal_reached", "in_program"].includes(scenario) ? scenario : "earning", ...(st.lastError ? { lastError: st.lastError } : {}), ...(st.checkedAt ? { lastCheckedAt: st.checkedAt } : {}) };
       }
-      const out = everywhere({
+      return everywhere({
         today: new Date().toISOString(),
         facebookVerified: data.facebookVerified,
         accounts,
@@ -734,14 +734,9 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         crOn: items.on,
         crconn: items.crconn,
         crmoney: items.crmoney as Parameters<typeof everywhere>[0]["crmoney"],
+        // §40.4's sent lines from the pretend Get paid payouts.
+        ...getpaid.sentInputs(),
       });
-      // §40.4's sent lines: the server's copy (moneyEverywhere.ts) wins once it has them; until then Get paid's.
-      if (out.sent === undefined) {
-        const lines = getpaid.sentLines();
-        out.places = out.places.map((p) => (p.sent ? p : { ...p, sent: lines[p.place] }));
-        out.sent = sentBlock(lines, out.places.map((p) => p.place));
-      }
-      return out;
     },
     ...getpaid.api,
     async health() {
