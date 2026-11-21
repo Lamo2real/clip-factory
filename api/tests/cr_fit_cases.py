@@ -190,6 +190,21 @@ def campaign_job(**fields: Any) -> dict[str, Any]:
     return out
 
 
+def judged_by(rules_then: dict[str, Any], **fields: Any) -> dict[str, Any]:
+    """A campaign job whose own rules copy (what the agent made and judged the clip by) is ``rules_then``."""
+    snapshot = {"campaignId": UUID, "name": "FaZe Clips", "brand": "FaZe", "rules": rules_then}
+    return campaign_job(campaign=snapshot, **fields)
+
+
+# The agent's ``campaign_rules`` row when Claude's review never came back (``checklist.judged_items``, §38.13).
+UNCHECKED_ROW = {
+    "key": "campaign_rules",
+    "label": "Follows the campaign's rules (no banned content)",
+    "pass": False,
+    "note": "Claude couldn't check the campaign's rules. Check it yourself.",
+}
+
+
 def normal_job(**fields: Any) -> dict[str, Any]:
     out: dict[str, Any] = {
         "jobId": JOB,
@@ -306,6 +321,16 @@ def _fit_cases() -> list[dict[str, Any]]:
         ),
         case("too long", clip=campaign_clip(durationSec=72.2)),
         case("too short", clip=campaign_clip(durationSec=12.6)),
+        case(
+            "an exact length: a cut clip a little over still fits",
+            campaign=cam(rules=rl(lengthMinSec=30, lengthMaxSec=30)),
+            clip=campaign_clip(durationSec=30.6),
+        ),
+        case(
+            "an exact length: two seconds over is too long",
+            campaign=cam(rules=rl(lengthMinSec=30, lengthMaxSec=30)),
+            clip=campaign_clip(durationSec=32.2),
+        ),
         case("only a minimum", campaign=cam(rules=rl(lengthMaxSec=None))),
         case("only a maximum", campaign=cam(rules=rl(lengthMinSec=None))),
         case("no length rule is not listed", campaign=cam(rules=rl(lengthMinSec=None, lengthMaxSec=None))),
@@ -366,6 +391,20 @@ def _fit_cases() -> list[dict[str, Any]]:
             "the logo is on the clip, even after the campaign's logo was deleted",
             campaign=cam(logo={"needed": True, "state": "none"}, rules=rl(logo={"required": True, "rules": None})),
             clip=campaign_clip(checklist=checklist(logo=True, disclosure=True)),
+            job=judged_by(rl(logo={"required": True, "rules": None})),
+        ),
+        case(
+            "the logo row passed only because the job didn't ask for one",
+            campaign=cam(logo={"needed": True, "state": "ready"}, rules=rl(logo={"required": True, "rules": None})),
+            clip=campaign_clip(
+                checklist={
+                    "items": [
+                        {"key": "logo", "label": "x", "pass": True, "note": "This campaign does not ask for a logo."},
+                        {"key": "disclosure", "label": "x", "pass": True},
+                    ],
+                    "fixes": [],
+                }
+            ),
         ),
         case(
             "the logo is missing and a ready logo can be put on a copy",
@@ -450,10 +489,40 @@ def _fit_cases() -> list[dict[str, Any]]:
         ),
         case("no stored language", campaign=cam(rules=rl(language="English")), job=campaign_job(sourceLanguage=None)),
         case("a rule that names no known language", campaign=cam(rules=rl(language="Tagalog"))),
+        case("“de” in Spanish words is not German", campaign=cam(rules=rl(language="Español de España"))),
+        case("“it” is not Italian", campaign=cam(rules=rl(language="Any, as long as it is clear"))),
+        case("“keep it clean” names no language", campaign=cam(rules=rl(language="Any, keep it clean"))),
         case(
             "banned content checked and fine",
             campaign=cam(rules=rl(bannedContent=["swearing", "No gambling"])),
             clip=campaign_clip(checklist=checklist(disclosure=True, campaign_rules=True)),
+            job=judged_by(rl(bannedContent=["swearing", "No gambling"])),
+        ),
+        case(
+            "banned content added after the clip was judged",
+            campaign=cam(rules=rl(bannedContent=["swearing", "gambling"])),
+            clip=campaign_clip(checklist=checklist(disclosure=True, campaign_rules=True)),
+            job=judged_by(rl(bannedContent=["Swearing"])),
+        ),
+        case(
+            "the review never came back: look yourself, never a no",
+            campaign=cam(rules=rl(bannedContent=["gambling"], otherRules=["Show the scoreboard."])),
+            clip=campaign_clip(
+                checklist={
+                    "items": [{"key": "disclosure", "label": "x", "pass": True}, UNCHECKED_ROW],
+                    "fixes": [],
+                }
+            ),
+            job=judged_by(rl(bannedContent=["gambling"], otherRules=["Show the scoreboard."])),
+        ),
+        case(
+            "the review never came back and nothing is banned",
+            clip=campaign_clip(
+                checklist={
+                    "items": [{"key": "disclosure", "label": "x", "pass": True}, UNCHECKED_ROW],
+                    "fixes": [],
+                }
+            ),
         ),
         case(
             "banned content found",
@@ -489,6 +558,19 @@ def _fit_cases() -> list[dict[str, Any]]:
             "a campaign clip's other rules were judged",
             campaign=cam(rules=rl(otherRules=["Show the scoreboard."])),
             clip=campaign_clip(checklist=checklist(disclosure=True, campaign_rules=True)),
+            job=judged_by(rl(otherRules=["Show the scoreboard."])),
+        ),
+        case(
+            "an other rule added after the clip was judged",
+            campaign=cam(rules=rl(otherRules=["Show the scoreboard.", "Keep the music."])),
+            clip=campaign_clip(checklist=checklist(disclosure=True, campaign_rules=True)),
+            job=judged_by(rl(otherRules=["Show the scoreboard."])),
+        ),
+        case(
+            "a campaign clip known from its posts only",
+            clip={k: v for k, v in campaign_clip().items() if k != "campaignId"},
+            job={k: v for k, v in campaign_job().items() if k not in ("campaignId", "campaign")},
+            posts=[post("youtube", "failed", campaignId=UUID)],
         ),
         case(
             "a campaign clip for another campaign",

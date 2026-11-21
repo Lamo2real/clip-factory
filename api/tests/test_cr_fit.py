@@ -19,7 +19,7 @@ import pytest
 from clipfactory_api import db
 from clipfactory_api.app import App
 from clipfactory_api.clock import iso
-from clipfactory_api.contentrewards import fit, public, rules
+from clipfactory_api.contentrewards import campaigns, fit, public, rules
 from clipfactory_api.platforms.campaign_caption import campaign_caption, campaign_options
 from conftest import NOW, USER, Call, Clock, seed_clip, seed_job
 from cr_fit_cases import (
@@ -37,6 +37,9 @@ from cr_fit_cases import (
     normal_clip,
     normal_job,
     run,
+)
+from cr_fit_cases import (
+    campaign_job as fit_job,
 )
 from cr_support import UUID, UUID2, FakeCR, FakeInvoker, make_deps, seed_campaign, seed_connection, seed_setup
 from fakes import FakeSecretsManager
@@ -223,6 +226,25 @@ def test_language_free_text() -> None:
     assert fit.languages_in("EN only") == [("en", "English")]
     assert fit.languages_in("Englisch") == []  # whole words only
     assert fit.languages_in("es-MX please") == [("es", "Spanish")]
+    assert fit.languages_in("EN-US or pt-BR") == [("en", "English"), ("pt", "Portuguese")]
+    # codes count only as codes are written: ordinary words are never a language
+    for words in ("Español de España", "Any, as long as it is clear", "keep it clean", "en français", "hi there"):
+        assert fit.languages_in(words) == [], words
+        found = run(case(words, campaign=base_campaign(rules=base_rules(language=words))))
+        assert (one(found, "language")["state"], found["canUpload"]) == ("check", True), words
+    assert fit.languages_in("english, ITALIAN") == [("en", "English"), ("it", "Italian")]
+    italian = run(case("italian", campaign=base_campaign(rules=base_rules(language="English, or Spanish if it fits"))))
+    assert one(italian, "language")["text"] == "In English."
+    wrong = run(
+        case(
+            "italian clip",
+            campaign=base_campaign(rules=base_rules(language="English, or Spanish if it fits")),
+            job=fit_job(sourceLanguage="it-IT"),
+        )
+    )
+    assert one(wrong, "language")["text"] == "This clip is in Italian. FaZe Clips wants English or Spanish."
+    rule = campaigns.language_rule_text({"name": "FaZe Clips", "rules": {"language": "Español de España"}})
+    assert rule == "FaZe Clips wants clips in Español de España."
     assert not items_of(expect("a clean campaign clip fits"), "language")  # no language rule: not listed
 
 
@@ -271,6 +293,66 @@ def test_place_link_checks_and_notes() -> None:
     only = expect("content rewards doesn't know the only place")
     assert one(only, "places")["text"] == "Add YouTube in Content Rewards first. Then tap I added it."
     assert not items_of(only, "place_link")  # said once
+
+
+def test_a_rules_review_that_never_came_back_is_a_check() -> None:
+    """The agent's "couldn't check" row (``pass: false``, §38.13) is never a ``no``: the banned list and the other
+    rules are his own checks, and the word "Claude" never reaches the screen."""
+    found = expect("the review never came back: look yourself, never a no")
+    assert (found["verdict"], found["canUpload"], found["headline"]) == (
+        "cant_tell",
+        True,
+        "Check 2 things, then upload",
+    )
+    assert one(found, "banned")["text"] == "I couldn't check: no gambling. Look yourself."
+    assert [i["text"] for i in items_of(found, "uncertain")] == [
+        "I couldn't check: Show the scoreboard. Look yourself."
+    ]
+    assert fit.upload_refusal(found) is None
+    assert all("Claude" not in i["text"] for c in FITS for i in c["expect"]["items"])
+    nothing = expect("the review never came back and nothing is banned")
+    assert not items_of(nothing, "banned")
+    assert nothing["verdict"] == "fits"
+    found_it = expect("banned content found")
+    assert (one(found_it, "banned")["state"], one(found_it, "banned")["text"]) == ("no", "Shows gambling at 0:12.")
+
+
+def test_checked_only_against_what_the_agent_judged() -> None:
+    """The agent judged the clip by its job's own rules: a logo row that passed because that job asked for no logo,
+    or a banned item or other rule added since, is never shown as done."""
+    logo = expect("the logo row passed only because the job didn't ask for one")
+    assert one(logo, "logo")["state"] == "remake"
+    later = expect("banned content added after the clip was judged")
+    assert one(later, "banned")["text"] == "I couldn't check: no gambling. Look yourself."  # swearing was judged
+    assert one(expect("banned content checked and fine"), "banned")["text"] == "No swearing or gambling. Checked."
+    newer = expect("an other rule added after the clip was judged")
+    assert [i["text"] for i in items_of(newer, "uncertain")] == ["I couldn't check: Keep the music. Look yourself."]
+
+
+def test_a_campaign_clip_known_from_its_posts_only() -> None:
+    found = expect("a campaign clip known from its posts only")
+    assert one(found, "on_screen")["state"] == "ok"  # its own checklist counts: it is this campaign's clip
+    assert (found["verdict"], found["canUpload"]) == ("fits", True)
+
+
+def test_every_required_phrase_is_checked() -> None:
+    """``required.phrase`` carries one phrase; a second (a tag that isn't a whole token) is checked by the server."""
+    rules_then = base_rules(requiredTags=["@FaZeClan", "@faze."], requiredCaptionText="Use code FAZE")
+    c = case(
+        "two phrases",
+        campaign=base_campaign(rules=rules_then),
+        job=fit_job(campaign={"campaignId": UUID, "name": "FaZe Clips", "rules": rules_then}),
+    )
+    found = run(c)
+    assert found["required"]["phrase"] == "@faze."
+    youtube = next(i for i in items_of(found, "tags") if i.get("platform") == "youtube")
+    assert (
+        youtube["text"]
+        == "The YouTube words are missing “@faze.” and “Use code FAZE”. I'll put them back when it uploads."
+    )
+    good = {k: f"{v} @faze. Use code FAZE" for k, v in GOOD.items()}
+    fine = run({**c, "captions": good})
+    assert one(fine, "tags")["text"] == "Every caption has #FaZe, @FaZeClan, “@faze.” and “Use code FAZE”."
 
 
 def test_other_rules_are_checks_for_a_normal_clip_only() -> None:
@@ -360,9 +442,45 @@ def test_length_words() -> None:
     assert one(expect("too short"), "length")["text"] == "This clip is 13 seconds. FaZe Clips takes 15 to 60 seconds."
     edge = run(case("just over", clip=normal_clip(durationSec=60.3), job=normal_job()))
     assert one(edge, "length")["text"].startswith("This clip is 61 seconds.")  # never "60 seconds" for a no
-    assert one(expect("only a minimum"), "length")["text"] == "42 seconds. FaZe Clips takes 15 or more."
-    assert one(expect("only a maximum"), "length")["text"] == "42 seconds. FaZe Clips takes up to 60."
+    assert one(expect("only a minimum"), "length")["text"] == "42 seconds. FaZe Clips takes 15 seconds or more."
+    assert one(expect("only a maximum"), "length")["text"] == "42 seconds. FaZe Clips takes up to 60 seconds."
     assert not items_of(expect("no length rule is not listed"), "length")
+    short = run(
+        case(
+            "one side short",
+            campaign=base_campaign(rules=base_rules(lengthMaxSec=None)),
+            clip=normal_clip(durationSec=9.0),
+            job=normal_job(),
+        )
+    )
+    assert one(short, "length")["text"] == "This clip is 9 seconds. FaZe Clips takes 15 seconds or more."
+
+
+def test_an_exact_length_uses_the_agents_second_each_way() -> None:
+    """The agent widens an exact length by 1 s each way (``Campaign.length``) and its strict check passed a 30.6 s
+    clip of a "30 seconds" campaign: the fit agrees, and never says a number that reads as the other answer."""
+    near = expect("an exact length: a cut clip a little over still fits")
+    assert one(near, "length") == {
+        "rule": "length",
+        "state": "ok",
+        "text": "30 seconds. FaZe Clips takes 30 seconds.",
+        "fix": None,
+    }
+    assert (near["verdict"], near["canUpload"]) == ("fits", True)
+    over = expect("an exact length: two seconds over is too long")
+    assert (one(over, "length")["state"], one(over, "length")["text"]) == (
+        "no",
+        "This clip is 32 seconds. FaZe Clips takes 30 seconds.",
+    )
+    exact = base_campaign(rules=base_rules(lengthMinSec=30, lengthMaxSec=30))
+    for seconds, state in ((28.9, "no"), (29.0, "ok"), (31.0, "ok"), (31.1, "no")):
+        found = run(case(f"{seconds}", campaign=exact, clip=normal_clip(durationSec=seconds), job=normal_job()))
+        assert one(found, "length")["state"] == state, seconds
+    narrow = base_campaign(rules=base_rules(lengthMinSec=29, lengthMaxSec=30))
+    found = run(case("29 to 30", campaign=narrow, clip=normal_clip(durationSec=30.8), job=normal_job()))
+    assert one(found, "length")["text"] == "30 seconds. FaZe Clips takes 29 to 30."
+    wide = run(case("15 to 60 keeps its bounds", clip=normal_clip(durationSec=60.4), job=normal_job()))
+    assert one(wide, "length")["state"] == "no"  # 2 s or wider: exactly the campaign's own bounds
 
 
 def test_deadline_words() -> None:

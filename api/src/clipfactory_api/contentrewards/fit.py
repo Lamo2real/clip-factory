@@ -82,6 +82,7 @@ SOFT_NOTES = frozenset({"budget_half", "low_rate", "not_connected"})
 # ``spoken_needed`` is said once, by the ``spoken`` row (§38.13's sentence), not twice.
 SOFT_CHECKS = frozenset({"face_needed", "audience"})
 UNCERTAIN_MAX = 5
+GOING_UP = frozenset({"posted", "queued", "pending_integration"})  # a campaign post that is, or will be, up
 SOURCE_KEPT = timedelta(days=13)  # the 14-day rule of §7, with a day to spare
 NORMAL_MAX = 10
 MIN_CHANNEL_KEY = 3
@@ -91,6 +92,11 @@ CAMPAIGN_GONE = "Add the campaign again on the Campaigns page."
 SPOKEN = "The brand wants “paid partnership” said out loud. Clip Factory can't. This clip may be turned down."
 AUTO_SEND = "After it posts, Clip Factory sends it to Content Rewards by itself."
 HAND_SEND = "After it posts, send its link to Content Rewards within 30 minutes. I'll remind you."
+# The agent's ``campaign_rules`` row when Claude's review never came back (``checklist.RULES_UNCHECKED``, §38.13): it
+# reads ``pass: false`` but nothing was judged, so it is a ``check``, never a ``no``.
+UNJUDGED = "Claude couldn't check the campaign's rules. Check it yourself."
+# The agent's ``logo`` row that passes only because the job's rules didn't ask for a logo.
+LOGO_NOT_ASKED = "This campaign does not ask for a logo."
 TIKTOK_WAITS = (
     "TikTok is left out for now. Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't "
     "earn."
@@ -149,6 +155,23 @@ def _checklist(clip: Mapping[str, Any], key: str) -> Item | None:
         if isinstance(row, Mapping) and row.get("key") == key:
             return dict(row)
     return None
+
+
+def _plain(text: Any) -> str:
+    return " ".join(str(text or "").split())
+
+
+def _judged(row: Mapping[str, Any] | None) -> bool:
+    """A checklist row the agent really judged: it has a ``pass``, and it isn't the "couldn't check" row."""
+    if row is None or not isinstance(row.get("pass"), bool):
+        return False
+    return not (row.get("pass") is False and _plain(row.get("note")) == UNJUDGED)
+
+
+def _not_in(current: Iterable[Any], judged: Iterable[Any]) -> list[str]:
+    """The lines of ``current`` the job's own rules didn't have (added after the agent judged the clip)."""
+    seen = {_plain(j).casefold() for j in judged}
+    return [str(c) for c in current if _plain(c) and _plain(c).casefold() not in seen]
 
 
 def _campaign_href(campaign_id: str, part: str = "") -> str:
@@ -253,16 +276,26 @@ def source_kept(job: Mapping[str, Any], now: datetime) -> bool:
 class _Ctx:
     """What every row needs about the campaign and the clip."""
 
-    def __init__(self, clip: Mapping[str, Any], job: Mapping[str, Any], campaign: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        clip: Mapping[str, Any],
+        job: Mapping[str, Any],
+        campaign: Mapping[str, Any],
+        posts: Iterable[Mapping[str, Any]] = (),
+    ) -> None:
         self.cid = str(campaign.get("campaignId") or "")
         self.name = str(campaign.get("name") or "This campaign")
         self.brand = str(campaign.get("brand") or "") or self.name
         self.rules = obj(campaign.get("rules"))
-        self.mine = campaign_id_of(clip, job) == self.cid  # a campaign clip of this campaign
+        # a campaign clip of this campaign (its campaign may be known from its posts only, as clip_fit finds it)
+        self.mine = campaign_id_of(clip, job, posts) == self.cid
         snapshot = obj(job.get("campaign"))
+        # The rules the agent made and judged the clip by (the job's own copy; {} for a normal clip).
+        self.snapshot = snapshot if self.mine else {}
+        self.judged_rules = obj(snapshot.get("rules")) if self.mine else {}
         # The words the publisher sends come from the job's own rules (B's campaign_clip): the tags and #Ad are
         # checked against those; a normal clip (whose copy takes today's rules) against the campaign's.
-        self.caption_rules = obj(snapshot.get("rules")) if self.mine and snapshot.get("rules") else self.rules
+        self.caption_rules = self.judged_rules or self.rules
         self.source = obj(job.get("source"))
         self.copy = f"Make a {self.name} copy"
 
@@ -359,35 +392,45 @@ def _deadline_rows(ctx: _Ctx, now: datetime) -> list[Item]:
     return [_item("deadline", "no", f"{ctx.name} stopped taking clips on {_day(last)}.", _find_another())]
 
 
+def _length_words(lo: int | None, hi: int | None) -> tuple[str, str]:
+    """What the campaign takes, for an ``ok`` line and for a ``no`` or ``check`` line ("15 to 60" and "15 to 60
+    seconds"; one side or an exact length always says "seconds")."""
+    if lo is not None and hi is not None:
+        if lo == hi:
+            return _seconds(lo), _seconds(lo)
+        return f"{lo} to {hi}", f"{lo} to {hi} seconds"
+    if lo is not None:
+        return f"{lo} seconds or more", f"{lo} seconds or more"
+    return f"up to {hi} seconds", f"up to {hi} seconds"
+
+
 def _length_rows(ctx: _Ctx, clip: Mapping[str, Any]) -> list[Item]:
     lo, hi = ctx.rules.get("lengthMinSec"), ctx.rules.get("lengthMaxSec")
     lo = lo if isinstance(lo, int) and not isinstance(lo, bool) else None
     hi = hi if isinstance(hi, int) and not isinstance(hi, bool) else None
     if lo is None and hi is None:
         return []
-    takes = (
-        f"{lo} to {hi}" if lo is not None and hi is not None else f"{lo} or more" if lo is not None else f"up to {hi}"
-    )
+    takes_ok, takes = _length_words(lo, hi)
     raw = clip.get("durationSec")
     if not isinstance(raw, int | float) or isinstance(raw, bool):
-        return [_item("length", "check", f"I couldn't check this clip's length. {ctx.name} takes {takes} seconds.")]
+        return [_item("length", "check", f"I couldn't check this clip's length. {ctx.name} takes {takes}.")]
     seconds = float(raw)
+    # The agent's own bounds (``Campaign.length``): an exact length ("30 seconds", less than 2 s wide) gets a second
+    # each way, so a cut clip can meet it, and its strict length check passed on those.
+    low, high = lo, hi
+    if lo is not None and hi is not None and hi - lo < 2:
+        low, high = max(1, lo - 1), min(600, hi + 1)
     shown = math.floor(seconds + 0.5)  # whole seconds, never a number that reads as the other answer
-    if lo is not None and seconds < lo:
-        shown = min(shown, lo - 1)
-    elif hi is not None and seconds > hi:
-        shown = max(shown, hi + 1)
+    if low is not None and seconds < low:
+        shown = min(shown, low - 1)
+    elif high is not None and seconds > high:
+        shown = max(shown, high + 1)
     else:
         shown = max(shown, lo) if lo is not None else shown
         shown = min(shown, hi) if hi is not None else shown
-        return [_item("length", "ok", f"{_seconds(shown)}. {ctx.name} takes {takes}.")]
+        return [_item("length", "ok", f"{_seconds(shown)}. {ctx.name} takes {takes_ok}.")]
     return [
-        _item(
-            "length",
-            "no",
-            f"This clip is {_seconds(shown)}. {ctx.name} takes {takes} seconds.",
-            ctx.new_clips("length"),
-        )
+        _item("length", "no", f"This clip is {_seconds(shown)}. {ctx.name} takes {takes}.", ctx.new_clips("length"))
     ]
 
 
@@ -483,25 +526,41 @@ def required_of(rules: Mapping[str, Any]) -> Item:
     return {"disclosure": disclosure, "tokens": tokens, "phrase": phrase}
 
 
-def _shown(item: str, phrase: str | None) -> str:
-    return f"“{item}”" if item == phrase else item
-
-
-def tags_live(required: Mapping[str, Any], going: list[str], captions: Mapping[str, Any]) -> list[Item]:
+def more_phrases(rules: Mapping[str, Any], required: Mapping[str, Any]) -> list[str]:
+    """The required phrases after the first (``required.phrase`` carries one): B's ``required_items`` can hold a
+    second when a required tag isn't a whole token ("@faze."). The server checks them too; the card's live check
+    knows only ``required``."""
+    disclosure = str(required.get("disclosure") or "").casefold()
     phrase = required.get("phrase")
-    wanted = [*[str(t) for t in required.get("tokens") or []], *([str(phrase)] if phrase else [])]
+    return [
+        str(r)
+        for r in cc.required_items(rules)
+        if not cc.is_token(str(r)) and str(r).casefold() != disclosure and str(r) != phrase
+    ]
+
+
+def _shown(item: str, phrases: Sequence[str]) -> str:
+    return f"“{item}”" if item in phrases else item
+
+
+def tags_live(
+    required: Mapping[str, Any], going: list[str], captions: Mapping[str, Any], extra: Sequence[str] = ()
+) -> list[Item]:
+    phrase = required.get("phrase")
+    phrases = [*([str(phrase)] if phrase else []), *extra]
+    wanted = [*[str(t) for t in required.get("tokens") or []], *phrases]
     if not wanted or not going:
         return []
     out: list[Item] = []
     for p in going:
         text = str(captions.get(CAPTION_OF[p]) or "")
-        missing = [_shown(w, phrase) for w in wanted if not cc.has_item(text, w)]
+        missing = [_shown(w, phrases) for w in wanted if not cc.has_item(text, w)]
         if missing:
             them = "it" if len(missing) == 1 else "them"
             words = f"The {_label(p)} words are missing {_join(missing)}. I'll put {them} back when it uploads."
             out.append(_item("tags", "fix", words, {"kind": "captions", "label": "Fix it for me"}, p))
     if not out:
-        out.append(_item("tags", "ok", f"Every caption has {_join([_shown(w, phrase) for w in wanted])}."))
+        out.append(_item("tags", "ok", f"Every caption has {_join([_shown(w, phrases) for w in wanted])}."))
     return out
 
 
@@ -550,7 +609,9 @@ def _logo_rows(ctx: _Ctx, clip: Mapping[str, Any], campaign: Mapping[str, Any]) 
     if not gates.logo_needed(campaign):
         return []
     row = _checklist(clip, "logo") if ctx.mine else None
-    if row is not None and row.get("pass") is True:
+    # The agent's row also passes when the job's rules didn't ask for a logo: only a job made to carry one counts.
+    asked = obj(ctx.judged_rules.get("logo")).get("required") is True or bool(ctx.snapshot.get("logoKey"))
+    if row is not None and row.get("pass") is True and asked and _plain(row.get("note")) != LOGO_NOT_ASKED:
         return [_item("logo", "ok", f"The {ctx.brand} logo is on the whole clip.")]
     if obj(campaign.get("logo")).get("state") == "ready":
         return [_item("logo", "remake", f"The {ctx.brand} logo isn't on this clip.", ctx.remake())]
@@ -642,17 +703,28 @@ def _banned_words(rules: Mapping[str, Any]) -> str:
     return _join(found, "or")
 
 
+def _rules_row(ctx: _Ctx, clip: Mapping[str, Any]) -> Item | None:
+    """A campaign clip's ``campaign_rules`` row when the agent really judged it (None: never judged, or Claude's
+    review didn't come back)."""
+    row = _checklist(clip, "campaign_rules") if ctx.mine else None
+    return row if _judged(row) else None
+
+
 def _banned_rows(ctx: _Ctx, clip: Mapping[str, Any]) -> list[Item]:
     what = _banned_words(ctx.rules)
-    row = _checklist(clip, "campaign_rules") if ctx.mine else None
+    row = _rules_row(ctx, clip)
     if row is not None and row.get("pass") is False:
         note = _line(row.get("note"), 200)
         text = f"{note}." if note else f"This clip doesn't follow {possessive(ctx.name)} rules."
         return [_item("banned", "no", text, ctx.new_clips("banned"))]
     if not what:
         return []
-    if row is not None and row.get("pass") is True:
-        return [_item("banned", "ok", f"No {what}. Checked.")]
+    if row is not None:
+        # judged against the job's own list: a banned item added since was never looked at
+        later = _not_in(ctx.rules.get("bannedContent") or [], ctx.judged_rules.get("bannedContent") or [])
+        if not later:
+            return [_item("banned", "ok", f"No {what}. Checked.")]
+        what = _banned_words({"bannedContent": later})
     return [_item("banned", "check", f"I couldn't check: no {what}. Look yourself.", read_rules(ctx.cid))]
 
 
@@ -662,10 +734,13 @@ def _spoken_rows(ctx: _Ctx) -> list[Item]:
     return []
 
 
-def _uncertain_rows(ctx: _Ctx, campaign: Mapping[str, Any]) -> list[Item]:
+def _uncertain_rows(ctx: _Ctx, clip: Mapping[str, Any], campaign: Mapping[str, Any]) -> list[Item]:
     lines = [str(u) for u in ctx.rules.get("uncertain") or campaign.get("uncertain") or [] if str(u).strip()]
-    if not ctx.mine:  # a campaign clip's other rules were judged in its campaign_rules item (§38.13)
-        lines += [str(r) for r in ctx.rules.get("otherRules") or [] if str(r).strip()]
+    other = [str(r) for r in ctx.rules.get("otherRules") or [] if str(r).strip()]
+    if _rules_row(ctx, clip) is None:  # a normal clip, or the review never came back: nothing judged them
+        lines += other
+    else:  # a campaign clip's other rules were judged in its campaign_rules item (§38.13), all but newer ones
+        lines += _not_in(other, ctx.judged_rules.get("otherRules") or [])
     out = [
         _item("uncertain", "check", f"I couldn't check: {_line(line)}. Look yourself.", read_rules(ctx.cid))
         for line in lines[:UNCERTAIN_MAX]
@@ -834,7 +909,7 @@ def fit(
     merged) captions, else the clip's; ``chosen`` the places he picked (None: every place); ``tiktok`` the card's
     TikTok choices (None: not known yet, so TikTok's Branded content is left to the card's live check)."""
     job = job or {}
-    ctx = _Ctx(clip, job, campaign)
+    ctx = _Ctx(clip, job, campaign, posts)
     words = captions if captions is not None else obj(clip.get("captions"))
     required = required_of(ctx.caption_rules)
     if set(campaign.get("platformsPaid") or []) == {"tiktok"}:
@@ -851,7 +926,7 @@ def fit(
         *places_fixed,
         *places_live(ctx.name, places, chosen),
         *_place_link_rows(campaign, places, conn, named),
-        *tags_live(required, upload, words),
+        *tags_live(required, upload, words, more_phrases(ctx.caption_rules, required)),
         *ad_live(required, upload, words),
         *paid_live(upload, tiktok, str(required["disclosure"])),
         *_logo_rows(ctx, clip, campaign),
@@ -860,7 +935,7 @@ def fit(
         *_language_rows(ctx, job),
         *_banned_rows(ctx, clip),
         *_spoken_rows(ctx),
-        *_uncertain_rows(ctx, campaign),
+        *_uncertain_rows(ctx, clip, campaign),
         *_brief_only_rows(ctx),
         *_posted_rows(ctx, posts),
         *_one_campaign_rows(ctx, clip, job, posts, crsubs, others),
@@ -978,6 +1053,22 @@ def remake_refusal(cf: Mapping[str, Any], *, kept: bool) -> str | None:
         None,
     )
     return str(blocking["text"]) if blocking else f"Clip Factory can't make a {cf.get('campaignName')} copy yet."
+
+
+def nothing_to_copy(cf: Mapping[str, Any], posts: Iterable[Mapping[str, Any]]) -> str | None:
+    """The copy route's 409 when a copy would only be a second post of one moment for one campaign (a reused edit):
+    the clip already went up, or is going up, the campaign way, or nothing on it needs a copy (no ``remake`` item and
+    no ``banned`` ``no``: tags and #Ad go back in at upload). None when a copy is needed."""
+    name = cf.get("campaignName")
+    going = [p for p in posts if p.get("campaignId") == cf.get("campaignId") and p.get("status") in GOING_UP]
+    if going:
+        up = "already up" if any(p.get("status") == "posted" for p in going) else "already going up"
+        return f"This clip is {up} for {name}."
+    needed = any(
+        i.get("state") == "remake" or (i.get("rule") == "banned" and i.get("state") == "no")
+        for i in cf.get("items") or []
+    )
+    return None if needed else f"This clip can already earn on {name}."
 
 
 # --- loading one owner's items -----------------------------------------------------------------------------------

@@ -781,13 +781,24 @@ LANGUAGES: tuple[tuple[str, str], ...] = (
 )
 
 
+_LETTER_BEFORE = r"(?<![^\W\d_])"
+_LETTER_AFTER = r"(?![^\W\d_])"
+
+
+def _names_language(text: str, code: str, name: str) -> bool:
+    """A rule names a language by its name, any case ("english"), or by its code only as a code is written: upper
+    case ("EN only", "EN-US") or a language tag ("en-US", "es-mx"). A plain lower-case "de", "it", "hi" or "en" is an
+    ordinary word ("Español de España", "keep it clean"), never a language."""
+    if re.search(rf"{_LETTER_BEFORE}{name}{_LETTER_AFTER}", text, re.IGNORECASE):
+        return True
+    if re.search(rf"{_LETTER_BEFORE}{code.upper()}(?:-[A-Za-z]{{2}}|-[A-Za-z]{{4}}|-\d{{3}})?{_LETTER_AFTER}", text):
+        return True
+    return bool(re.search(rf"{_LETTER_BEFORE}{code}-(?:[A-Za-z]{{2}}|[A-Za-z]{{4}}|\d{{3}}){_LETTER_AFTER}", text))
+
+
 def languages_in(text: str) -> list[tuple[str, str]]:
-    """The table's languages a free-text rule names, by name or code, as whole words, case-insensitive."""
-    return [
-        (code, name)
-        for code, name in LANGUAGES
-        if re.search(rf"(?<![^\W\d_])(?:{code}|{name})(?![^\W\d_])", text, re.IGNORECASE)
-    ]
+    """The table's languages a free-text rule names (``_names_language``), whole words only."""
+    return [(code, name) for code, name in LANGUAGES if _names_language(text, code, name)]
 
 
 def language_words(text: str) -> str:

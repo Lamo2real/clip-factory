@@ -1019,6 +1019,24 @@ def test_confirm_refuses_a_campaign_clip_that_cant_earn(
     assert posts.posts_for_clip(store, USER, found["clipId"], consistent=True) == []
 
 
+def test_confirm_lets_a_clip_whose_rules_review_never_came_back_go_up(call: Call, store: db.Store, cr_on: Any) -> None:
+    """The agent's "couldn't check" row reads ``pass: false``, but nothing was judged: it is the owner's own check
+    (§39.3 ``banned`` "the review never came back"), never a refusal, and "Claude" never reaches the screen."""
+    ready(store, "youtube", "instagram")
+    put_campaign(store, rules={**RULES, "bannedContent": ["gambling"]})
+    put_crconn(store)
+    unchecked = {
+        "key": "campaign_rules",
+        "label": "Follows the campaign's rules (no banned content)",
+        "pass": False,
+        "note": "Claude couldn't check the campaign's rules. Check it yourself.",
+    }
+    clip = fitting_clip(store, checklist={"items": [*FITS["items"], unchecked], "fixes": []})
+    status, body = confirm(call, clip["clipId"], {"platforms": ["youtube", "instagram"]})
+    assert status == 200, body
+    assert {p["platform"] for p in body["posts"]} == {"youtube", "instagram"}
+
+
 def test_confirm_checks_the_merged_captions_and_the_chosen_places(
     call: Call, store: db.Store, cr_on: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
