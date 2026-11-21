@@ -689,6 +689,32 @@ def test_money_and_refresh_limit(call: Call, cr: Any) -> None:
     assert call("POST", f"{BASE}/seen", {"key": "money:pay_x"})[0] == 404
 
 
+def test_money_says_when_money_last_moved_to_whop(call: Call, cr: Any) -> None:
+    """``movedAt`` (§38.8 CrMoney, additive): null until Clip Factory saw money leave the balance toward Whop, then
+    that time, on the money route and the overview alike."""
+    seed_connection(cr, USER, cr.clock.now)
+    status, body = call("GET", f"{BASE}/money")
+    assert (status, body["movedAt"]) == (200, None)
+    moved = iso(cr.clock.now - timedelta(hours=2))
+    cr.store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": db.CRMONEY_SK,
+            "type": "crmoney",
+            "userId": USER,
+            "firstReadDone": True,
+            "paidTotalCents": 0,
+            "onItsWayCents": 0,
+            "readyToMoveCents": 0,
+            "asOf": iso(cr.clock.now),
+            "movedAt": moved,
+        }
+    )
+    status, body = call("GET", f"{BASE}/money")
+    assert (status, body["movedAt"]) == (200, moved)
+    assert call("GET", BASE)[1]["money"]["movedAt"] == moved
+
+
 def test_a_request_never_undoes_a_rules_read(call: Call, cr: Any) -> None:
     """A PATCH that read the item before cf-prod-campaigns wrote the rules keeps those rules."""
     from clipfactory_api.contentrewards import campaigns, rules

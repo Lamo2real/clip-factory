@@ -499,6 +499,28 @@ def test_a_cached_client_reads_each_invocations_time_left(setup: Any) -> None:
     assert len(fake.token_forms()) == 1
 
 
+def test_a_requests_time_counts_from_its_start(setup: Any) -> None:
+    """§38 notes: a cf-prod-api request's 28.5 s count from when it arrived (``Request.started``), not from when the
+    route first needed Content Rewards, so a request that already spent 10 s (a cold start, the job's own reads) never
+    starts a refresh it can't finish."""
+    import time
+
+    deps, fake, _client, clock = setup
+    seed_connection(deps, USER, clock.now, expires_in=timedelta(seconds=30))  # due
+    deps.for_request(time.monotonic() - 10.0)
+    assert 18.0 < deps.time_left() <= config.API_SECONDS - 10.0
+    with pytest.raises(TokenError) as caught:
+        deps.tokens().access(USER)
+    assert caught.value.kind == "down"
+    assert fake.token_forms() == []
+    deps.for_request(time.monotonic())  # a request that just arrived: the whole 28.5 s
+    assert deps.time_left() > config.API_SECONDS - 1.0
+    assert deps.tokens().access(USER).token == "at_1"
+    assert len(fake.token_forms()) == 1
+    deps.for_request(time.monotonic() + 5.0)  # never more than the 28.5 s
+    assert deps.time_left() <= config.API_SECONDS
+
+
 def test_429_is_not_waited_out_past_the_20_seconds(setup: Any) -> None:
     deps, fake, _client, clock = setup
     seed_connection(deps, USER, clock.now, expires_in=timedelta(seconds=30))
