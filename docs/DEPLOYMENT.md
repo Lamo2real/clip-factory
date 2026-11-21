@@ -637,6 +637,56 @@ An older app shows "Update the Clip Factory app first" on the Connect step.
 **Cost.** One more small Lambda, a few Content Rewards calls a tick, one model call per campaign rules read (about
 $0.02), and two more secrets ($0.80 a month).
 
+### Campaign finder (CONTRACTS §41)
+
+Campaigns on Content Rewards that match what the owner wants
+([CONTRACTS.md §41](CONTRACTS.md#41-campaign-finder-campaigns-that-match-what-you-want-owner-request-2026-11-21),
+[ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap),
+[ARCHITECTURE.md flow 22](ARCHITECTURE.md#22-campaign-finder-contracts-41-adr-65)). Nothing to set up in AWS, GitHub
+or on Content Rewards by hand.
+
+**Switched off until every part has merged.** `infra/envs/prod` has `variable "cr_finder_enabled"` (bool, **default
+`false`**). It sets `CR_FINDER` (`"on"` or `"off"`) on `cf-prod-api`, `cf-prod-stats` and `cf-prod-campaigns`; the
+modules default to `false` too, and an unset value is off. Off, every `/v1/contentrewards/finder…` route answers 503
+`unavailable` ("Coming soon."), the overview has no `finder`, the `cf-prod-stats` tick never starts a look and
+`cf-prod-campaigns` answers `{"action": "find", "outcome": "off"}`; the web hides the Campaigns entry card and Home's
+chips, and `/campaigns/find` says "Find campaigns is coming soon to Clip Factory." The parts are built in parallel
+(CONTRACTS §41.6: P the reader, Q the routes, R infra, S web, T docs and help), each merging in any order and passing
+CI alone (T after S).
+
+**The switch PR.** After P, Q, R, S and T have merged, one last pull request (owner: R) changes `envs/prod`'s default
+to `true` and updates `wiring.tftest.hcl`'s expectation. Its plan changes three env vars in place
+(`CR_FINDER = "on"` on the three Lambdas) and nothing else; the deploy's delete gate must still print "Delete gate:
+the plan deletes or replaces nothing that holds the owner's data." From then on the `cf-prod-stats` tick starts a look
+every 6 hours, the owner's first "Find campaigns for me" starts one at once, and the first full read of Content
+Rewards' campaign pages takes 3 to 5 days.
+
+**Turning it off the same day if Content Rewards or Whop asks.** If Content Rewards or Whop asks Clip Factory to stop
+reading its pages, set the default back to `false` (revert the switch PR's one line) in a pull request that day; its
+deploy sets `CR_FINDER = "off"` on the three Lambdas, so no page is read from then on and every finder route answers
+503. The stored items (`CRFIND`, `CRPUBLIC`) stay, nothing on Content Rewards or any platform changes, and turning it
+on again later picks up where it was. The finder also stops reading by itself when Content Rewards' robots.txt stops
+allowing these pages, or after it is blocked. Never deploy from a local AWS CLI: only `deploy.yml` deploys.
+
+**What the deploys add** (additive only, the plan in the deploy log shows it):
+- in place: the env var `CR_FINDER` on `cf-prod-api`, `cf-prod-stats` and `cf-prod-campaigns`, and the prefix
+  `CRFIND` in the live-updates and notifications stream filters (notifications stay `MODIFY` only);
+- no new Lambda, schedule, table, index, bucket, secret, grant or output: the look is a new action of the existing
+  `cf-prod-campaigns`, started by the existing `cf-prod-stats` tick through the existing invoke grants, and reaches
+  `contentrewards.com` over the Lambda's normal internet access (no VPC). `cf-prod-campaigns` still has no Secrets
+  Manager action.
+
+**The deploy role needs nothing new.** Env vars, stream-filter changes and the existing Lambda are all covered by the
+role's current permissions; no change to `infra/bootstrap`.
+
+**Owner data.** Nothing that holds the owner's data is replaced or destroyed. The new items are a new sort key
+(`USER#{id}` / `CRFIND`), a new partition key value in the same table (`CRPUBLIC` with `CAMP#{uuid}`, `PUB#{uuid}` and
+`STATE`, public campaign data only, expiring through the table's existing `ttl` attribute) and one internal attribute
+on campaigns (`addedBy: "finder"`).
+
+**Cost.** Cents a month: at most 6 short runs of `cf-prod-campaigns` a day, about 155 public pages a day, a few
+hundred small table writes, no model call and no secret.
+
 ## First sign-in
 
 1. On the first deploy, Cognito emails `CF_OWNER_EMAIL` a temporary password (from `no-reply@verificationemail.com`;

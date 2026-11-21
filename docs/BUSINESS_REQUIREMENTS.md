@@ -14,7 +14,8 @@ assistant pattern and using the skills (BR-24, NFR-18, UX-18), and the owner's r
 campaigns by pasting their link and have every clip follow the campaign's rules, kid-proof from setup to getting paid
 (BR-25, NFR-19, UX-19), and his follow-up the same day: Connect in time order, a pleasant choice between campaign clips
 and normal clips, all his money from every place in one view, and knowing before an upload whether a clip can earn on
-a campaign (BR-25 update, BR-26 to BR-28, NFR-19 AC8 to AC10, UX-19 AC8 to AC10).
+a campaign (BR-25 update, BR-26 to BR-28, NFR-19 AC8 to AC10, UX-19 AC8 to AC10), and his question whether he can
+find campaigns and join them by requirements he sets (I-50).
 Every requirement below traces back to one of them. Where
 the brief was open or unclear, the interpretation we chose is stated in [Interpretations and open questions](#interpretations-and-open-questions).
 
@@ -956,6 +957,7 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 | I-47 | "Using either the content rewards way of videos or normal way we have done so far" | Two ways with their own names: "Make clips" (normal clips, exactly as before) and "Make campaign clips" (always started from a campaign). The choice is never a field on the normal form, so the normal way gains nothing (BR-26). | No. |
 | I-48 | "Track how much i earn from all platforms including contentrewards" | One "All your money" card: the money each place reports for the same 30 days and one total per currency. TikTok, Instagram and X report no money to apps, so they say "Not available" with where to look; Facebook waits until its numbers are checked; what left Content Rewards for Whop and the bank is not in its tools (BR-27). | Is 30 days the right period for the total? |
 | I-49 | "Know if the content i upload is compatible with the content rewards campaigns … instead of me selecting the content rewards way of uploading but arent compatible" | A fit check on every campaign clip before Upload, refused on the server when it can't earn, and a quiet "could earn" line on normal clips that fit a joined campaign. A normal clip is not turned into a campaign clip in place: it lacks the logo and "Paid partnership" on the video that briefs ask for, so a copy is made with them ([ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards)) (BR-28). | Is a copy below the original acceptable? |
+| I-50 | "Will I be able to find campaigns and join them based on some requirements that I set if the MCP and my connection to content rewards through Clip Factory gets accepted?" | Finding, yes; joining stays his own tap. Content Rewards' tools have no way to browse Discover or to join or apply, joining also accepts the brand's terms (his call), and a robot on Content Rewards' site would break Whop's no-bots terms. So a campaign finder ([CONTRACTS.md §41](CONTRACTS.md#41-campaign-finder-campaigns-that-match-what-you-want-owner-request-2026-11-21), [ADR-65](DECISIONS.md#adr-65-campaign-finder-content-rewards-public-pages-read-politely-joining-stays-the-owners-own-tap)): he sets once what he wants (at least a pay per 1,000 views, the places he posts to, how much money is left, open to join or also apply, topics, language), Clip Factory reads Content Rewards' public campaign pages 4 times a day, skips what it can't make clips for, tells him "3 new campaigns match", and gives each match "Open on Content Rewards". He taps **Join Campaign** there; "I joined: add it" adds it with no copy or paste, and once Content Rewards' sign-in yes has arrived Clip Factory adds it by itself when he comes back. Open campaigns hide their rules until he joins, so the finder matches on what the public page shows and the rules are read right after. A signed-in "Ask Content Rewards" asks them for an official way. | Waiting for Content Rewards' sign-in yes, and for whether Content Rewards adds official search and join tools. |
 
 ## Out of scope for this phase
 
@@ -963,8 +965,10 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
   [roadmap](ROADMAP.md#phase-2-social-integrations)).
 - Webhook signature checks and acting on webhook events.
 - OpenSearch Serverless (an option, not deployed).
-- Browsing, joining or applying to Content Rewards campaigns inside Clip Factory (that stays on Content Rewards; its
-  tools offer no way to do it). Reading and following joined campaigns is in scope (BR-25).
+- Joining or applying to Content Rewards campaigns inside Clip Factory (that stays the owner's own tap on Content
+  Rewards; its tools offer no way to do it, and a robot on its site would break Whop's terms). Reading and following
+  joined campaigns is in scope (BR-25), and so is finding campaigns that match what he wants from Content Rewards'
+  public pages (I-50).
 - Content Rewards campaigns that want drafts first or the brand's own sound, and sending proof of views for the owner
   (Clip Factory reminds him and says how).
 - Money from TikTok, Instagram and X (their tools tell apps nothing about it), and what left Content Rewards for Whop
