@@ -100,27 +100,32 @@
   display: none;
 }
 @media (min-width: 1100px) {
-  /* The side column runs the hero's whole height: Working now on top, the fanned covers in the room under it (330 px
-     at least, more when the form beside it is taller), centred there, so the hero holds no empty block. */
+  /* The side column runs the hero's whole height: Working now on top, the fanned covers (their own 330 px, which is
+     also what fans them out on hover) centred in the room under it, so the hero holds no empty block under them. */
   .hero__side {
     align-self: stretch;
     display: flex;
     flex-direction: column;
   }
   .cover-stack {
-    --cover-w: clamp(120px, 10vw, 160px);
     position: relative;
     display: block;
-    flex: 1 0 330px;
+    flex: none;
+    height: 330px;
+    margin-block: auto;
+  }
+  /* No covers to fan (nothing made yet, or Home could not load): Working now goes under the form, the whole width,
+     instead of a short card at the top of an empty column. */
+  .hero--bare {
+    grid-template-columns: minmax(0, 1fr);
   }
   .cover-stack__item {
     position: absolute;
     left: 50%;
-    /* Centred, a little high: the outer two drop 14 px and tilt out. */
-    top: calc(50% - var(--cover-w) * 8 / 9 - 10px);
-    width: var(--cover-w);
+    top: 12px;
+    width: clamp(120px, 10vw, 160px);
     aspect-ratio: 9 / 16;
-    margin-left: calc(var(--cover-w) / -2);
+    margin-left: calc(clamp(120px, 10vw, 160px) / -2);
     overflow: hidden;
     border-radius: var(--r-md);
     border: 4px solid transparent;
@@ -322,7 +327,7 @@
 .home-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: clamp(14px, 2vw, 20px);
+  gap: clamp(12px, 1.6vw, 16px);
   align-items: start;
 }
 .home-row__intro {
@@ -333,11 +338,12 @@
 .home-row__intro .btn {
   justify-self: start;
 }
-/* Ready for review, from 640 px of room: the views total stands beside the heading block, the clips run the whole
-   width under both. The total sits on the button's line (the block's bottom), so neither box grows to match. */
+/* Ready for review, from 640 px of room: the views total stands beside the heading block (no wider than its words
+   need, so "Ready for review." keeps one line), the clips run the whole width under both. The total sits on the
+   button's line (the block's bottom), so neither box grows to match. */
 @container home (min-width: 640px) {
   .home-row--review {
-    grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
     grid-template-areas:
       "intro stat"
       "cards cards";
@@ -354,9 +360,9 @@
   }
 }
 /* The clips waiting: one row of covers about 140 to 200 px wide, as many as the room holds (2 on a phone, up to 6 on a
-   big screen), never squeezed thin and never blown up. Home sends six at most; the ones past the row are not drawn.
-   With fewer clips than that, each grows to the width it would have with one column less (so one short of a full row
-   still fills it), and never past 240 px: a few clips sit at their usual size from the left. */
+   big screen), never squeezed thin and never blown up. Home sends six at most; the ones past the row are not drawn
+   (a browser without container queries draws 2). With fewer clips than the row holds, each grows to the width it
+   would have with one column less (so one short of a full row still fills it), at most 240 px, from the left. */
 .home-row__cards {
   --cols: 2;
   --grow-cols: max(2, var(--cols) - 1);
@@ -381,7 +387,7 @@
     display: none;
   }
 }
-@container home (min-width: 640px) and (max-width: 859.98px) {
+@container home (min-width: 640px) and (max-width: 819.98px) {
   .home-row__cards {
     --cols: 4;
   }
@@ -389,7 +395,7 @@
     display: none;
   }
 }
-@container home (min-width: 860px) and (max-width: 1059.98px) {
+@container home (min-width: 820px) and (max-width: 1059.98px) {
   .home-row__cards {
     --cols: 5;
   }
@@ -400,6 +406,11 @@
 @container home (min-width: 1060px) {
   .home-row__cards {
     --cols: 6;
+  }
+}
+@supports not (container-type: inline-size) {
+  .home-row__cards > :nth-child(n + 3) {
+    display: none;
   }
 }
 
@@ -453,18 +464,20 @@
   text-overflow: ellipsis;
 }
 .teaser__body {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  align-content: start;
   padding: 10px 6px 6px;
 }
 .teaser__hook {
   font-weight: 650;
   font-size: 0.93rem;
   line-height: 1.3;
-  /* Room for its two lines even when it needs one, so every cover in the row is as tall as the others and their
-     time and score sit on one line. */
-  min-height: 2.6em;
+}
+/* The time and score sit on the cover's bottom line: level across the row when one title takes two lines, and right
+   under the title when none does (no room kept for a line nobody needs). */
+.teaser__meta {
+  margin-top: auto;
 }
 .teaser__meta {
   display: flex;
@@ -479,11 +492,11 @@
   color: var(--vermilion-ink);
 }
 .teaser--empty {
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 8px;
-  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px var(--inset);
   color: var(--ink-2);
   font-weight: 600;
 }
@@ -500,8 +513,14 @@
   justify-items: start;
 }
 .teaser-skel {
-  aspect-ratio: 4 / 6;
+  /* A loaded cover's shape: its 4/5 picture plus the title and time lines under it, so the row does not jump. */
+  padding-bottom: 75px;
   border-radius: var(--r-lg);
+}
+.teaser-skel::before {
+  content: "";
+  display: block;
+  aspect-ratio: 4 / 5;
 }
 
 .stat {
@@ -527,6 +546,23 @@
 .stat__dots {
   display: flex;
   gap: 5px;
+}
+/* Home's views total under the covers (below 640 px of room, the whole width): the number on the left and its two
+   lines beside it, a short card instead of a tall one with its right half empty. */
+@container home (max-width: 639.98px) {
+  .home-row--review > .stat {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: clamp(14px, 5cqi, 28px);
+    row-gap: 4px;
+  }
+  .home-row--review > .stat > .stat__value {
+    grid-row: 1 / span 3;
+    font-size: clamp(2.4rem, 16cqi, 5rem);
+  }
+  .home-row--review > .stat > :not(.stat__value) {
+    grid-column: 2;
+  }
 }
 .stat__dots span {
   width: 9px;

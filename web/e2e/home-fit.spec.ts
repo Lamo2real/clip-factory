@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { settle } from "./helpers.ts";
+import { settle, stillBackdrop } from "./helpers.ts";
 
 // Home's boxes are as tall as what is in them and nothing leaves the screen, from a phone to a big monitor. The owner
 // (2026-11-21): "fix the unnecessary space in the boxes and make sure the solution fits all resolutions such as phone
@@ -18,10 +18,17 @@ const SIZES: [number, number][] = [
 /** Room a box may keep under (and, centred, over) its last line: half-leading and rounding, never a blank band. */
 const SPARE = 12;
 
+// WebKit on Linux paints without a GPU: hold the living backdrop still so frames stay cheap (helpers.ts, stillBackdrop).
+test.beforeEach(async ({ page, browserName }) => {
+  if (browserName === "webkit") await stillBackdrop(page);
+});
+
 interface Box {
   name: string;
   spareTop: number;
   spareBottom: number;
+  /** How much of its inner width the drawn content spans (0 to 1). */
+  fill: number;
 }
 
 async function measure(page: Page) {
@@ -31,6 +38,8 @@ async function measure(page: Page) {
     const drawn = (el: Element) => {
       let top = Infinity;
       let bottom = -Infinity;
+      let left = Infinity;
+      let right = -Infinity;
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
       for (let n = walker.nextNode(); n; n = walker.nextNode()) {
         let rects: DOMRect[] = [];
@@ -51,9 +60,11 @@ async function measure(page: Page) {
           if (r.width < 1 || r.height < 1) continue;
           top = Math.min(top, r.top);
           bottom = Math.max(bottom, r.bottom);
+          left = Math.min(left, r.left);
+          right = Math.max(right, r.right);
         }
       }
-      return { top, bottom };
+      return { top, bottom, left, right };
     };
     const boxes: Box[] = [];
     for (const el of document.querySelectorAll(".home-row .teaser, .home-row > .stat, .money-tile__body, .cr-row-chip, .working")) {
@@ -65,6 +76,7 @@ async function measure(page: Page) {
         name: `${(el as HTMLElement).className.split(" ")[0]} "${(el.textContent ?? "").trim().slice(0, 24)}"`,
         spareTop: Math.round(d.top - r.top - parseFloat(s.paddingTop) - parseFloat(s.borderTopWidth)),
         spareBottom: Math.round(r.bottom - parseFloat(s.paddingBottom) - parseFloat(s.borderBottomWidth) - d.bottom),
+        fill: (d.right - d.left) / (r.width - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight) - parseFloat(s.borderLeftWidth) - parseFloat(s.borderRightWidth)),
       });
     }
     const out: string[] = [];
@@ -108,6 +120,10 @@ for (const [width, height] of SIZES) {
     expect(loose, loose.join("\n")).toEqual([]);
     expect(m.out, m.out.join("\n")).toEqual([]);
     expect(m.sideways, "the page scrolls sideways").toBe(false);
+    // The views total is no wider than what is in it: a short card with the number beside its lines, or a column
+    // as wide as the number.
+    const stat = m.boxes.find((b) => b.name.startsWith("stat "))!;
+    expect(stat.fill, `the views total is ${Math.round((1 - stat.fill) * 100)} % empty across`).toBeGreaterThanOrEqual(0.66);
 
     // The mock starts with five clips waiting, at least one short of any row: the covers fill the row edge to edge,
     // all on one line, all one height, none squeezed thin or blown up.
@@ -123,7 +139,7 @@ for (const [width, height] of SIZES) {
   });
 }
 
-test("Home with nothing to review: the one card spans the row and stays small", async ({ page }) => {
+test("Home with nothing to review: the one card spans the row and stays one short line, and the hero is one column", async ({ page }) => {
   await page.addInitScript(() => sessionStorage.setItem("cf-mock-empty", "1"));
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
@@ -132,5 +148,10 @@ test("Home with nothing to review: the one card spans the row and stays small", 
   await expect(empty).toHaveText("All done here.");
   const [card, row] = await Promise.all([empty.boundingBox(), page.locator(".home-row__cards").boundingBox()]);
   expect(Math.round(card!.width)).toBe(Math.round(row!.width));
-  expect(card!.height).toBeLessThanOrEqual(200);
+  expect(card!.height).toBeLessThanOrEqual(72);
+  // No covers to fan out: Working now goes under the form, as wide as it, instead of a short card over empty glass.
+  await expect(page.locator(".hero")).toHaveClass(/hero--bare/);
+  const [main, working] = await Promise.all([page.locator(".hero__main").boundingBox(), page.locator(".working").boundingBox()]);
+  expect(working!.y).toBeGreaterThan(main!.y + main!.height - 1);
+  expect(Math.round(working!.width)).toBe(Math.round(main!.width));
 });

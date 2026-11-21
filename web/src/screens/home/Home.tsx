@@ -58,6 +58,8 @@ export function Home() {
     ? { ...data, jobs: data.jobs.filter((j) => !gone.jobs.has(j.jobId)), review: data.review.filter((c) => !gone.reviewJobs.has(c.jobId)) }
     : data;
   const working = view?.jobs.filter((j) => j.status === "running" || j.status === "queued") ?? [];
+  // Nothing to fan beside Working now once Home knows (no cover yet, or it could not load): the hero is one column.
+  const bare = failed !== null || (!!view && !view.review.some((c) => c.coverUrl));
   const inReview = (c: Clip) => c.status === "review";
   useLiveEvents(
     (e) => {
@@ -85,7 +87,7 @@ export function Home() {
   return (
     <div className="home">
       <GetAppBanner />
-      <section className="hero glass glass--green glass--refract" aria-labelledby="hero-title">
+      <section className={`hero glass glass--green glass--refract${bare ? " hero--bare" : ""}`} aria-labelledby="hero-title">
         <div className="hero__main">
           <h1 className="hero__title" id="hero-title">
             Clips worth <Swash>posting</Swash>.

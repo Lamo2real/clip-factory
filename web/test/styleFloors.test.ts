@@ -62,7 +62,8 @@ describe("type and target floors", () => {
     expect([...rows]).toEqual(expect.arrayContaining(["home-row--review", "money-tile", "streamers-row", "cr-row"]));
     for (const cls of rows)
       for (const [file, text] of all) {
-        const grids = text.match(new RegExp(`\\.${cls}(?![\\w-])[^{,]*\\{[^}]*grid-template-columns`, "g")) ?? [];
+        // Rules for the row itself (not what is inside it, such as the views total's own number-and-lines grid).
+        const grids = text.match(new RegExp(`\\.${cls}\\s*\\{[^}]*grid-template-columns`, "g")) ?? [];
         expect(grids.length, `${file}: .${cls} sets its own columns`).toBe(cls === "home-row--review" && file === "screens.css" ? 1 : 0);
       }
   });
