@@ -26,6 +26,9 @@ changes one is checked against this list.
   | Upload | Pick a video |
   | Failed, Error 500 | "That didn't work. Tap Try again." |
   | Pending integration | Waiting for the account connection |
+  | Submission, submit | Clip, send, "Sent ✓" |
+  | CPM | per 1,000 views |
+  | MCP, OAuth, token, scope, API | sign in, allow (the jargon is never on screen) |
 
   Skills are the one place that says **Delete**, because a skill is the owner's own writing, not a clip
   ([Skill pages](#skill-pages)).

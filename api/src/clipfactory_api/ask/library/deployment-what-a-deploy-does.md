@@ -19,8 +19,8 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    with a fresh heartbeat (counts only in the log, read only). A job still running after that resumes on the new
    agent version by itself.
    The apply creates or updates every resource, including the three API Gateway APIs (REST first, then WebSocket,
-   because API Gateway allows one deployment every 5 seconds per account), the nine Lambdas (the two durable ones
-   publish a new version and move their `live` alias; running executions stay on their old version), the stream
+   because API Gateway allows one deployment every 5 seconds per account), every Lambda (with `cf-prod-campaigns`, [Content Rewards](#content-rewards-contracts-38)); the two durable ones
+   publish a new version and move their `live` alias, and running executions stay on their old version), the stream
    trigger, the EventBridge rule `cf-prod-stats` (every 15 minutes, read from `config/platforms.json`), the vector
    bucket and index, the SSM parameter, the Connect state-key secret and the alarms (including `cf-prod-help-model-failures` and its log metric
    filter), and the AgentCore runtime's log group `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT` with 30-day

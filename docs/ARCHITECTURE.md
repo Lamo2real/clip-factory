@@ -10,7 +10,8 @@ The diagram is [architecture/aws-architecture.drawio](architecture/aws-architect
 [§16](CONTRACTS.md#16-clip-performance-stats-refresh-and-weekly-best-owner-request-2026-11-16) (clip numbers and the weekly best),
 [§17](CONTRACTS.md#17-posting-setup-a-setup-list-per-platform-real-connect-real-posting-owner-request-2026-11-16) (posting setup, Connect and real posting),
 [§18](CONTRACTS.md#18-skills-full-create-read-update-delete-every-ai-call-uses-every-skill-owner-request-2026-11-16) (skills, and every AI call using every skill)
-and [§19](CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16) (Ask Clip Factory, the help assistant);
+and [§19](CONTRACTS.md#19-ask-clip-factory-grounded-in-app-help-assistant-owner-request-2026-11-16) (Ask Clip Factory, the help assistant),
+and [§38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21) (Content Rewards campaigns);
 this document explains how the pieces work together and why.
 
 ![Clip Factory Cloud on AWS](architecture/aws-architecture.png)
@@ -68,6 +69,19 @@ flowchart LR
   evl[EventBridge rule cf-prod-learn-daily, 05:00 UTC] -- "12 daily: day-7 numbers, winners, lessons" --> lrn
   lapi -- "11 help answer, optional" --> haiku[Bedrock: Claude Haiku 5.5, EU profile]
   lapi -- "11 help corpus, cached 10 min" --> cf
+  owner -- "13 Connect Content Rewards: the Mac app opens a one-shot door" --> door[["Desktop door 127.0.0.1:47811-47815, 5 minutes"]]
+  owner -- "13 sign in and allow, system browser" --> crid["id.contentrewards.com: sign-in"]
+  crid -- "13 302 to 127.0.0.1 with code and state" --> door
+  lapi -- "13 register, exchange the code, refresh, revoke" --> crid
+  lapi -- "13 Connect, Check now, Try sending again" --> crmcp["mcp.contentrewards.com/mcp: MCP, never an Origin header"]
+  lapi -- "13 public campaign JSON, only when the owner acts" --> crpub["contentrewards.com public campaign JSON"]
+  lapi -- "13 read the rules, fetch the logo: async" --> camp["Lambda cf-prod-campaigns: no secrets, no CR call"]
+  camp -- "13 rules from the brief" --> bedrock
+  camp -- "13 CAMPAIGN# rules, logo state" --> ddb
+  camp -- "13 campaigns/*" --> media
+  lapi -- "13 the CR token" --> sm
+  clf -- "13 cr-send: create_my_submission within 25 minutes" --> crmcp
+  st -- "13 tick: membership, reviews, views, money" --> crmcp
   classDef off stroke-dasharray: 5 5
 ```
 
@@ -86,20 +100,21 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | Amazon API Gateway, HTTP API | `/v1` routes | The app's API. Cheapest type, with a built-in JWT authorizer. CORS for the app and `localhost:5173`; a public `OPTIONS /v1/{proxy+}` route lets CORS answer the browser's preflight before the JWT authorizer. |
 | Amazon API Gateway, WebSocket API | `cf-prod-ws`, stage `live` | Pushes job, clip, post and learning changes to open apps, so screens update without waiting for a poll. See [ADR-23](DECISIONS.md#adr-23-live-updates-over-a-websocket-api-polling-only-as-the-fallback). |
 | Amazon API Gateway, REST API | `cf-prod-hooks`, stage `v1` | The one public, unauthenticated surface: platform webhooks and the OAuth callback that finishes Connect, with per-method throttling, a usage plan, request validation and X-Ray. See [ADR-24](DECISIONS.md#adr-24-a-separate-rest-api-for-public-platform-webhooks). |
-| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, skills (write, upload, read, change, delete), starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`), the posting setup (keys to Secrets Manager, Check it, Connect start, choose, disconnect, TikTok's verification file to the web bucket), and Ask Clip Factory ([flow 17](#17-ask-clip-factory-the-help-assistant): search, compose, the optional Haiku rewrite; the help code loads only on its two routes). |
-| AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
+| AWS Lambda | `cf-prod-api` | Every `/v1` route: validation, DynamoDB, presigned URLs, skills (write, upload, read, change, delete), starting the two durable flows, cancel, Keep and Throw away, similar clips, a clip's performance, Refresh numbers (claims the posts, then invokes `cf-prod-stats`), the weeks and their picks (invokes `cf-prod-learn`), the posting setup (keys to Secrets Manager, Check it, Connect start, choose, disconnect, TikTok's verification file to the web bucket), and Ask Clip Factory ([flow 17](#17-ask-clip-factory-the-help-assistant): search, compose, the optional Haiku rewrite; the help code loads only on its two routes), and Content Rewards under `/v1/contentrewards` ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62): register, Connect finish, Check it, campaigns and their Check now, the logo, Try sending again, money refresh). |
+| AWS Lambda | `cf-prod-stats` | The numbers poller ([flow 13](#13-clip-numbers-the-poller-and-refresh-numbers)): every tick it reads the posts that are due from the sparse `gsi2`, reserves each platform's budget, reads the numbers in batches and writes them to the posts and `STAT#` snapshots. The Refresh button runs the same code at once. After the platform poll, the same tick checks Content Rewards when it is switched on (membership, reviews, views, proof reminders and money, [flow 19](#19-content-rewards-campaigns-contracts-38-adr-62)); `{"action": "contentrewards"}` runs that for one owner. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda | `cf-prod-learn` | The weekly best ([flow 14](#14-best-of-the-week)): marks the starred clips' vectors `best`, asks Claude Fable 5.1 (with the skills block) for one "Best of week" learning. See [ADR-31](DECISIONS.md#adr-31-the-weekly-best-is-an-explicit-owner-signal). |
+| AWS Lambda | `cf-prod-campaigns` | Content Rewards ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62), [CONTRACTS.md §38.10](CONTRACTS.md#3810-reading-a-campaign)): reads a campaign's rules from the brand's brief with Claude (one Bedrock Converse call per read, checked field by field in code), fetches the campaign logo from a Google Drive or Dropbox link and copies the brand's picture into the media bucket (`campaigns/*`). Started only by `cf-prod-api` and `cf-prod-stats` (async). It reads untrusted brand text and outside links, so it has **no Secrets Manager access at all** and never calls Content Rewards; the brief is already on the `CAMPAIGN#` item. See [ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant). |
 | AWS Lambda | `cf-prod-money` | Real earnings ([CONTRACTS.md §25](CONTRACTS.md#25-real-earnings-paid-programme-progress-and-platform-reported-money-owner-request-2026-11-18)): once a day reads each connected platform's account numbers and the money the platform itself reports (YouTube Analytics `estimatedRevenue` with the monetary scope; Facebook only after its live check), through the shared token manager and rate budgets, and writes `ACCTSTAT#`, `REVENUE#` and `MONEYSTATE#` items. No DeleteItem. See [ADR-47](DECISIONS.md#adr-47-only-platform-reported-money-the-estimates-are-removed). |
 | Amazon EventBridge | rule `cf-prod-stats`, `rate(15 minutes)` | The only schedule in the system: one tick for the stats poller, its rate taken from the smallest interval in `config/platforms.json`. A few thousand invocations a month. See [ADR-30](DECISIONS.md#adr-30-one-eventbridge-rule-and-a-due-queue-for-stats-polling). |
 | AWS Lambda, durable function | `cf-prod-job-flow` (alias `live`) | Starts the agent for a job and waits (no compute) for its callback; fails the job if heartbeats stop. Replaces the watchdog. See [ADR-22](DECISIONS.md#adr-22-lambda-durable-functions-for-the-job-and-clip-workflows). |
-| AWS Lambda, durable function | `cf-prod-clip-flow` (alias `live`) | After Keep: makes the posts, publishes each one (start, durable waits and checks, finish; tokens from Secrets Manager), waits 48 hours (no compute), reads metrics, writes a learning, updates the clip's vector. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). Replaces the publish queue, the publisher, the scheduler and perf-check. |
+| AWS Lambda, durable function | `cf-prod-clip-flow` (alias `live`) | After Keep: makes the posts, publishes each one (start, durable waits and checks, finish; tokens from Secrets Manager), sends each campaign post to Content Rewards right after it is live (`cr-send-{platform}`, retried every minute up to 25 minutes, never failing the flow), waits 48 hours (no compute), reads metrics, writes a learning, updates the clip's vector. Reads `cf-prod/platforms/*`, writes only a refreshed token (`cf-prod/platforms/*/token-*`). Replaces the publish queue, the publisher, the scheduler and perf-check. |
 | AWS Lambda | `cf-prod-ws-authorizer` | Checks the Cognito access token on `$connect` (standard library RS256 check, no extra packages). |
 | AWS Lambda | `cf-prod-ws` | `$connect` stores the connection, `$disconnect` removes it, `$default` answers `ping`. |
 | AWS Lambda | `cf-prod-broadcast` | Reads the DynamoDB stream and sends each change to the owner's open connections. |
 | AWS Lambda | `cf-prod-hooks` | Answers webhook verification challenges, stores webhook events, and finishes Connect: checks the signed state, exchanges the code, stores the token in Secrets Manager, redirects to the setup page with a result code ([flow 16](#16-set-up-posting-connect-and-real-posting)). |
-| Amazon DynamoDB | `cf-prod-data` + stream | Single table for all entities including WebSocket connections, webhook events, stats snapshots (`STAT#`, 90-day TTL), the weekly picks (`WEEK#`) and the per-platform rate budgets (`RATE#`); a sparse `gsi2` holds only the posts due for a stats poll. On-demand, point-in-time recovery, TTL, stream `NEW_AND_OLD_IMAGES` feeding `cf-prod-broadcast`. See [ADR-05](DECISIONS.md#adr-05-one-dynamodb-table-single-table-design). |
+| Amazon DynamoDB | `cf-prod-data` + stream | Single table for all entities including WebSocket connections, webhook events, stats snapshots (`STAT#`, 90-day TTL), the weekly picks (`WEEK#`), the per-platform rate budgets (`RATE#`) and the Content Rewards items (`CRCONN`, `CRSTATE#`, `CAMPAIGN#`, `CRSUB#`, `CRMONEY`, `CROWNERS`); a sparse `gsi2` holds only the posts due for a stats poll. On-demand, point-in-time recovery, TTL, stream `NEW_AND_OLD_IMAGES` feeding `cf-prod-broadcast`. See [ADR-05](DECISIONS.md#adr-05-one-dynamodb-table-single-table-design). |
 | AWS Systems Manager Parameter Store | `/cf-prod/hooks/verify-token` (SecureString) | The Meta webhook verify token. Generated by Terraform as a write-only value, so it never enters the Terraform state. |
-| AWS Secrets Manager | `cf-prod/oauth/state-key` (Terraform, write-only value) and `cf-prod/platforms/{platform}/{app,token,pending}` (created at runtime) | The only place for the owner's platform app keys and account tokens, and the key that signs the Connect `state` ([flow 16](#16-set-up-posting-connect-and-real-posting), [ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). `cf-prod-api` and `cf-prod-hooks` write all of them; `cf-prod-clip-flow` and `cf-prod-stats` can read `cf-prod/platforms/*` but write only the token secrets `cf-prod/platforms/*/token-*` (Terraform output `platform_token_secrets_arn` of the hooks module). At most about 16 secrets. |
+| AWS Secrets Manager | `cf-prod/oauth/state-key` (Terraform, write-only value), `cf-prod/platforms/{platform}/{app,token,pending}` and `cf-prod/platforms/contentrewards/{app,token}` (all created at runtime) | The only place for the owner's platform app keys and account tokens, and the key that signs the Connect `state` ([flow 16](#16-set-up-posting-connect-and-real-posting), [ADR-34](DECISIONS.md#adr-34-oauth-with-a-signed-single-use-state-tokens-only-in-secrets-manager)). `cf-prod-api` writes all of them; `cf-prod-hooks` reads the app keys and writes tokens and pending choices; `cf-prod-clip-flow`, `cf-prod-stats` and `cf-prod-money` read `cf-prod/platforms/*` and write only the token secrets `cf-prod/platforms/*/token-*` (Terraform output `platform_token_secrets_arn` of the hooks module). At most about 18 secrets. |
 | Amazon Bedrock AgentCore Runtime | `cf_prod_clip_agent` | Runs the agent container for as long as a job needs, one isolated session per job. See [ADR-03](DECISIONS.md#adr-03-amazon-bedrock-agentcore-runtime--claude-agent-sdk-for-the-agent). |
 | Amazon Bedrock | Claude Fable 5.1 (global profile), Titan Text Embeddings V2 (in-Region) | Fable: watching the whole picture as frames and the second look at each picked moment ([ADR-40](DECISIONS.md#adr-40-watch-the-whole-video-before-picking)), moment selection, facecam detection, checklist judgement, captions, learnings. Every Fable call, through the Agent SDK or Converse, gets the owner's skills block first ([flow 15](#15-skills-every-ai-call-gets-every-skill)). Titan: 1024-number embeddings of clip text for S3 Vectors (no skills: not text generation). |
 | Amazon Bedrock | Claude Haiku 5.5 (EU profile `eu.anthropic.claude-haiku-5-5`) | Ask Clip Factory only: rewrites a found answer in friendlier words. Optional, capped at 2,000 answers per 30 days, EU Regions only. See [ADR-39](DECISIONS.md#adr-39-help-runs-in-cf-prod-api-with-claude-haiku-55-through-the-eu-profile). |
@@ -110,11 +125,12 @@ Only managed, pay-per-use services. Nothing runs while the app is idle except st
 | Amazon SNS | `cf-prod-alarms` | Emails `alarm_email` when an alarm fires (optional). |
 | AWS IAM | GitHub OIDC deploy role, one role per function, the API Gateway logging role | No long-lived keys anywhere; each function can touch only what it needs. |
 | Amazon OpenSearch Serverless | not deployed | Shown dashed in the diagram as an option for keyword or hybrid search later ([ADR-25](DECISIONS.md#adr-25-s3-vectors-for-the-learning-memory-opensearch-not-deployed)). |
+| Content Rewards (not AWS) | `id.contentrewards.com` (sign-in), `mcp.contentrewards.com/mcp` (MCP, alpha, API version `2026-10-01`), the public campaign JSON on `contentrewards.com` | Paid clipping campaigns ([flow 19](#19-content-rewards-campaigns-contracts-38-adr-62)). Only `cf-prod-api`, `cf-prod-clip-flow` and `cf-prod-stats` call it; never the browser or the Mac. |
 | GitHub Actions (not AWS) | CI, deploy, desktop runners | Tests and deploys through OIDC; builds the desktop app on `macos-latest` and `windows-latest` ([§12.3](CONTRACTS.md#123-desktop-wrapper-desktop-tauri-v2)). |
 
 ### Lambda functions
 
-All nine share one zip (`api/dist/lambda.zip`), Python 3.13, arm64, JSON logs, X-Ray active
+All of them, `cf-prod-campaigns` too, share one zip (`api/dist/lambda.zip`), Python 3.13, arm64, JSON logs, X-Ray active
 ([CONTRACTS.md §9](CONTRACTS.md#9-lambdas-one-zip-apidistlambdazip-python-313-arm64-package-clipfactory_api)).
 
 | Function | Started by | Memory / timeout | Durable |
@@ -126,9 +142,10 @@ All nine share one zip (`api/dist/lambda.zip`), Python 3.13, arm64, JSON logs, X
 | `cf-prod-ws` | WebSocket routes | 128 MB / 10 s | no |
 | `cf-prod-broadcast` | DynamoDB stream (filtered) | 256 MB / 60 s | no |
 | `cf-prod-hooks` | REST API | 256 MB / 28 s (the code exchange calls the platform) | no |
-| `cf-prod-stats` | EventBridge rule `cf-prod-stats` (every 15 min) and `cf-prod-api` (async, Refresh numbers) | 256 MB / 300 s; stops starting requests after 240 s; async retries 0, event age 15 min | no |
+| `cf-prod-stats` | EventBridge rule `cf-prod-stats` (every 15 min) and `cf-prod-api` (async: Refresh numbers; `{"action": "contentrewards"}` on Connect finish and money refresh) | 256 MB / 300 s; stops starting requests after 240 s; async retries 0, event age 15 min | no |
 | `cf-prod-learn` | `cf-prod-api`, async invoke on `PUT /v1/weeks/{week}/best`; EventBridge `cf-prod-learn-daily` at 05:00 UTC | 512 MB / 900 s; async retries 1, event age 1 h | no |
 | `cf-prod-money` | EventBridge `cf-prod-money-daily` at 06:00 UTC and `cf-prod-api` (async, Check now, once an hour) | 256 MB / 300 s; stops starting work after 240 s; async retries 0, event age 1 h | no |
+| `cf-prod-campaigns` | `cf-prod-api` and `cf-prod-stats`, async only (`{"action": "read" \| "logo" \| "brand_picture", "userId", "campaignId"}`) | 512 MB / 120 s; async retries 0 | no |
 
 ### What was removed
 
@@ -1005,6 +1022,184 @@ events on the WebSocket the app already holds. The search key is the owner's own
 (`api/src/clipfactory_api/ask/knowledge.json`, `ask/library/`), behind the owner's skills and cached for an hour.
 When the socket, the model or the assistant switch is not there, the panel answers with §17 (above) instead.
 
+### 19. Content Rewards campaigns (CONTRACTS §38, ADR-62)
+
+The owner joins a paid clipping campaign on Content Rewards (CR), pastes its link into Clip Factory, and every clip
+made for it follows its rules and is sent to CR inside CR's 30-minute window
+([CONTRACTS.md §38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21),
+[ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant),
+the owner's steps in [SETUP_POSTING.md](SETUP_POSTING.md#content-rewards)). Numbered **13** in the diagram.
+
+CR is **not** a sixth `Platform`: it is its own connection (`CRCONN`), its own card on Set up posting, its own routes
+under `/v1/contentrewards` and its own items. The five platforms, `GET /v1/setup`, the setup to-do list and the
+publish chain behave exactly as before when no campaign is involved. The whole feature ships switched off
+(`content_rewards_enabled = false` → `CONTENT_REWARDS=off`: every `/v1/contentrewards*` route answers 503
+`unavailable` and the clip flow sends nothing) until every part of §38.19 has merged; one last one-line PR switches it
+on ([DEPLOYMENT.md](DEPLOYMENT.md#content-rewards-contracts-38)).
+
+**Who talks to Content Rewards.** Only `cf-prod-api`, `cf-prod-clip-flow` and `cf-prod-stats`, server to server.
+Never the browser (CR answers 403 to any MCP request that carries an `Origin` header, and the token lives only in
+Secrets Manager), never the Mac (it only carries a one-time code) and never `cf-prod-campaigns` (it reads untrusted
+brand text and outside links, and has no secret access).
+
+| Host | Used for | By |
+|---|---|---|
+| `id.contentrewards.com` | OAuth: `/oauth2/register` (RFC 7591, once per install, `client_name` "Clip Factory", five loopback redirects, no secret), `/oauth2/authorize` (in the owner's system browser), `/oauth2/token`, `/oauth2/revoke` | `cf-prod-api` (register, code exchange, revoke); the three Lambdas (refresh, under the lease) |
+| `mcp.contentrewards.com/mcp` | MCP JSON-RPC: `get_me`, `list_my_campaigns`, `create_my_submission`, `list_my_submissions`, `get_my_submission`, `get_my_balance`, `list_my_payouts`, `send_feedback`; headers `Api-Version: 2026-10-01`, `MCP-Protocol-Version: 2025-11-25`, `Mcp-Name`, never `Origin`; at most 2 calls a second per container | `cf-prod-api`, `cf-prod-clip-flow`, `cf-prod-stats` |
+| `contentrewards.com/api/campaign/campaigns/{uuid}` | the public campaign JSON (undocumented): a preview for the card, read only when the owner acts (add, Check now, a card older than 10 minutes, a job's start), at most 6 a minute, cached on the item, never on a schedule and never to submit | `cf-prod-api` |
+| `crusercontent.com`, `docs.google.com`, Google Drive, Dropbox | the brand's picture (copied once, only `https://crusercontent.com/…`, ≤ 1 MB), the Google Docs a brief links to, logo links; the Google Docs and logo links go through the `ask/fetch.py` SSRF guard on every hop | `cf-prod-campaigns` |
+
+**Sign-in: the desktop app's one-shot door.** CR's sign-in only returns to `http://127.0.0.1` (no https), so the
+Mac app listens once on the computer, and the cloud keeps everything else.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Owner (Mac app window)
+  participant D as Desktop door (127.0.0.1, ports 47811-47815)
+  participant A as cf-prod-api
+  participant DB as DynamoDB
+  participant SM as Secrets Manager
+  participant B as System browser
+  participant ID as id.contentrewards.com
+  participant M as mcp.contentrewards.com
+  participant S as cf-prod-stats
+  O->>D: cr_connect_listen: first free port of five, closes after 5 minutes
+  O->>A: POST /v1/contentrewards/connect {port}
+  A->>ID: POST /oauth2/register (first time only)
+  A->>SM: cf-prod/platforms/contentrewards/app (clientId)
+  A->>DB: a CRSTATE item per nonce (port, redirectUri, exp, TTL)
+  A-->>O: authorizeUrl (signed state, PKCE S256, one resource)
+  O->>D: cr_connect_open {url} (host, S256, resource and this port checked)
+  D->>B: open the URL
+  B->>ID: sign in, allow
+  ID-->>B: 302 to the door on 127.0.0.1 with code, state and iss
+  B->>D: GET / (Host and state checked in constant time)
+  D-->>B: "Done! Go back to Clip Factory. You can close this tab."
+  O->>D: cr_connect_result every 500 ms: {status: done, code, state, iss}
+  O->>A: POST /v1/contentrewards/connect/finish {state, code, iss} (the code lives 60 s)
+  A->>DB: consume that CRSTATE item once (conditional delete)
+  A->>ID: POST /oauth2/token (code, verifier derived from the state, resource)
+  A->>M: get_me, tools/list: can it send?
+  A->>SM: under the CRCONN lease: put cf-prod/platforms/contentrewards/token, keep the VersionId
+  A->>DB: CRCONN connected or read_only, tokenVersionId, signInBy, then CROWNERS
+  A-)S: async {"action": "contentrewards", "what": "campaigns"}
+  A-->>O: {result, connection}: confetti or one sentence
+  DB-->>O: live event "contentrewards"
+```
+
+The door is macOS only (on Windows `listen` answers `unsupported` and the page shows the "browser on a computer"
+words); it binds `127.0.0.1` only, answers one good request, never sees a token and never logs or stores the code.
+The PKCE verifier is derived from the signed state, never stored. A phone or a plain browser gets "Do this step on
+your Mac"; after this one sign-in everything runs in the cloud, so a phone upload is sent too.
+
+**Tokens.** CR's access token lives 10 minutes; its refresh token is single use and rotates (a reuse more than a few
+seconds later ends the connection), dies after 30 days unused and lasts 90 days at most. So exactly one process ever
+refreshes: the `CRCONN` lease (as in §17.6), taken only with at least 20 s of Lambda time left; the secret is always
+read by the `VersionId` recorded on `CRCONN`, never a cached or "current" copy; a lost answer is retried at once with
+the same refresh token; the new secret is written put-only (a refresh can never re-create a disconnected secret)
+before the token is used. Connect and Disconnect take the same lease. The stats tick refreshes once a day to keep
+the sign-in alive, warns 7 days before `signInBy` (card and notification) and marks `needs_reconnect` after it.
+
+**Adding a campaign.** `POST /v1/contentrewards/campaigns {url}` parses the link (campaign, Discover, the Whop copy, a
+group; invite, checkout and other CR pages are refused with a sentence), reads the public preview, writes
+`CAMPAIGN#{uuid}` and starts the rules read. Membership comes from `list_my_campaigns` (pending applications are not
+listed): the page's UUID is matched to CR's `cmp_` id by its TypeID encoding, else by name, organization, access and
+rates; two same-name siblings are `ambiguous` and never sent automatically. Joining stays in the CR app (there is no
+tool to browse, join or apply). Pure code (`contentrewards/gates.py`, ported from the local app's `ruleCheck.js`)
+makes the stops, the one next step and the `uploadPlaces` every time a campaign is served.
+
+**Reading the rules** (`cf-prod-campaigns` `read`, async). The api and the stats tick store CR's listed
+`description` on the item as `brief` before they start a read, so the reader needs nothing from CR. One Bedrock
+Converse call with the clip agent's model and the local app's `RULES_SCHEMA` (ported) as a forced tool; the brief,
+the owner's pasted rules and up to 3 public Google Docs the brief links to go in as JSON-encoded untrusted blocks
+(`<` and `>` escaped). Code then checks every field: anything that can reach a caption, the screen or a link must
+appear word for word in the input; fixed disclosure words (`#Ad`, "Paid partnership"); at most 8 hashtags and 5 tags;
+CR's own toggles (drafts first, a sound, the logo) can only add stops; pay, budget, status, access and platforms
+come only from CR's own fields. A read that fails or runs past 3 minutes is `rules_failed` ("I couldn't read the
+rules. Tap Check now, or paste them below.").
+
+**A campaign job.** `POST /v1/jobs {campaignId, campaignAnyway}` checks the campaign again (`list_my_campaigns` and
+the public JSON, at most 8 s together; CR down → the stored rules and status), copies the rules onto the job
+(`Job.campaign`, internal `JobCampaign`) and the ready logo to `jobs/{jobId}/source/campaign-logo.{ext}`, so a later
+change never breaks a queued job. The agent follows `job.campaign` ([AGENT.md](AGENT.md#campaign-clips)): the length,
+banned content, the logo in a taller band above the picture, "Paid partnership" on screen for the first 3 seconds,
+"#Ad" first and every required tag in each caption. Without a campaign every prompt and file is byte for byte as
+before.
+
+**Posting a campaign clip.** Confirm (and Try again) accept only the campaign's `uploadPlaces` (paid for, ready in
+Clip Factory, not refused by CR as unlinked, TikTok only after its audit), public, never made for kids, TikTok with
+Branded content (the owner's own tap). Each post gets `campaignId` (fixed forever) and the internal
+`postOptions.campaign`. The publishers turn on paid partnership where the API has it (YouTube
+`paidProductPlacementDetails`, X `paid_partnership`, TikTok `brand_content_toggle`; Meta has no field for this kind
+of app, so the caption's `#Ad` and the words on the video carry it), and `campaign_caption` puts the disclosure and
+every required item back into a caption the owner edited. No publisher has a delete or unpublish call.
+
+**Sending** (new steps in `cf-prod-clip-flow`, [CONTRACTS.md §38.12](CONTRACTS.md#3812-submitting-a-new-step-chain-in-cf-prod-clip-flow-and-checking-folded-into-cf-prod-stats)).
+CR takes a post only while it is less than 30 minutes live, so the cloud sends it the moment it is live and public:
+
+```
+ensure-posts → publish-{platform} … finish-{platform} → cr-send-{platform}      (a post with campaignId)
+             → (each later post's chain) → cr-catchup-{platform}                  (while earlier ones still wait)
+settle-clip  → [cr-wait-{n} (60 s, no compute) → cr-retry-{n}] n = 1…26           (while any still wait)
+             → wait-48h → metrics → distil                                        (as before)
+```
+
+`submit.send` writes `CRSUB#{postId}` once (`sending`, with the `idempotency_key`, URL and CR campaign id frozen,
+`deadline` = posted + 25 min, `sendBy` = posted + 30 min) and calls `create_my_submission`. Retryable answers
+(the post not visible yet, CR busy, 5xx, a timeout that may still have gone through) are tried again with the same key
+every minute until `deadline`; then the post goes `send_by_hand` (time is left until `sendBy`) or `missed`. A CR step
+never fails the flow: any exception sets `send_by_hand` / `missed`, and `settle-clip`, the 48-hour metrics and the
+vector step always run. A clip with no campaign post has exactly the old step names.
+
+**When Clip Factory can't send** (not connected, the pilot has not granted the write scope, a campaign the owner said
+he is in by hand, an error that isn't his, or the 25 minutes ran out): the owner gets a notification "Send this to
+Content Rewards now (N min left)" that opens the clip with one "Copy and open" button. In the Mac app, which has no
+Web Push, a green banner (`CrSendNow`) shows the same line on every page.
+
+**Checking** (`contentrewards.poll.run_tick`, called by the `cf-prod-stats` tick after the platform poll, with at most
+45 s; it never raises and one owner's failure never stops another). For each `CROWNERS` owner, in this order:
+1. time only, no CR call: `send_by_hand` past `sendBy` → `missed`; a stuck `sending` → `send_by_hand`; proofs due →
+   one notification each; the pilot reminder every 3 days (at most 5); a rules read older than 3 minutes → failed;
+2. the daily keep-alive refresh and the 90-day warning;
+3. membership (`list_my_campaigns` to the end): waiting campaigns every tick for 7 days, then every 6 hours to day
+   30; joined ones every 6 hours. Newly in → "You're in!" (confetti once, a notification) and a rules read;
+4. money: `get_my_balance`, then `list_my_payouts` paid rows newest first down to a watermark (the first read pages
+   to the end across ticks and shows "Checking…" until done, with no celebration for old money), then the pending
+   rows; `reversed` rows never count;
+5. submissions due: `list_my_submissions` newest first, then `get_my_submission` for the rest; a post the owner sent
+   by hand is found by its normalized link; status, flags, removal, views, the brand's note.
+At most 25 CR calls per owner per tick. Check now on a campaign runs step 3 for it at once; the clip page's Check now
+runs step 5 for that clip; money refresh invokes step 4 through `cf-prod-stats`.
+
+**Live and notifications.** The broadcast filter gains `CAMPAIGN#`, `CRCONN`, `CRSUB#` and `CRMONEY`, each sent as one
+`contentrewards` event (`partial: true`) after which the web refetches `GET /v1/contentrewards`; `CRSTATE#` and
+`CROWNERS` never travel and internal attributes are stripped. `cf-prod-notify` takes `MODIFY` records of the same
+four, under the owner's choice "Content Rewards news" (`notify.contentRewards`, on by default): you're in, send now
+(high urgency, its TTL the seconds left), approved, not approved, proof, money, sign in again, the pilot reminder;
+each once (`NOTIFIED#cr#{key}`).
+
+**Money.** Only CR's own numbers (§25 extended): `get_my_balance` and `list_my_payouts`, in USD cents, formatted
+only. "Paid" may stand only next to CR's paid payouts. A campaign's rate × views is a guess and is never shown or
+added anywhere; CR money is never added into the Money dashboard's totals.
+
+**Data** (additive only, [CONTRACTS.md §38.11](CONTRACTS.md#3811-data-additive-only-new-sort-keys-new-attributes-a-new-s3-prefix-new-runtime-secrets)):
+
+| Item or place | Holds |
+|---|---|
+| `USER#{id}` / `CRCONN` | the connection: status, can send, linked accounts learned from CR's answers, ticked steps, the Finance answer, pilot reminders, the lease and the token's `VersionId` (internal) |
+| `USER#{id}` / `CRSTATE#{nonce}` | one Connect in progress (TTL) |
+| `USER#{id}` / `CAMPAIGN#{uuid}` | one campaign: CR's id and match, the public copy, the brief, pasted rules, the checked rules, membership, the logo state |
+| `USER#{id}` / `CRSUB#{postId}` | one campaign post's send: the frozen key, URL and campaign, state, deadlines, CR's review, views, earned money, appeal and proof |
+| `USER#{id}` / `CRMONEY` | balance, paid total and its watermark, pending, celebrations |
+| `CROWNERS` / `USER#{id}` | the poller's list of owners |
+| `JOB#`, `CLIP#`, `POST#`, `SETTINGS` | + `campaignId`, `campaignNote`, the internal `campaign` snapshot, `paidLabel`, `postOptions.campaign`, `notify.contentRewards` |
+| media bucket `campaigns/{userId}/{uuid}/` | the logo (`logo-{rev}.{ext}`) and the brand's picture; the job's copy goes to `jobs/{jobId}/source/` |
+| Secrets Manager `cf-prod/platforms/contentrewards/{app,token}` | the registration and the token, made at runtime, never in Terraform |
+
+No table, index, Cognito pool, bucket or secret is replaced; removing a campaign or disconnecting deletes nothing on
+CR or any platform.
+
 ## Failure handling
 
 | What can fail | What happens |
@@ -1063,6 +1258,19 @@ When the socket, the model or the assistant switch is not there, the panel answe
 | Too many help questions | `429` with `Retry-After`; the panel counts down and never retries by itself. |
 | The help assistant must stop now | Kill switch `HELP` / `SWITCH` (60 s), no deploy ([DEPLOYMENT.md](DEPLOYMENT.md#ask-clip-factory-kill-switch)). |
 | A download file is missing | `manifest.json` does not list it; Get the app falls back to the browser install. The next deploy rebuilds it. |
+| Content Rewards is switched off, or the api is older than §38 | Every `/v1/contentrewards*` route answers 503 `unavailable` (an old api: 404). The web hides every Content Rewards card on 404 and says "Coming soon" on 503 `unavailable` only; the clip flow sends nothing. |
+| Content Rewards is slow or down during a send (5xx, `service_unavailable`, a 504 that may still have gone through, the post not visible yet) | The same `idempotency_key` is sent again every minute (inside the step while there is time) until 25 minutes after posting, so a submit never runs twice; then the post goes `send_by_hand` with the minutes left, or `missed`. The flow itself never fails. |
+| A Content Rewards step raises (a client bug, a Secrets error) | `submit.send` catches it: the post goes `send_by_hand` (`not_sent_by_app`) while there is time, else `missed`, logged at error. Each CR step is also wrapped like `distil`, so `settle-clip`, the 48-hour metrics and the vector step still run. |
+| CR's pilot has not granted the write scope | `CRCONN read_only`: campaigns and money are read, every campaign post goes `send_by_hand` with a reminder, and the setup card offers the ready email; every 3 days (at most 5) a notification asks him to try Connect again. |
+| The CR refresh token is dead (`invalid_grant`, 401), or 90 days have passed | `CRCONN needs_reconnect`: a card and a notification "Sign in to Content Rewards again on your Mac, so your clips keep getting sent."; sends go `send_by_hand` meanwhile. A daily keep-alive refresh keeps the 30-day unused limit from ending it. |
+| Two Lambdas want to refresh the CR token at once | The `CRCONN` lease lets one refresh; the others wait up to 5 s and re-read the secret by its `VersionId`. A lost answer is retried once at once with the same refresh token; a Disconnect during a refresh throws the result away. |
+| CR answers `permission_denied` to the connection itself | `CRCONN.blocked`, Check it says "Content Rewards stopped Clip Factory for now. You send clips yourself until it's fixed."; cleared by the next good call. |
+| CR answers an unknown or "bug on our side" error | Logged at error; `send_feedback` to CR at most once per code per day (no personal data, URLs or tokens); the post goes `send_by_hand`. |
+| Too many of the owner's clips wait for the brand | The campaign gets the hard stop `held` (Make clips and Upload refused with the sentence); the poller clears it when fewer are pending, or after 24 hours. |
+| The rules read fails, or takes over 3 minutes | `rulesState: failed`, the hard stop "I couldn't read the rules. Tap Check now, or paste them below." |
+| The public campaign JSON fails | The page's Open Graph line fills the name and pay; when both fail the add answers `platform_down`. A 404 means the campaign ended. |
+| The CR campaign can't be matched for sure (two siblings with the same name) | `idMatch: ambiguous`: never sent automatically, the owner sends by hand with the reminder. |
+| The desktop door can't open (every port of 47811–47815 busy) | The `no_port` card: "Clip Factory couldn't start the sign-in. Quit Clip Factory, open it again, then tap Connect Content Rewards." |
 
 ## Cost notes
 
@@ -1082,13 +1290,14 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | EventBridge rule + `cf-prod-stats` | about 2,900 ticks a month (every 15 min), each a few seconds; post writes and 90-day `STAT#` snapshots | cents |
 | YouTube, TikTok, Instagram, Facebook APIs | Free within their quotas; the budgets stay well under them | $0 |
 | X API | Pay per use: $0.015 per post; about $0.005 per post read, a post read again on the same UTC day free, so about $0.15 per post over its 30 days | posts and reads together capped at $10 by the app ([DEPLOYMENT.md](DEPLOYMENT.md#x-api-credits-for-clip-numbers)) |
-| AWS Secrets Manager | At most about 16 secrets (the state key, and an app, token and short-lived pending secret per platform) at $0.40 each, plus API calls (cached 5 minutes) | about $6 at most |
+| AWS Secrets Manager | At most about 18 secrets (the state key, an app, token and short-lived pending secret per platform, and Content Rewards' app and token) at $0.40 each, plus API calls (cached 5 minutes) | about $7 at most |
 | `cf-prod-learn` | One small Fable 5.1 call per changed set of weekly picks | cents |
 | Bedrock, Claude Haiku 5.5 (help) | Only questions that found a match: about 1 to 2.5k input and 150 to 400 output tokens each; capped at 2,000 answers per 30 days | cents at normal use; a few dollars at the cap |
 | S3 | Clips kept; sources expire after 14 days | under $1 |
 | CloudFront | Web app, config, `version.json` checks, desktop downloads (about 10 MB each) | under $1 |
 | OpenSearch Serverless | not deployed (would have a standing minimum of OCUs) | $0 |
 | GitHub Actions | macOS and Windows runners for the desktop app | free (public repository) |
+| Content Rewards | `cf-prod-campaigns` (one small Lambda), one Bedrock call per campaign rules read (about $0.02), a few CR calls a tick (free), two more secrets | about $1 a month plus $0.02 a campaign read |
 
 `maxSourceHours` (default 6) is the main cost lever: it limits how much audio is transcribed and read by Claude, and
 how much picture the two models watch. There is no cost ceiling on a job (the owner's decision of 2026-11-17); the
@@ -1153,6 +1362,20 @@ only switch is `CF_DEEP=off` (Terraform `deep_analysis_enabled = false`), which 
   and Google deletes OAuth clients unused for 6 months; X charges per post.
 - **Clips kept before a platform was connected** are not posted automatically after Connect
   ([roadmap](ROADMAP.md#phase-2-social-integrations)).
+- **Content Rewards' sign-in is an alpha and a pilot.** Until CR lets the owner's account in, there are two cases. If
+  the sign-in works without `my_submissions:write` (`read_only`), Clip Factory reads campaigns and money and reminds
+  him to send each clip himself. If CR refuses the sign-in (`not_allowed`), there is no `CRCONN` connection: nothing
+  is read, membership is "Check it yourself" (he looks for **Submit clip** and pastes the rules), every clip is sent
+  by hand, and Money says "Connect Content Rewards to see your campaign money." The API version is pinned
+  (`2026-10-01`) and unknown fields are tolerated; what is still unverified until the first real Connect is in
+  [CONTRACTS.md §38.21](CONTRACTS.md#3821-not-verified-live-each-is-checked-at-the-owners-first-connect-or-first-campaign-post).
+- **Content Rewards Connect needs the Mac app** (CR only returns to `127.0.0.1`; the door is macOS only), and a sign-in
+  again at least every 90 days. Joining or applying stays in the CR app (no tool for it), and the campaigns' reference
+  files (logos, footage) are not in the API, so the owner adds the logo.
+- **30 minutes to send.** CR takes a post only in its first 30 minutes live; Clip Factory stops trying at 25 and the
+  reminder covers the rest. TikTok campaign clips wait for TikTok's audit (private posts can't earn); Instagram and
+  Facebook carry the disclosure only in the caption and on the video; campaigns that want drafts first or the brand's
+  own sound are refused.
 - **A new app address breaks Connect.** The redirect URIs and website addresses pasted on the platforms contain the
   CloudFront and REST API hosts; after a custom domain or a rebuilt REST API, redo the "return address" steps (Check it
   reports `redirect_wrong`).
