@@ -1012,7 +1012,9 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
       changed("money");
     },
     moneyArrivedOnWhop() {
-      state.money = { ...state.money, onItsWayCents: 0 };
+      // As the API (contentrewards/money.py): a move that finishes is kept as movedAt, for every device.
+      const moved = (state.money.onItsWayCents ?? 0) > 0;
+      state.money = { ...state.money, onItsWayCents: 0, ...(moved ? { movedAt: iso(now()) } : {}) };
       changed("money");
     },
     proofDue(postId: string) {

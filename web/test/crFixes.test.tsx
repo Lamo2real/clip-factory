@@ -19,6 +19,7 @@ const { CrSetup, crStepHome } = await import("../src/screens/settings/setup/CrSe
 const { ToastProvider } = await import("../src/components/Toasts.tsx");
 const { CrPostLines } = await import("../src/components/CrPostLine.tsx");
 const lib = await import("../src/lib/contentRewards.ts");
+const lib2 = await import("../src/screens/campaigns/bits.tsx");
 
 const conn = (over: Partial<CrConnection> = {}): CrConnection => ({
   status: "connected",
@@ -227,6 +228,78 @@ describe("the setup page (§38.3)", () => {
     const connects = [...host.querySelectorAll("button:not(.gstep__head)")].filter((b) => /Connect (Content Rewards|again)/.test(b.textContent ?? ""));
     expect(connects.map((b) => b.textContent)).toEqual(["Connect again"]);
     expect(vermilion()).toEqual([]);
+  });
+
+  it("Content Rewards said no? wears one info mark, in the number's place (never two)", async () => {
+    current = { crOverview: async () => overview(conn({ status: "read_only", canSubmit: false, stepsDone: ["ready-account", "ready-socials"] })), getSetup: async () => setupNone };
+    await draw(<CrSetup />);
+    const head = host.querySelector('[data-step="connect-pilot"] .gstep__head')!;
+    expect(head.textContent).toContain("Content Rewards said no?");
+    expect(head.querySelectorAll(".gstep__icon")).toHaveLength(0);
+    expect(head.querySelectorAll(".gstep__num svg")).toHaveLength(1);
+    // The mark and the open/close chevron: nothing else draws in the row.
+    expect(head.querySelectorAll("svg")).toHaveLength(2);
+    // Numbered steps keep their number and their own picture.
+    const step1 = host.querySelector('[data-step="ready-account"] .gstep__head')!;
+    expect(step1.querySelectorAll(".gstep__icon")).toHaveLength(1);
+  });
+
+  it("phones: steps 1's lines sit above the pinned pair's box, which starts with the pair's room", async () => {
+    const before = window.matchMedia;
+    const rect = HTMLElement.prototype.getBoundingClientRect;
+    window.matchMedia = ((q: string) => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {} })) as unknown as typeof matchMedia;
+    // A phone: the lines run to the bottom of the first screen, so the box starts below the pinned spot (jsdom lays
+    // nothing out).
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      const top = this.classList.contains("gstep__rest") ? innerHeight + 10 : 0;
+      return { top, bottom: top, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON() {} } as DOMRect;
+    };
+    try {
+      current = { crOverview: async () => overview(conn({ status: "not_connected", canSubmit: false })), getSetup: async () => setupNone };
+      await draw(<CrSetup />);
+      const body = host.querySelector('[data-step="ready-account"] .gstep__body')!;
+      const rest = body.querySelector(".gstep__rest")!;
+      const say = body.querySelector(".gstep__say")!;
+      const pin = rest.querySelector(".cr-pin")!;
+      expect(rest.classList.contains("has-room")).toBe(true);
+      // Every line of the step comes before the sticky box (so the pair can never ride up over one), the pair last.
+      expect(rest.contains(say)).toBe(false);
+      expect(say.compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(rest.lastElementChild).toBe(pin);
+      expect([...pin.querySelectorAll("a, button")].map((b) => b.textContent?.replace("(opens in a new tab)", "").trim())).toEqual(["Open Content Rewards", "I have an account"]);
+      // The room is the pair's own height (0 in jsdom, which lays nothing out).
+      expect((rest as HTMLElement).style.getPropertyValue("--pin-room")).toBe("0px");
+      // Only the open, pinned step with its own answer gets the room.
+      expect(host.querySelectorAll(".gstep__rest.has-room")).toHaveLength(1);
+    } finally {
+      window.matchMedia = before;
+      HTMLElement.prototype.getBoundingClientRect = rect;
+    }
+  });
+
+  it("a tall touch screen whose lines end high: the same order, but no room (it would only be an empty gap)", async () => {
+    const before = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {} })) as unknown as typeof matchMedia;
+    try {
+      current = { crOverview: async () => overview(conn({ status: "not_connected", canSubmit: false })), getSetup: async () => setupNone };
+      await draw(<CrSetup />);
+      const body = host.querySelector('[data-step="ready-account"] .gstep__body')!;
+      const rest = body.querySelector(".gstep__rest")!;
+      expect(rest.contains(body.querySelector(".gstep__say"))).toBe(false);
+      expect(rest.lastElementChild).toBe(rest.querySelector(".cr-pin"));
+      expect(rest.classList.contains("has-room")).toBe(false);
+    } finally {
+      window.matchMedia = before;
+    }
+  });
+
+  it("the pair's room: only where the pinned pair can ever reach the top of its box", () => {
+    // 812 × 375 phone, pinned spot 724, pair 106 tall: a box from 738 down (lines ending low) needs it.
+    expect(lib2.needsPinRoom(738, 14, 724, 106)).toBe(true);
+    // Within one gap of it: still the room, so the pair never sits on the box's first line.
+    expect(lib2.needsPinRoom(610, 14, 724, 106)).toBe(true);
+    // An 820 × 1180 tablet: the box starts at 738, the pinned spot is 1092; the pair never gets up there.
+    expect(lib2.needsPinRoom(738, 14, 1092, 106)).toBe(false);
   });
 
   it("an Ask button for a join or money step lands where that step is", () => {

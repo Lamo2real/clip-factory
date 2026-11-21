@@ -221,6 +221,33 @@
     padding: 6px 12px;
   }
 }
+/* What the apps and days change draws no box of its own (the page's grid lays out its parts as before)… */
+.dash-filtered {
+  display: contents;
+}
+/* …except on phones and touch tablets while All your money is on the page (§39.2): that part is the dock's sticky box,
+   so the dock comes with the cards it changes, rests at the bottom right while they are on screen, and never floats
+   over All your money above them. It stays first in the reading and tab order; it only shows last (its sticky end). */
+.money-dash.dock-with-cards .dash-filtered {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  min-width: 0;
+}
+.money-dash.dock-with-cards .money-dock {
+  position: sticky;
+  order: 1;
+  left: auto;
+  right: auto;
+  flex: none;
+}
+/* Touch tablets: only as wide as it needs, at the window's right end as before (24 px in, past the page's gutter). */
+@media (min-width: 768px) {
+  .money-dash.dock-with-cards .money-dock {
+    align-self: flex-end;
+    margin-right: calc(max(24px, env(safe-area-inset-right)) - max(var(--gutter), env(safe-area-inset-right)));
+  }
+}
 /* Room under the last clip so it scrolls clear of the dock and of Ask above it. */
 html.has-money-dock .app:has(> .help-launcher) .shell,
 html.has-money-dock .shell {
