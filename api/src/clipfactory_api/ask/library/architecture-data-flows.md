@@ -1175,7 +1175,8 @@ him money can reach him (or that it can't although he may earn), what he earned 
 [ADR-64](DECISIONS.md#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner),
 the owner's steps in [SETUP_POSTING.md](SETUP_POSTING.md#get-paid)). No new Lambda, table, index, bucket, role or
 Terraform-made secret: seven routes under `/v1/getpaid` (plus `{"grant": "payments"}` on the YouTube connect route),
-new sort keys, two stream filters changed in place and one api setting. It is part of **13** in the diagram.
+new sort keys, two stream filters changed in place and one api setting. It isn't drawn in the overview diagram
+(`cf-prod-money` isn't either); the diagram below shows it.
 
 **What it reads.** Only two places report payout facts to an app, so only they get a connection:
 

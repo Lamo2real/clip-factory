@@ -1,5 +1,5 @@
 {
-  "version": "fcb62aff818c",
+  "version": "557302730879",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -3642,6 +3642,8 @@
         "payout status",
         "status check",
         "can money reach me",
+        "can money reach you",
+        "money reach me",
         "you said its done",
         "not set up yet",
         "not set up",
@@ -3697,10 +3699,10 @@
         "exact number",
         "all my bank accounts"
       ],
-      "answer": "Google and Whop tell Clip Factory what they sent. On **Money**, **All your money** shows **Sent to your bank, so far**: one total for each money type, never adding dollars and kronor together. TikTok, Instagram, Facebook and X don't tell apps, so they say **Not available**. Clip Factory can't see your bank. Look in your bank's app to see what arrived.",
+      "answer": "Google and Whop tell Clip Factory what they sent. On **Money**, **All your money** shows it under each place, and **Sent to your bank, so far** has one total for each money type. Dollars and kronor are never added together. TikTok, Instagram, Facebook and X don't tell apps, so they say **Not available**. Clip Factory can't see your bank. Look in your bank's app to see what arrived.",
       "steps": [
         "Tap **Money**. Find **Sent to your bank, so far** under **All your money**.",
-        "Each line says who sent it: **Sent to your bank by Google** or **by Whop**.",
+        "Under each place in **All your money**, a small line says what that place sent so far, like **Sent to your bank by Google**.",
         "Google's money reaches your bank up to 7 workdays after Google sends it. Whop says when.",
         "To see each payment, open **Get paid** and tap **YouTube** or **Content Rewards**.",
         "Whop counts all your Whop money, not only Content Rewards.",
@@ -3776,7 +3778,11 @@
         "live gifts",
         "payoneer",
         "tiktok studio",
-        "can i earn on tiktok"
+        "can i earn on tiktok",
+        "get paid on tiktok",
+        "get paid by tiktok",
+        "tiktok payout",
+        "tiktok payouts"
       ],
       "answer": "Not from Creator Rewards: TikTok lists only the US, UK, Germany, Japan, South Korea, France, Mexico and Brazil. **Video Gifts** and **LIVE Gifts** may work in Sweden, so look in **TikTok Studio**. Gifts need you to be 18 or older with a Personal account. TikTok pays to PayPal, your bank or Payoneer. TikTok doesn't tell apps what you earn.",
       "steps": [

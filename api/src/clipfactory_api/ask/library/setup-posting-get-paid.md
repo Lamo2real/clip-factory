@@ -70,8 +70,9 @@ Instagram needs you."
 Two places tell apps what they sent: Google (YouTube's money, after "Allow payment reading") and Whop (Content
 Rewards' money, after "Connect Whop"). Their payments show as **"Sent to your bank by Google"** or **"Sent to your bank
 by Whop"**, tagged "YouTube says" or "Whop says". They are never called "Reached your bank": Google's date is the day
-Google sent it, and Whop's "sent" means it left Whop. Each line says when it should arrive: "Your bank gets it up to 7
-workdays after Google sends it." or "Whop says it should arrive by …" ("within 5 workdays" when Whop gives no date).
+Google says it paid you (Clip Factory hasn't checked this live yet), and Whop's "sent" means it left Whop. Each line
+says when it should arrive: "Your bank gets it up to 7 workdays after Google sends it." or "Whop says it should arrive
+by …" ("within 5 workdays" when Whop gives no date).
 
 - **On Money**, under each row of **All your money**, one small grey line, for example "Sent to your bank by Google:
   kr 2 468,00 so far · YouTube says". Under the 30-day total, the block **"Sent to your bank, so far"**: one line per
@@ -95,6 +96,9 @@ workdays after Google sends it." or "Whop says it should arrive by …" ("within
   - YouTube without payment reading: "Clip Factory can't see YouTube payments yet." with "Allow payment reading".
   - Content Rewards without Connect Whop: "Sent to your bank: not available from Content Rewards. Look on Whop:
     **Balances**."
+
+Clip Factory tells you when Google or Whop says your money is on hold or sent ("Your YouTube money is on hold. Tap to
+see why."). Turn it off with **Money on hold or sent to your bank** in Settings › App & account › Notifications.
 
 ### How a Get paid page works
 
@@ -529,9 +533,9 @@ is spread over weeks. Clip Factory tells you when a place needs you again.
 
 ### Sources (checked on 21 Nov 2026)
 
-Each step and fact above was written from these pages, checked on 21 Nov 2026 for an owner in Sweden (273 claims,
-each checked a second time). Uncertain details are worded as "If you see…" or "may show this a little differently"
-on the cards. What could not be checked before the first real use is listed under "Not verified live" in
+Each step and fact above was written from these pages, checked on 21 Nov 2026 for an owner in Sweden (273 claims:
+212 checked a second time and confirmed, 60 not checked again, 1 corrected). Uncertain details are worded as "If you
+see…" or "may show this a little differently" on the cards. What could not be checked before the first real use is listed under "Not verified live" in
 [CONTRACTS.md §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live).
 
 **YouTube and AdSense for YouTube**
@@ -627,29 +631,29 @@ on the cards. What could not be checked before the first real use is listed unde
   [read_insights](https://developers.facebook.com/docs/permissions/reference/read_insights)
 
 **TikTok**
+
+A TikTok help page named by its number is `www.tiktok.com/support/faq_detail` with `id=` and that number. Those links
+are written in words because Ask hides every link that has a `?` part.
+
 - Creator Rewards: [the program and its country list](https://www.tiktok.com/creator-academy/en/article/creator-rewards-program),
   [eligibility](https://www.tiktok.com/creator-academy/en/article/eligibility),
-  [how it pays]([hidden]),
-  [who can join]([hidden]),
-  [its terms for the EEA](https://www.tiktok.com/legal/page/global/tiktok-creator-rewards-program-eea/en)
+  TikTok's help pages "how it pays" and "who can join" (help page numbers 7543897461245450808 and
+  7581821550694013452), [its terms for the EEA](https://www.tiktok.com/legal/page/global/tiktok-creator-rewards-program-eea/en)
 - TikTok's help centre set to Sweden and to Germany (its **Monetization**, **LIVE** and **Account** lists): for Sweden
   it leaves out Creator Rewards, Series and Shop, and shows LIVE Gifts, Video Gifts and withdrawals (an inference)
-- Gifts and money: [going LIVE]([hidden]),
-  [LIVE Gifts]([hidden]),
-  [the LIVE rewards balance]([hidden]),
-  [Video Gifts]([hidden]),
+- Gifts and money: TikTok's help pages on going LIVE (7543604790438451768), LIVE Gifts (7543897462415579704), the
+  LIVE rewards balance (7636676986282252820) and Video Gifts (7581821551121783352),
   [the EEA Rewards Policy](https://www.tiktok.com/legal/page/global/rewards-policy-eea/en) (dollars),
   [Payment limits and transaction fees](https://www.tiktok.com/platform/legal/page/payment-limit-and-fees) (Sweden:
-  PayPal, bank or Payoneer; the same table from TikTok's wallet), [why a withdrawal fails]([hidden]),
-  [withdrawal history]([hidden]),
-  [old withdrawal terms](https://www.tiktok.com/legal/page/global/cash-award-withdrawal-terms/en) (2019),
-  [the US tax form (W-8BEN)]([hidden]),
-  [changing your account's region]([hidden])
+  PayPal, bank or Payoneer; the same table from TikTok's wallet), TikTok's help pages on why a withdrawal fails
+  (7387751569967864326) and withdrawal history (7387751569967798790),
+  [old withdrawal terms](https://www.tiktok.com/legal/page/global/cash-award-withdrawal-terms/en) (2019), and
+  TikTok's help pages on the US tax form, W-8BEN (7581821550676957752), and changing your account's region
+  (7543896418571033093)
 - Other tools: [Subscription](https://www.tiktok.com/creator-academy/en/article/Subscription) and
   [setting it up](https://www.tiktok.com/creator-academy/en/article/Setting-up-your-Subscription),
   [Super Fan](https://www.tiktok.com/creator-academy/en/article/subscription-or-superfan),
-  Series ([one]([hidden]),
-  [two]([hidden])),
+  TikTok's two help pages on Series (7639210131833756180 and 7636670084748089876),
   [TikTok Shop's seller site](https://seller.tiktok.com/uk) (no Sweden),
   [TikTok One](https://ads.tiktok.com/help/article/how-creators-can-sign-up-for-tiktok-one) and
   [its payouts](https://ads.tiktok.com/resources/help/article/how-creators-can-manage-payouts-from-tiktok-one)
@@ -660,7 +664,7 @@ on the cards. What could not be checked before the first real use is listed unde
   [data types](https://developers.tiktok.com/docs/en/data-portability-data-types),
   [get started](https://developers.tiktok.com/docs/en/data-portability-api-get-started),
   [add a data request](https://developers.tiktok.com/docs/en/data-portability-api-add-data-request)),
-  [downloading your data in the app]([hidden]),
+  TikTok's help page on downloading your data in the app (7543597460594285112),
   [Research API](https://developers.tiktok.com/products/research-api),
   [monetization for developers](https://developers.tiktok.com/docs/en/monetization-overview) (mini games only)
 - PayPal (where TikTok can pay): [REST APIs](https://developer.paypal.com/api/rest/) and
