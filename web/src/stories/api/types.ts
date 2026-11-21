@@ -1,4 +1,5 @@
 // Lamo Stories API shapes (docs/CONTRACTS.md §45.6), the web's copy. The Python side uses the same keys.
+// Changed only through docs/CONTRACTS.md §45.6 (builders ask the lead).
 import type {
   CaptionCue,
   CharacterLook,
@@ -21,14 +22,16 @@ export const CLIPS_WORKSPACE_ID = "clips";
 export const FIRST_STORIES_WORKSPACE_ID = "stories";
 
 export interface StoriesConfig {
-  /** 15..90, default 45 */
+  /** 15..90, default 45; 30..60 suggested */
   defaultDurationSec: number;
   captionsOn: boolean;
   musicOn: boolean;
   /** a key of clipModels in config/models.json */
   storyModel: string;
-  imageProvider: "builtin" | "nova-canvas";
-  postPreset: boolean;
+  providers: { images: "builtin-rig" | "nova-canvas"; animation: "builtin-2d"; audio: "builtin-synth" };
+  /** Film & Animation, Autos & Vehicles, Comedy, Entertainment, Education (default "27") */
+  youtubeCategory: "1" | "2" | "23" | "24" | "27";
+  youtubePrivacy: "public" | "unlisted" | "private";
 }
 
 export interface Workspace {
@@ -104,7 +107,6 @@ export type StoryStatus =
   | "producing"
   | "needs_check"
   | "review"
-  | "changes_requested"
   | "approved"
   | "rejected"
   | "published"
@@ -112,7 +114,8 @@ export type StoryStatus =
 
 export interface StoryInput {
   ideaId?: string;
-  concept?: VideoConcept;
+  /** "type a concept": a short form the writer expands */
+  brief?: { title: string; logline: string; category: IdeaCategory };
   title?: string;
   /** 1..3 */
   characterIds: string[];
@@ -131,9 +134,11 @@ export interface Captions {
 }
 
 export interface StorySafety {
-  topicId: string;
-  status: "ok" | "problems";
+  /** null: no driving advice, only the "nothing dangerous" check */
+  topicId: string | null;
+  status: "pending" | "ok" | "problems";
   problems: string[];
+  checkedScriptVersion: number | null;
   citations: { publisher: string; title: string; url: string; section?: string }[];
 }
 
@@ -157,6 +162,7 @@ export interface Story {
   contentType: "animation";
   title: string;
   status: StoryStatus;
+  category: IdeaCategory;
   ideaId: string | null;
   characterIds: string[];
   durationSec: number;
@@ -170,6 +176,7 @@ export interface Story {
   coverUrl?: string;
   storageLocation: string;
   stale: StepKey[];
+  safetyTopicId: string | null;
   safety: StorySafety | null;
   reviewNote: string | null;
   currentJobId: string | null;
@@ -182,7 +189,8 @@ export interface Story {
 }
 
 export interface StoryStep {
-  key: StepKey;
+  /** a portrait job has one step of its own: { key: "portrait", label: "Draw the picture" } */
+  key: StepKey | "portrait";
   label: string;
   status: "pending" | "running" | "done" | "failed" | "skipped";
   message?: string;
@@ -195,12 +203,24 @@ export interface StoryStep {
 export interface ProductionJob {
   jobId: string;
   workspaceId: string;
+  contentType: "animation" | "character";
+  /** storyId, or characterId for a portrait */
   contentId: string;
   jobType: "produce" | "changes" | "portrait";
   status: "queued" | "running" | "ready" | "needs_check" | "failed" | "canceled";
   steps: StoryStep[];
   progress: number;
-  configuration: { from: StepKey; sceneIds: string[] | null; note: string | null; characterId?: string };
+  configuration: { run: (StepKey | "portrait")[]; from: StepKey | null; sceneIds: string[] | null; note: string | null };
+  meta: {
+    writerModel: string | null;
+    engineVersion: number | null;
+    seed: number | null;
+    scriptVersion: number | null;
+    targetSec: number | null;
+    actualSec: number | null;
+    safetyTopicId: string | null;
+    providers: Record<string, string>;
+  };
   error?: string;
   createdAt: string;
   updatedAt: string;
@@ -209,7 +229,9 @@ export interface ProductionJob {
 export interface SceneEdit {
   sceneId: string;
   caption?: string | null;
+  /** 2..15 */
   durationSec?: number;
+  /** replaces that scene's whole effects list: add, move, remove */
   sfx?: SfxCue[];
 }
 
@@ -218,7 +240,6 @@ export interface StoryPatch {
   title?: string;
   postCaptions?: Partial<Captions>;
   captions?: CaptionCue[];
-  sfx?: SfxCue[];
   musicMood?: MusicMood;
   captionsOn?: boolean;
   scenes?: SceneEdit[];
@@ -232,7 +253,6 @@ export type AssetKind =
   | "scene_still"
   | "character_ref"
   | "portrait"
-  | "generated_image"
   | "audio"
   | "captions";
 
@@ -263,8 +283,8 @@ export interface ProviderStatus {
 export interface GuidanceTopic {
   id: string;
   title: string;
-  steps: { id: string; text: string; shown: boolean }[];
-  donts: string[];
+  steps: { id: string; text: string; shown: boolean; why?: string }[];
+  donts: { id: string; text: string; shown: boolean; why?: string }[];
   caveats: string[];
   citations: { publisher: string; title: string; url: string; section?: string }[];
 }
@@ -282,8 +302,12 @@ export interface SocialAccount {
   connectedAt: string | null;
   missing: string[];
   reason: string | null;
+  reconnectBy: string | null;
   choices: { id: string; name: string; avatarUrl?: string; usedByClips: boolean }[] | null;
+  /** plain sentences: this platform's rules for a second account */
   limits: string[];
+  /** e.g. "Lamo Clips may have lost Facebook. …" */
+  warning: string | null;
 }
 
 export interface ClipsDestination {
@@ -292,17 +316,30 @@ export interface ClipsDestination {
   name: string | null;
 }
 
-export interface PublishOptions {
-  tiktok?: {
-    privacyLevel: string;
-    disableComment: boolean;
-    disableDuet: boolean;
-    disableStitch: boolean;
-    brandContent: boolean;
-    brandOrganic: boolean;
-  };
-  youtubePrivacy?: "public" | "unlisted" | "private";
+export interface TikTokCreator {
+  nickname: string;
+  username: string;
+  avatarUrl: string | null;
+  privacyOptions: string[];
+  commentDisabled: boolean;
+  duetDisabled: boolean;
+  stitchDisabled: boolean;
+  maxDurationSec: number;
 }
+
+/** Flat, the keys the platform publishers read (CONTRACTS §17.6, §17.8); the server allow-lists them per platform. */
+export type PublishOptions =
+  | { privacy?: "public" | "unlisted" | "private"; category?: string; notifySubscribers?: boolean } // youtube
+  | {
+      privacyLevel: string;
+      disableComment: boolean;
+      disableDuet: boolean;
+      disableStitch: boolean;
+      brandContent: boolean;
+      brandOrganic: boolean;
+    } // tiktok
+  | { shareToFeed?: boolean } // instagram
+  | Record<string, never>; // facebook, x
 
 export interface PublishTarget {
   platform: Platform;
@@ -327,10 +364,26 @@ export interface PublishingJob {
 }
 
 export interface StoriesDashboard {
-  counts: { made: number; review: number; published: number; producing: number; needsCheck: number };
+  counts: { made: number; review: number; published: number; producing: number; needsCheck: number; needsYou: number };
+  needsYou: {
+    publishingJobId: string | null;
+    storyId: string | null;
+    title: string;
+    platform: Platform | null;
+    sentence: string;
+    href: string;
+  }[];
   producing: { storyId: string; title: string; step: StepKey; progress: number }[];
-  accounts: { platform: Platform; connected: boolean; accountName: string | null }[];
-  performance: { views: number; likes: number; comments: number; shares: number; posts: number; checkedAt: string | null };
+  accounts: { platform: Platform; status: SocialAccount["connectionStatus"]; accountName: string | null }[];
+  performance: {
+    views: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    posts: number;
+    checkedAt: string | null;
+    lastAt: string | null;
+  };
   activity: {
     at: string;
     kind: "made" | "approved" | "rejected" | "changes" | "posted" | "failed";
@@ -374,13 +427,16 @@ export interface StoriesApi {
   listStories(ws: string, q?: { status?: StoryStatus | "all"; limit?: number; cursor?: string }): Promise<{ stories: Story[]; nextCursor: string | null }>;
   createStory(ws: string, body: StoryInput): Promise<{ story: Story; job: ProductionJob }>;
   getStory(ws: string, storyId: string): Promise<{ story: Story; job: ProductionJob | null; script: StoryScript | null }>;
+  storyJobs(ws: string, storyId: string): Promise<ProductionJob[]>;
   patchStory(ws: string, storyId: string, patch: StoryPatch): Promise<{ story: Story; script: StoryScript | null }>;
   deleteStory(ws: string, storyId: string): Promise<void>;
-  produce(ws: string, storyId: string, body?: { from?: StepKey; sceneIds?: string[]; note?: string }): Promise<{ story: Story; job: ProductionJob }>;
+  /** no `from`: runs exactly the story's stale steps ("Try again", "Check again", "Remake") */
+  produce(ws: string, storyId: string, body?: { from?: StepKey; sceneIds?: string[] }): Promise<{ story: Story; job: ProductionJob }>;
   cancelStory(ws: string, storyId: string): Promise<{ story: Story; job: ProductionJob | null }>;
   approve(ws: string, storyId: string, version: number): Promise<Story>;
   reject(ws: string, storyId: string, reason?: string): Promise<Story>;
-  requestChanges(ws: string, storyId: string, body: { note: string; sceneIds?: string[] }): Promise<{ story: Story; job: ProductionJob }>;
+  /** a note, scene ids or both; scene ids without a note is "Remake this scene" (a new take) */
+  requestChanges(ws: string, storyId: string, body: { note?: string; sceneIds?: string[] }): Promise<{ story: Story; job: ProductionJob }>;
   download(ws: string, storyId: string): Promise<{ url: string; filename: string }>;
 
   library(ws: string, q?: { kind?: AssetKind | "all"; storyId?: string; characterId?: string; limit?: number; cursor?: string }): Promise<{ items: LibraryItem[]; nextCursor: string | null }>;
@@ -392,9 +448,10 @@ export interface StoriesApi {
   chooseSocial(ws: string, platform: Platform, choiceId: string): Promise<SocialAccount>;
   shareWithClips(ws: string, platform: Platform): Promise<SocialAccount>;
   checkSocial(ws: string, platform: Platform): Promise<SocialAccount>;
+  tiktokCreatorInfo(ws: string): Promise<TikTokCreator>;
   disconnectSocial(ws: string, platform: Platform): Promise<void>;
 
   publish(ws: string, storyId: string, targets: PublishTarget[]): Promise<PublishingJob[]>;
   listPublishing(ws: string, storyId?: string): Promise<PublishingJob[]>;
-  retryPublishing(ws: string, publishingJobId: string, options?: PublishOptions): Promise<PublishingJob>;
+  retryPublishing(ws: string, publishingJobId: string, body?: { options?: PublishOptions; confirmAccount?: string }): Promise<PublishingJob>;
 }

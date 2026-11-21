@@ -16,7 +16,7 @@ export async function loadStoriesApi(): Promise<StoriesApi> {
   if (!loading) {
     loading = (async () => {
       if (import.meta.env.VITE_MOCK === "1") {
-        const { mockStoriesApi } = await import("./mock.ts");
+        const { mockStoriesApi } = await import("./mock/index.ts");
         current = mockStoriesApi();
       } else {
         const { httpStoriesApi } = await import("./http.ts");

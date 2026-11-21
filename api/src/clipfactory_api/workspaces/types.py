@@ -43,7 +43,9 @@ PJOB_SK: Final = "PJOB#"
 ASSET_SK: Final = "ASSET#"
 SOCIAL_SK: Final = "SOCIAL#"
 PUBJOB_SK: Final = "PUBJOB#"
-ITEM_PREFIXES: Final = (IDEA_SK, CHAR_SK, STORY_SK, PJOB_SK, ASSET_SK, SOCIAL_SK, PUBJOB_SK)
+ACT_SK: Final = "ACT#"  # ACT#{at}#{id}: recent activity, ttl 90 days (§45.16.3)
+PROVIDER_SK: Final = "PROVIDER#"  # PROVIDER#{kind}#{providerId}: written only by the agent after a real call (§45.11.6)
+ITEM_PREFIXES: Final = (IDEA_SK, CHAR_SK, STORY_SK, PJOB_SK, ASSET_SK, SOCIAL_SK, PUBJOB_SK, ACT_SK, PROVIDER_SK)
 
 # Item `type` values (never "job", "clip", "post", "account", "setup": Lamo Clips readers filter on those).
 TYPE_WORKSPACE: Final = "workspace"
@@ -54,6 +56,8 @@ TYPE_PJOB: Final = "ws_pjob"
 TYPE_ASSET: Final = "ws_asset"
 TYPE_SOCIAL: Final = "ws_social"
 TYPE_PUBJOB: Final = "ws_pubjob"
+TYPE_ACTIVITY: Final = "ws_activity"
+TYPE_PROVIDER: Final = "ws_provider"
 
 
 def registry_pk(user_id: str) -> str:
@@ -85,6 +89,20 @@ def social_account_id(workspace_id: str, platform: str) -> str:
 
 WS_SECRET_PREFIX: Final = "cf-prod/workspaces/"  # noqa: S105 (a name prefix, not a secret); never under platforms/
 SECRET_KINDS: Final = ("token", "pending")
+
+
+# The identity field inside each platform's token secret (written by oauth.providers.exchange / chosen, kept by
+# refresh): the publishing check compares it with the job's and the account's externalAccountId (§45.14 rule 4).
+SECRET_IDENTITY: Final = {
+    "youtube": "channelId",
+    "tiktok": "openId",
+    "instagram": "igUserId",
+    "facebook": "pageId",
+    "x": "xUserId",
+}
+
+# Workspace OAuth states start with this; Lamo Clips' start with "v1." (§45.13.2).
+WS_STATE_PREFIX: Final = "w1."
 
 
 def secret_name(prefix: str, workspace_id: str, platform: str, kind: str) -> str:

@@ -10,8 +10,10 @@
 - **Decision.** (CONTRACTS §45.14, §45.15) Option 2: `cf-prod-story-flow`. A publishing job records the account's
   identity at the tap; the flow re-checks the workspace, the story, the account (same partition, same platform,
   connected, same identity, not Lamo Clips' own unless shared on purpose) and builds the secret name from the checked
-  ids only. Its role can read `cf-prod/workspaces/*` and the `…/app` secrets and nothing else; the Lamo Clips roles
-  cannot read `cf-prod/workspaces/*`.
-- **Consequences.** A code mistake in either flow cannot reach the other workspace's tokens (Terraform tests hold the
-  policies). A reconnect to a different account stops queued jobs instead of sending them somewhere new. Lamo Stories
-  numbers are read by the flow at 1 h, 24 h and 72 h, not by the 15-minute stats poller.
+  ids only, and checks the identity inside the secret itself. Its role can read `cf-prod/workspaces/*` and the five
+  `…/app` secrets and nothing else, and can write DynamoDB only under `USER#*#WS#*` and the shared `RATE#*` budgets;
+  the Lamo Clips roles cannot read `cf-prod/workspaces/*`.
+- **Consequences.** A code mistake in either flow cannot reach the other workspace's tokens or Lamo Clips' items
+  (Terraform tests hold the policies). A reconnect to a different account stops queued jobs instead of sending them
+  somewhere new. Lamo Stories numbers are read by the flow at 1 h, 24 h, 72 h and 7 days, through the same rate
+  budgets as Lamo Clips, not by the 15-minute stats poller; the flow runs up to 9 days.

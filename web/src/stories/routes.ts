@@ -11,7 +11,7 @@ export type StoriesPage =
   | { name: "production_story"; storyId: string }
   | { name: "review" }
   | { name: "review_story"; storyId: string }
-  | { name: "library"; kind: string | null }
+  | { name: "library"; kind: string | null; storyId: string | null }
   | { name: "connections"; platform: string | null; result: string | null; ws: string | null }
   | { name: "settings" }
   | { name: "not_found" };
@@ -45,7 +45,7 @@ export function matchStories(pathname: string, search: string): StoriesPage {
     if (b === undefined) return { name: "review" };
     if (ID.test(b)) return { name: "review_story", storyId: b };
   }
-  if (a === "library" && b === undefined) return { name: "library", kind: q.get("kind") };
+  if (a === "library" && b === undefined) return { name: "library", kind: q.get("kind"), storyId: q.get("story") };
   if (a === "connections" && b === undefined)
     return { name: "connections", platform: q.get("platform"), result: q.get("result"), ws: q.get("ws") };
   if (a === "settings" && b === undefined) return { name: "settings" };
@@ -66,8 +66,13 @@ export function storiesHref(page: StoriesPage): string {
       return `${STORIES_ROOT}/production/${encodeURIComponent(page.storyId)}`;
     case "review_story":
       return `${STORIES_ROOT}/review/${encodeURIComponent(page.storyId)}`;
-    case "library":
-      return `${STORIES_ROOT}/library${page.kind ? `?kind=${encodeURIComponent(page.kind)}` : ""}`;
+    case "library": {
+      const q = new URLSearchParams();
+      if (page.kind) q.set("kind", page.kind);
+      if (page.storyId) q.set("story", page.storyId);
+      const qs = q.toString();
+      return `${STORIES_ROOT}/library${qs ? `?${qs}` : ""}`;
+    }
     case "connections":
       return `${STORIES_ROOT}/connections`;
     case "not_found":

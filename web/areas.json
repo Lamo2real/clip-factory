@@ -89,5 +89,11 @@
   "config": "Clip making",
   "infra/modules/auth": "Sign in",
   "infra": "Speed",
-  "desktop": "Desktop app"
+  "desktop": "Desktop app",
+  "web/src/stories": "Behind the scenes",
+  "api/src/clipfactory_api/workspaces": "Behind the scenes",
+  "api/src/clipfactory_api/routes/workspaces": "Behind the scenes",
+  "api/src/clipfactory_api/flows/story_flow.py": "Behind the scenes",
+  "agent/src/clipfactory_agent/stories": "Behind the scenes",
+  "config/stories-guidance.json": "Behind the scenes"
 }

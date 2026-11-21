@@ -1773,9 +1773,11 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   story's script, so consistency is by construction; the writer (Claude) only picks from the engine's catalog and names
   characters by cast id; effects, character noises and music are synthesized with numpy, so there are no audio files
   and no licences. AI images (Nova Canvas) can be added later behind the rigs (ADR-75).
-- **Consequences.** Previews and videos match frame for frame (shared code, golden tests). The look is clean
-  flat-shaded 2D, not painted or realistic; new actions, props or sets are code in one file. The engine folder is
-  copied into the agent image, so the image tag hash includes it. Rendering 45 s takes a few minutes on the agent.
+- **Consequences.** Previews and videos use the same draw lists (shared code; the rasterizer is tested on fixed draw
+  lists). The look is clean flat-shaded 2D, not painted or realistic; new actions, props or sets are code in one
+  folder. The engine folder is copied into the agent image, so the image tag hash includes it, and an engine change
+  rebuilds the image (which replaces the image build trigger, as every agent change already does). Rendering 45 s
+  takes a few minutes on the agent.
 
 ## ADR-72 Separate social connections over the same developer apps
 
@@ -1787,15 +1789,21 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   again); (2) the same apps and the same callback, with the stored OAuth state telling the callback which workspace it
   serves, tokens under a second Secrets Manager prefix; (3) nest Lamo Stories tokens under `cf-prod/platforms/` (no IAM
   change, but every Lamo Clips function could read them).
-- **Decision.** (CONTRACTS §45.13) Option 2. The state item gains `workspaceId`; only then does the callback take the
-  workspace path, which writes `cf-prod/workspaces/{workspaceId}/{platform}/token` and a `SOCIAL#{platform}` item and
-  nothing of Lamo Clips. One account per platform per workspace. YouTube connects with `prompt=select_account
-  consent` and lists every channel the token can post to; Meta lists Pages. An identity equal to Lamo Clips' own is
-  held as `same_as_clips` until the owner says "Use it for both".
-- **Consequences.** No platform setup again. App keys are shared, so quotas and credits are shared (YouTube's daily
-  units, X's credits) and TikTok's Sandbox and review limits apply to both. Meta's page picker is per Facebook login:
-  unticking Lamo Clips' Page while connecting Lamo Stories would cut Lamo Clips off, so the page says so and checks
-  afterwards. The OAuth callback gains one branch, proven not to change the old path.
+- **Decision.** (CONTRACTS §45.13) Option 2. A Lamo Stories connect uses its own state format (`w1.` with the
+  workspace id inside the signature) and the callback routes on that prefix before verifying anything: `v1.` states
+  run today's code unchanged, `w1.` states always land on Lamo Stories' Connections page and write only
+  `cf-prod/workspaces/{workspaceId}/{platform}/token` and a `SOCIAL#{platform}` item. One account per platform per
+  workspace. YouTube connects the one channel picked in Google's picker (`prompt=select_account consent`): a token
+  posts to exactly one channel, so there is no channel list to choose from; Meta lists Pages. An identity equal to
+  Lamo Clips' own is held as `same_as_clips` until the owner says "Use it for both". Disconnect never calls a
+  platform's revoke endpoint (Google's and TikTok's revoke end the app's whole grant for that account, which can be
+  Lamo Clips' too, as §40 found for AdSense).
+- **Consequences.** No platform setup again. App keys are shared, so quotas, credits and the owner's monthly X limit
+  are shared (and counted together), and TikTok's Sandbox, private-account and review limits apply to both; a later
+  key change in Lamo Clips asks Lamo Stories to connect again. Meta's page picker is per Facebook login: unticking
+  Lamo Clips' Page while connecting Lamo Stories would cut Lamo Clips off, so the page says so and checks afterwards.
+  A Disconnect leaves the grant at the platform; the page says where to remove it by hand. The OAuth callback and
+  `hooks.py` gain one prefix branch, proven not to change the old path.
 
 ## ADR-73 Publishing isolation: checked before every call, no default account, IAM as the last wall
 
@@ -1809,11 +1817,13 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
 - **Decision.** (CONTRACTS §45.14, §45.15) Option 2: `cf-prod-story-flow`. A publishing job records the account's
   identity at the tap; the flow re-checks the workspace, the story, the account (same partition, same platform,
   connected, same identity, not Lamo Clips' own unless shared on purpose) and builds the secret name from the checked
-  ids only. Its role can read `cf-prod/workspaces/*` and the `…/app` secrets and nothing else; the Lamo Clips roles
-  cannot read `cf-prod/workspaces/*`.
-- **Consequences.** A code mistake in either flow cannot reach the other workspace's tokens (Terraform tests hold the
-  policies). A reconnect to a different account stops queued jobs instead of sending them somewhere new. Lamo Stories
-  numbers are read by the flow at 1 h, 24 h and 72 h, not by the 15-minute stats poller.
+  ids only, and checks the identity inside the secret itself. Its role can read `cf-prod/workspaces/*` and the five
+  `…/app` secrets and nothing else, and can write DynamoDB only under `USER#*#WS#*` and the shared `RATE#*` budgets;
+  the Lamo Clips roles cannot read `cf-prod/workspaces/*`.
+- **Consequences.** A code mistake in either flow cannot reach the other workspace's tokens or Lamo Clips' items
+  (Terraform tests hold the policies). A reconnect to a different account stops queued jobs instead of sending them
+  somewhere new. Lamo Stories numbers are read by the flow at 1 h, 24 h, 72 h and 7 days, through the same rate
+  budgets as Lamo Clips, not by the 15-minute stats poller; the flow runs up to 9 days.
 
 ## ADR-74 Safety videos only from checked guidance; Lamo Stories' AI calls keep the skills block
 
@@ -1841,7 +1851,9 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   eu-west-1; Nova Reel needs a bucket in us-east-1 and AI-realism labels the shared publishers do not set.
 - **Options.** (1) Hard-wire the built-in engine; (2) a registry per kind (writer, images, animation, audio) with
   one interface each, the built-in providers on, Nova Canvas built and off, Nova Reel interface only.
-- **Decision.** (CONTRACTS §45.11.6) Option 2. A provider is `on` only after a real call answered; the Providers list
-  says in one sentence what each missing one needs.
-- **Consequences.** The first videos are fully built-in. Switching on Nova Canvas adds AI portraits and painted
-  backgrounds; Nova Reel stays out until the owner wants a US bucket and the posting labels are added.
+- **Decision.** (CONTRACTS §45.11.6) Option 2. A provider is `on` only after a real call answered (its state is
+  stored by the agent); the Providers list says in one sentence what each missing one needs. Nova Canvas makes
+  character portraits shown in the app only, never part of a posted video, because the shared publishers mark posts
+  as not AI-generated.
+- **Consequences.** The videos are fully built-in. Switching on Nova Canvas adds AI portraits; AI backgrounds in videos
+  and Nova Reel stay out until the posting labels are added (and, for Reel, a US bucket).

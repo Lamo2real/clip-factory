@@ -1,5 +1,5 @@
 {
- "version": "9d4a5b1f1f10",
+ "version": "ddfadf1085bb",
  "parts": [
   {
    "id": "app-map",
@@ -272,8 +272,8 @@
   {
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Lamo Stories: a second, separate workspace (owner request, 2026-11-21)",
-   "line": "The owner asked for Lamo Stories, a second content studio inside Clip Factory that makes short animated story",
-   "chars": 67692
+   "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Lamo Stories",
+   "chars": 99977
   },
   {
    "id": "adr-01",
@@ -669,19 +669,19 @@
    "id": "adr-71",
    "title": "DECISIONS: ADR-71 One animation engine in TypeScript, drawn by the browser and by the agent",
    "line": "Context. Lamo Stories needs 30–60 s vertical cartoons without voice-over, with recurring characters that must",
-   "chars": 2201
+   "chars": 2359
   },
   {
    "id": "adr-72",
    "title": "DECISIONS: ADR-72 Separate social connections over the same developer apps",
    "line": "Context. The owner wants different accounts for Lamo Stories on every platform and no accidental posting to",
-   "chars": 1900
+   "chars": 2535
   },
   {
    "id": "adr-73",
    "title": "DECISIONS: ADR-73 Publishing isolation: checked before every call, no default account, IAM as the last wall",
    "line": "Context. \"A video created in Lamo Stories must only be published to Lamo Stories-connected accounts\", every",
-   "chars": 1656
+   "chars": 1898
   },
   {
    "id": "adr-74",
@@ -693,7 +693,7 @@
    "id": "adr-75",
    "title": "DECISIONS: ADR-75 Providers behind a registry: built-in today, AI images off until a real call works",
    "line": "Context. The owner wants room for more image, video, animation and audio providers \"without rebuilding\", and no",
-   "chars": 1034
+   "chars": 1221
   },
   {
    "id": "architecture-overview",
@@ -711,7 +711,7 @@
    "id": "architecture-data-flows",
    "title": "ARCHITECTURE: Data flows",
    "line": "1. Sign in and token lifetimes",
-   "chars": 72668
+   "chars": 73120
   },
   {
    "id": "architecture-failure-handling",
@@ -897,7 +897,7 @@
    "id": "testing-lamo-stories-contracts-45",
    "title": "TESTING: Lamo Stories (CONTRACTS §45)",
    "line": "The list is CONTRACTS §45.19. Three checks matter most, because the owner put protecting Lamo Clips first:",
-   "chars": 1242
+   "chars": 1546
   },
   {
    "id": "testing-manual-checks-after-the-first-deploy",

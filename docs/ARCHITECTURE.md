@@ -1323,11 +1323,15 @@ Lamo Clips (everything above) is the built-in workspace and does not change.
   (`web/src/stories/engine`, copied into the image) with Deno for draw lists, rasterizes them with numpy, synthesizes
   effects, noises and music, and joins it all with ffmpeg into a 1080×1920 MP4. The browser runs the same engine for
   live previews.
-* **Connections.** The same developer apps and callback URL as Lamo Clips; the stored OAuth state carries the
-  workspace, and the callback writes `cf-prod/workspaces/{id}/{platform}/token` and a `SOCIAL#` item only.
-* **Posting.** `cf-prod-story-flow` (durable, new) checks the destination before every platform call and reuses the
-  platform publishers unchanged; its IAM role cannot read Lamo Clips' tokens, and Lamo Clips' roles cannot read
-  Lamo Stories'.
+* **Connections.** The same developer apps and callback URL as Lamo Clips; a Lamo Stories connect uses its own state
+  format (`w1.`, the workspace inside the signature), the callback routes on that prefix before anything else, and
+  the workspace path writes `cf-prod/workspaces/{id}/{platform}/token` and a `SOCIAL#` item only. YouTube posts to the
+  one channel picked in Google's picker. Disconnect never calls a platform's revoke (it would end Lamo Clips' grant
+  too when the account is shared).
+* **Posting.** `cf-prod-story-flow` (durable, new, up to 9 days) checks the destination inside every platform step,
+  including the identity inside the token secret, and reuses the platform publishers unchanged; it shares Lamo
+  Clips' rate budgets and the owner's monthly X limit. Its IAM role cannot read Lamo Clips' tokens or write Lamo
+  Clips' items, and Lamo Clips' roles cannot read Lamo Stories' tokens.
 
 ## Failure handling
 

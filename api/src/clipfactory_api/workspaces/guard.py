@@ -7,9 +7,12 @@ SCAFFOLD (Phase 1): builders A and B use these; extend, never weaken.
 
 from __future__ import annotations
 
+import contextlib
+from datetime import datetime
 from typing import Any
 
 from .. import db
+from ..clock import iso
 from ..errors import ApiError, not_found
 from . import types as ws
 
@@ -41,9 +44,48 @@ def find_workspace(store: db.Store, user_id: str, workspace_id: str) -> dict[str
     return item
 
 
-def require_workspace(store: db.Store, user_id: str, workspace_id: str, *, stories: bool = True) -> dict[str, Any]:
-    """The caller's workspace, else 404; with ``stories`` (the routes marked **S**), a Lamo Clips id is a 409."""
+def default_stories_config() -> dict[str, Any]:
+    """StoriesConfig defaults (CONTRACTS §45.6). ``storyModel`` empty means the agent's default model."""
+    return {
+        "defaultDurationSec": 45,
+        "captionsOn": True,
+        "musicOn": True,
+        "storyModel": "",
+        "providers": {"images": "builtin-rig", "animation": "builtin-2d", "audio": "builtin-synth"},
+        "youtubeCategory": "27",
+        "youtubePrivacy": "public",
+    }
+
+
+def ensure_first_stories(store: db.Store, user_id: str, now: datetime) -> dict[str, Any]:
+    """Creates the first Lamo Stories workspace (``stories``) once: a conditional put, so two calls at once make one."""
+    item = {
+        "pk": ws.registry_pk(user_id),
+        "sk": ws.workspace_sk(ws.FIRST_STORIES_ID),
+        "type": ws.TYPE_WORKSPACE,
+        "userId": user_id,
+        "workspaceId": ws.FIRST_STORIES_ID,
+        "workspaceName": ws.FIRST_STORIES_NAME,
+        "workspaceType": ws.STORIES,
+        "configuration": default_stories_config(),
+        "version": 1,
+        "createdAt": iso(now),
+        "updatedAt": iso(now),
+    }
+    with contextlib.suppress(db.ConditionFailed):  # someone else made it a moment ago: use theirs
+        store.put(item, if_absent=True)
+    found = store.get(ws.registry_pk(user_id), ws.workspace_sk(ws.FIRST_STORIES_ID))
+    return found or item
+
+
+def require_workspace(
+    store: db.Store, user_id: str, workspace_id: str, *, stories: bool = True, now: datetime | None = None
+) -> dict[str, Any]:
+    """The caller's workspace, else 404; with ``stories`` (the routes marked **S**), a Lamo Clips id is a 409.
+    The first Lamo Stories workspace (``stories``) is made on first use when ``now`` is given (§45.3)."""
     item = find_workspace(store, user_id, workspace_id)
+    if item is None and workspace_id == ws.FIRST_STORIES_ID and now is not None:
+        item = ensure_first_stories(store, user_id, now)
     if item is None:
         raise not_found(NOT_FOUND)
     if stories and item.get("workspaceType") != ws.STORIES:

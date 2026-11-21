@@ -203,6 +203,7 @@ export interface Beat {
   dir?: "left" | "right";
   bubble?: BubbleId;
   noise?: NoiseId;
+  /** Only in the writer's raw answer: normalizeScript() moves it into the scene's `sfx` list. */
   sfx?: SfxId;
 }
 
@@ -212,6 +213,8 @@ export interface Scene {
   title: string;
   /** 2..15 */
   durationSec: number;
+  /** this scene's own seed (a "Remake this scene" gets a new one); falls back to the script's seed */
+  seed?: number;
   set: SetId;
   /** top: a road seen from above, for showing how a car moves */
   view: "side" | "top";
@@ -219,6 +222,8 @@ export interface Scene {
   actors: SceneActor[];
   props: SceneProp[];
   beats: Beat[];
+  /** this scene's editable effects, times from the scene's start (normalizeScript fills it from the beats) */
+  sfx: SfxCue[];
   /** ≤ 60: on-screen teaching text */
   caption: string | null;
   note: string | null;
@@ -236,8 +241,9 @@ export interface CaptionCue {
 }
 
 export interface SfxCue {
+  /** "{sceneId}.fx{k}" for the writer's effects; any unique id for the owner's */
   id: string;
-  /** seconds, whole video */
+  /** seconds from the scene's start */
   at: number;
   sfx: SfxId;
   /** 0..1 */
@@ -264,8 +270,6 @@ export interface StoryScript {
   music: { mood: MusicMood; volume: number } | null;
   captionsOn: boolean;
   captions: CaptionCue[];
-  /** owner-added effects; effects named on beats come from audioTrack() */
-  sfx: SfxCue[];
   safety: { topicId: string; citations: Citation[] } | null;
 }
 

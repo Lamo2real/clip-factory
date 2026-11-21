@@ -87,7 +87,8 @@
         }
       ],
       "caption": "Ease off the accelerator",
-      "note": null
+      "note": null,
+      "sfx": []
     },
     {
       "sceneId": "s2",
@@ -116,7 +117,8 @@
         }
       ],
       "caption": null,
-      "note": null
+      "note": null,
+      "sfx": []
     }
   ],
   "music": {
@@ -132,6 +134,5 @@
       "text": "Ease off the accelerator"
     }
   ],
-  "sfx": [],
   "safety": null
 }

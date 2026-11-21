@@ -1,7 +1,9 @@
 // The engine's command line for the agent (docs/CONTRACTS.md §45.10), run with Deno:
 //   deno run --allow-read cli.ts validate <script.json>        → {"ok": true} | {"ok": false, "errors": [...]}
+//   deno run --allow-read cli.ts normalize <script.json>       → the normalized script (beat effects into scene lists)
 //   deno run --allow-read cli.ts fit <seconds> <script.json>   → the fitted script
 //   deno run --allow-read cli.ts frames <script.json> [from] [to] → one JSON line per frame: {"f": n, "p": Prim[]}
+//   deno run --allow-read cli.ts scenes <script.json>          → [{"sceneId", "from", "to", "mid"}] (frame numbers)
 //   deno run --allow-read cli.ts text <script.json>            → TextEvent[]
 //   deno run --allow-read cli.ts audio <script.json>           → AudioEvent[]
 //   deno run --allow-read cli.ts catalog                       → the CATALOG and ENGINE_VERSION
@@ -15,6 +17,8 @@ import {
   ENGINE_VERSION,
   fitDuration,
   frameCount,
+  normalizeScript,
+  sceneList,
   textTrack,
   validateScript,
 } from "./engine.ts";
@@ -65,6 +69,12 @@ function main(args: string[]): void {
       write(JSON.stringify(result.ok ? { ok: true } : { ok: false, errors: result.errors }) + "\n");
       return;
     }
+    case "normalize":
+      write(JSON.stringify(normalizeScript(valid(rest[0]))) + "\n");
+      return;
+    case "scenes":
+      write(JSON.stringify(sceneList(valid(rest[0]))) + "\n");
+      return;
     case "fit": {
       const seconds = Number(rest[0]);
       if (!Number.isFinite(seconds) || seconds <= 0) fail("fit needs a number of seconds");
@@ -92,7 +102,7 @@ function main(args: string[]): void {
       write(JSON.stringify({ engine: ENGINE_VERSION }) + "\n");
       return;
     default:
-      fail("unknown command; use validate, fit, frames, text, audio, catalog or version");
+      fail("unknown command; use validate, normalize, fit, frames, scenes, text, audio, catalog or version");
   }
 }
 

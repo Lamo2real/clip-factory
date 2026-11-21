@@ -27,6 +27,8 @@ export const ENGINE_VERSION = 1;
 export const WIDTH = 1080;
 export const HEIGHT = 1920;
 export const FPS = 30;
+/** Facebook Reels take at most 90 s; the audio tail needs a little room (CONTRACTS §45.9). */
+export const MAX_SECONDS = 89.5;
 
 /** A small seeded PRNG (mulberry32): the only randomness the engine may use. */
 export function prng(seed: number): () => number {
@@ -89,18 +91,59 @@ function sceneStarts(s: StoryScript): number[] {
   return starts;
 }
 
-/** Scales every scene (and its beats) so the total lands within ±10% of the target; scenes stay 2..15 s. */
+/** Moves every Beat.sfx into its scene's own effects list (ids "{sceneId}.fx{k}"), gives each scene a seed, and makes
+ * sure every scene has an `sfx` list. Idempotent. */
+export function normalizeScript(s: StoryScript): StoryScript {
+  const scenes = s.scenes.map((sc, i) => {
+    const sfx = [...(sc.sfx ?? [])];
+    let k = sfx.length;
+    const beats = sc.beats.map((b) => {
+      if (!b.sfx) return b;
+      k += 1;
+      sfx.push({ id: `${sc.sceneId}.fx${k}`, at: b.at, sfx: b.sfx, volume: 0.8 });
+      const { sfx: _moved, ...rest } = b;
+      return rest;
+    });
+    return { ...sc, seed: sc.seed ?? (s.seed + i * 7919) >>> 0, beats, sfx: sfx.sort((a, b) => a.at - b.at) };
+  });
+  return { ...s, scenes };
+}
+
+/** Scales every scene (its beats and effects too) so the total lands within ±10% of the target and never above
+ * MAX_SECONDS; scenes stay 2..15 s. */
 export function fitDuration(s: StoryScript, targetSec: number): StoryScript {
   const total = s.scenes.reduce((sum, sc) => sum + sc.durationSec, 0);
   if (total <= 0) return s;
-  const k = targetSec / total;
-  const scenes = s.scenes.map((sc) => {
+  const target = Math.min(targetSec, MAX_SECONDS);
+  const k = target / total;
+  let scenes = s.scenes.map((sc) => {
     const d = Math.min(15, Math.max(2, Math.round(sc.durationSec * k * 10) / 10));
     const f = d / sc.durationSec;
-    return { ...sc, durationSec: d, beats: sc.beats.map((b) => ({ ...b, at: b.at * f, dur: b.dur * f })) };
+    return {
+      ...sc,
+      durationSec: d,
+      beats: sc.beats.map((b) => ({ ...b, at: b.at * f, dur: b.dur * f })),
+      sfx: (sc.sfx ?? []).map((c) => ({ ...c, at: c.at * f })),
+    };
   });
-  const durationSec = Math.round(scenes.reduce((sum, sc) => sum + sc.durationSec, 0) * 10) / 10;
-  return { ...s, scenes, durationSec };
+  // Rounding or the 2 s floor may push the total over the cap: trim the longest scenes by 0.1 s until it fits.
+  let sum = scenes.reduce((acc, sc) => acc + sc.durationSec, 0);
+  while (sum > MAX_SECONDS + 1e-9) {
+    const longest = scenes.reduce((best, sc, i) => (sc.durationSec > scenes[best]!.durationSec ? i : best), 0);
+    const sc = scenes[longest]!;
+    if (sc.durationSec <= 2) break;
+    scenes = scenes.map((x, i) => (i === longest ? { ...x, durationSec: Math.round((x.durationSec - 0.1) * 10) / 10 } : x));
+    sum = scenes.reduce((acc, x) => acc + x.durationSec, 0);
+  }
+  return { ...s, scenes, durationSec: Math.round(sum * 10) / 10 };
+}
+
+/** Each scene's frame range and its middle frame (the still). */
+export function sceneList(s: StoryScript): { sceneId: string; from: number; to: number; mid: number }[] {
+  return s.scenes.map((sc) => {
+    const [from, to] = sceneFrames(s, sc.sceneId);
+    return { sceneId: sc.sceneId, from, to, mid: from + Math.floor((to - from) / 2) };
+  });
 }
 
 export function frameCount(s: StoryScript): number {
@@ -173,13 +216,14 @@ export function audioTrack(s: StoryScript): AudioEvent[] {
   const out: AudioEvent[] = [];
   const starts = sceneStarts(s);
   s.scenes.forEach((scene, i) => {
+    const start = starts[i]!;
     for (const b of scene.beats) {
       const pitch = s.cast[b.who]?.voice.pitch;
-      if (b.sfx) out.push({ at: starts[i]! + b.at, kind: "sfx", id: b.sfx, volume: 0.8 });
-      if (b.noise) out.push({ at: starts[i]! + b.at, kind: "noise", id: b.noise, volume: 0.9, ...(pitch ? { pitch } : {}) });
+      if (b.sfx) out.push({ at: start + b.at, kind: "sfx", id: b.sfx, volume: 0.8 });
+      if (b.noise) out.push({ at: start + b.at, kind: "noise", id: b.noise, volume: 0.9, ...(pitch ? { pitch } : {}) });
     }
+    for (const c of scene.sfx ?? []) out.push({ at: start + c.at, kind: "sfx", id: c.sfx, volume: c.volume });
   });
-  for (const c of s.sfx) out.push({ at: c.at, kind: "sfx", id: c.sfx, volume: c.volume });
   return out.sort((a, b) => a.at - b.at);
 }
 
