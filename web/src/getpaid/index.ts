@@ -30,7 +30,7 @@ export const CR_GETPAID = {
   cost: "Free",
   facts: [
     { text: "Content Rewards sends your money to Whop. Whop sends it to your bank.", source: "https://docs.whop.com/manage-your-business/manage-payouts/set-up-payouts" },
-    { text: "Moving to Whop is free from $1.", source: "https://contentrewards.com/c/earnings" },
+    { text: "Moving to Whop is free from $1.", source: "https://help.contentrewards.com/en/articles/16817239-withdraw-your-earnings" },
     { text: "Whop checks your ID and a selfie once.", source: "https://docs.whop.com/manage-your-business/manage-payouts/set-up-payouts" },
     { text: "Whop to your bank takes up to 5 workdays.", source: "https://docs.whop.com/manage-your-business/manage-payouts/payout-methods" },
   ] satisfies GetPaidFact[],

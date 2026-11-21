@@ -41,6 +41,13 @@
   color: var(--vermilion-ink);
 }
 
+/* §40.1: "Live" is never on a Get paid screen. The app's realtime chip ("● Live": changes show up by themselves) would
+   read as "payouts are live" next to a payout status with no signal behind it, so it steps aside on the list and the
+   place pages. The screens still update by themselves; the chip shows again everywhere else. */
+:root:has(.gp-list, .gp-page) .live-dot {
+  display: none;
+}
+
 /* ---------- Settings › Posting › Get paid ---------- */
 .gp-list {
   display: grid;

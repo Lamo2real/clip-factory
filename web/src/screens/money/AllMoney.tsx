@@ -25,6 +25,13 @@ export const PAID_OUT = "Paid out to your bank: not available from Content Rewar
 /** The block under the total (§40.4). */
 export const SENT_TITLE = "Sent to your bank, so far";
 export const SENT_TWO_MONIES = "Different money, like dollars and kronor, is never added together.";
+/** Said before a row's sent line that doesn't say so itself, so it never reads as the row's earnings. */
+export const SENT_LABEL = "Sent to your bank:";
+/**
+ * A sent line's own button (Allow payment reading, Connect Whop, See them, Open Stripe) is on that place's Get paid page:
+ * a row keeps at most one button, at its right end (§39.2), so the line says where to find it.
+ */
+export const MORE_IN_GETPAID = "More in Get paid below.";
 /** The Monthly card's line while Content Rewards is on All your money (§39.2). */
 export const APPS_ONLY = "Apps only. Content Rewards is in All your money.";
 
@@ -74,13 +81,15 @@ export function clockTime(iso: string | undefined): string {
  * place's not-available line. Amounts are only formatted, one per currency, never added across.
  */
 export function sentText(sent: SentLine): string {
+  const more = sent.button || sent.where?.button ? ` ${MORE_IN_GETPAID}` : "";
   if (sent.state === "number") {
     const amounts = sent.amounts.map((a) => formatMoney(a.amountMicros, a.currency)).join(" · ");
-    return [`${sent.headline}${amounts ? `: ${amounts} so far` : ""}`, sent.tag, amounts ? null : sent.notAdded].filter(Boolean).join(" · ");
+    return [`${sent.headline}${amounts ? `: ${amounts} so far` : ""}`, sent.tag, amounts ? null : sent.notAdded].filter(Boolean).join(" · ") + more;
   }
   const where = sent.where?.text;
-  const head = /[.!?]$/.test(sent.headline) || !where ? sent.headline : `${sent.headline}.`;
-  return where ? `${head} ${where}` : head;
+  const label = /sent to your bank/i.test(sent.headline) ? "" : `${SENT_LABEL} `;
+  const head = /[.!?…]$/.test(sent.headline) || !where ? sent.headline : `${sent.headline}.`;
+  return `${label}${where ? `${head} ${where}` : head}${more}`;
 }
 
 /** The Content Rewards row's small lines, in money's time order; each number only when Content Rewards reported it.

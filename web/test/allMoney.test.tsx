@@ -170,8 +170,10 @@ describe("All your money's sent lines (§40.4)", () => {
     await draw(card(places, [{ currency: "USD", amountMicros: 20_400_000, places: ["youtube", "contentrewards"], tag: "YouTube's estimate + Content Rewards' numbers" }]));
     const line = (i: number) => row(i).querySelector(".cr-all__sent")!.textContent!.replace(/\u00a0/g, " ");
     expect(line(0)).toBe("Sent to your bank by Google: SEK 2,468.00 so far · YouTube says");
-    expect(line(1)).toBe("Not available from TikTok. Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal.");
-    expect(line(2)).toBe("Not available from X. Look in Stripe: Payouts.");
+    // A line that doesn't say it is about the bank starts with "Sent to your bank:", so it never reads as earnings.
+    expect(line(1)).toBe("Sent to your bank: Not available from TikTok. Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal.");
+    // Its own button (Open Stripe) is on the place's Get paid page: a row keeps one button, at its right end (§39.2).
+    expect(line(2)).toBe("Sent to your bank: Not available from X. Look in Stripe: Payouts. More in Get paid below.");
     expect(line(3)).toBe("Sent to your bank: not available from Content Rewards. Look on Whop: Balances.");
     // Content Rewards' "Paid out to your bank" line is replaced by the row's sent line, never said twice.
     expect(row(3).textContent).not.toContain("Paid out to your bank");
@@ -220,12 +222,17 @@ describe("All your money's sent lines (§40.4)", () => {
     expect(block.textContent).not.toContain("Nothing sent to your bank yet.");
     expect(block.querySelectorAll("li")).toHaveLength(0);
     expect(sentText(SENT.youtubeUnread)).toBe("Sent to your bank by Google · YouTube says · Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up.");
+    expect(sentText({ ...SENT.youtubeUnread, button: { label: "See them", href: "/settings/posting/getpaid/youtube", external: false } })).toBe(
+      "Sent to your bank by Google · YouTube says · Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up. More in Get paid below.",
+    );
     await draw({ ...card([{ ...ROWS[0]!, sent: SENT.youtubeNoReading }]), sent: { totals: [], tag: "Google and Whop say they sent it.", bankText: BANK, empty: "Nothing sent to your bank yet." } });
     block = host.querySelector<HTMLElement>(".cr-all__sentsofar")!;
     expect(block.textContent).toContain("Nothing sent to your bank yet.");
     expect(block.querySelectorAll("li")).toHaveLength(0);
     expect(block.textContent).not.toMatch(/\$0\b/);
-    expect(row(0).querySelector(".cr-all__sent")!.textContent).toBe("Clip Factory can't see YouTube payments yet.");
+    // Its Allow payment reading is on YouTube's Get paid page; the row's one button stays the row's own.
+    expect(row(0).querySelector(".cr-all__sent")!.textContent).toBe("Sent to your bank: Clip Factory can't see YouTube payments yet. More in Get paid below.");
+    expect(row(0).querySelectorAll(".btn").length).toBeLessThanOrEqual(1);
   });
 
   it("an API from before §40: no sent line and no block", async () => {

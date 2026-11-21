@@ -43,7 +43,7 @@ import { moneySteps } from "../money/CrMoneyPart.tsx";
 import { CrStepCard, OpenButton } from "../campaigns/bits.tsx";
 import { Rich } from "../settings/setup/bits.tsx";
 import { PlaceMark, ringLabel } from "./GetPaidList.tsx";
-import { GetPaidStep, MainAction, type StepState } from "./GetPaidStep.tsx";
+import { GetPaidStep, MainAction, whoSaid, type StepState } from "./GetPaidStep.tsx";
 import { SentRows } from "./SentRows.tsx";
 import { StatusPill } from "./StatusPill.tsx";
 import { startWhop, WhopCard } from "./WhopCard.tsx";
@@ -132,7 +132,7 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
     }
   }, [result]);
 
-  // The first step not done is open; on a return visit (or an anchor) it is brought into view.
+  // The first step not done is open and brought into view (§40.1), so on a computer its main button is on screen.
   const steps = card?.steps ?? [];
   const stateOf = (id: string): StepState => {
     const s = steps.find((x) => x.id === id);
@@ -145,11 +145,14 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
   const anchor = hash === "yt-reading" ? "step-yt-reading" : hash?.startsWith("step-") ? hash : hash === "whop" || hash === "cr-finance" ? hash : null;
   useEffect(() => {
     if (!card) return;
-    const to = anchor ?? (result && (result in WHOP_RESULTS) ? "whop" : result ? "step-yt-reading" : card.ring.done > 0 && current ? `step-${current}` : null);
+    const to = anchor ?? (result && (result in WHOP_RESULTS) ? "whop" : result ? "step-yt-reading" : current ? `step-${current}` : null);
     if (!to || scrolled.current === to) return;
+    // The current step moves only as far as it must (the status block stays on screen when there is room); a link or a
+    // result goes to the middle.
+    const block = !anchor && !result ? "nearest" : "center";
     const t = setTimeout(() => {
       scrolled.current = to;
-      document.getElementById(to)?.scrollIntoView?.({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      document.getElementById(to)?.scrollIntoView?.({ block, behavior: prefersReducedMotion() ? "auto" : "smooth" });
     }, 160);
     return () => clearTimeout(t);
   }, [card, anchor, current, result]);
@@ -194,9 +197,15 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
 
   const name = placeName(place);
 
+  /** The tapped answer goes away with its folded step: focus moves to that step's head, so a keyboard keeps its place. */
+  function focusHead(id: string) {
+    setTimeout(() => document.querySelector<HTMLElement>(`#step-${id} > .gstep__head`)?.focus({ preventScroll: true }), 0);
+  }
+
   async function tick(id: string, done: boolean) {
     setBusy(id);
     fold(id);
+    focusHead(id);
     try {
       return await tickGetPaid(id, done, (m) => toast.error(m));
     } finally {
@@ -208,6 +217,7 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
     if (!conn) return false;
     setBusy(step.id);
     fold(step.id);
+    focusHead(step.id);
     patchCr((o) => ({ ...o, connection: { ...o.connection, stepsDone: done ? [...new Set([...o.connection.stepsDone, step.id])] : o.connection.stepsDone.filter((x) => x !== step.id) } }));
     try {
       const connection = await api().crPatchConnection({ step: step.id, done });
@@ -353,7 +363,8 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
       </div>
     );
 
-  const lineEndsWithNext = !!next?.text && card.line.trim().endsWith(next.text.trim());
+  // next.text is said once: not again under the line when the line already says it (it may end with a `when` line).
+  const lineHasNext = !!next?.text && card.line.includes(next.text.trim());
   const facts = factsFor(guide ? guide.facts : CR_GETPAID.facts, country);
   const groups = factGroups(facts);
   const readingGone = place === "youtube" && adsense?.status === "needs_reconnect";
@@ -398,7 +409,6 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
                     </LinkButton>
                   </div>
                 ) : null}
-                {card.readingChip ? <p className="gp-chip">{card.readingChip}</p> : null}
               </>
             ) : null}
           </GetPaidStep>
@@ -413,6 +423,7 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
   const crCard = (step: CrStep, number: number | null) => {
     const isNext = next?.stepId === step.id && vermilion;
     const done = step.repeat === "once" && crDone(step.id);
+    const server = card?.steps.find((x) => x.id === step.id);
     return (
       <CrStepCard
         key={step.id}
@@ -426,6 +437,7 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
         onToggle={() => toggle(step.id)}
         onDone={step.manual === false ? undefined : (d) => tickCr(step, d)}
         busy={busy === step.id}
+        who={done ? whoSaid({ done, by: server?.done ? server.by : "you", auto: server?.auto }) : undefined}
       />
     );
   };
@@ -469,7 +481,7 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
             <span>{card.warning}</span>
           </p>
         ) : null}
-        {next?.stepId && next.text && !lineEndsWithNext ? <p className="gp-status__next">{next.text}</p> : null}
+        {next?.stepId && next.text && !lineHasNext ? <p className="gp-status__next">{next.text}</p> : null}
         {next && !next.stepId ? (
           <div className="gp-status__fix">
             {next.hint ? (
@@ -590,7 +602,7 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
         </ul>
       </section>
 
-      <SentRows sent={card.sent} rows={where.payouts} />
+      <SentRows sent={card.sent} rows={where.payouts} unpaid={place === "youtube" ? card.unpaid : undefined} here={getPaidPath(place)} />
 
       <section className="done-panel glass gp-done" aria-labelledby="gp-done-title">
         <h2 className="done-panel__title" id="gp-done-title">
@@ -602,7 +614,8 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
               Check now
             </Button>
           ) : null}
-          {place === "youtube" && adsense?.status === "connected" ? (
+          {/* Also while it needs a reconnect: the token is still kept until he stops it (§40.6). */}
+          {place === "youtube" && (adsense?.status === "connected" || adsense?.status === "needs_reconnect") ? (
             <Button variant="glass" icon="logout" act={stopAct} disabled={stopping} onClick={stopReading}>
               Stop payment reading
             </Button>

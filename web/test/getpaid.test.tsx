@@ -31,12 +31,18 @@ const { GetPaidList } = await import("../src/screens/getpaid/GetPaidList.tsx");
 const { GetPaidPage, READING_GONE } = await import("../src/screens/getpaid/GetPaidPage.tsx");
 const { StatusPill } = await import("../src/screens/getpaid/StatusPill.tsx");
 const { GetPaidCard: MoneyCard } = await import("../src/screens/money/GetPaidCard.tsx");
+const { SentRows } = await import("../src/screens/getpaid/SentRows.tsx");
+const { WhopCard, WHOP_KEY_CHANGED } = await import("../src/screens/getpaid/WhopCard.tsx");
+const { mockApi } = await import("../src/api/mock/index.ts");
+const { seed } = await import("../src/api/mock/fixtures.ts");
+const { SetupList } = await import("../src/screens/settings/setup/SetupList.tsx");
+const { SetupTodo } = await import("../src/components/SetupTodo.tsx");
+const { forgetLoaded } = await import("../src/lib/hooks.ts");
 const { NotifyBranch } = await import("../src/screens/settings/NotifyBranch.tsx");
 const { ToastProvider } = await import("../src/components/Toasts.tsx");
 const gp = await import("../src/lib/getPaid.ts");
 const { resetCr } = await import("../src/lib/contentRewards.ts");
 const { todoRows, todoCount } = await import("../src/lib/setupTodo.ts");
-const { setupApi } = await import("../src/api/mock/setup.ts");
 const { allGetPaidSteps } = await import("../src/getpaid/index.ts");
 
 const DESKTOP_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15";
@@ -205,7 +211,12 @@ describe("one vermilion per screen, per status (§40.1)", () => {
     expect(vermilion()).toHaveLength(0);
     const cards = [...host.querySelectorAll<HTMLAnchorElement>("a.gp-card")];
     expect(cards.map((a) => a.getAttribute("href"))).toEqual(["youtube", "tiktok", "instagram", "facebook", "x", "contentrewards"].map((p) => `/settings/posting/getpaid/${p}`));
-    expect(host.querySelector("[data-help='getpaid-list']")).not.toBeNull();
+    // The list is the branch's apple: Settings search and Ask land on #getpaid and light it up.
+    const list = host.querySelector<HTMLElement>("[data-help~='getpaid-list']")!;
+    expect(list).not.toBeNull();
+    expect(host.querySelector("#getpaid")).toBe(list);
+    expect(list.matches("[data-help~='getpaid']")).toBe(true);
+    expect(list.tabIndex).toBe(-1);
     expect(text()).toContain("Clip Factory can't see your bank. Look in your bank's app to see what arrived.");
     expect(host.querySelector(".gp-bank button, .gp-bank a")).toBeNull();
     expect(host.querySelector(".gp-summary")!.textContent).toBe((await mock.api.getPaid()).summary);
@@ -293,6 +304,22 @@ describe("one vermilion per screen, per status (§40.1)", () => {
     expect(vermilion()[0]!.closest("#step-yt-join")).not.toBeNull();
   });
 
+  it("next.text is said once, also when the line goes on with the step's when line", async () => {
+    accounts = [{ platform: "instagram", status: "connected" } as Account];
+    start("fresh", (s) => {
+      s.ticks = ["ig-gifts"];
+      s.followers.instagram = 900;
+    });
+    const ig = await cardOf("instagram");
+    expect(ig.next!.text).toBe("Next: step 2, Tell Meta where to pay you.");
+    expect(ig.line).toContain(ig.next!.text!);
+    expect(ig.line.endsWith(ig.next!.text!)).toBe(false);
+    await draw(<GetPaidPage place="instagram" />);
+    const status = host.querySelector<HTMLElement>("[data-help='getpaid-status']")!;
+    expect(status.textContent!.split("Next: step 2, Tell Meta where to pay you.").length - 1).toBe(1);
+    expect(status.querySelector(".gp-status__next")).toBeNull();
+  });
+
   it("a paid next (X Premium) is never the vermilion", async () => {
     accounts = [{ platform: "x", status: "connected" } as Account];
     start("fresh", (s) => (s.followers.xVerified = 900));
@@ -302,6 +329,21 @@ describe("one vermilion per screen, per status (§40.1)", () => {
     await draw(<GetPaidPage place="x" />);
     expect(vermilion()).toHaveLength(0);
     expect(text()).toContain("X doesn't pay for posts an app made or posted, or clips copied from other sites. Your Clip Factory clips probably won't earn on X.");
+  });
+
+  it("after I have Premium, the status block says the next step under §40.2's line, so the tap shows it worked", async () => {
+    accounts = [{ platform: "x", status: "connected" } as Account];
+    start("fresh", (s) => {
+      s.followers.xVerified = 900;
+      s.ticks = ["x-premium"];
+    });
+    const x = await cardOf("x");
+    expect(x.ring.done).toBe(1);
+    expect(x.next!.stepId).toBe("x-apply");
+    await draw(<GetPaidPage place="x" />);
+    const status = host.querySelector<HTMLElement>("[data-help='getpaid-status']")!;
+    expect(status.querySelector(".gp-status__next")!.textContent).toBe("Next: step 2, Apply for Original Content Rewards.");
+    expect(host.querySelector("#step-x-premium .gp-step__who")!.textContent).toBe("You said it's done");
   });
 
   it("Content Rewards: §38.7's money steps are glass unless next; Connect Whop is glass while a step is next", async () => {
@@ -343,13 +385,23 @@ describe("the place page's steps", () => {
     expect(host.querySelector(".gp-head [role='progressbar']")!.getAttribute("aria-label")).toBe("YouTube: 6 of 6 steps done");
     expect(host.querySelector("[data-help='getpaid-status']")!.textContent).toContain("Clip Factory can see payments: on");
     expect(host.querySelector("#step-yt-reading .gstep__num")!.textContent).not.toMatch(/^\d/);
+    // The chip is the status block's alone (§40.2), never said again in the reading step.
+    act(() => (host.querySelector<HTMLButtonElement>("#step-yt-reading > .gstep__head")!.getAttribute("aria-expanded") === "false" ? host.querySelector<HTMLButtonElement>("#step-yt-reading > .gstep__head")!.click() : undefined));
+    expect(host.querySelector("#step-yt-reading .gstep__body")).not.toBeNull();
+    expect(host.querySelectorAll(".gp-chip")).toHaveLength(1);
+    expect(text().split("Clip Factory can see payments: on").length - 1).toBe(1);
   });
 
   it("a phone step on a computer says to use the phone and has no Open; on a phone it opens the app's https page", async () => {
+    expect((await cardOf("tiktok")).next!.stepId).toBe("tt-gifts");
     await draw(<GetPaidPage place="tiktok" />);
     const one = host.querySelector<HTMLElement>("#step-tt-gifts")!;
     expect(one.textContent).toContain("Do this in the TikTok app on your phone.");
     expect(one.querySelector("a[href^='https://']")).toBeNull();
+    // The next step is done on the phone, so a computer has no main button for it: no vermilion at all, and the green
+    // answer stays glass. The status block still says the next step in words.
+    expect(vermilion()).toHaveLength(0);
+    expect(host.querySelector("[data-help='getpaid-status']")!.textContent).toContain("Next: step 1, Turn on Gifts.");
     act(() => root.unmount());
     root = createRoot(host);
     gp.resetGetPaid();
@@ -358,6 +410,7 @@ describe("the place page's steps", () => {
     expect(host.querySelector("#step-tt-gifts")!.textContent).not.toContain("on your phone.");
     expect(host.querySelector<HTMLAnchorElement>(".gp-pin a")!.getAttribute("href")).toBe("https://www.tiktok.com/");
     expect(host.querySelector<HTMLAnchorElement>(".gp-pin a")!.rel).toBe("noopener noreferrer");
+    expect(vermilion()).toHaveLength(1);
   });
 
   it("I did this sends the PATCH, folds the step with You said it's done, and opens the next", async () => {
@@ -372,6 +425,33 @@ describe("the place page's steps", () => {
     expect(tax.querySelector(".gp-step__who")!.textContent).toBe("You said it's done");
     expect(tax.querySelector(".gstep__body")).toBeNull();
     expect(host.querySelector("#step-yt-bank .gstep__body")).not.toBeNull();
+    // The answer went away with the folded step: focus is on that step's head, never lost to the page.
+    expect(document.activeElement).toBe(tax.querySelector(":scope > .gstep__head"));
+  });
+
+  it("the first step not done is brought into view on the first visit too, only as far as it must", async () => {
+    const seen: { id: string; block?: ScrollLogicalPosition }[] = [];
+    const before = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element, o?: boolean | ScrollIntoViewOptions) {
+      seen.push({ id: this.id, block: typeof o === "object" ? o.block : undefined });
+    };
+    try {
+      await draw(<GetPaidPage place="facebook" />);
+      await act(async () => await new Promise((r) => setTimeout(r, 220)));
+      expect((await cardOf("facebook")).ring.done).toBe(0);
+      expect(seen).toContainEqual({ id: "step-fb-join", block: "nearest" });
+    } finally {
+      Element.prototype.scrollIntoView = before;
+    }
+  });
+
+  it("Content Rewards' done steps say who said so on their folded row", async () => {
+    crConn = conn({ finance: false, stepsDone: ["move-whop"] });
+    await draw(<GetPaidPage place="contentrewards" />);
+    const move = host.querySelector<HTMLElement>("#step-move-whop")!;
+    expect(move.dataset.done).toBe("true");
+    expect(move.querySelector(".gp-step__who")!.textContent).toBe("You said it's done");
+    expect(host.querySelector("#step-bank-setup .gp-step__who")).toBeNull();
   });
 
   it("one meta-payout tick is for both Meta places, but never makes them you said it's done alone", async () => {
@@ -410,6 +490,9 @@ describe("the place page's steps", () => {
     expect(sent.textContent).toContain("Clip Factory can't see your bank. Look in your bank's app to see what arrived.");
     expect(sent.textContent).not.toMatch(/Reached your bank|received|in your bank\b(?!'s)/);
     expect(sent.querySelectorAll(".gp-sent__row")).toHaveLength(2);
+    // Google's balance it hasn't paid yet: its own words, with when Google pays; never in a total.
+    expect(sent.querySelector("[data-sent='unpaid']")!.textContent).toBe("Waiting to be paid: SEK 512.30 (YouTube says).Google pays between the 21st and 26th when you have kr 700 or more.");
+    expect(sent.querySelector(".gp-sent__amount")!.textContent).not.toContain("512");
     // Google's own words when the money type can't be read: shown, never added up.
     act(() => root.unmount());
     root = createRoot(host);
@@ -420,6 +503,27 @@ describe("the place page's steps", () => {
     expect(s2.textContent).toContain("Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up.");
     expect(s2.textContent).toContain("1 234,56 kr");
     expect(s2.textContent).not.toContain("Nothing sent to your bank yet.");
+    // "See them" goes to this very page: it is left out here (Money's line points here instead).
+    expect((await cardOf("youtube")).sent.button?.label).toBe("See them");
+    expect([...s2.querySelectorAll("a")].some((a) => a.textContent?.includes("See them"))).toBe(false);
+  });
+
+  it("a Whop payout that didn't go through, came back or is gone never says when it arrives", async () => {
+    const sent = { state: "number", headline: "Sent to your bank by Whop", amounts: [{ currency: "USD", amountMicros: 40_000_000 }], tag: "Whop says", arrive: "Whop says it should arrive by 19 Nov." } as const;
+    const rows = [
+      { date: "2026-11-18", by: "Whop", state: "didnt_go_through", amountMicros: 25_000_000, currency: "USD", arriveBy: "2026-11-19" },
+      { date: "2026-11-17", by: "Whop", state: "came_back", amountMicros: 15_000_000, currency: "USD", arriveBy: "2026-11-19" },
+      { date: "2026-11-16", by: "Whop", state: "on_its_way", amountMicros: 10_000_000, currency: "USD", arriveBy: "2026-11-20" },
+      { date: "2026-11-01", by: "Whop", state: "sent", amountMicros: 40_000_000, currency: "USD", arriveBy: "2026-11-05" },
+    ] as const;
+    await draw(<SentRows sent={{ ...sent, amounts: [...sent.amounts] }} rows={rows.map((r) => ({ ...r }))} />);
+    const row = (state: string) => host.querySelector<HTMLElement>(`.gp-sent__row[data-state='${state}']`)!;
+    expect(row("didnt_go_through").textContent).toContain("Didn't go through. Whop puts it back in your balance.");
+    expect(row("didnt_go_through").querySelector(".gp-sent__arrive")).toBeNull();
+    expect(row("came_back").querySelector(".gp-sent__arrive")).toBeNull();
+    expect(row("on_its_way").querySelector(".gp-sent__arrive")!.textContent).toBe("Whop says it should arrive by 20 Nov 2026.");
+    // A sent one is already on its way to the bank: only the sent line's own arrive words, and only on the newest.
+    expect(row("sent").textContent).not.toContain("should arrive by 5 Nov");
   });
 
   it("TikTok, Instagram, Facebook and X: not available, never $0", async () => {
@@ -439,6 +543,10 @@ describe("the place page's steps", () => {
     expect(red).toHaveLength(1);
     expect(red[0]!.textContent).toContain("Allow payment reading");
     expect(red[0]!.closest("[data-help='getpaid-status']")).not.toBeNull();
+    // The old sign-in is still kept (nothing is deleted), so he can still stop and forget it.
+    const stop = [...host.querySelectorAll<HTMLButtonElement>(".gp-done button")].find((b) => b.textContent?.includes("Stop payment reading"));
+    expect(stop).toBeDefined();
+    expect(stop!.classList.contains("btn--primary")).toBe(false);
   });
 });
 
@@ -509,6 +617,50 @@ describe("Connect Whop (§40.6)", () => {
     await settle();
     expect(host.querySelector("[data-help='getpaid-whop']")!.textContent).toContain("Your Whop key is saved: app_Ab…3456");
     expect([...host.querySelectorAll("[data-help='getpaid-whop'] button")].some((b) => b.textContent?.includes("Connect Whop") && b.getAttribute("aria-disabled") !== "true")).toBe(true);
+  });
+});
+
+describe("the Whop card's buttons (§40.1 item 2, §40.6)", () => {
+  const whopConn = (over: Partial<import("../src/api/types.ts").PayConn> = {}) => ({ source: "whop" as const, status: "not_connected" as const, redirectUri: "https://hooks.example/oauth/whop/callback", ...over });
+
+  it("nothing next and Whop not connected: Save key is the one vermilion until a key is saved, then Connect Whop", async () => {
+    await draw(<WhopCard conn={whopConn()} main result={null} />);
+    expect(vermilion().map((b) => b.textContent)).toEqual(["Save key"]);
+    expect(host.querySelector("[data-step='whop-key']")!.textContent).toContain("A grown-up does this once on the Mac.");
+    await draw(<WhopCard conn={whopConn({ status: "keys_saved", keyHint: "app_Ab…3456" })} main result={null} />);
+    expect(vermilion().map((b) => b.textContent)).toEqual(["Connect Whop"]);
+    // A step is next: every button here is glass.
+    await draw(<WhopCard conn={whopConn({ status: "keys_saved", keyHint: "app_Ab…3456" })} main={false} result={null} />);
+    expect(vermilion()).toHaveLength(0);
+  });
+
+  it("needs a reconnect: Connect Whop, and Stop reading Whop to forget the old sign-in", async () => {
+    await draw(<WhopCard conn={whopConn({ status: "needs_reconnect", reason: "token_dead", keyHint: "app_Ab…3456" })} main result={null} />);
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>("[data-help='getpaid-whop'] button")].map((b) => b.textContent);
+    expect(buttons).toContain("Connect Whop");
+    expect(buttons).toContain("Stop reading Whop");
+    expect(vermilion().map((b) => b.textContent)).toEqual(["Connect Whop"]);
+  });
+
+  it("a different key while connected: the saved line comes back with a note, never the empty form", async () => {
+    start("fresh", (s) => {
+      s.whopOn = true;
+      s.whop = { status: "connected", accountName: "@faze", keyHint: "app_Ab…3456" };
+    });
+    crConn = conn({ finance: false });
+    await draw(<GetPaidPage place="contentrewards" />);
+    const card = () => host.querySelector<HTMLElement>("[data-help='getpaid-whop']")!;
+    await act(async () => [...card().querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Change key")!.click());
+    const input = host.querySelector<HTMLInputElement>("#whop-key")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "app_ZyXw98765432");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => host.querySelector<HTMLFormElement>(".gp-whop__form")!.requestSubmit());
+    await settle();
+    expect(card().querySelector(".gp-whop__form")).toBeNull();
+    expect(card().textContent).toContain("Your Whop key is saved: app_Zy…5432");
+    expect(card().textContent).toContain(WHOP_KEY_CHANGED);
   });
 });
 
@@ -588,19 +740,43 @@ describe("lib/getPaid.ts refetches", () => {
 // ---------- never part of Set up posting ----------
 
 describe("Set up posting is unchanged (§40.1 item 5)", () => {
-  it("every Get paid tick set: still exactly five rows and of 5; no Get paid tick in SETUP#", async () => {
-    sessionStorage.removeItem("cf-mock-setup");
-    const setup = setupApi();
-    const before = setup.overview();
-    for (const { step } of allGetPaidSteps()) if (step.manual !== false) await mock.api.setGetPaidStep(step.id, true);
-    const after = setup.overview();
+  afterEach(() => {
+    delete (window as unknown as { __cfMockFaults?: unknown }).__cfMockFaults;
+  });
+  it("every Get paid tick set: Set up posting and the floating list still have exactly five rows and say of 5", async () => {
+    forgetLoaded();
+    // The whole pretend API, so the Get paid ticks and Set up posting share one pretend server (with no pretend wait).
+    (window as unknown as { __cfMockFaults?: { latencyMs: number } }).__cfMockFaults = { latencyMs: 0 };
+    const full = mockApi(seed());
+    current = full;
+    me = { user: { id: "u", email: "a@b.c" }, settings: { notify: {} }, counts: { review: 0, running: 0, posted: 0 } } as unknown as Me;
+    const before = await full.getSetup();
+    for (const { step } of allGetPaidSteps()) if (step.manual !== false) await full.setGetPaidStep(step.id, true);
+    const ticked = (await full.getPaid()).stepsDone;
+    expect(ticked.length).toBeGreaterThan(10);
+    const after = await full.getSetup();
     expect(after.platforms).toHaveLength(5);
-    expect(after.ready).toBe(before.ready);
+    expect(after.platforms.map((p) => p.stepsDone)).toEqual(before.platforms.map((p) => p.stepsDone));
+    const ids = new Set(allGetPaidSteps().map((x) => x.step.id));
+    for (const p of after.platforms) expect(p.stepsDone.filter((x) => ids.has(x))).toEqual([]);
     const rows = todoRows(after.platforms);
     expect(rows).toHaveLength(5);
     expect(todoCount(rows).total).toBe(5);
-    expect(`${after.ready} of 5 ready`).toMatch(/ of 5 ready$/);
-    const ids = new Set(allGetPaidSteps().map((s) => s.step.id));
-    for (const p of after.platforms) expect(p.stepsDone.filter((s) => ids.has(s))).toEqual([]);
-  });
+
+    history.replaceState(null, "", "/settings/posting/getpaid");
+    await draw(
+      <>
+        <SetupList />
+        <SetupTodo />
+      </>,
+    );
+    for (let i = 0; i < 150 && !(host.querySelector(".setup-todo__pill") && host.querySelector("ul[aria-label='The five platforms'] > li .setup-card")); i++) await settle();
+    expect(host.querySelectorAll("ul[aria-label='The five platforms'] > li")).toHaveLength(5);
+    expect(text()).toMatch(/\d of 5 ready/);
+    const pill = host.querySelector<HTMLButtonElement>(".setup-todo__pill")!;
+    expect(pill.getAttribute("aria-label")).toMatch(/^Set up posting: \d of 5 done$/);
+    await act(async () => pill.click());
+    expect(document.querySelectorAll(".setup-todo-panel .todo-row")).toHaveLength(5);
+    expect([...document.querySelectorAll<HTMLElement>(".setup-todo-panel .todo-row")].map((r) => r.dataset.platform)).toEqual(["youtube", "tiktok", "instagram", "facebook", "x"]);
+  }, 20_000);
 });

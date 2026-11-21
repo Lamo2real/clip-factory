@@ -38,7 +38,7 @@ export const youtube: GetPaidGuide = {
       say: [
         "Tap **Apply Now**, then **Start**.",
         "Read the terms and tap **Accept**.",
-        "Tap **Start** on the AdSense card. Pick your Google account. Type your name and address.",
+        "Tap **Start** on the AdSense for YouTube card. Pick your Google account. Type your name and address.",
         "YouTube checks your channel. It takes about a month.",
       ],
       ifYouSee: [

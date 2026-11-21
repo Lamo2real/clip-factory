@@ -346,6 +346,34 @@ for (const [name, use] of [
       expect(fails, fails.join("\n")).toEqual([]);
     });
 
+    test("never Live on a Get paid screen: the app's realtime chip steps aside there, and only there", async ({ page }) => {
+      await start(page, "/settings/posting/setup", "owner");
+      // Outside Get paid the chip still shows while the live connection is up.
+      await expect(page.locator(".live-dot").filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
+      for (const path of ["/settings/posting/getpaid", "/settings/posting/getpaid/youtube", "/settings/posting/getpaid/contentrewards"]) {
+        await page.goto(path);
+        await settle(page);
+        await expect(page.locator(".live-dot").filter({ visible: true }), path).toHaveCount(0);
+        await expect(page.locator("body"), path).not.toContainText(/\bLive\b/, { useInnerText: true });
+      }
+    });
+
+    if (!phone)
+      test("computer, first visit: the first step not done is brought into view, so the one vermilion is on screen", async ({ page }) => {
+        for (const [place, finish] of [
+          ["youtube", ["youtube"]],
+          ["facebook", ["facebook"]],
+        ] as const) {
+          await start(page, `/settings/posting/getpaid/${place}`, "fresh", [...finish]);
+          await page.waitForTimeout(900);
+          const b = await tomato(page).boundingBox();
+          expect(b, `${place}: one vermilion`).not.toBeNull();
+          expect(b!.y, `${place}: on screen`).toBeGreaterThanOrEqual(0);
+          expect(b!.y + b!.height, `${place}: on screen`).toBeLessThanOrEqual(900);
+          await expect(tomato(page)).toHaveCount(1);
+        }
+      });
+
     if (phone)
       test("phone: the next step's main button sits at the bottom right from page open, and Ask is never over it", async ({ page }) => {
         await start(page, "/settings/posting/getpaid/youtube", "fresh", ["youtube"], [["youtube", ["in_program"]]]);

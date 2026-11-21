@@ -489,7 +489,7 @@ function platformCard(place: Platform, i: Inputs): GetPaidCard {
     ring,
     seen: seenLines(place, i),
     sent: sentLine(place, i),
-    ...(yt && ytFresh && s.adsense.unpaidText ? { unpaid: { text: s.adsense.unpaidText, note: "Google pays when it's kr 700 or more." } } : {}),
+    ...(yt && ytFresh && s.adsense.unpaidText ? { unpaid: { text: s.adsense.unpaidText, note: "Google pays between the 21st and 26th when you have kr 700 or more." } } : {}),
     ...(yt && s.adsense.lastCheckedAt ? { checkedAt: s.adsense.lastCheckedAt } : {}),
   };
 }

@@ -2,7 +2,7 @@
 // Whop reported, newest first (at most 36). A payment is "sent to your bank", never "reached your bank": only a bank
 // can say that (§40.5, not built), so the bank line always says to look in the bank's app. Amounts are only formatted
 // (or shown as Google wrote them), never added, converted or guessed; a place that tells apps nothing says so, never $0.
-import type { PayoutRow, SentLine } from "../../api/types.ts";
+import type { GetPaidCard, PayoutRow, SentLine } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { LinkButton } from "../../components/ui.tsx";
 import { BANK_TEXT } from "../../lib/getPaid.ts";
@@ -40,8 +40,14 @@ export function rowAmount(row: Pick<PayoutRow, "amountMicros" | "currency" | "te
   return row.text ?? "";
 }
 
+/** A link to the page it is drawn on ("See them" on YouTube's own page) is left out: it would go nowhere. */
+function linksHere(href: string, here: string | undefined): boolean {
+  return !!here && href.split(/[?#]/)[0] === here && !href.includes("#");
+}
+
 /** A place's sent line: its headline, its amounts per currency (never added across), and where to look. */
-export function SentLineView({ sent, compact = false }: { sent: SentLine; compact?: boolean }) {
+export function SentLineView({ sent, compact = false, here }: { sent: SentLine; compact?: boolean; here?: string }) {
+  const button = sent.button && !linksHere(sent.button.href, here) ? sent.button : null;
   return (
     <div className={`gp-sent__line${compact ? " is-compact" : ""}`} data-sent={sent.state}>
       <p className="gp-sent__headline">
@@ -60,15 +66,15 @@ export function SentLineView({ sent, compact = false }: { sent: SentLine; compac
       {sent.note ? <p className="gp-sent__small">{sent.note}</p> : null}
       {sent.arrive ? <p className="gp-sent__small">{sent.arrive}</p> : null}
       {sent.where ? <p className="gp-sent__small">{sent.where.text}</p> : null}
-      {sent.where?.button || sent.button ? (
+      {sent.where?.button || button ? (
         <div className="gp-sent__buttons">
           {sent.where?.button ? <OpenButton label={sent.where.button.label} href={sent.where.button.url} size="sm" /> : null}
-          {sent.button ? (
-            sent.button.external ? (
-              <OpenButton label={sent.button.label} href={sent.button.href} size="sm" />
+          {button ? (
+            button.external ? (
+              <OpenButton label={button.label} href={button.href} size="sm" />
             ) : (
-              <LinkButton href={sent.button.href} variant="glass" size="sm" iconAfter="chevronRight">
-                {sent.button.label}
+              <LinkButton href={button.href} variant="glass" size="sm" iconAfter="chevronRight">
+                {button.label}
               </LinkButton>
             )
           ) : null}
@@ -78,14 +84,23 @@ export function SentLineView({ sent, compact = false }: { sent: SentLine; compac
   );
 }
 
-export function SentRows({ sent, rows }: { sent: SentLine; rows: readonly PayoutRow[] }) {
+/** "Waiting to be paid" (YouTube only, §40.4): Google's own words for the balance it hasn't paid yet, never in a total. */
+export const waitingLine = (unpaid: NonNullable<GetPaidCard["unpaid"]>) => `Waiting to be paid: ${unpaid.text} (YouTube says).`;
+
+export function SentRows({ sent, rows, unpaid, here }: { sent: SentLine; rows: readonly PayoutRow[]; unpaid?: GetPaidCard["unpaid"]; here?: string }) {
   const shown = rows.slice(0, 36);
   return (
     <section className="gp-sent glass" data-help="getpaid-sent" aria-labelledby="gp-sent-title">
       <h2 className="gp-section__title" id="gp-sent-title">
         Sent to your bank
       </h2>
-      <SentLineView sent={sent} />
+      <SentLineView sent={sent} here={here} />
+      {unpaid ? (
+        <div className="gp-sent__unpaid" data-sent="unpaid">
+          <p className="gp-sent__small">{waitingLine(unpaid)}</p>
+          {unpaid.note ? <p className="gp-sent__small">{unpaid.note}</p> : null}
+        </div>
+      ) : null}
       {shown.length ? (
         <ul className="gp-sent__rows" aria-label="Payments">
           {shown.map((r, i) => (
@@ -94,7 +109,8 @@ export function SentRows({ sent, rows }: { sent: SentLine; rows: readonly Payout
               <span className="gp-sent__money">{rowAmount(r)}</span>
               <span className="gp-sent__words">{rowWords(r)}</span>
               {i === 0 && r.state === "sent" && sent.arrive ? <span className="gp-sent__arrive">{sent.arrive}</span> : null}
-              {r.arriveBy && r.state !== "sent" ? <span className="gp-sent__arrive">Whop says it should arrive by {payoutDate(r.arriveBy)}.</span> : null}
+              {/* Only a payout still on its way can arrive: a failed or returned one never says it is coming. */}
+              {r.arriveBy && r.state === "on_its_way" ? <span className="gp-sent__arrive">Whop says it should arrive by {payoutDate(r.arriveBy)}.</span> : null}
             </li>
           ))}
         </ul>

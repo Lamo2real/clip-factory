@@ -56,11 +56,12 @@ function PlaceCard({ card }: { card: GetPaidCard }) {
   );
 }
 
+/** The list is the branch's one apple (`getpaid`): Settings search and Ask land on it with #getpaid and light it up. */
 export function GetPaidList() {
   const load = useGetPaid();
   if (load.state === "missing")
     return (
-      <div className="gp-list" data-help="getpaid-list">
+      <div className="gp-list" id="getpaid" data-help="getpaid-list getpaid" tabIndex={-1}>
         <p className="callout callout--info">
           <Icon name="info" size={18} />
           <span>{GETPAID_SOON}</span>
@@ -71,7 +72,7 @@ export function GetPaidList() {
   if (load.state === "error" && !load.data) return <ErrorPanel message={load.error} onRetry={() => void load.reload()} />;
   const data = load.data;
   return (
-    <div className="gp-list" data-help="getpaid-list">
+    <div className="gp-list" id="getpaid" data-help="getpaid-list getpaid" tabIndex={-1}>
       <p className="gp-summary" aria-live="polite">
         {data ? data.summary : <Skeleton className="line-skel" />}
       </p>

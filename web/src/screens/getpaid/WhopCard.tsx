@@ -16,6 +16,9 @@ import { CopyChip, readClipboard } from "../settings/setup/bits.tsx";
 
 export const WHOP_DEVELOPER = "https://whop.com/dashboard/developer";
 export const WHOP_SOON = "Coming soon: your Whop payouts here.";
+/** A new key while connected: the server forgot the old sign-in (it belonged to the old Whop app), so sign in again. */
+export const WHOP_KEY_CHANGED = "Your Whop key changed. Tap Connect Whop again.";
+export const WHOP_KEY_LEAD = "A grown-up does this once on the Mac.";
 const SCOPES = "Tick **user:balance:read**, **payout:withdrawal:read**, **payout:destination:read** and **identity:read**.";
 
 /** Starts Connect Whop: the authorize page in this tab (only Whop's https page, or the mock's own page). */
@@ -105,7 +108,13 @@ export function WhopCard({ conn, main, result }: { conn: PayConn | null; main: b
     });
   }
 
-  const showKeyStep = !keySaved || change || conn.reason === "keys_changed";
+  // A changed key is still a saved key: its saved line shows, with a short note to sign in to Whop again.
+  const showKeyStep = !keySaved || change;
+  const keyChanged = conn.reason === "keys_changed" && !connected;
+  // The page's one vermilion when nothing else is next and Whop isn't connected (§40.1 item 2): Save key until a key is
+  // saved, then Connect Whop.
+  const saveMain = main && !connected && showKeyStep;
+  const connectMain = main && !connected && keySaved && !showKeyStep;
   return (
     <section className="gp-whop glass" id="whop" data-help="getpaid-whop" aria-labelledby="gp-whop-title" tabIndex={-1}>
       <h2 className="gp-section__title" id="gp-whop-title">
@@ -128,6 +137,11 @@ export function WhopCard({ conn, main, result }: { conn: PayConn | null; main: b
           <Icon name="alert" size={18} />
           <span>Sign in to Whop again to see your payouts.</span>
         </p>
+      ) : keyChanged ? (
+        <p className="gstep__note" data-whop="key-changed">
+          <Icon name="info" size={18} />
+          <span>{WHOP_KEY_CHANGED}</span>
+        </p>
       ) : null}
 
       {showKeyStep ? (
@@ -136,6 +150,7 @@ export function WhopCard({ conn, main, result }: { conn: PayConn | null; main: b
             <Icon name="key" size={20} />
             <span>Make your Whop key</span>
           </h3>
+          <p className="gstep__lead">{WHOP_KEY_LEAD}</p>
           <div className="gstep__actions">
             <OpenButton label="Open Whop's developer page" href={WHOP_DEVELOPER} size="md" />
           </div>
@@ -181,7 +196,7 @@ export function WhopCard({ conn, main, result }: { conn: PayConn | null; main: b
                 {bad}
               </p>
             ) : null}
-            <Button type="submit" variant="glass" size="lg" icon="check" act="tick" loading={busy === "save"}>
+            <Button type="submit" variant={saveMain ? "primary" : "glass"} size="lg" icon="check" act="tick" loading={busy === "save"} data-help-clear={saveMain ? "" : undefined}>
               Save key
             </Button>
           </form>
@@ -201,19 +216,27 @@ export function WhopCard({ conn, main, result }: { conn: PayConn | null; main: b
 
       <div className="gstep__actions">
         {!connected ? (
-          <Button
-            variant={main && keySaved ? "primary" : "glass"}
-            size="lg"
-            icon="link"
-            act="connect"
-            loading={busy === "connect"}
-            disabled={!keySaved}
-            onClick={connect}
-            data-help-clear={main && keySaved ? "" : undefined}
-            data-gp="connect-whop"
-          >
-            Connect Whop
-          </Button>
+          <>
+            <Button
+              variant={connectMain ? "primary" : "glass"}
+              size="lg"
+              icon="link"
+              act="connect"
+              loading={busy === "connect"}
+              disabled={!keySaved}
+              onClick={connect}
+              data-help-clear={connectMain ? "" : undefined}
+              data-gp="connect-whop"
+            >
+              Connect Whop
+            </Button>
+            {/* Needs a reconnect: the old sign-in is still kept, so he can still stop and forget it (§40.6). */}
+            {reconnect ? (
+              <Button variant="glass" size="md" icon="logout" act={stopAct} disabled={stopping} onClick={stop}>
+                Stop reading Whop
+              </Button>
+            ) : null}
+          </>
         ) : (
           <Button variant="glass" size="md" icon="logout" act={stopAct} disabled={stopping} onClick={stop}>
             Stop reading Whop

@@ -121,7 +121,12 @@ describe("kid-proof words (§40.1, §38.1)", () => {
     }
     expect(GETPAID_GUIDES.youtube.steps[0]!.open!.url).toBe("https://studio.youtube.com/channel/UC/monetization");
     expect(GETPAID_GUIDES.x.steps.find((s) => s.id === "x-apply")!.open!.url).toBe("https://x.com/i/jf/creators/studio");
-    for (const f of CR_GETPAID.facts) expect(new URL(f.source).protocol).toBe("https:");
+    // Content Rewards' facts name public help pages (Content Rewards' or Whop's), never a signed-in app page.
+    for (const f of CR_GETPAID.facts) {
+      const u = new URL(f.source);
+      expect(u.protocol).toBe("https:");
+      expect(/^(help\.contentrewards\.com|docs\.whop\.com)$/.test(u.hostname), f.source).toBe(true);
+    }
   });
 
   it("bold is only the other site's labels: never Clip Factory's own buttons or answers", () => {
@@ -139,7 +144,7 @@ describe("kid-proof words (§40.1, §38.1)", () => {
   });
 
   it("AdSense is always AdSense for YouTube (the button Turn on AdSense reading and the AdSense website aside)", () => {
-    const ok = /AdSense for YouTube|Turn on AdSense reading|the AdSense website|the AdSense card/g;
+    const ok = /AdSense for YouTube|Turn on AdSense reading|the AdSense website/g;
     for (const g of guides)
       for (const s of g.steps)
         for (const t of [...texts(s), s.open?.label ?? "", ...(s.more ?? []).map((m) => m.label)]) expect(ours(t).replace(ok, "").includes("AdSense"), `${s.id}: ${t}`).toBe(false);

@@ -111,10 +111,11 @@ test.describe("All your money", () => {
     await open(page);
     const sent = (place: string) => row(page, place).locator(".cr-all__sent");
     await expect(sent("youtube")).toHaveText(/^Sent to your bank by Google: SEK\s2,468\.00 so far · YouTube says$/);
-    await expect(sent("tiktok")).toHaveText("Not available from TikTok. Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal.");
-    await expect(sent("instagram")).toHaveText("Not available from Instagram. Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month.");
-    await expect(sent("facebook")).toHaveText("Not available from Meta. Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month.");
-    await expect(sent("x")).toHaveText("Not available from X. Look in Stripe: Payouts.");
+    await expect(sent("tiktok")).toHaveText("Sent to your bank: Not available from TikTok. Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal.");
+    await expect(sent("instagram")).toHaveText("Sent to your bank: Not available from Instagram. Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month.");
+    await expect(sent("facebook")).toHaveText("Sent to your bank: Not available from Meta. Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month.");
+    // Its Open Stripe is on X's Get paid page (a row keeps one button, at its right end).
+    await expect(sent("x")).toHaveText("Sent to your bank: Not available from X. Look in Stripe: Payouts. More in Get paid below.");
     await expect(sent("contentrewards")).toHaveText("Sent to your bank: not available from Content Rewards. Look on Whop: Balances.");
     for (const p of ["tiktok", "instagram", "facebook", "x"]) await expect(sent(p)).not.toContainText("$0");
     const block = page.locator(".cr-all__sentsofar");
@@ -137,7 +138,8 @@ test.describe("All your money", () => {
     const block = page.locator(".cr-all__sentsofar");
     await expect(block).toContainText("Nothing sent to your bank yet.");
     await expect(block.locator("li")).toHaveCount(0);
-    await expect(row(page, "youtube").locator(".cr-all__sent")).toHaveText("Clip Factory can't see YouTube payments yet.");
+    // Allow payment reading is on YouTube's Get paid page, right below; the row's own button stays Allow money reading.
+    await expect(row(page, "youtube").locator(".cr-all__sent")).toHaveText("Sent to your bank: Clip Factory can't see YouTube payments yet. More in Get paid below.");
   });
 
   test("Content Rewards signed out: Sign in again, its own button and no See it all", async ({ page }) => {

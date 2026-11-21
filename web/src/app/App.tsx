@@ -8,6 +8,7 @@ import { navigate, useHash, useRoute, type Route } from "../lib/router.ts";
 import { findBranch, findTree, legacySettingsRedirect } from "../lib/settingsTree.ts";
 import { forgetLoaded } from "../lib/hooks.ts";
 import { resetCr } from "../lib/contentRewards.ts";
+import { resetGetPaid } from "../lib/getPaid.ts";
 import { sounds } from "../lib/sounds.ts";
 import { Backdrop, GlassFilter } from "../components/Backdrop.tsx";
 import { Sidebar, TabBar } from "../components/Nav.tsx";
@@ -112,6 +113,7 @@ export function App() {
       onSignedOut(() => {
         forgetLoaded();
         resetCr();
+        resetGetPaid();
         setBoot({ state: "signed_out", note: "Your sign-in on this device has ended. Please sign in again." });
       }),
     [],
@@ -126,6 +128,7 @@ export function App() {
     await auth().signOut();
     forgetLoaded();
     resetCr();
+    resetGetPaid();
     setBoot({ state: "signed_out", note: null });
   }, []);
 
