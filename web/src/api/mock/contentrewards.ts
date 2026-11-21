@@ -1197,7 +1197,12 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
         if (body.finance === null) delete c.finance;
         else c.finance = body.finance;
       } else if ("said" in body) {
-        if (body.said === null) delete c.pilotSentAt;
+        if (body.said === "cant_connect") {
+          // He says Content Rewards refused at sign-in (it never sends the browser back): like a not_allowed Connect,
+          // and it proves he has an account (step 1).
+          c.lastResult = "not_allowed";
+          c.stepsDone = [...new Set([...c.stepsDone, "ready-account"])];
+        } else if (body.said === null) delete c.pilotSentAt;
         else c.pilotSentAt = iso(now());
       }
       changed();

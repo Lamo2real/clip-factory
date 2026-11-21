@@ -72,6 +72,9 @@ export type ConnectOutcome =
   | { kind: "unsupported" }
   /** Cancel, or the page went away. */
   | { kind: "canceled" }
+  /** Content Rewards never sent the browser back (the door or the 5 minutes ran out). It does that when it refuses
+   * at sign-in ("This account can't connect apps"), so the page asks what it said, never "That took too long". */
+  | { kind: "no_answer" }
   /** The API refused before the sign-in opened: its sentence. */
   | { kind: "failed"; message: string };
 
@@ -81,6 +84,9 @@ export interface ConnectDeps {
   signal: AbortSignal;
   /** Called once the browser has the sign-in page. */
   onOpened?: () => void;
+  /** Called once Content Rewards answered (the door has its code or error), while the API finishes the sign-in: the
+   * page stops asking "What did Content Rewards say?" then, and shows "Connecting…". */
+  onAnswered?: () => void;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 }
@@ -89,8 +95,29 @@ export interface ConnectDeps {
 export const POLL_MS = 500;
 export const WAIT_MS = 5 * 60_000;
 
+/** While it waits, "What did Content Rewards say?" shows this long after he comes back to the window (a good answer
+ * brings the window to the front too, and arrives first), never sooner than ASK_MIN_MS after the browser opened,
+ * and by itself after ASK_LATE_MS. */
+export const ASK_RETURN_MS = 1_500;
+export const ASK_MIN_MS = 3_000;
+export const ASK_LATE_MS = 30_000;
+
 /** One Connect, start to finish. Never throws. */
-export async function runConnect({ api, bridge, signal, onOpened, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = Date.now }: ConnectDeps): Promise<ConnectOutcome> {
+export async function runConnect({ api, bridge, signal, onOpened, onAnswered, sleep, now = Date.now }: ConnectDeps): Promise<ConnectOutcome> {
+  // The wait between polls ends at once on Cancel, so the stopped run closes its door right away (and a Connect tapped
+  // right after it never waits long for that).
+  const nap =
+    sleep ??
+    ((ms: number) =>
+      new Promise<void>((r) => {
+        const done = () => {
+          clearTimeout(t);
+          signal.removeEventListener("abort", done);
+          r();
+        };
+        const t = setTimeout(done, ms);
+        signal.addEventListener("abort", done, { once: true });
+      }));
   let port: number;
   try {
     ({ port } = await bridge.listen());
@@ -130,17 +157,18 @@ export async function runConnect({ api, bridge, signal, onOpened, sleep = (ms) =
       return { kind: "result", result: "error" };
     }
     if (signal.aborted) return stop();
-    if (door.status === "expired") return { kind: "result", result: "expired" };
-    if (door.status === "done" && door.state && door.code) return finish({ state: door.state, code: door.code, ...(door.iss ? { iss: door.iss } : {}) });
+    if (door.status === "expired") return { kind: "no_answer" };
+    if (door.status === "done" && door.state && door.code) return answered({ state: door.state, code: door.code, ...(door.iss ? { iss: door.iss } : {}) });
     if (door.status === "error" && door.state)
-      return finish({ state: door.state, error: door.error ?? "error", ...(door.errorDescription ? { errorDescription: door.errorDescription } : {}) });
+      return answered({ state: door.state, error: door.error ?? "error", ...(door.errorDescription ? { errorDescription: door.errorDescription } : {}) });
     if (door.status === "done" || door.status === "error") return { kind: "result", result: "error" };
-    await sleep(POLL_MS);
+    await nap(POLL_MS);
   }
   await bridge.cancel().catch(() => undefined);
-  return { kind: "result", result: "expired" };
+  return { kind: "no_answer" };
 
-  async function finish(body: Parameters<Api["crConnectFinish"]>[0]): Promise<ConnectOutcome> {
+  async function answered(body: Parameters<Api["crConnectFinish"]>[0]): Promise<ConnectOutcome> {
+    onAnswered?.();
     try {
       const out = await api.crConnectFinish(body);
       return { kind: "result", result: out.result, connection: out.connection };

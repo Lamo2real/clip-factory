@@ -99,8 +99,10 @@ run "environment_names_the_flow_aliases" {
       CONTENT_REWARDS = "off"
       # §39.3 module default: the campaign copy off.
       CR_REMAKE = "off"
+      # §41.6 module default: the campaign finder off.
+      CR_FINDER = "off"
     })
-    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9, §19.9 and §38.16 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
+    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9, §19.9, §38.16 and §41.6 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
   }
 }
 
@@ -610,5 +612,66 @@ run "cr_remake_on" {
   assert {
     condition     = length([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == 1
     error_message = "The copy needs no new permission: the api's grants are the ones Content Rewards already has."
+  }
+}
+
+# docs/CONTRACTS.md §41.5 and §41.6: the campaign finder's seven routes answer 503 "Coming soon." until CR_FINDER=on,
+# off by default and independent of the other Content Rewards switches; the switch is an in-place environment change
+# (its look invoke and send_feedback use the Campaigns and PlatformSecrets grants Content Rewards already has).
+run "cr_finder_off_by_default" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    cr_remake_enabled       = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["CR_FINDER"] == "off"
+    error_message = "cr_finder_enabled defaults to false: CR_FINDER is off even with Content Rewards and the copy on."
+  }
+}
+
+run "cr_finder_on" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    cr_finder_enabled       = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition = (one(aws_lambda_function.fn["api"].environment).variables["CR_FINDER"] == "on" &&
+      one(aws_lambda_function.fn["api"].environment).variables["CONTENT_REWARDS"] == "on" &&
+      one(aws_lambda_function.fn["api"].environment).variables["CR_REMAKE"] == "off" &&
+    one(aws_lambda_function.fn["api"].environment).variables["CAMPAIGNS_FUNCTION_ARN"] == "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns")
+    error_message = "With cr_finder_enabled, CR_FINDER is on and the other Content Rewards env vars keep their own switches."
+  }
+
+  assert {
+    condition = one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == {
+      Sid = "Campaigns", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"]
+    }
+    error_message = "A look is started through the same cf-prod-campaigns invoke grant, nothing new."
+  }
+
+  assert {
+    condition     = aws_lambda_function.fn["api"].function_name == "cf-test-api" && aws_lambda_function.fn["api"].timeout == 29
+    error_message = "The same function: the switch changes only its environment."
+  }
+}
+
+# The finder switch reaches only the CR_FINDER env var: one use of var.cr_finder_enabled in this module, inside the
+# Content Rewards env, so it can never add a grant or replace anything (the deploy's delete gate stays quiet).
+run "cr_finder_switch_only_sets_its_env_var" {
+  command = plan
+
+  assert {
+    condition = (one(aws_lambda_function.fn["api"].environment).variables["CR_FINDER"] == "off" &&
+      length(regexall("var\\.cr_finder_enabled", file("main.tf"))) == 1 &&
+    length(regexall("(?m)^\\s+CR_FINDER\\s+=\\s+var\\.cr_finder_enabled \\? \"on\" : \"off\"$", file("main.tf"))) == 1)
+    error_message = "var.cr_finder_enabled is used once, as CR_FINDER = var.cr_finder_enabled ? \"on\" : \"off\"."
   }
 }

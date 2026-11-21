@@ -37,7 +37,9 @@ reference files are not in the API either.
   line, plain words ("Join", "Copy", "Paste", "Make clips", "Upload"), no jargon (never "MCP", "OAuth", "token",
   "scope", "CPM", "submission", "API"; say "sign in", "allow", "per 1,000 views", "clip", "sent"). The one exception is
   the body of the pilot email (§38.3), which is written for CR's support team: it sits under **Show more** and is
-  never the visible label of anything.
+  never the visible label of anything. Since §41 the same exception covers the finder's `ASK_MESSAGE` under **Show
+  more** "What it says" (§41.1 item 6), with the line "This is what Clip Factory sends to Content Rewards' team." above
+  it.
 * **Bold** inside the owner's words in this section = an exact label of the other site the step opens, word for word
   (CR's app code of 21 Nov 2026; Whop's, YouTube Studio's, Instagram's and Facebook's own words). Where CR's help pages
   use an older name, the step uses the app's word and a hint names the help word: **Accounts** (help: Connected
@@ -250,8 +252,8 @@ top to bottom:
    `make_clips`.
 3. **Pay** (`data-help="cr-pay"`): one row per platform the campaign pays on (mark + name): CPM "$1.00 per 1,000
    views · up to $200.00 a clip · a clip starts paying once it has earned $2.00" (`minPayout`); per post "$5.00 for
-   each approved post · needs 1,000 views"; pool "Shares the prize money"; retainer "A monthly fee for picked
-   creators". "Pays more in some countries" folds out the country rates ("US & UK: $2.00 per 1,000 views", "Other
+   each approved post · needs 1,000 views"; pool "Shares the prize money"; retainer "Pays picked creators each
+   month" (§41.6 change 13). "Pays more in some countries" folds out the country rates ("US & UK: $2.00 per 1,000 views", "Other
    countries: $0.20", "Unknown country: …"). These are CR's published rates, never a guess of what a clip will earn.
    Then "Money left: $7,890 of $8,500 · as of 2:10 pm" over a soft bar with a chip "Plenty left" (< 50% used) / "Half
    used" / "Almost gone" (≥ 95%), "Open to everyone" or "The brand picks creators (you apply)", and "Pays for:
@@ -726,7 +728,7 @@ outside links) has no secret access at all (§38.16). Package `api/src/clipfacto
 | `rules.py` | `RULES_SCHEMA`, the Claude call, `validate`, `plain_rules`, `things_you_do` |
 | `gates.py` | stops, `upload_places`, the next step |
 | `campaigns.py`, `submit.py`, `poll.py`, `money.py`, `logo.py` | the items and flows of §38.10–§38.12 |
-| `handler.py` | `cf-prod-campaigns` (`{"action": "read" \| "logo" \| "brand_picture", "userId", "campaignId", …}`; no CR call, no secret) |
+| `handler.py` | `cf-prod-campaigns` (`{"action": "read" \| "logo" \| "brand_picture", "userId", "campaignId", …}`, and since §41 `{"action": "find", …}`; no call to Content Rewards' API, no secret; since §41 it reads Content Rewards' public campaign pages that robots.txt allows, `/sitemap.xml` and `/c/campaigns/{uuid}`, for the finder) |
 
 **Registering (RFC 7591), once per install.** `POST {ISSUER}/oauth2/register` (JSON) `{client_name: "Clip Factory",
 redirect_uris: ["http://127.0.0.1:47811/", …, "http://127.0.0.1:47815/"], grant_types: ["authorization_code",
@@ -890,7 +892,9 @@ This is checked at the first Connect (and logged once as `cr.typeid_verified` or
 * **Official (once you're in).** The listed campaign from `list_my_campaigns` wins for status, pay, platforms and the
   brief (`description`); the 6-hourly re-check uses only this list (the budget then shows "as of" the last owner
   action). The api and `cf-prod-stats` store the listed `description` on the item (`brief`) **before** they start a
-  rules read, so `cf-prod-campaigns` never needs CR. The brand's picture: `cf-prod-campaigns` copies
+  rules read, so `cf-prod-campaigns` never needs CR's API (since §41 it reads only CR's public campaign pages that
+  robots.txt allows, for the finder; the rule above for `/api/…`, only on the owner's own action and never on a
+  schedule, is unchanged and holds for the finder too). The brand's picture: `cf-prod-campaigns` copies
   `organization.logoUrl` (only `https://crusercontent.com/…`, ≤ 1 MB, the extension from the first bytes, never the
   URL) to `campaigns/{userId}/{uuid}/brand.{png|jpg|webp}` once, so the page needs no outside image (CSP unchanged).
 * **The rules (Claude, in `cf-prod-campaigns` `read`).** Started async on add, on join, when the brief's hash or the
@@ -1286,7 +1290,9 @@ for macOS only (`#[cfg(target_os = "macos")]`); on Windows the bridge exists but
   role with DynamoDB `GetItem`, `PutItem`, `UpdateItem`, `Query` on the table; `s3:GetObject`, `s3:PutObject`,
   `s3:DeleteObject` on `${media_bucket_arn}/campaigns/*`; `bedrock:InvokeModel` on `model_invoke_arns`; X-Ray; and
   **no `secretsmanager:*` action at all** (it reads untrusted brand text and fetches outside files; the brief is already
-  on the item). Env `TABLE_NAME`, `MEDIA_BUCKET`, `MODEL_ID`, `APP_URL`, `CONTENT_REWARDS`. Its name joins
+  on the item). It never calls Content Rewards' API; since §41 it reads the public campaign pages robots.txt allows,
+  for the finder (env `CR_FINDER`, §41.6). Env `TABLE_NAME`, `MEDIA_BUCKET`, `MODEL_ID`, `APP_URL`,
+  `CONTENT_REWARDS`. Its name joins
   monitoring's error and failed-invocation alarms.
 * `api`: env `CONTENT_REWARDS` (`var.content_rewards_enabled ? "on" : "off"`), `CAMPAIGNS_FUNCTION_ARN`;
   `lambda:InvokeFunction` on it (the stats invoke for `{"action": "contentrewards"}` uses the existing `StatsAndLearn`

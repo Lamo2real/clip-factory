@@ -23,7 +23,7 @@ import type {
   SaidAnswer,
   StopCode,
 } from "../api/types.ts";
-import { CR_DISCOVER, CR_SETTINGS, CR_SUBMISSIONS } from "../setup/contentrewards.ts";
+import { CR_DISCOVER, CR_PILOT_EMAIL, CR_SETTINGS, CR_SUBMISSIONS, isGmail, pilotGmail, pilotMailto } from "../setup/contentrewards.ts";
 import { withBack } from "./backLink.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER, count } from "./format.ts";
 import { onLiveSignal } from "./live.ts";
@@ -137,6 +137,11 @@ function ensureStarted() {
 /** Puts a newer copy in the store straight away (after a PATCH answered), without a round trip. */
 export function patchCr(fn: (d: CrOverview) => CrOverview): void {
   if (snapshot.data) set({ ...snapshot, data: fn(snapshot.data) } as CrState);
+}
+
+/** The store as it is right now (after an await, before React draws it). */
+export function crSnapshot(): CrState {
+  return snapshot;
 }
 
 /** Forgets everything (sign-out, tests). */
@@ -268,15 +273,20 @@ export function refused(c: CrConnection | null | undefined): boolean {
   return !signedIn(c) && (c.lastResult === "not_allowed" || !!c.pilotSentAt);
 }
 
-/** Which of the three setup steps are done (each also ticks itself from what Clip Factory sees). */
+/**
+ * Which of the three setup steps are done (each also ticks itself from what Clip Factory sees, so the page's one
+ * vermilion is the real next step). A finished Connect (signed in, or signed out later by Content Rewards) means
+ * steps 1 and 2 are done; Content Rewards saying the account can't connect apps (or the pilot email sent from his
+ * login) proves he has an account, so step 1 is done. A place Content Rewards doesn't know reopens step 2.
+ */
 export function crStepsDone(c: CrConnection | null | undefined): { "ready-account": boolean; "ready-socials": boolean; connect: boolean } {
   const on = signedIn(c);
+  const connectedOnce = on || c?.status === "needs_reconnect";
   const linked = !!c && Object.values(c.crLinked).some((v) => v === true);
   const refusedLink = !!c && Object.values(c.crLinked).some((v) => v === false);
   return {
-    // Signed out by Content Rewards: he has an account, only step 3 opens again.
-    "ready-account": on || c?.status === "needs_reconnect" || !!c?.stepsDone.includes("ready-account"),
-    "ready-socials": linked || (!!c?.stepsDone.includes("ready-socials") && !refusedLink),
+    "ready-account": connectedOnce || c?.lastResult === "not_allowed" || !!c?.pilotSentAt || !!c?.stepsDone.includes("ready-account"),
+    "ready-socials": linked || ((connectedOnce || !!c?.stepsDone.includes("ready-socials")) && !refusedLink),
     connect: on,
   };
 }
@@ -286,6 +296,11 @@ export function crSetupCount(c: CrConnection | null | undefined): number {
   return Object.values(crStepsDone(c)).filter(Boolean).length;
 }
 
+/** The setup card's line when GET /v1/contentrewards failed and nothing is kept yet (never "Not started"). */
+export const CR_LOAD_FAILED = "Couldn't load.";
+/** The setup card's line after Content Rewards said no, until the email to them went. */
+export const CR_CARD_EMAIL = "Needs you: email Content Rewards";
+
 /** The setup card's one state line (§38.3). `onMac`: this window can run Connect. */
 export function crCardLine(c: CrConnection | null | undefined, onMac: boolean): string {
   if (!c) return "Not started";
@@ -293,6 +308,8 @@ export function crCardLine(c: CrConnection | null | undefined, onMac: boolean): 
   if (c.status === "connected" && c.canSubmit && !c.blocked) return "Ready: sends your clips for you";
   if (signedIn(c)) return c.pilotSentAt && !c.canSubmit ? "Waiting for Content Rewards to say yes" : "Ready: you send clips yourself";
   if (c.pilotSentAt) return "Waiting for Content Rewards to say yes";
+  // Content Rewards said his account can't connect apps: the email to them is what comes next.
+  if (c.lastResult === "not_allowed") return CR_CARD_EMAIL;
   const done = crStepsDone(c);
   const n = Object.values(done).filter(Boolean).length;
   if (n === 0) return "Not started";
@@ -1039,6 +1056,47 @@ export function copyAndOpen(text: string, href: string, copy: (t: string) => Pro
 /** The pilot email's `mailto:` only when it goes to Content Rewards' support (else the one this app writes). */
 export function safeMailto(mailto: string | null | undefined, fallback: string): string {
   return typeof mailto === "string" && /^mailto:support@contentrewards\.com\?/.test(mailto) ? mailto : fallback;
+}
+
+// ---------- The email he signs in to Content Rewards with (this device only, never sent to the API) ----------
+
+const LOGIN_KEY = "cf.crLoginEmail";
+
+/** A plain email address ("a@b.co"), at most 254 characters. */
+export function looksLikeEmail(v: string): boolean {
+  const t = v.trim();
+  return t.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(t);
+}
+
+/** The saved Content Rewards login email, or "". */
+export function crLoginEmail(): string {
+  try {
+    const v = localStorage.getItem(LOGIN_KEY) ?? "";
+    return looksLikeEmail(v) ? v : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Keeps it on this device ("" forgets it). */
+export function saveCrLoginEmail(v: string): void {
+  try {
+    if (looksLikeEmail(v)) localStorage.setItem(LOGIN_KEY, v.trim());
+    else localStorage.removeItem(LOGIN_KEY);
+  } catch {
+    /* private mode: this device forgets */
+  }
+}
+
+/**
+ * Where "Open email" goes: Gmail's compose page for that exact account for a Gmail address (Mail would use its own
+ * default account), else the mailto (the desktop app hands it to Mail). Only ever to Content Rewards' support.
+ */
+export function pilotOpen(from: string, email: { to: string; subject: string; body: string; mailto: string } | null | undefined): { href: string; gmail: boolean } {
+  const mailto = safeMailto(email?.mailto, pilotMailto());
+  if (!looksLikeEmail(from) || !isGmail(from)) return { href: mailto, gmail: false };
+  const own = email && email.to === CR_PILOT_EMAIL.to && email.subject && email.body ? email : CR_PILOT_EMAIL;
+  return { href: pilotGmail(from, own), gmail: true };
 }
 
 /**

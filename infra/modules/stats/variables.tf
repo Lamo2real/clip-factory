@@ -92,6 +92,12 @@ variable "content_rewards_enabled" {
   description = "§38.16: CONTENT_REWARDS on/off for the stats tick's Content Rewards checking."
 }
 
+variable "cr_finder_enabled" {
+  type        = bool
+  default     = false
+  description = "§41.6: CR_FINDER on/off, the stats tick starting the campaign finder's scheduled look."
+}
+
 variable "campaigns_function_arn" {
   type        = string
   default     = ""

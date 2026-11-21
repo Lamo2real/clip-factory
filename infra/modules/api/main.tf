@@ -22,9 +22,15 @@ locals {
   # Content Rewards (docs/CONTRACTS.md §38.8, §38.16): every /v1/contentrewards route answers 503 until
   # CONTENT_REWARDS=on (and the names below are set). The stats invoke ({"action": "contentrewards"}) uses the
   # existing StatsAndLearn grant; the CR secrets are under the existing PlatformSecrets grant (§17.9). §39.3:
-  # CR_REMAKE turns on the campaign copy of a clip (503 "Coming soon." until then), an in-place env change.
-  cr_on  = var.campaigns_function_arn != ""
-  cr_env = merge({ CONTENT_REWARDS = var.content_rewards_enabled ? "on" : "off", CR_REMAKE = var.cr_remake_enabled ? "on" : "off" }, local.cr_on ? { CAMPAIGNS_FUNCTION_ARN = var.campaigns_function_arn } : {})
+  # CR_REMAKE turns on the campaign copy of a clip (503 "Coming soon." until then), an in-place env change. §41.5:
+  # CR_FINDER turns on the campaign finder's seven /v1/contentrewards/finder routes and the overview's finder key
+  # (503 "Coming soon." until then), also in place: its look invoke and its MCP send_feedback use the grants above.
+  cr_on = var.campaigns_function_arn != ""
+  cr_env = merge({
+    CONTENT_REWARDS = var.content_rewards_enabled ? "on" : "off"
+    CR_REMAKE       = var.cr_remake_enabled ? "on" : "off"
+    CR_FINDER       = var.cr_finder_enabled ? "on" : "off"
+  }, local.cr_on ? { CAMPAIGNS_FUNCTION_ARN = var.campaigns_function_arn } : {})
   cr_permissions = local.cr_on ? [
     { Sid = "Campaigns", Action = ["lambda:InvokeFunction"], Resource = [var.campaigns_function_arn] },
   ] : []

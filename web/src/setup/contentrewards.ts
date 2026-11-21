@@ -28,6 +28,49 @@ export function pilotMailto(email: { to: string; subject: string; body: string }
   return `mailto:${email.to}?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`;
 }
 
+/** A Gmail or Googlemail address: Gmail's own compose page can pick that exact account (Mail picks its default). */
+export function isGmail(address: string): boolean {
+  return /@(gmail|googlemail)\.com$/i.test(address.trim());
+}
+
+/** Gmail's compose page, signed in as `from` (authuser), with the pilot email filled in. Every value URL-encoded. */
+export function pilotGmail(from: string, email: { to: string; subject: string; body: string } = CR_PILOT_EMAIL): string {
+  const q = (v: string) => encodeURIComponent(v);
+  return `https://mail.google.com/mail/?view=cm&authuser=${q(from.trim())}&to=${q(email.to)}&su=${q(email.subject)}&body=${q(email.body)}`;
+}
+
+/**
+ * When Content Rewards refuses at sign-in it never sends the browser back, so the app asks what it said: while it
+ * waits (when he comes back to the window), after Cancel, and when the wait runs out. Never "That took too long".
+ */
+export const CR_ASK = {
+  question: "What did Content Rewards say?",
+  cant: "It said my account can't connect apps",
+  allowed: "I tapped Allow",
+  other: "Something else",
+  /** The wait ran out with no answer from Content Rewards. */
+  noAnswer: "Clip Factory didn't hear back from Content Rewards.",
+  /** "I tapped Allow" while it still waits. */
+  waiting: "OK. Waiting for Content Rewards…",
+  /** "I tapped Allow" after the wait stopped, and Clip Factory still isn't connected. */
+  missed: "Clip Factory didn't get it. Tap Connect Content Rewards again.",
+  /** "Something else". */
+  other_next: "Close that tab. Then tap Connect Content Rewards again.",
+  /** Content Rewards answered; the sign-in is being finished (a few seconds). */
+  finishing: "Connecting…",
+  /** "I tapped Allow" after the wait stopped: Clip Factory checks. */
+  checking: "Checking…",
+} as const;
+
+/** Tapping Open email before the box has his email (Mail would send it from its own default account). */
+export const CR_LOGIN_FIRST = "Type the email you use for Content Rewards first.";
+
+/** The first line of "Content Rewards said no?" once he says Content Rewards refused (or Connect said so). */
+export const CR_SAID_CANT = "Content Rewards hasn't let your account connect apps yet. Send them the email below.";
+
+/** The pilot card's one box (kept on this device only, never sent to the API). */
+export const CR_LOGIN_ASK = "Which email do you sign in to Content Rewards with?";
+
 /** Step 2's line after "Clip Factory posts to: …" (§38.3, unchanged), and its last line (§39.1). */
 const CR_TIKTOK_WAITS_LINE =
   "TikTok can wait. TikTok posts from Clip Factory stay private until TikTok checks the app, and private posts can't earn.";

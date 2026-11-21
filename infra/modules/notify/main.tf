@@ -21,12 +21,13 @@ locals {
   tags          = { Component = "notify" }
   function_name = "${var.name}-notify"
   vapid_name    = "${var.name}/notify/vapid"
-  # Only job items and the Content Rewards items (§38.11: CAMPAIGN#, CRSUB#, CRMONEY, CRCONN), and only changes (a new
-  # item never needs a notification: CRSUB# is always created as "sending" first): filtered before Lambda runs. One
-  # pattern with five prefixes, updated in place.
+  # Only job items and the Content Rewards items (§38.11: CAMPAIGN#, CRSUB#, CRMONEY, CRCONN; §41.4: CRFIND, whose
+  # changed notice.key is "3 new campaigns match what you want."), and only changes (a new item never needs a
+  # notification: CRSUB# is always created as "sending" first, and a finder look never creates CRFIND): filtered
+  # before Lambda runs. One pattern with six prefixes, updated in place.
   stream_filter = jsonencode({
     eventName = ["MODIFY"]
-    dynamodb  = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }] } } }
+    dynamodb  = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }, { prefix = "CRFIND" }] } } }
   })
 }
 
