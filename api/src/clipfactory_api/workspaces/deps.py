@@ -14,7 +14,7 @@ from typing import Any
 
 from . import types as ws
 
-_ATTR = "_cf_workspace_deps"
+# The attribute on App that holds them (a plain literal: the skills scan forbids computed getattr names).
 
 
 @dataclass
@@ -36,15 +36,15 @@ def from_env(app: Any) -> WsDeps:
 
 
 def of(app: Any) -> WsDeps:
-    found = getattr(app, _ATTR, None)
+    found = getattr(app, "_cf_workspace_deps", None)
     if isinstance(found, WsDeps):
         return found
     deps = from_env(app)
-    setattr(app, _ATTR, deps)
+    app._cf_workspace_deps = deps
     return deps
 
 
 def install(app: Any, deps: WsDeps) -> WsDeps:
     """For tests (and the builders' factories): use these dependencies for this app."""
-    setattr(app, _ATTR, deps)
+    app._cf_workspace_deps = deps
     return deps
