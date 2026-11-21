@@ -16,6 +16,9 @@ import { CampaignsRow } from "./CampaignsRow.tsx";
 import { LiveLine } from "../jobs/LiveLine.tsx";
 import { jobPercent, jobProgress } from "../../lib/jobProgress.ts";
 
+/** The most review clips Home sends to its row; the row draws as many as fit across (screens.css, `.home-row__cards`). */
+export const TEASERS_MAX = 6;
+
 export interface HomeData {
   jobs: Job[];
   review: Clip[];
@@ -99,7 +102,7 @@ export function Home() {
         </div>
       </section>
 
-      <section className="home-row" aria-labelledby="ready-title">
+      <section className="home-row home-row--review" aria-labelledby="ready-title">
         <div className="home-row__intro">
           <h2 className="display-2" id="ready-title">
             Ready for <em>review</em>.
@@ -123,13 +126,10 @@ export function Home() {
               <ErrorPanel message={failed} onRetry={() => void reload()} />
             </div>
           ) : view ? (
-            view.review.slice(0, 3).map((c) => <ClipTeaser key={c.clipId} clip={c} />)
+            // Six at most: the row shows as many as its width holds (2 on a phone, up to 6 on a big screen).
+            view.review.slice(0, TEASERS_MAX).map((c) => <ClipTeaser key={c.clipId} clip={c} />)
           ) : (
-            <>
-              <Skeleton className="teaser-skel" />
-              <Skeleton className="teaser-skel" />
-              <Skeleton className="teaser-skel" />
-            </>
+            Array.from({ length: TEASERS_MAX }, (_, i) => <Skeleton key={i} className="teaser-skel" />)
           )}
           {view && view.review.length === 0 ? (
             <div className="teaser teaser--empty glass">
