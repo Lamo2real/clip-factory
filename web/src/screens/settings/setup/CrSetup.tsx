@@ -368,11 +368,12 @@ export function CrSetup() {
       : pilotMain
         ? "pilot"
         : (current ?? (back && on ? "back" : !campaigns.length ? "add" : null));
-  // While "What did Content Rewards say?" is on screen, its three big answers are the step: no vermilion. Once he
+  // While Connect waits for the browser (before the question shows too), or "What did Content Rewards say?" is on
+  // screen, nothing is the vermilion: he is in the browser, or its three big answers are the step (§39.1). Once he
   // answered "Something else" (or Clip Factory missed his Allow), its line says to tap Connect again, so that Connect
   // is the vermilion wherever it is (step 3, the calm card, or the panel's Connect again).
   const connectAgain = bridge && !run.waiting && !run.checking && (run.said === "other" || run.said === "allowed");
-  const main: string | null = run.ask ? null : connectAgain ? (soonMain ? "soon" : on || reconnect ? "reconnect" : "connect") : next;
+  const main: string | null = run.ask || (bridge && run.waiting) ? null : connectAgain ? (soonMain ? "soon" : on || reconnect ? "reconnect" : "connect") : next;
   const postsTo = setup.data ? postsToLine(setup.data.platforms) : null;
   const places = addedPlaces(setup.data?.platforms);
   // The shortcut: only while steps 1 and 2 are both not done (someone already set up says so in one tap).
@@ -605,7 +606,8 @@ export function CrSetup() {
  * signs in to Content Rewards with (kept on this device only), as Mail would send from its own default account: a
  * Gmail address opens Gmail's compose page for that exact account; any other keeps the mailto and says to check the
  * From line. Until the box has his email, Open email opens nothing: it points at the box. Once sent, it never pushes
- * him to send it again.
+ * him to send it again: no email question, and Open email stays (glass), so he can send it again if Content Rewards
+ * never answers.
  */
 function PilotCard({
   conn,
@@ -628,20 +630,33 @@ function PilotCard({
   const [saved, setSaved] = useState(() => crLoginEmail());
   const [draft, setDraft] = useState(saved);
   const [editing, setEditing] = useState(!saved);
-  // He tapped Open email before typing his email: the box says so.
-  const [nudge, setNudge] = useState(false);
+  // He tapped Open email before typing his email: the box says so. Kept with whether it was sent then, so a tap from
+  // before "I sent it" never brings the email question back after it.
+  const [nudgedAt, setNudgedAt] = useState<"before" | "after" | null>(null);
   const box = useRef<HTMLInputElement>(null);
   const boxId = useId();
   const done = conn.canSubmit;
   const sent = !!conn.pilotSentAt;
+  const phase = sent ? "after" : "before";
+  const nudge = nudgedAt === phase;
   const email = conn.pilotEmail;
   const from = looksLikeEmail(draft) ? draft.trim() : saved;
   const target = pilotOpen(from, email);
   // Once sent, only what comes next (CR_PILOT_AFTER). Before that, only its first line: the box and the bold
   // "Send it from …" say where from (the guide's "Check the From line" would say it a third time).
   const lines = sent ? [] : CR_PILOT.say.slice(0, 1);
-  const describedBy = [nudge && !from ? `${boxId}-first` : "", from ? `${boxId}-from` : ""].filter(Boolean).join(" ") || undefined;
+  // Once sent, no email question: the box comes back only when he taps Open email with no email kept here, and folds
+  // again once Open email opens it. Never the "Send it from" line or Change after sending.
+  const askBox = !sent || nudge;
+  const fromLine = !sent && !!from;
+  const describedBy = [nudge && !from ? `${boxId}-first` : "", fromLine ? `${boxId}-from` : ""].filter(Boolean).join(" ") || undefined;
   const first = cant && !sent;
+  // Open email is the vermilion only while the email waits; once sent it stays glass.
+  const emailMain = main && !sent;
+  // After sending, the box shows only once he tapped Open email: it comes on screen first, then takes the focus.
+  useEffect(() => {
+    if (nudge) box.current?.focus();
+  }, [nudge]);
   // Saved as he leaves the box (the box stays put, so nothing moves under his pointer); it folds once he taps Open
   // email, and on his next visit it shows only the bold line with Change.
   const keep = () => {
@@ -671,9 +686,9 @@ function PilotCard({
               <Lines lines={lines} />
             </>
           ) : null}
-          {sent ? null : (
+          {askBox || (from && !target.gmail) ? (
             <div className="cr-login" data-cr="login">
-              {editing ? (
+              {askBox && editing ? (
                 <div className="field">
                   <label className="field__label" htmlFor={boxId}>
                     {CR_LOGIN_ASK}
@@ -701,17 +716,19 @@ function PilotCard({
                   <strong>{CR_LOGIN_FIRST}</strong>
                 </p>
               ) : null}
-              {from ? (
-                <p id={`${boxId}-from`}>
-                  <strong>
-                    Send it from <span className="user-text">{from}</span>.
-                  </strong>
+              {fromLine ? (
+                <div className="cr-login__from">
+                  <p id={`${boxId}-from`}>
+                    <strong>
+                      Send it from <span className="user-text">{from}</span>.
+                    </strong>
+                  </p>
                   {editing ? null : (
-                    <button type="button" className="text-link" onClick={() => setEditing(true)}>
+                    <Button variant="glass" className="cr-login__change" onClick={() => setEditing(true)}>
                       Change
-                    </button>
+                    </Button>
                   )}
-                </p>
+                </div>
               ) : null}
               {from && !target.gmail ? (
                 <p>
@@ -721,43 +738,42 @@ function PilotCard({
                 </p>
               ) : null}
             </div>
-          )}
-          {sent ? null : (
-            <div className="gstep__actions">
-              {from ? (
-                <a
-                  className={`btn btn--${main ? "primary" : "glass"} btn--lg`}
-                  href={target.href}
-                  data-help-clear={main ? "" : undefined}
-                  data-cr="open-email"
-                  onClick={() => {
-                    keep();
-                    setEditing(false);
-                  }}
-                  {...(target.gmail ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                >
-                  <Icon name="fileText" size={20} />
-                  <span className="btn__label">Open email</span>
-                  {target.gmail ? <span className="sr-only"> (opens Gmail in a new tab)</span> : null}
-                </a>
-              ) : (
-                // No email yet: Mail would pick its own default account, so the box comes first.
-                <button
-                  type="button"
-                  className={`btn btn--${main ? "primary" : "glass"} btn--lg`}
-                  data-help-clear={main ? "" : undefined}
-                  data-cr="open-email"
-                  onClick={() => {
-                    setNudge(true);
-                    box.current?.focus();
-                  }}
-                >
-                  <Icon name="fileText" size={20} />
-                  <span className="btn__label">Open email</span>
-                </button>
-              )}
-            </div>
-          )}
+          ) : null}
+          <div className="gstep__actions">
+            {from ? (
+              <a
+                className={`btn btn--${emailMain ? "primary" : "glass"} btn--lg`}
+                href={target.href}
+                data-help-clear={emailMain ? "" : undefined}
+                data-cr="open-email"
+                onClick={() => {
+                  keep();
+                  setEditing(false);
+                  setNudgedAt(null);
+                }}
+                {...(target.gmail ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              >
+                <Icon name="fileText" size={20} />
+                <span className="btn__label">Open email</span>
+                {target.gmail ? <span className="sr-only"> (opens Gmail in a new tab)</span> : null}
+              </a>
+            ) : (
+              // No email yet: Mail would pick its own default account, so the box comes first.
+              <button
+                type="button"
+                className={`btn btn--${emailMain ? "primary" : "glass"} btn--lg`}
+                data-help-clear={emailMain ? "" : undefined}
+                data-cr="open-email"
+                onClick={() => {
+                  setNudgedAt(phase);
+                  box.current?.focus();
+                }}
+              >
+                <Icon name="fileText" size={20} />
+                <span className="btn__label">Open email</span>
+              </button>
+            )}
+          </div>
           <div className="cr-email">
             <p className="gstep__note">An email asking Content Rewards to let Clip Factory send your clips.</p>
             <button type="button" className="text-link" aria-expanded={more} onClick={() => setMore((m) => !m)}>
