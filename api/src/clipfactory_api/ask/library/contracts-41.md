@@ -1,13 +1,13 @@
-## 40. Post it on TikTok yourself (owner request, 2026-11-21)
+## 41. Post it on TikTok yourself (owner request, 2026-11-21)
 
 The owner: he needs "the real deal", TikTok posts everyone can see, today. TikTok's API keeps every post of an
 unaudited app "Only me" on a private account (developers.tiktok.com/doc/content-sharing-guidelines), and TikTok's
 review rules ("Apps must not be for private or personal use"; Direct Post "Not acceptable: A utility tool to help
 upload contents to the account(s) you or your team manages") make approval unlikely for a one-person tool. So Clip
 Factory hands the clip to TikTok and the owner taps Post there himself, picking Everyone. Nothing here uses TikTok's
-posting API. Decision record: ADR-64.
+posting API. Decision record: ADR-65.
 
-### 40.1 What the owner sees
+### 41.1 What the owner sees
 
 * **Library** (each card) and **the clip page** (beside Refresh numbers): **Post it yourself** (TikTok mark; accessible
   name "Post it on TikTok yourself") on every uploaded clip (`confirmed` with posts, `publishing`, `posted`,
@@ -39,20 +39,24 @@ posting API. Decision record: ADR-64.
     (vermilion once the video was handed over; it sends `since`, a minute before the sheet opened). Confetti, the sheet
     closes, and one Undo toast: "On TikTok for everyone!" plus " Clip Factory will count its views." when it has the
     post, or the answer's `note` without its "Saved." ("… Clip Factory could not find it on your TikTok yet. Tap Add
-    link in a minute."). Undo takes it back (§40.2).
+    link in a minute."). Undo takes it back (§41.2).
 * **After**: the TikTok row says "Posted by you · Everyone", with Open and its numbers once read; without a link
   "Posted by you · Everyone · add the link to count views" and **Add link** (the same sheet with only the link box,
   **Find it on my TikTok**, which asks again from when he marked it, and **Save the link**). The clip page's TikTok stack says "Posted by you. Add its TikTok link in Library to count views."
   until it has one.
-* Review is unchanged: Upload to, Use my settings, each place's row with TikTok's dropdown and switches, and Upload to
-  several places all stay. TikTok ticked there is still Clip Factory's own upload, "Only me" until TikTok approves.
+* **Right after Upload on Review** (`offerAfterUpload`): when nothing of Clip Factory's is on its way to TikTok (no
+  TikTok post, or one waiting for setup) and TikTok's `posting_audit` gate is not `ok`, the clip's line in "Uploaded
+  just now" gets **Post it yourself** too, and when TikTok is set up (he posts there) but was left unticked, the sheet
+  opens by itself (Not now closes it). Nothing
+  else on Review changes: Upload to, Use my settings, each place's row with TikTok's dropdown and switches, and Upload
+  to several places all stay. TikTok ticked there is still Clip Factory's own upload, "Only me" until TikTok approves.
 
 TikTok's rule: Everyone needs a public account, while an unaudited app may only post to a private one
 (`unaudited_client_can_only_post_to_private_accounts`). With his account public, Clip Factory's own TikTok upload fails
 with the existing sentence ("Make your TikTok account private (Setup step 3), then press Try again."), and Post it
 yourself stays on that row.
 
-### 40.2 API (additive, under `ANY /v1/{proxy+}`; `routes/clips.py`, `tiktok_self.py`, `tiktok_link.py`)
+### 41.2 API (additive, under `ANY /v1/{proxy+}`; `routes/clips.py`, `tiktok_self.py`, `tiktok_link.py`)
 
 | Method & path | Body | 2xx response |
 |---|---|---|
@@ -100,24 +104,26 @@ yourself stays on that row.
 * `Post.by?: "you"` and `PlatformPerformance.by?: "you"` (§16.2) are the only shape changes. No Terraform, table,
   index or secret change; existing clips and posts are untouched (new attributes only on posts the owner marks).
 
-### 40.3 Web
+### 41.3 Web
 
 `lib/tiktokYourself.ts` (`handOffFor`, `canShareVideo`, `tiktokState`, `canPostYourself`, `canPostYourselfHere`,
-`steps`, `videoFileName`, `looksLikeTikTokLink`, `TIKTOK_UPLOAD_URL`), `screens/library/PostYourself.tsx`
-(`PostYourself`, `PostYourselfButton`), `Library.tsx`, `ClipPerformance.tsx`, `lib/metrics.ts` `calmCopy`; `Api.clipFile`,
+`tiktokAudited`, `offerAfterUpload`, `steps`, `videoFileName`, `looksLikeTikTokLink`, `TIKTOK_UPLOAD_URL`),
+`screens/library/PostYourself.tsx` (`PostYourself`, `PostYourselfButton`), `Library.tsx`, `ClipPerformance.tsx`,
+`Review.tsx` (Uploaded just now), `lib/metrics.ts` `calmCopy`; `Api.clipFile`,
 `markTikTokPosted(clipId, link?)`, `undoTikTokPosted`; the mock follows the API's rules (a short link reads as the
 sample video; mock clips without a video get a tiny stand-in file).
 
-### 40.4 Tests
+### 41.4 Tests
 
 `api/tests/test_tiktok_yourself.py` (links: full, short, away from TikTok, three hops, home page, not a video, TikTok
 down, the real opener's hosts; I posted it: new post, link and poller, short link, another account, replace and Undo,
 failed clip, Undo of a made post, link later, every refusal, another owner; finding it: by caption, the only new post,
 too unsure, TikTok down; the file link); `web/test/tiktokYourself.test.ts` (the pure helpers and the mock's rules);
-`web/e2e/tiktok-yourself.spec.ts` (Library: button, sheet, I posted it, Add link, Find it, Undo). The mock's first
+`web/e2e/tiktok-yourself.spec.ts` (Library: button, sheet, I posted it, Add link, Find it, Undo; Review: Uploaded just
+now). The mock's first
 look finds nothing and a later one finds the sample post.
 
-### 40.5 Not verified live
+### 41.5 Not verified live
 
 Whether iOS 26 offers Save Video for a file shared from the Home Screen app (reported working on iOS 16; WebKit bug
 255641 fixed the Save actions in 2023), and whether TikTok appears in that menu at all (reports say only from Photos);

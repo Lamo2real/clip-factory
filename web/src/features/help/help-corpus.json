@@ -1,5 +1,5 @@
 {
-  "version": "ab48a0f78f8c",
+  "version": "062449557987",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -3770,9 +3770,14 @@
         "not",
         "done",
         "yet",
+        "save",
+        "video",
+        "tiktok",
+        "paste",
+        "close",
+        "link",
         "fix",
         "ask",
-        "tiktok",
         "made",
         "kids",
         "tell",
@@ -3790,9 +3795,7 @@
         "throw",
         "away",
         "post",
-        "close",
-        "rewards",
-        "settings"
+        "rewards"
       ],
       "answer": "These clips all come from one job. Tap Upload to post one, or Throw away if you do not like it. Tap Show every job to see the rest.",
       "steps": [

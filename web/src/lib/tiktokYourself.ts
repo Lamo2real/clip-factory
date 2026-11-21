@@ -1,7 +1,7 @@
-// Post it on TikTok yourself (docs/CONTRACTS.md §40). TikTok's API keeps Clip Factory's own uploads "Only me" until
+// Post it on TikTok yourself (docs/CONTRACTS.md §41). TikTok's API keeps Clip Factory's own uploads "Only me" until
 // TikTok approves the app, so the owner hands the clip to TikTok and taps Post there himself, picking Everyone.
 // Pure helpers here (tested without a browser); the sheet is screens/library/PostYourself.tsx.
-import type { Clip, PlatformPerformance, Post } from "../api/types.ts";
+import type { Clip, PlatformPerformance, PlatformSetup, Post } from "../api/types.ts";
 import type { DeviceOs } from "./device.ts";
 
 /** TikTok's own page for posting from a computer (TikTok Studio's uploader). */
@@ -61,6 +61,25 @@ export function canPostYourselfHere(clip: Clip, tiktok: Pick<PlatformPerformance
   return tiktok.status !== "posting" && tiktok.status !== "posted";
 }
 
+/** Has TikTok passed its posting audit (Clip Factory's own TikTok uploads can be public)? Unknown counts as no. */
+export function tiktokAudited(setups: readonly PlatformSetup[] | undefined): boolean {
+  const tiktok = setups?.find((s) => s.platform === "tiktok");
+  return tiktok?.gates.some((g) => g.key === "posting_audit" && g.state === "ok") ?? false;
+}
+
+/**
+ * Right after Upload on Review (§41.1): offer Post it yourself when TikTok was not one of the places (so nothing of
+ * Clip Factory's is on its way there) and TikTok has not approved public uploads. `open`: the sheet opens by itself,
+ * only when TikTok is set up (he posts there) but was left unticked.
+ */
+export function offerAfterUpload(posts: Post[], setups: readonly PlatformSetup[] | undefined): { offer: boolean; open: boolean } {
+  const tiktok = posts.find((p) => p.platform === "tiktok");
+  // No TikTok post, or one that waits for TikTok to be set up: nothing of Clip Factory's is on its way to TikTok.
+  const offer = posts.length > 0 && (!tiktok || tiktok.status === "pending_integration") && !tiktokAudited(setups);
+  const tiktokReady = !!setups?.find((s) => s.platform === "tiktok")?.ready;
+  return { offer, open: offer && !tiktok && tiktokReady };
+}
+
 /** Is this a campaign clip (a paid partnership on TikTok)? */
 export function isPaid(clip: Clip): boolean {
   return !!clip.campaignId;
@@ -68,7 +87,7 @@ export function isPaid(clip: Clip): boolean {
 
 /**
  * The steps the sheet shows, in TikTok's own words, for this device. TikTok is rarely in the share menu of a web app
- * (§40.5), so the phone saves the video and posts it with TikTok's own +. TikTok starts a new post with the last post's
+ * (§41.5), so the phone saves the video and posts it with TikTok's own +. TikTok starts a new post with the last post's
  * privacy, which after Clip Factory's Only me uploads is Only you: the step says to check Everyone every time.
  */
 export function steps(mode: HandOff, paid: boolean): string[] {

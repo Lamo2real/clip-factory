@@ -424,7 +424,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
             >
               {label}
             </Button>
-            {/* TikTok keeps Clip Factory's own uploads Only me for now: he can post it there himself (§40). */}
+            {/* TikTok keeps Clip Factory's own uploads Only me for now: he can post it there himself (§41). */}
             {canPostYourselfHere(perf.clip, perf.posts.find((p) => p.platform === "tiktok")) ? (
               <PostYourselfButton clip={perf.clip} onMarked={() => void load()} size="md" />
             ) : null}

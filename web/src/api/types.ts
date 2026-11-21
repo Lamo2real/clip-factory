@@ -551,17 +551,17 @@ export interface Post {
   campaignId?: string;
   /** YouTube or X did not take the paid-partnership switch (§38.14). */
   paidLabel?: "not_set";
-  /** "you": the owner posted it on TikTok himself (Post on TikTok yourself, §40). */
+  /** "you": the owner posted it on TikTok himself (Post on TikTok yourself, §41). */
   by?: "you";
 }
 
-/** GET /v1/clips/{clipId}/file: a 1-hour link that saves the clip's video (§40). */
+/** GET /v1/clips/{clipId}/file: a 1-hour link that saves the clip's video (§41). */
 export interface ClipFile {
   url: string;
   filename: string;
 }
 
-/** POST and DELETE /v1/clips/{clipId}/tiktok/posted (§40). `note`: the link was kept, but views are not read. */
+/** POST and DELETE /v1/clips/{clipId}/tiktok/posted (§41). `note`: the link was kept, but views are not read. */
 export interface TikTokMarked {
   clip: Clip;
   posts: Post[];
@@ -658,7 +658,7 @@ export interface PlatformPerformance {
   error?: string;
   /** §25.3: what this platform reported this clip made (YouTube's estimate today). Absent when nothing was reported. */
   revenue?: ReportedMoney;
-  /** "you": posted on TikTok by the owner himself (§40). */
+  /** "you": posted on TikTok by the owner himself (§41). */
   by?: "you";
 }
 
@@ -1592,11 +1592,11 @@ export interface Api {
     options?: ClipPostOptions,
   ): Promise<{ clip: Clip; posts: Post[] }>;
   declineClip(clipId: string): Promise<Clip>;
-  /** GET /v1/clips/{clipId}/file: a link that saves the clip's video (Save the video, §40). */
+  /** GET /v1/clips/{clipId}/file: a link that saves the clip's video (Save the video, §41). */
   clipFile(clipId: string): Promise<ClipFile>;
-  /** POST /v1/clips/{clipId}/tiktok/posted: the owner posted it on TikTok himself; `link` gives its views (§40). */
+  /** POST /v1/clips/{clipId}/tiktok/posted: the owner posted it on TikTok himself; `link` gives its views (§41). */
   markTikTokPosted(clipId: string, link?: string, since?: string): Promise<TikTokMarked>;
-  /** DELETE /v1/clips/{clipId}/tiktok/posted: Undo of "I posted it" (§40). */
+  /** DELETE /v1/clips/{clipId}/tiktok/posted: Undo of "I posted it" (§41). */
   undoTikTokPosted(clipId: string): Promise<TikTokMarked>;
   /** GET /v1/skills: built-ins first, then the owner's, by name (§18.3). */
   listSkills(): Promise<Skill[]>;

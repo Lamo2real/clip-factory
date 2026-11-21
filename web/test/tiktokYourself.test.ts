@@ -1,14 +1,15 @@
-// Post it on TikTok yourself (docs/CONTRACTS.md §40): the pure helpers and the mock's rules.
+// Post it on TikTok yourself (docs/CONTRACTS.md §41): the pure helpers and the mock's rules.
 import { beforeAll, describe, expect, it } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
 import { mockApi, type MockFaults } from "../src/api/mock/index.ts";
 import { seed } from "../src/api/mock/fixtures.ts";
-import type { Clip, PlatformPerformance, Post } from "../src/api/types.ts";
+import type { Clip, PlatformPerformance, PlatformSetup, Post } from "../src/api/types.ts";
 import { calmCopy } from "../src/lib/metrics.ts";
 import {
   canPostYourself,
   canPostYourselfHere,
   handOffFor,
+  offerAfterUpload,
   looksLikeTikTokLink,
   steps,
   tiktokState,
@@ -70,6 +71,26 @@ describe("when Post it yourself shows", () => {
     expect(canPostYourselfHere(clip("posted"), row("posted"))).toBe(false);
     expect(canPostYourselfHere(clip("posted"), row("posted", "you"))).toBe(false);
     expect(canPostYourselfHere(clip("review"), row("not_posted"))).toBe(false);
+  });
+});
+
+describe("right after Upload on Review", () => {
+  const tiktok = (ready: boolean, audit: "ok" | "limited" | "unknown") =>
+    [{ platform: "tiktok", ready, gates: [{ key: "posting_audit", state: audit }] }] as unknown as PlatformSetup[];
+  const yt = post({ platform: "youtube", status: "queued" });
+
+  it("offers it when TikTok was not ticked and TikTok has not approved public uploads", () => {
+    expect(offerAfterUpload([yt], tiktok(true, "limited"))).toEqual({ offer: true, open: true });
+    expect(offerAfterUpload([yt], tiktok(false, "unknown"))).toEqual({ offer: true, open: false });
+    expect(offerAfterUpload([yt], undefined)).toEqual({ offer: true, open: false });
+    // TikTok not set up yet: its post waits, and he can post it himself meanwhile (the sheet does not open by itself).
+    expect(offerAfterUpload([yt, post({ status: "pending_integration" })], tiktok(false, "unknown"))).toEqual({ offer: true, open: false });
+  });
+
+  it("not when TikTok is one of the places, nor once TikTok approved, nor with no posts", () => {
+    expect(offerAfterUpload([yt, post({ status: "queued" })], tiktok(true, "limited")).offer).toBe(false);
+    expect(offerAfterUpload([yt], tiktok(true, "ok")).offer).toBe(false);
+    expect(offerAfterUpload([], tiktok(true, "limited")).offer).toBe(false);
   });
 });
 

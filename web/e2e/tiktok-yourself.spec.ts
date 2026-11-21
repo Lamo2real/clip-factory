@@ -1,4 +1,4 @@
-// Post it on TikTok yourself (docs/CONTRACTS.md §40): the Library's button, the sheet, I posted it, Add link and Undo.
+// Post it on TikTok yourself (docs/CONTRACTS.md §41): the Library's button, the sheet, I posted it, Add link and Undo.
 import { expect, test } from "@playwright/test";
 import { settle } from "./helpers.ts";
 import type { Page } from "@playwright/test";
@@ -71,4 +71,20 @@ test("library: Add link's Find it on my TikTok finds the post", async ({ page })
   await expect(page.getByText("Found it on your TikTok! Clip Factory will count its views.")).toBeVisible();
   await expect(row.getByRole("link", { name: "Open the TikTok post" })).toBeVisible();
   await expect(row.getByRole("button", { name: "Add the TikTok link" })).toHaveCount(0);
+});
+
+test("review: right after Upload without TikTok, Uploaded just now offers Post it yourself", async ({ page }) => {
+  await page.goto("/review");
+  await settle(page);
+  const card = page.locator(".review-card").first();
+  const hook = await card.locator(".review-card__hook").innerText();
+  await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
+  const box = page.locator(".kept-now");
+  await expect(box).toBeVisible();
+  const item = box.locator(".kept-now__item", { hasText: hook.slice(0, 20) });
+  await item.getByRole("button", { name: "Post it on TikTok yourself" }).click();
+  const sheet = page.getByRole("dialog", { name: "Post it on TikTok yourself" });
+  await sheet.getByRole("button", { name: "I posted it" }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(item.getByRole("button", { name: "Post it on TikTok yourself" })).toHaveCount(0);
 });

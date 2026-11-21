@@ -1,4 +1,4 @@
-"""Post it on TikTok yourself (docs/CONTRACTS.md §40): reading pasted links, I posted it, Undo, and Save the video."""
+"""Post it on TikTok yourself (docs/CONTRACTS.md §41): reading pasted links, I posted it, Undo, and Save the video."""
 
 from __future__ import annotations
 

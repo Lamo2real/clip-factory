@@ -449,7 +449,7 @@ def _try_again(
     return release.restart(app.store, app.flows, clip, [*failed, *waiting], clip_posts=rows, tiktok=tiktok)
 
 
-# --- Post it on TikTok yourself (§40) ---------------------------------------------------------------------------
+# --- Post it on TikTok yourself (§41) ---------------------------------------------------------------------------
 
 OTHER_ACCOUNT = "Saved. Views only show for posts on the TikTok account you connected."
 NOT_FOUND_YET = "Saved. Clip Factory could not find it on your TikTok yet. Tap Add link in a minute."
@@ -472,7 +472,7 @@ def _has_link(app: App, user_id: str, item: Mapping[str, Any]) -> bool:
 
 
 def clip_file(app: App, req: Request) -> Response:
-    """``GET /v1/clips/{clipId}/file``: a 1-hour link that saves the clip's video as a file (Save the video, §40)."""
+    """``GET /v1/clips/{clipId}/file``: a 1-hour link that saves the clip's video as a file (Save the video, §41)."""
     item = _clip_or_404(app, req)
     if item.get("status") == "declined" or not item.get("videoKey"):
         raise not_found("This clip has no video any more.")
@@ -527,7 +527,7 @@ def tiktok_posted(app: App, req: Request) -> Response:
 
 
 def tiktok_posted_undo(app: App, req: Request) -> Response:
-    """``DELETE /v1/clips/{clipId}/tiktok/posted``: Undo of "I posted it" (§40)."""
+    """``DELETE /v1/clips/{clipId}/tiktok/posted``: Undo of "I posted it" (§41)."""
     item = _clip_or_404(app, req)
     try:
         tiktok_self.undo(app.store, item)

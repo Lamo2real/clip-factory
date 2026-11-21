@@ -1,4 +1,4 @@
-"""TikTok post links the owner pastes after posting a clip on TikTok himself (docs/CONTRACTS.md §40).
+"""TikTok post links the owner pastes after posting a clip on TikTok himself (docs/CONTRACTS.md §41).
 
 TikTok's Copy link gives a full link on the web (``https://www.tiktok.com/@name/video/<id>``) and, in the phone app,
 usually a short one (``https://www.tiktok.com/t/<code>/``, ``https://vm.tiktok.com/<code>/``,

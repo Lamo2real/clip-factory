@@ -1,4 +1,4 @@
-"""Post it on TikTok yourself (docs/CONTRACTS.md §40): the owner hands the clip to TikTok, posts it there for
+"""Post it on TikTok yourself (docs/CONTRACTS.md §41): the owner hands the clip to TikTok, posts it there for
 Everyone, and tells Clip Factory it is out.
 
 The clip's TikTok post (one per clip, as everywhere) becomes ``posted`` with the public ``by: "you"``. When that post

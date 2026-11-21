@@ -294,7 +294,7 @@ function LibraryCard({
   // A waiting post whose place is set up since can go now (a clip still publishing finishes its run first).
   const canPostNow = (p: Post) => p.status === "pending_integration" && ready.includes(p.platform) && clip.status !== "publishing";
   // TikTok keeps Clip Factory's own uploads Only me until it approves the app, so the owner can post it there
-  // himself (§40): TikTok then gets its own row, even while TikTok is not set up or has no post at all.
+  // himself (§41): TikTok then gets its own row, even while TikTok is not set up or has no post at all.
   const yourself = canPostYourself(clip, posts);
   const ownRow = (p: Post) => p.status !== "pending_integration" || canPostNow(p) || (yourself && p.platform === "tiktok");
   const waiting = ordered.filter((p) => !ownRow(p));
@@ -322,7 +322,7 @@ function LibraryCard({
           {p.status === "posted" && !p.metrics && p.perfCheckAt && !(p.by === "you" && !p.url) && p.privacy !== "private" ? ` · numbers ${relative(p.perfCheckAt)}` : ""}
         </span>
       </span>
-      {/* TikTok only lets Clip Factory post Only me for now: the owner posts it there himself (§40). */}
+      {/* TikTok only lets Clip Factory post Only me for now: the owner posts it there himself (§41). */}
       {yourself && p.platform === "tiktok" ? <PostYourselfButton clip={clip} onMarked={marked} /> : null}
       {p.by === "you" && !p.url ? <PostYourselfButton clip={clip} onMarked={marked} linkOnly postedAt={p.postedAt} /> : null}
       {/* One place did not work on an uploaded clip: Try again for that place only (§33). */}
