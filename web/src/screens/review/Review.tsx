@@ -145,7 +145,7 @@ export function Review({ jobId }: { jobId: string | null }) {
   const setupFailed = !setup.data && !!setup.error;
   // Clips uploaded on this visit: each gets a "See how it does" link once its card has left the list.
   const [justKept, setJustKept] = useState<Clip[]>([]);
-  // Uploaded without TikTok while TikTok keeps Clip Factory's uploads Only me: offer Post it yourself (§41.1).
+  // Uploaded without TikTok while TikTok keeps Clip Factory's uploads Only me: offer Post it yourself (§42.1).
   const [tiktokYourself, setTikTokYourself] = useState<ReadonlySet<string>>(() => new Set());
   const [handOff, setHandOff] = useState<Clip | null>(null);
   const kept = (clip: Clip, posts: Post[] = []) => {
@@ -351,7 +351,7 @@ function ReviewCard({
   tiktokApproved = true,
 }: {
   clip: Clip;
-  /** TikTok approved Clip Factory's own public uploads (§41); until then a ticked TikTok points to Post it yourself. */
+  /** TikTok approved Clip Factory's own public uploads (§42); until then a ticked TikTok points to Post it yourself. */
   tiktokApproved?: boolean;
   /** A campaign copy of this clip waits right below it (§39.3). */
   copyHere?: boolean;

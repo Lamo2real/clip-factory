@@ -172,7 +172,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   const claimedAt = new Map<string, number>();
   // The TikTok sheet's choices stored on each TikTok post (the API's postOptions.tiktok, never returned).
   const postOptions = new Map<string, TikTokPostOptions>();
-  // Posted on TikTok by the owner (§41): what the TikTok post was before (null: made by I posted it), for Undo.
+  // Posted on TikTok by the owner (§42): what the TikTok post was before (null: made by I posted it), for Undo.
   const byYou = new Map<string, Post | null>();
   // Each place's own choices sent with Upload (§36.3), by post (the API's postOptions, never returned).
   const clipOptions = new Map<string, object>();
@@ -1010,7 +1010,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       }
       return startPosting();
     },
-    // Post it on TikTok yourself (§41): the same rules as the API's tiktok_self.py.
+    // Post it on TikTok yourself (§42): the same rules as the API's tiktok_self.py.
     async clipFile(clipId) {
       await delay();
       const c = clip(clipId);

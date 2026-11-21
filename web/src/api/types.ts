@@ -551,17 +551,17 @@ export interface Post {
   campaignId?: string;
   /** YouTube or X did not take the paid-partnership switch (§38.14). */
   paidLabel?: "not_set";
-  /** "you": the owner posted it on TikTok himself (Post on TikTok yourself, §41). */
+  /** "you": the owner posted it on TikTok himself (Post on TikTok yourself, §42). */
   by?: "you";
 }
 
-/** GET /v1/clips/{clipId}/file: a 1-hour link that saves the clip's video (§41). */
+/** GET /v1/clips/{clipId}/file: a 1-hour link that saves the clip's video (§42). */
 export interface ClipFile {
   url: string;
   filename: string;
 }
 
-/** POST and DELETE /v1/clips/{clipId}/tiktok/posted (§41). `note`: the link was kept, but views are not read. */
+/** POST and DELETE /v1/clips/{clipId}/tiktok/posted (§42). `note`: the link was kept, but views are not read. */
 export interface TikTokMarked {
   clip: Clip;
   posts: Post[];
@@ -658,7 +658,7 @@ export interface PlatformPerformance {
   error?: string;
   /** §25.3: what this platform reported this clip made (YouTube's estimate today). Absent when nothing was reported. */
   revenue?: ReportedMoney;
-  /** "you": posted on TikTok by the owner himself (§41). */
+  /** "you": posted on TikTok by the owner himself (§42). */
   by?: "you";
 }
 
@@ -1427,6 +1427,11 @@ export interface CrMoney {
   waitingForBrand: number;
   campaigns: { campaignId?: string; name: string; paidCents: number; pendingCents: number }[];
   celebrations: { key: string; kind: "first_money" | "money_arrived" | "can_move"; text: string }[];
+  /**
+   * When Clip Factory last saw a move to Whop finish (On its way went back to 0 after being above 0), ISO. Additive:
+   * absent on an API from before it, null before any move. The bank step leads on every device from it (§38.7).
+   */
+  movedAt?: string | null;
 }
 /** GET /v1/contentrewards: reads items only, never calls CR. */
 export interface CrOverview {
@@ -1437,7 +1442,9 @@ export interface CrOverview {
   waitingSends: CrSubmission[];
 }
 export type CrConnectionPatch =
-  | { said: "pilot_sent" | null }
+  /** "cant_connect": he says Content Rewards refused at sign-in (it never sends the browser back). The API sets
+   * lastResult not_allowed and ticks ready-account; an older API answers 400. */
+  | { said: "pilot_sent" | "cant_connect" | null }
   | { step: string; done: boolean }
   | { relinked: Platform }
   | { finance: boolean | null };
@@ -1592,11 +1599,11 @@ export interface Api {
     options?: ClipPostOptions,
   ): Promise<{ clip: Clip; posts: Post[] }>;
   declineClip(clipId: string): Promise<Clip>;
-  /** GET /v1/clips/{clipId}/file: a link that saves the clip's video (Save the video, §41). */
+  /** GET /v1/clips/{clipId}/file: a link that saves the clip's video (Save the video, §42). */
   clipFile(clipId: string): Promise<ClipFile>;
-  /** POST /v1/clips/{clipId}/tiktok/posted: the owner posted it on TikTok himself; `link` gives its views (§41). */
+  /** POST /v1/clips/{clipId}/tiktok/posted: the owner posted it on TikTok himself; `link` gives its views (§42). */
   markTikTokPosted(clipId: string, link?: string, since?: string): Promise<TikTokMarked>;
-  /** DELETE /v1/clips/{clipId}/tiktok/posted: Undo of "I posted it" (§41). */
+  /** DELETE /v1/clips/{clipId}/tiktok/posted: Undo of "I posted it" (§42). */
   undoTikTokPosted(clipId: string): Promise<TikTokMarked>;
   /** GET /v1/skills: built-ins first, then the owner's, by name (§18.3). */
   listSkills(): Promise<Skill[]>;

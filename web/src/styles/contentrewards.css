@@ -88,8 +88,14 @@
   gap: 10px;
   padding: 0 14px 14px;
 }
+/* An unnumbered card ("Content Rewards said no?"): its one mark sits in the number's place, light on a soft fill
+   (also while it is the open card: never the current step's dark-on-bone, which drew it dark on dark). */
 .gstep.is-helper .gstep__num {
   background: var(--fill);
+}
+.gstep.is-helper:not(.is-done) .gstep__num {
+  color: var(--ink);
+  text-shadow: none;
 }
 
 .cr-waiting {
@@ -104,6 +110,55 @@
   flex: 1;
   min-width: 12ch;
   font-weight: 650;
+}
+/* "What did Content Rewards say?": one question, three big answers (they wrap one under the other when narrow).
+   Its own names: campaigns' older .cr-ask (NextStep) is another thing. */
+.cr-waiting-wrap,
+.cr-said {
+  display: grid;
+  gap: 12px;
+}
+.cr-said__lead,
+.cr-said__q {
+  margin: 0;
+}
+.cr-said__q {
+  font-weight: 700;
+  font-size: var(--fs-h3);
+}
+/* Focus lands on the question after Cancel so screen readers read it; it is not a control, so no ring. */
+.cr-said__q:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.cr-said__answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cr-said__answers .btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: start;
+}
+/* The pilot email's box (kept on this device) and the bold From lines. */
+.cr-login {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  max-width: 34rem;
+}
+.cr-login p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.cr-login .text-link {
+  min-height: 44px;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  margin-inline-start: 8px;
 }
 .cr-place__words {
   margin: 0;
@@ -679,8 +734,36 @@
 .cr-job .panel__title {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: baseline;
   flex-wrap: wrap;
+}
+/* The coin sits on the strip's first line, also when the strip wraps to two: its foot is on that line's baseline,
+   lowered a little so its middle meets the words' middle. */
+.cr-job .panel__title > .icon {
+  flex: none;
+  position: relative;
+  top: 0.2em;
+}
+/* "Campaign clips · FaZe Clips · Following 7 rules": one line that wraps like words; each dot keeps to the words
+   after it (the name's dot and link are one box; a long name still wraps inside its link, never past the edge). */
+.cr-job__strip {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cr-job__name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  max-width: 100%;
+}
+.cr-job__name .text-link {
+  min-width: 0;
+}
+/* Library: the small "Campaign" chip of a campaign clip, under its status. */
+.lib-card__campaign {
+  display: inline-flex;
+  max-width: 100%;
 }
 .cr-clip {
   display: grid;
@@ -1009,9 +1092,16 @@
 .cr-fit__copy.is-ok {
   color: var(--green-ink);
 }
+/* "I couldn't check these:" and only its own lines, on a soft fill (no edge); the other lines keep clear room below. */
 .cr-fit__checks {
   display: grid;
   gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.cr-fit__checks + .cr-fit__more {
+  margin-top: 6px;
 }
 .cr-fit__actions {
   display: flex;
@@ -1288,6 +1378,15 @@
   flex-direction: column;
   gap: 14px;
   min-width: 0;
+}
+/* Setup's steps 1 and 2 on phones: the step's lines come before the pair's sticky box, and its first thing is a room
+   exactly the pair's height (set by CrStepCard). The pair rests there, right under the lines, so it never covers one;
+   scrolling on, it stays pinned at the bottom right as before. Only where the pair can ever rest there (lines that end
+   low on the first screen): a tall screen gets no room, so no empty gap. */
+.gstep__rest.has-room::before {
+  content: "";
+  flex: none;
+  height: var(--pin-room, 0px);
 }
 
 /* Home's campaigns row: "campaigns." stays one word in the narrow intro column, and the chip's scissors sit on the

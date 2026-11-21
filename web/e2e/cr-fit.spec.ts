@@ -244,6 +244,107 @@ test.describe("the fit block on Review", () => {
     await expect(page.locator("#rules")).toBeInViewport();
   });
 
+  test("Check 1 thing: I couldn't check these: heads only its own line, the other lines sit apart with room between", async ({ page }) => {
+    await start(page);
+    const { card } = await campaignClips(page);
+    await knob(page, "cr", "setRules", FAZE, { uncertain: ["Clips must feel organic"] });
+    const fit = card.locator(".cr-fit");
+    await expect(fit.locator(".cr-fit__headline")).toHaveText("Check 1 thing, then upload");
+    const group = fit.locator(".cr-fit__checks");
+    await expect(group.locator(".cr-fit__lead")).toHaveText("I couldn't check these:");
+    // The heading's own list holds exactly its line; every other line of the block is outside the group.
+    await expect(group.locator(".cr-fit__line")).toHaveCount(1);
+    await expect(group.locator(".cr-fit__line[data-state='check']")).toHaveCount(1);
+    await expect(group.locator("ul")).toHaveAttribute("aria-labelledby", (await group.locator(".cr-fit__lead").getAttribute("id"))!);
+    const geo = await fit.evaluate((el) => {
+      const g = el.querySelector(".cr-fit__checks")!.getBoundingClientRect();
+      const others = [...el.querySelectorAll(":scope > .cr-fit__lines > .cr-fit__line")].map((li) => li.getBoundingClientRect());
+      const lines = [...el.querySelectorAll(":scope > .cr-fit__checks .cr-fit__line")].map((li) => li.getBoundingClientRect());
+      const gap = parseFloat(getComputedStyle(el.querySelector(".cr-fit__checks .cr-fit__lines")!).rowGap) || 0;
+      return { bottom: g.bottom, others: others.map((r) => r.top), inside: lines.every((r) => r.top >= g.top && r.bottom <= g.bottom), withinGap: gap };
+    });
+    expect(geo.inside).toBe(true);
+    expect(geo.others.length, "the send note (and any fix) after the group").toBeGreaterThan(0);
+    // Clear room between the group and the next line: more than the gap between two lines of one list.
+    for (const top of geo.others) expect(top - geo.bottom).toBeGreaterThan(geo.withinGap + 4);
+    expect(await visibleEdges(page).then((e) => e.filter((x) => /cr-fit/.test(x)))).toEqual([]);
+  });
+
+  test("the job page: Campaign clips · FaZe Clips · Following its rules; Library: a Campaign chip on campaign clips only", async ({ page }) => {
+    await start(page);
+    await page.goto("/");
+    await page.waitForFunction(() => !!(window as MockWin).__cfMock?.jobs && !!(window as MockWin).__cfMock?.setup);
+    await knob(page, "setup", "finish", "youtube");
+    await knob(page, "setup", "finish", "instagram");
+    // The count the strip names is the campaign's own rules, as its card lists them.
+    await go(page, `/campaigns/${FAZE}`);
+    const rules = await page.locator("#rules [data-help='cr-rules'] .cr-ticks li").count();
+    expect(rules).toBeGreaterThan(1);
+    await go(page, `/?campaign=${FAZE}`);
+    await page.getByLabel("YouTube, Twitch or Kick link").fill(VIDEO);
+    await page.locator("form.newjob").getByRole("button", { name: "Make campaign clips", exact: true }).click();
+    await expect(page).toHaveURL(/\/jobs\/[0-9A-Z]{26}$/);
+    const strip = page.locator(".cr-job [data-cr='job-strip']");
+    await expect(strip).toHaveText(`Campaign clips · FaZe Clips · Following ${rules} rules`);
+    await expect(strip.getByRole("link", { name: "FaZe Clips" })).toHaveAttribute("href", `/campaigns/${FAZE}`);
+    await expect(page.locator(".cr-job")).not.toContainText("on Content Rewards");
+    // Narrow phones: the strip wraps, but each dot stays with the words after it (never alone at a line's end), the
+    // coin sits on the first line, and a long campaign name wraps inside its link, never past the strip's edge.
+    const stripLines = () =>
+      strip.evaluate((h) => {
+        const box = h.querySelector(".cr-job__strip")!;
+        const rows = new Map<number, string>();
+        const walk = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+        const r = document.createRange();
+        for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+          for (let i = 0; i < n.textContent!.length; i++) {
+            r.setStart(n, i);
+            r.setEnd(n, i + 1);
+            const at = r.getClientRects()[0];
+            if (at) rows.set(Math.round(at.top / 8), (rows.get(Math.round(at.top / 8)) ?? "") + n.textContent![i]);
+          }
+        }
+        r.selectNodeContents(box.firstChild!);
+        const words = r.getBoundingClientRect();
+        const coin = h.querySelector(".icon")!.getBoundingClientRect();
+        return {
+          lines: [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, t]) => t.trim()),
+          coinOff: Math.abs(coin.top + coin.height / 2 - (words.top + words.height / 2)),
+          over: box.scrollWidth - box.clientWidth,
+        };
+      });
+    for (const width of [320, 375, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      const got = await stripLines();
+      expect(got.lines.length, `${width}: wraps`).toBeGreaterThan(1);
+      for (const l of got.lines) expect(l, `${width}: a dot alone at a line's end`).not.toMatch(/·$/);
+      expect(got.coinOff, `${width}: the coin on the first line`).toBeLessThanOrEqual(3);
+      expect(got.over, `${width}: past the edge`).toBeLessThanOrEqual(0);
+    }
+    await strip.getByRole("link").evaluate((a) => (a.textContent = "The Very Long Campaign Name For Summer Sneaker Drop Clips"));
+    const long = await stripLines();
+    expect(long.over, "a long name past the edge").toBeLessThanOrEqual(0);
+    for (const l of long.lines) expect(l).not.toMatch(/·$/);
+    await strip.getByRole("link").evaluate((a) => (a.textContent = "FaZe Clips"));
+    await page.setViewportSize(DESKTOP.viewport);
+    // Upload the first campaign clip, then Library shows it with the small Campaign chip; normal clips carry none.
+    await knob(page, "jobs", "finish");
+    await page.getByRole("link", { name: "Check these clips" }).click();
+    await expect(page).toHaveURL(/\/review\?job=/);
+    const card = page.locator(".review-list__item").first().locator(".review-card");
+    await expect(card.locator(".cr-fit")).toBeVisible();
+    const clipId = ((await card.getAttribute("aria-labelledby")) ?? "").replace(/^hook-/, "");
+    const mine = card.getByRole("button", { name: "Use my settings" });
+    if (await mine.count()) await mine.click();
+    await card.getByRole("button", { name: /^Upload to \d/ }).click();
+    await expect(page.getByText(/Uploading to \d places?!/)).toBeVisible();
+    await go(page, "/library");
+    const libCard = page.locator(".lib-card").filter({ has: page.locator(`#lib-${clipId}`) });
+    await expect(libCard.locator("[data-cr='campaign-chip']")).toHaveText("Campaign");
+    expect(await page.locator(".lib-card").count()).toBeGreaterThan(1);
+    await expect(page.locator("[data-cr='campaign-chip']")).toHaveCount(1);
+  });
+
   test("the clip page: the same block while it waits in Review; a normal clip's fold Can it earn on your campaigns?", async ({ page }) => {
     await start(page, { remake: true });
     const { clipId } = await campaignClips(page);

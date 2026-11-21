@@ -297,6 +297,10 @@ test.describe("desktop journeys", () => {
     await expect(page.locator(".result-card")).toContainText("Connected, but Content Rewards hasn't let Clip Factory send clips yet.");
     const pilot = page.locator("[data-help='cr-pilot-email']");
     await expect(pilot).toContainText("Content Rewards turns this on by email.");
+    // Its row wears one info mark (in the number's place), never two side by side.
+    await expect(pilot.locator(".gstep__head .gstep__icon")).toHaveCount(0);
+    await expect(pilot.locator(".gstep__head .gstep__num svg")).toHaveCount(1);
+    await expect(pilot.locator(".gstep__head svg")).toHaveCount(2);
     await expect(tomatoes(page)).toHaveCount(1);
     await expect(tomatoes(page)).toHaveText(/Open email/);
     await expect(pilot.getByRole("button", { name: "Copy Email to Content Rewards" })).toHaveCount(0);
@@ -305,6 +309,125 @@ test.describe("desktop journeys", () => {
     await pilot.getByRole("button", { name: "I sent it" }).click();
     await expect(pilot).toContainText("Content Rewards will email you back.");
     await expect(page.locator("[data-cr='card']")).toHaveCount(0);
+  });
+
+  test("Content Rewards refuses without sending the browser back: What did Content Rewards say? → the email card, from his Gmail", async ({ page }) => {
+    await start(page, { fresh: true });
+    await asMacWindow(page, { crConnect: true });
+    await page.goto(SETUP);
+    await settle(page);
+    await page.locator("#step-connect .gstep__head").click();
+    const popup = page.waitForEvent("popup");
+    await page.locator("#step-connect").getByRole("button", { name: "Connect Content Rewards", exact: true }).click();
+    // Content Rewards' "This account can't connect apps" page never sends the browser back: he just comes back.
+    await (await popup).close();
+    await expect(page.getByText("Waiting for you in the browser…")).toBeVisible();
+    await page.waitForTimeout(3_200);
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    const ask = page.locator("[data-cr='ask']");
+    await expect(ask).toContainText("What did Content Rewards say?", { timeout: 5_000 });
+    await expect(ask.getByRole("button")).toHaveText(["It said my account can't connect apps", "I tapped Allow", "Something else"]);
+    await expect(page.getByText("That took too long")).toHaveCount(0);
+    expect(await screenProblems(page, false)).toEqual([]);
+    await ask.getByRole("button", { name: "It said my account can't connect apps" }).click();
+    const pilot = page.locator("[data-help='cr-pilot-email']");
+    await expect(pilot).toContainText("Content Rewards hasn't let your account connect apps yet. Send them the email below.");
+    await expect(pilot.locator(".gstep")).toHaveClass(/is-open/);
+    // Content Rewards signed him in, so step 1 ticks itself; the pilot email is the one vermilion.
+    await expect(page.locator("#step-ready-account")).toHaveAttribute("data-done", "true");
+    await expect(tomatoes(page)).toHaveCount(1);
+    await expect(tomatoes(page)).toHaveText(/Open email/);
+    // No email in the box yet: Open email never goes to Mail's default account; it points at the box.
+    const openEmail = pilot.locator("[data-cr='open-email']");
+    await expect(openEmail).not.toHaveAttribute("href", /.*/);
+    await openEmail.click();
+    await expect(pilot.getByLabel("Which email do you sign in to Content Rewards with?")).toBeFocused();
+    await expect(pilot.getByRole("alert")).toHaveText("Type the email you use for Content Rewards first.");
+    await pilot.getByLabel("Which email do you sign in to Content Rewards with?").fill("kid.test@gmail.com");
+    await pilot.getByLabel("Which email do you sign in to Content Rewards with?").blur();
+    await expect(pilot.locator("strong").first()).toHaveText("Send it from kid.test@gmail.com.");
+    const href = (await pilot.locator("[data-cr='open-email']").getAttribute("href")) ?? "";
+    expect(href.startsWith("https://mail.google.com/mail/?view=cm&authuser=kid.test%40gmail.com&to=support%40contentrewards.com&su=")).toBe(true);
+    expect(await screenProblems(page, false)).toEqual([]);
+    // Every device knows: the API keeps lastResult (a reload opens the card by itself, the email box asks no more).
+    await page.reload();
+    await settle(page);
+    await expect(pilot).toContainText("Content Rewards hasn't let your account connect apps yet.");
+    await expect(pilot.getByLabel("Which email do you sign in to Content Rewards with?")).toHaveCount(0);
+    await expect(pilot).toContainText("Send it from kid.test@gmail.com.");
+    // The email card is the step on the first screen (step 2 waits folded until the email went).
+    await expect(page.locator("#step-ready-socials")).not.toHaveClass(/is-open/);
+    await expect(pilot.locator("[data-cr='open-email']")).toBeInViewport();
+    await expect(tomatoes(page)).toHaveText(/Open email/);
+  });
+
+  test("a narrow Mac window: What did Content Rewards say? comes on screen with all three answers above the tab bar, and no other vermilion", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await start(page, { fresh: true });
+    await asMacWindow(page, { crConnect: true });
+    await page.goto(SETUP);
+    await settle(page);
+    const ask = page.locator("[data-cr='ask']");
+    const answers = ["It said my account can't connect apps", "I tapped Allow", "Something else"];
+    /** Each answer's middle is the answer itself (nothing over it: not the tab bar, not Ask). */
+    const tappable = () =>
+      page.evaluate((names) => {
+        const bar = document.querySelector(".tabbar")?.getBoundingClientRect();
+        return names.map((n) => {
+          const b = [...document.querySelectorAll<HTMLElement>("[data-cr='ask'] button")].find((x) => x.textContent?.trim() === n);
+          if (!b) return `${n}: missing`;
+          const r = b.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (bar && bar.height > 0 && r.bottom > bar.top) return `${n}: under the tab bar`;
+          return hit && b.contains(hit) ? "ok" : `${n}: covered by ${hit?.className || hit?.tagName}`;
+        });
+      }, answers);
+    await page.locator("#step-connect .gstep__head").click();
+    let popup = page.waitForEvent("popup");
+    await page.locator("#step-connect").getByRole("button", { name: "Connect Content Rewards", exact: true }).click();
+    await (await popup).close();
+    // He comes back from Content Rewards' page while it still waits: the question comes on screen by itself.
+    await page.waitForTimeout(3_200);
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(ask).toContainText("What did Content Rewards say?", { timeout: 5_000 });
+    await expect.poll(tappable, { timeout: 5_000 }).toEqual(["ok", "ok", "ok"]);
+    await expect(tomatoes(page)).toHaveCount(0);
+    // Cancel: asked again, still all on screen; Something else points at Connect, which is then the vermilion.
+    await page.locator(".cr-waiting").getByRole("button", { name: "Cancel" }).click();
+    await expect(ask.getByRole("button")).toHaveText(answers);
+    await expect.poll(tappable, { timeout: 5_000 }).toEqual(["ok", "ok", "ok"]);
+    await expect(tomatoes(page)).toHaveCount(0);
+    expect(await screenProblems(page, false)).toEqual([]);
+    await ask.getByRole("button", { name: "Something else" }).click();
+    await expect(page.getByText("Close that tab. Then tap Connect Content Rewards again.")).toBeVisible();
+    await expect(tomatoes(page)).toHaveCount(1);
+    await expect(tomatoes(page)).toHaveText("Connect Content Rewards");
+    // A good answer: never the question, straight to connected.
+    popup = page.waitForEvent("popup");
+    await tomatoes(page).click();
+    // (Tapped right after Cancel: the stopped run never closes this run's door.)
+    await (await popup).getByRole("button", { name: "Allow" }).click();
+    await expect(page.locator("#step-connect .result-card")).toContainText("Content Rewards is connected!");
+    await expect(ask).toHaveCount(0);
+  });
+
+  test("Set up posting: a failed read says Couldn't load with Try again, never Not started", async ({ page }) => {
+    await start(page, { fresh: true });
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem("cf-e2e-cr-500")) {
+        sessionStorage.setItem("cf-e2e-cr-500", "1");
+        sessionStorage.setItem("cf-mock-cr-overview", "500");
+      }
+    });
+    await page.goto("/settings/posting/setup");
+    await settle(page);
+    const card = page.locator("[data-cr='card']");
+    await expect(card).toContainText("Couldn't load.");
+    await expect(card).not.toContainText("Not started");
+    await page.evaluate(() => sessionStorage.removeItem("cf-mock-cr-overview"));
+    await page.locator("[data-cr='retry']").getByRole("button", { name: "Try again" }).click();
+    await expect(page.locator("[data-cr='card']")).toContainText("Not started");
+    await expect(page.locator("[data-cr='retry']")).toHaveCount(0);
   });
 
   test("Connect before ticking step 2: the answer is on screen, and step 2's Open is the one vermilion (no Add a campaign yet)", async ({ page }) => {
@@ -629,6 +752,31 @@ test.describe("desktop journeys", () => {
     await expect(page.locator("canvas.confetti")).toHaveCount(1);
   });
 
+  test("Money: a move to Whop this device never saw still says Your money is on Whop (the API's movedAt)", async ({ page }) => {
+    await start(page);
+    await page.goto("/money#content-rewards");
+    await settle(page);
+    const part = page.locator("#content-rewards");
+    await part.locator(".segmented__opt", { hasText: /^Yes$/ }).click();
+    await expect(part.locator("#step-fin-setup")).toBeVisible();
+    // The money moves and lands on Whop while this device is on another page (another device, as far as it knows).
+    await page.goto("/");
+    await settle(page);
+    await mock(page);
+    await cr(page, "moveToWhop");
+    await cr(page, "moneyArrivedOnWhop");
+    await page.goto("/money#content-rewards");
+    await settle(page);
+    await expect(part).toContainText("Your money is on Whop. Move it to your bank.");
+    await expect(part.locator(".btn--primary")).toHaveCount(1);
+    await expect(part.locator("#step-fin-bank .btn--primary")).toHaveCount(1);
+    // Once per move on each device: the next visit doesn't lead with it again.
+    await page.reload();
+    await settle(page);
+    await expect(part.locator("[data-tile='way']")).toContainText("$0.00");
+    await expect(part).not.toContainText("Your money is on Whop. Move it to your bank.");
+  });
+
   test("an API from before Content Rewards (404): every part and link is hidden", async ({ page }) => {
     await start(page, { off: "404" });
     await page.goto("/settings/posting/setup");
@@ -692,6 +840,74 @@ test.describe("phone: the main button stays pinned", () => {
       .toBeLessThanOrEqual(page.viewportSize()!.height);
     const box = (await main.boundingBox())!;
     expect(box.x + box.width).toBeGreaterThan(page.viewportSize()!.width / 2);
+    // The pinned Open and I have an account never cover a line of step 1: on the first screen every line on screen
+    // is above them (they rest in their own room), and scrolling on, the step's lines never pass under them.
+    const underPin = () =>
+      page.evaluate(() => {
+        const step = document.querySelector("#step-ready-account")!;
+        const pin = step.querySelector(".cr-pin")!.getBoundingClientRect();
+        return [...step.querySelectorAll<HTMLElement>(".gstep__lead, .gstep__say li")]
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.bottom > 0 && r.top < innerHeight && r.top < pin.bottom && r.bottom > pin.top;
+          })
+          .map((el) => el.textContent!.slice(0, 40));
+      });
+    const atRest = await page.evaluate(() => {
+      const step = document.querySelector("#step-ready-account")!;
+      const pin = step.querySelector(".cr-pin")!.getBoundingClientRect();
+      return [...step.querySelectorAll<HTMLElement>(".gstep__body p, .gstep__body li")]
+        .filter((el) => !el.closest(".cr-pin"))
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.bottom > 0 && r.top < innerHeight && r.top < pin.bottom && r.bottom > pin.top;
+        })
+        .map((el) => el.textContent!.slice(0, 40));
+    });
+    expect(atRest, "lines under the pinned buttons on the first screen").toEqual([]);
+    expect(await underPin()).toEqual([]);
+    for (let i = 0; i < 6; i++) {
+      await page.evaluate(() => scrollBy(0, 120));
+      await page.waitForTimeout(50);
+      expect(await underPin(), `after ${(i + 1) * 120} px`).toEqual([]);
+    }
+    // The lines end low on a phone's first screen, so the pair has its room; at the step's end it rests after every
+    // "If you see …" line.
+    await expect(page.locator("#step-ready-account .gstep__rest")).toHaveClass(/has-room/);
+    expect(await pinAtStepEnd(page)).toEqual({ hintsAbove: true, pinOnScreen: true });
+  });
+
+  test("a toast never covers the pinned main button (You're in! over Make clips for this campaign)", async ({ page }) => {
+    await start(page);
+    await page.goto("/");
+    await mock(page);
+    await finishSetup(page, "youtube");
+    await page.goto(`/campaigns/${IDS.apply}`);
+    await settle(page);
+    const look = () =>
+      page.evaluate(() => {
+        const pins = [...document.querySelectorAll(".cr-pin")].filter((p) => p.childElementCount > 0).map((p) => p.getBoundingClientRect());
+        const toasts = [...document.querySelectorAll(".toast")].map((t) => t.getBoundingClientRect());
+        const overlap = toasts.some((t) => pins.some((p) => t.top < p.bottom && t.bottom > p.top && t.left < p.right && t.right > p.left));
+        return { toasts: toasts.length, pins: pins.length, overlap, inView: pins.every((p) => p.top >= 0 && p.bottom <= innerHeight) };
+      });
+    await tomatoes(page).click();
+    await expect(page.locator(".cr-chip")).toHaveText("Waiting for the brand");
+    await mock(page);
+    await cr(page, "sayYes", IDS.apply);
+    await expect(page.locator(".toast", { hasText: "You're in!" })).toBeVisible();
+    await expect(tomatoes(page)).toHaveText(/Make clips anyway/);
+    expect(await look()).toEqual({ toasts: expect.any(Number), pins: 1, overlap: false, inView: true });
+    await tomatoes(page).click();
+    await expect(tomatoes(page)).toHaveText(/Make clips for this campaign/);
+    const now = await look();
+    expect(now.toasts, "the toast is still up").toBeGreaterThan(0);
+    expect(now.pins).toBe(1);
+    expect(now.overlap, "a toast over Make clips for this campaign").toBe(false);
+    // Still where the thumb is: the button stays put, the toasts moved instead.
+    const main = (await tomatoes(page).boundingBox())!;
+    expect(main.x + main.width).toBeGreaterThan(page.viewportSize()!.width / 2);
+    expect(main.y + main.height).toBeLessThanOrEqual(page.viewportSize()!.height);
   });
 
   test("Campaigns with none yet: the join steps come first, Paste is glass, one vermilion on the first screen", async ({ page }) => {
@@ -704,6 +920,49 @@ test.describe("phone: the main button stays pinned", () => {
     await expect(tomatoes(page)).toBeInViewport();
     await expect(page.locator("#step-join-copy")).toBeVisible();
     expect(await screenProblems(page, true)).toEqual([]);
+  });
+});
+
+/** Scrolls the setup step's end up the screen: the pinned pair rests in its own place, after the step's hints. */
+async function pinAtStepEnd(page: Page) {
+  return page.evaluate(async () => {
+    const step = document.querySelector("#step-ready-account")!;
+    const rest = step.querySelector(".gstep__rest")!;
+    scrollBy(0, rest.getBoundingClientRect().bottom - innerHeight * 0.4);
+    await new Promise((r) => setTimeout(r, 200));
+    const pin = step.querySelector(".cr-pin")!.getBoundingClientRect();
+    const hints = [...step.querySelectorAll(".gstep__hint")].map((h) => h.getBoundingClientRect());
+    return { hintsAbove: hints.length > 0 && hints.every((h) => h.bottom <= pin.top + 0.5), pinOnScreen: pin.top >= 0 && pin.bottom <= innerHeight };
+  });
+}
+
+test.describe("a touch tablet: the setup step's pinned pair", () => {
+  test.use({ viewport: { width: 820, height: 1180 }, hasTouch: true });
+  test("the lines end high on a tall screen: no room for the pair, so no empty gap under the lines", async ({ page }) => {
+    await start(page, { fresh: true });
+    await page.goto(SETUP);
+    await settle(page);
+    const step = page.locator("#step-ready-account");
+    await expect(step.locator(".cr-pin")).toBeVisible();
+    await expect(step.locator(".cr-pin .btn--primary")).toHaveText(/Open Content Rewards/);
+    await page.waitForTimeout(600);
+    const geo = await step.evaluate((el) => {
+      const rest = el.querySelector(".gstep__rest")!;
+      const say = el.querySelector(".gstep__say")!.getBoundingClientRect();
+      const first = [...rest.children].find((c) => !c.classList.contains("cr-pin"))!.getBoundingClientRect();
+      const pin = el.querySelector(".cr-pin")!.getBoundingClientRect();
+      const gap = parseFloat(getComputedStyle(el.querySelector(".gstep__body")!).rowGap) || 0;
+      const lines = [...el.querySelectorAll(".gstep__lead, .gstep__say li")].map((l) => l.getBoundingClientRect());
+      return {
+        room: rest.classList.contains("has-room"),
+        space: first.top - say.bottom - gap,
+        linesUnder: lines.filter((r) => r.top < pin.bottom && r.bottom > pin.top).length,
+      };
+    });
+    expect(geo.room, "a room on a tall screen").toBe(false);
+    expect(geo.space, "empty space between the lines and the next part").toBeLessThanOrEqual(1);
+    expect(geo.linesUnder, "a step line under the pinned pair").toBe(0);
+    expect(await pinAtStepEnd(page)).toEqual({ hintsAbove: true, pinOnScreen: true });
   });
 });
 

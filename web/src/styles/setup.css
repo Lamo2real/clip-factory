@@ -1073,7 +1073,7 @@
   text-align: right;
 }
 
-/* ---------- Post it on TikTok yourself (§41) ---------- */
+/* ---------- Post it on TikTok yourself (§42) ---------- */
 /* The same floating sheet as Post to TikTok; the steps sit beside the video on wide screens and under it on phones. */
 .ty-sheet__title {
   display: flex;
@@ -1142,7 +1142,7 @@
   color: var(--ink);
   font-weight: 600;
 }
-/* Review, TikTok ticked before TikTok approved the app (§41): one plain line pointing to Post it yourself. */
+/* Review, TikTok ticked before TikTok approved the app (§42): one plain line pointing to Post it yourself. */
 .tt-yourself-hint {
   margin: 0;
   font-size: var(--fs-small);

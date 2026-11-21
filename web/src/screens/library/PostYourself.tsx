@@ -1,4 +1,4 @@
-// Post it on TikTok yourself (docs/CONTRACTS.md §41). While TikTok has not approved Clip Factory, its API keeps every
+// Post it on TikTok yourself (docs/CONTRACTS.md §42). While TikTok has not approved Clip Factory, its API keeps every
 // upload "Only me". This sheet hands the clip to TikTok instead: on a phone the share menu (pick TikTok), on a
 // computer the file plus TikTok's own upload page; the caption is copied on the same tap. The owner posts it in
 // TikTok for Everyone, then taps I posted it here, with the post's link when he has it, so its views are counted.
@@ -79,7 +79,7 @@ export function PostYourself({
     return { mode: handOffFor(os, canShare), airdrop: os === "mac" && canShare };
   });
   const { mode, airdrop } = device;
-  // The post he makes is newer than this: the API looks for it on his TikTok from here (§41.2).
+  // The post he makes is newer than this: the API looks for it on his TikTok from here (§42.2).
   const [openedAt] = useState(() => new Date(Date.now() - 60_000).toISOString());
   const [attempt, setAttempt] = useState(0);
   const file = useClipFile(clip.clipId, (mode === "share" || airdrop) && !linkOnly, attempt, !linkOnly);

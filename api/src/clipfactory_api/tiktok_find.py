@@ -1,4 +1,4 @@
-"""Find the clip the owner just posted on TikTok himself (docs/CONTRACTS.md §41.2), so he needs no link.
+"""Find the clip the owner just posted on TikTok himself (docs/CONTRACTS.md §42.2), so he needs no link.
 
 TikTok's Display API ``POST /v2/video/list/`` (scope ``video.list``, already granted for the numbers, §16.3) lists the
 connected account's public posts, newest first. A post made after the sheet opened whose description starts like the

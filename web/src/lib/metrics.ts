@@ -269,14 +269,14 @@ export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "m
     case "posted_private":
       return { text: "Uploaded privately. TikTok shows numbers after the app is approved." };
     case "failed": {
-      // TikTok refused it because the account is public (§41): post it yourself, not Try again.
+      // TikTok refused it because the account is public (§42): post it yourself, not Try again.
       if (p.platform === "tiktok" && p.error && postError(p.error) === TIKTOK_PRIVATE_ONLY)
         return { text: "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Go to Library and tap Post it yourself.", link: { href: "/library", label: "Go to Library" } };
       const why = (p.error ?? "something went wrong").replace(/[.!\s]+$/, "");
       return { text: `${why}. Go to Library and tap Try again.`, link: { href: "/library", label: "Go to Library" } };
     }
     case "posted":
-      // Posted on TikTok by the owner himself (§41): only its link lets Clip Factory find its numbers.
+      // Posted on TikTok by the owner himself (§42): only its link lets Clip Factory find its numbers.
       if (p.by === "you" && !p.url) return { text: "Posted by you. Add its TikTok link in Library to count views.", link: { href: "/library", label: "Go to Library" } };
       return p.metrics ? null : { text: "Numbers are on the way. Check back in a few minutes." };
   }

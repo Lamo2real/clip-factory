@@ -1,4 +1,4 @@
-// Post it on TikTok yourself (docs/CONTRACTS.md §41): the Library's button, the sheet, I posted it, Add link and Undo.
+// Post it on TikTok yourself (docs/CONTRACTS.md §42): the Library's button, the sheet, I posted it, Add link and Undo.
 import { expect, test } from "@playwright/test";
 import { settle } from "./helpers.ts";
 import type { Page } from "@playwright/test";

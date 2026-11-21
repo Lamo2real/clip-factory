@@ -1,7 +1,7 @@
 // Small pieces every Content Rewards screen shares (docs/CONTRACTS.md §38.1): the numbered step card with its
 // fold-outs, the Open button (exact https page, new tab), brand text shown as plain escaped words with Show more,
 // the brand's picture or a round letter, and the green answer button.
-import { useId, useState, type ReactNode } from "react";
+import { useId, useLayoutEffect, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "../../components/Icon.tsx";
 import { Button } from "../../components/ui.tsx";
 import { usePinMain } from "../../lib/contentRewards.ts";
@@ -146,6 +146,24 @@ export function Fold({ fold, open, onToggle }: { fold: Pick<CrFold, "id" | "ques
 }
 
 /**
+ * Setup's steps 1 and 2 on phones: does the pinned pair need its room at the top of its box? Only if, at the top of
+ * the page (where the pinned spot is highest on the page), the pair would come within one gap of the box's top. Then
+ * it rests in the room, under the lines; otherwise it never gets there and the room would only be an empty gap. All
+ * values in page pixels: `restTop` the box's top, `pinAt` the pinned pair's bottom on screen.
+ */
+export function needsPinRoom(restTop: number, gap: number, pinAt: number, pairHeight: number): boolean {
+  return restTop + gap > pinAt - pairHeight;
+}
+
+function needsRoom(rest: HTMLElement, pin: HTMLElement, pairHeight: number): boolean {
+  const bottom = parseFloat(getComputedStyle(pin).bottom);
+  const bar = document.querySelector<HTMLElement>(".tabbar")?.getBoundingClientRect();
+  const pinAt = Number.isFinite(bottom) ? window.innerHeight - bottom : (bar && bar.height > 0 ? bar.top : window.innerHeight) - 12;
+  const gap = parseFloat(getComputedStyle(rest).rowGap) || 0;
+  return needsPinRoom(rest.getBoundingClientRect().top + window.scrollY, gap, pinAt, pairHeight);
+}
+
+/**
  * One numbered Content Rewards step (the §17.1 card): number in a circle, icon, title, a few short lines, then
  * only what the step needs, and "I did this" (green). A step Clip Factory can see ticks itself.
  */
@@ -192,15 +210,41 @@ export function CrStepCard({
   // §39.1: a step with a `lead` and its own answer ("I have an account") puts that green answer right under its Open
   // button, before the other lines, so someone who already did it taps once.
   const early = manual && !!onDone && !!step.doneLabel && !done;
+  // Phones, Setup's steps 1 and 2: the step's lines sit above the pinned pair's sticky box, and that box starts with a
+  // room of the pair's own height, where the pair rests right under the lines. So the pair never covers a line of
+  // the step: on the first screen every line is above it; scrolling on, it stays pinned at the bottom right.
+  const room = pin && early;
+  const [pinEl, setPinEl] = useState<HTMLDivElement | null>(null);
+  // The room is there only where the pair would ever rest at the top of its box: when the lines end low on the first
+  // screen (a phone). A tall screen (a touch tablet) whose lines end well above the pinned pair gets no room, so no
+  // empty gap shows under the lines.
+  const [roomOn, setRoomOn] = useState(true);
+  useLayoutEffect(() => {
+    const rest = pinEl?.parentElement;
+    if (!room || !pinEl || !rest) return;
+    const put = () => {
+      const h = Math.ceil(pinEl.getBoundingClientRect().height);
+      rest.style.setProperty("--pin-room", `${h}px`);
+      setRoomOn(needsRoom(rest, pinEl, h));
+    };
+    put();
+    if (typeof ResizeObserver === "undefined") return;
+    // The pair's own size, and the page's (a part above the step that loads later moves the lines down).
+    const watch = new ResizeObserver(put);
+    watch.observe(pinEl);
+    watch.observe(document.documentElement);
+    return () => watch.disconnect();
+  }, [room, pinEl]);
   // Pinned beside the vermilion, the answer is a next step too: Ask never rests on it (it fades out instead).
   const answerEl = early ? (
     <Button size="lg" variant="glass" icon="check" act="tick" className="btn--leaf gstep__done" onClick={() => onDone!(true)} loading={busy} data-help-clear={pin ? "" : undefined}>
       {step.doneLabel}
     </Button>
   ) : null;
+  const lines = <Lines lines={say ?? step.say} />;
   const rest = (
     <>
-      <Lines lines={say ?? step.say} />
+      {room ? null : lines}
       {openEl && !pin && !early ? <div className="gstep__actions">{openEl}</div> : null}
       {copies?.length || step.copy?.length ? (
         <div className="gstep__copies">
@@ -242,12 +286,15 @@ export function CrStepCard({
       data-done={done || undefined}
     >
       <button type="button" className="gstep__head" aria-expanded={open} aria-controls={bodyId} onClick={onToggle}>
+        {/* An unnumbered card ("Content Rewards said no?") wears its own mark once, in the number's place. */}
         <span className="gstep__num" aria-hidden="true">
-          {done ? <Icon name="check" size={22} /> : number !== null ? number : <Icon name="info" size={20} />}
+          {done ? <Icon name="check" size={22} /> : number !== null ? number : <Icon name={step.icon} size={20} />}
         </span>
-        <span className="gstep__icon" aria-hidden="true">
-          <Icon name={step.icon} size={22} />
-        </span>
+        {number !== null ? (
+          <span className="gstep__icon" aria-hidden="true">
+            <Icon name={step.icon} size={22} />
+          </span>
+        ) : null}
         <span className="gstep__title">
           {number !== null ? <span className="sr-only">Step {number}: </span> : null}
           <Rich text={step.title} />
@@ -268,11 +315,13 @@ export function CrStepCard({
               {answerEl}
             </div>
           ) : null}
+          {room ? lines : null}
           {pin ? (
-            // The pinned pair's sticky box is this part, so it never rides up over the lead line above.
-            <div className="gstep__rest">
+            // The pinned pair's sticky box is this part, so it never rides up over the lead line (or, with a room, the
+            // step's lines) above.
+            <div className={`gstep__rest${room && roomOn ? " has-room" : ""}`}>
               {rest}
-              <div className={`gstep__actions cr-pin${early ? " cr-pin--stack" : ""}`}>
+              <div className={`gstep__actions cr-pin${early ? " cr-pin--stack" : ""}`} ref={setPinEl}>
                 {openEl}
                 {answerEl}
               </div>

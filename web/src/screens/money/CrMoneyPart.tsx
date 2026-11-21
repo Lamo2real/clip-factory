@@ -21,22 +21,53 @@ import { CrStepCard } from "../campaigns/bits.tsx";
 
 const MOVED_KEY = "cf-cr-on-its-way";
 
-/** What this device saw of the moves to Whop: what was on its way, the last amount moved, and if one ever was. */
+/**
+ * What this device saw of the moves to Whop: what was on its way, the last amount moved, if one ever was, and the
+ * API's last `movedAt` it already led with (so each move leads the bank step once on each device).
+ */
 export interface MovedMemo {
   onItsWay: number;
   lastMoveCents: number | null;
   moved: boolean;
+  seenMovedAt: string | null;
 }
 export function readMoved(raw: string | null): MovedMemo {
-  if (!raw) return { onItsWay: 0, lastMoveCents: null, moved: false };
+  const none: MovedMemo = { onItsWay: 0, lastMoveCents: null, moved: false, seenMovedAt: null };
+  if (!raw) return none;
   // Before this record: the plain number that was on its way.
-  if (/^\d+$/.test(raw)) return { onItsWay: Number(raw), lastMoveCents: null, moved: Number(raw) > 0 };
+  if (/^\d+$/.test(raw)) return { ...none, onItsWay: Number(raw), moved: Number(raw) > 0 };
   try {
     const m = JSON.parse(raw) as Partial<MovedMemo>;
-    return { onItsWay: Number(m.onItsWay) || 0, lastMoveCents: typeof m.lastMoveCents === "number" ? m.lastMoveCents : null, moved: !!m.moved };
+    return {
+      onItsWay: Number(m.onItsWay) || 0,
+      lastMoveCents: typeof m.lastMoveCents === "number" ? m.lastMoveCents : null,
+      moved: !!m.moved,
+      seenMovedAt: typeof m.seenMovedAt === "string" ? m.seenMovedAt : null,
+    };
   } catch {
-    return { onItsWay: 0, lastMoveCents: null, moved: false };
+    return none;
   }
+}
+
+/**
+ * How long after a move to Whop a device that didn't see it still leads with the bank step: one day, so it means "just
+ * finished" (§38.7). Later he may well have moved it to his bank already, which Clip Factory can't know.
+ */
+export const MOVED_FRESH_MS = 86_400_000;
+
+/**
+ * Did a move to Whop just finish, for this device? The API's `movedAt` when it sends one (any device: a move newer
+ * than the last one this device led with, from the last day, with nothing on its way now); else, as before, only
+ * what this device saw itself (On its way went back to 0 after being above 0).
+ */
+export function justMovedNow(before: MovedMemo, money: Pick<CrMoney, "onItsWayCents" | "movedAt">, now = Date.now()): boolean {
+  const way = money.onItsWayCents;
+  if (way === null) return false;
+  const seenHere = before.onItsWay > 0 && way === 0;
+  const at = money.movedAt ? Date.parse(money.movedAt) : NaN;
+  if (!Number.isFinite(at)) return seenHere;
+  const newer = money.movedAt !== before.seenMovedAt && (before.seenMovedAt === null || !(Date.parse(before.seenMovedAt) >= at));
+  return way === 0 && (seenHere || (newer && now - at <= MOVED_FRESH_MS));
 }
 
 /** The money steps for the owner's answer about Finance (§38.7), in order. */
@@ -131,7 +162,9 @@ export function CrMoneyPart() {
     const next: MovedMemo = {
       onItsWay: way,
       lastMoveCents: way > 0 ? way : before.lastMoveCents,
-      moved: before.moved || way > 0,
+      // Any move proves Whop is linked, also one another device saw (the API's movedAt).
+      moved: before.moved || way > 0 || !!money.movedAt,
+      seenMovedAt: money.movedAt ?? before.seenMovedAt,
     };
     try {
       localStorage.setItem(MOVED_KEY, JSON.stringify(next));
@@ -139,7 +172,7 @@ export function CrMoneyPart() {
       /* no storage */
     }
     setMemo(next);
-    if (before.onItsWay > 0 && way === 0) setJustMoved(true);
+    if (justMovedNow(before, money)) setJustMoved(true);
   }, [money]);
 
   // Any move to Whop proves Whop is linked: tick Link your Whop account by itself, once (§38.7, auto whop_linked).

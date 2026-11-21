@@ -6,7 +6,7 @@ About 40 minutes, plus the time TikTok takes to check your app · Free · Steps 
 post is **"Only me"**. TikTok often says no to apps that only one person uses. If it says no, Clip Factory still posts
 to TikTok, but only you can see those posts, and TikTok gives no numbers for them.
 
-**Want everyone to see it now? Post it yourself** (docs/CONTRACTS.md §41). On any uploaded clip in Library, or on its
+**Want everyone to see it now? Post it yourself** (docs/CONTRACTS.md §42). On any uploaded clip in Library, or on its
 page, tap **Post it yourself**. Clip Factory copies the caption and saves the video to your phone (or your computer).
 You post it in TikTok and pick **Everyone**, then tap **I posted it**, and Clip Factory finds the post and counts its
 views. **Everyone** needs a public TikTok account. While your account is public, TikTok will not let Clip Factory upload

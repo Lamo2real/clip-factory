@@ -80,11 +80,32 @@ describe("runConnect", () => {
     expect(a.crConnectFinish).toHaveBeenCalledWith({ state: "s1", error: "access_denied", errorDescription: "The user said no" });
   });
 
-  it("the door expired; it waited too long", async () => {
-    expect(await runConnect({ api: api(), bridge: bridge([{ status: "expired" }]), signal: new AbortController().signal, ...fast })).toEqual({ kind: "result", result: "expired" });
+  it("the door ran out, or the 5 minutes did: no answer (Content Rewards never sent the browser back), never 'took too long'", async () => {
+    const a = api();
+    expect(await runConnect({ api: a, bridge: bridge([{ status: "expired" }]), signal: new AbortController().signal, ...fast })).toEqual({ kind: "no_answer" });
     let t = 0;
-    const out = await runConnect({ api: api(), bridge: bridge([]), signal: new AbortController().signal, sleep: async () => void (t += 60_000), now: () => t });
-    expect(out).toEqual({ kind: "result", result: "expired" });
+    const b = bridge([]);
+    const out = await runConnect({ api: a, bridge: b, signal: new AbortController().signal, sleep: async () => void (t += 60_000), now: () => t });
+    expect(out).toEqual({ kind: "no_answer" });
+    expect(b.canceled).toBe(1);
+    expect(a.crConnectFinish).not.toHaveBeenCalled();
+  });
+
+  it("onAnswered fires once Content Rewards answered, before the finish; Cancel ends the wait between polls at once", async () => {
+    const order: string[] = [];
+    const a = api(async () => {
+      order.push("finish");
+      return { result: "connected", connection };
+    });
+    await runConnect({ api: a, bridge: bridge([{ status: "waiting" }, { status: "done", state: "s1", code: "c" }]), signal: new AbortController().signal, onAnswered: () => order.push("answered"), ...fast });
+    expect(order).toEqual(["answered", "finish"]);
+    const ctl = new AbortController();
+    const b = bridge([]);
+    const at = Date.now();
+    const run = runConnect({ api: api(), bridge: b, signal: ctl.signal, onOpened: () => setTimeout(() => ctl.abort(), 20) });
+    expect(await run).toEqual({ kind: "canceled" });
+    expect(Date.now() - at).toBeLessThan(POLL_MS);
+    expect(b.canceled).toBe(1);
   });
 
   it("listen errors: no port, busy, and Windows (unsupported → the browser's words)", async () => {

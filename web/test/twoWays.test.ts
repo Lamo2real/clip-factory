@@ -65,6 +65,12 @@ describe("one name for each thing (§39.1)", () => {
     expect(home).toContain("Campaign clips");
     expect(readFileSync(join(SRC, "screens", "home", "CampaignsRow.tsx"), "utf8")).toContain('"Make campaign clips"');
     expect(readFileSync(join(SRC, "screens", "review", "CampaignFit.tsx"), "utf8")).toContain("Campaign clip ·");
+    // The job page strip "Campaign clips · FaZe Clips · Following 9 rules" and Library's chip "Campaign" (§39.1).
+    const job = readFileSync(join(SRC, "screens", "jobs", "JobDetail.tsx"), "utf8");
+    expect(job).toContain("Campaign clips");
+    expect(job).toContain("{`· Following ${plural(campaign.plainRules.length, \"rule\")}`}");
+    expect(job).not.toContain("on Content Rewards</>");
+    expect(readFileSync(join(SRC, "screens", "library", "Library.tsx"), "utf8")).toContain('<Pill icon="coin">Campaign</Pill>');
     const line = readFileSync(join(SRC, "screens", "review", "FitSuggestion.tsx"), "utf8");
     expect(line).toContain("This clip could earn money on ${name}.");
     expect(line).toContain("Make a ${name} copy");

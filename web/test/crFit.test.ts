@@ -492,6 +492,28 @@ describe("the fit block (CampaignFit.tsx)", () => {
     expect(checkedIcon).not.toBe(await tick());
   });
 
+  it("Check 1 thing: I couldn't check these: heads only its own line; the fix and send lines sit in a list apart", async () => {
+    localStorage.clear();
+    const tag = it_("tags", "fix", "The Instagram words are missing #FaZe. I'll put it back when it uploads.", { kind: "captions", label: "Fix it for me" }, "instagram");
+    const f = fit([it_("uncertain", "check", "I couldn't check: Clips must feel organic. Look yourself.", READ), tag, SEND, ...OK_ITEMS]);
+    await draw(createElement(Block, { clipId: "c11", fit: f, primary: true, onFixCaptions: () => undefined }));
+    const group = host.querySelector(".cr-fit__checks")!;
+    const lead = group.querySelector(".cr-fit__lead")!;
+    expect(lead.textContent).toBe("I couldn't check these:");
+    // The heading names its own list (and only that one), and that list holds only the things to check.
+    const own = group.querySelector("ul")!;
+    expect(own.getAttribute("aria-labelledby")).toBe(lead.id);
+    expect([...own.querySelectorAll("li")].map((li) => li.getAttribute("data-state"))).toEqual(["check"]);
+    expect(host.querySelectorAll(`[aria-labelledby="${lead.id}"]`)).toHaveLength(1);
+    // The tags line and the send note follow in their own list, outside the group, right after it.
+    const more = group.nextElementSibling!;
+    expect(more.matches("ul.cr-fit__lines.cr-fit__more")).toBe(true);
+    expect(more.hasAttribute("aria-labelledby")).toBe(false);
+    expect([...more.querySelectorAll("li")].map((li) => li.getAttribute("data-rule"))).toEqual(["tags", "send"]);
+    expect(group.textContent).not.toContain("#FaZe");
+    expect(group.textContent).not.toContain("After it posts");
+  });
+
   it("the copy: making, ready and uploaded each have their line, and no copy button meanwhile", async () => {
     const f = fit([it_("on_screen", "remake", "“Paid partnership” isn't on the video.", { kind: "remake", label: "Make a FaZe Clips copy" }), ...OK_ITEMS]);
     for (const [copy, words] of [

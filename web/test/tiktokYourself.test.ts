@@ -1,4 +1,4 @@
-// Post it on TikTok yourself (docs/CONTRACTS.md §41): the pure helpers and the mock's rules.
+// Post it on TikTok yourself (docs/CONTRACTS.md §42): the pure helpers and the mock's rules.
 import { beforeAll, describe, expect, it } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
 import { mockApi, type MockFaults } from "../src/api/mock/index.ts";

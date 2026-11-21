@@ -471,6 +471,9 @@ export function MoneyDashboard() {
   const appsOnly = crRow ? APPS_ONLY : null;
   const appsOnlyEmpty = crRow?.state === "number" ? APPS_ONLY : null;
   const allShown = everywhereLoad.state === "ok";
+  // Phones: while All your money is on the page (loading, its numbers or its error), the dock sits with the cards it
+  // changes and never floats over All your money (CSS: .dock-with-cards). Without it (an API from before §39), as before.
+  const dockWithCards = dock && everywhereLoad.state !== "off";
   const [currency, setCurrency] = useState<string | null>(null);
 
   const set = useCallback((patch: Partial<DashChoice>) => setChoiceState((c) => ({ ...c, ...patch })), []);
@@ -500,7 +503,12 @@ export function MoneyDashboard() {
 
   return (
     <>
-    <div className={`page money-dash${dock ? " is-dock" : " is-toolbar"}${allShown ? " has-all-money" : ""}`} data-help="money-dash" data-help-dodge-text aria-busy={!fresh || undefined}>
+    <div
+      className={`page money-dash${dock ? " is-dock" : " is-toolbar"}${allShown ? " has-all-money" : ""}${dockWithCards ? " dock-with-cards" : ""}`}
+      data-help="money-dash"
+      data-help-dodge-text
+      aria-busy={!fresh || undefined}
+    >
       <header className="dash-head">
         <div className="dash-head__text">
           <h1 className="page-head__title">Money</h1>
@@ -524,8 +532,11 @@ export function MoneyDashboard() {
       {/* All your money comes first (§39.2): the apps and days below change only the cards under them. */}
       <AllMoney load={everywhereLoad} />
 
+      {/* Everything the apps and days change, with their controls first. Its own box only on phones beside All your
+          money (the dock's sticky box: it can never leave the cards); elsewhere it draws no box at all. */}
+      <div className="dash-filtered">
       {/* Right after the title in the reading and tab order on both layouts. Wide screens: a full-width glass band
-          that stays at the top (the page scrolls under it, nothing hides beside it); phones: the fixed dock. */}
+          that stays at the top (the page scrolls under it, nothing hides beside it); phones: the dock. */}
       {dock ? (
         <Controls choice={choice} set={set} dock />
       ) : (
@@ -582,6 +593,7 @@ export function MoneyDashboard() {
       ) : null}
 
       <MoneyClipList choice={choice} onSort={(sort) => set({ sort })} />
+      </div>
     </div>
     {/* Content Rewards' own numbers (§38.7): their own part at the end of the page, never added into the MRR cards
         (All your money's total is the one place it is added, §39.2). */}

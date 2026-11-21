@@ -541,7 +541,7 @@ and the rest wait for Post now or the next release.
 613/80001/80002, X 429) → "{Platform} says slow down. Clip Factory tries again later." (retryable except daily caps:
 "…Press Try again tomorrow."); TikTok `spam_risk_user_banned_from_posting` → "TikTok is not letting this account post
 right now."; `unaudited_client_can_only_post_to_private_accounts` → "TikTok only takes Clip Factory's uploads on a private
-account until it approves the app. Tap Post it yourself to post it for everyone." (§41; it said "Make your TikTok
+account until it approves the app. Tap Post it yourself to post it for everyone." (§42; it said "Make your TikTok
 account private (Setup step 3), then press Try again." before the owner's account went public on 2026-11-21); `reached_active_user_cap` → "TikTok's daily limit for your app is reached. Try tomorrow.";
 YouTube `forbidden`/`uploadLimitExceeded` channel → "YouTube did not accept the upload. Check your channel in YouTube
 Studio."; file checks (`file_format_check_failed`, `duration_check_failed`, Meta 2207026 …) → "{Platform} did not like

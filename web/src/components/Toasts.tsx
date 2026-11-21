@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "./Icon.tsx";
 
 export type ToastTone = "success" | "error" | "info" | "undo";
@@ -38,6 +38,40 @@ export interface Toaster {
 export const UNDO_MS = 8000;
 
 const Ctx = createContext<Toaster | null>(null);
+
+/** A screen's pinned main button (phones, §38.1): the toasts never sit on it. */
+export const PINNED_MAIN = ".cr-pin";
+
+interface Box {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+/**
+ * Where the toasts' bottom edge goes (px from the window's bottom) so they never cover a pinned main button: null to
+ * stay in their own place, else just above the highest pinned button they would touch. `toasts` is their box in
+ * their own place; `pins` are the pinned buttons' boxes on screen.
+ */
+export function toastLift(toasts: Box, pins: readonly Box[], viewportHeight: number, gap = 10): number | null {
+  const height = toasts.bottom - toasts.top;
+  if (height <= 0) return null;
+  const solid = pins.filter((p) => p.bottom > p.top && p.right > p.left);
+  let at = toasts;
+  let lift: number | null = null;
+  // Above the button they touch; if that lands on another one, above that one too.
+  for (let i = 0; i <= solid.length; i++) {
+    const hit = solid.filter((p) => p.top < at.bottom && p.bottom > at.top && p.left < at.right && p.right > at.left);
+    if (!hit.length) return lift;
+    const top = Math.min(...hit.map((p) => p.top));
+    // No room above it (a button high on the screen): the toasts keep their own place.
+    if (top - gap - height < 0) return null;
+    lift = Math.round(viewportHeight - top + gap);
+    at = { ...at, top: top - gap - height, bottom: top - gap };
+  }
+  return lift;
+}
 
 export function useToast(): Toaster {
   const t = useContext(Ctx);
@@ -122,6 +156,43 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
     [push, commit],
   );
 
+  // Phones: a toast never covers the screen's pinned main button ("You're in!" over Make clips for this campaign):
+  // while toasts show, they rise just above it whenever they would touch it, and come back down when it moves away.
+  const box = useRef<HTMLDivElement>(null);
+  const shown = items.length > 0;
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || !shown) return;
+    let frame = 0;
+    const place = () => {
+      frame = 0;
+      el.style.removeProperty("bottom");
+      const pins = [...document.querySelectorAll<HTMLElement>(PINNED_MAIN)].filter((p) => p.childElementCount > 0).map((p) => p.getBoundingClientRect());
+      if (!pins.length) return;
+      const lift = toastLift(el.getBoundingClientRect(), pins, window.innerHeight);
+      if (lift !== null) el.style.bottom = `${lift}px`;
+    };
+    const later = () => {
+      if (!frame) frame = requestAnimationFrame(place);
+    };
+    place();
+    window.addEventListener("scroll", later, { passive: true });
+    window.addEventListener("resize", later);
+    // A pinned button drawn after the toast (a portal filled on the next render) or a toast that grows moves it too.
+    const watch = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(later);
+    watch?.observe(el);
+    const drawn = typeof MutationObserver === "undefined" ? null : new MutationObserver(later);
+    drawn?.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      window.removeEventListener("scroll", later);
+      window.removeEventListener("resize", later);
+      watch?.disconnect();
+      drawn?.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+      el.style.removeProperty("bottom");
+    };
+  }, [shown, items]);
+
   const icon = (tone: ToastTone) => (tone === "error" ? "alert" : tone === "success" ? "checkCircle" : tone === "undo" ? "trash" : "info");
 
   const render = (filter: (t: ToastItem) => boolean) =>
@@ -148,7 +219,7 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
   return (
     <Ctx.Provider value={api}>
       {children}
-      <div className="toasts">
+      <div className="toasts" ref={box}>
         <div aria-live="polite" className="toasts__group">
           {render((t) => t.tone !== "error")}
         </div>

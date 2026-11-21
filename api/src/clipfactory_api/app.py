@@ -167,7 +167,7 @@ class App:
     # Notifications (§32): the VAPID key from Secrets Manager (read on first use) and how a message is posted.
     push: VapidKey = field(default_factory=VapidKey)
     push_post: Poster = urllib_post
-    # Post it on TikTok yourself (§41): opens a pasted short TikTok link once, without following its redirect.
+    # Post it on TikTok yourself (§42): opens a pasted short TikTok link once, without following its redirect.
     tiktok_open: Opener = open_once
     # Content Rewards (§38): None (every /v1/contentrewards route answers 503) unless switched on and configured.
     contentrewards: Any = None
