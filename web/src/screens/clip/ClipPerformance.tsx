@@ -21,7 +21,7 @@ import { goBack } from "../../lib/router.ts";
 import { isoWeek, weekRange } from "../../lib/week.ts";
 import { CrPostLines } from "../../components/CrPostLine.tsx";
 import { sendGroups, useSubmissions } from "../../lib/contentRewards.ts";
-import { ClipFit, useClipPageFit, WaitingClipFit } from "./ClipFit.tsx";
+import { CampaignsFold, ClipFit, useClipPageFit, WaitingClipFit } from "./ClipFit.tsx";
 
 /** Re-renders every `ms` so "3 min ago" and "Next check in 4 min" stay true. */
 export function useNow(ms = 15_000): number {
@@ -441,6 +441,8 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
         </div>
       </div>
       {crSubs.subs.length && !crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={false} /> : null}
+      {/* §39.3: closed by default, at the end, so the video and its numbers still come first. */}
+      <CampaignsFold data={fitPage.data} />
     </div>
   );
 }

@@ -38,14 +38,12 @@ export function fitSummary(f: Fit): string {
 
 export function ClipFit({ clip, data, primary }: { clip: Clip; data: ClipFitData | null; primary: boolean }) {
   const toast = useToast();
-  const cr = useCr();
   const [busy, setBusy] = useState(false);
   const [asked, setAsked] = useState<string | null>(null);
   if (!data) return null;
   const waiting = clip.status === "review";
   const own = data.mode === "campaign" ? (data.fits[0] ?? null) : null;
   const suggested = data.mode === "normal" && data.suggestion ? (data.fits.find((f) => f.campaignId === data.suggestion!.campaignId) ?? null) : null;
-  const inCampaign = cr.state === "ok" && cr.data.campaigns.some((c) => c.membership === "in" || c.membership === "manual");
 
   const copyOf = (campaignId: string | null): { state: CopyState; jobId?: string } => {
     const entry = campaignId ? data.remakes[campaignId] : undefined;
@@ -106,26 +104,36 @@ export function ClipFit({ clip, data, primary }: { clip: Clip; data: ClipFitData
           {copyLink(suggestedCopy, suggested.campaignName)}
         </section>
       ) : null}
-      {data.mode === "normal" && inCampaign && data.fits.length ? (
-        <details className="cr-fold cr-clip-fit__all" data-help="cr-fit">
-          <summary className="cr-fold__q">
-            <Icon name="coin" size={18} />
-            <span>Can it earn on your campaigns?</span>
-            <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
-          </summary>
-          <ul className="cr-fold__body cr-fit__lines">
-            {data.fits.map((f) => (
-              <li key={f.campaignId} className={`cr-fit__line is-${f.verdict}`} data-campaign={f.campaignId}>
-                <Icon name={f.verdict === "fits" ? "checkCircle" : f.verdict === "doesnt_fit" ? "xCircle" : f.verdict === "wait" ? "clock" : "info"} size={18} />
-                <span>
-                  <strong className="user-text">{f.campaignName}:</strong> <Rich text={fitSummary(f)} />
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
     </>
+  );
+}
+
+/**
+ * "Can it earn on your campaigns?" (§39.3): closed by default, only for a normal clip while he is in a campaign, one
+ * line per campaign (its headline and first reason). A glass panel of its own, at the end of the clip page.
+ */
+export function CampaignsFold({ data }: { data: ClipFitData | null }) {
+  const cr = useCr();
+  const inCampaign = cr.state === "ok" && cr.data.campaigns.some((c) => c.membership === "in" || c.membership === "manual");
+  if (!data || data.mode !== "normal" || !inCampaign || !data.fits.length) return null;
+  return (
+    <details className="cr-clip-fit__all glass" data-help="cr-fit">
+      <summary className="cr-fold__q">
+        <Icon name="coin" size={18} />
+        <span>Can it earn on your campaigns?</span>
+        <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
+      </summary>
+      <ul className="cr-fold__body cr-fit__lines">
+        {data.fits.map((f) => (
+          <li key={f.campaignId} className={`cr-fit__line is-${f.verdict}`} data-campaign={f.campaignId}>
+            <Icon name={f.verdict === "fits" ? "checkCircle" : f.verdict === "doesnt_fit" ? "xCircle" : f.verdict === "wait" ? "clock" : "info"} size={18} />
+            <span>
+              <strong className="user-text">{f.campaignName}:</strong> <Rich text={fitSummary(f)} />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -147,5 +155,10 @@ export function WaitingClipFit({ clipId }: { clipId: string }) {
   }, [clipId]);
   const page = useClipPageFit(clip?.status === "review" ? clip : null);
   if (!clip || clip.status !== "review") return null;
-  return <ClipFit clip={clip} data={page.data} primary={false} />;
+  return (
+    <>
+      <ClipFit clip={clip} data={page.data} primary={false} />
+      <CampaignsFold data={page.data} />
+    </>
+  );
 }

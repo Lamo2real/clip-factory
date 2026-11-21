@@ -383,7 +383,8 @@ async function flush() {
   for (let i = 0; i < ids.length; i += FIT_BATCH) {
     const chunk = ids.slice(i, i + FIT_BATCH);
     try {
-      const list = chunk.length === 1 ? [await api().crFit(chunk[0]!)] : await api().crFits(chunk);
+      // Always the list form: an unknown clip is just left out (200), so a 404 can only mean an API from before §39.
+      const list = await api().crFits(chunk);
       for (const fit of list) if (fit && typeof fit.clipId === "string") put(fit.clipId, { state: "ok", data: fit });
       for (const id of chunk) if (cache.get(id)?.state === "loading") put(id, OFF);
     } catch (e) {

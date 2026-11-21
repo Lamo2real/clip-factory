@@ -1095,7 +1095,8 @@
   margin: 0;
 }
 .cr-clip-fit__all {
-  margin-bottom: var(--space-4);
+  margin-block: var(--space-4);
+  border-radius: var(--r-lg);
 }
 .cr-clip-fit__all[open] > .cr-fold__q .cr-fold__chev {
   transform: rotate(90deg);
