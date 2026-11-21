@@ -134,15 +134,36 @@ def test_whop_amounts_in_their_own_money(deps: notify.NotifyDeps, phone: None, s
 
     records = [
         _record(sent(0, amountMicros=1, currency="USD"), sent(1, amountMicros=412_000_000, currency="SEK")),
-        _record(sent(1, amountMicros=1, currency="SEK"), sent(2, amountMicros=1_234_567_891, currency="USD")),
+        _record(sent(1, amountMicros=1, currency="SEK"), sent(2, amountMicros=1_234_560_000, currency="USD")),
         _record(sent(2), sent(3)),  # Whop's amount couldn't be read: no number is made up
+        _record(sent(3), sent(4, amountMicros=1_235_000_000, currency="JPY")),
     ]
     notify.process({"Records": records}, deps)
     assert [m["body"] for m in service.shown] == [
         "Money sent to your bank: Whop sent 412.00 SEK.",
-        "Money sent to your bank: Whop sent $1,234.57.",
+        "Money sent to your bank: Whop sent $1,234.56.",
         "Money sent to your bank: Whop sent you money.",
+        "Money sent to your bank: Whop sent 1,235 JPY.",
     ]
+
+
+@pytest.mark.parametrize(
+    ("micros", "currency", "words"),
+    [
+        (40_000_000, "USD", "$40.00"),
+        (40_005_000, "USD", "$40.005"),  # every decimal Whop sent, never rounded
+        (1_234_567_891, "USD", "$1,234.567891"),
+        (412_000_000, "SEK", "412.00 SEK"),
+        (1_235_000_000, "JPY", "1,235 JPY"),
+        (1_235_500_000, "JPY", "1,235.5 JPY"),
+        (0, "KRW", "0 KRW"),
+        (-1, "USD", None),
+        (True, "USD", None),
+        (40_000_000, "usd", None),
+    ],
+)
+def test_money_words_never_round(micros: Any, currency: str, words: str | None) -> None:
+    assert notify.money_words(micros, currency) == words
 
 
 def test_none_on_the_first_read(deps: notify.NotifyDeps, phone: None, service: PushService) -> None:

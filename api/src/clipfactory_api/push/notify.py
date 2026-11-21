@@ -34,7 +34,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
-from decimal import ROUND_HALF_EVEN, Decimal
+from decimal import Decimal
 from typing import Any
 
 from .. import db, settings
@@ -492,16 +492,24 @@ PLACE_URL = {
 }
 SENT_URL = "/money"
 AMOUNT_MAX = 40
+# Money types written without decimals (ISO 4217 exponent 0): "1,235 JPY", never "1,235.00 JPY".
+NO_DECIMALS = frozenset(
+    {"BIF", "CLP", "DJF", "GNF", "ISK", "JPY", "KMF", "KRW", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"}
+)
 
 
 def money_words(micros: Any, currency: Any) -> str | None:
-    """Whop's amount as words ("$40.00", "412.00 SEK"): formatting only, never a conversion."""
+    """Whop's amount as words ("$40.00", "412.00 SEK", "1,235 JPY", "$40.005"): formatting only, never a conversion
+    and never rounded (every decimal Whop sent is shown; 2 at least, none for a money type without them)."""
     if isinstance(micros, bool) or not isinstance(micros, int) or micros < 0:
         return None
     if not isinstance(currency, str) or not re.fullmatch(r"[A-Z]{3}", currency):
         return None
-    amount = (Decimal(micros) / Decimal(1_000_000)).quantize(Decimal("0.01"), rounding=ROUND_HALF_EVEN)
-    number = f"{amount:,.2f}"
+    amount = Decimal(micros) / Decimal(1_000_000)  # exact: micros have at most 6 decimals
+    exponent = amount.normalize().as_tuple().exponent
+    shown = -exponent if isinstance(exponent, int) and exponent < 0 else 0
+    places = max(0 if currency in NO_DECIMALS else 2, shown)
+    number = f"{amount:,.{places}f}"
     return f"${number}" if currency == "USD" else f"{number} {currency}"
 
 

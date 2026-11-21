@@ -2,7 +2,8 @@
 
 A run, only while ``PAYCONN#whop`` is ``connected`` (it can be only while ``WHOP_CONNECT`` is on):
 
-1. ``GET /users/me`` (1): his own ``user_`` id, the ID check (``verification.individual``), owned businesses.
+1. ``GET /users/me`` (1): his own ``user_`` id, the ID check (``verification.individual``), owned businesses
+   (``balance.businesses[]`` / ``balance.businesses_total_usd``, Whop's balances of the ``biz_`` accounts he owns).
 2. ``GET /payouts/methods?user_id=`` (1): the saved methods and whether each can be paid to.
 3. ``GET /payouts?user_id=&created_after=`` (at most 5 pages), from ``payoutsMark`` minus 30 days so status changes
    are seen; one ``PAYOUT#contentrewards#{created yyyy-mm-dd}#{payoutId}`` per payout, its amount Whop's own
@@ -57,11 +58,11 @@ MAX_PAGES = 5
 PAGE_SIZE = 50
 WINDOW = timedelta(days=30)
 MICROS = Decimal(1_000_000)
-ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+ID = re.compile(r"^[A-Za-z0-9_]{1,64}$")  # Whop's ids (``po_…``); the sort key's pattern in §40.7
 USER_ID = re.compile(r"^user_[A-Za-z0-9]{1,64}$")
 CURRENCY = re.compile(r"^[A-Z]{3}$")
 BAD = frozenset({"failed", "denied", "reversed"})  # never "canceled": that one is often his own
-BUSINESS_KEYS = ("owned_businesses", "businesses", "owned_companies", "companies")
+BUSINESS_KEYS = ("owned_businesses", "businesses", "owned_companies", "companies")  # top level, just in case
 
 
 class Failed(Exception):
@@ -117,6 +118,29 @@ class _Reader:
         if resp.status in (400, 403, 404):
             raise Failed(WHOP_REFUSED)
         raise Failed(WHOP_DOWN)  # 429 and 5xx wait for the next run
+
+
+def _positive(value: Any) -> bool:
+    if isinstance(value, bool) or value is None:
+        return False
+    try:
+        amount = Decimal(str(value))
+    except InvalidOperation:
+        return False
+    return amount.is_finite() and amount > 0
+
+
+def businesses(me: dict[str, Any]) -> bool:
+    """Does he own a Whop business? Whop lists their balances under ``balance`` (``businesses[]`` and
+    ``businesses_total_usd``; the balance comes only on the self view with balance reading). Only noted: Content
+    Rewards may pay into a business's balance, which Clip Factory doesn't read."""
+    if any(isinstance(me.get(k), list) and bool(me[k]) for k in BUSINESS_KEYS):
+        return True
+    balance = me.get("balance")
+    if not isinstance(balance, dict):
+        return False
+    listed = balance.get("businesses")
+    return (isinstance(listed, list) and bool(listed)) or _positive(balance.get("businesses_total_usd"))
 
 
 def kyc(me: dict[str, Any]) -> str:
@@ -225,7 +249,7 @@ def _read(deps: PayoutDeps, tokens: WhopTokens, user_id: str, conn: dict[str, An
         whop_user = str(conn.get("accountId") or "")
     if not USER_ID.match(whop_user):
         raise Failed(WHOP_REFUSED)
-    read = Read(kyc=kyc(me), businesses=any(isinstance(me.get(k), list) and bool(me[k]) for k in BUSINESS_KEYS))
+    read = Read(kyc=kyc(me), businesses=businesses(me))
     read.methods, read.last_paid_out_at = methods(reader.get("/payouts/methods", {"user_id": whop_user}))
     read.payouts, read.mark = _payouts(reader, whop_user, state)
     return read
@@ -326,7 +350,7 @@ def run(deps: PayoutDeps, user_id: str, now: datetime) -> str:
     conn = load(deps.store, user_id, payconn_sk(WHOP))
     if conn.get("status") != "connected":
         return "not_connected"
-    mark = grant_mark(conn)
+    mark = grant_mark(conn, WHOP)
     try:
         state = start_read(deps.store, user_id, WHOP, load(deps.store, user_id, paystate_sk(CONTENT_REWARDS)), mark)
         read = _read(deps, WhopTokens(deps), user_id, conn, state)

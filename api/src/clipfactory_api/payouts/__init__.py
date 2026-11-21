@@ -56,6 +56,7 @@ GOOGLE_DOWN = "Google didn't answer. Clip Factory tries again tomorrow."
 GOOGLE_API_OFF = "AdSense reading is off in Google Cloud. Tap Turn on AdSense reading, then Enable."
 GOOGLE_NO_ACCOUNT = "Google shows no AdSense for YouTube for that Google account. Tap Allow payment reading again."
 GOOGLE_REFUSED = "Google didn't let Clip Factory read payments. Tap Allow payment reading again."
+GOOGLE_TOO_MANY = "You have more than 2 AdSense accounts open. Clip Factory can read only 2."
 WHOP_DOWN = "Whop didn't answer. Clip Factory tries again tomorrow."
 WHOP_REFUSED = "Whop didn't let Clip Factory read your payouts. Clip Factory tries again tomorrow."
 CHECK_FAILED = "Clip Factory couldn't check this time. It tries again tomorrow."
@@ -171,10 +172,21 @@ def whop_payout_sk(day: str, payout_id: str) -> str:
     return f"{payout_prefix(CONTENT_REWARDS)}{day}#{payout_id}"
 
 
-def grant_mark(conn: dict[str, Any]) -> str:
-    """Which grant a read belongs to. Only the grant (and a stop) write ``connectedAt``/``updatedAt`` while a
-    connection is ``connected`` (the collector's own refreshes never do), so a new value means a new grant: its first
-    read fills the old payments quietly (§40.7)."""
+def grant_mark(conn: Mapping[str, Any], source: str) -> str:
+    """Which grant a read belongs to: a new value means a new grant, whose first read fills the old payments quietly
+    (§40.7). The collector's own writes (a refresh, the lease) never change it.
+
+    * ``grantedAt`` when ``PAYCONN#`` has it (written by a successful grant only).
+    * Whop: ``connectedAt``. Every "Connect Whop" writes it anew, and a stop or a key change removes it. ``updatedAt``
+      also moves when the same key is saved again, so it is not part of the mark.
+    * AdSense: ``connectedAt`` (a second Allow keeps the first one) and ``updatedAt`` (only an Allow, a stop and
+      ``needs_reconnect`` write ``PAYCONN#adsense``).
+    """
+    granted = conn.get("grantedAt")
+    if isinstance(granted, str) and granted:
+        return f"granted|{granted}"
+    if source == WHOP:
+        return str(conn.get("connectedAt") or "")
     return f"{conn.get('connectedAt') or ''}|{conn.get('updatedAt') or ''}"
 
 
@@ -221,10 +233,13 @@ def set_error(store: db.Store, user_id: str, source: str, text: str) -> None:
 
 def start_read(store: db.Store, user_id: str, source: str, state: Mapping[str, Any], mark: str) -> dict[str, Any]:
     """Before a read: when the connection is a new grant (another ``grantMark``), ``firstReadDone`` is removed first,
-    so this grant's first read is quiet (no notification for old money) and nothing counts as fresh until it ends."""
+    so this grant's first read is quiet (no notification for old money) and nothing counts as fresh until it ends.
+    For Whop ``payoutsMark`` goes too: the new grant may be another Whop account, so its first read pages from the
+    start, never from the old account's newest payout."""
     if not state or state.get("grantMark") == mark:
         return dict(state)
-    return write_state(store, user_id, PLACE[source], {"grantMark": mark}, remove=["firstReadDone"])
+    remove = ["firstReadDone", "payoutsMark"] if source == WHOP else ["firstReadDone"]
+    return write_state(store, user_id, PLACE[source], {"grantMark": mark}, remove=remove)
 
 
 def mark_reconnect(store: db.Store, user_id: str, source: str, reason: str, now: datetime) -> bool:

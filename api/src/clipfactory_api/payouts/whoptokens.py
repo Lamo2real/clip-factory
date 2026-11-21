@@ -177,7 +177,8 @@ class WhopTokens:
 
     def _point_at(self, user_id: str, old: Any, version: str) -> None:
         """``tokenVersionId`` → the new version and the lease cleared, in one UpdateItem that still expects the old
-        version (the put-only write's check). Neither ``updatedAt`` nor ``connectedAt`` moves: they mark the grant."""
+        version (the put-only write's check). Neither ``updatedAt`` nor ``connectedAt`` moves (``connectedAt`` marks
+        the grant)."""
         names = {"#v": "tokenVersionId", "#l": "refreshLeaseUntil", "#s": "status"}
         values: dict[str, Any] = {":c": "connected"}
         if version:
@@ -212,10 +213,13 @@ class WhopTokens:
             raise _Fail("rate", retry_after(resp))
         if resp.status >= 500:
             raise _Fail("down")
-        if code == "invalid_grant" or resp.status == 401:
+        # The app key first: signing in again with a key Whop refuses can never work.
+        if code == "invalid_grant":
             raise _Fail("dead")
         if code in {"invalid_client", "unauthorized_client"}:
             raise _Fail("keys")
+        if resp.status == 401:
+            raise _Fail("dead")
         if resp.status != 200 or not data.get("access_token"):
             raise _Fail("error")
         return data

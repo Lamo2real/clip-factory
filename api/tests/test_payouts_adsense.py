@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -286,10 +287,10 @@ def test_the_first_read_writes_the_items_with_the_publisher_suffix(deps: PayoutD
 
 
 def test_at_most_five_adsense_calls_a_run(deps: PayoutDeps, google: Google) -> None:
-    google.accounts.append({"name": A3, "displayName": "Third", "state": "READY"})
     google.accounts.insert(0, {"name": "accounts/pub-0000000000000001", "displayName": "Closed", "state": "CLOSED"})
     seed(deps)
-    adsense.run(deps, USER, NOW)
+    assert adsense.run(deps, USER, NOW) == "read"
+    # The open accounts first; the closed one doesn't fit.
     assert google.api_calls == [
         f"{API}/accounts?pageSize=5",
         f"{API}/{A1}/alerts?languageCode=en",
@@ -298,7 +299,39 @@ def test_at_most_five_adsense_calls_a_run(deps: PayoutDeps, google: Google) -> N
         f"{API}/{A2}/payments",
     ]
     assert google.token_forms == []  # the token was fresh: no refresh
-    assert len(state(deps)["accounts"]) == 4  # every account's state is kept, only two are read
+    assert [a["state"] for a in state(deps)["accounts"]] == ["CLOSED", "READY", "READY"]
+
+
+def test_a_closed_account_is_read_when_there_is_room(deps: PayoutDeps, google: Google) -> None:
+    google.accounts[1]["state"] = "CLOSED"
+    seed(deps)
+    assert adsense.run(deps, USER, NOW) == "read"
+    assert len(google.api_calls) == 5
+    assert "PAYOUT#youtube#2026-10-23#8888" in rows(deps)  # the closed account's old payment still counts
+
+
+def test_no_hold_is_never_said_for_an_account_that_wasnt_read(deps: PayoutDeps, google: Google) -> None:
+    seed(deps)
+    adsense.run(deps, USER, NOW)
+    kept = state(deps)
+    # A third open account: alerts for all three don't fit in 5 calls, so there is no verdict at all.
+    google.accounts.append({"name": A3, "displayName": "Third", "state": "READY"})
+    google.alerts[A1] = []
+    google.calls.clear()
+    assert adsense.run(deps, USER, NOW + timedelta(days=1)) == "error"
+    assert google.api_calls == [f"{API}/accounts?pageSize=5"]
+    got = state(deps)
+    assert got["lastError"] == payouts.GOOGLE_TOO_MANY
+    assert {k: v for k, v in got.items() if k != "lastError"} == kept  # the old hold stays, not a fresh "no hold"
+
+
+def test_a_refusal_after_the_list_never_reads_past_five_calls(deps: PayoutDeps, google: Google) -> None:
+    seed(deps)
+    google.fail[f"{A2}/payments"] = response(401, {"error": {"code": 401, "status": "UNAUTHENTICATED"}})
+    assert adsense.run(deps, USER, NOW) == "error"
+    assert len(google.api_calls) == 5
+    assert google.token_forms == []  # only a refusal of the first call is worth a refresh
+    assert state(deps)["lastError"] == payouts.GOOGLE_REFUSED
 
 
 def test_a_changed_amount_sets_revised_at_and_a_vanished_payment_is_gone(
@@ -429,8 +462,7 @@ def test_a_due_token_is_refreshed_with_the_youtube_keys_and_written_put_only(
     assert client.writes[-1] == ("put", TOKEN_NAME)
 
 
-def test_a_refused_token_is_refreshed_once_then_read_again(deps: PayoutDeps, google: Google) -> None:
-    seed(deps)
+def _refuse_the_first_list(deps: PayoutDeps, google: Google) -> None:
     first = {"done": False}
     original = google.__call__
 
@@ -442,8 +474,28 @@ def test_a_refused_token_is_refreshed_once_then_read_again(deps: PayoutDeps, goo
         return original(request)
 
     deps.http = refuse_once
+
+
+def test_a_refused_token_is_refreshed_once_then_read_again(deps: PayoutDeps, google: Google) -> None:
+    google.accounts = google.accounts[:1]
+    seed(deps)
+    _refuse_the_first_list(deps, google)
     assert adsense.run(deps, USER, NOW) == "read"
     assert len(google.token_forms) == 1
+    assert len(google.api_calls) == 4  # the refused list counts: 1 + 1 + 2
+
+
+def test_after_a_refresh_two_open_accounts_wait_for_the_next_run(deps: PayoutDeps, google: Google) -> None:
+    seed(deps)
+    _refuse_the_first_list(deps, google)
+    assert adsense.run(deps, USER, NOW) == "error"  # 2 + 2 + 2 would be 6 calls
+    assert len(google.api_calls) == 2
+    assert state(deps)["lastError"] == payouts.CHECK_FAILED
+    assert rows(deps) == {}
+    google.calls.clear()
+    deps.http = google
+    assert adsense.run(deps, USER, NOW + timedelta(days=1)) == "read"  # the refreshed token: room for both
+    assert len(google.api_calls) == 5
 
 
 def test_invalid_grant_needs_a_reconnect_and_deletes_nothing(
@@ -505,6 +557,46 @@ def test_a_stop_during_the_refresh_is_never_undone(
     assert table.raw(PK, "PAYSTATE#youtube") is None
 
 
+def test_another_allow_during_the_refresh_keeps_the_new_grant(
+    deps: PayoutDeps, google: Google, client: FakeSecretsManager
+) -> None:
+    seed(deps, expires_in=timedelta(seconds=10))
+    new = {
+        "accessToken": "at_new",
+        "expiresAt": iso(NOW + timedelta(hours=1)),
+        "refreshToken": "rt_new",
+        "scope": SCOPE,
+        "clientId": CLIENT,
+        "accounts": [A3],
+    }
+
+    def allow_again_meanwhile(request: HttpRequest) -> HttpResponse:
+        if request.url == GOOGLE_TOKEN:
+            # Stop, then Allow payment reading with another Google account, while the old refresh is in flight.
+            deps.secrets.write(TOKEN_NAME, new, platform="adsense")
+            deps.store.update(PK, "PAYCONN#adsense", {"updatedAt": iso(NOW + timedelta(seconds=1))})
+        return google(request)
+
+    deps.http = allow_again_meanwhile
+    assert adsense.run(deps, USER, NOW) == "not_connected"
+    assert client.json(TOKEN_NAME) == new  # never the old grant's token over the new one
+    assert google.api_calls == []  # and nothing read with the old grant
+
+
+def test_a_new_secret_alone_also_wins(deps: PayoutDeps, google: Google, client: FakeSecretsManager) -> None:
+    seed(deps, expires_in=timedelta(seconds=10))
+
+    def secret_first(request: HttpRequest) -> HttpResponse:
+        if request.url == GOOGLE_TOKEN:  # the new grant wrote its secret, its PAYCONN# write is still to come
+            deps.secrets.write(TOKEN_NAME, {**client.json(TOKEN_NAME), "refreshToken": "rt_new"}, platform="adsense")
+        return google(request)
+
+    deps.http = secret_first
+    assert adsense.run(deps, USER, NOW) == "not_connected"
+    assert client.json(TOKEN_NAME)["refreshToken"] == "rt_new"
+    assert client.json(TOKEN_NAME)["accessToken"] == "at_0"
+
+
 @pytest.mark.parametrize("status", ["not_connected", "needs_reconnect", "keys_saved"])
 def test_nothing_is_read_unless_connected(deps: PayoutDeps, google: Google, status: str) -> None:
     seed(deps, status=status)
@@ -524,7 +616,7 @@ def test_without_payment_reading_nothing_happens(deps: PayoutDeps, google: Googl
 def test_a_new_grant_starts_quiet(deps: PayoutDeps, google: Google, table: StreamTable, clock: Clock) -> None:
     seed(deps)
     adsense.run(deps, USER, NOW)
-    assert state(deps)["grantMark"] == payouts.grant_mark(conn(deps))
+    assert state(deps)["grantMark"] == payouts.grant_mark(conn(deps), "adsense")
     # Stop, then allow again: a new grant. Its first read removes firstReadDone first, then sets it at its end.
     later = NOW + timedelta(days=9)
     deps.store.update(PK, "PAYCONN#adsense", {"status": "connected", "updatedAt": iso(later)})
@@ -539,39 +631,61 @@ def test_a_new_grant_starts_quiet(deps: PayoutDeps, google: Google, table: Strea
 # --- the API builder's golden items -------------------------------------------------------------------------------
 
 
-def _golden_items() -> list[dict[str, Any]]:
+def _golden_entries() -> list[dict[str, Any]]:
+    """The API builder's ``getpaid_items.json``: one entry per item kind (``sk``, ``skPattern``, ``attributes``,
+    ``example`` and the shared values). Only the entries themselves are read, never the example's values (its
+    ``lastSent`` has an ``sk`` too)."""
     data = json.loads(GOLDEN.read_text())
-    found: list[dict[str, Any]] = []
+    entries = data.get("items") if isinstance(data, dict) else data
+    assert isinstance(entries, list)
+    return [e for e in entries if isinstance(e, dict) and isinstance(e.get("sk"), str)]
 
-    def walk(value: Any) -> None:
-        if isinstance(value, dict):
-            if isinstance(value.get("sk"), str):
-                found.append(value)
-            for v in value.values():
-                walk(v)
-        elif isinstance(value, list):
-            for v in value:
-                walk(v)
 
-    walk(data)
-    return found
+ITEM_ATTRS = {
+    "PAYSTATE#youtube": payouts.PAYSTATE_YOUTUBE_ATTRS,
+    "PAYSTATE#contentrewards": payouts.PAYSTATE_WHOP_ATTRS,
+    "PAYOUT#youtube#": payouts.PAYOUT_YOUTUBE_ATTRS,
+    "PAYOUT#contentrewards#": payouts.PAYOUT_WHOP_ATTRS,
+}
+KEYS = {"pk", "sk", "userId", "ttl"}
+# What the collector reads on PAYCONN# (the API builder writes it): each must be one of its attributes.
+PAYCONN_READS = {
+    "PAYCONN#adsense": {"status", "connectedAt", "updatedAt"},
+    "PAYCONN#whop": {"status", "connectedAt", "accountId", "tokenVersionId", "refreshLeaseUntil"},
+}
 
 
 @pytest.mark.skipif(not GOLDEN.exists(), reason="getpaid_items.json arrives with the API builder's part (§40.8)")
 def test_the_items_match_the_api_builders_golden_file() -> None:
-    attrs = {
-        "PAYSTATE#youtube": payouts.PAYSTATE_YOUTUBE_ATTRS,
-        "PAYSTATE#contentrewards": payouts.PAYSTATE_WHOP_ATTRS,
-        "PAYOUT#youtube#": payouts.PAYOUT_YOUTUBE_ATTRS,
-        "PAYOUT#contentrewards#": payouts.PAYOUT_WHOP_ATTRS,
-    }
-    checked = 0
-    for item in _golden_items():
-        for prefix, allowed in attrs.items():
-            if item["sk"].startswith(prefix):
-                extra = set(item) - allowed - {"pk", "sk", "userId", "ttl"}
-                assert not extra, f"{item['sk']}: the API reads attributes the collector never writes: {extra}"
-                checked += 1
-                if prefix.startswith("PAYOUT#"):
-                    assert item.get("state") in {"sent", "gone", "on_its_way", "didnt_go_through", "came_back"}
-    assert checked
+    entries = {e["sk"]: e for e in _golden_entries()}
+    checked: set[str] = set()
+    for sk, entry in entries.items():
+        for prefix, allowed in ITEM_ATTRS.items():
+            if sk == prefix or (prefix.endswith("#") and sk.startswith(prefix)):
+                example = entry.get("example") if isinstance(entry.get("example"), dict) else {}
+                read = set(entry.get("attributes") or []) | set(example)
+                extra = read - allowed - KEYS
+                assert not extra, f"{sk}: the API reads attributes the collector never writes: {extra}"
+                checked.add(prefix)
+    assert checked == set(ITEM_ATTRS)
+
+    def entry(prefix: str) -> dict[str, Any]:
+        return next(e for sk, e in entries.items() if sk.startswith(prefix))
+
+    # The sort keys the collector writes match the API builder's patterns.
+    assert re.match(entry("PAYOUT#youtube#")["skPattern"], payouts.youtube_payout_sk("2026-10-23", "3456"))
+    assert re.match(entry("PAYOUT#youtube#")["skPattern"], payouts.youtube_payout_sk("2026-10-23", adsense.last4(A1)))
+    assert re.match(entry("PAYOUT#contentrewards#")["skPattern"], payouts.whop_payout_sk("2026-11-10", "po_3"))
+    assert re.match(entry("PAYSTATE#youtube")["skPattern"], payouts.paystate_sk("youtube"))
+    assert re.match(entry("PAYSTATE#contentrewards")["skPattern"], payouts.paystate_sk("contentrewards"))
+    # The shared values, word for word.
+    whop_state = entry("PAYSTATE#contentrewards")
+    assert set(whop_state["holdKinds"]) == set(payouts.HOLD_KINDS)
+    assert set(whop_state["kyc"]) == payouts.KYC | {"unknown"}
+    assert entry("PAYOUT#contentrewards#")["statusToState"] == payouts.WHOP_STATES
+    assert {"sent", "gone"} <= set(entry("PAYOUT#youtube#")["states"])
+    for sk, reads in PAYCONN_READS.items():
+        if sk in entries:
+            assert reads <= set(entries[sk].get("attributes") or []) | KEYS, sk
+            assert {"connected", "needs_reconnect"} <= set(entries[sk].get("statuses") or [])
+            assert {"token_dead", "keys_changed"} <= set(entries[sk].get("reasons") or [])

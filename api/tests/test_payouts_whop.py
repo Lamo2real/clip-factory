@@ -147,7 +147,7 @@ class Whop:
         path = url.path.removeprefix("/api/v1")
         if path == "/users/me":
             return response(200, self.me)
-        assert query.get("user_id") == WHOP_USER
+        assert query.get("user_id") == self.me.get("id", WHOP_USER)  # only his own Whop money
         if path == "/payouts/methods":
             return response(200, {"data": self.methods, "page_info": {"has_next_page": False}})
         assert path == "/payouts"
@@ -375,15 +375,33 @@ def test_methods_waiting_for_the_bank_check_are_not_ready(deps: PayoutDeps, fake
         {"id": "pom_4", "status": "broken"},
     ]
     fake.me["verification"] = {"individual": "pending"}
-    fake.me["owned_businesses"] = [{"id": "biz_1"}]
     seed(deps)
     whop.run(deps, USER, NOW)
     got = state(deps)
     assert got["methods"] == {"created": 2, "active": 1, "broken": 1, "ready": 1, "currencies": ["SEK"]}
     assert got["kyc"] == "pending"
-    assert got["businesses"] is True
+    assert got["businesses"] is False
     assert "hold" not in got
     assert "lastPaidOutAt" not in got
+
+
+@pytest.mark.parametrize(
+    ("me", "owns"),
+    [
+        # Whop's own shape: the balances of the biz_ accounts he owns sit under balance.
+        ({"balance": {"total_usd": 0, "businesses": [{"id": "biz_1"}], "businesses_total_usd": 5}}, True),
+        ({"balance": {"total_usd": 3, "businesses": [], "businesses_total_usd": "12.50"}}, True),
+        ({"balance": {"total_usd": 3, "businesses": [], "businesses_total_usd": 0}}, False),
+        ({"balance": {"total_usd": 3}}, False),
+        ({"balance": None}, False),
+        ({"owned_businesses": [{"id": "biz_1"}]}, True),  # a top-level list, just in case
+    ],
+)
+def test_owned_businesses_are_noted(deps: PayoutDeps, fake: Whop, me: dict[str, Any], owns: bool) -> None:
+    fake.me.update(me)
+    seed(deps)
+    whop.run(deps, USER, NOW)
+    assert state(deps)["businesses"] is owns
 
 
 def test_an_unknown_id_check_is_unknown_never_a_guess(deps: PayoutDeps, fake: Whop) -> None:
@@ -582,6 +600,74 @@ def test_another_sign_in_during_the_refresh_wins(deps: PayoutDeps, fake: Whop, c
     assert whop.run(deps, USER, NOW) == "not_connected"
     newest = json.loads(client.versions[TOKEN_NAME][conn(deps)["tokenVersionId"]])
     assert newest["refreshToken"] == "rt_new"
+
+
+@pytest.mark.parametrize(
+    ("answer", "reason"),
+    [
+        (response(401, {"error": "invalid_client"}), "keys_changed"),  # the app key itself: signing in again can't help
+        (response(400, {"error": "unauthorized_client"}), "keys_changed"),
+        (response(401, {"error": "invalid_token"}), "token_dead"),
+    ],
+)
+def test_whop_refusing_the_key_is_keys_changed(deps: PayoutDeps, fake: Whop, answer: HttpResponse, reason: str) -> None:
+    seed(deps)
+    fake.tokens = [answer]
+    assert whop.run(deps, USER, NOW) == "token_dead"
+    assert (conn(deps)["status"], conn(deps)["reason"]) == ("needs_reconnect", reason)
+    assert len(fake.refreshes) == 1
+
+
+# --- a new grant ----------------------------------------------------------------------------------------------
+
+
+def _payouts_reads(fake: Whop) -> list[dict[str, str]]:
+    return [{k: v[0] for k, v in parse_qs(urlsplit(u).query).items()} for u in fake.reads if "/payouts?" in u]
+
+
+def test_another_whop_account_is_read_from_the_start(deps: PayoutDeps, fake: Whop, table: StreamTable) -> None:
+    seed(deps, expires_in=timedelta(hours=1))
+    whop.run(deps, USER, NOW)
+    assert state(deps)["payoutsMark"] == iso(NOW - timedelta(days=2))
+    # Stop reading Whop, then Connect Whop with another Whop account: K writes connectedAt anew.
+    later = NOW + timedelta(days=3)
+    deps.store.update(PK, "PAYCONN#whop", {"accountId": "user_Other9", "connectedAt": iso(later)})
+    fake.me["id"] = "user_Other9"
+    fake.calls.clear()
+    table.stream.clear()
+    whop.run(deps, USER, later)
+    first = _payouts_reads(fake)[0]
+    assert "created_after" not in first  # never from the old account's newest payout
+    paystate = [(old or {}, new) for _, old, new in table.stream if new["sk"] == "PAYSTATE#contentrewards"]
+    assert "payoutsMark" in paystate[0][0]
+    assert "payoutsMark" not in paystate[0][1]
+    assert [bool(new.get("firstReadDone")) for _, new in paystate] == [False, True]  # quiet, then done
+
+
+def test_saving_the_same_key_again_is_not_a_new_grant(deps: PayoutDeps, fake: Whop, table: StreamTable) -> None:
+    seed(deps, expires_in=timedelta(hours=1))
+    whop.run(deps, USER, NOW)
+    # PUT /v1/getpaid/whop/key with the key he already has: only keyHint and updatedAt move.
+    deps.store.update(PK, "PAYCONN#whop", {"keyHint": "app_Cl…e123", "updatedAt": iso(NOW + timedelta(hours=1))})
+    fake.calls.clear()
+    table.stream.clear()
+    whop.run(deps, USER, NOW + timedelta(days=1))
+    assert _payouts_reads(fake)[0]["created_after"] == iso(NOW - timedelta(days=32))
+    paystate = [new for _, _, new in table.stream if new["sk"] == "PAYSTATE#contentrewards"]
+    assert len(paystate) == 1  # one write: never quiet again
+    assert paystate[0]["firstReadDone"] is True
+
+
+def test_a_grant_mark_from_the_api_wins(deps: PayoutDeps) -> None:
+    base = {"connectedAt": "2026-11-01T09:00:00.000Z", "updatedAt": "2026-11-21T12:00:00.000Z"}
+    assert payouts.grant_mark(base, "whop") == "2026-11-01T09:00:00.000Z"
+    assert payouts.grant_mark(base, "adsense") == "2026-11-01T09:00:00.000Z|2026-11-21T12:00:00.000Z"
+    granted = {**base, "grantedAt": "2026-11-20T08:00:00.000Z"}
+    assert (
+        payouts.grant_mark(granted, "whop")
+        == payouts.grant_mark(granted, "adsense")
+        == "granted|2026-11-20T08:00:00.000Z"
+    )
 
 
 @pytest.mark.parametrize("status", ["not_connected", "keys_saved", "needs_reconnect"])
