@@ -73,6 +73,13 @@ def test_empty_disallow_allows_all_and_percent_encoding_is_compared_decoded() ->
     assert robots.parse("").allowed("/x")
 
 
+def test_a_byte_order_mark_never_turns_the_file_into_allow_all() -> None:
+    rules = robots.parse("\ufeffUser-agent: *\nDisallow: /api/\nDisallow: /home\n")
+    assert not rules.allowed("/home")
+    assert not rules.allowed("/api/x")
+    assert rules.allowed(f"/c/campaigns/{UUID}")
+
+
 def test_forbidding_what_is_needed_and_the_compact_copy() -> None:
     forbids = "User-agent: *\nDisallow: /c/campaigns/\n"
     assert not robots.needed(robots.parse(forbids))
@@ -115,6 +122,30 @@ def test_a_fresh_copy_is_not_read_again_and_a_new_one_is_kept() -> None:
     look, urls = _look({"robots": {**fresh, "readAt": iso(NOW - timedelta(hours=25))}})
     assert urls[0] == "https://contentrewards.com/robots.txt"
     assert look.robots_kept == {"text": robots.compact(CR), "readAt": iso(NOW)}
+
+
+def test_a_failed_read_is_a_try_and_the_copy_is_used_without_asking_again_for_24_hours() -> None:
+    down = {"/robots.txt": text(b"", 500)}
+    copy = {"text": robots.compact(CR), "readAt": iso(NOW - timedelta(days=2))}
+    look, urls = _look({"robots": copy}, down)
+    assert urls[0] == "https://contentrewards.com/robots.txt"
+    assert look.entries is not None
+    assert (look.robots_kept, look.robots_tried) == (None, {**copy, "triedAt": iso(NOW)})
+    tried = {**copy, "triedAt": iso(NOW - timedelta(hours=23))}
+    look, urls = _look({"robots": tried}, down)
+    assert "https://contentrewards.com/robots.txt" not in urls  # tried 23 h ago: the 2-day-old copy is used
+    assert (look.entries is not None, look.robots_tried) == (True, None)
+    look, urls = _look({"robots": {**tried, "triedAt": iso(NOW - timedelta(hours=24))}}, down)
+    assert urls[0] == "https://contentrewards.com/robots.txt"
+    old = {**copy, "readAt": iso(NOW - timedelta(days=8)), "triedAt": iso(NOW - timedelta(hours=1))}
+    look, urls = _look({"robots": old}, down)  # no usable copy: a try is all this look can do
+    assert (urls, look.state) == (["https://contentrewards.com/robots.txt"], "down")
+
+
+def test_a_byte_order_mark_in_the_file_read() -> None:
+    look, urls = _look({}, {"/robots.txt": text(b"\xef\xbb\xbfUser-agent: *\nDisallow: /c/\n")})
+    assert (look.state, urls) == ("not_allowed", ["https://contentrewards.com/robots.txt"])
+    assert look.robots_kept == {"text": "User-agent: *\nDisallow: /c/\n", "readAt": iso(NOW)}
 
 
 def test_forbidding_robots_means_not_allowed_and_nothing_else_is_read() -> None:

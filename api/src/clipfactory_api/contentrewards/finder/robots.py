@@ -53,7 +53,7 @@ def _matches(pattern: str, path: str) -> bool:
 
 def _lines(text: str) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
-    for raw in text.splitlines():
+    for raw in text.lstrip("\ufeff").splitlines():  # a leading byte order mark is not part of the first line
         line = raw.split("#", 1)[0].strip()
         if ":" not in line:
             continue

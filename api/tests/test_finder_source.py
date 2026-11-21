@@ -13,7 +13,7 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.clock import iso, parse
-from clipfactory_api.contentrewards import fetch
+from clipfactory_api.contentrewards import fetch, links
 from clipfactory_api.contentrewards.finder import robots, source
 from finder_fakes import NOW, Monotonic, Site, campaign_page, fixture, html, look, samples, site, store, xml
 
@@ -157,6 +157,16 @@ def test_the_requests_are_anonymous(monkeypatch: pytest.MonkeyPatch) -> None:
         "https://contentrewards.com/api/campaign/campaigns/" + PICKLE,
         "https://contentrewards.com/home/x",
         "http://contentrewards.com/c/campaigns/" + PICKLE,
+        "https://contentrewards.com/c/discover",  # robots.txt allows it, the finder never reads it
+        "/c/discover?category=gaming",
+        f"https://contentrewards.com/c/campaigns/{PICKLE}?group=1",
+        f"/c/campaigns/{PICKLE}/",
+        f"/c/campaigns/{PICKLE.upper()}",
+        "https://contentrewards.com/c/../api/x",  # urljoin keeps the dot segments of an absolute Location
+        "../../api/campaign/campaigns/discover",
+        "/c/campaigns/%2e%2e/%2e%2e/api/x",
+        "/c/api/og/campaign.png",
+        "/sitemap-campaigns-1.xml",  # a child sitemap only when this look's index named it
     ],
 )
 def test_a_redirect_off_the_allowed_pages_is_refused(location: str) -> None:
@@ -217,10 +227,11 @@ def test_403_three_looks_in_a_row_is_blocked_and_a_good_page_clears_it() -> None
     blocked_looks = 0
     for n in range(1, 4):
         fake, uuids = _many(3)
-        fake.routes[f"/c/campaigns/{uuids[0]}"] = (403, {}, b"")
+        for u in uuids:
+            fake.routes[f"/c/campaigns/{u}"] = (403, {}, b"")
         found = look(st, fake, state={"blockedLooks": blocked_looks})
         state = _state(st)
-        assert state["blockedLooks"] == n
+        assert (state["blockedLooks"], len(fake.pages())) == (n, 1)
         wait = (parse(state["backoffUntil"]) or NOW) - NOW
         assert timedelta(hours=24) <= wait <= timedelta(hours=24, seconds=10)
         blocked_looks = state["blockedLooks"]
@@ -229,6 +240,18 @@ def test_403_three_looks_in_a_row_is_blocked_and_a_good_page_clears_it() -> None
     fake, _ = _many(2)
     found = look(st, fake, state=_state(st))
     assert found.good == 2  # run's end-of-look write then sets blockedLooks 0 and sourceState ok
+
+
+def test_a_good_page_before_a_403_in_the_same_look_starts_the_count_again() -> None:
+    st = store()
+    fake, uuids = _many(3)
+    order = source.plan([(u, 1_790_000_000 + i) for i, u in enumerate(uuids)], {}, [], NOW)
+    fake.routes[f"/c/campaigns/{order[2]}"] = (403, {}, b"")
+    found = look(st, fake, state={"blockedLooks": 2})
+    assert (found.good, found.stopped, found.state) == (2, "blocked", None)
+    state = _state(st)
+    assert state["blockedLooks"] == 1  # the blocks were not in a row
+    assert "sourceState" not in state
 
 
 @pytest.mark.parametrize("at", [0, 9])
@@ -318,6 +341,57 @@ def test_the_reader_refuses_api_paths_even_if_robots_allowed_them() -> None:
     assert not reader.allow(f"https://contentrewards.com/c/campaigns/{PICKLE}")  # no robots.txt yet: nothing
 
 
+def test_the_reader_allows_exactly_the_three_kinds_of_url() -> None:
+    reader = source.Reader(fetch.get, lambda *_a: (200, {}, b""), None, Monotonic(), Monotonic().sleep)
+    reader.rules = robots.parse("User-agent: *\nAllow: /\n")
+    site_ = "https://contentrewards.com"
+    for ok in ("/robots.txt", "/sitemap.xml", f"/c/campaigns/{PICKLE}"):
+        assert reader.allow(site_ + ok), ok
+    for bad in (
+        "/",
+        "/c/discover",
+        "/c/discover?sort=new",
+        f"/c/campaigns/{PICKLE}?group=1",
+        f"/c/campaigns/{PICKLE}/",
+        f"/c/campaigns/{PICKLE}/apply",
+        f"/c/campaigns/{PICKLE.upper()}",
+        "/c/campaigns/not-a-uuid",
+        "/c/../api/x",
+        "/c/campaigns/./" + PICKLE,
+        "/c/campaigns/%2e%2e/%2e%2e/api/x",
+        "/c/campaigns/" + PICKLE.replace("-", "%2d"),
+        "/c/api/og/x.png",
+        "/robots.txt?x=1",
+        "/sitemap.xml?page=2",
+        "/sitemap-campaigns-1.xml",
+        "/api/campaign/campaigns/discover",
+    ):
+        assert not reader.allow(site_ + bad), bad
+    reader.children = frozenset({"/sitemap-campaigns-1.xml"})
+    assert reader.allow(site_ + "/sitemap-campaigns-1.xml")
+    assert not reader.allow(site_ + "/sitemap-campaigns-2.xml")
+    reader.rules = robots.parse("User-agent: *\nDisallow: /sitemap-campaigns-1.xml\n")
+    assert not reader.allow(site_ + "/sitemap-campaigns-1.xml")  # robots.txt still has the last word
+
+
+def test_an_index_child_that_is_no_xml_sitemap_is_never_read() -> None:
+    index = (
+        b"<sitemapindex><sitemap><loc>https://contentrewards.com/c/discover</loc></sitemap>"
+        b"<sitemap><loc>https://contentrewards.com/../api/x.xml</loc></sitemap>"
+        b"<sitemap><loc>https://contentrewards.com/sitemap-campaigns-1.xml</loc></sitemap></sitemapindex>"
+    )
+    fake = site(Monotonic(), sitemap=index)
+    fake.routes["/sitemap-campaigns-1.xml"] = xml(_sitemap([PICKLE]))
+    found = look(store(), fake)
+    assert fake.urls()[:3] == [
+        "https://contentrewards.com/robots.txt",
+        "https://contentrewards.com/sitemap.xml",
+        "https://contentrewards.com/sitemap-campaigns-1.xml",
+    ]
+    assert found.entries == [(PICKLE, 1_793_491_200)]
+    assert fake.pages() == [f"/c/campaigns/{PICKLE}"]
+
+
 def test_a_sitemap_challenge_is_blocked() -> None:
     st = store()
     fake = site(Monotonic())
@@ -335,6 +409,20 @@ def test_the_plan(case: dict[str, Any]) -> None:
     entries = [(u, int(at.timestamp()) if (at := parse(m)) else None) for u, m in case["entries"]]
     got = source.plan(entries, case["cache"], case["matched"], NOW, case.get("cap", 40))
     assert got == case["expect"]
+
+
+def test_the_plan_reads_only_real_uuids_from_brand_data() -> None:
+    bad = ["../../api/campaign/campaigns/discover", "X?group=1", "", 7, None, f"{PICKLE}/", f"{PICKLE}?group=1"]
+    cache = {
+        _u(1): {
+            "state": "ok",
+            "readAt": iso(NOW - timedelta(hours=1)),
+            "card": {"onDiscover": True, "groupIds": [*bad, PICKLE.upper()]},
+        },
+    }
+    got = source.plan([(_u(1), 1_790_000_000)], cache, [*bad, _u(1)], NOW)
+    assert got == [PICKLE]  # the sibling, lower-cased; nothing else
+    assert all(links.UUID.match(u) and u == u.lower() for u in got)
 
 
 def test_the_plan_never_repeats_and_keeps_the_cap() -> None:

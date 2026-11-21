@@ -1,18 +1,21 @@
 """The polite reader of Content Rewards' public pages (docs/CONTRACTS.md §41.2).
 
-Exactly three kinds of URL, nothing else, ever: ``/robots.txt`` (at most once a day), ``/sitemap.xml`` (and at most 5
-child sitemaps) and ``/c/campaigns/{uuid}`` (the plan, at most 40 a look). Every request is a ``GET`` through
-``fetch.get`` (§38.10's SSRF guard: https only, public addresses only, at most 3 redirects), one at a time, at least
-1 s between the starts of two requests, ``User-Agent: ClipFactory/1``, no cookie, no ``Authorization``, no
-``Referer``; every hop must be ``contentrewards.com`` on port 443 **and** a path the stored robots.txt allows. Never an
-``/api/`` path. The status and ``Retry-After`` of a non-200 answer are taken by this module's own ``opener`` wrapper
-around ``fetch.https_open`` (``fetch.py`` is unchanged). The network and the clocks are passed in, so tests never look
-anything up. Backoffs are written to ``CRPUBLIC/STATE`` the moment a 429, 503, 403 or challenge arrives.
+Exactly three kinds of URL, nothing else, ever: ``/robots.txt`` (at most once a day, a failed try included),
+``/sitemap.xml`` (and at most 5 child ``.xml`` sitemaps its index names) and ``/c/campaigns/{uuid}`` (the plan, at most
+40 a look). Every request is a ``GET`` through ``fetch.get`` (§38.10's SSRF guard: https only, public addresses only, at
+most 3 redirects), one at a time, at least 1 s between the starts of two requests, ``User-Agent: ClipFactory/1``, no
+cookie, no ``Authorization``, no ``Referer``; every hop must be ``contentrewards.com`` on port 443, one of those exact
+paths (no query, no ``%``, no dot segment) **and** a path the stored robots.txt allows. Never an ``/api/`` path, never
+``/c/discover``, never a ``?group=1`` page, even when a redirect points there. The status and ``Retry-After`` of a
+non-200 answer are taken by this module's own ``opener`` wrapper around ``fetch.https_open`` (``fetch.py`` is
+unchanged). The network and the clocks are passed in, so tests never look anything up. Backoffs are written to
+``CRPUBLIC/STATE`` the moment a 429, 503, 403 or challenge arrives.
 """
 
 from __future__ import annotations
 
 import email.utils
+import re
 import time
 import urllib.parse
 from collections.abc import Callable, Iterable, Mapping
@@ -23,7 +26,7 @@ from typing import Any
 from ... import db
 from ...clock import iso, parse
 from ...log import log
-from .. import fetch, public
+from .. import fetch, links, public
 from ..util import obj
 from . import config, normalize, robots, rsc, sitemap
 from .sitemap import Entry
@@ -33,6 +36,14 @@ PK = "CRPUBLIC"
 STATE_SK = "STATE"
 CAMP_PREFIX = "CAMP#"
 PUB_PREFIX = "PUB#"
+_PAGE = re.compile(r"/c/campaigns/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+def campaign_id(value: object) -> str | None:
+    """A uuid as a lower-case string, else ``None`` (brand data names group siblings: never read anything else)."""
+    if not isinstance(value, str) or not links.UUID.match(value):
+        return None
+    return value.lower()
 
 
 def camp_sk(uuid: str) -> str:
@@ -101,8 +112,9 @@ def plan(
     siblings: list[str] = []
     for item in cache.values():
         for g in (item.get("card") or {}).get("groupIds") or []:
-            if g not in listed and g not in siblings:
-                siblings.append(str(g))
+            sibling = campaign_id(g)
+            if sibling is not None and sibling not in listed and sibling not in siblings:
+                siblings.append(sibling)
     eligible = set(listed) | set(siblings)
 
     def oldest(uuids: Iterable[str], name: str = "readAt") -> list[str]:
@@ -113,9 +125,10 @@ def plan(
         return sorted(uuids, key=key)
 
     # 1. current matches whose read is older than 12 hours (at most 10), oldest read first
+    current = [c for c in (campaign_id(m) for m in matched) if c is not None]
     stale = [
         u
-        for u in dict.fromkeys(str(m) for m in matched)
+        for u in dict.fromkeys(current)
         if u in cache and u in eligible and cache[u].get("readAt") and _older(cache[u], now, config.MATCH_STALE)
     ]
     if take(oldest(stale)[: config.MATCH_STALE_MAX]):
@@ -202,21 +215,28 @@ class Reader:
     monotonic: Callable[[], float]
     sleep: Callable[[float], None]
     rules: robots.Robots | None = None
+    children: frozenset[str] = frozenset()  # the child sitemaps' paths this look's index named
     requests: list[str] = field(default_factory=list)
     _last_start: float | None = None
     _status: int | None = None
     _headers: dict[str, str] = field(default_factory=dict)
 
     def allow(self, url: str) -> bool:
+        """An exact allow-list (every hop of a redirect too): ``/robots.txt``; ``/sitemap.xml``, a child sitemap its
+        index named or ``/c/campaigns/{uuid}``, each only when the stored robots.txt allows it. No query, no
+        fragment, no ``%``, no ``.`` or ``..`` segment, never ``/api/``."""
         if not fetch.host_in(url, frozenset({config.HOST})):
             return False
         parts = urllib.parse.urlsplit(url)
-        path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
-        if path.startswith("/api/") or parts.fragment:
+        path = parts.path
+        if parts.query or parts.fragment or "%" in path or path.startswith("/api/"):
+            return False
+        if any(segment in {".", ".."} for segment in path.split("/")):
             return False
         if path == "/robots.txt":
             return True
-        return self.rules is not None and self.rules.allowed(path)
+        known = path == "/sitemap.xml" or path in self.children or _PAGE.fullmatch(path) is not None
+        return known and self.rules is not None and self.rules.allowed(path)
 
     def _open(
         self, address: str, host: str, target: str, timeout: float, max_bytes: int
@@ -267,6 +287,7 @@ class Look:
     ``sourceState`` this look decided (``None``: unchanged)."""
 
     robots_kept: Item | None = None  # a new robots.txt copy to store
+    robots_tried: Item | None = None  # robots.txt could not be read: the stored copy (if any) with this try's time
     entries: list[Entry] | None = None
     state: str | None = None
     stopped: str | None = None
@@ -286,15 +307,24 @@ def _state_update(store: db.Store, fields: Mapping[str, Any]) -> None:
     store.update_expr(PK, STATE_SK, update, names=names, values=values)
 
 
+def robots_last(state: Mapping[str, Any]) -> datetime | None:
+    """The last time robots.txt was asked for: its good read or a failed try, whichever is later."""
+    stored = obj(state.get("robots"))
+    times = [t for t in (parse(stored.get("readAt")), parse(stored.get("triedAt"))) if t is not None]
+    return max(times) if times else None
+
+
 def _robots(reader: Reader, state: Mapping[str, Any], now: datetime, look: Look) -> robots.Robots | None:
     stored = obj(state.get("robots"))
     text = stored.get("text") if isinstance(stored.get("text"), str) else None
     read_at = parse(stored.get("readAt"))
-    if text is not None and read_at is not None and now - read_at < config.ROBOTS_EVERY:
-        return robots.parse(text)
+    usable = text is not None and read_at is not None and now - read_at <= config.ROBOTS_USABLE
+    last = robots_last(state)
+    if text is not None and usable and last is not None and now - last < config.ROBOTS_EVERY:
+        return robots.parse(text)  # read (or tried) in the last 24 h: at most one robots.txt request a day
     try:
         got = reader.read(config.ROBOTS_URL, max_bytes=config.ROBOTS_MAX_BYTES, timeout=config.ROBOTS_TIMEOUT, now=now)
-        body = got.body.decode("utf-8", errors="replace")
+        body = got.body.decode("utf-8-sig", errors="replace")
         if got.content_type == "text/html" or "<html" in body[:2048].lower():
             raise ReadFail("failed", 200)  # a web page in its place (a bot wall) is no robots.txt: never "allow all"
         kept = robots.compact(body)
@@ -304,7 +334,8 @@ def _robots(reader: Reader, state: Mapping[str, Any], now: datetime, look: Look)
         log("info", "finder.read", what="robots", outcome=e.kind, status=(e.status or 0) // 100)
         if e.kind in ("throttled", "blocked"):
             look.fail = e
-        if text is not None and read_at is not None and now - read_at <= config.ROBOTS_USABLE:
+        look.robots_tried = {**stored, "triedAt": iso(now)}
+        if text is not None and usable:
             return robots.parse(text)
         return None
     log("info", "finder.read", what="robots", outcome="ok", status=2)
@@ -328,6 +359,8 @@ def _sitemap(reader: Reader, now: datetime, look: Look, left: Callable[[], float
         if top.kind == "urlset":
             entries = top.entries
         else:
+            paths = (urllib.parse.urlsplit(child).path for child in top.children[: config.SITEMAP_CHILDREN])
+            reader.children = frozenset(p for p in paths if p.endswith(".xml"))
             parts = []
             for child in top.children[: config.SITEMAP_CHILDREN]:
                 if not reader.allow(child):
@@ -362,7 +395,8 @@ def _backoff(store: db.Store, state: Mapping[str, Any], at: datetime, fail: Read
             hours=round(min(wait, config.BACKOFF_MAX).total_seconds() / 3600, 2),
         )
         return
-    blocked = int(state.get("blockedLooks") or 0) + 1
+    base = 0 if look.good > 0 else int(state.get("blockedLooks") or 0)  # a good page this look cleared it
+    blocked = base + 1
     fields: Item = {"backoffUntil": iso(at + config.BLOCKED_BACKOFF), "blockedLooks": blocked}
     if blocked >= config.BLOCKED_AFTER:
         fields["sourceState"] = "blocked"

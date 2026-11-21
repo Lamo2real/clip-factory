@@ -13,7 +13,7 @@ from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
-from .. import campaigns, rules
+from .. import campaigns, links, rules
 from ..util import obj
 from . import config
 
@@ -156,14 +156,33 @@ def on_discover(detail: Mapping[str, Any]) -> bool:
     )
 
 
+def _fits(card: Item) -> bool:
+    return len(json.dumps(card, ensure_ascii=False).encode()) <= config.CARD_MAX_BYTES
+
+
+def _top_tiers(row: Item, n: int) -> None:
+    """Only the ``n`` best-paying country rates, in their order (the row's top rate and its country note stay)."""
+    tiers = [g for g in row.get("countryRates") or [] if isinstance(g, dict)]
+    if len(tiers) <= n:
+        return
+
+    def rate(g: Item) -> int:
+        value = g.get("per1kCents")
+        return value if isinstance(value, int) and not isinstance(value, bool) else -1
+
+    best = sorted(range(len(tiers)), key=lambda i: (-rate(tiers[i]), i))[:n]
+    row["countryRates"] = [tiers[i] for i in sorted(best)]
+
+
 def _fit(card: Item) -> Item:
-    """≤ 6 KB: long country lists go first, then the shortest that still says what pays."""
-    if len(json.dumps(card, ensure_ascii=False).encode()) <= config.CARD_MAX_BYTES:
+    """≤ 6 KB, always: long country lists go first, then the shortest that still says what pays, then only the best
+    country rates, then shorter words, then one country rate and one row a place."""
+    if _fits(card):
         return card
     for row in card["pay"]:
         for group in row.get("countryRates") or []:
             group["countries"] = group.get("countries", [])[:5]
-    if len(json.dumps(card, ensure_ascii=False).encode()) <= config.CARD_MAX_BYTES:
+    if _fits(card):
         return card
     for row in card["pay"]:
         for group in row.get("countryRates") or []:
@@ -171,6 +190,26 @@ def _fit(card: Item) -> Item:
     card["groupIds"] = card["groupIds"][:5]
     card["name"] = card["name"][:120]
     card["brand"] = card["brand"][:120]
+    if _fits(card):
+        return card
+    for row in card["pay"]:
+        _top_tiers(row, 3)
+    if _fits(card):
+        return card
+    card["name"], card["brand"] = card["name"][:80], card["brand"][:80]
+    if isinstance(card.get("groupName"), str):
+        card["groupName"] = card["groupName"][:80]
+    card["categories"] = card["categories"][:3]
+    card["contentTypes"] = [t[:40] for t in card["contentTypes"][:3]]
+    if isinstance(card.get("orgId"), str) and len(card["orgId"]) > 64:
+        card["orgId"] = None
+    if _fits(card):
+        return card
+    rows: dict[str, Item] = {}
+    for row in card["pay"]:
+        _top_tiers(row, 1)
+        rows.setdefault(str(row.get("platform")), row)
+    card["pay"] = list(rows.values())
     return card
 
 
@@ -195,9 +234,13 @@ def card(
     counts = obj(detail.get("briefCounts"))
     hidden = counts.get("contentRules") if isinstance(counts.get("contentRules"), int) else None
     group = obj((discover_card or {}).get("group"))
-    group_ids = [
-        str(g).lower() for g in group.get("campaignIds") or [] if isinstance(g, str) and str(g).lower() != uuid
-    ][: config.MAX_GROUP]
+    group_ids = list(  # only real uuids: the plan reads each as its own /c/campaigns/{uuid} page
+        dict.fromkeys(
+            g.lower()
+            for g in group.get("campaignIds") or []
+            if isinstance(g, str) and links.UUID.match(g) and g.lower() != uuid
+        )
+    )[: config.MAX_GROUP]
     listed = _iso((discover_card or {}).get("listedAt"))
     if listed is None and lastmod is not None:
         listed = _iso(datetime.fromtimestamp(lastmod, UTC).isoformat())

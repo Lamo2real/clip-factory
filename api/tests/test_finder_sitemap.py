@@ -58,6 +58,18 @@ def test_only_exact_campaign_locs() -> None:
     ]
 
 
+def test_only_the_uuid_may_be_in_any_case() -> None:
+    assert sitemap.campaign_uuid(f"https://contentrewards.com/c/campaigns/{PICKLE.upper()}") == PICKLE
+    for loc in (
+        f"HTTPS://contentrewards.com/c/campaigns/{PICKLE}",
+        f"https://CONTENTREWARDS.COM/c/campaigns/{PICKLE}",
+        f"https://contentrewards.com/C/Campaigns/{PICKLE}",
+        f"https://contentrewards.com/c/CAMPAIGNS/{PICKLE}",
+    ):
+        assert sitemap.campaign_uuid(loc) is None, loc
+    assert sitemap.parse(_urlset(_url(f"https://Contentrewards.com/c/campaigns/{PICKLE}"))).entries == []
+
+
 def test_an_index_names_at_most_5_children_on_contentrewards_com() -> None:
     found = sitemap.parse(fixture("sitemap-index.xml"))
     assert found.kind == "index"

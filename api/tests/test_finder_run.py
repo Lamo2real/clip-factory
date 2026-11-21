@@ -125,6 +125,103 @@ def test_a_scheduled_look_reads_once_and_matches_every_owner_that_is_on() -> Non
     )  # Q's attributes untouched (null places unstored)
 
 
+def test_a_scheduled_look_with_nobody_finding_reads_nothing() -> None:
+    for owners in ("stopped", "none", "no_crfind"):
+        st, clock, fake = store(), WallClock(), site(Monotonic())
+        if owners == "stopped":
+            _owner(st, USER, want={"on": False})  # "Stop finding campaigns" stops the looks too
+        if owners == "no_crfind":
+            st.put({"pk": db.CROWNERS_PK, "sk": db.user_pk(USER), "type": "crowner", "userId": USER})
+        out = _go(st, clock, fake, "schedule")
+        assert out == {"action": "find", "outcome": "idle", "owners": 0}, owners
+        assert fake.calls == [], owners
+        state = _state(st)
+        assert (state["nextRunAt"], state["type"]) == (iso(NOW + timedelta(hours=6)), "crpublicstate"), owners
+        assert not {"lastReadAt", "readsToday", "runningUntil"} & set(state), owners  # no reading look counted
+        if owners == "stopped":
+            assert "matchedAt" not in _crfind(st)
+    st, clock, fake = store(), WallClock(), site(Monotonic())
+    _owner(st, USER, want={"on": False})
+    st.put({"pk": "CRPUBLIC", "sk": "STATE", "type": "crpublicstate", "runningUntil": iso(NOW + timedelta(seconds=60))})
+    assert _go(st, clock, fake, "schedule")["outcome"] == "busy"
+    assert "nextRunAt" not in _state(st)  # the running look sets it
+    st.update(db.user_pk(USER), "CRFIND", {"want": {**_crfind(st)["want"], "on": True}})
+    clock.advance(minutes=5)
+    assert _go(st, clock, fake, "schedule")["outcome"] == "read"  # on again: the looks come back
+    assert len(fake.pages()) > 0
+
+
+def test_robots_txt_is_asked_for_at_most_once_a_day_while_it_keeps_failing() -> None:
+    st, clock, fake = store(), WallClock(), site(Monotonic())
+    _owner(st, USER)
+    copy_ = {"text": fixture("robots.txt").decode(), "readAt": iso(NOW - timedelta(days=2))}
+    st.put({"pk": "CRPUBLIC", "sk": "STATE", "type": "crpublicstate", "robots": copy_})
+    fake.routes["/robots.txt"] = (500, {}, b"")
+
+    def robots_reads() -> int:
+        return fake.urls().count("https://contentrewards.com/robots.txt")
+
+    for _ in range(4):
+        assert _go(st, clock, fake, "schedule")["outcome"] == "read"
+        clock.advance(hours=1)
+    assert robots_reads() == 1
+    assert len(fake.urls()) > 4 * 2  # every look still read the sitemap and pages with the 2-day-old copy
+    assert _state(st)["robots"] == {**copy_, "triedAt": iso(NOW)}
+    clock.now = NOW + timedelta(hours=24)
+    _go(st, clock, fake, "schedule")
+    assert robots_reads() == 2  # the next day's try
+    fake.routes["/robots.txt"] = (200, {"content-type": "text/plain"}, fixture("robots.txt"))
+    clock.now = NOW + timedelta(hours=48)
+    _go(st, clock, fake, "schedule")
+    assert robots_reads() == 3
+    assert "triedAt" not in _state(st)["robots"]  # a good read replaces the tries
+
+
+def test_a_current_match_keeps_its_first_shown_time_past_the_300_cap() -> None:
+    old = "2026-01-01T00:00:00.000Z"
+    previous = {f"00000000-0000-4000-8000-{i:012d}": f"2026-11-{1 + i % 20:02d}T00:00:00.000Z" for i in range(300)}
+    previous["c0c37381-e244-4643-98bd-edbff4bc1465"] = old
+    shown = run._shown(previous, [{"campaignId": "c0c37381-e244-4643-98bd-edbff4bc1465"}], iso(NOW))
+    assert len(shown) == 300
+    assert shown["c0c37381-e244-4643-98bd-edbff4bc1465"] == old  # never "new" again
+    assert min(shown.values()) == old
+    later = "00000000-0000-4000-8000-999999999999"
+    fresh = run._shown(previous, [{"campaignId": later}], iso(NOW))
+    assert (len(fresh), fresh[later]) == (300, iso(NOW))
+    assert old not in fresh.values()  # no longer a match: the oldest goes first
+
+
+def _without_none(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _without_none(v) for k, v in value.items() if v is not None}
+    if isinstance(value, list):
+        return [_without_none(v) for v in value]
+    return value
+
+
+def test_the_stored_matches_lack_the_keys_whose_value_is_null(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shape Q's view reads: the table stores no null, so every ``number | null`` key of ``FinderMatch`` (and
+    ``want.places: null``) is missing when null and must be read back as null."""
+    st, clock, fake = store(), WallClock(), site(Monotonic())
+    _owner(st, USER, want={"access": "any", "kinds": "any"})
+    found: list[dict[str, Any]] = []
+    real = match.find
+
+    def keep(*a: Any, **k: Any) -> dict[str, Any]:
+        result = real(*a, **k)
+        found.append(copy.deepcopy(result))
+        return result
+
+    monkeypatch.setattr(match, "find", keep)
+    _go(st, clock, fake, "schedule")
+    stored = _crfind(st)["matches"]
+    assert stored == _without_none(found[-1]["matches"])
+    nulls = {k for m in found[-1]["matches"] for k, v in m.items() if v is None}
+    assert nulls  # some keys really are null (e.g. maxPerClipCents, hiddenRules, launchedAt)
+    assert all(k not in m for m in stored for k in nulls if all(x.get(k) is None for x in found[-1]["matches"]))
+    assert "places" not in _crfind(st)["want"]  # places: null is stored as no key
+
+
 def test_the_notice_once_a_day_only_on_scheduled_looks() -> None:
     st, clock, fake = store(), WallClock(), site(Monotonic())
     _owner(st, USER)

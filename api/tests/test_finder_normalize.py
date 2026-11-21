@@ -133,6 +133,58 @@ def test_hidden_rules_group_ids_and_the_6_kb_cap() -> None:
     assert len(fat["pay"][0]["countryRates"]) == 12  # the rates stay, the long country lists go
 
 
+def test_group_ids_are_only_real_uuids() -> None:
+    lanco = copy.deepcopy(samples()["d07-8lanco-sound"])
+    own, sibling = lanco["detail"]["id"], "e7b7aa0d-8d5c-460b-bb1e-803ad0492bc5"
+    lanco["card"]["group"]["campaignIds"] = [
+        "../../api/campaign/campaigns/discover",
+        "X?group=1",
+        f"{sibling}?group=1",
+        f"{sibling}/",
+        "",
+        7,
+        None,
+        own.upper(),
+        sibling.upper(),
+        sibling,
+    ]
+    assert normalize.card(lanco["detail"], lanco["card"], None, NOW)["groupIds"] == [sibling]
+
+
+def test_the_6_kb_cap_holds_for_five_places_with_many_country_rates() -> None:
+    from clipfactory_api.contentrewards.finder import match
+
+    big = copy.deepcopy(samples()["d04-cod-dmz"])
+    places = ["youtube", "tiktok", "instagram", "facebook", "x"]
+    cfg = big["detail"]["configuration"]
+    cfg["payoutModel"] = [{"platform": p, "rate": 100} for p in places]
+    cfg["geoRates"] = {
+        "tiers": [
+            {
+                "label": f"Tier {i} " + "x" * 50,
+                "countries": [f"C{j}" for j in range(60)],
+                "platform": p,
+                "rate": 150 + i,
+            }
+            for p in places
+            for i in range(14)
+        ],
+        "restOfWorld": [{"platform": p, "rate": 40} for p in places],
+    }
+    fat = normalize.card(big["detail"], big["card"], None, NOW)
+    assert len(json.dumps(fat, ensure_ascii=False).encode()) <= 6 * 1024
+    assert [r["platform"] for r in fat["pay"]] == places
+    for row in fat["pay"]:
+        assert [g["per1kCents"] for g in row["countryRates"]] == [161, 162, 163]  # the best ones, in their order
+        assert (match.top(row), match.geo(row)) == (163, True)  # what pays stays the same
+    big["detail"]["name"] = big["detail"]["organization"]["name"] = "\U0001f600" * 300
+    big["card"]["group"] = {"name": "\U0001f600" * 300, "campaignIds": []}
+    cfg["content"] = {"contentTypes": [{"id": "t" * 300 + str(i)} for i in range(8)]}
+    worst = normalize.card(big["detail"], big["card"], None, NOW)
+    assert len(json.dumps(worst, ensure_ascii=False).encode()) <= 6 * 1024
+    assert {match.top(r) for r in worst["pay"]} == {163}
+
+
 def test_listed_at_falls_back_to_the_sitemap_lastmod() -> None:
     pickle = samples()["d18-pickleball"]
     card = normalize.card(pickle["detail"], None, 1794677024, NOW)

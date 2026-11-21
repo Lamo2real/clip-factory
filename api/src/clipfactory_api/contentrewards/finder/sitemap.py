@@ -20,9 +20,8 @@ from . import config
 
 Entry = tuple[str, int | None]  # (uuid, lastmod as epoch seconds)
 
-_CAMPAIGN = re.compile(
-    r"^https://contentrewards\.com/c/campaigns/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
-    re.IGNORECASE,
+_CAMPAIGN = re.compile(  # exactly this URL: only the uuid may be in any case
+    r"^https://contentrewards\.com/c/campaigns/((?i:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))$"
 )
 _CHILD = re.compile(r"^https://contentrewards\.com/[A-Za-z0-9._/-]{1,200}$")
 _URL = re.compile(r"<(?:\w+:)?url>(.*?)</(?:\w+:)?url>", re.DOTALL | re.IGNORECASE)
