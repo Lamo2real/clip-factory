@@ -1,5 +1,5 @@
 {
- "version": "e12da357eabb",
+ "version": "56e9f5f493bb",
  "parts": [
   {
    "id": "app-map",
@@ -256,6 +256,12 @@
    "title": "CONTRACTS: 38. Content Rewards campaigns (owner request, 2026-11-21)",
    "line": "The owner's words: \"browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip",
    "chars": 161331
+  },
+  {
+   "id": "contracts-39",
+   "title": "CONTRACTS: 39. Content Rewards: the two ways, all your money, and does this clip fit (owner request, 2026-11-21)",
+   "line": "The owner's words, the day §38 was approved: \"please double check that the steps to conect to contentrewards is",
+   "chars": 56516
   },
   {
    "id": "adr-01",
@@ -628,6 +634,12 @@
    "title": "DECISIONS: ADR-62 Content Rewards: the official sign-in through the desktop app's loopback door, sending from the cloud, a reminder when it can't",
    "line": "Context. The owner joins paid clipping campaigns on Content Rewards (CR) and wants Clip Factory to follow each",
    "chars": 6807
+  },
+  {
+   "id": "adr-63",
+   "title": "DECISIONS: ADR-63 Content Rewards follow-ups: one fit check in the API, a new copy instead of turning a normal clip into a campaign clip, one 30-day total that ",
+   "line": "Context. After approving §38 the owner asked (2026-11-21) for three things: the Connect steps checked so they are",
+   "chars": 4874
   },
   {
    "id": "architecture-overview",
