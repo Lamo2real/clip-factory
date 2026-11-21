@@ -163,8 +163,18 @@ test.describe("Home", () => {
     await page.setViewportSize({ width: 1024, height: 812 });
     await page.goto("/");
     await settle(page);
-    const cols = await page.locator(".home-row__cards").evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length);
-    expect(cols).toBe(3);
+    // The covers fill the row from edge to edge, all on one line (the mock has more clips waiting than fit).
+    const row = await page.locator(".home-row__cards").evaluate((el) => {
+      const shown = Array.from(el.children).filter((c) => c.getClientRects().length > 0);
+      return {
+        shown: shown.length,
+        gap: Math.round(el.getBoundingClientRect().right - shown[shown.length - 1]!.getBoundingClientRect().right),
+        tops: new Set(shown.map((c) => Math.round(c.getBoundingClientRect().top))).size,
+      };
+    });
+    expect(row.shown).toBeGreaterThanOrEqual(3);
+    expect(Math.abs(row.gap)).toBeLessThanOrEqual(2);
+    expect(row.tops).toBe(1);
   });
 
   test("F032: text links are at least 44 px tall on tablets and desktops", async ({ page }) => {

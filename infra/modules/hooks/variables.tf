@@ -19,6 +19,16 @@ variable "app_url" {
   description = "The web app's origin: OAuth callbacks redirect back to its Settings screen."
 }
 
+variable "stories_oauth_callback" {
+  type        = string
+  default     = ""
+  description = "Lamo Stories' own OAuth callback base, {apiUrl}/v1/stories-oauth (STORIES_OAUTH_CALLBACK, docs/CONTRACTS.md §45.13.3): a w1. state is answered 302 to {STORIES_OAUTH_CALLBACK}/{platform}/callback. Empty: not set (w1. states are not forwarded)."
+  validation {
+    condition     = var.stories_oauth_callback == "" || can(regex("^https://[^/]+/v1/stories-oauth$", var.stories_oauth_callback))
+    error_message = "stories_oauth_callback must be empty or https://<host>/v1/stories-oauth (no trailing slash)."
+  }
+}
+
 variable "clip_flow_alias_arn" {
   type        = string
   description = "cf-prod-clip-flow alias live (CLIP_FLOW_ARN): a connect starts publish executions for waiting posts on it (§17.6)."
