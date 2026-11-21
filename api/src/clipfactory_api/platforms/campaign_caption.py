@@ -2,11 +2,12 @@
 ``campaign_caption`` just before sending it, so a caption the owner edited on Review still qualifies.
 
 * The disclosure (``#Ad`` unless the campaign asks for another) goes first, the same rule as the agent (§38.13): it is
-  put in front unless a ``#ad``-like token already starts within the first 30 characters.
+  put in front unless a ``#ad``-like token already starts within the first 30 characters. When the brand asked for
+  another tag (``#Sponsored``, ``#PaidPartnership``) only that tag counts, so the brand's own word is always there.
 * Every required hashtag, tag and phrase the caption lacks is added at the end.
 * Each platform's limits hold, and the required items are never what gets cut: Instagram 2,200 characters and 30
-  hashtags (other hashtags are dropped first), X 280 characters (the free text is shortened, never a tag), YouTube's
-  description 5,000 bytes, TikTok and Facebook 2,200 characters.
+  hashtags (other hashtags are dropped first), X 280 by X's own count (emoji, CJK and most other scripts count twice;
+  the free text is shortened, never a tag), YouTube's description 5,000 bytes, TikTok and Facebook 2,200 characters.
 
 Pure code: no I/O and no imports from the rest of the app. ``campaign`` is the post's internal
 ``postOptions.campaign`` (``{paidPartnership, disclosure, required}``), made by ``campaign_options`` at Confirm.
@@ -23,14 +24,17 @@ DEFAULT_DISCLOSURE = "#Ad"
 # The tokens that already tell viewers it is an ad (case-insensitive), when they start in the first 30 characters.
 AD_LIKE = frozenset(d.lower() for d in DISCLOSURES)
 DISCLOSURE_WINDOW = 30
-# (limit, unit): characters, except YouTube's description, which YouTube counts in bytes.
+# (limit, unit): characters, except YouTube's description (bytes) and X (X's weighted count, ``x_length``).
 LIMITS: dict[str, tuple[int, str]] = {
     "youtube": (5000, "bytes"),
     "tiktok": (2200, "chars"),
     "instagram": (2200, "chars"),
     "facebook": (2200, "chars"),
-    "x": (280, "chars"),
+    "x": (280, "x"),
 }
+# X's weighted length (twitter-text v3): these code points count 1, every other one counts 2. Counting each code point
+# of an emoji sequence (X counts the whole sequence as 2) only ever errs on the short side.
+X_LIGHT = ((0, 4351), (8192, 8205), (8208, 8223), (8242, 8247))
 HASHTAG_LIMITS = {"instagram": 30}
 ONE_LINE = frozenset({"x"})  # X's text is sent on one line (publishers.x_text)
 ELLIPSIS = "…"
@@ -84,9 +88,31 @@ def campaign_options(rules: Mapping[str, Any] | None) -> dict[str, Any]:
 # --- the caption ---------------------------------------------------------------------------------------------------
 
 
+def _x_weight(char: str) -> int:
+    code = ord(char)
+    return 1 if any(low <= code <= high for low, high in X_LIGHT) else 2
+
+
+def x_length(text: str) -> int:
+    """``text``'s length as X counts it against its 280 (links aside: Clip Factory never sends one)."""
+    return sum(_x_weight(c) for c in text)
+
+
+def x_prefix(text: str, room: int) -> str:
+    """The longest start of ``text`` whose X length is at most ``room``."""
+    used = 0
+    for i, char in enumerate(text):
+        used += _x_weight(char)
+        if used > room:
+            return text[:i]
+    return text
+
+
 def _measure(platform: str, text: str) -> int:
     _, unit = LIMITS.get(platform, (2200, "chars"))
-    return len(text.encode()) if unit == "bytes" else len(text)
+    if unit == "bytes":
+        return len(text.encode())
+    return x_length(text) if unit == "x" else len(text)
 
 
 def _is_token(item: str) -> bool:
@@ -104,11 +130,19 @@ def _has(text: str, item: str) -> bool:
     return " ".join(item.split()).casefold() in " ".join(text.split()).casefold()
 
 
-def _ad_first(text: str) -> bool:
+def _counts_as(disclosure: str) -> frozenset[str]:
+    """The tags that already disclose up front: any ``#ad``-like one for ``#Ad`` (the agent's rule, §38.13); only the
+    brand's own tag when it asked for another (a ``#ad`` the owner typed never stands in for ``#Sponsored``)."""
+    asked = disclosure.lower()
+    return AD_LIKE if asked == DEFAULT_DISCLOSURE.lower() else frozenset({asked})
+
+
+def _ad_first(text: str, disclosure: str) -> bool:
+    counts = _counts_as(disclosure)
     for match in _HASHTAG.finditer(text):
         if match.start() >= DISCLOSURE_WINDOW:
             return False
-        if match.group(0).lower() in AD_LIKE:
+        if match.group(0).lower() in counts:
             return True
     return False
 
@@ -153,9 +187,10 @@ def _fit_hashtags(text: str, limit: int, keep: set[str]) -> str:
 
 def _prefix(platform: str, text: str, room: int) -> str:
     """The longest start of ``text`` that fits ``room`` (in the platform's unit)."""
-    if LIMITS.get(platform, (0, "chars"))[1] == "bytes":
+    unit = LIMITS.get(platform, (0, "chars"))[1]
+    if unit == "bytes":
         return text.encode()[:room].decode("utf-8", "ignore")
-    return text[:room]
+    return x_prefix(text, room) if unit == "x" else text[:room]
 
 
 def _shorten(platform: str, text: str, room: int) -> str:
@@ -200,7 +235,7 @@ def campaign_caption(platform: str, text: str, campaign: Mapping[str, Any] | Non
     required = [r for r in _strings(campaign.get("required")) if r.casefold() != disclosure.casefold()]
     one_line = platform in ONE_LINE
     out = _tidy(text, one_line)
-    if not _ad_first(out):
+    if not _ad_first(out, disclosure):
         out = _tidy(f"{disclosure} {_remove(out, disclosure)}", one_line)
     missing = [r for r in required if not _has(out, r)]
     if missing:

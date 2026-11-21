@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from typing import Any
 
 from .. import clips, db, post_preset, posts, release, s3, settings, validate, vectors
 from ..app import App
-from ..clock import iso, parse
+from ..clock import iso
 from ..errors import bad_request, conflict, not_found
 from ..http import Request, Response, ok
 from ..ids import is_ulid
@@ -136,7 +135,9 @@ CAMPAIGN_HELD = (
     "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post again."
 )
 CAMPAIGN_CAN_POST = ("in", "manual")
-HELD_FOR = timedelta(hours=24)  # the poller clears a hold after a day at most (§38.12)
+# Try again (Library, a clip's post line) has no switch and no Upload: its sentences name the buttons it has.
+TRY_ANOTHER = "Tap Try again on another place."
+TIKTOK_PRIVATE = "TikTok keeps Clip Factory's posts private until TikTok checks the app, and private posts can't earn."
 # The stop that keeps a campaign from taking clips (§38.4): its state first, then the owner's membership.
 CAMPAIGN_STATE_STOPS = {
     "ended": "This campaign has ended. Pick another one.",
@@ -192,14 +193,6 @@ def campaign_clip(
     return CampaignClip(campaign_id, item, paid, campaign_options(rules if isinstance(rules, Mapping) else None))
 
 
-def _held(item: Mapping[str, Any], now: datetime) -> bool:
-    held = item.get("held")
-    if not held:
-        return False
-    at = parse(held.get("at")) if isinstance(held, Mapping) else None
-    return at is None or now - at < HELD_FOR
-
-
 def _require_campaign_open(app: App, campaign: CampaignClip) -> None:
     """409 unless the owner is in the campaign (``in`` or ``manual``) and it takes clips (not held, paused, ended)."""
     item = campaign.item
@@ -211,38 +204,47 @@ def _require_campaign_open(app: App, campaign: CampaignClip) -> None:
     membership = item.get("membership")
     if membership not in CAMPAIGN_CAN_POST:
         raise conflict(CAMPAIGN_MEMBERSHIP_STOPS.get(str(membership), CAMPAIGN_MEMBERSHIP_STOPS["unknown"]))
-    if _held(item, app.clock()):
+    if item.get("held"):  # held until the poller clears it (§38.12), the same rule as the card's stop
         raise conflict(CAMPAIGN_HELD)
 
 
-def _place_refusal(platform: str, campaign: CampaignClip, setups: list[dict[str, Any]], linked: Any) -> str | None:
+def _place_refusal(
+    platform: str, campaign: CampaignClip, setups: list[dict[str, Any]], linked: Any, *, try_again: bool = False
+) -> str | None:
     """Why a campaign clip can't go to ``platform`` (None when it can): the §38.8 ``uploadPlaces`` rule, the
     campaign's paid places ∩ places ready on Set up posting ∩ not refused by Content Rewards as unlinked, TikTok only
-    once its posting audit passed."""
+    once its posting audit passed. Upload's sentences say to turn the place off; Try again's (Library, a clip's post
+    line: no switch and no Upload there) name the buttons those screens have."""
     name = platform_label(platform)
     setup = next((s for s in setups if s.get("platform") == platform), {})
     if platform not in campaign.paid:
+        if try_again:
+            return f"This campaign doesn't pay for {name} any more. {TRY_ANOTHER}"
         return f"This campaign doesn't pay for {name}. Turn it off, then tap Upload."
     if not setup.get("ready"):
+        if try_again:
+            return f"{name} is not set up yet. Set it up in Settings › Posting › Set up posting, then tap Try again."
         return f"{name} is not set up yet. Turn it off, then tap Upload."
     if platform == "tiktok":
         audit = [g.get("state") for g in setup.get("gates") or [] if g.get("key") == "posting_audit"]
         if audit != ["ok"]:
-            return (
-                "TikTok keeps Clip Factory's posts private until TikTok checks the app, and private posts can't "
-                "earn. Turn TikTok off, then tap Upload."
-            )
+            then = TRY_ANOTHER if try_again else "Turn TikTok off, then tap Upload."
+            return f"{TIKTOK_PRIVATE} {then}"
     if isinstance(linked, Mapping) and linked.get(platform) is False:
+        if try_again:
+            return f"Link {name} inside Content Rewards first, then tap Try again."
         return f"Link {name} inside Content Rewards first. Then tap I linked it, or turn {name} off and tap Upload."
     return None
 
 
-def _require_campaign_places(app: App, user_id: str, campaign: CampaignClip, places: list[str]) -> None:
+def _require_campaign_places(
+    app: App, user_id: str, campaign: CampaignClip, places: list[str], *, try_again: bool = False
+) -> None:
     """400 with the reason when a place is not one of this campaign clip's places (``_place_refusal``)."""
     setups = platform_setup.all_setups(app.store, user_id)
     linked = (app.store.get(db.user_pk(user_id), "CRCONN") or {}).get("crLinked")
     for platform in places:
-        refusal = _place_refusal(platform, campaign, setups, linked)
+        refusal = _place_refusal(platform, campaign, setups, linked, try_again=try_again)
         if refusal:
             raise bad_request(refusal)
 
@@ -388,7 +390,7 @@ def _try_again(
     if campaign is not None:
         going = [p for p in posts.UPLOAD_ORDER if any(r.get("platform") == p for r in [*failed, *waiting])]
         _require_campaign_open(app, campaign)
-        _require_campaign_places(app, clip["userId"], campaign, going)
+        _require_campaign_places(app, clip["userId"], campaign, going, try_again=True)
         if tiktok is not None and "tiktok" in going:
             _require_campaign_tiktok(tiktok)
             kept = next((r.get("postOptions") for r in rows if r.get("platform") == "tiktok"), None)

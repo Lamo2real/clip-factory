@@ -44,7 +44,7 @@ from .base import (
     appsecret_proof,
     obj,
 )
-from .campaign_caption import campaign_caption
+from .campaign_caption import campaign_caption, x_length
 
 MB = 1024 * 1024
 YOUTUBE_UPLOAD = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
@@ -52,6 +52,7 @@ YOUTUBE_PAID_PART = "paidProductPlacementDetails"
 X_PAID_FIELD = "paid_partnership"
 # A YouTube 400 for a part it does not take may give only the reason, not the part's name.
 YOUTUBE_PART_REASONS = frozenset({"unexpectedPart", "invalidPart"})
+REFUSED_FIELD = (400, 403)  # a field the platform doesn't take: 400, or 403 for one this app isn't allowed (§38.21)
 NOT_SET = "not_set"
 YOUTUBE_VIDEOS = "https://www.googleapis.com/youtube/v3/videos"
 YOUTUBE_CATEGORY_GAMING = "20"
@@ -129,11 +130,14 @@ def _paid(job: PublishJob) -> bool:
 
 
 def _names(resp: HttpResponse, name: str, reasons: frozenset[str] = frozenset()) -> bool:
-    """A 400 whose answer names ``name`` (or gives one of ``reasons``): the platform refused that one field."""
-    if resp.status != 400:
+    """A 400 or 403 whose answer names ``name`` (or a 400 that gives one of ``reasons``): the platform refused that
+    one field, so the same call without it can go through."""
+    if resp.status not in REFUSED_FIELD:
         return False
     if name.encode() in (resp.body or b""):
         return True
+    if resp.status != 400:
+        return False
     error = _json(resp).get("error")
     found = error.get("errors") if isinstance(error, dict) else None
     return any(isinstance(e, dict) and e.get("reason") in reasons for e in found or [])
@@ -186,20 +190,25 @@ def cut_bytes(text: str, limit: int) -> str:
     return raw[:limit].decode("utf-8", "ignore")
 
 
-def cut_words(text: str, limit: int) -> str:
-    """At most ``limit`` characters, cut at a word with "…" when it is too long."""
+def cut_words(text: str, limit: int, length: Callable[[str], int] = len) -> str:
+    """At most ``limit`` (characters, or as ``length`` counts them), cut at a word with "…" when it is too long."""
     text = " ".join(text.split())
-    if len(text) <= limit:
+    if length(text) <= limit:
         return text
-    head = text[: limit - 1]
+    room, used, end = limit - length("…"), 0, 0
+    while end < len(text) and used + length(text[end]) <= room:
+        used += length(text[end])
+        end += 1
+    head = text[:end]
     if " " in head:
         head = head.rsplit(" ", 1)[0]
     return head.rstrip() + "…"
 
 
 def x_text(caption: str) -> str:
-    """X caption with every URL removed (a link costs extra on X), ≤ 280 characters."""
-    return cut_words(_URL.sub("", caption), X_MAX_CHARS)
+    """X caption with every URL removed (a link costs extra on X), ≤ 280 as X counts it (emoji, CJK and most other
+    scripts count twice, so a caption X would refuse as too long is cut instead)."""
+    return cut_words(_URL.sub("", caption), X_MAX_CHARS, x_length)
 
 
 def instagram_caption(caption: str) -> str:

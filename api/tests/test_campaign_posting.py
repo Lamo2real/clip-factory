@@ -25,6 +25,7 @@ from clipfactory_api.platforms.campaign_caption import (
     campaign_options,
     disclosure_of,
     required_items,
+    x_length,
 )
 from clipfactory_api.platforms.publishers import (
     PUBLISHERS,
@@ -36,6 +37,7 @@ from clipfactory_api.platforms.publishers import (
     XPublisher,
     YouTubePublisher,
     caption,
+    x_text,
 )
 from conftest import NOW, USER, Call, seed_clip, seed_job
 from fakes import FakeHttp, FakeLambda, FakeTable
@@ -341,6 +343,11 @@ def test_a_place_content_rewards_refused_as_unlinked_comes_back_after_i_linked_i
             {"held": {"at": "2026-11-15T09:00:00.000Z", "pending": 5}},
             "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post again.",
         ),
+        (
+            # Older than a day but not cleared yet: still held, as the card's stop says, until the poller clears it.
+            {"held": {"at": "2026-11-14T11:00:00.000Z", "pending": 5}},
+            "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post again.",
+        ),
     ],
 )
 def test_a_campaign_that_does_not_take_clips_is_refused(
@@ -361,8 +368,8 @@ def test_a_removed_campaign_is_refused(call: Call, store: db.Store) -> None:
     assert (status, message(body)) == (409, "Add the campaign again on the Campaigns page.")
 
 
-@pytest.mark.parametrize("fields", [{"membership": "manual"}, {"held": {"at": "2026-11-14T11:00:00.000Z"}}])
-def test_manual_membership_and_an_old_hold_can_post(call: Call, store: db.Store, fields: dict[str, Any]) -> None:
+@pytest.mark.parametrize("fields", [{"membership": "manual"}, {"held": None}, {"held": {}}])
+def test_manual_membership_and_a_cleared_hold_can_post(call: Call, store: db.Store, fields: dict[str, Any]) -> None:
     ready(store, "youtube")
     put_campaign(store, **fields)
     clip = campaign_clip(store)
@@ -432,7 +439,11 @@ def failed_campaign_clip(
     [
         ({"state": "ended"}, 409, "This campaign has ended. Pick another one."),
         ({"membership": "left"}, 409, "Content Rewards doesn't show this campaign for you any more."),
-        ({"platformsPaid": ["instagram"]}, 400, "This campaign doesn't pay for YouTube. Turn it off, then tap Upload."),
+        (
+            {"platformsPaid": ["instagram"]},
+            400,
+            "This campaign doesn't pay for YouTube any more. Tap Try again on another place.",
+        ),
     ],
 )
 def test_try_again_runs_the_campaign_checks(
@@ -445,6 +456,45 @@ def test_try_again_runs_the_campaign_checks(
     assert code == status
     assert message(body).startswith(sentence)
     assert store.get(PK, db.post_sk("Pyoutube"))["status"] == "failed"  # type: ignore[index]
+    assert lambda_client.calls == []
+
+
+@pytest.mark.parametrize(
+    ("place", "setup", "sentence"),
+    [
+        (
+            "youtube",
+            {"paid": ["instagram"]},
+            "This campaign doesn't pay for YouTube any more. Tap Try again on another place.",
+        ),
+        (
+            "youtube",
+            {"ready": False},
+            "YouTube is not set up yet. Set it up in Settings › Posting › Set up posting, then tap Try again.",
+        ),
+        (
+            "tiktok",
+            {"audit": "waiting"},
+            "TikTok keeps Clip Factory's posts private until TikTok checks the app, and private posts can't earn. "
+            "Tap Try again on another place.",
+        ),
+        ("youtube", {"unlinked": True}, "Link YouTube inside Content Rewards first, then tap Try again."),
+    ],
+)
+def test_try_again_says_what_to_tap_on_its_own_screen(
+    call: Call, store: db.Store, lambda_client: FakeLambda, place: str, setup: dict[str, Any], sentence: str
+) -> None:
+    """Library and the post line have no switch and no Upload: the sentences name Try again (§38.1)."""
+    if setup.get("ready", True):
+        ready(store, place, audit=setup.get("audit", "ok"))
+    put_campaign(store, platformsPaid=setup.get("paid", ["youtube", "tiktok"]))
+    if setup.get("unlinked"):
+        put_crconn(store, crLinked={place: False})
+    clip = failed_campaign_clip(store, place, status="posted")
+    body = {"platforms": [place], **({"tiktok": TIKTOK} if place == "tiktok" else {})}
+    status, answer = confirm(call, clip["clipId"], body)
+    assert (status, message(answer)) == (400, sentence)
+    assert "Upload" not in sentence
     assert lambda_client.calls == []
 
 
@@ -547,6 +597,19 @@ def test_another_disclosure_and_a_phrase() -> None:
     assert campaign_caption("facebook", "use  code faze10 now", options) == "#Sponsored use code faze10 now"
 
 
+def test_the_brands_own_disclosure_is_never_stood_in_for() -> None:
+    """The brand asked for #Sponsored: a #ad the owner typed doesn't count, so #Sponsored still goes first."""
+    options = {"paidPartnership": True, "disclosure": "#Sponsored", "required": ["#FaZe"]}
+    assert campaign_caption("tiktok", "#ad wait for it #FaZe", options) == "#Sponsored #ad wait for it #FaZe"
+    assert campaign_caption("tiktok", "#sponsored wait for it #FaZe", options) == "#sponsored wait for it #FaZe"
+    paid = {**options, "disclosure": "#PaidPartnership"}
+    assert campaign_caption("x", "#Sponsored wow #FaZe", paid) == "#PaidPartnership #Sponsored wow #FaZe"
+    # With #Ad (the default) any #ad-like tag up front counts, as the agent's rule (§38.13).
+    assert campaign_caption("tiktok", "#Sponsored wow #FaZe @FaZeClan", CAMPAIGN_OPTIONS) == (
+        "#Sponsored wow #FaZe @FaZeClan"
+    )
+
+
 def test_without_a_campaign_the_caption_is_unchanged() -> None:
     assert campaign_caption("instagram", "  No way #gaming  ", None) == "  No way #gaming  "
 
@@ -578,6 +641,26 @@ def test_x_shortens_the_free_text_and_never_a_tag() -> None:
     assert out.startswith("#Ad So unreal")
     assert out.endswith("… #FaZe #FaZeUp @FaZeClan @FaZeBanks")
     assert "\n" not in out
+
+
+def test_x_counts_emoji_and_cjk_twice() -> None:
+    assert x_length("abc é ü \u2018\u2019 \u2014 ") == 13  # Latin, its accents and common punctuation count 1
+    assert x_length("😀") == x_length("字") == x_length("…") == 2
+    out = campaign_caption("x", "😀" * 200, CAMPAIGN_OPTIONS)
+    assert x_length(out) <= 280
+    assert out.startswith("#Ad 😀")
+    assert out.endswith("… #FaZe @FaZeClan")
+    assert x_text(out) == out  # nothing more to cut: the tags reach X whole
+    text = "字" * 100 + " then " + "😀" * 100
+    out = campaign_caption("x", text, CAMPAIGN_OPTIONS)
+    assert x_length(out) <= 280
+    assert out.endswith(" #FaZe @FaZeClan")
+
+
+def test_x_cuts_a_post_without_a_campaign_by_xs_count() -> None:
+    assert x_text("😀 " * 100) == ("😀 " * 92).strip() + "…"  # 200 characters, but 300 to X
+    assert x_length(x_text("😀 " * 100)) <= 280
+    assert x_text("a " * 100) == ("a " * 100).strip()  # under 280 as X counts it: unchanged
 
 
 def test_youtube_description_fits_5000_bytes() -> None:
@@ -643,8 +726,29 @@ def test_youtube_refusing_paid_promotion_starts_once_more_without_it(
     assert posts.public_post(written)["paidLabel"] == "not_set"
 
 
-def test_youtube_other_errors_are_not_retried_without_paid_promotion() -> None:
-    http = FakeHttp((400, "publish/youtube_campaign_bad_request"))
+def test_youtube_forbidding_paid_promotion_starts_once_more_without_it(capsys: pytest.CaptureFixture[str]) -> None:
+    """A 403 that names the part (a feature this app isn't allowed, §38.21) is a refusal too, not a dead end."""
+    http = FakeHttp(
+        (403, "publish/youtube_campaign_paid_forbidden"),
+        (200, b"", {"Location": SESSION}),
+        (201, "publish/youtube_video"),
+    )
+    job, saved = youtube_job(http)
+    YouTubePublisher().start(job)
+    first, second, upload = http.calls
+    assert first.url.endswith(",paidProductPlacementDetails")
+    assert second.url.endswith("&part=snippet,status")
+    assert upload.method == "PUT"
+    assert saved[0] == {"sessionUri": SESSION, "paidLabel": "not_set"}
+    assert "publish.youtube_paid_refused" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("status", "fixture"),
+    [(400, "publish/youtube_campaign_bad_request"), (403, "publish/youtube_campaign_forbidden")],
+)
+def test_youtube_other_errors_are_not_retried_without_paid_promotion(status: int, fixture: str) -> None:
+    http = FakeHttp((status, fixture))
     job, _ = youtube_job(http)
     with pytest.raises(PublishError):
         YouTubePublisher().start(job)
@@ -706,8 +810,13 @@ def test_x_campaign_tweet_is_a_paid_partnership() -> None:
     assert type(done.published) is Published
 
 
-def test_x_refusing_the_paid_partnership_tweets_once_more_without_it(capsys: pytest.CaptureFixture[str]) -> None:
-    http = FakeHttp((400, "publish/x_campaign_paid_refused"), (201, "publish/x_tweet"))
+@pytest.mark.parametrize(
+    ("status", "fixture"), [(400, "publish/x_campaign_paid_refused"), (403, "publish/x_campaign_paid_forbidden")]
+)
+def test_x_refusing_the_paid_partnership_tweets_once_more_without_it(
+    status: int, fixture: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    http = FakeHttp((status, fixture), (201, "publish/x_tweet"))
     job, saved = x_job(http)
     done = XPublisher().finish(job, job.handle)
     first, second = (json.loads(c.body) for c in http.calls)
@@ -717,6 +826,17 @@ def test_x_refusing_the_paid_partnership_tweets_once_more_without_it(capsys: pyt
     assert isinstance(done.published, LabelledPublished)
     assert done.published.paid_label == "not_set"
     assert "publish.x_paid_refused" in capsys.readouterr().out
+
+
+def test_x_other_refusals_are_not_retried_without_the_paid_partnership() -> None:
+    http = FakeHttp(
+        (403, b'{"title": "Forbidden", "detail": "You are not allowed to create a Post with duplicate content."}')
+    )
+    job, saved = x_job(http)
+    with pytest.raises(PublishError):
+        XPublisher().finish(job, job.handle)
+    assert len(http.calls) == 1
+    assert saved == []
 
 
 def test_x_without_a_campaign_is_unchanged() -> None:
