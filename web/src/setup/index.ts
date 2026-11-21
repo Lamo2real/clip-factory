@@ -33,7 +33,7 @@ export const TIKTOK_REVIEW_TEXT = [
   "video.publish: post clips I approved with Upload straight to my own TikTok (Direct Post).",
   "video.upload: comes with Content Posting API. Clip Factory does not ask for it; it only uses Direct Post.",
   "video.list: show the views and likes of my own posts on my Clip Factory dashboard.",
-  "user.info.stats: show my follower and like totals on my Clip Factory money tile, only after I say OK.",
+  "user.info.stats: show my follower count on my Clip Factory Money page, only after I say OK.",
 ].join("\n");
 
 export const VALUE_REFS: readonly ValueRefName[] = [

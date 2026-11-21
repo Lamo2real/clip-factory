@@ -20,6 +20,7 @@ import {
   TIKTOK_AUDIT_DESCRIPTION,
   TIKTOK_AUDIT_DIRECT_POST,
   TIKTOK_AUDIT_USAGE,
+  TIKTOK_APP_DESCRIPTION,
   TIKTOK_DEMO_SHOTS,
 } from "../src/setup/tiktok.ts";
 import { KEY_FORMATS } from "../src/lib/keyFormats.ts";
@@ -230,6 +231,17 @@ describe("the five setup guides (§17.2)", () => {
     for (const scope of MOCK_VALUES.scopes.tiktok) expect(TIKTOK_REVIEW_TEXT).toContain(`${scope}`);
     expect(lines[2]).toMatch(/does not ask for it/);
     expect(resolveValue({ ref: "tiktokReviewText" }, "tiktok", null)).toBe(TIKTOK_REVIEW_TEXT);
+    // user.info.stats only gives Clip Factory the follower count (api money/sources.py), so the line says only that.
+    expect(TIKTOK_REVIEW_TEXT).toContain("user.info.stats: show my follower count on my Clip Factory Money page, only after I say OK.");
+    expect(TIKTOK_REVIEW_TEXT).not.toMatch(/like totals/);
+  });
+
+  it("gives TikTok its own app Description, with the same facts as the audit answers", () => {
+    const details = steps("tiktok").find((s) => s.id === "key-details")!;
+    expect(details.copy!.find((c) => c.label === "Description")!.value).toBe(TIKTOK_APP_DESCRIPTION);
+    for (const words of ["my own clipping tool", "other creators'", "paid clipping campaigns", "I approve", "I press Upload"]) {
+      expect(TIKTOK_APP_DESCRIPTION.toLowerCase()).toContain(words.toLowerCase());
+    }
   });
 
   it("gives every TikTok audit form answer in one step, true for one creator, after App review is Live", () => {
@@ -239,7 +251,8 @@ describe("the five setup guides (§17.2)", () => {
     expect(say).toMatch(/^Only after \*\*App review\*\* says \*\*Live\*\*/);
     expect(stepNumber(GUIDES.tiktok, "public-review")).toBeLessThan(stepNumber(GUIDES.tiktok, "public-audit"));
     expect(stepNumber(GUIDES.tiktok, "public-demo")).toBeLessThan(stepNumber(GUIDES.tiktok, "public-review"));
-    expect(say).toMatch(/may say no, because Clip Factory is a tool for one creator/);
+    // TikTok's guidelines ask for apps many people can use: said plainly in the app, as in the docs.
+    expect(say).toContain("TikTok's rules ask for apps that many people can use. Clip Factory is only for you. If it says no, posts stay private but still post.");
     expect(audit.copy!.map((c) => c.label)).toEqual([
       "Organization name",
       "Organization website",
@@ -256,11 +269,19 @@ describe("the five setup guides (§17.2)", () => {
     expect(TIKTOK_AUDIT_DESCRIPTION).toMatch(/invite-only/);
     expect(TIKTOK_AUDIT_DESCRIPTION).toMatch(/other creators' streams and videos/);
     expect(TIKTOK_AUDIT_DESCRIPTION).toMatch(/Branded content/);
-    expect(TIKTOK_AUDIT_USAGE).toMatch(/1 creator/);
-    expect(TIKTOK_AUDIT_USAGE).toMatch(/15 clips a day/);
-    for (const text of [TIKTOK_AUDIT_DESCRIPTION, TIKTOK_AUDIT_DIRECT_POST, TIKTOK_AUDIT_USAGE]) {
+    // The Organization fields don't make up a company: the answer says so plainly.
+    const noCompany = "There is no company. Clip Factory is the name of my tool, and I am one person.";
+    expect(TIKTOK_AUDIT_DESCRIPTION).toContain(noCompany);
+    expect(TIKTOK_AUDIT_USAGE).toMatch(/at most 1 creator posts with it on any day/);
+    expect(TIKTOK_AUDIT_USAGE).toMatch(/15 clips/);
+    expect(TIKTOK_AUDIT_USAGE).not.toMatch(/each day/);
+    for (const text of [TIKTOK_AUDIT_DESCRIPTION.replace(noCompany, ""), TIKTOK_AUDIT_DIRECT_POST, TIKTOK_AUDIT_USAGE, TIKTOK_APP_DESCRIPTION]) {
       expect(text).not.toMatch(/\b(company|agencies|customers|thousands|millions|public sign-?ups?)\b/i);
     }
+    // Data you store: only what the api keeps (follower count; a views total and a count of long videos).
+    expect(TIKTOK_AUDIT_DATA).toContain("- my follower count (user.info.stats, only after I say OK)");
+    expect(TIKTOK_AUDIT_DATA).toContain("- a total of views and a count of long videos from my recent videos (video.list)");
+    expect(TIKTOK_AUDIT_DATA).not.toMatch(/video count|length of/);
     // The creator controls TikTok checks, and every scope on the app.
     for (const words of ["nothing is picked for me", "Comments, Duet and Stitch start off", "Branded content can't be Only me", "Music Usage Confirmation", "Use my settings"]) {
       expect(TIKTOK_AUDIT_DIRECT_POST).toContain(words);
@@ -285,13 +306,15 @@ describe("the five setup guides (§17.2)", () => {
       "Comments, Duet and Stitch: all off",
       "Turned off in your TikTok settings.",
       "Commercial content",
-      "You need to indicate if your content promotes yourself, a third party, or both.",
+      "Pick Your brand, Branded content, or both.",
+      "Pick Your brand or Branded content on TikTok first.",
       "Your brand",
       "Promotional content",
       "Branded content",
       "Paid partnership",
       "Branded Content Policy",
-      "Only me",
+      "Branded content can't be Only me. Turn off Branded content.",
+      "Pick Only me by hand",
       "Music Usage Confirmation line right above Upload",
       "Press Upload",
       "TikTok can take a few minutes to process your clip.",
@@ -309,6 +332,8 @@ describe("the five setup guides (§17.2)", () => {
     }
     // Use my settings is the owner's own tap, shown last, after nothing was on.
     expect(lines.at(-1)).toMatch(/nothing is on\. Tap Use my settings/);
+    // Every quoted line is one the app really shows (no TikTok wording the app doesn't have).
+    expect(TIKTOK_DEMO_SHOTS).not.toMatch(/You need to indicate|will be labeled as|is grey now|Only me is grey/);
     expect(steps("tiktok").find((s) => s.id === "public-demo")!.copy![0]!.value).toBe(TIKTOK_DEMO_SHOTS);
   });
 

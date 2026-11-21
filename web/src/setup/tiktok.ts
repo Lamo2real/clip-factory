@@ -20,10 +20,10 @@ export const TIKTOK_DEMO_SHOTS = [
   "6. Change the TikTok caption: the words and the hashtags.",
   "7. Show Upload is held: \"Pick who can see it on TikTok first.\" Open Who can see it: nothing is picked, and only TikTok's choices are there. Don't pick yet.",
   "8. Show Comments, Duet and Stitch: all off. Turn one on by hand. A switch you turned off in TikTok is grey: \"Turned off in your TikTok settings.\"",
-  "9. Turn on Commercial content. Show Upload is off, with TikTok's line: \"You need to indicate if your content promotes yourself, a third party, or both.\"",
-  "10. Tick Your brand. Show TikTok's line: \"Your video will be labeled as Promotional content.\"",
-  "11. Tick Branded content. Show \"Paid partnership\", and the line above Upload now names TikTok's Branded Content Policy and Music Usage Confirmation. Open Who can see it: Only me is grey (branded content can't be private).",
-  "12. Untick Branded content. Pick Only me by hand: Branded content is grey now, with its reason. Turn Commercial content off.",
+  "9. Turn on Commercial content. Show the line under it: \"Pick Your brand, Branded content, or both.\" Pick Only me in Who can see it. Show Upload is still held: \"Pick Your brand or Branded content on TikTok first.\"",
+  "10. Tick Your brand. Show its \"Promotional content\" tag.",
+  "11. Tick Branded content. Show \"Paid partnership\" and the Branded Content Policy line above Upload. Who can see it now says: \"Branded content can't be Only me. Turn off Branded content.\"",
+  "12. Untick Branded content. Pick Only me by hand. Turn Commercial content off.",
   "13. Show the Music Usage Confirmation line right above Upload.",
   "14. Press Upload. Show the note: \"TikTok can take a few minutes to process your clip.\"",
   "15. Open Library. Show the clip on its way, then Posted.",
@@ -32,9 +32,14 @@ export const TIKTOK_DEMO_SHOTS = [
   "18. Last, on another clip: show nothing is on. Tap Use my settings: your saved TikTok choices go on with that one tap. Tap the TikTok row to show every option.",
 ].join("\n");
 
+/** TikTok's own app Description (App details): the same facts as the audit answers, not the shared APP_DESCRIPTION. */
+export const TIKTOK_APP_DESCRIPTION =
+  "My own clipping tool. It turns long videos and streams I pick (my own and other creators', including paid clipping campaigns) into short clips, and posts the ones I approve to my own accounts when I press Upload.";
+
 /** Audit form, page 1: what Clip Factory is and who uses it. True today: one creator, invite-only. */
 export const TIKTOK_AUDIT_DESCRIPTION = [
   "Clip Factory is my own clipping tool, for me as one creator. Today I am its only user. Sign-up is invite-only, so it is not open to the public.",
+  "There is no company. Clip Factory is the name of my tool, and I am one person.",
   "It turns long videos and streams I pick into short vertical clips. The sources are my own gameplay recordings and other creators' streams and videos, including paid clipping campaigns (such as Content Rewards), where a creator pays clippers to post clips of their content. I treat campaign clips as paid partnerships and mark them as Branded content.",
   "I watch every clip and post only the ones I approve, to my own TikTok account, which I connected myself with Login Kit.",
 ].join("\n\n");
@@ -50,7 +55,7 @@ export const TIKTOK_AUDIT_DIRECT_POST = [
 
 /** Audit form, page 2: how the daily users number was found (pick the smallest choice in the dropdown). */
 export const TIKTOK_AUDIT_USAGE =
-  "Clip Factory has one user: me. It is only for me and sign-up is invite-only, so 1 creator posts with it each day. I post at most about 15 clips a day, which is TikTok's own daily limit for one creator. So I picked the smallest choice.";
+  "Clip Factory has one user: me. Sign-up is invite-only, so at most 1 creator posts with it on any day, up to about 15 clips, which is TikTok's own daily limit for one creator. So I picked the smallest choice.";
 
 /** Audit form, page 3: every piece of TikTok data Clip Factory keeps (checked against the api code, 21 Nov 2026). */
 export const TIKTOK_AUDIT_DATA = [
@@ -61,8 +66,9 @@ export const TIKTOK_AUDIT_DATA = [
   "- username, display name and avatar URL",
   "- for each post: publish_id, the privacy level I picked, the post status, TikTok's post id, and the error if a post fails",
   "- the caption I wrote",
-  "- views, likes, comments and shares of my own posts, and the views and length of my recent videos (video.list)",
-  "- my follower and video count (user.info.stats, only after I say OK)",
+  "- views, likes, comments and shares of my own posts (video.list)",
+  "- a total of views and a count of long videos from my recent videos (video.list)",
+  "- my follower count (user.info.stats, only after I say OK)",
   "Disconnect revokes the token and deletes it.",
 ].join("\n");
 
@@ -149,7 +155,7 @@ export const tiktok: SetupGuide = {
           download: { label: "Download the icon", href: "/brand/clip-factory-1024.png" },
           copy: [
             { label: "App name", value: { ref: "appName" } },
-            { label: "Description", value: { ref: "appDescription" } },
+            { label: "Description", value: TIKTOK_APP_DESCRIPTION },
             { label: "Terms of Service URL", value: { ref: "termsUrl" } },
             { label: "Privacy Policy URL", value: { ref: "privacyUrl" } },
           ],
@@ -322,8 +328,8 @@ export const tiktok: SetupGuide = {
           ],
           ifYouSee: [
             {
-              see: "a line from the shot list that Clip Factory does not show yet",
-              do: "Wait for the next Clip Factory update, then record. TikTok checks every one of them.",
+              see: "a line from the shot list you can't find",
+              do: "Tap the **TikTok** row to open it. Every line is in there or right above **Upload**. TikTok checks every one.",
             },
             { see: "your Client secret, a key or a long code on screen", do: "Cut that part out before you upload the video." },
           ],
@@ -363,7 +369,7 @@ export const tiktok: SetupGuide = {
             "Only after **App review** says **Live**. In **Production**, open **Content Posting API**. Press **Apply** next to **Direct Post**.",
             "The form has 4 pages and does not save. Paste each answer below into the box with the same name.",
             "For how many users, pick the smallest choice. Upload your demo video. Read and tick the 3 boxes. Press **Next**.",
-            "TikTok may say no, because Clip Factory is a tool for one creator. Then your posts stay private, but they still post.",
+            "TikTok's rules ask for apps that many people can use. Clip Factory is only for you. If it says no, posts stay private but still post.",
           ],
           open: { label: "Open TikTok's form", url: `${DEV}/application/content-posting-api` },
           copy: [

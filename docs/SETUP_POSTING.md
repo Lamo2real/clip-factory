@@ -77,6 +77,7 @@ them. `{app}` is your Clip Factory address and `{hooks}` is its sign-in return a
 | Permissions (scopes) | the list for that platform (YouTube: 3 lines) |
 | Your email | the email you sign in to Clip Factory with |
 | X use case | "Post my own short video clips to my own X account and read their view and like counts in my personal Clip Factory app." |
+| TikTok description | "My own clipping tool. It turns long videos and streams I pick (my own and other creators', including paid clipping campaigns) into short clips, and posts the ones I approve to my own accounts when I press Upload." (TikTok only, so it says the same as the form in step 24) |
 | TikTok review text | See [step 13 of TikTok](#13-fill-in-app-review-then-save). |
 
 The About, Privacy and Terms pages live on your Clip Factory address on purpose: TikTok checks that the website is
@@ -288,7 +289,7 @@ video.** So fill in steps 7 to 13 first, and press Save only in step 13.
 #### 7. Fill in App details
 - Press **Download the icon** in Clip Factory. Upload that picture as the app icon.
 - App name: copy it. Category: pick the closest one.
-- Description: copy it.
+- Description: copy it. TikTok gets its own one: it names the other creators' videos and paid campaigns too.
 - **Terms of Service URL**: copy it. **Privacy Policy URL**: copy it.
 - Don't press **Save** yet. It stays off until **App review** has its text and a video (step 13).
 
@@ -320,7 +321,7 @@ video.** So fill in steps 7 to 13 first, and press Save only in step 13.
   video.publish: post clips I approved with Upload straight to my own TikTok (Direct Post).
   video.upload: comes with Content Posting API. Clip Factory does not ask for it; it only uses Direct Post.
   video.list: show the views and likes of my own posts on my Clip Factory dashboard.
-  user.info.stats: show my follower and like totals on my Clip Factory money tile, only after I say OK."
+  user.info.stats: show my follower count on my Clip Factory Money page, only after I say OK."
 - Record your screen for a few seconds: the About page, then the setup page. Upload that video.
 - Now press **Save**. You swap in the real demo video later (step 21).
 - Save still won't press? App review needs both: the text and a video.
@@ -375,8 +376,8 @@ stay private until TikTok approves the app.
 - End with the post arriving on your TikTok. Keep it short, about 1 minute. Save it as MP4, under 50 MB. You can send
   up to 5 videos.
 - The same video goes to App review (step 22) and to the form (step 24).
-- A line from the shot list that Clip Factory does not show yet? Wait for the next Clip Factory update, then record.
-  TikTok checks every one of them.
+- A line from the shot list you can't find? Tap the **TikTok** row to open it. Every line is in there or right above
+  **Upload**. TikTok checks every one.
 - Your Client secret, a key or a long code on screen? Cut that part out before you upload the video.
 
 The shot list (Clip Factory has a **Copy** button for it):
@@ -389,10 +390,10 @@ The shot list (Clip Factory has a **Copy** button for it):
 > 6. Change the TikTok caption: the words and the hashtags.
 > 7. Show Upload is held: "Pick who can see it on TikTok first." Open Who can see it: nothing is picked, and only TikTok's choices are there. Don't pick yet.
 > 8. Show Comments, Duet and Stitch: all off. Turn one on by hand. A switch you turned off in TikTok is grey: "Turned off in your TikTok settings."
-> 9. Turn on Commercial content. Show Upload is off, with TikTok's line: "You need to indicate if your content promotes yourself, a third party, or both."
-> 10. Tick Your brand. Show TikTok's line: "Your video will be labeled as Promotional content."
-> 11. Tick Branded content. Show "Paid partnership", and the line above Upload now names TikTok's Branded Content Policy and Music Usage Confirmation. Open Who can see it: Only me is grey (branded content can't be private).
-> 12. Untick Branded content. Pick Only me by hand: Branded content is grey now, with its reason. Turn Commercial content off.
+> 9. Turn on Commercial content. Show the line under it: "Pick Your brand, Branded content, or both." Pick Only me in Who can see it. Show Upload is still held: "Pick Your brand or Branded content on TikTok first."
+> 10. Tick Your brand. Show its "Promotional content" tag.
+> 11. Tick Branded content. Show "Paid partnership" and the Branded Content Policy line above Upload. Who can see it now says: "Branded content can't be Only me. Turn off Branded content."
+> 12. Untick Branded content. Pick Only me by hand. Turn Commercial content off.
 > 13. Show the Music Usage Confirmation line right above Upload.
 > 14. Press Upload. Show the note: "TikTok can take a few minutes to process your clip."
 > 15. Open Library. Show the clip on its way, then Posted.
@@ -425,7 +426,7 @@ The shot list (Clip Factory has a **Copy** button for it):
   take 2 minutes. Keep the page open.
 - Then it says **Under review**. TikTok often takes 1 to 3 weeks.
 - **TikTok may say no, because Clip Factory is a tool for one creator.** TikTok's rules ask for apps that many people
-  can use, and Clip Factory is only for you. If it says no, your posts stay private, but they still post.
+  can use. Clip Factory is only for you. If it says no, your posts stay private, but they still post.
 - A no with empty **Review comments**? Ask TikTok support (developers.tiktok.com/support) for the reason before you
   try again.
 
@@ -436,6 +437,8 @@ The answers, word for word. They are all true today: do not change them to sound
 - **Organization description**:
 
 > Clip Factory is my own clipping tool, for me as one creator. Today I am its only user. Sign-up is invite-only, so it is not open to the public.
+>
+> There is no company. Clip Factory is the name of my tool, and I am one person.
 >
 > It turns long videos and streams I pick into short vertical clips. The sources are my own gameplay recordings and other creators' streams and videos, including paid clipping campaigns (such as Content Rewards), where a creator pays clippers to post clips of their content. I treat campaign clips as paid partnerships and mark them as Branded content.
 >
@@ -455,7 +458,7 @@ The answers, word for word. They are all true today: do not change them to sound
 
 - **How you got the number**:
 
-> Clip Factory has one user: me. It is only for me and sign-up is invite-only, so 1 creator posts with it each day. I post at most about 15 clips a day, which is TikTok's own daily limit for one creator. So I picked the smallest choice.
+> Clip Factory has one user: me. Sign-up is invite-only, so at most 1 creator posts with it on any day, up to about 15 clips, which is TikTok's own daily limit for one creator. So I picked the smallest choice.
 
 - **Data you store**:
 
@@ -466,8 +469,9 @@ The answers, word for word. They are all true today: do not change them to sound
 > - username, display name and avatar URL
 > - for each post: publish_id, the privacy level I picked, the post status, TikTok's post id, and the error if a post fails
 > - the caption I wrote
-> - views, likes, comments and shares of my own posts, and the views and length of my recent videos (video.list)
-> - my follower and video count (user.info.stats, only after I say OK)
+> - views, likes, comments and shares of my own posts (video.list)
+> - a total of views and a count of long videos from my recent videos (video.list)
+> - my follower count (user.info.stats, only after I say OK)
 > Disconnect revokes the token and deletes it.
 
 #### 25. Make your account public again
