@@ -35,7 +35,7 @@ export const PARTS: { value: EditorPart; label: string }[] = [
   { value: "face", label: "Face" },
   { value: "moves", label: "Moves" },
   { value: "sounds", label: "Sounds" },
-  { value: "name", label: "Name" },
+  { value: "name", label: "Name and personality" },
 ];
 
 /** Which part to open to fix a problem. */

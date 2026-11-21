@@ -1,6 +1,8 @@
 // The Lamo Stories mock's ideas, characters and stories parts (docs/CONTRACTS.md §45.7–§45.9, §45.16.8): the seed
 // covers every story status, every script passes the engine's validator, a production job walks its run in about 10 s,
 // and the status table, the stale rules and the approve rule hold as they do in the API.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
 import * as characters from "../src/stories/api/mock/characters.ts";
@@ -86,6 +88,11 @@ describe("the seed", () => {
     const { stories: list } = await call(api.listStories("stories", { status: "all", limit: 50 }));
     const statuses = new Set(list.map((s) => s.status));
     for (const s of ["draft", "producing", "needs_check", "review", "approved", "rejected", "published", "failed"]) expect(statuses.has(s as never), s).toBe(true);
+  });
+
+  it("the studio e2e opens the very ids the seed has", () => {
+    const spec = readFileSync(join(import.meta.dirname, "..", "e2e", "stories-studio.spec.ts"), "utf8");
+    for (const id of [S.review, S.needsCheck, S.approved, S.failed, I.deer, C.pip]) expect(spec).toContain(id);
   });
 
   it("every seeded script passes the engine's validator", () => {

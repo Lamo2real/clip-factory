@@ -185,7 +185,7 @@ function type(el: Element | null, value: string) {
 }
 
 function field(label: string | RegExp): HTMLInputElement | HTMLTextAreaElement {
-  const l = Array.from(document.querySelectorAll("label[for]")).find((x) => (typeof label === "string" ? x.textContent?.trim() === label : label.test(x.textContent ?? "")));
+  const l = Array.from(document.querySelectorAll<HTMLLabelElement>("label[for]")).find((x) => (typeof label === "string" ? x.textContent?.trim() === label : label.test(x.textContent ?? "")));
   const el = l?.htmlFor ? document.getElementById(l.htmlFor) : null;
   if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) throw new Error(`no field ${String(label)}`);
   return el;
@@ -306,7 +306,7 @@ describe("Characters", () => {
     expect(document.querySelector(".st-editor__now")?.textContent).toContain("Jump");
     await click(control("Next: Sounds"), 50);
     await click(control(/Whoa/), 50);
-    await click(control("Next: Name"), 50);
+    await click(control("Next: Name and personality"), 50);
     await click(control("Save character"), 50);
     expect(text()).toContain("Give your character a name.");
     type(field("Name"), "Zed");

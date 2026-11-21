@@ -1100,6 +1100,10 @@
   background: var(--st-fill-2);
 }
 
+.st-draft .st-btn {
+  justify-self: end;
+}
+
 .st-draft.is-saved {
   background: rgba(71, 214, 160, 0.14);
 }
@@ -1330,8 +1334,8 @@
 
 .st-refs__remove {
   position: absolute;
-  top: -8px;
-  right: -8px;
+  top: 4px;
+  right: 4px;
   color: #1c1842;
   background: var(--st-coral, #ff6f61);
 }
@@ -2382,8 +2386,14 @@ button.st-place:hover {
 
   .st-head__actions,
   .st-idea__actions,
-  .st-decide__more {
+  .st-decide__more,
+  .st-presets {
     justify-content: flex-end;
+  }
+
+  .st-decide__main .st-btn--big,
+  .st-refs__add {
+    justify-self: end;
   }
 
   .st-head__actions {

@@ -278,7 +278,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const problems = story.safety?.status === "problems" ? story.safety.problems : [];
   const citations = story.safety?.citations ?? [];
   const checkAgain = story.status === "needs_check";
-  const width = Math.max(200, Math.min(340, colWidth));
+  // Phones get a smaller player, so the decision is close below it.
+  const width = colWidth < 500 ? Math.max(180, Math.min(250, colWidth - 40)) : Math.max(200, Math.min(340, colWidth));
 
   return (
     <section className="st-page st-studio">
@@ -326,26 +327,6 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             </Notice>
           ) : null}
 
-          {citations.length ? (
-            <section className="st-sources" aria-label="Where the advice comes from">
-              <h2 className="st-sources__title">Based on</h2>
-              <ul>
-                {citations.map((c) => (
-                  <li key={c.url + (c.section ?? "")}>
-                    <a href={c.url} target="_blank" rel="noopener noreferrer">
-                      {c.publisher}
-                    </a>
-                    <span>
-                      {" "}
-                      · {c.title}
-                      {c.section ? ` (${c.section})` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="st-field__hint">The video ends with “Check your local road rules.”</p>
-            </section>
-          ) : null}
 
           {!live && story.stale.length && story.status !== "draft" ? (
             <Notice
@@ -492,6 +473,26 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             </section>
           ) : null}
           {done ? <PostsPanel jobs={pubs.data} onRetry={(j) => void retry(j)} busyId={retrying} /> : null}
+          {citations.length ? (
+            <section className="st-sources" aria-label="Where the advice comes from">
+              <h2 className="st-sources__title">Based on</h2>
+              <ul>
+                {citations.map((c) => (
+                  <li key={c.url + (c.section ?? "")}>
+                    <a href={c.url} target="_blank" rel="noopener noreferrer">
+                      {c.publisher}
+                    </a>
+                    <span>
+                      {" "}
+                      · {c.title}
+                      {c.section ? ` (${c.section})` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="st-field__hint">The video ends with “Check your local road rules.”</p>
+            </section>
+          ) : null}
         </div>
       </div>
 
