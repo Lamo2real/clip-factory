@@ -54,6 +54,9 @@ locals {
         SECRET_PREFIX             = var.secret_prefix # §17.6: real platform tokens
         # §38.12: Content Rewards checking rides this tick (no new schedule); rules reads go to cf-prod-campaigns.
         CONTENT_REWARDS = var.content_rewards_enabled ? "on" : "off"
+        # §41.5: when a finder look is due, the tick starts cf-prod-campaigns {"action": "find", "why": "schedule"}
+        # through the Campaigns grant below (no new schedule, no new grant). Off: the tick never starts a look.
+        CR_FINDER = var.cr_finder_enabled ? "on" : "off"
       }, var.campaigns_function_arn == "" ? {} : { CAMPAIGNS_FUNCTION_ARN = var.campaigns_function_arn })
       # A missed tick is covered by the next one; a manual refresh is pressed again. Never retry (budgets).
       max_retries   = 0
@@ -105,7 +108,8 @@ locals {
       { Sid = "PlatformSecretsRead", Action = ["secretsmanager:GetSecretValue"], Resource = [var.platform_secrets_arn] },
       { Sid = "PlatformTokens", Action = ["secretsmanager:PutSecretValue"], Resource = [var.platform_token_secrets_arn] },
       ], var.campaigns_function_arn == "" ? [] : [
-      # §38.12: a campaign whose brief changed starts a rules read (InvocationType=Event, unqualified).
+      # §38.12: a campaign whose brief changed starts a rules read (InvocationType=Event, unqualified). §41.5: the
+      # same grant starts the campaign finder's scheduled look.
       { Sid = "Campaigns", Action = ["lambda:InvokeFunction"], Resource = [var.campaigns_function_arn] },
     ])
     learn = [

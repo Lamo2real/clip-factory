@@ -2,9 +2,14 @@
 #   cf-prod-campaigns  reads a campaign's rules with Claude from the item's own text (the brief cf-prod-api and
 #                      cf-prod-stats stored there), fetches a Google Drive or Dropbox logo the owner pasted and copies the
 #                      brand's picture. Async only (cf-prod-api and cf-prod-stats invoke it with InvocationType=Event).
+#                      Since §41 (ADR-65) its "find" action is the campaign finder's look: it reads Content Rewards'
+#                      public campaign pages that robots.txt allows (/robots.txt, /sitemap.xml, /c/campaigns/{uuid}),
+#                      anonymously and only from here (never /api/), into the shared CRPUBLIC cache, and matches each
+#                      owner from it. CR_FINDER (cr_finder_enabled, default off) turns that action on.
 #
-# It reads untrusted brand text and fetches outside files, so it has NO secretsmanager action at all and makes no
-# Content Rewards call: the token stays reachable only from cf-prod-api, cf-prod-clip-flow and cf-prod-stats.
+# It reads untrusted brand text and fetches outside files, so it has NO secretsmanager action at all and never calls
+# Content Rewards' API; since §41 it reads the public pages robots.txt allows. The token stays reachable only from
+# cf-prod-api, cf-prod-clip-flow and cf-prod-stats.
 # Additive only: a new function, role, policy and log group. No table, index, secret or bucket is created, changed or
 # deleted here; the CR secrets are made at runtime and never in Terraform. The role has no DeleteItem.
 terraform {
@@ -35,7 +40,9 @@ resource "aws_iam_role" "campaigns" {
   tags = local.tags
 }
 
-# Exactly what api/src/clipfactory_api/contentrewards/handler.py calls, beyond logs and traces.
+# Exactly what api/src/clipfactory_api/contentrewards/handler.py calls, beyond logs and traces. The finder (§41.5)
+# needs nothing new: Query, GetItem, PutItem and UpdateItem on CRPUBLIC (CAMP#, PUB#, STATE), CROWNERS and the
+# owners' CRFIND, SETUP#, ACCOUNT# and CAMPAIGN# items; old cache items leave by the table's TTL, never DeleteItem.
 resource "aws_iam_role_policy" "campaigns" {
   name = "least-privilege"
   role = aws_iam_role.campaigns.id
@@ -63,7 +70,7 @@ resource "aws_lambda_function" "campaigns" {
   handler          = "clipfactory_api.contentrewards.handler.handler"
   filename         = var.lambda_zip_path
   source_code_hash = filebase64sha256(var.lambda_zip_path)
-  timeout          = 120 # one 60 s model call (one retry on a throttle) or a 10 s logo fetch
+  timeout          = 120 # a 60 s model call (one retry on a throttle), a 10 s logo fetch or a finder look (100 s)
   memory_size      = 512
 
   tracing_config {
@@ -80,6 +87,8 @@ resource "aws_lambda_function" "campaigns" {
       MODEL_ID        = var.model_id
       APP_URL         = var.app_url
       CONTENT_REWARDS = var.content_rewards_enabled ? "on" : "off"
+      # §41.6: the "find" action answers {"outcome": "off"} unless CR_FINDER=on. An in-place env change.
+      CR_FINDER = var.cr_finder_enabled ? "on" : "off"
     }
   }
 
@@ -89,7 +98,7 @@ resource "aws_lambda_function" "campaigns" {
 }
 
 # Only ever invoked asynchronously. A failed read ends as rulesState "failed" (the card offers Check now), so it is
-# never retried.
+# never retried. A finder look is never retried either: its lease already counted it (§41.2); the next look comes.
 resource "aws_lambda_function_event_invoke_config" "campaigns" {
   function_name                = aws_lambda_function.campaigns.function_name
   maximum_retry_attempts       = 0
