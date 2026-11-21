@@ -38,8 +38,10 @@ Triggered by a push to `main` ([deploy.yml](../.github/workflows/deploy.yml)) or
    `/version.json` last, never cached. Open apps show the update bar within 5 minutes
    ([ARCHITECTURE.md flow 11](ARCHITECTURE.md#11-updates-versionjson-release-areas-and-the-update-bar)).
 8. **Smoke test**: `GET /v1/health` must answer `{ "ok": true }`.
-9. **Desktop app** (jobs `desktop` and `desktop-upload`, only when needed): see [Desktop downloads](#desktop-downloads).
+9. **Desktop app**: once the deploy has succeeded, its own workflow
+   ([desktop.yml](../.github/workflows/desktop.yml)) rebuilds it when needed: see [Desktop downloads](#desktop-downloads).
 
 The run summary shows `app_url`. The first deploy into an empty account takes about 15–20 minutes (CloudFront and
-the AgentCore runtime are the slow parts); later deploys take a few minutes. A deploy that rebuilds the desktop app
-adds about 10–15 minutes on the macOS and Windows runners, in parallel, after the web is already live.
+the AgentCore runtime are the slow parts); later deploys take a few minutes. One deploy runs at a time (the
+`deploy-prod` group), and it ends with the smoke test: a desktop rebuild (about 10–15 minutes on the macOS and
+Windows runners, after the web is already live) runs in desktop.yml and never holds up the next merge's deploy.

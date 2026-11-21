@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Static checks of .github/workflows/*.yml that review found missing once. Needs only bash, grep and awk.
+# deploy.yml releases prod; desktop.yml builds the desktop apps after it, outside the deploy-prod lock.
 #   - deploy.yml passes alarm_email to Terraform, so the alarm topic always emails someone (§14.9).
 #   - the desktop build job (npm ci, cargo, Tauri) cannot mint the deploy role's OIDC token; only the small
-#     desktop-upload job can, and no other job that runs npm ci has it either.
+#     desktop-upload job can, and no other job (in either workflow) that runs npm ci has it either.
 #   - every action is pinned to a full commit SHA (with its version in a comment).
 #   - the updater signing key reaches only the desktop build job (which has no OIDC token), and latest.json is
 #     written by desktop-manifest, which runs after desktop-upload (§12.6).
@@ -10,24 +11,45 @@
 #   - the tool manifest's key (CF_TOOLS_SIGNING_KEY) reaches only desktop-tools, which has no OIDC token; the pinned
 #     tools never rebuild the app (desktop-plan's hash leaves out desktop/tools), and the app build gets the media
 #     bucket's host (§35).
+#   - the desktop jobs are in desktop.yml, not deploy.yml (so they never hold the deploy-prod lock); desktop.yml
+#     runs only after a successful deploy, builds that deploy's commit, keeps the deploy's run number as the
+#     version (its own would go down) and never cancels a started run.
+#   - desktop.yml trusts only a push or run by hand of deploy in this repository, never a fork's pull request
+#     (which can also complete as "deploy" on a branch it calls main), in its concurrency group, resolve's `if`, the
+#     run-by-hand lookup and a second look at the run through the API.
 # Run: bash scripts/test-deploy-workflow.sh   (ci.yml runs it on every push)
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 deploy="${DEPLOY_YML:-${root}/.github/workflows/deploy.yml}"
+desktop_wf="${DESKTOP_YML:-${root}/.github/workflows/desktop.yml}"
 
 passed=0
 failed=0
 ok() { passed=$((passed + 1)); echo "ok   - $1"; }
 not_ok() { failed=$((failed + 1)); echo "FAIL - $1" >&2; }
 
-# job <name>: prints the lines of one top-level job of deploy.yml.
+# job <name> [file]: prints the lines of one job of a workflow (default deploy.yml).
 job() {
   awk -v name="  $1:" '
-    $0 == name { on = 1; print; next }
+    $0 == "jobs:" { jobs = 1; next }
+    jobs && $0 == name { on = 1; print; next }
     on && /^  [A-Za-z0-9_-]+:$/ { exit }
     on { print }
-  ' "$deploy"
+  ' "${2:-$deploy}"
+}
+
+# job_names <file>: the job names of one workflow.
+job_names() {
+  awk '$0 == "jobs:" { on = 1; next } on && /^  [A-Za-z0-9_-]+:$/ { sub(/^  /, ""); sub(/:$/, ""); print }' "$1"
+}
+
+# all_jobs: "<file> <job>" for every job of deploy.yml and desktop.yml, so a rule holds wherever a job lives.
+all_jobs() {
+  local f name
+  for f in "$deploy" "$desktop_wf"; do
+    while IFS= read -r name; do printf '%s %s\n' "$f" "$name"; done < <(job_names "$f")
+  done
 }
 
 # 1. alarm_email reaches Terraform, from CF_ALARM_EMAIL or the owner's email.
@@ -38,10 +60,10 @@ else
 fi
 
 # 2. The desktop build job has no id-token; desktop-upload has it and runs no npm, cargo or tauri.
-desktop="$(job desktop)"
-upload="$(job desktop-upload)"
+desktop="$(job desktop "$desktop_wf")"
+upload="$(job desktop-upload "$desktop_wf")"
 if [ -z "$desktop" ] || [ -z "$upload" ]; then
-  not_ok "deploy.yml must have the jobs desktop and desktop-upload"
+  not_ok "desktop.yml must have the jobs desktop and desktop-upload"
 else
   if grep -Eq '^\s+id-token:' <<<"$desktop"; then
     not_ok "the desktop build job must not have id-token: write"
@@ -59,14 +81,14 @@ fi
 
 # 3. No job that runs npm ci (or npx) may also have id-token: write.
 risky=()
-while IFS= read -r name; do
-  body="$(job "$name")"
+while read -r file name; do
+  body="$(job "$name" "$file")"
   if grep -Eq '^\s+id-token: write' <<<"$body" && grep -Eq 'npm ci|npx ' <<<"$body"; then
     risky+=("$name")
   fi
-done < <(grep -E '^  [A-Za-z0-9_-]+:$' "$deploy" | sed -E 's/^  ([^:]+):$/\1/')
+done < <(all_jobs)
 if [ "${#risky[@]}" -eq 0 ]; then
-  ok "no deploy job runs npm and holds id-token: write"
+  ok "no deploy or desktop job runs npm and holds id-token: write"
 else
   not_ok "jobs that run npm and can mint an OIDC token: ${risky[*]}"
 fi
@@ -105,14 +127,14 @@ fi
 # 6. The updater signing key (TAURI_SIGNING_PRIVATE_KEY and its password) is read only by the desktop build job, and
 #    desktop-plan, which may only ask whether it is set.
 key_users=()
-while IFS= read -r name; do
-  body="$(job "$name")"
+while read -r file name; do
+  body="$(job "$name" "$file")"
   if grep -q 'secrets\.TAURI_SIGNING_PRIVATE_KEY' <<<"$body"; then key_users+=("$name"); fi
-done < <(grep -E '^  [A-Za-z0-9_-]+:$' "$deploy" | sed -E 's/^  ([^:]+):$/\1/')
-plan_refs="$(job desktop-plan | grep -o 'secrets\.TAURI_SIGNING_PRIVATE_KEY[^}]*' || true)"
+done < <(all_jobs)
+plan_refs="$(job desktop-plan "$desktop_wf" | grep -o 'secrets\.TAURI_SIGNING_PRIVATE_KEY[^}]*' || true)"
 if [ "${key_users[*]:-}" = "desktop-plan desktop" ] \
   && [ "$plan_refs" = "secrets.TAURI_SIGNING_PRIVATE_KEY != '' " ] \
-  && [ "$(job desktop | grep -c 'secrets\.TAURI_SIGNING_PRIVATE_KEY')" -eq 2 ]; then
+  && [ "$(grep -c 'secrets\.TAURI_SIGNING_PRIVATE_KEY' <<<"$desktop")" -eq 2 ]; then
   ok "the updater signing key reaches only the desktop build job (desktop-plan only checks it is set)"
 else
   not_ok "secrets.TAURI_SIGNING_PRIVATE_KEY* used outside the desktop build step: ${key_users[*]:-none}; desktop-plan: ${plan_refs:-none}"
@@ -120,10 +142,11 @@ fi
 
 # 7. latest.json is written only by desktop-manifest, after desktop-upload has put the bundles in place.
 writers=()
-while IFS= read -r name; do
-  if job "$name" | grep -q '/downloads/latest\.json" '; then writers+=("$name"); fi
-done < <(grep -E '^  [A-Za-z0-9_-]+:$' "$deploy" | sed -E 's/^  ([^:]+):$/\1/')
-if [ "${writers[*]:-}" = "desktop-manifest" ] && job desktop-manifest | grep -Eq '^    needs: \[.*desktop-upload.*\]$'; then
+while read -r file name; do
+  if job "$name" "$file" | grep -q '/downloads/latest\.json" '; then writers+=("$name"); fi
+done < <(all_jobs)
+if [ "${writers[*]:-}" = "desktop-manifest" ] \
+  && job desktop-manifest "$desktop_wf" | grep -Eq '^    needs: \[.*desktop-upload.*\]$'; then
   ok "only desktop-manifest writes downloads/latest.json, after desktop-upload"
 else
   not_ok "downloads/latest.json must be written only by desktop-manifest, which needs desktop-upload (writers: ${writers[*]:-none})"
@@ -165,12 +188,12 @@ fi
 
 # 11. Mac fetches it (§35.4): the tool manifest's signing key reaches only desktop-tools, which cannot mint an OIDC
 #     token and is never the updater key's job; desktop-tools-upload assumes the role but never sees the key.
-tools="$(job desktop-tools)"
-tools_upload="$(job desktop-tools-upload)"
+tools="$(job desktop-tools "$desktop_wf")"
+tools_upload="$(job desktop-tools-upload "$desktop_wf")"
 tool_key_users=()
-while IFS= read -r name; do
-  if job "$name" | grep -q 'secrets\.CF_TOOLS_SIGNING_KEY'; then tool_key_users+=("$name"); fi
-done < <(grep -E '^  [A-Za-z0-9_-]+:$' "$deploy" | sed -E 's/^  ([^:]+):$/\1/')
+while read -r file name; do
+  if job "$name" "$file" | grep -q 'secrets\.CF_TOOLS_SIGNING_KEY'; then tool_key_users+=("$name"); fi
+done < <(all_jobs)
 if [ "${tool_key_users[*]:-}" = "desktop-tools" ] \
   && ! grep -Eq '^\s+id-token:' <<<"$tools" && ! grep -q 'configure-aws-credentials' <<<"$tools" \
   && ! grep -q 'TAURI_SIGNING' <<<"$tools" \
@@ -181,13 +204,65 @@ else
 fi
 
 # 12. Bumping a pinned tool never rebuilds the app, and the app build knows where to send the Mac's video.
-plan="$(job desktop-plan)"
+plan="$(job desktop-plan "$desktop_wf")"
 # shellcheck disable=SC2016  # the literal text "$MEDIA_HOST" is what the workflow must contain
 if grep -q "'!desktop/tools/\*\*'" <<<"$plan" && grep -q 'CF_MEDIA_HOST: ' <<<"$desktop" \
   && grep -q '"$MEDIA_HOST"' <<<"$plan"; then
   ok "desktop/tools is left out of the app's source hash, and the app build gets the media bucket host"
 else
   not_ok "desktop-plan must hash desktop/** without desktop/tools/** and the desktop build must set CF_MEDIA_HOST"
+fi
+
+# 13. The desktop jobs never hold the deploy-prod lock: they live in desktop.yml, which runs after a successful deploy
+#     of main, from the values its infra job hands off, and builds exactly the deployed commit.
+resolve="$(job resolve "$desktop_wf")"
+deploy_desktop_jobs="$(job_names "$deploy" | grep '^desktop' || true)"
+checkouts="$(grep -c 'uses: actions/checkout@' "$desktop_wf" || true)"
+# shellcheck disable=SC2016  # literal workflow expressions
+deployed_refs="$(grep -cF 'ref: ${{ needs.resolve.outputs.sha }}' "$desktop_wf" || true)"
+# shellcheck disable=SC2016
+if [ -z "$deploy_desktop_jobs" ] \
+  && grep -Eq '^    workflows: \[deploy\]$' "$desktop_wf" && grep -Eq '^    branches: \[main\]$' "$desktop_wf" \
+  && grep -qF "github.event.workflow_run.conclusion == 'success'" <<<"$resolve" \
+  && grep -qF 'SHA: ${{ github.event.workflow_run.head_sha }}' <<<"$resolve" \
+  && [ "$checkouts" -gt 0 ] && [ "$checkouts" = "$deployed_refs" ] \
+  && job infra | grep -q 'name: desktop-handoff' \
+  && grep -q 'name: desktop-handoff' <<<"$resolve" && grep -qF 'run-id: ${{ steps.run.outputs.run_id }}' <<<"$resolve"; then
+  ok "the desktop jobs run in desktop.yml after a successful deploy, on the deployed commit, from infra's hand-off"
+else
+  not_ok "desktop.yml must hold every desktop job (deploy.yml: ${deploy_desktop_jobs:-none}), run on deploy's success, check out workflow_run.head_sha in every job (${deployed_refs}/${checkouts}) and read infra's desktop-handoff"
+fi
+
+# 13b. Only this repository's push or run-by-hand deploys get desktop.yml's secrets and the deploy role: a fork's pull
+#      request can run a deploy.yml of its own, named deploy, from a branch it calls main.
+group_line="$(awk '/^concurrency:$/ { on = 1; next } on && /^[^ ]/ { exit } on && /^  group:/' "$desktop_wf")"
+trusted_repo='github.event.workflow_run.head_repository.full_name == github.repository'
+trusted_event="github.event.workflow_run.event == 'push'"
+# shellcheck disable=SC2016  # literal shell and jq text the workflow must contain
+if grep -qF "$trusted_repo" <<<"$resolve" && grep -qF "$trusted_event" <<<"$resolve" \
+  && grep -qF "$trusted_repo" <<<"$group_line" && grep -qF "$trusted_event" <<<"$group_line" \
+  && grep -qF "github.ref == 'refs/heads/main'" <<<"$group_line" \
+  && grep -qF '.head_repository.full_name == $repo' <<<"$resolve" \
+  && grep -qF 'want="${REPO} main .github/workflows/deploy.yml success ${SHA} ${RUN_NUMBER}"' <<<"$resolve" \
+  && grep -qF 'compare/${SHA}...main' <<<"$resolve"; then
+  ok "desktop.yml builds and signs only for this repository's push or run-by-hand deploys of main"
+else
+  not_ok "desktop.yml must check workflow_run.event and head_repository in its concurrency group and resolve, filter the run-by-hand lookup the same way, and re-check the run and its commit through the API"
+fi
+
+# 14. The version stays 1.<deploy run number>.0 (desktop.yml's own number started again at 1, and the updater never
+#     takes a lower version), and a started desktop run is never cancelled (desktop-prod, cancel-in-progress: false).
+# shellcheck disable=SC2016
+if ! grep -Eq '\$\{\{[^}]*github\.run_number' "$desktop_wf" \
+  && grep -qF 'RUN_NUMBER: ${{ github.event.workflow_run.run_number }}' <<<"$resolve" \
+  && grep -qF 'RUN_NUMBER: ${{ needs.resolve.outputs.run_number }}' <<<"$plan" \
+  && grep -qF 'version="1.${RUN_NUMBER}.0"' <<<"$plan" \
+  && grep -qF "&& 'desktop-prod' ||" "$desktop_wf" \
+  && awk '/^concurrency:$/ { on = 1; next } on && /^[^ ]/ { exit } on' "$desktop_wf" | grep -Eq '^  cancel-in-progress: false$' \
+  && awk '/^concurrency:$/ { on = 1; next } on && /^[^ ]/ { exit } on' "$deploy" | grep -Eq '^  group: deploy-prod$'; then
+  ok "desktop versions are 1.<deploy run number>.0, and desktop.yml never cancels a started run"
+else
+  not_ok "desktop.yml must take its version from the deploy run (never github.run_number) and run in desktop-prod with cancel-in-progress: false"
 fi
 
 echo "${passed} passed, ${failed} failed"
