@@ -51,27 +51,27 @@ export function StepTrack({
   const live = job && (job.status === "queued" || job.status === "running");
   const progress = job ? job.progress : steps.filter((s) => s.status === "done" || s.status === "skipped").length / steps.length;
   return (
-    <div className={`st-track${compact ? " st-track--compact" : ""}${live ? " is-live" : ""}`}>
-      <ol className="st-track__steps" aria-label={label}>
+    <div className={`st-s-track${compact ? " st-s-track--compact" : ""}${live ? " is-live" : ""}`}>
+      <ol className="st-s-track__steps" aria-label={label}>
         {steps.map((s, i) => (
-          <li key={s.key} className={`st-track__step is-${s.status}`} aria-current={s.status === "running" ? "step" : undefined}>
-            <span className="st-track__dot" aria-hidden="true">
-              {s.status === "running" ? <span className="st-track__spin" /> : MARK[s.status] || i + 1}
+          <li key={s.key} className={`st-s-track__step is-${s.status}`} aria-current={s.status === "running" ? "step" : undefined}>
+            <span className="st-s-track__dot" aria-hidden="true">
+              {s.status === "running" ? <span className="st-s-track__spin" /> : MARK[s.status] || i + 1}
             </span>
-            <span className={compact ? "st-sr" : "st-track__label"}>
+            <span className={compact ? "st-s-sr" : "st-track__label"}>
               {s.label}
-              <span className="st-sr">
+              <span className="st-s-sr">
                 {": "}
                 {s.status === "done" ? "done" : s.status === "running" ? "working on it now" : s.status === "failed" ? "stopped" : s.status === "skipped" ? "skipped" : "waiting"}
               </span>
             </span>
-            {!compact && s.status === "running" && s.message ? <span className="st-track__msg">{s.message}</span> : null}
-            {!compact && s.status === "failed" && s.message ? <span className="st-track__msg is-bad">{s.message}</span> : null}
+            {!compact && s.status === "running" && s.message ? <span className="st-s-track__msg">{s.message}</span> : null}
+            {!compact && s.status === "failed" && s.message ? <span className="st-s-track__msg is-bad">{s.message}</span> : null}
           </li>
         ))}
       </ol>
       <ProgressBar value={progress} label={`${label}: ${Math.round(progress * 100)}% done`} />
-      {job ? <p className={`st-track__now${job.status === "failed" ? " is-bad" : ""}`}>{nowLine(job, steps)}</p> : null}
+      {job ? <p className={`st-s-track__now${job.status === "failed" ? " is-bad" : ""}`}>{nowLine(job, steps)}</p> : null}
     </div>
   );
 }

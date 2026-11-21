@@ -47,7 +47,7 @@ async function context(browser: Browser, width: number, height: number, touch: b
 async function open(page: Page, path: string) {
   await page.goto(path);
   await page.locator(".st-studio").first().waitFor({ timeout: 20_000 });
-  await page.waitForFunction(() => !document.querySelector(".st-studio .st-busy"), undefined, { timeout: 20_000 });
+  await page.waitForFunction(() => !document.querySelector(".st-studio .st-s-busy"), undefined, { timeout: 20_000 });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(400);
 }
@@ -59,7 +59,7 @@ async function go(page: Page, path: string) {
     dispatchEvent(new PopStateEvent("popstate"));
   }, path);
   await page.locator(".st-studio").first().waitFor();
-  await page.waitForFunction(() => !document.querySelector(".st-studio .st-busy"), undefined, { timeout: 20_000 });
+  await page.waitForFunction(() => !document.querySelector(".st-studio .st-s-busy"), undefined, { timeout: 20_000 });
 }
 
 /** Every rule of the owner's that can be measured on the page as it is now. */
@@ -80,7 +80,7 @@ async function audit(page: Page, label: string, phone: boolean): Promise<string[
       const name = (e.getAttribute("aria-label") || e.textContent || e.tagName).trim().slice(0, 40);
       if (r.height < min - 0.5 || r.width < min - 0.5) found.push(`"${name}" is ${Math.round(r.width)}x${Math.round(r.height)}`);
       if (r.right > vw + 0.5 || r.left < -0.5) {
-        const scroller = e.closest(".st-film");
+        const scroller = e.closest(".st-s-film");
         if (!scroller) found.push(`"${name}" is off the screen`);
       }
       const cursor = getComputedStyle(e).cursor;
@@ -114,14 +114,14 @@ test("the publish sheet fits and follows the rules on a phone and a desktop", as
     await page.getByRole("button", { name: "Post it", exact: true }).click();
     const sheet = page.getByRole("dialog", { name: "Post it" });
     await expect(sheet).toBeVisible();
-    await page.waitForFunction(() => !document.querySelector(".st-sheet .st-busy"));
+    await page.waitForFunction(() => !document.querySelector(".st-s-sheet .st-s-busy"));
     const o = await findOverflow(page);
     expect(o.page, `${w}: sideways scroll`).toBeLessThanOrEqual(o.viewport);
     expect((await visibleEdges(page)).filter((e) => /\.st-/.test(e)), `${w}: edges`).toEqual([]);
-    const axe = await new AxeBuilder({ page }).include(".st-sheet").withRules(["color-contrast"]).analyze();
+    const axe = await new AxeBuilder({ page }).include(".st-s-sheet").withRules(["color-contrast"]).analyze();
     expect(axe.violations.flatMap((v) => v.nodes.map((n) => n.target.join(" "))), `${w}: contrast`).toEqual([]);
     // The main button sits at the bottom right, where the thumb is.
-    const main = await sheet.locator(".st-sheet__actions .st-btn--main").boundingBox();
+    const main = await sheet.locator(".st-s-sheet__actions .st-btn--main").boundingBox();
     expect(main && main.x + main.width).toBeGreaterThan(w * 0.6);
     await ctx.close();
   }
@@ -141,14 +141,14 @@ test("the whole flow: idea, character, production, review, approve and the publi
   await page.getByRole("button", { name: "New idea" }).click();
   await page.getByLabel("Title").fill("Zed and the giant snowball");
   await page.getByLabel("What happens, in one line").fill("Zed rolls a snowball so big it rolls him.");
-  await page.locator(".st-pick__opt", { hasText: "Funny" }).click();
+  await page.locator(".st-s-pick__opt", { hasText: "Funny" }).click();
   await page.getByRole("button", { name: "Save idea" }).click();
-  const card = page.locator(".st-idea", { hasText: "Zed and the giant snowball" });
+  const card = page.locator(".st-s-idea", { hasText: "Zed and the giant snowball" });
   await expect(card).toBeVisible();
 
   // 2. A character, through the stepper.
   await go(page, "/stories/characters/new");
-  await page.locator(".st-pick__opt", { hasText: "Tall" }).click();
+  await page.locator(".st-s-pick__opt", { hasText: "Tall" }).click();
   for (const next of ["Next: Face", "Next: Moves", "Next: Sounds", "Next: Name and personality"]) await page.getByRole("button", { name: next }).click();
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Zed");
   await page.getByRole("button", { name: "Save character" }).click();
@@ -157,23 +157,23 @@ test("the whole flow: idea, character, production, review, approve and the publi
 
   // 3. Production: the idea with the new character.
   await go(page, "/stories/ideas");
-  await page.locator(".st-idea", { hasText: "Zed and the giant snowball" }).getByRole("button", { name: "Make the video" }).click();
+  await page.locator(".st-s-idea", { hasText: "Zed and the giant snowball" }).getByRole("button", { name: "Make the video" }).click();
   await expect(page).toHaveURL(/\/stories\/production\/new\?idea=/);
-  await page.locator(".st-casttile", { hasText: "Zed" }).click();
+  await page.locator(".st-s-casttile", { hasText: "Zed" }).click();
   await page.evaluate(() => {
     const store = (window as StoriesWindow).__cfStoriesMock?.store;
     if (store) store.knobs.jobSeconds = 3;
   });
   await page.getByRole("button", { name: "Make the video" }).click();
   await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/);
-  await expect(page.locator(".st-track__step")).toHaveCount(8);
+  await expect(page.locator(".st-s-track__step")).toHaveCount(8);
   await expect(page.getByRole("link", { name: "Watch it in Review" })).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator(".st-film__card").first()).toBeVisible();
+  await expect(page.locator(".st-s-film__card").first()).toBeVisible();
 
   // 4. Review and approve.
   await page.getByRole("link", { name: "Watch it in Review" }).click();
   await expect(page).toHaveURL(/\/stories\/review\/[0-9A-Z]{26}$/);
-  await expect(page.locator(".st-player canvas, .st-player video")).toBeVisible();
+  await expect(page.locator(".st-s-player canvas, .st-s-player video")).toBeVisible();
   await page.getByRole("button", { name: "Approve" }).click();
   await expect(page.getByText("Approved! Now you can post it.")).toBeVisible();
 
@@ -189,19 +189,19 @@ test("the whole flow: idea, character, production, review, approve and the publi
   await page.getByRole("button", { name: "Post it", exact: true }).click();
   const sheet = page.getByRole("dialog", { name: "Post it" });
   await expect(sheet).toBeVisible();
-  const places = sheet.locator("button.st-place");
+  const places = sheet.locator("button.st-s-place");
   await expect(places).toHaveCount(connected.length);
-  expect((await sheet.locator("button.st-place .st-place__name").allTextContents()).sort()).toEqual(connected.map((n) => n ?? "Connected account").sort());
-  await expect(sheet.locator('button.st-place[aria-pressed="true"]')).toHaveCount(0);
-  await expect(sheet.locator(".st-sheet__actions .st-btn--main")).toHaveAttribute("aria-disabled", "true");
+  expect((await sheet.locator("button.st-s-place .st-s-place__name").allTextContents()).sort()).toEqual(connected.map((n) => n ?? "Connected account").sort());
+  await expect(sheet.locator('button.st-s-place[aria-pressed="true"]')).toHaveCount(0);
+  await expect(sheet.locator(".st-s-sheet__actions .st-btn--main")).toHaveAttribute("aria-disabled", "true");
   await places.first().click();
   await expect(places.first()).toHaveAttribute("aria-pressed", "true");
   await sheet.getByRole("button", { name: "Use my settings" }).click();
   await expect(sheet.getByText("My settings: everyone can see it")).toBeVisible();
   await sheet.getByRole("button", { name: "More details" }).click();
-  await expect(sheet.locator(".st-sheet__actions .st-btn--main")).not.toHaveAttribute("aria-disabled", "true", { timeout: 10_000 });
-  await sheet.locator(".st-sheet__actions .st-btn--main").click();
+  await expect(sheet.locator(".st-s-sheet__actions .st-btn--main")).not.toHaveAttribute("aria-disabled", "true", { timeout: 10_000 });
+  await sheet.locator(".st-s-sheet__actions .st-btn--main").click();
   await expect(page.getByRole("dialog", { name: /Sending your video|Posted!/ })).toBeVisible();
-  await expect(page.locator(".st-sheet .st-post")).toHaveCount(1);
+  await expect(page.locator(".st-s-sheet .st-s-post")).toHaveCount(1);
   await ctx.close();
 });

@@ -60,15 +60,15 @@ function ReviewQueue({ ws }: { ws: string }) {
       return pages.flatMap((p) => p.stories);
     },
     ws,
-    "st-review",
+    "st-s-review",
   );
   const all = lists.data ?? [];
   return (
     <section className="st-page st-studio">
-      <header className="st-head">
+      <header className="st-s-head">
         <div>
-          <h1 className="st-head__title">Review</h1>
-          <p className="st-head__lede">Watch each new video. Approve it, ask for changes, or make a scene again.</p>
+          <h1 className="st-s-head__title">Review</h1>
+          <p className="st-s-head__lede">Watch each new video. Approve it, ask for changes, or make a scene again.</p>
         </div>
       </header>
       {lists.error && !lists.data ? (
@@ -83,28 +83,28 @@ function ReviewQueue({ ws }: { ws: string }) {
           if (!items.length && !group.empty) return null;
           return (
             <section key={group.title} aria-label={group.title}>
-              <h2 className="st-section">{group.title}</h2>
+              <h2 className="st-s-section">{group.title}</h2>
               {items.length ? (
-                <ul className="st-queue">
+                <ul className="st-s-queue">
                   {items.map((s) => (
                     <li key={s.storyId}>
-                      <A href={storiesHref({ name: "review_story", storyId: s.storyId })} className="st-qcard">
-                        {s.coverUrl ? <img className="st-qcard__cover" src={s.coverUrl} alt="" width={90} height={160} /> : <span className="st-qcard__cover is-blank" aria-hidden="true" />}
-                        <span className="st-qcard__text">
+                      <A href={storiesHref({ name: "review_story", storyId: s.storyId })} className="st-s-qcard">
+                        {s.coverUrl ? <img className="st-s-qcard__cover" src={s.coverUrl} alt="" width={90} height={160} /> : <span className="st-s-qcard__cover is-blank" aria-hidden="true" />}
+                        <span className="st-s-qcard__text">
                           <Tag tone={STATUS_TONE[s.status]}>{STATUS_LABEL[s.status]}</Tag>
-                          <span className="st-qcard__title">{s.title}</span>
-                          <span className="st-qcard__meta">
+                          <span className="st-s-qcard__title">{s.title}</span>
+                          <span className="st-s-qcard__meta">
                             {CATEGORY_LABEL[s.category]} · {seconds(s.actualDurationSec ?? s.durationSec)}
                           </span>
-                          {s.status === "needs_check" && s.safety?.problems.length ? <span className="st-qcard__why">{s.safety.problems.length === 1 ? "1 fact to fix" : `${s.safety.problems.length} facts to fix`}</span> : null}
-                          {s.posted.length ? <span className="st-qcard__meta">On {s.posted.map((p) => PLATFORM_LABEL[p.platform]).join(", ")}</span> : null}
+                          {s.status === "needs_check" && s.safety?.problems.length ? <span className="st-s-qcard__why">{s.safety.problems.length === 1 ? "1 fact to fix" : `${s.safety.problems.length} facts to fix`}</span> : null}
+                          {s.posted.length ? <span className="st-s-qcard__meta">On {s.posted.map((p) => PLATFORM_LABEL[p.platform]).join(", ")}</span> : null}
                         </span>
                       </A>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="st-field__hint">{group.empty}</p>
+                <p className="st-s-field__hint">{group.empty}</p>
               )}
             </section>
           );
@@ -283,20 +283,20 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
   return (
     <section className="st-page st-studio">
-      <header className="st-head">
+      <header className="st-s-head">
         <div>
-          <A href={storiesHref({ name: "review" })} className="st-back">
+          <A href={storiesHref({ name: "review" })} className="st-s-back">
             ‹ Review
           </A>
-          <h1 className="st-head__title">{story.title}</h1>
-          <p className="st-head__lede">
+          <h1 className="st-s-head__title">{story.title}</h1>
+          <p className="st-s-head__lede">
             <Tag tone={STATUS_TONE[story.status]}>{STATUS_LABEL[story.status]}</Tag> {CATEGORY_LABEL[story.category]} · {seconds(story.actualDurationSec ?? story.durationSec)}
           </p>
         </div>
       </header>
 
-      <div className="st-review">
-        <div className="st-review__player" ref={col}>
+      <div className="st-s-review">
+        <div className="st-s-review__player" ref={col}>
           <Player story={story} script={script} width={width} />
           {done ? (
             <button type="button" className="st-btn" aria-disabled={busy !== null || undefined} onClick={() => void download()}>
@@ -305,9 +305,9 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           ) : null}
         </div>
 
-        <div className="st-review__side">
+        <div className="st-s-review__side">
           {live ? (
-            <section className="st-panel" aria-label="Being made again">
+            <section className="st-s-panel" aria-label="Being made again">
               <StepTrack job={job} story={story} label={`Making ${story.title}`} />
               <A href={storiesHref({ name: "production_story", storyId })} className="st-btn">
                 Watch it being made
@@ -318,7 +318,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           {problems.length ? (
             <Notice tone="bad">
               <strong>Fix the facts first.</strong>
-              <ul className="st-problems">
+              <ul className="st-s-problems">
                 {problems.map((p, i) => (
                   <li key={i}>{p}</li>
                 ))}
@@ -367,11 +367,11 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           {problem ? <Notice tone="bad">{problem}</Notice> : null}
 
           {deciding ? (
-            <section className="st-panel st-decide" aria-label="Your decision">
-              <div className="st-decide__main">
+            <section className="st-s-panel st-s-decide" aria-label="Your decision">
+              <div className="st-s-decide__main">
                 <button
                   type="button"
-                  className="st-btn st-btn--main st-btn--big st-approve"
+                  className="st-btn st-btn--main st-s-big st-approve"
                   aria-disabled={!!block || busy !== null || undefined}
                   aria-describedby={block ? "st-approve-why" : undefined}
                   onClick={(e) => {
@@ -388,25 +388,25 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   {busy === "approve" ? "Approving…" : "Approve"}
                 </button>
                 {block ? (
-                  <p className="st-field__hint" id="st-approve-why">
+                  <p className="st-s-field__hint" id="st-approve-why">
                     {block}
                   </p>
                 ) : null}
               </div>
-              <div className="st-decide__more">
+              <div className="st-s-decide__more">
                 <button type="button" className="st-btn" aria-expanded={form === "changes"} onClick={() => setForm((f) => (f === "changes" ? "none" : "changes"))}>
                   Ask for changes
                 </button>
                 <button type="button" className="st-btn" onClick={() => setAsking("whole")}>
                   Remake the whole video
                 </button>
-                <button type="button" className="st-btn st-btn--quiet" aria-expanded={form === "reject"} onClick={() => setForm((f) => (f === "reject" ? "none" : "reject"))}>
+                <button type="button" className="st-btn st-s-quiet" aria-expanded={form === "reject"} onClick={() => setForm((f) => (f === "reject" ? "none" : "reject"))}>
                   Reject
                 </button>
               </div>
               {form === "changes" ? (
                 <form
-                  className="st-form"
+                  className="st-s-form"
                   aria-label="Ask for changes"
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -423,9 +423,9 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   }}
                 >
                   <TextField label="What should change?" multiline rows={3} value={note} onChange={setNote} max={500} placeholder="For example: make Pip look more surprised when the car slides" />
-                  <div className="st-field">
-                    <span className="st-field__label">Only these scenes (you can skip this)</span>
-                    <div className="st-chips">
+                  <div className="st-s-field">
+                    <span className="st-s-field__label">Only these scenes (you can skip this)</span>
+                    <div className="st-s-chips">
                       {story.scenes.map((sc, i) => (
                         <Chip key={sc.sceneId} on={picked.includes(sc.sceneId)} onToggle={() => setPicked((p) => (p.includes(sc.sceneId) ? p.filter((x) => x !== sc.sceneId) : [...p, sc.sceneId]))}>
                           {i + 1}. {sc.title}
@@ -433,7 +433,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                       ))}
                     </div>
                   </div>
-                  <div className="st-actionbar">
+                  <div className="st-s-actionbar">
                     <button type="submit" className="st-btn st-btn--main" aria-disabled={busy !== null || (!note.trim() && !picked.length) || undefined}>
                       {busy === "changes" ? "Sending…" : "Send the changes"}
                     </button>
@@ -442,7 +442,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
               ) : null}
               {form === "reject" ? (
                 <form
-                  className="st-form"
+                  className="st-s-form"
                   aria-label="Reject"
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -454,8 +454,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   }}
                 >
                   <TextField label="Why? (you can skip this)" multiline rows={2} value={reason} onChange={setReason} max={500} placeholder="For example: the ending was flat" />
-                  <div className="st-actionbar">
-                    <button type="submit" className="st-btn st-btn--danger" aria-disabled={busy !== null || undefined}>
+                  <div className="st-s-actionbar">
+                    <button type="submit" className="st-btn st-s-danger" aria-disabled={busy !== null || undefined}>
                       {busy === "reject" ? "Rejecting…" : "Reject the video"}
                     </button>
                   </div>
@@ -465,17 +465,17 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           ) : null}
 
           {done ? (
-            <section className="st-panel st-decide" aria-label="Post it">
-              <button type="button" className="st-btn st-btn--main st-btn--big st-postit" onClick={() => setPosting(true)}>
+            <section className="st-s-panel st-s-decide" aria-label="Post it">
+              <button type="button" className="st-btn st-btn--main st-s-big st-postit" onClick={() => setPosting(true)}>
                 Post it
               </button>
-              <p className="st-field__hint">Only to Lamo Stories&apos; own accounts. You pick each one.</p>
+              <p className="st-s-field__hint">Only to Lamo Stories&apos; own accounts. You pick each one.</p>
             </section>
           ) : null}
           {done ? <PostsPanel jobs={pubs.data} onRetry={(j) => void retry(j)} busyId={retrying} /> : null}
           {citations.length ? (
-            <section className="st-sources" aria-label="Where the advice comes from">
-              <h2 className="st-sources__title">Based on</h2>
+            <section className="st-s-sources" aria-label="Where the advice comes from">
+              <h2 className="st-s-sources__title">Based on</h2>
               <ul>
                 {citations.map((c) => (
                   <li key={c.url + (c.section ?? "")}>
@@ -490,15 +490,15 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   </li>
                 ))}
               </ul>
-              <p className="st-field__hint">The video ends with “Check your local road rules.”</p>
+              <p className="st-s-field__hint">The video ends with “Check your local road rules.”</p>
             </section>
           ) : null}
         </div>
       </div>
 
       {story.scenes.length ? (
-        <section className="st-panel" aria-labelledby="st-scenes-title">
-          <h2 className="st-panel__title" id="st-scenes-title">
+        <section className="st-s-panel" aria-labelledby="st-scenes-title">
+          <h2 className="st-s-panel__title" id="st-scenes-title">
             Scenes
           </h2>
           <Filmstrip
@@ -509,7 +509,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 ? (sceneId) => (
                     <button
                       type="button"
-                      className="st-btn st-btn--small"
+                      className="st-btn st-s-small"
                       aria-disabled={busy !== null || undefined}
                       onClick={() =>
                         void act(`scene:${sceneId}`, async () => {
@@ -535,21 +535,21 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
       {editable && script ? (
         <>
-          <section className="st-panel" aria-labelledby="st-captions-title">
-            <h2 className="st-panel__title" id="st-captions-title">
+          <section className="st-s-panel" aria-labelledby="st-captions-title">
+            <h2 className="st-s-panel__title" id="st-captions-title">
               Captions
             </h2>
             <CaptionEditor key={`c:${story.scriptVersion}:${story.version}`} story={story} script={script} saving={saving} onSave={(e) => void save(e)} />
           </section>
-          <section className="st-panel" aria-labelledby="st-sfx-title">
-            <h2 className="st-panel__title" id="st-sfx-title">
+          <section className="st-s-panel" aria-labelledby="st-sfx-title">
+            <h2 className="st-s-panel__title" id="st-sfx-title">
               Sound effects and music
             </h2>
             <SfxEditor key={`s:${story.scriptVersion}:${story.version}`} story={story} script={script} saving={saving} onSave={(e) => void save(e)} />
           </section>
         </>
       ) : done ? (
-        <p className="st-field__hint">An approved video can&apos;t be changed. Its captions and sounds stay as they are.</p>
+        <p className="st-s-field__hint">An approved video can&apos;t be changed. Its captions and sounds stay as they are.</p>
       ) : null}
 
       {asking === "whole" ? (

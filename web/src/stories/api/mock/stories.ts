@@ -918,6 +918,7 @@ function seedStory(store: MockStore, spec: SeedSpec, now: number): void {
   if (problems.length) job.status = "needs_check";
   for (const sc of script.scenes) addAsset(store, story, "scene_clip", EMPTY_VIDEO, "video/mp4", Math.round(sc.durationSec * 900_000), sc.sceneId);
   addAsset(store, story, "audio", "data:audio/mp4;base64,", "audio/mp4", Math.round(script.durationSec * 24_000));
+  if (story.captionsOn) addAsset(store, story, "captions", `data:text/plain;charset=utf-8,${encodeURIComponent("[Script Info]\nTitle: " + story.title)}`, "text/plain", 2_000);
   addAsset(store, story, "final_video", EMPTY_VIDEO, "video/mp4", Math.round(script.durationSec * 1_400_000));
   const mid = script.scenes[Math.floor(script.scenes.length / 2)];
   if (mid) addAsset(store, story, "cover", stillOf(spec.id, script, mid.sceneId), "image/jpeg", 30_000);

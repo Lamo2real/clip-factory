@@ -10,24 +10,24 @@ export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; on
   const stuck = job.publishingStatus === "failed" || job.publishingStatus === "needs_attention";
   const m = job.metrics;
   return (
-    <li className={`st-post is-${job.publishingStatus}`}>
-      <span className="st-post__mark">
+    <li className={`st-s-post is-${job.publishingStatus}`}>
+      <span className="st-s-post__mark">
         <PlatformMark platform={job.platform} size={24} />
       </span>
-      <span className="st-post__body">
-        <span className="st-post__top">
+      <span className="st-s-post__body">
+        <span className="st-s-post__top">
           <strong>{PLATFORM_LABEL[job.platform]}</strong>
           <Tag tone={PUBLISH_TONE[job.publishingStatus]}>{PUBLISH_LABEL[job.publishingStatus]}</Tag>
         </span>
-        <span className="st-post__account">{job.accountName ?? "Lamo Stories account"}</span>
+        <span className="st-s-post__account">{job.accountName ?? "Lamo Stories account"}</span>
         {job.publishingStatus === "posted" ? (
-          <span className="st-post__when">Posted {ago(job.postedAt ?? job.updatedAt)}</span>
+          <span className="st-s-post__when">Posted {ago(job.postedAt ?? job.updatedAt)}</span>
         ) : job.publishingStatus === "queued" || job.publishingStatus === "publishing" ? (
-          <span className="st-post__when">{job.publishingStatus === "queued" ? "Waiting to send…" : "Sending now…"}</span>
+          <span className="st-s-post__when">{job.publishingStatus === "queued" ? "Waiting to send…" : "Sending now…"}</span>
         ) : null}
-        {stuck && job.error ? <span className="st-post__why">{job.error}</span> : null}
+        {stuck && job.error ? <span className="st-s-post__why">{job.error}</span> : null}
         {m ? (
-          <span className="st-post__numbers" aria-label={`Numbers from ${PLATFORM_LABEL[job.platform]}`}>
+          <span className="st-s-post__numbers" aria-label={`Numbers from ${PLATFORM_LABEL[job.platform]}`}>
             <span>
               <strong>{shortNumber(m.views)}</strong> views
             </span>
@@ -42,17 +42,17 @@ export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; on
             </span>
           </span>
         ) : job.publishingStatus === "posted" ? (
-          <span className="st-post__when">No numbers yet. They come in until 7 days after posting.</span>
+          <span className="st-s-post__when">No numbers yet. They come in until 7 days after posting.</span>
         ) : null}
       </span>
-      <span className="st-post__actions">
+      <span className="st-s-post__actions">
         {job.url ? (
-          <a className="st-btn st-btn--small" href={job.url} target="_blank" rel="noopener noreferrer">
-            Open<span className="st-sr"> on {PLATFORM_LABEL[job.platform]}</span>
+          <a className="st-btn st-s-small" href={job.url} target="_blank" rel="noopener noreferrer">
+            Open<span className="st-s-sr"> on {PLATFORM_LABEL[job.platform]}</span>
           </a>
         ) : null}
         {stuck ? (
-          <button type="button" className="st-btn st-btn--small st-btn--main" aria-disabled={busy || undefined} onClick={() => !busy && onRetry(job)}>
+          <button type="button" className="st-btn st-s-small st-btn--main" aria-disabled={busy || undefined} onClick={() => !busy && onRetry(job)}>
             {busy ? "Trying…" : "Try again"}
           </button>
         ) : null}
@@ -63,16 +63,16 @@ export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; on
 
 export function PostsPanel({ jobs, onRetry, busyId }: { jobs: PublishingJob[] | null; onRetry: (j: PublishingJob) => void; busyId: string | null }) {
   return (
-    <section className="st-panel st-postspanel" aria-labelledby="st-posts-title">
-      <h2 className="st-panel__title" id="st-posts-title">
+    <section className="st-s-panel st-postspanel" aria-labelledby="st-posts-title">
+      <h2 className="st-s-panel__title" id="st-posts-title">
         Posts
       </h2>
       {jobs === null ? (
-        <p className="st-field__hint">Getting the posts…</p>
+        <p className="st-s-field__hint">Getting the posts…</p>
       ) : jobs.length === 0 ? (
-        <p className="st-field__hint">Not posted anywhere yet. Tap Post it to send it to your Lamo Stories accounts.</p>
+        <p className="st-s-field__hint">Not posted anywhere yet. Tap Post it to send it to your Lamo Stories accounts.</p>
       ) : (
-        <ul className="st-posts">
+        <ul className="st-s-posts">
           {jobs.map((j) => (
             <PostRow key={j.publishingJobId} job={j} onRetry={onRetry} busy={busyId === j.publishingJobId} />
           ))}

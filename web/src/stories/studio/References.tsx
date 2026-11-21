@@ -69,17 +69,17 @@ export function References({ ws, character, onChange }: { ws: string; character:
   }
 
   return (
-    <section className="st-refs" aria-labelledby="st-refs-title">
-      <h2 className="st-refs__title" id="st-refs-title">
+    <section className="st-s-refs" aria-labelledby="st-refs-title">
+      <h2 className="st-s-refs__title" id="st-refs-title">
         Pictures to aim for
       </h2>
-      <p className="st-refs__lede">Add up to {CHAR_LIMITS.refs} pictures of the look you want. They stay with {character.name} and never change the drawing.</p>
+      <p className="st-s-refs__lede">Add up to {CHAR_LIMITS.refs} pictures of the look you want. They stay with {character.name} and never change the drawing.</p>
       {character.references.length ? (
-        <ul className="st-refs__list">
+        <ul className="st-s-refs__list">
           {character.references.map((r, i) => (
-            <li key={r.assetId} className="st-refs__item">
+            <li key={r.assetId} className="st-s-refs__item">
               <img src={local[r.assetId] ?? r.url} alt={`Picture ${i + 1} for ${character.name}`} width={88} height={88} />
-              <button type="button" className="st-iconbtn st-refs__remove" aria-label={`Remove picture ${i + 1}`} onClick={() => void remove(r.assetId)}>
+              <button type="button" className="st-s-iconbtn st-s-refs__remove" aria-label={`Remove picture ${i + 1}`} onClick={() => void remove(r.assetId)}>
                 <span aria-hidden="true">×</span>
               </button>
             </li>
@@ -87,17 +87,17 @@ export function References({ ws, character, onChange }: { ws: string; character:
         </ul>
       ) : null}
       {progress !== null ? (
-        <div className="st-refs__sending">
+        <div className="st-s-refs__sending">
           <span>Sending the picture…</span>
           <ProgressBar value={progress} label="Sending the picture" />
         </div>
       ) : (
-        <span className="st-refs__add">
+        <span className="st-s-refs__add">
           <input
             ref={input}
             type="file"
             accept="image/png,image/jpeg,image/webp"
-            className="st-sr"
+            className="st-s-sr"
             id={`st-ref-${character.characterId}`}
             disabled={full}
             onChange={(e) => {
@@ -149,20 +149,20 @@ export function Portrait({ ws, character, aiOn, onChange }: { ws: string; charac
   }
 
   return (
-    <section className="st-portrait" aria-labelledby="st-portrait-title">
-      <h2 className="st-refs__title" id="st-portrait-title">
+    <section className="st-s-portrait" aria-labelledby="st-portrait-title">
+      <h2 className="st-s-refs__title" id="st-portrait-title">
         AI picture
       </h2>
-      {character.portrait ? <img className="st-portrait__img" src={character.portrait.url} alt={`AI picture of ${character.name}`} width={120} height={120} /> : null}
+      {character.portrait ? <img className="st-s-portrait__img" src={character.portrait.url} alt={`AI picture of ${character.name}`} width={120} height={120} /> : null}
       {aiOn ? (
         <>
-          <p className="st-refs__lede">Only for the app and the Library. Videos always use the drawing.</p>
+          <p className="st-s-refs__lede">Only for the app and the Library. Videos always use the drawing.</p>
           <button type="button" className="st-btn" aria-disabled={waiting !== null || undefined} onClick={() => waiting === null && void make()}>
             {waiting ? "Drawing the picture…" : character.portrait ? "Make a new AI picture" : "Make an AI picture"}
           </button>
         </>
       ) : (
-        <p className="st-refs__lede">
+        <p className="st-s-refs__lede">
           AI pictures are off. You can turn them on in <A href={storiesHref({ name: "settings" })}>Settings</A>.
         </p>
       )}

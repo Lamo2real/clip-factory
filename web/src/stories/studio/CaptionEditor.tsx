@@ -84,7 +84,7 @@ export function CaptionEditor({ story, script, saving, onSave }: { story: Story;
   }
 
   return (
-    <div className="st-editor-box">
+    <div className="st-s-editor-box">
       <Pick
         label="Which words"
         hideLabel
@@ -99,38 +99,38 @@ export function CaptionEditor({ story, script, saving, onSave }: { story: Story;
         ]}
       />
       {tab === "video" ? (
-        <div className="st-captions">
+        <div className="st-s-captions">
           <Switch label="Show captions" line="Short words on screen. The video has no talking." checked={on} onChange={setOn} />
           {cues.length ? (
-            <ol className="st-cues">
+            <ol className="st-s-cues">
               {cues.map((c, i) => (
-                <li key={c.id} className="st-cue">
-                  <span className="st-cue__head">
+                <li key={c.id} className="st-s-cue">
+                  <span className="st-s-cue__head">
                     <strong>Caption {i + 1}</strong>
                     <span>
                       Scene {sceneAt(script, c.at)} · {clock(c.at)} to {clock(c.at + c.dur)}
                     </span>
-                    <button type="button" className="st-btn st-btn--small st-btn--quiet" onClick={() => setCues((l) => l.filter((x) => x.id !== c.id))}>
-                      Remove<span className="st-sr"> caption {i + 1}</span>
+                    <button type="button" className="st-btn st-s-small st-s-quiet" onClick={() => setCues((l) => l.filter((x) => x.id !== c.id))}>
+                      Remove<span className="st-s-sr"> caption {i + 1}</span>
                     </button>
                   </span>
                   <TextField label="Words" value={c.text} max={60} onChange={(text) => setCue(c.id, { text })} />
-                  <span className="st-cue__times">
+                  <span className="st-s-cue__times">
                     <Slider label="Starts at" min={0} max={Math.max(0.5, Math.round((total - 0.5) * 10) / 10)} step={0.1} value={c.at} words={clock(c.at)} onChange={(at) => setCue(c.id, { at })} />
                     <Slider label="Shows for" min={0.5} max={10} step={0.1} value={c.dur} words={`${c.dur.toFixed(1)} s`} onChange={(dur) => setCue(c.id, { dur })} />
                   </span>
-                  {c.guidanceRef ? <span className="st-field__hint">From the checked advice. If you change these words, the facts are checked again.</span> : null}
+                  {c.guidanceRef ? <span className="st-s-field__hint">From the checked advice. If you change these words, the facts are checked again.</span> : null}
                 </li>
               ))}
             </ol>
           ) : (
-            <p className="st-field__hint">No captions yet.</p>
+            <p className="st-s-field__hint">No captions yet.</p>
           )}
           <button type="button" className="st-btn" onClick={addCue}>
             Add a caption
           </button>
-          <fieldset className="st-group">
-            <legend className="st-group__title">Words on each scene</legend>
+          <fieldset className="st-s-group">
+            <legend className="st-s-group__title">Words on each scene</legend>
             {script.scenes.map((sc, i) => (
               <TextField
                 key={sc.sceneId}
@@ -146,20 +146,20 @@ export function CaptionEditor({ story, script, saving, onSave }: { story: Story;
             ))}
           </fieldset>
           {problem ? <Notice tone="bad">{problem}</Notice> : null}
-          <div className="st-actionbar">
+          <div className="st-s-actionbar">
             <button type="button" className="st-btn st-btn--main" aria-disabled={!videoDirty || saving || undefined} onClick={() => videoDirty && !saving && saveVideo()}>
               {saving ? "Saving…" : videoDirty ? "Save captions" : "No changes yet"}
             </button>
           </div>
         </div>
       ) : (
-        <div className="st-captions">
-          <p className="st-field__hint">What each place shows with the video. Each one has its own limit.</p>
+        <div className="st-s-captions">
+          <p className="st-s-field__hint">What each place shows with the video. Each one has its own limit.</p>
           {POST_FIELDS.map((f) => (
             <TextField key={f.key} label={f.label} value={posts[f.key]} max={POST_LIMITS[f.key]} multiline={f.rows > 1} rows={f.rows} onChange={(v) => setPosts((p) => ({ ...p, [f.key]: v }))} hint={`Up to ${POST_LIMITS[f.key].toLocaleString("en-GB")} letters.`} />
           ))}
           {problem ? <Notice tone="bad">{problem}</Notice> : null}
-          <div className="st-actionbar">
+          <div className="st-s-actionbar">
             <button type="button" className="st-btn st-btn--main" aria-disabled={!postChanges.length || saving || undefined} onClick={() => postChanges.length && !saving && savePosts()}>
               {saving ? "Saving…" : postChanges.length ? "Save post words" : "No changes yet"}
             </button>

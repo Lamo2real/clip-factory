@@ -194,7 +194,7 @@ function field(label: string | RegExp): HTMLInputElement | HTMLTextAreaElement {
 async function pick(group: string, option: string) {
   const g = Array.from(document.querySelectorAll('[role="radiogroup"]')).find((r) => document.getElementById(r.getAttribute("aria-labelledby") ?? "")?.textContent?.trim() === group);
   if (!g) throw new Error(`no pick bar ${group}`);
-  const opt = Array.from(g.querySelectorAll("label")).find((l) => l.querySelector(".st-pick__label")?.textContent?.trim() === option);
+  const opt = Array.from(g.querySelectorAll("label")).find((l) => l.querySelector(".st-s-pick__label")?.textContent?.trim() === option);
   if (!opt) throw new Error(`no option ${option}`);
   await click(opt.querySelector("input") as HTMLElement, 50);
 }
@@ -206,7 +206,7 @@ const text = () => document.body.textContent ?? "";
 describe("Ideas", () => {
   it("shows the board with each safety idea's checked advice, and a safety idea without it cannot become a video", async () => {
     await show(<IdeasScreen {...page({ name: "ideas" })} />);
-    const cards = Array.from(document.querySelectorAll(".st-idea"));
+    const cards = Array.from(document.querySelectorAll(".st-s-idea"));
     expect(cards.length).toBe(store.ideas.length);
     const deer = cards.find((c) => c.textContent?.includes("A deer on the road"))!;
     expect(deer.textContent).toMatch(/Checked advice: .*From /);
@@ -232,7 +232,7 @@ describe("Ideas", () => {
     await pick("What kind of video?", "Funny");
     await click(control("Save idea"));
     expect(create).toHaveBeenCalledWith("stories", { title: "Dash learns to juggle", logline: "Dash drops every ball, then finds the trick.", category: "comedy", source: "manual" });
-    expect(Array.from(document.querySelectorAll(".st-idea__title")).map((e) => e.textContent)).toContain("Dash learns to juggle");
+    expect(Array.from(document.querySelectorAll(".st-s-idea__title")).map((e) => e.textContent)).toContain("Dash learns to juggle");
   });
 
   it("Ask for ideas: a topic and a kind make drafts; each is saved only when Save is tapped", async () => {
@@ -244,7 +244,7 @@ describe("Ideas", () => {
     await pick("What kind?", "Everyday skills");
     await click(control("Get ideas"));
     expect(gen).toHaveBeenCalledWith("stories", { topic: "a snowy day", category: "everyday_skills", count: 4 });
-    const drafts = Array.from(document.querySelectorAll(".st-draft"));
+    const drafts = Array.from(document.querySelectorAll(".st-s-draft"));
     expect(drafts).toHaveLength(4);
     expect(create).not.toHaveBeenCalled();
     await click(control("Save", drafts[1]!));
@@ -255,20 +255,20 @@ describe("Ideas", () => {
   it("Make it a full idea shows the concept; More like this adds drafts that point at it", async () => {
     const vary = vi.spyOn(api, "ideaVariations");
     await show(<IdeasScreen {...page({ name: "ideas" })} />);
-    const gps = () => Array.from(document.querySelectorAll(".st-idea")).find((c) => c.textContent?.includes("sleepy GPS"))!;
+    const gps = () => Array.from(document.querySelectorAll(".st-s-idea")).find((c) => c.textContent?.includes("sleepy GPS"))!;
     await click(control("Make it a full idea", gps()));
-    expect(gps().querySelector(".st-concept")).not.toBeNull();
-    expect(gps().querySelectorAll(".st-concept__beats li").length).toBeGreaterThanOrEqual(3);
+    expect(gps().querySelector(".st-s-concept")).not.toBeNull();
+    expect(gps().querySelectorAll(".st-s-concept__beats li").length).toBeGreaterThanOrEqual(3);
     await click(control("More like this", gps()));
     expect(vary).toHaveBeenCalledWith("stories", I.gps, { count: 3 });
-    expect(document.querySelector(".st-drafts__title")?.textContent).toContain("More like");
-    expect(document.querySelectorAll(".st-draft")).toHaveLength(3);
+    expect(document.querySelector(".st-s-drafts__title")?.textContent).toContain("More like");
+    expect(document.querySelectorAll(".st-s-draft")).toHaveLength(3);
   });
 
   it("Delete hides the card at once and Undo brings it back; without Undo it is deleted", async () => {
     const del = vi.spyOn(api, "deleteIdea");
     await show(<IdeasScreen {...page({ name: "ideas" })} />);
-    const rainbow = () => Array.from(document.querySelectorAll(".st-idea")).find((c) => c.textContent?.includes("How a rainbow is made"));
+    const rainbow = () => Array.from(document.querySelectorAll(".st-s-idea")).find((c) => c.textContent?.includes("How a rainbow is made"));
     await click(control("Delete", rainbow()!), 50);
     expect(rainbow()).toBeUndefined();
     await click(control("Undo"), 50);
@@ -285,8 +285,8 @@ describe("Ideas", () => {
 describe("Characters", () => {
   it("the gallery shows every character with its rig", async () => {
     await show(<CharactersScreen {...page({ name: "characters" })} />);
-    const cards = Array.from(document.querySelectorAll(".st-cast__card"));
-    expect(cards.map((c) => c.querySelector(".st-cast__name")?.textContent)).toEqual(["Bolt", "Dash", "Nana Rose", "Pip"]);
+    const cards = Array.from(document.querySelectorAll(".st-s-cast__card"));
+    expect(cards.map((c) => c.querySelector(".st-s-cast__name")?.textContent)).toEqual(["Bolt", "Dash", "Nana Rose", "Pip"]);
     expect(cards.every((c) => c.querySelector("canvas[role=img]"))).toBe(true);
   });
 
@@ -296,14 +296,14 @@ describe("Characters", () => {
     await pick("Shape", "Tall");
     await pick("Hair style", "Curly");
     await click(control("Next: Face"), 50);
-    expect(document.querySelectorAll(".st-face")).toHaveLength(14);
+    expect(document.querySelectorAll(".st-s-face")).toHaveLength(14);
     await click(control(/^Try\s*Shocked$/), 50);
-    expect(document.querySelector(".st-editor__now")?.textContent).toContain("Shocked");
-    const neutral = Array.from(document.querySelectorAll(".st-face")).find((f) => f.textContent?.includes("Neutral"))!;
+    expect(document.querySelector(".st-s-editor__now")?.textContent).toContain("Shocked");
+    const neutral = Array.from(document.querySelectorAll(".st-s-face")).find((f) => f.textContent?.includes("Neutral"))!;
     expect(control(/Uses it/, neutral).getAttribute("aria-disabled")).toBe("true");
     await click(control("Next: Moves"), 50);
     await pick("Try a move", "Jump");
-    expect(document.querySelector(".st-editor__now")?.textContent).toContain("Jump");
+    expect(document.querySelector(".st-s-editor__now")?.textContent).toContain("Jump");
     await click(control("Next: Sounds"), 50);
     await click(control(/Whoa/), 50);
     await click(control("Next: Name and personality"), 50);
@@ -346,18 +346,18 @@ describe("Characters", () => {
     const done = vi.spyOn(api, "referenceComplete");
     await show(<CharactersScreen {...page({ name: "character", characterId: C.bolt })} />);
     expect(text()).toContain("AI pictures are off");
-    const input = document.querySelector<HTMLInputElement>('.st-refs input[type="file"]')!;
+    const input = document.querySelector<HTMLInputElement>('.st-s-refs input[type="file"]')!;
     const file = new File([new Uint8Array(4000)], "bolt.png", { type: "image/png" });
     Object.defineProperty(input, "files", { value: [file], configurable: true });
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
     await wait(300);
-    expect(document.querySelector(".st-refs .st-progress")).not.toBeNull();
+    expect(document.querySelector(".st-s-refs .st-s-progress")).not.toBeNull();
     await wait(3000);
     expect(up).toHaveBeenCalledWith("stories", C.bolt, { filename: "bolt.png", contentType: "image/png", size: 4000 });
     expect(done).toHaveBeenCalledTimes(1);
-    expect(document.querySelectorAll(".st-refs__item")).toHaveLength(1);
+    expect(document.querySelectorAll(".st-s-refs__item")).toHaveLength(1);
     await click(control(/Remove picture 1/));
-    expect(document.querySelectorAll(".st-refs__item")).toHaveLength(0);
+    expect(document.querySelectorAll(".st-s-refs__item")).toHaveLength(0);
   });
 });
 
@@ -367,12 +367,12 @@ describe("Production", () => {
   it("New: the idea from the link, its cast, the workspace's default length and captions, then Make the video", async () => {
     const create = vi.spyOn(api, "createStory");
     await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich })} />);
-    const chosen = () => Array.from(document.querySelectorAll('.st-casttile[aria-pressed="true"]')).map((t) => t.textContent);
+    const chosen = () => Array.from(document.querySelectorAll('.st-s-casttile[aria-pressed="true"]')).map((t) => t.textContent);
     expect(chosen().map((t) => t?.replace(/[✓+]/g, "").trim())).toEqual(["Dash", "Pip"]);
     const length = document.querySelector<HTMLInputElement>('input[type="range"]')!;
     expect(length.value).toBe("50");
     expect(document.querySelector('[role="switch"]')?.getAttribute("aria-checked")).toBe("false");
-    const tile = (name: string) => Array.from(document.querySelectorAll<HTMLElement>(".st-casttile")).find((t) => t.textContent?.includes(name))!;
+    const tile = (name: string) => Array.from(document.querySelectorAll<HTMLElement>(".st-s-casttile")).find((t) => t.textContent?.includes(name))!;
     await click(tile("Bolt"), 50);
     await click(tile("Nana Rose"), 50);
     expect(tile("Nana Rose").getAttribute("aria-disabled")).toBe("true");
@@ -393,7 +393,7 @@ describe("Production", () => {
     type(field("What happens, in one line"), "Dash squeezes the car into a tiny gap.");
     await pick("What kind of video?", "Driving safety");
     // The idea's own character came along.
-    expect(document.querySelector('.st-casttile[aria-pressed="true"]')?.textContent).toContain("Dash");
+    expect(document.querySelector('.st-s-casttile[aria-pressed="true"]')?.textContent).toContain("Dash");
     await click(control("Make the video"));
     expect(create).toHaveBeenCalledTimes(1);
     expect(text()).toContain("Checked advice covers:");
@@ -402,13 +402,13 @@ describe("Production", () => {
   it("the story's page shows the eight steps, checks every 2 seconds while it runs, and lands on Watch it in Review", async () => {
     const get = vi.spyOn(api, "getStory");
     await show(<ProductionScreen {...page({ name: "production_story", storyId: S.producing })} />);
-    expect(document.querySelectorAll(".st-track__step")).toHaveLength(8);
+    expect(document.querySelectorAll(".st-s-track__step")).toHaveLength(8);
     const calls = get.mock.calls.length;
     await wait(4100);
     expect(get.mock.calls.length - calls).toBeGreaterThanOrEqual(2);
-    expect(document.querySelectorAll(".st-film__card").length).toBeGreaterThan(2);
+    expect(document.querySelectorAll(".st-s-film__card").length).toBeGreaterThan(2);
     await wait(10_000);
-    expect(document.querySelectorAll(".st-track__step.is-done")).toHaveLength(8);
+    expect(document.querySelectorAll(".st-s-track__step.is-done")).toHaveLength(8);
     expect(control("Watch it in Review").getAttribute("href")).toBe(`/stories/review/${S.producing}`);
   });
 
@@ -422,15 +422,15 @@ describe("Production", () => {
     await wait();
     await click(control("Try again from “Animate”"));
     expect(produce).toHaveBeenCalledWith("stories", S.failed);
-    expect(document.querySelector(".st-track.is-live")).not.toBeNull();
+    expect(document.querySelector(".st-s-track.is-live")).not.toBeNull();
     await wait(6000);
-    expect(document.querySelector(".st-track__step.is-running, .st-track__step.is-done:nth-child(8)")).not.toBeNull();
+    expect(document.querySelector(".st-s-track__step.is-running, .st-s-track__step.is-done:nth-child(8)")).not.toBeNull();
   });
 
   it("the list shows every story with its step track", async () => {
     await show(<ProductionScreen {...page({ name: "production" })} />);
-    expect(document.querySelectorAll(".st-run")).toHaveLength(store.stories.length);
-    expect(document.querySelectorAll(".st-run .st-track__steps").length).toBe(store.stories.length);
+    expect(document.querySelectorAll(".st-s-run")).toHaveLength(store.stories.length);
+    expect(document.querySelectorAll(".st-s-run .st-s-track__steps").length).toBe(store.stories.length);
   });
 });
 
@@ -439,7 +439,7 @@ describe("Production", () => {
 describe("Review", () => {
   it("the queue holds only videos to watch or check (and approved and posted ones below)", async () => {
     await show(<ReviewScreen {...page({ name: "review" })} />);
-    const titles = Array.from(document.querySelectorAll(".st-qcard__title")).map((e) => e.textContent);
+    const titles = Array.from(document.querySelectorAll(".st-s-qcard__title")).map((e) => e.textContent);
     expect(titles).toEqual(["Foggy morning drive", "When the car starts to slide", "Bolt ties his shoes", "The sandwich tower"]);
   });
 
@@ -448,9 +448,9 @@ describe("Review", () => {
     const produce = vi.spyOn(api, "produce");
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.needsCheck })} />);
     expect(text()).toContain("Fix the facts first.");
-    expect(document.querySelectorAll(".st-sources li").length).toBeGreaterThan(0);
+    expect(document.querySelectorAll(".st-s-sources li").length).toBeGreaterThan(0);
     expect(control("Approve").getAttribute("aria-disabled")).toBe("true");
-    const bad = Array.from(document.querySelectorAll<HTMLInputElement>(".st-cue input")).find((i) => /full beam/.test(i.value))!;
+    const bad = Array.from(document.querySelectorAll<HTMLInputElement>(".st-s-cue input")).find((i) => /full beam/.test(i.value))!;
     type(bad, "Use dipped headlights in fog");
     await click(control("Save captions"));
     expect(patch.mock.calls[0]![2]).toMatchObject({ captions: expect.arrayContaining([expect.objectContaining({ text: "Use dipped headlights in fog" })]) });
@@ -479,7 +479,7 @@ describe("Review", () => {
     const produce = vi.spyOn(api, "produce");
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
     const second = store.stories.find((s) => s.storyId === S.review)!.scenes[1]!.sceneId;
-    await click(control("Remake this scene", document.querySelectorAll(".st-film__card")[1]!));
+    await click(control("Remake this scene", document.querySelectorAll(".st-s-film__card")[1]!));
     expect(changes).toHaveBeenLastCalledWith("stories", S.review, { sceneIds: [second] });
     await wait(12_000);
     await click(control("Remake the whole video"), 50);
@@ -516,11 +516,11 @@ describe("Review", () => {
     expect(patch.mock.calls[0]![2]).toMatchObject({ postCaptions: { x: "Pip on ice!" } });
     expect(Object.keys(patch.mock.calls[0]![2].postCaptions!)).toEqual(["x"]);
 
-    const scene = document.querySelectorAll(".st-sfx__scene")[2]!;
-    const before = scene.querySelectorAll(".st-sfx__row").length;
+    const scene = document.querySelectorAll(".st-s-sfx__scene")[2]!;
+    const before = scene.querySelectorAll(".st-s-sfx__row").length;
     await click(control(/Add a sound/, scene), 50);
-    expect(scene.querySelectorAll(".st-sfx__row")).toHaveLength(before + 1);
-    const marks = scene.querySelectorAll<HTMLButtonElement>(".st-timeline__mark");
+    expect(scene.querySelectorAll(".st-s-sfx__row")).toHaveLength(before + 1);
+    const marks = scene.querySelectorAll<HTMLButtonElement>(".st-s-timeline__mark");
     const mark = marks[marks.length - 1]!;
     await act(async () => mark.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
     await click(control("Save sounds"));
@@ -533,7 +533,7 @@ describe("Review", () => {
     expect(added.at).toBeCloseTo(Math.round((Math.round((script.scenes[2]!.durationSec / 2) * 10) / 10 + 0.1) * 10) / 10, 5);
     expect(text()).toContain("Saved. Tap Remake to put it in the video.");
     expect(text()).toContain("Your changes aren't in the video yet.");
-    const rows = () => document.querySelectorAll(".st-sfx__scene")[2]!.querySelectorAll(".st-sfx__row");
+    const rows = () => document.querySelectorAll(".st-s-sfx__scene")[2]!.querySelectorAll(".st-s-sfx__row");
     const n = rows().length;
     await click(control(/^Remove/, rows()[n - 1]!), 50);
     expect(rows()).toHaveLength(n - 1);
@@ -557,12 +557,12 @@ describe("Post it", () => {
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
     await click(control("Post it"));
     const dialog = document.querySelector('[role="dialog"]')!;
-    const places = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button.st-place"));
-    expect(places.map((p) => p.querySelector(".st-place__name")?.textContent)).toEqual(["Lamo Stories Channel", "Lamo Stories TikTok"]);
+    const places = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button.st-s-place"));
+    expect(places.map((p) => p.querySelector(".st-s-place__name")?.textContent)).toEqual(["Lamo Stories Channel", "Lamo Stories TikTok"]);
     expect(places.every((p) => p.getAttribute("aria-pressed") === "false")).toBe(true);
     expect(control(/Post it|Post to/, dialog).getAttribute("aria-disabled")).toBe("true");
-    const off = Array.from(dialog.querySelectorAll(".st-place--off"));
-    expect(off.map((o) => o.querySelector(".st-place__platform")?.textContent)).toEqual(["Instagram", "Facebook", "X"]);
+    const off = Array.from(dialog.querySelectorAll(".st-s-place--off"));
+    expect(off.map((o) => o.querySelector(".st-s-place__platform")?.textContent)).toEqual(["Instagram", "Facebook", "X"]);
     expect(off.every((o) => o.querySelector('a[href="/stories/connections"]'))).toBe(true);
   });
 
@@ -621,7 +621,7 @@ describe("Post it", () => {
     });
     retry.mockRejectedValueOnce(new ApiError(409, "conflict", "Lamo Stories' YouTube is now Lamo Stories Channel. Check it, then tap Try again."));
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
-    expect(document.querySelector(".st-post__why")?.textContent).toContain("needs connecting again");
+    expect(document.querySelector(".st-s-post__why")?.textContent).toContain("needs connecting again");
     await click(control("Try again", document.querySelector(".st-postspanel")!));
     expect(retry).toHaveBeenCalledWith("stories", "pj-old", undefined);
     const dialog = document.querySelector('[role="dialog"]')!;
@@ -629,7 +629,7 @@ describe("Post it", () => {
     expect(dialog.textContent).toContain("ext-youtube");
     await click(control(/Yes, post to/, dialog));
     expect(retry).toHaveBeenLastCalledWith("stories", "pj-old", { confirmAccount: "ext-youtube" });
-    expect(document.querySelector(".st-post")?.textContent).toContain("Waiting");
+    expect(document.querySelector(".st-s-post")?.textContent).toContain("Waiting");
   });
 
   it("a post that goes up while watching is celebrated", async () => {
@@ -639,14 +639,14 @@ describe("Post it", () => {
     pubs[0]!.url = "https://youtube.com/shorts/x";
     await wait(10_500);
     expect(text()).toContain("Posted to YouTube!");
-    expect(document.querySelector(".st-post a")?.getAttribute("href")).toBe("https://youtube.com/shorts/x");
+    expect(document.querySelector(".st-s-post a")?.getAttribute("href")).toBe("https://youtube.com/shorts/x");
   });
 
   it("the sheet alone: no account connected means no post, only the way to Connections", async () => {
     for (const a of store.social) a.connectionStatus = "not_connected";
     const story = store.stories.find((s) => s.storyId === S.approved)!;
     await show(<PublishSheet ws="stories" story={story} config={{}} jobs={[]} onSent={() => undefined} onRetry={() => undefined} onClose={() => undefined} />);
-    expect(document.querySelectorAll("button.st-place")).toHaveLength(0);
+    expect(document.querySelectorAll("button.st-s-place")).toHaveLength(0);
     expect(text()).toContain("No Lamo Stories account is connected yet.");
     expect(control("Post it").getAttribute("aria-disabled")).toBe("true");
   });

@@ -118,12 +118,12 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
 
   return (
     <section className="st-page st-studio">
-      <header className="st-head">
+      <header className="st-s-head">
         <div>
-          <h1 className="st-head__title">Ideas</h1>
-          <p className="st-head__lede">Keep ideas for videos here. Make one into a video when you are ready.</p>
+          <h1 className="st-s-head__title">Ideas</h1>
+          <p className="st-s-head__lede">Keep ideas for videos here. Make one into a video when you are ready.</p>
         </div>
-        <div className="st-head__actions">
+        <div className="st-s-head__actions">
           <button type="button" className="st-btn" aria-expanded={open === "ask"} onClick={() => setOpen((o) => (o === "ask" ? "none" : "ask"))}>
             Ask for ideas
           </button>
@@ -141,7 +141,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
             put(idea);
             setOpen("none");
             setFilter("all");
-            celebrate(document.querySelector(".st-head__actions"), 80);
+            celebrate(document.querySelector(".st-s-head__actions"), 80);
             toast.success(`Saved “${idea.title}”.`);
           }}
         />
@@ -149,22 +149,22 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
       {open === "ask" ? <AskForIdeas ws={ws} onCancel={() => setOpen("none")} onDrafts={(list, from) => showDrafts({ from, drafts: list.map((input) => ({ input, saved: false, saving: false })) })} /> : null}
 
       {drafts ? (
-        <section className="st-drafts" ref={draftsRef} aria-labelledby="st-drafts-title">
-          <div className="st-drafts__head">
-            <h2 className="st-drafts__title" id="st-drafts-title">
+        <section className="st-s-drafts" ref={draftsRef} aria-labelledby="st-drafts-title">
+          <div className="st-s-drafts__head">
+            <h2 className="st-s-drafts__title" id="st-drafts-title">
               {drafts.from}
             </h2>
-            <button type="button" className="st-btn st-btn--quiet" onClick={() => setDrafts(null)}>
+            <button type="button" className="st-btn st-s-quiet" onClick={() => setDrafts(null)}>
               Done
             </button>
           </div>
-          <p className="st-drafts__lede">Nothing is kept until you tap Save.</p>
-          <ul className="st-drafts__list">
+          <p className="st-s-drafts__lede">Nothing is kept until you tap Save.</p>
+          <ul className="st-s-drafts__list">
             {drafts.drafts.map((d, k) => (
-              <li key={k} className={`st-draft${d.saved ? " is-saved" : ""}`} data-draft={k}>
+              <li key={k} className={`st-s-draft${d.saved ? " is-saved" : ""}`} data-draft={k}>
                 <Tag tone={CATEGORY_TONE[d.input.category]}>{CATEGORY_LABEL[d.input.category]}</Tag>
-                <h3 className="st-draft__title">{d.input.title}</h3>
-                <p className="st-draft__line">{d.input.logline}</p>
+                <h3 className="st-s-draft__title">{d.input.title}</h3>
+                <p className="st-s-draft__line">{d.input.logline}</p>
                 <button type="button" className={`st-btn${d.saved ? "" : " st-btn--main"}`} aria-disabled={d.saved || d.saving || undefined} onClick={() => void saveDraft(k)}>
                   {d.saved ? "✓ Saved" : d.saving ? "Saving…" : "Save"}
                 </button>
@@ -184,7 +184,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
           { value: "saved", label: `Saved (${counts.saved})` },
           { value: "used", label: `Made into videos (${counts.used})` },
         ]}
-        className="st-filter"
+        className="st-s-filter"
       />
 
       {ideas.error && !ideas.data ? (
@@ -194,13 +194,13 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
       ) : !ideas.data ? (
         <Busy>Getting your ideas…</Busy>
       ) : shown.length === 0 ? (
-        <div className="st-empty">
-          <span className="st-empty__bulb" aria-hidden="true" />
-          <h2 className="st-empty__title">{filter === "all" ? "No ideas yet" : filter === "saved" ? "No saved ideas waiting" : "No ideas made into videos yet"}</h2>
-          <p className="st-empty__text">Tap New idea to type one, or Ask for ideas to get a few to pick from.</p>
+        <div className="st-s-empty">
+          <span className="st-s-empty__bulb" aria-hidden="true" />
+          <h2 className="st-s-empty__title">{filter === "all" ? "No ideas yet" : filter === "saved" ? "No saved ideas waiting" : "No ideas made into videos yet"}</h2>
+          <p className="st-s-empty__text">Tap New idea to type one, or Ask for ideas to get a few to pick from.</p>
         </div>
       ) : (
-        <ul className="st-board">
+        <ul className="st-s-board">
           {shown.map((idea) => (
             <IdeaCard
               key={idea.ideaId}
@@ -244,20 +244,20 @@ function NewIdeaForm({ onSave, onCancel }: { onSave: (i: IdeaInput) => Promise<v
 
   return (
     <form
-      className="st-panel"
+      className="st-s-panel"
       aria-label="New idea"
       onSubmit={(e) => {
         e.preventDefault();
         void save();
       }}
     >
-      <h2 className="st-panel__title">New idea</h2>
+      <h2 className="st-s-panel__title">New idea</h2>
       <TextField label="Title" value={title} onChange={setTitle} max={80} placeholder="For example: Pip and the icy hill" />
       <TextField label="What happens, in one line" value={logline} onChange={setLogline} max={280} multiline rows={2} placeholder="For example: Pip's car slides on ice and Pip stays calm." />
       <Pick label="What kind of video?" big value={category} options={KIND_OPTIONS} onChange={setCategory} />
-      {category === "driving_safety" ? <p className="st-field__hint">Driving-safety videos only use checked advice from road authorities.</p> : null}
+      {category === "driving_safety" ? <p className="st-s-field__hint">Driving-safety videos only use checked advice from road authorities.</p> : null}
       {problem ? <Notice tone="bad">{problem}</Notice> : null}
-      <div className="st-actionbar">
+      <div className="st-s-actionbar">
         <button type="button" className="st-btn" onClick={onCancel}>
           Cancel
         </button>
@@ -295,19 +295,19 @@ function AskForIdeas({ ws, onDrafts, onCancel }: { ws: string; onDrafts: (d: Ide
 
   return (
     <form
-      className="st-panel"
+      className="st-s-panel"
       aria-label="Ask for ideas"
       onSubmit={(e) => {
         e.preventDefault();
         if (!busy) void ask();
       }}
     >
-      <h2 className="st-panel__title">Ask for ideas</h2>
+      <h2 className="st-s-panel__title">Ask for ideas</h2>
       <TextField label="What about? (you can leave this empty)" value={topic} onChange={setTopic} max={200} placeholder="For example: a snowy day" />
       <Pick label="What kind?" big value={kind} options={[{ value: "any", label: "Any kind", line: "A mix of everything" }, ...KIND_OPTIONS]} onChange={setKind} />
       {problem ? <Notice tone="bad">{problem}</Notice> : null}
       {busy ? <Busy>Thinking of ideas…</Busy> : null}
-      <div className="st-actionbar">
+      <div className="st-s-actionbar">
         <button type="button" className="st-btn" onClick={onCancel}>
           Cancel
         </button>
@@ -372,21 +372,21 @@ function IdeaCard({
 
   const c = idea.concept;
   return (
-    <li className={`st-idea st-idea--${idea.category}`}>
-      <span className="st-idea__tags">
+    <li className={`st-s-idea st-s-idea--${idea.category}`}>
+      <span className="st-s-idea__tags">
         <Tag tone={CATEGORY_TONE[idea.category]}>{CATEGORY_LABEL[idea.category]}</Tag>
         {idea.status === "used" ? <Tag tone="mint">In {idea.storyIds.length === 1 ? "1 video" : `${idea.storyIds.length} videos`}</Tag> : <Tag>Saved</Tag>}
         {blocked ? <Tag tone="coral">Needs checked advice</Tag> : null}
       </span>
-      <h2 className="st-idea__title">{idea.title}</h2>
-      <p className="st-idea__line">{idea.logline}</p>
-      {advice ? <p className="st-idea__advice">{advice}</p> : null}
-      {blocked ? <p className="st-idea__advice is-bad">{NO_GUIDANCE}</p> : null}
+      <h2 className="st-s-idea__title">{idea.title}</h2>
+      <p className="st-s-idea__line">{idea.logline}</p>
+      {advice ? <p className="st-s-idea__advice">{advice}</p> : null}
+      {blocked ? <p className="st-s-idea__advice is-bad">{NO_GUIDANCE}</p> : null}
 
       {c && showConcept ? (
-        <div className="st-concept" aria-label={`The full idea for ${idea.title}`}>
-          <p className="st-concept__premise">{c.premise}</p>
-          <ol className="st-concept__beats">
+        <div className="st-s-concept" aria-label={`The full idea for ${idea.title}`}>
+          <p className="st-s-concept__premise">{c.premise}</p>
+          <ol className="st-s-concept__beats">
             {c.beats.map((b, i) => (
               <li key={i}>{b}</li>
             ))}
@@ -399,7 +399,7 @@ function IdeaCard({
           <p>
             <strong>The ending:</strong> {c.ending}
           </p>
-          <p className="st-concept__meta">
+          <p className="st-s-concept__meta">
             <Tag tone="sky">{TONE_LABEL[c.tone]}</Tag>
             <Tag>{seconds(c.durationSec)}</Tag>
           </p>
@@ -414,7 +414,7 @@ function IdeaCard({
       {problem ? <Notice tone="bad">{problem}</Notice> : null}
       {busy === "expand" ? <Busy>Writing the full idea…</Busy> : busy === "more" ? <Busy>Thinking of more…</Busy> : null}
 
-      <span className="st-idea__actions">
+      <span className="st-s-idea__actions">
         <button
           type="button"
           className="st-btn st-btn--main"
@@ -443,7 +443,7 @@ function IdeaCard({
         <button type="button" className="st-btn" aria-disabled={busy !== "none" || undefined} onClick={() => void more()}>
           More like this
         </button>
-        <button type="button" className="st-btn st-btn--quiet" onClick={onDelete}>
+        <button type="button" className="st-btn st-s-quiet" onClick={onDelete}>
           Delete
         </button>
       </span>

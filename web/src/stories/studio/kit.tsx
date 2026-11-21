@@ -41,19 +41,19 @@ export function Pick<T extends string>({
 }) {
   const name = useId();
   return (
-    <div className={`st-field${className ? ` ${className}` : ""}`}>
-      <span className={hideLabel ? "st-sr" : "st-field__label"} id={`${name}-l`}>
+    <div className={`st-s-field${className ? ` ${className}` : ""}`}>
+      <span className={hideLabel ? "st-s-sr" : "st-s-field__label"} id={`${name}-l`}>
         {label}
       </span>
-      <div className={`st-pick${big ? " st-pick--big" : ""}`} role="radiogroup" aria-labelledby={`${name}-l`}>
-        <Glide active=".st-pick__opt.is-on" />
+      <div className={`st-s-pick${big ? " st-s-pick--big" : ""}`} role="radiogroup" aria-labelledby={`${name}-l`}>
+        <Glide active=".st-s-pick__opt.is-on" />
         {options.map((o) => (
-          <label key={o.value} className={`st-pick__opt${o.value === value ? " is-on" : ""}`}>
-            <input type="radio" className="st-sr" name={name} value={o.value} checked={o.value === value} onChange={() => onChange(o.value)} />
+          <label key={o.value} className={`st-s-pick__opt${o.value === value ? " is-on" : ""}`}>
+            <input type="radio" className="st-s-sr" name={name} value={o.value} checked={o.value === value} onChange={() => onChange(o.value)} />
             {o.art ? <span className="st-pick__art">{o.art}</span> : null}
-            <span className="st-pick__text">
-              <span className="st-pick__label">{o.label}</span>
-              {o.line ? <span className="st-pick__line">{o.line}</span> : null}
+            <span className="st-s-pick__text">
+              <span className="st-s-pick__label">{o.label}</span>
+              {o.line ? <span className="st-s-pick__line">{o.line}</span> : null}
             </span>
           </label>
         ))}
@@ -76,17 +76,17 @@ export function Swatches({
 }) {
   const name = useId();
   return (
-    <div className="st-field">
-      <span className="st-field__label" id={`${name}-l`}>
+    <div className="st-s-field">
+      <span className="st-s-field__label" id={`${name}-l`}>
         {label}
       </span>
-      <div className="st-swatches" role="radiogroup" aria-labelledby={`${name}-l`}>
-        <Glide active=".st-swatch.is-on" />
+      <div className="st-s-swatches" role="radiogroup" aria-labelledby={`${name}-l`}>
+        <Glide active=".st-s-swatch.is-on" />
         {colors.map((c) => (
-          <label key={c.hex} className={`st-swatch${c.hex.toLowerCase() === value.toLowerCase() ? " is-on" : ""}`} title={c.name}>
-            <input type="radio" className="st-sr" name={name} value={c.hex} checked={c.hex.toLowerCase() === value.toLowerCase()} onChange={() => onChange(c.hex)} />
-            <span className="st-swatch__dot" style={{ background: c.hex }} aria-hidden="true" />
-            <span className="st-sr">{c.name}</span>
+          <label key={c.hex} className={`st-s-swatch${c.hex.toLowerCase() === value.toLowerCase() ? " is-on" : ""}`} title={c.name}>
+            <input type="radio" className="st-s-sr" name={name} value={c.hex} checked={c.hex.toLowerCase() === value.toLowerCase()} onChange={() => onChange(c.hex)} />
+            <span className="st-s-swatch__dot" style={{ background: c.hex }} aria-hidden="true" />
+            <span className="st-s-sr">{c.name}</span>
           </label>
         ))}
       </div>
@@ -124,14 +124,14 @@ export function TextField({
   const near = value.length >= max * 0.8;
   const describedBy = [problem || over ? `${id}-p` : "", hint ? `${id}-h` : "", near ? `${id}-c` : ""].filter(Boolean).join(" ") || undefined;
   return (
-    <div className={`st-field${problem || over ? " is-bad" : ""}`}>
-      <label className="st-field__label" htmlFor={id}>
+    <div className={`st-s-field${problem || over ? " is-bad" : ""}`}>
+      <label className="st-s-field__label" htmlFor={id}>
         {label}
       </label>
       {multiline ? (
         <textarea
           id={id}
-          className="st-input st-input--area"
+          className="st-s-input st-s-input--area"
           rows={rows}
           value={value}
           placeholder={placeholder}
@@ -142,7 +142,7 @@ export function TextField({
       ) : (
         <input
           id={id}
-          className="st-input"
+          className="st-s-input"
           value={value}
           placeholder={placeholder}
           aria-invalid={over || !!problem || undefined}
@@ -151,17 +151,17 @@ export function TextField({
         />
       )}
       {hint ? (
-        <span className="st-field__hint" id={`${id}-h`}>
+        <span className="st-s-field__hint" id={`${id}-h`}>
           {hint}
         </span>
       ) : null}
       {near ? (
-        <span className={`st-field__count${over ? " is-over" : ""}`} id={`${id}-c`}>
+        <span className={`st-s-field__count${over ? " is-over" : ""}`} id={`${id}-c`}>
           {value.length} / {max}
         </span>
       ) : null}
       {problem || over ? (
-        <span className="st-field__problem" id={`${id}-p`} role="alert">
+        <span className="st-s-field__problem" id={`${id}-p`} role="alert">
           {problem ?? `That is ${value.length - max} letters too long.`}
         </span>
       ) : null}
@@ -185,13 +185,13 @@ export function Switch({
 }) {
   const id = useId();
   return (
-    <div className="st-switch-row">
-      <span className="st-switch-row__text">
-        <span className="st-switch-row__label" id={`${id}-l`}>
+    <div className="st-s-switch-row">
+      <span className="st-s-switch-row__text">
+        <span className="st-s-switch-row__label" id={`${id}-l`}>
           {label}
         </span>
         {line ? (
-          <span className="st-switch-row__line" id={`${id}-d`}>
+          <span className="st-s-switch-row__line" id={`${id}-d`}>
             {line}
           </span>
         ) : null}
@@ -199,7 +199,7 @@ export function Switch({
       <button
         type="button"
         role="switch"
-        className="st-switch"
+        className="st-s-switch"
         aria-checked={checked}
         aria-labelledby={`${id}-l`}
         aria-describedby={line ? `${id}-d` : undefined}
@@ -208,7 +208,7 @@ export function Switch({
           if (!disabled) onChange(!checked);
         }}
       >
-        <span className="st-switch__thumb" />
+        <span className="st-s-switch__thumb" />
       </button>
     </div>
   );
@@ -239,23 +239,23 @@ export function Slider({
   const id = useId();
   const pct = (n: number) => ((n - min) / (max - min)) * 100;
   return (
-    <div className="st-field st-slider">
-      <span className="st-slider__top">
-        <label className="st-field__label" htmlFor={id}>
+    <div className="st-s-field st-slider">
+      <span className="st-s-slider__top">
+        <label className="st-s-field__label" htmlFor={id}>
           {label}
         </label>
-        <output className="st-slider__value" htmlFor={id}>
+        <output className="st-s-slider__value" htmlFor={id}>
           {words}
         </output>
       </span>
-      <span className="st-slider__track">
+      <span className="st-s-slider__track">
         {marks ? (
-          <span className="st-slider__mark" style={{ left: `${pct(marks.from)}%`, width: `${pct(marks.to) - pct(marks.from)}%` }} aria-hidden="true" />
+          <span className="st-s-slider__mark" style={{ left: `${pct(marks.from)}%`, width: `${pct(marks.to) - pct(marks.from)}%` }} aria-hidden="true" />
         ) : null}
         <input
           id={id}
           type="range"
-          className="st-range"
+          className="st-s-range"
           min={min}
           max={max}
           step={step}
@@ -266,7 +266,7 @@ export function Slider({
         />
       </span>
       {marks ? (
-        <span className="st-field__hint" id={`${id}-m`}>
+        <span className="st-s-field__hint" id={`${id}-m`}>
           {marks.label}
         </span>
       ) : null}
@@ -292,7 +292,7 @@ export function Chip({
   return (
     <button
       type="button"
-      className={`st-chipbtn${on ? " is-on" : ""}`}
+      className={`st-s-chipbtn${on ? " is-on" : ""}`}
       aria-pressed={on}
       aria-disabled={locked || undefined}
       title={locked ? lockedWhy : undefined}
@@ -300,7 +300,7 @@ export function Chip({
         if (!locked) onToggle();
       }}
     >
-      <span className="st-chipbtn__tick" aria-hidden="true">
+      <span className="st-s-chipbtn__tick" aria-hidden="true">
         {on ? "✓" : "+"}
       </span>
       {children}
@@ -310,15 +310,15 @@ export function Chip({
 
 /** A small coloured status word. */
 export function Tag({ tone = "plain", children }: { tone?: "sun" | "coral" | "mint" | "sky" | "plain"; children: ReactNode }) {
-  return <span className={`st-tag st-tag--${tone}`}>{children}</span>;
+  return <span className={`st-s-tag st-s-tag--${tone}`}>{children}</span>;
 }
 
 /** The eased progress bar (fast in the middle, slow at the start and the end). */
 export function ProgressBar({ value, label }: { value: number; label: string }) {
   const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
   return (
-    <span className="st-progress" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
-      <span className="st-progress__fill" style={{ width: `${pct}%` }} />
+    <span className="st-s-progress" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+      <span className="st-s-progress__fill" style={{ width: `${pct}%` }} />
     </span>
   );
 }
@@ -326,8 +326,8 @@ export function ProgressBar({ value, label }: { value: number; label: string }) 
 /** A turning circle for a short wait, with its words. */
 export function Busy({ children }: { children: ReactNode }) {
   return (
-    <p className="st-busy" role="status">
-      <span className="st-busy__dot" aria-hidden="true" />
+    <p className="st-s-busy" role="status">
+      <span className="st-s-busy__dot" aria-hidden="true" />
       {children}
     </p>
   );
@@ -336,9 +336,9 @@ export function Busy({ children }: { children: ReactNode }) {
 /** A plain message: bad news is read out at once. */
 export function Notice({ tone = "info", children, action }: { tone?: "info" | "bad" | "good"; children: ReactNode; action?: ReactNode }) {
   return (
-    <div className={`st-notice st-notice--${tone}`} role={tone === "bad" ? "alert" : "status"}>
-      <div className="st-notice__text">{children}</div>
-      {action ? <div className="st-notice__action">{action}</div> : null}
+    <div className={`st-s-notice st-s-notice--${tone}`} role={tone === "bad" ? "alert" : "status"}>
+      <div className="st-s-notice__text">{children}</div>
+      {action ? <div className="st-s-notice__action">{action}</div> : null}
     </div>
   );
 }
@@ -388,26 +388,26 @@ export function StSheet({
   }
 
   return createPortal(
-    <div className="st-scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="st-s-scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
         ref={box}
-        className={`st-sheet${wide ? " st-sheet--wide" : ""}`}
+        className={`st-s-sheet${wide ? " st-s-sheet--wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-t`}
         tabIndex={-1}
         onKeyDown={keys}
       >
-        <header className="st-sheet__head">
-          <h2 className="st-sheet__title" id={`${id}-t`}>
+        <header className="st-s-sheet__head">
+          <h2 className="st-s-sheet__title" id={`${id}-t`}>
             {title}
           </h2>
-          <button type="button" className="st-iconbtn" aria-label="Close" onClick={onClose}>
+          <button type="button" className="st-s-iconbtn" aria-label="Close" onClick={onClose}>
             <span aria-hidden="true">×</span>
           </button>
         </header>
-        <div className="st-sheet__body">{children}</div>
-        {actions ? <footer className="st-sheet__actions">{actions}</footer> : null}
+        <div className="st-s-sheet__body">{children}</div>
+        {actions ? <footer className="st-s-sheet__actions">{actions}</footer> : null}
       </div>
     </div>,
     sheetHost(),

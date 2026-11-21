@@ -6,7 +6,7 @@ import { StoryPreview } from "../preview/StoryPreview.tsx";
 export function Player({ story, script, width }: { story: Story; script: StoryScript | null; width: number }) {
   const height = Math.round((width * 16) / 9);
   return (
-    <div className="st-player" style={{ width }}>
+    <div className="st-s-player" style={{ width }}>
       {story.videoUrl ? (
         <video
           className="st-player__video"
@@ -22,11 +22,11 @@ export function Player({ story, script, width }: { story: Story; script: StorySc
       ) : script ? (
         <StoryPreview script={script} width={width} playing label={`Video: ${story.title}, drawn live`} />
       ) : (
-        <div className="st-player__empty" style={{ width, height }}>
+        <div className="st-s-player__empty" style={{ width, height }}>
           <span>The video isn&apos;t ready yet.</span>
         </div>
       )}
-      <p className="st-player__note">{story.videoUrl ? "The finished video" : script ? "Drawn live by Lamo Stories" : ""}</p>
+      <p className="st-s-player__note">{story.videoUrl ? "The finished video" : script ? "Drawn live by Lamo Stories" : ""}</p>
     </div>
   );
 }

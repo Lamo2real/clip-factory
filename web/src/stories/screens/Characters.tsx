@@ -29,10 +29,10 @@ export function CharactersScreen({ ws, page }: StoriesScreenProps) {
 /** A character-shaped empty state: a friendly figure waiting to be made. */
 export function EmptyCast({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="st-empty">
+    <div className="st-s-empty">
       <CharacterPreview look={{ ...DEFAULT_LOOK, outfit: { ...DEFAULT_LOOK.outfit, top: "#62c6ff" } }} movementStyle="bouncy" expression="happy" action="wave" size={140} label="A friendly character waving" />
-      <h2 className="st-empty__title">{title}</h2>
-      <p className="st-empty__text">{children}</p>
+      <h2 className="st-s-empty__title">{title}</h2>
+      <p className="st-s-empty__text">{children}</p>
       {action}
     </div>
   );
@@ -42,10 +42,10 @@ function Gallery({ ws }: { ws: string }) {
   const list = useLoad(() => storiesApi().listCharacters(ws), ws, "st-characters");
   return (
     <section className="st-page st-studio">
-      <header className="st-head">
+      <header className="st-s-head">
         <div>
-          <h1 className="st-head__title">Characters</h1>
-          <p className="st-head__lede">Your cast. Each one looks and moves the same in every video.</p>
+          <h1 className="st-s-head__title">Characters</h1>
+          <p className="st-s-head__lede">Your cast. Each one looks and moves the same in every video.</p>
         </div>
         <A href={storiesHref({ name: "character_new" })} className="st-btn st-btn--main">
           New character
@@ -62,14 +62,14 @@ function Gallery({ ws }: { ws: string }) {
           Make a character once, and use it in all your videos.
         </EmptyCast>
       ) : (
-        <ul className="st-cast">
+        <ul className="st-s-cast">
           {list.data.map((c) => (
             <li key={c.characterId}>
-              <A href={storiesHref({ name: "character", characterId: c.characterId })} className="st-cast__card">
+              <A href={storiesHref({ name: "character", characterId: c.characterId })} className="st-s-cast__card">
                 <CharacterPreview look={c.look} movementStyle={c.movementStyle} action="idle" expression="happy" size={132} label={`${c.name}, moving`} />
-                <span className="st-cast__name">{c.name}</span>
-                <span className="st-cast__line">{c.personality || MOVE_LINE[c.movementStyle]}</span>
-                <span className="st-cast__tags">
+                <span className="st-s-cast__name">{c.name}</span>
+                <span className="st-s-cast__line">{c.personality || MOVE_LINE[c.movementStyle]}</span>
+                <span className="st-s-cast__tags">
                   <Tag tone="sky">{CATALOG.movementStyles.find((m) => m.id === c.movementStyle)?.label ?? c.movementStyle}</Tag>
                   <Tag>In {count(c.storyCount, "video")}</Tag>
                 </span>
@@ -92,7 +92,7 @@ function NewCharacter({ ws }: { ws: string }) {
     setProblem(null);
     try {
       const made = await storiesApi().createCharacter(ws, c);
-      celebrate(document.querySelector(".st-editor__preview"), 130);
+      celebrate(document.querySelector(".st-s-editor__preview"), 130);
       toast.success(`Say hi to ${made.name}!`);
       navigate(storiesHref({ name: "character", characterId: made.characterId }), { replace: true });
     } catch (e) {
@@ -103,13 +103,13 @@ function NewCharacter({ ws }: { ws: string }) {
 
   return (
     <section className="st-page st-studio">
-      <header className="st-head">
+      <header className="st-s-head">
         <div>
-          <A href={storiesHref({ name: "characters" })} className="st-back">
+          <A href={storiesHref({ name: "characters" })} className="st-s-back">
             ‹ Characters
           </A>
-          <h1 className="st-head__title">New character</h1>
-          <p className="st-head__lede">Pick how they look, their faces, how they move and their sounds. Then give them a name.</p>
+          <h1 className="st-s-head__title">New character</h1>
+          <p className="st-s-head__lede">Pick how they look, their faces, how they move and their sounds. Then give them a name.</p>
         </div>
       </header>
       <CharacterEditor initial={newCharacter()} mode="new" saving={saving} onSave={(c) => void save(c)} serverProblem={problem ? <Notice tone="bad">{problem}</Notice> : null} />
@@ -141,7 +141,7 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
     try {
       const next = await storiesApi().putCharacter(ws, characterId, { ...input, version: c.version });
       replace(next);
-      celebrate(document.querySelector(".st-editor__preview"), 90);
+      celebrate(document.querySelector(".st-s-editor__preview"), 90);
       toast.success(`${next.name} is saved.`);
     } catch (e) {
       if (isConflict(e) && !/already have/i.test(say(e))) setStale(true);
@@ -189,17 +189,17 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
 
   return (
     <section className="st-page st-studio">
-      <header className="st-head">
+      <header className="st-s-head">
         <div>
-          <A href={storiesHref({ name: "characters" })} className="st-back">
+          <A href={storiesHref({ name: "characters" })} className="st-s-back">
             ‹ Characters
           </A>
-          <h1 className="st-head__title">{c.name}</h1>
-          <p className="st-head__lede">
+          <h1 className="st-s-head__title">{c.name}</h1>
+          <p className="st-s-head__lede">
             In {count(c.storyCount, "video")}. Changes show in new videos and in a Remake the whole video, never in one already made.
           </p>
         </div>
-        <button type="button" className="st-btn st-btn--quiet" onClick={() => setAsking(true)}>
+        <button type="button" className="st-btn st-s-quiet" onClick={() => setAsking(true)}>
           Delete
         </button>
       </header>
@@ -241,7 +241,7 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
               <button type="button" className="st-btn" onClick={() => setAsking(false)}>
                 Keep {c.name}
               </button>
-              <button type="button" className="st-btn st-btn--danger" aria-disabled={deleting || undefined} onClick={() => !deleting && void remove()}>
+              <button type="button" className="st-btn st-s-danger" aria-disabled={deleting || undefined} onClick={() => !deleting && void remove()}>
                 {deleting ? "Deleting…" : "Delete"}
               </button>
             </>

@@ -66,10 +66,10 @@ function ProductionList({ ws }: { ws: string }) {
 
   return (
     <section className="st-page st-studio">
-      <header className="st-head">
+      <header className="st-s-head">
         <div>
-          <h1 className="st-head__title">Production</h1>
-          <p className="st-head__lede">Every video being made, and every video made. Each one goes through eight steps.</p>
+          <h1 className="st-s-head__title">Production</h1>
+          <p className="st-s-head__lede">Every video being made, and every video made. Each one goes through eight steps.</p>
         </div>
         <A href={storiesHref({ name: "production_new", ideaId: null })} className="st-btn st-btn--main">
           Make a new video
@@ -82,10 +82,10 @@ function ProductionList({ ws }: { ws: string }) {
       ) : !list.data ? (
         <Busy>Getting your videos…</Busy>
       ) : list.data.stories.length === 0 ? (
-        <div className="st-empty">
-          <span className="st-empty__film" aria-hidden="true" />
-          <h2 className="st-empty__title">No videos yet</h2>
-          <p className="st-empty__text">Pick an idea and a character, and Lamo Stories makes the whole video.</p>
+        <div className="st-s-empty">
+          <span className="st-s-empty__film" aria-hidden="true" />
+          <h2 className="st-s-empty__title">No videos yet</h2>
+          <p className="st-s-empty__text">Pick an idea and a character, and Lamo Stories makes the whole video.</p>
           <A href={storiesHref({ name: "production_new", ideaId: null })} className="st-btn st-btn--main">
             Make your first video
           </A>
@@ -94,8 +94,8 @@ function ProductionList({ ws }: { ws: string }) {
         <>
           {making.length ? (
             <>
-              <h2 className="st-section">Being made</h2>
-              <ul className="st-runs">
+              <h2 className="st-s-section">Being made</h2>
+              <ul className="st-s-runs">
                 {making.map((s) => (
                   <RunRow key={s.storyId} story={s} job={list.data!.jobs[s.storyId] ?? null} />
                 ))}
@@ -104,8 +104,8 @@ function ProductionList({ ws }: { ws: string }) {
           ) : null}
           {made.length ? (
             <>
-              <h2 className="st-section">Made</h2>
-              <ul className="st-runs">
+              <h2 className="st-s-section">Made</h2>
+              <ul className="st-s-runs">
                 {made.map((s) => (
                   <RunRow key={s.storyId} story={s} job={list.data!.jobs[s.storyId] ?? null} />
                 ))}
@@ -122,23 +122,23 @@ function RunRow({ story, job }: { story: Story; job: ProductionJob | null }) {
   const href = storiesHref({ name: "production_story", storyId: story.storyId });
   const watch = ["review", "needs_check", "approved", "published"].includes(story.status);
   return (
-    <li className="st-run">
-      <A href={href} className="st-run__cover" aria-label={`Open ${story.title}`}>
-        {story.coverUrl ? <img src={story.coverUrl} alt="" width={54} height={96} /> : <span className="st-run__blank" aria-hidden="true" />}
+    <li className="st-s-run">
+      <A href={href} className="st-s-run__cover" aria-label={`Open ${story.title}`}>
+        {story.coverUrl ? <img src={story.coverUrl} alt="" width={54} height={96} /> : <span className="st-s-run__blank" aria-hidden="true" />}
       </A>
-      <span className="st-run__body">
-        <span className="st-run__top">
-          <A href={href} className="st-run__title">
+      <span className="st-s-run__body">
+        <span className="st-s-run__top">
+          <A href={href} className="st-s-run__title">
             {story.title}
           </A>
           <Tag tone={STATUS_TONE[story.status]}>{STATUS_LABEL[story.status]}</Tag>
         </span>
-        <span className="st-run__meta">
+        <span className="st-s-run__meta">
           {CATEGORY_LABEL[story.category]} · {seconds(story.actualDurationSec ?? story.durationSec)} · {ago(story.updatedAt)}
         </span>
         <StepTrack job={isLive(job) || story.status === "failed" ? job : null} story={story} compact label={`Making ${story.title}`} />
       </span>
-      <span className="st-run__go">
+      <span className="st-s-run__go">
         {watch ? (
           <A href={storiesHref({ name: "review_story", storyId: story.storyId })} className="st-btn">
             Watch it
@@ -266,22 +266,22 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
   const blockedCount = ideas.filter(blockedIdea).length;
   return (
     <section className="st-page st-studio">
-      <header className="st-head">
+      <header className="st-s-head">
         <div>
-          <A href={storiesHref({ name: "production" })} className="st-back">
+          <A href={storiesHref({ name: "production" })} className="st-s-back">
             ‹ Production
           </A>
-          <h1 className="st-head__title">Make a new video</h1>
-          <p className="st-head__lede">Four quick picks, then Lamo Stories writes, draws, animates and puts it all together.</p>
+          <h1 className="st-s-head__title">Make a new video</h1>
+          <p className="st-s-head__lede">Four quick picks, then Lamo Stories writes, draws, animates and puts it all together.</p>
         </div>
       </header>
       {!data.data ? (
         <Busy>Getting your ideas and characters…</Busy>
       ) : (
-        <div className="st-newvideo">
-          <section className="st-panel" aria-labelledby="st-nv-1">
-            <h2 className="st-panel__title" id="st-nv-1">
-              <span className="st-num">1</span> The idea
+        <div className="st-s-newvideo">
+          <section className="st-s-panel" aria-labelledby="st-nv-1">
+            <h2 className="st-s-panel__title" id="st-nv-1">
+              <span className="st-s-num">1</span> The idea
             </h2>
             <Pick
               label="Where the idea comes from"
@@ -313,16 +313,16 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
                       setPicked(v);
                       setProblem(null);
                     }}
-                    className="st-ideapick"
+                    className="st-s-ideapick"
                   />
                   {blockedCount ? (
-                    <p className="st-field__hint">
+                    <p className="st-s-field__hint">
                       {blockedCount === 1 ? "1 driving-safety idea needs" : `${blockedCount} driving-safety ideas need`} checked advice first, so {blockedCount === 1 ? "it is" : "they are"} not here.
                     </p>
                   ) : null}
                 </>
               ) : (
-                <p className="st-field__hint">
+                <p className="st-s-field__hint">
                   No ideas to use yet. Tap Type my own, or save some on the <A href={storiesHref({ name: "ideas" })}>Ideas</A> page.
                 </p>
               )
@@ -335,33 +335,33 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
             )}
           </section>
 
-          <section className="st-panel" aria-labelledby="st-nv-2">
-            <h2 className="st-panel__title" id="st-nv-2">
-              <span className="st-num">2</span> The cast <span className="st-panel__hint">(1 to 3)</span>
+          <section className="st-s-panel" aria-labelledby="st-nv-2">
+            <h2 className="st-s-panel__title" id="st-nv-2">
+              <span className="st-s-num">2</span> The cast <span className="st-s-panel__hint">(1 to 3)</span>
             </h2>
             {characters.length ? (
-              <ul className="st-castpick">
+              <ul className="st-s-castpick">
                 {characters.map((c) => (
                   <CastTile key={c.characterId} c={c} on={cast.includes(c.characterId)} full={cast.length >= 3} onToggle={() => toggleCast(c.characterId)} />
                 ))}
               </ul>
             ) : (
-              <p className="st-field__hint">
+              <p className="st-s-field__hint">
                 You have no characters yet. <A href={storiesHref({ name: "character_new" })}>Make one first</A>.
               </p>
             )}
           </section>
 
-          <section className="st-panel" aria-labelledby="st-nv-3">
-            <h2 className="st-panel__title" id="st-nv-3">
-              <span className="st-num">3</span> How long
+          <section className="st-s-panel" aria-labelledby="st-nv-3">
+            <h2 className="st-s-panel__title" id="st-nv-3">
+              <span className="st-s-num">3</span> How long
             </h2>
             <Slider label="Length" min={15} max={90} step={5} value={lengthSec} onChange={setLength} words={seconds(lengthSec)} marks={{ from: 30, to: 60, label: "30 to 60 seconds works best." }} />
           </section>
 
-          <section className="st-panel" aria-labelledby="st-nv-4">
-            <h2 className="st-panel__title" id="st-nv-4">
-              <span className="st-num">4</span> Words and music
+          <section className="st-s-panel" aria-labelledby="st-nv-4">
+            <h2 className="st-s-panel__title" id="st-nv-4">
+              <span className="st-s-num">4</span> Words and music
             </h2>
             <Switch label="Captions" line="Short words on screen. No talking in Lamo Stories videos." checked={captionsOn} onChange={setCaptions} />
             <Pick label="Music" value={music} options={CATALOG.musicMoods.map((m) => ({ value: m.id, label: m.id === "none" ? "No music" : m.label }))} onChange={setMood} />
@@ -371,14 +371,14 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
             <Notice tone="bad">
               {problem}
               {noAdvice && topics?.length ? (
-                <span className="st-topics">
+                <span className="st-s-topics">
                   Checked advice covers: {topics.map((t) => t.title).join(" · ")}.
                 </span>
               ) : null}
             </Notice>
           ) : null}
-          <div className="st-actionbar st-actionbar--pin">
-            <button type="button" className="st-btn st-btn--main st-btn--big st-make" aria-disabled={busy || undefined} onClick={() => !busy && void make()}>
+          <div className="st-s-actionbar st-s-actionbar--pin">
+            <button type="button" className="st-btn st-btn--main st-s-big st-make" aria-disabled={busy || undefined} onClick={() => !busy && void make()}>
               {busy ? "Starting…" : "Make the video"}
             </button>
           </div>
@@ -394,7 +394,7 @@ function CastTile({ c, on, full, onToggle }: { c: Character; on: boolean; full: 
     <li>
       <button
         type="button"
-        className={`st-casttile${on ? " is-on" : ""}`}
+        className={`st-s-casttile${on ? " is-on" : ""}`}
         aria-pressed={on}
         aria-disabled={off || undefined}
         title={off ? "Pick up to 3 characters." : undefined}
@@ -402,7 +402,7 @@ function CastTile({ c, on, full, onToggle }: { c: Character; on: boolean; full: 
       >
         <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression={on ? "happy" : "neutral"} action={on ? "wave" : "idle"} size={88} playing={on} label={c.name} />
         <span className="st-casttile__name">{c.name}</span>
-        <span className="st-casttile__tick" aria-hidden="true">
+        <span className="st-s-casttile__tick" aria-hidden="true">
           {on ? "✓" : "+"}
         </span>
       </button>
@@ -496,17 +496,17 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
 
   return (
     <section className="st-page st-studio">
-      <header className="st-head">
+      <header className="st-s-head">
         <div>
-          <A href={storiesHref({ name: "production" })} className="st-back">
+          <A href={storiesHref({ name: "production" })} className="st-s-back">
             ‹ Production
           </A>
-          <h1 className="st-head__title">{story.title}</h1>
-          <p className="st-head__lede">
+          <h1 className="st-s-head__title">{story.title}</h1>
+          <p className="st-s-head__lede">
             <Tag tone={STATUS_TONE[story.status]}>{STATUS_LABEL[story.status]}</Tag> {CATEGORY_LABEL[story.category]} · {seconds(story.actualDurationSec ?? story.durationSec)}
           </p>
         </div>
-        <div className="st-head__actions">
+        <div className="st-s-head__actions">
           {watch ? (
             <A href={storiesHref({ name: "review_story", storyId })} className="st-btn st-btn--main">
               {story.status === "needs_check" ? "Check it in Review" : "Watch it in Review"}
@@ -515,10 +515,10 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
         </div>
       </header>
 
-      <section className="st-panel" aria-label="The steps">
+      <section className="st-s-panel" aria-label="The steps">
         <StepTrack job={job} story={story} label={`Making ${story.title}`} />
         {problem ? <Notice tone="bad">{problem}</Notice> : null}
-        <div className="st-actionbar">
+        <div className="st-s-actionbar">
           {live ? (
             <button type="button" className="st-btn" aria-disabled={busy !== "none" || undefined} onClick={() => busy === "none" && void cancel()}>
               {busy === "cancel" ? "Stopping…" : "Cancel"}
@@ -532,23 +532,23 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
         </div>
       </section>
 
-      <section className="st-panel" aria-labelledby="st-board-title">
-        <h2 className="st-panel__title" id="st-board-title">
+      <section className="st-s-panel" aria-labelledby="st-board-title">
+        <h2 className="st-s-panel__title" id="st-board-title">
           Storyboard
         </h2>
         {story.scenes.length ? (
           <>
-            <p className="st-field__hint">Tap a scene to play it. The finished pictures appear once the scenes are drawn.</p>
+            <p className="st-s-field__hint">Tap a scene to play it. The finished pictures appear once the scenes are drawn.</p>
             <Filmstrip script={script} scenes={story.scenes} />
           </>
         ) : (
-          <p className="st-field__hint">{live ? "Writing the story… the scenes show here in a moment." : "No storyboard yet."}</p>
+          <p className="st-s-field__hint">{live ? "Writing the story… the scenes show here in a moment." : "No storyboard yet."}</p>
         )}
       </section>
 
-      <details className="st-details">
-        <summary className="st-details__sum">Production details</summary>
-        <dl className="st-facts">
+      <details className="st-s-details">
+        <summary className="st-s-details__sum">Production details</summary>
+        <dl className="st-s-facts">
           {writer ? (
             <>
               <dt>Writer</dt>
@@ -583,12 +583,12 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
             </>
           ) : null}
           <dt>Saved in</dt>
-          <dd className="st-facts__mono">{story.storageLocation}</dd>
+          <dd className="st-s-facts__mono">{story.storageLocation}</dd>
         </dl>
         {jobs.data?.length ? (
           <>
-            <h3 className="st-details__title">Every run</h3>
-            <ul className="st-jobs">
+            <h3 className="st-s-details__title">Every run</h3>
+            <ul className="st-s-jobs">
               {jobs.data.map((j) => (
                 <li key={j.jobId}>
                   <Tag tone={j.status === "failed" ? "coral" : j.status === "ready" ? "mint" : j.status === "needs_check" ? "coral" : "plain"}>

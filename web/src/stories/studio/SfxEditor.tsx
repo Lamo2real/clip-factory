@@ -52,9 +52,9 @@ function Timeline({ duration, cues, onMove, label }: { duration: number; cues: S
   }
 
   return (
-    <div className="st-timeline" ref={track} role="group" aria-label={label}>
-      <span className="st-timeline__line" aria-hidden="true" />
-      <span className="st-timeline__ends" aria-hidden="true">
+    <div className="st-s-timeline" ref={track} role="group" aria-label={label}>
+      <span className="st-s-timeline__line" aria-hidden="true" />
+      <span className="st-s-timeline__ends" aria-hidden="true">
         <span>0:00</span>
         <span>{clock(duration)}</span>
       </span>
@@ -62,7 +62,7 @@ function Timeline({ duration, cues, onMove, label }: { duration: number; cues: S
         <button
           key={c.id}
           type="button"
-          className="st-timeline__mark"
+          className="st-s-timeline__mark"
           style={{ left: `${(c.at / Math.max(0.1, duration)) * 100}%` }}
           aria-label={`${sfxLabel(c.sfx)} at ${clock(c.at)}. Drag, or use the arrow keys, to move it.`}
           onPointerDown={(e) => down(e, c.id)}
@@ -71,7 +71,7 @@ function Timeline({ duration, cues, onMove, label }: { duration: number; cues: S
           onPointerCancel={() => (dragging.current = null)}
           onKeyDown={(e) => key(e, c)}
         >
-          <span className="st-timeline__name">{sfxLabel(c.sfx)}</span>
+          <span className="st-s-timeline__name">{sfxLabel(c.sfx)}</span>
         </button>
       ))}
     </div>
@@ -107,47 +107,47 @@ export function SfxEditor({ story, script, saving, onSave }: { story: Story; scr
   }
 
   return (
-    <div className="st-editor-box">
+    <div className="st-s-editor-box">
       <Pick label="Music" value={mood} options={CATALOG.musicMoods.map((m) => ({ value: m.id, label: m.id === "none" ? "No music" : m.label }))} onChange={setMood} />
-      <ol className="st-sfx">
+      <ol className="st-s-sfx">
         {script.scenes.map((sc, i) => {
           const list = lists[sc.sceneId] ?? [];
           return (
-            <li key={sc.sceneId} className="st-sfx__scene">
-              <h3 className="st-sfx__title">
+            <li key={sc.sceneId} className="st-s-sfx__scene">
+              <h3 className="st-s-sfx__title">
                 Scene {i + 1}: {sc.title} <span>({clock(sc.durationSec)})</span>
               </h3>
               <Timeline duration={sc.durationSec} cues={list} label={`Sounds in scene ${i + 1}`} onMove={(id, at) => edit(sc.sceneId, (l) => l.map((c) => (c.id === id ? { ...c, at } : c)))} />
               {list.length ? (
-                <ul className="st-sfx__list">
+                <ul className="st-s-sfx__list">
                   {list.map((c) => (
-                    <li key={c.id} className="st-sfx__row">
-                      <span className="st-sfx__pick">
-                        <span className="st-field__label" id={`${c.id}-l`}>
+                    <li key={c.id} className="st-s-sfx__row">
+                      <span className="st-s-sfx__pick">
+                        <span className="st-s-field__label" id={`${c.id}-l`}>
                           Sound
                         </span>
                         <Dropdown labelledBy={`${c.id}-l`} value={c.sfx} options={options} placeholder="Pick a sound" onChange={(v) => edit(sc.sceneId, (l) => l.map((x) => (x.id === c.id ? { ...x, sfx: v as SfxId } : x)))} />
                       </span>
                       <Slider label="When" min={0} max={sc.durationSec} step={0.1} value={c.at} words={clock(c.at)} onChange={(at) => edit(sc.sceneId, (l) => l.map((x) => (x.id === c.id ? { ...x, at } : x)))} />
                       <Slider label="How loud" min={0} max={1} step={0.05} value={c.volume} words={`${Math.round(c.volume * 100)}%`} onChange={(volume) => edit(sc.sceneId, (l) => l.map((x) => (x.id === c.id ? { ...x, volume } : x)))} />
-                      <button type="button" className="st-btn st-btn--small st-btn--quiet" onClick={() => edit(sc.sceneId, (l) => l.filter((x) => x.id !== c.id))}>
-                        Remove<span className="st-sr"> {sfxLabel(c.sfx)}</span>
+                      <button type="button" className="st-btn st-s-small st-s-quiet" onClick={() => edit(sc.sceneId, (l) => l.filter((x) => x.id !== c.id))}>
+                        Remove<span className="st-s-sr"> {sfxLabel(c.sfx)}</span>
                       </button>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="st-field__hint">No sounds in this scene.</p>
+                <p className="st-s-field__hint">No sounds in this scene.</p>
               )}
-              <button type="button" className="st-btn st-btn--small" onClick={() => add(sc.sceneId, sc.durationSec)}>
-                Add a sound<span className="st-sr"> to scene {i + 1}</span>
+              <button type="button" className="st-btn st-s-small" onClick={() => add(sc.sceneId, sc.durationSec)}>
+                Add a sound<span className="st-s-sr"> to scene {i + 1}</span>
               </button>
             </li>
           );
         })}
       </ol>
       {problem ? <Notice tone="bad">{problem}</Notice> : null}
-      <div className="st-actionbar">
+      <div className="st-s-actionbar">
         <button type="button" className="st-btn st-btn--main" aria-disabled={!dirty || saving || undefined} onClick={() => dirty && !saving && save()}>
           {saving ? "Saving…" : dirty ? "Save sounds" : "No changes yet"}
         </button>

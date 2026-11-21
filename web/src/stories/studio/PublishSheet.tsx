@@ -209,8 +209,8 @@ export function PublishSheet({
           </button>
         }
       >
-        <p className="st-field__hint">{done ? "Your video is up. The numbers come in over the next 7 days." : "Each place shows here as it goes. You can close this: it keeps going."}</p>
-        <ul className="st-posts">
+        <p className="st-s-field__hint">{done ? "Your video is up. The numbers come in over the next 7 days." : "Each place shows here as it goes. You can close this: it keeps going."}</p>
+        <ul className="st-s-posts">
           {sent.map((j) => (
             <PostRow key={j.publishingJobId} job={j} onRetry={onRetry} />
           ))}
@@ -233,7 +233,7 @@ export function PublishSheet({
           <button type="button" className="st-btn" onClick={onClose}>
             Not now
           </button>
-          <button type="button" className="st-btn st-btn--main st-btn--big" aria-disabled={!!why || sending || undefined} title={why ?? undefined} onClick={() => void post()}>
+          <button type="button" className="st-btn st-btn--main st-s-big" aria-disabled={!!why || sending || undefined} title={why ?? undefined} onClick={() => void post()}>
             {sending ? "Sending…" : chosen.length > 1 ? `Post to ${chosen.length} places` : "Post it"}
           </button>
         </>
@@ -245,23 +245,23 @@ export function PublishSheet({
         <Busy>Getting your Lamo Stories accounts…</Busy>
       ) : (
         <>
-          <p className="st-field__hint">Only Lamo Stories&apos; own accounts are here. Tap each place to post “{story.title}” to.</p>
+          <p className="st-s-field__hint">Only Lamo Stories&apos; own accounts are here. Tap each place to post “{story.title}” to.</p>
           {connected.length ? (
-            <ul className="st-places" aria-label="Where to post">
+            <ul className="st-s-places" aria-label="Where to post">
               {connected.map((a) => {
                 const on = chosen.includes(a.platform);
                 return (
                   <li key={a.platform}>
-                    <button type="button" className={`st-place${on ? " is-on" : ""}`} aria-pressed={on} onClick={() => toggle(a.platform)}>
-                      <span className="st-place__mark">
+                    <button type="button" className={`st-s-place${on ? " is-on" : ""}`} aria-pressed={on} onClick={() => toggle(a.platform)}>
+                      <span className="st-s-place__mark">
                         <PlatformMark platform={a.platform} size={26} />
                       </span>
-                      <span className="st-place__text">
-                        <span className="st-place__platform">{PLATFORM_LABEL[a.platform]}</span>
-                        <span className="st-place__name">{a.accountName ?? "Connected account"}</span>
-                        {a.handle ? <span className="st-place__handle">{a.handle}</span> : null}
+                      <span className="st-s-place__text">
+                        <span className="st-s-place__platform">{PLATFORM_LABEL[a.platform]}</span>
+                        <span className="st-s-place__name">{a.accountName ?? "Connected account"}</span>
+                        {a.handle ? <span className="st-s-place__handle">{a.handle}</span> : null}
                       </span>
-                      <span className="st-place__tick" aria-hidden="true">
+                      <span className="st-s-place__tick" aria-hidden="true">
                         {on ? "✓" : "+"}
                       </span>
                     </button>
@@ -275,17 +275,17 @@ export function PublishSheet({
             </Notice>
           )}
           {others.length ? (
-            <ul className="st-places st-places--off" aria-label="Not ready to post">
+            <ul className="st-s-places st-places--off" aria-label="Not ready to post">
               {others.map((a) => (
-                <li key={a.platform} className="st-place st-place--off">
-                  <span className="st-place__mark">
+                <li key={a.platform} className="st-s-place st-s-place--off">
+                  <span className="st-s-place__mark">
                     <PlatformMark platform={a.platform} size={22} />
                   </span>
-                  <span className="st-place__text">
-                    <span className="st-place__platform">{PLATFORM_LABEL[a.platform]}</span>
-                    <span className="st-place__name">{accountState(a)}</span>
+                  <span className="st-s-place__text">
+                    <span className="st-s-place__platform">{PLATFORM_LABEL[a.platform]}</span>
+                    <span className="st-s-place__name">{accountState(a)}</span>
                   </span>
-                  <A href={storiesHref({ name: "connections", platform: null, result: null, ws: null })} className="st-btn st-btn--small">
+                  <A href={storiesHref({ name: "connections", platform: null, result: null, ws: null })} className="st-btn st-s-small">
                     Connect in Connections
                   </A>
                 </li>
@@ -294,7 +294,7 @@ export function PublishSheet({
           ) : null}
 
           {connected.length ? (
-            <div className="st-presets">
+            <div className="st-s-presets">
               <button type="button" className={`st-btn${mine ? "" : " st-btn--main"}`} onClick={useMine}>
                 {mine ? "✓ Using my settings" : "Use my settings"}
               </button>
@@ -303,11 +303,11 @@ export function PublishSheet({
               </button>
             </div>
           ) : null}
-          {mine ? <p className="st-field__hint">My settings: everyone can see it, comments, duets and stitches on, not made for kids.</p> : null}
+          {mine ? <p className="st-s-field__hint">My settings: everyone can see it, comments, duets and stitches on, not made for kids.</p> : null}
 
           {tiktokOn ? (
-            <fieldset className="st-group st-tiktok">
-              <legend className="st-group__title">TikTok</legend>
+            <fieldset className="st-s-group st-tiktok">
+              <legend className="st-s-group__title">TikTok</legend>
               {creatorProblem ? (
                 <Notice tone="bad" action={<button type="button" className="st-btn" onClick={() => setAsked((n) => n + 1)}>Ask TikTok again</button>}>
                   {creatorProblem}
@@ -316,11 +316,11 @@ export function PublishSheet({
                 <Busy>Asking TikTok…</Busy>
               ) : (
                 <>
-                  <p className="st-field__hint">
+                  <p className="st-s-field__hint">
                     Posting as <strong>{creator.nickname}</strong> (@{creator.username})
                   </p>
-                  <div className="st-field">
-                    <span className="st-field__label" id={`${id}-tt-who`}>
+                  <div className="st-s-field">
+                    <span className="st-s-field__label" id={`${id}-tt-who`}>
                       Who can see it
                     </span>
                     <Dropdown
@@ -333,20 +333,20 @@ export function PublishSheet({
                       })}
                       onChange={(privacy) => setTt((c) => ({ ...c, privacy }))}
                     />
-                    {onlyPrivateAllowed(creator.privacyOptions) ? <span className="st-field__hint">TikTok keeps posts private until it approves the app.</span> : null}
+                    {onlyPrivateAllowed(creator.privacyOptions) ? <span className="st-s-field__hint">TikTok keeps posts private until it approves the app.</span> : null}
                   </div>
                   <Switch label="Comments" checked={tt.comments && !creator.commentDisabled} disabled={creator.commentDisabled} line={creator.commentDisabled ? "Turned off in your TikTok settings." : undefined} onChange={(comments) => setTt((c) => ({ ...c, comments }))} />
                   <Switch label="Duet" checked={tt.duet && !creator.duetDisabled} disabled={creator.duetDisabled} line={creator.duetDisabled ? "Turned off in your TikTok settings." : undefined} onChange={(duet) => setTt((c) => ({ ...c, duet }))} />
                   <Switch label="Stitch" checked={tt.stitch && !creator.stitchDisabled} disabled={creator.stitchDisabled} line={creator.stitchDisabled ? "Turned off in your TikTok settings." : undefined} onChange={(stitch) => setTt((c) => ({ ...c, stitch }))} />
                   <Switch label="Commercial content" line="Turn on if this video promotes a brand, a product or yourself." checked={tt.commercial} onChange={(commercial) => setTt((c) => ({ ...c, commercial }))} />
                   {tt.commercial ? (
-                    <div className="st-chips" role="group" aria-label="Commercial content">
-                      <button type="button" className={`st-chipbtn${tt.yourBrand ? " is-on" : ""}`} aria-pressed={tt.yourBrand} onClick={() => setTt((c) => ({ ...c, yourBrand: !c.yourBrand }))}>
+                    <div className="st-s-chips" role="group" aria-label="Commercial content">
+                      <button type="button" className={`st-s-chipbtn${tt.yourBrand ? " is-on" : ""}`} aria-pressed={tt.yourBrand} onClick={() => setTt((c) => ({ ...c, yourBrand: !c.yourBrand }))}>
                         Your brand
                       </button>
                       <button
                         type="button"
-                        className={`st-chipbtn${tt.branded ? " is-on" : ""}`}
+                        className={`st-s-chipbtn${tt.branded ? " is-on" : ""}`}
                         aria-pressed={tt.branded}
                         aria-disabled={(!!brandBlock && !tt.branded) || undefined}
                         title={brandBlock ?? undefined}
@@ -354,11 +354,11 @@ export function PublishSheet({
                       >
                         Branded content
                       </button>
-                      <span className="st-field__hint">{ttTag ? `Your video will be labeled as '${ttTag}'.` : "Pick Your brand, Branded content, or both."}</span>
-                      {brandBlock ? <span className="st-field__hint">{brandBlock}</span> : null}
+                      <span className="st-s-field__hint">{ttTag ? `Your video will be labeled as '${ttTag}'.` : "Pick Your brand, Branded content, or both."}</span>
+                      {brandBlock ? <span className="st-s-field__hint">{brandBlock}</span> : null}
                     </div>
                   ) : null}
-                  <p className="st-field__hint">
+                  <p className="st-s-field__hint">
                     By posting, you agree to TikTok&apos;s{" "}
                     {tt.commercial && tt.branded ? (
                       <>
@@ -380,32 +380,32 @@ export function PublishSheet({
           ) : null}
 
           {more ? (
-            <div className="st-more" id={`${id}-more`}>
+            <div className="st-s-more" id={`${id}-more`}>
               {chosen.includes("youtube") || !chosen.length ? (
-                <fieldset className="st-group">
-                  <legend className="st-group__title">YouTube</legend>
+                <fieldset className="st-s-group">
+                  <legend className="st-s-group__title">YouTube</legend>
                   <Pick label="Who can see it" value={yt.privacy} options={WHO} onChange={(privacy) => setYt((y) => ({ ...y, privacy }))} />
-                  <div className="st-field">
-                    <span className="st-field__label" id={`${id}-yt-cat`}>
+                  <div className="st-s-field">
+                    <span className="st-s-field__label" id={`${id}-yt-cat`}>
                       Category
                     </span>
                     <Dropdown labelledBy={`${id}-yt-cat`} value={yt.category} placeholder="Pick a category" options={YOUTUBE_CATEGORIES.map((c) => ({ value: c.id, label: c.label }))} onChange={(category) => setYt((y) => ({ ...y, category }))} />
                   </div>
                   <Switch label="Tell my subscribers" checked={yt.notifySubscribers} onChange={(notifySubscribers) => setYt((y) => ({ ...y, notifySubscribers }))} />
-                  <p className="st-field__hint">Made for kids: No. Lamo Stories never marks a video as made for kids.</p>
+                  <p className="st-s-field__hint">Made for kids: No. Lamo Stories never marks a video as made for kids.</p>
                 </fieldset>
               ) : null}
               {chosen.includes("instagram") || !chosen.length ? (
-                <fieldset className="st-group">
-                  <legend className="st-group__title">Instagram</legend>
+                <fieldset className="st-s-group">
+                  <legend className="st-s-group__title">Instagram</legend>
                   <Switch label="Also show it in the feed" checked={shareToFeed} onChange={setShareToFeed} />
                 </fieldset>
               ) : null}
-              {chosen.includes("facebook") || chosen.includes("x") ? <p className="st-field__hint">Facebook and X have nothing else to pick.</p> : null}
+              {chosen.includes("facebook") || chosen.includes("x") ? <p className="st-s-field__hint">Facebook and X have nothing else to pick.</p> : null}
             </div>
           ) : null}
 
-          {why && chosen.length ? <p className="st-field__hint st-why">{why}</p> : null}
+          {why && chosen.length ? <p className="st-s-field__hint st-s-why">{why}</p> : null}
           {problem ? <Notice tone="bad">{problem}</Notice> : null}
         </>
       )}

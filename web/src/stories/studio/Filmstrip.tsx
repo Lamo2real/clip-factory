@@ -39,16 +39,16 @@ export function Filmstrip({
   const [hover, setHover] = useState<string | null>(null);
   if (!scenes.length) return null;
   return (
-    <ol className="st-film" aria-label={label}>
+    <ol className="st-s-film" aria-label={label}>
       {scenes.map((sc, i) => {
         const live = playing === sc.sceneId || hover === sc.sceneId;
         const words = sceneWords(script, sc.sceneId);
         const inScript = !!script?.scenes.some((x) => x.sceneId === sc.sceneId);
         return (
-          <li key={sc.sceneId} className={`st-film__card${live ? " is-live" : ""}`} onPointerEnter={() => setHover(sc.sceneId)} onPointerLeave={() => setHover(null)}>
+          <li key={sc.sceneId} className={`st-s-film__card${live ? " is-live" : ""}`} onPointerEnter={() => setHover(sc.sceneId)} onPointerLeave={() => setHover(null)}>
             <button
               type="button"
-              className="st-film__frame"
+              className="st-s-film__frame"
               aria-pressed={playing === sc.sceneId}
               aria-label={`${playing === sc.sceneId ? "Stop" : "Play"} scene ${i + 1}: ${sc.title}`}
               onClick={() => setPlaying((p) => (p === sc.sceneId ? null : sc.sceneId))}
@@ -56,18 +56,18 @@ export function Filmstrip({
               {script && inScript ? (
                 <StoryPreview script={script} sceneId={sc.sceneId} width={width} playing={live} label={`Scene ${i + 1}, ${sc.title}, drawn live`} />
               ) : (
-                <span className="st-film__blank" style={{ width, height: (width * 16) / 9 }} aria-hidden="true" />
+                <span className="st-s-film__blank" style={{ width, height: (width * 16) / 9 }} aria-hidden="true" />
               )}
-              <span className="st-film__play" aria-hidden="true">
+              <span className="st-s-film__play" aria-hidden="true">
                 {playing === sc.sceneId ? "❚❚" : "▶"}
               </span>
             </button>
-            <span className="st-film__text">
-              <span className="st-film__num">Scene {i + 1}</span>
-              <span className="st-film__title">{sc.title}</span>
-              <span className="st-film__len">{seconds(sc.durationSec)}</span>
+            <span className="st-s-film__text">
+              <span className="st-s-film__num">Scene {i + 1}</span>
+              <span className="st-s-film__title">{sc.title}</span>
+              <span className="st-s-film__len">{seconds(sc.durationSec)}</span>
               {words.length ? (
-                <span className="st-film__words">
+                <span className="st-s-film__words">
                   {words.map((w, k) => (
                     <span key={k} className="st-film__word">
                       “{w}”
@@ -75,18 +75,18 @@ export function Filmstrip({
                   ))}
                 </span>
               ) : (
-                <span className="st-film__words is-none">No words on screen</span>
+                <span className="st-s-film__words is-none">No words on screen</span>
               )}
             </span>
             {sc.stillUrl ? (
-              <span className="st-film__still">
+              <span className="st-s-film__still">
                 <img src={sc.stillUrl} alt={`Finished picture of scene ${i + 1}`} width={44} height={78} loading="lazy" />
                 <span>Finished picture</span>
               </span>
             ) : (
-              <span className="st-film__still is-waiting">Picture not drawn yet</span>
+              <span className="st-s-film__still is-waiting">Picture not drawn yet</span>
             )}
-            {actions ? <span className="st-film__actions">{actions(sc.sceneId)}</span> : null}
+            {actions ? <span className="st-s-film__actions">{actions(sc.sceneId)}</span> : null}
           </li>
         );
       })}
