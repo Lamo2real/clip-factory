@@ -1,5 +1,5 @@
 {
- "version": "73d5c135788b",
+ "version": "1fe0fe36c747",
  "parts": [
   {
    "id": "app-map",
@@ -177,7 +177,7 @@
    "id": "contracts-25",
    "title": "CONTRACTS: 25. Real earnings: paid-programme progress and platform-reported money (owner request, 2026-11-18)",
    "line": "The owner's words: \"it should be completely for real, real data, nothing that I should add in myself ... a tracking",
-   "chars": 16565
+   "chars": 16830
   },
   {
    "id": "contracts-26",

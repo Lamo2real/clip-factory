@@ -256,6 +256,30 @@ def test_connect_youtube_url(call: Call, table: FakeTable) -> None:
     assert verifier not in json.dumps(table.all(), default=str)  # derived, never stored
 
 
+def test_connect_youtube_payments_url(call: Call, table: FakeTable) -> None:
+    """§40.6 "Allow payment reading": the same YouTube keys and redirect, the AdSense scope only, Google's account
+    picker and no ``include_granted_scopes`` (its own token, even for the same Google account)."""
+    save_keys(call, "youtube")
+    status, body = call("POST", "/v1/accounts/youtube/connect", {"grant": "payments"})
+    assert status == 200
+    q = parse_qs(urlsplit(body["authorizeUrl"]).query)
+    assert q["client_id"] == [YOUTUBE_ID]
+    assert q["redirect_uri"] == [f"{HOOKS_URL}/oauth/youtube/callback"]
+    assert q["scope"] == ["https://www.googleapis.com/auth/adsense.readonly"]
+    assert (q["access_type"], q["prompt"]) == (["offline"], ["consent select_account"])
+    assert "include_granted_scopes" not in q
+    assert q["code_challenge_method"] == ["S256"]
+    assert _state_item(table)["grant"] == "payments"
+    _, plain = call("POST", "/v1/accounts/youtube/connect")
+    assert "adsense" not in plain["authorizeUrl"]  # a normal Connect never asks for it
+
+
+def test_connect_grant_words(call: Call) -> None:
+    save_keys(call, "youtube")
+    status, body = call("POST", "/v1/accounts/youtube/connect", {"grant": "bank"})
+    assert (status, body["error"]["message"]) == (400, 'grant can be "money" or "payments".')
+
+
 def test_connect_tiktok_url(call: Call) -> None:
     base, q, body = _authorize(call, "tiktok")
     assert base == "https://www.tiktok.com/v2/auth/authorize/"

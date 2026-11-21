@@ -60,7 +60,7 @@ test.describe("All your money", () => {
     await expect(row(page, "tiktok")).toContainText("Not available from TikTok");
     await expect(row(page, "tiktok")).toContainText("Look in TikTok: Profile, then Balance.");
     await expect(row(page, "tiktok").locator(".cr-all__amount")).toHaveCount(0);
-    await expect(row(page, "x").getByRole("link", { name: /Open X/ })).toHaveAttribute("href", "https://x.com/settings/monetization");
+    await expect(row(page, "x").getByRole("link", { name: /Open X/ })).toHaveAttribute("href", "https://x.com/i/jf/creators/studio");
     await expect(row(page, "contentrewards")).toContainText("Content Rewards says");
     await expect(row(page, "contentrewards")).toContainText("Paid out to your bank: not available from Content Rewards. Look on Whop: Balances.");
     await expect(row(page, "contentrewards").getByRole("link", { name: "See it all" })).toHaveAttribute("href", "/money#content-rewards");

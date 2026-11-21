@@ -20,7 +20,7 @@ RAW: dict[str, Any] = json.loads((ROOT / "config" / "monetization.json").read_te
 
 def test_the_committed_file_loads() -> None:
     cfg = rules.load(ROOT / "config" / "monetization.json")
-    assert cfg.as_of == date(2026, 11, 18)
+    assert cfg.as_of == date(2026, 11, 21)
     assert set(cfg.platforms) == {"youtube", "tiktok", "instagram", "facebook", "x"}
     assert "other" in cfg.country_codes()
 
@@ -152,6 +152,42 @@ def test_x_impressions_are_a_number_without_a_bar() -> None:
     assert not rules.all_reached(goals)
 
 
+def test_the_get_paid_config_fixes() -> None:
+    """§40.3: X's programme is Original Content Rewards in Creator Studio; Creator Rewards isn't open in Sweden;
+    YouTube's 2027 rules cite answer 12843009. The goals keep their ids, so stored celebrations stay."""
+    cfg = rules.load(ROOT / "config" / "monetization.json")
+    x = cfg.platform("x")
+    assert x.programme == "Original Content Rewards"
+    assert dict(x.status_where) == {"label": "X › Creator Studio", "url": "https://x.com/i/jf/creators/studio"}
+    assert dict(x.paid_where) == {
+        "label": "X › Creator Studio (paid through Stripe)",
+        "url": "https://x.com/i/jf/creators/studio",
+    }
+    x_rule = next(r for r in RAW["platforms"]["x"]["rules"])
+    assert x_rule["id"] == "x-revenue-sharing"  # the id stays
+    assert {g["key"] for g in x_rule["goals"]} == {"premium", "verifiedFollowers", "impressions90"}
+    assert {g["source"] for g in x_rule["goals"]} == {"https://help.x.com/en/using-x/original-content-rewards"}
+    tiktok = cfg.platform("tiktok")
+    assert dict(tiktok.status_where) == {"label": "TikTok Studio › Monetization"}
+    open_rule = next(r for r in RAW["platforms"]["tiktok"]["rules"] if r["id"] == "tiktok-rewards")
+    assert open_rule["countries"] == ["US", "GB", "DE", "FR", "BR"]
+    today = date(2026, 11, 21)
+    assert rules.pick(cfg, "tiktok", today=today, in_program=False, country="SE") == "not_open"
+    assert isinstance(rules.pick(cfg, "tiktok", today=today, in_program=False, country="JP"), rules.Rule)
+    for r in RAW["platforms"]["tiktok"]["rules"]:
+        for g in r["goals"]:
+            assert g["source"] == "https://www.tiktok.com/creator-academy/en/article/creator-rewards-program"
+    by_id = {r["id"]: r for r in RAW["platforms"]["youtube"]["rules"]}
+    for rule_id in ("ypp-2027", "ypp-2027-keep-shorts"):
+        assert {g["source"] for g in by_id[rule_id]["goals"]} == {"https://support.google.com/youtube/answer/12843009"}
+    assert {g["source"] for g in by_id["ypp-2023"]["goals"] + by_id["ypp-2023"].get("more", [])} == {
+        "https://support.google.com/youtube/answer/72851"
+    }
+    # Each new source is on its platform's own help host.
+    for host in ("help.x.com", "www.tiktok.com", "support.google.com"):
+        assert host in rules.OFFICIAL_HOSTS
+
+
 def test_money_scopes_are_only_for_allow_money_reading() -> None:
     cfg = config.load()
     assert cfg.platform("youtube").money_scopes == ("https://www.googleapis.com/auth/yt-analytics-monetary.readonly",)
@@ -165,3 +201,22 @@ def test_money_scopes_are_only_for_allow_money_reading() -> None:
         "https://www.googleapis.com/auth/youtube.upload",
     )
     assert cfg.platform("tiktok").scopes == ("user.info.basic", "video.publish", "video.list")
+
+
+def test_payment_scopes_are_only_for_allow_payment_reading() -> None:
+    """§40.6: ``paymentScopes`` (YouTube's AdSense permission) never overlaps Connect's or money reading's."""
+    cfg = config.load()
+    assert cfg.platform("youtube").payment_scopes == ("https://www.googleapis.com/auth/adsense.readonly",)
+    for name in ("tiktok", "instagram", "facebook", "x"):
+        assert cfg.platform(name).payment_scopes == ()
+    assert "https://www.googleapis.com/auth/adsense.readonly" not in cfg.platform("youtube").scopes
+    raw = copy.deepcopy(cfg.raw)
+    raw["platforms"]["youtube"]["paymentScopes"] = ["https://www.googleapis.com/auth/youtube.readonly"]
+    with pytest.raises(config.ConfigError, match="paymentScopes"):
+        config.parse(raw)
+    raw["platforms"]["youtube"]["paymentScopes"] = ["https://www.googleapis.com/auth/yt-analytics-monetary.readonly"]
+    with pytest.raises(config.ConfigError, match="paymentScopes"):
+        config.parse(raw)
+    raw["platforms"]["youtube"]["paymentScopes"] = "adsense"
+    with pytest.raises(config.ConfigError, match="paymentScopes"):
+        config.parse(raw)
