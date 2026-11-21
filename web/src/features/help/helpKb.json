@@ -797,11 +797,11 @@
       "where": "Settings › Posting › Money › Getting your money out",
       "route": "/settings/posting/money",
       "hash": "money-payouts",
-      "answer": "Each app pays you itself, so you add your bank account or PayPal inside each app. YouTube: **AdSense for YouTube › Payments**. Facebook and Instagram: Meta's payout settings. TikTok: your TikTok **Balance**. X: **Creator Studio**, through Stripe. Clip Factory never needs your bank details, and never asks for them.",
+      "answer": "Each app pays you itself, so you add your bank or PayPal inside each app. **Get paid** shows the steps for each one. YouTube: **AdSense for YouTube**. Facebook and Instagram: Meta's **Payouts**. TikTok: your TikTok **Balance**. X: **Creator Studio**, through Stripe. Clip Factory never needs your bank details, and never asks for them.",
       "steps": [
-        "Tap **Settings**, then **Posting**, then **Money**.",
-        "Scroll to **Getting your money out**.",
-        "Open that app and add your bank or PayPal there."
+        "Tap **Settings**, then **Posting**, then **Get paid**.",
+        "Tap the place that pays you.",
+        "Do its steps. You add your bank or PayPal on that app's own page."
       ],
       "keywords": [
         "bank",
@@ -823,11 +823,11 @@
       ],
       "actions": [
         {
-          "id": "money-payouts:money",
-          "label": "Open payouts help",
-          "to": "/settings/posting/money#money-payouts",
+          "id": "money-payouts:getpaid",
+          "label": "Open Get paid",
+          "to": "/settings/posting/getpaid",
           "highlight": [
-            "money-payouts"
+            "getpaid-list"
           ]
         }
       ]
@@ -3270,7 +3270,7 @@
     },
     {
       "id": "getpaid-setup",
-      "route": "/settings/posting/money",
+      "route": "/settings/posting/getpaid",
       "where": "Settings › Posting › Get paid",
       "title": "How do I set up getting paid?",
       "keywords": [
@@ -3301,15 +3301,26 @@
       ],
       "actions": [
         {
+          "id": "getpaid-setup:list",
+          "label": "Open Get paid",
+          "to": "/settings/posting/getpaid",
+          "highlight": [
+            "getpaid-list"
+          ]
+        },
+        {
           "id": "getpaid-setup:money",
-          "label": "Open Money settings",
-          "to": "/settings/posting/money"
+          "label": "Open Money",
+          "to": "/money",
+          "highlight": [
+            "getpaid-card"
+          ]
         }
       ]
     },
     {
       "id": "getpaid-status",
-      "route": "/settings/posting/money",
+      "route": "/settings/posting/getpaid",
       "where": "Settings › Posting › Get paid",
       "title": "What does Can get paid mean?",
       "keywords": [
@@ -3347,9 +3358,20 @@
       ],
       "actions": [
         {
-          "id": "getpaid-status:money",
-          "label": "Open Money settings",
-          "to": "/settings/posting/money"
+          "id": "getpaid-status:list",
+          "label": "Open Get paid",
+          "to": "/settings/posting/getpaid",
+          "highlight": [
+            "getpaid-list"
+          ]
+        },
+        {
+          "id": "getpaid-status:youtube",
+          "label": "See YouTube's status",
+          "to": "/settings/posting/getpaid/youtube",
+          "highlight": [
+            "getpaid-status"
+          ]
         }
       ]
     },
@@ -3389,12 +3411,20 @@
           "id": "getpaid-sent:money",
           "label": "Open Money",
           "to": "/money"
+        },
+        {
+          "id": "getpaid-sent:youtube",
+          "label": "See YouTube payments",
+          "to": "/settings/posting/getpaid/youtube",
+          "highlight": [
+            "getpaid-sent"
+          ]
         }
       ]
     },
     {
       "id": "getpaid-youtube",
-      "route": "/settings/posting/money",
+      "route": "/settings/posting/getpaid/youtube",
       "where": "Settings › Posting › Get paid › YouTube",
       "title": "Get paid by YouTube",
       "keywords": [
@@ -3428,15 +3458,18 @@
       ],
       "actions": [
         {
-          "id": "getpaid-youtube:money",
-          "label": "Open Money settings",
-          "to": "/settings/posting/money"
+          "id": "getpaid-youtube:page",
+          "label": "Open YouTube's steps",
+          "to": "/settings/posting/getpaid/youtube",
+          "highlight": [
+            "getpaid-place"
+          ]
         }
       ]
     },
     {
       "id": "getpaid-tiktok-sweden",
-      "route": "/settings/posting/money",
+      "route": "/settings/posting/getpaid/tiktok",
       "where": "Settings › Posting › Get paid › TikTok",
       "title": "Can I earn on TikTok in Sweden?",
       "keywords": [
@@ -3468,15 +3501,18 @@
       ],
       "actions": [
         {
-          "id": "getpaid-tiktok-sweden:money",
-          "label": "Open Money settings",
-          "to": "/settings/posting/money"
+          "id": "getpaid-tiktok-sweden:page",
+          "label": "Open TikTok's steps",
+          "to": "/settings/posting/getpaid/tiktok",
+          "highlight": [
+            "getpaid-place"
+          ]
         }
       ]
     },
     {
       "id": "getpaid-x-clips",
-      "route": "/settings/posting/money",
+      "route": "/settings/posting/getpaid/x",
       "where": "Settings › Posting › Get paid › X",
       "title": "Why won't X pay for my clips?",
       "keywords": [
@@ -3507,15 +3543,19 @@
       ],
       "actions": [
         {
-          "id": "getpaid-x-clips:money",
-          "label": "Open Money settings",
-          "to": "/settings/posting/money"
+          "id": "getpaid-x-clips:page",
+          "label": "Open X's steps",
+          "to": "/settings/posting/getpaid/x",
+          "highlight": [
+            "getpaid-status"
+          ]
         }
       ]
     },
     {
       "id": "getpaid-whop",
-      "route": "/settings/posting/money",
+      "route": "/settings/posting/getpaid/contentrewards",
+      "hash": "whop",
       "where": "Settings › Posting › Get paid › Content Rewards",
       "title": "See my Whop payouts",
       "keywords": [
@@ -3542,9 +3582,12 @@
       ],
       "actions": [
         {
-          "id": "getpaid-whop:money",
-          "label": "Open Money settings",
-          "to": "/settings/posting/money"
+          "id": "getpaid-whop:card",
+          "label": "Open the Whop card",
+          "to": "/settings/posting/getpaid/contentrewards#whop",
+          "highlight": [
+            "getpaid-whop"
+          ]
         }
       ]
     },
