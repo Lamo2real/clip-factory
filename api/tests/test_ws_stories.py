@@ -11,11 +11,14 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App
-from clipfactory_api.workspaces import guidance
+from clipfactory_api.routes.workspaces import core
+from clipfactory_api.workspaces import guidance, jobs
 from conftest import USER, Call
 from fakes import FakeAgentCore, FakeS3, FakeTable
 from ws_support import (
     BASE,
+    agent_end,
+    agent_step,
     install,
     pk,
     prefix,
@@ -197,6 +200,22 @@ def test_a_not_accepted_start_is_not_retried(call: Call, agentcore: FakeAgentCor
     )[1]
     assert len(agentcore.calls) == 1
     assert body["job"]["status"] == "failed"
+    # The session the refused start opened is ended (the job itself already has a new sessionId).
+    assert agentcore.stopped == [agentcore.calls[0]["runtimeSessionId"]]
+
+
+def test_a_slow_failed_start_leaves_the_stop_to_the_fence(
+    call: Call, agentcore: FakeAgentCore, hero: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(core, "STOP_AFTER_START_WITHIN_SECONDS", -1.0)  # as if the start took most of the 29 s
+    agentcore.reply = {"accepted": False}
+    body = call(
+        "POST",
+        f"{BASE}/stories",
+        {"brief": {"title": "x", "logline": "y", "category": "comedy"}, "characterIds": [hero["characterId"]]},
+    )[1]
+    assert body["job"]["status"] == "failed"
+    assert agentcore.stopped == []
 
 
 # --- read -----------------------------------------------------------------------------------------------------
@@ -319,7 +338,10 @@ def test_a_scene_length_edit_remakes_that_scene_and_retimes_the_captions(
     job = call("POST", f"{BASE}/stories/{story['storyId']}/produce", {})[1]["job"]
     assert job["configuration"]["run"] == ["animation", "sound", "captions", "assemble", "preview"]
     assert job["configuration"]["sceneIds"] == ["s1"]
-    assert "staleScenes" not in _story(store, story["storyId"])
+    # The scenes to animate stay known while the job runs (a cancel keeps them) and stop counting once animated.
+    assert jobs.valid_stale_scenes(_story(store, story["storyId"])) == ["s1"]
+    agent_step(store, story["storyId"], job["jobId"], "animation", message="1 animated")
+    assert jobs.valid_stale_scenes(_story(store, story["storyId"])) == []
 
 
 def test_effects_music_and_post_captions_make_their_own_steps_stale(
@@ -340,6 +362,70 @@ def test_effects_music_and_post_captions_make_their_own_steps_stale(
     same = _patch(call, seed_story(store, s3_client), musicMood="playful")[1]["story"]
     assert same["stale"] == []
     assert same["version"] == 3
+
+
+def _remake_and_finish(call: Call, store: db.Store, story_id: str, body: dict[str, Any] | None = None) -> Any:
+    status, out = call("POST", f"{BASE}/stories/{story_id}/produce", body or {})
+    assert status == 202, out
+    agent_end(store, story_id, out["job"]["jobId"])
+    return out["job"]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"musicMood": "calm"},
+        {"scenes": [{"sceneId": "s2", "sfx": [{"id": "mine", "at": 1, "sfx": "honk", "volume": 0.5}]}]},
+        {"scenes": [{"sceneId": "s1", "durationSec": 6}]},
+        {"musicMood": "calm", "scenes": [{"sceneId": "s1", "durationSec": 5, "sfx": []}]},
+    ],
+)
+def test_effects_music_or_length_edits_can_be_remade_then_approved(
+    call: Call, store: db.Store, s3_client: FakeS3, changes: dict[str, Any]
+) -> None:
+    story = seed_story(store, s3_client)
+    edited = _patch(call, story, **changes)[1]["story"]
+    assert edited["scriptVersion"] == 2
+    assert "safety" not in edited["stale"]
+    # No text the fact check reads changed, so the check moves onto the new script version.
+    assert _story(store, story["storyId"])["safety"]["checkedScriptVersion"] == 2
+    url = f"{BASE}/stories/{story['storyId']}"
+    assert call("POST", f"{url}/approve", {"version": edited["version"]})[0] == 409  # not in the video yet
+    job = _remake_and_finish(call, store, story["storyId"])
+    assert "safety" not in job["configuration"]["run"]
+    after = _story(store, story["storyId"])
+    assert after["stale"] == []
+    status, body = call("POST", f"{url}/approve", {"version": after["version"]})
+    assert status == 200, body
+    assert body["story"]["status"] == "approved"
+
+
+def test_a_check_that_is_due_or_on_another_version_is_not_carried(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    story = seed_story(store, s3_client)
+    out = _patch(call, story, captions=[{"id": "cap1", "at": 0.5, "dur": 2, "text": "Steer gently"}])[1]["story"]
+    out = _patch(call, out, musicMood="calm")[1]["story"]
+    safety = _story(store, story["storyId"])["safety"]
+    assert (safety["status"], safety["checkedScriptVersion"], out["scriptVersion"]) == ("pending", 1, 3)
+    old = seed_story(
+        store,
+        s3_client,
+        scriptVersion=2,
+        safety={"topicId": None, "status": "ok", "problems": [], "checkedScriptVersion": 1, "citations": []},
+    )
+    _patch(call, old, musicMood="calm")
+    assert _story(store, old["storyId"])["safety"]["checkedScriptVersion"] == 1
+    # Problems found on this version stay with the new one: the text they are about did not change.
+    held = seed_story(
+        store,
+        s3_client,
+        status="needs_check",
+        safety={"topicId": None, "status": "problems", "problems": ["x"], "checkedScriptVersion": 1, "citations": []},
+    )
+    _patch(call, held, musicMood="calm")
+    safety = _story(store, held["storyId"])["safety"]
+    assert (safety["status"], safety["checkedScriptVersion"]) == ("problems", 2)
 
 
 @pytest.mark.parametrize(
@@ -481,6 +567,148 @@ def test_cancel_of_a_first_run_goes_back_to_draft_and_try_again_makes_everything
     assert call("POST", f"{BASE}/stories/{sid}/cancel")[1]["story"]["status"] == "draft"
     job = call("POST", f"{BASE}/stories/{sid}/produce", {})[1]["job"]
     assert job["configuration"]["run"] == ALL
+
+
+def test_a_cancel_after_the_storyboard_leaves_the_rest_to_make(
+    call: Call, store: db.Store, s3_client: FakeS3, hero: dict[str, Any]
+) -> None:
+    created = call(
+        "POST",
+        f"{BASE}/stories",
+        {"brief": {"title": "x", "logline": "y", "category": "comedy"}, "characterIds": [hero["characterId"]]},
+    )[1]
+    sid, job_id = created["story"]["storyId"], created["job"]["jobId"]
+    key = story_key(sid, "script/v1.json")
+    s3_client.objects[key] = json.dumps({"scenes": []}).encode()
+    agent_step(
+        store,
+        sid,
+        job_id,
+        "storyboard",
+        scriptVersion=1,
+        scriptKey=key,
+        scenes=[{"sceneId": "s1", "title": "One", "durationSec": 6}],
+    )
+    status, body = call("POST", f"{BASE}/stories/{sid}/cancel")
+    assert status == 200
+    assert body["story"]["status"] == "draft"
+    assert body["story"]["stale"] == ALL[1:]  # the storyboard is made; nothing after it is
+    status, body = call("POST", f"{BASE}/stories/{sid}/produce", {})
+    assert status == 202
+    assert body["job"]["configuration"]["run"] == ALL[1:]
+    assert body["job"]["jobType"] == "produce"
+
+
+def test_a_canceled_whole_remake_never_approves_the_older_video(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    story = seed_story(store, s3_client)
+    sid = story["storyId"]
+    job = call("POST", f"{BASE}/stories/{sid}/produce", {"from": "storyboard"})[1]["job"]
+    agent_step(store, sid, job["jobId"], "storyboard", scriptVersion=2, scriptKey=story_key(sid, "script/v2.json"))
+    checked = {"topicId": None, "status": "ok", "problems": [], "checkedScriptVersion": 2, "citations": []}
+    agent_step(store, sid, job["jobId"], "safety", safety=checked)
+    out = call("POST", f"{BASE}/stories/{sid}/cancel")[1]["story"]
+    assert out["status"] == "review"
+    assert out["stale"] == ALL[2:]
+    status, body = call("POST", f"{BASE}/stories/{sid}/approve", {"version": out["version"]})
+    assert status == 409
+    assert body["error"]["message"] == "Your changes aren't in the video yet. Tap Remake first."
+    status, body = call("POST", f"{BASE}/stories/{sid}/produce", {})
+    assert status == 202
+    assert body["job"]["configuration"]["run"] == ALL[2:]
+
+
+def test_a_cancel_before_the_run_wrote_anything_keeps_stale_and_its_scenes(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    story = seed_story(store, s3_client)
+    sid = story["storyId"]
+    _patch(call, story, scenes=[{"sceneId": "s2", "durationSec": 4}])
+    call("POST", f"{BASE}/stories/{sid}/produce", {})
+    out = call("POST", f"{BASE}/stories/{sid}/cancel")[1]["story"]
+    assert out["stale"] == ["animation", "sound", "captions", "assemble", "preview"]
+    assert _story(store, sid)["staleScenes"] == ["s2"]
+    assert call("POST", f"{BASE}/stories/{sid}/produce", {})[1]["job"]["configuration"]["sceneIds"] == ["s2"]
+    # A whole remake stopped at once leaves the made video as it was: still approvable.
+    other = seed_story(store, s3_client)
+    call("POST", f"{BASE}/stories/{other['storyId']}/produce", {"from": "storyboard"})
+    out = call("POST", f"{BASE}/stories/{other['storyId']}/cancel")[1]["story"]
+    assert (out["status"], out["stale"]) == ("review", [])
+    assert call("POST", f"{BASE}/stories/{other['storyId']}/approve", {"version": out["version"]})[0] == 200
+
+
+def test_a_cancel_refused_by_a_write_meanwhile_is_tried_again(
+    call: Call, store: db.Store, s3_client: FakeS3, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    story = seed_story(store, s3_client)
+    sid = story["storyId"]
+    job = call("POST", f"{BASE}/stories/{sid}/produce", {"from": "storyboard"})[1]["job"]
+    real = jobs.cancel
+    seen: list[int] = []
+
+    def racing(st: db.Store, j: dict[str, Any], s: dict[str, Any] | None, now: Any) -> bool:
+        if not seen:  # the agent writes the storyboard just before the first try lands
+            agent_step(store, sid, job["jobId"], "storyboard", scriptVersion=2)
+        seen.append(1)
+        return real(st, j, s, now)
+
+    monkeypatch.setattr(jobs, "cancel", racing)
+    out = call("POST", f"{BASE}/stories/{sid}/cancel")[1]
+    assert len(seen) == 2
+    assert out["job"]["status"] == "canceled"
+    assert out["story"]["stale"] == ALL[1:]
+
+
+def test_try_again_after_an_unfinished_change_asks_for_the_same_change(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    story = seed_story(store, s3_client)
+    sid = story["storyId"]
+    asked = call("POST", f"{BASE}/stories/{sid}/changes", {"note": "Make it funnier", "sceneIds": ["s2"]})[1]["job"]
+    agent_end(store, sid, asked["jobId"], failed_at="storyboard")
+    status, body = call("POST", f"{BASE}/stories/{sid}/produce", {})
+    assert status == 202
+    job = body["job"]
+    assert job["jobType"] == "changes"
+    assert job["configuration"] == {"run": ALL, "from": "storyboard", "sceneIds": ["s2"], "note": "Make it funnier"}
+    assert _story(store, sid)["reviewNote"] == "Make it funnier"
+    # Once the new storyboard was written, Try again just makes the rest.
+    agent_step(store, sid, job["jobId"], "storyboard", scriptVersion=2)
+    agent_end(store, sid, job["jobId"], failed_at="scenes")
+    again = call("POST", f"{BASE}/stories/{sid}/produce", {})[1]["job"]
+    assert (again["jobType"], again["configuration"]["run"]) == ("produce", ALL[1:])
+
+
+def test_remaking_named_scenes_also_remakes_the_ones_already_out_of_date(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    story = seed_story(store, s3_client)
+    sid = story["storyId"]
+    _patch(call, story, scenes=[{"sceneId": "s2", "durationSec": 4}])
+    job = call("POST", f"{BASE}/stories/{sid}/produce", {"from": "animation", "sceneIds": ["s1"]})[1]["job"]
+    assert job["configuration"]["sceneIds"] == ["s1", "s2"]
+    # The run stops (its heartbeat goes quiet): the fence keeps both scenes to animate.
+    store.update(pk(), f"PJOB#{job['jobId']}", {"status": "running", "heartbeatAt": "2026-11-15T11:00:00.000Z"})
+    assert call("GET", f"{BASE}/stories/{sid}")[1]["story"]["status"] == "failed"
+    assert _story(store, sid)["staleScenes"] == ["s1", "s2"]
+    # Every scene's animation out of date (no list of scenes): a named remake does them all.
+    whole = seed_story(store, s3_client, stale=["animation", "sound", "assemble", "preview"])
+    url = f"{BASE}/stories/{whole['storyId']}/produce"
+    assert call("POST", url, {"from": "animation", "sceneIds": ["s2"]})[1]["job"]["configuration"]["sceneIds"] == [
+        "s1",
+        "s2",
+    ]
+    fresh = seed_story(store, s3_client)
+    url = f"{BASE}/stories/{fresh['storyId']}/produce"
+    assert call("POST", url, {"from": "animation", "sceneIds": ["s2"]})[1]["job"]["configuration"]["sceneIds"] == ["s2"]
+
+
+def test_a_storyboard_without_a_video_is_made_on_try_again(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    story = seed_story(store, s3_client, status="draft", videoKey=None)
+    status, body = call("POST", f"{BASE}/stories/{story['storyId']}/produce", {})
+    assert status == 202
+    assert body["job"]["configuration"]["run"] == ALL[1:]
 
 
 # --- review ---------------------------------------------------------------------------------------------------

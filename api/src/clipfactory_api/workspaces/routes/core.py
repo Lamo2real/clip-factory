@@ -53,6 +53,10 @@ SETTINGS_CHANGED = "These settings changed on another screen. Reload and try aga
 CHARACTER_CHANGED = "This character changed on another screen. Reload it and try again."
 IMAGES_OFF = "AI pictures are off. Turn them on in Lamo Stories › Settings."
 SCRIPT_UNREADABLE = "We could not open the storyboard just now. Try again in a minute."
+# A failed start is followed by a stop only while one more AgentCore call (3 s connect + 20 s read at most) still ends
+# inside API Gateway's 29 s.
+STOP_AFTER_START_WITHIN_SECONDS = 6.0
+CANCEL_ATTEMPTS = 3
 
 
 @dataclass
@@ -756,7 +760,9 @@ def make_portrait(app: App, req: Request) -> Response:
         )
     except Exception as e:
         log("warning", "stories.portrait_start_failed", jobId=job_id, error=type(e).__name__)
+        session_id = str(job["sessionId"])
         job = jobs.fail_start(ctx.store, job, None, ctx.now, jobs.PORTRAIT_NOT_STARTED)
+        _stop_after_failed_start(ctx, session_id)
     return ok({"job": shapes.public_job(job)}, 202)
 
 
@@ -833,6 +839,7 @@ def _story_job(
     from_step: str | None,
     scene_ids: list[str] | None,
     note: str | None,
+    story_version: int,
 ) -> Item:
     return jobs.new_job(
         ctx.user_id,
@@ -848,17 +855,28 @@ def _story_job(
         scene_ids=scene_ids,
         note=note,
         meta=_meta(ctx, story),
+        story_version=story_version,
     )
+
+
+def _stop_after_failed_start(ctx: Ctx, session_id: str) -> None:
+    """A start that failed may still have opened a runtime session (a refusal, or a timeout after the runtime took
+    the job): end it, best effort, when the request still has time for it. Either way the job's new ``sessionId``
+    fences the run out, so its first write is refused and it stops by itself."""
+    if time.monotonic() - ctx.req.started <= STOP_AFTER_START_WITHIN_SECONDS:
+        jobs.stop_quietly(ctx.stop(), session_id)
 
 
 def _start(ctx: Ctx, story: Item, job: Item) -> tuple[Item, Item]:
     """Sends the job to the agent; a refused or impossible start fails it at once with a plain sentence."""
     agent = ctx.deps.agent
     sentence = None
+    asked = False
     if agent is None or not getattr(agent, "ready", False):
         sentence = jobs.NOT_SET_UP
     else:
         try:
+            asked = True
             agent.start_story(
                 user_id=ctx.user_id,
                 workspace_id=ctx.ws_id,
@@ -870,8 +888,11 @@ def _start(ctx: Ctx, story: Item, job: Item) -> tuple[Item, Item]:
             log("warning", "stories.start_failed", jobId=job.get("jobId"), error=type(e).__name__)
             sentence = jobs.NOT_STARTED
     if sentence is not None:
+        session_id = str(job["sessionId"])
         job = jobs.fail_start(ctx.store, job, story, ctx.now, sentence)
         story = _reread_story(ctx, story)
+        if asked:
+            _stop_after_failed_start(ctx, session_id)
     return story, job
 
 
@@ -887,8 +908,6 @@ def _launch(ctx: Ctx, story: Item, job: Item, *, note: str | None = None) -> tup
     if note:
         sets["reviewNote"] = note
     update = Update(ctx.pk, str(story["sk"]), sets=sets).bump()
-    if "animation" in (job.get("configuration") or {}).get("run", []):
-        update.removes.append("staleScenes")
     update.equals("version", story.get("version")).one_of("status", stories.REMAKE_STATUSES)
     update.absent_or_null("currentJobId")
     try:
@@ -969,7 +988,9 @@ def create_story(app: App, req: Request) -> Response:
         "updatedAt": ctx.at(),
     }
     run = list(shapes.STEP_ORDER)
-    job = _story_job(ctx, story, job_type="produce", run=run, from_step=None, scene_ids=None, note=None)
+    job = _story_job(
+        ctx, story, job_type="produce", run=run, from_step=None, scene_ids=None, note=None, story_version=1
+    )
     story.update(
         {"status": "producing", "statusBefore": "draft", "currentJobId": job["jobId"], "lastJobId": job["jobId"]}
     )
@@ -1043,11 +1064,15 @@ def patch_story(app: App, req: Request) -> Response:
         update.sets["stale"] = shapes.ordered_steps([*(story.get("stale") or []), *stale_add])
         if "safety" in stale_add and isinstance(story.get("safety"), Mapping):
             update.sets["safety"] = {**story["safety"], "status": "pending"}
+    if new_script is not None and "safety" not in stale_add:
+        carried = stories.carried_check(story, int(update.sets["scriptVersion"]))
+        if carried is not None:
+            update.sets["safety"] = carried
     if stale_scenes:
-        known = story.get("staleScenes")
+        known = jobs.valid_stale_scenes(story)
         whole = "animation" in (story.get("stale") or []) and not known
         if not whole:
-            update.sets["staleScenes"] = sorted(set(known or []) | stale_scenes)
+            update.sets["staleScenes"] = sorted(set(known) | stale_scenes)
     edits = _merge_owner(story, owner)
     if edits is not None:
         update.sets["ownerEdits"] = edits
@@ -1058,13 +1083,57 @@ def patch_story(app: App, req: Request) -> Response:
     except db.ConditionFailed as e:
         raise conflict(stories.CHANGED) from e
     if new_script is not None:
+        data = json.dumps(new_script, ensure_ascii=False).encode()
         try:
-            app.media.put(key, json.dumps(new_script, ensure_ascii=False).encode(), "application/json")
+            app.media.put(key, data, "application/json")
         except Exception as e:
             _undo_patch(ctx, story, item, list(update.sets))
             log("warning", "stories.script_write_failed", storyId=story["storyId"], error=type(e).__name__)
             raise ApiError(503, "platform_down", "We could not save the change just now. Try again.") from e
+        _register_script(ctx, story, key, int(item.get("scriptVersion") or 0), len(data))
     return ok({"story": _public_story(ctx, item), "script": new_script or script or _read_script(ctx, item)})
+
+
+def _register_script(ctx: Ctx, story: Mapping[str, Any], key: str, number: int, size: int) -> None:
+    """The owner's storyboard version becomes the Library's current storyboard (§45.12): a new ``ASSET#`` with
+    ``meta.current = 1``, and the older ones kept with ``meta.current = 0``. Best effort: the story and its file are
+    already saved, so a refused write only leaves the Library one version behind."""
+    story_id = str(story["storyId"])
+    older = [
+        a
+        for a in _all(ctx, ws.ASSET_SK, ws.TYPE_ASSET)
+        if a.get("storyId") == story_id
+        and a.get("kind") == "storyboard"
+        and int(((a.get("meta") or {}) if isinstance(a.get("meta"), Mapping) else {}).get("current", 1) or 0) == 1
+    ]
+    asset_id = ulid()
+    asset = {
+        "pk": ctx.pk,
+        "sk": f"{ws.ASSET_SK}{asset_id}",
+        "type": ws.TYPE_ASSET,
+        "userId": ctx.user_id,
+        "workspaceId": ctx.ws_id,
+        "assetId": asset_id,
+        "kind": "storyboard",
+        "storyId": story_id,
+        "characterId": None,
+        "key": key,
+        "contentType": "application/json",
+        "bytes": size,
+        "version": number,
+        "meta": {"current": 1, "by": "owner"},
+        "createdAt": ctx.at(),
+    }
+    retire = [
+        Update(ctx.pk, str(a["sk"]), sets={"meta": {**dict(a.get("meta") or {}), "current": 0}})
+        .equals("userId", ctx.user_id)
+        .request()
+        for a in older[: db.MAX_TRANSACT_ITEMS - 1]
+    ]
+    try:
+        ctx.store.transact(puts=[asset], updates=retire)
+    except Exception as e:
+        log("warning", "stories.script_asset_failed", storyId=story_id, error=type(e).__name__)
 
 
 def _undo_patch(ctx: Ctx, before: Mapping[str, Any], after: Mapping[str, Any], fields: list[str]) -> None:
@@ -1082,15 +1151,27 @@ def _undo_patch(ctx: Ctx, before: Mapping[str, Any], after: Mapping[str, Any], f
 
 
 def _stop_job(ctx: Ctx, story: Item, job: Item | None) -> tuple[Item, Item | None]:
-    """Cancels a running job (its writes fenced out by a new sessionId), then tells the agent (best effort)."""
+    """Cancels a running job (its writes fenced out by a new sessionId), then tells the agent (best effort). A cancel
+    refused because the run wrote meanwhile is tried again on what is stored now."""
     if job is None or not jobs.active(job):
         return story, job
-    if jobs.cancel(ctx.store, job, story, ctx.now):
+    canceled = None
+    for _ in range(CANCEL_ATTEMPTS):
+        if jobs.cancel(ctx.store, job, story, ctx.now):
+            canceled = job
+            break
+        story = _reread_story(ctx, story)
+        found = ctx.owned(ctx.store.get(ctx.pk, str(job["sk"])), ws.TYPE_PJOB)
+        if found is None or not jobs.active(found):
+            break
+        job = found
+    if canceled is not None:
         agent = ctx.deps.agent
         if agent is not None and getattr(agent, "ready", False):
+            session_id, job_id = str(canceled["sessionId"]), str(canceled["jobId"])
             calls: list[Callable[[], None]] = [
-                lambda: agent.cancel_story(str(job["jobId"]), str(job["sessionId"])),
-                lambda: agent.stop_session(str(job["sessionId"])),
+                lambda: agent.cancel_story(job_id, session_id),
+                lambda: agent.stop_session(session_id),
             ]
             for call in calls:
                 try:
@@ -1139,7 +1220,22 @@ def produce(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     story = _story(ctx)
     from_step, scene_ids = stories.produce_input(req.json(), story)
-    story, _ = _ready_to_remake(ctx, story)
+    story, last = _ready_to_remake(ctx, story)
+    again = stories.changes_again(story, last) if from_step is None else None
+    if again is not None:  # "Try again" after an "Ask for changes" or "Remake this scene" that did not finish
+        note, chosen = again
+        job = _story_job(
+            ctx,
+            story,
+            job_type="changes",
+            run=shapes.ordered_steps(story.get("stale") or []),
+            from_step="storyboard",
+            scene_ids=chosen,
+            note=note,
+            story_version=int(story.get("version") or 0) + 1,
+        )
+        story, job = _launch(ctx, story, job, note=note)
+        return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
     run, scenes = stories.produce_run(story, from_step, scene_ids)
     job = _story_job(
         ctx,
@@ -1149,6 +1245,7 @@ def produce(app: App, req: Request) -> Response:
         from_step=from_step if stories.has_script(story) else None,
         scene_ids=scenes,
         note=None,
+        story_version=int(story.get("version") or 0) + 1,
     )
     story, job = _launch(ctx, story, job)
     return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
@@ -1169,6 +1266,7 @@ def request_changes(app: App, req: Request) -> Response:
         from_step="storyboard",
         scene_ids=scene_ids,
         note=note,
+        story_version=int(story.get("version") or 0) + 1,
     )
     story, job = _launch(ctx, story, job, note=note)
     activity.record(ctx.store, ctx.user_id, ctx.ws_id, "changes", story, now=ctx.now)
@@ -1265,7 +1363,9 @@ def get_library(app: App, req: Request) -> Response:
 def get_providers(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     records = _all(ctx, ws.PROVIDER_SK, ws.TYPE_PROVIDER)
-    return ok({"providers": providers.statuses(ctx.config, records)})
+    found = ctx.store.query_all(ctx.pk, ws.PJOB_SK, newest_first=True, cap=providers.JOBS_READ)
+    story_jobs = [j for j in (ctx.owned(x, ws.TYPE_PJOB) for x in found) if j is not None]
+    return ok({"providers": providers.statuses(ctx.config, records, story_jobs)})
 
 
 def get_guidance(app: App, req: Request) -> Response:

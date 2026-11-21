@@ -15,6 +15,7 @@ from typing import Any, Final
 
 from .. import validate
 from ..errors import ApiError, bad_request
+from ..help.model import CONNECT_TIMEOUT_S, READ_TIMEOUT_S
 from ..ids import is_ulid
 from ..learn import converse_text
 from ..log import log
@@ -30,7 +31,8 @@ IDEA_KEYS: Final = ("title", "logline", "category", "characterIds", "concept", "
 BUSY = "The idea helper is busy. Try again in a minute."
 OFF = "The idea helper is not switched on yet. Type your idea yourself for now."
 BUDGET_SECONDS = 22.0
-MIN_CALL_SECONDS = 11.0  # one call (3 s connect + 10 s read at most) must fit in what is left of the 22 s
+# A call starts only when it can end inside the 22 s: the help model's client waits at most this long (no retries).
+MIN_CALL_SECONDS = float(CONNECT_TIMEOUT_S + READ_TIMEOUT_S)
 MAX_TOKENS = 2500
 MAX_RAW_CHARS = 20_000
 REQUEST_FIELDS: Final = {"thinking": {"type": "disabled"}, "output_config": {"effort": "low"}}

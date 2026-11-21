@@ -18,6 +18,7 @@ from clipfactory_api.ids import ulid
 from clipfactory_api.workspaces import deps, guard
 from clipfactory_api.workspaces import types as ws
 from clipfactory_api.workspaces.agent import StoryAgent
+from clipfactory_api.workspaces.expr import Update
 from conftest import USER
 from fakes import FakeAgentCore, FakeS3
 
@@ -363,6 +364,65 @@ def seed_item(
     item.update(fields)
     store.put(item)
     return item
+
+
+def agent_step(
+    store: db.Store,
+    story_id: str,
+    job_id: str,
+    key: str,
+    *,
+    message: str | None = None,
+    user: str = USER,
+    workspace_id: str = WS,
+    **story_set: Any,
+) -> None:
+    """What the agent writes when a step finishes (§45.9.1): the step's result on the story with the step taken out
+    of ``stale`` (``version`` + 1, only while the story points at the job), then the step ``done`` on the job."""
+    story = store.get(pk(user, workspace_id), f"{ws.STORY_SK}{story_id}")
+    assert story is not None and story.get("currentJobId") == job_id
+    sets = {**story_set, "stale": [s for s in story.get("stale") or [] if s != key], "updatedAt": AT}
+    Update(str(story["pk"]), str(story["sk"]), sets=sets).bump().equals("currentJobId", job_id).run(store)
+    job = store.get(pk(user, workspace_id), f"{ws.PJOB_SK}{job_id}")
+    assert job is not None
+    steps = [
+        {**s, "status": "done", "finishedAt": AT, **({"message": message} if message else {})}
+        if s["key"] == key
+        else s
+        for s in job["steps"]
+    ]
+    store.update(str(job["pk"]), str(job["sk"]), {"status": "running", "steps": steps})
+
+
+def agent_end(
+    store: db.Store,
+    story_id: str,
+    job_id: str,
+    *,
+    failed_at: str | None = None,
+    user: str = USER,
+    workspace_id: str = WS,
+) -> None:
+    """The agent's last write: ``review`` with the run's steps out of ``stale``, or ``failed`` at a step with it and
+    every later step of the run added to ``stale``; ``currentJobId`` cleared."""
+    story = store.get(pk(user, workspace_id), f"{ws.STORY_SK}{story_id}")
+    job = store.get(pk(user, workspace_id), f"{ws.PJOB_SK}{job_id}")
+    assert story is not None and job is not None and story.get("currentJobId") == job_id
+    order = ["storyboard", "safety", "scenes", "animation", "sound", "captions", "assemble", "preview"]
+    run = list(job["configuration"]["run"])
+    stale = list(story.get("stale") or [])
+    if failed_at is None:
+        sets: dict[str, Any] = {"status": "review", "stale": [s for s in stale if s not in run]}
+        job_status = "ready"
+        steps = [{**s, "status": "done"} if s["key"] in run else s for s in job["steps"]]
+    else:
+        later = [s for s in run if order.index(s) >= order.index(failed_at)]
+        sets = {"status": "failed", "stale": [s for s in order if s in stale or s in later]}
+        job_status = "failed"
+        steps = [{**s, "status": "failed"} if s["key"] == failed_at else s for s in job["steps"]]
+    update = Update(str(story["pk"]), str(story["sk"]), sets={**sets, "currentJobId": None, "updatedAt": AT})
+    update.bump().equals("currentJobId", job_id).run(store)
+    store.update(str(job["pk"]), str(job["sk"]), {"status": job_status, "steps": steps})
 
 
 def presigned_keys(s3_client: FakeS3) -> list[str]:

@@ -69,7 +69,10 @@ def new_job(
     scene_ids: list[str] | None = None,
     note: str | None = None,
     meta: Mapping[str, Any] | None = None,
+    story_version: int | None = None,
 ) -> Item:
+    """``story_version``: the story's ``version`` once this job is launched. The agent's every story write adds 1, so
+    a cancel can tell whether the run already changed the story (``cancel``)."""
     at = iso(now)
     configuration: Item = {"run": list(run)}
     if from_step:
@@ -98,6 +101,8 @@ def new_job(
         "createdAt": at,
         "updatedAt": at,
     }
+    if story_version is not None:
+        item["storyVersion"] = int(story_version)
     return item
 
 
@@ -131,16 +136,39 @@ def unfinished(job: Mapping[str, Any]) -> list[str]:
     return [k for k in shapes.STEP_ORDER if k in run and k not in done]
 
 
+def valid_stale_scenes(story: Mapping[str, Any]) -> list[str]:
+    """The scenes whose animation is out of date. ``staleScenes`` counts only while ``animation`` is stale (the agent
+    takes ``animation`` out of ``stale`` when it has animated them); empty means none known, or every scene."""
+    if "animation" not in (story.get("stale") or []):
+        return []
+    scenes = story.get("staleScenes")
+    return [str(s) for s in scenes] if isinstance(scenes, list) else []
+
+
+def _unfinished_into(update: Update, story: Mapping[str, Any], job: Mapping[str, Any]) -> None:
+    """The run's unfinished steps go back into ``stale`` (a later step never ran on what an earlier one made), and
+    the scenes still to animate into ``staleScenes`` (removed: every scene)."""
+    left = unfinished(job)
+    update.sets["stale"] = shapes.ordered_steps([*(story.get("stale") or []), *left])
+    if "animation" not in left:
+        return
+    config = job.get("configuration") if isinstance(job.get("configuration"), Mapping) else {}
+    from_step = (config or {}).get("from")
+    ids = [str(s) for s in (config or {}).get("sceneIds") or []]
+    known = valid_stale_scenes(story)  # still valid: the animation step did not finish
+    named = job.get("jobType") != "changes" and from_step in ("scenes", "animation") and bool(ids)
+    if named and not ("animation" in (story.get("stale") or []) and not known):
+        update.sets["staleScenes"] = sorted({*ids, *known})  # only these scenes still need animating
+    elif job.get("jobType") != "changes" and from_step is None and known:
+        update.sets["staleScenes"] = known  # a run by content: the same scenes are still out of date
+    else:
+        update.removes.append("staleScenes")  # the whole animation is out of date
+
+
 def _story_fail(story: Mapping[str, Any], job: Mapping[str, Any], at: str) -> Update:
-    stale = shapes.ordered_steps([*(story.get("stale") or []), *unfinished(job)])
-    update = Update(str(story["pk"]), str(story["sk"]), sets={"status": "failed", "stale": stale, "updatedAt": at})
+    update = Update(str(story["pk"]), str(story["sk"]), sets={"status": "failed", "updatedAt": at})
+    _unfinished_into(update, story, job)
     update.removes.append("currentJobId")
-    if "animation" in unfinished(job):
-        scene_ids = (job.get("configuration") or {}).get("sceneIds")
-        if scene_ids:
-            update.sets["staleScenes"] = list(scene_ids)  # only these scenes still need animating
-        else:
-            update.removes.append("staleScenes")  # the whole animation is out of date again
     return update.bump().equals("currentJobId", job["jobId"]).equals("version", story.get("version"))
 
 
@@ -148,12 +176,13 @@ def _reread(store: db.Store, job: Mapping[str, Any]) -> Item:
     return store.get(str(job["pk"]), str(job["sk"])) or dict(job)
 
 
-def _stop(stop: Stop | None, session_id: Any) -> None:
+def stop_quietly(stop: Stop | None, session_id: Any) -> None:
+    """Ends a runtime session, best effort: the job's new ``sessionId`` already fences the old run out."""
     if stop is None or not isinstance(session_id, str) or not session_id:
         return
     try:
         stop(session_id)
-    except Exception as e:  # best effort: the new sessionId already fences the old run out
+    except Exception as e:
         log("warning", "stories.stop_failed", error=type(e).__name__)
 
 
@@ -210,7 +239,7 @@ def settle(
     message = STOPPED if job.get("contentType") == "animation" else PORTRAIT_STOPPED
     if _fail(store, job, now, message, story=story, expect_status=[str(job.get("status"))]):
         log("info", "stories.job_fenced", jobId=job.get("jobId"), was=job.get("status"))
-        _stop(stop, job.get("sessionId"))
+        stop_quietly(stop, job.get("sessionId"))
     return _reread(store, job)
 
 
@@ -222,6 +251,17 @@ def fail_start(
     return _reread(store, job)
 
 
+def run_changed_story(story: Mapping[str, Any], job: Mapping[str, Any]) -> bool:
+    """Whether the run already wrote a step's result to the story (each agent write adds 1 to ``version``)."""
+    start = job.get("storyVersion")
+    if isinstance(start, int) and not isinstance(start, bool):
+        return int(story.get("version") or 0) != start
+    config = job.get("configuration") if isinstance(job.get("configuration"), Mapping) else {}
+    run = set((config or {}).get("run") or [])
+    finished = any(s.get("key") in run and s.get("status") in shapes.STEP_DONE for s in job.get("steps") or [])
+    return job.get("status") != "queued" or finished  # not recorded: assume it did, unless it never started
+
+
 def cancel(
     store: db.Store,
     job: Mapping[str, Any],
@@ -229,7 +269,9 @@ def cancel(
     now: datetime,
 ) -> bool:
     """Marks a queued or running job ``canceled`` (a new ``sessionId`` fences its writes out) and puts the story back
-    to its status before the job, ``stale`` as it was. False when the job changed meanwhile."""
+    to its status before the job. ``stale`` stays as it was when the run changed nothing; once it wrote a step's result
+    (a new storyboard, say), its unfinished steps join ``stale`` as on a failure, so "Try again" makes the rest and an
+    older video is never approved with a newer script. False when the job or the story changed meanwhile."""
     at = iso(now)
     steps = []
     for step in job.get("steps") or []:
@@ -248,8 +290,11 @@ def cancel(
     if story is not None and story.get("currentJobId") == job.get("jobId"):
         back = story.get("statusBefore") or "draft"
         su = Update(str(story["pk"]), str(story["sk"]), sets={"status": back, "updatedAt": at})
+        if run_changed_story(story, job):
+            _unfinished_into(su, story, job)
         su.removes.append("currentJobId")
-        updates.append(su.bump().equals("currentJobId", job["jobId"]).request())
+        su.bump().equals("currentJobId", job["jobId"]).equals("version", story.get("version"))
+        updates.append(su.request())
     try:
         store.transact(updates=updates)
     except db.ConditionFailed:

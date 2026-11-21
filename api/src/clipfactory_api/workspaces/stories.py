@@ -19,6 +19,7 @@ from ..errors import bad_request, conflict
 from ..ids import is_ulid
 from . import catalog, shapes
 from .ideas import LOGLINE_MAX, TITLE_MAX, character_ids
+from .jobs import valid_stale_scenes
 
 REMAKE_STATUSES: Final = ("draft", "review", "needs_check", "failed")
 EDIT_STATUSES: Final = ("review", "needs_check", "failed")
@@ -131,6 +132,27 @@ def scene_list(value: Any, story: Mapping[str, Any]) -> list[str]:
     return ids
 
 
+def _all_scenes(story: Mapping[str, Any]) -> list[str]:
+    return [str(s.get("sceneId")) for s in story.get("scenes") or [] if isinstance(s, Mapping) and s.get("sceneId")]
+
+
+def _named_scenes(story: Mapping[str, Any], run: list[str], scene_ids: list[str] | None) -> list[str] | None:
+    """The scenes an explicit ``from "scenes" | "animation"`` re-renders: the ones asked for plus every scene already
+    out of date, so an older take never stays in the video next to newer sound and captions."""
+    if not scene_ids:
+        return scene_ids
+    stale = set(story.get("stale") or [])
+    if "scenes" in run and "scenes" in stale:
+        return _all_scenes(story)  # the stills are out of date, and which ones is not known
+    if "animation" in stale:
+        known = valid_stale_scenes(story)
+        if not known:
+            return _all_scenes(story)  # every scene's animation is out of date
+        wanted = {*scene_ids, *known}
+        return [s for s in _all_scenes(story) if s in wanted]
+    return scene_ids
+
+
 def produce_run(
     story: Mapping[str, Any], from_step: str | None, scene_ids: list[str] | None
 ) -> tuple[list[str], list[str] | None]:
@@ -138,14 +160,36 @@ def produce_run(
     if not has_script(story):
         return list(shapes.STEP_ORDER), None
     if from_step is not None:
-        return list(shapes.STEP_ORDER[shapes.STEP_ORDER.index(from_step) :]), scene_ids
+        run = list(shapes.STEP_ORDER[shapes.STEP_ORDER.index(from_step) :])
+        return run, _named_scenes(story, run, scene_ids)
     run = shapes.ordered_steps(story.get("stale") or [])
+    if not run and not story.get("videoKey"):
+        run = list(shapes.STEP_ORDER[1:])  # a storyboard and no video: make everything after the storyboard
     if not run:
         raise conflict(UP_TO_DATE)
-    scenes = story.get("staleScenes")
-    if "animation" in run and "scenes" not in run and isinstance(scenes, list) and scenes:
-        return run, [str(s) for s in scenes]
+    scenes = valid_stale_scenes(story)
+    if "animation" in run and "scenes" not in run and scenes:
+        return run, scenes
     return run, None
+
+
+def changes_again(story: Mapping[str, Any], last: Mapping[str, Any] | None) -> tuple[str | None, list[str]] | None:
+    """(note, sceneIds) when "Try again" must repeat an "Ask for changes" or "Remake this scene" whose storyboard
+    never finished, so the note and the chosen scenes are not lost; else None (a plain produce)."""
+    if last is None or last.get("jobType") != "changes" or last.get("status") not in ("failed", "canceled"):
+        return None
+    if last.get("contentId") != story.get("storyId") or "storyboard" not in (story.get("stale") or []):
+        return None
+    if not has_script(story):
+        return None
+    config = last.get("configuration") if isinstance(last.get("configuration"), Mapping) else {}
+    note = (config or {}).get("note")
+    known = set(_all_scenes(story))
+    scenes = [str(s) for s in (config or {}).get("sceneIds") or [] if str(s) in known]
+    note = note.strip() if isinstance(note, str) and note.strip() else None
+    if note is None and not scenes:
+        return None
+    return note, scenes
 
 
 def done_steps(story: Mapping[str, Any]) -> list[str]:
@@ -187,6 +231,20 @@ def approve_problem(story: Mapping[str, Any]) -> str | None:
     if safety.get("status") == "ok" and safety.get("checkedScriptVersion") == story.get("scriptVersion"):
         return None
     return _facts(story) or NOT_YET
+
+
+def carried_check(story: Mapping[str, Any], new_version: int) -> dict[str, Any] | None:
+    """The fact check moved onto a new script version that changed no text it reads (effects, music, a scene's
+    length: the captions, scene captions and the actions stay word for word), or None when there is nothing to carry
+    (no check, a check that is due anyway, or one made on another version)."""
+    safety = story.get("safety")
+    if not isinstance(safety, Mapping) or safety.get("status") not in ("ok", "problems"):
+        return None
+    if "safety" in (story.get("stale") or []):
+        return None
+    if safety.get("checkedScriptVersion") != story.get("scriptVersion"):
+        return None
+    return {**safety, "checkedScriptVersion": new_version}
 
 
 def _facts(story: Mapping[str, Any]) -> str | None:
