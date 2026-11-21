@@ -9,6 +9,8 @@ export interface DropdownOption {
   label: string;
   /** One plain line under the name. */
   line?: string;
+  /** Shown greyed: it cannot be picked (the line says why). */
+  disabled?: boolean;
 }
 
 export function Dropdown({
@@ -56,14 +58,20 @@ export function Dropdown({
 
   function show() {
     if (disabled) return;
-    const i = options.findIndex((o) => o.value === value);
-    setAt(i >= 0 ? i : 0);
+    const i = options.findIndex((o) => o.value === value && !o.disabled);
+    setAt(i >= 0 ? i : Math.max(0, options.findIndex((o) => !o.disabled)));
     setOpen(true);
+  }
+
+  /** The next choice that can be picked from `from`, going `step` (1 down, -1 up); `from` itself when there is none. */
+  function next(from: number, step: number) {
+    for (let i = from + step; i >= 0 && i < options.length; i += step) if (!options[i]!.disabled) return i;
+    return from;
   }
 
   function pick(i: number) {
     const o = options[i];
-    if (!o) return;
+    if (!o || o.disabled) return;
     onChange(o.value);
     setOpen(false);
     button.current?.focus();
@@ -77,11 +85,10 @@ export function Dropdown({
   }
 
   function onListKey(e: KeyboardEvent) {
-    const last = options.length - 1;
-    if (e.key === "ArrowDown") setAt((i) => Math.min(last, i + 1));
-    else if (e.key === "ArrowUp") setAt((i) => Math.max(0, i - 1));
-    else if (e.key === "Home") setAt(0);
-    else if (e.key === "End") setAt(last);
+    if (e.key === "ArrowDown") setAt((i) => next(i, 1));
+    else if (e.key === "ArrowUp") setAt((i) => next(i, -1));
+    else if (e.key === "Home") setAt((i) => (next(-1, 1) < 0 ? i : next(-1, 1)));
+    else if (e.key === "End") setAt((i) => (next(options.length, -1) >= options.length ? i : next(options.length, -1)));
     else if (e.key === "Enter" || e.key === " ") pick(at);
     else if (e.key === "Escape") {
       e.stopPropagation();
@@ -135,8 +142,9 @@ export function Dropdown({
               id={`${id}-opt-${i}`}
               role="option"
               aria-selected={o.value === value}
-              className={`dropdown__opt${i === at ? " is-at" : ""}${o.value === value ? " is-on" : ""}`}
-              onPointerEnter={() => setAt(i)}
+              aria-disabled={o.disabled || undefined}
+              className={`dropdown__opt${i === at ? " is-at" : ""}${o.value === value ? " is-on" : ""}${o.disabled ? " is-disabled" : ""}`}
+              onPointerEnter={() => !o.disabled && setAt(i)}
               onClick={() => pick(i)}
             >
               <span className="dropdown__text">

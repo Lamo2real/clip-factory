@@ -55,7 +55,7 @@ for (const size of [
   test.describe(`at ${size.width}px`, () => {
     test.use({ viewport: size });
 
-    test("the TikTok row: nothing picked, Upload off until the owner picks; branded content hides Only me", async ({ page }) => {
+    test("the TikTok row: nothing picked, Upload off until the owner picks; branded content greys Only me and Followers", async ({ page }) => {
       await connectTikTok(page, true);
       await page.goto("/review");
       await settle(page);
@@ -84,15 +84,32 @@ for (const size of [
       await expect(dropdown(row)).toHaveText("Only me");
       await expect(upload).not.toHaveAttribute("aria-disabled", "true");
 
-      // Commercial content needs whose: Branded content (paid partnership), which cannot be Only me.
+      // Commercial content needs whose: TikTok's own words show on Upload (hover) and under it (phones have no hover).
+      const whose = "You need to indicate if your content promotes yourself, a third party, or both.";
       await row.getByRole("switch", { name: "Commercial content" }).click();
       await expect(upload).toHaveAttribute("aria-disabled", "true");
-      await expect(card.locator(".upload-going")).toHaveText("Pick Your brand or Branded content on TikTok first.");
-      await row.getByRole("checkbox", { name: /^Branded content/ }).check();
-      await expect(dropdown(row)).toHaveText("Pick who can see it");
-      expect(await choices(row)).toEqual(["Everyone", "Followers", "Friends"]);
-      await expect(card.locator(".tt-legal")).toHaveText("By posting, you agree to TikTok's Music Usage Confirmation and Branded Content Policy.");
+      await expect(upload).toHaveAttribute("title", whose);
+      await expect(card.locator(".upload-going")).toHaveText(`${whose} Pick Your brand or Branded content on TikTok first.`);
+      // Your brand: the video is labeled Promotional content.
+      await row.getByRole("checkbox", { name: /^Your brand/ }).check();
+      await expect(row.getByText("Your video will be labeled as 'Promotional content'.")).toBeVisible();
+      await expect(upload).not.toHaveAttribute("title", whose);
+      await row.getByRole("checkbox", { name: /^Your brand/ }).uncheck();
+      // Only me was picked first: Branded content (paid partnership) is greyed and says what to do; Only me stays picked.
+      const branded = row.getByRole("checkbox", { name: /^Branded content/ });
+      await expect(branded).toBeDisabled();
+      await expect(row.getByText("Branded content can't be Only me. Pick Everyone or Friends first.")).toBeVisible();
+      await expect(dropdown(row)).toHaveText("Only me");
       await pick(row, "Everyone");
+      await branded.check();
+      await expect(row.getByText("Your video will be labeled as 'Paid partnership'.")).toBeVisible();
+      // Branded content ticked: Only me and Followers show greyed with TikTok's line.
+      await dropdown(row).click();
+      for (const name of ["Followers", "Only me"]) await expect(row.getByRole("option", { name: new RegExp(`^${name}`) })).toHaveAttribute("aria-disabled", "true");
+      for (const name of ["Everyone", "Friends"]) await expect(row.getByRole("option", { name: new RegExp(`^${name}`) })).not.toHaveAttribute("aria-disabled", "true");
+      await expect(row.getByRole("option", { name: /^Only me/ })).toContainText("Branded content visibility cannot be set to private.");
+      await dropdown(row).click();
+      await expect(card.locator(".tt-legal")).toHaveText("By posting, you agree to TikTok's Branded Content Policy and Music Usage Confirmation.");
       await expect(upload).not.toHaveAttribute("aria-disabled", "true");
       await upload.click();
       await expect(page.getByRole("dialog", { name: "Post to TikTok" })).toHaveCount(0);

@@ -1,5 +1,5 @@
 {
- "version": "9c56cf4b7184",
+ "version": "f95acbf05e49",
  "parts": [
   {
    "id": "app-map",
@@ -129,7 +129,7 @@
    "id": "contracts-17",
    "title": "CONTRACTS: 17. Posting setup: a setup list per platform, real Connect, real posting (owner request, 2026-11-16)",
    "line": "The owner's words: \"Facebook, Instagram, YouTube, TikTok and X should each be a step to connect to in order for this",
-   "chars": 99768
+   "chars": 101619
   },
   {
    "id": "contracts-18",
@@ -243,7 +243,7 @@
    "id": "contracts-36",
    "title": "CONTRACTS: 36. One simple Review card: Use my settings and one row per place (owner request, 2026-11-20)",
    "line": "The owner, on a Review card after §33: \"How can I select platforms on the bottom bar AND tick/untick them under Upload",
-   "chars": 9762
+   "chars": 10012
   },
   {
    "id": "contracts-37",

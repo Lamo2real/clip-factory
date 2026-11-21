@@ -265,6 +265,30 @@ def test_tiktok_refuses_a_privacy_the_creator_cannot_use() -> None:
         TikTokPublisher().start(job)
 
 
+@pytest.mark.parametrize("privacy", ["SELF_ONLY", "FOLLOWER_OF_CREATOR"])
+def test_tiktok_refuses_branded_content_that_is_not_for_everyone_or_friends(privacy: str) -> None:
+    http = FakeHttp(
+        (
+            200,
+            {
+                **json.loads(__import__("fakes").stats_fixture("publish/tiktok_creator")),
+                "data": {
+                    "privacy_level_options": [
+                        "PUBLIC_TO_EVERYONE",
+                        "MUTUAL_FOLLOW_FRIENDS",
+                        "FOLLOWER_OF_CREATOR",
+                        "SELF_ONLY",
+                    ]
+                },
+            },
+        )
+    )
+    job, _, _ = make_job("tiktok", http, options={"privacyLevel": privacy, "brandContent": True})
+    with pytest.raises(PublishError, match="Pick who can see it on TikTok"):
+        TikTokPublisher().start(job)
+    assert len(http.calls) == 1  # never init: nothing reaches TikTok
+
+
 def test_tiktok_refuses_a_too_long_clip() -> None:
     creator = json.loads(__import__("fakes").stats_fixture("publish/tiktok_creator"))
     creator["data"]["max_video_post_duration_sec"] = 10

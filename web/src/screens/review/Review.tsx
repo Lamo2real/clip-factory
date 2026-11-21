@@ -20,8 +20,9 @@ import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAwa
 import { useDeletedJobs } from "../../lib/jobDeletes.ts";
 import { captionsTooLong, PlaceRows, type PlaceRowsHandle } from "./PlaceRows.tsx";
 import { prefersReducedMotion } from "../../lib/prefs.ts";
-import { choicesReady, myTikTokChoices, NO_TIKTOK_CHOICES, tiktokOptions, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
+import { brandedBlocked, choicesReady, myTikTokChoices, NO_TIKTOK_CHOICES, PICK_WHOSE, tiktokOptions, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
 import { cardOptionsFrom, optionsFor, presetOf, type CardOptions } from "../../lib/preset.ts";
+import { TikTokLegal } from "./TikTokCommercial.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
 import { useUnsaved } from "../../features/help/unsaved.ts";
 
@@ -603,6 +604,8 @@ function ReviewCard({
   }
 
   const passed = clip.checklist.items.filter((i) => i.pass).length;
+  // Commercial content is on but says nothing about whose: TikTok's own words go on Upload's hover text and the line.
+  const ttNoWhose = tiktokOn && !!creator && choices.commercial && !choices.yourBrand && !choices.branded;
   // Why Upload is off because of TikTok, in plain words (null when TikTok is ready or not ticked).
   const uploadWhy: string | null = !tiktokOn || ttReady
     ? null
@@ -616,7 +619,9 @@ function ReviewCard({
             ? "This clip is too long for TikTok. Untick TikTok to upload it to the rest."
             : !choices.privacy
               ? "Pick who can see it on TikTok first."
-              : "Pick Your brand or Branded content on TikTok first.";
+              : ttNoWhose
+                ? `${PICK_WHOSE} Pick Your brand or Branded content on TikTok first.`
+                : (brandedBlocked(choices.privacy) ?? "Pick Your brand or Branded content on TikTok first.");
   const placesShown = ready && !noneReady ? chosen : PLATFORM_ORDER;
 
   return (
@@ -802,22 +807,7 @@ function ReviewCard({
           </p>
         ) : null}
         {ready && !noneReady && tiktokOn ? (
-          <p className="tt-legal">
-            By posting, you agree to TikTok&apos;s{" "}
-            <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener noreferrer">
-              Music Usage Confirmation
-            </a>
-            {choices.commercial && choices.branded ? (
-              <>
-                {" "}
-                and{" "}
-                <a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener noreferrer">
-                  Branded Content Policy
-                </a>
-              </>
-            ) : null}
-            .
-          </p>
+          <TikTokLegal className="tt-legal" branded={choices.commercial && choices.branded} />
         ) : null}
         <div className="review-card__actions" ref={confirmRef} data-help-dodge="">
           <Button variant="ghost" icon="trash" act="throw" data-help="throw-away" disabled={busy !== null || leaving} onClick={throwAway}>
@@ -836,6 +826,7 @@ function ReviewCard({
             // Held, not dead: a tap takes him to the fix (Use my settings) instead of doing nothing.
             aria-disabled={leaving || !ready || (!noneReady && !chosen.length) || !!uploadWhy ? true : undefined}
             aria-describedby={ready && !keepFailed && !noneReady ? `going-${clip.clipId}` : undefined}
+            title={ttNoWhose && !ttTooLong ? PICK_WHOSE : undefined}
             onClick={confirm}
           >
             {keepFailed ? "Try again" : uploadLabel(chosen)}

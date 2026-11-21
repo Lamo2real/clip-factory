@@ -35,10 +35,36 @@ export const PRIVACY_LABEL: Record<string, string> = {
 /** The order the choices show: Everyone first, Only me last. Anything TikTok adds later goes at the end. */
 const PRIVACY_ORDER = ["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"];
 
-/** The privacy choices to offer: TikTok's list (never more), Everyone first, without "Only me" for branded content. */
-export function privacyChoices(options: string[], branded: boolean): string[] {
+/** TikTok's rule: branded content (a paid partnership) can only be seen by Everyone or Friends. */
+export const BRANDED_PRIVACY = ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS"];
+
+/** TikTok's own words on a greyed choice while Branded content is ticked. */
+export const BRANDED_PRIVATE_LINE = "Branded content visibility cannot be set to private.";
+
+/** TikTok's own words when Commercial content is on and nothing is ticked. */
+export const PICK_WHOSE = "You need to indicate if your content promotes yourself, a third party, or both.";
+
+/** TikTok's list (never more), Everyone first. */
+export function orderedPrivacy(options: string[]): string[] {
   const rank = (o: string) => (PRIVACY_ORDER.includes(o) ? PRIVACY_ORDER.indexOf(o) : PRIVACY_ORDER.length);
-  return options.filter((o) => !(branded && o === "SELF_ONLY")).sort((a, b) => rank(a) - rank(b));
+  return [...options].sort((a, b) => rank(a) - rank(b));
+}
+
+/** The privacy choices that can be picked: TikTok's list, Everyone first; only Everyone or Friends for branded content. */
+export function privacyChoices(options: string[], branded: boolean): string[] {
+  return orderedPrivacy(options).filter((o) => !branded || BRANDED_PRIVACY.includes(o));
+}
+
+/** The label TikTok puts on the post, or null when Commercial content says nothing yet. Branded content wins. */
+export function tiktokLabel(c: { commercial: boolean; yourBrand: boolean; branded: boolean }): string | null {
+  if (!c.commercial) return null;
+  return c.branded ? "Paid partnership" : c.yourBrand ? "Promotional content" : null;
+}
+
+/** Why Branded content cannot be ticked with the privacy picked now (TikTok's rule), or null when it can. */
+export function brandedBlocked(privacy: string): string | null {
+  if (!privacy || BRANDED_PRIVACY.includes(privacy)) return null;
+  return `Branded content can't be ${PRIVACY_LABEL[privacy] ?? privacy}. Pick Everyone or Friends first.`;
 }
 
 /** TikTok only lets this creator post as "Only me": the app is not approved (audited) by TikTok yet. */
@@ -50,7 +76,7 @@ export function onlyPrivateAllowed(options: string[]): boolean {
 export function sheetReady(o: { privacy: string; commercial: boolean; yourBrand: boolean; branded: boolean }): boolean {
   if (!o.privacy) return false;
   if (o.commercial && !o.yourBrand && !o.branded) return false;
-  if (o.branded && o.privacy === "SELF_ONLY") return false;
+  if (o.branded && !BRANDED_PRIVACY.includes(o.privacy)) return false;
   return true;
 }
 

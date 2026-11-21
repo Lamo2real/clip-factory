@@ -2555,8 +2555,9 @@ On Upload, when TikTok is one of the chosen places (§33; an older client: in `s
 sheet opens before the confirm request: the creator nickname (`GET /v1/accounts/tiktok/creator-info`, fetched each
 time), a **Who can see it** dropdown (the app's own) with **no default** (below), switches Comments / Duet /
 Stitch (off by default, greyed when disabled by the creator), a **Commercial content** switch (off) with **Your brand** / **Branded content** (one required when on;
-label "Promotional content" / "Paid partnership"; branded cannot be "Only me"), the sentence "By posting, you agree to
-TikTok's Music Usage Confirmation" (+ "Branded Content Policy" when branded), a video preview and the editable
+label "Promotional content" / "Paid partnership"; branded is only Everyone or Friends), the sentence "By posting, you agree to
+TikTok's Music Usage Confirmation." (branded: "By posting, you agree to TikTok's Branded Content Policy and Music Usage
+Confirmation."), a video preview and the editable
 caption. Upload stays disabled until a privacy is chosen. Confirm body gains `"tiktok": { "privacyLevel", "disableComment",
 "disableDuet", "disableStitch", "brandContent", "brandOrganic" }` (validated; stored on the TikTok Post as internal
 `postOptions`); a `queued` TikTok post without it → 400 "Pick who can see it on TikTok.". After Upload the toast says
@@ -2571,10 +2572,26 @@ that the creator picks the privacy status himself **from a dropdown** with no de
 are shown and none is on by default; Commercial content is off until the creator turns it on. So:
 
 * **The app's own dropdown** (`components/Dropdown.tsx`, never the OS list) labelled "Who can see it": exactly
-  `privacyOptions` (minus Only me when branded), ordered Everyone, Followers, Friends, Only me, showing "Pick who can
-  see it" until the owner picks. When `SELF_ONLY` is the only option it is the one choice, and the line "TikTok keeps
-  posts private until it approves your app." shows under it. When Branded content leaves nothing: "Branded content
-  can't be Only me. Turn off Branded content." The sheet's hint reads "Pick who can see it to turn on Upload."
+  `privacyOptions`, ordered Everyone, Followers, Friends, Only me, showing "Pick who can see it" until the owner picks.
+  With Branded content ticked, Only me and Followers stay in the list greyed (`DropdownOption.disabled`: skipped by
+  the keys, a tap does nothing, `aria-disabled`) with TikTok's line "Branded content visibility cannot be set to
+  private." When `SELF_ONLY` is the only option it is the one choice, and the line "TikTok keeps posts private until it
+  approves your app." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off
+  Branded content." The sheet's hint reads "Pick who can see it to turn on Upload."
+* **Commercial content (TikTok's audit rules, 2026-11-21).** Shared by the sheet and the TikTok row
+  (`screens/review/TikTokCommercial.tsx`). Under the two ticks one line says the label: nothing ticked "Pick Your
+  brand, Branded content, or both."; Your brand only "Your video will be labeled as 'Promotional content'."; Branded
+  content (alone or with Your brand) "Your video will be labeled as 'Paid partnership'.". Branded content (paid
+  partnership) is only for Everyone or Friends (`BRANDED_PRIVACY`): while Only me or Followers is picked the Branded
+  content tick is greyed with "Branded content can't be Only me. Pick Everyone or Friends first." (or "… can't be
+  Followers. …"); the privacy he picked is never cleared (TikTok's option A; a tick already on can always be
+  unticked). Commercial content on with nothing ticked keeps Upload off; TikTok's sentence "You need to indicate if
+  your content promotes yourself, a third party, or both." is Upload's hover text (`title`) and starts the line under
+  it, because phones have no hover: the sheet "… Pick Your brand or Branded content to turn on Upload.", the card
+  "… Pick Your brand or Branded content on TikTok first.". The API refuses branded content that is not Everyone or
+  Friends twice: the confirm body (400 "Branded content can only be seen by Everyone or Friends on TikTok. Pick who
+  can see it.") and `TikTokPublisher.post_info` (PublishError "Pick who can see it on TikTok again, then press Try
+  again.", before anything reaches TikTok).
 * **Use my settings** on the Review card (§36) is the owner's own action: one tap puts his saved TikTok choices on
   (within what TikTok offers him right now). Nothing is ever on before he taps it or picks in the TikTok row.
 * Commercial content (off) with Your brand / Branded content ("Paid partnership"), the Branded Content Policy line and
@@ -2704,8 +2721,8 @@ Shared names: `oauth.state.sign(key, platform, nonce, exp)`, `oauth.state.verify
   canvas, "Connected as", ring complete; Facebook/Instagram choose a page; **Cancel** → `denied` copy; reload resumes at
   the first not-done step; TikTok shows "Works now, but your TikTok posts stay private until TikTok says yes."; expired
   token → "Connect again" vermilion; Disconnect → Undo within 8 s keeps it, after 8 s it is gone; all five ready → the
-  floating setup list gone and "5 of 5 ready". `e2e/tiktok-sheet.spec.ts`: Keep disabled until privacy chosen, branded hides "Only
-  me"; **Try again** on a failed clip whose TikTok post needs new privacy choices opens the sheet first and sends
+  floating setup list gone and "5 of 5 ready". `e2e/tiktok-sheet.spec.ts`: Keep disabled until privacy chosen, branded greys "Only
+  me" and "Followers", Only me first greys Branded content; **Try again** on a failed clip whose TikTok post needs new privacy choices opens the sheet first and sends
   `tiktok` in the confirm body (mock `_try_again` replaces `postOptions`). `overflow.spec.ts` +
   `/settings/posting/setup`, each platform page, `/mock-oauth/youtube`, `/about.html`, the
   TikTok sheet at 320–1920; `screenshots.spec.ts` adds the list and the YouTube page at 375/1440, light and dark;
@@ -7035,10 +7052,12 @@ Decision record: ADR-60 (which corrects ADR-57).
    With nothing set up (or the check failed) the rows hold the words only. There is no caption tab bar and no second
    place selector anywhere on the card.
 5. "Going to: YouTube · TikTok · Instagram · Facebook" (or why Upload is off), TikTok's Music Usage Confirmation line
-   (`.tt-legal`, + Branded Content Policy when branded) whenever TikTok is ticked, then **Throw away** and **Upload to
+   (`.tt-legal`; branded: Branded Content Policy and Music Usage Confirmation) whenever TikTok is ticked, then **Throw away** and **Upload to
    4** (bottom right, vermilion on the top card). Upload is off, with one plain line in its place, while TikTok is
    ticked and not ready: "Tap Use my settings first. TikTok needs your tap.", "Asking TikTok…", "Pick who can see it on
-   TikTok first.", "Pick Your brand or Branded content on TikTok first.", "This clip is too long for TikTok. Untick
+   TikTok first.", "You need to indicate if your content promotes yourself, a third party, or both. Pick Your brand
+   or Branded content on TikTok first." (that first sentence is also Upload's hover text), "Branded content can't be
+   Only me. Pick Everyone or Friends first.", "This clip is too long for TikTok. Untick
    TikTok to upload it to the rest.", "TikTok did not answer. Tap Ask TikTok again, or untick TikTok."
 
 A standard upload is two taps: **Use my settings**, then **Upload to 4**. The TikTok sheet no longer opens from the
@@ -7103,7 +7122,7 @@ options)`. Nothing about My settings is kept in localStorage.
 ### 34.5 TikTok's "Who can see it"
 
 The app's own dropdown (`components/Dropdown.tsx`: a soft-fill button that opens a solid list, keyboard arrows,
-Escape, never the OS list), labelled "Who can see it", with exactly `privacyOptions` (minus Only me when branded),
+Escape, never the OS list), labelled "Who can see it", with exactly `privacyOptions` (Only me and Followers greyed when branded, §17.8),
 Everyone first, and the placeholder "Pick who can see it" until the owner picks or taps Use my settings. When only
 `SELF_ONLY` is allowed: one choice and the line "TikTok keeps posts private until it approves your app." Used in the
 TikTok row and on the Post to TikTok sheet (which still opens for Library's Try again, and on Upload while nothing is

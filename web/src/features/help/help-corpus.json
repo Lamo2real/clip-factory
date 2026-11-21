@@ -1,5 +1,5 @@
 {
-  "version": "70ac13a45478",
+  "version": "22f774d764a7",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -32,6 +32,7 @@
     "src/screens/library/WeekView.tsx",
     "src/screens/review/PlaceRows.tsx",
     "src/screens/review/Review.tsx",
+    "src/screens/review/TikTokCommercial.tsx",
     "src/screens/review/TikTokPrivacy.tsx",
     "src/screens/review/TikTokSheet.tsx",
     "src/screens/review/UploadTo.tsx",
@@ -3050,6 +3051,8 @@
         "week",
         "later",
         "best",
+        "commercial",
+        "content",
         "post",
         "tiktok",
         "ask",
@@ -3057,9 +3060,7 @@
         "close",
         "comments",
         "duet",
-        "stitch",
-        "commercial",
-        "content"
+        "stitch"
       ],
       "answer": "Library has every clip you uploaded.",
       "steps": [

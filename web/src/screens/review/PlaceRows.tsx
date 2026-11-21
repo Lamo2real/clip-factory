@@ -11,6 +11,7 @@ import { Button, Segmented, Toggle } from "../../components/ui.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 import { X_REPLIES_LABEL, YOUTUBE_CATEGORIES, YT_WHO, type CardOptions } from "../../lib/preset.ts";
 import { PRIVACY_LABEL, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
+import { TikTokCommercial } from "./TikTokCommercial.tsx";
 import { TikTokPrivacy } from "./TikTokPrivacy.tsx";
 
 // The platforms' own caption limits.
@@ -339,7 +340,6 @@ function TikTokFields({ row, field }: { row: TikTokRow; field: ReactNode }) {
     );
   const { privacy, comments, duet, stitch, commercial, yourBrand, branded } = choices;
   const tooLong = tooLongForTikTok(row.durationSec, creator.maxDurationSec);
-  const setBranded = (on: boolean) => onChoices(on && privacy === "SELF_ONLY" ? { branded: on, privacy: "" } : { branded: on });
   return (
     <>
       <div className="tt-sheet__who">
@@ -356,19 +356,7 @@ function TikTokFields({ row, field }: { row: TikTokRow; field: ReactNode }) {
         <Toggle label="Stitch" checked={stitch && !creator.stitchDisabled} disabled={creator.stitchDisabled} onChange={(v) => onChoices({ stitch: v })} description={creator.stitchDisabled ? "Turned off in your TikTok settings." : undefined} />
         <Toggle label="Commercial content" description="Turn on if this clip promotes a brand, a product or yourself." checked={commercial} onChange={(v) => onChoices({ commercial: v })} />
         {commercial ? (
-          <div className="tt-sheet__brand" role="group" aria-label="Commercial content">
-            <label className={`check-chip${yourBrand ? " is-on" : ""}`}>
-              <input type="checkbox" checked={yourBrand} onChange={(e) => onChoices({ yourBrand: e.target.checked })} />
-              <span>Your brand</span>
-              <span className="tt-sheet__tag">Promotional content</span>
-            </label>
-            <label className={`check-chip${branded ? " is-on" : ""}`}>
-              <input type="checkbox" checked={branded} onChange={(e) => setBranded(e.target.checked)} />
-              <span>Branded content</span>
-              <span className="tt-sheet__tag">Paid partnership</span>
-            </label>
-            {!yourBrand && !branded ? <p className="field__hint">Pick Your brand, Branded content, or both.</p> : null}
-          </div>
+          <TikTokCommercial privacy={privacy} yourBrand={yourBrand} branded={branded} onYourBrand={(v) => onChoices({ yourBrand: v })} onBranded={(v) => onChoices({ branded: v })} />
         ) : null}
       </div>
       {tooLong ? (
