@@ -180,3 +180,12 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
   pool, bucket or secret holding the owner's data is replaced, and the deploy's delete gate passes.
 - AC6: Switched off in prod (`content_rewards_enabled = false`) until every part has merged; one line switches it on.
 - AC7: Money shows only what Content Rewards reports; a rate × views guess is never shown (a test checks).
+- AC8: The fit check (BR-28) is one pure function on the server, worked out from stored items each time it is asked
+  (never Content Rewards, the public campaign data or the network), and the same answer drives the Review card, the
+  clip page, Upload, Try again, Post now and the copy. The web only re-checks the four things that change while he
+  types or taps (tags, #Ad, the paid switch, the places).
+- AC9: All your money (BR-27) is added up on the server; the web only formats. Content Rewards' paid money is kept by
+  day; for an owner whose money was read before, a one-time scan fills it without ever changing the paid total.
+- AC10: Additive only: new attributes on the job, clip and money items and one api setting (`CR_REMAKE`, from
+  `cr_remake_enabled`, off by default); no new table, index, bucket, secret or Lambda, and nothing that holds the
+  owner's data is replaced.
