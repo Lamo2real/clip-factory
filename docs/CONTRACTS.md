@@ -13303,3 +13303,347 @@ pixels. Each job records which providers made it (`PJOB#.meta.providers`).
   app-key secrets and the OAuth state key; `RATE#{platform}` writes only for the shared-app choice. Nothing else of
   Clip Factory is read or written. §45.32 #20 counts the shared-app choice's shared budget as the owner's own choice.
 * **Social accounts page**: each card shows the platform's logo mark (the same marks Clip Factory's setup uses).
+
+## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
+
+Decision record: ADR-81. Builders: §46.16. Everything here is additive: no table, index, secret, bucket, Cognito or
+cf-prod-api infrastructure changes; existing settings, clips and posts read exactly as before.
+
+### 46.1 The owner's words and the answers he gave
+
+The spec (2026-11-22, verbatim where quoted): "On each scheduled run, take the next clips from the review list, oldest
+first, and post them." "Each clip goes to all my connected accounts on every platform in the same run." "Clips in
+review post automatically, without my approval. I can still decline a clip before its turn, which removes it." "If
+there are no clips in review, the run does nothing." "A clip is never posted twice, even if a run is retried or two
+runs overlap." "If posting fails on one platform, retry once, record the error, and still post to the other
+platforms." "Save the live link of every post next to its clip and campaign." Settings: an on/off switch ("While it
+is off, nothing posts"), "Post every X hours" (1 to 24, default 5), "Clips per interval" (1 to 5, default 1),
+"Changes take effect immediately when I save, without a redeploy", and under the controls the result in plain words,
+"e.g. '1 clip every 5 hours = about 5 clips a day per platform', and warn me if it is more than 5 a day". Visibility:
+"whether auto-posting is on, when the next run is, and which clips post next", and "failed posts with the error and a
+way to retry them". Technical: EventBridge, serverless only, "even gaps between runs, including across midnight".
+
+Asked before building, he answered "Yes, all your picks" (2026-11-22). They are the rules below:
+1. **My settings, not bare platform defaults** (§36.2): public, most reach, never made for kids.
+2. **TikTok is never part of a run.** Clip Factory's uploads fail on his public account until TikTok approves the app
+   (§42), and TikTok's rules want the creator's own pick of who can see each post, with no default (§17.8), so a
+   post nobody tapped can't be a TikTok post even after approval. Each auto-posted clip keeps **Post it yourself**.
+3. **Campaign clips wait for his Upload** while Content Rewards can't take them from Clip Factory by itself (it only
+   takes a clip in its first 30 minutes, §38.6; his account can't connect apps yet). Once it can (§46.5 rule 4) they go
+   too, the campaign way (§38.14).
+4. **A clip with a failed important check waits for him** (§46.5 rule 3).
+5. **Clips already in Review count**, oldest first; the page shows the whole line before he turns it on.
+6. **Retries stay as Upload's** (§17.6): up to 3 tries when a platform does not answer, and no blind retry where one
+   would fail the same way or could post twice (X's post, Instagram's publish, TikTok's start). Every error is saved
+   and the other platforms still post. This replaces "retry once".
+7. **The timer is an EventBridge rule that fires every hour on the hour**; a run happens only when his X hours are up
+   (§46.4).
+
+Also decided: X is used once it is set up (never for clips posted before); only clips of finished jobs are picked;
+a "Practice" mode and a "Private test run" let him test the whole flow with nothing public (§46.8).
+
+### 46.2 What the owner sees
+
+**Settings › Posting › Auto-posting** (`/settings/posting/auto`, `screens/settings/AutoPostBranch.tsx`; in the tree
+after My settings). Top to bottom, every control saving the moment it changes (like My settings, §36.2), with the
+toast "Saved.":
+1. The switch **Post my clips by themselves** (`autoPost.on`). Under it one line: off "Off. Nothing posts by itself.";
+   on "On. Next: Sun 15:00." (the owner's local time, weekday + 24-hour time, "Today"/"Tomorrow" never used); on in
+   practice "On, practising. Next practice: Sun 15:00. Nothing gets sent."
+2. **Post every** (the app's own `Dropdown`, §36.5: "1 hour", "2 hours" … "24 hours"; `everyHours`) and **Clips each
+   time** (a `<Glide>` bar 1 2 3 4 5; `perRun`). Under them the **result line**, always shown:
+   "{n} clip(s) every {h} hour(s) = {about }{d} clip(s) a day per platform." `d = perRun × 24 / everyHours`; whole →
+   that number without "about" ("1 clip every 24 hours = 1 clip a day per platform."), else "about" + rounded half up
+   ("1 clip every 5 hours = about 5 clips a day per platform.", 4.8; "2 clips every 7 hours = about 7 clips a day per
+   platform.", 6.86). When `d > 5`, a warning under it in vermilion ink (`role="status"`): "That's more than 5 clips a
+   day on each platform." and when `d > 100` also "YouTube takes at most 100 uploads a day, so some would wait until
+   the next day." (videos.insert has its own bucket of 100 a day, checked 2026-11-22).
+3. **Where they go**: "Goes to YouTube, Instagram and Facebook." (the run's places, §46.6, in STATS_ORDER), then one
+   line per place left out: "TikTok: you post it yourself (TikTok's rule). Each clip gets Post it yourself."; "X: not
+   set up yet." (with "Set up X" → `/settings/posting/setup/x`). With nothing set up: "Nothing is set up to post to.
+   Set up a place first." and runs post nothing.
+4. **Next up** (`autopost.nextUp`, at most 10): cover, hook, and its time ("Sun 15:00"; with it off, no times and the
+   title "Would go first"), each with **Throw away** (the Review card's own decline with its Undo, §20.7, accessible
+   name "Throw away, {hook}"). Empty: "Nothing in Review. New clips join the line when they are made."
+5. **Waits for you** (`autopost.waiting`): clips in Review that runs skip, each with its reason (§46.5) and **Open in
+   Review**.
+6. **Didn't work** (`autopost.failed`): one row per failed auto-posted post: place mark and name, hook, the saved
+   friendly error (§17.6), **Try again** (the Library's per-place Try again: `confirm` with `platforms: [p]`, accessible
+   name "Try again, {place}"). Hidden when empty.
+7. **Post these on TikTok yourself** (`autopost.tiktokYourself`): auto-posted clips not on TikTok yet, each with **Post
+   it yourself** (§42's `PostYourselfButton`). Hidden when empty.
+8. **Recent** (`autopost.runs`, newest first, 10): "Sun 10:00 · “hook”: YouTube ✓ Instagram ✓ Facebook ✗", each
+   posted place with **Open** (its live `url`); a run with nothing: "Sun 05:00 · Nothing in Review, so nothing posted.";
+   practice: "Sun 05:00 · Practice: would post “hook” to YouTube, Instagram and Facebook."; private test: "Private test
+   · “hook”: YouTube (only you) · Facebook (draft) · Instagram (checked, not published)".
+9. A fold **Test it first** (closed to start): the switch **Practice** (`autoPost.practice`, "Pick the clips on time,
+   but send nothing. The clips stay in Review."), **Practice run now** and **Private test run** (glass buttons; the
+   second's line: "Posts the next clip so only you can see it: YouTube as Only me, Facebook as a draft on your Page,
+   Instagram uploaded and checked but not published. It leaves Review."). After a tap the page reads the status again
+   every 3 s for 30 s; the run shows in Recent.
+
+The page reads `GET /v1/autopost` on open, on focus, every 60 s while open, and after every change. Clip changes reach
+Review and Library live as today (the clip item's stream news, §14.2).
+
+**Review card** (§36), only while `autoPost.on`: one quiet line above the actions. A clip in Next up: "Goes up by
+itself {Sun 15:00}. Throw it away to stop it." (practice: "Practice picks it {Sun 15:00}. Nothing gets sent."); a
+waiting clip: "Auto-posting skips this one: {reason} Upload it yourself." Upload and Throw away work as before.
+
+**Home** (`NewJobForm.tsx`): the hint "Nothing gets posted until you tap Upload." becomes, while on, "Auto-posting is
+on: your clips go up by themselves every {h} hour(s), oldest first." (practice: unchanged hint).
+
+**Library and the clip page**: an auto-posted post row adds "· by auto-posting" after its state; a private test post
+says "Private test · only you" (YouTube), "Private test · draft on your Page" (Facebook), "Private test · checked, not
+published" (Instagram) instead of "Uploaded", and has no numbers.
+
+### 46.3 Settings (`settings.py`, GET/PUT `/v1/settings`)
+
+`Settings.autoPost: { on: boolean /* false */, everyHours: number /* 1..24, 5 */, perRun: number /* 1..5, 1 */,
+practice: boolean /* false */, onAt?: string /* read-only: when it was last switched on */ }`.
+
+* PUT may send any of `on`, `everyHours`, `perRun`, `practice`; each is merged over the stored value. Unknown keys and
+  `onAt` → 400 "autoPost has a setting Clip Factory does not know.". `everyHours` an integer 1..24 else 400 "Pick 1 to
+  24 hours.", `perRun` an integer 1..5 else 400 "Pick 1 to 5 clips.", `on`/`practice` booleans.
+* When `on` goes false → true the server writes `onAt = now`. A PUT with `on: true` while already on keeps `onAt`.
+* Every PUT that carries `autoPost` also puts the owner's registry item `AUTOPOSTOWNERS` / `USER#{userId}` (§46.10),
+  so the tick finds him with one Query.
+* A stored value that no longer validates reads the defaults (as `postPreset`). An owner who never saved it reads
+  `{on: false, everyHours: 5, perRun: 1, practice: false}`: nothing changes for anyone until he turns it on.
+
+### 46.4 The schedule (even gaps, across midnight)
+
+* EventBridge rule `cf-prod-autopost-hourly`, `cron(0 * * * ? *)` (every hour at :00 UTC), target `cf-prod-autopost`.
+  All times are UTC instants on whole hours ("slots"); the web shows them in local time.
+* The tick's slot is `floorHour(event.time)`, the event's own time, never "now": a retried delivery of the same event
+  is the same slot.
+* `nextRunAt` (only while on) `= max(nextFullHour(onAt), lastRunAt + everyHours h)`, `lastRunAt` absent → the first
+  term alone. `nextFullHour(t)` is the first whole hour strictly after `t`. A slot runs when `slot ≥ nextRunAt`. So
+  runs fall exactly `everyHours` apart (5 h: 00, 05, 10, 15, 20, 01, 06 …); a changed `everyHours` counts from the last
+  run (if that time has passed, the next full hour runs); switching on runs at the next full hour, never sooner than
+  `everyHours` after the last run. Shown as `nextRunAt`, or the next full hour when that is already past.
+* A run that finds nothing still counts (`lastRunAt` moves), so the gaps stay even.
+* Practice runs (`practice: true`) keep the same times. Run-now actions (§46.8) never move the schedule.
+* Why not a schedule the app changes (ADR-81): EventBridge Scheduler needs `iam:PassRole`, which the cf-prod-* role
+  boundary forbids, and neither it nor a rule's `rate()` says when the next run is.
+
+### 46.5 Which clips (`autopost/pick.py`)
+
+Candidates: the owner's clips with `status: "review"` (one `query_all` of `CLIP#`), ordered oldest first by their job's
+`createdAt` (the clip's own `createdAt` when the job is gone), then `rank` (best first), then `clipId`. A candidate is
+**taken** unless one of these holds, in this order; then it is **waiting**, with the reason the owner sees:
+1. Its job exists and is not `ready` → "It is still being made." (a retried job removes its earlier `review` clips).
+2. It has no `videoKey` → "Its video is missing.".
+3. A failed checklist item whose key is one of `hear`, `moving`, `zero_context`, `payoff`, `campaign_rules`, `logo`,
+   `disclosure` → "A check didn't pass: {label}." (the agent drops clips that fail these, §8, so this is mostly
+   `campaign_rules` that could not be checked).
+4. A campaign clip (`routes/clips.campaign_clip` is not None): it waits unless **all** of: Content Rewards is on
+   (`CONTENT_REWARDS`), `CRCONN.status` is `connected` (not `read_only`), the campaign's `membership` is `in` (not
+   `manual`), `_require_campaign_open` passes, its places (rule below) are not empty, and the fit check (`_require_fit`
+   with those places) passes. Reasons: "It's for a campaign, and Content Rewards can't take clips from Clip Factory by
+   itself yet." (not connected or read only), "It's for a campaign you send by hand." (`manual`), else the refusal's
+   own sentence.
+5. A clip planned by another run that is still going (an `AUTORUN#` item with `state: "planned"` from the last 15
+   minutes lists it) is skipped silently (not waiting).
+
+`nextUp` lists taken clips in order, at most 10; the i-th (0-based) gets `runAt = nextRunAt + floor(i / perRun) ×
+everyHours h` (no `runAt` while off). `waiting` lists the waiting ones (not rule 5), at most 20.
+
+### 46.6 Places and options
+
+* **Places** of a normal clip: every platform whose setup is `ready` (`oauth.setup.all_setups`, as Review's Upload to
+  reads it, §33.2) except `tiktok`, in STATS_ORDER. A campaign clip: the same minus places `_place_refusal` refuses.
+  Settings › Where clips go (`settings.platforms`) is not read (Upload ignores it too since §33). No places → the clip
+  is not sent; the run's note says "Nothing is set up to post to."
+* **Options** (`post_preset.upload_options(settings)`, the server twin of the web's `cardOptionsFrom` + `optionsFor`):
+  YouTube `{privacy: settings.youtubePrivacy, category, madeForKids: false, notifySubscribers, embeddable}`, Instagram
+  `{shareToFeed}`, X `{replies}` from `postPreset`, only for the places going; Facebook has none. A campaign clip gets
+  the campaign versions exactly as Upload builds them (`_campaign_youtube`, `postOptions.campaign`). Captions are the
+  clip's stored ones (his edits on the card are saved by `PATCH`). No TikTok options ever.
+
+### 46.7 One run (`autopost/run.py`, shared by the tick and the API)
+
+`run_once(deps, user_id, kind, slot)`; `kind` is `scheduled`, `practice_now` or `private_now`; `mode` is `live`,
+`practice` (scheduled with `practice: true`, or `practice_now`) or `private` (`private_now`). `runId =
+"{slot}#{kind}"` (slot = ISO UTC to the second for run-now).
+1. **Scheduled only:** settings off → return `off`; `slot < nextRunAt` → `not_due`.
+2. **Plan:** pick (§46.5) the first `perRun` taken clips (`private_now`: 1), each with its places and options.
+3. **Claim** (scheduled): one `TransactWriteItems`: Put `AUTORUN#{runId}` (`state: "planned"`, `mode`, `clips:
+   [{clipId, hook, places}]`, `note?`) on `attribute_not_exists(pk)`, and Update `AUTOPOST` `SET lastRunAt = :slot` on
+   `attribute_not_exists(lastRunAt) OR lastRunAt < :slot`. Cancelled because the run item exists → **resume**: read it;
+   `done` → return `done`; `planned` → continue at 4 with its own clips (never a new pick). Cancelled only on `AUTOPOST`
+   → return `not_due`. Run-now: a Put of `AUTORUN#{runId}` alone, after `AUTOPOST.lastNowAt` moved on the condition
+   that it is absent or ≥ 60 s old (else 409, §46.9).
+4. **Send each planned clip** (`live` and `private`) through **Upload's own code**: `uploads.upload_review_clip(...)`,
+   the review branch of `routes/clips.confirm` moved into one function the route now calls (Upload's behaviour,
+   messages and tests unchanged), with `platforms` = its places, `options`, no `tiktok`, no caption patch, and
+   `auto = {runId, at, test?}`. It writes `confirmed` and the posts in one transaction conditional on `status = review`
+   and `attribute_not_exists(postsCreated)` (§14.5), then starts `clip-{clipId}-{flowRun}`. Outcomes: `sent`; the
+   condition failed → read the clip: its `autoRun` is this run → `sent` (and when its `publishState` is `pending`,
+   finish the start, §14.5); else `skipped` with "You threw it away first." (`declined`), "You uploaded it yourself."
+   (any other status) or the campaign/fit refusal's sentence. `practice`: no write, outcome `would_send`.
+5. Update `AUTORUN#{runId}`: `state: "done"`, each clip's `outcome`/`reason`. Out of time (`AUTOPOST_TIME_BUDGET_SECONDS`
+   240, a new clip only starts with ≥ 30 s left) → the rest `skipped` "Out of time. It goes next run." (still in
+   Review). Notes: no candidates → "Nothing in Review, so nothing posted."; candidates but none taken → "Every clip in
+   Review is waiting for you."; no places → "Nothing is set up to post to.".
+
+The clip flow then posts each place one after another (§17.6), so one place failing never stops the others.
+
+### 46.8 Testing with nothing public
+
+* **Practice** (`autoPost.practice`): scheduled runs plan, claim and record as usual and send nothing (`would_send`);
+  clips stay in Review, so the next practice run may pick the same ones.
+* **Practice run now** (`POST /v1/autopost/run {"kind": "practice"}`): one practice run now, inline in cf-prod-api.
+* **Private test run** (`{"kind": "private"}`): one live run now, inline, of the first taken clip, with `auto.test =
+  "private"`. Every post of it carries the internal `postOptions.test = "private"`, which only this run sets (no route
+  body can: `post_preset.clip_options` keeps refusing unknown keys). Its places are the normal ones minus X (X has no
+  private posts). Publishers:
+  * YouTube: `privacyStatus: "private"` whatever the options say, `notifySubscribers=false`; url as usual (he can open
+    it); `privacy: "private"`.
+  * Facebook: the finish call sends `video_state=DRAFT`; marked posted with `privacy: "private"`, `platformPostId` =
+    video id, no `url`, no `statsId`.
+  * Instagram: the container is made, uploaded and checked to `FINISHED`; `media_publish` is never called; marked
+    posted with `privacy: "private"`, no `url`, no `statsId`. (The unpublished container expires by itself.)
+  * Private posts never join the stats poller (`mark_posted`: only public posts get `gsi2`, §16.3).
+  The clip leaves Review and gets public `auto.test: "private"`; its posts public `test: "private"`.
+
+### 46.9 API (`routes/autopost.py`, under `ANY /v1/{proxy+}`: no Terraform)
+
+| Method & path | Body | 2xx |
+|---|---|---|
+| GET `/v1/autopost` | – | `AutoPostStatus` |
+| POST `/v1/autopost/run` | `{ "kind": "practice" \| "private" }` | `{ "run": AutoRun }` |
+
+```ts
+interface AutoPostSettings { on: boolean; everyHours: number; perRun: number; practice: boolean; onAt?: string }
+interface AutoPostStatus {
+  autoPost: AutoPostSettings;
+  nextRunAt: string | null;               // null while off
+  perDay: number;                         // perRun * 24 / everyHours, not rounded
+  places: Platform[];                     // a normal clip's places now (§46.6)
+  leftOut: { platform: Platform; reason: "tiktok_yourself" | "not_set_up" }[];
+  nextUp: { clipId: string; jobId: string; hook: string; coverUrl?: string; runAt?: string }[];   // ≤ 10
+  waiting: { clipId: string; jobId: string; hook: string; coverUrl?: string; reason: string }[];  // ≤ 20
+  runs: AutoRun[];                        // newest first, ≤ 10
+  failed: { postId: string; clipId: string; hook: string; platform: Platform; error: string; at: string }[]; // ≤ 20
+  tiktokYourself: { clipId: string; hook: string; coverUrl?: string }[];                          // ≤ 10
+}
+interface AutoRun {
+  runId: string; at: string; kind: "scheduled" | "practice_now" | "private_now"; mode: "live" | "practice" | "private";
+  state: "planned" | "done"; note?: string;
+  clips: { clipId: string; hook: string; places: Platform[]; outcome?: "sent" | "would_send" | "skipped";
+           reason?: string;
+           posts: { platform: Platform; status: Post["status"]; url?: string; error?: string; test?: "private" }[] }[];
+}
+// Additions to existing shapes: Clip.auto?: { runId: string; at: string; test?: "private" };
+// Post.auto?: true; Post.test?: "private"; Settings.autoPost (§46.3).
+```
+* `failed`: the owner's posts with `autoRun` and `status: "failed"`, newest first. `tiktokYourself`: clips with `auto`
+  (not `test`) whose TikTok is not out for everyone (`tiktok_self` rules, §42.1). `runs[].clips[].posts`: read by the
+  clip's `postIds` (strongly consistent BatchGet).
+* POST: unknown keys 400; `kind` missing or other → 400 "Pick practice or private.". A second run-now within 60 s →
+  409 "A test run just started. Wait a minute." `private` with no taken clip → 200 with the run's note "Nothing in
+  Review to test with." and no clips. Runs regardless of `on` (testing before switching on is the point).
+* Mock mode (`web/src/api/mock/autopost.ts`) follows the same rules, with a fake clock the e2e tests can move.
+
+### 46.10 Data (additive: new sort keys and attributes only)
+
+| Item | pk | sk | Attributes |
+|---|---|---|---|
+| Auto-post state | `USER#{userId}` | `AUTOPOST` | `type="autopost"`, `lastRunAt?`, `lastRunId?`, `lastNowAt?` |
+| Run | `USER#{userId}` | `AUTORUN#{runId}` | `type="autorun"`, `runId`, `at`, `kind`, `mode`, `state`, `clips`, `note?`, `ttl` (180 days) |
+| Owner registry | `AUTOPOSTOWNERS` | `USER#{userId}` | `type="autopostowner"`, `userId`, `since` |
+| Clip | (as §6) | | `autoRun`, `autoAt`, `autoTest?` (internal; public `auto`) |
+| Post | (as §6) | | `autoRun` (internal; public `auto: true`), `postOptions.test?` (internal; public `test`) |
+
+Runs are listed with a `Query` of `AUTORUN#` (newest first, `ScanIndexForward=false`, limit 10). Nothing here is ever
+deleted except by TTL.
+
+### 46.11 Lambda and Terraform (new module `infra/modules/autopost`, wired in `envs/prod`)
+
+* `cf-prod-autopost`: the shared zip, `clipfactory_api.autopost.handler.handler`, python3.13 arm64, 256 MB, timeout
+  300 s, X-Ray, JSON logs to `/aws/lambda/cf-prod-autopost` (retention as the others). Env: `TABLE_NAME`,
+  `MEDIA_BUCKET`, `CLIP_FLOW_ARN` (the clip flow's `live` alias), `SECRET_PREFIX`, `CONTENT_REWARDS`,
+  `AUTOPOST_TIME_BUDGET_SECONDS=240`. Event: EventBridge (`source == "aws.events"`) → every owner in `AUTOPOSTOWNERS`
+  (one Query), `run_once(..., "scheduled", slot)`, one owner's failure logged and skipped.
+* Role `cf-prod-fn-autopost` with the deploy boundary, exactly what the code calls: DynamoDB `GetItem`, `PutItem`,
+  `UpdateItem`, `Query`, `BatchGetItem`, `TransactWriteItems`, `ConditionCheckItem` on the table and `index/*` (never
+  `DeleteItem` or `Scan`); `lambda:InvokeFunction` on `${clip_flow_arn_prefix}:*` (start executions on the alias);
+  and, for the campaign fit check only, the clip flow's Content Rewards secret grants (`PlatformSecretsRead`,
+  `PlatformTokens`). No S3 (a run reads no files and signs no links), nothing else. Logs and X-Ray as the money module.
+* `aws_lambda_function_event_invoke_config`: `maximum_retry_attempts = 2`, `maximum_event_age_in_seconds = 3300`
+  (before the next tick); a retry is the same event, so it resumes its own run (§46.7 step 3).
+* `aws_cloudwatch_event_rule` `${name}-autopost-hourly` `cron(0 * * * ? *)` ENABLED, its target (unqualified ARN,
+  `retry_policy { maximum_event_age_in_seconds = 3300, maximum_retry_attempts = 2 }`) and `aws_lambda_permission`
+  (`events.amazonaws.com`, the rule's ARN).
+* `envs/prod/main.tf`: `module "autopost"` (inputs from `module.data`, `module.storage`, `module.flows`,
+  `module.hooks`, `var.content_rewards_enabled`, the boundary); monitoring gets `module.autopost.function_names` and
+  `module.autopost.schedule_rule_names` (their alarms are new, additive).
+* **Not changed:** cf-prod-api's function, role and policy (run-now runs inline with Upload's existing grants), the
+  table, every existing rule and alarm. The plan adds only `module.autopost.*` and the two new alarms; 0 to destroy.
+  `scripts/check-plan-clips-unchanged.sh` has nothing to report.
+* `infra/modules/autopost/tests/autopost.tftest.hcl`: names, the cron, ENABLED, retries 2 / age 3300, the target is
+  the function, the permission's source is the rule, the role carries the boundary, no `DeleteItem`/`Scan`/`iam:*`/
+  `scheduler:*`, the invoke grant is only the clip flow.
+
+### 46.12 Words
+
+As written in §46.2 and §46.5 to §46.9. "Auto-posting" (one word, hyphenated) everywhere; "Throw away", "Upload", "Try
+again", "Post it yourself" keep their meaning. Ask (§19, §28) learns it from this section and the help guide
+"Turn on auto-posting" (`helpKb.json`): where the page is, what each control does, why TikTok and campaign clips wait,
+how to test with Practice and the Private test run.
+
+### 46.13 Edge cases
+
+* He throws a clip away before its turn: it is `declined` and never picked; if a run had planned it a moment before,
+  the run's conditional write fails and the outcome is "You threw it away first.".
+* He taps Upload on a clip a run planned at the same instant: one transaction wins; the other side sees it taken.
+* Two deliveries of one tick, or a retry after a crash: the same `runId`; the second resumes the first's plan.
+* A tick that arrives late inside its hour still has its own slot; a tick lost entirely is caught up by the next one
+  (one run, never two).
+* A place fails at 3 a.m.: its post is `failed` with the plain sentence, shows in Didn't work and in Library with Try
+  again; the other places of that clip post.
+* He turns it off while a run is sending: clips already handed to the clip flow keep posting (like Upload); no new run
+  starts.
+* A place connected later gets only clips from later runs.
+
+### 46.14 Not verified live
+
+That Facebook keeps a `video_state=DRAFT` Reel hidden from everyone but Page admins and shows it under the Page's
+drafts; that EventBridge's hourly cron fires within the first minute of the hour; checked at the first private test
+run and the first hours of practice.
+
+### 46.15 Tests (offline, fakes only)
+
+* `api/tests/test_autopost_schedule.py`: every `everyHours` 1..24 over 10 days from several `onAt` minutes gives runs
+  exactly `everyHours` apart, across midnight and month ends; switching on, changing `everyHours` (up and down), off and
+  on again, practice; a late tick and a lost tick; `nextRunAt` shown.
+* `test_autopost_run.py`: oldest first by job then rank; each waiting rule and its sentence; `perRun`; places (TikTok
+  never, X only when ready, nothing set up); My settings options (never made for kids) and the campaign versions;
+  nothing in Review does nothing but moves `lastRunAt`; off and not due; the same event twice, two overlapping
+  invocations, a crash after the claim and its retry: every clip confirmed once and its flow started once; a clip
+  thrown away or uploaded by hand after planning; out of time; one owner failing does not stop another.
+* `test_autopost_routes.py`: settings validation and `onAt`, the registry write, `GET /v1/autopost` (each list, the
+  `runAt`s), run-now practice and private, the 60 s limit, private with nothing.
+* `test_autopost_private.py`: the three publishers' test behaviour, that only `postOptions.test` turns it on, that
+  Upload's `options` can't set it, no `gsi2`.
+* Upload's existing tests (`test_upload_to.py`, `test_campaign_posting.py`, `test_clips.py`, `test_release.py`) pass
+  unchanged after the refactor.
+* Web: `web/test/autopost.test.ts` (the result line for every pair 1..5 × 1..24, the warnings, time words, the
+  mock's rules), `web/e2e/autopost.spec.ts` (switch, both controls save, result line and warning, Next up with Throw
+  away and Undo, Didn't work Try again, Recent, Practice run now, Private test run, the Review line and the Home hint;
+  at 390×844 and 1440×900).
+* Infra: `autopost.tftest.hcl` (§46.11); `scripts/test-check-plan-deletes.sh` unchanged.
+
+### 46.16 Who builds what (parallel builders; each stays inside its files)
+
+* **S (server)**: `api/src/clipfactory_api/autopost/**` (new: `__init__.py`, `schedule.py`, `pick.py`, `run.py`,
+  `handler.py`), `uploads.py` (new, the moved Upload core), `routes/clips.py`, `routes/autopost.py` (new), the route
+  table, `settings.py`, `post_preset.py`, `posts.py`, `clips.py` (public `auto`), `platforms/{youtube,facebook,
+  instagram}.py` (private test), `api/tests/test_autopost_*.py`, `api/scripts/build_lambda.py` if handlers are listed.
+* **I (infra)**: `infra/modules/autopost/**` (new), `infra/envs/prod/main.tf`.
+* **W (web)**: `web/src/screens/settings/AutoPostBranch.tsx` (new), `Settings.tsx`, `branches.tsx`, `web/src/lib/
+  autopost.ts` (new), `web/src/api/**` (types, client, `mock/autopost.ts`), Review's line, `NewJobForm.tsx`, Library's
+  post-row words, `web/test/autopost.test.ts`, `web/e2e/autopost.spec.ts`.
+* **D (docs and help)**: `docs/BUSINESS_REQUIREMENTS.md`, `ARCHITECTURE.md`, `TESTING.md`, `SECURITY.md`,
+  `DEPLOYMENT.md` (nothing to do by hand), `ROADMAP.md`, `web/src/features/help/helpKb.json` (the guide); then the
+  generated help corpus and Ask knowledge are regenerated once everything is merged.
