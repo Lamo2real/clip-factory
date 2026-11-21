@@ -288,14 +288,14 @@ run "notifications_are_wired" {
   }
 }
 
-# docs/CONTRACTS.md §38.16: Content Rewards. cf-prod-campaigns is planned and watched, the switch defaults to off, the
-# api and the stats tick get its unqualified ARN, and the stack still plans with the switch on (the one-line PR).
-run "content_rewards_is_wired_and_off" {
+# docs/CONTRACTS.md §38.16: Content Rewards. cf-prod-campaigns is planned and watched, the switch defaults to on (every
+# builder's part has merged), the api and the stats tick get its unqualified ARN, and the stack still plans with it off.
+run "content_rewards_is_wired_and_on" {
   command = plan
 
   assert {
-    condition     = var.content_rewards_enabled == false
-    error_message = "content_rewards_enabled must default to false until every builder's part has merged."
+    condition     = var.content_rewards_enabled == true
+    error_message = "content_rewards_enabled defaults to true now that every builder's part of §38.19 has merged."
   }
 
   assert {
@@ -310,15 +310,15 @@ run "content_rewards_is_wired_and_off" {
   }
 }
 
-run "content_rewards_switch_on_plans" {
+run "content_rewards_switch_off_plans" {
   command = plan
 
   variables {
-    content_rewards_enabled = true
+    content_rewards_enabled = false
   }
 
   assert {
     condition     = module.contentrewards.function_names == { campaigns = "cf-prod-campaigns" }
-    error_message = "With the switch on the stack still plans and cf-prod-campaigns is the same function."
+    error_message = "With the switch off the stack still plans and cf-prod-campaigns is the same function."
   }
 }
