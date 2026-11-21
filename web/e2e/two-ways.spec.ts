@@ -27,7 +27,7 @@ type Knobs = Record<string, (...a: unknown[]) => unknown>;
 type MockWin = Window & { __cfMock?: { cr?: Knobs; setup?: Knobs; jobs?: Knobs } };
 
 /** Start states read once by the mock, then the places he has set up. */
-async function start(page: Page, flags: { fresh?: boolean; off?: "404" | "503"; remake?: boolean; review?: boolean } = {}) {
+async function start(page: Page, flags: { fresh?: boolean; off?: "404" | "503"; remake?: boolean; review?: boolean; tiktok?: boolean } = {}) {
   await page.addInitScript((f) => {
     if (sessionStorage.getItem("cf-e2e-two-ways")) return;
     sessionStorage.setItem("cf-e2e-two-ways", "1");
@@ -35,6 +35,8 @@ async function start(page: Page, flags: { fresh?: boolean; off?: "404" | "503"; 
     if (f.off) sessionStorage.setItem("cf-mock-cr-off", f.off);
     if (f.remake) sessionStorage.setItem("cf-mock-cr-remake", "on");
     if (f.review) sessionStorage.setItem("cf-mock-cr-review", "1");
+    // FaZe Clips pays for TikTok too (the mock's review flag "tiktok").
+    if (f.tiktok) sessionStorage.setItem("cf-mock-cr-review", "tiktok");
   }, flags);
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
 }
@@ -159,6 +161,43 @@ for (const [size, viewport] of [
       await taps.tap(upload);
       await expect(page.getByText(/^Uploading to/)).toBeVisible();
       expect(taps.count).toBe(CAMPAIGN_WAY_TAPS);
+    });
+
+    test("the campaign way with TikTok: 7 only after he turned Branded content off (Turn on Branded content)", async ({ page }) => {
+      await start(page, { tiktok: true });
+      await page.goto("/");
+      await ready(page, "youtube", "instagram", "tiktok");
+      await page.evaluate(() => (window as MockWin).__cfMock!.setup!.setAudit!(true));
+      const taps = tap(CAMPAIGN_WAY_TAPS + 1);
+      await page.goto("/");
+      await settle(page);
+      await taps.tap(page.locator(`.cr-row-chip[data-campaign='${FAZE}']`), "FaZe Clips · Make campaign clips");
+      await copy(page, VIDEO);
+      await taps.tap(page.locator("form.newjob").getByRole("button", { name: "Paste", exact: true }));
+      await taps.tap(page.locator("form.newjob").getByRole("button", { name: "Make campaign clips", exact: true }));
+      await expect(page).toHaveURL(/\/jobs\/[0-9A-Z]{26}$/);
+      await jobRuns(page);
+      await taps.tap(page.getByRole("link", { name: "Check these clips" }), "Go to Review");
+      const card = page.locator(".review-card").first();
+      await taps.tap(card.locator("[data-help='use-my-settings'] button"), "Use my settings");
+      const fit = card.locator(".cr-fit");
+      await expect(fit.locator(".cr-fit__headline")).toHaveText("Can earn on FaZe Clips");
+      // His own change, not a step: he unticks TikTok's Branded content.
+      const tiktok = card.locator("[data-place='tiktok']");
+      if (!(await tiktok.getAttribute("open").then((v) => v !== null).catch(() => false))) await tiktok.locator("summary").first().click();
+      await tiktok.getByRole("checkbox", { name: /Branded content/ }).uncheck({ force: true });
+      await expect(fit.locator(".cr-fit__headline")).toHaveText("Almost ready for FaZe Clips");
+      await expect(fit).toContainText("Branded content is off on TikTok.");
+      const upload = card.getByRole("button", { name: /^Upload to 3$/ });
+      await expect(upload).toHaveAttribute("aria-disabled", "true");
+      await expect(card.locator(".upload-going")).toContainText("Turn on Branded content for TikTok first.");
+      await taps.tap(fit.getByRole("button", { name: "Turn on Branded content" }));
+      await expect(page.locator(".toast").filter({ hasText: "Branded content is on for TikTok." })).toHaveCount(1);
+      await expect(fit.locator(".cr-fit__headline")).toHaveText("Can earn on FaZe Clips");
+      await expect(upload).not.toHaveAttribute("aria-disabled", "true");
+      await taps.tap(upload);
+      await expect(page.getByText(/^Uploading to/)).toBeVisible();
+      expect(taps.count).toBe(CAMPAIGN_WAY_TAPS + 1);
     });
 
     test("the copy: Make a GameFuel Clips copy arrives right after its original by live news, then 3 taps", async ({ page }) => {
