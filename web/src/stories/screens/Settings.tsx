@@ -1,4 +1,4 @@
-// Lamo Stories › Settings (docs/CONTRACTS.md §45.16). SCAFFOLD (Phase 1): builder F builds this screen.
+// Lamo Stories › Settings (docs/CONTRACTS.md §45.16). SCAFFOLD (Phase 1): builder F2 builds this screen (its sections in web/src/stories/settings/).
 import type { StoriesScreenProps } from "./types.ts";
 
 export function SettingsScreen(_props: StoriesScreenProps) {

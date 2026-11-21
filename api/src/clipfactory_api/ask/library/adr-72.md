@@ -1,4 +1,4 @@
-## ADR-72 Separate social connections over the same developer apps
+## ADR-72 Separate social connections: own tokens, one callback, the owner's choice of developer app
 
 - **Context.** The owner wants different accounts for Lamo Stories on every platform and no accidental posting to
   Lamo Clips' destinations. He set up one developer app per platform (13 manual steps for YouTube) and asked never to
@@ -8,7 +8,8 @@
   again); (2) the same apps and the same callback, with the stored OAuth state telling the callback which workspace it
   serves, tokens under a second Secrets Manager prefix; (3) nest Lamo Stories tokens under `cf-prod/platforms/` (no IAM
   change, but every Lamo Clips function could read them).
-- **Decision.** (CONTRACTS §45.13) Option 2. A Lamo Stories connect uses its own state format (`w1.` with the
+- **Decision.** (CONTRACTS §45.13) Option 2 for the callback and the tokens; which developer app each platform uses is
+  the owner's explicit choice, his own or Clip Factory's (ADR-79). A Lamo Stories connect uses its own state format (`w1.` with the
   workspace id inside the signature) and the callback routes on that prefix before verifying anything: `v1.` states
   run today's code unchanged, `w1.` states always land on Lamo Stories' Connections page and write only
   `cf-prod/workspaces/{workspaceId}/{platform}/token` and a `SOCIAL#{platform}` item. One account per platform per

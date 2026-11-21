@@ -2,7 +2,7 @@
 import type { StoriesApi } from "../types.ts";
 import { notBuilt, type MockStore } from "./store.ts";
 
-export const KEYS = ["listIdeas", "createIdea", "patchIdea", "deleteIdea", "generateIdeas", "expandIdea", "ideaVariations"] as const;
+export const KEYS = ["listIdeas", "createIdea", "patchIdea", "deleteIdea", "generateIdeas", "expandIdea", "ideaVariations", "getTask"] as const;
 
 export function seed(_store: MockStore): void {}
 

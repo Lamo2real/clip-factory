@@ -1,0 +1,11 @@
+# BuildKit reads this for stories/agent/Dockerfile (the build context is the repository root): send only what the
+# image copies.
+*
+!stories/agent/pyproject.toml
+!stories/agent/uv.lock
+!stories/agent/src
+!stories/config
+!stories/skills
+!web/src/stories/engine
+**/__pycache__
+**/*.pyc

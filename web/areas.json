@@ -94,6 +94,5 @@
   "api/src/clipfactory_api/workspaces": "Behind the scenes",
   "api/src/clipfactory_api/routes/workspaces": "Behind the scenes",
   "api/src/clipfactory_api/flows/story_flow.py": "Behind the scenes",
-  "agent/src/clipfactory_agent/stories": "Behind the scenes",
-  "config/stories-guidance.json": "Behind the scenes"
+  "stories": "Behind the scenes"
 }

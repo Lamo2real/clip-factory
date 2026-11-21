@@ -28,7 +28,7 @@ from the owner's "learn from its own results" request
 whose plan the owner approved on 2026-11-18; the statistics and the lesson life were decided by the build. ADR-42
 comes from the owner's request to pick the AI model for clip jobs in Settings
 ([CONTRACTS.md §23](CONTRACTS.md#23-ai-model-choice-for-clip-jobs-owner-request-2026-11-18)); the list of five was the
-owner's, the fallback and the IAM shape were decided by the build. ADR-70 to ADR-75 come from the owner's Lamo Stories request
+owner's, the fallback and the IAM shape were decided by the build. ADR-70 to ADR-80 come from the owner's Lamo Stories requests
 ([CONTRACTS.md §45](CONTRACTS.md#45-lamo-stories-a-second-separate-workspace-owner-request-2026-11-21)), whose spec the
 owner wrote; the mechanisms were decided by the build.
 
@@ -1833,11 +1833,12 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   and no licences. AI images (Nova Canvas) can be added later behind the rigs (ADR-75).
 - **Consequences.** Previews and videos use the same draw lists (shared code; the rasterizer is tested on fixed draw
   lists). The look is clean flat-shaded 2D, not painted or realistic; new actions, props or sets are code in one
-  folder. The engine folder is copied into the agent image, so the image tag hash includes it, and an engine change
-  rebuilds the image (which replaces the image build trigger, as every agent change already does). Rendering 45 s
+  folder. The engine folder is copied into Lamo Stories' own agent image (ADR-76), so that image's tag hash includes
+  it, and an engine change rebuilds only that image; Clip Factory's agent image never changes because of Lamo
+  Stories. Rendering 45 s
   takes a few minutes on the agent.
 
-## ADR-72 Separate social connections over the same developer apps
+## ADR-72 Separate social connections: own tokens, one callback, the owner's choice of developer app
 
 - **Context.** The owner wants different accounts for Lamo Stories on every platform and no accidental posting to
   Lamo Clips' destinations. He set up one developer app per platform (13 manual steps for YouTube) and asked never to
@@ -1847,7 +1848,8 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   again); (2) the same apps and the same callback, with the stored OAuth state telling the callback which workspace it
   serves, tokens under a second Secrets Manager prefix; (3) nest Lamo Stories tokens under `cf-prod/platforms/` (no IAM
   change, but every Lamo Clips function could read them).
-- **Decision.** (CONTRACTS §45.13) Option 2. A Lamo Stories connect uses its own state format (`w1.` with the
+- **Decision.** (CONTRACTS §45.13) Option 2 for the callback and the tokens; which developer app each platform uses is
+  the owner's explicit choice, his own or Clip Factory's (ADR-79). A Lamo Stories connect uses its own state format (`w1.` with the
   workspace id inside the signature) and the callback routes on that prefix before verifying anything: `v1.` states
   run today's code unchanged, `w1.` states always land on Lamo Stories' Connections page and write only
   `cf-prod/workspaces/{workspaceId}/{platform}/token` and a `SOCIAL#{platform}` item. One account per platform per
@@ -1883,24 +1885,21 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   somewhere new. Lamo Stories numbers are read by the flow at 1 h, 24 h, 72 h and 7 days, through the same rate
   budgets as Lamo Clips, not by the 15-minute stats poller; the flow runs up to 9 days.
 
-## ADR-74 Safety videos only from checked guidance; Lamo Stories' AI calls keep the skills block
+## ADR-74 Safety videos only from checked guidance
 
 - **Context.** The owner: "Safety-related educational content must be based on verified guidance. Do not generate
   potentially dangerous driving instructions without appropriate validation." Research on 2026-11-21 fetched road
   authorities' pages (UK Highway Code, National Highways, RoSPA, NY, California and Ontario driver handbooks, Transport
   Canada, Transport for NSW, Trafikverket) and found real disagreements (stay in the car or get out after a breakdown,
-  neutral in a skid, braking with or without ABS). Separately, the owner's standing rule (§18, ADR-32) is that every AI
-  call gets all his skills, "no matter what", and the repository's scan tests enforce it; the new request wants the
-  workspaces' configurations independent.
-- **Options.** Safety: (1) trust the model; (2) a model check only; (3) a checked guidance list bundled with the app,
-  the writer allowed only its uncontradicted steps, then a separate checker call, and stories with problems held for
-  the owner. Skills: (a) give Lamo Stories no skills (breaks the standing rule and its tests); (b) send the skills block
-  first on every Lamo Stories call too, with the Lamo Stories brief after it, and report the conflict.
-- **Decision.** (CONTRACTS §45.11.5, §45.7) Option 3, and a safety topic with no guidance cannot be produced. Option
-  (b), reported to the owner, who can ask for Stories-only skills later.
+  neutral in a skid, braking with or without ABS).
+- **Options.** (1) Trust the model; (2) a model check only; (3) a checked guidance list bundled with the app, the
+  writer allowed only its uncontradicted steps, then a separate checker (the quality agent), and stories with problems
+  held for the owner.
+- **Decision.** (CONTRACTS §45.11.5) Option 3, and a safety topic with no guidance cannot be produced. (This ADR first
+  also kept Clip Factory's skills block on Lamo Stories' calls; the owner's second request settled that the other way:
+  ADR-78.)
 - **Consequences.** Only 12 driving situations can be taught at first; adding one means adding checked sources. Some
-  advice differs by country, so contradicted steps are left out and the video points to local rules. Lamo Clips'
-  clip-making skills reach the story writer; they mostly help hooks and captions.
+  advice differs by country, so contradicted steps are left out and the video points to local rules.
 
 ## ADR-75 Providers behind a registry: built-in today, AI images off until a real call works
 
@@ -1915,3 +1914,85 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   as not AI-generated.
 - **Consequences.** The videos are fully built-in. Switching on Nova Canvas adds AI portraits; AI backgrounds in videos
   and Nova Reel stay out until the posting labels are added (and, for Reel, a US bucket).
+
+## ADR-76 Lamo Stories is its own application: its own API Lambda, AgentCore runtime and IAM roles
+
+- **Context.** The owner's second request (2026-11-21): "Lamo Stories must be treated as an independent application
+  within the existing Clip Factory application shell … The only shared element should be the application shell",
+  with its own AgentCore environment, agents, skills, models, chat, memory, settings, OAuth credentials and data, "two
+  separate applications accessible through one desktop application", while shared AWS infrastructure is fine "where
+  appropriate" with "strict authorization and data boundaries". The first plan ran Lamo Stories' routes in
+  `cf-prod-api` and its videos as new actions of Clip Factory's agent runtime.
+- **Options.** (1) Keep the first plan (one API Lambda and one agent runtime, separated in code only); (2) separate
+  route modules in `cf-prod-api` but Lamo Stories' own runtime; (3) Lamo Stories' own Lambda (`cf-prod-stories-api`,
+  the same zip and HTTP API, its own routes and role) and its own AgentCore runtime (`cf_prod_story_agent`, its own
+  image from `stories/agent/`, role and sessions), each role allowed only Lamo Stories' keys, prefix and secrets;
+  (4) a second AWS account or a second app (duplicated sign-in and infrastructure, which the first request ruled out).
+- **Decision.** (CONTRACTS §45.24, §45.15) Option 3. Shared on purpose: the shell and Cognito sign-in, the HTTP API
+  (separate routes), the table, bucket and Secrets Manager (separate namespaces, enforced by IAM leading keys and
+  prefixes), the OAuth callback Lambda (each platform allows only its registered redirect URI; the `w1.` state keeps
+  the paths apart), and the platform publisher library code.
+- **Consequences.** Clip Factory's API Lambda, its route table, its agent runtime, image and roles do not change at
+  all, and a Lamo Stories change never redeploys or drains them. Lamo Stories has its own image to build and its own
+  CI job. Code shared as a library (the publishers, `db`, `http.dispatch`) is used read-only; a change there is a
+  Clip Factory change and is reviewed as one.
+
+## ADR-77 Models and reasoning effort are the owner's, per workspace, agent, task and request, never substituted
+
+- **Context.** The owner wants complete control over which model powers Lamo Stories (examples "Sable 5.2, Sable 5.1,
+  Opus 5.5": the account's Claude Fable 5.2 / 5.1 and Opus 5.5), with a default, per-agent and per-task choices, a
+  per-request override from the chat, the active model visible, no silent substitution, and the reasoning effort set
+  separately and really sent where the model supports it. Fable 5.x, Opus 5.5, Sonnet 5.5 and Haiku 5.5 take
+  `output_config.effort` (low to max) with adaptive thinking; their default efforts differ (Opus 5.5 and Haiku 5.5
+  `medium`); they reject a thinking budget.
+- **Options.** (1) One model setting; (2) a model per agent only; (3) four levels (request, task, agent, workspace)
+  over a model list kept apart from Clip Factory's, each model listing the efforts it accepts, an availability check by
+  a real call, and the effective choice recorded on every job and message.
+- **Decision.** (CONTRACTS §45.25) Option 3, with `stories/config/models.json` as the list (IAM grants built from it),
+  no automatic fallback model (a refused or unavailable model stops the task with its reason and a way to pick
+  another), and usage and cost recorded per call, cost only where a price is known or the owner typed one.
+- **Consequences.** The owner can mix models per task; jobs are reproducible; a model the account cannot reach is
+  visible as such. A refusal is shown rather than retried on another model, so an occasional task needs the owner's
+  tap to continue.
+
+## ADR-78 Lamo Stories' own agents, skills, chat and memory live in its runtime; actions wait for the owner's tap
+
+- **Context.** The second request asks for its own agents and agent configuration, skills (upload, versions,
+  enable/disable, assign to agents), a creative chat with history and memory, and reference-video analysis; Clip
+  Factory's standing rule that every AI call gets all its skills belongs to Clip Factory.
+- **Options.** Memory: AgentCore Memory (a managed service resource) or items in the workspace partition the owner
+  can see and edit. Chat: an agent that acts on its own, or one that proposes and the owner taps. Skills: shared with
+  Clip Factory, or Lamo Stories' own.
+- **Decision.** (CONTRACTS §45.26–§45.28) Five built-in agents with editable instructions, models, efforts and
+  skills; Lamo Stories' own skills only (Clip Factory's are never read); memory as `MEM#` items; the creative
+  director's tools read and draft, and anything that costs a render or changes a video is a button the owner taps;
+  reference videos are uploaded files analyzed from frames and sound.
+- **Consequences.** The owner sees and edits everything the agents remember; nothing is published or rendered
+  without his tap; Clip Factory's skills rule is untouched. Reference links to other people's videos are not
+  downloaded (upload the file).
+
+## ADR-79 Developer apps: the owner picks Lamo Stories' own or Clip Factory's, per platform, never silently
+
+- **Context.** The second request: Lamo Stories' "own OAuth credentials", "Do not reuse Clip Factory OAuth tokens. Do
+  not modify existing OAuth authorizations." The tokens are already separate (ADR-72). A separate developer app means
+  new setup and, for TikTok and Meta, a new app review that takes days to weeks; Meta's page picker is per login and
+  per app, so re-authorizing Clip Factory's Meta app for a second Page can change Clip Factory's grant.
+- **Options.** (1) Always Clip Factory's apps; (2) always new apps; (3) the owner's explicit choice per platform,
+  shown on the card, with the trade-offs in plain words, and a recommendation of a separate app for Meta.
+- **Decision.** (CONTRACTS §45.30) Option 3; no default, no fallback; own keys in `cf-prod/workspaces/{ws}/{p}/app`;
+  quotas, credits and limits follow the app chosen.
+- **Consequences.** Fully separate apps keep every Clip Factory authorization untouched and cost the owner the
+  platforms' setup and reviews once; the quick choice shares quotas and review state and carries the Meta warning.
+
+## ADR-80 Video generation is configured apart from the reasoning models; the built-in animator first
+
+- **Context.** The second request separates reasoning models from image, video and audio generation and says an LLM
+  cannot make a video by itself. Only Amazon Bedrock is set up; Nova Reel writes to a bucket in us-east-1 and makes
+  realistic footage, which the platforms want labelled.
+- **Options.** (1) The built-in 2D animator only; (2) add Nova Reel now, its US bucket always on; (3) a provider
+  registry per kind, the built-in animator on, Nova Reel built behind a Terraform switch for its US bucket (off until
+  the owner allows US storage), AI labels set by Lamo Stories' own publisher wrappers, and a generic key store for
+  providers added later.
+- **Decision.** (CONTRACTS §45.31) Option 3.
+- **Consequences.** Videos are made today with the built-in animator; AI footage arrives when the owner allows the US
+  bucket and enables the model; no external provider is claimed as working until one is added and checked live.

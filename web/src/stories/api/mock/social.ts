@@ -2,7 +2,7 @@
 import type { StoriesApi } from "../types.ts";
 import { notBuilt, type MockStore } from "./store.ts";
 
-export const KEYS = ["social", "connectSocial", "chooseSocial", "shareWithClips", "checkSocial", "tiktokCreatorInfo", "disconnectSocial"] as const;
+export const KEYS = ["social", "connectSocial", "chooseSocial", "shareWithClips", "checkSocial", "tiktokCreatorInfo", "disconnectSocial", "setSocialApp", "checkSocialApp", "deleteSocialApp"] as const;
 
 export function seed(_store: MockStore): void {}
 

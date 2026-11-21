@@ -39,7 +39,7 @@ describe("the stories route", () => {
   });
 
   it("round-trips its own addresses", () => {
-    for (const path of ["/stories", "/stories/ideas", "/stories/characters/new", "/stories/production/new?idea=ab1", "/stories/library?kind=final_video&story=s1"]) {
+    for (const path of ["/stories", "/stories/ideas", "/stories/characters/new", "/stories/production/new?idea=ab1", "/stories/library?kind=final_video&story=s1", "/stories/settings/agents", "/stories/chat/c1", "/stories/references/r1", "/stories/setup"]) {
       const [p, q = ""] = path.split("?");
       expect(storiesHref(matchStories(p!, q ? `?${q}` : ""))).toBe(path);
     }

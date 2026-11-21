@@ -3,8 +3,6 @@ from __future__ import annotations
 import base64
 import json
 
-import ws_routes_core
-import ws_routes_social
 from clipfactory_api.app import App
 from clipfactory_api.http import MAX_BODY_BYTES, dispatch
 from clipfactory_api.routes import ROUTES
@@ -249,12 +247,15 @@ def test_every_contract_route_is_registered() -> None:
         ("GET", "/v1/contentrewards/money"),
         ("POST", "/v1/contentrewards/money/refresh"),
         ("POST", "/v1/contentrewards/seen"),
+        # §41: the campaign finder
+        ("GET", "/v1/contentrewards/finder"),
+        ("PATCH", "/v1/contentrewards/finder"),
+        ("POST", "/v1/contentrewards/finder/check"),
+        ("PATCH", "/v1/contentrewards/finder/matches/200ea21b-be80-4db8-b552-8e32b148604e"),
+        ("POST", "/v1/contentrewards/finder/matches/200ea21b-be80-4db8-b552-8e32b148604e/add"),
+        ("POST", "/v1/contentrewards/finder/joined"),
+        ("POST", "/v1/contentrewards/finder/ask"),
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)
-    # §45: the /v1/workspaces routes are listed in their own files, so Lamo Clips' list above stays as it was.
-    workspace_routes = ws_routes_core.EXPECTED | ws_routes_social.EXPECTED
-    for method, path in workspace_routes:
-        assert path.startswith("/v1/workspaces"), path
-        assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)
-    assert len(ROUTES) == len(expected) + len(workspace_routes)
+    assert len(ROUTES) == len(expected)

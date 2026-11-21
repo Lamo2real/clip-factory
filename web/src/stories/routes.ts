@@ -13,8 +13,16 @@ export type StoriesPage =
   | { name: "review_story"; storyId: string }
   | { name: "library"; kind: string | null; storyId: string | null }
   | { name: "connections"; platform: string | null; result: string | null; ws: string | null }
-  | { name: "settings" }
+  | { name: "settings"; section: SettingsSection }
+  | { name: "chat" }
+  | { name: "chat_conv"; convId: string }
+  | { name: "references" }
+  | { name: "reference"; refId: string }
+  | { name: "setup" }
   | { name: "not_found" };
+
+export const SETTINGS_SECTIONS = ["ai", "agents", "skills", "memory", "video", "storage"] as const;
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 export const STORIES_ROOT = "/stories";
 
@@ -48,7 +56,19 @@ export function matchStories(pathname: string, search: string): StoriesPage {
   if (a === "library" && b === undefined) return { name: "library", kind: q.get("kind"), storyId: q.get("story") };
   if (a === "connections" && b === undefined)
     return { name: "connections", platform: q.get("platform"), result: q.get("result"), ws: q.get("ws") };
-  if (a === "settings" && b === undefined) return { name: "settings" };
+  if (a === "settings") {
+    if (b === undefined) return { name: "settings", section: "ai" };
+    if ((SETTINGS_SECTIONS as readonly string[]).includes(b)) return { name: "settings", section: b as SettingsSection };
+  }
+  if (a === "chat") {
+    if (b === undefined) return { name: "chat" };
+    if (ID.test(b)) return { name: "chat_conv", convId: b };
+  }
+  if (a === "references") {
+    if (b === undefined) return { name: "references" };
+    if (ID.test(b)) return { name: "reference", refId: b };
+  }
+  if (a === "setup" && b === undefined) return { name: "setup" };
   return { name: "not_found" };
 }
 
@@ -75,6 +95,12 @@ export function storiesHref(page: StoriesPage): string {
     }
     case "connections":
       return `${STORIES_ROOT}/connections`;
+    case "settings":
+      return `${STORIES_ROOT}/settings/${page.section}`;
+    case "chat_conv":
+      return `${STORIES_ROOT}/chat/${encodeURIComponent(page.convId)}`;
+    case "reference":
+      return `${STORIES_ROOT}/references/${encodeURIComponent(page.refId)}`;
     case "not_found":
       return STORIES_ROOT;
     default:

@@ -26,12 +26,206 @@ export interface StoriesConfig {
   defaultDurationSec: number;
   captionsOn: boolean;
   musicOn: boolean;
-  /** a key of clipModels in config/models.json */
-  storyModel: string;
-  providers: { images: "builtin-rig" | "nova-canvas"; animation: "builtin-2d"; audio: "builtin-synth" };
+  providers: { images: "builtin-rig" | "nova-canvas"; video: "builtin-2d" | "nova-reel"; audio: "builtin-synth" };
+  video: { resolution: "1080x1920"; aspect: "9:16"; quality: "standard" | "high" | "best"; fps: 24 | 30 };
+  production: { burnCaptions: boolean; scenesAtOnce: 1 | 2 | 3; keepVersions: "all" | number };
   /** Film & Animation, Autos & Vehicles, Comedy, Entertainment, Education (default "27") */
   youtubeCategory: "1" | "2" | "23" | "24" | "27";
   youtubePrivacy: "public" | "unlisted" | "private";
+  /** only with Lamo Stories' own X app */
+  xMonthlyLimitUsd: number | null;
+}
+
+/** Reasoning effort (CONTRACTS §45.25); each model offers only some levels. */
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+export const EFFORT_LABEL: Record<Effort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Maximum" };
+
+export type TaskKind =
+  | "chat"
+  | "brainstorm"
+  | "expand_idea"
+  | "variations"
+  | "storyboard"
+  | "scene_rewrite"
+  | "character_design"
+  | "reference_analysis"
+  | "fact_check"
+  | "final_review"
+  | "captions";
+
+export interface StoriesAiConfig {
+  defaultModel: string;
+  defaultEffort: Effort;
+  tasks: Partial<Record<TaskKind, { model?: string; effort?: Effort }>>;
+  prices: Record<string, { inputPer1M: number; outputPer1M: number; currency: string }>;
+  version: number;
+}
+
+/** Just for this request; never saved. */
+export interface ModelOverride {
+  model?: string;
+  effort?: Effort;
+}
+
+export interface ModelInfo {
+  key: string;
+  label: string;
+  provider: string;
+  modelId: string;
+  efforts: Effort[];
+  defaultEffort: Effort | null;
+  vision: boolean;
+  status: "ok" | "not_checked" | "denied" | "not_found" | "error";
+  statusLine: string;
+  checkedAt: string | null;
+  price: { inputPer1M: number; outputPer1M: number; currency: string; source: "list" | "owner" } | null;
+}
+
+export type AgentId = "creative_director" | "video_analysis" | "storyboard" | "character" | "quality_assurance";
+
+export interface TaskInfo {
+  kind: TaskKind;
+  label: string;
+  agentId: AgentId;
+  suggestedEffort: Effort;
+  effective: { model: string; effort: Effort | null; from: "task" | "agent" | "default" };
+}
+
+export interface Agent {
+  agentId: AgentId;
+  name: string;
+  tasks: TaskKind[];
+  instructions: string;
+  defaultInstructions: string;
+  active: boolean;
+  model: string | null;
+  effort: Effort | null;
+  skillIds: string[];
+  version: number;
+  updatedAt: string;
+}
+
+export interface Skill {
+  skillId: string;
+  title: string;
+  description: string;
+  builtin: boolean;
+  source: "builtin" | "written" | "upload";
+  format: "md" | "zip";
+  enabled: boolean;
+  agentIds: AgentId[];
+  revisions: { revisionId: string; savedAt: string; size: number }[];
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiTask {
+  taskId: string;
+  kind: TaskKind;
+  status: "queued" | "running" | "done" | "failed";
+  model: string | null;
+  effort: Effort | null;
+  effortApplied: boolean | null;
+  result: Record<string, unknown> | null;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ProjectRef = { kind: "idea" | "story" | "character" | "reference"; id: string };
+
+export interface Conversation {
+  convId: string;
+  title: string;
+  model: string | null;
+  effort: Effort | null;
+  projectRef: ProjectRef | null;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatAction {
+  kind: "make_video" | "remake_scene" | "analyze_reference" | "save_character" | "save_idea" | "open";
+  label: string;
+  payload: Record<string, unknown>;
+}
+
+export interface Message {
+  msgId: string;
+  convId: string;
+  role: "user" | "assistant";
+  text: string;
+  attachments: { assetId: string; url: string; contentType: string }[];
+  status: "pending" | "streaming" | "done" | "failed" | "stopped";
+  model: string | null;
+  effort: Effort | null;
+  effortApplied: boolean | null;
+  usage: { input: number; output: number } | null;
+  actions: ChatAction[];
+  error?: string;
+  createdAt: string;
+}
+
+export interface MemoryItem {
+  memId: string;
+  text: string;
+  source: "chat" | "owner";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReferenceVideo {
+  refId: string;
+  title: string;
+  status: "uploading" | "ready" | "analyzing" | "analyzed" | "failed";
+  durationSec: number | null;
+  bytes: number;
+  url?: string;
+  currentJobId: string | null;
+  analyzedWith: { model: string; effort: Effort | null } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReferenceAnalysis {
+  summary: string;
+  hook: { atSec: number; what: string };
+  pacing: { cutsPer10s: number; notes: string };
+  shots: { start: number; end: number; what: string; acting: string; sound: string }[];
+  gags: string[];
+  sound: string;
+  captions: string;
+  borrow: string[];
+  avoid: string[];
+}
+
+export type OnboardStep = "ai" | "model" | "effort" | "video" | "agents" | "instagram" | "tiktok" | "youtube" | "facebook" | "x" | "done";
+
+export interface Onboarding {
+  steps: { step: OnboardStep; label: string; state: "done" | "skipped" | "todo" }[];
+  done: number;
+  total: 11;
+  finishedAt: string | null;
+}
+
+export interface UsageSummary {
+  days: { day: string; byModel: { model: string; input: number; output: number; cost: number | null; currency: string | null }[] }[];
+  totals: { model: string; input: number; output: number; cost: number | null; currency: string | null }[];
+  renderMinutes: number;
+}
+
+export interface StorageSummary {
+  bytes: { videos: number; scenes: number; audio: number; references: number; skills: number; other: number };
+  files: number;
+}
+
+export interface KeyCheck {
+  at: string;
+  ok: boolean;
+  code: string;
+  message: string;
 }
 
 export interface Workspace {
@@ -122,6 +316,10 @@ export interface StoryInput {
   durationSec?: number;
   captionsOn?: boolean;
   musicMood?: MusicMood;
+  /** ≤ 3 reference videos whose analyses the storyboard agent reads */
+  referenceIds?: string[];
+  /** this video's storyboard and checks only */
+  override?: ModelOverride;
 }
 
 export interface Captions {
@@ -203,10 +401,10 @@ export interface StoryStep {
 export interface ProductionJob {
   jobId: string;
   workspaceId: string;
-  contentType: "animation" | "character";
-  /** storyId, or characterId for a portrait */
+  contentType: "animation" | "character" | "reference";
+  /** storyId, characterId (portrait) or refId (reference analysis) */
   contentId: string;
-  jobType: "produce" | "changes" | "portrait";
+  jobType: "produce" | "changes" | "portrait" | "reference_analysis";
   status: "queued" | "running" | "ready" | "needs_check" | "failed" | "canceled";
   steps: StoryStep[];
   progress: number;
@@ -220,6 +418,7 @@ export interface ProductionJob {
     actualSec: number | null;
     safetyTopicId: string | null;
     providers: Record<string, string>;
+    models: { step: string; agentId: string; model: string; effort: Effort | null; effortApplied: boolean }[];
   };
   error?: string;
   createdAt: string;
@@ -293,6 +492,9 @@ export interface SocialAccount {
   socialAccountId: string;
   workspaceId: string;
   platform: Platform;
+  /** which developer app this platform uses (CONTRACTS §45.30): never chosen silently */
+  app: { choice: "own" | "clips" | null; saved: boolean; hints?: Record<string, string>; check?: KeyCheck };
+  lastCheckedAt: string | null;
   connectionStatus: "not_connected" | "connected" | "choose_account" | "needs_reconnect" | "same_as_clips";
   externalAccountId: string | null;
   accountName: string | null;
@@ -410,9 +612,11 @@ export interface StoriesApi {
   createIdea(ws: string, idea: IdeaInput): Promise<Idea>;
   patchIdea(ws: string, ideaId: string, patch: Partial<IdeaInput>): Promise<Idea>;
   deleteIdea(ws: string, ideaId: string): Promise<void>;
-  generateIdeas(ws: string, body: { topic?: string; category?: IdeaCategory; count?: number }): Promise<IdeaInput[]>;
-  expandIdea(ws: string, ideaId: string, body?: { durationSec?: number }): Promise<Idea>;
-  ideaVariations(ws: string, ideaId: string, body?: { count?: number }): Promise<IdeaInput[]>;
+  /** AI work runs in Lamo Stories' own agent as a task: poll getTask until done (result.drafts / result.idea) */
+  generateIdeas(ws: string, body: { topic?: string; category?: IdeaCategory; count?: number; override?: ModelOverride }): Promise<AiTask>;
+  expandIdea(ws: string, ideaId: string, body?: { durationSec?: number; override?: ModelOverride }): Promise<AiTask>;
+  ideaVariations(ws: string, ideaId: string, body?: { count?: number; override?: ModelOverride }): Promise<AiTask>;
+  getTask(ws: string, taskId: string): Promise<AiTask>;
 
   listCharacters(ws: string): Promise<Character[]>;
   createCharacter(ws: string, c: CharacterInput): Promise<Character>;
@@ -423,6 +627,8 @@ export interface StoriesApi {
   referenceComplete(ws: string, characterId: string, assetId: string): Promise<Character>;
   deleteReference(ws: string, characterId: string, assetId: string): Promise<Character>;
   makePortrait(ws: string, characterId: string): Promise<ProductionJob>;
+  /** the character agent's suggested CharacterInput in result.character (a draft) */
+  designCharacter(ws: string, body: { description?: string; referenceAssetId?: string; override?: ModelOverride }): Promise<AiTask>;
 
   listStories(ws: string, q?: { status?: StoryStatus | "all"; limit?: number; cursor?: string }): Promise<{ stories: Story[]; nextCursor: string | null }>;
   createStory(ws: string, body: StoryInput): Promise<{ story: Story; job: ProductionJob }>;
@@ -435,7 +641,7 @@ export interface StoriesApi {
   cancelStory(ws: string, storyId: string): Promise<{ story: Story; job: ProductionJob | null }>;
   approve(ws: string, storyId: string, version: number): Promise<Story>;
   reject(ws: string, storyId: string, reason?: string): Promise<Story>;
-  /** a note, scene ids or both; scene ids without a note is "Remake this scene" (a new take) */
+  /** a note, scene ids or both; scene ids without a note is "Remake this scene" (a new take). override: this job only */
   requestChanges(ws: string, storyId: string, body: { note?: string; sceneIds?: string[] }): Promise<{ story: Story; job: ProductionJob }>;
   download(ws: string, storyId: string): Promise<{ url: string; filename: string }>;
 
@@ -450,6 +656,54 @@ export interface StoriesApi {
   checkSocial(ws: string, platform: Platform): Promise<SocialAccount>;
   tiktokCreatorInfo(ws: string): Promise<TikTokCreator>;
   disconnectSocial(ws: string, platform: Platform): Promise<void>;
+
+  setSocialApp(ws: string, platform: Platform, body: { choice: "clips" } | { choice: "own"; clientId: string; clientSecret: string; configId?: string }): Promise<SocialAccount>;
+  checkSocialApp(ws: string, platform: Platform): Promise<KeyCheck>;
+  deleteSocialApp(ws: string, platform: Platform): Promise<void>;
+
+  getAi(ws: string): Promise<{ ai: StoriesAiConfig; models: ModelInfo[]; agents: Agent[]; tasks: TaskInfo[] }>;
+  putAi(ws: string, ai: StoriesAiConfig): Promise<StoriesAiConfig>;
+  checkModels(ws: string, models?: string[]): Promise<AiTask>;
+  setModelPrice(ws: string, modelKey: string, price: { inputPer1M: number; outputPer1M: number; currency: string } | null): Promise<ModelInfo>;
+  usage(ws: string, days?: number): Promise<UsageSummary>;
+  getAgent(ws: string, agentId: AgentId): Promise<Agent>;
+  patchAgent(ws: string, agentId: AgentId, patch: { version: number; instructions?: string; active?: boolean; model?: string | null; effort?: Effort | null; skillIds?: string[] } | { reset: true }): Promise<Agent>;
+
+  listSkills(ws: string): Promise<Skill[]>;
+  skillUpload(ws: string, body: { filename: string; skillId?: string }): Promise<{ skillId: string; key: string; uploadUrl: string; headers: Record<string, string> }>;
+  createSkill(ws: string, body: { skillId: string; key: string } | { title: string; description: string; instructions: string }): Promise<Skill>;
+  getSkill(ws: string, skillId: string): Promise<Skill & { content: string }>;
+  putSkill(ws: string, skillId: string, body: { version: number; title?: string; description?: string; instructions?: string; key?: string; enabled?: boolean }): Promise<Skill>;
+  deleteSkill(ws: string, skillId: string): Promise<void>;
+  restoreSkill(ws: string, skillId: string, revisionId: string): Promise<Skill>;
+
+  listConversations(ws: string): Promise<Conversation[]>;
+  createConversation(ws: string, body: { title?: string; projectRef?: ProjectRef; model?: string | null; effort?: Effort | null }): Promise<Conversation>;
+  getConversation(ws: string, convId: string, after?: string): Promise<{ conversation: Conversation; messages: Message[] }>;
+  patchConversation(ws: string, convId: string, patch: { title?: string; model?: string | null; effort?: Effort | null; projectRef?: ProjectRef | null }): Promise<Conversation>;
+  deleteConversation(ws: string, convId: string): Promise<void>;
+  sendMessage(ws: string, convId: string, body: { text: string; attachments?: { assetId: string }[]; override?: ModelOverride }): Promise<{ user: Message; assistant: Message }>;
+  chatAttachment(ws: string, convId: string, file: { filename: string; contentType: string; size: number }): Promise<Upload>;
+  stopMessage(ws: string, convId: string, msgId: string): Promise<Message>;
+
+  listMemory(ws: string): Promise<MemoryItem[]>;
+  addMemory(ws: string, text: string): Promise<MemoryItem>;
+  patchMemory(ws: string, memId: string, text: string): Promise<MemoryItem>;
+  deleteMemory(ws: string, memId: string): Promise<void>;
+
+  listReferences(ws: string): Promise<ReferenceVideo[]>;
+  createReference(ws: string, body: { filename: string; contentType: string; size: number; title: string }): Promise<{ reference: ReferenceVideo; upload: { uploadId: string; parts: { partNumber: number; url: string }[] } }>;
+  completeReference(ws: string, refId: string, parts: { partNumber: number; etag: string }[]): Promise<ReferenceVideo>;
+  analyzeReference(ws: string, refId: string, override?: ModelOverride): Promise<{ reference: ReferenceVideo; job: ProductionJob }>;
+  getReference(ws: string, refId: string): Promise<{ reference: ReferenceVideo; analysis: ReferenceAnalysis | null }>;
+  patchReference(ws: string, refId: string, title: string): Promise<ReferenceVideo>;
+  deleteReference(ws: string, refId: string): Promise<void>;
+
+  getOnboarding(ws: string): Promise<Onboarding>;
+  patchOnboarding(ws: string, body: { step: OnboardStep; done?: boolean; skipped?: boolean } | { finish: true }): Promise<Onboarding>;
+  setProviderKey(ws: string, providerId: string, key: string): Promise<ProviderStatus>;
+  deleteProviderKey(ws: string, providerId: string): Promise<void>;
+  storage(ws: string): Promise<StorageSummary>;
 
   publish(ws: string, storyId: string, targets: PublishTarget[]): Promise<PublishingJob[]>;
   listPublishing(ws: string, storyId?: string): Promise<PublishingJob[]>;

@@ -1140,27 +1140,29 @@ the watermark) fills it and never touches the paid total.
 
 No sort key, index, table, bucket, secret or Lambda is added, and nothing that holds the owner's data is replaced.
 
-### 21. Lamo Stories: a second workspace (CONTRACTS §45, ADR-70 to ADR-75)
+### 21. Lamo Stories: a second application inside Clip Factory (CONTRACTS §45, ADR-70 to ADR-80)
 
 The owner's second studio: short animated story videos with recurring characters, no voice-over, posted to its own
-social accounts ([CONTRACTS.md §45](CONTRACTS.md#45-lamo-stories-a-second-separate-workspace-owner-request-2026-11-21)).
-Lamo Clips (everything above) is the built-in workspace and does not change.
+social accounts, run as **its own application** inside the Clip Factory shell
+([CONTRACTS.md §45](CONTRACTS.md#45-lamo-stories-a-second-separate-workspace-owner-request-2026-11-21)). Clip Factory
+(everything above) does not change: its API Lambda, route table, agent runtime and roles are untouched.
 
+* **Its own pieces.** Lambda `cf-prod-stories-api` behind `/v1/workspaces` on the same HTTP API; AgentCore runtime
+  `cf_prod_story_agent` built from `stories/agent/` (its own image, role and sessions); the durable `cf-prod-story-flow`
+  for posting. Each role may write only Lamo Stories' keys (`USER#*#WS#*`, `USER#*#WSREG`), the `ws/` prefix and
+  `cf-prod/workspaces/*` secrets.
 * **Data.** One registry partition `USER#{userId}#WSREG` and one partition per workspace `USER#{userId}#WS#{id}` in
-  the same table, with sort-key prefixes (`IDEA#`, `CHAR#`, `STORY#`, `PJOB#`, `ASSET#`, `SOCIAL#`, `PUBJOB#`) that no
-  stream forwards; files under `ws/{userId}/{id}/` in the media bucket. Lamo Stories screens poll.
-* **Writing.** Ideas (Claude Haiku 5.5 in `cf-prod-api`); the storyboard and the fact check (the clip models in the
-  agent), every call with the skills block first; safety topics only from `config/stories-guidance.json`.
-* **Making the video.** The API invokes the agent with `process_story`. The agent runs the TypeScript engine
-  (`web/src/stories/engine`, copied into the image) with Deno for draw lists, rasterizes them with numpy, synthesizes
-  effects, noises and music, and joins it all with ffmpeg into a 1080×1920 MP4. The browser runs the same engine for
-  live previews.
-* **Connections.** The same developer apps and callback URL as Lamo Clips; a Lamo Stories connect uses its own state
-  format (`w1.`, the workspace inside the signature), the callback routes on that prefix before anything else, and
-  the workspace path writes `cf-prod/workspaces/{id}/{platform}/token` and a `SOCIAL#` item only. YouTube posts to the
-  one channel picked in Google's picker. Disconnect never calls a platform's revoke (it would end Lamo Clips' grant
-  too when the account is shared).
-* **Posting.** `cf-prod-story-flow` (durable, new, up to 9 days) checks the destination inside every platform step,
-  including the identity inside the token secret, and reuses the platform publishers unchanged; it shares Lamo
-  Clips' rate budgets and the owner's monthly X limit. Its IAM role cannot read Lamo Clips' tokens or write Lamo
-  Clips' items, and Lamo Clips' roles cannot read Lamo Stories' tokens.
+  the same table, with sort-key prefixes no stream forwards; files under `ws/{userId}/{id}/`. Lamo Stories screens poll.
+* **AI.** Five agents (creative director, video analysis, storyboard, character, quality) with the owner's models and
+  reasoning effort per workspace, agent, task and request (`stories/config/models.json`; effort sent as
+  `output_config.effort` where the model takes it; never a silent substitute), Lamo Stories' own skills and memory,
+  a creative chat, and reference-video analysis. Safety topics only from `stories/config/guidance.json`.
+* **Making the video.** The API invokes Lamo Stories' runtime. It runs the TypeScript engine (`web/src/stories/engine`,
+  copied into its image) with Deno for draw lists, rasterizes them with numpy, synthesizes effects, noises and music,
+  and joins it all with ffmpeg into a 1080×1920 MP4. The browser runs the same engine for live previews.
+* **Connections.** The same callback URL; a Lamo Stories connect uses its own state format (`w1.`) and writes only
+  `cf-prod/workspaces/{id}/{platform}/token` and a `SOCIAL#` item. Per platform the owner picks Lamo Stories' own
+  developer app or Clip Factory's; tokens are always separate. YouTube posts to the one channel picked in Google's
+  picker. Disconnect never calls a platform's revoke.
+* **Posting.** `cf-prod-story-flow` checks the destination inside every platform step, including the identity inside
+  the token secret, and reuses the platform publisher library unchanged.

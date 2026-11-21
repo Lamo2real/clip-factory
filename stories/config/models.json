@@ -1,0 +1,127 @@
+{
+  "$comment": "Lamo Stories' own model list (docs/CONTRACTS.md §45.25, ADR-77). Separate from config/models.json, which is Clip Factory's and is never read by Lamo Stories. Terraform builds the Lamo Stories agent's bedrock:InvokeModel grants from this file. 'profile' is the inference profile the agent calls; 'regions' are that profile's destination Regions (for IAM; '*' for a global profile). 'efforts' are the output_config.effort levels the model accepts (empty: no effort setting, the model runs at its own level). 'pricing' is null when no price is known for this account: Bedrock prices are partner prices and differ from Anthropic's own list, so the owner may type them in Lamo Stories › Settings › AI. The owner's 'Sable 5.2 / Sable 5.1' are the Claude Fable 5.2 / 5.1 models below.",
+  "defaultModel": "opus-5-5",
+  "defaultEffort": "high",
+  "models": [
+    {
+      "key": "fable-5-2",
+      "label": "Claude Fable 5.2",
+      "provider": "Amazon Bedrock",
+      "modelId": "anthropic.claude-fable-5-2",
+      "profile": "global.anthropic.claude-fable-5-2",
+      "regions": [
+        "*"
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "defaultEffort": "high",
+      "vision": true,
+      "pricing": null,
+      "line": "The most capable. Best for storyboards and hard reasoning."
+    },
+    {
+      "key": "fable-5-1",
+      "label": "Claude Fable 5.1",
+      "provider": "Amazon Bedrock",
+      "modelId": "anthropic.claude-fable-5-1",
+      "profile": "global.anthropic.claude-fable-5-1",
+      "regions": [
+        "*"
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "defaultEffort": "high",
+      "vision": true,
+      "pricing": null,
+      "line": "Very capable. The model Clip Factory uses by default (a separate setting)."
+    },
+    {
+      "key": "opus-5-5",
+      "label": "Claude Opus 5.5",
+      "provider": "Amazon Bedrock",
+      "modelId": "anthropic.claude-opus-5-5",
+      "profile": "global.anthropic.claude-opus-5-5",
+      "regions": [
+        "*"
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "defaultEffort": "medium",
+      "vision": true,
+      "pricing": null,
+      "line": "Smart and quicker. A good default for creative work."
+    },
+    {
+      "key": "sonnet-5-5",
+      "label": "Claude Sonnet 5.5",
+      "provider": "Amazon Bedrock",
+      "modelId": "anthropic.claude-sonnet-5-5",
+      "profile": "global.anthropic.claude-sonnet-5-5",
+      "regions": [
+        "*"
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "defaultEffort": "high",
+      "vision": true,
+      "pricing": null,
+      "line": "Good and fast. Costs less."
+    },
+    {
+      "key": "haiku-5-5",
+      "label": "Claude Haiku 5.5",
+      "provider": "Amazon Bedrock",
+      "modelId": "anthropic.claude-haiku-5-5",
+      "profile": "eu.anthropic.claude-haiku-5-5",
+      "regions": [
+        "eu-central-1",
+        "eu-north-1",
+        "eu-south-1",
+        "eu-south-2",
+        "eu-west-1",
+        "eu-west-3"
+      ],
+      "efforts": [
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "defaultEffort": "medium",
+      "vision": true,
+      "pricing": null,
+      "line": "Cheapest and fastest. For quick edits."
+    }
+  ],
+  "imageModel": {
+    "label": "Amazon Nova Canvas",
+    "modelId": "amazon.nova-canvas-v1:0",
+    "region": "eu-west-1"
+  },
+  "videoModel": {
+    "label": "Amazon Nova Reel 1.1",
+    "modelId": "amazon.nova-reel-v1:1",
+    "region": "us-east-1"
+  }
+}

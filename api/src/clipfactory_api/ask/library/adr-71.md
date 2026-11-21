@@ -19,6 +19,7 @@
   and no licences. AI images (Nova Canvas) can be added later behind the rigs (ADR-75).
 - **Consequences.** Previews and videos use the same draw lists (shared code; the rasterizer is tested on fixed draw
   lists). The look is clean flat-shaded 2D, not painted or realistic; new actions, props or sets are code in one
-  folder. The engine folder is copied into the agent image, so the image tag hash includes it, and an engine change
-  rebuilds the image (which replaces the image build trigger, as every agent change already does). Rendering 45 s
+  folder. The engine folder is copied into Lamo Stories' own agent image (ADR-76), so that image's tag hash includes
+  it, and an engine change rebuilds only that image; Clip Factory's agent image never changes because of Lamo
+  Stories. Rendering 45 s
   takes a few minutes on the agent.

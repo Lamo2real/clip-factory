@@ -11,13 +11,16 @@ import { loadStoriesApi } from "./api/client.ts";
 import type { Workspace } from "./api/types.ts";
 import { storiesHref, type StoriesPage } from "./routes.ts";
 import { CharactersScreen } from "./screens/Characters.tsx";
+import { ChatScreen } from "./screens/Chat.tsx";
 import { ConnectionsScreen } from "./screens/Connections.tsx";
 import { DashboardScreen } from "./screens/Dashboard.tsx";
 import { IdeasScreen } from "./screens/Ideas.tsx";
 import { LibraryScreen } from "./screens/Library.tsx";
 import { ProductionScreen } from "./screens/Production.tsx";
+import { ReferencesScreen } from "./screens/References.tsx";
 import { ReviewScreen } from "./screens/Review.tsx";
 import { SettingsScreen } from "./screens/Settings.tsx";
+import { SetupScreen } from "./screens/Setup.tsx";
 import type { StoriesScreenProps } from "./screens/types.ts";
 
 const NAV: { label: string; page: StoriesPage; match: StoriesPage["name"][] }[] = [
@@ -26,9 +29,11 @@ const NAV: { label: string; page: StoriesPage; match: StoriesPage["name"][] }[] 
   { label: "Characters", page: { name: "characters" }, match: ["characters", "character", "character_new"] },
   { label: "Production", page: { name: "production" }, match: ["production", "production_new", "production_story"] },
   { label: "Review", page: { name: "review" }, match: ["review", "review_story"] },
+  { label: "Chat", page: { name: "chat" }, match: ["chat", "chat_conv"] },
+  { label: "References", page: { name: "references" }, match: ["references", "reference"] },
   { label: "Library", page: { name: "library", kind: null, storyId: null }, match: ["library"] },
-  { label: "Connections", page: { name: "connections", platform: null, result: null, ws: null }, match: ["connections"] },
-  { label: "Settings", page: { name: "settings" }, match: ["settings"] },
+  { label: "Social accounts", page: { name: "connections", platform: null, result: null, ws: null }, match: ["connections"] },
+  { label: "Settings", page: { name: "settings", section: "ai" }, match: ["settings", "setup"] },
 ];
 
 /** Picks the workspace to show: a checked id from the server's own list, never one taken from the address alone. */
@@ -61,6 +66,14 @@ function Screen(props: StoriesScreenProps) {
       return <ConnectionsScreen {...props} />;
     case "settings":
       return <SettingsScreen {...props} />;
+    case "chat":
+    case "chat_conv":
+      return <ChatScreen {...props} />;
+    case "references":
+    case "reference":
+      return <ReferencesScreen {...props} />;
+    case "setup":
+      return <SetupScreen {...props} />;
     default:
       return (
         <section className="st-page">
@@ -101,7 +114,7 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
           </A>
         ))}
         <A href="/" className="st-nav__item">
-          Lamo Clips
+          Clip Factory
         </A>
       </nav>
       <main className="st-main" id="main" tabIndex={-1}>

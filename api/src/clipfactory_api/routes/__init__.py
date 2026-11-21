@@ -7,6 +7,7 @@ from . import (
     ask,
     clips,
     contentrewards,
+    finder,
     follows,
     help,
     jobs,
@@ -19,7 +20,6 @@ from . import (
     skills,
     system,
     weeks,
-    workspaces,
 )
 
 ROUTES: list[Route] = [
@@ -143,6 +143,12 @@ ROUTES: list[Route] = [
     route("GET", "/v1/contentrewards/money", contentrewards.get_money),
     route("POST", "/v1/contentrewards/money/refresh", contentrewards.refresh_money),
     route("POST", "/v1/contentrewards/seen", contentrewards.seen),
-    # §45: Lamo Stories and other workspaces, all under /v1/workspaces (appended last; nothing above changes).
-    *workspaces.ROUTES,
+    # §41: the campaign finder. 503 "unavailable" on every one until switched on (CR_FINDER=on).
+    route("GET", "/v1/contentrewards/finder", finder.get_finder),
+    route("PATCH", "/v1/contentrewards/finder", finder.patch_finder),
+    route("POST", "/v1/contentrewards/finder/check", finder.check),
+    route("PATCH", "/v1/contentrewards/finder/matches/{campaignId}", finder.patch_match),
+    route("POST", "/v1/contentrewards/finder/matches/{campaignId}/add", finder.add_match),
+    route("POST", "/v1/contentrewards/finder/joined", finder.joined),
+    route("POST", "/v1/contentrewards/finder/ask", finder.ask),
 ]
