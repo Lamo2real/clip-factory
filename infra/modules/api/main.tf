@@ -14,7 +14,18 @@ locals {
   data_rw         = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:BatchWriteItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem"]
   table_resources = [var.table_arn, "${var.table_arn}/index/*"]
   # "ask": the question's files (§28.7): presigned PUTs and DELETE /v1/help/files/{fileId}.
-  media_prefixes = ["uploads", "jobs", "skills", "private", "ask"]
+  # "campaigns": a Content Rewards campaign's logo and brand picture (§38.11, §38.16); listing it is what removing a
+  # campaign needs to delete its files. The logo copy into jobs/* uses the jobs prefix above.
+  media_prefixes = ["uploads", "jobs", "skills", "private", "ask", "campaigns"]
+
+  # Content Rewards (docs/CONTRACTS.md §38.8, §38.16): every /v1/contentrewards route answers 503 until
+  # CONTENT_REWARDS=on (and the names below are set). The stats invoke ({"action": "contentrewards"}) uses the
+  # existing StatsAndLearn grant; the CR secrets are under the existing PlatformSecrets grant (§17.9).
+  cr_on  = var.campaigns_function_arn != ""
+  cr_env = merge({ CONTENT_REWARDS = var.content_rewards_enabled ? "on" : "off" }, local.cr_on ? { CAMPAIGNS_FUNCTION_ARN = var.campaigns_function_arn } : {})
+  cr_permissions = local.cr_on ? [
+    { Sid = "Campaigns", Action = ["lambda:InvokeFunction"], Resource = [var.campaigns_function_arn] },
+  ] : []
 
   # Ask Clip Factory (docs/CONTRACTS.md §19.6, §19.9). Off unless the env turns it on; without a model id it
   # answers from the help knowledge only. The per-user rate limits are fixed by the contract.
@@ -57,7 +68,7 @@ locals {
       handler = "clipfactory_api.http.handler"
       timeout = 29
       memory  = 512
-      env = merge(local.help_env, local.ask_env, local.push_env, {
+      env = merge(local.help_env, local.ask_env, local.push_env, local.cr_env, {
         TABLE_NAME        = var.table_name
         MEDIA_BUCKET      = var.media_bucket
         AGENT_RUNTIME_ARN = var.agent_runtime_arn
@@ -85,7 +96,7 @@ locals {
 
   # What each function may do beyond writing its own logs and traces.
   permissions = {
-    api = concat(local.help_permissions, local.ask_permissions, local.push_permissions, [
+    api = concat(local.help_permissions, local.ask_permissions, local.push_permissions, local.cr_permissions, [
       # Confirm writes the clip and its posts in one transaction.
       { Sid = "Data", Action = local.data_rw, Resource = local.table_resources },
       # Presigned uploads and downloads, decline (deletes the clip's files), skill and cookie files.

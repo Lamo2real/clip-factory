@@ -86,6 +86,22 @@ variable "platforms_config_path" {
   }
 }
 
+variable "content_rewards_enabled" {
+  type        = bool
+  default     = false
+  description = "§38.16: CONTENT_REWARDS on/off for the stats tick's Content Rewards checking."
+}
+
+variable "campaigns_function_arn" {
+  type        = string
+  default     = ""
+  description = "Unqualified ARN of cf-prod-campaigns (CAMPAIGNS_FUNCTION_ARN). Empty: no grant."
+  validation {
+    condition     = var.campaigns_function_arn == "" || can(regex("^arn:aws[a-z-]*:lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9_-]+$", var.campaigns_function_arn))
+    error_message = "campaigns_function_arn must be empty or an unqualified Lambda function ARN."
+  }
+}
+
 variable "log_retention_days" {
   type    = number
   default = 30

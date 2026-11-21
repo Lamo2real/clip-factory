@@ -83,6 +83,23 @@ variable "money_function_arn" {
   }
 }
 
+# ---------- Content Rewards campaigns (docs/CONTRACTS.md §38.16) ----------
+variable "campaigns_function_arn" {
+  type        = string
+  default     = ""
+  description = "Unqualified ARN of cf-prod-campaigns (CAMPAIGNS_FUNCTION_ARN): rules reads, logo links, brand pictures. Empty: no grant."
+  validation {
+    condition     = var.campaigns_function_arn == "" || can(regex("^arn:aws[a-z-]*:lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9_-]+$", var.campaigns_function_arn))
+    error_message = "campaigns_function_arn must be empty or an unqualified Lambda function ARN."
+  }
+}
+
+variable "content_rewards_enabled" {
+  type        = bool
+  default     = false
+  description = "§38.16: CONTENT_REWARDS on/off. Off until every builder's part of §38.19 has merged."
+}
+
 # ---------- Set up posting (docs/CONTRACTS.md §17.4, §17.9) ----------
 variable "hooks_url" {
   type        = string
