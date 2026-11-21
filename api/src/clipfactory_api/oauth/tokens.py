@@ -18,7 +18,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from .. import db
@@ -34,7 +34,7 @@ LEASE_TRIES = 5
 ROTATING = frozenset({"tiktok", "x"})
 REFRESHING = frozenset({"youtube", "tiktok", "x"})
 
-__all__ = ["AppKeys", "Credentials", "ReconnectNeededError", "SecretsTokenProvider"]
+__all__ = ["AppKeys", "Credentials", "ReconnectNeededError", "SecretsTokenProvider", "clear_lease", "take_lease"]
 
 
 @dataclass(frozen=True)
@@ -55,6 +55,30 @@ def _user_id(account: dict[str, Any]) -> str:
         return found
     pk = str(account.get("pk") or "")
     return pk.removeprefix("USER#")
+
+
+def take_lease(store: db.Store, pk: str, sk: str, now: datetime, lease: timedelta = LEASE) -> bool:
+    """Takes the refresh lease (``refreshLeaseUntil = now + 30 s``) on an existing item when it is free or past.
+    Shared by the platform tokens and the Content Rewards tokens (§38.9)."""
+    try:
+        store.update_expr(
+            pk,
+            sk,
+            "SET #l = :until",
+            condition="attribute_exists(pk) AND (attribute_not_exists(#l) OR #l < :now)",
+            names={"#l": "refreshLeaseUntil"},
+            values={":until": iso(now + lease), ":now": iso(now)},
+        )
+    except db.ConditionFailed:
+        return False
+    return True
+
+
+def clear_lease(store: db.Store, pk: str, sk: str) -> None:
+    try:
+        store.update_expr(pk, sk, "REMOVE #l", condition="attribute_exists(pk)", names={"#l": "refreshLeaseUntil"})
+    except db.ConditionFailed:
+        return
 
 
 class SecretsTokenProvider:
@@ -116,27 +140,10 @@ class SecretsTokenProvider:
         raise RetryablePublishError(f"{label(platform)} is busy. Clip Factory tries again later.")
 
     def _take_lease(self, pk: str, sk: str) -> bool:
-        now = self.env.clock()
-        try:
-            self.store.update_expr(
-                pk,
-                sk,
-                "SET #l = :until",
-                condition="attribute_exists(pk) AND (attribute_not_exists(#l) OR #l < :now)",
-                names={"#l": "refreshLeaseUntil"},
-                values={":until": iso(now + LEASE), ":now": iso(now)},
-            )
-        except db.ConditionFailed:
-            return False
-        return True
+        return take_lease(self.store, pk, sk, self.env.clock())
 
     def _clear_lease(self, pk: str, sk: str) -> None:
-        try:
-            self.store.update_expr(
-                pk, sk, "REMOVE #l", condition="attribute_exists(pk)", names={"#l": "refreshLeaseUntil"}
-            )
-        except db.ConditionFailed:
-            return
+        clear_lease(self.store, pk, sk)
 
     def _do_refresh(
         self, platform: str, account: dict[str, Any], keys: AppKeys, token: dict[str, Any]
