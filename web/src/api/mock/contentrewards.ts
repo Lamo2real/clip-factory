@@ -560,7 +560,11 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
   }
 
   // GameFuel Clips: the posted clips' first five posts with a link (three approved, two not approved).
-  const seeded = store.posts.filter((p) => p.status === "posted" && p.url && p.platform !== "tiktok" && p.platform !== "x").slice(0, 5);
+  // The oldest ones (last week's), so this week's clips keep the faces other tests know.
+  const seeded = store.posts
+    .filter((p) => p.status === "posted" && p.url && p.platform !== "tiktok" && p.platform !== "x")
+    .sort((a, b) => (a.postedAt ?? "").localeCompare(b.postedAt ?? ""))
+    .slice(0, 5);
   const keyOf = (p: Post) => `${store.clips.find((c) => c.clipId === p.clipId)?.hook ?? p.clipId}|${p.platform}`;
   if (!state.subs.length && state.campaigns.some((c) => c.campaignId === CR_IDS.money)) {
     seeded.forEach((p, i) => {

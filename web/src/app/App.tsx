@@ -7,6 +7,7 @@ import { usePrefs } from "../lib/prefs.ts";
 import { navigate, useHash, useRoute, type Route } from "../lib/router.ts";
 import { findBranch, findTree, legacySettingsRedirect } from "../lib/settingsTree.ts";
 import { forgetLoaded } from "../lib/hooks.ts";
+import { resetCr } from "../lib/contentRewards.ts";
 import { sounds } from "../lib/sounds.ts";
 import { Backdrop, GlassFilter } from "../components/Backdrop.tsx";
 import { Sidebar, TabBar } from "../components/Nav.tsx";
@@ -103,6 +104,7 @@ export function App() {
     () =>
       onSignedOut(() => {
         forgetLoaded();
+        resetCr();
         setBoot({ state: "signed_out", note: "Your sign-in on this device has ended. Please sign in again." });
       }),
     [],
@@ -116,6 +118,7 @@ export function App() {
     await Promise.race([forgetDevice(), new Promise<void>((done) => setTimeout(done, 4000))]);
     await auth().signOut();
     forgetLoaded();
+    resetCr();
     setBoot({ state: "signed_out", note: null });
   }, []);
 

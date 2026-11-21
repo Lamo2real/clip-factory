@@ -164,7 +164,8 @@ export function NewJobForm() {
   const check = useMemo(() => checkLink(link), [link]);
   const crLink = useMemo(() => campaignLink(link), [link]);
   const isCampaignLink = mode === "link" && crLink.kind !== "none";
-  const clipFor = clippable(cr);
+  // The campaigns a job can be for right now (in or manual, nothing stopping it), and the one Home was opened for.
+  const clipFor = clippable(cr).filter((c) => c.hardStops === 0 || c.campaignId === pickedCampaign);
   // Only a campaign the API listed goes with a new job (§38.19).
   const listed = listedCampaign(cr, pickedCampaign);
   const forCampaign = listed && (listed.membership === "in" || listed.membership === "manual") ? listed.campaignId : null;

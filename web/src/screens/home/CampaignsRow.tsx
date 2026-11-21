@@ -18,11 +18,9 @@ export function CampaignsRow() {
   return (
     <section className="home-row cr-row" aria-labelledby="cr-row-title">
       <div className="home-row__intro">
+        {/* No nowrap: in the narrow intro column (1100 px and up) "campaigns." takes a line of its own. */}
         <h2 className="display-2" id="cr-row-title">
-          Your{" "}
-          <span className="nowrap">
-            <em>campaigns</em>.
-          </span>
+          Your <em>campaigns</em>.
         </h2>
         <p className="muted">{campaigns.length ? `${plural(campaigns.length, "campaign")} on Content Rewards.` : "Get paid by brands for your clips."}</p>
         <LinkButton href={CAMPAIGNS_PATH} size="sm" icon="layers" iconAfter="chevronRight">
@@ -32,7 +30,7 @@ export function CampaignsRow() {
       <ul className="cr-row__list" aria-label="Your campaigns">
         {shown.map((c) => (
           <li key={c.campaignId}>
-            <A href={campaignPath(c.campaignId)} className={`cr-row-chip${c.membership === "in" || c.membership === "manual" ? " is-in" : ""}`} data-campaign={c.campaignId}>
+            <A href={campaignPath(c.campaignId)} className={`cr-row-chip glass${c.membership === "in" || c.membership === "manual" ? " is-in" : ""}`} data-campaign={c.campaignId}>
               <BrandMark name={c.brand || c.name} url={c.brandPictureUrl} size={40} />
               <span className="cr-row-chip__text">
                 <span className="cr-row-chip__name user-text clamp-1">{c.name}</span>
@@ -43,7 +41,7 @@ export function CampaignsRow() {
         ))}
         {!campaigns.length ? (
           <li>
-            <A href={CAMPAIGNS_PATH} className="cr-row-chip is-add">
+            <A href={CAMPAIGNS_PATH} className="cr-row-chip glass is-add">
               <span className="cr-brand cr-brand--letter" aria-hidden="true" style={{ width: 40, height: 40 }}>
                 <Icon name="plus" size={20} />
               </span>

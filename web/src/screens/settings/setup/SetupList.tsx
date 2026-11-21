@@ -134,7 +134,7 @@ function CrCardPart() {
   const soon = cr.state === "soon";
   return (
     <section className="cr-part" aria-labelledby="cr-part-title">
-      <h2 className="cr-part__title" id="cr-part-title">
+      <h2 className="setup-part__title cr-part__title" id="cr-part-title">
         Get paid by brands
       </h2>
       <ul className="setup-cards" aria-label="Get paid by brands">

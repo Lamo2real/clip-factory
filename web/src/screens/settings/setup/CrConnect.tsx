@@ -11,6 +11,7 @@ import { burst } from "../../../lib/confetti.ts";
 import { CONNECT_RESULT_TEXT, patchCr, reloadCr } from "../../../lib/contentRewards.ts";
 import { connectPlace, crBridge, PLACE_WORDS, runConnect, type ConnectPlace } from "../../../lib/crConnect.ts";
 import { prefersReducedMotion } from "../../../lib/prefs.ts";
+import { cheerOnNextTap } from "../../../lib/sound.ts";
 import { sounds } from "../../../lib/sounds.ts";
 import { Lines } from "../../campaigns/bits.tsx";
 
@@ -75,13 +76,12 @@ export function useCrConnect(onConnection?: (c: CrConnection) => void): CrConnec
     }
     void reloadCr();
     if (out.result === "connected") {
-      // Once, right here (the door brought the window to the front; the owner's tap started it).
+      // Once, right here (the door brought the window to the front). The success sound answers his next tap (§20.8).
       if (!prefersReducedMotion()) burst(undefined, 140);
-      sounds.play("success");
+      cheerOnNextTap(sounds);
       toast.success(CONNECT_RESULT_TEXT.connected);
       return true;
     }
-    if (out.result !== "read_only") sounds.play("deny");
     return out.result === "read_only";
   }, [toast]);
 

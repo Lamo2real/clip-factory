@@ -1,5 +1,5 @@
 {
-  "version": "d060928872f4",
+  "version": "d8204c78747c",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -4805,7 +4805,7 @@
         "Instagram",
         "Facebook",
         "X",
-        "Content Rewards",
+        "Content Rewards money",
         "Getting your money out"
       ],
       "answer": "How close you are to getting paid, and real money each app reports.",
@@ -5082,7 +5082,7 @@
       "route": "/money",
       "hash": "money-contentrewards",
       "where": "Settings › Posting › Money",
-      "title": "Content Rewards",
+      "title": "Content Rewards money",
       "keywords": [
         "content rewards",
         "whop",
@@ -5094,11 +5094,11 @@
         "payout",
         "get paid"
       ],
-      "answer": "Money from brand campaigns, in Content Rewards' own numbers, and how to move it to your bank.",
+      "answer": "Money from brand campaigns, in their own numbers, and how to move it to your bank.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**.",
-        "Find **Content Rewards**."
+        "Find **Content Rewards money**."
       ],
       "actions": [
         {

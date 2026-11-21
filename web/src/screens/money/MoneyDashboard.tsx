@@ -555,7 +555,7 @@ export function MoneyDashboard() {
       <MoneyClipList choice={choice} onSort={(sort) => set({ sort })} />
     </div>
     {/* Content Rewards' own numbers (§38.7): their own part, never added into the totals above. */}
-    <div className={`page cr-money-page${dock ? " is-dock" : ""}`}>
+    <div className={`page cr-money-page${dock ? " is-dock" : ""}`} data-help-dodge-text>
       <CrMoneyPart />
     </div>
     </>

@@ -88,6 +88,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   // one vermilion button; Refresh numbers steps back to glass until it is sent.
   const crSubs = useSubmissions({ clipId });
   const sendNow = sendGroups(crSubs.subs).length > 0;
+  const crFirst = sendNow || (typeof location !== "undefined" && new URLSearchParams(location.search).has("cr"));
   const [perf, setPerf] = useState<Perf | null>(null);
   const [error, setError] = useState<{ message: string; missing: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -278,7 +279,8 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
         </p>
       </header>
 
-      {crSubs.subs.length ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={sendNow} /> : null}
+      {/* From the send-now notification (?cr=), or while a post waits to be sent, the lines lead the page (§38.6). */}
+      {crSubs.subs.length && crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={sendNow} /> : null}
 
       <div className="perf__stage" ref={setStage} data-layout={layout}>
         <PerfLines
@@ -431,6 +433,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
           })}
         </div>
       </div>
+      {crSubs.subs.length && !crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={false} /> : null}
     </div>
   );
 }

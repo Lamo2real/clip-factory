@@ -9,7 +9,7 @@ import { CrPostLines } from "../../components/CrPostLine.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { A, Button, Empty, ErrorPanel, LinkButton, Progress, Skeleton } from "../../components/ui.tsx";
+import { Button, Empty, ErrorPanel, LinkButton, Progress, Skeleton } from "../../components/ui.tsx";
 import { burst } from "../../lib/confetti.ts";
 import {
   CAMPAIGNS_PATH,
@@ -212,11 +212,11 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
           <OpenButton label="Open campaign" href={c.url} size="sm" />
         </footer>
       </article>
-      <p className="cr-below">
-        <A href={CAMPAIGNS_PATH} className="text-link">
+      <div className="cr-below">
+        <LinkButton href={CAMPAIGNS_PATH} variant="glass" icon="layers">
           All your campaigns
-        </A>
-      </p>
+        </LinkButton>
+      </div>
     </div>
   );
 }

@@ -308,8 +308,8 @@ export const TREES: Tree[] = [
           },
           {
             id: "money-contentrewards",
-            name: "Content Rewards",
-            leaf: "Money from brand campaigns, in Content Rewards' own numbers, and how to move it to your bank.",
+            name: "Content Rewards money",
+            leaf: "Money from brand campaigns, in their own numbers, and how to move it to your bank.",
             words: ["content rewards", "whop", "campaign", "campaigns", "brand", "withdraw", "balance", "payout", "get paid"],
             href: "/money#content-rewards",
           },
