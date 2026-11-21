@@ -10,6 +10,8 @@ Per platform, on its own (one failing never stops the others, and nothing here c
    ``detectedAt``, ``earningSince`` and ``firstPositiveAt`` are written once (conditional).
 5. Celebrations are queued once per key (``pendingCelebrations``) and acknowledged by the owner (``POST
    /v1/money/seen``). First money waits until it survived a later re-read at least 3 days on.
+
+Then, in its own try, Get paid's payout reads (``payouts.collect.run``, §40.7).
 """
 
 from __future__ import annotations
@@ -587,4 +589,14 @@ def run_user(deps: MoneyDeps, user_id: str, *, platforms: tuple[str, ...] = MONE
         rows=sum(o.rows for o in outcomes),
         errors=sum(1 for o in outcomes if o.error),
     )
+    # §40.7: Get paid's payout reads (AdSense for YouTube, Whop) after the five platforms, in their own try: they can
+    # never stop the money run, and they are skipped when less than 20 s of the time budget is left.
+    try:
+        from ..payouts import collect as payouts_collect
+
+        payouts_collect.run(
+            deps, user_id, deps.clock(), remaining=lambda: deps.time_budget_seconds - (deps.monotonic() - started)
+        )
+    except Exception as e:
+        log("error", "money.payouts_failed", error=type(e).__name__)
     return outcomes

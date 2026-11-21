@@ -400,3 +400,32 @@ run "cr_finder_switch_on_plans" {
     error_message = "No new function: the finder runs in cf-prod-campaigns, started by the stats tick and the api."
   }
 }
+
+# docs/CONTRACTS.md §40.6: "Connect Whop" (WHOP_CONNECT) defaults to off until K, L and M of §40.8 have merged; it only
+# changes cf-prod-api's environment, so the stack plans the same functions with it on.
+run "whop_connect_is_wired_and_off" {
+  command = plan
+
+  assert {
+    condition     = var.whop_connect_enabled == false
+    error_message = "whop_connect_enabled defaults to false until K, L and M of §40.8 have merged (then one switch PR)."
+  }
+
+  assert {
+    condition     = module.api.function_names == { api = "cf-prod-api" }
+    error_message = "cf-prod-api is planned with the switch off."
+  }
+}
+
+run "whop_connect_switch_on_plans" {
+  command = plan
+
+  variables {
+    whop_connect_enabled = true
+  }
+
+  assert {
+    condition     = module.api.function_names == { api = "cf-prod-api" } && module.money.function_names == { money = "cf-prod-money" } && module.notify.notify_function_name == "cf-prod-notify"
+    error_message = "With the switch on the stack still plans and cf-prod-api, cf-prod-money and cf-prod-notify are the same functions."
+  }
+}

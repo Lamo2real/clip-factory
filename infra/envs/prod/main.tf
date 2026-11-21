@@ -346,6 +346,8 @@ module "api" {
   cr_remake_enabled = var.cr_remake_enabled
   # §41.5: the campaign finder's seven routes (CR_FINDER), 503 "Coming soon." until its switch PR.
   cr_finder_enabled = var.cr_finder_enabled
+  # §40.6: "Connect Whop" (WHOP_CONNECT), off until its switch PR; an in-place env change.
+  whop_connect_enabled = var.whop_connect_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn

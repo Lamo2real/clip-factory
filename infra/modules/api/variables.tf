@@ -112,6 +112,12 @@ variable "cr_finder_enabled" {
   description = "§41.6: CR_FINDER on/off, the campaign finder's routes. Off until every builder's part of §41.6 has merged."
 }
 
+variable "whop_connect_enabled" {
+  type        = bool
+  default     = false
+  description = "§40.6: WHOP_CONNECT on/off, \"Connect Whop\" on the Content Rewards Get paid page. Off until K, L and M of §40.8 have merged; while off the Whop routes answer 503 \"Coming soon.\"."
+}
+
 # ---------- Set up posting (docs/CONTRACTS.md §17.4, §17.9) ----------
 variable "hooks_url" {
   type        = string
