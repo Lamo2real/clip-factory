@@ -30,6 +30,13 @@ export type Route =
   | { name: "skill"; mode: "new" | "read" | "edit"; skillId: string | null }
   /** Mock mode only: the pretend consent page Connect goes to (§17.10). */
   | { name: "mock_oauth"; platform: Platform }
+  /** Posting › Set up posting › Content Rewards (§38.3): its own guide, not one of the five platforms. */
+  | { name: "cr_setup" }
+  /** Your Content Rewards campaigns (§38.4), and one campaign's card. */
+  | { name: "campaigns" }
+  | { name: "campaign"; campaignId: string }
+  /** Mock mode only: the pretend Content Rewards sign-in page (§38.18). */
+  | { name: "mock_cr_consent" }
   | { name: "get_app" }
   /** Mock (e2e) mode only: one button per action motion kind (docs/CONTRACTS.md §20.10). Never in a real build. */
   | { name: "motion_gallery" }
@@ -37,6 +44,9 @@ export type Route =
 
 /** The motion gallery's address (mock mode only). */
 export const MOTION_GALLERY_PATH = "/__motion";
+
+/** The pretend Content Rewards sign-in page (mock mode only, §38.18). */
+export const MOCK_CR_CONSENT_PATH = "/mock-cr-consent";
 
 export function match(pathname: string, search = ""): Route {
   const path = pathname.replace(/\/+$/, "") || "/";
@@ -53,6 +63,9 @@ export function match(pathname: string, search = ""): Route {
       : { name: "library", view: "all", week: null };
   }
   if (path === "/money") return { name: "money" };
+  if (path === "/campaigns") return { name: "campaigns" };
+  const campaign = /^\/campaigns\/([0-9A-Za-z-]{1,64})$/.exec(path);
+  if (campaign) return { name: "campaign", campaignId: campaign[1]!.toLowerCase() };
   const clip = /^\/clips\/([A-Za-z0-9_-]{1,64})$/.exec(path);
   if (clip) return { name: "clip", clipId: clip[1]! };
   const skill = /^\/settings\/clip-making\/skills\/(.+)$/.exec(path);
@@ -67,6 +80,8 @@ export function match(pathname: string, search = ""): Route {
     if (!findBranch(tree, branchSlug)) return { name: "not_found" };
     return { name: "settings", tree: tree.slug, branch: branchSlug };
   }
+  // Matched before the platform pages: Content Rewards is not a sixth platform (§38.3).
+  if (path === "/settings/posting/setup/contentrewards") return { name: "cr_setup" };
   const setup = /^\/settings\/posting\/setup\/([a-z]{1,20})$/.exec(path);
   if (setup) {
     const platform = setup[1] as Platform;
@@ -76,6 +91,7 @@ export function match(pathname: string, search = ""): Route {
   if (consent && isMock && SETUP_PLATFORMS.includes(consent[1] as Platform)) return { name: "mock_oauth", platform: consent[1] as Platform };
   if (path === "/get-app") return { name: "get_app" };
   if (isMock && path === MOTION_GALLERY_PATH) return { name: "motion_gallery" };
+  if (isMock && path === MOCK_CR_CONSENT_PATH) return { name: "mock_cr_consent" };
   return { name: "not_found" };
 }
 
@@ -236,8 +252,14 @@ export function decodeHash(raw: string): string {
 export function section(route: Route): "home" | "jobs" | "review" | "library" | "money" | "settings" | "get_app" | null {
   switch (route.name) {
     case "mock_oauth":
+    case "mock_cr_consent":
     case "motion_gallery":
       return null;
+    case "cr_setup":
+      return "settings";
+    case "campaigns":
+    case "campaign":
+      return "home";
     case "job":
       return "jobs";
     case "clip":

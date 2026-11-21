@@ -116,3 +116,34 @@ export function myTikTokChoices(saved: TikTokPreset, creator: TikTokCreator, now
     stitch: saved.stitch && !creator.stitchDisabled,
   };
 }
+
+// ---- Campaign clips (docs/CONTRACTS.md §38.5) ----
+
+/** Under the TikTok row when a campaign clip is set to anything but Everyone. */
+export const CAMPAIGN_PUBLIC = "Campaign clips must be public. Pick Everyone.";
+export const CAMPAIGN_BRANDED = "Turn on Branded content on TikTok for campaign clips.";
+
+/**
+ * "Use my settings" on a campaign clip (TikTok only after its audit): Everyone, and Commercial content on with
+ * Branded content ticked. TikTok's own tap rule still holds: this is the owner's tap (§17.8). The dropdown still lists
+ * TikTok's own choices with no default before that tap.
+ */
+export function campaignTikTokChoices(saved: TikTokPreset, creator: TikTokCreator): TikTokChoices {
+  const offered = privacyChoices(creator.privacyOptions, true);
+  return {
+    privacy: offered.includes("PUBLIC_TO_EVERYONE") ? "PUBLIC_TO_EVERYONE" : "",
+    comments: saved.comments && !creator.commentDisabled,
+    duet: saved.duet && !creator.duetDisabled,
+    stitch: saved.stitch && !creator.stitchDisabled,
+    commercial: true,
+    yourBrand: false,
+    branded: true,
+  };
+}
+
+/** Why a campaign clip can't go to TikTok with these choices, or null. */
+export function campaignTikTokProblem(c: TikTokChoices): string | null {
+  if (c.privacy && c.privacy !== "PUBLIC_TO_EVERYONE") return CAMPAIGN_PUBLIC;
+  if (c.privacy && !(c.commercial && c.branded)) return CAMPAIGN_BRANDED;
+  return null;
+}

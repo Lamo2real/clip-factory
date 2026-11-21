@@ -2572,6 +2572,482 @@
           ]
         }
       ]
+    },
+    {
+      "id": "cr-setup",
+      "route": "/settings/posting/setup/contentrewards",
+      "where": "Settings › Posting › Set up posting › Content Rewards",
+      "title": "Connect Content Rewards",
+      "keywords": [
+        "content rewards",
+        "connect content rewards",
+        "set up content rewards",
+        "get paid by brands",
+        "brand campaigns",
+        "clipping",
+        "campaign money",
+        "sign in content rewards"
+      ],
+      "answer": "Content Rewards pays you for clips you make for brands. Set it up once in 3 steps: make a Content Rewards account, connect your accounts there, then tap **Connect Content Rewards** in the Clip Factory app on your Mac.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **Content Rewards**.",
+        "Do step 1 and step 2 on Content Rewards.",
+        "On your Mac, tap **Connect Content Rewards** and allow it."
+      ],
+      "actions": [
+        {
+          "id": "cr-setup:page",
+          "label": "Open Content Rewards",
+          "to": "/settings/posting/setup/contentrewards",
+          "highlight": [
+            "cr-setup-card",
+            "cr-connect"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-cant-connect",
+      "route": "/settings/posting/setup/contentrewards",
+      "where": "Settings › Posting › Set up posting › Content Rewards",
+      "title": "Content Rewards says my account can't connect apps",
+      "keywords": [
+        "can't connect apps",
+        "cannot connect",
+        "not allowed",
+        "content rewards said no",
+        "pilot",
+        "email content rewards",
+        "connect apps"
+      ],
+      "answer": "Content Rewards turns this on by email. On the Content Rewards page in Clip Factory, open **Content Rewards said no?**, tap **Open email** and send it from the email you sign in with. Until they say yes, you send each clip yourself and I remind you.",
+      "steps": [
+        "Open the Content Rewards page in Set up posting.",
+        "Open **Content Rewards said no?**.",
+        "Tap **Open email** and send it.",
+        "Tap **I sent it**.",
+        "When they say yes, tap **Connect Content Rewards** again."
+      ],
+      "actions": [
+        {
+          "id": "cr-cant-connect:page",
+          "label": "Open the email card",
+          "to": "/settings/posting/setup/contentrewards",
+          "highlight": [
+            "cr-pilot-email"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-add-campaign",
+      "route": "/campaigns",
+      "where": "Your campaigns",
+      "title": "Add a Content Rewards campaign",
+      "keywords": [
+        "add campaign",
+        "paste campaign link",
+        "campaign link",
+        "join campaign",
+        "new campaign",
+        "content rewards link"
+      ],
+      "answer": "Join the campaign on Content Rewards, tap its share icon, then **Copy campaign link**. In Clip Factory tap **Paste**, then **Add campaign**. I read the pay and the rules, and check by myself if you're in.",
+      "steps": [
+        "On Content Rewards, tap **Join Campaign** (or **Apply**).",
+        "Tap the share icon, then **Copy campaign link**.",
+        "Open **Your campaigns** in Clip Factory.",
+        "Tap **Paste**, then **Add campaign**."
+      ],
+      "actions": [
+        {
+          "id": "cr-add-campaign:open",
+          "label": "Open your campaigns",
+          "to": "/campaigns",
+          "highlight": [
+            "cr-campaign-paste"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-am-i-in",
+      "route": "/campaigns",
+      "where": "Your campaigns",
+      "title": "Am I in the campaign?",
+      "keywords": [
+        "am i in",
+        "am i in the campaign",
+        "campaign",
+        "joined the campaign",
+        "in a campaign",
+        "accepted",
+        "pending review",
+        "not eligible",
+        "submit clip",
+        "member of the campaign",
+        "confirmed member"
+      ],
+      "answer": "Clip Factory checks by itself and says **You're in!** on the campaign. To look yourself, open the campaign on Content Rewards: **Submit clip** means you're in, **Pending review** means you wait, **Not eligible** means the brand said no.",
+      "steps": [
+        "Open **Your campaigns**.",
+        "Tap the campaign.",
+        "Read the chip at the top: You're in, Waiting for the brand, or Not joined yet.",
+        "Tap **Check now** to look again."
+      ],
+      "actions": [
+        {
+          "id": "cr-am-i-in:open",
+          "label": "Open your campaigns",
+          "to": "/campaigns",
+          "highlight": [
+            "cr-campaign-card",
+            "cr-next-step"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-applied",
+      "route": "/campaigns",
+      "where": "Your campaigns",
+      "title": "I applied to a campaign. What now?",
+      "keywords": [
+        "applied",
+        "application",
+        "waiting for the brand",
+        "submit application",
+        "pending",
+        "apply"
+      ],
+      "answer": "Nothing to do. On the campaign tap **Yes, I applied** if you like. Content Rewards shows **Pending review** while the brand decides, and I tell you when you're in.",
+      "steps": [
+        "Open **Your campaigns** and tap the campaign.",
+        "Tap **Yes, I applied**.",
+        "Wait. I check by myself and tell you when you're in."
+      ],
+      "actions": [
+        {
+          "id": "cr-applied:open",
+          "label": "Open your campaigns",
+          "to": "/campaigns",
+          "highlight": [
+            "cr-next-step"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-logo",
+      "route": "/campaigns",
+      "where": "Your campaigns › a campaign",
+      "title": "Add the campaign's logo",
+      "keywords": [
+        "logo",
+        "watermark",
+        "brand logo",
+        "reference materials",
+        "logo file",
+        "google drive logo"
+      ],
+      "answer": "Some campaigns want their logo on every clip. On Content Rewards open **Reference materials** and download the logo. On the campaign in Clip Factory tap **Add the logo** and pick the file, or paste a Google Drive or Dropbox link.",
+      "steps": [
+        "On Content Rewards, open **Reference materials**.",
+        "Download the file with logo in its name.",
+        "Open the campaign in Clip Factory.",
+        "Tap **Add the logo** and pick the file."
+      ],
+      "actions": [
+        {
+          "id": "cr-logo:open",
+          "label": "Open your campaigns",
+          "to": "/campaigns",
+          "highlight": [
+            "cr-logo"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-make-clips",
+      "route": "/",
+      "where": "Home",
+      "title": "Make clips for a campaign",
+      "keywords": [
+        "campaign clips",
+        "for a campaign",
+        "campaign rules",
+        "clips for a brand",
+        "brand clips",
+        "paid partnership",
+        "campaign video"
+      ],
+      "answer": "Open the campaign and tap **Make clips for this campaign**. Home opens with the campaign picked. Paste or pick the video and start. The rules go with it: length, tags, #Ad and the logo.",
+      "steps": [
+        "Open **Your campaigns** and tap the campaign.",
+        "Tap **Make clips for this campaign**.",
+        "Paste or pick the video.",
+        "Tap the scissors button to start."
+      ],
+      "actions": [
+        {
+          "id": "cr-make-clips:home",
+          "label": "Go to Home",
+          "to": "/",
+          "highlight": [
+            "cr-make-clips",
+            "make-clips"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-tiktok",
+      "route": "/campaigns",
+      "where": "Your campaigns",
+      "title": "Why is TikTok left out for campaigns?",
+      "keywords": [
+        "tiktok campaign",
+        "tiktok left out",
+        "tiktok private",
+        "tiktok audit",
+        "tiktok not paid"
+      ],
+      "answer": "Until TikTok checks Clip Factory, TikTok keeps its posts private, and private posts can't earn. So campaign clips go to YouTube, Instagram, X and Facebook for now. TikTok comes back by itself once TikTok says yes.",
+      "steps": [
+        "Set up YouTube, Instagram, X or Facebook.",
+        "Pick campaigns that pay for those places."
+      ],
+      "actions": [
+        {
+          "id": "cr-tiktok:open",
+          "label": "Open your campaigns",
+          "to": "/campaigns",
+          "highlight": [
+            "cr-pay"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-clip-sent",
+      "route": "/library",
+      "where": "Library",
+      "title": "Did my clip go to Content Rewards?",
+      "keywords": [
+        "sent to content rewards",
+        "submitted",
+        "clip sent",
+        "approved",
+        "waiting for the brand",
+        "campaign clip status"
+      ],
+      "answer": "Each campaign clip has a line under its posts: **Sent** means Content Rewards has it and the brand will check it, **Approved** means it counts. Find it in Library, on the clip, or on the campaign.",
+      "steps": [
+        "Tap **Library**.",
+        "Find the clip.",
+        "Read its Content Rewards line."
+      ],
+      "actions": [
+        {
+          "id": "cr-clip-sent:library",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "cr-post-line"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-send-by-hand",
+      "route": "/library",
+      "where": "Library",
+      "title": "Send a clip to Content Rewards myself",
+      "keywords": [
+        "send by hand",
+        "send it yourself",
+        "copy and open",
+        "clip link",
+        "submit clip",
+        "send now",
+        "30 minutes"
+      ],
+      "answer": "When I can't send a clip, its line says **Send this to Content Rewards now**. Tap **Copy and open**, tap **Submit clip**, paste in **Clip link**, tick the box and tap **Submit clip**. Do it within 30 minutes of posting.",
+      "steps": [
+        "Tap **Copy and open** on the clip's line.",
+        "Tap **Submit clip**.",
+        "Tap **Clip link** and paste.",
+        "Tick the box. Tap **Submit clip**.",
+        "Tap **I sent it**."
+      ],
+      "actions": [
+        {
+          "id": "cr-send-by-hand:library",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "cr-send-now"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-proof",
+      "route": "/library",
+      "where": "Library",
+      "title": "The brand wants proof of views",
+      "keywords": [
+        "proof of views",
+        "screen recording",
+        "record screen",
+        "brand wants proof",
+        "stats recording"
+      ],
+      "answer": "Some brands ask for a screen recording of a clip's views. When it's due, the clip's line says so and I send a notification. Open the clip's views, record your screen, send it to the brand, then tap **I sent it**.",
+      "steps": [
+        "Open the clip's views (YouTube Studio, Instagram, X or Facebook).",
+        "Record your screen while they show.",
+        "Send it where the brief says, or in Content Rewards **Support**.",
+        "Tap **I sent it**."
+      ],
+      "actions": [
+        {
+          "id": "cr-proof:library",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "cr-post-line"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-not-approved",
+      "route": "/library",
+      "where": "Library",
+      "title": "My campaign clip was not approved",
+      "keywords": [
+        "not approved",
+        "rejected",
+        "turned down",
+        "appeal",
+        "ask again",
+        "brand said no to my clip"
+      ],
+      "answer": "The clip's line shows what the brand said. If you think it follows the rules, tap **Ask again**: it copies the words and opens Content Rewards. Tap **Rejected**, the clip, **Start appeal**, paste and tap **Start appeal**.",
+      "steps": [
+        "Tap **Ask again** on the clip's line.",
+        "Tap **Rejected**, then the clip.",
+        "Tap **Start appeal**.",
+        "Paste in **Appeal explanation**. Tap **Start appeal**.",
+        "Tap **I asked**."
+      ],
+      "actions": [
+        {
+          "id": "cr-not-approved:library",
+          "label": "Open Library",
+          "to": "/library",
+          "highlight": [
+            "cr-post-line"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-get-paid",
+      "route": "/money",
+      "hash": "content-rewards",
+      "where": "Money › Content Rewards",
+      "title": "Get my Content Rewards money",
+      "keywords": [
+        "get paid",
+        "content rewards money",
+        "withdraw",
+        "balance",
+        "ready to move",
+        "payout",
+        "money to bank"
+      ],
+      "answer": "Money from approved campaign clips shows on **Money** under Content Rewards, in Content Rewards' own numbers. When **Ready to move** has $1 or more, move it to Whop on Content Rewards, then from Whop to your bank.",
+      "steps": [
+        "Tap **Money**.",
+        "Find **Content Rewards**.",
+        "Answer: do you see **Finance** in the Content Rewards menu?",
+        "Follow the steps: move it to Whop, then to your bank."
+      ],
+      "actions": [
+        {
+          "id": "cr-get-paid:money",
+          "label": "Open the money part",
+          "to": "/money#content-rewards",
+          "highlight": [
+            "cr-money"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-whop",
+      "route": "/money",
+      "hash": "content-rewards",
+      "where": "Money › Content Rewards",
+      "title": "What is Whop?",
+      "keywords": [
+        "what is whop",
+        "whop",
+        "whop account",
+        "whop balance",
+        "whop bank"
+      ],
+      "answer": "Whop is the website where Content Rewards sends your money. From there it goes to your bank. Link your Whop account inside Content Rewards once, then add your bank on Whop.",
+      "steps": [
+        "Tap **Money**.",
+        "Find **Content Rewards**.",
+        "Follow **Link your Whop account** and **Add your bank on Whop**."
+      ],
+      "actions": [
+        {
+          "id": "cr-whop:money",
+          "label": "Open the money part",
+          "to": "/money#content-rewards",
+          "highlight": [
+            "cr-money"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-sign-in-again",
+      "route": "/settings/posting/setup/contentrewards",
+      "where": "Settings › Posting › Set up posting › Content Rewards",
+      "title": "Sign in to Content Rewards again",
+      "keywords": [
+        "sign in again",
+        "content rewards signed out",
+        "reconnect content rewards",
+        "connect again",
+        "90 days"
+      ],
+      "answer": "Content Rewards keeps you signed in for up to 90 days. A week before, I remind you. Open the Content Rewards page on your Mac and tap **Connect again**. It takes one minute.",
+      "steps": [
+        "On your Mac, tap **Settings**.",
+        "Tap **Posting**, then **Set up posting**.",
+        "Tap **Content Rewards**.",
+        "Tap **Connect again** and allow it."
+      ],
+      "actions": [
+        {
+          "id": "cr-sign-in-again:page",
+          "label": "Open Content Rewards",
+          "to": "/settings/posting/setup/contentrewards",
+          "highlight": [
+            "cr-ready"
+          ]
+        }
+      ]
     }
   ]
 }

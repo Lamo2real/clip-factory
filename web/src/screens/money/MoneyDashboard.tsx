@@ -6,6 +6,7 @@
 // bar; Ask's home spot moves above the dock while this page is open. Wide screens with a mouse get the controls at the
 // right of a full-width glass band under the title that stays at the top (the page scrolls under it, so it never
 // floats over a clip's money or the sort bar).
+import { CrMoneyPart } from "./CrMoneyPart.tsx";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { api, friendlyMessage } from "../../api/index.ts";
 import type { MoneyChange, MoneyCurrencySummary, MoneyExcluded, MoneySummary, MoneyView, Platform } from "../../api/types.ts";
@@ -472,6 +473,7 @@ export function MoneyDashboard() {
   const thisYear = new Date().getUTCFullYear();
 
   return (
+    <>
     <div className={`page money-dash${dock ? " is-dock" : " is-toolbar"}`} data-help="money-dash" data-help-dodge-text aria-busy={!fresh || undefined}>
       <header className="dash-head">
         <div className="dash-head__text">
@@ -552,6 +554,11 @@ export function MoneyDashboard() {
 
       <MoneyClipList choice={choice} onSort={(sort) => set({ sort })} />
     </div>
+    {/* Content Rewards' own numbers (§38.7): their own part, never added into the totals above. */}
+    <div className={`page cr-money-page${dock ? " is-dock" : ""}`} data-help-dodge-text>
+      <CrMoneyPart />
+    </div>
+    </>
   );
 }
 

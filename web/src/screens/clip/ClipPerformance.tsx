@@ -19,6 +19,8 @@ import { useAction } from "../../lib/motion.ts";
 import { prefersReducedMotion, usePrefs } from "../../lib/prefs.ts";
 import { goBack } from "../../lib/router.ts";
 import { isoWeek, weekRange } from "../../lib/week.ts";
+import { CrPostLines } from "../../components/CrPostLine.tsx";
+import { sendGroups, useSubmissions } from "../../lib/contentRewards.ts";
 
 /** Re-renders every `ms` so "3 min ago" and "Next check in 4 min" stay true. */
 export function useNow(ms = 15_000): number {
@@ -82,6 +84,11 @@ export function refreshMessage(results: RefreshResult[], now = Date.now()): { to
 }
 
 export function ClipPerformance({ clipId }: { clipId: string }) {
+  // This clip's posts on Content Rewards (§38.6). A post waiting to be sent by hand makes "Copy and open" the page's
+  // one vermilion button; Refresh numbers steps back to glass until it is sent.
+  const crSubs = useSubmissions({ clipId });
+  const sendNow = sendGroups(crSubs.subs).length > 0;
+  const crFirst = sendNow || (typeof location !== "undefined" && new URLSearchParams(location.search).has("cr"));
   const [perf, setPerf] = useState<Perf | null>(null);
   const [error, setError] = useState<{ message: string; missing: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -272,6 +279,9 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
         </p>
       </header>
 
+      {/* From the send-now notification (?cr=), or while a post waits to be sent, the lines lead the page (§38.6). */}
+      {crSubs.subs.length && crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={sendNow} /> : null}
+
       <div className="perf__stage" ref={setStage} data-layout={layout}>
         <PerfLines
           stage={stage}
@@ -383,7 +393,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
               <span>Best this week</span>
             </button>
             <Button
-              variant="primary"
+              variant={sendNow ? "glass" : "primary"}
               size="lg"
               icon={waiting ? "clock" : "retry"}
               loading={state.refreshing}
@@ -423,6 +433,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
           })}
         </div>
       </div>
+      {crSubs.subs.length && !crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={false} /> : null}
     </div>
   );
 }
@@ -434,5 +445,37 @@ function BackRow() {
         Back
       </Button>
     </div>
+  );
+}
+
+/** The clip's lines on Content Rewards, at the top; from the "send now" notification (`?cr=`) the steps fold open. */
+function ClipOnContentRewards({ clipId, subs, sendNow }: { clipId: string; subs: ReturnType<typeof useSubmissions>; sendNow: boolean }) {
+  const toast = useToast();
+  const [checking, setChecking] = useState(false);
+  const fromNotice = typeof location !== "undefined" && new URLSearchParams(location.search).has("cr");
+  async function checkNow() {
+    setChecking(true);
+    try {
+      subs.setSubs(await api().crCheckSubmissions(clipId));
+      return true;
+    } catch (e) {
+      toast.error(friendlyMessage(e));
+      return false;
+    } finally {
+      setChecking(false);
+    }
+  }
+  return (
+    <section className="cr-clip glass" aria-labelledby="cr-clip-title">
+      <div className="cr-clip__head">
+        <h2 className="cr-section__title" id="cr-clip-title">
+          On Content Rewards
+        </h2>
+        <Button variant="glass" size="sm" icon="retry" act="retry" loading={checking} onClick={checkNow}>
+          Check now
+        </Button>
+      </div>
+      <CrPostLines subs={subs.subs} onChange={subs.put} openSend={fromNotice} primary={sendNow} />
+    </section>
   );
 }

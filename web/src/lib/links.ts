@@ -117,3 +117,54 @@ export function extractLink(input: string): string {
   const m = /(https?:\/\/[^\s<>"']+)/i.exec(text) ?? /((?:www\.|m\.)?(?:youtube\.com|youtu\.be|twitch\.tv|clips\.twitch\.tv|kick\.com)\/[^\s<>"']*)/i.exec(text);
   return m ? m[1]!.replace(/[).,!?]+$/, "") : text;
 }
+
+// ---------- Content Rewards campaign links (docs/CONTRACTS.md §38.4; mirrors the API's links.parse_campaign_url) ----------
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export type CampaignLink =
+  /** One campaign (or, with `group`, a group of campaigns: the API answers `{ group }`). */
+  | { kind: "campaign"; uuid: string; url: string; group: boolean }
+  /** A Content Rewards or Whop link that is not one campaign: the sentence says what to do. */
+  | { kind: "refused"; message: string }
+  /** Not a campaign link at all: Home treats it as a video link. */
+  | { kind: "none" };
+
+export const INVITE_REFUSED =
+  "That's an invite link. Open it, join, then copy the campaign's own link (share icon, **Copy campaign link**).";
+export const CHECKOUT_REFUSED = "That's a Whop sign-up link. Open the campaign on contentrewards.com and copy its link there.";
+export const CR_PAGE_REFUSED = "That's a Content Rewards page, not one campaign. Open the campaign, then copy its link.";
+
+/** Recognises a Content Rewards campaign link (§38.4): the host after a leading `www.`, the uuid in any case. */
+export function campaignLink(input: string): CampaignLink {
+  const u = parse(extractLink(input));
+  if (!u || !/^https?:$/.test(u.protocol)) return { kind: "none" };
+  const h = u.hostname.toLowerCase().replace(/^www\./, "");
+  const parts = u.pathname.split("/").filter(Boolean);
+  const group = u.searchParams.get("group") === "1";
+  const found = (raw: string | undefined): CampaignLink | null => {
+    if (!raw || !UUID.test(raw)) return null;
+    const uuid = raw.toLowerCase();
+    return { kind: "campaign", uuid, url: `https://contentrewards.com/c/campaigns/${uuid}`, group };
+  };
+  if (h === "contentrewards.com") {
+    const [a, b, c] = parts;
+    const hit =
+      (a === "c" && b === "campaigns" && parts.length === 3 ? found(c) : null) ??
+      (a === "c" && b === "discover" && parts.length === 3 ? found(c) : null) ??
+      (a === "discover" && parts.length === 2 ? found(b) : null);
+    if (hit) return hit;
+    if (a === "c" && b === "invite") return { kind: "refused", message: INVITE_REFUSED };
+    return { kind: "refused", message: CR_PAGE_REFUSED };
+  }
+  if (h === "whop.com") {
+    const [a, , c, d] = parts;
+    if (a === "experiences" && c === "campaigns" && parts.length === 4) {
+      const hit = found(d);
+      if (hit) return hit;
+    }
+    if (a === "checkout") return { kind: "refused", message: CHECKOUT_REFUSED };
+    return { kind: "none" };
+  }
+  return { kind: "none" };
+}

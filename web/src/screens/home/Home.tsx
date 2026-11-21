@@ -12,6 +12,7 @@ import { GetAppBanner } from "../../components/GetApp.tsx";
 import { NewJobForm } from "./NewJobForm.tsx";
 import { MoneyTile } from "./MoneyTile.tsx";
 import { StreamersRow } from "./StreamersRow.tsx";
+import { CampaignsRow } from "./CampaignsRow.tsx";
 import { LiveLine } from "../jobs/LiveLine.tsx";
 import { jobPercent, jobProgress } from "../../lib/jobProgress.ts";
 
@@ -141,6 +142,7 @@ export function Home() {
       </section>
       <MoneyTile />
       <StreamersRow />
+      <CampaignsRow />
     </div>
   );
 }

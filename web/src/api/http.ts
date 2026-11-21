@@ -3,6 +3,10 @@ import { ApiError, errorFromResponse, networkError } from "./errors.ts";
 import type {
   Account,
   Api,
+  Campaign,
+  CampaignSummary,
+  CrConnection,
+  CrSubmission,
   Clip,
   ClipPerformance,
   Job,
@@ -183,6 +187,34 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
       if (typeof out === "string" || !out || !Array.isArray(out.clips))
         return (await call<{ week: WeekView }>("GET", `/weeks/${id(week)}${q({ from: body.from, to: body.to })}`)).week;
       return out;
+    },
+    // Content Rewards (§38.8)
+    crOverview: () => call("GET", "/contentrewards"),
+    crConnect: (port) => call("POST", "/contentrewards/connect", { port }),
+    crConnectFinish: (body) => call("POST", "/contentrewards/connect/finish", body),
+    crCheck: () => call("POST", "/contentrewards/check"),
+    crPatchConnection: async (body) => (await call<{ connection: CrConnection }>("PATCH", "/contentrewards/connection", body)).connection,
+    crDisconnect: () => call("DELETE", "/contentrewards/connection", undefined, true),
+    crCampaigns: async () => (await call<{ campaigns: CampaignSummary[] }>("GET", "/contentrewards/campaigns")).campaigns,
+    crAddCampaign: (url) => call("POST", "/contentrewards/campaigns", { url }),
+    crCampaign: async (campaignId) => (await call<{ campaign: Campaign }>("GET", `/contentrewards/campaigns/${id(campaignId)}`)).campaign,
+    crReadCampaign: async (campaignId, pastedRules) =>
+      (await call<{ campaign: Campaign }>("POST", `/contentrewards/campaigns/${id(campaignId)}/read`, pastedRules ? { pastedRules } : {})).campaign,
+    crPatchCampaign: async (campaignId, body) => (await call<{ campaign: Campaign }>("PATCH", `/contentrewards/campaigns/${id(campaignId)}`, body)).campaign,
+    crLogoUpload: (campaignId, body) => call("POST", `/contentrewards/campaigns/${id(campaignId)}/logo`, body),
+    crLogoDone: async (campaignId, key) => (await call<{ campaign: Campaign }>("POST", `/contentrewards/campaigns/${id(campaignId)}/logo/done`, { key })).campaign,
+    crLogoLink: async (campaignId, url) => (await call<{ campaign: Campaign }>("POST", `/contentrewards/campaigns/${id(campaignId)}/logo/link`, { url })).campaign,
+    crDeleteLogo: async (campaignId) => (await call<{ campaign: Campaign }>("DELETE", `/contentrewards/campaigns/${id(campaignId)}/logo`)).campaign,
+    crRemoveCampaign: (campaignId) => call("DELETE", `/contentrewards/campaigns/${id(campaignId)}`, undefined, true),
+    crSubmissions: async (query) =>
+      (await call<{ submissions: CrSubmission[] }>("GET", `/contentrewards/submissions${q({ clipId: query.clipId, campaignId: query.campaignId })}`)).submissions,
+    crCheckSubmissions: async (clipId) => (await call<{ submissions: CrSubmission[] }>("POST", "/contentrewards/submissions/check", { clipId })).submissions,
+    crSendSubmission: async (postId) => (await call<{ submission: CrSubmission }>("POST", `/contentrewards/submissions/${id(postId)}/send`)).submission,
+    crPatchSubmission: async (postId, said) => (await call<{ submission: CrSubmission }>("PATCH", `/contentrewards/submissions/${id(postId)}`, { said })).submission,
+    crMoney: () => call("GET", "/contentrewards/money"),
+    crRefreshMoney: () => call("POST", "/contentrewards/money/refresh"),
+    crSeen: async (key) => {
+      await call("POST", "/contentrewards/seen", { key });
     },
   };
 }
