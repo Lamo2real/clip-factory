@@ -32,3 +32,7 @@
   counts need a TikTok review of `user.info.stats`; 30-day views need 30 days of snapshots. Google shows an
   "unverified app" screen for the monetary scope. The YouTube API policy's storage limits are not yet confirmed, so
   nothing is deleted automatically except on an explicit YouTube Disconnect (§25.6, §25.8).
+- **Amended by [ADR-64](#adr-64-get-paid-payout-records-count-as-sent-to-your-bank-statuses-say-how-they-are-known-the-bank-waits-for-the-owner)
+  (2026-11-21).** Two APIs do report money sent toward the bank: AdSense `payments` (YouTube) and Whop `payouts`
+  (Content Rewards' money after Whop). They show as "Sent to your bank by Google/Whop", never "received" or "in your
+  bank"; the other places still link to their payout pages, and typed-in money stays forbidden.
