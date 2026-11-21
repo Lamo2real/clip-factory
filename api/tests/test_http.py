@@ -236,6 +236,7 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/logo/link"),
         ("DELETE", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/logo"),
         ("DELETE", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e"),
+        ("POST", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/remake"),
         ("GET", "/v1/contentrewards/fit"),
         ("POST", "/v1/contentrewards/fit/captions"),
         ("GET", "/v1/contentrewards/submissions"),

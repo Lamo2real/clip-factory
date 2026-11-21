@@ -739,3 +739,47 @@ def test_a_slow_cr_never_holds_a_job_start_past_8_seconds(call: Call, cr_on: Any
     assert body["job"]["campaignNote"] == "Couldn't check the campaign just now."
     assert slow.waited
     assert sum(slow.waited) <= 8.0 + 0.1
+
+
+# --- start_job: the one way a job is made (POST /v1/jobs and the campaign copy, §39.3) -------------------------------
+
+
+def test_start_job_is_what_post_jobs_does(app: Any, table: FakeTable, lambda_client: FakeLambda) -> None:
+    """A pure refactor of ``create``: the same item and flow start; ``extra`` adds a copy's fields (``remakeOf``, the
+    internal ``remake``, ``sourceLanguage``) and ``remake`` never leaves the API."""
+    from clipfactory_api.routes.jobs import start_job
+
+    source = {"type": "link", "platform": "youtube", "url": "https://www.youtube.com/watch?v=abc", "title": "Kept"}
+    extra = {
+        "remakeOf": {"clipId": "01J0000000000000000000000C", "jobId": "01J0000000000000000000000J"},
+        "remake": {"clipId": "01J0000000000000000000000C", "jobId": "01J0000000000000000000000J", "sourceStart": 1.0},
+        "sourceLanguage": "en-US",
+    }
+    made = start_job(
+        app,
+        USER,
+        job_id="01J000000000000000000000NW",
+        source=source,
+        target={"min": 1, "max": 1},
+        notes="funny",
+        mac_up=True,
+        extra=extra,
+    )
+    stored = table.raw(db.user_pk(USER), db.job_sk("01J000000000000000000000NW")) or {}
+    assert stored["source"] == source
+    assert (stored["status"], stored["clipTarget"], stored["notes"]) == ("queued", {"min": 1, "max": 1}, "funny")
+    assert stored["macFetch"] == {"state": "waiting", "up": True}
+    assert stored["remakeOf"] == extra["remakeOf"]
+    assert stored["remake"] == extra["remake"]
+    assert stored["sourceLanguage"] == "en-US"
+    assert [c for c in lambda_client.calls if c["FunctionName"] == JOB_FLOW_ARN]
+    public = jobs.public_job(made)
+    assert "remake" not in public
+    assert public["remakeOf"] == extra["remakeOf"]
+    assert "remake" in jobs.INTERNAL_FIELDS
+
+
+def test_post_jobs_never_takes_a_copys_fields(call: Call) -> None:
+    for name in ("remake", "remakeOf", "sourceLanguage"):
+        body = {"source": {"type": "link", "url": "https://youtu.be/abc"}, name: {}}
+        assert call("POST", "/v1/jobs", body)[0] == 400

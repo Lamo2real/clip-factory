@@ -28,6 +28,8 @@ STATUS_GROUPS: dict[str, frozenset[str] | None] = {
 }
 # Internal fields never leave the API (docs/CONTRACTS.md §13, §14.5). publishState is "pending" from Confirm until
 # the durable cf-prod-clip-flow has started, then "started". publishClaimAt is gone but may linger on old items.
+# Public on purpose (§39.3): ``remakes`` (campaignId → {jobId, at}, the campaign copies made of this clip) and
+# ``remakeOf`` ({clipId, jobId}, on a copy: the clip it was made from).
 INTERNAL_FIELDS = (
     "videoKey",
     "coverKey",
