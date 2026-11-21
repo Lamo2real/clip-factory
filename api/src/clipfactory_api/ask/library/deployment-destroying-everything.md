@@ -16,5 +16,6 @@ policy are not managed by this Terraform; delete them by hand (or `terraform des
 longer need them. The agent's log group `/aws/bedrock-agentcore/runtimes/...-DEFAULT` stays too (it expires its
 logs after 30 days); delete it in the CloudWatch console if you want it gone. GitHub Pages and the legal pages are not affected.
 The platform secrets under `cf-prod/platforms/` are created by the app, not by Terraform: press **Disconnect** on each
-platform first (which also revokes the tokens), or delete them in the Secrets Manager console (eu-north-1). Remove the
+platform first (which also revokes the tokens; Content Rewards too, then remove Clip Factory under **Connected apps**
+on Content Rewards), or delete them in the Secrets Manager console (eu-north-1). Remove the
 developer apps on the platforms' websites too if you no longer need them.

@@ -191,7 +191,7 @@ broadest to narrowest:
 ```
 
 What each group is for: S3 (web, media and state buckets), CloudFront (distribution, Origin Access Control,
-invalidations), Cognito (user pool, client, the owner), Lambda (nine functions; for the two durable ones also
+invalidations), Cognito (user pool, client, the owner), Lambda (every function, including `cf-prod-campaigns` for Content Rewards; for the two durable ones also
 `PublishVersion`, the `live` aliases, the event source mapping, and `ListDurableExecutionsByFunction` and
 `StopDurableExecution`, which a destroy uses to stop running executions), DynamoDB (table, its stream:
 `DescribeStream`, `ListStreams`), S3 Vectors (bucket `cf-prod-vectors-*` and its index), API Gateway (the HTTP,
@@ -294,6 +294,10 @@ following the steps in [SETUP_POSTING.md](SETUP_POSTING.md). Every value a platf
 terms pages, the exact redirect URI `{hooks_url}/oauth/{platform}/callback`) has a Copy button there, and the keys are
 pasted into the app, which keeps them in Secrets Manager. Nothing goes into GitHub, Terraform or `config.json` except
 the public `oauthCallbackBase`.
+
+**Content Rewards** (paid campaigns) is set up the same way, inside the app: Settings › Posting › Set up posting ›
+Content Rewards, with the last step in the Mac app ([SETUP_POSTING.md](SETUP_POSTING.md#content-rewards)). It is
+switched off until all its parts have merged ([Content Rewards](#content-rewards-contracts-38)).
 
 What this deploy changes for posting: `cf-prod-hooks` runs up to **28 s** (the code exchange calls the platform),
 `cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **16 secrets** (the

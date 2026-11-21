@@ -162,3 +162,20 @@ The Mac and Windows downloads in BR-15 come from a thin desktop app ([CONTRACTS.
   path on the same origin), caches it 10 minutes and falls back to the copy bundled in the Lambda.
 - AC8: The knowledge never contains keys, ids, emails or infrastructure words; a test fails if it does.
 - AC9: A failing model raises an alarm (10 failures in an hour) to `cf-prod-alarms`.
+
+### NFR-19 Content Rewards is safe, additive and switched on only when complete
+([CONTRACTS.md §38.8–§38.16](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21),
+[SECURITY.md](SECURITY.md#content-rewards-contracts-38), [DEPLOYMENT.md](DEPLOYMENT.md#content-rewards-contracts-38))
+- AC1: Only Content Rewards' official sign-in and tools are used (no browser automation, no scraping); the public
+  campaign page is read only when the owner acts, never on a schedule.
+- AC2: The Content Rewards token lives only in Secrets Manager and is used only by the cloud; the browser never calls
+  Content Rewards and the Mac app only passes a one-time code, once. The function that reads brand text has no
+  secret access.
+- AC3: Text from brands is data, never instructions: shown escaped, and every rule that reaches a caption, the video
+  or a link is checked by code against the brief.
+- AC4: A campaign post is tried right after it is live and never sent twice; the clip flow never fails because of
+  Content Rewards.
+- AC5: Only additive data (new sort keys, attributes, a media prefix, runtime secrets, one small Lambda); no table,
+  pool, bucket or secret holding the owner's data is replaced, and the deploy's delete gate passes.
+- AC6: Switched off in prod (`content_rewards_enabled = false`) until every part has merged; one line switches it on.
+- AC7: Money shows only what Content Rewards reports; a rate × views guess is never shown (a test checks).

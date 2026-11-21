@@ -65,3 +65,22 @@
      share this".
    - Open the official pages linked in `config/monetization.json` for TikTok, Instagram and X and confirm each number
      (`verifiedHow: official-snippet` today).
+15. **Content Rewards** ([CONTRACTS §38.21](CONTRACTS.md#3821-not-verified-live-each-is-checked-at-the-owners-first-connect-or-first-campaign-post)):
+   these were not checked against the live Content Rewards when the feature was built. Do them after the switch PR
+   ([DEPLOYMENT.md](DEPLOYMENT.md#content-rewards-contracts-38)), with the steps in
+   [SETUP_POSTING.md](SETUP_POSTING.md#content-rewards).
+   - In the deploy log of the first §38 deploy, the plan adds `cf-prod-campaigns` and replaces nothing; the delete
+     gate passes. Until the switch PR, Set up posting shows the Content Rewards card as "Coming soon".
+   - In the Mac app, **Connect Content Rewards**. Note CR's approve screen and its words, whether CR took the
+     registration from AWS and the five loopback redirects (a "Sign-in failed" page says no), and whether the answer
+     carries `iss`. Secrets Manager (eu-north-1) now has `cf-prod/platforms/contentrewards/app` and `…/token`; the
+     `CRCONN` item has no token. The card says "Ready: sends your clips for you" (the pilot granted
+     `my_submissions:write`) or "Ready: you send clips yourself" (then send the email on "Content Rewards said no?").
+   - Paste a campaign you joined: the card says "You're in" within a minute; check whether its rules came from CR's
+     listed description or need the paste box, and that the TypeID match was logged as `cr.typeid_verified`.
+   - Post the first campaign clip to YouTube: the post line goes "Sending…" → "Sent ✓" within a few minutes (or the
+     "Send this to Content Rewards now" reminder arrives); YouTube Studio shows "Includes paid promotion" (no
+     "YouTube didn't take the Paid promotion switch" line); an X post shows "Paid partnership". Note whether CR's
+     30-minute clock started at the upload or after YouTube's processing.
+   - When money arrives: the three tiles match CR's **Earnings**; follow the **Finance** or Whop steps once and note
+     where Whop's screens differ.

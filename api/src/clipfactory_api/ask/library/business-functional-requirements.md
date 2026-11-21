@@ -327,4 +327,57 @@ whole application, and for every AI call to use the skills.
 - AC11: Mac and Windows download steps appear only on desktops without the app installed, iPhone steps only on iOS,
   Android steps only on Android.
 
+### BR-25 Content Rewards campaigns: paste the link, Clip Factory follows the rules
+"Browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip Factory should
+then onboard onto that campaign and follow its rules and guardrails (required hashtags, logos/watermarks, captions,
+tags, length, platforms, posting rules) so the videos qualify to earn money. It should connect just like we have
+created for all the social media platforms. The whole flow should take 3 steps, 5 at most." … "make sure that
+whatever steps i need to take for both the setup and creating and joining a campaign to checking if I am confirmed
+as a member of the campaign and get paid for it, is all idiot proof, even an 8 year old should be able to understand
+how to navigate it". ([the steps](SETUP_POSTING.md#content-rewards),
+[CONTRACTS.md §38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21),
+[ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant))
+- AC1: Settings › Posting › Set up posting shows a separate **Content Rewards** card under the five platforms ("Get
+  paid by brands"), with a ring over 3 numbered steps and one state line. It never counts in "n of 5 ready" and is
+  never in the floating setup list, which keeps exactly five rows.
+- AC2: Setup is **3 steps**: make a Content Rewards account, connect the same accounts inside Content Rewards, then
+  "Connect Content Rewards" in the Mac app (sign in, allow). Only if Content Rewards says the account can't connect
+  apps, one more: "Open email" sends a ready email; until it says yes, Clip Factory reads campaigns and money and
+  reminds the owner after each post (and every 3 days, at most 5 times, to try Connect again).
+- AC3: Each campaign is **3 steps**, **5 at most**: join it on Content Rewards (**Join Campaign**, or **Apply** →
+  **Submit application**), copy its link (share icon → **Copy campaign link**), then "Paste" and "Add campaign" in
+  Clip Factory (on Home or the Campaigns page). The extras are "Add the logo" when the brief needs one, and either
+  "Yes, I applied" (optional) or, only while Content Rewards doesn't let Clip Factory look, "I'm in. Read these rules".
+- AC4: Clip Factory shows the campaign's pay as Content Rewards publishes it (per 1,000 views, per post, the money
+  left), reads its rules from the brief ("Rules I'll follow", "Things you do", "I couldn't tell"), and finds out by
+  itself whether the owner is in: every 15 minutes for 7 days, then every 6 hours to day 30, plus "Check now". "You're
+  in!" comes with confetti and a notification, once.
+- AC5: A campaign that can't earn says why and what to do in one sentence (paused, ended, the money almost gone, only
+  TikTok, drafts first, its own sound, a missing logo, too many clips waiting), and Make clips is refused; a warning
+  (half the money used, a low rate, face on camera, a spoken disclosure, a viewer-country rule) is accepted with one
+  "Make clips anyway".
+- AC6: Each video is **3 steps** ("Make clips for this campaign", paste or pick the video, "Make clips"). Every clip
+  follows the rules: the campaign's length, no banned content, the logo on screen the whole clip (above the picture,
+  away from faces and the game), "Paid partnership" on screen for the first 3 seconds, "#Ad" first and every required
+  hashtag, tag and phrase in each caption (put back at upload if the owner deleted one). A video outside the brief's
+  allowed channels gets a warning on the job.
+- AC7: Each clip is **2 taps** ("Use my settings", "Upload to N"): Upload to offers only the places the campaign pays
+  for that are set up and linked inside Content Rewards; campaign clips are public, never made for kids, and marked
+  as paid (YouTube Paid promotion, X Paid partnership, TikTok Branded content by the owner's own tap). TikTok is left
+  out until TikTok's audit, because private posts can't earn.
+- AC8: After each post, Clip Factory sends the clip to Content Rewards by itself within 30 minutes (0 steps), and its
+  line shows Sending → Sent → Waiting for the brand → Approved or Not approved (with the brand's reason), the views
+  and the money Content Rewards reports for it.
+- AC9: When it can't send, the owner gets "Send this to Content Rewards now (N min left)"; the clip opens with one
+  "Copy and open" and 4 numbered steps. A rejected clip has "Ask again" (copies true words, opens Content Rewards, 4
+  steps); a brief that wants proof of views gets one reminder with 3 steps.
+- AC10: Getting paid is **3 steps once** (answer "Do you see **Finance**?", link Whop, add the bank) and **2 each
+  payout** (**Withdraw** on Content Rewards, **Withdraw** on Whop). The Money page shows only Content Rewards' own
+  numbers (Still earning, On its way, Ready to move, paid so far), never a rate × views guess, and celebrates the first
+  money once.
+- AC11: [SETUP_POSTING.md](SETUP_POSTING.md#content-rewards) has the same step titles as the app, with the date they
+  were checked (21 Nov 2026) and the sources; a test checks the titles.
+- AC12: Nothing about the five platforms changes when no campaign is involved, and removing a campaign or
+  disconnecting deletes nothing on Content Rewards or any platform.
+
 ---

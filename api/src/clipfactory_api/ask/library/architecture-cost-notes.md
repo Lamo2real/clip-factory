@@ -23,6 +23,7 @@ Rough, for one owner running about 10 jobs a month on 2-hour sources. Everything
 | CloudFront | Web app, config, `version.json` checks, desktop downloads (about 10 MB each) | under $1 |
 | OpenSearch Serverless | not deployed (would have a standing minimum of OCUs) | $0 |
 | GitHub Actions | macOS and Windows runners for the desktop app | free (public repository) |
+| Content Rewards | `cf-prod-campaigns` (one small Lambda), one Bedrock call per campaign rules read (about $0.02), a few CR calls a tick (free), two more secrets | about $1 a month plus $0.02 a campaign read |
 
 `maxSourceHours` (default 6) is the main cost lever: it limits how much audio is transcribed and read by Claude, and
 how much picture the two models watch. There is no cost ceiling on a job (the owner's decision of 2026-11-17); the

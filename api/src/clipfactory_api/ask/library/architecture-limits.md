@@ -57,6 +57,17 @@
   and Google deletes OAuth clients unused for 6 months; X charges per post.
 - **Clips kept before a platform was connected** are not posted automatically after Connect
   ([roadmap](ROADMAP.md#phase-2-social-integrations)).
+- **Content Rewards' sign-in is an alpha and a pilot.** Until CR grants the owner's account `my_submissions:write`,
+  Clip Factory only reads campaigns and money and reminds him to send each clip himself. The API version is pinned
+  (`2026-10-01`) and unknown fields are tolerated; what is still unverified until the first real Connect is in
+  [CONTRACTS.md §38.21](CONTRACTS.md#3821-not-verified-live-each-is-checked-at-the-owners-first-connect-or-first-campaign-post).
+- **Content Rewards Connect needs the Mac app** (CR only returns to `127.0.0.1`; the door is macOS only), and a sign-in
+  again at least every 90 days. Joining or applying stays in the CR app (no tool for it), and the campaigns' reference
+  files (logos, footage) are not in the API, so the owner adds the logo.
+- **30 minutes to send.** CR takes a post only in its first 30 minutes live; Clip Factory stops trying at 25 and the
+  reminder covers the rest. TikTok campaign clips wait for TikTok's audit (private posts can't earn); Instagram and
+  Facebook carry the disclosure only in the caption and on the video; campaigns that want drafts first or the brand's
+  own sound are refused.
 - **A new app address breaks Connect.** The redirect URIs and website addresses pasted on the platforms contain the
   CloudFront and REST API hosts; after a custom domain or a rebuilt REST API, redo the "return address" steps (Check it
   reports `redirect_wrong`).

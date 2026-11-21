@@ -6,6 +6,9 @@
   send frames and small video parts of the source to those two models so they can watch it; run ffmpeg; write clips
   to S3 and Clip items to DynamoDB; update the job's status, steps and progress; and send its job flow callback
   (heartbeat, success, failure).
+- For a campaign job it also reads the campaign's rules on the job (`job.campaign`) and the logo copy under
+  `jobs/{jobId}/source/` ([Campaign clips](#campaign-clips)); it never reads `campaigns/` and never calls Content
+  Rewards.
 - It **never** publishes anything, never changes settings or skills, and never reads the YouTube cookies for anything
   but yt-dlp. Publishing happens only after the owner's Confirm, in the durable `cf-prod-clip-flow`.
 - It **never** calls a service the deep analysis rejected (Rekognition, Comprehend, MediaConvert, Step Functions,
