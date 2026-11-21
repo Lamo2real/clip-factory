@@ -43,7 +43,10 @@ Never on a screen: "the Content Rewards way", "mode", "normal mode", "compatible
 `/settings/posting/setup/contentrewards` (§38.3), the only place Connect happens, like each platform's setup page. Each
 step is something only the owner can do or knows: CR's API has no tool that tells Clip Factory he has an account or
 which accounts he added inside Content Rewards (`get_me` returns only his `cre_` id and brand memberships,
-`mcp-tools.json` 2026-10-01), so steps 1 and 2 are one green tap each; step 3 ticks steps 1 and 3 by itself. The page,
+`mcp-tools.json` 2026-10-01), so steps 1 and 2 are one green tap each. Each ticks itself once Clip Factory really knows
+(live check, 21 Nov 2026): a finished Connect (step 3) ticks steps 1, 2 and 3, and Content Rewards saying the account
+can't connect apps (its redirect, or his answer "It said my account can't connect apps", §38.3) ticks step 1, since he
+had to have an account and be signed in to see it. The page,
 top to bottom (H; `CrSetup.tsx`, D's `CrStepCard` in `screens/campaigns/bits.tsx`):
 
 0. **The shortcut**, only while steps 1 and 2 are both not done: "Already use Content Rewards, with YouTube added
@@ -69,6 +72,16 @@ top to bottom (H; `CrSetup.tsx`, D's `CrStepCard` in `screens/campaigns/bits.tsx
    button ("Back to FaZe Clips") instead of "Add a campaign", and the result card (`CrResultCard`) adds "Next: back to
    FaZe Clips.". While the "Content Rewards said no?" card waits for "I sent it", the back button is glass and "Open
    email" is the vermilion; after "I sent it" the back button is the vermilion again.
+
+**The one vermilion is always the real next step** (live check, 21 Nov 2026: with steps 1 and 2 not ticked it was step
+1's button for someone already signed in to Content Rewards). In this order, the first that applies: signed out
+(`needs_reconnect`, the Mac app) → the panel's "Connect again"; the sign-in-again week (the Mac app) → the calm card's
+"Connect again"; "Content Rewards said no?" open and its email not sent yet (no `pilotSentAt`) → "Open email"; the first
+numbered step not done → step 1 "Open Content Rewards", step 2 "Open Content Rewards settings" (each with its green
+answer right under it), step 3 "Connect Content Rewards" (elsewhere, step 3's own words for where the page runs); every
+step done → the back button with a `?back=`, else "Add a campaign" while he has no campaign. While the page waits for
+the browser, or asks "What did Content Rewards say?" (§38.3), nothing is vermilion. Steps tick themselves whenever Clip
+Factory knows (above), so after any Connect he never sees step 1's button as the next step.
 
 **`?back=`** (H, `web/src/lib/backLink.ts`, one pure function used by every setup page): only these exact same-origin
 shapes count, anything else (another origin, `//`, a scheme, other paths, extra query keys) is ignored: `/campaigns/{uuid}`
@@ -125,8 +138,10 @@ opens his mail. Each more place inside Content Rewards is optional: Instagram +4
 page), and the card says "You're in!" (checked at once, §38.12). That is the fewest: each tap is the move to the next
 screen, a fact only he knows, or Content Rewards' own allow. (Starting the sign-in straight from the card would save
 one more but skip the "accounts added" answer the fit's `place_link` needs, so it is not done.) Extras, only when they
-apply: an older Mac app +1 ("Restart now", §38.15); Content Rewards says no to apps +2 ("Open email", Send) and +1
-optional "I sent it". On a phone the campaign card's vermilion is "Set up Content Rewards" (→ the setup page with
+apply: an older Mac app +1 ("Restart now", §38.15); Content Rewards says no to apps: +1 "It said my account can't
+connect apps" (its page sends nobody back, §38.3), the first time only typing his Content Rewards email, +2 ("Open
+email", Send) and +1 optional "I sent it".
+On a phone the campaign card's vermilion is "Set up Content Rewards" (→ the setup page with
 `?back=`); steps 1 and 2 work the same and step 3 says "Do this step on your Mac." (on the Mac, once steps 1 and 2 are
 done, the card's "Connect Content Rewards" opens the page at step 3: 1 tap). Then each later campaign (§38.4,
 unchanged): on Content Rewards open it, **Join Campaign** (**Hold to confirm** when asked), share icon, **Copy campaign
