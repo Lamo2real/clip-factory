@@ -33,8 +33,8 @@ from . import signals as signals_mod
 from . import vectors as vectors_mod
 from .agent import Brief, find_moments
 from .bedrock import Bedrock, Facecam, FrameLayout, ModelError, model_unavailable
+from .campaign import LOGO_MISSING, Campaign
 from .checklist import (
-    REVIEW_SCHEMA,
     Candidate,
     Item,
     Outcome,
@@ -45,6 +45,7 @@ from .checklist import (
     measured_items,
     plan_fix,
     review_prompt,
+    review_schema,
 )
 from .config import Config
 from .creators import creator_keys, creator_name
@@ -52,7 +53,7 @@ from .guard import Deadline, fable_budget, nova_budget
 from .heartbeat import free_memory
 from .jobs import StepDone, StepFn, Tracker, creep
 from .moments import Moment, length_target
-from .render import RenderResult, render_clip
+from .render import Marks, RenderResult, prepare_logo, render_clip
 from .skills import SkillsBlock, SkillSet, prepare_skills, skills_block
 from .store import Fence, Store, clip_prefix, cookies_key, source_prefix
 from .transcribe import PART_SECONDS, Transcriber, job_name, language_of, parse_items, parse_speakers
@@ -324,6 +325,12 @@ class JobState:
     model_id: str = ""
     model_wanted: str | None = None
     bedrock: Bedrock | None = None
+    # A Content Rewards campaign job (docs/CONTRACTS.md §38.13), read in resolve from ``job.campaign``: the rules
+    # travel with the job, the logo is prepared once (``logo.png`` in the work folder) and the channel check may leave
+    # a note. None for every other job, which then runs exactly as before.
+    campaign: Campaign | None = None
+    logo: Path | None = None
+    campaign_note: str | None = None
 
     @property
     def notes(self) -> str:
@@ -331,7 +338,22 @@ class JobState:
 
     @property
     def length(self) -> tuple[float, float]:
-        return length_target(self.notes)
+        return length_target(self.notes, self.campaign)
+
+    @property
+    def campaign_id(self) -> str | None:
+        """The campaign the job's clips are for: the rules' own id, else the job's public ``campaignId``."""
+        if self.campaign is not None:
+            return self.campaign.campaign_id
+        cid = self.job.get("campaignId")
+        return cid if isinstance(cid, str) and cid else None
+
+    @property
+    def marks(self) -> Marks | None:
+        """What a campaign clip shows in its mark row: the logo (when there is one) and the on-screen disclosure."""
+        if self.campaign is None:
+            return None
+        return Marks(logo=self.logo, disclosure=self.campaign.on_screen)
 
     @property
     def clip_target(self) -> tuple[int, int]:
@@ -472,8 +494,14 @@ class Pipeline:
         st.settings = await self.store.get_settings(st.user_id)
         self.pick_model(st)
         st.source = dict(job.get("source") or {})
+        st.campaign = Campaign.from_job(job)
+        if st.campaign is not None and not st.campaign.rules:
+            # The API always copies the rules (§38.8): the clips still get #Ad and "Paid partnership".
+            log("error", "campaign.no_rules", job=st.job_id)
         st.workdir.mkdir(parents=True, exist_ok=True)
         await self._clear_previous_clips(st)
+        if st.campaign is not None:
+            await self._campaign_logo(st)
         if await self.store.exists(st.key("meta.json")):
             st.meta = await self.store.get_json(st.key("meta.json"))
         if st.source.get("type") == "upload":
@@ -482,10 +510,17 @@ class Pipeline:
             await self._resolve_link(st, tr)
         await self.store.put_json(st.key("meta.json"), st.meta)
         model, drop = self._model_fields(st)
+        fields = {"source": st.source, **creator_fields(st.source), **model}
+        if st.campaign is not None and st.campaign_note:
+            # The note the API may have left ("Couldn't check the campaign just now.") stays; the channel note joins it.
+            prior = st.job.get("campaignNote")
+            prior = prior.strip() if isinstance(prior, str) else ""
+            if st.campaign_note not in prior:
+                fields["campaignNote"] = f"{prior} {st.campaign_note}".strip()
         await self.store.update_job(
             st.user_id,
             st.job_id,
-            {"source": st.source, **creator_fields(st.source), **model},
+            fields,
             unless_canceled=True,
             session_id=st.session_id,
             remove=drop,
@@ -493,6 +528,30 @@ class Pipeline:
         title = st.source.get("title") or "the video"
         length = f" ({hms(st.source['durationSec'])})" if st.source.get("durationSec") else ""
         return f"Found {title}{length}."
+
+    async def _campaign_logo(self, st: JobState) -> None:
+        """The campaign's logo, from the job's own copy (``jobs/{jobId}/source/campaign-logo.{ext}``, §38.11), prepared
+        as ``logo.png`` in the work folder (PNG, transparent edges trimmed). A required logo that is missing or can't be
+        read fails the job at once; any other logo that can't be read is left out."""
+        assert st.campaign is not None
+        ext = st.campaign.logo_ext(st.job_id)
+        st.logo = None
+        if st.campaign.logo_key and ext is None:
+            log("warn", "campaign.logo_key_refused", job=st.job_id)
+        key = str(st.campaign.logo_key)
+        if ext is not None and await self.store.exists(key):
+            raw = st.workdir / f"campaign-logo.{ext}"
+            await self.store.download(key, raw)  # a storage failure is the step's to retry, not a missing logo
+            try:
+                st.logo = await prepare_logo(raw, st.workdir / "logo.png")
+            except (proc.CommandError, OSError, ValueError) as e:
+                log("warn", "campaign.logo_unreadable", job=st.job_id, error=type(e).__name__, detail=str(e)[:200])
+                st.logo = None
+        elif ext is not None:
+            log("warn", "campaign.logo_gone", job=st.job_id)
+        if st.logo is None and st.campaign.logo_required:
+            raise UserFacingError(LOGO_MISSING)
+        log("info", "campaign.ready", job=st.job_id, logo=st.logo is not None, rulesVersion=st.campaign.rules_version)
 
     async def _clear_previous_clips(self, st: JobState) -> None:
         """A retried job starts over: clips of an earlier run still waiting for review are removed.
@@ -521,6 +580,10 @@ class Pipeline:
         if info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming"):
             raise UserFacingError("This stream is still live or has not started. Try again once it has ended.")
         st.source.update(sources.source_fields(info, platform))
+        if st.campaign is not None and not sources.from_allowed_channel(info, st.campaign.channels):
+            # The job goes on: the owner reads the note on the job and decides before uploading (§38.13).
+            st.campaign_note = st.campaign.channel_note()
+            log("info", "campaign.channel_mismatch", job=st.job_id)
         st.meta["heatmap"] = sources.heatmap(info)
         self._chat_source(st, info, platform)
         st.meta["webpageUrl"] = info.get("webpage_url") or url
@@ -1307,11 +1370,18 @@ class Pipeline:
             signals=st.signals,
             speakers=st.speakers,
             chat=st.chat,
+            campaign=st.campaign,
         )
 
     def _moments_hash(self, st: JobState) -> str:
         """What the picks depend on besides the video: when it changes, saved picks are not reused."""
-        basis = {"notes": st.notes, "target": list(st.clip_target), "model": st.model_id or self.cfg.model_id}
+        basis: dict[str, Any] = {
+            "notes": st.notes,
+            "target": list(st.clip_target),
+            "model": st.model_id or self.cfg.model_id,
+        }
+        if st.campaign is not None:
+            basis["campaign"] = [st.campaign.campaign_id, st.campaign.rules_version]
         return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:16]
 
     async def _saved_moments(self, st: JobState) -> tuple[list[Moment], list[Moment]] | None:
@@ -1386,6 +1456,7 @@ class Pipeline:
                 check_cancel=tr.check_cancel,
                 on_progress=lambda f: tr.report(0.8 + 0.2 * f),
                 prior=st.prior,
+                banned=st.campaign.banned if st.campaign is not None else (),
             )
             checked = sum(1 for r in st.second_look if "keep" in r)
             total = len(st.second_look)
@@ -1698,6 +1769,7 @@ class Pipeline:
             detect_layout=functools.partial(self.claude(st).detect_layout, skills=st.block),
             known_layout=layout,
             live_index=index + 1,
+            marks=st.marks,
         )
         return Candidate(m, r, index=index)
 
@@ -1721,6 +1793,8 @@ class Pipeline:
                 "tease": r.tease,
                 "frameLayout": {"scene": fl.scene, "facecam": vars(fl.facecam) if fl.facecam else None} if fl else None,
                 "extra": r.extra,
+                **({"logo": True} if r.logo else {}),
+                **({"disclosure": True} if r.disclosure else {}),
             }
             await self.store.upload(r.video, self._render_key(st, c.index, "clip.mp4", folder), "video/mp4")
             await self.store.upload(r.cover, self._render_key(st, c.index, "cover.jpg", folder), "image/jpeg")
@@ -1761,6 +1835,8 @@ class Pipeline:
                 tease=bool(done.get("tease")),
                 frame_layout=layout,
                 extra=dict(done.get("extra") or {}),
+                logo=bool(done.get("logo")),
+                disclosure=bool(done.get("disclosure")),
             )
         except (JobCanceled, asyncio.CancelledError):
             raise
@@ -1928,12 +2004,13 @@ class Pipeline:
                                 c.render,
                                 st.notes,
                                 seen=signals_mod.seen_block(st.signals, c.moment.start, c.moment.end),
+                                campaign=st.campaign,
                             )
                         }
                     ],
                     tool="submit_review",
                     description="Submit the checklist review of this clip.",
-                    schema=REVIEW_SCHEMA,
+                    schema=review_schema(st.campaign),
                     max_tokens=8000,
                 ),
                 REVIEW_SECONDS,
@@ -1963,14 +2040,21 @@ class Pipeline:
                 "move_start_by": 0,
                 "move_end_by": 0,
                 "verdict": "keep",
+                # Nobody looked at the campaign's rules: a warning on Review, never a silent pass.
+                **({"follows_rules": None, "follows_rules_note": ""} if st.campaign is not None else {}),
             }
 
     async def _check_one(self, st: JobState, c: Candidate, index: int, gate: RenderGate | None = None) -> Outcome:
         async def first() -> tuple[dict[str, Any], list[Item]]:
             review = await self._review(st, c)
             items = measured_items(
-                c.moment, c.render, await measure(c.render.video), st.length, has_speech=self._has_speech(st, c.moment)
-            ) + judged_items(review)
+                c.moment,
+                c.render,
+                await measure(c.render.video),
+                st.length,
+                has_speech=self._has_speech(st, c.moment),
+                campaign=st.campaign,
+            ) + judged_items(review, st.campaign)
             return review, items
 
         review, items = await asyncio.wait_for(first(), CHECK_CLIP_SECONDS)
@@ -1979,7 +2063,13 @@ class Pipeline:
         fixes: list[str] = []
         if any(not i.passed for i in items):
             fixed, fixes = plan_fix(
-                c.moment, items, review, length=st.length, first_loud=lambda t: loudness.first_loud_second(st.loud, t)
+                c.moment,
+                items,
+                review,
+                length=st.length,
+                first_loud=lambda t: loudness.first_loud_second(st.loud, t),
+                strict=st.campaign is not None and st.campaign.sets_length,
+                duration=c.render.duration,
             )
             if fixes:
                 async with gate or contextlib.nullcontext():
@@ -1992,6 +2082,7 @@ class Pipeline:
                             await measure(cut.render.video),
                             st.length,
                             has_speech=self._has_speech(st, cut.moment),
+                            campaign=st.campaign,
                         )
 
                     c, measured = await asyncio.wait_for(recut(), CUT_SECONDS)
@@ -2001,7 +2092,8 @@ class Pipeline:
                         **review,
                         "pays_off": review.get("pays_off") or any("payoff" in f for f in fixes),
                         "hook_ok": review.get("hook_ok") or any(f.startswith("New hook") for f in fixes),
-                    }
+                    },
+                    st.campaign,
                 )
                 items = measured + judged
         bad = critical_failure(items)
@@ -2246,7 +2338,10 @@ class Pipeline:
         except (proc.CommandError, OSError, ValueError) as e:
             log("warn", "checklist.measure_failed", job=st.job_id, index=c.index, error=type(e).__name__)
             return [passed]
-        return [*measured_items(c.moment, c.render, got, st.length, has_speech=self._has_speech(st, c.moment)), passed]
+        measured = measured_items(
+            c.moment, c.render, got, st.length, has_speech=self._has_speech(st, c.moment), campaign=st.campaign
+        )
+        return [*measured, passed]
 
     # --- captions --------------------------------------------------------------------------------------------
 
@@ -2295,6 +2390,7 @@ class Pipeline:
                     skills_text=st.skills.full_text,
                     system=learnings.with_prior(st.prior, "You write social captions for short clips."),
                     answer_seconds=CAPTIONS_SECONDS,
+                    campaign=st.campaign,
                 )
         rows = [
             {
@@ -2312,10 +2408,10 @@ class Pipeline:
             raise
         except Exception as e:
             log("warn", "captions.save_failed", job=st.job_id, error=type(e).__name__)
-        required = captions_mod.required_tags(st.notes, st.skills.full_text)
+        required = captions_mod.required_tags(st.notes, st.skills.full_text, st.campaign)
         for c in st.candidates:
             title = st.captions[st.clip_ids[id(c)]]["youtubeTitle"]
-            c.items = [i for i in c.items if i.key not in ("tags", "title")]
+            c.items = [i for i in c.items if i.key not in ("tags", "title", "campaign_tags")]
             c.items.append(
                 Item(
                     "tags",
@@ -2325,7 +2421,25 @@ class Pipeline:
                 )
             )
             c.items.append(Item("title", "Title under 60 characters", len(title) < 60, f"{len(title)} characters."))
+            if st.campaign is not None:
+                c.items.append(self._campaign_tags_item(st.campaign, st.captions[st.clip_ids[id(c)]]))
         return f"Wrote captions for {count(len(st.candidates), 'clip')}."
+
+    @staticmethod
+    def _campaign_tags_item(campaign: Campaign, captions: dict[str, str]) -> Item:
+        """``campaign_tags`` (§38.13): the disclosure first and every campaign item in every caption but the title."""
+        disclosure = campaign.disclosure_caption
+        items = captions_mod.campaign_items(campaign)
+        ok = captions_mod.qualifies(captions, items)
+        note = f"First in every caption: {disclosure}." + (
+            f" Also in every caption: {' '.join(items)}" if items else ""
+        )
+        return Item(
+            "campaign_tags",
+            f"{disclosure} and the campaign's tags in every caption",
+            ok,
+            note if ok else f"A caption is missing {disclosure} or a campaign tag. I put them back when it uploads.",
+        )
 
     # --- finalize --------------------------------------------------------------------------------------------
 
@@ -2444,6 +2558,8 @@ def clip_item(
     }
     if m.picked_for:
         item["pickedFor"] = m.picked_for[: signals_mod.MAX_PICKED_FOR]
+    if st.campaign_id:
+        item["campaignId"] = st.campaign_id  # public: the review card and Confirm read the campaign from it (§38.8)
     if url and platform in ("youtube", "twitch", "kick"):
         at = sources.url_at(url, platform, m.start)
         if at:

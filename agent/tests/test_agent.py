@@ -580,3 +580,63 @@ def test_no_chat_changes_nothing() -> None:
     b.chat = None
     assert CHAT_NOTE not in system_prompt(b) and "chat" not in brief_json(b)
     assert "Chat spikes" not in hints(b, 0, 4000)
+
+
+# --- Content Rewards campaigns (§38.13): without a campaign, every prompt, schema, brief and file is byte for byte ---
+
+# sha256 (first 16 hex) of what origin/main at b4f8149 (before §38 was built) produced for the inputs below.
+BEFORE_CAMPAIGNS = {
+    "look": "c3f809d4c79def9d",
+    "verify_system": "47e573279efb94d1",
+    "review": "07e4a087d695bb30",
+    "review_schema": "f5b829f9e890f57d",
+    "captions": "c8493cf1bf35dba3",
+    "ass": "376959cb8d5c466e",
+    "graph": "2fdfeb0d00f77998",
+    "fill": "99603f0175dc0463",
+}
+
+
+def test_without_a_campaign_every_prompt_and_file_is_byte_identical_to_before() -> None:
+    from clipfactory_agent import captions, checklist, render, verify
+    from clipfactory_agent.moments import Moment
+
+    m = Moment(
+        start=100.0,
+        end=130.0,
+        moment_type="rage",
+        hook="he thought he got away with it",
+        first_words="No way!",
+        payoff_at=128.0,
+        peak_at=120.0,
+        why="Big reaction",
+        score=7.0,
+        summary="He loses it",
+        people=["Sam"],
+        tease=(125.0, 126.5),
+    )
+    words = [[110.0, 110.4, "watch"], [110.5, 110.9, "this"]]
+    caps = [{"t0": 0.5, "t1": 1.0, "text": "WATCH THIS"}]
+    r = render.RenderResult(Path("clip.mp4"), Path("cover.jpg"), 27.5, [(100, 127.5)], caps, "facecam_top", True)
+    ph = render.phrases([render.TimedWord(0.5, 0.8, "no"), render.TimedWord(0.8, 1.1, "way")])
+    parts = render.layout_parts(Facecam(0.7, 0.05, 0.25, 0.3), 1920, 1080, peak=5.0)
+    graph = render.filter_graph(
+        [(20.0, 21.5), (2.0, 10.0)], parts, Path("/tmp/cf-work/J/clips/00/captions.ass"), True, tease=True
+    )
+    now = {
+        "look": digest(verify.look_text(m, words, None, 97, 133)),
+        "verify_system": digest(verify.VERIFY_SYSTEM),
+        "review": digest(checklist.review_prompt(m, r, "#GTA6", seen="[1.0s] (seen) crash 9/10")),
+        "review_schema": digest(json.dumps(checklist.review_schema(None), sort_keys=True)),
+        "captions": digest(captions.prompt([captions.ClipText("c1", m, "watch this")], "#GTA6")),
+        "ass": digest(render.build_ass("he thought he got away with it", ph, 20.0)),
+        "graph": digest(graph),
+        "fill": digest(";".join(render.layout_parts(None, 1920, 1080))),
+    }
+    assert now == BEFORE_CAMPAIGNS
+    b = brief()
+    assert b.campaign is None
+    assert digest(system_prompt(b)) == BEFORE["system"]
+    assert digest(json.dumps(brief_json(b), sort_keys=True)) == BEFORE["brief"]
+    assert "campaign" not in brief_json(b) and "Campaign:" not in system_prompt(b)
+    assert checklist.review_schema(None) is checklist.REVIEW_SCHEMA
