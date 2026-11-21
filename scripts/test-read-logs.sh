@@ -3,7 +3,8 @@
 # saved CloudWatch and DynamoDB fixtures and records every call. Checks that the Content Rewards lines (cr.* and
 # campaigns.*, also from cf-prod-campaigns and cf-prod-stats) and the CRCONN summary are printed, that nothing secret
 # (a token, an email, a name or an id) is, and that every AWS call only reads. Never calls AWS; writes only to a
-# temporary folder. Needs GNU date and sed, like the workflow (ubuntu-24.04).
+# temporary folder. Needs GNU date and sed, like the workflow (ubuntu-24.04): on a Mac without them it skips, in CI
+# (CI set) it fails instead.
 # Run: bash scripts/test-read-logs.sh   (ci.yml runs it on every push)
 set -euo pipefail
 
@@ -11,6 +12,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 workflow="${READ_LOGS_YML:-${root}/.github/workflows/read-logs.yml}"
 
 if ! date -u -d @0 +%s >/dev/null 2>&1 || ! echo x | sed -E 's/x/y/Ig' >/dev/null 2>&1; then
+  if [ -n "${CI:-}" ]; then echo "FAIL - needs GNU date and sed" >&2; exit 1; fi
   echo "skip - needs GNU date and sed (CI runs this on Ubuntu)"
   exit 0
 fi
@@ -66,13 +68,16 @@ results() { # results <function> <message>...: the saved Logs Insights answer fo
 results cf-prod-api \
   '{"level": "info", "event": "cr.connected", "ts": "2026-11-21T17:16:00+00:00", "result": "not_allowed"}' \
   '{"level": "info", "event": "cr.connect_read_failed", "ts": "2026-11-21T17:16:01+00:00", "code": "permission_denied"}' \
+  '{"level": "info", "event": "cr.said_cant_connect", "ts": "2026-11-21T17:16:02+00:00", "signedIn": false}' \
+  '{"level": "info", "event": "cr.campaign_added", "ts": "2026-11-21T17:16:03+00:00", "membership": "unknown"}' \
   'Traceback (most recent call last): https://contentrewards.com/b/oauth/consent?ix=secret-ix-123'
 results cf-prod-clip-flow \
   '{"level": "info", "event": "cr.sent", "ts": "2026-11-21T17:17:00+00:00", "postId": "post-secret-77", "platform": "youtube"}'
 results cf-prod-stats '{"level": "info", "event": "cr.tick", "ts": "2026-11-21T17:20:00+00:00", "owners": 1}'
 results cf-prod-campaigns '{"level": "info", "event": "campaigns.read", "ts": "2026-11-21T17:21:00+00:00", "rules": 3}'
 
-# Two CRCONN items: the pilot case (refused, email sent, steps as a string set) and a connected one (steps as a list).
+# Three CRCONN items: the pilot case (refused, email sent, steps as a string set), a connected one (steps as a list,
+# sign-in date far ahead) and a connected one past its sign-in date (the setup page says sign in again).
 cat >"${work}/crconn.json" <<'JSON'
 {"Items": [
   {"pk": {"S": "USER#owner-secret-id"}, "sk": {"S": "CRCONN"}, "type": {"S": "crconn"},
@@ -84,10 +89,13 @@ cat >"${work}/crconn.json" <<'JSON'
    "status": {"S": "connected"}, "canSubmit": {"BOOL": true}, "lastResult": {"S": "connected"},
    "stepsDone": {"L": [{"S": "ready-account"}]}, "creatorId": {"S": "creator-secret-9"},
    "tokenVersionId": {"S": "token-version-secret"}, "refreshLeaseUntil": {"S": "2026-11-21T18:00:00.000Z"},
-   "connectedAt": {"S": "2026-11-20T10:00:00.000Z"}, "signInBy": {"S": "2027-02-18T10:00:00.000Z"},
+   "connectedAt": {"S": "2026-11-20T10:00:00.000Z"}, "signInBy": {"S": "2099-02-18T10:00:00.000Z"},
    "missing": {"L": [{"S": "my_submissions:write"}]},
    "check": {"M": {"at": {"S": "2026-11-20T10:01:00.000Z"}, "ok": {"BOOL": true}, "code": {"S": "ok"},
-                   "message": {"S": "Content Rewards answers. You're signed in."}}}}
+                   "message": {"S": "Content Rewards answers. You're signed in."}}}},
+  {"pk": {"S": "USER#third-secret-id"}, "sk": {"S": "CRCONN"}, "type": {"S": "crconn"},
+   "status": {"S": "connected"}, "canSubmit": {"BOOL": true}, "lastResult": {"S": "connected"},
+   "connectedAt": {"S": "2026-05-22T09:00:00.000Z"}, "signInBy": {"S": "2026-08-20T09:00:00.000Z"}}
 ]}
 JSON
 
@@ -140,29 +148,35 @@ fi
 if grep -q '"event":"cr.connected","result":"not_allowed"' "$log" \
   && grep -q '"event":"cr.connect_read_failed","code":"permission_denied"' "$log" \
   && grep -q '"event":"cr.sent","platform":"youtube"' "$log" \
-  && grep -q '"event":"cr.tick","owners":1' "$log" && grep -q '"event":"campaigns.read","rules":3' "$log"; then
-  ok "cr.* and campaigns.* lines are printed (result, code, platform, owners, rules)"
+  && grep -q '"event":"cr.tick","owners":1' "$log" && grep -q '"event":"campaigns.read","rules":3' "$log" \
+  && grep -q '"event":"cr.said_cant_connect","signedIn":false' "$log" \
+  && grep -q '"event":"cr.campaign_added","membership":"unknown"' "$log"; then
+  ok "cr.* and campaigns.* lines are printed (result, code, platform, owners, rules, signedIn, membership)"
 else
   not_ok "Content Rewards lines missing: $(cat "$log")"
 fi
 
-# 5. The CRCONN summary: status, last result, whether the pilot email was sent, steps done, Connect and sign-in dates.
+# 5. The CRCONN summary: status, last result, whether the pilot email was sent, steps done, Connect and sign-in dates,
+# and whether the sign-in date has passed.
 summary="$(grep -F '{"status":' "$log" | grep -F '"pilotSentAtSet"' || true)"
 first="$(sed -n 1p <<<"$summary")"
 second="$(sed -n 2p <<<"$summary")"
-if [ "$(jq -r '[.status, .lastResult, .pilotSentAtSet, (.stepsDone | join(",")), .canSubmit] | join(" ")' <<<"$first")" \
-    = "not_connected not_allowed true ready-account,ready-link false" ] \
-  && [ "$(jq -r '[.status, .pilotSentAtSet, (.stepsDone | join(",")), .connectedAt, .reconnectBy, .check.code,
-        (.missing | join(","))] | join(" ")' <<<"$second")" \
-    = "connected false ready-account 2026-11-20T10:00:00.000Z 2027-02-18T10:00:00.000Z ok my_submissions:write" ] \
+third="$(sed -n 3p <<<"$summary")"
+if [ "$(jq -r '[.status, .lastResult, .pilotSentAtSet, (.stepsDone | join(",")), .canSubmit, .pastReconnectBy]
+        | join(" ")' <<<"$first")" = "not_connected not_allowed true ready-account,ready-link false false" ] \
+  && [ "$(jq -r '[.status, .pilotSentAtSet, (.stepsDone | join(",")), .connectedAt, .reconnectBy, .pastReconnectBy,
+        .check.code, (.missing | join(","))] | join(" ")' <<<"$second")" \
+    = "connected false ready-account 2026-11-20T10:00:00.000Z 2099-02-18T10:00:00.000Z false ok my_submissions:write" ] \
+  && [ "$(jq -r '[.status, .reconnectBy, .pastReconnectBy] | join(" ")' <<<"$third")" \
+    = "connected 2026-08-20T09:00:00.000Z true" ] \
   && jq -e '.fields | index("pilotSentAt") and index("lastResult") and (index("pk") | not)' <<<"$first" >/dev/null; then
-  ok "the CRCONN summary shows status, lastResult, pilotSentAt set or not, stepsDone, connectedAt and reconnectBy"
+  ok "the CRCONN summary shows status, lastResult, pilotSentAt set or not, stepsDone, connectedAt, reconnectBy and pastReconnectBy"
 else
   not_ok "CRCONN summary: ${summary:-none}"
 fi
 
 # 6. Nothing secret is printed: no token, email, name, id, URL query or the pilot email's time.
-leaks="$(grep -nE 'owner-secret-id|other-secret-id|creator-secret-9|token-version-secret|owner@example\.com|post-secret-77|secret-ix-123|2026-11-21T17:25:26|2026-11-21T18:00:00' "$log" || true)"
+leaks="$(grep -nE 'owner-secret-id|other-secret-id|third-secret-id|creator-secret-9|token-version-secret|owner@example\.com|post-secret-77|secret-ix-123|2026-11-21T17:25:26|2026-11-21T18:00:00' "$log" || true)"
 if [ -z "$leaks" ] && grep -q '<url>' "$log"; then
   ok "no token, email, name, id, URL query or pilot time is printed"
 else

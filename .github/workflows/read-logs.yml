@@ -75,7 +75,7 @@ jobs:
             | if ($j | type) == "object"
               then ($j | {level, event, job, jobId, step, index, what, kind, error, errorType, timedOut, outcome, status,
                           code, platform, result, reason, starts, sent, type, stopped, started, superseded, seconds, free, height, estBytes,
-                          owners, days, rules, jsonrpc,
+                          owners, days, rules, jsonrpc, signedIn, membership,
                           detail: ((.detail // null) | if . then .[0:300] else null end)} | with_entries(select(.value != null)) | tojson)
               else ($m | gsub("\n"; " ") | .[0:400]) end'
 
@@ -163,8 +163,9 @@ jobs:
                   connectedAt: .connectedAt.S, updatedAt: .updatedAt.S, reconnectBy: .reconnectBy.S}' | redact
           echo "::endgroup::"
           # The Content Rewards connection (CRCONN): what the setup page shows and why Connect may not have finished.
-          # pilotSentAt only says whether it is set; reconnectBy is CRCONN's signInBy; fields lists the attribute names
-          # only (never their values), so a new field shows up without printing it.
+          # pilotSentAt only says whether it is set; reconnectBy is CRCONN's signInBy; pastReconnectBy is true once that
+          # time has passed (the setup page then says sign in again, even though the stored status still says connected);
+          # fields lists the attribute names only (never their values), so a new field shows up without printing it.
           echo "::group::Content Rewards connection (status, last result, steps done; no tokens, emails, names or ids)"
           aws dynamodb scan --table-name cf-prod-data \
             --filter-expression "sk = :c" \
@@ -174,6 +175,8 @@ jobs:
                   stepsDone: ([(.stepsDone.SS // [])[], ((.stepsDone.L // [])[] | .S // empty)] | sort),
                   canSubmit: .canSubmit.BOOL, blocked: .blocked.BOOL, missing: [.missing.L[]?.S],
                   check: (if .check.M then {at: .check.M.at.S, ok: .check.M.ok.BOOL, code: .check.M.code.S} else null end),
-                  connectedAt: .connectedAt.S, reconnectBy: .signInBy.S, updatedAt: .updatedAt.S,
+                  connectedAt: .connectedAt.S, reconnectBy: .signInBy.S,
+                  pastReconnectBy: ((.signInBy.S // "")[0:19] + "Z" | try fromdateiso8601 catch null | . != null and . <= now),
+                  updatedAt: .updatedAt.S,
                   fields: (keys - ["pk", "sk"])}' | redact
           echo "::endgroup::"
