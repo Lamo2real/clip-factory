@@ -282,7 +282,8 @@ test("the director's buttons act only on a tap; a failed answer says why and tri
   await expect(page.locator(".st-ref-track__step")).toHaveCount(3);
   await expect(page.getByRole("heading", { name: "What happens" })).toBeVisible({ timeout: 20_000 });
 
-  // Make the video only opens Production › New filled in.
+  // Make the video (the agent's { story } payload with a short concept): the tap saves the concept as an idea and
+  // opens Production › New with that idea picked; nothing is made until Make the video is tapped there.
   await page.goBack();
   await expect(page).toHaveURL(/\/stories\/chat\/[0-9A-Z]{26}$/);
   await page.waitForFunction(() => !document.querySelector(".st-chat-wait"));
@@ -290,9 +291,11 @@ test("the director's buttons act only on a tap; a failed answer says why and tri
   await page.locator(".st-chat-send").click();
   const make = page.locator(".st-chat-msg--assistant").last().getByRole("button", { name: "Make the video" });
   await expect(make).toBeVisible({ timeout: 15_000 });
+  const storiesBefore = await page.evaluate(() => ((window as StoriesWindow).__cfStoriesMock?.store as unknown as { stories: unknown[] }).stories.length);
   await make.click();
-  await expect(page).toHaveURL(/\/stories\/production\/new\?.*title=Pip\+and\+the\+icy\+path/);
-  await expect(page).toHaveURL(/sec=40/);
+  await expect(page).toHaveURL(/\/stories\/production\/new\?idea=[0-9A-Z]{26}.*sec=40/);
+  await expect(page.getByText("Pip and the icy path").first()).toBeVisible({ timeout: 15_000 });
+  expect(await page.evaluate(() => ((window as StoriesWindow).__cfStoriesMock?.store as unknown as { stories: unknown[] }).stories.length)).toBe(storiesBefore);
 
   // Pictures: too big is refused before upload; a good one uploads with its progress and goes with the message.
   await go(page, "/stories/chat?all=1");
@@ -319,6 +322,14 @@ test("the chat can be about a project, and remembering goes to Settings › Memo
   await knobs(page, { chatChunkMs: 80, chatThinkMs: 200 });
   await page.getByRole("button", { name: "Pick what it is about" }).click();
   const sheet = page.getByRole("dialog", { name: "What is this chat about?" });
+  // Done sits at the bottom right of the sheet on a phone, and closes it without a change.
+  const done = await sheet.getByRole("button", { name: "Done" }).boundingBox();
+  expect(done && done.x + done.width).toBeGreaterThan(390 * 0.6);
+  expect(done && done.y).toBeGreaterThan(844 * 0.5);
+  await sheet.getByRole("button", { name: "Done" }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.locator(".st-chat-project__chip")).toHaveCount(0);
+  await page.getByRole("button", { name: "Pick what it is about" }).click();
   await sheet.getByRole("radio", { name: "References" }).click();
   await sheet.getByRole("radio", { name: /Penguin on the ice rink/ }).click();
   await expect(sheet).toBeHidden();
@@ -372,6 +383,8 @@ test("a reference video: upload in parts, analyze with a per-run model, the anal
   await expect(line).toHaveText("Model: Claude Haiku 5.5 · Effort: Medium");
   await page.getByRole("button", { name: "Analyze it" }).click();
   await expect(page.locator(".st-ref-track__step")).toHaveCount(3);
+  // The contract's answer has no job: the steps with a moving bar (never a bar stuck at nothing).
+  await expect(page.locator(".st-ref-busybar")).toBeVisible();
   await expect(page.locator(".st-ref-track")).toContainText("Look at it");
   await expect(page.locator(".st-ref-track")).toContainText("Listen");
   await expect(page.locator(".st-ref-track")).toContainText("Write it up");
@@ -379,6 +392,15 @@ test("a reference video: upload in parts, analyze with a per-run model, the anal
     await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(page.locator(".st-ref-with")).toHaveText("Analyzed with Claude Haiku 5.5 · Medium");
   await expect(line).toHaveText("Model: Claude Opus 5.5 · Effort: High");
+
+  // A re-run that fails is not cheered: it says so, keeps the last analysis, and offers another model.
+  await knobs(page, { refFail: "This video can't be opened right now.", refSeconds: 3 });
+  await page.evaluate(() => ((window as StoriesWindow).__cfSoundLog = []));
+  await page.getByRole("button", { name: "Analyze again" }).click();
+  await expect(page.locator(".st-ref-failed")).toContainText("The new analysis did not finish", { timeout: 20_000 });
+  await expect(page.getByRole("heading", { name: "What happens" })).toBeVisible();
+  await expect(page.locator(".st-ref-failed").getByRole("button", { name: "Pick another model" })).toBeVisible();
+  expect(await soundKinds(page)).not.toContain("success");
 
   // Rename.
   await page.getByRole("button", { name: "Rename my fav clip" }).click();

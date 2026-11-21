@@ -198,9 +198,17 @@ describe("chat", () => {
 
   it("offers each kind of button for the right question", () => {
     expect(chat.answerFor(store, "Help me make a new character", null).actions[0]!.kind).toBe("save_character");
-    expect(chat.answerFor(store, "Let's make a video", null).actions[0]).toMatchObject({ kind: "make_video", payload: { durationSec: 40 } });
+    // The agent's own shape (tools.py offer_make_video): { story: StoryInput }.
+    expect(chat.answerFor(store, "Let's make a video", null).actions[0]).toMatchObject({ kind: "make_video", payload: { story: { durationSec: 40, brief: { category: "comedy" } } } });
     expect(chat.answerFor(store, "Analyze my reference", null).actions[0]).toEqual({ kind: "analyze_reference", label: "Analyze this reference video", payload: { refId: references.SEED_IDS.ready } });
     expect(chat.answerFor(store, "Ideas please", null).actions[0]!.kind).toBe("save_idea");
+    // A chat about a story: the agent's propose_story_change for the whole story (a note, no scenes).
+    store.stories.push({ storyId: "01JSTST0000000000000000001" } as never);
+    expect(chat.answerFor(store, "Make the middle slower", { kind: "story", id: "01JSTST0000000000000000001" }).actions[0]).toEqual({
+      kind: "remake_scene",
+      label: "Make these changes",
+      payload: { storyId: "01JSTST0000000000000000001", sceneIds: [], note: "Make the middle slower" },
+    });
   });
 });
 
@@ -226,8 +234,12 @@ describe("references", () => {
     expect(started.reference.status).toBe("analyzing");
     await expect(api.analyzeReference("stories", id)).rejects.toMatchObject({ status: 409 });
     references.advance(store, Date.parse(started.job.createdAt) + 2000);
+    // The contract's answer: { reference, analysis } and no job.
+    expect(Object.keys(await api.getReference("stories", id)).sort()).toEqual(["analysis", "reference"]);
+    store.knobs.refJobInGet = true;
     const mid = (await api.getReference("stories", id)) as Awaited<ReturnType<StoriesApi["getReference"]>> & { job?: { steps: { status: string }[] } };
     expect(mid.job?.steps.map((s) => s.status)).toEqual(["done", "running", "pending"]);
+    store.knobs.refJobInGet = false;
     finish();
     const r = await api.getReference("stories", id);
     expect(r.reference.status).toBe("analyzed");
@@ -241,9 +253,28 @@ describe("references", () => {
     store.knobs.refFail = "We could not open that video. Upload it again as MP4 or MOV.";
     await api.analyzeReference("stories", references.SEED_IDS.ready);
     finish();
-    const r = (await api.getReference("stories", references.SEED_IDS.ready)) as Awaited<ReturnType<StoriesApi["getReference"]>> & { job?: { error?: string } };
+    const r = await api.getReference("stories", references.SEED_IDS.ready);
     expect(r.reference.status).toBe("failed");
-    expect(r.job?.error).toBe("We could not open that video. Upload it again as MP4 or MOV.");
+    expect(r.analysis).toBeNull();
+    store.knobs.refJobInGet = true;
+    const withJob = (await api.getReference("stories", references.SEED_IDS.ready)) as Awaited<ReturnType<StoriesApi["getReference"]>> & { job?: { status: string; error?: string } };
+    expect(withJob.job).toMatchObject({ status: "failed", error: "We could not open that video. Upload it again as MP4 or MOV." });
+  });
+
+  it("a failed re-run keeps the last analysis and goes back to analyzed, as the agent does", async () => {
+    const id = references.SEED_IDS.analyzed;
+    const old = (await api.getReference("stories", id)).analysis;
+    expect(old).not.toBeNull();
+    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again.";
+    await api.analyzeReference("stories", id, { model: "fable-5-2" });
+    // While it runs, the last analysis is still answered (the API reads analysis.json whatever the status).
+    expect((await api.getReference("stories", id)).analysis).toEqual(old);
+    finish();
+    const r = await api.getReference("stories", id);
+    expect(r.reference.status).toBe("analyzed");
+    expect(r.reference.analyzedWith).toEqual({ model: "opus-5-5", effort: "high" });
+    expect(r.analysis).toEqual(old);
+    expect(store.jobs.find((j) => j.contentId === id)).toMatchObject({ status: "failed", error: expect.stringContaining("Settings › AI") });
   });
 
   it("renames and deletes a reference video; a character's picture delete is not a video delete", async () => {

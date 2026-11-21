@@ -17,6 +17,7 @@ import { forgetVisit } from "../src/stories/chat/device.ts";
 import { fileModels, forgetModels } from "../src/stories/chat/models.ts";
 import { forgetProjectNames } from "../src/stories/chat/project.ts";
 import { forgetUploads } from "../src/stories/chat/references/uploads.ts";
+import { sounds } from "../src/lib/sounds.ts";
 import type { StoriesPage } from "../src/stories/routes.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -26,6 +27,7 @@ HTMLCanvasElement.prototype.getContext = (() => null) as never;
 
 const { ChatScreen } = await import("../src/stories/screens/Chat.tsx");
 const { ReferencesScreen } = await import("../src/stories/screens/References.tsx");
+const { ANALYSIS_FAILED, RERUN_FAILED } = await import("../src/stories/chat/references/RefPage.tsx");
 
 const CONV = chat.SEED_IDS.conversations;
 const REF = references.SEED_IDS;
@@ -36,7 +38,7 @@ let models: ModelInfo[];
 let tasks: TaskInfo[];
 let root: Root;
 let host: HTMLElement;
-const spies = { sendMessage: vi.fn(), createIdea: vi.fn(), analyzeReference: vi.fn() };
+const spies = { sendMessage: vi.fn(), createIdea: vi.fn(), analyzeReference: vi.fn(), chatAttachment: vi.fn() };
 
 function info(key: string, patch: Partial<ModelInfo> = {}): ModelInfo {
   const m = fileModels().find((x) => x.key === key)!;
@@ -62,12 +64,14 @@ function makeApi(): StoriesApi {
   const r = references.api(store);
   const reject = () => Promise.reject(new Error("Not used here."));
   spies.sendMessage = vi.fn(c.sendMessage);
-  spies.createIdea = vi.fn(async () => ({}) as never);
+  spies.createIdea = vi.fn(async () => ({ ideaId: "01JSTID0000000000000000009" }) as never);
   spies.analyzeReference = vi.fn(r.analyzeReference);
+  spies.chatAttachment = vi.fn(c.chatAttachment);
   return {
     ...c,
     ...r,
     sendMessage: spies.sendMessage,
+    chatAttachment: spies.chatAttachment,
     analyzeReference: spies.analyzeReference,
     createIdea: spies.createIdea,
     getAi: async () => ({ ai: { defaultModel: "opus-5-5", defaultEffort: "high", tasks: {}, prices: {}, version: 1 }, models: structuredClone(models), agents: [], tasks: structuredClone(tasks) }),
@@ -237,6 +241,87 @@ describe("the chat", () => {
     await until(() => !!byText("button", "Save this idea") && $$(".st-chat-msg--assistant").at(-1)?.classList.contains("is-done") === true, 8000);
   });
 
+  it("says which part a chat saved: an effort of its own, the model from Settings", async () => {
+    const conv = store.conversations.find((c) => c.convId === CONV.winter)!;
+    conv.effort = "max";
+    await openChat(CONV.winter);
+    expect(line()).toBe("Model: Claude Opus 5.5 · Effort: Maximum");
+    expect($(".st-chat-ai__from")?.textContent).toBe("Effort saved for this chat. The model comes from Lamo Stories › Settings › AI.");
+  });
+
+  it("Try again on a failed answer sends its picture again (uploaded once more), and Edit it keeps the pictures", async () => {
+    await openChat(CONV.winter);
+    const input = $('.st-chat-compose input[type="file"]') as HTMLInputElement;
+    const pic = () => new File([new Uint8Array(256)], "look.png", { type: "image/png" });
+    Object.defineProperty(input, "files", { value: [pic()], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await until(() => $$(".st-chat-pic").length === 1 && !$(".st-chat-pic .st-chat-progress"));
+    store.knobs.chatFail = "The director could not answer this time. Try again.";
+    await type($("textarea"), "Like this one");
+    await click($(".st-chat-send"));
+    await until(() => !!$(".st-chat-msg--assistant.is-failed"), 8000);
+    const first = (spies.sendMessage.mock.calls.at(-1)![2] as { attachments: { assetId: string }[] }).attachments[0]!.assetId;
+    await click(byText(".st-chat-msg--assistant.is-failed button", "Try again"));
+    await until(() => spies.sendMessage.mock.calls.length === 2);
+    const again = spies.sendMessage.mock.calls.at(-1)![2] as { text: string; attachments: { assetId: string }[] };
+    expect(again.text).toBe("Like this one");
+    expect(again.attachments).toHaveLength(1);
+    expect(again.attachments[0]!.assetId).not.toBe(first);
+    expect(spies.chatAttachment).toHaveBeenCalledTimes(2);
+    await until(() => $$(".st-chat-msg--assistant").at(-1)?.classList.contains("is-done") === true, 8000);
+    expect(host.textContent).not.toContain("That picture did not finish uploading");
+
+    // A message that does not send: Edit it puts the words and the picture back in the box.
+    Object.defineProperty(input, "files", { value: [pic()], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await until(() => $$(".st-chat-pic").length === 1 && !$(".st-chat-pic .st-chat-progress"));
+    spies.sendMessage.mockRejectedValueOnce(new Error("offline"));
+    await type($("textarea"), "And this one");
+    await click($(".st-chat-send"));
+    await until(() => !!byText("button", "Edit it"));
+    expect($$(".st-chat-pic")).toHaveLength(0);
+    await click(byText("button", "Edit it"));
+    expect(($("textarea") as HTMLTextAreaElement).value).toBe("And this one");
+    expect($$(".st-chat-pic")).toHaveLength(1);
+  });
+
+  it("a refused model's answer offers another model and Settings › AI", async () => {
+    await openChat(CONV.winter);
+    store.knobs.chatDenied = ["opus-5-5"];
+    await type($("textarea"), "Ideas about rain");
+    await click($(".st-chat-send"));
+    await until(() => !!$(".st-chat-msg--assistant.is-failed"), 8000);
+    const failed = $(".st-chat-msg--assistant.is-failed")!;
+    expect(failed.textContent).toContain("Claude Opus 5.5 isn't available right now");
+    expect(byText(".st-chat-msg--assistant.is-failed a", "Open Settings › AI")?.getAttribute("href")).toBe("/stories/settings/ai");
+    await click(byText(".st-chat-msg--assistant.is-failed button", "Pick another model"));
+    expect($(".st-chat-sheet")).not.toBeNull();
+  });
+
+  it("the project sheet closes with Done", async () => {
+    await openChat(CONV.winter);
+    await click(byText("button", "Pick what it is about"));
+    expect($(".st-chat-sheet")).not.toBeNull();
+    await click(byText(".st-chat-sheet__actions button", "Done"));
+    expect($(".st-chat-sheet")).toBeNull();
+  });
+
+  it("Make the video with a short concept saves it as an idea on the tap, then opens Production › New with it", async () => {
+    await openChat(CONV.winter);
+    await type($("textarea"), "Let's make a video of it");
+    await click($(".st-chat-send"));
+    await until(() => !!byText("button", "Make the video"), 8000);
+    expect(spies.createIdea).not.toHaveBeenCalled();
+    await click(byText("button", "Make the video"));
+    await until(() => location.pathname === "/stories/production/new");
+    expect(spies.createIdea.mock.calls[0]![1]).toMatchObject({ title: "Pip and the icy path", category: "comedy", source: "ai" });
+    expect(location.search).toBe("?idea=01JSTID0000000000000000009&sec=40");
+  });
+
   it("opens the last open chat when Chat opens, and the list when asked", async () => {
     localStorage.setItem("cf.workspace", JSON.stringify({ workspaceId: "stories", lastConversationId: CONV.hooks }));
     await render(<ChatScreen ws="stories" page={page({ name: "chat" })} />);
@@ -273,6 +358,94 @@ describe("references", () => {
     expect(line()).toBe("Model: Claude Fable 5.2 · Effort: High");
     await click(byText("button", "Use in a video"));
     expect(location.pathname + location.search).toBe(`/stories/production/new?ref=${REF.ready}`);
+  }, 20_000);
+
+  it("with the contract's answer (no job): the moving bar while it runs, and a cheer only for a real result", async () => {
+    const play = vi.spyOn(sounds, "play");
+    store.knobs.refSeconds = 1.5;
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.ready })} />);
+    await until(() => !!byText("button", "Analyze it"));
+    await click(byText("button", "Analyze it"));
+    // The Analyze tap's queued job is not followed: the steps with the moving bar, not a bar stuck at 0.
+    await until(() => !!$(".st-ref-busybar"));
+    expect($$(".st-ref-track__step")).toHaveLength(3);
+    expect($(".st-ref-card2 .st-chat-progress")).toBeNull();
+    // The run's own model, from the job the tap started (the mock's run here uses the default).
+    expect(host.textContent).toContain("With Claude Opus 5.5 · High");
+    await until(() => !!$(".st-ref-analysis"), 8000);
+    expect(play).toHaveBeenCalledWith("success");
+    play.mockRestore();
+  }, 20_000);
+
+  it("a failed re-run is not cheered: it says so, keeps the last analysis and offers another model", async () => {
+    const play = vi.spyOn(sounds, "play");
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.analyzed })} />);
+    await until(() => !!$(".st-ref-analysis"));
+    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again.";
+    await click(byText("button", "Analyze again"));
+    await until(() => !!$(".st-ref-busybar"));
+    await until(() => !!$(".st-ref-failed"), 8000);
+    // Without the job the reason is not known; the sentence says what happened, and the last analysis stays.
+    expect($(".st-ref-failed")?.textContent).toContain(RERUN_FAILED);
+    expect($(".st-ref-analysis")).not.toBeNull();
+    expect(play).not.toHaveBeenCalledWith("success");
+    await click(byText(".st-ref-failed button", "Pick another model"));
+    expect($(".st-chat-sheet")).not.toBeNull();
+    play.mockRestore();
+  }, 20_000);
+
+  it("a first analysis that fails says so; with the job in the answer, its own sentence and Settings › AI", async () => {
+    store.knobs.refFail = "This video can't be opened. Upload it again as MP4 or MOV.";
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.ready })} />);
+    await until(() => !!byText("button", "Analyze it"));
+    await click(byText("button", "Analyze it"));
+    await until(() => !!$(".st-ref-failed"), 8000);
+    expect($(".st-ref-failed")?.textContent).toContain(ANALYSIS_FAILED);
+
+    store.knobs.refJobInGet = true;
+    store.knobs.refSeconds = 9;
+    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again.";
+    await click(byText("button", "Try again"));
+    await until(() => !!$(".st-ref-card2 .st-chat-progress"));
+    await until(() => ($(".st-ref-failed")?.textContent ?? "").includes("no access"), 8000);
+    expect(byText(".st-ref-failed a", "Open Settings › AI")?.getAttribute("href")).toBe("/stories/settings/ai");
+  }, 20_000);
+
+  it("Analyze refused because the agent is switched off links to Settings › Agents", async () => {
+    store.agents.push({ agentId: "video_analysis", name: "The video analysis agent", active: false, model: null, effort: null } as never);
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.ready })} />);
+    await until(() => !!byText("button", "Analyze it"));
+    await click(byText("button", "Analyze it"));
+    await until(() => !!byText("a", "Open Settings › Agents"));
+    expect(byText("a", "Open Settings › Agents")?.getAttribute("href")).toBe("/stories/settings/agents");
+  });
+
+  it("an upload that finishes after the owner left References and came back still opens its page", async () => {
+    history.replaceState({}, "", "/stories/references");
+    await render(<ReferencesScreen ws="stories" page={page({ name: "references" })} />);
+    await until(() => $$(".st-ref-card").length === 2);
+    const input = $('.st-ref-drop input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [new File([new Uint8Array(2048)], "come_back.mp4", { type: "video/mp4" })], configurable: true });
+    // The last step waits: the owner leaves before it is done, then comes back.
+    const finish = api.completeReference.bind(api);
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    api.completeReference = async (...a: Parameters<StoriesApi["completeReference"]>) => {
+      await gate;
+      return finish(...a);
+    };
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await until(() => store.references.some((r) => r.title === "come back"));
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await render(<ReferencesScreen ws="stories" page={page({ name: "references" })} />);
+    await until(() => $$(".st-ref-card").length === 2 && !!$(".st-ref-upload"));
+    await act(async () => release());
+    const made = store.references.find((r) => r.title === "come back")!;
+    await until(() => location.pathname === `/stories/references/${made.refId}`, 8000);
+    expect(made.status).toBe("ready");
   }, 20_000);
 
   it("uploads a video in parts with its progress, then opens its page", async () => {

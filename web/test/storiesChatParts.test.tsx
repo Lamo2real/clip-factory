@@ -7,8 +7,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setStoriesApi } from "../src/stories/api/client.ts";
 import type { ChatAction, Message, StoriesApi } from "../src/stories/api/types.ts";
-import { BROKEN, planFor } from "../src/stories/chat/actions.tsx";
+import { ActionCard, BROKEN, planFor } from "../src/stories/chat/actions.tsx";
 import { forgetVisit, lastConversationId, rememberConversation, WORKSPACE_KEY } from "../src/stories/chat/device.ts";
+import { settingsNamed } from "../src/stories/chat/fixit.tsx";
 import { productionNewHref } from "../src/stories/chat/handoff.ts";
 import { ago, clock, sentence, size } from "../src/stories/chat/kit.tsx";
 import { afterId, askedBefore, mergeMessages, titleFrom } from "../src/stories/chat/messages.ts";
@@ -34,18 +35,95 @@ const msg = (id: string, role: Message["role"], status: Message["status"] = "don
 
 const act = (kind: ChatAction["kind"], payload: Record<string, unknown>): ChatAction => ({ kind, label: "Do it", payload });
 
+/** A stand-in API that writes down every call. */
+function recorder(ideas: { ideaId: string; title: string; logline: string; category: string }[] = []) {
+  const calls: string[] = [];
+  const fake = {
+    listIdeas: vi.fn(async () => ideas),
+    createIdea: vi.fn(async (_ws: string, i: { title: string; source?: string; characterIds?: string[] }) => {
+      calls.push(`idea ${i.title} ${i.source} ${JSON.stringify(i.characterIds ?? [])}`);
+      return { ideaId: "01JSTID0000000000000000009", ...i } as never;
+    }),
+    patchIdea: vi.fn(async (_ws: string, ideaId: string, patch: object) => {
+      calls.push(`patch ${ideaId} ${JSON.stringify(patch)}`);
+      return {} as never;
+    }),
+    requestChanges: vi.fn(async (_ws: string, storyId: string, body: object) => {
+      calls.push(`changes ${storyId} ${JSON.stringify(body)}`);
+      return {} as never;
+    }),
+  } as unknown as StoriesApi;
+  return { calls, fake };
+}
+
 describe("the director's buttons", () => {
-  it("Make the video only opens Production › New, filled in", () => {
+  it("Make the video with an idea only opens Production › New, filled in", () => {
     expect(planFor(act("make_video", { ideaId: "01JSTID0000000000000000001", characterIds: ["c1"], durationSec: 40, referenceIds: ["r1", "r2"] }))).toEqual({
       kind: "go",
       href: "/stories/production/new?idea=01JSTID0000000000000000001&ref=r1&ref=r2&cast=c1&sec=40",
     });
-    expect(planFor(act("make_video", { brief: { title: "Pip & ice", logline: "Pip slides.", category: "comedy" } }))).toEqual({
-      kind: "go",
-      href: "/stories/production/new?title=Pip+%26+ice&logline=Pip+slides.&category=comedy",
-    });
     expect(planFor(act("make_video", { brief: { title: "x", logline: "y", category: "horror" } })).kind).toBe("broken");
     expect(planFor(act("make_video", { characterIds: ["../../x"] })).kind).toBe("broken");
+    expect(planFor(act("make_video", { story: { characterIds: ["c1"], durationSec: "long" } })).kind).toBe("broken");
+  });
+
+  it("reads the agent's own payloads exactly as tools.py sends them", async () => {
+    // offer_make_video with an idea: {"story": {"characterIds": [...], "ideaId": ..., "durationSec": ...}}
+    expect(planFor(act("make_video", { story: { characterIds: ["01JSTCH0000000000000000001"], ideaId: "01JSTID0000000000000000001", durationSec: 45 } }))).toEqual({
+      kind: "go",
+      href: "/stories/production/new?idea=01JSTID0000000000000000001&cast=01JSTCH0000000000000000001&sec=45",
+    });
+    // offer_make_video with a short concept: the tap saves it as an idea, then Production › New opens with it.
+    const { calls, fake } = recorder();
+    setStoriesApi(fake);
+    try {
+      const plan = planFor(act("make_video", { story: { characterIds: ["01JSTCH0000000000000000001"], brief: { title: "Pip & ice", logline: "Pip slides.", category: "comedy" }, durationSec: 40 } }));
+      expect(plan.kind).toBe("call");
+      expect(calls).toEqual([]);
+      if (plan.kind !== "call") return;
+      const done = await plan.run("stories");
+      expect(calls).toEqual(['idea Pip & ice ai ["01JSTCH0000000000000000001"]']);
+      expect(done).toMatchObject({ go: true, href: "/stories/production/new?idea=01JSTID0000000000000000009&cast=01JSTCH0000000000000000001&sec=40" });
+      // propose_story_change for the whole story: a note and no scenes.
+      const whole = planFor(act("remake_scene", { storyId: "01JSTST0000000000000000001", sceneIds: [], note: "Slower in the middle" }));
+      expect(whole.kind).toBe("call");
+      if (whole.kind === "call") expect((await whole.run("stories")).text).toBe("Making those changes now!");
+      // update_idea on a driving-safety idea: {"ideaId", "patch"} through PATCH …/ideas/{id}.
+      const change = planFor(act("save_idea", { ideaId: "01JSTID0000000000000000002", patch: { logline: "Look twice at the crossing.", category: "driving_safety" } }));
+      expect(change.kind).toBe("call");
+      if (change.kind === "call") expect((await change.run("stories")).text).toBe("Saved the change!");
+      // offer_save_idea: {"idea": {..., "source": "ai"}}
+      const save = planFor(act("save_idea", { idea: { title: "Snow", logline: "It falls.", category: "comedy", source: "ai" } }));
+      if (save.kind === "call") await save.run("stories");
+      expect(calls.slice(1)).toEqual([
+        'changes 01JSTST0000000000000000001 {"note":"Slower in the middle"}',
+        'patch 01JSTID0000000000000000002 {"logline":"Look twice at the crossing.","category":"driving_safety"}',
+        "idea Snow ai []",
+      ]);
+    } finally {
+      setStoriesApi(null);
+    }
+  });
+
+  it("a short concept already saved as an idea is used again, not saved twice", async () => {
+    const { calls, fake } = recorder([{ ideaId: "01JSTID0000000000000000005", title: "Pip & ice", logline: "Pip slides.", category: "comedy" }]);
+    setStoriesApi(fake);
+    try {
+      const plan = planFor(act("make_video", { story: { characterIds: [], brief: { title: "Pip & ice", logline: "Pip slides.", category: "comedy" } } }));
+      expect(plan.kind === "call" && (await plan.run("stories")).href).toBe("/stories/production/new?idea=01JSTID0000000000000000005");
+      expect(calls).toEqual([]);
+    } finally {
+      setStoriesApi(null);
+    }
+  });
+
+  it("a malformed button is switched off and drawn without its preview, never crashing the chat", () => {
+    const html = renderToStaticMarkup(<ActionCard ws="stories" id="m:0" action={act("save_character", { character: { name: { text: "Skid" }, look: { body: "round" } } })} />);
+    expect(html).toContain(BROKEN);
+    expect(html).toContain('aria-disabled="true"');
+    expect(html).not.toContain("st-chat-action__show");
+    const noLabel = renderToStaticMarkup(<ActionCard ws="stories" id="m:1" action={{ kind: "save_idea", label: { x: 1 } as never, payload: { idea: { title: "T", logline: "L", category: "comedy" } } }} />);
+    expect(noLabel).toContain("Save this idea");
   });
 
   it("the other buttons call the normal route only when run (on the tap)", async () => {
@@ -65,7 +143,7 @@ describe("the director's buttons", () => {
       }),
       createIdea: vi.fn(async (_ws: string, i: { title: string; source?: string }) => {
         calls.push(`idea ${i.title} ${i.source}`);
-        return {} as never;
+        return { ideaId: "01JSTID0000000000000000009" } as never;
       }),
     } as unknown as StoriesApi;
     setStoriesApi(fake);
@@ -93,6 +171,10 @@ describe("the director's buttons", () => {
   it("a button whose details make no sense does nothing (and says so)", () => {
     for (const a of [
       act("remake_scene", { storyId: "s1", sceneIds: [] }),
+      act("remake_scene", { storyId: "s1", sceneIds: [], note: "  " }),
+      act("save_idea", { ideaId: "i1", patch: {} }),
+      act("save_idea", { ideaId: "i1", patch: { owner: "someone" } }),
+      act("save_idea", { ideaId: "i1", patch: { category: "horror" } }),
       act("remake_scene", { sceneIds: ["a"] }),
       act("analyze_reference", { refId: 5 }),
       act("save_character", { character: { name: "" } }),
@@ -112,6 +194,12 @@ describe("the director's buttons", () => {
     expect(planFor(act("open", { kind: "character", id: "ch1" }))).toEqual({ kind: "go", href: "/stories/characters/ch1" });
   });
 
+  it("a failure that names a setting offers the way there", () => {
+    expect(settingsNamed("Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again.")).toEqual({ ai: true, agents: false });
+    expect(settingsNamed("The video analysis agent is switched off. Switch it on in Lamo Stories › Settings › Agents.")).toEqual({ ai: false, agents: true });
+    expect(settingsNamed(null)).toEqual({ ai: false, agents: false });
+  });
+
   it("Use in a video hands one reference to Production › New", () => {
     expect(productionNewHref({ referenceIds: ["01JSTRF0000000000000000001"] })).toBe("/stories/production/new?ref=01JSTRF0000000000000000001");
     expect(productionNewHref({ referenceIds: ["a", "b", "c", "d"], durationSec: 200 })).toBe("/stories/production/new?ref=a&ref=b&ref=c");
@@ -127,7 +215,8 @@ describe("the last open conversation (cf.workspace)", () => {
   it("is kept inside cf.workspace, every other key untouched", () => {
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ workspaceId: "stories", lastStoriesPath: "/stories/chat", lastClipsPath: "/jobs" }));
     rememberConversation("01JSTCV0000000000000000002");
-    expect(JSON.parse(localStorage.getItem(WORKSPACE_KEY)!)).toEqual({ workspaceId: "stories", lastStoriesPath: "/stories/chat", lastClipsPath: "/jobs", lastConversationId: "01JSTCV0000000000000000002" });
+    // The shell may write its whole choice; the keys that were there keep their values either way.
+    expect(JSON.parse(localStorage.getItem(WORKSPACE_KEY)!)).toMatchObject({ workspaceId: "stories", lastStoriesPath: "/stories/chat", lastClipsPath: "/jobs", lastConversationId: "01JSTCV0000000000000000002" });
     expect(lastConversationId()).toBe("01JSTCV0000000000000000002");
     rememberConversation(null);
     expect(lastConversationId()).toBeNull();

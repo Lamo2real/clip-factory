@@ -88,7 +88,16 @@ function ProjectSheet({ ws, value, onPick, onClose }: { ws: string; value: Proje
   }
 
   return (
-    <Sheet title="What is this chat about?" onClose={onClose} wide>
+    <Sheet
+      title="What is this chat about?"
+      onClose={onClose}
+      wide
+      actions={
+        <Btn main onClick={onClose}>
+          Done
+        </Btn>
+      }
+    >
       <Pick label="Kind of project" value={kind} options={KINDS} onChange={setKind} className="st-chat-pick--bar" />
       {list === null ? (
         <Waiting label="Finding them…" />

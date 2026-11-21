@@ -1,6 +1,13 @@
 // One reference video's page (docs/CONTRACTS.md §45.28): the player, Analyze (with the model and effort shown and a
 // just-for-this-run override), the step track while the video analysis agent looks at it, the analysis, "Use in a
 // video" (Production › New with it), Talk about it in Chat, rename, and delete with Undo.
+//
+// GET …/references/{refId} answers { reference, analysis } (§45.5), without the analysis job. So while it runs the
+// page shows the three steps with a moving bar, and only an answer that carries the job (`job`, proposed in the
+// builder's contract notes) draws each step's own state and progress. When a run ends, the job's status says how it
+// went when it is there; without it: `failed` is a failure, and a video that goes back to `analyzed` with the very same
+// analysis as before was a re-run that did not finish (Lamo Stories' agent keeps the last analysis then), never a
+// success to cheer about.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { A } from "../../../components/ui.tsx";
 import { usePoll } from "../../../lib/hooks.ts";
@@ -10,6 +17,7 @@ import type { ModelOverride, ProductionJob, ReferenceAnalysis, ReferenceVideo, S
 import { storiesHref } from "../../routes.ts";
 import { AiLine, AiSheet } from "../ai.tsx";
 import { rememberConversation } from "../device.ts";
+import { FixIt } from "../fixit.tsx";
 import { productionNewHref } from "../handoff.ts";
 import { Btn, centerOf, cheer, Chip, clock, Empty, Icon, Progress, sentence, size, Waiting } from "../kit.tsx";
 import { effortProblem, findModel, modelLabel, effortLabel, projectEffective, useModels } from "../models.ts";
@@ -24,10 +32,20 @@ export const REF_STEP_LABELS = ["Look at it", "Listen", "Write it up"];
 
 type RefData = { reference: ReferenceVideo; analysis: ReferenceAnalysis | null; job?: ProductionJob | null };
 
+/** A failure whose reason the page does not know (the contract's answer has no job). */
+export const ANALYSIS_FAILED = "The video analysis agent could not finish this one. Try again, or pick another model.";
+/** A re-run that ended with the last analysis kept. */
+export const RERUN_FAILED = "The new analysis did not finish, so this is still the last one. Try again, or pick another model.";
+
+const same = (a: ReferenceAnalysis | null | undefined) => (a ? JSON.stringify(a) : null);
+
 export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   const models = useModels(ws);
   const [data, setData] = useState<RefData | null>(null);
+  /** The analysis job as the last answer carried it (null when the answer had none). */
   const [job, setJob] = useState<ProductionJob | null>(null);
+  /** The job the Analyze tap started: only its model is shown (its steps are not followed, it is not news). */
+  const [started, setStarted] = useState<ProductionJob | null>(null);
   const [problem, setProblem] = useState<{ text: string; missing: boolean } | null>(null);
   const [round, setRound] = useState(0);
   const [override, setOverride] = useState<ModelOverride | null>(null);
@@ -40,14 +58,32 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   const player = useRef<HTMLVideoElement>(null);
   const analyzeBtn = useRef<HTMLDivElement>(null);
   const was = useRef<ReferenceVideo["status"] | null>(null);
+  /** The analysis as it was when this run began (undefined while no run is followed). */
+  const before = useRef<string | null | undefined>(undefined);
+  /** How the last run this page followed ended, when it did not work. */
+  const [failed, setFailed] = useState<string | null>(null);
 
   const take = useCallback((r: RefData) => {
     setData(r);
     rememberProjectName({ kind: "reference", id: r.reference.refId }, r.reference.title);
-    if (r.job !== undefined) setJob(r.job);
-    // The moment it is done: a cheer.
-    if (was.current === "analyzing" && r.reference.status === "analyzed") cheer(centerOf(analyzeBtn.current));
-    was.current = r.reference.status;
+    // Only an answer that carries the job draws its steps; otherwise the job of the Analyze tap is no longer news.
+    const live = r.job ?? null;
+    setJob(live);
+    const status = r.reference.status;
+    if (status === "analyzing" && before.current === undefined) before.current = same(r.analysis);
+    if (was.current === "analyzing" && status !== "analyzing") {
+      const old = before.current;
+      before.current = undefined;
+      const ended = live && ["ready", "failed", "canceled", "needs_check"].includes(live.status) ? live : null;
+      const bad = ended ? ended.status !== "ready" : status === "failed" || (status === "analyzed" && typeof old === "string" && old === same(r.analysis));
+      if (bad) setFailed(ended?.error || (status === "analyzed" ? RERUN_FAILED : ANALYSIS_FAILED));
+      else {
+        // The moment it is done: a cheer.
+        setFailed(null);
+        cheer(centerOf(analyzeBtn.current));
+      }
+    }
+    was.current = status;
   }, []);
 
   useEffect(() => {
@@ -122,8 +158,17 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
     setWhyNot(null);
     try {
       const body = override && (override.model || override.effort) ? override : undefined;
+      const analysisBefore = same(data?.analysis);
       const r = await storiesApi().analyzeReference(ws, ref.refId, body);
-      setJob(r.job);
+      setFailed(null);
+      before.current = analysisBefore;
+      if (r.job.status === "failed" || r.reference.status === "failed") {
+        // Refused at the start: its sentence at once.
+        before.current = undefined;
+        setFailed(r.job.error || ANALYSIS_FAILED);
+      }
+      setJob(null);
+      setStarted(r.job);
       setData((d) => (d ? { ...d, reference: r.reference } : d));
       was.current = r.reference.status;
       setOverride(null);
@@ -168,7 +213,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
 
   const steps: StoryStep[] =
     job && job.steps.length ? job.steps : REF_STEP_LABELS.map((label) => ({ key: "storyboard", label, status: ref.status === "analyzing" ? "running" : "pending" }) as StoryStep);
-  const failedLine = (job?.status === "failed" && job.error) || "The video analysis agent could not finish this one. Try again.";
+  const failedLine = ref.status === "failed" ? failed || (job?.status === "failed" && job.error) || ANALYSIS_FAILED : ref.status === "analyzed" ? failed : null;
 
   return (
     <section className="st-page st-refs st-ref">
@@ -255,16 +300,20 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
                 ))}
               </ol>
               {job ? <Progress value={job.progress} label="How far the analysis is" /> : <div className="st-ref-busybar" aria-hidden="true" />}
-              {ref.analyzedWith || job?.meta.models.length ? (
-                <p className="st-chat-ai__note">With {modelLabel(models.models, job?.meta.models[0]?.model ?? ref.analyzedWith?.model)}</p>
+              {(job ?? started)?.meta.models[0] ? (
+                <p className="st-chat-ai__note">
+                  With {modelLabel(models.models, (job ?? started)!.meta.models[0]!.model)}
+                  {(job ?? started)!.meta.models[0]!.effort ? ` · ${effortLabel((job ?? started)!.meta.models[0]!.effort)}` : ""}
+                </p>
               ) : null}
             </div>
           ) : (
             <div className="st-ref-card2">
-              {ref.status === "failed" ? (
-                <p className="st-chat-note st-chat-note--bad" role="alert">
-                  {failedLine}
-                </p>
+              {failedLine ? (
+                <div className="st-chat-note st-chat-note--bad st-chat-note--row st-ref-failed" role="alert">
+                  <span>{failedLine}</span>
+                  <FixIt text={failedLine} onPickModel={() => setSheet(true)} pick />
+                </div>
               ) : null}
               <h2 className="st-ref-block__title">{ref.status === "analyzed" ? "Analyze it again" : "Analyze it"}</h2>
               <p>The video analysis agent looks at the shots, the timing, the jokes and the sound. Your videos borrow the ideas, never the characters or the footage.</p>
@@ -303,9 +352,10 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
             </p>
           ) : null}
           {actionProblem ? (
-            <p className="st-chat-note st-chat-note--bad" role="alert">
-              {actionProblem}
-            </p>
+            <div className="st-chat-note st-chat-note--bad st-chat-note--row" role="alert">
+              <span>{actionProblem}</span>
+              <FixIt text={actionProblem} onPickModel={() => setSheet(true)} />
+            </div>
           ) : null}
           <div className="st-ref-actions st-ref-actions--more">
             <button

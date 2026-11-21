@@ -4,13 +4,16 @@
 // 5 seconds and writes a ReferenceAnalysis. The model and effort follow the API's rules (§45.25: per-run override >
 // the reference's own setting > the task > the agent > the default). Builder H owns it.
 //
-// GET …/references/{refId} also answers the analysis job as `job` (the step track), which the contract's shape does
-// not list yet (see the builder's contract notes); the page uses it when it is there.
+// GET …/references/{refId} answers exactly the contract's { reference, analysis } (§45.5): the last stored analysis,
+// whatever the status (as the API reads analysis.json), and no job. The knob refJobInGet adds the analysis job as
+// `job` (proposed in the builder's contract notes), for the step track's own tests. Like Lamo Stories' agent, a failed
+// re-run puts an analyzed video back to `analyzed` (the last analysis kept) and only the job says it failed.
 //
 // `deleteReference` is two calls in StoriesApi: (ws, refId) deletes a reference video; (ws, characterId, assetId)
 // deletes a character's reference picture, which belongs to the characters part, so it is passed on to it.
 //
-// Test knobs: refSeconds (how long an analysis takes, default 5), refFail (the next analysis fails with this sentence).
+// Test knobs: refSeconds (how long an analysis takes, default 5), refFail (the next analysis fails with this sentence),
+// refJobInGet (GET …/references/{refId} also answers `job`).
 import { ApiError } from "../../../api/errors.ts";
 import type { Character, ModelOverride, ProductionJob, ReferenceAnalysis, ReferenceVideo, StoriesApi, StoryStep } from "../types.ts";
 import * as characters from "./characters.ts";
@@ -167,7 +170,7 @@ export function advance(store: MockStore, now = Date.now()): void {
       job.steps.forEach((st) => {
         if (st.status === "running") st.status = "failed";
       });
-      ref.status = "failed";
+      ref.status = s.analyses.has(ref.refId) ? "analyzed" : "failed";
       ref.currentJobId = null;
       ref.updatedAt = iso(now);
       s.runs.delete(jobId);
@@ -291,9 +294,11 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       await delay(90);
       const ref = find(store, ws, refId);
       advance(store);
-      const analysis = ref.status === "analyzed" ? (s.analyses.get(refId) ?? null) : null;
+      const analysis = s.analyses.get(refId) ?? null;
+      const out = { reference: structuredClone(ref), analysis: analysis ? structuredClone(analysis) : null };
+      if (store.knobs.refJobInGet !== true) return out;
       const job = jobOf(store, refId);
-      return { reference: structuredClone(ref), analysis: analysis ? structuredClone(analysis) : null, job: job ? structuredClone(job) : null };
+      return { ...out, job: job ? structuredClone(job) : null };
     },
 
     async patchReference(ws: string, refId: string, title: string) {

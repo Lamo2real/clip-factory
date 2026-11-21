@@ -21,6 +21,8 @@ export interface UploadJob {
   /** false when the file itself is the problem (wrong type, too big, too long): picking another one is the fix */
   retry: boolean;
   refId: string | null;
+  /** the half-made reference a stop or a failure took away again (the list leaves it out) */
+  droppedRefId: string | null;
   reference: ReferenceVideo | null;
 }
 
@@ -51,11 +53,12 @@ export function localVideo(refId: string): string | null {
 
 let seq = 0;
 
-/** Checks and sends one video; answers its upload key at once (follow it with useUploads). */
+/** Checks and sends one video; answers its upload key at once (follow it with useUploads: a finished one is `done`
+ * with its `reference`). `onDone` is for follow-ups that need no page. */
 export function startUpload(ws: string, file: File, onDone?: (ref: ReferenceVideo) => void): string {
   seq += 1;
   const key = `up-${seq}`;
-  const job: Running = { key, ws, title: titleFromName(file.name), bytes: file.size, fraction: 0, partsDone: 0, parts: 0, status: "checking", problem: null, retry: true, refId: null, reference: null, file, controller: new AbortController() };
+  const job: Running = { key, ws, title: titleFromName(file.name), bytes: file.size, fraction: 0, partsDone: 0, parts: 0, status: "checking", problem: null, retry: true, refId: null, droppedRefId: null, reference: null, file, controller: new AbortController() };
   jobs = [...jobs.filter((j) => j.status !== "done" && j.status !== "stopped"), job];
   publish();
   void run(job, onDone);
@@ -96,7 +99,8 @@ async function run(job: Running, onDone?: (ref: ReferenceVideo) => void): Promis
       if (url) URL.revokeObjectURL(url);
       localVideos.delete(refId);
     }
-    update(key, stopped ? { status: "stopped", refId: null } : { status: "failed", refId: null, problem: sentence(e, "The upload stopped before it finished. Check your connection and try again.") });
+    const gone = { refId: null, droppedRefId: refId };
+    update(key, stopped ? { status: "stopped", ...gone } : { status: "failed", ...gone, problem: sentence(e, "The upload stopped before it finished. Check your connection and try again.") });
   }
 }
 

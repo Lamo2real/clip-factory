@@ -26,16 +26,11 @@ export function RefList({ ws }: { ws: string }) {
   const [round, setRound] = useState(0);
   const [drag, setDrag] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  const here = useRef(true);
   const { pending, version } = usePendingDelete("reference");
   const uploads = useUploads(ws);
-
-  useEffect(() => {
-    here.current = true;
-    return () => {
-      here.current = false;
-    };
-  }, []);
+  // Uploads that had finished before this list opened: they are in the list it loads, with no cheer.
+  const seen = useRef<Set<string> | null>(null);
+  seen.current ??= new Set(uploads.filter((u) => u.status === "done").map((u) => u.key));
 
   useEffect(() => {
     let live = true;
@@ -52,16 +47,23 @@ export function RefList({ ws }: { ws: string }) {
     };
   }, [ws, round, version]);
 
-  const done = (ref: ReferenceVideo) => {
-    setList((prev) => [ref, ...(prev ?? []).filter((r) => r.refId !== ref.refId)]);
-    if (!here.current) return;
-    cheer(undefined);
-    navigate(storiesHref({ name: "reference", refId: ref.refId }));
-  };
+  // An upload finishing while this list is open (also one started before the owner left and came back): it joins
+  // the list as it is now, with a cheer, and its own page opens.
+  useEffect(() => {
+    for (const u of uploads) {
+      if (u.status !== "done" || !u.reference || seen.current!.has(u.key)) continue;
+      seen.current!.add(u.key);
+      const ref = u.reference;
+      setList((prev) => [ref, ...(prev ?? []).filter((r) => r.refId !== ref.refId)]);
+      cheer(undefined);
+      navigate(storiesHref({ name: "reference", refId: ref.refId }));
+      return;
+    }
+  }, [uploads]);
 
   function pick(files: FileList | null) {
     const file = files?.[0];
-    if (file) startUpload(ws, file, done);
+    if (file) startUpload(ws, file);
   }
 
   function onDrop(e: DragEvent<HTMLDivElement>) {
@@ -70,7 +72,7 @@ export function RefList({ ws }: { ws: string }) {
     pick(e.dataTransfer.files);
   }
 
-  const shown = (list ?? []).filter((r) => !(pending && pending.id === r.refId) && !uploads.some((u) => u.refId === r.refId && u.status !== "done"));
+  const shown = (list ?? []).filter((r) => !(pending && pending.id === r.refId) && !uploads.some((u) => u.droppedRefId === r.refId || (u.refId === r.refId && u.status !== "done")));
   const refused = refusedDelete("reference");
 
   return (
@@ -114,7 +116,7 @@ export function RefList({ ws }: { ws: string }) {
       {uploads.length ? (
         <ul className="st-ref-uploads" aria-label="Uploads">
           {uploads.map((u) => (
-            <UploadRow key={u.key} u={u} onRetry={() => retryUpload(u.key, done)} />
+            <UploadRow key={u.key} u={u} onRetry={() => retryUpload(u.key)} />
           ))}
         </ul>
       ) : null}

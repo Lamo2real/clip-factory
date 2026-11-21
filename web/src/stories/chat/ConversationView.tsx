@@ -10,6 +10,7 @@ import { storiesHref } from "../routes.ts";
 import { ActionCard } from "./actions.tsx";
 import { AiLine, AiSheet, DEFAULT } from "./ai.tsx";
 import { rememberConversation } from "./device.ts";
+import { FixIt } from "./fixit.tsx";
 import { Btn, Chip, Director, Empty, Icon, Progress, sentence, Waiting } from "./kit.tsx";
 import { afterId, askedBefore, inFlight, LOCAL, mergeMessages } from "./messages.ts";
 import { effortLabel, effortProblem, findModel, modelLabel, useModels, withOverride } from "./models.ts";
@@ -23,6 +24,14 @@ export const SUGGESTIONS = ["Give me three funny ideas about ice", "Help me make
 
 /** Pictures sent from this device this visit, shown from the file itself (the server's link may be a while). */
 const localPictures = new Map<string, string>();
+/**
+ * The files themselves, for Try again on a failed answer: the server lets each upload go with one message only, so
+ * the pictures are uploaded once more (after a reload the files are gone, and the owner adds them again).
+ */
+const localFiles = new Map<string, File>();
+
+/** Try again on an answer whose question had pictures, after a reload (the files are no longer here). */
+export const ADD_AGAIN = "Add the pictures again, then tap Send.";
 
 interface Attached {
   key: string;
@@ -82,7 +91,7 @@ export function ConversationView({
   const [sheetSaved, setSheetSaved] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendProblem, setSendProblem] = useState<string | null>(null);
-  const [failedSend, setFailedSend] = useState<{ localId: string; text: string; attachments: string[]; override: ModelOverride | null } | null>(null);
+  const [failedSend, setFailedSend] = useState<{ localId: string; text: string; attachments: string[]; tray: Attached[]; override: ModelOverride | null } | null>(null);
   const [whyNot, setWhyNot] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameProblem, setRenameProblem] = useState<string | null>(null);
@@ -197,7 +206,8 @@ export function ConversationView({
               ? "Take out the pictures that did not work first."
               : (effortBad ?? visionBad);
 
-  async function send(words = text, attachmentIds = pictures.filter((p) => p.assetId).map((p) => p.assetId!), once = override) {
+  /** Sends one message. `tray` is the pictures as they were in the box, so "Edit it" can put them back. */
+  async function send(words: string, attachmentIds: string[], once: ModelOverride | null, tray: Attached[] = []) {
     if (!conv) return;
     const clean = words.trim();
     if (!clean) return;
@@ -223,7 +233,7 @@ export function ConversationView({
         .then((c) => show(c.conversation))
         .catch(() => undefined);
     } catch (e) {
-      setFailedSend({ localId: temp.msgId, text: clean, attachments: attachmentIds, override: once });
+      setFailedSend({ localId: temp.msgId, text: clean, attachments: attachmentIds, tray, override: once });
       setSendProblem(sentence(e, "Your message did not send. Check your connection and try again."));
     } finally {
       setSending(false);
@@ -234,7 +244,48 @@ export function ConversationView({
     if (!failedSend) return;
     const f = failedSend;
     setMessages((prev) => prev.filter((m) => m.msgId !== f.localId));
-    void send(f.text, f.attachments, f.override);
+    void send(f.text, f.attachments, f.override, f.tray);
+  }
+
+  /** Try again on a failed answer: the same words and, uploaded once more, the same pictures. */
+  async function askAgain(asked: Message) {
+    if (!conv || sending || writing) return;
+    const ids = asked.attachments.map((a) => a.assetId);
+    if (!ids.length) return send(asked.text, [], override);
+    const files = ids.map((id) => localFiles.get(id) ?? null);
+    if (files.some((f) => !f)) {
+      setText(asked.text);
+      setWhyNot(ADD_AGAIN);
+      box.current?.focus();
+      return;
+    }
+    setSending(true);
+    setSendProblem(null);
+    setWhyNot(null);
+    const fresh: Attached[] = [];
+    try {
+      for (const [i, file] of (files as File[]).entries()) {
+        const target = await storiesApi().chatAttachment(ws, conv.convId, { filename: file.name, contentType: file.type, size: file.size });
+        await putPicture(target, file, () => undefined);
+        const url = localPictures.get(ids[i]!) ?? null;
+        if (url) localPictures.set(target.assetId, url);
+        localFiles.set(target.assetId, file);
+        localSeq += 1;
+        fresh.push({ key: `pic-${localSeq}`, file, url, progress: 1, assetId: target.assetId, problem: null });
+      }
+    } catch {
+      setSending(false);
+      setText(asked.text);
+      setWhyNot(`The pictures did not upload again. ${ADD_AGAIN}`);
+      return;
+    }
+    setSending(false);
+    void send(
+      asked.text,
+      fresh.map((p) => p.assetId!),
+      override,
+      fresh,
+    );
   }
 
   function dropFailed() {
@@ -242,6 +293,8 @@ export function ConversationView({
     const f = failedSend;
     setMessages((prev) => prev.filter((m) => m.msgId !== f.localId));
     setText(f.text);
+    // The pictures go back in the box too, still uploaded.
+    setPictures((prev) => [...f.tray.filter((t) => !prev.some((p) => p.key === t.key)), ...prev].slice(0, PICTURES_PER_MESSAGE));
     setFailedSend(null);
     setSendProblem(null);
   }
@@ -264,7 +317,12 @@ export function ConversationView({
       setWhyNot(blocked);
       return;
     }
-    void send();
+    void send(
+      text,
+      pictures.filter((p) => p.assetId).map((p) => p.assetId!),
+      override,
+      pictures,
+    );
   }
 
   function keys(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -291,6 +349,7 @@ export function ConversationView({
         const target = await storiesApi().chatAttachment(ws, conv.convId, { filename: file.name, contentType: file.type, size: file.size });
         await putPicture(target, file, (f) => setPictures((prev) => prev.map((p) => (p.key === key ? { ...p, progress: f } : p))));
         if (url) localPictures.set(target.assetId, url);
+        localFiles.set(target.assetId, file);
         setPictures((prev) => prev.map((p) => (p.key === key ? { ...p, progress: 1, assetId: target.assetId } : p)));
       } catch (e) {
         setPictures((prev) => prev.map((p) => (p.key === key ? { ...p, problem: sentence(e, "The picture did not upload. Take it out and add it again.") } : p)));
@@ -350,12 +409,18 @@ export function ConversationView({
       ? { model: current.model, effort: current.effort }
       : { model: conv.model ?? DEFAULT, effort: conv.effort ?? DEFAULT };
   const sheetModel = findModel(models.models, sheet?.scope === "once" ? current.model : (conv.model ?? conv.effective.model));
+  // Model and effort are chosen separately (§45.25), so each part says where it comes from.
+  const elsewhere = conv.effective.from === "agent" ? "Lamo Stories › Settings › Agents" : "Lamo Stories › Settings › AI";
   const fromLine =
     override && (override.model || override.effort)
       ? "Only the next message uses this. Your chat's setting stays."
-      : conv.effective.from === "conversation"
+      : conv.model !== null && conv.effort !== null
         ? "Saved for this chat."
-        : "From Lamo Stories › Settings › AI.";
+        : conv.model !== null
+          ? "Model saved for this chat. The effort comes from Lamo Stories › Settings."
+          : conv.effort !== null
+            ? `Effort saved for this chat. The model comes from ${elsewhere}.`
+            : `From ${elsewhere}.`;
 
   return (
     <div className="st-chat-conv">
@@ -426,7 +491,7 @@ export function ConversationView({
               failedSend={failedSend?.localId === m.msgId}
               onRetry={() => {
                 const asked = askedBefore(messages, m.msgId);
-                if (asked) void send(asked.text, asked.attachments.map((a) => a.assetId), override);
+                if (asked) void askAgain(asked);
               }}
               onPickModel={() => openSheet("model", true)}
             />
@@ -531,6 +596,7 @@ export function ConversationView({
                 </Btn>
               </>
             ) : null}
+            <FixIt text={sendProblem} onPickModel={() => openSheet("model", true)} />
           </div>
         ) : null}
       </div>
@@ -610,7 +676,6 @@ function MessageItem({
       </li>
     );
 
-  const settings = m.error && /Settings › AI/.test(m.error);
   return (
     <li className={`st-chat-msg st-chat-msg--assistant is-${m.status}`} aria-busy={inFlight(m) || undefined}>
       <Director size={40} mood={m.status === "failed" ? "oops" : m.status === "pending" ? "think" : "smile"} />
@@ -639,16 +704,7 @@ function MessageItem({
               <Btn main icon="retry" onClick={onRetry}>
                 Try again
               </Btn>
-              {settings ? (
-                <>
-                  <Btn quiet onClick={onPickModel}>
-                    Pick another model
-                  </Btn>
-                  <A href={storiesHref({ name: "settings", section: "ai" })} className="st-chat-link">
-                    Open Settings › AI
-                  </A>
-                </>
-              ) : null}
+              <FixIt text={m.error} onPickModel={onPickModel} />
             </div>
           </div>
         ) : null}

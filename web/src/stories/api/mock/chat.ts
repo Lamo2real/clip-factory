@@ -289,11 +289,26 @@ export function answerFor(store: MockStore, text: string, project: ProjectRef | 
       actions: [{ kind: "analyze_reference", label: "Analyze this reference video", payload: { refId: ref.refId } }],
       memory: null,
     };
+  const story = project?.kind === "story" ? store.stories.find((x) => x.storyId === project.id) : undefined;
+  if (story && /change|slower|faster|funnier|shorter|longer/.test(t))
+    return {
+      text: "Good idea. I'd slow the middle down and give the landing one more beat. Tap the button and the writer makes these changes; you check them in Review.",
+      // The agent's propose_story_change for the whole story: a note and no scenes.
+      actions: [{ kind: "remake_scene", label: "Make these changes", payload: { storyId: story.storyId, sceneIds: [], note: text.slice(0, 500) } }],
+      memory: null,
+    };
   if (/video|make it|let's make|film/.test(t)) {
     const cast = store.characters.slice(0, 1).map((c) => c.characterId);
     return {
       text: "Here is a short plan:\n1. Pip spots the icy path and stops.\n2. Tiny penguin steps, arms out.\n3. A slide, a spin, a soft landing on the mat.\n4. A proud grin to the camera.\n\nTap the button and Production opens with it filled in. Nothing is made until you tap Make the video there.",
-      actions: [{ kind: "make_video", label: "Make the video", payload: { brief: { title: "Pip and the icy path", logline: "Pip crosses an icy path with penguin steps and lands safely on the mat.", category: "comedy" }, characterIds: cast, durationSec: 40 } }],
+      // The agent's own shape (offer_make_video): { story: StoryInput }.
+      actions: [
+        {
+          kind: "make_video",
+          label: "Make the video",
+          payload: { story: { characterIds: cast, brief: { title: "Pip and the icy path", logline: "Pip crosses an icy path with penguin steps and lands safely on the mat.", category: "comedy" }, durationSec: 40 } },
+        },
+      ],
       memory: null,
     };
   }
