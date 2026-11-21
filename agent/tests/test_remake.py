@@ -278,6 +278,15 @@ async def test_a_kept_video_that_went_meanwhile_means_the_link(tmp_path: Path, m
     assert w.counts["section"] == 1 and w.file_cuts == []
 
 
+async def test_a_kept_video_is_read_whatever_the_source_key_says(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    w = CopyWorld(tmp_path, monkeypatch, source={**UPLOAD, "key": KEPT})  # not under uploads/: only sourceKey is read
+    status, _st, _ = await w.run()
+    assert status == "ready" and w.file_cuts == [(f"https://s3.test/{KEPT}", 98.0, 131.5)]
+    assert_one_campaign_copy(w)
+
+
 async def test_a_copy_of_a_video_file_that_is_gone_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     w = CopyWorld(tmp_path, monkeypatch, source=UPLOAD, kept_video=False)
     del w.store.files["uploads/u/video.mp4"]

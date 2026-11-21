@@ -687,16 +687,18 @@ class Pipeline:
             return None
 
     async def _resolve_upload(self, st: JobState) -> None:
-        key = str(st.source.get("key") or "")
-        if not key.startswith(f"uploads/{st.user_id}/"):
-            raise UserFacingError("The uploaded file could not be found. Upload it again.")
-        video_key = st.video_key  # a copy whose original's video is kept reads that one, with no copy of its own
-        if video_key == st.key("video.mp4") and not await self.store.exists(video_key):
-            if not await self.store.exists(key):
-                if st.remake is not None:
-                    raise UserFacingError(VIDEO_GONE)
-                raise UserFacingError("The uploaded file has expired or was removed. Upload it again.")
-            await self.store.copy(key, video_key)
+        # A copy whose original's video is kept reads that one (checked in Remake.from_job), with no copy of its own.
+        video_key = st.video_key
+        if video_key == st.key("video.mp4"):
+            key = str(st.source.get("key") or "")
+            if not key.startswith(f"uploads/{st.user_id}/"):
+                raise UserFacingError("The uploaded file could not be found. Upload it again.")
+            if not await self.store.exists(video_key):
+                if not await self.store.exists(key):
+                    if st.remake is not None:
+                        raise UserFacingError(VIDEO_GONE)
+                    raise UserFacingError("The uploaded file has expired or was removed. Upload it again.")
+                await self.store.copy(key, video_key)
         info = await proc.probe(self.store.presign(video_key))
         if not info.has_video:
             raise UserFacingError("The uploaded file has no video in it.")
