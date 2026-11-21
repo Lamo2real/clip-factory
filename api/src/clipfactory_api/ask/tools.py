@@ -61,9 +61,10 @@ OFFICIAL_TEXT_CHARS = 15_000
 OFFICIAL_PDF_BYTES = 500_000
 SETUP_STEP_ACTION = re.compile(r"setup-step:([a-z]+):([a-z0-9-]{1,40})")
 # Content Rewards' join and money parts are shown on their own pages, not the setup page: (where the button opens, the
-# spot lit when the step's card is not on screen). The money steps show once the owner answers about Finance.
+# spot lit when the step's card is not on screen). The join steps show only until the first campaign is added (then
+# the paste box, always there, is where a campaign is joined); the money steps once the owner answers about Finance.
 CR_STEP_PAGES: dict[str, tuple[str, tuple[str, ...]]] = {
-    "join": ("/campaigns#step-{step}", ()),
+    "join": ("/campaigns#step-{step}", ("cr-campaign-paste",)),
     "move": ("/money#content-rewards", ("cr-money",)),
     "bank": ("/money#content-rewards", ("cr-money",)),
 }

@@ -878,7 +878,8 @@ def test_content_rewards_join_and_money_steps_open_their_own_pages() -> None:
     }
     join = tools.setup_step_action(pack, "setup-step:contentrewards:join-copy")
     assert join is not None
-    assert (join["to"], join["highlight"]) == ("/campaigns#step-join-copy", ["step-join-copy"])
+    # The join steps show only until the first campaign is added: then the paste box (always there) lights up.
+    assert (join["to"], join["highlight"]) == ("/campaigns#step-join-copy", ["step-join-copy", "cr-campaign-paste"])
     for step_id in ("move-whop", "fin-setup", "move-withdraw", "bank-setup", "bank-cashout", "fin-bank"):
         money = tools.setup_step_action(pack, f"setup-step:contentrewards:{step_id}")
         assert money is not None, step_id
