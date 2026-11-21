@@ -3,8 +3,9 @@
 The event source mapping delivers only ``MODIFY`` records of ``JOB#`` items and of the Content Rewards items
 ``CAMPAIGN#``, ``CRSUB#``, ``CRMONEY``, ``CRCONN`` (§38.11: you're in, send now, approved, not approved, proof, money,
 sign in again, did they say yes) and ``CRFIND`` (§41.4: new campaigns match, at most once a day); one each, deduped by
-``NOTIFIED#cr#{key}``, under ``notify.contentRewards``. Each job record compares the job before and after the write
-and sends at most one notification:
+``NOTIFIED#cr#{key}``, under ``notify.contentRewards``, and of ``PAYSTATE#`` (§40.7: money on hold, money sent to
+your bank; one each, deduped by ``NOTIFIED#getpaid#{key}``, under ``notify.getPaid``, never for the first read after
+a grant). Each job record compares the job before and after the write and sends at most one notification:
 
 - **ready**: the job became ``ready`` ("Your clips are ready. Tap to look."), when ``notify.ready`` is on;
 - **stopped**: it became ``failed`` ("It stopped. Tap Try again."), when ``notify.stopped`` is on;
@@ -33,6 +34,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
+from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Any
 
 from .. import db, settings
@@ -476,19 +478,146 @@ def handle_cr_change(deps: NotifyDeps, sk: str, old: Mapping[str, Any], new: Map
     return key
 
 
+# --- Get paid (§40.7) -----------------------------------------------------------------------------------------
+
+GETPAID_PREFIX = "PAYSTATE#"
+GETPAID_TITLE = TEST_TITLE  # "Clip Factory"
+GETPAID_DEDUPE_DAYS = 30
+GETPAID_TTL = 7 * 24 * 3600
+HOLD_YOUTUBE = "Your YouTube money is on hold. Tap to see why."
+HOLD_WHOP = "Whop can't send your money. Tap to see why."
+PLACE_URL = {
+    "youtube": "/settings/posting/getpaid/youtube",
+    "contentrewards": "/settings/posting/getpaid/contentrewards",
+}
+SENT_URL = "/money"
+AMOUNT_MAX = 40
+
+
+def money_words(micros: Any, currency: Any) -> str | None:
+    """Whop's amount as words ("$40.00", "412.00 SEK"): formatting only, never a conversion."""
+    if isinstance(micros, bool) or not isinstance(micros, int) or micros < 0:
+        return None
+    if not isinstance(currency, str) or not re.fullmatch(r"[A-Z]{3}", currency):
+        return None
+    amount = (Decimal(micros) / Decimal(1_000_000)).quantize(Decimal("0.01"), rounding=ROUND_HALF_EVEN)
+    number = f"{amount:,.2f}"
+    return f"${number}" if currency == "USD" else f"{number} {currency}"
+
+
+def _newer(old: Any, new: Any) -> Mapping[str, Any] | None:
+    """``new`` when it is a sent row newer than ``old`` (by date, then sort key)."""
+    if not isinstance(new, Mapping) or not isinstance(new.get("sk"), str):
+        return None
+    known = isinstance(old, Mapping) and isinstance(old.get("sk"), str)
+    if known and (str(new.get("date") or ""), new["sk"]) <= (str(old.get("date") or ""), old["sk"]):
+        return None
+    return new
+
+
+def _sent_body(place: str, sent: Mapping[str, Any]) -> str:
+    if place == "youtube":
+        text = " ".join(str(sent.get("text") or "").splitlines()).strip()[:AMOUNT_MAX]  # Google's own words
+        what = text or "you money"
+        return f"Money sent to your bank: Google sent {what}. It arrives in up to 7 workdays."
+    amount = money_words(sent.get("amountMicros"), sent.get("currency"))
+    return f"Money sent to your bank: Whop sent {amount or 'you money'}."
+
+
+def getpaid_events(sk: str, old: Mapping[str, Any], new: Mapping[str, Any]) -> list[tuple[str, webpush.Message]]:
+    """(dedupe key, message) for each Get paid event one ``PAYSTATE#`` change calls for. None for the first read after
+    a grant: it fills the old payments quietly."""
+    place = sk.removeprefix(GETPAID_PREFIX)
+    if place not in PLACE_URL or not old.get("firstReadDone"):
+        return []
+    out: list[tuple[str, webpush.Message]] = []
+    if place == "youtube":
+        holds = [h for h in new.get("holds") or [] if isinstance(h, Mapping)]
+        if holds and not old.get("holds"):
+            since = str(new.get("holdSince") or holds[0].get("since") or "")
+            message = webpush.Message(
+                GETPAID_TITLE, HOLD_YOUTUBE, "getpaid-hold-youtube", PLACE_URL[place], ttl=GETPAID_TTL, urgency="high"
+            )
+            out.append((f"hold:youtube:{since}", message))
+    else:
+        hold = new.get("hold")
+        if isinstance(hold, Mapping) and not isinstance(old.get("hold"), Mapping):
+            message = webpush.Message(
+                GETPAID_TITLE, HOLD_WHOP, "getpaid-hold-whop", PLACE_URL[place], ttl=GETPAID_TTL, urgency="high"
+            )
+            out.append((f"hold:whop:{hold.get('kind') or ''}:{hold.get('since') or ''}", message))
+    sent = _newer(old.get("lastSent"), new.get("lastSent"))
+    if sent is not None:
+        message = webpush.Message(
+            GETPAID_TITLE, _sent_body(place, sent), f"getpaid-sent-{place}", SENT_URL, ttl=GETPAID_TTL
+        )
+        out.append((f"sent:{place}:{sent['sk']}", message))
+    return out
+
+
+def _get_paid_on(deps: NotifyDeps, user_id: str) -> bool:
+    """``notify.getPaid``, on by default. An API without §40's settings field refuses the key, so a stored value is
+    read as stored when the settings shape doesn't know it yet."""
+    prefs = settings.load(deps.store, user_id).get("notify") or {}
+    if isinstance(prefs.get("getPaid"), bool):
+        return bool(prefs["getPaid"])
+    stored = (deps.store.get(db.user_pk(user_id), db.SETTINGS_SK) or {}).get("notify")
+    value = stored.get("getPaid") if isinstance(stored, Mapping) else None
+    return value if isinstance(value, bool) else True
+
+
+def _getpaid_first_time(deps: NotifyDeps, pk: str, key: str) -> bool:
+    now = deps.clock()
+    item = {
+        "pk": pk,
+        "sk": f"NOTIFIED#getpaid#{key}",
+        "type": "notified",
+        "at": iso(now),
+        "ttl": int((now + timedelta(days=GETPAID_DEDUPE_DAYS)).timestamp()),
+    }
+    try:
+        deps.store.put(item, if_absent=True)
+    except db.ConditionFailed:
+        return False
+    return True
+
+
+def handle_getpaid_change(deps: NotifyDeps, sk: str, old: Mapping[str, Any], new: Mapping[str, Any]) -> list[str]:
+    """Sends each Get paid notification a ``PAYSTATE#`` change calls for (under ``notify.getPaid``); returns their keys."""
+    pk = str(new.get("pk") or "")
+    user_id = str(new.get("userId") or (pk.removeprefix("USER#") if pk.startswith("USER#") else ""))
+    if not user_id:
+        return []
+    found = getpaid_events(sk, old, new)
+    if not found or not _get_paid_on(deps, user_id):
+        return []
+    subs = devices.active(deps.store, user_id)
+    if not subs:
+        return []
+    sent = []
+    for key, message in found:
+        if _getpaid_first_time(deps, db.user_pk(user_id), key):
+            send_to_devices(deps, user_id, message, subs)
+            sent.append(key)
+    return sent
+
+
 def process(event: Mapping[str, Any], deps: NotifyDeps) -> dict[str, list[Any]]:
     records = [r for r in event.get("Records", []) if isinstance(r, Mapping)]
     sent = 0
     for record in records:
         data = record.get("dynamodb") or {}
         sk = str(((data.get("Keys") or {}).get("sk") or {}).get("S", ""))
-        if record.get("eventName") != "MODIFY" or not (sk.startswith("JOB#") or sk.startswith(CR_PREFIXES)):
+        watched = sk.startswith("JOB#") or sk.startswith(CR_PREFIXES) or sk.startswith(GETPAID_PREFIX)
+        if record.get("eventName") != "MODIFY" or not watched:
             continue
         old, new = data.get("OldImage"), data.get("NewImage")
         if not isinstance(old, Mapping) or not isinstance(new, Mapping):
             continue
         try:
-            if sk.startswith(CR_PREFIXES):
+            if sk.startswith(GETPAID_PREFIX):
+                sent += len(handle_getpaid_change(deps, sk, deps.deserialize(old), deps.deserialize(new)))
+            elif sk.startswith(CR_PREFIXES):
                 if handle_cr_change(deps, sk, deps.deserialize(old), deps.deserialize(new)):
                     sent += 1
             elif handle_change(deps, deps.deserialize(old), deps.deserialize(new)):
