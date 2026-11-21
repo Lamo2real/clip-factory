@@ -51,7 +51,8 @@ resource "aws_iam_role_policy" "campaigns" {
     Statement = [
       { Sid = "Logs", Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = "${aws_cloudwatch_log_group.campaigns.arn}:*" },
       { Sid = "Tracing", Effect = "Allow", Action = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"], Resource = "*" },
-      # The CAMPAIGN# item (rules, logo state, brand picture key) and the owner's FOLLOW# items (channel links).
+      # The CAMPAIGN# item (rules, logo state, brand picture key), the owner's FOLLOW# items (channel links) and,
+      # since §41, the CRPUBLIC cache (CAMP#, PUB#, STATE), CROWNERS and the owners' CRFIND, SETUP# and ACCOUNT# items.
       # Never DeleteItem and never Scan.
       { Sid = "Data", Effect = "Allow", Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Query"], Resource = [var.table_arn] },
       # Only the campaigns/ prefix: the logo files and the brand picture. Jobs copy their own logo (cf-prod-api).
