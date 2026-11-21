@@ -189,6 +189,20 @@ export const TREES: Tree[] = [
             words: ["X", "twitter", "money", "price", "credits", "card", "pay"],
             href: "/settings/posting/setup/x#x-cost",
           },
+          {
+            id: "contentrewards",
+            name: "Content Rewards",
+            leaf: "Get paid by brands for your clips. Set it up once.",
+            words: ["content rewards", "whop", "campaign", "campaigns", "brand", "brand deal", "clipping", "cpm", "get paid", "earn"],
+            href: "/settings/posting/setup/contentrewards",
+          },
+          {
+            id: "campaigns",
+            name: "Your campaigns",
+            leaf: "The Content Rewards campaigns you added, and what to do next.",
+            words: ["content rewards", "campaign", "campaigns", "brand", "join", "am i in", "whop"],
+            href: "/campaigns",
+          },
         ],
       },
       {
@@ -291,6 +305,13 @@ export const TREES: Tree[] = [
             name: "X",
             leaf: "Premium and verified followers against the goal.",
             words: ["x", "twitter", "premium", "verified followers", "revenue sharing", "creator revenue"],
+          },
+          {
+            id: "money-contentrewards",
+            name: "Content Rewards",
+            leaf: "Money from brand campaigns, in Content Rewards' own numbers, and how to move it to your bank.",
+            words: ["content rewards", "whop", "campaign", "campaigns", "brand", "withdraw", "balance", "payout", "get paid"],
+            href: "/money#content-rewards",
           },
           {
             id: "money-payouts",
@@ -444,6 +465,12 @@ export const TREES: Tree[] = [
             name: "Every step",
             leaf: "One card per video that changes as it works: the step and the clip. It can buzz often.",
             words: ["progress", "live", "status", "steps", "what it's doing", "lock screen", "updates", "clip 3 of 10"],
+          },
+          {
+            id: "notify-contentrewards",
+            name: "Content Rewards news",
+            leaf: "You're in, send-now reminders, approvals, proof and money.",
+            words: ["content rewards", "campaign", "brand", "approved", "send now", "proof", "whop"],
           },
           {
             id: "notify-badge",

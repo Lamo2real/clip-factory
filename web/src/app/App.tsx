@@ -1,3 +1,4 @@
+import "../styles/contentrewards.css";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { initApi } from "../api/index.ts";
 import { auth, onSignedOut } from "../lib/auth.ts";
@@ -27,6 +28,10 @@ import { SignIn } from "../screens/SignIn.tsx";
 import { SessionProvider } from "./session.tsx";
 import { ErrorBoundary } from "./ErrorBoundary.tsx";
 import { MockConsent } from "../screens/settings/setup/MockConsent.tsx";
+import { MockCrConsent } from "../screens/campaigns/MockCrConsent.tsx";
+import { CampaignsPage } from "../screens/campaigns/CampaignsPage.tsx";
+import { CampaignPage } from "../screens/campaigns/CampaignPage.tsx";
+import { CrSendNow } from "../components/CrSendNow.tsx";
 import { GUIDES } from "../setup/index.ts";
 import { AskClipFactory } from "../features/help/HelpLauncher.tsx";
 import { SetupTodo } from "../components/SetupTodo.tsx";
@@ -53,6 +58,10 @@ const TITLES: Record<Route["name"], string> = {
   skill: "Skill",
   get_app: "Get the app",
   mock_oauth: "Pretend sign-in",
+  mock_cr_consent: "Pretend Content Rewards",
+  cr_setup: "Content Rewards setup · Settings",
+  campaigns: "Your campaigns",
+  campaign: "Campaign",
   motion_gallery: "Motion gallery",
   not_found: "Not found",
 };
@@ -165,8 +174,9 @@ function Shell() {
     main.current?.focus({ preventScroll: true });
   }, [page]);
 
-  // Mock mode's pretend consent page stands alone, like the platform's real page would.
+  // Mock mode's pretend consent pages stand alone, like the platform's real page would.
   if (route.name === "mock_oauth") return <MockConsent platform={route.platform} />;
+  if (route.name === "mock_cr_consent") return <MockCrConsent />;
 
   return (
     <div className="app">
@@ -188,6 +198,8 @@ function Shell() {
         </header>
         <main className="main" id="main" ref={main} tabIndex={-1}>
           {/* One broken screen never blanks the app; moving to another page clears the error. */}
+          {/* The Mac app's "send this now" banner (§38.6): in the flow, so it never covers a control. */}
+          <CrSendNow route={route} />
           <ErrorBoundary resetKey={page} scope="page">
             <Screen route={route} />
           </ErrorBoundary>
@@ -220,6 +232,12 @@ function Screen({ route }: { route: Route }) {
       return <MoneyDashboard />;
     case "settings":
       return <Settings tree={route.tree} branch={route.branch} platform={route.platform ?? null} />;
+    case "cr_setup":
+      return <Settings tree="posting" branch="setup" contentRewards />;
+    case "campaigns":
+      return <CampaignsPage />;
+    case "campaign":
+      return <CampaignPage key={route.campaignId} campaignId={route.campaignId} />;
     case "skill":
       return <Settings skill={{ mode: route.mode, skillId: route.skillId }} />;
     case "motion_gallery":

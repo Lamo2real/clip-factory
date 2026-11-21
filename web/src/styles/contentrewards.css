@@ -1,0 +1,733 @@
+/* Content Rewards campaigns (docs/CONTRACTS.md §38): soft fills only, no edges, no cursor rules, the §17.1 step
+   cards reused. Phones keep each card's next-step button at the bottom right while the card is on screen (§27.4). */
+
+/* The green answer button ("I did this", "I sent it", "It says Submit clip"). */
+.btn.btn--leaf {
+  color: var(--green-text);
+  background: var(--tint-leaf);
+}
+.btn.btn--leaf:hover:not([aria-disabled="true"]) {
+  background:
+    linear-gradient(rgb(var(--green-leaf-rgb) / 0.32), rgb(var(--green-leaf-rgb) / 0.32)),
+    rgb(var(--green-deep-rgb) / 0.4);
+}
+.cr-more {
+  margin-inline-start: 6px;
+  font: inherit;
+  font-weight: 700;
+  background: none;
+  padding: 0;
+  min-height: 0;
+}
+
+.cr-mark {
+  color: var(--green-ink);
+}
+.cr-brand {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--green-2);
+}
+.cr-brand--letter {
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+/* Set up posting › Get paid by brands: the card sits apart from the five, after a gap (no line). */
+.cr-part {
+  display: grid;
+  gap: 12px;
+  margin-top: var(--space-6);
+}
+.cr-part__title,
+.cr-section__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  margin: 0;
+}
+.setup-card.is-soon {
+  opacity: 0.9;
+}
+
+/* Fold-outs inside a step: questions that open more lines, never numbered. */
+.cr-folds {
+  display: grid;
+  gap: 8px;
+}
+.cr-fold {
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.cr-fold__q {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 14px;
+  font-weight: 650;
+  list-style: none;
+}
+.cr-fold__q::-webkit-details-marker {
+  display: none;
+}
+.cr-fold__q > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cr-fold[open] > .cr-fold__q .cr-fold__chev {
+  transform: rotate(90deg);
+}
+.cr-fold__body {
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+.gstep.is-helper .gstep__num {
+  background: var(--fill);
+}
+
+.cr-waiting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--r-md);
+}
+.cr-waiting__text {
+  flex: 1;
+  min-width: 12ch;
+  font-weight: 650;
+}
+.cr-place__words {
+  margin: 0;
+}
+.cr-calm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+}
+.cr-calm > p {
+  flex: 1;
+  min-width: 16ch;
+  margin: 0;
+  font-weight: 650;
+}
+.cr-below {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: var(--space-4);
+}
+.cr-email {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.cr-email .text-link {
+  min-height: 44px;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+}
+.cr-email__body {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+.cr-email__body p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Campaigns: the paste box, the group picker and the list. */
+.cr-campaigns,
+.cr-campaign {
+  display: grid;
+  gap: var(--space-4);
+}
+.cr-paste {
+  display: grid;
+  gap: 10px;
+  padding: var(--inset);
+  border-radius: var(--r-lg);
+}
+.cr-paste__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.cr-group {
+  display: grid;
+  gap: 10px;
+  padding: var(--inset);
+  border-radius: var(--r-lg);
+}
+.cr-group__title {
+  margin: 0;
+  font-size: var(--fs-h3);
+}
+.cr-group__name {
+  margin: 0;
+  font-weight: 650;
+}
+.cr-group__list,
+.cr-cards,
+.cr-lines,
+.cr-ticks,
+.cr-video-rows,
+.cr-pay__rows,
+.cr-money__list,
+.cr-strip__ticks,
+.cr-row__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cr-group__list {
+  display: grid;
+  gap: 8px;
+}
+.cr-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+  color: var(--ink);
+  text-align: start;
+  font: inherit;
+}
+.cr-choice:hover {
+  background: var(--fill-hover);
+}
+.cr-choice__text {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.cr-choice__name {
+  font-weight: 700;
+}
+.cr-choice__brand,
+.cr-choice__pay {
+  font-size: var(--fs-small);
+}
+.cr-cards {
+  display: grid;
+  gap: 10px;
+}
+.cr-card-wrap {
+  border-radius: var(--r-lg);
+}
+.cr-card-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 14px 16px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.cr-card-row__text {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.cr-card-row__name {
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.cr-card-row__brand,
+.cr-card-row__next {
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.cr-chip {
+  flex: none;
+  max-width: 14ch;
+}
+
+/* One campaign's card. */
+.cr-card {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--inset);
+  border-radius: var(--r-xl);
+  min-width: 0;
+}
+.cr-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+}
+.cr-head__text {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 14ch;
+}
+.cr-head__name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+.cr-head__brand {
+  margin: 0;
+  font-weight: 600;
+}
+.cr-head__check {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+  margin-inline-start: auto;
+}
+.cr-quiet {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.cr-sub {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.cr-next {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--r-lg);
+  background: var(--fill);
+}
+.cr-next.is-in {
+  background: var(--tint-leaf);
+}
+.cr-next__text {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.cr-next__text > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cr-next__sub {
+  margin: 0;
+  font-size: var(--fs-small);
+}
+.cr-next__main,
+.cr-next__glass,
+.cr-next__asks,
+.cr-line__actions,
+.cr-logo__actions,
+.cr-chips,
+.cr-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.cr-next__main {
+  justify-content: flex-end;
+}
+.cr-ask {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.cr-ask__text {
+  font-size: var(--fs-small);
+}
+/* Phones and touch tablets: the next step's vermilion stays at the bottom right while the card is on screen. */
+@media (max-width: 767px), (pointer: coarse) {
+  .cr-next__main {
+    position: sticky;
+    bottom: calc(var(--tabbar-h, 64px) + env(safe-area-inset-bottom) + 12px);
+    z-index: 3;
+  }
+}
+.cr-rules-box {
+  display: grid;
+  gap: 6px;
+}
+
+.cr-pay,
+.cr-rules,
+.cr-logo,
+.cr-videos,
+.cr-clips {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.cr-pay__rows {
+  display: grid;
+  gap: 6px;
+}
+.cr-pay__row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+.cr-budget {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.cr-budget > p {
+  margin: 0;
+  font-weight: 650;
+}
+.cr-budget .progress {
+  width: 100%;
+}
+.cr-ticks {
+  display: grid;
+  gap: 8px;
+}
+.cr-ticks > li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  overflow-wrap: anywhere;
+}
+.cr-ticks > li > .icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--green-ink);
+}
+.cr-ticks.is-hand > li > .icon {
+  color: var(--green-ink);
+}
+.cr-ticks.is-unsure > li > .icon {
+  color: var(--ink-2);
+}
+.cr-todo,
+.cr-unsure {
+  display: grid;
+  gap: 8px;
+}
+.cr-logo__ready {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.cr-logo__tile {
+  width: 160px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: var(--r-sm);
+  background: var(--fill);
+}
+.cr-logo__drop {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  text-align: center;
+}
+.cr-logo__drop.is-over {
+  background: var(--tint-leaf);
+}
+.cr-video-rows {
+  display: grid;
+  gap: 8px;
+}
+.cr-video-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.cr-video-row__url {
+  flex: 1;
+  min-width: 12ch;
+  overflow-wrap: anywhere;
+}
+.cr-foot {
+  justify-content: space-between;
+}
+
+/* One line per campaign post (§38.6). */
+.cr-lines {
+  display: grid;
+  gap: 8px;
+}
+.cr-line {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+  min-width: 0;
+}
+.cr-line.is-ok {
+  background: var(--tint-leaf);
+}
+.cr-line.is-bad {
+  background: var(--tint-vermilion);
+}
+.cr-line--send {
+  background: var(--tint-amber);
+}
+.cr-line__text {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0;
+  font-weight: 650;
+}
+.cr-line__text > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cr-line__text > svg,
+.cr-line__text > .icon,
+.cr-line__text > .platform-mark {
+  flex: none;
+  margin-top: 2px;
+}
+.cr-line__hint {
+  margin: 0;
+  font-size: var(--fs-small);
+}
+.cr-line__appeal,
+.cr-line__proof {
+  display: grid;
+  gap: 8px;
+}
+.cr-lines.is-compact .cr-line {
+  padding: 10px 12px;
+}
+.cr-sendnow {
+  margin: 0 var(--gutter) var(--space-4);
+  border-radius: var(--r-lg);
+  padding: 4px;
+}
+.cr-sendnow .cr-line {
+  background: none;
+}
+
+/* Home › Your campaigns. */
+.cr-row__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+@media (min-width: 1100px) {
+  .cr-row {
+    grid-template-columns: minmax(200px, 0.9fr) minmax(0, 3.2fr);
+  }
+}
+.cr-row-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  max-width: 280px;
+  padding: 8px 14px 8px 8px;
+  border-radius: var(--r-pill);
+  background: var(--fill-control);
+  color: var(--ink);
+  text-decoration: none;
+}
+.cr-row-chip.is-in {
+  background: var(--tint-leaf);
+}
+.cr-row-chip__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cr-row-chip__name {
+  font-weight: 700;
+}
+.cr-row-chip__state {
+  font-size: var(--fs-small);
+}
+
+/* Review: the strip, the places, the locked choices. */
+.cr-strip {
+  display: grid;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--tint-leaf);
+}
+.cr-strip__for {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.cr-strip__ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: var(--fs-small);
+}
+.cr-strip__ticks li {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.cr-places {
+  display: grid;
+  gap: 6px;
+}
+.cr-places p {
+  margin: 0;
+}
+.cr-places__unlinked {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--tint-amber);
+}
+.cr-caption-note,
+.cr-after {
+  margin: 0;
+}
+.cr-locked {
+  display: grid;
+  gap: 4px;
+}
+.cr-locked p {
+  margin: 0;
+}
+
+.cr-job {
+  display: grid;
+  gap: 10px;
+  margin-bottom: var(--space-5);
+}
+.cr-job .panel__title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.cr-clip {
+  display: grid;
+  gap: 10px;
+  padding: var(--inset);
+  border-radius: var(--r-lg);
+  margin-bottom: var(--space-4);
+}
+.cr-clip__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Home › For a campaign. */
+.cr-for {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.cr-for__videos {
+  display: grid;
+  gap: 8px;
+}
+
+/* Money › Content Rewards. */
+.cr-money-page {
+  padding-top: 0;
+}
+.cr-money {
+  display: grid;
+  gap: 12px;
+  padding: var(--inset);
+  border-radius: var(--r-xl);
+  scroll-margin-top: 96px;
+}
+.cr-money__lede,
+.cr-money__paid {
+  margin: 0;
+}
+.cr-money__paid {
+  font-weight: 700;
+}
+.cr-tiles {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.cr-tile {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+}
+.cr-tile p {
+  margin: 0;
+}
+.cr-tile__title {
+  font-weight: 700;
+}
+.cr-tile__num {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  line-height: 1.1;
+}
+.cr-tile__hint {
+  font-size: var(--fs-small);
+}
+.cr-money__list {
+  display: grid;
+  gap: 6px;
+}
+.cr-money__list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.cr-money__steps {
+  display: grid;
+  gap: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cr-fold__chev {
+    transition: none;
+  }
+}
