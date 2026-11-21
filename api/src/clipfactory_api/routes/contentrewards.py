@@ -321,7 +321,7 @@ def logo_done(app: App, req: Request) -> Response:
     current.update({"state": "ready"})
     current.pop("error", None)
     item.update({"logo": current, "logoKey": key, "logoRev": max(int(found.group(1)), int(item.get("logoRev") or 0))})
-    item = campaigns.save(deps, req.user_id, item)
+    item = campaigns.save(deps, req.user_id, item, mine=campaigns.LOGO_FIELDS)
     if isinstance(old, str) and old.startswith(prefix) and old != key:
         deps.media.delete(old)  # jobs hold their own copy (§38.5)
     return ok({"campaign": campaigns.View(deps, req.user_id, _now(app)).full(item)})
@@ -342,7 +342,7 @@ def logo_link(app: App, req: Request) -> Response:
     current.update({"state": "fetching"})
     current.pop("error", None)
     item["logo"] = current
-    item = campaigns.save(deps, req.user_id, item)
+    item = campaigns.save(deps, req.user_id, item, mine=campaigns.LOGO_FIELDS)
     try:
         if deps.invoker is None:
             raise RuntimeError("no invoker")
@@ -352,7 +352,7 @@ def logo_link(app: App, req: Request) -> Response:
         current["state"] = "failed"
         current["error"] = "Clip Factory couldn't get that file. Try again, or drop the file."
         item["logo"] = current
-        item = campaigns.save(deps, req.user_id, item)
+        item = campaigns.save(deps, req.user_id, item, mine=campaigns.LOGO_FIELDS)
     return ok({"campaign": campaigns.View(deps, req.user_id, _now(app)).full(item)}, 202)
 
 
@@ -362,7 +362,7 @@ def logo_delete(app: App, req: Request) -> Response:
     deps, item = _campaign(app, req)
     old = item.pop("logoKey", None)
     item["logo"] = {"needed": bool((item.get("logo") or {}).get("needed")), "state": "none"}
-    item = campaigns.save(deps, req.user_id, item)
+    item = campaigns.save(deps, req.user_id, item, mine=campaigns.LOGO_FIELDS)
     if isinstance(old, str) and old.startswith(logo.campaign_prefix(req.user_id, str(item["campaignId"]))):
         deps.media.delete(old)
     return ok({"campaign": campaigns.View(deps, req.user_id, _now(app)).full(item)})

@@ -687,3 +687,18 @@ def test_money_and_refresh_limit(call: Call, cr: Any) -> None:
     assert (status, body["started"]) == (200, False)
     assert body["nextAllowedAt"] == iso(cr.clock.now + timedelta(minutes=10))
     assert call("POST", f"{BASE}/seen", {"key": "money:pay_x"})[0] == 404
+
+
+def test_a_request_never_undoes_a_rules_read(call: Call, cr: Any) -> None:
+    """A PATCH that read the item before cf-prod-campaigns wrote the rules keeps those rules."""
+    from clipfactory_api.contentrewards import campaigns, rules
+
+    seed_campaign(cr.store, USER, cr.clock.now, rulesState="reading", rules=None)
+    stale = cr.store.get(db.user_pk(USER), db.campaign_sk(UUID)) or {}
+    cr.store.update(
+        db.user_pk(USER), db.campaign_sk(UUID), {"rulesState": "ready", "rules": rules.empty(), "rulesVersion": 1}
+    )
+    stale["anyway"] = ["face_needed"]
+    campaigns.save(cr, USER, stale)
+    item = cr.store.get(db.user_pk(USER), db.campaign_sk(UUID)) or {}
+    assert (item["rulesState"], item["rulesVersion"], item["anyway"]) == ("ready", 1, ["face_needed"])

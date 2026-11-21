@@ -414,8 +414,36 @@ def initial_rules_state(item: Mapping[str, Any]) -> str:
     return "waiting_for_join"
 
 
-def save(deps: CrDeps, user_id: str, item: Item) -> Item:
-    """Writes the whole item (a single owner; the last write wins) and starts a pending rules read."""
+# Written by cf-prod-campaigns (or a logo route) while a request may hold an older copy of the item.
+HANDLER_FIELDS = (
+    "rules",
+    "rulesState",
+    "rulesVersion",
+    "rulesAt",
+    "plainRules",
+    "uncertain",
+    "logo",
+    "logoKey",
+    "logoRev",
+    "brandKey",
+)
+LOGO_FIELDS = ("logo", "logoKey", "logoRev")
+
+
+def save(deps: CrDeps, user_id: str, item: Item, *, mine: tuple[str, ...] = ()) -> Item:
+    """Writes the item and starts a pending rules read. The fields ``cf-prod-campaigns`` writes (the rules, the
+    logo, the brand picture) keep their stored values unless this caller changed them (``mine``, or a rules read it
+    just started), so a request that read the item before a rules read finished never undoes that read."""
+    current = deps.store.get(str(item["pk"]), str(item["sk"]))
+    if current is not None:
+        keep = set(HANDLER_FIELDS) - set(mine)
+        if item.get("readPending"):
+            keep.discard("rulesState")  # this request started a read
+        for name in keep:
+            if name in current:
+                item[name] = current[name]
+            else:
+                item.pop(name, None)
     item = {k: v for k, v in item.items() if v is not None}
     deps.store.put(item)
     kick_read(deps, user_id, item)
