@@ -51,7 +51,7 @@ run "whole_stack_plans" {
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
       "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money", "ask", "notify",
-      "campaigns", "story-flow", "stories-api",
+      "campaigns", "story-flow", "stories-api", "autopost",
     ])
     error_message = "Every function except the WebSocket authorizer is watched for errors."
   }
@@ -80,8 +80,8 @@ run "clip_performance_is_wired" {
   }
 
   assert {
-    condition     = toset(keys(module.monitoring.schedule_alarm_names)) == toset(["stats", "follow-tick", "money"])
-    error_message = "The stats, follow-tick and money rules are watched for failed invocations."
+    condition     = toset(keys(module.monitoring.schedule_alarm_names)) == toset(["stats", "follow-tick", "money", "autopost"])
+    error_message = "The stats, follow-tick, money and autopost rules are watched for failed invocations."
   }
 }
 
@@ -561,7 +561,7 @@ run "cr_finder_switch_on_plans" {
   assert {
     condition = toset(keys(module.monitoring.alarm_names)) == toset([
       "api", "job-flow", "clip-flow", "ws", "broadcast", "hooks", "stats", "learn", "follow-tick", "money", "ask", "notify",
-      "campaigns", "story-flow", "stories-api",
+      "campaigns", "story-flow", "stories-api", "autopost",
     ])
     error_message = "No new function: the finder runs in cf-prod-campaigns, started by the stats tick and the api."
   }
@@ -593,5 +593,55 @@ run "whop_connect_switch_on_plans" {
   assert {
     condition     = module.api.function_names == { api = "cf-prod-api" } && module.money.function_names == { money = "cf-prod-money" } && module.notify.notify_function_name == "cf-prod-notify"
     error_message = "With the switch on the stack still plans and cf-prod-api, cf-prod-money and cf-prod-notify are the same functions."
+  }
+}
+
+# docs/CONTRACTS.md §46.11 and ADR-81: auto-posting. cf-prod-autopost and its hourly rule are planned and watched (its
+# errors and the rule's failed invocations, two new alarms), it starts the clip flow on its live alias with the clip
+# flow's own secret grants, gets the Content Rewards switch and the boundary, and the switch off still plans it. The
+# module's own test (modules/autopost) proves the role, the cron and the retries.
+run "autopost_is_wired" {
+  command = plan
+
+  assert {
+    condition = (module.autopost.function_names == { autopost = "cf-prod-autopost" } &&
+      module.autopost.schedule_rule_names == { autopost = "cf-prod-autopost-hourly" } &&
+    module.autopost.function_name == "cf-prod-autopost")
+    error_message = "cf-prod-autopost and its rule cf-prod-autopost-hourly are planned."
+  }
+
+  assert {
+    condition = (module.monitoring.alarm_names["autopost"] == "cf-prod-autopost-errors" &&
+    module.monitoring.schedule_alarm_names["autopost"] == "cf-prod-autopost-hourly-failed-invocations")
+    error_message = "cf-prod-autopost is watched for errors and its hourly rule for failed invocations."
+  }
+
+  assert {
+    condition = module.autopost.function_name == "cf-prod-autopost" && alltrue([
+      for line in [
+        "\n  clip_flow_alias_arn  = module.flows.clip_flow_alias_arn\n",
+        "\n  clip_flow_arn_prefix = module.flows.function_arns[\"clip-flow\"]\n",
+        "\n  secret_prefix              = module.hooks.secret_prefix\n",
+        "\n  platform_secrets_arn       = module.hooks.platform_secrets_arn\n",
+        "\n  platform_token_secrets_arn = module.hooks.platform_token_secrets_arn\n",
+        "\n  content_rewards_enabled = var.content_rewards_enabled\n",
+        "\n  permissions_boundary_arn = var.role_permissions_boundary_arn\n",
+        "\n  table_arn       = module.data.table_arn\n",
+      ] : strcontains("\n${regex("(?s)\nmodule \"autopost\" \\{\n(.*?)\n\\}\n", file("main.tf"))[0]}\n", line)
+    ])
+    error_message = "module.autopost gets the clip flow's live alias and unqualified ARN, the clip flow's secret patterns, the Content Rewards switch, the table and the boundary."
+  }
+}
+
+run "autopost_with_content_rewards_off_plans" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = false
+  }
+
+  assert {
+    condition     = module.autopost.function_names == { autopost = "cf-prod-autopost" } && module.autopost.schedule_rule_names == { autopost = "cf-prod-autopost-hourly" }
+    error_message = "With Content Rewards off the stack still plans the same cf-prod-autopost and its rule (campaign clips then wait)."
   }
 }
