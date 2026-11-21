@@ -60,6 +60,13 @@ OFFICIAL_FETCH_CAP = 3
 OFFICIAL_TEXT_CHARS = 15_000
 OFFICIAL_PDF_BYTES = 500_000
 SETUP_STEP_ACTION = re.compile(r"setup-step:([a-z]+):([a-z0-9-]{1,40})")
+# Content Rewards' join and money parts are shown on their own pages, not the setup page: (where the button opens, the
+# spot lit when the step's card is not on screen). The money steps show once the owner answers about Finance.
+CR_STEP_PAGES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "join": ("/campaigns#step-{step}", ()),
+    "move": ("/money#content-rewards", ("cr-money",)),
+    "bank": ("/money#content-rewards", ("cr-money",)),
+}
 LIMIT_REACHED = "limit reached, answer with what you have"
 LIBRARY_SOURCE = "clip-factory://library/"
 URL_IN_TEXT = re.compile(r"https?://[^\s<>\"'`)\]]+")
@@ -129,11 +136,17 @@ def setup_step_action(knowledge: Knowledge, action_id: str) -> dict[str, Any] | 
     name = {"youtube": "YouTube", "tiktok": "TikTok", "x": "X", "contentrewards": "Content Rewards"}.get(
         platform, platform.capitalize()
     )
+    to, highlight = f"/settings/posting/setup/{platform}#step-{step_id}", [f"step-{step_id}"]
+    if platform == "contentrewards" and step.get("part") in CR_STEP_PAGES:
+        # The join steps live on Campaigns and the money steps on Money (web CrSetup.tsx crStepHome): straight there.
+        page, fallback = CR_STEP_PAGES[step["part"]]
+        to = page.format(step=step_id)
+        highlight = [*highlight, *fallback]
     return {
         "id": action_id,
         "label": f"Open {name} step {step.get('n')}",
-        "to": f"/settings/posting/setup/{platform}#step-{step_id}",
-        "highlight": [f"step-{step_id}"],
+        "to": to,
+        "highlight": highlight,
     }
 
 

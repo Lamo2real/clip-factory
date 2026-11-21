@@ -865,6 +865,36 @@ def test_a_guide_page_with_a_query_keeps_it_and_stays_official(store: db.Store) 
     assert hops("https://evil.example/") is False
 
 
+def test_content_rewards_join_and_money_steps_open_their_own_pages() -> None:
+    """The join steps live on Campaigns and the money steps on Money (web crStepHome): an Ask button for one goes
+    straight there; the one-time setup steps (and every other platform's steps) still open the setup page."""
+    pack = knowledge.load()
+    parts = {st["id"]: st.get("part") for st in pack.setup_steps["contentrewards"]}
+    assert {parts["join-find"], parts["move-withdraw"], parts["bank-cashout"], parts["connect"]} == {
+        "join",
+        "move",
+        "bank",
+        "setup",
+    }
+    join = tools.setup_step_action(pack, "setup-step:contentrewards:join-copy")
+    assert join is not None
+    assert (join["to"], join["highlight"]) == ("/campaigns#step-join-copy", ["step-join-copy"])
+    for step_id in ("move-whop", "fin-setup", "move-withdraw", "bank-setup", "bank-cashout", "fin-bank"):
+        money = tools.setup_step_action(pack, f"setup-step:contentrewards:{step_id}")
+        assert money is not None, step_id
+        # The money steps show once the owner answered about Finance: else the money part itself lights up.
+        assert (money["to"], money["highlight"]) == ("/money#content-rewards", [f"step-{step_id}", "cr-money"])
+    setup = tools.setup_step_action(pack, "setup-step:contentrewards:connect")
+    assert setup is not None
+    assert (setup["to"], setup["highlight"]) == (
+        "/settings/posting/setup/contentrewards#step-connect",
+        ["step-connect"],
+    )
+    other = tools.setup_step_action(pack, "setup-step:instagram:ready-page")
+    assert other is not None
+    assert other["to"] == "/settings/posting/setup/instagram#step-ready-page"
+
+
 def test_read_setup_guide_takes_the_content_rewards_guide(toolbox: Toolbox) -> None:
     """§38.17: "contentrewards" is accepted next to the five platforms, whichever builder's part merged first."""
     import dataclasses
