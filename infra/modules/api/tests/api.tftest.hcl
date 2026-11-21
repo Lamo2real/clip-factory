@@ -101,8 +101,10 @@ run "environment_names_the_flow_aliases" {
       CR_REMAKE = "off"
       # §41.6 module default: the campaign finder off.
       CR_FINDER = "off"
+      # §40.6 module default: Connect Whop off.
+      WHOP_CONNECT = "off"
     })
-    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9, §19.9, §38.16 and §41.6 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
+    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9, §19.9, §38.16, §40.6 and §41.6 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
   }
 }
 
@@ -673,5 +675,39 @@ run "cr_finder_switch_only_sets_its_env_var" {
       length(regexall("var\\.cr_finder_enabled", file("main.tf"))) == 1 &&
     length(regexall("(?m)^\\s+CR_FINDER\\s+=\\s+var\\.cr_finder_enabled \\? \"on\" : \"off\"$", file("main.tf"))) == 1)
     error_message = "var.cr_finder_enabled is used once, as CR_FINDER = var.cr_finder_enabled ? \"on\" : \"off\"."
+  }
+}
+
+# docs/CONTRACTS.md §40.6: "Connect Whop" waits behind WHOP_CONNECT, off by default; the switch is an in-place
+# environment change of the same function (no new grant, nothing replaced).
+run "whop_connect_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = var.whop_connect_enabled == false && one(aws_lambda_function.fn["api"].environment).variables["WHOP_CONNECT"] == "off"
+    error_message = "whop_connect_enabled defaults to false: WHOP_CONNECT is off."
+  }
+}
+
+run "whop_connect_on" {
+  command = plan
+
+  variables {
+    whop_connect_enabled = true
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["WHOP_CONNECT"] == "on"
+    error_message = "With whop_connect_enabled, WHOP_CONNECT is on."
+  }
+
+  assert {
+    condition     = aws_lambda_function.fn["api"].function_name == "cf-test-api" && keys(aws_lambda_function.fn) == ["api"]
+    error_message = "The switch changes only cf-test-api's environment: the same function, nothing replaced."
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if can(regex("(?i)whop", jsonencode(s)))]) == 0
+    error_message = "Connect Whop needs no new permission: its secrets ride the existing PlatformSecrets grant."
   }
 }

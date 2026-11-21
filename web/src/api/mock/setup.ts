@@ -241,6 +241,8 @@ export function setupApi({ onAccounts, publish, onConnected }: SetupDeps = {}) {
     finish,
     setAudit(passed: boolean) {
       state.tiktok.audited = passed;
+      // TikTok's posting audit can only be asked for once App review says Live (§17, step 24).
+      if (passed) state.tiktok.reviewState = "live";
       changed("tiktok");
     },
     /** Meta answered with several accounts: the picker shows (tests). */

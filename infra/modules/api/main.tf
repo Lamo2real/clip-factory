@@ -31,6 +31,9 @@ locals {
     CR_REMAKE       = var.cr_remake_enabled ? "on" : "off"
     CR_FINDER       = var.cr_finder_enabled ? "on" : "off"
   }, local.cr_on ? { CAMPAIGNS_FUNCTION_ARN = var.campaigns_function_arn } : {})
+  # Get paid (docs/CONTRACTS.md §40.6): "Connect Whop" waits behind WHOP_CONNECT, an in-place env change. The Whop
+  # secrets are made at runtime under the existing PlatformSecrets grant: no new permission.
+  getpaid_env = { WHOP_CONNECT = var.whop_connect_enabled ? "on" : "off" }
   cr_permissions = local.cr_on ? [
     { Sid = "Campaigns", Action = ["lambda:InvokeFunction"], Resource = [var.campaigns_function_arn] },
   ] : []
@@ -76,7 +79,7 @@ locals {
       handler = "clipfactory_api.http.handler"
       timeout = 29
       memory  = 512
-      env = merge(local.help_env, local.ask_env, local.push_env, local.cr_env, {
+      env = merge(local.help_env, local.ask_env, local.push_env, local.cr_env, local.getpaid_env, {
         TABLE_NAME        = var.table_name
         MEDIA_BUCKET      = var.media_bucket
         AGENT_RUNTIME_ARN = var.agent_runtime_arn

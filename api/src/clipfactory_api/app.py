@@ -21,6 +21,7 @@ from .log import log
 from .push.devices import VapidKey
 from .push.transport import Poster, urllib_post
 from .skills import BuiltinSkill, load_builtins
+from .tiktok_link import Opener, open_once
 from .vectors import Vectors
 
 if TYPE_CHECKING:
@@ -166,6 +167,8 @@ class App:
     # Notifications (§32): the VAPID key from Secrets Manager (read on first use) and how a message is posted.
     push: VapidKey = field(default_factory=VapidKey)
     push_post: Poster = urllib_post
+    # Post it on TikTok yourself (§42): opens a pasted short TikTok link once, without following its redirect.
+    tiktok_open: Opener = open_once
     # Content Rewards (§38): None (every /v1/contentrewards route answers 503) unless switched on and configured.
     contentrewards: Any = None
     _builtin_cache: list[BuiltinSkill] | None = field(default=None, repr=False)

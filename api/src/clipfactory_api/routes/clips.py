@@ -4,11 +4,25 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
-from .. import clips, db, post_preset, posts, release, s3, settings, validate, vectors
+from .. import (
+    clips,
+    db,
+    post_preset,
+    posts,
+    release,
+    s3,
+    settings,
+    tiktok_find,
+    tiktok_link,
+    tiktok_self,
+    validate,
+    vectors,
+)
 from ..app import App
-from ..clock import iso
+from ..clock import iso, parse
 from ..errors import bad_request, conflict, not_found
 from ..http import Request, Response, ok
 from ..ids import is_ulid
@@ -16,6 +30,7 @@ from ..log import log
 from ..oauth import setup as platform_setup
 from ..platforms import label as platform_label
 from ..platforms.campaign_caption import campaign_options
+from ..stats import config as stats_config
 
 ALREADY_DECIDED = "This clip has already been uploaded or thrown away."
 ALREADY_DECLINED = "This clip was thrown away, so it cannot be uploaded."
@@ -432,6 +447,115 @@ def _try_again(
             # release.restart replaces the TikTok post's postOptions: the campaign part goes along unchanged.
             tiktok = {**tiktok, "campaign": dict(frozen) if isinstance(frozen, Mapping) else campaign.options}
     return release.restart(app.store, app.flows, clip, [*failed, *waiting], clip_posts=rows, tiktok=tiktok)
+
+
+# --- Post it on TikTok yourself (§42) ---------------------------------------------------------------------------
+
+OTHER_ACCOUNT = "Saved. Views only show for posts on the TikTok account you connected."
+NOT_FOUND_YET = "Saved. Clip Factory could not find it on your TikTok yet. Tap Add link in a minute."
+SINCE_LIMIT = timedelta(hours=24)
+
+
+def _since(app: App, raw: Any) -> datetime:
+    """When the owner opened the sheet (the post is newer), never more than a day back and never in the future."""
+    now = app.clock()
+    at = parse(raw) if isinstance(raw, str) else None
+    if at is None:
+        return now - timedelta(hours=1)
+    return min(max(at, now - SINCE_LIMIT), now)
+
+
+def _has_link(app: App, user_id: str, item: Mapping[str, Any]) -> bool:
+    rows = posts.posts_for_clip(app.store, user_id, str(item["clipId"]), consistent=True)
+    row = tiktok_self.tiktok_row(rows)
+    return bool(row and row.get("by") == "you" and row.get("url"))
+
+
+def clip_file(app: App, req: Request) -> Response:
+    """``GET /v1/clips/{clipId}/file``: a 1-hour link that saves the clip's video as a file (Save the video, §42)."""
+    item = _clip_or_404(app, req)
+    if item.get("status") == "declined" or not item.get("videoKey"):
+        raise not_found("This clip has no video any more.")
+    name = f"clip-factory-{str(item.get('hook') or 'clip')[:40]}.mp4"
+    filename = s3.safe_filename(name, "clip-factory.mp4")
+    return ok({"url": app.media.presign_download(str(item["videoKey"]), filename), "filename": filename})
+
+
+def tiktok_posted(app: App, req: Request) -> Response:
+    """``POST /v1/clips/{clipId}/tiktok/posted`` ``{ "link"? }``: the owner posted this clip on TikTok himself. The
+    clip's TikTok post becomes ``posted`` with ``by: "you"``; a link (full or short, read by ``tiktok_link``) gives
+    the video's id, so its numbers are read like any public post's when it is on the connected TikTok account."""
+    body = req.json()
+    validate.only_keys(body, {"link", "since"})
+    link = body.get("link")
+    if link is not None and not isinstance(link, str):
+        raise bad_request("Paste the TikTok link as text.")
+    item = _clip_or_404(app, req)
+    video = None
+    count_views = True
+    note = None
+    account = posts.connected_account(app.store, req.user_id, "tiktok")
+    if link and link.strip():
+        try:
+            video = tiktok_link.resolve(link, app.tiktok_open)
+        except tiktok_link.LinkError as e:
+            raise bad_request(str(e)) from e
+        # The connected handle is "@username" when TikTok gave one, else the display name (which a link never has).
+        stored = str((account or {}).get("handle") or "")
+        handle = stored[1:].lower() if stored.startswith("@") else ""
+        if account is None or (handle and video.handle and video.handle.lower() != handle):
+            count_views = False
+            note = OTHER_ACCOUNT
+    elif account is not None and app.oauth is not None and not _has_link(app, req.user_id, item):
+        # No link: look for the post on his connected TikTok (posted since the sheet opened).
+        video = tiktok_find.find_recent(
+            app.oauth,
+            app.store,
+            account,
+            since=_since(app, body.get("since")),
+            caption=str((item.get("captions") or {}).get("tiktok") or ""),
+        )
+        if video is None:
+            note = NOT_FOUND_YET
+    minutes = stats_config.load().platform("tiktok").min_interval
+    try:
+        try:
+            tiktok_self.mark_posted(app.store, item, video, app.clock(), min_interval=minutes, count_views=count_views)
+        except db.ConditionFailed:
+            # A second tap at the same moment (or the clip just changed): read it again and write once more, which
+            # only adds the link when the first one already marked it.
+            fresh = _clip_or_404(app, req)
+            tiktok_self.mark_posted(app.store, fresh, video, app.clock(), min_interval=minutes, count_views=count_views)
+    except tiktok_self.Refused as e:
+        raise conflict(e.message) from e
+    except db.ConditionFailed as e:
+        raise conflict("This clip just changed. Try again.") from e
+    log("info", "clip.tiktok_by_you", clipId=item["clipId"], link=video is not None, views=count_views)
+    return _with_posts(app, req, note=note)
+
+
+def tiktok_posted_undo(app: App, req: Request) -> Response:
+    """``DELETE /v1/clips/{clipId}/tiktok/posted``: Undo of "I posted it" (§42)."""
+    item = _clip_or_404(app, req)
+    try:
+        tiktok_self.undo(app.store, item)
+    except tiktok_self.Refused as e:
+        raise conflict(e.message) from e
+    except db.ConditionFailed as e:
+        raise conflict("This clip just changed. Try again.") from e
+    return _with_posts(app, req)
+
+
+def _with_posts(app: App, req: Request, *, note: str | None = None) -> Response:
+    fresh = _clip_or_404(app, req)
+    rows = posts.posts_for_clip(app.store, req.user_id, fresh["clipId"], consistent=True)
+    out: dict[str, Any] = {
+        "clip": clips.public_clip(fresh, app.media, posts=rows),
+        "posts": [posts.public_post(p) for p in rows],
+    }
+    if note:
+        out["note"] = note
+    return ok(out)
 
 
 def decline(app: App, req: Request) -> Response:
