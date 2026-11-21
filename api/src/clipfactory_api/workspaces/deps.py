@@ -25,13 +25,17 @@ class WsDeps:
     flow: Any = None  # workspaces.flow.StoryFlowStarter (builder B)
     secrets: Any = None  # the workspace Secrets wrapper (builder B)
     extra: Any = None  # room for later needs without changing this shape
+    s3: Any = None  # an S3 client for download links (builder A, workspaces/media.py); None = made on first use
 
 
 def from_env(app: Any) -> WsDeps:
     """Plain values from the environment; the AWS-backed parts are filled by the builders' own factories."""
+    from . import agent
+
     return WsDeps(
         story_flow_arn=os.environ.get("STORY_FLOW_ARN", ""),
         ws_secret_prefix=os.environ.get("WS_SECRET_PREFIX", ws.WS_SECRET_PREFIX),
+        agent=agent.from_env(),  # Lamo Stories' own runtime: None until STORIES_AGENT_RUNTIME_ARN is set
     )
 
 

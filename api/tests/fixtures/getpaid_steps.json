@@ -1,0 +1,80 @@
+{
+ "youtube": [
+  {
+   "id": "yt-join",
+   "role": "earn"
+  },
+  {
+   "id": "yt-reading",
+   "role": "reading"
+  },
+  {
+   "id": "yt-tax",
+   "role": "payout"
+  },
+  {
+   "id": "yt-bank",
+   "role": "payout"
+  },
+  {
+   "id": "yt-test",
+   "role": "payout"
+  },
+  {
+   "id": "yt-id",
+   "role": "payout"
+  },
+  {
+   "id": "yt-pin",
+   "role": "payout"
+  }
+ ],
+ "tiktok": [
+  {
+   "id": "tt-gifts",
+   "role": "earn"
+  },
+  {
+   "id": "tt-payout",
+   "role": "payout"
+  },
+  {
+   "id": "tt-withdraw",
+   "role": "each_time"
+  }
+ ],
+ "instagram": [
+  {
+   "id": "ig-gifts",
+   "role": "earn"
+  },
+  {
+   "id": "meta-payout",
+   "role": "payout"
+  }
+ ],
+ "facebook": [
+  {
+   "id": "fb-join",
+   "role": "earn"
+  },
+  {
+   "id": "meta-payout",
+   "role": "payout"
+  }
+ ],
+ "x": [
+  {
+   "id": "x-premium",
+   "role": "earn"
+  },
+  {
+   "id": "x-apply",
+   "role": "earn"
+  },
+  {
+   "id": "x-stripe",
+   "role": "payout"
+  }
+ ]
+}

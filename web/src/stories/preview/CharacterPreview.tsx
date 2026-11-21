@@ -28,10 +28,16 @@ export function CharacterPreview({ look, movementStyle, expression = "neutral", 
     canvas.height = Math.round(size * dpr);
     const still = !playing || (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
     let raf = 0;
+    let last = -1;
     const start = performance.now();
     const frame = (now: number) => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawPrims(ctx, previewCharacter(look, movementStyle, expression, action, still ? 0 : (now - start) / 1000, canvas.width), 1);
+      // 30 frames a second, like the videos: no need to redraw more often
+      const t = still ? 0.9 : Math.floor(((now - start) / 1000) * 30) / 30;
+      if (t !== last) {
+        last = t;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawPrims(ctx, previewCharacter(look, movementStyle, expression, action, t, canvas.width), 1);
+      }
       if (!still) raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);

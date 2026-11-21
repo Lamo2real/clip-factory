@@ -12,6 +12,10 @@ The §25 rule holds: only money a platform or Content Rewards reported, never ca
 in. Instagram, TikTok and X report none, so their rows say "Not available from …" with where to look, never $0.
 ``everywhere`` is pure (``api/tests/fixtures/money_everywhere_cases.json``); ``load`` reads one owner's items and
 never calls a platform or Content Rewards.
+
+Get paid (§40.4, additive): each row gains ``sent``, the money Google or Whop say they sent toward his bank
+(``getpaid.sent.sent_line``), and the card gains ``sent``, the "Sent to your bank, so far" block, one line per money
+type (``sent_totals``). It is never added to the 30-day total: a different thing over a different time.
 """
 
 from __future__ import annotations
@@ -22,6 +26,8 @@ from typing import Any
 
 from .. import db, posts
 from ..clock import iso, parse
+from ..getpaid import SOURCE_OF, payconn_sk, payout_prefix, paystate_sk
+from ..getpaid import sent as getpaid_sent
 from . import MONEY_ORDER, label, revenue_prefix, rules, sources, state_sk
 from .summary import LAG_NOTES, MONEY_PLATFORMS, summarize
 from .view import money_shown, tag
@@ -271,10 +277,17 @@ def everywhere(  # noqa: PLR0917 (the inputs of §39.2, in its order)
     crmoney: Mapping[str, Any] | None,
     cr_on: bool,
     today: datetime,
+    *,
+    payouts: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
+    payconns: Mapping[str, Mapping[str, Any]] | None = None,
+    paystates: Mapping[str, Mapping[str, Any]] | None = None,
+    whop_on: bool = False,
 ) -> Item:
     """``MoneyEverywhere``. ``accounts[p]``: the connected Account (None when not connected); ``states[p]``: the
     ``MONEYSTATE#`` item; ``rows``: stored ``REVENUE#`` rows (``platform``, ``date``, ``amountMicros``,
-    ``currency``); ``today``: now (UTC)."""
+    ``currency``); ``today``: now (UTC). §40.4: ``payouts[place]`` (``PAYOUT#`` rows), ``payconns[source]``
+    (``PAYCONN#adsense`` / ``PAYCONN#whop``), ``paystates[place]`` (``PAYSTATE#``) and ``whop_on``
+    (``WHOP_CONNECT``)."""
     stored: dict[str, list[Item]] = {}
     for r in rows:
         p = str(r.get("platform"))
@@ -321,6 +334,19 @@ def everywhere(  # noqa: PLR0917 (the inputs of §39.2, in its order)
     ]
     if cr_on:
         places.append(_cr_place(crconn or {}, crmoney or {}, start, end, today))
+    lines: dict[str, Item] = {}
+    for row in places:
+        place = str(row["place"])
+        source = SOURCE_OF.get(place)
+        lines[place] = getpaid_sent.sent_line(
+            place,
+            list((payouts or {}).get(place) or []),
+            (payconns or {}).get(source or "") or {},
+            (paystates or {}).get(place) or {},
+            whop_on=whop_on,
+            now=today,
+        )
+        row["sent"] = getpaid_sent.public(lines[place])
     out: Item = {
         "from": start.isoformat(),
         "to": end.isoformat(),
@@ -342,13 +368,23 @@ def everywhere(  # noqa: PLR0917 (the inputs of §39.2, in its order)
     text = _not_counted_text(places)
     if text:
         out["notCountedText"] = text
+    out["sent"] = getpaid_sent.sent_totals(lines)
     out["asOf"] = iso(today)
     return out
 
 
-def load(store: db.Store, user_id: str, now: datetime, *, cr_on: bool, cfg: rules.Monetization | None = None) -> Item:
-    """One owner's ``MoneyEverywhere`` from stored items only (Accounts, ``MONEYSTATE#``, ``REVENUE#``, the config
-    and, while Content Rewards is on, ``CRCONN`` and ``CRMONEY``)."""
+def load(
+    store: db.Store,
+    user_id: str,
+    now: datetime,
+    *,
+    cr_on: bool,
+    whop_on: bool = False,
+    cfg: rules.Monetization | None = None,
+) -> Item:
+    """One owner's ``MoneyEverywhere`` from stored items only (Accounts, ``MONEYSTATE#``, ``REVENUE#``, the config,
+    the Get paid ``PAYOUT#``, ``PAYCONN#`` and ``PAYSTATE#`` items and, while Content Rewards is on, ``CRCONN`` and
+    ``CRMONEY``)."""
     cfg = cfg or rules.load()
     pk = db.user_pk(user_id)
     accounts = {p: posts.connected_account(store, user_id, p) for p in MONEY_ORDER}
@@ -363,4 +399,18 @@ def load(store: db.Store, user_id: str, now: datetime, *, cr_on: bool, cfg: rule
         ]
     crconn = store.get(pk, db.CRCONN_SK) if cr_on else None
     crmoney = store.get(pk, db.CRMONEY_SK) if cr_on else None
-    return everywhere(cfg, accounts, states, rows, crconn, crmoney, cr_on, now)
+    places = ["youtube", *(["contentrewards"] if cr_on else [])]
+    return everywhere(
+        cfg,
+        accounts,
+        states,
+        rows,
+        crconn,
+        crmoney,
+        cr_on,
+        now,
+        payouts={p: store.query_all(pk, payout_prefix(p)) for p in places},
+        payconns={SOURCE_OF[p]: store.get(pk, payconn_sk(SOURCE_OF[p])) or {} for p in places},
+        paystates={p: store.get(pk, paystate_sk(p)) or {} for p in places},
+        whop_on=whop_on and cr_on,
+    )

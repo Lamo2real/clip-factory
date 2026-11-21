@@ -95,7 +95,8 @@ def get_everywhere(app: App, req: Request) -> Response:
     now = app.clock()
     money.register_owner(app.store, req.user_id, now)
     cr_on = getattr(app, "contentrewards", None) is not None
-    return ok(everywhere.load(app.store, req.user_id, now, cr_on=cr_on))
+    whop_on = bool(getattr(app, "whop_connect", False))  # §40.4: "Connect Whop" only while it is switched on
+    return ok(everywhere.load(app.store, req.user_id, now, cr_on=cr_on, whop_on=whop_on))
 
 
 def refresh(app: App, req: Request) -> Response:

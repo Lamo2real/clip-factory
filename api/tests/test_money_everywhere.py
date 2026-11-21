@@ -59,9 +59,9 @@ def test_the_where_lines_word_for_word() -> None:
     found = expect("YouTube and Content Rewards give one USD total")
     assert place(found, "instagram")["where"] == {"text": "Look in Instagram: Professional dashboard, then Payouts."}
     assert place(found, "tiktok")["where"] == {"text": "Look in TikTok: Profile, then Balance."}
-    assert place(found, "x")["where"] == {
-        "text": "Look in X, then Monetization (paid through Stripe).",
-        "button": {"label": "Open X", "url": "https://x.com/settings/monetization"},
+    assert place(found, "x")["where"] == {  # §40.3: X's programme is Original Content Rewards, in Creator Studio
+        "text": "Look in X, then Creator Studio (paid through Stripe).",
+        "button": {"label": "Open X", "url": "https://x.com/i/jf/creators/studio"},
     }
     assert place(found, "facebook")["where"] == {
         "text": "Look in Meta Business Suite, then Payouts.",
@@ -267,3 +267,118 @@ def test_get_money_everywhere(call: Call, app: App, secrets_client: FakeSecretsM
     assert fake.requests == []  # never calls Content Rewards
     assert "dayScan" not in json.dumps(body)  # nothing internal
     assert "paidByDay" not in json.dumps(body)
+
+
+# --- §40.4: "Sent to your bank", per place and in total ----------------------------------------------------------
+
+
+def test_sent_lines_per_place_word_for_word() -> None:
+    found = expect("sent to your bank: Google in kronor and Whop in dollars, never added together")
+    yt, cr = place(found, "youtube")["sent"], place(found, "contentrewards")["sent"]
+    assert (yt["state"], yt["headline"], yt["tag"]) == ("number", "Sent to your bank by Google", "YouTube says")
+    assert yt["amounts"] == [{"currency": "SEK", "amountMicros": 2_468_000_000}]  # Google's own two amounts
+    assert yt["arrive"] == "Your bank gets it up to 7 workdays after Google sends it."
+    assert (cr["headline"], cr["tag"]) == ("Sent to your bank by Whop", "Whop says")
+    assert cr["amounts"] == [{"currency": "USD", "amountMicros": 40_000_000}]  # on its way and came back don't count
+    assert cr["note"] == "Whop counts all your Whop money, not only Content Rewards."
+    assert cr["arrive"] == "Whop says it should arrive by Sat 14 Nov."
+    for p in ("tiktok", "instagram", "facebook", "x"):
+        line = place(found, p)["sent"]
+        assert (line["state"], line["amounts"]) == ("not_available", [])  # never $0
+    assert place(found, "x")["sent"]["where"] == {
+        "text": "Look in Stripe: Payouts.",
+        "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"},
+    }
+    assert place(found, "tiktok")["sent"]["headline"] == "Not available from TikTok"
+    assert place(found, "facebook")["sent"]["headline"] == "Not available from Meta"
+    block = found["sent"]
+    assert [(t["currency"], t["names"]) for t in block["totals"]] == [
+        ("SEK", "YouTube"),
+        ("USD", "Whop (all your Whop money, Content Rewards too)"),
+    ]  # in the places' order, never ranked across money types
+    assert block["tag"] == "Google and Whop say they sent it."
+    assert block["notCountedText"] == "Not in this: TikTok, Instagram, Facebook and X (not available)."
+    assert block["bankText"] == "Clip Factory can't see your bank. Look in your bank's app to see what arrived."
+    assert "empty" not in block
+    assert found["totals"] == expect("YouTube and Content Rewards give one USD total")["totals"]  # never in the 30 days
+    assert "traceCode" not in json.dumps(found)
+    assert "UETR" not in json.dumps(found)
+
+
+def test_sent_in_one_money_type_is_one_line_and_unread_amounts_are_never_added() -> None:
+    one = expect("sent to your bank: Google and Whop in dollars make one line")["sent"]["totals"]
+    assert one == [
+        {
+            "currency": "USD",
+            "amountMicros": 210_000_000,
+            "places": ["youtube", "contentrewards"],
+            "names": "YouTube and Whop (all your Whop money, Content Rewards too)",
+        }
+    ]
+    unread = expect("sent to your bank: Google's money type can't be read, so nothing is added up")
+    line = place(unread, "youtube")["sent"]
+    assert (line["state"], line["amounts"]) == ("number", [])  # still "number", never "Nothing sent yet"
+    assert (
+        line["notAdded"]
+        == "Google sent 2 payments. Clip Factory couldn't tell their money type, so they aren't added up."
+    )
+    assert line["button"] == {"label": "See them", "href": "/settings/posting/getpaid/youtube", "external": False}
+    assert line["last"]["text"] == "$1,234.57"  # Google's own words
+    assert "empty" not in unread["sent"]
+    assert unread["sent"]["totals"] == []
+    some = place(expect("sent to your bank: one of Google's payments can't be read"), "youtube")["sent"]
+    assert some["notAdded"] == "1 payment isn't added up: Clip Factory couldn't tell its money type."
+    two = place(expect("sent to your bank: two AdSense accounts paid on the same day stay two payments"), "youtube")
+    assert two["sent"]["amounts"] == [{"currency": "EUR", "amountMicros": 100_000_000}]
+    gone = place(expect("sent to your bank: a payment Google no longer lists stops counting"), "youtube")
+    assert gone["sent"]["amounts"] == [{"currency": "SEK", "amountMicros": 1_234_560_000}]
+
+
+def test_sent_states_without_a_payment() -> None:
+    def yt(name: str) -> dict[str, Any]:
+        return place(expect(name), "youtube")["sent"]  # type: ignore[no-any-return]
+
+    assert (
+        yt("YouTube and Content Rewards give one USD total")["headline"]
+        == "Clip Factory can't see YouTube payments yet"
+    )
+    assert yt("sent to your bank: payment reading on, nothing sent yet")["state"] == "none_yet"
+    assert yt("sent to your bank: payment reading just allowed, checking")["state"] == "checking"
+    assert yt("sent to your bank: the first read is late")["state"] == "error"
+    assert yt("sent to your bank: payment reading needs a reconnect")["headline"] == (
+        "Clip Factory can't see YouTube payments anymore"
+    )
+    assert yt("sent to your bank: payment reading stopped, Google's payments stay")["note"] == (
+        "Clip Factory stopped reading on 3 Nov."
+    )
+    assert expect("YouTube and Content Rewards give one USD total")["sent"]["empty"] == "Nothing sent to your bank yet."
+    off = place(expect("sent to your bank: Connect Whop switched off says not available"), "contentrewards")["sent"]
+    assert off == {
+        "state": "not_available",
+        "headline": "Sent to your bank: not available from Content Rewards",
+        "amounts": [],
+        "where": {"text": "Look on Whop: **Balances**."},
+    }  # no Connect Whop while it is switched off
+    on = place(expect("sent to your bank: Connect Whop is on but not connected"), "contentrewards")["sent"]
+    assert on["button"] == {
+        "label": "Connect Whop",
+        "href": "/settings/posting/getpaid/contentrewards#whop",
+        "external": False,
+    }
+
+
+def test_get_money_everywhere_reads_the_stored_payouts(call: Call, app: App) -> None:
+    from cr_fit_cases import ADSENSE_ON, READ, google
+
+    _youtube(app.store)
+    app.store.put({"pk": PK, "sk": "PAYCONN#adsense", **ADSENSE_ON})
+    app.store.put({"pk": PK, "sk": "PAYSTATE#youtube", **READ})
+    row = google("2026-10-23", "kr 1 234,56 SEK")
+    app.store.put({"pk": PK, **row})
+    status, body = call("GET", "/v1/money/everywhere")
+    assert status == 200
+    sent = place(body, "youtube")["sent"]
+    assert (sent["state"], sent["amounts"]) == ("number", [{"currency": "SEK", "amountMicros": 1_234_560_000}])
+    assert body["sent"]["totals"][0]["names"] == "YouTube"
+    assert body["totals"][0]["amountMicros"] == 15_000_000  # the 30-day total is unchanged
+    assert "pub-1234567890123456" not in json.dumps(body)

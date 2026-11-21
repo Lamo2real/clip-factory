@@ -35,7 +35,9 @@ RAW_MAX_BYTES = 8 * 1024
 LONG_VIDEO_SECONDS = 60
 NEWEST_FOR_LONG = 20
 PREMIUM_TYPES = frozenset({"Premium", "PremiumPlus", "PremiumBusiness"})
-NOT_PREMIUM_TYPES = frozenset({"None", "Basic"})
+# §40.8 change 13: X also sends "None" for its newer plans that the field doesn't know, so "None" is "X didn't share
+# this" (missing), never "no Premium". Only "Basic" says no.
+NOT_PREMIUM_TYPES = frozenset({"Basic"})
 NOT_SHARED = "{name} didn't share this."
 
 # YouTube Analytics 403 reasons that are never "not in the Partner Program yet" (§25.1).
