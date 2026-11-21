@@ -1,0 +1,163 @@
+{
+  "$comment": "Shared cases for the model and effort resolver (docs/CONTRACTS.md \u00a745.25): the agent's lamostories_agent.models.resolve and the API's workspaces/ai_resolve.py must both pass every case. Model and effort are merged separately; precedence request > conversation or project > task > agent > workspace default. An effort the model does not offer is refused (expect.error), never swapped.",
+  "cases": [
+    {
+      "name": "workspace default",
+      "task": "chat",
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high"
+      },
+      "expect": {
+        "model": "opus-5-5",
+        "effort": "high",
+        "from": "default"
+      }
+    },
+    {
+      "name": "agent beats default",
+      "task": "chat",
+      "agent": {
+        "model": "sonnet-5-5",
+        "effort": "low"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high"
+      },
+      "expect": {
+        "model": "sonnet-5-5",
+        "effort": "low",
+        "from": "agent"
+      }
+    },
+    {
+      "name": "task beats agent",
+      "task": "storyboard",
+      "agent": {
+        "model": "sonnet-5-5"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high",
+        "tasks": {
+          "storyboard": {
+            "model": "fable-5-2"
+          }
+        }
+      },
+      "expect": {
+        "model": "fable-5-2",
+        "effort": "high",
+        "from": "task"
+      }
+    },
+    {
+      "name": "conversation beats task",
+      "task": "chat",
+      "conversation": {
+        "model": "fable-5-1",
+        "effort": "medium"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high",
+        "tasks": {
+          "chat": {
+            "model": "haiku-5-5"
+          }
+        }
+      },
+      "expect": {
+        "model": "fable-5-1",
+        "effort": "medium",
+        "from": "conversation"
+      }
+    },
+    {
+      "name": "project beats task",
+      "task": "storyboard",
+      "project": {
+        "model": "fable-5-2",
+        "effort": "xhigh"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high",
+        "tasks": {
+          "storyboard": {
+            "model": "sonnet-5-5"
+          }
+        }
+      },
+      "expect": {
+        "model": "fable-5-2",
+        "effort": "xhigh",
+        "from": "project"
+      }
+    },
+    {
+      "name": "request beats all",
+      "task": "chat",
+      "request": {
+        "model": "fable-5-2",
+        "effort": "max"
+      },
+      "conversation": {
+        "model": "fable-5-1"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high"
+      },
+      "expect": {
+        "model": "fable-5-2",
+        "effort": "max",
+        "from": "request"
+      }
+    },
+    {
+      "name": "effort and model merge separately",
+      "task": "chat",
+      "conversation": {
+        "effort": "low"
+      },
+      "agent": {
+        "model": "sonnet-5-5"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5",
+        "defaultEffort": "high"
+      },
+      "expect": {
+        "model": "sonnet-5-5",
+        "effort": "low",
+        "from": "agent"
+      }
+    },
+    {
+      "name": "unknown model is refused",
+      "task": "chat",
+      "agent": {
+        "model": "gpt-9"
+      },
+      "ai": {},
+      "expect": {
+        "error": "model"
+      }
+    },
+    {
+      "name": "unknown effort is refused",
+      "task": "chat",
+      "request": {
+        "effort": "turbo"
+      },
+      "ai": {
+        "defaultModel": "opus-5-5"
+      },
+      "expect": {
+        "error": "effort"
+      }
+    }
+  ]
+}
