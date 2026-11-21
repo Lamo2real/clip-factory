@@ -16,7 +16,10 @@
         "stream",
         "vod",
         "new clips",
-        "start"
+        "start",
+        "make my clips",
+        "make clips for me",
+        "how do i make clips"
       ],
       "answer": "Copy the link to a stream or video, paste it on Home and tap **Make clips**. Clip Factory finds the best moments for you.",
       "steps": [
@@ -459,7 +462,10 @@
         "edit caption",
         "change the caption",
         "tiktok caption",
-        "instagram caption"
+        "instagram caption",
+        "fix my caption",
+        "add hashtags",
+        "tags"
       ],
       "answer": "Each clip has its own caption for every place it goes. Change them on the clip in **Review** before you tap **Upload**. They save by themselves.",
       "steps": [
@@ -614,10 +620,10 @@
       "title": "How much money did I make?",
       "where": "Money",
       "route": "/money",
-      "answer": "Clip Factory only shows money an app reports. It never guesses from views and you never type money in. Tap **Money** in the menu. The big number at the top is what the apps reported for your last 30 days. The list under it shows each posted clip with what YouTube says it earned, the biggest first. TikTok, Instagram and X don't share money with apps.",
+      "answer": "Clip Factory only shows money a place reports. It never guesses from views and you never type money in. Tap **Money** in the menu. **All your money** at the top adds up your last 30 days from every place, Content Rewards too. **Monthly MRR** under it is the apps only. The list further down shows what YouTube says each posted clip earned. TikTok, Instagram and X don't share money with apps.",
       "steps": [
         "Tap **Money** in the menu.",
-        "Read the big number at the top. Each amount says whose estimate it is.",
+        "Read **All your money** at the top. Each amount says whose numbers it is.",
         "Scroll down to see what each clip earned."
       ],
       "keywords": [
@@ -646,7 +652,7 @@
           "label": "Open Money",
           "to": "/money",
           "highlight": [
-            "money-dash-monthly"
+            "money-dash"
           ]
         },
         {
@@ -668,7 +674,8 @@
       "steps": [
         "Tap **Money** in the menu.",
         "Tap app icons in the bar at the bottom right to pick apps. **All** shows every app.",
-        "Tap **7 days**, **30 days**, **90 days** or **Year** to change the chart and the clip list."
+        "Tap **7 days**, **30 days**, **90 days** or **Year** to change the chart and the clip list.",
+        "Content Rewards money is not in MRR. It is in **All your money** at the top."
       ],
       "keywords": [
         "mrr",
@@ -821,6 +828,78 @@
           "to": "/settings/posting/money#money-payouts",
           "highlight": [
             "money-payouts"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-everywhere",
+      "title": "How much did I earn everywhere?",
+      "where": "Money",
+      "route": "/money",
+      "answer": "Tap **Money**. The first card, **All your money**, adds up the last 30 days from YouTube, Content Rewards and every other place that tells apps what you earn. **Total** is the biggest number. Each amount says whose numbers it is. TikTok, Instagram and X say **Not available**, never $0. Dollars and euros are never added together.",
+      "steps": [
+        "Tap **Money** in the menu.",
+        "Look at **All your money**, the first card.",
+        "Read **Total** and the places in it.",
+        "Under Content Rewards, read **Right now** and **Earned so far**."
+      ],
+      "keywords": [
+        "all your money",
+        "earn everywhere",
+        "earn on all platforms",
+        "money from every platform",
+        "total",
+        "total money",
+        "all my money",
+        "money in one place",
+        "track my earnings",
+        "including content rewards",
+        "everything i earned"
+      ],
+      "actions": [
+        {
+          "id": "money-everywhere:money",
+          "label": "Open Money",
+          "to": "/money",
+          "highlight": [
+            "money-dash"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-not-available",
+      "title": "Why does it say Not available from TikTok?",
+      "where": "Money",
+      "route": "/money",
+      "answer": "TikTok, Instagram and X don't tell apps what you earn. So Clip Factory never guesses and never shows $0: it says **Not available from TikTok** and where to look. TikTok: **Profile**, then **Balance**. Instagram: **Professional dashboard**, then **Payouts**. X: **Monetization**. Facebook says **Coming soon** for now.",
+      "steps": [
+        "Tap **Money** in the menu.",
+        "Find the place in **All your money**.",
+        "Read its **Look in** line.",
+        "Open that app and look there.",
+        "Money that went to your bank? Content Rewards doesn't tell apps. Look on Whop, **Balances**."
+      ],
+      "keywords": [
+        "not available",
+        "not available from tiktok",
+        "not available from instagram",
+        "not available from x",
+        "no tiktok money",
+        "instagram money",
+        "x money",
+        "why no number",
+        "facebook money coming soon",
+        "look in"
+      ],
+      "actions": [
+        {
+          "id": "money-not-available:money",
+          "label": "Open Money",
+          "to": "/money",
+          "highlight": [
+            "money-dash"
           ]
         }
       ]
@@ -2582,24 +2661,26 @@
         "content rewards",
         "connect content rewards",
         "set up content rewards",
-        "get paid by brands",
-        "brand campaigns",
         "clipping",
         "campaign money",
-        "sign in content rewards"
+        "sign in content rewards",
+        "i have an account",
+        "i added them",
+        "connect my content rewards account",
+        "how to connect content rewards"
       ],
-      "answer": "Content Rewards pays you for clips you make for brands. Set it up once in 3 steps: make a Content Rewards account, connect your accounts there, then tap **Connect Content Rewards** in the Clip Factory app on your Mac.",
+      "answer": "Content Rewards pays you for clips you make for brands. Connect it once, in 3 steps, in this order. 1: make a Content Rewards account, or tap **I have an account**. 2: add YouTube and your other accounts inside Content Rewards, then tap **I added them**. 3: on your Mac, tap **Connect Content Rewards** and allow it. Already set up there? Tap **Yes** at the top, then do step 3.",
       "steps": [
-        "Tap **Settings**.",
-        "Tap **Posting**, then **Set up posting**.",
-        "Tap **Content Rewards**.",
-        "Do step 1 and step 2 on Content Rewards.",
-        "On your Mac, tap **Connect Content Rewards** and allow it."
+        "Tap **Settings**, then **Posting**, then **Set up posting**, then **Content Rewards**.",
+        "Already set up there? Tap **Yes**.",
+        "Step 1: tap **Open Content Rewards** and make your account. Then tap **I have an account**.",
+        "Step 2: tap **Open Content Rewards settings** and add YouTube. Then tap **I added them**.",
+        "Step 3: on your Mac, tap **Connect Content Rewards** and allow it."
       ],
       "actions": [
         {
           "id": "cr-setup:page",
-          "label": "Open Content Rewards",
+          "label": "Set up Content Rewards",
           "to": "/settings/posting/setup/contentrewards",
           "highlight": [
             "cr-setup-card",
@@ -2615,12 +2696,10 @@
       "title": "Content Rewards says my account can't connect apps",
       "keywords": [
         "can't connect apps",
-        "cannot connect",
         "not allowed",
         "content rewards said no",
         "pilot",
-        "email content rewards",
-        "connect apps"
+        "email content rewards"
       ],
       "answer": "Content Rewards turns this on by email. On the Content Rewards page in Clip Factory, open **Content Rewards said no?**, tap **Open email** and send it from the email you sign in with. Until they say yes, you send each clip yourself and I remind you.",
       "steps": [
@@ -2774,22 +2853,25 @@
       "id": "cr-make-clips",
       "route": "/",
       "where": "Home",
-      "title": "Make clips for a campaign",
+      "title": "Make campaign clips",
       "keywords": [
         "campaign clips",
-        "for a campaign",
         "campaign rules",
         "clips for a brand",
         "brand clips",
         "paid partnership",
-        "campaign video"
+        "campaign video",
+        "which campaign",
+        "videos from the campaign",
+        "for a campaign",
+        "clips for my campaign"
       ],
-      "answer": "Open the campaign and tap **Make clips for this campaign**. Home opens with the campaign picked. Paste or pick the video and start. The rules go with it: length, tags, #Ad and the logo.",
+      "answer": "Campaign clips start from a campaign: tap its chip in **Your campaigns** on Home, or tap **Make clips for this campaign** on the campaign. Home then says **Campaign clips** and its name. Paste or pick the video and tap **Make campaign clips**. The rules go with it: length, tags, #Ad and the logo.",
       "steps": [
-        "Open **Your campaigns** and tap the campaign.",
-        "Tap **Make clips for this campaign**.",
-        "Paste or pick the video.",
-        "Tap the scissors button to start."
+        "Go to **Home**.",
+        "In **Your campaigns**, tap **Make campaign clips** on the campaign.",
+        "Tap a **Videos from the campaign** chip, or tap **Paste**.",
+        "Tap **Make campaign clips**."
       ],
       "actions": [
         {
@@ -2797,8 +2879,175 @@
           "label": "Go to Home",
           "to": "/",
           "highlight": [
-            "cr-make-clips",
-            "make-clips"
+            "cr-make-clips"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-two-ways",
+      "route": "/",
+      "where": "Home",
+      "title": "Normal clips or campaign clips?",
+      "keywords": [
+        "normal or campaign",
+        "two ways",
+        "which way",
+        "normal way",
+        "campaign way",
+        "both ways",
+        "pick a way"
+      ],
+      "answer": "There are two ways. **Make clips** on Home makes normal clips, the same as always. Campaign clips start from a campaign you joined: tap **Make campaign clips** on it in Your campaigns. Then Home says **Campaign clips** and its name. A normal clip that could earn on your campaign tells you so on Review.",
+      "steps": [
+        "Normal clips: on **Home**, tap **Paste**, then **Make clips**.",
+        "Campaign clips: in **Your campaigns** on Home, tap **Make campaign clips**.",
+        "Look at the top: it says **Campaign clips** and the campaign's name.",
+        "Tap **Make campaign clips**.",
+        "Back to normal clips? Tap **Make normal clips instead**."
+      ],
+      "actions": [
+        {
+          "id": "cr-two-ways:home",
+          "label": "Go to Home",
+          "to": "/",
+          "highlight": [
+            "make-clips",
+            "cr-make-clips"
+          ]
+        },
+        {
+          "id": "cr-two-ways:campaigns",
+          "label": "Open your campaigns",
+          "to": "/campaigns"
+        }
+      ]
+    },
+    {
+      "id": "cr-fit",
+      "route": "/review",
+      "where": "Review",
+      "title": "Can this clip earn on my campaign?",
+      "keywords": [
+        "can it earn",
+        "will it earn",
+        "earn on my campaign",
+        "does it fit",
+        "fit the campaign",
+        "qualify",
+        "will it count",
+        "get paid for this clip",
+        "follows the rules",
+        "can earn",
+        "almost ready",
+        "one thing first",
+        "wait a little",
+        "can't earn",
+        "check 2 things",
+        "i read them",
+        "campaign clip",
+        "rules check",
+        "will this clip get paid",
+        "clip ok for the campaign",
+        "right for the campaign",
+        "content i upload",
+        "work for my campaign",
+        "earn money on content rewards",
+        "get paid on content rewards",
+        "i couldn't check",
+        "campaign deadline",
+        "needs a copy",
+        "can this clip earn on my campaign",
+        "will this clip get paid on content rewards"
+      ],
+      "answer": "On Review, a campaign clip checks its Content Rewards rules. It checks the length, where it pays, tags and #Ad, the logo, Paid partnership, where the video is from, its language, banned things and the deadline. If it can't earn money, **Upload** stays off. **Wait a little** means Upload turns on by itself. **I couldn't check** means look yourself. One clip earns on one campaign only.",
+      "steps": [
+        "Tap **Review**. Read the big line under **Campaign clip** at the top.",
+        "**Can earn on** it? Tap **Upload**.",
+        "**Almost ready** or **One thing first**? Tap the button right under it.",
+        "**Needs a copy of this clip**? Tap **Make a FaZe Clips copy**.",
+        "**Can't earn**? Tap **Make new clips for this campaign**.",
+        "**Check 2 things**? Read them. You can still tap **Upload**."
+      ],
+      "actions": [
+        {
+          "id": "cr-fit:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "cr-review-strip"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-fix-it",
+      "route": "/review",
+      "where": "Review",
+      "title": "What does Fix it for me do?",
+      "keywords": [
+        "fix it for me",
+        "what does fix it for me do",
+        "missing #ad",
+        "#ad missing",
+        "campaign tags missing"
+      ],
+      "answer": "On a campaign clip, when a caption is missing #Ad or a tag the campaign wants, Review says so and shows **Fix it for me**. Tap it to put them back in the words right now. Tap **Undo** within 8 seconds to get the old words back. You don't have to tap it: when the clip uploads, I put #Ad and the tags back by myself. For TikTok, **Turn on Branded content** is its own button. Tap that one yourself.",
+      "steps": [
+        "Tap **Review**.",
+        "Find the line that says #Ad or a tag is missing.",
+        "Tap **Fix it for me**. The words have them again.",
+        "Tap **Undo** if you want the old words back.",
+        "Or skip it: I put them back when it uploads."
+      ],
+      "actions": [
+        {
+          "id": "cr-fix-it:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "cr-review-strip"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cr-make-it-for",
+      "route": "/review",
+      "where": "Review",
+      "title": "Make a campaign copy of a clip",
+      "keywords": [
+        "make a copy",
+        "campaign copy",
+        "copy for my campaign",
+        "could earn",
+        "this clip could earn money",
+        "normal clip for a campaign",
+        "use this clip for my campaign",
+        "earn with this clip",
+        "not now",
+        "the copy",
+        "already up",
+        "already posted",
+        "posted the normal way"
+      ],
+      "answer": "When a normal clip could earn on a campaign you're in, Review says **This clip could earn money on** it. Tap the button with the campaign's name, like **Make a FaZe Clips copy**. In about 3 minutes the copy shows right below, with the logo, **Paid partnership** and #Ad. Upload the copy to earn. The first clip stays as it is. **Not now** hides the line.",
+      "steps": [
+        "In **Review**, find **This clip could earn money on** under the clip.",
+        "Tap **Make a FaZe Clips copy**. It shows your campaign's name.",
+        "Wait about 3 minutes. The copy shows right below.",
+        "On the copy, tap **Use my settings**, then **Upload**.",
+        "You can throw the first one away.",
+        "Already posted the normal way? Content Rewards only takes a post in its first 30 minutes, so make a copy."
+      ],
+      "actions": [
+        {
+          "id": "cr-make-it-for:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "cr-review-strip",
+            "use-my-settings"
           ]
         }
       ]
