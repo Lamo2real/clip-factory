@@ -10,24 +10,28 @@ import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { LinkButton } from "../../components/ui.tsx";
 import { useCr } from "../../lib/contentRewards.ts";
-import { fitMain, reloadFit, useClipFit } from "../../lib/crFit.ts";
+import { fitMain, reloadFit, useClipFit, useCopy } from "../../lib/crFit.ts";
 import { canMacFetch } from "../../lib/macFetch.ts";
 import { Rich } from "../settings/setup/bits.tsx";
-import { CampaignFit, making, type CopyState } from "../review/CampaignFit.tsx";
+import { CampaignFit } from "../review/CampaignFit.tsx";
 import { FitSuggestion } from "../review/FitSuggestion.tsx";
 
-const MAKING_MS = 10 * 60_000;
+export type PageCopy = ReturnType<typeof useCopy>;
 
-/** The clip page's fit, and whether its block has the page's main button (then Refresh numbers steps back). */
+/**
+ * The clip page's fit, where its campaign copy stands (read from the copy's own job), and whether its block has the
+ * page's main button (then Refresh numbers steps back).
+ */
 export function useClipPageFit(clip: Pick<Clip, "clipId" | "status"> | null) {
   const cr = useCr();
   const load = useClipFit(clip?.clipId ?? null, !!clip && cr.state !== "missing" && cr.state !== "soon");
   const data = load.state === "ok" || load.state === "error" ? load.data : null;
   const own = data?.mode === "campaign" ? (data.fits[0] ?? null) : null;
   const waiting = clip?.status === "review";
-  const remade = own && data?.remakes[own.campaignId];
-  const main = waiting && own && !remade ? fitMain(own) : null;
-  return { data, own, waiting, main };
+  const copyFor = own?.campaignId ?? (data?.mode === "normal" ? (data.suggestion?.campaignId ?? null) : null);
+  const copy = useCopy(clip?.clipId ?? "", copyFor ? data?.remakes[copyFor] : undefined);
+  const main = waiting && own && copy.state === "none" ? fitMain(own) : null;
+  return { data, own, waiting, main, copy };
 }
 
 /** One line per campaign: its headline and first reason (the first problem, else the first thing that's right). */
@@ -36,27 +40,20 @@ export function fitSummary(f: Fit): string {
   return first ? `${f.headline}. ${first.text}` : `${f.headline}.`;
 }
 
-export function ClipFit({ clip, data, primary }: { clip: Clip; data: ClipFitData | null; primary: boolean }) {
+export function ClipFit({ clip, data, primary, copy: pageCopy }: { clip: Clip; data: ClipFitData | null; primary: boolean; copy: PageCopy }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [asked, setAsked] = useState<string | null>(null);
   if (!data) return null;
   const waiting = clip.status === "review";
   const own = data.mode === "campaign" ? (data.fits[0] ?? null) : null;
   const suggested = data.mode === "normal" && data.suggestion ? (data.fits.find((f) => f.campaignId === data.suggestion!.campaignId) ?? null) : null;
 
-  const copyOf = (campaignId: string | null): { state: CopyState; jobId?: string } => {
-    const entry = campaignId ? data.remakes[campaignId] : undefined;
-    if (!entry) return { state: asked && asked === campaignId ? "making" : "none" };
-    return { state: Date.now() - Date.parse(entry.at) < MAKING_MS ? "making" : "ready", jobId: entry.jobId };
-  };
-
   async function copy(campaignId: string, campaignAnyway: string[]) {
     setBusy(true);
     try {
       const youtube = /^https:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//.test(clip.sourceUrlAt ?? "");
-      await api().crRemake(campaignId, { clipId: clip.clipId, ...(youtube && canMacFetch() ? { macFetch: true } : {}), ...(campaignAnyway.length ? { campaignAnyway } : {}) });
-      setAsked(campaignId);
+      const job = await api().crRemake(campaignId, { clipId: clip.clipId, ...(youtube && canMacFetch() ? { macFetch: true } : {}), ...(campaignAnyway.length ? { campaignAnyway } : {}) });
+      pageCopy.started(job);
       reloadFit(clip.clipId);
       return true;
     } catch (e) {
@@ -67,21 +64,18 @@ export function ClipFit({ clip, data, primary }: { clip: Clip; data: ClipFitData
     }
   }
 
-  const ownCopy = copyOf(own?.campaignId ?? null);
-  const suggestedCopy = copyOf(suggested?.campaignId ?? null);
-  const copyLink = (c: { state: CopyState; jobId?: string }, name: string) =>
-    c.state === "ready" && c.jobId ? (
+  // The copy waits in Review (its job's own clips say so): one way there. Making it, or already up: its line.
+  const copyLink = (name: string) =>
+    pageCopy.state === "ready" && pageCopy.jobId ? (
       <div className="cr-clip-fit__copy">
         <p className="small">{`The ${name} copy is in Review.`}</p>
-        <LinkButton href={`/review?job=${encodeURIComponent(c.jobId)}`} variant="glass" icon="review" iconAfter="chevronRight">
+        <LinkButton href={`/review?job=${encodeURIComponent(pageCopy.jobId)}`} variant="glass" icon="review" iconAfter="chevronRight">
           Go to Review
         </LinkButton>
       </div>
-    ) : c.state === "making" ? (
-      <p className="small" role="status">
-        {making(name)}
-      </p>
     ) : null;
+  // The block itself says "Making…" or "uploaded"; "ready" is said by the link above (not "right below" here).
+  const blockCopy = pageCopy.state === "ready" ? "unknown" : pageCopy.state;
 
   return (
     <>
@@ -91,17 +85,22 @@ export function ClipFit({ clip, data, primary }: { clip: Clip; data: ClipFitData
             clipId={clip.clipId}
             fit={own}
             primary={primary}
-            copy={ownCopy.state === "none" ? "none" : "making"}
+            copy={blockCopy}
             onRemake={() => copy(own.campaignId, own.softCodes)}
             remaking={busy}
           />
-          {copyLink(ownCopy, own.campaignName)}
+          {copyLink(own.campaignName)}
         </section>
       ) : null}
       {waiting && suggested ? (
         <section className="cr-clip-fit" aria-label="Could this clip earn money?">
-          <FitSuggestion clipId={clip.clipId} fit={suggested} copy={suggestedCopy.state === "none" ? "none" : "making"} onCopy={(anyway) => copy(suggested.campaignId, anyway)} busy={busy} />
-          {copyLink(suggestedCopy, suggested.campaignName)}
+          {pageCopy.state === "ready" ? (
+            <section className="cr-suggest glass" data-help="cr-review-strip cr-fit-suggest" aria-label={`The ${suggested.campaignName} copy`}>
+              {copyLink(suggested.campaignName)}
+            </section>
+          ) : (
+            <FitSuggestion clipId={clip.clipId} fit={suggested} copy={pageCopy.state} onCopy={(anyway) => copy(suggested.campaignId, anyway)} busy={busy} />
+          )}
         </section>
       ) : null}
     </>
@@ -116,6 +115,9 @@ export function CampaignsFold({ data }: { data: ClipFitData | null }) {
   const cr = useCr();
   const inCampaign = cr.state === "ok" && cr.data.campaigns.some((c) => c.membership === "in" || c.membership === "manual");
   if (!data || data.mode !== "normal" || !inCampaign || !data.fits.length) return null;
+  // The campaign the "could earn" line names comes first, so the two never disagree.
+  const first = data.suggestion?.campaignId;
+  const fits = first ? [...data.fits.filter((f) => f.campaignId === first), ...data.fits.filter((f) => f.campaignId !== first)] : data.fits;
   return (
     <details className="cr-clip-fit__all glass" data-help="cr-fit">
       <summary className="cr-fold__q">
@@ -124,7 +126,7 @@ export function CampaignsFold({ data }: { data: ClipFitData | null }) {
         <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
       </summary>
       <ul className="cr-fold__body cr-fit__lines">
-        {data.fits.map((f) => (
+        {fits.map((f) => (
           <li key={f.campaignId} className={`cr-fit__line is-${f.verdict}`} data-campaign={f.campaignId}>
             <Icon name={f.verdict === "fits" ? "checkCircle" : f.verdict === "doesnt_fit" ? "xCircle" : f.verdict === "wait" ? "clock" : "info"} size={18} />
             <span>
@@ -137,13 +139,11 @@ export function CampaignsFold({ data }: { data: ClipFitData | null }) {
   );
 }
 
-/**
- * A clip that waits in Review has no numbers yet (its page says so): the fit still shows above that, from the clip
- * itself, so the clip page tells him whether it can earn before he uploads it.
- */
-export function WaitingClipFit({ clipId }: { clipId: string }) {
+/** The clip itself, when its page has no numbers (a clip still in Review answers 404 there). */
+export function useWaitingClip(clipId: string, on: boolean): Clip | null {
   const [clip, setClip] = useState<Clip | null>(null);
   useEffect(() => {
+    if (!on) return;
     let alive = true;
     api()
       .getClip(clipId)
@@ -152,12 +152,20 @@ export function WaitingClipFit({ clipId }: { clipId: string }) {
     return () => {
       alive = false;
     };
-  }, [clipId]);
+  }, [clipId, on]);
+  return on ? clip : null;
+}
+
+/**
+ * A clip that waits in Review has no numbers yet (its page says so): the fit still shows above that, from the clip
+ * itself, so the clip page tells him whether it can earn before he uploads it.
+ */
+export function WaitingClipFit({ clip }: { clip: Clip | null }) {
   const page = useClipPageFit(clip?.status === "review" ? clip : null);
   if (!clip || clip.status !== "review") return null;
   return (
     <>
-      <ClipFit clip={clip} data={page.data} primary={false} />
+      <ClipFit clip={clip} data={page.data} primary={false} copy={page.copy} />
       <CampaignsFold data={page.data} />
     </>
   );

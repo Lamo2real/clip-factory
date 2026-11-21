@@ -7,7 +7,7 @@ import type { CampaignFit } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { Button } from "../../components/ui.tsx";
 import { isNotNow, saveNotNow, softText } from "../../lib/crFit.ts";
-import { copyReady, making, type CopyState } from "./CampaignFit.tsx";
+import { copyLine, type CopyState } from "./CampaignFit.tsx";
 
 export const couldEarn = (name: string) => `This clip could earn money on ${name}.`;
 
@@ -33,22 +33,20 @@ export function FitSuggestion({
   busy?: boolean;
 }) {
   const [hidden, setHidden] = useState(() => isNotNow(clipId));
-  if (hidden && copy === "none") return null;
+  // Not read yet: nothing, so a copy already asked for never flashes its button first.
+  if (copy === "unknown" || (hidden && copy === "none")) return null;
   const name = fit.campaignName;
   const soft = softText(fit);
+  const line = copyLine(copy, name);
   return (
     <section className="cr-suggest glass" data-help="cr-review-strip cr-fit-suggest" aria-label={couldEarn(name)}>
       <p className="cr-suggest__title">
         <Icon name="coin" size={18} />
         <span>{couldEarn(name)}</span>
       </p>
-      {copy === "making" ? (
-        <p className="cr-suggest__line" role="status">
-          {making(name)}
-        </p>
-      ) : copy === "ready" ? (
-        <p className="cr-suggest__line is-ok" role="status">
-          {copyReady(name)}
+      {line ? (
+        <p className={`cr-suggest__line${copy === "making" ? "" : " is-ok"}`} role="status">
+          {line}
         </p>
       ) : (
         <>

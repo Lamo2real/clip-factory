@@ -82,6 +82,75 @@ export function sourceKept(job: Job | null, now: number): boolean {
   return now - Date.parse(job.createdAt) < SOURCE_KEPT_MS;
 }
 
+const SITES: [string, string][] = [
+  ["youtube", "YouTube"],
+  ["twitch", "Twitch"],
+  ["kick", "Kick"],
+];
+const siteLabel = (site: string | null) => SITES.find(([k]) => k === site)?.[1] ?? (site && site in PLATFORM_LABEL ? PLATFORM_LABEL[site as Platform] : (site ?? ""));
+/** fit.py `_site_of`: a link job's site, or where a Mac-fetched video came from. */
+function siteOf(job: Job | null): string | null {
+  if (job?.source.type === "link") return job.source.platform || null;
+  if (job?.source.fetchedBy === "mac") return job.source.linkPlatform ?? "youtube";
+  return null;
+}
+/** links.normalize_post_url, in short: no scheme, no www/m., no trailing slash, case-folded. */
+const normal = (u: string) =>
+  u
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/^(www\.|m\.)/i, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+/** fit.py `_line`: brand text as one plain line, without its last full stop. */
+function line(text: string, limit = 160): string {
+  let out = text.split(/\s+/).filter(Boolean).join(" ");
+  if (out.length > limit) return `${out.slice(0, limit - 1).trimEnd()}…`;
+  out = out.replace(/[.!? ]+$/, "");
+  return out;
+}
+/** fit.py `channel_matches`: a channel's name or handle contains the video's, or the other way round. */
+function channelMatches(channels: { name: string; url: string | null }[], job: Job | null): boolean | null {
+  const key = (t: string) => t.toLowerCase().replace(/[\W_]+/g, "");
+  const handle = (u: string | null) => (u ? (/(?:youtube\.com\/@|twitch\.tv\/|kick\.com\/)([^/?#]+)/i.exec(u)?.[1] ?? "") : "");
+  const allowed = channels.flatMap((c) => [key(c.name), key(handle(c.url))]).filter((k) => k.length >= 3);
+  const video = [...new Set((job?.source.channelKeys?.length ? job.source.channelKeys : [job?.source.channel ?? ""]).map(key))].filter((k) => k.length >= 3);
+  if (!allowed.length || !video.length) return null;
+  return video.some((v) => allowed.some((a) => v.includes(a) || a.includes(v)));
+}
+
+/** fit.py `_source_rows`: the source videos, campaign videos only, a ruled-out site, channels, notes, sites, any. */
+function sourceRow(job: Job | null, rules: Campaign["rules"], name: string, owner: string, cid: string, newClips: (rule: FitRule) => FitFix): FitItem {
+  const allowed = rules?.allowedSources;
+  const videos = (rules?.sourceVideos ?? []).map((v) => v.url).filter(Boolean);
+  const link = linkOf(job);
+  const site = siteOf(job);
+  const look = "Look yourself.";
+  if (link && videos.some((v) => normal(v) === normal(link))) return item("source", "ok", `From a ${name} video.`);
+  if (allowed?.campaignProvidedOnly) {
+    if (link) return item("source", "no", `${name} only pays for clips of its own videos.`, newClips("source"));
+    return item("source", "check", `I couldn't check where this video is from. ${name} only pays for clips of its own videos. ${look}`, readRules(cid));
+  }
+  const sites = allowed ? SITES.map(([k]) => k).filter((k) => allowed[k as "youtube" | "twitch" | "kick"] === true) : [];
+  if (sites.length && site && SITES.some(([k]) => k === site) && !sites.includes(site))
+    return item("source", "no", `${name} doesn't pay for clips of ${siteLabel(site)} videos.`, newClips("source"));
+  const channels = (allowed?.channels ?? []).filter((c) => c.name);
+  if (channels.length) {
+    const matched = channelMatches(channels, job);
+    if (matched === true) return item("source", "ok", `From ${owner} ${siteLabel(site) || "channel"}.`);
+    if (matched === false) return item("source", "check", `This video may not be from ${owner} channels. ${name} only pays for those. ${look}`, readRules(cid));
+    return item("source", "check", `I couldn't check where this video is from. ${name} wants clips from ${owner} channels. ${look}`, readRules(cid));
+  }
+  if (allowed?.notes) return item("source", "check", `I couldn't check where this video is from. ${name} says: “${line(allowed.notes, 120)}”. ${look}`, readRules(cid));
+  if (sites.length && sites.length < SITES.length) {
+    if (site && sites.includes(site)) return item("source", "ok", `From a ${siteLabel(site)} video.`);
+    const names = sites.map(siteLabel);
+    const joined = names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
+    return item("source", "check", `I couldn't check where this video is from. ${name} wants clips of ${joined} videos. ${look}`, readRules(cid));
+  }
+  return item("source", "ok", `Any video is fine for ${name}.`);
+}
+
 /** This clip against this campaign, with the server's words (a copy of fit.py's rows). */
 export function fitOne(i: FitInputs): CampaignFit {
   const { clip, job, campaign: c, conn } = i;
@@ -180,22 +249,8 @@ export function fitOne(i: FitInputs): CampaignFit {
   const shown = mine ? (checklist(clip, "disclosure")?.pass ?? true) : false;
   items.push(shown ? item("on_screen", "ok", `“${words}” shows for the first 3 seconds.`) : item("on_screen", "remake", `“${words}” isn't on the video.`, remake()));
 
-  // Where the video is from.
-  const allowed = rules?.allowedSources;
-  const owner = possessive(brand);
-  if (allowed?.campaignProvidedOnly && rules?.sourceVideos.length) {
-    const link = linkOf(job);
-    if (link && rules.sourceVideos.some((v) => v.url === link)) items.push(item("source", "ok", `From a ${name} video.`));
-    else items.push(item("source", "no", `${name} only pays for clips of its own videos.`, newClips("source")));
-  } else if (allowed?.channels.length) {
-    const video = (job?.source.channelKeys ?? [job?.source.channel ?? ""]).map((k) => k.toLowerCase().replace(/[\W_]+/g, "")).filter((k) => k.length >= 3);
-    const wanted = allowed.channels.map((ch) => ch.name.toLowerCase().replace(/[\W_]+/g, "")).filter((k) => k.length >= 3);
-    const matched = video.length ? video.some((v) => wanted.some((w) => v.includes(w) || w.includes(v))) : null;
-    const site = job?.source.platform && job.source.platform !== "upload" ? PLATFORM_LABEL[job.source.platform] : null;
-    if (matched === true) items.push(item("source", "ok", `From ${owner} ${site ?? "channel"}.`));
-    else if (matched === false) items.push(item("source", "check", `This video may not be from ${owner} channels. ${name} only pays for those. Look yourself.`, readRules(cid)));
-    else items.push(item("source", "check", `I couldn't check where this video is from. ${name} wants clips from ${owner} channels. Look yourself.`, readRules(cid)));
-  } else items.push(item("source", "ok", `Any video is fine for ${name}.`));
+  // Where the video is from (fit.py `_source_rows`, in its order).
+  items.push(sourceRow(job, rules, name, possessive(brand), cid, newClips));
 
   // The language.
   if (rules?.language?.trim()) {

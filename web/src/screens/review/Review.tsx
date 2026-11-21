@@ -25,9 +25,9 @@ import { campaignCardOptions, cardOptionsFrom, optionsFor, presetOf, type CardOp
 import { afterUploadLine, crAvailability, patchCr, placesLines, reloadCr, unlinkedPlaces, useCr } from "../../lib/contentRewards.ts";
 import { campaignTikTokChoices, campaignTikTokProblem } from "../../lib/tiktokChoices.ts";
 import { CampaignStrip } from "./CampaignStrip.tsx";
-import { CampaignFit, type CopyState } from "./CampaignFit.tsx";
+import { CampaignFit, copyLine } from "./CampaignFit.tsx";
 import { FitSuggestion } from "./FitSuggestion.tsx";
-import { fitMain, fixedWords, liveFit, reloadFit, uploadOffWords, useClipFit } from "../../lib/crFit.ts";
+import { fitMain, fixedWords, liveFit, reloadFit, uploadOffWords, useClipFit, useCopy } from "../../lib/crFit.ts";
 import { canMacFetch } from "../../lib/macFetch.ts";
 import { TikTokLegal } from "./TikTokCommercial.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
@@ -38,12 +38,14 @@ export const MEDIA_FRESH_MS = 50 * 60 * 1000;
 
 /**
  * Review's clips: one job's (with the campaign copies made of them, §39.3: a copy is a clip of a new job, so the jobs
- * named in its clips' `remakes` are read too, at most 10), or every job's.
+ * named in the `remakes` of every clip of the job are read too, at most 10: a copy stays here after its original was
+ * thrown away), or every job's.
  */
 export async function reviewClips(jobId: string | null): Promise<Clip[]> {
-  const clips = await api().listClips({ status: "review", ...(jobId ? { jobId } : {}) });
-  if (!jobId) return clips;
-  const jobs = [...new Set(clips.flatMap((c) => Object.values(c.remakes ?? {}).map((r) => r.jobId)))].filter((j) => j !== jobId).slice(0, 10);
+  if (!jobId) return api().listClips({ status: "review" });
+  const all = await api().listClips({ status: "all", jobId });
+  const clips = all.filter((c) => c.status === "review");
+  const jobs = [...new Set(all.flatMap((c) => Object.values(c.remakes ?? {}).map((r) => r.jobId)))].filter((j) => j !== jobId).slice(0, 10);
   if (!jobs.length) return clips;
   const copies = (await Promise.all(jobs.map((j) => api().listClips({ status: "review", jobId: j }).catch(() => [] as Clip[])))).flat();
   const have = new Set(clips.map((c) => c.clipId));
@@ -405,7 +407,6 @@ function ReviewCard({
     setPicked(chosen.includes(p) ? chosen.filter((x) => x !== p) : [...chosen, p]);
   }
   const [dirty, setDirty] = useState<Partial<Captions>>({});
-  const [askedCopy, setAskedCopy] = useState<string | null>(null);
   const [copyBusy, setCopyBusy] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [save, setSave] = useState<SaveState>("idle");
@@ -714,12 +715,12 @@ function ReviewCard({
     setCopyBusy(true);
     try {
       const youtube = /^https:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//.test(clip.sourceUrlAt ?? "");
-      await api().crRemake(campaignId, {
+      const job = await api().crRemake(campaignId, {
         clipId: clip.clipId,
         ...(youtube && canMacFetch() ? { macFetch: true } : {}),
         ...(campaignAnyway.length ? { campaignAnyway } : {}),
       });
-      setAskedCopy(campaignId);
+      copy.started(job);
       reloadFit(clip.clipId);
       return true;
     } catch (e) {
@@ -747,6 +748,21 @@ function ReviewCard({
       return false;
     } finally {
       setFixing(false);
+    }
+  }
+
+  /** "I added it": Content Rewards knows that account now (the place row's and the fit block's, the same PATCH). */
+  async function relink(p: Platform) {
+    try {
+      const connection = await api().crPatchConnection({ relinked: p });
+      patchCr((d) => ({ ...d, connection }));
+      void reloadCr();
+      if (campaignId) setCampaign(await api().crCampaign(campaignId));
+      reloadFit(clip.clipId);
+      return true;
+    } catch (e) {
+      toast.error(friendlyMessage(e));
+      return false;
     }
   }
 
@@ -781,10 +797,14 @@ function ReviewCard({
       })
     : null;
   const copyCampaign = live ? live.campaignId : (clipFit?.suggestion?.campaignId ?? null);
-  const copyState: CopyState = copyHere ? "ready" : copyCampaign && (clipFit?.remakes[copyCampaign] || askedCopy === copyCampaign) ? "making" : "none";
+  // Where its campaign copy stands, from the copy's own job (a failed or thrown-away copy can be made again).
+  const copy = useCopy(clip.clipId, copyCampaign ? clipFit?.remakes[copyCampaign] : undefined, copyHere);
+  const copyState = copy.state;
   // The block's own main button (a copy, new clips, the one thing first): then Upload steps back to glass.
   const blockMain = live && copyState === "none" ? fitMain(live) : null;
-  const fitWhy = live ? uploadOffWords(live) : null;
+  // While the copy it needs is being made (or is here), Upload's words say that, not "Tap Make a … copy first."
+  const copySays = live && !live.canUpload && fitMain(live)?.fix?.kind === "remake" ? copyLine(copyState, live.campaignName) : null;
+  const fitWhy = live ? (copySays ?? uploadOffWords(live)) : null;
   const suggested = clipFit?.mode === "normal" && clipFit.suggestion ? (clipFit.fits.find((f) => f.campaignId === clipFit.suggestion!.campaignId) ?? null) : null;
   // Why Upload is off because of TikTok, in plain words (null when TikTok is ready or not ticked).
   const ttWhy: string | null = !tiktokOn || ttReady
@@ -808,7 +828,10 @@ function ReviewCard({
   const placesShown = placesReady && !noneReady ? chosen : PLATFORM_ORDER;
 
   return (
-    <article className={`review-card glass${leaving ? " is-leaving" : returning ? " is-returning" : ""}`} aria-labelledby={`hook-${clip.clipId}`}>
+    <article
+      className={`review-card glass${live || campaign ? " review-card--campaign" : ""}${leaving ? " is-leaving" : returning ? " is-returning" : ""}`}
+      aria-labelledby={`hook-${clip.clipId}`}
+    >
       {live ? (
         <CampaignFit
           clipId={clip.clipId}
@@ -820,6 +843,7 @@ function ReviewCard({
           onFixCaptions={fixCaptions}
           fixing={fixing}
           onBranded={turnOnBranded}
+          onAdded={relink}
         />
       ) : campaign ? (
         <CampaignStrip campaign={campaign} />
@@ -931,18 +955,7 @@ function ReviewCard({
                 ? {
                     lines: placesLines(campaign),
                     unlinked: unlinkedPlaces(campaign, cr.data?.connection),
-                    onRelinked: async (p) => {
-                      try {
-                        const connection = await api().crPatchConnection({ relinked: p });
-                        patchCr((d) => ({ ...d, connection }));
-                        void reloadCr();
-                        setCampaign(await api().crCampaign(campaign.campaignId));
-                        return true;
-                      } catch (e) {
-                        toast.error(friendlyMessage(e));
-                        return false;
-                      }
-                    },
+                    onRelinked: relink,
                   }
                 : undefined
             }

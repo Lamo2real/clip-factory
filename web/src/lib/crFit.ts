@@ -4,12 +4,13 @@
 // fit.py `live`, checked against the API's golden cases (api/tests/fixtures/cr_fit_live_cases.json). The rest of this
 // file draws nothing: which control of the fit block is the screen's one vermilion, Upload's words while it is off,
 // "I read them. They're OK" and "Not now" (this device only), and the shared GET /v1/contentrewards/fit store.
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "../api/index.ts";
-import type { CampaignFit, Captions, ClipFit, FitFix, FitItem, FitRule, FitState, FitVerdict, Platform, TikTokPostOptions } from "../api/types.ts";
+import { ApiError } from "../api/errors.ts";
+import type { CampaignFit, Captions, Clip, ClipFit, FitFix, FitItem, FitRule, FitState, FitVerdict, Job, Platform, TikTokPostOptions } from "../api/types.ts";
 import { crAvailability } from "./contentRewards.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "./format.ts";
-import { onLiveSignal } from "./live.ts";
+import { onLiveSignal, useLiveEvents } from "./live.ts";
 
 // ---------- The rules' order and the four live items (a port of fit.py) ----------
 
@@ -72,8 +73,13 @@ export function isToken(item: string): boolean {
  */
 export function hasItem(text: string, item: string): boolean {
   if (isToken(item)) return new RegExp(`(?<![\\p{L}\\p{N}_#@])${escape(item)}(?!${W}|\\.${W})`, "iu").test(text);
-  const fold = (s: string) => s.split(/\s+/).filter(Boolean).join(" ").toLowerCase();
+  const fold = (s: string) => casefold(s.split(/\s+/).filter(Boolean).join(" "));
   return fold(text).includes(fold(item));
+}
+
+/** Python's `str.casefold()` for the letters it folds further than lower case (ß → ss, ς → σ, ſ → s). */
+export function casefold(s: string): string {
+  return s.toLowerCase().replace(/ß/g, "ss").replace(/ς/g, "σ").replace(/ſ/g, "s");
 }
 
 /** B's disclosure-first rule (`campaign_caption.ad_first`): an `#ad`-like tag (or the brand's own one) starts in the
@@ -82,7 +88,8 @@ export function adFirst(text: string, disclosure: string): boolean {
   const asked = disclosure.toLowerCase();
   const counts = asked === DEFAULT_DISCLOSURE.toLowerCase() ? AD_LIKE : new Set([asked]);
   for (const m of text.matchAll(HASHTAG)) {
-    if ((m.index ?? 0) >= DISCLOSURE_WINDOW) return false;
+    // Python counts characters (code points); JavaScript's index counts UTF-16 units, so an emoji counts once here too.
+    if ([...text.slice(0, m.index ?? 0)].length >= DISCLOSURE_WINDOW) return false;
     if (counts.has(m[0].toLowerCase())) return true;
   }
   return false;
@@ -288,10 +295,131 @@ export function checkPages(items: readonly FitItem[]): FitFix[] {
   return out;
 }
 
-/** The suggestion's soft-stop sentence ("Half the money is used. Post soon."), when the copy accepts one. */
+/** Which item says each soft stop (A's gates.py words; `spoken_needed` is said once, by the `spoken` row). */
+const SOFT_ITEM: Record<string, (i: FitItem) => boolean> = {
+  budget_half: (i) => i.rule === "soft" && i.text.startsWith("Half the money is used."),
+  low_rate: (i) => i.rule === "soft" && i.text.startsWith("It pays only "),
+  face_needed: (i) => i.rule === "soft" && i.text.startsWith("This brand wants your face"),
+  audience: (i) => i.rule === "soft" && i.text.startsWith("This brand wants this audience"),
+  spoken_needed: (i) => i.rule === "spoken",
+};
+
+/** The suggestion's soft-stop sentence ("Half the money is used. Post soon."): the text of `softCodes`' first code,
+ * the one the copy's tap accepts (never the words of a stop he already accepted). */
 export function softText(cf: CampaignFit): string | null {
-  if (!cf.softCodes.length) return null;
-  return cf.items.find((i) => i.rule === "soft" && i.fix?.label !== "Connect Content Rewards")?.text ?? null;
+  const match = cf.softCodes.length ? SOFT_ITEM[cf.softCodes[0]!] : undefined;
+  return match ? (cf.items.find(match)?.text ?? null) : null;
+}
+
+/** Under "I couldn't check these:" a line doesn't say "I couldn't check:" again ("No swearing or gambling. Look
+ * yourself."); every other line keeps the server's words. */
+export function checkLineText(text: string): string {
+  const lead = "I couldn't check: ";
+  if (!text.startsWith(lead) || text.length <= lead.length) return text;
+  const rest = text.slice(lead.length);
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
+/**
+ * What the block says under its headline, by verdict (§39.3's "Then" column): one thing at a time. `folded`: the other
+ * notes of a clip that can earn (or only needs a look), kept under "See what's right" with the ok items. A cant_tell
+ * block shows its `check` items in their own list right under the headline, before `lines`.
+ */
+export function fitLines(cf: CampaignFit): { lines: FitItem[]; folded: FitItem[] } {
+  const problems = cf.items.filter((i) => i.state !== "ok");
+  const only = (lines: FitItem[]) => ({ lines, folded: [] as FitItem[] });
+  if (cf.verdict === "doesnt_fit") return only(problems.filter((i) => i.state === "no"));
+  if (cf.verdict === "wait") return only(problems.filter(isWait));
+  if (cf.verdict === "fixable") {
+    const todo = problems.find((i) => i.state === "todo");
+    if (todo) return only([todo]);
+    const remakes = problems.filter((i) => i.state === "remake");
+    if (remakes.length) return only(remakes);
+    return only(problems.filter((i) => i.rule === "paid_switch" && i.state === "fix"));
+  }
+  // fits and cant_tell: any tags or #Ad line (with "Fix it for me"), then the send note last.
+  const send = (i: FitItem) => i.rule === "send";
+  const lines = [...problems.filter((i) => (i.rule === "tags" || i.rule === "ad") && i.state === "fix"), ...problems.filter(send)];
+  return { lines, folded: problems.filter((i) => i.state === "note" && !send(i)) };
+}
+
+// ---------- Where a campaign copy stands (§39.3 "The copy"), from the copy's own job ----------
+
+/**
+ * none: no copy, or its job failed or was canceled, or the copy was thrown away (a new one can be made); making: its
+ * job is queued or running; ready: the copy waits in Review; done: the copy was uploaded; unknown: not read yet (no
+ * line and no button, so nothing flashes).
+ */
+export type CopyState = "none" | "making" | "ready" | "done" | "unknown";
+
+export interface CopyRead {
+  jobId: string;
+  /** null: the job is gone (404). */
+  job: Pick<Job, "status"> | null;
+  clips: Pick<Clip, "clipId" | "status" | "remakeOf">[];
+}
+
+/**
+ * The copy's state from what its job says. `inList`: on Review, whether the copy is in this list (only then "ready";
+ * undefined on the clip page, where the job's own clips say it).
+ */
+export function copyStateOf(originalId: string, jobId: string | null, read: CopyRead | null, inList?: boolean): CopyState {
+  if (inList) return "ready";
+  if (!jobId) return "none";
+  if (!read || read.jobId !== jobId) return "unknown";
+  if (!read.job) return "none";
+  if (read.job.status === "queued" || read.job.status === "running") return "making";
+  if (read.job.status !== "ready") return "none";
+  const copy = read.clips.find((c) => c.remakeOf?.clipId === originalId) ?? read.clips[0];
+  if (!copy || copy.status === "declined") return "none";
+  if (copy.status === "review") return inList === undefined ? "ready" : "unknown";
+  return "done";
+}
+
+/**
+ * The copy of `originalId` named by `entry` (its `remakes` entry for the campaign), read from the copy's job and read
+ * again on that job's live news. `started(job)`: this session's tap, which counts as making until the job is read.
+ */
+export function useCopy(originalId: string, entry: { jobId: string } | undefined, inList?: boolean): { state: CopyState; jobId: string | null; started: (job: Job) => void } {
+  const [mine, setMine] = useState<string | null>(null);
+  const jobId = mine ?? entry?.jobId ?? null;
+  const [read, setRead] = useState<CopyRead | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const load = useCallback(() => {
+    if (!jobId) return;
+    api()
+      .getJob(jobId)
+      .then(({ job, clips }) => setRead({ jobId, job, clips }))
+      .catch((e) => {
+        if (e instanceof ApiError && e.status === 404) setRead({ jobId, job: null, clips: [] });
+      });
+  }, [jobId]);
+  useEffect(() => {
+    load();
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [load]);
+  const soon = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(load, 300);
+  };
+  useLiveEvents(
+    (e) => {
+      if (!jobId) return;
+      if (e.type === "job" && e.id === jobId) soon();
+      else if (e.type === "clip" && (e.item?.jobId === jobId || (e.op === "delete" && read?.clips.some((c) => c.clipId === e.id)))) soon();
+    },
+    () => {
+      if (jobId) soon();
+    },
+  );
+  const found = copyStateOf(originalId, jobId, read, inList);
+  const started = useCallback((job: Job) => {
+    setMine(job.jobId);
+    if (job.status === "queued" || job.status === "running") setRead({ jobId: job.jobId, job, clips: [] });
+  }, []);
+  return { state: found === "unknown" && mine && mine === jobId ? "making" : found, jobId, started };
 }
 
 // ---------- This device's own answers (never sent, never needed to upload) ----------

@@ -481,13 +481,14 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
 
   // §39.3: does this clip fit, and the campaign copy. The copy waits behind a switch, like the API's (off by default).
   const REMAKE_KEY = "cf-mock-cr-remake";
-  const remakeOn = () => {
+  const remakeFlag = () => {
     try {
-      return sessionStorage.getItem(REMAKE_KEY) === "on";
+      return sessionStorage.getItem(REMAKE_KEY);
     } catch {
-      return false;
+      return null;
     }
   };
+  const remakeOn = () => remakeFlag() === "on" || remakeFlag() === "fail";
   const fitInputs = (c: Clip) => (campaign: Campaign): FitInputs => {
     const original = c.remakeOf ? store.clips.find((x) => x.clipId === c.remakeOf!.clipId) : null;
     const relatives = [original, ...store.clips.filter((x) => (original && x.remakeOf?.clipId === original.clipId) || x.remakeOf?.clipId === c.clipId)].filter(
@@ -557,6 +558,14 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     publishJob(j);
     publishClip(copy);
   }
+  /** A copy whose job failed: the original keeps its `remakes` entry (as the API does), and a new copy can be asked. */
+  function failCopy(j: Job) {
+    j.status = "failed";
+    j.error = "Clip Factory couldn't make the copy. Try again.";
+    j.steps = stepsAt(Math.max(0, STEP_KEYS.length - 2), "failed", "Cutting the clips");
+    j.updatedAt = new Date().toISOString();
+    publishJob(j);
+  }
   const clip = (clipId: string) => {
     const c = store.clips.find((x) => x.clipId === clipId);
     if (!c) throw notFound("clip");
@@ -625,9 +634,12 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       const c = clip(body.clipId);
       const campaign = cr.served().find((x) => x.campaignId === campaignId);
       if (!campaign) throw notFound("campaign");
+      // G's reserve: a copy already named answers that job, unless it failed, was canceled or deleted, or its clip
+      // was thrown away (then a new copy can be made).
       const had = c.remakes?.[campaignId];
       const hadJob = had ? store.jobs.find((j) => j.jobId === had.jobId && j.status !== "failed" && j.status !== "canceled") : undefined;
-      if (hadJob) return clone(hadJob);
+      const thrown = hadJob ? store.clips.some((x) => x.jobId === hadJob.jobId && x.status === "declined") : false;
+      if (hadJob && !thrown) return clone(hadJob);
       const from = store.jobs.find((j) => j.jobId === c.jobId) ?? null;
       const found = fitOne(fitInputs(c)(campaign));
       const refusal = remakeRefusal(found, sourceKept(from, Date.now()));
@@ -655,8 +667,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       c.remakes = { ...(c.remakes ?? {}), [campaignId]: { jobId: j.jobId, at: now } };
       publishJob(j);
       publishClip(c);
-      // "It shows here in about 3 minutes": a moment in the pretend app.
-      setTimeout(() => finishCopy(j, c, campaign), 2500);
+      // "It shows here in about 3 minutes": a moment in the pretend app (or, with the "fail" knob, its job fails).
+      setTimeout(() => (remakeFlag() === "fail" ? failCopy(j) : finishCopy(j, c, campaign)), 2500);
       return clone(j);
     },
     async getMoneyEverywhere() {
