@@ -3,7 +3,7 @@
 // "Content Rewards said no?" card when it applies, then "When it's done". A step Clip Factory can see ticks itself;
 // one it can't see yet has its own green answer ("I have an account", "I added them") right under its Open button.
 // With `?back=` the page leads back where the owner came from once he is signed in. One vermilion at a time.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api } from "../../../api/index.ts";
 import { friendlyMessage } from "../../../api/errors.ts";
 import type { CrConnection, Platform } from "../../../api/types.ts";
@@ -17,9 +17,12 @@ import {
   CHECK_TEXT,
   COMING_SOON,
   CR_MONEY_PATH,
+  crLoginEmail,
   crSetupCount,
-  safeMailto,
   crStepsDone,
+  looksLikeEmail,
+  pilotOpen,
+  saveCrLoginEmail,
   dayDate,
   patchCr,
   placeList,
@@ -34,7 +37,7 @@ import { isTouchDevice } from "../../../lib/crConnect.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../../lib/format.ts";
 import { prefersReducedMotion } from "../../../lib/prefs.ts";
 import { navigate } from "../../../lib/router.ts";
-import { CR_GUIDE, CR_PILOT, CR_PILOT_AFTER, CR_SETUP_STEPS, CR_SHORTCUT, CR_TIKTOK_WAITS, pilotMailto } from "../../../setup/contentrewards.ts";
+import { CR_GUIDE, CR_LOGIN_ASK, CR_LOGIN_FIRST, CR_PILOT, CR_PILOT_AFTER, CR_SAID_CANT, CR_SETUP_STEPS, CR_SHORTCUT, CR_TIKTOK_WAITS } from "../../../setup/contentrewards.ts";
 import type { CrStep } from "../../../setup/types.ts";
 import { BrandText, CrStepCard, GreenButton, Lines, Note } from "../../campaigns/bits.tsx";
 import { CopyChip } from "./bits.tsx";
@@ -87,6 +90,22 @@ export function crStepHome(hash: string): string | null {
   return null;
 }
 
+/** Scrolls just enough that `el` is all on screen, clear of the bars fixed at the bottom (the phone tab bar, the
+ * update bar), its top first when it is taller than the room. */
+function bringOnScreen(el: HTMLElement) {
+  let floor = window.innerHeight;
+  for (const bar of document.querySelectorAll<HTMLElement>(".tabbar, .update-bar")) {
+    const r = bar.getBoundingClientRect();
+    if (r.height > 0 && r.top > 0) floor = Math.min(floor, r.top);
+  }
+  const bottom = floor - 12;
+  const top = 48;
+  const r = el.getBoundingClientRect();
+  let by = r.bottom > bottom ? r.bottom - bottom : 0;
+  if (r.top - by < top) by = r.top - top;
+  if (Math.abs(by) >= 1) window.scrollBy({ top: by, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+}
+
 /** "Connect" status and reason: an old result card or Check it answer goes when it changes. */
 const statusKey = (c: CrConnection | null) => (c ? `${c.status}:${c.reason ?? ""}:${c.canSubmit ? 1 : 0}` : "");
 
@@ -116,8 +135,10 @@ export function CrSetup() {
   const refusedLink = conn ? PLATFORM_ORDER.find((p) => conn.crLinked[p] === false) : undefined;
   const current = CR_SETUP_STEPS.find((s) => !done[s.id as keyof typeof done])?.id ?? null;
   const on = signedIn(conn);
-  // "Content Rewards said no?": open when Connect said the account can't connect apps, or the sign-in is read only.
-  const pilotApplies = !!conn && !conn.canSubmit && (conn.lastResult === "not_allowed" || conn.status === "read_only" || !!conn.pilotSentAt);
+  // "Content Rewards said no?": open when Connect said the account can't connect apps (or he said Content Rewards
+  // said so, as it never sends the browser back then), or the sign-in is read only.
+  const saidCant = !!conn && (conn.lastResult === "not_allowed" || run.saidCant);
+  const pilotApplies = !!conn && !conn.canSubmit && (saidCant || conn.status === "read_only" || !!conn.pilotSentAt);
   const pilotDone = !!conn?.canSubmit;
   const pilotSent = !!conn?.pilotSentAt;
   // While that card waits for its email, "Open email" is the screen's one vermilion; after "I sent it", Connect is.
@@ -126,6 +147,11 @@ export function CrSetup() {
   const reconnect = conn?.status === "needs_reconnect";
   const bridge = run.place === "bridge";
   const key = statusKey(conn);
+  const soonMain = !reconnect && soon && !!conn?.signInBy && bridge;
+  // While the pilot email waits, that card is the next step: it is the one open and brought on screen (the first step
+  // not done stays folded until the email went, so the one vermilion is on the first screen).
+  const pilotFirst = !reconnect && !soonMain && pilotMain;
+  const focusId = pilotFirst ? CR_PILOT.id : current;
 
   // An Ask button for a join or money step lands where that step is.
   useEffect(() => {
@@ -147,23 +173,49 @@ export function CrSetup() {
   useEffect(() => {
     if (run.result) resultRef.current?.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
   }, [run.result]);
-
-  // The first step not done is open and scrolled into view (once).
+  // "What did Content Rewards say?" comes all on screen, its three answers clear of the tab bar (also while it waits:
+  // it shows under the waiting card, so nothing moves under his pointer). After "It said my account can't connect
+  // apps", its card opens (even if he folded it earlier) and comes on screen, its first line first.
   useEffect(() => {
-    if (!conn || scrolled.current || !current || count === 0) return;
-    scrolled.current = true;
-    const t = setTimeout(() => document.getElementById(`step-${current}`)?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" }), 160);
+    if (!run.ask) return;
+    const t = setTimeout(() => {
+      const el = document.querySelector<HTMLElement>("[data-cr='ask']");
+      if (el) bringOnScreen(el);
+    }, 60);
     return () => clearTimeout(t);
-  }, [conn, current, count]);
+  }, [run.ask]);
+  useEffect(() => {
+    if (run.said !== "cant_connect") return;
+    setClosed((s) => {
+      if (!s.has(CR_PILOT.id)) return s;
+      const n = new Set(s);
+      n.delete(CR_PILOT.id);
+      return n;
+    });
+    const t = setTimeout(() => document.getElementById(`step-${CR_PILOT.id}`)?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" }), 60);
+    return () => clearTimeout(t);
+  }, [run.said]);
+
+  // The next step (the first step not done, or the pilot card while its email waits) is open and scrolled into view
+  // (once).
+  useEffect(() => {
+    if (!conn || scrolled.current || !focusId || count === 0) return;
+    scrolled.current = true;
+    const t = setTimeout(
+      () => document.getElementById(`step-${focusId}`)?.scrollIntoView({ block: focusId === CR_PILOT.id ? "start" : "center", behavior: prefersReducedMotion() ? "auto" : "smooth" }),
+      160,
+    );
+    return () => clearTimeout(t);
+  }, [conn, focusId, count]);
 
   // Phones: the open step's pinned Open and its answer come fully on screen, clear of the tab bar (once). A step low on
   // the first screen would otherwise leave them under the bar until he scrolls.
   const pinShown = useRef(false);
   useEffect(() => {
-    if (!conn || pinShown.current || !current) return;
+    if (!conn || pinShown.current || !focusId) return;
     const t = setTimeout(() => {
       pinShown.current = true;
-      const pin = document.querySelector<HTMLElement>(`#step-${current} .cr-pin`);
+      const pin = document.querySelector<HTMLElement>(`#step-${focusId} .cr-pin`);
       if (!pin) return;
       const bar = document.querySelector<HTMLElement>(".tabbar")?.getBoundingClientRect();
       const limit = (bar && bar.height > 0 ? bar.top : window.innerHeight) - 12;
@@ -171,9 +223,9 @@ export function CrSetup() {
       if (r.bottom > limit) window.scrollBy({ top: r.bottom - limit, behavior: prefersReducedMotion() ? "auto" : "smooth" });
     }, 400);
     return () => clearTimeout(t);
-  }, [conn, current]);
+  }, [conn, focusId]);
 
-  const isOpen = (id: string) => (closed.has(id) ? false : opened.has(id) || current === id);
+  const isOpen = (id: string) => (closed.has(id) ? false : opened.has(id) || focusId === id);
   const toggle = (id: string) => {
     const now = isOpen(id);
     setOpened((s) => {
@@ -307,8 +359,7 @@ export function CrSetup() {
   // The one vermilion button, in one order: signed out → the panel's Connect again (Mac app); the sign-in-again week
   // (Mac app) → the calm card's Connect again; the pilot email; the first step not done; and only when every step is
   // done, Add a campaign. Signed out elsewhere: none (the panel says to sign in again on the Mac).
-  const soonMain = !reconnect && soon && !!conn.signInBy && bridge;
-  const main: string | null = reconnect
+  const next: string | null = reconnect
     ? bridge
       ? "reconnect"
       : null
@@ -317,6 +368,11 @@ export function CrSetup() {
       : pilotMain
         ? "pilot"
         : (current ?? (back && on ? "back" : !campaigns.length ? "add" : null));
+  // While "What did Content Rewards say?" is on screen, its three big answers are the step: no vermilion. Once he
+  // answered "Something else" (or Clip Factory missed his Allow), its line says to tap Connect again, so that Connect
+  // is the vermilion wherever it is (step 3, the calm card, or the panel's Connect again).
+  const connectAgain = bridge && !run.waiting && !run.checking && (run.said === "other" || run.said === "allowed");
+  const main: string | null = run.ask ? null : connectAgain ? (soonMain ? "soon" : on || reconnect ? "reconnect" : "connect") : next;
   const postsTo = setup.data ? postsToLine(setup.data.platforms) : null;
   const places = addedPlaces(setup.data?.platforms);
   // The shortcut: only while steps 1 and 2 are both not done (someone already set up says so in one tap).
@@ -388,7 +444,7 @@ export function CrSetup() {
             const isDone = done[step.id as keyof typeof done];
             const primary = main === step.id;
             // Step 3 stays open while its last result shows (the card sits right above its button).
-            const open = isOpen(step.id) || (step.id === "ready-socials" && !!refusedLink && !isDone) || (isConnect && (!!run.result || run.waiting));
+            const open = isOpen(step.id) || (step.id === "ready-socials" && !!refusedLink && !isDone) || (isConnect && (!!run.result || run.waiting || !!run.ask || !!run.said));
             return (
               <CrStepCard
                 key={step.id}
@@ -397,7 +453,7 @@ export function CrSetup() {
                 number={i + 1}
                 done={isDone}
                 open={open}
-                current={current === step.id}
+                current={focusId === step.id}
                 primary={primary && !isConnect}
                 onToggle={() => toggle(step.id)}
                 onDone={(d) => tick(step, d)}
@@ -454,6 +510,8 @@ export function CrSetup() {
           conn={conn}
           applies={pilotApplies}
           main={main === "pilot"}
+          // The result card says it already when Connect itself answered not_allowed.
+          cant={saidCant && run.result !== "not_allowed"}
           onSaid={() => saidPilot(true)}
           open={isOpen(CR_PILOT.id) || (pilotApplies && !closed.has(CR_PILOT.id))}
           onToggle={() => toggle(CR_PILOT.id)}
@@ -542,22 +600,164 @@ export function CrSetup() {
   );
 }
 
-/** "Content Rewards said no?" (§38.3): the pilot email, under Show more, and "I sent it". */
-function PilotCard({ conn, applies, main, onSaid, open, onToggle }: { conn: CrConnection; applies: boolean; main: boolean; onSaid: () => unknown; open: boolean; onToggle: () => void }) {
+/**
+ * "Content Rewards said no?" (§38.3): the pilot email, under Show more, and "I sent it". It asks once which email he
+ * signs in to Content Rewards with (kept on this device only), as Mail would send from its own default account: a
+ * Gmail address opens Gmail's compose page for that exact account; any other keeps the mailto and says to check the
+ * From line. Until the box has his email, Open email opens nothing: it points at the box. Once sent, it never pushes
+ * him to send it again.
+ */
+function PilotCard({
+  conn,
+  applies,
+  main,
+  cant,
+  onSaid,
+  open,
+  onToggle,
+}: {
+  conn: CrConnection;
+  applies: boolean;
+  main: boolean;
+  cant: boolean;
+  onSaid: () => unknown;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const [more, setMore] = useState(false);
+  const [saved, setSaved] = useState(() => crLoginEmail());
+  const [draft, setDraft] = useState(saved);
+  const [editing, setEditing] = useState(!saved);
+  // He tapped Open email before typing his email: the box says so.
+  const [nudge, setNudge] = useState(false);
+  const box = useRef<HTMLInputElement>(null);
+  const boxId = useId();
   const done = conn.canSubmit;
   const sent = !!conn.pilotSentAt;
   const email = conn.pilotEmail;
+  const from = looksLikeEmail(draft) ? draft.trim() : saved;
+  const target = pilotOpen(from, email);
+  // Once sent, only what comes next (CR_PILOT_AFTER). Before that, only its first line: the box and the bold
+  // "Send it from …" say where from (the guide's "Check the From line" would say it a third time).
+  const lines = sent ? [] : CR_PILOT.say.slice(0, 1);
+  const describedBy = [nudge && !from ? `${boxId}-first` : "", from ? `${boxId}-from` : ""].filter(Boolean).join(" ") || undefined;
+  const first = cant && !sent;
+  // Saved as he leaves the box (the box stays put, so nothing moves under his pointer); it folds once he taps Open
+  // email, and on his next visit it shows only the bold line with Change.
+  const keep = () => {
+    if (!looksLikeEmail(draft)) return;
+    saveCrLoginEmail(draft);
+    setSaved(draft.trim());
+  };
   return (
     <ol className="guide-steps cr-pilot" data-help="cr-pilot-email">
-      <CrStepCard step={CR_PILOT} number={null} done={done} open={open && !done} current={applies && !done} primary={false} onToggle={onToggle}>
+      <CrStepCard
+        step={CR_PILOT}
+        number={null}
+        done={done}
+        open={open && !done}
+        current={applies && !done}
+        primary={false}
+        onToggle={onToggle}
+        // Content Rewards' no comes first, above the card's own lines.
+        say={first ? [] : lines}
+      >
         <div className="gstep__extras">
-          <div className="gstep__actions">
-            <a className={`btn btn--${main ? "primary" : "glass"} btn--lg`} href={safeMailto(email.mailto, pilotMailto())} data-help-clear={main ? "" : undefined}>
-              <Icon name="fileText" size={20} />
-              <span className="btn__label">Open email</span>
-            </a>
-          </div>
+          {first ? (
+            <>
+              <Note role="status" icon="alert">
+                {CR_SAID_CANT}
+              </Note>
+              <Lines lines={lines} />
+            </>
+          ) : null}
+          {sent ? null : (
+            <div className="cr-login" data-cr="login">
+              {editing ? (
+                <div className="field">
+                  <label className="field__label" htmlFor={boxId}>
+                    {CR_LOGIN_ASK}
+                  </label>
+                  <input
+                    id={boxId}
+                    className="input"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    spellCheck={false}
+                    value={draft}
+                    ref={box}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onBlur={keep}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") keep();
+                    }}
+                    aria-describedby={describedBy}
+                  />
+                </div>
+              ) : null}
+              {nudge && !from ? (
+                <p id={`${boxId}-first`} className="cr-login__first" role="alert">
+                  <strong>{CR_LOGIN_FIRST}</strong>
+                </p>
+              ) : null}
+              {from ? (
+                <p id={`${boxId}-from`}>
+                  <strong>
+                    Send it from <span className="user-text">{from}</span>.
+                  </strong>
+                  {editing ? null : (
+                    <button type="button" className="text-link" onClick={() => setEditing(true)}>
+                      Change
+                    </button>
+                  )}
+                </p>
+              ) : null}
+              {from && !target.gmail ? (
+                <p>
+                  <strong>
+                    Check the From line says <span className="user-text">{from}</span>.
+                  </strong>
+                </p>
+              ) : null}
+            </div>
+          )}
+          {sent ? null : (
+            <div className="gstep__actions">
+              {from ? (
+                <a
+                  className={`btn btn--${main ? "primary" : "glass"} btn--lg`}
+                  href={target.href}
+                  data-help-clear={main ? "" : undefined}
+                  data-cr="open-email"
+                  onClick={() => {
+                    keep();
+                    setEditing(false);
+                  }}
+                  {...(target.gmail ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                >
+                  <Icon name="fileText" size={20} />
+                  <span className="btn__label">Open email</span>
+                  {target.gmail ? <span className="sr-only"> (opens Gmail in a new tab)</span> : null}
+                </a>
+              ) : (
+                // No email yet: Mail would pick its own default account, so the box comes first.
+                <button
+                  type="button"
+                  className={`btn btn--${main ? "primary" : "glass"} btn--lg`}
+                  data-help-clear={main ? "" : undefined}
+                  data-cr="open-email"
+                  onClick={() => {
+                    setNudge(true);
+                    box.current?.focus();
+                  }}
+                >
+                  <Icon name="fileText" size={20} />
+                  <span className="btn__label">Open email</span>
+                </button>
+              )}
+            </div>
+          )}
           <div className="cr-email">
             <p className="gstep__note">An email asking Content Rewards to let Clip Factory send your clips.</p>
             <button type="button" className="text-link" aria-expanded={more} onClick={() => setMore((m) => !m)}>
