@@ -7384,8 +7384,9 @@ matched before the platform route). The Settings tree's `setup` branch gains app
 Rewards", leaf "Get paid by brands for your clips. Set it up once.", href that page) and `campaigns` ("Your
 campaigns", href `/campaigns`). When `GET /v1/contentrewards` answers 404 the part is not there; 503 `unavailable`: the
 card says "Coming soon" with no button (§38.8). Any other failure with nothing kept from an earlier read: the state
-line is "Couldn't load. Try again" with a glass "Try again" that reads it again, never "Not started" (a load that
-failed says so; live check, 21 Nov 2026).
+line is "Couldn't load. Try again" with a glass "Try again" that reads `GET /v1/contentrewards` again, never "Not
+started" (a load that failed says so; live check, 21 Nov 2026). In this state the card is not a link (like "Coming
+soon"), so the button never sits inside a link.
 
 **The page.** Header: the coin mark, "Content Rewards", ring (3 steps), "Get paid by brands for your clips.", "About 10
 minutes · Free", "Steps checked on 21 Nov 2026". Then three numbered step cards, the unnumbered "Content Rewards said
@@ -7414,7 +7415,7 @@ export interface CrGuide { name: "Content Rewards"; checkedOn: "2026-11-21"; min
 **Setup** (part `setup`, numbered 1–3; the ring counts these three):
 | # | id | title | essentials |
 |---|---|---|---|
-| 1 | `ready-account` | Make a Content Rewards account | Open "Open Content Rewards" → `https://contentrewards.com/login?intent=signup`. "You'll see **Create your account**. Type your email in **Email**. Tap **Send code**." "Type the 6 numbers from the email. Tap **Verify**." "Or tap **Continue with Google**." "You must be 18 or older. One account per person." "I did this"; `auto: connected` (a finished Connect also ticks it, and so does Content Rewards saying the account can't connect apps: both are in `stepsDone`, §38.8). If you see: "That code is incorrect or has expired" → "Tap **Resend code** and use the newest email."; "We already sent a code" → "Look in Spam or Promotions."; the wrong email → "Tap **Change it**."; a few questions after signing in → "Answer them. Any answer is fine."; a cookie bar → "Tap **Accept** or **Decline**. Both are fine." |
+| 1 | `ready-account` | Make a Content Rewards account | Open "Open Content Rewards" → `https://contentrewards.com/login?intent=signup`. "You'll see **Create your account**. Type your email in **Email**. Tap **Send code**." "Type the 6 numbers from the email. Tap **Verify**." "Or tap **Continue with Google**." "You must be 18 or older. One account per person." "I did this"; `auto: connected` (a finished Connect also ticks it, and so does Content Rewards saying the account can't connect apps; both are in `stepsDone`, and so is a sent pilot email, §38.8, §39.1). If you see: "That code is incorrect or has expired" → "Tap **Resend code** and use the newest email."; "We already sent a code" → "Look in Spam or Promotions."; the wrong email → "Tap **Change it**."; a few questions after signing in → "Answer them. Any answer is fine."; a cookie bar → "Tap **Accept** or **Decline**. Both are fine." |
 | 2 | `ready-socials` | Connect your accounts there | Open "Open Content Rewards settings" → `https://contentrewards.com/c/settings`. "Tap **Accounts**." "Tap **Connect account**. Tap YouTube." "On the next screen, leave every box ticked and tap Allow or Continue." "Do the same for Instagram, X and Facebook." "Each one should say **Connected**." Then one line made from `GET /v1/setup` (connected places only, never TikTok): "Clip Factory posts to: YouTube @faze · Instagram @faze · X @faze · Facebook FaZe Page." Line: "TikTok can wait. TikTok posts from Clip Factory stay private until TikTok checks the app, and private posts can't earn." "I did this" (sets every `crLinked` that is `false` back to unknown, §38.11); `auto: linked` (ticks when any `crLinked` is `true`); a finished Connect also ticks it (`stepsDone`). A `crLinked: false` re-opens the step with the line "Content Rewards doesn't know your YouTube account. Connect it here, then tap I did this." If you see: "No **Accounts** tab?" → "Look for **Connected accounts**."; **Verify** in red → "Tap it and allow again."; **Sign in again** → "Tap it."; **In review** → "Nothing to do. Content Rewards links it for you."; "already connected to another creator" → "That account is on another Content Rewards account. Unlink it there, or ask Content Rewards support."; "access wasn't granted" → "Tap **Connect account** again and leave every box ticked."; "No YouTube channel found" → "Pick the Google account that owns your channel." Folds: `fold-instagram`, `fold-facebook` (below). |
 | 3 | `connect` | Connect Content Rewards | `auto: connected` (ticks on `connected` **or** `read_only`), `manual: false`. Words by where the page runs (below). If you see: **Sign-in failed** → "Close that tab and tap Connect Content Rewards again."; "your account can't connect apps" (or anything about connecting apps) → "Look at the card Content Rewards said no? below. It has an email for you."; nothing happens → "Look for a new browser tab. Still nothing? Tap Connect Content Rewards again." |
 
@@ -7440,13 +7441,18 @@ Fold-outs inside step 2 (closed unless the question applies):
   **"What did Content Rewards say?"** Content Rewards' page "This account can't connect apps. Sign in with another
   account to connect this app." sends nobody back (seen live, 21 Nov 2026), so the app is never told. The page asks
   this plainly, with three big green answers and no vermilion: while it waits, when he comes back to the window (after
-  a few seconds, so an Allow already on its way lands first); on "Cancel"; and when the 5 minutes end (instead of
-  "That took too long": that card stays only for a sign-in the API itself calls `expired`). The answers:
+  a few seconds, so an Allow already on its way lands first); on "Cancel"; and when the 5 minutes end. "The 5 minutes
+  end" is either one: the door's own `expired` from `result()` (the door opens before the sign-in, so it always ends
+  first, §38.15) or the page's own 5-minute wait. Neither shows "That took too long": that card stays only for a
+  `connect/finish` answer `expired` from the API. The answers:
   * "It said my account can't connect apps" → `PATCH /v1/contentrewards/connection {said: "cant_connect"}` (§38.8;
     an older API's 400 still opens the card on this device), the result card "Content Rewards hasn't let your account
     connect apps yet. Send them the email below." and the "Content Rewards said no?" card opens by itself.
   * "I tapped Allow" → while it still waits, it keeps waiting; after Cancel or the 5 minutes, Check it (its sentence).
   * "Something else" → "Close that tab and tap Connect Content Rewards again." (step 3's If you see stays below).
+  Picking "It said my account can't connect apps" or "Something else", or tapping Cancel, calls the door's `cancel`
+  and ends the wait, so no later card replaces his answer. "I tapped Allow" ends it only after Cancel or the 5
+  minutes.
 * **A phone or touch tablet**: no button. "Do this step on your Mac. Open Clip Factory there, then Settings, Set up
   posting, Content Rewards."
 * **A browser on a computer** (no bridge, not touch): "Connect works in the Clip Factory app on your Mac."
@@ -7472,10 +7478,16 @@ vermilion**).
 
 **Which email** (live check, 21 Nov 2026: `mailto` opens Mail's default account, which may not be his Content Rewards
 login). The card asks once "Which email do you sign in to Content Rewards with?" (one email box, kept on this device
-only in `localStorage`, never sent to the API), then shows **"Send it from {email}"** in bold. For an `@gmail.com` or
-`@googlemail.com` address "Open email" opens Gmail's own compose page for that exact account instead of the `mailto`:
+only in `localStorage`, never sent to the API), then shows **"Send it from {email}"** in bold with a glass "Change"
+next to it (it shows the box again). The bold line takes the place of "Send it from the email you use to sign in to
+Content Rewards. Check the From line.", so the two never show together. The address is trimmed, and its domain is
+matched in any case. For an `@gmail.com` or `@googlemail.com` address "Open email" opens Gmail's own compose page for
+that exact account instead of the `mailto`:
 `https://mail.google.com/mail/?view=cm&authuser={email}&to=support@contentrewards.com&su={subject}&body={body}` (every
-value URL-encoded). Any other address keeps the `mailto` with the bold line **"Check the From line says {email}"**.
+value with `encodeURIComponent`, so a space is `%20`, like `connection.pilotEmail.mailto`). The link check that guards
+"Open email" lets an `https` link through only for exactly `https://mail.google.com/mail/?view=cm` with
+`to=support@contentrewards.com`. Any other address keeps the `mailto` with the bold line **"Check the From line says
+{email}"**. Until he types an email, "Open email" is the `mailto` with the card's own "Check the From line." line.
 The Copy chip stays as the fallback. Once `pilotSentAt` is set the card never pushes him to send it again: no email
 question, "Open email" is glass, and the lines after "I sent it" show.
 
@@ -7498,13 +7510,13 @@ campaign" (→ `/campaigns`). Below the panel: "Your campaigns" (→ `/campaigns
 Result cards after Connect (`CrConnectResult`, §38.8): `connected` → confetti, success sound, "Content Rewards is
 connected!"; `read_only` → "Connected, but Content Rewards hasn't let Clip Factory send clips yet." and the "Content
 Rewards said no?" card opens; `denied` → "You didn't allow it. Tap Connect Content Rewards to try again."; `expired` →
-"That took too long. Tap Connect Content Rewards again."; `not_allowed` → "Content Rewards says your account can't
-connect apps yet. Send the email below."; `no_port` → "Clip Factory couldn't start the sign-in. Quit Clip Factory,
-open it again, then tap Connect Content Rewards."; `cr_down` → "Content Rewards didn't answer. Try again in a few
+"That took too long. Tap Connect Content Rewards again." (only when the API answers `expired`); `not_allowed` →
+"Content Rewards hasn't let your account connect apps yet. Send them the email below."; `no_port` → "Clip Factory
+couldn't start the sign-in. Quit Clip Factory, open it again, then tap Connect Content Rewards."; `cr_down` → "Content Rewards didn't answer. Try again in a few
 minutes."; `busy` → "Clip Factory is busy with Content Rewards. Try again in a few seconds."; `error` → "Something
-went wrong. Tap Connect Content Rewards again." His answer "It said my account can't connect apps" → "Content
-Rewards hasn't let your account connect apps yet. Send them the email below." The app's own 5-minute wait and Cancel
-never show `expired`'s "That took too long": they ask "What did Content Rewards say?" (step 3, above).
+went wrong. Tap Connect Content Rewards again." His answer "It said my account can't connect apps" shows the same
+`not_allowed` card. The door's `expired`, the app's own 5-minute wait and Cancel never show `expired`'s "That took too
+long": they ask "What did Content Rewards say?" (step 3, above).
 
 **Check it** answers one sentence (`CrCheck.message`): ok "Content Rewards answers. You're signed in."; read only
 "You're signed in. Content Rewards hasn't let Clip Factory send clips yet."; `token_dead` "Content Rewards signed you
@@ -7849,7 +7861,7 @@ there it goes to your bank."
 | POST `/v1/contentrewards/connect` | `{ "port": 47811…47815 }` | `{ "authorizeUrl", "expiresAt" }` (registers Clip Factory with CR the first time, §38.9) |
 | POST `/v1/contentrewards/connect/finish` | `{ "state", "code", "iss"? }` or `{ "state", "error", "errorDescription"? }` | `{ "result": CrConnectResult, "connection": CrConnection }` (the campaign re-check after it runs async, §38.12) |
 | POST `/v1/contentrewards/check` | – | `{ "check": CrCheck, "connection": CrConnection }` (at most once a minute; else the stored check) |
-| PATCH `/v1/contentrewards/connection` | one of `{ "said": "pilot_sent" \| "cant_connect" \| null }` (`cant_connect`: his answer "It said my account can't connect apps", §38.3: `lastResult` becomes `not_allowed`, so the "Content Rewards said no?" card opens on every device, the internal `saidCantConnectAt` records when, and `ready-account` is ticked; `null` undoes only `pilot_sent`), `{ "step": id, "done": bool }` (ids of `CR_GUIDE`, `^[a-z0-9-]{1,40}$`), `{ "relinked": Platform }`, `{ "finance": bool \| null }` | `{ "connection" }` |
+| PATCH `/v1/contentrewards/connection` | one of `{ "said": "pilot_sent" \| "cant_connect" \| null }` (`cant_connect`: his answer "It said my account can't connect apps", §38.3: `lastResult` becomes `not_allowed`, so the "Content Rewards said no?" card opens on every device, the internal `saidCantConnectAt` records when, and `ready-account` is ticked; while signed in, or when a Connect finished between its read and its write, nothing changes; `null` undoes only `pilot_sent`), `{ "step": id, "done": bool }` (ids of `CR_GUIDE`, `^[a-z0-9-]{1,40}$`), `{ "relinked": Platform }`, `{ "finance": bool \| null }` | `{ "connection" }` |
 | DELETE `/v1/contentrewards/connection` | – | `204` (under the refresh lease, §38.9: revoke the refresh token best effort, delete the token secret, `CRCONN` → `not_connected`; campaigns, submissions and money items stay); 409 "Try again in a few seconds." when the lease is busy |
 | GET `/v1/contentrewards/campaigns` | – | `{ "campaigns": CampaignSummary[] }` (newest added first) |
 | POST `/v1/contentrewards/campaigns` | `{ "url" }` | `201 { "campaign": Campaign }` new; `200 { "campaign" }` already added (re-checked); `200 { "group": { "name", "choices": GroupChoice[] } }` for a group link (nothing added) |
@@ -7915,7 +7927,9 @@ interface CrConnection {
   crLinked: Partial<Record<Platform, boolean>>;   // learned from CR's answers (§38.11); absent = unknown
   stepsDone: string[];                // CR_GUIDE ids the owner ticked ("I did this"), plus what Clip Factory knows:
                                       // a finished Connect adds ready-account and ready-socials; a not_allowed
-                                      // result or said cant_connect adds ready-account
+                                      // result, said cant_connect, or any result after CR gave a code adds
+                                      // ready-account; and it is shown (read only, not stored) whenever
+                                      // lastResult is not_allowed or pilotSentAt is set (§39.1)
   finance?: boolean;                  // "Do you see Finance?" (§38.7); absent = not asked
   pilotSentAt?: string; lastResult?: CrConnectResult /* also not_allowed after said cant_connect */; check?: CrCheck;
   pilotEmail: { to: string; subject: string; body: string; mailto: string };
@@ -8074,8 +8088,10 @@ then tick `ready-account` and invoke `cf-prod-stats` async (`{"action": "content
 `denied`; an error or description that mentions connecting apps, the pilot or not allowed (loose, case-insensitive:
 `connect apps`, `pilot`, `not allowed`, `not eligible`) → `not_allowed`; anything else → `error`. Token endpoint
 5xx/network → `cr_down`. Never log `code`, `state`, tokens or the query.
-A finished Connect also ticks `ready-socials` (§39.1), and a `not_allowed` ticks `ready-account` (he signed in to see
-it). Every result is logged as `cr.connect_result` (the result only).
+A finished Connect also ticks `ready-socials` (§39.1). A `not_allowed`, and every result once CR gave a code
+(`busy`, `cr_down`, `error`, `expired` after the code), tick `ready-account` with a DynamoDB `ADD` (he signed in to
+get there). Every result, a success too, is logged as `cr.connect_result` (the result only; a success also logs
+`cr.connected`).
 
 **Tokens** (`CrTokens(store, secrets, http, clock, sleep)`). The secret `cf-prod/platforms/contentrewards/token`
 `{accessToken, expiresAt, refreshToken, scope, creatorId, issuedAt}` is single-sourced by `CRCONN`: every reader does a
@@ -8589,8 +8605,10 @@ for macOS only (`#[cfg(target_os = "macos")]`); on Windows the bridge exists but
 * **The page's side** (`web/src/lib/crConnect.ts`, desktop window only): `listen` → `POST /v1/contentrewards/connect
   {port}` → `open(authorizeUrl)` → `result()` every 500 ms (background throttling is already off, §35.2) → on
   `status: "done"`, `POST …/connect/finish {state, code, iss?}` within a second (CR's code lives 60 s); on `error`, the
-  same route with `{state, error, errorDescription}`; on `expired`, the `expired` card. Cancel or leaving the page calls
-  `cancel`. `unsupported` → the "browser on a computer" words of §38.3; `no_port` → the `no_port` card.
+  same route with `{state, error, errorDescription}`; on `expired` (the door's 5 minutes ended and nobody came back),
+  the "What did Content Rewards say?" question of §38.3, never the `expired` card. Cancel, an answer to that question
+  (§38.3) or leaving the page calls `cancel`. `unsupported` → the "browser on a computer" words of §38.3; `no_port` →
+  the `no_port` card.
 * Ships in the next signed desktop release (§12.6); the owner taps "Restart now" once. An older app (no
   `__CF_CR_CONNECT__`) gets the "Update the Clip Factory app first" step (§38.3).
 
@@ -8892,10 +8910,19 @@ Never on a screen: "the Content Rewards way", "mode", "normal mode", "compatible
 `/settings/posting/setup/contentrewards` (§38.3), the only place Connect happens, like each platform's setup page. Each
 step is something only the owner can do or knows: CR's API has no tool that tells Clip Factory he has an account or
 which accounts he added inside Content Rewards (`get_me` returns only his `cre_` id and brand memberships,
-`mcp-tools.json` 2026-10-01), so steps 1 and 2 are one green tap each. Each ticks itself once Clip Factory really knows
-(live check, 21 Nov 2026): a finished Connect (step 3) ticks steps 1, 2 and 3, and Content Rewards saying the account
-can't connect apps (its redirect, or his answer "It said my account can't connect apps", §38.3) ticks step 1, since he
-had to have an account and be signed in to see it. The page,
+`mcp-tools.json` 2026-10-01), so steps 1 and 2 are one green tap each. They also tick themselves (live check, 21 Nov
+2026; the owner: "extremely easy and simple ... chronological and structured"):
+* A finished Connect (step 3) ticks steps 1, 2 and 3. Step 2 because Connect is the step he does after setting
+  Content Rewards up. It is not proof of each place: a `crLinked: false` still reopens step 2 and still shows in the
+  fit; only the fit's `place_link` `check` rows for places Content Rewards never answered about go (§39.3).
+* Content Rewards saying the account can't connect apps (its redirect, or his answer "It said my account can't connect
+  apps", §38.3), or any Connect result after Content Rewards gave a code, ticks step 1: he had to have an account and
+  be signed in to get there.
+* Step 1 also shows done whenever `lastResult` is `not_allowed` or `pilotSentAt` is set (the "Content Rewards said
+  no?" card asks him to send the email from his Content Rewards login). The API adds it to `stepsDone` when it answers,
+  with nothing written, so data from before 21 Nov 2026 shows it too.
+
+The page,
 top to bottom (H; `CrSetup.tsx`, D's `CrStepCard` in `screens/campaigns/bits.tsx`):
 
 0. **The shortcut**, only while steps 1 and 2 are both not done: "Already use Content Rewards, with YouTube added
@@ -8930,7 +8957,9 @@ numbered step not done → step 1 "Open Content Rewards", step 2 "Open Content R
 answer right under it), step 3 "Connect Content Rewards" (elsewhere, step 3's own words for where the page runs); every
 step done → the back button with a `?back=`, else "Add a campaign" while he has no campaign. While the page waits for
 the browser, or asks "What did Content Rewards say?" (§38.3), nothing is vermilion. Steps tick themselves whenever Clip
-Factory knows (above), so after any Connect he never sees step 1's button as the next step.
+Factory knows (above), so after a finished Connect, once Content Rewards said the account can't connect apps, or once
+the pilot email is sent, he never sees step 1's button as the next step. With the owner's own data at the live check
+(pilot email sent, no steps ticked) the vermilion is step 2's "Open Content Rewards settings".
 
 **`?back=`** (H, `web/src/lib/backLink.ts`, one pure function used by every setup page): only these exact same-origin
 shapes count, anything else (another origin, `//`, a scheme, other paths, extra query keys) is ignored: `/campaigns/{uuid}`
@@ -8986,8 +9015,8 @@ opens his mail. Each more place inside Content Rewards is optional: Instagram +4
 3), allow, "Back to FaZe Clips": **7 taps on 5 screens** (Home, campaign card, setup page, the allow page, the Done
 page), and the card says "You're in!" (checked at once, §38.12). That is the fewest: each tap is the move to the next
 screen, a fact only he knows, or Content Rewards' own allow. (Starting the sign-in straight from the card would save
-one more but skip the "accounts added" answer the fit's `place_link` needs, so it is not done.) Extras, only when they
-apply: an older Mac app +1 ("Restart now", §38.15); Content Rewards says no to apps: +1 "It said my account can't
+one more, but someone new would skip making an account and adding YouTube there, so it is not done.) Extras, only when
+they apply: an older Mac app +1 ("Restart now", §38.15); Content Rewards says no to apps: +1 "It said my account can't
 connect apps" (its page sends nobody back, §38.3), the first time only typing his Content Rewards email, +2 ("Open
 email", Send) and +1 optional "I sent it".
 On a phone the campaign card's vermilion is "Set up Content Rewards" (→ the setup page with
@@ -9247,7 +9276,7 @@ own campaign only (one clip, one campaign). A normal clip is checked against eve
 | `deadline` | `rules.clipUntil` against today (UTC, like A's gates) | `ok` "Takes clips until 23 Nov." · `note` "Today is the last day FaZe Clips takes clips." · `no` "FaZe Clips stopped taking clips on 23 Nov." fix `open` "Find another campaign" |
 | `length` | `clip.durationSec` against `lengthMinSec`/`lengthMaxSec` (a minimum learned from a `too_short` answer counts, §38.9) | `ok` "42 seconds. FaZe Clips takes 15 to 60." · `no` "This clip is 72 seconds. FaZe Clips takes 15 to 60 seconds." fix `new_clips`. No length rule: not listed |
 | `places` | `places` (paid ∩ ready ∩ not `crLinked: false`, TikTok after its audit) ∩ `chosen` | `ok` "Goes to YouTube and Instagram. FaZe Clips pays for both." · `todo` (no place yet, one can be set up) "Set up YouTube first. FaZe Clips pays for YouTube." fix `open` "Set up YouTube" · `todo` A's `no_place` with no `platformsPaid` "I can't tell where FaZe Clips pays yet. Tap Check now." fix `open` "Open campaign" (→ the card) · `no` for `tiktok_only` (its stop text) · `note` per paid place left out: "Instagram pays too. Set it up to earn there as well." (fix `open`), TikTok before its audit: §38.5's TikTok line |
-| `place_link` | per place in `places`: `crLinked` absent and `ready-socials` not in `stepsDone`; per paid place left out as `crLinked: false` | `check` "I couldn't check that Content Rewards knows your YouTube account. Look under **Accounts** there." fix `open` "Open Content Rewards settings" (new tab) · `note` "Content Rewards doesn't know your Instagram account. Add it there, then tap I added it." (the "I added it" of §38.5). Absent and the step done, or `true`: not listed |
+| `place_link` | per place in `places`: `crLinked` absent and `ready-socials` not in `stepsDone` (a finished Connect ticks it, §39.1, so after one only the `crLinked: false` notes are left); per paid place left out as `crLinked: false` | `check` "I couldn't check that Content Rewards knows your YouTube account. Look under **Accounts** there." fix `open` "Open Content Rewards settings" (new tab) · `note` "Content Rewards doesn't know your Instagram account. Add it there, then tap I added it." (the "I added it" of §38.5). Absent and the step done, or `true`: not listed |
 | `tags` | every caption of every place in `places` (GET: `clip.captions`; the card: its text; Confirm: the merged captions) has each item of B's `campaign_caption.required_items(rules)` by B's own match (a whole `#`/`@` token, case-insensitive; a phrase with spaces folded; `_has`, made public as `has_item`) | `ok` "Every caption has #FaZe and @FaZeClan." · `fix` "The X words are missing #FaZe. I'll put it back when it uploads." fix `captions` "Fix it for me" |
 | `ad` | every caption passes B's disclosure-first rule (`_ad_first`, made public as `ad_first`: an `#ad`-like tag, or the brand's own one, in the first `DISCLOSURE_WINDOW` characters; YouTube: the description) | `ok` "#Ad is at the start of every caption." · `fix` "#Ad isn't at the start of the Instagram words. I'll put it there when it uploads." fix `captions` "Fix it for me" |
 | `paid_switch` | per place: YouTube and X are turned on by the publisher (§38.14); TikTok needs Branded content in the card's TikTok choices (Confirm: `tiktok.brandContent`) | `ok` "Paid promotion goes on for YouTube and X." · `fix` "Branded content is off on TikTok." fix `tiktok_branded` "Turn on Branded content" · `note` Instagram and Facebook: "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers." |

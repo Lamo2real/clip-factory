@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import urllib.parse
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any
 
@@ -16,6 +16,11 @@ Item = dict[str, Any]
 STATUSES = ("not_connected", "connected", "read_only", "needs_reconnect")
 SIGNED_IN = ("connected", "read_only")
 STEP_ID = re.compile(r"^[a-z0-9-]{1,40}$")
+# CR_GUIDE's setup steps 1 and 2 (web/src/setup/contentrewards.ts). A finished Connect ticks both (§39.1); anything
+# that shows he signed in to Content Rewards (its "can't connect apps", or an answer after it issued a code) ticks 1.
+STEP_ACCOUNT = "ready-account"
+STEPS_CONNECTED = (STEP_ACCOUNT, "ready-socials")
+STEPS_SIGNED_IN = (STEP_ACCOUNT,)
 INTERNAL = (
     "refreshLeaseUntil",
     "tokenVersionId",
@@ -90,6 +95,46 @@ def update(
     return store.update(pk, sk, {**fields, "updatedAt": iso(now)}, remove=remove or [])
 
 
+def tick(
+    store: db.Store,
+    user_id: str,
+    now: datetime,
+    steps: Iterable[str],
+    fields: Mapping[str, Any],
+    *,
+    unchanged_since: Mapping[str, Any] | None = None,
+) -> Item:
+    """Sets ``fields`` and adds ``steps`` to ``stepsDone`` in one UpdateItem (an ADD, so a step ticked at the same
+    moment is never lost). With ``unchanged_since`` (the item as read) it only lands while ``status`` and
+    ``tokenVersionId`` are still the same, i.e. no Connect finished and no Disconnect ran meanwhile; else
+    ``db.ConditionFailed``."""
+    pk, sk = key(user_id)
+    names: dict[str, str] = {"#u": "updatedAt"}
+    values: Item = {":u": iso(now)}
+    sets = ["#u = :u"]
+    for i, (name, value) in enumerate(fields.items()):
+        names[f"#f{i}"] = name
+        values[f":f{i}"] = value
+        sets.append(f"#f{i} = :f{i}")
+    expression = "SET " + ", ".join(sets)
+    add = {str(s) for s in steps}
+    if add:
+        names["#d"] = "stepsDone"
+        values[":d"] = add
+        expression += " ADD #d :d"
+    conditions = ["attribute_exists(pk)"]
+    if unchanged_since is not None:
+        for tag, name in (("st", "status"), ("tv", "tokenVersionId")):
+            names[f"#{tag}"] = name
+            was = unchanged_since.get(name)
+            if was is None:
+                conditions.append(f"attribute_not_exists(#{tag})")
+            else:
+                values[f":{tag}"] = was
+                conditions.append(f"#{tag} = :{tag}")
+    return store.update_expr(pk, sk, expression, condition=" AND ".join(conditions), names=names, values=values)
+
+
 def signed_in(item: Mapping[str, Any]) -> bool:
     return item.get("status") in SIGNED_IN
 
@@ -127,13 +172,23 @@ def crlinked(item: Mapping[str, Any]) -> dict[str, bool]:
     return {str(k): bool(v) for k, v in raw.items() if isinstance(v, bool)}
 
 
+def steps_done(item: Mapping[str, Any]) -> list[str]:
+    """``CrConnection.stepsDone``: the stored ticks, plus step 1 when Content Rewards said the account can't connect
+    apps or he sent the pilot email (the card asks him to send it from his Content Rewards login). Read here, nothing
+    written, so an account from before 21 Nov 2026 shows it too (§39.1)."""
+    steps = {str(s) for s in item.get("stepsDone") or [] if isinstance(s, str)}
+    if item.get("lastResult") == "not_allowed" or item.get("pilotSentAt"):
+        steps.add(STEP_ACCOUNT)
+    return sorted(steps)
+
+
 def public(item: Mapping[str, Any], now: datetime) -> Item:
     status, reason = effective(item, now)
     out: Item = {
         "status": status,
         "canSubmit": bool(item.get("canSubmit")) and status == "connected",
         "crLinked": crlinked(item),
-        "stepsDone": sorted(str(s) for s in item.get("stepsDone") or [] if isinstance(s, str)),
+        "stepsDone": steps_done(item),
         "pilotEmail": pilot_email(),
     }
     signed = item.get("connectedAt") and status in (*SIGNED_IN, "needs_reconnect")

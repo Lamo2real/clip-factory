@@ -43,10 +43,19 @@ Never on a screen: "the Content Rewards way", "mode", "normal mode", "compatible
 `/settings/posting/setup/contentrewards` (§38.3), the only place Connect happens, like each platform's setup page. Each
 step is something only the owner can do or knows: CR's API has no tool that tells Clip Factory he has an account or
 which accounts he added inside Content Rewards (`get_me` returns only his `cre_` id and brand memberships,
-`mcp-tools.json` 2026-10-01), so steps 1 and 2 are one green tap each. Each ticks itself once Clip Factory really knows
-(live check, 21 Nov 2026): a finished Connect (step 3) ticks steps 1, 2 and 3, and Content Rewards saying the account
-can't connect apps (its redirect, or his answer "It said my account can't connect apps", §38.3) ticks step 1, since he
-had to have an account and be signed in to see it. The page,
+`mcp-tools.json` 2026-10-01), so steps 1 and 2 are one green tap each. They also tick themselves (live check, 21 Nov
+2026; the owner: "extremely easy and simple ... chronological and structured"):
+* A finished Connect (step 3) ticks steps 1, 2 and 3. Step 2 because Connect is the step he does after setting
+  Content Rewards up. It is not proof of each place: a `crLinked: false` still reopens step 2 and still shows in the
+  fit; only the fit's `place_link` `check` rows for places Content Rewards never answered about go (§39.3).
+* Content Rewards saying the account can't connect apps (its redirect, or his answer "It said my account can't connect
+  apps", §38.3), or any Connect result after Content Rewards gave a code, ticks step 1: he had to have an account and
+  be signed in to get there.
+* Step 1 also shows done whenever `lastResult` is `not_allowed` or `pilotSentAt` is set (the "Content Rewards said
+  no?" card asks him to send the email from his Content Rewards login). The API adds it to `stepsDone` when it answers,
+  with nothing written, so data from before 21 Nov 2026 shows it too.
+
+The page,
 top to bottom (H; `CrSetup.tsx`, D's `CrStepCard` in `screens/campaigns/bits.tsx`):
 
 0. **The shortcut**, only while steps 1 and 2 are both not done: "Already use Content Rewards, with YouTube added
@@ -81,7 +90,9 @@ numbered step not done → step 1 "Open Content Rewards", step 2 "Open Content R
 answer right under it), step 3 "Connect Content Rewards" (elsewhere, step 3's own words for where the page runs); every
 step done → the back button with a `?back=`, else "Add a campaign" while he has no campaign. While the page waits for
 the browser, or asks "What did Content Rewards say?" (§38.3), nothing is vermilion. Steps tick themselves whenever Clip
-Factory knows (above), so after any Connect he never sees step 1's button as the next step.
+Factory knows (above), so after a finished Connect, once Content Rewards said the account can't connect apps, or once
+the pilot email is sent, he never sees step 1's button as the next step. With the owner's own data at the live check
+(pilot email sent, no steps ticked) the vermilion is step 2's "Open Content Rewards settings".
 
 **`?back=`** (H, `web/src/lib/backLink.ts`, one pure function used by every setup page): only these exact same-origin
 shapes count, anything else (another origin, `//`, a scheme, other paths, extra query keys) is ignored: `/campaigns/{uuid}`
@@ -137,8 +148,8 @@ opens his mail. Each more place inside Content Rewards is optional: Instagram +4
 3), allow, "Back to FaZe Clips": **7 taps on 5 screens** (Home, campaign card, setup page, the allow page, the Done
 page), and the card says "You're in!" (checked at once, §38.12). That is the fewest: each tap is the move to the next
 screen, a fact only he knows, or Content Rewards' own allow. (Starting the sign-in straight from the card would save
-one more but skip the "accounts added" answer the fit's `place_link` needs, so it is not done.) Extras, only when they
-apply: an older Mac app +1 ("Restart now", §38.15); Content Rewards says no to apps: +1 "It said my account can't
+one more, but someone new would skip making an account and adding YouTube there, so it is not done.) Extras, only when
+they apply: an older Mac app +1 ("Restart now", §38.15); Content Rewards says no to apps: +1 "It said my account can't
 connect apps" (its page sends nobody back, §38.3), the first time only typing his Content Rewards email, +2 ("Open
 email", Send) and +1 optional "I sent it".
 On a phone the campaign card's vermilion is "Set up Content Rewards" (→ the setup page with
@@ -398,7 +409,7 @@ own campaign only (one clip, one campaign). A normal clip is checked against eve
 | `deadline` | `rules.clipUntil` against today (UTC, like A's gates) | `ok` "Takes clips until 23 Nov." · `note` "Today is the last day FaZe Clips takes clips." · `no` "FaZe Clips stopped taking clips on 23 Nov." fix `open` "Find another campaign" |
 | `length` | `clip.durationSec` against `lengthMinSec`/`lengthMaxSec` (a minimum learned from a `too_short` answer counts, §38.9) | `ok` "42 seconds. FaZe Clips takes 15 to 60." · `no` "This clip is 72 seconds. FaZe Clips takes 15 to 60 seconds." fix `new_clips`. No length rule: not listed |
 | `places` | `places` (paid ∩ ready ∩ not `crLinked: false`, TikTok after its audit) ∩ `chosen` | `ok` "Goes to YouTube and Instagram. FaZe Clips pays for both." · `todo` (no place yet, one can be set up) "Set up YouTube first. FaZe Clips pays for YouTube." fix `open` "Set up YouTube" · `todo` A's `no_place` with no `platformsPaid` "I can't tell where FaZe Clips pays yet. Tap Check now." fix `open` "Open campaign" (→ the card) · `no` for `tiktok_only` (its stop text) · `note` per paid place left out: "Instagram pays too. Set it up to earn there as well." (fix `open`), TikTok before its audit: §38.5's TikTok line |
-| `place_link` | per place in `places`: `crLinked` absent and `ready-socials` not in `stepsDone`; per paid place left out as `crLinked: false` | `check` "I couldn't check that Content Rewards knows your YouTube account. Look under **Accounts** there." fix `open` "Open Content Rewards settings" (new tab) · `note` "Content Rewards doesn't know your Instagram account. Add it there, then tap I added it." (the "I added it" of §38.5). Absent and the step done, or `true`: not listed |
+| `place_link` | per place in `places`: `crLinked` absent and `ready-socials` not in `stepsDone` (a finished Connect ticks it, §39.1, so after one only the `crLinked: false` notes are left); per paid place left out as `crLinked: false` | `check` "I couldn't check that Content Rewards knows your YouTube account. Look under **Accounts** there." fix `open` "Open Content Rewards settings" (new tab) · `note` "Content Rewards doesn't know your Instagram account. Add it there, then tap I added it." (the "I added it" of §38.5). Absent and the step done, or `true`: not listed |
 | `tags` | every caption of every place in `places` (GET: `clip.captions`; the card: its text; Confirm: the merged captions) has each item of B's `campaign_caption.required_items(rules)` by B's own match (a whole `#`/`@` token, case-insensitive; a phrase with spaces folded; `_has`, made public as `has_item`) | `ok` "Every caption has #FaZe and @FaZeClan." · `fix` "The X words are missing #FaZe. I'll put it back when it uploads." fix `captions` "Fix it for me" |
 | `ad` | every caption passes B's disclosure-first rule (`_ad_first`, made public as `ad_first`: an `#ad`-like tag, or the brand's own one, in the first `DISCLOSURE_WINDOW` characters; YouTube: the description) | `ok` "#Ad is at the start of every caption." · `fix` "#Ad isn't at the start of the Instagram words. I'll put it there when it uploads." fix `captions` "Fix it for me" |
 | `paid_switch` | per place: YouTube and X are turned on by the publisher (§38.14); TikTok needs Branded content in the card's TikTok choices (Confirm: `tiktok.brandContent`) | `ok` "Paid promotion goes on for YouTube and X." · `fix` "Branded content is off on TikTok." fix `tiktok_branded` "Turn on Branded content" · `note` Instagram and Facebook: "Instagram doesn't let apps turn on Paid partnership. #Ad and the words on the video tell viewers." |
