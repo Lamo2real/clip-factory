@@ -1,5 +1,5 @@
 {
- "version": "437c047573ad",
+ "version": "62f00cf360d2",
  "parts": [
   {
    "id": "app-map",
@@ -255,7 +255,7 @@
    "id": "contracts-38",
    "title": "CONTRACTS: 38. Content Rewards campaigns (owner request, 2026-11-21)",
    "line": "The owner's words: \"browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip",
-   "chars": 168574
+   "chars": 169368
   },
   {
    "id": "contracts-39",
@@ -273,7 +273,7 @@
    "id": "contracts-41",
    "title": "CONTRACTS: 41. Campaign finder: campaigns that match what you want (owner request, 2026-11-21)",
    "line": "The owner's words: \"Also, will I be able to find campaigns and join them based on some requirements that I set if the",
-   "chars": 73667
+   "chars": 94827
   },
   {
    "id": "adr-01",
@@ -663,7 +663,7 @@
    "id": "adr-65",
    "title": "DECISIONS: ADR-65 Campaign finder: Content Rewards' public pages read politely, joining stays the owner's own tap",
    "line": "Context. The owner asked (2026-11-21) whether he can find campaigns and join them by requirements he sets, once",
-   "chars": 4835
+   "chars": 6402
   },
   {
    "id": "architecture-overview",
