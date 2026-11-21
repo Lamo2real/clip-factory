@@ -21,6 +21,7 @@ import { goBack } from "../../lib/router.ts";
 import { isoWeek, weekRange } from "../../lib/week.ts";
 import { CrPostLines } from "../../components/CrPostLine.tsx";
 import { sendGroups, useSubmissions } from "../../lib/contentRewards.ts";
+import { ClipFit, useClipPageFit } from "./ClipFit.tsx";
 
 /** Re-renders every `ms` so "3 min ago" and "Next check in 4 min" stay true. */
 export function useNow(ms = 15_000): number {
@@ -107,6 +108,9 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   // Lines draw in once per visit; with reduced motion they are simply there.
   const [animate] = useState(() => !prefersReducedMotion());
   const live = useLiveStatus();
+  // §39.3: while it waits in Review, the clip's fit (its block's main button is then the page's vermilion).
+  const fitPage = useClipPageFit(perf?.clip ?? null);
+  const fitMain = !!fitPage.main && !sendNow;
 
   const stage = useRef<HTMLDivElement | null>(null);
   const stageObserver = useRef<ResizeObserver | null>(null);
@@ -279,6 +283,8 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
         </p>
       </header>
 
+      <ClipFit clip={clip} data={fitPage.data} primary={fitMain} />
+
       {/* From the send-now notification (?cr=), or while a post waits to be sent, the lines lead the page (§38.6). */}
       {crSubs.subs.length && crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={sendNow} /> : null}
 
@@ -393,7 +399,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
               <span>Best this week</span>
             </button>
             <Button
-              variant={sendNow ? "glass" : "primary"}
+              variant={sendNow || fitMain ? "glass" : "primary"}
               size="lg"
               icon={waiting ? "clock" : "retry"}
               loading={state.refreshing}
