@@ -373,8 +373,10 @@ test("a reference video: upload in parts, analyze with a per-run model, the anal
   await expect(page.getByText("Analyze it first, then use it in a video.")).toBeVisible();
 
   // Analyze with a model just for this run: the line shows it, the run uses it, the setting is not kept.
+  // The usual setting is the reference-analysis task's (Lamo Stories › Settings › AI), whatever it is set to.
   const line = page.locator(".st-chat-ai__line");
-  await expect(line).toHaveText("Model: Claude Opus 5.5 · Effort: High");
+  await expect(line).toHaveText(/^Model: Claude .+ · Effort: .+$/);
+  const usual = (await line.textContent()) ?? "";
   await page.getByRole("button", { name: "Just for this run" }).click();
   const sheet = page.getByRole("dialog", { name: "Model and effort for this run" });
   await sheet.getByRole("radio", { name: /Claude Haiku 5\.5/ }).click();
@@ -391,7 +393,7 @@ test("a reference video: upload in parts, analyze with a per-run model, the anal
   for (const heading of ["What happens", "The hook", "Pacing", "Shot by shot", "Jokes and acting", "Sound", "Captions", "Borrow these", "Don't copy these"])
     await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(page.locator(".st-ref-with")).toHaveText("Analyzed with Claude Haiku 5.5 · Medium");
-  await expect(line).toHaveText("Model: Claude Opus 5.5 · Effort: High");
+  await expect(line).toHaveText(usual);
 
   // A re-run that fails is not cheered: it says so, keeps the last analysis, and offers another model.
   await knobs(page, { refFail: "This video can't be opened right now.", refSeconds: 3 });
