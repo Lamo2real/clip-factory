@@ -531,3 +531,94 @@ def test_unexpected_failure_still_lands_on_the_setup_page(
 
     monkeypatch.setattr(providers, "exchange", broken)
     assert back(hooks_deps, "x", {"code": "C", "state": signed}) == "error"
+
+
+def test_get_paid_results_land_on_their_own_fixed_pages() -> None:
+    """§40.6: payment reading lands on the YouTube Get paid page, Connect Whop on the Content Rewards one; anything
+    else stays the setup page's listed codes (no open redirect)."""
+    for result in callback.PAYMENTS_RESULTS:
+        assert callback.location(APP_URL, "youtube", result) == (
+            f"{APP_URL}/settings/posting/getpaid/youtube?result={result}"
+        )
+    for result in callback.WHOP_RESULTS:
+        assert callback.location(APP_URL, "whop", result) == (
+            f"{APP_URL}/settings/posting/getpaid/contentrewards?result={result}#whop"
+        )
+    assert callback.location(APP_URL, "whop", "expired").endswith("?result=whop_expired#whop")
+    assert callback.location(APP_URL, "tiktok", "payments_allowed") == (
+        f"{APP_URL}/settings/posting/setup/tiktok?result=error"
+    )
+    assert not set(callback.PAYMENTS_RESULTS) & set(callback.RESULTS)
+    assert not set(callback.WHOP_RESULTS) & set(callback.RESULTS)
+
+
+def test_a_payments_grant_never_goes_through_save(
+    call: Call, hooks_deps: hooks.HooksDeps, http: FakeHttp, store: db.Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The callback hands a ``grant: "payments"`` state to ``getpaid.grants`` only: never ``save`` (the Account)."""
+
+    def boom(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("never save() or save_money_grant() for a payments grant")
+
+    monkeypatch.setattr(callback, "save", boom)
+    monkeypatch.setattr(callback, "save_money_grant", boom)
+    assert call("PUT", "/v1/setup/youtube/keys", GOOD["youtube"])[0] == 200
+    _, body = call("POST", "/v1/accounts/youtube/connect", {"grant": "payments"})
+    signed = str(parse_qs(urlsplit(body["authorizeUrl"]).query)["state"][0])
+    http.answers.extend(
+        [
+            (200, {"access_token": "ya29.A", "scope": "https://www.googleapis.com/auth/adsense.readonly"}),
+            (200, {"accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}]}),
+        ]
+    )
+    event = {
+        "httpMethod": "GET",
+        "resource": "/oauth/{platform}/callback",
+        "pathParameters": {"platform": "youtube"},
+        "queryStringParameters": {"code": "C", "state": signed},
+        "requestContext": {"requestId": "r"},
+    }
+    out = hooks.handle(event, hooks_deps)
+    assert out["headers"]["location"] == f"{APP_URL}/settings/posting/getpaid/youtube?result=payments_allowed"
+    assert account(store, "youtube") is None  # no Account was made
+
+
+def test_a_payments_state_that_fails_goes_back_to_get_paid(
+    hooks_deps: hooks.HooksDeps, http: FakeHttp, store: db.Store
+) -> None:
+    """A payments state is signed for ``youtube:payments``: forged without its item, or carrying another grant, it
+    still lands on Get paid ("Tap Allow payment reading again"), never on the YouTube setup page."""
+    env = hooks_deps.oauth
+    assert env is not None
+    key = STATE_KEY.encode()
+
+    def result(platform: str, signed: str) -> str:
+        return callback.handle_callback(platform, {"code": "C", "state": signed}, store, env)
+
+    forged = state.sign(key, "youtube:payments", state.new_nonce(), 1_794_744_600)
+    assert result("youtube", forged) == "payments_error"
+    # The same label on a Connect item (no payments grant) is refused, never handed to Connect.
+    nonce = state.new_nonce()
+    store.put(
+        {
+            "pk": f"OAUTH#{nonce}",
+            "sk": "STATE",
+            "type": "oauth",
+            "userId": USER,
+            "platform": "youtube",
+            "redirectUri": f"{HOOKS_URL}/oauth/youtube/callback",
+        }
+    )
+    assert result("youtube", state.sign(key, "youtube:payments", nonce, 1_794_744_600)) == "payments_error"
+    # A payments label is YouTube's only: on another platform it is just a bad state.
+    assert result("tiktok", forged) == "expired"
+    assert http.calls == []
+    event = {
+        "httpMethod": "GET",
+        "resource": "/oauth/{platform}/callback",
+        "pathParameters": {"platform": "youtube"},
+        "queryStringParameters": {"code": "C", "state": forged},
+        "requestContext": {"requestId": "r"},
+    }
+    out = hooks.handle(event, hooks_deps)
+    assert out["headers"]["location"] == f"{APP_URL}/settings/posting/getpaid/youtube?result=payments_error"

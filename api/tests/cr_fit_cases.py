@@ -9,7 +9,8 @@
 * ``fixtures/channel_match_cases.json``: a campaign's channels, yt-dlp's facts about a video (``info``), the
   ``channelKeys`` the agent stores for it (``sources.channel_keys(info)``, I) and whether the fit says it matches
   (``true``, ``false``, or ``null``: nothing to compare). The agent's tests read it when present.
-* ``fixtures/money_everywhere_cases.json``: one owner's stored money items and ``GET /v1/money/everywhere``.
+* ``fixtures/money_everywhere_cases.json``: one owner's stored money items and ``GET /v1/money/everywhere``, with
+  the Get paid "Sent to your bank" lines and block (§40.4: ``payouts``, ``payconns``, ``paystates``, ``whopOn``).
 
 Run ``uv run python tests/cr_fit_cases.py`` (from ``api/``) to write the files again after a deliberate change: the
 expected answers come from the code, and every case is read by hand in review (the key ones also have their own
@@ -819,7 +820,7 @@ def crmoney(**fields: Any) -> dict[str, Any]:
 
 
 def money_case(name: str, **kw: Any) -> dict[str, Any]:
-    return {
+    out = {
         "name": name,
         "today": kw.pop("today", "2026-11-19T15:00:00.000Z"),
         "facebookVerified": kw.pop("facebook_verified", False),
@@ -830,6 +831,190 @@ def money_case(name: str, **kw: Any) -> dict[str, Any]:
         "crconn": kw.pop("crconn", {"status": "connected", "signInBy": "2027-02-01T00:00:00.000Z"}),
         "crmoney": kw.pop("crmoney", crmoney()),
     }
+    # §40.4 (Get paid): what Google and Whop say they sent toward his bank. Only the cases that store some.
+    for key in ("payouts", "payconns", "paystates", "whopOn"):
+        if key in kw:
+            out[key] = kw.pop(key)
+    return out
+
+
+# --- §40.4: the stored Get paid items (the shapes of §40.7) --------------------------------------------------------
+
+ADSENSE_ON = {
+    "type": "payconn",
+    "source": "adsense",
+    "status": "connected",
+    "connectedAt": "2026-10-01T09:00:00.000Z",
+    "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}],
+}
+WHOP_ON = {
+    "type": "payconn",
+    "source": "whop",
+    "status": "connected",
+    "connectedAt": "2026-10-01T09:00:00.000Z",
+    "accountId": "user_abc123",
+    "accountName": "@owner",
+    "tokenVersionId": "v3",
+}
+READ = {"type": "paystate", "firstReadDone": True, "lastCheckedAt": "2026-11-19T06:00:00.000Z"}
+
+
+def google(day: str, text: str, account: str = "3456", **fields: Any) -> dict[str, Any]:
+    return {
+        "sk": f"PAYOUT#youtube#{day}#{account}",
+        "type": "payout",
+        "place": "youtube",
+        "by": "google",
+        "source": "adsense.payments",
+        "account": account,
+        "date": day,
+        "amountText": text,
+        "state": "sent",
+        "fetchedAt": "2026-11-19T06:00:00.000Z",
+        **fields,
+    }
+
+
+def whop(day: str, payout_id: str, status: str, micros: int, currency: str = "USD", **fields: Any) -> dict[str, Any]:
+    states = {"completed": "sent", "processing": "on_its_way", "failed": "didnt_go_through", "reversed": "came_back"}
+    return {
+        "sk": f"PAYOUT#contentrewards#{day}#{payout_id}",
+        "type": "payout",
+        "place": "contentrewards",
+        "by": "whop",
+        "source": "whop.payouts",
+        "payoutId": payout_id,
+        "status": status,
+        "state": states.get(status, "on_its_way"),
+        "date": day,
+        "amountMicros": micros,
+        "currency": currency,
+        "traceCode": "UETR-secret-trace",
+        "fetchedAt": "2026-11-19T06:00:00.000Z",
+        **fields,
+    }
+
+
+def _sent_cases() -> list[dict[str, Any]]:
+    both = {"adsense": ADSENSE_ON, "whop": WHOP_ON}
+    read = {"youtube": READ, "contentrewards": {**READ, "kyc": "approved"}}
+    return [
+        money_case(
+            "sent to your bank: Google in kronor and Whop in dollars, never added together",
+            payouts={
+                "youtube": [google("2026-10-23", "kr 1 234,56 SEK"), google("2026-09-22", "SEK 1,233.44")],
+                "contentrewards": [
+                    whop("2026-11-10", "po_1", "completed", 40_000_000, estimatedArrival="2026-11-14"),
+                    whop("2026-11-17", "po_2", "processing", 12_000_000),
+                    whop("2026-10-02", "po_0", "reversed", 9_000_000),
+                ],
+            },
+            payconns=both,
+            paystates=read,
+            whopOn=True,
+        ),
+        money_case(
+            "sent to your bank: Google and Whop in dollars make one line",
+            payouts={
+                "youtube": [google("2026-10-23", "USD 170.00")],
+                "contentrewards": [whop("2026-11-10", "po_1", "completed", 40_000_000)],
+            },
+            payconns=both,
+            paystates=read,
+            whopOn=True,
+        ),
+        money_case(
+            "sent to your bank: Google's money type can't be read, so nothing is added up",
+            payouts={"youtube": [google("2026-10-23", "$1,234.57"), google("2026-09-22", "1 234,56 kr")]},
+            payconns={"adsense": ADSENSE_ON},
+            paystates={"youtube": READ},
+        ),
+        money_case(
+            "sent to your bank: one of Google's payments can't be read",
+            payouts={"youtube": [google("2026-10-23", "kr 1 234,56 SEK"), google("2026-09-22", "$1,234.57")]},
+            payconns={"adsense": ADSENSE_ON},
+            paystates={"youtube": READ},
+        ),
+        money_case(
+            "sent to your bank: two AdSense accounts paid on the same day stay two payments",
+            payouts={
+                "youtube": [google("2026-10-23", "€87.65", "1111"), google("2026-10-23", "€12.35", "2222")],
+            },
+            payconns={"adsense": ADSENSE_ON},
+            paystates={"youtube": READ},
+        ),
+        money_case(
+            "sent to your bank: a payment Google no longer lists stops counting",
+            payouts={
+                "youtube": [
+                    google("2026-10-23", "kr 1 234,56 SEK"),
+                    google("2026-09-22", "kr 999,00 SEK", state="gone", goneAt="2026-11-01T06:00:00.000Z"),
+                ],
+            },
+            payconns={"adsense": ADSENSE_ON},
+            paystates={"youtube": READ},
+        ),
+        money_case(
+            "sent to your bank: payment reading on, nothing sent yet",
+            payouts={"youtube": []},
+            payconns={"adsense": ADSENSE_ON},
+            paystates={"youtube": READ},
+        ),
+        money_case(
+            "sent to your bank: payment reading just allowed, checking",
+            payconns={"adsense": {**ADSENSE_ON, "connectedAt": "2026-11-19T09:00:00.000Z"}},
+            paystates={},
+        ),
+        money_case(
+            "sent to your bank: the first read is late",
+            payconns={"adsense": {**ADSENSE_ON, "connectedAt": "2026-11-17T09:00:00.000Z"}},
+            paystates={},
+        ),
+        money_case(
+            "sent to your bank: payment reading allowed again after Stop, the old read doesn't count",
+            payconns={"adsense": {**ADSENSE_ON, "connectedAt": "2026-11-19T14:00:00.000Z"}},
+            paystates={"youtube": {**READ, "lastCheckedAt": "2026-11-16T06:00:00.000Z"}},
+        ),
+        money_case(
+            "sent to your bank: reads failing for 10 days never say nothing sent yet",
+            payconns={"adsense": ADSENSE_ON, "whop": WHOP_ON},
+            paystates={
+                "youtube": {**READ, "lastCheckedAt": "2026-11-09T06:00:00.000Z", "lastError": "Google said 500"},
+                "contentrewards": {**READ, "lastCheckedAt": "2026-11-09T06:00:00.000Z", "lastError": "Whop said 500"},
+            },
+            whopOn=True,
+        ),
+        money_case(
+            "sent to your bank: payment reading needs a reconnect",
+            payconns={"adsense": {**ADSENSE_ON, "status": "needs_reconnect", "reason": "token_dead"}},
+            paystates={"youtube": READ},
+        ),
+        money_case(
+            "sent to your bank: payment reading stopped, Google's payments stay",
+            payouts={"youtube": [google("2026-10-23", "kr 1 234,56 SEK")]},
+            payconns={
+                "adsense": {"type": "payconn", "status": "not_connected", "stoppedAt": "2026-11-03T10:00:00.000Z"}
+            },
+            paystates={"youtube": READ},
+        ),
+        money_case(
+            "sent to your bank: Connect Whop is on but not connected",
+            payconns={"whop": {"type": "payconn", "source": "whop", "status": "keys_saved", "keyHint": "app_Ab…wxyz"}},
+            whopOn=True,
+        ),
+        money_case(
+            "sent to your bank: Whop needs a reconnect",
+            payconns={"whop": {**WHOP_ON, "status": "needs_reconnect", "reason": "token_dead"}},
+            paystates={"contentrewards": READ},
+            whopOn=True,
+        ),
+        money_case(
+            "sent to your bank: Connect Whop switched off says not available",
+            payconns={"whop": WHOP_ON},
+            paystates={"contentrewards": READ},
+            whopOn=False,
+        ),
+    ]
 
 
 def money_run(c: dict[str, Any]) -> dict[str, Any]:
@@ -846,6 +1031,10 @@ def money_run(c: dict[str, Any]) -> dict[str, Any]:
         c["crmoney"],
         c["crOn"],
         today,
+        payouts=c.get("payouts"),
+        payconns=c.get("payconns"),
+        paystates=c.get("paystates"),
+        whop_on=bool(c.get("whopOn")),
     )
 
 
@@ -937,6 +1126,7 @@ def _money_cases() -> list[dict[str, Any]]:
             rows=[],
             states={},
         ),
+        *_sent_cases(),
     ]
     for c in out:
         c["expect"] = money_run(c)

@@ -171,6 +171,8 @@ class App:
     tiktok_open: Opener = open_once
     # Content Rewards (§38): None (every /v1/contentrewards route answers 503) unless switched on and configured.
     contentrewards: Any = None
+    # Get paid (§40.6): "Connect Whop" and its routes answer 503 "Coming soon." unless WHOP_CONNECT is "on".
+    whop_connect: bool = False
     _builtin_cache: list[BuiltinSkill] | None = field(default=None, repr=False)
 
     def builtin_skills(self) -> list[BuiltinSkill]:
@@ -268,6 +270,7 @@ def from_env() -> App:
         ask=ask_from_env(reg, lambda_client),
         push=_push_from_env(env, reg),
         contentrewards=_content_rewards(env, store, media, invoker),
+        whop_connect=env.get("WHOP_CONNECT", "off").strip().lower() == "on",
     )
 
 
@@ -300,7 +303,7 @@ def _posting_setup(env: Any, reg: str) -> tuple[OAuthEnv | None, WebFiles | None
     """Secrets Manager, the state key and the public URLs of §17.9; both None when any is missing."""
     import boto3
 
-    from .oauth import OAuthEnv, money_scopes_from_config, scopes_from_config
+    from .oauth import OAuthEnv, money_scopes_from_config, payment_scopes_from_config, scopes_from_config
     from .oauth.secrets import PREFIX, Secrets
     from .routes.setup import WebFiles
     from .stats import config
@@ -319,6 +322,7 @@ def _posting_setup(env: Any, reg: str) -> tuple[OAuthEnv | None, WebFiles | None
         graph_version=config.load().graph_api_version,
         scopes=scopes_from_config(),
         money_scopes=money_scopes_from_config(),
+        payment_scopes=payment_scopes_from_config(),
     )
     web_files = None
     if env.get("WEB_BUCKET") and env.get("DISTRIBUTION_ID"):
