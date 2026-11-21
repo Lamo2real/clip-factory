@@ -1,5 +1,5 @@
 {
- "version": "56e9f5f493bb",
+ "version": "bd855e839a55",
  "parts": [
   {
    "id": "app-map",
@@ -261,7 +261,7 @@
    "id": "contracts-39",
    "title": "CONTRACTS: 39. Content Rewards: the two ways, all your money, and does this clip fit (owner request, 2026-11-21)",
    "line": "The owner's words, the day §38 was approved: \"please double check that the steps to conect to contentrewards is",
-   "chars": 56516
+   "chars": 79050
   },
   {
    "id": "adr-01",
@@ -639,7 +639,7 @@
    "id": "adr-63",
    "title": "DECISIONS: ADR-63 Content Rewards follow-ups: one fit check in the API, a new copy instead of turning a normal clip into a campaign clip, one 30-day total that ",
    "line": "Context. After approving §38 the owner asked (2026-11-21) for three things: the Connect steps checked so they are",
-   "chars": 4874
+   "chars": 5942
   },
   {
    "id": "architecture-overview",
