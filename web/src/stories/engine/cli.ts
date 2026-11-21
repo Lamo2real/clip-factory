@@ -1,33 +1,21 @@
 // The engine's command line for the agent (docs/CONTRACTS.md §45.10), run with Deno:
 //   deno run --allow-read cli.ts validate <script.json>        → {"ok": true} | {"ok": false, "errors": [...]}
-//   deno run --allow-read cli.ts normalize <script.json>       → the normalized script (beat effects into scene lists)
+//   deno run --allow-read cli.ts normalize <script.json>       → the normalized script (beat effects and the place's
+//                                                                 sounds into scene lists)
 //   deno run --allow-read cli.ts fit <seconds> <script.json>   → the fitted script
 //   deno run --allow-read cli.ts frames <script.json> [from] [to] → one JSON line per frame: {"f": n, "p": Prim[]}
 //   deno run --allow-read cli.ts scenes <script.json>          → [{"sceneId", "from", "to", "mid"}] (frame numbers)
 //   deno run --allow-read cli.ts text <script.json>            → TextEvent[]
 //   deno run --allow-read cli.ts audio <script.json>           → AudioEvent[]
-//   deno run --allow-read cli.ts catalog                       → {"engine": n, "catalog": CATALOG, "limits": {...}}
+//   deno run --allow-read cli.ts catalog                       → {"engine": n, "catalog": CATALOG, "limits": {...},
+//                                                                 "rules": [{id, text}], "propStates": {...}}
 //   deno run --allow-read cli.ts version                       → {"engine": n}
 //   deno run --allow-read cli.ts character <character.json>    → {"ok": true} | {"ok": false, "errors": [...]}
-//                                                               (a character's look, movementStyle, voice, faces)
-// It never reads the network and writes only to stdout (errors to stderr, exit code 2).
+//                                                               (the character agent's CharacterInput)
+// It never reads the network and writes only to stdout (errors to stderr, exit code 2). The commands themselves are
+// commands.ts, so the web's tests run them too.
 
-import {
-  audioTrack,
-  CATALOG,
-  drawFrame,
-  ENGINE_VERSION,
-  fitDuration,
-  frameCount,
-  LIMITS,
-  normalizeScript,
-  sceneList,
-  SEATS,
-  textTrack,
-  validateCharacter,
-  validateScript,
-} from "./engine.ts";
-import type { StoryScript } from "./types.ts";
+import { runCli } from "./commands.ts";
 
 // Deno's globals, declared here so the web's type check (which has no Deno types) accepts this file.
 declare const Deno: {
@@ -40,80 +28,15 @@ declare const Deno: {
 
 const encoder = new TextEncoder();
 
-function write(text: string): void {
+function writeAll(out: { writeSync(data: Uint8Array): number }, text: string): void {
   const bytes = encoder.encode(text);
   let done = 0;
-  while (done < bytes.length) done += Deno.stdout.writeSync(bytes.subarray(done));
+  while (done < bytes.length) done += out.writeSync(bytes.subarray(done));
 }
 
-function fail(message: string): never {
-  Deno.stderr.writeSync(encoder.encode(message + "\n"));
-  Deno.exit(2);
-}
-
-function readScript(path: string | undefined, what = "script"): unknown {
-  if (!path) fail(`a ${what} path is required`);
-  try {
-    return JSON.parse(Deno.readTextFileSync(path));
-  } catch {
-    fail(`the ${what} could not be read as JSON`);
-  }
-}
-
-function valid(path: string | undefined): StoryScript {
-  const result = validateScript(readScript(path));
-  if (!result.ok) fail("invalid script: " + result.errors.join("; "));
-  return result.script;
-}
-
-function main(args: string[]): void {
-  const [command, ...rest] = args;
-  switch (command) {
-    case "validate": {
-      const result = validateScript(readScript(rest[0]));
-      write(JSON.stringify(result.ok ? { ok: true } : { ok: false, errors: result.errors }) + "\n");
-      return;
-    }
-    case "normalize":
-      write(JSON.stringify(normalizeScript(valid(rest[0]))) + "\n");
-      return;
-    case "scenes":
-      write(JSON.stringify(sceneList(valid(rest[0]))) + "\n");
-      return;
-    case "fit": {
-      const seconds = Number(rest[0]);
-      if (!Number.isFinite(seconds) || seconds <= 0) fail("fit needs a number of seconds");
-      write(JSON.stringify(fitDuration(valid(rest[1]), seconds)) + "\n");
-      return;
-    }
-    case "frames": {
-      const script = valid(rest[0]);
-      const total = frameCount(script);
-      const from = rest[1] === undefined ? 0 : Math.max(0, Math.floor(Number(rest[1])));
-      const to = rest[2] === undefined ? total : Math.min(total, Math.floor(Number(rest[2])));
-      for (let f = from; f < to; f += 1) write(JSON.stringify({ f, p: drawFrame(script, f) }) + "\n");
-      return;
-    }
-    case "text":
-      write(JSON.stringify(textTrack(valid(rest[0]))) + "\n");
-      return;
-    case "audio":
-      write(JSON.stringify(audioTrack(valid(rest[0]))) + "\n");
-      return;
-    case "catalog":
-      write(JSON.stringify({ engine: ENGINE_VERSION, catalog: CATALOG, limits: { ...LIMITS, seats: SEATS } }) + "\n");
-      return;
-    case "character": {
-      const result = validateCharacter(readScript(rest[0], "character"));
-      write(JSON.stringify(result) + "\n");
-      return;
-    }
-    case "version":
-      write(JSON.stringify({ engine: ENGINE_VERSION }) + "\n");
-      return;
-    default:
-      fail("unknown command; use validate, normalize, fit, frames, scenes, text, audio, catalog, version or character");
-  }
-}
-
-main(Deno.args);
+const code = runCli(Deno.args, {
+  read: (path) => Deno.readTextFileSync(path),
+  write: (text) => writeAll(Deno.stdout, text),
+  error: (text) => writeAll(Deno.stderr, text),
+});
+if (code !== 0) Deno.exit(code);

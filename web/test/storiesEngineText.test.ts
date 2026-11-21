@@ -99,7 +99,8 @@ describe("the safety end card", () => {
     const card = textTrack(s).find((e) => e.kind === "endcard")!;
     const lastStart = s.scenes.slice(0, -1).reduce((a, sc) => a + sc.durationSec, 0);
     expect(card.start).toBeGreaterThanOrEqual(lastStart);
-    const short = valid({ ...raw("ice-skid.json"), scenes: raw("ice-skid.json").scenes.map((sc, i, all) => (i === all.length - 1 ? { ...sc, durationSec: 2, beats: sc.beats.filter((b) => b.at + b.dur <= 2), sfx: [] } : sc)), captions: [] });
+    const scenes = raw("ice-skid.json").scenes.map((sc, i, all) => (i === all.length - 1 ? { ...sc, durationSec: 2, beats: sc.beats.filter((b) => b.at + b.dur <= 2), sfx: [] } : sc));
+    const short = valid({ ...raw("ice-skid.json"), durationSec: scenes.reduce((a, sc) => a + sc.durationSec, 0), scenes, captions: [] });
     const total = short.scenes.reduce((a, sc) => a + sc.durationSec, 0);
     const shortCard = textTrack(short).find((e) => e.kind === "endcard")!;
     expect(shortCard.start).toBeCloseTo(total - 2, 6);

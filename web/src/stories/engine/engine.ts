@@ -5,7 +5,8 @@
 //
 // The pieces: script.ts (validate, normalize, fit, frame maths), scene.ts (one frame of a scene), rig.ts and face.ts
 // (characters), motion.ts (actions and movement styles), props.ts, sets.ts, camera.ts, bubbles.ts, tracks.ts (text
-// and audio), pen.ts (transforms into prims), math.ts.
+// and audio), ambience.ts (the place's sounds normalize lists), rules.ts (what the script's words mean, for the
+// writer), commands.ts and cli.ts (the command line), pen.ts (transforms into prims), math.ts.
 
 import { CATALOG } from "./catalog.ts";
 import { FACES } from "./face.ts";
@@ -24,8 +25,9 @@ export { prng } from "./math.ts";
 export { audioTrack, fitDuration, FPS, frameCount, HEIGHT, LIMITS, MAX_SECONDS, normalizeScript, sceneFrames, sceneList, sceneShapes, SEATS, textTrack, validateCharacter, validateScript, WIDTH };
 
 /** Bumps whenever drawing changes; stored on each job's meta (2: the full rig, sets, props and cameras; 3: a skid
- * slides the rear to its dir's side, cars turn smoothly, bubbles keep clear of the end card and use scene time). */
-export const ENGINE_VERSION = 3;
+ * slides the rear to its dir's side, cars turn smoothly, bubbles keep clear of the end card and use scene time; 4: a
+ * side-view skid with a dir goes nose first, a humming voice keeps its lips closed, the place's sounds are listed). */
+export const ENGINE_VERSION = 4;
 
 /** The draw list for one frame of the whole story (frames past the end show the last frame). */
 export function drawFrame(s: StoryScript, frame: number): Prim[] {

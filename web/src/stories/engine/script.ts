@@ -2,6 +2,7 @@
 // sentence the writer can act on; normalizeScript moves beat effects into the scene lists and fills seeds;
 // fitDuration lands the story on its target length without breaking any scene rule.
 
+import { sceneBeds } from "./ambience.ts";
 import { CATALOG, catalogIds } from "./catalog.ts";
 import { clamp, hash, isHex } from "./math.ts";
 import type { CaptionCue, Scene, SfxCue, StoryScript, ValidateResult } from "./types.ts";
@@ -18,7 +19,7 @@ export const SCENE_MAX = 15;
 export const SEATS = { car: 2, truck: 1 } as const;
 
 /** Limits that keep every frame light enough for the agent's rasterizer. */
-export const LIMITS = { scenes: 30, cast: 6, actors: 4, props: 12, beats: 40, sfx: 24, captions: 40, totalSec: 180, shapes: 480 };
+export const LIMITS = { scenes: 30, cast: 6, actors: 4, props: 12, beats: 40, sfx: 40, captions: 40, totalSec: 180, shapes: 480 };
 
 /** About how many shapes (prims) each thing adds to a frame at its busiest (measured on the busiest sets, with every
  * action it can do); weather draws once however many of it there are. */
@@ -122,24 +123,31 @@ function checkVoice(v: unknown, where: string, err: (m: string) => void): void {
   if (!Array.isArray(v.sfx) || v.sfx.length > 8 || v.sfx.some((n) => !SFX.has(n as string))) err(`${where}: voice.sfx must be up to 8 known effects.`);
 }
 
-/** The character agent's answer, or a saved character (CONTRACTS §45.33): its look, movement style and voice follow
- * the same rules as a script's cast; its faces (when given) are at least 3 known ones, neutral among them. */
+/** The character agent's answer, or a saved character: a CharacterInput (CONTRACTS §45.6, §45.33). Its look, movement
+ * style and voice follow the same rules as a script's cast; its faces are at least 3 different known ones, neutral
+ * among them; its name, description, personality and traits keep their lengths. */
 export function validateCharacter(input: unknown): { ok: true } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const err = (m: string) => {
     if (errors.length < 40) errors.push(m);
   };
-  if (!isObj(input)) return { ok: false, errors: ["The character must be a JSON object { look, movementStyle, voice, expressions }."] };
+  if (!isObj(input)) return { ok: false, errors: ["The character must be a JSON object { name, description, personality, traits, movementStyle, expressions, look, voice }."] };
   const where = typeof input.name === "string" && input.name.trim() ? `character ${input.name.trim().slice(0, 30)}` : "character";
   if (input.name !== undefined && (typeof input.name !== "string" || !input.name.trim() || input.name.length > 30)) err(`${where}: name must be 1 to 30 characters.`);
+  for (const k of ["description", "personality"]) {
+    const v = input[k];
+    if (v !== undefined && (typeof v !== "string" || v.length > 400)) err(`${where}: ${k} must be text of at most 400 characters (it has ${typeof v === "string" ? v.length : "no text"}).`);
+  }
+  const traits = input.traits;
+  if (traits !== undefined && (!Array.isArray(traits) || traits.length > 8 || traits.some((x) => typeof x !== "string" || !x.trim() || x.length > 30))) {
+    err(`${where}: traits must be up to 8 words or short phrases of at most 30 characters each.`);
+  }
   checkLook(input.look, where, err);
   if (!STYLES.has(input.movementStyle as string)) err(`${where}: movementStyle is ${show(input.movementStyle)}; use one of ${list([...STYLES])}.`);
   checkVoice(input.voice, where, err);
   const faces = input.expressions;
-  if (faces !== undefined) {
-    if (!Array.isArray(faces) || faces.length < 3 || faces.some((f) => !FACES.has(f as string)) || !faces.includes("neutral") || new Set(faces).size !== faces.length) {
-      err(`${where}: expressions must be at least 3 different faces of ${list([...FACES], 14)}, with neutral among them.`);
-    }
+  if (!Array.isArray(faces) || faces.length < 3 || faces.some((f) => !FACES.has(f as string)) || !faces.includes("neutral") || new Set(faces).size !== faces.length) {
+    err(`${where}: expressions must be at least 3 different faces of ${list([...FACES], 14)}, with neutral among them.`);
   }
   return errors.length ? { ok: false, errors } : { ok: true };
 }
@@ -342,6 +350,9 @@ export function validateScript(input: unknown): ValidateResult {
       if (isObj(sc) && isNum(sc.durationSec)) total += sc.durationSec;
     });
     if (total > LIMITS.totalSec) err(`the scenes add up to ${round(total)} s; write at most ${LIMITS.totalSec} s (fitDuration then brings it to the target).`);
+    else if (isNum(s.durationSec) && total > 0 && Math.abs(s.durationSec - total) > TOL) {
+      err(`durationSec is ${round(s.durationSec)} but the scenes add up to ${round(total)} s; set it to ${round(total)} (or run fit).`);
+    }
   }
   if (s.captions !== undefined) {
     if (!Array.isArray(s.captions)) err("captions must be a list (it may be empty).");
@@ -386,26 +397,45 @@ function withDefaults(s: StoryScript): StoryScript {
 const byAt = <T extends { at: number }>(a: T, b: T) => a.at - b.at;
 
 /** Moves every Beat.sfx into its scene's own effects list (ids "{sceneId}.fx{k}"), gives each scene a seed (from the
- * script's seed and the scene id), and sorts beats and effects by time. Idempotent. */
+ * script's seed and the scene id), and sorts beats and effects by time. A new scene (one with no seed yet, or with
+ * effects still on its beats: the writer's answer) also gets the sounds its place needs for the whole scene (ids
+ * "{sceneId}.amb{k}": wind, rain, traffic, an engine hum while someone drives), unless its list already has that
+ * sound; a scene normalized before is never given them again, so an effect the owner removed stays removed.
+ * Idempotent. */
 export function normalizeScript(s: StoryScript): StoryScript {
   const used = new Set<string>();
   for (const sc of s.scenes) for (const c of sc.sfx ?? []) used.add(c.id);
-  const scenes: Scene[] = s.scenes.map((sc) => {
-    const sfx: SfxCue[] = (sc.sfx ?? []).map((c) => ({ ...c }));
+  const fresh = (prefix: string) => {
     let k = 0;
-    const beats = sc.beats.map((b) => {
-      if (!b.sfx) return { ...b };
-      const { sfx: effect, ...rest } = b;
+    return () => {
       let id: string;
       do {
         k += 1;
-        id = `${sc.sceneId}.fx${k}`;
+        id = `${prefix}${k}`;
       } while (used.has(id));
       used.add(id);
-      sfx.push({ id, at: b.at, sfx: effect, volume: 0.8 });
+      return id;
+    };
+  };
+  const scenes: Scene[] = s.scenes.map((sc) => {
+    const sfx: SfxCue[] = (sc.sfx ?? []).map((c) => ({ ...c }));
+    const hasSeed = isInt(sc.seed) && sc.seed >= 0;
+    const isNew = !hasSeed || sc.beats.some((b) => b.sfx !== undefined);
+    const fxId = fresh(`${sc.sceneId}.fx`);
+    const beats = sc.beats.map((b) => {
+      if (!b.sfx) return { ...b };
+      const { sfx: effect, ...rest } = b;
+      sfx.push({ id: fxId(), at: b.at, sfx: effect, volume: 0.8 });
       return rest;
     });
-    const seed = isInt(sc.seed) && sc.seed >= 0 ? sc.seed : hash(s.seed, sc.sceneId);
+    if (isNew) {
+      const ambId = fresh(`${sc.sceneId}.amb`);
+      for (const bed of sceneBeds(sc)) {
+        if (sfx.length >= LIMITS.sfx || sfx.some((c) => c.sfx === bed.sfx)) continue;
+        sfx.push({ id: ambId(), at: 0, sfx: bed.sfx, volume: bed.volume });
+      }
+    }
+    const seed = hasSeed ? (sc.seed as number) : hash(s.seed, sc.sceneId);
     return { ...sc, seed, beats: stableSort(beats, byAt), sfx: stableSort(sfx, (a, b) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), caption: sc.caption ?? null, note: sc.note ?? null };
   });
   return { ...s, scenes, captions: stableSort([...(s.captions ?? [])], byAt), music: s.music ?? null, safety: s.safety ?? null };

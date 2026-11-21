@@ -8,7 +8,9 @@ Both drawers must follow it exactly.
 ## Rules for the code in this folder
 
 * Only relative `./*.ts` imports. No npm packages, DOM, network, `Date`, `performance` or `Math.random`.
-  Randomness comes from `prng(seed)` or the stateless `rand(seed, i)` in `math.ts`. `Deno` appears only in `cli.ts`.
+  Randomness comes from `prng(seed)` or the stateless `rand(seed, i)` in `math.ts`. `Deno` appears only in `cli.ts`,
+  which hands its arguments, files and stdout to `commands.ts` (so `web/test/storiesEngineCli.test.ts` runs the very
+  same commands). A bad argument or file is one sentence on stderr and exit code 2.
   `web/test/storiesEngine.test.ts` scans the folder to keep it that way. Every output is 9:16, 1080 × 1920, 30 fps.
 * Everything is pure and deterministic. The same script and frame number always give the same prims, in Node, in
   Deno and in every browser. Coordinates are rounded to 0.1 px and alphas to 0.001, so the lists are short and
@@ -77,11 +79,20 @@ Text is not part of the prims. Captions and bubble symbols are drawn on top of t
 ## Sound (`audioTrack`)
 
 `AudioEvent.at` is in seconds from the start of the video. `pan` runs from -1 (left) to 1 (right), worked out from
-where the sound's maker stands. `pitch` (noises) is the character's voice pitch. `dur` is set on looping sounds
-(`engine`, `wind`, `rain`, until the end of their scene) and on repeating ones (`footsteps`, `heartbeat`, `tick`,
-`snow_crunch`) when a beat gives them a length. A scene gets its place's loop (rain on a rainy road, wind on ice and
-snow, traffic on the highway), weather props' loops, and an engine hum while someone drives, unless its effects list
-already has that sound. Music is not in the track: the mixer reads `script.music`.
+where the sound's maker stands. `pitch` (noises) is the character's voice pitch, and `voice` (noises, an additive
+field: `VoicedAudioEvent` in `tracks.ts`) is the character's voice style, `"babble"` (an open voice) or `"hum"` (a
+closed-mouth hum; the character's lips stay closed in the frames too). A character whose voice is `none` makes no
+noises. `dur` is set on looping sounds (`engine`, `wind`, `rain`, until the end of their scene) and on repeating ones
+(`footsteps`, `heartbeat`, `tick`, `snow_crunch`) when a beat gives them a length. Music is not in the track: the mixer
+reads `script.music`.
+
+The track plays every effect of the scenes' lists (`Scene.sfx`; in a script not normalized yet, also `Beat.sfx`) and
+nothing else, so what the owner removes in Review is gone from the sound. The place's sounds are in the lists too:
+`normalizeScript` gives a new scene (one with no `seed` yet, or with effects still on its beats: the writer's answer)
+its place's loop (rain on a rainy road, wind on ice, snow and fog and in the park, traffic on the highway), weather
+props' loops and an engine hum while someone drives, as cues `"{sceneId}.amb{k}"` at 0 s, unless its list already has
+that sound. A scene normalized before never gets them again, so an ambient sound the owner removed stays removed.
+An ambient engine hum pans with the scene's first car; the other ambient sounds are centred.
 
 ## Coordinates in a script
 
@@ -99,8 +110,9 @@ already has that sound. Music is not in the track: the mixer reads `script.music
   all the way round (`dir` right is clockwise). An actor `inCar` a car shows through the windows (side view) or
   through the glass roof (top view); a car seats 2 and a truck 1. Their `steer_left` / `steer_right` turn the front
   wheels and draw a curved arrow ahead of the car.
-* In a side view, `dir` on `move`, `stop`, `bump` or `appear` turns a prop to face that way; on a `skid`, `spin` or
-  `tyre_burst` it is the side of the slide and never turns the car round.
+* In a side view, `dir` on `move`, `stop`, `bump` or `appear` turns a prop to face that way (a `move` with `dir` and a
+  `to` behind it reverses); on a `skid`, `spin` or `tyre_burst` it is the side of the slide and never turns the car
+  round: the car faces the way it travels, nose first.
 * A car with people in it and no `move` beat with `to` is driving: the road and the scenery roll past. `brake` slows
   it down, `stop` (a beat on the car) brings it to a halt, and `drive` speeds it up again. A prop `state` can say
   `parked` (no rolling), `driving`, `lights`, `brakes` or `flat` (cars). For an `arrow`, `curve_left` or
@@ -110,19 +122,25 @@ already has that sound. Music is not in the track: the mixer reads `script.music
   was when the bubble started (never over the face), clear of the other bubbles. In a safety story's end-card seconds
   they show below the card; one that cannot ends when the card starts, or is left out.
 
+`cli.ts catalog` gives these rules to the writer and the fact checker as `rules` (one plain sentence each: `skid_dir`,
+`spin_dir`, `side_dir`, `top_rot`, `steering`, `coordinates`, `arrow_rot`, `prop_state`, `sounds`; `rules.ts`) and the
+state words as `propStates`, next to `catalog` and `limits`.
+
 ## Limits (`validateScript`, also in `cli.ts catalog` as `limits`)
 
-A script has at most 30 scenes, 6 cast members, and per scene 4 actors, 12 props, 40 beats and 24 effects; at most 40
-captions; scenes add up to at most 180 s before `fitDuration`. A car seats 2 and a truck 1. A scene's busiest frame
+A script has at most 30 scenes, 6 cast members, and per scene 4 actors, 12 props, 40 beats and 40 effects (the API's
+own limit for an edited list); at most 40 captions; scenes add up to at most 180 s before `fitDuration`, and the
+script's `durationSec` is their sum (within 0.05 s), so `frameCount` = round(durationSec × fps). A car seats 2 and a truck 1. A scene's busiest frame
 must stay under about 480 shapes (`sceneShapes`): about 60 for the set (80 on a snowy or rainy road), 70 per
 character, 45 per car, 36 per truck, 30 per deer, 36 to 42 for snow or rain (once), 15 for ice, trees and sparkles,
 12 for any other prop. A writer who goes over gets a sentence that says which things to use fewer of.
 
 ## Characters (`validateCharacter`, `cli.ts character`)
 
-The look and voice choices are `CATALOG.looks` (the character agent's vocabulary). `validateCharacter({ name?, look,
-movementStyle, voice, expressions? })` checks a character the way a script's cast is checked, and its faces: at least
-3 different known expressions, `neutral` among them.
+The look and voice choices are `CATALOG.looks` (the character agent's vocabulary). `validateCharacter` checks the
+character agent's answer as a `CharacterInput` (CONTRACTS §45.6): its look, movement style and voice the way a script's
+cast is checked; its `expressions` (required: at least 3 different known faces, `neutral` among them); and, when they
+are there, `name` (1 to 30), `description` and `personality` (at most 400 each) and `traits` (at most 8, each 1 to 30).
 
 ## Scenes stand alone
 

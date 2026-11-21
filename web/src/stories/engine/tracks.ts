@@ -1,11 +1,11 @@
 // Lamo Stories engine: the text track (captions, bubble symbols, the safety end card) and the audio track (every
-// effect and character noise at its absolute time, plus the loops a place needs). The text layout is text.ts.
+// effect of the scenes' lists and every character noise at its absolute time). The text layout is text.ts.
 
+import { BED_ID, bedPan } from "./ambience.ts";
 import { BUBBLE_SYMBOL, symbolSpan } from "./bubbles.ts";
 import { clamp } from "./math.ts";
 import { actorPath, STYLES } from "./motion.ts";
-import { drives, prepare } from "./scene.ts";
-import { setInfo } from "./sets.ts";
+import { prepare } from "./scene.ts";
 import { CAPTION, ENDCARD, endCardFrom, endCardLayout, fitText, HEADER } from "./text.ts";
 import type { AudioEvent, Beat, Scene, SfxId, StoryScript, TextEvent } from "./types.ts";
 
@@ -57,6 +57,12 @@ function order(k: TextEvent["kind"]): number {
   return k === "caption" ? 0 : k === "bubble" ? 1 : 2;
 }
 
+/** An AudioEvent with the character's voice style on its noises (an additive field; CONTRACTS §45.6 AudioEvent has
+ * no name for it yet): "hum" is a closed-mouth hum, "babble" the open voice. */
+export interface VoicedAudioEvent extends AudioEvent {
+  voice?: "babble" | "hum";
+}
+
 const LOOPS: Set<SfxId> = new Set(["engine", "wind", "rain"]);
 const REPEATS: Set<SfxId> = new Set(["footsteps", "heartbeat", "tick", "snow_crunch"]);
 
@@ -87,50 +93,38 @@ function matchBeat(scene: Scene, at: number, sfx: SfxId): Beat | undefined {
   return scene.beats.find((b) => Math.abs(b.at - at) < 0.002 && (b.sfx === undefined || b.sfx === sfx));
 }
 
+/** Every effect of the scenes' lists (and, in a script not normalized yet, on its beats) and every character noise,
+ * at absolute times. Nothing else: the place's ambience is in the lists (normalizeScript puts it there), so what the
+ * owner removes in Review is gone from the sound too. A noise carries its character's voice style ("babble" or
+ * "hum"); a character with no voice makes none. */
 export function audioTrack(s: StoryScript): AudioEvent[] {
   const prep = prepare(s);
-  const out: AudioEvent[] = [];
+  const out: VoicedAudioEvent[] = [];
   s.scenes.forEach((scene, i) => {
     const start = prep.starts[i]!;
-    const end = start + scene.durationSec;
-    const have = new Set<SfxId>();
-    const sfxEvent = (at: number, id: SfxId, volume: number, who: string | undefined, beatDur: number | undefined) => {
-      const ev: AudioEvent = { at: round3(start + at), kind: "sfx", id, volume: clamp(volume, 0, 1), pan: panOf(s, scene, who, at) };
+    const sfxEvent = (at: number, id: SfxId, volume: number, pan: number, beatDur: number | undefined) => {
+      const ev: AudioEvent = { at: round3(start + at), kind: "sfx", id, volume: clamp(volume, 0, 1), pan };
       if (LOOPS.has(id)) ev.dur = round3(Math.max(0.1, scene.durationSec - at));
       else if (REPEATS.has(id) && beatDur) ev.dur = round3(Math.min(beatDur, scene.durationSec - at));
-      have.add(id);
       out.push(ev);
     };
     for (const b of scene.beats) {
       if (b.noise && b.who in s.cast) {
         const voice = s.cast[b.who]!.voice;
         if (voice?.style !== "none") {
-          out.push({ at: round3(start + b.at), kind: "noise", id: b.noise, volume: 0.9, pitch: clamp(voice?.pitch ?? 1, 0.5, 2), pan: panOf(s, scene, b.who, b.at) });
+          out.push({ at: round3(start + b.at), kind: "noise", id: b.noise, volume: 0.9, pitch: clamp(voice?.pitch ?? 1, 0.5, 2), pan: panOf(s, scene, b.who, b.at), voice: voice?.style === "hum" ? "hum" : "babble" });
         }
       }
       // a script that is not normalized yet still has its effects on the beats
-      if (b.sfx) sfxEvent(b.at, b.sfx, 0.8, b.who, b.dur);
+      if (b.sfx) sfxEvent(b.at, b.sfx, 0.8, panOf(s, scene, b.who, b.at), b.dur);
     }
     for (const c of scene.sfx ?? []) {
+      if (BED_ID.test(c.id)) {
+        sfxEvent(c.at, c.sfx, c.volume, bedPan(scene, c.sfx), undefined);
+        continue;
+      }
       const beat = matchBeat(scene, c.at, c.sfx);
-      sfxEvent(c.at, c.sfx, c.volume, beat?.who, beat?.dur);
-    }
-    // the place's own loop, and weather props, unless the scene already has that sound
-    const loops: { sfx: SfxId; volume: number; pan: number }[] = [];
-    const info = setInfo(scene.set);
-    if (info.loop) loops.push({ ...info.loop, pan: 0 });
-    for (const p of scene.props) {
-      if (p.kind === "rain") loops.push({ sfx: "rain", volume: 0.35, pan: 0 });
-      if (p.kind === "snow") loops.push({ sfx: "wind", volume: 0.22, pan: 0 });
-    }
-    if (drives(scene)) {
-      const car = scene.props.find((p) => p.kind === "car" || p.kind === "truck");
-      loops.push({ sfx: "engine", volume: 0.3, pan: car ? Math.round(clamp((car.x - 0.5) * 1.6, -1, 1) * 100) / 100 : 0 });
-    }
-    for (const l of loops) {
-      if (have.has(l.sfx)) continue;
-      have.add(l.sfx);
-      out.push({ at: round3(start), kind: "sfx", id: l.sfx, volume: l.volume, dur: round3(end - start), pan: l.pan });
+      sfxEvent(c.at, c.sfx, c.volume, panOf(s, scene, beat?.who, c.at), beat?.dur);
     }
   });
   return out.sort((a, b) => a.at - b.at || (a.kind === b.kind ? 0 : a.kind === "sfx" ? -1 : 1) || a.id.localeCompare(b.id));

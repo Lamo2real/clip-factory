@@ -105,7 +105,8 @@ function propPath(prop: SceneProp, beats: Beat[], view: "side" | "top", t: numbe
       to = { x: x + Math.sin(heading * DEG) * d, y: y - Math.cos(heading * DEG) * d * (9 / 16) };
     }
     if (!to) continue;
-    if (view === "side" && !b.dir && Math.abs(to.x - x) > 0.005) facing = to.x < x ? -1 : 1;
+    // otherwise the way it travels is the way it faces (a skid with a dir still goes nose first)
+    if (view === "side" && !(b.dir && FACERS.has(a)) && Math.abs(to.x - x) > 0.005) facing = to.x < x ? -1 : 1;
     const dx = to.x - x;
     const dy = (to.y - y) * (16 / 9);
     if (view === "top" && Math.hypot(dx, dy) > 0.01) {

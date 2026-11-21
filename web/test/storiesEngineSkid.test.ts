@@ -286,11 +286,56 @@ describe("a side view keeps the car facing its way through a skid", () => {
     const script = valid({ ...s, durationSec: 4, scenes: [scene], captions: [], safety: null });
     // the headlights stay at the front, on the left, for the whole skid
     for (const t of [0.8, 1.5, 2.5]) {
-      const prims = drawFrame(script, Math.round(t * 30));
-      const heads = prims.filter((p) => p.k === "ellipse" && HEADLIGHTS.has(p.color)).map(centre);
-      const tails = prims.filter((p) => (p.k === "poly" || p.k === "rect") && TAILLIGHTS.has(p.color)).map(centre);
-      if (!heads.length || !tails.length) continue;
-      expect(mean(heads)[0], `t ${t}`).toBeLessThan(mean(tails)[0]);
+      const side = readSideCar(drawFrame(script, Math.round(t * 30)));
+      expect(side.head[0], `t ${t}`).toBeLessThan(side.tail[0]);
     }
   });
+
+  // a skid that is the car's first beat: its dir is the side of the slide, and the car still goes nose first
+  for (const dir of ["left", "right"] as const) {
+    for (const [from, to] of [
+      [0.7, 0.3],
+      [0.3, 0.7],
+    ] as const) {
+      const way = to < from ? "left" : "right";
+      it(`a first-beat skid with dir ${dir} travelling ${way} faces ${way} for the whole skid`, () => {
+        const s = raw("ice-skid.json");
+        const scene: Scene = {
+          sceneId: "s1",
+          title: "Skid",
+          durationSec: 3,
+          set: "icy_road",
+          view: "side",
+          camera: "wide",
+          actors: [],
+          props: [{ propId: "car1", kind: "car", x: from, y: 0.74, scale: 1, rot: 0, color: "#62c6ff" }],
+          beats: [{ at: 0, dur: 2.5, who: "car1", do: "skid", dir, to: { x: to, y: 0.74 } }],
+          sfx: [],
+          caption: null,
+          note: null,
+        };
+        const script = valid({ ...s, durationSec: 3, scenes: [scene], captions: [], safety: null });
+        let last: number | null = null;
+        for (const t of [0.1, 0.5, 1, 1.5, 2, 2.4]) {
+          const car = readSideCar(drawFrame(script, Math.round(t * 30)));
+          // the nose (headlights) is on the side the car travels to
+          if (way === "left") expect(car.head[0], `t ${t}: headlights left of the tail lights`).toBeLessThan(car.tail[0]);
+          else expect(car.head[0], `t ${t}: headlights right of the tail lights`).toBeGreaterThan(car.tail[0]);
+          // and it really travels that way
+          const mid = (car.head[0] + car.tail[0]) / 2;
+          if (last !== null) expect((mid - last) * (way === "left" ? -1 : 1), `t ${t}: moving ${way}`).toBeGreaterThan(0);
+          last = mid;
+        }
+      });
+    }
+  }
 });
+
+/** A side-view car's headlights and tail lights (both must be drawn). */
+function readSideCar(prims: Prim[]): { head: Pt; tail: Pt } {
+  const heads = prims.filter((p) => p.k === "ellipse" && HEADLIGHTS.has(p.color)).map(centre);
+  const tails = prims.filter((p) => (p.k === "poly" || p.k === "rect") && TAILLIGHTS.has(p.color)).map(centre);
+  expect(heads.length, "headlights drawn").toBeGreaterThan(0);
+  expect(tails.length, "tail lights drawn").toBeGreaterThan(0);
+  return { head: mean(heads), tail: mean(tails) };
+}

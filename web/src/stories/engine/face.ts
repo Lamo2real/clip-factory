@@ -6,7 +6,7 @@ import type { Pen } from "./pen.ts";
 import { arcPts, clipConvex, dropPts, quadPts, starPts } from "./pen.ts";
 import type { CharacterLook, Expression, NoiseId } from "./types.ts";
 
-export type Mouth = "smile" | "grin" | "laugh" | "o" | "bigo" | "flat" | "frown" | "wavy" | "smirk" | "grit" | "pout";
+export type Mouth = "smile" | "grin" | "laugh" | "o" | "bigo" | "flat" | "frown" | "wavy" | "smirk" | "grit" | "pout" | "hum";
 export type Eyes = "normal" | "happy" | "closed" | "spiral" | "lidded";
 export type Extra = "sweat" | "sweat2" | "tear" | "stars" | "vein" | "shock" | "sparkle" | "puff";
 
@@ -240,6 +240,15 @@ function drawMouth(pen: Pen, m: Mouth, open: number, x: number, y: number, mw: n
       const h = 5 * clamp(open, 0.5, 1.3);
       pen.ellipse(x, y + 2, 3.5, h, 0, MOUTH_DARK);
       pen.ellipse(x, y + 2 + h * 0.55, 2.2, h * 0.3, 0, TONGUE);
+      return;
+    }
+    case "hum": {
+      // closed lips, humming: a soft curve that hums up and down, never open
+      const w = mw * 0.62;
+      const lift = 0.9 * clamp(open, 0, 1);
+      pen.line(quadPts(x - w, y + 1, x, y + 1.6 + lift, x + w, y + 1, 6), 2.3, ink);
+      pen.line([x - w - 0.8, y + 0.2 - lift * 0.3, x - w, y + 1], 1.4, ink, 0.7);
+      pen.line([x + w, y + 1, x + w + 0.8, y + 0.2 - lift * 0.3], 1.4, ink, 0.7);
       return;
     }
     case "grit":

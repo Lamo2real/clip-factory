@@ -11,6 +11,8 @@ import type { ActionId, CameraId, CharacterLook, PropAction, PropKind, Scene, Se
 const ENGINE = join(import.meta.dirname, "../src/stories/engine");
 const raw = (name: string): StoryScript => JSON.parse(readFileSync(join(ENGINE, "fixtures", name), "utf8")) as StoryScript;
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
+/** The fewest faces a character may have (CONTRACTS §45.6 CharacterInput). */
+const FACES3 = ["neutral", "happy", "surprised"];
 
 function errorsOf(s: unknown): string[] {
   const r = validateScript(s);
@@ -147,29 +149,29 @@ describe("looks and voices come from the catalog", () => {
         set(l, id);
         const s = { ...clone(base), cast: { ...clone(base.cast), c1: { ...clone(member), look: l } } };
         expect(errorsOf(s), `${key} ${id}`).toEqual([]);
-        expect(validateCharacter({ look: l, movementStyle: member.movementStyle, voice: member.voice })).toEqual({ ok: true });
+        expect(validateCharacter({ look: l, movementStyle: member.movementStyle, voice: member.voice, expressions: FACES3 })).toEqual({ ok: true });
         // a few moments, so a blink in one of them cannot hide the eyes
         drawn.add(JSON.stringify([0.5, 1.1, 2.3].map((t) => previewCharacter(l, "calm", "neutral", "idle", t, 400))));
       }
       expect(drawn.size, `${key}: each choice looks different`).toBe(entries.length);
       const l = look();
       set(l, "sparkly");
-      const r = validateCharacter({ look: l, movementStyle: member.movementStyle, voice: member.voice });
+      const r = validateCharacter({ look: l, movementStyle: member.movementStyle, voice: member.voice, expressions: FACES3 });
       expect(r.ok).toBe(false);
       expect(!r.ok && r.errors.join(" ")).toContain(entries.map((e) => e.id).join(", "));
     });
   }
 
   it("every voice style in the catalog is accepted, and the sentence lists them", () => {
-    for (const { id } of CATALOG.looks.voiceStyle) expect(validateCharacter({ look: member.look, movementStyle: "calm", voice: { ...member.voice, style: id } })).toEqual({ ok: true });
-    const r = validateCharacter({ look: member.look, movementStyle: "calm", voice: { ...member.voice, style: "opera" } });
+    for (const { id } of CATALOG.looks.voiceStyle) expect(validateCharacter({ look: member.look, movementStyle: "calm", voice: { ...member.voice, style: id }, expressions: FACES3 })).toEqual({ ok: true });
+    const r = validateCharacter({ look: member.look, movementStyle: "calm", voice: { ...member.voice, style: "opera" }, expressions: FACES3 });
     expect(r).toEqual({ ok: false, errors: ["character: voice.style must be babble, hum or none."] });
   });
 
   it("checks a character agent's answer: faces, movement style and name", () => {
     const good = { name: "Lamo", look: member.look, movementStyle: "bouncy", voice: member.voice, expressions: ["neutral", "happy", "shocked"] };
     expect(validateCharacter(good)).toEqual({ ok: true });
-    expect(validateCharacter(null)).toEqual({ ok: false, errors: ["The character must be a JSON object { look, movementStyle, voice, expressions }."] });
+    expect(validateCharacter(null)).toEqual({ ok: false, errors: ["The character must be a JSON object { name, description, personality, traits, movementStyle, expressions, look, voice }."] });
     const bad = validateCharacter({ ...good, movementStyle: "floaty", expressions: ["happy", "sad"], name: "x".repeat(31) });
     expect(bad.ok).toBe(false);
     const errors = bad.ok ? [] : bad.errors;
@@ -179,6 +181,35 @@ describe("looks and voices come from the catalog", () => {
     expect(validateCharacter({ ...good, expressions: ["happy", "sad", "proud"] }).ok).toBe(false);
     expect(validateCharacter({ ...good, expressions: ["neutral", "happy", "happy"] }).ok).toBe(false);
     expect(validateCharacter({ ...good, look: undefined }).ok).toBe(false);
+  });
+
+  // a CharacterInput (CONTRACTS §45.6): expressions are required, and its texts keep their lengths
+  const good = () => ({ name: "Lamo", description: "A round, cheerful driver.", personality: "Calm and kind.", traits: ["careful", "funny"], look: member.look, movementStyle: "calm", voice: member.voice, expressions: ["neutral", "happy", "worried"] });
+  const sentence = (input: unknown): string => {
+    const r = validateCharacter(input);
+    return r.ok ? "" : r.errors.join(" ");
+  };
+  it("a whole CharacterInput is accepted", () => {
+    expect(validateCharacter(good())).toEqual({ ok: true });
+  });
+  it("a character with no expressions is refused", () => {
+    const { expressions: _, ...rest } = good();
+    expect(sentence(rest)).toMatch(/expressions must be at least 3 different faces of .*, with neutral among them/);
+    expect(sentence({ ...good(), expressions: [] })).toMatch(/expressions must be at least 3/);
+    expect(sentence({ ...good(), expressions: "neutral" })).toMatch(/expressions must be at least 3/);
+  });
+  it("a description or personality over 400 characters is refused", () => {
+    expect(sentence({ ...good(), description: "x".repeat(900) })).toMatch(/description must be text of at most 400 characters \(it has 900\)/);
+    expect(sentence({ ...good(), personality: "y".repeat(401) })).toMatch(/personality must be text of at most 400 characters/);
+    expect(sentence({ ...good(), description: 7 })).toMatch(/description must be text/);
+    expect(validateCharacter({ ...good(), description: "x".repeat(400), personality: "" })).toEqual({ ok: true });
+  });
+  it("more than 8 traits, or a trait over 30 characters, is refused", () => {
+    expect(sentence({ ...good(), traits: Array.from({ length: 20 }, (_, i) => `trait ${i} ${"z".repeat(42)}`) })).toMatch(/traits must be up to 8/);
+    expect(sentence({ ...good(), traits: Array.from({ length: 9 }, (_, i) => `t${i}`) })).toMatch(/traits must be up to 8/);
+    expect(sentence({ ...good(), traits: ["x".repeat(31)] })).toMatch(/at most 30 characters each/);
+    expect(sentence({ ...good(), traits: [3] })).toMatch(/traits must be/);
+    expect(validateCharacter({ ...good(), traits: Array.from({ length: 8 }, () => "x".repeat(30)) })).toEqual({ ok: true });
   });
 });
 

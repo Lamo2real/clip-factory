@@ -188,7 +188,7 @@ export function sceneRuntime(s: StoryScript, prep: Prepared, index: number, t: n
   const unitsPerWidth = W / CHAR_PX;
   const actors: ActorRT[] = [];
   for (const p of pending) {
-    const st = actorState(p.actor, p.beats, p.style, p.geo, p.seed, t, unitsPerWidth);
+    const st = actorState(p.actor, p.beats, p.style, p.geo, p.seed, t, unitsPerWidth, p.member.voice?.style ?? "babble");
     const rt: ActorRT = { actor: p.actor, member: p.member, geo: p.geo, style: p.style, seed: p.seed, st };
     if (p.actor.inCar) {
       const car = props.find((c) => c.prop.propId === p.actor.inCar);

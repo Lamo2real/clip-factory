@@ -152,6 +152,8 @@ describe("validateScript", () => {
     ["two effects with one id", (s) => ((s.scenes[0]!.sfx = [{ id: "x1", at: 1, sfx: "pop", volume: 1 }]), (s.scenes[1]!.sfx = [{ id: "x1", at: 1, sfx: "pop", volume: 1 }]), s), /id "x1" is used twice; effect ids must be unique/],
     ["a scene too short", (s) => ((s.scenes[0]!.durationSec = 1), s), /durationSec is 1; a scene lasts 2 to 15 seconds/],
     ["a scene too long", (s) => ((s.scenes[0]!.durationSec = 16), s), /durationSec is 16; a scene lasts 2 to 15 seconds/],
+    ["a durationSec that disagrees with the scenes", (s) => ({ ...s, durationSec: 60 }), /^durationSec is 60 but the scenes add up to 6 s; set it to 6 \(or run fit\)\.$/],
+    ["a scene length changed without the total", (s) => ((s.scenes[1]!.durationSec = 4.5), s), /durationSec is 6 but the scenes add up to 7\.5 s/],
     ["two scenes with one id", (s) => ((s.scenes[1]!.sceneId = "s1"), s), /sceneId "s1" is used twice/],
     ["an unknown face", (s) => ((s.scenes[0]!.beats[0]!.face = "smug" as never), s), /face "smug" is not in the catalog/],
     ["a bubble on a prop", (s) => (s.scenes[0]!.beats.push({ at: 0.1, dur: 1, who: "car1", do: "flash", bubble: "idea" }), s), /bubble "idea" is for characters only/],
@@ -184,6 +186,14 @@ describe("validateScript", () => {
     });
   }
 
+  it("accepts a durationSec within 0.05 s of the scenes' sum (rounding), and frameCount follows it", () => {
+    for (const d of [5.96, 6, 6.04]) expect(errorsOf({ ...base(), durationSec: d }), String(d)).toEqual([]);
+    const s = valid(base());
+    expect(frameCount(s)).toBe(Math.round(s.durationSec * s.fps));
+    const f = fitDuration(iceSkid(), 37);
+    expect(frameCount(f)).toBe(Math.round(f.durationSec * f.fps));
+  });
+
   it("accepts a writer's raw answer: effects on beats, no seeds, no effect lists", () => {
     const s = base();
     for (const sc of s.scenes) {
@@ -203,7 +213,11 @@ describe("normalizeScript", () => {
     const s = normalizeScript(before);
     expect(before).toEqual(copy);
     expect(s.scenes.flatMap((sc) => sc.beats).some((b) => b.sfx !== undefined)).toBe(false);
-    expect(s.scenes[0]!.sfx).toEqual([{ id: "s1.fx1", at: 0.2, sfx: "skid", volume: 0.8 }]);
+    // the icy road's wind comes first: a new scene gets its place's sound in its list
+    expect(s.scenes[0]!.sfx).toEqual([
+      { id: "s1.amb1", at: 0, sfx: "wind", volume: 0.18 },
+      { id: "s1.fx1", at: 0.2, sfx: "skid", volume: 0.8 },
+    ]);
     for (const sc of s.scenes) expect(Number.isInteger(sc.seed)).toBe(true);
     expect(s.scenes[0]!.seed).not.toBe(s.scenes[1]!.seed);
   });
@@ -214,7 +228,7 @@ describe("normalizeScript", () => {
     const s = clone(valid(raw("sample-script.json")));
     s.scenes[0]!.sfx = [{ id: "s1.fx1", at: 1, sfx: "pop", volume: 0.5 }];
     const n = normalizeScript(s);
-    expect(n.scenes[0]!.sfx.map((c) => c.id)).toEqual(["s1.fx2", "s1.fx1"]);
+    expect(n.scenes[0]!.sfx.map((c) => c.id)).toEqual(["s1.amb1", "s1.fx2", "s1.fx1"]);
     const ids = once.scenes.flatMap((sc) => sc.sfx.map((c) => c.id));
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -413,8 +427,8 @@ describe("audioTrack", () => {
   it("has every effect and noise at its absolute time, with the voice's pitch and a pan from where it stands", () => {
     const a = audioTrack(sample());
     expect(a).toContainEqual({ at: 0.2, kind: "sfx", id: "skid", volume: 0.8, pan: 0 });
-    expect(a).toContainEqual({ at: 0.2, kind: "noise", id: "gasp", volume: 0.9, pitch: 1.2, pan: 0 });
-    expect(a).toContainEqual({ at: 3.5, kind: "noise", id: "phew", volume: 0.9, pitch: 1.2, pan: 0 });
+    expect(a).toContainEqual({ at: 0.2, kind: "noise", id: "gasp", volume: 0.9, pitch: 1.2, pan: 0, voice: "babble" });
+    expect(a).toContainEqual({ at: 3.5, kind: "noise", id: "phew", volume: 0.9, pitch: 1.2, pan: 0, voice: "babble" });
     // the icy road's wind for its scene
     expect(a).toContainEqual({ at: 0, kind: "sfx", id: "wind", volume: 0.18, dur: 3, pan: 0 });
   });

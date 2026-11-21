@@ -489,7 +489,7 @@ function restStateBefore(beats: Beat[], beat: Beat): RestState {
 }
 
 /** Everything about one character at scene time t. `px` converts local units to output pixels (for walk phases). */
-export function actorState(actor: ActorInput, beats: Beat[], style: Style, g: Geo, seed: number, t: number, unitsPerFrameWidth: number): ActorState {
+export function actorState(actor: ActorInput, beats: Beat[], style: Style, g: Geo, seed: number, t: number, unitsPerFrameWidth: number, voice: "babble" | "hum" | "none" = "babble"): ActorState {
   const path = actorPath(actor, beats, style, t);
   const inCar = !!actor.inCar;
   const restNow = restStateAt(beats, t);
@@ -537,12 +537,16 @@ export function actorState(actor: ActorInput, beats: Beat[], style: Style, g: Ge
   if (!implied && restNow === "lie" && expression === "neutral") implied = "dizzy";
   const exprShown = implied ?? expression;
   let face: FaceParams = FACES[exprShown] ?? FACES.neutral;
-  // talking: a noise moves the mouth while it plays
+  // talking: a noise moves the mouth while it plays; a humming voice keeps its lips closed and hums
   for (const b of beats) {
     if (b.at > t || !b.noise) continue;
     const m = NOISE_MOUTH[b.noise as NoiseId];
     if (!m || t >= b.at + m.dur) continue;
     const local = t - b.at;
+    if (voice === "hum") {
+      face = { ...face, mouth: "hum", mouthOpen: 0.5 + 0.5 * Math.sin(TAU * 3 * local) };
+      continue;
+    }
     const flap = m.flap > 0 ? 0.55 + 0.45 * Math.abs(Math.sin(TAU * m.flap * 0.5 * local)) : 1;
     face = { ...face, mouth: m.mouth, mouthOpen: flap * (1 - smoothstep(m.dur * 0.7, m.dur, local) * 0.6) };
   }
