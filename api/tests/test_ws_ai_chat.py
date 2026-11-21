@@ -1,10 +1,12 @@
 """The creative chat (docs/CONTRACTS.md §45.5 ``…/chat``, §45.6, §45.9.1 tail, §45.25, §45.27): conversations with
 the model and effort the next message will use, sending (a ``pending`` answer with its own session, the override
 kept only on that answer), the 409 while an answer is being written, Stop, the stale-heartbeat fence, polling with
-``after``, pictures, and delete. The answer itself is written by Lamo Stories' own runtime (``chat_turn``)."""
+``after`` (from the cursor), pictures (never lost, never blocking), best-effort stops inside the 29 s, and delete.
+The answer itself is written by Lamo Stories' own runtime (``chat_turn``)."""
 
 from __future__ import annotations
 
+import time
 from datetime import timedelta
 from typing import Any
 
@@ -12,7 +14,9 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App
+from clipfactory_api.workspaces import ai_config as cfg
 from clipfactory_api.workspaces import ai_resolve as res
+from clipfactory_api.workspaces import chat
 from clipfactory_api.workspaces import types as ws
 from conftest import USER, Clock
 from fakes import FakeS3, FakeTable
@@ -316,3 +320,151 @@ def test_another_owners_conversation_is_never_found(app: App, wcall: WsCall, sto
     assert wcall("GET", f"{BASE}/chat/01JD0000000000000000000009")[0] == 404
     _, listed = wcall("GET", f"{BASE}/chat")
     assert [c["convId"] for c in listed["conversations"]] == [conv["convId"]]
+
+
+# --- one answer at a time, also when two messages arrive at once ----------------------------------------------
+
+
+def test_two_messages_sent_at_once_get_one_answer(
+    app: App, wcall: WsCall, runtime: FakeRuntime, table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A double tap: the second send reads the same state as the first (no answer yet) and the first one commits
+    while the second is between its check and its write. The second must not leave a second pending answer."""
+    conv = _conv(wcall)
+    conv_id = conv["convId"]
+    real_last = chat._last_answer
+    seen: list[Any] = []
+
+    def racing_last(*args: Any, **kwargs: Any) -> Any:
+        found = real_last(*args, **kwargs)
+        if not seen:  # the first send's check: the other tap lands right after it
+            seen.append(None)
+            seen.append(chat.send(app, USER, "stories", conv_id, {"text": "Tap one"}, now=app.clock()))
+        return found
+
+    monkeypatch.setattr(chat, "_last_answer", racing_last)
+    status, body = _send(wcall, conv_id, "Tap two")
+    assert (status, body["error"]["message"]) == (409, "Wait for the answer, or tap Stop.")
+    assert seen[1]["assistant"]["status"] == "pending"
+    answers = [i for k, i in table.items.items() if k[1].startswith(f"MSG#{conv_id}#") and i["role"] == "assistant"]
+    users = [i for k, i in table.items.items() if k[1].startswith(f"MSG#{conv_id}#") and i["role"] == "user"]
+    assert (len(answers), [u["text"] for u in users]) == (1, ["Tap one"])
+    assert runtime.actions() == ["chat_turn"]
+
+
+def test_a_picture_asked_for_while_a_message_is_sent_is_kept(
+    app: App, wcall: WsCall, s3_client: FakeS3, table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conv = _conv(wcall)
+    conv_id = conv["convId"]
+    real_pictures = chat._pictures
+    asked: list[str] = []
+
+    def racing_pictures(*args: Any, **kwargs: Any) -> Any:
+        found = real_pictures(*args, **kwargs)
+        if not asked:  # another picture is asked for between the send's read and its write
+            body = {"filename": "b.png", "contentType": "image/png", "size": 4}
+            asked.append(chat.attachment(app, USER, "stories", conv_id, body, now=app.clock())["assetId"])
+        return found
+
+    monkeypatch.setattr(chat, "_pictures", racing_pictures)
+    assert _send(wcall, conv_id)[0] == 202  # read again after the picture's write, then sent
+    assert list(table.raw(pk(), f"CONV#{conv_id}")["uploads"]) == asked
+
+
+def _ask_picture(wcall: WsCall, conv_id: str) -> tuple[int, Any]:
+    body = {"filename": "a.png", "contentType": "image/png", "size": 4}
+    return wcall("POST", f"{BASE}/chat/{conv_id}/attachments", body)
+
+
+def test_pictures_never_sent_do_not_block_the_conversation(
+    wcall: WsCall, s3_client: FakeS3, table: FakeTable, clock: Clock
+) -> None:
+    conv = _conv(wcall)
+    conv_id = conv["convId"]
+    for _ in range(20):  # added and removed again, failed uploads, a reload: none of them is ever sent
+        assert _ask_picture(wcall, conv_id)[0] == 200
+    status, body = _ask_picture(wcall, conv_id)
+    assert (status, body["error"]["message"]) == (409, "Too many pictures are waiting. Send them with a message first.")
+    clock.now += timedelta(minutes=16)  # their upload links have closed: they no longer count
+    status, up = _ask_picture(wcall, conv_id)
+    assert status == 200
+    s3_client.objects[f"{prefix()}chat/{conv_id}/{up['assetId']}.png"] = b"\x89PNG"
+    clock.now += timedelta(hours=2)  # a picture uploaded earlier can still be sent later the same day
+    status, body = _send(wcall, conv_id, attachments=[{"assetId": up["assetId"]}])
+    assert status == 202
+    assert len(table.raw(pk(), f"CONV#{conv_id}")["uploads"]) == 20
+    clock.now += timedelta(days=1, minutes=1)  # a day on, the ones never sent are forgotten
+    assert _ask_picture(wcall, conv_id)[0] == 200
+    assert len(table.raw(pk(), f"CONV#{conv_id}")["uploads"]) == 1
+
+
+def test_waiting_pictures_are_capped(wcall: WsCall, table: FakeTable, clock: Clock) -> None:
+    conv = _conv(wcall)
+    conv_id = conv["convId"]
+    for _ in range(3):
+        for _ in range(20):
+            assert _ask_picture(wcall, conv_id)[0] == 200
+        clock.now += timedelta(minutes=16)
+    assert len(table.raw(pk(), f"CONV#{conv_id}")["uploads"]) == chat.MAX_KEPT
+
+
+def test_the_poll_reads_only_the_newer_messages(wcall: WsCall, table: FakeTable) -> None:
+    conv = _conv(wcall)
+    conv_id = conv["convId"]
+    _, one = _send(wcall, conv_id)
+    _finish(table, conv_id, one["assistant"]["msgId"])
+    _, two = _send(wcall, conv_id, "More?")
+    table.calls.clear()
+    status, got = wcall("GET", f"{BASE}/chat/{conv_id}", query={"after": two["user"]["msgId"]})
+    assert status == 200
+    assert [m["msgId"] for m in got["messages"]] == [two["assistant"]["msgId"]]
+    queries = [kw for name, kw in table.calls if name == "query" and ":prefix" in kw["ExpressionAttributeValues"]]
+    reads = [q for q in queries if q["ExpressionAttributeValues"][":prefix"] == f"MSG#{conv_id}#"]
+    assert len(reads) == 1
+    assert reads[0]["ExclusiveStartKey"] == {"pk": pk(), "sk": f"MSG#{conv_id}#{two['user']['msgId']}"}
+    assert reads[0]["ScanIndexForward"] is True
+    assert reads[0]["ConsistentRead"] is True
+    missing = "01JD0000000000000000000000"
+    status, body = wcall("GET", f"{BASE}/chat/{conv_id}", query={"after": missing})
+    assert (status, body["error"]["message"]) == (404, "We could not find that message.")
+
+
+# --- best-effort stops: once, after the start, only while the request has time -------------------------------
+
+
+def test_a_stale_answers_stop_comes_after_the_new_start_and_is_tried_once(
+    wcall: WsCall, runtime: FakeRuntime, table: FakeTable, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conv = _conv(wcall)
+    _, first = _send(wcall, conv["convId"])
+    old_session = table.raw(pk(), f"MSG#{conv['convId']}#{first['assistant']['msgId']}")["sessionId"]
+    order: list[str] = []
+    real_stop, real_start = runtime.stop_session, runtime.start_chat_turn
+
+    def stop(session_id: str, *, attempts: int = 2) -> None:
+        order.append("stop")
+        real_stop(session_id, attempts=attempts)
+
+    def start(**kw: Any) -> None:
+        order.append("start")
+        real_start(**kw)
+
+    monkeypatch.setattr(runtime, "stop_session", stop)
+    monkeypatch.setattr(runtime, "start_chat_turn", start)
+    clock.now += timedelta(minutes=4)  # the first answer's heartbeat stopped
+    assert _send(wcall, conv["convId"], "Try again")[0] == 202
+    assert order == ["start", "stop"]
+    assert (runtime.stopped, runtime.stop_attempts) == ([old_session], [1])
+
+
+def test_no_stop_is_made_when_the_request_has_no_time_left(
+    wcall: WsCall, runtime: FakeRuntime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conv = _conv(wcall)
+    _, first = _send(wcall, conv["convId"])
+    real_begin = cfg.begin_request
+    monkeypatch.setattr(cfg, "begin_request", lambda started: real_begin(time.monotonic() - 10))  # 10 s gone
+    status, body = wcall("POST", f"{BASE}/chat/{conv['convId']}/messages/{first['assistant']['msgId']}/stop")
+    assert (status, body["message"]["status"]) == (200, "stopped")  # fenced all the same
+    assert runtime.stopped == []

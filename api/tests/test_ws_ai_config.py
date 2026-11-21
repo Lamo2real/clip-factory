@@ -105,6 +105,10 @@ def test_the_first_put_makes_the_item_and_later_ones_need_the_version(wcall: WsC
         ({"tasks": {"storyboard": {"model": "gpt-9"}}}, "Lamo Stories has no model called 'gpt-9'."),
         ({"tasks": {"storyboard": {"speed": "fast"}}}, "Unknown field: speed."),
         ({"prices": {"gpt-9": {"inputPer1M": 1, "outputPer1M": 2, "currency": "USD"}}}, "There is no model"),
+        (
+            {"prices": {"nova-reel": {"inputPer1M": 1, "outputPer1M": 2, "currency": "USD"}}},
+            "Prices can be typed for AI models only. Video and picture makers have no price to type yet.",
+        ),
         ({"prices": {"opus-5-5": {"inputPer1M": -1, "outputPer1M": 2, "currency": "USD"}}}, "inputPer1M must be"),
         ({"prices": {"opus-5-5": {"inputPer1M": 1, "outputPer1M": 2, "currency": "dollars"}}}, "currency must be"),
         ({"colour": "red"}, "Unknown field: colour."),

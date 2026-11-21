@@ -4,9 +4,15 @@
 Sending writes the owner's message and a ``pending`` answer (with its own ``sessionId``, ``heartbeatAt`` and, as
 ``requested``, the "Just for this message" override, which is never saved as a setting), then asks **Lamo Stories'
 own runtime** to answer (``chat_turn``); the agent streams the text into the answer and the web polls. A second
-message while the last answer is ``pending`` or ``streaming`` is a 409. An answer whose heartbeat stopped is failed
-by ``settle`` ("The answer stopped. Tap Try again."), and Stop fences it with a new ``sessionId``. Every conversation
-shows the model and effort its next message will use (``effective``, the same rules as the agent).
+message while the last answer is ``pending`` or ``streaming`` is a 409, also when two arrive at once: the send's
+transaction is conditional on the conversation's ``rev`` as read, so the second one re-reads, finds the first one's
+pending answer and answers 409. An answer whose heartbeat stopped is failed by ``settle`` ("The answer stopped. Tap
+Try again."), and Stop fences it with a new ``sessionId``. Every conversation shows the model and effort its next
+message will use (``effective``, the same rules as the agent).
+
+Pictures waiting for a message are kept on the conversation (``uploads``, written only on ``rev``, so a picture asked
+for while a message is being sent is never lost). Only the ones asked for in the last 15 minutes (the upload link's
+life) count towards the 20 waiting; one not sent within a day is forgotten.
 """
 
 from __future__ import annotations
@@ -33,7 +39,10 @@ TEXT_MAX: Final = 8000
 MAX_ATTACHMENTS: Final = 4
 PICTURE_MAX: Final = 5 * 1024 * 1024
 PICTURE_TYPES: Final = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
-MAX_WAITING: Final = 20
+MAX_WAITING: Final = 20  # pictures asked for in the last UPLOAD_SECONDS and not sent yet
+MAX_KEPT: Final = 40  # waiting records kept on the conversation at most (the oldest go first)
+KEEP_SECONDS: Final = 24 * 3600  # a picture not sent within a day is forgotten
+SEND_TRIES: Final = 3
 UPLOAD_SECONDS: Final = 900
 GET_SECONDS: Final = 3600
 SHOWN: Final = 500
@@ -193,9 +202,17 @@ def get(
     for name, value in (("after", after), ("before", before)):
         if value is not None and not is_ulid(value):
             raise bad_request(f"{name} is not a message id.", name)
-    if after:
-        items = cfg.query_owned(store, user_id, workspace_id, msg_prefix(conv_id))
-        items = [m for m in items if str(m.get("msgId") or "") > after][:SHOWN]
+    if after:  # from the cursor on: only the newer messages are read, however long the chat is
+        if cfg.get_owned(store, user_id, workspace_id, msg_sk(conv_id, after)) is None:
+            raise not_found(MSG_NOT_FOUND)
+        page = store.query_page(
+            cfg.pk(user_id, workspace_id),
+            msg_prefix(conv_id),
+            limit=SHOWN,
+            consistent=True,
+            start_key={"pk": cfg.pk(user_id, workspace_id), "sk": msg_sk(conv_id, after)},
+        )
+        items = [m for m in page.items if guard.owned(m, user_id, workspace_id)]
     else:
         start = None
         if before:
@@ -369,6 +386,7 @@ def create(app: Any, user_id: str, workspace_id: str, body: Mapping[str, Any], *
         "effort": effort,
         "projectRef": ref,
         "uploads": {},
+        "rev": 0,
         "createdAt": at,
         "updatedAt": at,
     }
@@ -457,43 +475,74 @@ def attachment(
     if size > PICTURE_MAX:
         raise too_large("Pictures can be at most 5 MB. Pick a smaller one.")
     store = app.store
-    conv = _conv(store, user_id, workspace_id, conv_id)
-    waiting = conv.get("uploads") if isinstance(conv.get("uploads"), Mapping) else {}
-    if len(waiting or {}) >= MAX_WAITING:
-        raise conflict("Too many pictures are waiting. Send them with a message first.")
     asset_id = ulid()
     key = f"{chat_prefix(user_id, workspace_id, conv_id)}{asset_id}.{PICTURE_TYPES[str(content_type)]}"
     record = {"key": key, "contentType": str(content_type), "size": size, "createdAt": iso(now)}
-    names = {"#up": "uploads", "#a": asset_id, "#uid": "userId", "#wid": "workspaceId"}
-    values = {":rec": record, ":uid": user_id, ":wid": workspace_id}
-    try:
-        store.update_expr(
-            str(conv["pk"]),
-            str(conv["sk"]),
-            "SET #up.#a = :rec",
-            condition="attribute_exists(pk) AND attribute_exists(#up) AND #uid = :uid AND #wid = :wid",
-            names=names,
-            values=values,
-        )
-    except db.ConditionFailed:
+    for _ in range(SEND_TRIES):
+        conv = _conv(store, user_id, workspace_id, conv_id)
+        waiting = kept_uploads(conv, now)
+        if len(in_flight(waiting, now)) >= MAX_WAITING:
+            raise conflict("Too many pictures are waiting. Send them with a message first.")
+        while len(waiting) >= MAX_KEPT:  # the oldest record goes first
+            waiting.pop(min(waiting, key=lambda a: str(waiting[a].get("createdAt") or "")))
+        waiting[asset_id] = record
         try:
-            store.update_expr(
+            store.update(
                 str(conv["pk"]),
                 str(conv["sk"]),
-                "SET #up = :map",
-                condition="attribute_exists(pk) AND attribute_not_exists(#up) AND #uid = :uid AND #wid = :wid",
-                names={"#up": "uploads", "#uid": "userId", "#wid": "workspaceId"},
-                values={":map": {asset_id: record}, ":uid": user_id, ":wid": workspace_id},
+                {"uploads": waiting, "rev": rev(conv) + 1},
+                **on_rev(conv, user_id, workspace_id),
             )
-        except db.ConditionFailed as e:
-            raise not_found(NOT_FOUND) from e
+        except db.ConditionFailed:
+            continue  # a message or another picture changed the conversation meanwhile: read it again
+        break
+    else:
+        raise conflict("Too many pictures at once. Try again.")
     url = app.media.presign_put_sized(key, str(content_type), size, UPLOAD_SECONDS)
     return {"assetId": asset_id, "uploadUrl": url, "headers": {"Content-Type": str(content_type)}}
 
 
-def _pictures(app: Any, conv: Mapping[str, Any], raw: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def rev(conv: Mapping[str, Any]) -> int:
+    value = conv.get("rev")
+    return int(value) if isinstance(value, int | float) and not isinstance(value, bool) else 0
+
+
+def on_rev(conv: Mapping[str, Any], user_id: str, workspace_id: str) -> dict[str, Any]:
+    """The conditions of a write of what was read: the same owner and the same ``rev`` (absent on a conversation
+    nothing was sent to yet)."""
+    expect: dict[str, list[Any]] = {"userId": [user_id], "workspaceId": [workspace_id]}
+    if "rev" in conv:
+        expect["rev"] = [conv["rev"]]
+        return {"expect_in": expect}
+    return {"expect_in": expect, "expect_absent": ["rev"]}
+
+
+def _age(record: Mapping[str, Any], now: datetime) -> float | None:
+    at = parse(record.get("createdAt"))
+    return None if at is None else (now - at).total_seconds()
+
+
+def kept_uploads(conv: Mapping[str, Any], now: datetime) -> dict[str, dict[str, Any]]:
+    """The waiting pictures asked for within the last day (older or unreadable records are dropped)."""
+    raw = conv.get("uploads") if isinstance(conv.get("uploads"), Mapping) else {}
+    out: dict[str, dict[str, Any]] = {}
+    for asset_id, record in (raw or {}).items():
+        age = _age(record, now) if isinstance(record, Mapping) else None
+        if age is not None and age <= KEEP_SECONDS:
+            out[str(asset_id)] = dict(record)
+    return out
+
+
+def in_flight(waiting: Mapping[str, Mapping[str, Any]], now: datetime) -> list[str]:
+    """The pictures whose upload link is still open: the ones the 20-picture limit counts."""
+    return [a for a, r in waiting.items() if (_age(r, now) or 0) <= UPLOAD_SECONDS]
+
+
+def _pictures(
+    app: Any, conv: Mapping[str, Any], raw: Any, now: datetime
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """The message's pictures (each one uploaded to this conversation and checked), and the uploads still waiting."""
-    waiting = dict(conv.get("uploads") or {}) if isinstance(conv.get("uploads"), Mapping) else {}
+    waiting: dict[str, Any] = kept_uploads(conv, now)
     if raw is None:
         return [], waiting
     if not isinstance(raw, list) or len(raw) > MAX_ATTACHMENTS:
@@ -542,6 +591,27 @@ def send(
     if len(text) > TEXT_MAX:
         raise bad_request(f"The message is too long (at most {TEXT_MAX:,} characters).", "text")
     override = cfg.clean_override(body.get("override"))
+    with cfg.stops_last(app):  # a stale answer's stop waits until the new answer has started
+        for _ in range(SEND_TRIES):
+            sent = _try_send(app, user_id, workspace_id, conv_id, text=text, body=body, override=override, now=now)
+            if sent is not None:
+                return sent
+    raise conflict(WAIT)
+
+
+def _try_send(
+    app: Any,
+    user_id: str,
+    workspace_id: str,
+    conv_id: str,
+    *,
+    text: str,
+    body: Mapping[str, Any],
+    override: dict[str, str] | None,
+    now: datetime,
+) -> dict[str, Any] | None:
+    """One try on what was read; None when the conversation changed meanwhile (another message or picture), so the
+    caller reads it again."""
     store = app.store
     conv = _conv(store, user_id, workspace_id, conv_id)
     last = _last_answer(app, user_id, workspace_id, conv_id, now)
@@ -555,7 +625,7 @@ def send(
         eff = res.resolve(task="chat", agent=agent, ai=ai, request=override, conversation=setting(conv))
     except res.ResolveError as e:
         raise bad_request(e.message, "override" if override else None) from e
-    pictures, waiting = _pictures(app, conv, body.get("attachments"))
+    pictures, waiting = _pictures(app, conv, body.get("attachments"), now)
     info = res.model(eff["model"]) or {}
     if pictures and not info.get("vision"):
         raise bad_request(f"{info.get('label') or eff['model']} can't look at pictures. Pick another model.")
@@ -592,23 +662,20 @@ def send(
         "heartbeatAt": at,
         "requested": override,
     }
-    conv_sets: dict[str, Any] = {"lastMessageAt": at, "updatedAt": at, "uploads": waiting}
+    conv_sets: dict[str, Any] = {"lastMessageAt": at, "updatedAt": at, "uploads": waiting, "rev": rev(conv) + 1}
     if str(conv.get("title") or DEFAULT_TITLE) == DEFAULT_TITLE:
         conv_sets["title"] = " ".join(text.split())[:60] or DEFAULT_TITLE
     try:
+        # One answer at a time: the write holds only while the conversation is as read (its ``rev``), so of two
+        # messages sent at once the second one fails here, reads again and finds the first one's pending answer.
         store.transact(
             puts=[user_item, answer],
             updates=[
-                db.update_request(
-                    str(conv["pk"]),
-                    str(conv["sk"]),
-                    conv_sets,
-                    expect_in={"userId": [user_id], "workspaceId": [workspace_id]},
-                )
+                db.update_request(str(conv["pk"]), str(conv["sk"]), conv_sets, **on_rev(conv, user_id, workspace_id))
             ],
         )
-    except db.ConditionFailed as e:
-        raise not_found(NOT_FOUND) from e
+    except db.ConditionFailed:
+        return None
     answer = _start(app, user_id, workspace_id, conv_id, answer, now=now)
     return {"user": public_message(app, user_item), "assistant": public_message(app, answer)}
 

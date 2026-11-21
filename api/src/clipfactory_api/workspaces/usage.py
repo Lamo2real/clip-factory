@@ -7,6 +7,11 @@ up to 30 days. A cost is shown **only** when a price is known: the owner's price
 beats the list price of ``stories/config/models.json``; a model with neither shows tokens only (``cost: null``). Each
 call is priced on its own (a long-context price applies to the calls above its threshold) and the sums are rounded
 to 4 decimals at the end (small calls cost fractions of a cent).
+
+Provider usage (§45.33: Nova Canvas pictures, Nova Reel seconds, built-in render seconds) is "priced only when a
+price is known": an item that carries its own ``cost`` and ``currency`` (the agent's, when it knows the provider's
+price) adds a row keyed by the provider id, with no tokens; one without a cost adds no row (no "0 tokens" lines).
+Render seconds are summed into ``renderMinutes`` either way.
 """
 
 from __future__ import annotations
@@ -71,9 +76,10 @@ def summary(store: db.Store, user_id: str, workspace_id: str, days: int, now: da
         by_model: dict[str, dict[str, Any]] = {}
         for item in items:
             if item.get("kind") == "provider":
-                seconds = item.get("renderSec")
-                if isinstance(seconds, int | float) and not isinstance(seconds, bool) and seconds > 0:
-                    render_sec += float(seconds)
+                seconds = _num(item.get("renderSec"))
+                if seconds is not None and seconds > 0:
+                    render_sec += seconds
+                _add_provider(by_model, item)
                 continue
             key = str(item.get("model") or "")
             if not key:
@@ -82,16 +88,41 @@ def summary(store: db.Store, user_id: str, workspace_id: str, days: int, now: da
             _add(row, item, ai)
         out_days.append({"day": day, "byModel": [_rounded(r) for r in by_model.values()]})
         for key, row in by_model.items():
-            total = totals.setdefault(key, _row(key, ai))
+            total = totals.setdefault(
+                key,
+                {
+                    "model": key,
+                    "input": 0,
+                    "output": 0,
+                    "cost": None if row["cost"] is None else 0.0,
+                    "currency": row["currency"],
+                },
+            )
             total["input"] += row["input"]
             total["output"] += row["output"]
-            if total["cost"] is not None and row["cost"] is not None:
+            if total["cost"] is not None and row["cost"] is not None and total["currency"] == row["currency"]:
                 total["cost"] += row["cost"]
     return {
         "days": out_days,
         "totals": [_rounded(r) for r in totals.values()],
         "renderMinutes": round(render_sec / 60, 1),
     }
+
+
+def _num(value: Any) -> float | None:
+    """A stored number (DynamoDB gives back ints and floats), else None."""
+    return float(value) if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+
+def _add_provider(by_model: dict[str, dict[str, Any]], item: Mapping[str, Any]) -> None:
+    """A provider's own recorded cost (none is known today: the agent writes ``cost: null``)."""
+    provider = str(item.get("providerId") or "")
+    cost, currency = _num(item.get("cost")), item.get("currency")
+    if not provider or cost is None or cost < 0 or not isinstance(currency, str) or not currency:
+        return
+    row = by_model.setdefault(provider, {"model": provider, "input": 0, "output": 0, "cost": 0.0, "currency": currency})
+    if row["currency"] == currency and row["cost"] is not None:
+        row["cost"] += cost
 
 
 def _row(model_key: str, ai: Mapping[str, Any]) -> dict[str, Any]:

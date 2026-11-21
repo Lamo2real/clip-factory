@@ -208,6 +208,53 @@ def test_a_job_whose_heartbeat_stopped_is_failed(
     assert len(runtime.stopped) == 1
 
 
+def _analyzed(table: FakeTable, s3: FakeS3, ref_id: str) -> str:
+    """The reference as the agent leaves it after a good analysis."""
+    key = f"{prefix()}references/{ref_id}/analysis.json"
+    s3.objects[key] = json.dumps(ANALYSIS).encode()
+    table.items[(pk(), f"REFVID#{ref_id}")].update(
+        status="analyzed", analysisKey=key, analyzedWith={"model": "opus-5-5", "effort": "high"}
+    )
+    return key
+
+
+def test_a_re_analysis_that_does_not_start_keeps_the_earlier_analysis(
+    app: App, s3_client: FakeS3, table: FakeTable
+) -> None:
+    runtime = FakeRuntime()
+    install(app, runtime)
+    wcall = ws_call(app)
+    ref = _upload(wcall, s3_client)
+    _analyzed(table, s3_client, ref["refId"])
+    runtime.fail = True
+    status, body = wcall("POST", f"{BASE}/references/{ref['refId']}/analyze", {})
+    assert (status, body["job"]["status"]) == (202, "failed")
+    assert (body["reference"]["status"], body["reference"]["currentJobId"]) == ("analyzed", None)
+    status, got = wcall("GET", f"{BASE}/references/{ref['refId']}")
+    assert (got["reference"]["status"], got["analysis"]["summary"]) == ("analyzed", ANALYSIS["summary"])
+
+
+def test_a_stalled_re_analysis_keeps_the_earlier_analysis(
+    wcall: WsCall, runtime: FakeRuntime, s3_client: FakeS3, clock: Clock, table: FakeTable
+) -> None:
+    ref = _upload(wcall, s3_client)
+    _analyzed(table, s3_client, ref["refId"])
+    _, body = wcall("POST", f"{BASE}/references/{ref['refId']}/analyze", {})
+    assert body["reference"]["status"] == "analyzing"
+    clock.now += timedelta(minutes=4)  # the job's heartbeat stopped
+    _, got = wcall("GET", f"{BASE}/references/{ref['refId']}")
+    assert (got["reference"]["status"], got["reference"]["currentJobId"]) == ("analyzed", None)
+    assert got["analysis"] is not None
+    assert table.raw(pk(), f"PJOB#{body['job']['jobId']}")["status"] == "failed"
+    # a job that is gone altogether: the same rule
+    _, again = wcall("POST", f"{BASE}/references/{ref['refId']}/analyze", {})
+    del table.items[(pk(), f"PJOB#{again['job']['jobId']}")]
+    _, got = wcall("GET", f"{BASE}/references/{ref['refId']}")
+    assert (got["reference"]["status"], got["reference"]["currentJobId"]) == ("analyzed", None)
+    item = table.raw(pk(), f"REFVID#{ref['refId']}")
+    assert "statusBefore" not in item
+
+
 def test_get_returns_the_analysis_from_s3(wcall: WsCall, s3_client: FakeS3, table: FakeTable) -> None:
     ref = _upload(wcall, s3_client)
     status, got = wcall("GET", f"{BASE}/references/{ref['refId']}")

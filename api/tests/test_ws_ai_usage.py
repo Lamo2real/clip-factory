@@ -77,6 +77,38 @@ def test_the_owners_price_wins_and_no_price_means_no_cost(
     assert (rows["sonnet-5-5"]["cost"], rows["sonnet-5-5"]["currency"]) == (3.0, "EUR")
 
 
+def test_provider_usage_is_priced_only_when_its_price_is_known(wcall: WsCall, store: db.Store) -> None:
+    usage = ws.TYPE_USAGE
+    seed(store, "USAGE#2026-11-15#p1", usage, kind="provider", providerId="nova-canvas", images=2, cost=None)
+    seed(
+        store,
+        "USAGE#2026-11-15#p2",
+        usage,
+        kind="provider",
+        providerId="nova-reel",
+        videoSec=6,
+        cost=0.48,
+        currency="USD",
+    )
+    seed(
+        store,
+        "USAGE#2026-11-14#p3",
+        usage,
+        kind="provider",
+        providerId="nova-reel",
+        videoSec=6,
+        cost=0.48,
+        currency="USD",
+    )
+    seed(store, "USAGE#2026-11-15#p4", usage, kind="provider", providerId="builtin-2d", renderSec=60, cost=None)
+    _, body = wcall("GET", f"{BASE}/usage")
+    today = body["usage"]["days"][-1]["byModel"]
+    # a provider with a known cost has its own row (no tokens); one without a price adds no "0 tokens" line
+    assert today == [{"model": "nova-reel", "input": 0, "output": 0, "cost": 0.48, "currency": "USD"}]
+    assert body["usage"]["totals"] == [{"model": "nova-reel", "input": 0, "output": 0, "cost": 0.96, "currency": "USD"}]
+    assert body["usage"]["renderMinutes"] == 1.0
+
+
 def test_a_long_context_call_uses_the_long_context_price(wcall: WsCall, store: db.Store) -> None:
     seed_usage(store, "2026-11-15", "haiku-5-5", input=200_000, output=10_000)
     seed_usage(store, "2026-11-15", "haiku-5-5", input=50_000, output=10_000)

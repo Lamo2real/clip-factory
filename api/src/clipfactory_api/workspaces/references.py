@@ -272,7 +272,15 @@ def analyze(
     app: Any, user_id: str, workspace_id: str, ref_id: str, body: Mapping[str, Any], *, now: datetime
 ) -> dict[str, Any]:
     """Starts a ``reference_analysis`` job: the job and the reference change in one transaction (only from
-    ``ready``, ``analyzed`` or ``failed`` with no job running), then Lamo Stories' runtime is asked to run it."""
+    ``ready``, ``analyzed`` or ``failed`` with no job running), then Lamo Stories' runtime is asked to run it. The
+    stop of a stale run it fences waits until the start is done."""
+    with cfg.stops_last(app):
+        return _analyze(app, user_id, workspace_id, ref_id, body, now=now)
+
+
+def _analyze(
+    app: Any, user_id: str, workspace_id: str, ref_id: str, body: Mapping[str, Any], *, now: datetime
+) -> dict[str, Any]:
     validate.only_keys(body, ("override",))
     override = cfg.clean_override(body.get("override"))
     store = app.store
@@ -322,7 +330,7 @@ def analyze(
     ref_update = db.update_request(
         str(item["pk"]),
         str(item["sk"]),
-        {"status": "analyzing", "currentJobId": job_id, "statusBefore": before, "updatedAt": at},
+        {"status": "analyzing", "currentJobId": job_id, "updatedAt": at},
         # Two taps at once: the first moves the status on, so the second's condition fails (a 409, nothing started).
         expect_in={"status": [before], "userId": [user_id], "workspaceId": [workspace_id]},
     )
@@ -350,8 +358,9 @@ def analyze(
 def _fail(
     app: Any, job: Mapping[str, Any], message: str, now: datetime, *, queued_only: bool = False
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Fails the job (a new ``sessionId``, the running or first pending step failed) and puts the reference to
-    ``failed``, in one transaction conditional on what was read; a refused condition re-reads both."""
+    """Fails the job (a new ``sessionId``, the running or first pending step failed) and puts the reference back to
+    ``analyzed`` when an earlier analysis is kept (``analysisKey``), else to ``failed`` (the agent's own rule), in one
+    transaction conditional on what was read; a refused condition re-reads both."""
     store = app.store
     at = iso(now)
     steps = [dict(s) for s in job.get("steps") or [] if isinstance(s, Mapping)]
@@ -380,7 +389,7 @@ def _fail(
     ref_update = db.update_request(
         ref_pk,
         ref_key,
-        {"status": "failed", "updatedAt": at},
+        {"status": after_failure(store.get(ref_pk, ref_key)), "updatedAt": at},
         remove=["currentJobId"],
         expect_in={"currentJobId": [job["jobId"]]},
     )
@@ -391,6 +400,12 @@ def _fail(
     else:
         cfg.stop_quietly(app, job.get("sessionId"))
     return (store.get(str(job["pk"]), str(job["sk"])) or dict(job), store.get(ref_pk, ref_key) or {})
+
+
+def after_failure(ref: Mapping[str, Any] | None) -> str:
+    """A failed or stopped analysis keeps an earlier one: ``analyzed`` while ``analysisKey`` is there, else
+    ``failed`` (the same rule as the agent's ``reference/study.py``, so the stories keep using the old analysis)."""
+    return "analyzed" if (ref or {}).get("analysisKey") else "failed"
 
 
 def _stale(job: Mapping[str, Any], now: datetime) -> bool:
@@ -419,12 +434,13 @@ def settle(app: Any, item: dict[str, Any], now: datetime) -> dict[str, Any]:
 
 
 def _orphan(app: Any, item: Mapping[str, Any], now: datetime) -> tuple[None, dict[str, Any] | None]:
-    """A reference that says it is being studied by a job that no longer exists goes back to ``failed``."""
+    """A reference that says it is being studied by a job that no longer exists goes back to ``analyzed`` (an earlier
+    analysis is kept) or ``failed``."""
     with contextlib.suppress(db.ConditionFailed):
         return None, app.store.update(
             str(item["pk"]),
             str(item["sk"]),
-            {"status": "failed", "updatedAt": iso(now)},
+            {"status": after_failure(item), "updatedAt": iso(now)},
             remove=["currentJobId"],
             expect_in={"currentJobId": [item.get("currentJobId")]},
         )

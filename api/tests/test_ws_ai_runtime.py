@@ -12,11 +12,14 @@ import pytest
 from fakes import FakeAgentCore
 from test_ws_ai_support import STORIES_ARN, FakeRuntime
 
-CALLS = ("start_task", "start_chat_turn", "start_reference", "stop_session")
+CALLS = ("start_task", "start_chat_turn", "start_reference", "stop_session", "cancel")
 
 
-def _params(cls: type, name: str) -> list[str]:
-    return [p for p in inspect.signature(cls.__dict__[name]).parameters if p != "self"]
+def _params(cls: type, name: str) -> list[tuple[str, str]]:
+    """Each parameter's name and kind (positional or keyword-only), so a call the AI routes make with
+    ``attempts=1`` works on both."""
+    signature = inspect.signature(cls.__dict__[name])
+    return [(p.name, p.kind.name) for p in signature.parameters.values() if p.name != "self"]
 
 
 def test_the_fake_matches_lamo_stories_runtime_client() -> None:

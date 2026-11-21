@@ -26,7 +26,9 @@ BASE = "/v1/workspaces/{ws}"
 
 
 def _open(app: App, req: Request) -> tuple[str, str, dict[str, Any], datetime]:
-    """The caller, the workspace id, the workspace (404 / 409 first) and now."""
+    """The caller, the workspace id, the workspace (404 / 409 first) and now; starts the request's time budget for
+    best-effort runtime calls."""
+    cfg.begin_request(req.started)
     now = app.clock()
     workspace = guard.require_workspace(app.store, req.user_id, req.params["ws"], stories=True, now=now)
     return req.user_id, str(workspace["workspaceId"]), workspace, now

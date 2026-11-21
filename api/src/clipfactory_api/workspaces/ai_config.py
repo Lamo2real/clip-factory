@@ -9,8 +9,13 @@ Stories' agent after a real call; a model is never shown as available because it
 ``TASK#`` of kind ``check_models`` and asks Lamo Stories' own runtime (never Clip Factory's) to make one tiny call per
 model.
 
-The runtime helpers at the end (``runtime``, ``new_session``, ``stop_quietly``) are shared by the chat and the
-reference analysis; they reach Lamo Stories' runtime only through ``workspaces.deps.of(app).agent``.
+``configSavedAt`` is set only by a save of the configuration itself (PUT ``…/ai``), never by a price alone, so the
+setup's steps 1–3 (§45.33) tick only when the owner really saved his AI settings.
+
+The runtime helpers at the end (``runtime``, ``new_session``, ``stop_quietly``, ``stops_last``) are shared by the chat
+and the reference analysis; they reach Lamo Stories' runtime only through ``workspaces.deps.of(app).agent``. A
+best-effort stop (the item's new ``sessionId`` already fences the old run) is made once, and only while one more call
+still ends inside the request's 29 s; a route that starts work makes its stops after the start (``stops_last``).
 """
 
 from __future__ import annotations
@@ -18,7 +23,9 @@ from __future__ import annotations
 import contextlib
 import math
 import re
-from collections.abc import Mapping
+import time
+from collections.abc import Iterator, Mapping
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, Final
 
@@ -31,7 +38,10 @@ from . import ai_resolve as res
 from . import deps, guard
 from . import types as ws
 
-PRICE_PROVIDERS: Final = ("nova-canvas", "nova-reel")  # provider ids whose usage can carry a price (§45.33)
+# Provider ids (§45.6 says prices are "by model key or provider id"), refused for now: ``Price`` is per million
+# tokens and has no per-picture or per-second field, so a typed provider price could never be applied (contractIssues).
+PRICE_PROVIDERS: Final = ("nova-canvas", "nova-reel")
+NO_PROVIDER_PRICE: Final = "Prices can be typed for AI models only. Video and picture makers have no price to type yet."
 CURRENCY: Final = re.compile(r"^[A-Z]{3}$")
 MAX_PRICE: Final = 100_000.0
 STALE: Final = "Your AI settings were changed somewhere else. Load them again, then save."
@@ -142,6 +152,11 @@ def defaults() -> dict[str, Any]:
 
 def read(store: db.Store, user_id: str, workspace_id: str) -> dict[str, Any] | None:
     return get_owned(store, user_id, workspace_id, ws.AICONFIG_SK)
+
+
+def saved(store: db.Store, user_id: str, workspace_id: str) -> bool:
+    """Whether the owner saved his AI configuration (PUT ``…/ai``); a price typed on its own does not count."""
+    return bool((read(store, user_id, workspace_id) or {}).get("configSavedAt"))
 
 
 def current(store: db.Store, user_id: str, workspace_id: str) -> dict[str, Any]:
@@ -295,8 +310,10 @@ def clean_config(
         raw_prices = validate.obj(body.get("prices"), "prices")
         prices = {}
         for key, value in raw_prices.items():
-            if res.model(key) is None and key not in PRICE_PROVIDERS:
-                raise bad_request(f"There is no model or provider called '{key}' to set a price for.", "prices")
+            if key in PRICE_PROVIDERS:
+                raise bad_request(NO_PROVIDER_PRICE, "prices")
+            if res.model(key) is None:
+                raise bad_request(f"There is no model called '{key}' to set a price for.", "prices")
             prices[key] = clean_price(value, f"prices.{key}")
     out = {
         "defaultModel": default_model,
@@ -325,6 +342,7 @@ def save(store: db.Store, user_id: str, workspace_id: str, cleaned: Mapping[str,
             **base_item(user_id, workspace_id, ws.AICONFIG_SK, ws.TYPE_AICONFIG),
             **fields,
             "version": 1,
+            "configSavedAt": at,
             "createdAt": at,
             "updatedAt": at,
         }
@@ -337,7 +355,7 @@ def save(store: db.Store, user_id: str, workspace_id: str, cleaned: Mapping[str,
         item = store.update_expr(
             pk(user_id, workspace_id),
             ws.AICONFIG_SK,
-            "SET #dm = :dm, #de = :de, #t = :t, #p = :p, #u = :u, #v = :nv",
+            "SET #dm = :dm, #de = :de, #t = :t, #p = :p, #u = :u, #cs = :u, #v = :nv",
             condition="attribute_exists(pk) AND #v = :v AND #uid = :uid AND #wid = :wid",
             names={
                 "#dm": "defaultModel",
@@ -345,6 +363,7 @@ def save(store: db.Store, user_id: str, workspace_id: str, cleaned: Mapping[str,
                 "#t": "tasks",
                 "#p": "prices",
                 "#u": "updatedAt",
+                "#cs": "configSavedAt",
                 "#v": "version",
                 "#uid": "userId",
                 "#wid": "workspaceId",
@@ -369,8 +388,8 @@ def save(store: db.Store, user_id: str, workspace_id: str, cleaned: Mapping[str,
 def set_price(
     store: db.Store, user_id: str, workspace_id: str, key: str, price: dict[str, Any] | None, *, now: datetime
 ) -> dict[str, Any]:
-    """Sets (or with ``None`` clears) the owner's price of one model or provider; read, change, write on the
-    version, a few times if another save wins meanwhile."""
+    """Sets (or with ``None`` clears) the owner's price of one model; read, change, write on the version, a few times
+    if another save wins meanwhile. A price alone makes the item with the file's defaults but no ``configSavedAt``."""
     at = iso(now)
     for _ in range(4):
         item = read(store, user_id, workspace_id)
@@ -604,13 +623,68 @@ def new_session(item_id: str) -> str:
     return session
 
 
+# One runtime call at worst (3 s connect + 20 s read, ``workspaces/agent.py``), the request's 29 s (API Gateway's and
+# the Lambda's limit) and what a request still does after its last best-effort call: the same budget as builder A's
+# ``agent.time_for_call``.
+CALL_SECONDS: Final = 23.0
+REQUEST_SECONDS: Final = 29.0
+AFTER_CALL_SECONDS: Final = 2.0
+_STARTED: ContextVar[float | None] = ContextVar("ws_ai_request_started", default=None)
+_DEFERRED: ContextVar[list[str] | None] = ContextVar("ws_ai_deferred_stops", default=None)
+
+
+def begin_request(started: float | None) -> None:
+    """Called by every AI route on arrival with the request's ``time.monotonic()`` (``Request.started``)."""
+    _STARTED.set(started)
+    _DEFERRED.set(None)
+
+
+def time_for_call(*, after: float = AFTER_CALL_SECONDS) -> bool:
+    """Whether one more runtime call still ends inside the request's 29 s with ``after`` seconds to spare."""
+    started = _STARTED.get()
+    if started is None:
+        return True
+    return time.monotonic() - started + CALL_SECONDS + after <= REQUEST_SECONDS
+
+
 def stop_quietly(app: Any, session_id: Any) -> None:
-    """Best effort: the item's new ``sessionId`` already fences the old run, so a failed stop changes nothing."""
+    """Best effort: the item's new ``sessionId`` already fences the old run, so a failed or skipped stop changes
+    nothing. Inside ``stops_last`` it waits for the route's start; otherwise one try, only while there is time."""
     agent = runtime(app)
     if agent is None or not isinstance(session_id, str) or not session_id:
         return
+    deferred = _DEFERRED.get()
+    if deferred is not None:
+        deferred.append(session_id)
+        return
+    _stop_now(agent, session_id)
+
+
+def _stop_now(agent: Any, session_id: str) -> None:
+    if not time_for_call():
+        log("info", "ws.stop_skipped", reason="no_time")
+        return
     with contextlib.suppress(Exception):
-        agent.stop_session(session_id)
+        agent.stop_session(session_id, attempts=1)
+
+
+@contextlib.contextmanager
+def stops_last(app: Any) -> Iterator[None]:
+    """For a route that starts work on the runtime: the stops of runs it fences wait until its start is done (or
+    refused), so a slow stop never eats the time the start needs."""
+    if _DEFERRED.get() is not None:  # already inside one
+        yield
+        return
+    token = _DEFERRED.set([])
+    try:
+        yield
+    finally:
+        sessions = _DEFERRED.get() or []
+        _DEFERRED.reset(token)
+        agent = runtime(app)
+        for session_id in dict.fromkeys(sessions):
+            if agent is not None:
+                _stop_now(agent, session_id)
 
 
 def require(condition: bool, status: int, code: str, message: str) -> None:

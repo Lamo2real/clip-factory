@@ -44,6 +44,7 @@ class FakeRuntime:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
         self.stopped: list[str] = []
+        self.stop_attempts: list[int] = []
         self.fail = False
 
     def _record(self, action: str, **kw: Any) -> None:
@@ -83,14 +84,12 @@ class FakeRuntime:
     ) -> None:
         self._record("process_portrait", user_id=user_id, workspace_id=workspace_id, character_id=character_id)
 
-    def cancel(self, item_id: str, session_id: str) -> None:
-        self.calls.append({"action": "cancel", "id": item_id, "session_id": session_id})
+    def cancel(self, item_id: str, session_id: str, *, attempts: int = 2) -> None:
+        self.calls.append({"action": "cancel", "id": item_id, "session_id": session_id, "attempts": attempts})
 
-    def cancel_story(self, job_id: str, session_id: str) -> None:
-        self.calls.append({"action": "cancel", "id": job_id, "session_id": session_id})
-
-    def stop_session(self, session_id: str) -> None:
+    def stop_session(self, session_id: str, *, attempts: int = 2) -> None:
         self.stopped.append(session_id)
+        self.stop_attempts.append(attempts)
 
     @property
     def ready(self) -> bool:
@@ -225,6 +224,8 @@ INTERNAL = (
     "uploads",
     "summaryUpToMsgId",
     "statusBefore",
+    "configSavedAt",
+    "rev",
     "partCount",
     "override",
     "pk",
@@ -297,6 +298,9 @@ def expression_problems(table: FakeTable) -> list[str]:
 @pytest.fixture(autouse=True)
 def dynamodb_rules(table: FakeTable) -> Iterator[None]:
     """Imported by every AI test module: after each test, no request may carry a placeholder its expressions do not
-    use (or use one it does not give)."""
+    use (or use one it does not give). It also clears the request time budget a route of an earlier test started."""
+    from clipfactory_api.workspaces import ai_config
+
+    ai_config.begin_request(None)
     yield
     assert expression_problems(table) == []
