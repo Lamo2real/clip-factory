@@ -57,7 +57,7 @@ export function OpenButton({
   );
 }
 
-/** A green answer button ("I sent it", "It says Submit clip", "I linked it"). */
+/** A green answer button ("I sent it", "It says Submit clip", "I added it"). */
 export function GreenButton({ children, onClick, loading, size = "md", icon = "check" }: { children: ReactNode; onClick: () => unknown; loading?: boolean; size?: "sm" | "md" | "lg"; icon?: IconName }) {
   return (
     <Button variant="glass" size={size} icon={icon} act="tick" className="btn--leaf" loading={loading} onClick={onClick}>
@@ -162,6 +162,7 @@ export function CrStepCard({
   say,
   children,
   copies,
+  lead,
 }: {
   step: CrStep;
   /** null: an unnumbered card ("Content Rewards said no?"). */
@@ -179,6 +180,8 @@ export function CrStepCard({
   children?: ReactNode;
   /** Copy chips made from live values (the owner's account links, the amount to move). */
   copies?: { label: string; value: string | null }[];
+  /** The `lead` with live words ("Already added YouTube and Instagram there? Tap I added them."). */
+  lead?: string;
 }) {
   const bodyId = `step-${step.id}-body`;
   const manual = step.manual !== false;
@@ -186,6 +189,50 @@ export function CrStepCard({
   // screen (§38.1). Elsewhere it sits right under the step's lines.
   const pin = usePinMain() && primary && !!step.open;
   const openEl = step.open ? <OpenButton label={step.open.label} href={step.open.url} primary={primary} size="lg" /> : null;
+  // §39.1: a step with a `lead` and its own answer ("I have an account") puts that green answer right under its Open
+  // button, before the other lines, so someone who already did it taps once.
+  const early = manual && !!onDone && !!step.doneLabel && !done;
+  // Pinned beside the vermilion, the answer is a next step too: Ask never rests on it (it fades out instead).
+  const answerEl = early ? (
+    <Button size="lg" variant="glass" icon="check" act="tick" className="btn--leaf gstep__done" onClick={() => onDone!(true)} loading={busy} data-help-clear={pin ? "" : undefined}>
+      {step.doneLabel}
+    </Button>
+  ) : null;
+  const rest = (
+    <>
+      <Lines lines={say ?? step.say} />
+      {openEl && !pin && !early ? <div className="gstep__actions">{openEl}</div> : null}
+      {copies?.length || step.copy?.length ? (
+        <div className="gstep__copies">
+          {(copies ?? []).map((c) => (
+            <CopyChip key={c.label} label={c.label} value={c.value} quiet />
+          ))}
+        </div>
+      ) : null}
+      {children}
+      {step.folds?.length ? (
+        <div className="cr-folds">
+          {step.folds.map((f) => (
+            <Fold key={f.id} fold={f} />
+          ))}
+        </div>
+      ) : null}
+      <Hints list={step.ifYouSee} />
+      {manual && onDone && !early ? (
+        <div className="gstep__done-row">
+          {done ? (
+            <Button size="sm" variant="ghost" icon="undo" act="undo" onClick={() => onDone(false)} loading={busy}>
+              Not done yet
+            </Button>
+          ) : (
+            <Button size="lg" variant="glass" icon="check" act="tick" className="btn--leaf gstep__done" onClick={() => onDone(true)} loading={busy}>
+              I did this
+            </Button>
+          )}
+        </div>
+      ) : null}
+    </>
+  );
   return (
     <li
       className={`gstep glass${done ? " is-done" : ""}${current ? " is-current" : ""}${open ? " is-open" : ""}${number === null ? " is-helper" : ""}`}
@@ -210,38 +257,29 @@ export function CrStepCard({
       </button>
       {open ? (
         <div className={`gstep__body${pin ? " has-pin" : ""}`} id={bodyId}>
-          <Lines lines={say ?? step.say} />
-          {openEl && !pin ? <div className="gstep__actions">{openEl}</div> : null}
-          {copies?.length || step.copy?.length ? (
-            <div className="gstep__copies">
-              {(copies ?? []).map((c) => (
-                <CopyChip key={c.label} label={c.label} value={c.value} quiet />
-              ))}
+          {step.lead ? (
+            <p className="gstep__lead">
+              <Rich text={lead ?? step.lead} />
+            </p>
+          ) : null}
+          {early && !pin ? (
+            <div className="gstep__actions gstep__actions--stack">
+              {openEl}
+              {answerEl}
             </div>
           ) : null}
-          {children}
-          {step.folds?.length ? (
-            <div className="cr-folds">
-              {step.folds.map((f) => (
-                <Fold key={f.id} fold={f} />
-              ))}
+          {pin ? (
+            // The pinned pair's sticky box is this part, so it never rides up over the lead line above.
+            <div className="gstep__rest">
+              {rest}
+              <div className={`gstep__actions cr-pin${early ? " cr-pin--stack" : ""}`}>
+                {openEl}
+                {answerEl}
+              </div>
             </div>
-          ) : null}
-          <Hints list={step.ifYouSee} />
-          {manual && onDone ? (
-            <div className="gstep__done-row">
-              {done ? (
-                <Button size="sm" variant="ghost" icon="undo" act="undo" onClick={() => onDone(false)} loading={busy}>
-                  Not done yet
-                </Button>
-              ) : (
-                <Button size="lg" variant="glass" icon="check" act="tick" className="btn--leaf gstep__done" onClick={() => onDone(true)} loading={busy}>
-                  I did this
-                </Button>
-              )}
-            </div>
-          ) : null}
-          {pin ? <div className="gstep__actions cr-pin">{openEl}</div> : null}
+          ) : (
+            rest
+          )}
         </div>
       ) : null}
     </li>

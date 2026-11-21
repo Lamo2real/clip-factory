@@ -25,6 +25,10 @@ import { campaignCardOptions, cardOptionsFrom, optionsFor, presetOf, type CardOp
 import { afterUploadLine, crAvailability, patchCr, placesLines, reloadCr, unlinkedPlaces, useCr } from "../../lib/contentRewards.ts";
 import { campaignTikTokChoices, campaignTikTokProblem } from "../../lib/tiktokChoices.ts";
 import { CampaignStrip } from "./CampaignStrip.tsx";
+import { CampaignFit, copyLine } from "./CampaignFit.tsx";
+import { FitSuggestion } from "./FitSuggestion.tsx";
+import { fitMain, fixedWords, liveFit, reloadFit, uploadOffWords, useClipFit, useCopy } from "../../lib/crFit.ts";
+import { canMacFetch } from "../../lib/macFetch.ts";
 import { TikTokLegal } from "./TikTokCommercial.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
 import { useUnsaved } from "../../features/help/unsaved.ts";
@@ -32,16 +36,44 @@ import { useUnsaved } from "../../features/help/unsaved.ts";
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
 export const MEDIA_FRESH_MS = 50 * 60 * 1000;
 
+/**
+ * Review's clips: one job's (with the campaign copies made of them, §39.3: a copy is a clip of a new job, so the jobs
+ * named in the `remakes` of every clip of the job are read too, at most 10: a copy stays here after its original was
+ * thrown away), or every job's.
+ */
+export async function reviewClips(jobId: string | null): Promise<Clip[]> {
+  if (!jobId) return api().listClips({ status: "review" });
+  const all = await api().listClips({ status: "all", jobId });
+  const clips = all.filter((c) => c.status === "review");
+  const jobs = [...new Set(all.flatMap((c) => Object.values(c.remakes ?? {}).map((r) => r.jobId)))].filter((j) => j !== jobId).slice(0, 10);
+  if (!jobs.length) return clips;
+  const copies = (await Promise.all(jobs.map((j) => api().listClips({ status: "review", jobId: j }).catch(() => [] as Clip[])))).flat();
+  const have = new Set(clips.map((c) => c.clipId));
+  return [...clips, ...copies.filter((c) => c.remakeOf?.jobId === jobId && !have.has(c.clipId))];
+}
+
+/** Each campaign copy right after the clip it was made from (the rest keep their order). */
+export function copiesAfterOriginals(list: Clip[]): Clip[] {
+  const ids = new Set(list.map((c) => c.clipId));
+  const copies = list.filter((c) => c.remakeOf && ids.has(c.remakeOf.clipId));
+  const out = list.filter((c) => !copies.includes(c));
+  for (const copy of copies) {
+    const at = out.findIndex((c) => c.clipId === copy.remakeOf!.clipId);
+    let end = at + 1;
+    while (end < out.length && out[end]!.remakeOf?.clipId === copy.remakeOf!.clipId) end++;
+    out.splice(end, 0, copy);
+  }
+  return out;
+}
+
 export function Review({ jobId }: { jobId: string | null }) {
   const loadedAt = useRef(0);
   const { data, error, reload, setData } = useLoad(
     () =>
-      api()
-        .listClips({ status: "review", ...(jobId ? { jobId } : {}) })
-        .then((clips) => {
-          loadedAt.current = Date.now();
-          return clips;
-        }),
+      reviewClips(jobId).then((clips) => {
+        loadedAt.current = Date.now();
+        return clips;
+      }),
     jobId ?? "",
     "review",
   );
@@ -72,14 +104,15 @@ export function Review({ jobId }: { jobId: string | null }) {
   const thrown = useThrownAway();
   // Clips of a job deleted with its Review clips leave the same way (§34.5).
   const goneJobs = useDeletedJobs().reviewJobs;
-  const visible = data ? data.filter((c) => !thrown.has(c.clipId) && !goneJobs.has(c.jobId)) : null;
+  const visible = data ? copiesAfterOriginals(data.filter((c) => !thrown.has(c.clipId) && !goneJobs.has(c.jobId))) : null;
 
   // Clips being uploaded right here: their cards leave on their own, and live news about them waits.
   const settling = useRef(new Set<string>());
   const settle = (clipId: string, on: boolean) => (on ? settling.current.add(clipId) : settling.current.delete(clipId));
 
   // Live: new clips appear as the agent finishes them; clips decided elsewhere leave; caption edits show up.
-  const waiting = (c: Clip) => c.status === "review" && (!jobId || c.jobId === jobId);
+  // A campaign copy of one of this job's clips stays here too, right after its original (§39.3).
+  const waiting = (c: Clip) => c.status === "review" && (!jobId || c.jobId === jobId || c.remakeOf?.jobId === jobId);
   useLiveEvents(
     (e) => {
       if (e.type !== "clip" || settling.current.has(e.id)) return;
@@ -92,8 +125,7 @@ export function Review({ jobId }: { jobId: string | null }) {
           .catch(() => undefined);
     },
     () =>
-      void api()
-        .listClips({ status: "review", ...(jobId ? { jobId } : {}) })
+      void reviewClips(jobId)
         .then((fresh) => {
           loadedAt.current = Date.now();
           setData(() => fresh.filter((c) => !settling.current.has(c.clipId)));
@@ -239,7 +271,19 @@ export function Review({ jobId }: { jobId: string | null }) {
           <ol className="review-list">
             {visible.map((c, i) => (
               <li key={c.clipId} id={`clip-${c.clipId}`} className="review-list__item">
-                <ReviewCard clip={c} ready={ready} setupFailed={setupFailed} onCheckAgain={() => void setup.reload()} next={i === 0} returning={returning.has(c.clipId)} onDone={remove} onKept={kept} onThrowAway={throwAway} onSettling={settle} />
+                <ReviewCard
+                  clip={c}
+                  ready={ready}
+                  setupFailed={setupFailed}
+                  onCheckAgain={() => void setup.reload()}
+                  next={i === 0}
+                  returning={returning.has(c.clipId)}
+                  onDone={remove}
+                  onKept={kept}
+                  onThrowAway={throwAway}
+                  onSettling={settle}
+                  copyHere={visible.some((x) => x.remakeOf?.clipId === c.clipId)}
+                />
               </li>
             ))}
           </ol>
@@ -278,8 +322,11 @@ function ReviewCard({
   onKept,
   onThrowAway,
   onSettling,
+  copyHere = false,
 }: {
   clip: Clip;
+  /** A campaign copy of this clip waits right below it (§39.3). */
+  copyHere?: boolean;
   /** The places that are set up (null while loading). */
   ready: Platform[] | null;
   /** The check of what is set up did not work: the card says so and offers to check again. */
@@ -304,6 +351,11 @@ function ReviewCard({
   // A campaign clip (§38.5): its campaign's card. Until it is read, Upload waits (it must never go to a place the
   // campaign does not pay for). An API without Content Rewards: the clip is a normal clip.
   const cr = useCr();
+  // §39.3: the fit of this clip (a campaign clip against its campaign; a normal clip against the ones he is in).
+  // An API from before §39 (404) or Content Rewards switched off (503): nothing shows, the card is as before.
+  const fitLoad = useClipFit(clip.clipId, cr.state !== "missing" && cr.state !== "soon");
+  const clipFit = fitLoad.data;
+  const ownFit = clipFit?.mode === "campaign" ? (clipFit.fits[0] ?? null) : null;
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [campaignOff, setCampaignOff] = useState(false);
   // The campaign could not be read (a network error or a 5xx): say so, with Check again, never a skeleton for good.
@@ -338,7 +390,9 @@ function ReviewCard({
   }, [campaignId, linkedKey, summaryKey, campaignTry]);
   const isCampaign = !!campaign;
   const campaignWait = !!campaignId && !campaign && !campaignOff;
-  const placesReady: Platform[] | null = campaignWait ? null : ready && campaign ? ready.filter((p) => campaign.uploadPlaces.includes(p)) : ready;
+  // A campaign clip offers only the places its campaign pays for: the fit's (read again on setup news), else the card's.
+  const campaignPlaces = ownFit?.uploadPlaces ?? campaign?.uploadPlaces ?? null;
+  const placesReady: Platform[] | null = campaignWait ? null : ready && campaignPlaces && (campaign || ownFit) ? ready.filter((p) => campaignPlaces.includes(p)) : ready;
   // Where it goes (§33): the owner's taps on this card, else this device's last choice / Where clips go, minus
   // places that are not set up. A campaign clip starts with every place the campaign pays for.
   const [picked, setPicked] = useState<Platform[] | null>(null);
@@ -353,6 +407,8 @@ function ReviewCard({
     setPicked(chosen.includes(p) ? chosen.filter((x) => x !== p) : [...chosen, p]);
   }
   const [dirty, setDirty] = useState<Partial<Captions>>({});
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [save, setSave] = useState<SaveState>("idle");
   const [busy, setBusy] = useState<"confirm" | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -547,6 +603,12 @@ function ReviewCard({
   const noneReady = !isCampaign && !!placesReady && placesReady.length === 0;
 
   async function confirm() {
+    // A campaign clip goes up the campaign way only when it can earn (the API refuses it too, §39.3).
+    if (fitWhy && !keepFailed) {
+      keepAct.fail({ sound: false });
+      toast.error(fitWhy);
+      return;
+    }
     // Also on Try again: a place picked, or none turned off, is checked every time.
     if (!noneReady && !chosen.length) {
       keepAct.fail({ sound: false });
@@ -648,6 +710,74 @@ function ReviewCard({
     }
   }
 
+  /** "Make a FaZe Clips copy" (§39.3): a new campaign clip of the same moment; it arrives right below this one. */
+  async function makeCopy(campaignId: string, campaignAnyway: string[]) {
+    setCopyBusy(true);
+    try {
+      const youtube = /^https:\/\/(www\.|m\.)?(youtube\.com|youtu\.be)\//.test(clip.sourceUrlAt ?? "");
+      const job = await api().crRemake(campaignId, {
+        clipId: clip.clipId,
+        ...(youtube && canMacFetch() ? { macFetch: true } : {}),
+        ...(campaignAnyway.length ? { campaignAnyway } : {}),
+      });
+      copy.started(job);
+      reloadFit(clip.clipId);
+      return true;
+    } catch (e) {
+      toast.error(friendlyMessage(e));
+      return false;
+    } finally {
+      setCopyBusy(false);
+    }
+  }
+
+  /** "Fix it for me": #Ad first and every required tag back in the card's captions, with an 8 s Undo. */
+  async function fixCaptions() {
+    if (!live) return false;
+    setFixing(true);
+    const before = captions;
+    try {
+      const out = await api().crFitCaptions({ clipId: clip.clipId, campaignId: live.campaignId, captions: { ...captions } });
+      const going = live.uploadPlaces.filter((p) => chosen.includes(p));
+      const words = fixedWords(live, going.length ? going : live.uploadPlaces, captions);
+      edit(out);
+      toast.undo(words, { onUndo: () => edit(before), onCommit: () => undefined });
+      return true;
+    } catch (e) {
+      toast.error(friendlyMessage(e));
+      return false;
+    } finally {
+      setFixing(false);
+    }
+  }
+
+  /** "I added it": Content Rewards knows that account now (the place row's and the fit block's, the same PATCH). */
+  async function relink(p: Platform) {
+    try {
+      const connection = await api().crPatchConnection({ relinked: p });
+      patchCr((d) => ({ ...d, connection }));
+      void reloadCr();
+      if (campaignId) setCampaign(await api().crCampaign(campaignId));
+      reloadFit(clip.clipId);
+      return true;
+    } catch (e) {
+      toast.error(friendlyMessage(e));
+      return false;
+    }
+  }
+
+  /** "Turn on Branded content" (TikTok's own words): his own tap puts the campaign's TikTok choices on (§17.8). */
+  function turnOnBranded() {
+    if (creator) {
+      setChoices(campaignTikTokChoices(presetRef.current.tiktok, creator));
+      setApplied(true);
+      toast.success("Branded content is on for TikTok.");
+      return;
+    }
+    applyWhenAsked.current = true;
+    askTikTok();
+  }
+
   function throwAway() {
     clearTimeout(timer.current);
     settled.current = true;
@@ -658,8 +788,26 @@ function ReviewCard({
   const passed = clip.checklist.items.filter((i) => i.pass).length;
   // Commercial content is on but says nothing about whose: TikTok's own words go on Upload's hover text and the line.
   const ttNoWhose = tiktokOn && !!creator && choices.commercial && !choices.yourBrand && !choices.branded;
+  // §39.3: the fit again for what this card holds now (captions, places, TikTok's Branded content).
+  const live = ownFit
+    ? liveFit(ownFit, {
+        captions,
+        chosen: placesReady ? chosen : null,
+        tiktok: tiktokOn && choices.privacy ? { brandContent: choices.commercial && choices.branded } : null,
+      })
+    : null;
+  const copyCampaign = live ? live.campaignId : (clipFit?.suggestion?.campaignId ?? null);
+  // Where its campaign copy stands, from the copy's own job (a failed or thrown-away copy can be made again).
+  const copy = useCopy(clip.clipId, copyCampaign ? clipFit?.remakes[copyCampaign] : undefined, copyHere);
+  const copyState = copy.state;
+  // The block's own main button (a copy, new clips, the one thing first): then Upload steps back to glass.
+  const blockMain = live && copyState === "none" ? fitMain(live) : null;
+  // While the copy it needs is being made (or is here), Upload's words say that, not "Tap Make a … copy first."
+  const copySays = live && !live.canUpload && fitMain(live)?.fix?.kind === "remake" ? copyLine(copyState, live.campaignName) : null;
+  const fitWhy = live ? (copySays ?? uploadOffWords(live)) : null;
+  const suggested = clipFit?.mode === "normal" && clipFit.suggestion ? (clipFit.fits.find((f) => f.campaignId === clipFit.suggestion!.campaignId) ?? null) : null;
   // Why Upload is off because of TikTok, in plain words (null when TikTok is ready or not ticked).
-  const uploadWhy: string | null = !tiktokOn || ttReady
+  const ttWhy: string | null = !tiktokOn || ttReady
     ? null
     : ttError
       ? "TikTok did not answer. Tap Ask TikTok again, or untick TikTok."
@@ -676,11 +824,30 @@ function ReviewCard({
                 : ttNoWhose
                 ? `${PICK_WHOSE} Pick Your brand or Branded content on TikTok first.`
                 : (brandedBlocked(choices.privacy) ?? "Pick Your brand or Branded content on TikTok first.");
+  const uploadWhy: string | null = fitWhy ?? ttWhy;
   const placesShown = placesReady && !noneReady ? chosen : PLATFORM_ORDER;
 
   return (
-    <article className={`review-card glass${leaving ? " is-leaving" : returning ? " is-returning" : ""}`} aria-labelledby={`hook-${clip.clipId}`}>
-      {campaign ? <CampaignStrip campaign={campaign} /> : null}
+    <article
+      className={`review-card glass${live || campaign ? " review-card--campaign" : ""}${leaving ? " is-leaving" : returning ? " is-returning" : ""}`}
+      aria-labelledby={`hook-${clip.clipId}`}
+    >
+      {live ? (
+        <CampaignFit
+          clipId={clip.clipId}
+          fit={live}
+          primary={next}
+          copy={copyState}
+          onRemake={() => makeCopy(live.campaignId, live.softCodes)}
+          remaking={copyBusy}
+          onFixCaptions={fixCaptions}
+          fixing={fixing}
+          onBranded={turnOnBranded}
+          onAdded={relink}
+        />
+      ) : campaign ? (
+        <CampaignStrip campaign={campaign} />
+      ) : null}
       <div className="review-card__head">
         <div className="review-card__tags">
           <Pill tone="vermilion">{MOMENT_LABEL[clip.momentType]}</Pill>
@@ -774,6 +941,10 @@ function ReviewCard({
           ) : null}
         </details>
 
+        {suggested ? (
+          <FitSuggestion clipId={clip.clipId} fit={suggested} copy={copyState} onCopy={(anyway) => makeCopy(suggested.campaignId, anyway)} busy={copyBusy} />
+        ) : null}
+
         {placesReady ? (
           <UploadToChips
             ready={placesReady}
@@ -784,18 +955,7 @@ function ReviewCard({
                 ? {
                     lines: placesLines(campaign),
                     unlinked: unlinkedPlaces(campaign, cr.data?.connection),
-                    onRelinked: async (p) => {
-                      try {
-                        const connection = await api().crPatchConnection({ relinked: p });
-                        patchCr((d) => ({ ...d, connection }));
-                        void reloadCr();
-                        setCampaign(await api().crCampaign(campaign.campaignId));
-                        return true;
-                      } catch (e) {
-                        toast.error(friendlyMessage(e));
-                        return false;
-                      }
-                    },
+                    onRelinked: relink,
                   }
                 : undefined
             }
@@ -891,7 +1051,7 @@ function ReviewCard({
             </p>
           </div>
         ) : null}
-        {campaign && !keepFailed ? (
+        {campaign && !live && !keepFailed ? (
           <p className="cr-after small" data-help="cr-send-now">
             {afterUploadLine(cr.data?.connection, campaign.membership)}
           </p>
@@ -909,7 +1069,7 @@ function ReviewCard({
             Throw away
           </Button>
           <Button
-            variant={next ? "primary" : "glass"}
+            variant={next && !blockMain ? "primary" : "glass"}
             size="lg"
             icon={keepFailed ? "retry" : "upload"}
             act={keepAct}

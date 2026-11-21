@@ -1,6 +1,8 @@
-// Settings › Posting › Set up posting › Content Rewards (docs/CONTRACTS.md §38.3): three numbered steps, the
-// unnumbered "Content Rewards said no?" card when it applies, then "When it's done". A step Clip Factory can see
-// ticks itself; one it can't see yet shows "I did this" (green). One vermilion button on the screen at a time.
+// Settings › Posting › Set up posting › Content Rewards (docs/CONTRACTS.md §38.3, §39.1): in time order, the shortcut
+// "Already use Content Rewards …?" (while steps 1 and 2 are both not done), three numbered steps, the unnumbered
+// "Content Rewards said no?" card when it applies, then "When it's done". A step Clip Factory can see ticks itself;
+// one it can't see yet has its own green answer ("I have an account", "I added them") right under its Open button.
+// With `?back=` the page leads back where the owner came from once he is signed in. One vermilion at a time.
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api/index.ts";
 import { friendlyMessage } from "../../../api/errors.ts";
@@ -20,17 +22,19 @@ import {
   crStepsDone,
   dayDate,
   patchCr,
+  placeList,
   reloadCr,
   shortDay,
   signedIn,
   signInSoon,
   useCr,
 } from "../../../lib/contentRewards.ts";
+import { backLabel, backLink, backNext } from "../../../lib/backLink.ts";
 import { isTouchDevice } from "../../../lib/crConnect.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../../lib/format.ts";
 import { prefersReducedMotion } from "../../../lib/prefs.ts";
 import { navigate } from "../../../lib/router.ts";
-import { CR_GUIDE, CR_PILOT, CR_PILOT_AFTER, CR_SETUP_STEPS, pilotMailto } from "../../../setup/contentrewards.ts";
+import { CR_GUIDE, CR_PILOT, CR_PILOT_AFTER, CR_SETUP_STEPS, CR_SHORTCUT, CR_TIKTOK_WAITS, pilotMailto } from "../../../setup/contentrewards.ts";
 import type { CrStep } from "../../../setup/types.ts";
 import { BrandText, CrStepCard, GreenButton, Lines, Note } from "../../campaigns/bits.tsx";
 import { CopyChip } from "./bits.tsx";
@@ -44,6 +48,22 @@ export function CrMark({ size = 30 }: { size?: number }) {
       <Icon name="coin" size={size} />
     </span>
   );
+}
+
+/** The places connected in Clip Factory, never TikTok ("YouTube and Instagram"), for the shortcut and step 2's lead. */
+export function addedPlaces(platforms: { platform: Platform; account: { status: string } }[] | undefined): string {
+  const list = PLATFORM_ORDER.filter((p) => p !== "tiktok" && platforms?.find((x) => x.platform === p)?.account.status === "connected");
+  return placeList(list);
+}
+
+/** "Already use Content Rewards, with YouTube added there?" (§39.1 item 0). */
+export function shortcutQuestion(places: string): string {
+  return places ? CR_SHORTCUT.question.replace("{places}", places) : CR_SHORTCUT.none;
+}
+
+/** Step 2's lead: "Already added YouTube and Instagram there? Tap I added them." */
+export function socialsLead(places: string): string {
+  return `Already added ${places || "your accounts"} there? Tap I added them.`;
 }
 
 /** "Clip Factory posts to: YouTube @faze · Instagram @faze …" from GET /v1/setup (connected places, never TikTok). */
@@ -86,6 +106,10 @@ export function CrSetup() {
   const disconnectAct = useAction("disconnect");
   const phone = isTouchDevice();
   const scrolled = useRef(false);
+  // Where the owner came from (§39.1 `?back=`): once signed in, the way back is the page's next step.
+  const [back] = useState(() => (typeof location === "undefined" ? null : backLink(location.search)));
+  const backName = back?.campaignId ? (campaigns.find((c) => c.campaignId === back.campaignId)?.name ?? null) : null;
+  const [shortcutBusy, setShortcutBusy] = useState(false);
 
   const done = crStepsDone(conn);
   const count = crSetupCount(conn);
@@ -131,6 +155,23 @@ export function CrSetup() {
     const t = setTimeout(() => document.getElementById(`step-${current}`)?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" }), 160);
     return () => clearTimeout(t);
   }, [conn, current, count]);
+
+  // Phones: the open step's pinned Open and its answer come fully on screen, clear of the tab bar (once). A step low on
+  // the first screen would otherwise leave them under the bar until he scrolls.
+  const pinShown = useRef(false);
+  useEffect(() => {
+    if (!conn || pinShown.current || !current) return;
+    const t = setTimeout(() => {
+      pinShown.current = true;
+      const pin = document.querySelector<HTMLElement>(`#step-${current} .cr-pin`);
+      if (!pin) return;
+      const bar = document.querySelector<HTMLElement>(".tabbar")?.getBoundingClientRect();
+      const limit = (bar && bar.height > 0 ? bar.top : window.innerHeight) - 12;
+      const r = pin.getBoundingClientRect();
+      if (r.bottom > limit) window.scrollBy({ top: r.bottom - limit, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [conn, current]);
 
   const isOpen = (id: string) => (closed.has(id) ? false : opened.has(id) || current === id);
   const toggle = (id: string) => {
@@ -275,13 +316,67 @@ export function CrSetup() {
       ? "soon"
       : pilotMain
         ? "pilot"
-        : (current ?? (!campaigns.length ? "add" : null));
+        : (current ?? (back && on ? "back" : !campaigns.length ? "add" : null));
   const postsTo = setup.data ? postsToLine(setup.data.platforms) : null;
+  const places = addedPlaces(setup.data?.platforms);
+  // The shortcut: only while steps 1 and 2 are both not done (someone already set up says so in one tap).
+  const shortcut = !done["ready-account"] && !done["ready-socials"] && !on;
+  async function yesShortcut() {
+    setShortcutBusy(true);
+    try {
+      const a = CR_SETUP_STEPS.find((st) => st.id === "ready-account")!;
+      const b = CR_SETUP_STEPS.find((st) => st.id === "ready-socials")!;
+      if ((await tick(a, true)) && (await tick(b, true))) {
+        // Step 3 opens next: its Connect comes on screen (a short Mac window put it just below the edge).
+        setTimeout(() => {
+          const to = document.querySelector<HTMLElement>("#step-connect .gstep__connect, #step-connect .cr-place, #step-connect");
+          to?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+        }, 60);
+      }
+    } finally {
+      setShortcutBusy(false);
+    }
+    return true;
+  }
+  const socialsSay = (step: CrStep) => {
+    const lines = step.say.filter((l) => l !== CR_TIKTOK_WAITS);
+    const last = lines.pop();
+    return [...lines, ...(postsTo ? [postsTo] : []), CR_TIKTOK_WAITS, ...(last ? [last] : [])];
+  };
+  // On a phone, step 3 is done on the Mac: with a way back, the page still leads back (the vermilion when step 3 is the
+  // only step left, since a phone's step 3 has no button), and says where that campaign is on the Mac.
+  const phoneBack = !!back && !on && !reconnect && run.place === "phone";
+  const phoneBackMain = phoneBack && main === "connect";
+  const phoneWords = back?.campaignId && backName ? { phone: [`Do this step on your Mac. Open ${backName} in Clip Factory there, then tap Connect Content Rewards.`] } : undefined;
   const shownCheck = check && check.key === key ? check.text : null;
+  // The way back (§39.1): the vermilion once he is signed in (glass while the pilot email waits). Right after a
+  // Connect it sits in the result card, right under "Next: back to FaZe Clips.", so it is on screen at once.
+  const backInCard = !!back && !reconnect && (run.result === "connected" || run.result === "read_only");
+  const backButton = back ? (
+    <LinkButton
+      href={back.href}
+      variant={main === "back" || phoneBackMain ? "primary" : "glass"}
+      size="lg"
+      icon="chevronLeft"
+      data-help-clear={main === "back" || phoneBackMain ? "" : undefined}
+      data-cr="back"
+    >
+      {backLabel(back, backName)}
+    </LinkButton>
+  ) : null;
 
   return (
     <div className="setup-page cr-setup">
       {header}
+
+      {shortcut ? (
+        <section className="cr-shortcut glass" aria-label="Already set up?" data-cr="shortcut">
+          <p>{shortcutQuestion(places)}</p>
+          <GreenButton size="lg" onClick={yesShortcut} loading={shortcutBusy}>
+            {CR_SHORTCUT.yes}
+          </GreenButton>
+        </section>
+      ) : null}
 
       <section className="setup-part" aria-labelledby="cr-part-setup">
         <h2 className="setup-part__title" id="cr-part-setup">
@@ -307,16 +402,14 @@ export function CrSetup() {
                 onToggle={() => toggle(step.id)}
                 onDone={(d) => tick(step, d)}
                 busy={busy === step.id}
-                say={isConnect ? [] : undefined}
+                say={isConnect ? [] : step.id === "ready-socials" ? socialsSay(step) : undefined}
+                lead={step.id === "ready-socials" ? socialsLead(places) : undefined}
               >
-                {step.id === "ready-socials" ? (
+                {step.id === "ready-socials" && refusedLink ? (
                   <div className="gstep__extras">
-                    {refusedLink ? (
-                      <Note icon="alert" tone="bad" role="alert">
-                        Content Rewards doesn&apos;t know your {PLATFORM_LABEL[refusedLink]} account. Connect it here, then tap I did this.
-                      </Note>
-                    ) : null}
-                    {postsTo ? <p className="gstep__note">{postsTo}</p> : null}
+                    <Note icon="alert" tone="bad" role="alert">
+                      Content Rewards doesn&apos;t know your {PLATFORM_LABEL[refusedLink]} account. Add it in Content Rewards, then tap I added them.
+                    </Note>
                   </div>
                 ) : null}
                 {isConnect ? (
@@ -324,7 +417,12 @@ export function CrSetup() {
                     {bridge ? <Lines lines={step.say} /> : null}
                     {run.result ? (
                       <div ref={resultRef}>
-                        <CrResultCard result={run.result} onClose={run.clear} />
+                        <CrResultCard
+                          result={run.result}
+                          onClose={run.clear}
+                          next={backInCard && back ? backNext(back, backName) : undefined}
+                          action={backInCard ? backButton : undefined}
+                        />
                       </div>
                     ) : null}
                     {reconnect && bridge ? (
@@ -334,8 +432,9 @@ export function CrSetup() {
                       </Note>
                     ) : on && bridge ? null : (
                       // Signed in, in the Mac app: Connect again lives in the panel below (one Connect on the page).
-                      <CrConnectControls run={run} primary={primary} />
+                      <CrConnectControls run={run} primary={primary} words={phoneWords} />
                     )}
+                    {phoneBack ? backButton : null}
                     {on ? (
                       <p className="gstep__note is-ok">
                         <Icon name="checkCircle" size={18} />
@@ -411,7 +510,11 @@ export function CrSetup() {
               Disconnect
             </Button>
           </div>
-          {main === "add" ? (
+          {back && !reconnect ? (
+            // §39.1: the way back is the next step once he is signed in; glass while the pilot email waits. Right
+            // after Connect it sits in the result card instead (on screen at once), never twice.
+            backInCard ? null : <div className="done-panel__actions">{backButton}</div>
+          ) : main === "add" ? (
             <div className="done-panel__actions">
               <LinkButton href={CAMPAIGNS_PATH} variant="primary" size="lg" icon="plus" data-help-clear="">
                 Add a campaign

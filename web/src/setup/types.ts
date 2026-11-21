@@ -117,6 +117,13 @@ export interface CrStep extends Omit<GuideStep, "auto" | "paste" | "upload" | "g
   finance?: "yes" | "no" | "both";
   /** Done once (it folds away), or each time money moves. */
   repeat?: "once" | "each_time";
+  /**
+   * The step's first line, for someone who already did it ("Have one already? Tap I have an account.", §39.1). With
+   * `doneLabel`, the step's green answer sits right under its Open button, before the other lines.
+   */
+  lead?: string;
+  /** The green answer's words instead of "I did this" ("I have an account", "I added them"). */
+  doneLabel?: string;
 }
 
 export interface CrGuide {

@@ -92,6 +92,26 @@ describe("no money guesses (§25, ADR-47)", () => {
     expect(part).toContain("Content Rewards&apos; numbers");
   });
 
+  // §39.2: All your money adds money in one place only, the server (GET /v1/money/everywhere). The web formats it; the
+  // mock's copy of the server's sums (checked against money_everywhere_cases.json) is the one exception.
+  const EVERYWHERE_MOCK = "api/mock/moneyEverywhere.ts";
+  it("All your money only formats: no amount or cents added, multiplied or divided on its screens", () => {
+    for (const f of ["screens/money/AllMoney.tsx", "screens/money/MoneyDashboard.tsx", "screens/review/CampaignFit.tsx", "screens/review/FitSuggestion.tsx", "screens/clip/ClipFit.tsx", "lib/crFit.ts"]) {
+      const text = code(join(SRC, f));
+      expect(text, f).not.toMatch(/amountMicros\s*[-+*/]|[-+*/]=?\s*[\w.]*amountMicros\b/);
+      expect(text, f).not.toMatch(/Cents\b\s*[-+*/]|[-+*/]\s*[\w.]*Cents\b/);
+    }
+    const all = read(join(SRC, "screens/money/AllMoney.tsx"));
+    expect(all).toContain("formatMoney(");
+    expect(all).not.toMatch(/\.reduce\(/);
+  });
+
+  it("no screen sums amounts by place or currency (only the mock's copies of the server do)", () => {
+    const using = files(SRC).filter((f) => !rel(f).startsWith("api/mock/") && /amountMicros\s*\+=|\+=\s*[\w.]*amountMicros\b/.test(code(f)));
+    expect(using.map(rel)).toEqual([]);
+    expect(code(join(SRC, EVERYWHERE_MOCK))).toMatch(/amountMicros \+= a\.amountMicros/);
+  });
+
   it("the help assistant never offers to change a rate or calls money a best guess", () => {
     const kb = read(join(SRC, "features/help/helpKb.json")).toLowerCase();
     for (const phrase of ["for 1,000 views", "best guess", "use the usual", "your amount"]) expect(kb).not.toContain(phrase);

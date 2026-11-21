@@ -115,7 +115,8 @@ for (const v of VIEWPORTS) {
         const pad = parseFloat(getComputedStyle(d).paddingRight);
         const controls = [...d.querySelectorAll<HTMLElement>("button, .segmented__opt")].map((el) => el.getBoundingClientRect());
         const seg = d.querySelector(".dash-period .segmented")!.getBoundingClientRect();
-        const num = document.querySelector("[data-kpi=monthly] .dash-num")!.getBoundingClientRect();
+        // §39.2: All your money is the page's first card (its title in view above the dock on first load).
+        const num = document.querySelector(".cr-all__title")!.getBoundingClientRect();
         const tabEl = document.querySelector<HTMLElement>(".tabbar");
         const tab = tabEl && tabEl.offsetParent !== null ? tabEl.getBoundingClientRect() : null;
         const ask = document.querySelector<HTMLElement>(".help-launcher");
@@ -148,7 +149,7 @@ for (const v of VIEWPORTS) {
         expect(overlaps, "Ask sits above the dock").toBe(false);
         expect(geo.askHidden, "Ask stays shown once the page is still").toBe(false);
       }
-      expect(geo.numBottom, "the Monthly number is in view above the dock on first load").toBeLessThanOrEqual(geo.box.top);
+      expect(geo.numBottom, "All your money is in view above the dock on first load").toBeLessThanOrEqual(geo.box.top);
       // The last clip row scrolls fully clear of the dock.
       await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
       await page.waitForTimeout(200);
@@ -411,7 +412,8 @@ test.describe("flows", () => {
     await expect(page.locator("[data-kpi='monthly']")).toContainText("Not enough days to compare yet");
     await expect(page.locator("[data-kpi='monthly'] .dash-chip")).toHaveCount(0);
     await open(page, "start");
-    const allow = page.getByRole("link", { name: "Allow money reading" });
+    // The Notes card's (All your money's YouTube row has its own glass one).
+    const allow = page.locator(".dash-notes").getByRole("link", { name: "Allow money reading" });
     await expect(allow).toHaveClass(/btn--action/);
     await expect(allow).toHaveAttribute("href", "/settings/posting/money#money-youtube");
   });
@@ -424,11 +426,12 @@ test.describe("flows", () => {
     expect(await page.title()).toBe("Money · Clip Factory");
   });
 
-  test("the filters come right after the title in reading and tab order", async ({ page }) => {
+  test("All your money comes right after the title, then the filters, in reading and tab order (§39.2)", async ({ page }) => {
     await open(page);
-    const order = await page.evaluate(() => [...document.querySelector(".money-dash")!.children].slice(0, 2).map((el) => el.className));
+    const order = await page.evaluate(() => [...document.querySelector(".money-dash")!.children].slice(0, 3).map((el) => el.className));
     expect(order[0]).toContain("dash-head");
-    expect(order[1]).toContain("money-dock");
+    expect(order[1]).toContain("cr-all");
+    expect(order[2]).toContain("money-dock");
   });
 
   test("with motion on, the count-up never shows a negative amount", async ({ browser }) => {

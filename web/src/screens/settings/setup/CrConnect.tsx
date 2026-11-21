@@ -1,7 +1,7 @@
 // Step 3 of the Content Rewards setup (docs/CONTRACTS.md §38.3, §38.15): Connect Content Rewards, with the words for
 // where the page runs, the "Waiting for you in the browser…" card while the sign-in is open, and the result card
 // after it. The run itself is lib/crConnect.ts; this file only draws it.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../../../api/index.ts";
 import type { CrConnectResult, CrConnection } from "../../../api/types.ts";
 import { Icon } from "../../../components/Icon.tsx";
@@ -96,7 +96,18 @@ export function useCrConnect(onConnection?: (c: CrConnection) => void): CrConnec
 }
 
 /** Step 3's controls for where the page runs. `primary`: Connect (or Get the app) is the screen's vermilion. */
-export function CrConnectControls({ run, primary, label = "Connect Content Rewards" }: { run: CrConnectRun; primary: boolean; label?: string }) {
+export function CrConnectControls({
+  run,
+  primary,
+  label = "Connect Content Rewards",
+  words,
+}: {
+  run: CrConnectRun;
+  primary: boolean;
+  label?: string;
+  /** Other words for where the page runs (a phone opened from a campaign: where that campaign is on the Mac). */
+  words?: Partial<Record<Exclude<ConnectPlace, "bridge">, string[]>>;
+}) {
   if (run.place === "bridge") {
     if (run.waiting)
       return (
@@ -118,7 +129,7 @@ export function CrConnectControls({ run, primary, label = "Connect Content Rewar
   }
   return (
     <div className="gstep__connect cr-place" data-help="cr-connect" data-place={run.place}>
-      <Lines lines={PLACE_WORDS[run.place]} className="gstep__say cr-place__words" />
+      <Lines lines={words?.[run.place] ?? PLACE_WORDS[run.place]} className="gstep__say cr-place__words" />
       {run.place === "browser" || run.place === "old_app_cant_update" ? (
         <LinkButton href="/get-app" variant={primary ? "primary" : "glass"} size="lg" icon="download" data-help-clear="">
           Get the app
@@ -128,8 +139,9 @@ export function CrConnectControls({ run, primary, label = "Connect Content Rewar
   );
 }
 
-/** The card after a Connect (§38.3): confetti already played for `connected`. */
-export function CrResultCard({ result, onClose }: { result: CrConnectResult; onClose: () => void }) {
+/** The card after a Connect (§38.3): confetti already played for `connected`. `next`: "Next: back to FaZe Clips."
+ * when the page was opened with a way back (§39.1), with `action` (the way back) right under it, on screen at once. */
+export function CrResultCard({ result, onClose, next, action }: { result: CrConnectResult; onClose: () => void; next?: string; action?: ReactNode }) {
   const ok = result === "connected";
   return (
     <section className={`result-card${ok ? " result-card--ok" : ""} glass`} role={ok ? "status" : "alert"} data-result={result}>
@@ -137,6 +149,8 @@ export function CrResultCard({ result, onClose }: { result: CrConnectResult; onC
       <div className="result-card__text">
         <h2 className="result-card__title">{ok ? "Connected!" : result === "read_only" ? "Connected, almost" : "Not connected yet"}</h2>
         <p>{CONNECT_RESULT_TEXT[result]}</p>
+        {next ? <p className="result-card__next">{next}</p> : null}
+        {action ? <div className="result-card__actions">{action}</div> : null}
         <Button size="sm" variant="ghost" icon="x" onClick={onClose}>
           Close
         </Button>

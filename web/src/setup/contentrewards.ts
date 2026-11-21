@@ -28,6 +28,11 @@ export function pilotMailto(email: { to: string; subject: string; body: string }
   return `mailto:${email.to}?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`;
 }
 
+/** Step 2's line after "Clip Factory posts to: …" (§38.3, unchanged), and its last line (§39.1). */
+const CR_TIKTOK_WAITS_LINE =
+  "TikTok can wait. TikTok posts from Clip Factory stay private until TikTok checks the app, and private posts can't earn.";
+const CR_SOCIALS_LAST_LINE = "Then come back to Clip Factory. Tap I added them.";
+
 /** Whop's screens were not seen (§38.1): every Whop step says so. */
 export const WHOP_HINT = "Whop may show this a little differently. Look for the same words.";
 
@@ -71,11 +76,13 @@ export const CR_GUIDE: CrGuide = {
           id: "ready-account",
           icon: "user",
           title: "Make a Content Rewards account",
+          lead: "Have one already? Tap I have an account.",
+          doneLabel: "I have an account",
           say: [
-            "You'll see **Create your account**. Type your email in **Email**. Tap **Send code**.",
-            "Type the 6 numbers from the email. Tap **Verify**.",
-            "Or tap **Continue with Google**.",
+            "Tap **Continue with Google**. Pick your Google account.",
+            "Or type your email in **Email**. Tap **Send code**. Type the 6 numbers from the email. Tap **Verify**.",
             "You must be 18 or older. One account per person.",
+            "Then come back to Clip Factory. Tap I have an account.",
           ],
           open: { label: "Open Content Rewards", url: CR_SIGNUP },
           auto: "connected",
@@ -90,14 +97,19 @@ export const CR_GUIDE: CrGuide = {
         {
           id: "ready-socials",
           icon: "link",
-          title: "Connect your accounts there",
+          title: "Add your accounts there",
+          // The {places} of the lead are the places connected in Clip Factory (CrSetup.tsx says them).
+          lead: "Already added YouTube there? Tap I added them.",
+          doneLabel: "I added them",
           say: [
             "Tap **Accounts**.",
             "Tap **Connect account**. Tap YouTube.",
             "On the next screen, leave every box ticked and tap Allow or Continue.",
-            "Do the same for Instagram, X and Facebook.",
+            "Add Instagram, X and Facebook the same way, if you post there.",
             "Each one should say **Connected**.",
-            "TikTok can wait. TikTok posts from Clip Factory stay private until TikTok checks the app, and private posts can't earn.",
+            // The page puts "Clip Factory posts to: …" (from GET /v1/setup) right before the TikTok line.
+            CR_TIKTOK_WAITS_LINE,
+            CR_SOCIALS_LAST_LINE,
           ],
           open: { label: "Open Content Rewards settings", url: CR_SETTINGS },
           auto: "linked",
@@ -105,8 +117,8 @@ export const CR_GUIDE: CrGuide = {
             { see: "no **Accounts** tab", do: "Look for **Connected accounts**." },
             { see: "**Verify** in red", do: "Tap it and allow again." },
             { see: "**Sign in again**", do: "Tap it." },
-            { see: "**In review**", do: "Nothing to do. Content Rewards links it for you." },
-            { see: "“already connected to another creator”", do: "That account is on another Content Rewards account. Unlink it there, or ask Content Rewards support." },
+            { see: "**In review**", do: "Nothing to do. Content Rewards adds it for you." },
+            { see: "“already connected to another creator”", do: "That account is on another Content Rewards account. Take it off there, or ask Content Rewards support." },
             { see: "“access wasn't granted”", do: "Tap **Connect account** again and leave every box ticked." },
             { see: "“No YouTube channel found”", do: "Pick the Google account that owns your channel." },
           ],
@@ -119,7 +131,7 @@ export const CR_GUIDE: CrGuide = {
                 "Tap **More**, then **Settings**.",
                 "Tap **Account type and tools**.",
                 "Tap **Switch to professional account**. Tap **Business**, then **Next**.",
-                "Pick any category. Then connect Instagram again on Content Rewards.",
+                "Pick any category. Then add Instagram again on Content Rewards.",
               ],
               open: { label: "Open Instagram", url: "https://www.instagram.com/" },
             },
@@ -174,7 +186,7 @@ export const CR_GUIDE: CrGuide = {
           icon: "search",
           title: "Pick a campaign",
           say: [
-            "Tap **Sort**, then **Highest CPM**. That shows the best pay first.",
+            "Tap **Sort**, then **Highest CPM**. That shows the most money for every 1,000 views first.",
             "Pick one that pays for YouTube. Skip ones that need your face, a sound, or only TikTok.",
             "Not sure? Paste its link here first. I'll check it before you join.",
           ],
@@ -336,6 +348,12 @@ export const CR_GUIDE: CrGuide = {
     },
   ],
 };
+
+export const CR_TIKTOK_WAITS = CR_TIKTOK_WAITS_LINE;
+export const CR_SOCIALS_LAST = CR_SOCIALS_LAST_LINE;
+
+/** The shortcut above the steps, while steps 1 and 2 are both not done (§39.1 item 0). */
+export const CR_SHORTCUT = { question: "Already use Content Rewards, with {places} added there?", none: "Already use Content Rewards, with your accounts added?", yes: "Yes" } as const;
 
 /** The three numbered setup steps (the ring counts these). */
 export const CR_SETUP_STEPS: readonly CrStep[] = CR_GUIDE.parts.find((p) => p.id === "setup")!.steps;

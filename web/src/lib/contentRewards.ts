@@ -24,6 +24,7 @@ import type {
   StopCode,
 } from "../api/types.ts";
 import { CR_DISCOVER, CR_SETTINGS, CR_SUBMISSIONS } from "../setup/contentrewards.ts";
+import { withBack } from "./backLink.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER, count } from "./format.ts";
 import { onLiveSignal } from "./live.ts";
 
@@ -32,6 +33,8 @@ export const CAMPAIGNS_PATH = "/campaigns";
 export const campaignPath = (campaignId: string) => `/campaigns/${encodeURIComponent(campaignId)}`;
 export const makeClipsPath = (campaignId: string) => `/?campaign=${encodeURIComponent(campaignId)}`;
 export const CR_MONEY_PATH = "/money#content-rewards";
+/** The setup page with the way back to this campaign's card (§39.1 `?back=`, as the API's gates.next_step makes it). */
+export const crSetupFor = (campaignId: string) => withBack(CR_SETUP_PATH, campaignPath(campaignId));
 
 /** What Home and the Campaigns page say when the API is switched off (503 `unavailable`, §38.8). */
 export const COMING_SOON = "Content Rewards is coming soon to Clip Factory.";
@@ -217,6 +220,15 @@ export function clippable(state: CrState): CampaignSummary[] {
   return state.state === "ok" ? state.data.campaigns.filter((c) => c.membership === "in" || c.membership === "manual") : [];
 }
 
+/**
+ * A campaign ready for clips right now (§39.1): its next step is Make clips. An API from before §39 sends no
+ * `nextStepKind`: then in or manual with no hard stop (§39.4).
+ */
+export function readyForClips(c: Pick<CampaignSummary, "membership" | "hardStops" | "nextStepKind">): boolean {
+  if (c.nextStepKind !== undefined) return c.nextStepKind === "make_clips";
+  return (c.membership === "in" || c.membership === "manual") && c.hardStops === 0;
+}
+
 // ---------- Connect: results, checks and the setup card ----------
 
 export const CONNECT_RESULT_TEXT: Record<CrConnectResult, string> = {
@@ -355,7 +367,7 @@ export const AM_I_IN =
   "Open the campaign on Content Rewards. **Submit clip** means you're in. **Pending review** means you wait. **Not eligible** means the brand said no. **Limit reached**, **Post limit reached** or **Clip limit reached** also means you're in: the brand must check your clips first. Your list is under **Campaigns**.";
 
 /** Hard stops that send him to another campaign get a glass "Find another campaign". */
-export const PICK_ANOTHER: readonly StopCode[] = ["ended", "deadline", "budget_gone", "tiktok_only", "drafts_first", "sound_needed", "cap_reached", "not_accepted"];
+export const PICK_ANOTHER: readonly StopCode[] = ["ended", "deadline", "budget_gone", "tiktok_only", "drafts_first", "sound_needed", "overlay_needed", "cap_reached", "not_accepted"];
 const MEMBERSHIP_STOPS: readonly StopCode[] = ["not_checked", "not_joined", "apply_first", "waiting", "left", "not_accepted"];
 /** Soft stops ("Make clips anyway"); `not_connected` is a note only and is never accepted. */
 export const SOFT_STOPS: readonly StopCode[] = ["not_connected", "budget_half", "low_rate", "face_needed", "spoken_needed", "audience"];
@@ -427,12 +439,15 @@ export function stopText(code: StopCode, ctx: StopContext = {}): string {
       return "This campaign wants to see each clip before you post it. Clip Factory can't do that yet. Pick another campaign.";
     case "sound_needed":
       return "This campaign needs one of its own sounds. Clip Factory can't add it yet. Pick another campaign.";
+    case "overlay_needed":
+      return "This campaign wants its own picture on top of the video. Clip Factory can't add it yet. Pick another campaign.";
     case "face_needed":
       return "This brand wants your face on camera. Clips of other videos may be turned down.";
     case "spoken_needed":
       return "This brand wants you to say “paid partnership” out loud. Clip Factory can't, so clips may be turned down.";
     case "audience":
-      return `This brand wants ${ctx.audience ?? "viewers from some countries"}. In YouTube Studio tap **Analytics**, then **Audience**, then look at **Top geographies**.`;
+      // A's gates.py words (the server sends this text; the mock and the fit's soft line read the same).
+      return `This brand wants this audience: “${ctx.audience ?? "viewers from some countries"}”. In YouTube Studio tap **Analytics**, then **Audience**, then look at **Top geographies**.`;
   }
 }
 
@@ -451,6 +466,7 @@ export const STOP_SHORT: Partial<Record<StopCode, string>> = {
   cap_reached: "You earned the most",
   drafts_first: "Can't make these",
   sound_needed: "Can't make these",
+  overlay_needed: "Can't do this one",
 };
 
 /**
@@ -495,6 +511,7 @@ export const STOP_CODES: readonly StopCode[] = [
   "cap_reached",
   "drafts_first",
   "sound_needed",
+  "overlay_needed",
   "face_needed",
   "spoken_needed",
   "audience",
@@ -539,6 +556,23 @@ export function membershipStop(m: Membership): StopCode | null {
   }
 }
 
+/** A hard stop's short chip (A's gates.py `_stop_chip`): the chip says what holds it up, never only "You're in". */
+export const STOP_CHIP: Partial<Record<StopCode, string>> = {
+  ended: "Ended",
+  deadline: "Ended",
+  budget_gone: "Money gone",
+  paused: "Paused",
+  held: "On hold",
+  rules_reading: "Reading the rules",
+  rules_failed: "Rules missing",
+  tiktok_only: "TikTok only",
+  no_place: "Set up first",
+  cap_reached: "Most reached",
+  drafts_first: "Can't do this one",
+  sound_needed: "Can't do this one",
+  overlay_needed: "Can't do this one",
+};
+
 /**
  * The one next step of a campaign card (§38.4), in priority order: a hard stop that ends it · the membership ·
  * the rules · the logo · soft stops not accepted · a video to pick · Make clips. `button` is the screen's only
@@ -555,7 +589,7 @@ export function nextStepFor(g: GateInput): NextStep {
     const other = PICK_ANOTHER.includes(ending.code);
     return {
       kind: other ? "pick_another" : "stop",
-      chip: ending.code === "ended" || ending.code === "deadline" ? "Ended" : chip(g.membership),
+      chip: STOP_CHIP[ending.code] ?? chip(g.membership),
       text: ending.text,
       ...(ending.fixHref && !other ? { button: { label: ending.code === "no_place" ? "Set it up" : "Fix it", href: ending.fixHref, external: false } } : {}),
       ...(other ? { glass: [findAnother] } : {}),
@@ -584,7 +618,7 @@ export function nextStepFor(g: GateInput): NextStep {
         kind: "connect",
         chip: chip("unknown"),
         text: MEMBERSHIP_TEXT.unknown,
-        button: { label: "Connect Content Rewards", href: CR_SETUP_PATH, external: false },
+        button: { label: "Connect Content Rewards", href: crSetupFor(g.campaignId), external: false },
         glass: [openCampaign(g.url)],
         asks: quiet(["joined_by_hand"]),
       };
@@ -630,11 +664,11 @@ export function nextStepFor(g: GateInput): NextStep {
   }
   // In (listed) or manual: rules, logo, soft stops, a video, then Make clips.
   const inChip = chip(g.membership);
-  if (g.rulesState === "reading") return { kind: "stop", chip: inChip, text: stopText("rules_reading") };
+  if (g.rulesState === "reading") return { kind: "stop", chip: STOP_CHIP.rules_reading!, text: stopText("rules_reading") };
   if (g.membership === "manual" && (g.rulesState === "waiting_for_join" || (g.rulesState === "ready" && !g.hasRules)))
     return { kind: "rules_paste", chip: inChip, text: MEMBERSHIP_TEXT.rulesPaste, button: { label: "Open campaign", href: g.url, external: true } };
   if (g.rulesState === "failed")
-    return { kind: "rules_paste", chip: inChip, text: stopText("rules_failed"), button: { label: "Open campaign", href: g.url, external: true } };
+    return { kind: "rules_paste", chip: STOP_CHIP.rules_failed!, text: stopText("rules_failed"), button: { label: "Open campaign", href: g.url, external: true } };
   if (g.logoNeeded && !g.logoReady)
     return { kind: "logo", chip: inChip, text: stopText("logo_missing"), button: { label: "Add the logo", external: false, action: "logo_picker" } };
   const soft = g.stops.filter((s) => !s.hard && s.code !== "not_connected" && !g.anyway.includes(s.code));
@@ -651,11 +685,15 @@ export function nextStepFor(g: GateInput): NextStep {
   };
 }
 
-/** The phone's words for a next step: Connect only works on the Mac, so a phone gets no button (§38.4). */
+/**
+ * The phone's words for a next step: Connect itself only works on the Mac, so a phone's vermilion is "Set up Content
+ * Rewards", the same setup page with the way back (§39.1 change 8): steps 1 and 2 work there, step 3 says "Do this
+ * step on your Mac.".
+ */
 export function forDevice(step: NextStep, phone: boolean): NextStep {
   if (!phone || step.kind !== "connect") return step;
-  const { button: _b, ...rest } = step;
-  return { ...rest, text: MEMBERSHIP_TEXT.unknownPhone };
+  const href = step.button?.href && step.button.href.startsWith(CR_SETUP_PATH) ? step.button.href : CR_SETUP_PATH;
+  return { ...step, text: MEMBERSHIP_TEXT.unknownPhone, button: { label: "Set up Content Rewards", href, external: false } };
 }
 
 /**
@@ -707,7 +745,7 @@ export function placesLines(c: Pick<Campaign, "platformsPaid" | "uploadPlaces">)
   return out;
 }
 
-/** The places CR refused as not linked, among those the campaign pays for (they come back after "I linked it"). */
+/** The places CR refused as not added there, among those the campaign pays for (they come back after "I added it"). */
 export function unlinkedPlaces(c: Pick<Campaign, "platformsPaid">, conn: CrConnection | null | undefined): Platform[] {
   if (!conn) return [];
   return PLATFORM_ORDER.filter((p) => c.platformsPaid.includes(p) && conn.crLinked[p] === false);
@@ -727,11 +765,11 @@ export function reasonText(code: CrReasonCode, platform?: Platform, brandSaid?: 
   const quoted = brandSaid ? ` “${brandSaid.slice(0, 200)}”` : "";
   switch (code) {
     case "not_linked":
-      return `Content Rewards doesn't know this ${place} account. Open Content Rewards settings, tap **Accounts**, and connect it. Then tap I linked it.`;
+      return `Content Rewards doesn't know this ${place} account. Open Content Rewards settings, tap **Accounts**, and add it. Then tap I added it.`;
     case "not_on_application":
       return `Your ${place} account isn't on your application for this campaign. Open the campaign, tap **Add accounts**, and add it. The next clip will go.`;
     case "relink":
-      return `This campaign needs ${place} connected again on Content Rewards, with every box allowed. Open Content Rewards settings, then tap I linked it.`;
+      return `This campaign needs ${place} added again in Content Rewards, with every box allowed. Open Content Rewards settings, then tap I added it.`;
     case "wrong_place":
       return `This campaign doesn't pay for ${place}. Pick another campaign.`;
     case "too_short":
@@ -883,7 +921,7 @@ export function sendHints(platforms: readonly Platform[] = ["youtube"]): { see: 
     { see: "“Posts have to be submitted within 30 minutes”", do: "Too late for this one. Next time, send it as soon as I remind you." },
     ...(names.length ? names : ["YouTube"]).map((name) => ({
       see: `“You don't have a linked ${name} account”`,
-      do: "Tap Open Content Rewards settings below. Tap **Accounts**, and connect it. The next clip will go.",
+      do: "Tap Open Content Rewards settings below. Tap **Accounts**, and add it. The next clip will go.",
     })),
     { see: "“This post's account isn't on your application”", do: "Tap Open campaign below. Tap **Add accounts** and add it." },
     { see: "“already submitted”", do: "Nothing to do. It's in." },

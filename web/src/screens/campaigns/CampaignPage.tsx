@@ -118,6 +118,19 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
     return () => stop();
   }, [campaign, toast]);
 
+  // "Read the rules" (§39.3) opens this card at `#rules`: once the card is drawn, the rules come into view.
+  const toRules = useRef(typeof location !== "undefined" && location.hash === "#rules");
+  useEffect(() => {
+    if (!campaign || !toRules.current) return;
+    toRules.current = false;
+    const t = setTimeout(() => {
+      const el = document.getElementById("rules");
+      el?.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      el?.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
+    }, 60);
+    return () => clearTimeout(t);
+  }, [campaign]);
+
   const subs = useSubmissions({ campaignId }, !!campaign);
   // A clip that waits to be sent by hand now comes first: its Copy and open is the screen's vermilion (§38.6).
   const now = useNow(subs.subs.some((s) => s.state === "send_by_hand"));
@@ -324,8 +337,8 @@ function RulesSection({ c, onCampaign }: { c: Campaign; onCampaign: (c: Campaign
     }
   }
   return (
-    <section className="cr-rules" aria-labelledby="cr-rules-title">
-      <h2 className="cr-section__title" id="cr-rules-title">
+    <section className="cr-rules" id="rules" aria-labelledby="cr-rules-title">
+      <h2 className="cr-section__title" id="cr-rules-title" tabIndex={-1}>
         Rules I&apos;ll follow
       </h2>
       <div data-help="cr-rules">

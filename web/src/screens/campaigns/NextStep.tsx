@@ -9,7 +9,8 @@ import type { Campaign, SaidAnswer, StopCode } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, LinkButton } from "../../components/ui.tsx";
-import { CR_SETUP_PATH, MEMBERSHIP_TEXT, SOFT_STOPS, forDevice, refused, reloadCr, signedIn, useCr, vermilionOf } from "../../lib/contentRewards.ts";
+import { CR_SETUP_PATH, MEMBERSHIP_TEXT, SOFT_STOPS, crSetupFor, forDevice, refused, reloadCr, signedIn, useCr, vermilionOf } from "../../lib/contentRewards.ts";
+import { withBack } from "../../lib/backLink.ts";
 import { isTouchDevice } from "../../lib/crConnect.ts";
 import { Rich } from "../settings/setup/bits.tsx";
 import { GreenButton, OpenButton } from "./bits.tsx";
@@ -81,7 +82,12 @@ export function NextStepPanel({
   const toast = useToast();
   const cr = useCr();
   const conn = cr.state === "ok" ? cr.data.connection : null;
-  const step = forDevice(campaign.nextStep, isTouchDevice());
+  // Every link to a setup page leads back to this card (§39.1): the API's own href already does; an older one gets it.
+  const served = campaign.nextStep;
+  const withWayBack: typeof served = served.button?.href?.startsWith(CR_SETUP_PATH)
+    ? { ...served, button: { ...served.button, href: withBack(served.button.href, `/campaigns/${campaign.campaignId}`) } }
+    : served;
+  const step = forDevice(withWayBack, isTouchDevice());
   const [box, setBox] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   // "It says Submit clip" while the rules can't be read: the box opens at once (saying you're in and giving the
@@ -251,7 +257,7 @@ export function NextStepPanel({
             <Rich text={manualNote} />
           </p>
           {manualNote !== MANUAL_REFUSED ? (
-            <LinkButton href={CR_SETUP_PATH} variant="glass" icon="link">
+            <LinkButton href={crSetupFor(campaign.campaignId)} variant="glass" icon="link">
               Connect Content Rewards
             </LinkButton>
           ) : null}

@@ -30,7 +30,7 @@ describe("CR_GUIDE", () => {
 
   it("has exactly three numbered setup steps, in the contract's order", () => {
     expect(CR_SETUP_STEPS.map((s) => s.id)).toEqual(["ready-account", "ready-socials", "connect"]);
-    expect(CR_SETUP_STEPS.map((s) => s.title)).toEqual(["Make a Content Rewards account", "Connect your accounts there", "Connect Content Rewards"]);
+    expect(CR_SETUP_STEPS.map((s) => s.title)).toEqual(["Make a Content Rewards account", "Add your accounts there", "Connect Content Rewards"]);
     // The "said no?" card is unnumbered: it is not one of the three.
     expect(CR_SETUP_STEPS.map((s) => s.id)).not.toContain(CR_PILOT.id);
     expect(CR_GUIDE.parts.find((p) => p.id === "join")!.steps.map((s) => s.id)).toEqual(["join-find", "join-join", "join-copy"]);

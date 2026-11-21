@@ -18,7 +18,7 @@ How many steps each thing takes. Waiting is never a step: Clip Factory watches a
 
 | When | Your steps | What Clip Factory does by itself |
 |---|---|---|
-| Set up, once | **3**: make a Content Rewards account, connect the same accounts there, then "Connect Content Rewards" in the Mac app. (+1 only if Content Rewards says your account can't connect apps: send the email.) | Keeps you signed in. Warns you a week before you must sign in again (every 90 days). Reminds you every 3 days to try Connect again while the email waits. |
+| Set up, once | **3**: make a Content Rewards account (or tap "I have an account"), add the same accounts there (or tap "I added them"), then "Connect Content Rewards" in the Mac app. Already set up on Content Rewards? Tap "Yes" at the top and only "Connect Content Rewards" is left. (+1 only if Content Rewards says your account can't connect apps: send the email.) | Keeps you signed in. Warns you a week before you must sign in again (every 90 days). Reminds you every 3 days to try Connect again while the email waits. |
 | Each campaign | **3**: join it on Content Rewards, copy its link, then "Paste" and "Add campaign" in Clip Factory. **5 at most**: +1 when it needs a logo ("Add the logo"), and +1 "Yes, I applied" (optional) or, only while Content Rewards doesn't let Clip Factory look, "I'm in. Read these rules". | Reads the pay and the rules. Checks by itself whether you are in. Says "You're in!" |
 | Each video | **3**: "Make clips for this campaign", paste or pick the video, "Make clips". | Follows the rules on every clip. |
 | Each clip | **2**: "Use my settings", then "Upload to 2". | Paid partnership on. Only the places the campaign pays for. |
@@ -43,7 +43,7 @@ Whop's screens were not seen; those steps say "Whop may show this a little diffe
 | # | Step | Part |
 |---|---|---|
 | 1 | Make a Content Rewards account | Set up |
-| 2 | Connect your accounts there | Set up |
+| 2 | Add your accounts there | Set up |
 | 3 | Connect Content Rewards | Set up |
 | – | Content Rewards said no? (only if you need it) | Set up |
 | – | Pick a campaign | Add a campaign |
@@ -61,13 +61,17 @@ the Campaigns page and in the Money page's Content Rewards part.
 
 ### Part 1: Set up (once)
 
+Already use Content Rewards, with your accounts added there? The page asks it first: tap "Yes" and steps 1 and 2
+tick, so only step 3 is left. With a way back (for example from a campaign), the page's last button takes you back
+there once you are connected ("Back to FaZe Clips").
+
 #### 1. Make a Content Rewards account
-- Tap "Open Content Rewards" (contentrewards.com, the sign-up page).
-- You'll see **Create your account**. Type your email in **Email**. Tap **Send code**.
-- Type the 6 numbers from the email. Tap **Verify**.
-- Or tap **Continue with Google**.
+- Have one already? Tap "I have an account".
+- Tap "Open Content Rewards" (contentrewards.com, the sign-up page). "I have an account" sits right under it.
+- Tap **Continue with Google**. Pick your Google account.
+- Or type your email in **Email**. Tap **Send code**. Type the 6 numbers from the email. Tap **Verify**.
 - You must be 18 or older. One account per person.
-- Tap "I did this". The step also ticks itself when you connect (step 3).
+- Then come back to Clip Factory. Tap "I have an account". The step also ticks itself when you connect (step 3).
 
 | If you see | Do this |
 |---|---|
@@ -77,28 +81,30 @@ the Campaigns page and in the Money page's Content Rewards part.
 | A few questions after signing in | Answer them. Any answer is fine. |
 | A cookie bar | Tap **Accept** or **Decline**. Both are fine. |
 
-#### 2. Connect your accounts there
-- Tap "Open Content Rewards settings" (contentrewards.com/c/settings).
+#### 2. Add your accounts there
+- Already added YouTube there? Tap "I added them".
+- Tap "Open Content Rewards settings" (contentrewards.com/c/settings). "I added them" sits right under it.
 - Tap **Accounts**.
 - Tap **Connect account**. Tap YouTube.
 - On the next screen, leave every box ticked and tap Allow or Continue.
-- Do the same for Instagram, X and Facebook.
+- Add Instagram, X and Facebook the same way, if you post there.
 - Each one should say **Connected**.
 - The card lists the accounts Clip Factory posts to, for example "Clip Factory posts to: YouTube @faze · Instagram
-  @faze · X @faze · Facebook FaZe Page." Connect those same accounts.
+  @faze · X @faze · Facebook FaZe Page." Add those same accounts.
 - TikTok can wait. TikTok posts from Clip Factory stay private until TikTok checks the app, and private posts can't
   earn.
-- Tap "I did this". The step also ticks itself once Content Rewards takes a clip from one of your accounts.
+- Then come back to Clip Factory. Tap "I added them". The step also ticks itself once Content Rewards takes a clip
+  from one of your accounts.
 - If Content Rewards ever says it doesn't know an account, this step opens again with the line "Content Rewards
-  doesn't know your YouTube account. Connect it here, then tap I did this."
+  doesn't know your YouTube account. Add it in Content Rewards, then tap I added them."
 
 | If you see | Do this |
 |---|---|
 | No **Accounts** tab | Look for **Connected accounts**. |
 | **Verify** in red | Tap it and allow again. |
 | **Sign in again** | Tap it. |
-| **In review** | Nothing to do. Content Rewards links it for you. |
-| "already connected to another creator" | That account is on another Content Rewards account. Unlink it there, or ask Content Rewards support. |
+| **In review** | Nothing to do. Content Rewards adds it for you. |
+| "already connected to another creator" | That account is on another Content Rewards account. Take it off there, or ask Content Rewards support. |
 | "access wasn't granted" | Tap **Connect account** again and leave every box ticked. |
 | "No YouTube channel found" | Pick the Google account that owns your channel. |
 
@@ -109,7 +115,7 @@ Two questions open more lines on the card when they apply:
 - Tap "Open Instagram". Tap **More**, then **Settings**.
 - Tap **Account type and tools**.
 - Tap **Switch to professional account**. Tap **Business**, then **Next**.
-- Pick any category. Then connect Instagram again on Content Rewards.
+- Pick any category. Then add Instagram again on Content Rewards.
 
 *Content Rewards asks for a Facebook code?*
 - Tap **Connect account**, then Facebook. Type your Page name and tap **Continue**.
@@ -190,7 +196,7 @@ red button is "Open Content Rewards". Once a campaign link is in the box, "Add c
 
 #### Pick a campaign
 - Tap "Open Content Rewards" (contentrewards.com/c/discover).
-- Tap **Sort**, then **Highest CPM**. That shows the best pay first.
+- Tap **Sort**, then **Highest CPM**. That shows the most money for every 1,000 views first.
 - Pick one that pays for YouTube. Skip ones that need your face, a sound, or only TikTok.
 - Not sure? Paste its link here first. I'll check it before you join.
 
@@ -338,8 +344,8 @@ the red button is "Make clips anyway".
 - "Upload to" shows only the places this campaign pays for: "Only places this campaign pays for."
 - TikTok is left out for now: "Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't
   earn."
-- A place Content Rewards doesn't know yet: "Link YouTube inside Content Rewards first." Tap "Open Content Rewards
-  settings", connect it, then tap "I linked it". "Then tap I linked it. The next clip will go."
+- A place Content Rewards doesn't know yet: "Add YouTube in Content Rewards first." Tap "Open Content Rewards
+  settings", add it, then tap "I added it". "Then tap I added it. The next clip will go."
 - Tap "Use my settings". Campaign clips are public, never made for kids, and marked as paid. On YouTube that is Who can
   see it **Everyone**, Made for kids **No** and Paid promotion on, shown locked. X gets "Paid partnership: on".
   Instagram and Facebook don't let apps turn on Paid partnership, so "#Ad" and the words on the video tell viewers.
@@ -398,7 +404,7 @@ Mac app a green banner shows the same line on every page.
 | **Hold to confirm** | Press and hold it. |
 | A sign-in page | Type the email code, then tap **Submit clip**. |
 | "Posts have to be submitted within 30 minutes" | Too late for this one. Next time, send it as soon as I remind you. |
-| "You don't have a linked YouTube account" | Open Content Rewards settings, tap **Accounts**, and connect it. The next clip will go. |
+| "You don't have a linked YouTube account" | Open Content Rewards settings, tap **Accounts**, and add it. The next clip will go. |
 | "This post's account isn't on your application" | On the campaign page tap **Add accounts** and add it. |
 | "already submitted" | Nothing to do. It's in. |
 
