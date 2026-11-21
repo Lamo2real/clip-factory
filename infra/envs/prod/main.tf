@@ -240,6 +240,8 @@ module "stats" {
   # §38.12: Content Rewards checking rides the stats tick; a changed brief starts a rules read.
   content_rewards_enabled = var.content_rewards_enabled
   campaigns_function_arn  = module.contentrewards.campaigns_function_arn
+  # §41.5: the campaign finder's scheduled look rides the same tick (CR_FINDER), off until its switch PR.
+  cr_finder_enabled = var.cr_finder_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
@@ -247,7 +249,9 @@ module "stats" {
 
 # Content Rewards campaigns (docs/CONTRACTS.md §38.16): cf-prod-campaigns reads a campaign's rules, fetches a logo
 # link and copies the brand's picture. Additive: a new function, role, policy and log group; no secret access at all,
-# and the CR secrets are made at runtime, never here. Off (CONTENT_REWARDS=off) until the switch PR.
+# and the CR secrets are made at runtime, never here. Off (CONTENT_REWARDS=off) until the switch PR. Since §41 its
+# "find" action reads Content Rewards' public campaign pages that robots.txt allows (never its API) for the campaign
+# finder, behind CR_FINDER (cr_finder_enabled).
 module "contentrewards" {
   source                  = "../../modules/contentrewards"
   name                    = local.name
@@ -262,6 +266,8 @@ module "contentrewards" {
   model_invoke_arns       = local.model_invoke_arns
   app_url                 = module.frontend.app_url
   content_rewards_enabled = var.content_rewards_enabled
+  # §41.2: the campaign finder's look (CR_FINDER), off until its switch PR.
+  cr_finder_enabled = var.cr_finder_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
@@ -338,6 +344,8 @@ module "api" {
   campaigns_function_arn  = module.contentrewards.campaigns_function_arn
   # §39.3: the campaign copy of a clip (CR_REMAKE), on since its switch PR.
   cr_remake_enabled = var.cr_remake_enabled
+  # §41.5: the campaign finder's seven routes (CR_FINDER), 503 "Coming soon." until its switch PR.
+  cr_finder_enabled = var.cr_finder_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn

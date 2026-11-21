@@ -209,8 +209,9 @@ run "functions_match_the_contract" {
       STATS_TIME_BUDGET_SECONDS = "240"
       SECRET_PREFIX             = "cf-test/platforms/"
       CONTENT_REWARDS           = "off" # §38.16 module default
+      CR_FINDER                 = "off" # §41.6 module default
     })
-    error_message = "cf-prod-stats gets exactly TABLE_NAME, STATS_TIME_BUDGET_SECONDS = 240, SECRET_PREFIX (§17.9) and CONTENT_REWARDS off (§38.16)."
+    error_message = "cf-prod-stats gets exactly TABLE_NAME, STATS_TIME_BUDGET_SECONDS = 240, SECRET_PREFIX (§17.9), CONTENT_REWARDS off (§38.16) and CR_FINDER off (§41.6)."
   }
 
   assert {
@@ -503,5 +504,75 @@ run "content_rewards_switch_and_grant" {
       Sid = "Campaigns", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"]
     }
     error_message = "cf-prod-stats may invoke cf-prod-campaigns (a rules read) and nothing else new."
+  }
+}
+
+# docs/CONTRACTS.md §41.5 and §41.6: the campaign finder's scheduled look rides this tick (no new schedule, no new
+# grant): with CR_FINDER=on and a look due, the tick starts cf-prod-campaigns through the same Campaigns grant. Off by
+# default and independent of CONTENT_REWARDS; only cf-prod-stats gets it.
+run "cr_finder_switch_rides_the_tick" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    cr_finder_enabled       = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition = one(aws_lambda_function.fn["stats"].environment).variables == tomap({
+      TABLE_NAME                = "cf-test-data"
+      STATS_TIME_BUDGET_SECONDS = "240"
+      SECRET_PREFIX             = "cf-test/platforms/"
+      CONTENT_REWARDS           = "on"
+      CR_FINDER                 = "on"
+      CAMPAIGNS_FUNCTION_ARN    = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+    })
+    error_message = "With cr_finder_enabled, cf-prod-stats gets CR_FINDER on and nothing else new."
+  }
+
+  assert {
+    condition = (!contains(keys(one(aws_lambda_function.fn["learn"].environment).variables), "CR_FINDER") &&
+    !contains(keys(one(aws_lambda_function.fn["follow-tick"].environment).variables), "CR_FINDER"))
+    error_message = "Only cf-prod-stats starts finder looks: cf-prod-learn and cf-prod-follow-tick never get CR_FINDER."
+  }
+
+  assert {
+    condition = one([for s in jsondecode(aws_iam_role_policy.fn["stats"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == {
+      Sid = "Campaigns", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"]
+    }
+    error_message = "A scheduled look is started through the same cf-prod-campaigns invoke grant (InvocationType=Event)."
+  }
+
+  assert {
+    condition     = output.stats_tick_minutes <= 15 && output.schedule_rule_names == { stats = "cf-test-stats", follow-tick = "cf-test-follow-tick" }
+    error_message = "No new schedule: the finder rides the existing stats tick, at most 15 minutes apart (§41.2: a look is due every 6 h)."
+  }
+}
+
+run "cr_finder_off_with_content_rewards_on" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["stats"].environment).variables["CR_FINDER"] == "off"
+    error_message = "CR_FINDER has its own switch: Content Rewards on leaves the finder off."
+  }
+}
+
+# The finder switch reaches only the CR_FINDER env var: one use of var.cr_finder_enabled in this module, inside
+# cf-prod-stats' environment, so it can never add a grant, a schedule or replace anything.
+run "cr_finder_switch_only_sets_its_env_var" {
+  command = plan
+
+  assert {
+    condition = (one(aws_lambda_function.fn["stats"].environment).variables["CR_FINDER"] == "off" &&
+      length(regexall("var\\.cr_finder_enabled", file("main.tf"))) == 1 &&
+    length(regexall("(?m)^\\s+CR_FINDER\\s+=\\s+var\\.cr_finder_enabled \\? \"on\" : \"off\"$", file("main.tf"))) == 1)
+    error_message = "var.cr_finder_enabled is used once, as CR_FINDER = var.cr_finder_enabled ? \"on\" : \"off\"."
   }
 }

@@ -2,8 +2,8 @@
 #   cd infra/modules/notify && terraform init -backend=false && terraform test
 #
 # docs/CONTRACTS.md §32.2 and §32.5: the VAPID key is written only through the write-only argument (never in the plan
-# or the state) and is never destroyed; cf-prod-notify reads only MODIFY records of JOB# items, can never delete
-# anything and may read only its own secret.
+# or the state) and is never destroyed; cf-prod-notify reads only MODIFY records of JOB# items (and the Content
+# Rewards items of §38.11 and §41.4), can never delete anything and may read only its own secret.
 
 mock_provider "aws" {
   override_during = plan
@@ -57,8 +57,21 @@ run "notify_reads_job_changes_and_can_never_delete" {
   command = plan
 
   assert {
-    condition     = one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern == jsonencode({ eventName = ["MODIFY"], dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }] } } } })
-    error_message = "cf-test-notify reads only MODIFY records of JOB# items and the Content Rewards CAMPAIGN#, CRSUB#, CRMONEY and CRCONN items (§38.11), one pattern."
+    condition     = one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern == jsonencode({ eventName = ["MODIFY"], dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }, { prefix = "CRFIND" }] } } } })
+    error_message = "cf-test-notify reads only MODIFY records of JOB# items and the Content Rewards CAMPAIGN#, CRSUB#, CRMONEY, CRCONN (§38.11) and CRFIND (§41.4) items, one pattern."
+  }
+
+  # §41.4: "3 new campaigns match" comes from a MODIFY of CRFIND (the look only updates it, never creates it). The
+  # shared CRPUBLIC cache (CAMP#{uuid}, PUB#{uuid}, STATE), CROWNERS' USER# rows and the NOTIFIED# dedupe items never
+  # reach cf-test-notify.
+  assert {
+    condition = (
+      jsondecode(one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern).eventName == ["MODIFY"] &&
+      anytrue([for p in jsondecode(one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern).dynamodb.Keys.sk.S : startswith("CRFIND", p.prefix)]) &&
+      alltrue([for sk in ["CAMP#3d9ef19f-0000-4000-8000-000000000000", "PUB#3d9ef19f-0000-4000-8000-000000000000", "STATE", "USER#u1", "NOTIFIED#cr#finder:2026112112:3"] :
+      !anytrue([for p in jsondecode(one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern).dynamodb.Keys.sk.S : startswith(sk, p.prefix)])])
+    )
+    error_message = "Only MODIFY records; CRFIND must pass, CRPUBLIC's CAMP#, PUB# and STATE, CROWNERS' USER# and NOTIFIED# must not."
   }
 
   assert {
