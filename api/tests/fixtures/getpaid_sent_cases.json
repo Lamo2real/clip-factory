@@ -235,6 +235,36 @@
   "expect": {"state": "error", "headline": "Clip Factory couldn't check YouTube payments yet", "amounts": [], "why": "It tries again tomorrow."}
  },
  {
+  "name": "youtube: allowed again after Stop: the old read is not this connection's, so it is checking",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-21T11:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-18T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "checking", "headline": "Checking YouTube payments…", "amounts": [], "why": "This can take until tomorrow."}
+ },
+ {
+  "name": "youtube: allowed again after Stop, 26 hours and no new read",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-20T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-18T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "error", "headline": "Clip Factory couldn't check YouTube payments yet", "amounts": [], "why": "It tries again tomorrow."}
+ },
+ {
+  "name": "youtube: reads failing for 10 days never say nothing sent yet",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-11T06:00:00.000Z", "lastError": "Google said 500"},
+  "whopOn": false,
+  "expect": {"state": "error", "headline": "Clip Factory couldn't check YouTube payments lately", "amounts": [], "why": "Clip Factory last checked YouTube payments on 11 Nov."}
+ },
+ {
   "name": "youtube: reading needs a reconnect",
   "place": "youtube",
   "now": "2026-11-21T12:00:00.000Z",
@@ -295,6 +325,26 @@
   "expect": {"state": "none_yet", "headline": "Nothing sent to your bank yet", "amounts": [], "tag": "Whop says", "note": "Whop counts all your Whop money, not only Content Rewards."}
  },
  {
+  "name": "contentrewards: Whop connected again: the old read is not this connection's, so it is checking",
+  "place": "contentrewards",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "whop", "status": "connected", "connectedAt": "2026-11-21T11:00:00.000Z", "accountId": "user_abc123", "accountName": "@owner", "keyHint": "app_Ab…wxyz", "tokenVersionId": "v3"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-18T06:00:00.000Z"},
+  "whopOn": true,
+  "expect": {"state": "checking", "headline": "Checking your Whop payouts…", "amounts": [], "why": "This can take until tomorrow.", "note": "Whop counts all your Whop money, not only Content Rewards."}
+ },
+ {
+  "name": "contentrewards: Whop reads failing for 10 days never say nothing sent yet",
+  "place": "contentrewards",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "whop", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accountId": "user_abc123", "accountName": "@owner", "keyHint": "app_Ab…wxyz", "tokenVersionId": "v3"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-11T06:00:00.000Z", "lastError": "Whop said 500"},
+  "whopOn": true,
+  "expect": {"state": "error", "headline": "Clip Factory couldn't check your Whop payouts lately", "amounts": [], "why": "Clip Factory last checked Whop on 11 Nov.", "note": "Whop counts all your Whop money, not only Content Rewards."}
+ },
+ {
   "name": "contentrewards: Whop needs a reconnect",
   "place": "contentrewards",
   "now": "2026-11-21T12:00:00.000Z",
@@ -313,18 +363,23 @@
  },
  {
   "name": "only unread amounts: not added, never Nothing sent yet",
-  "lines": {"youtube": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [], "tag": "YouTube says", "notAdded": "Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up.", "button": {"label": "See them", "href": "/settings/posting/getpaid/youtube", "external": false}, "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": null, "currency": null, "text": "$1,234.57"}}, "tiktok": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}, "instagram": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}, "facebook": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}, "x": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}},
+  "lines": {"youtube": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [], "tag": "YouTube says", "notAdded": "Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up.", "button": {"label": "See them", "href": "/settings/posting/getpaid/youtube", "external": false}, "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": null, "currency": null, "text": "$1,234.57"}, "_unread": 3}, "tiktok": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}, "instagram": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}, "facebook": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}, "x": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}},
   "expect": {"totals": [], "tag": "Google says it sent it.", "notAdded": "Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up.", "notCountedText": "Not in this: TikTok, Instagram, Facebook and X (not available).", "bankText": "Clip Factory can't see your bank. Look in your bank's app to see what arrived."}
  },
  {
   "name": "some unread amounts",
-  "lines": {"youtube": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [{"currency": "SEK", "amountMicros": 1234560000}], "tag": "YouTube says", "notAdded": "1 payment isn't added up: Clip Factory couldn't tell its money type.", "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": 1234560000, "currency": "SEK"}}, "tiktok": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}, "instagram": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}, "facebook": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}, "x": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}, "contentrewards": {"state": "not_available", "headline": "Sent to your bank: not available from Content Rewards", "amounts": [], "where": {"text": "Look on Whop: **Balances**."}}},
+  "lines": {"youtube": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [{"currency": "SEK", "amountMicros": 1234560000}], "tag": "YouTube says", "notAdded": "1 payment isn't added up: Clip Factory couldn't tell its money type.", "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": 1234560000, "currency": "SEK"}, "_unread": 1}, "tiktok": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}, "instagram": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}, "facebook": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}, "x": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}, "contentrewards": {"state": "not_available", "headline": "Sent to your bank: not available from Content Rewards", "amounts": [], "where": {"text": "Look on Whop: **Balances**."}}},
   "expect": {"totals": [{"currency": "SEK", "amountMicros": 1234560000, "places": ["youtube"], "names": "YouTube"}], "tag": "Google says it sent it.", "notAdded": "Google sent 1 more payment. Clip Factory couldn't tell its money type, so it isn't added up.", "notCountedText": "Not in this: TikTok, Instagram, Facebook, X and Content Rewards (not available).", "bankText": "Clip Factory can't see your bank. Look in your bank's app to see what arrived."}
  },
  {
   "name": "nothing sent at all",
   "lines": {"youtube": {"state": "needs_reading", "headline": "Clip Factory can't see YouTube payments yet", "amounts": [], "button": {"label": "Allow payment reading", "href": "/settings/posting/getpaid/youtube#yt-reading", "external": false}}, "tiktok": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}, "instagram": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}, "facebook": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}, "x": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}},
-  "expect": {"totals": [], "tag": "Google and Whop say they sent it.", "notCountedText": "Not in this: YouTube (Clip Factory can't see it) · TikTok, Instagram, Facebook and X (not available).", "bankText": "Clip Factory can't see your bank. Look in your bank's app to see what arrived.", "empty": "Nothing sent to your bank yet."}
+  "expect": {"totals": [], "tag": "", "notCountedText": "Not in this: YouTube (Clip Factory can't see it) · TikTok, Instagram, Facebook and X (not available).", "bankText": "Clip Factory can't see your bank. Look in your bank's app to see what arrived.", "empty": "Nothing sent to your bank yet."}
+ },
+ {
+  "name": "nothing sent, Whop on: the tag names no one",
+  "lines": {"youtube": {"state": "none_yet", "headline": "Nothing sent to your bank yet", "amounts": [], "tag": "YouTube says"}, "tiktok": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}, "instagram": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}, "facebook": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}, "x": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}, "contentrewards": {"state": "none_yet", "headline": "Nothing sent to your bank yet", "amounts": [], "tag": "Whop says", "note": "Whop counts all your Whop money, not only Content Rewards."}},
+  "expect": {"totals": [], "tag": "", "notCountedText": "Not in this: YouTube and Content Rewards (nothing sent yet) · TikTok, Instagram, Facebook and X (not available).", "bankText": "Clip Factory can't see your bank. Look in your bank's app to see what arrived.", "empty": "Nothing sent to your bank yet."}
  }
 ],
 "payoutRows": [

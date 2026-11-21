@@ -171,3 +171,57 @@ def test_the_arrive_lines() -> None:
     assert line["arrive"] == "Whop says it should arrive by Sat 14 Nov."
     yt = sent.sent_line("youtube", [google("2026-10-23", "€1.00")], {"status": "connected"}, {}, now=NOW)
     assert yt["arrive"] == "Your bank gets it up to 7 workdays after Google sends it."
+
+
+def test_nothing_sent_yet_only_from_a_fresh_read_of_this_connection() -> None:
+    """§40.2: "Nothing sent to your bank yet · YouTube says" only from a fresh PAYSTATE# read since this connection."""
+    allowed_again = LINES["youtube: allowed again after Stop: the old read is not this connection's, so it is checking"]
+    assert allowed_again["expect"]["state"] == "checking"
+    failing = LINES["youtube: reads failing for 10 days never say nothing sent yet"]["expect"]
+    assert failing == {
+        "state": "error",
+        "headline": "Clip Factory couldn't check YouTube payments lately",
+        "amounts": [],
+        "why": "Clip Factory last checked YouTube payments on 11 Nov.",
+    }
+    whop_again = LINES["contentrewards: Whop connected again: the old read is not this connection's, so it is checking"]
+    assert whop_again["expect"]["state"] == "checking"
+    whop_failing = LINES["contentrewards: Whop reads failing for 10 days never say nothing sent yet"]["expect"]
+    assert (whop_failing["state"], whop_failing["why"]) == ("error", "Clip Factory last checked Whop on 11 Nov.")
+    for c in GOLDEN["lines"]:
+        if c["expect"]["state"] == "none_yet":
+            assert sent.fresh(c["conn"], c["state"], parse(c["now"])), c["name"]
+
+
+def test_read_since_connect() -> None:
+    conn = {"status": "connected", "connectedAt": "2026-11-21T11:00:00.000Z"}
+    assert not sent.read_since_connect(conn, {"firstReadDone": True, "lastCheckedAt": "2026-11-21T10:59:59.000Z"})
+    assert sent.read_since_connect(conn, {"firstReadDone": True, "lastCheckedAt": "2026-11-21T11:00:00.000Z"})
+    assert not sent.read_since_connect(conn, {"lastCheckedAt": "2026-11-21T11:30:00.000Z"})  # the first read isn't done
+    assert not sent.read_since_connect(conn, {"firstReadDone": True})
+    stopped = {"status": "not_connected", "stoppedAt": "2026-11-21T11:00:00.000Z"}  # Stop removed connectedAt
+    assert sent.read_since_connect(stopped, {"firstReadDone": True, "lastCheckedAt": "2026-11-20T06:00:00.000Z"})
+    assert not sent.fresh(stopped, {"firstReadDone": True, "lastCheckedAt": "2026-11-21T06:00:00.000Z"}, NOW)
+    assert not sent.fresh(conn, {"firstReadDone": True, "lastCheckedAt": "2026-11-21T11:30:00.000Z"}, None)
+
+
+def test_the_block_tag_names_only_who_sent_something() -> None:
+    assert TOTALS["nothing sent at all"]["tag"] == ""
+    assert TOTALS["nothing sent, Whop on: the tag names no one"]["tag"] == ""
+    assert TOTALS["only unread amounts: not added, never Nothing sent yet"]["tag"] == "Google says it sent it."
+    assert TOTALS["kronor and dollars are never added together, in the places' order"]["tag"] == (
+        "Google and Whop say they sent it."
+    )
+
+
+def test_the_not_added_count_never_comes_from_the_words() -> None:
+    """The block reads ``_unread``, so a copy change to the line's sentence can't change its count; ``public`` takes
+    ``_unread`` off before a line leaves."""
+    line = sent.sent_line("youtube", [google("2026-10-23", "$1,234.57"), google("2026-09-22", "$5")], {}, {})
+    assert line["_unread"] == 2
+    reworded = {**line, "notAdded": "Some payments have no money type."}
+    assert sent.sent_totals({"youtube": reworded})["notAdded"] == (
+        "Google sent 2 payments. Clip Factory couldn't tell their money type, so they aren't added up."
+    )
+    assert "_unread" not in sent.public(line)
+    assert all(not k.startswith("_") for c in GOLDEN["lines"] for k in c["expect"])

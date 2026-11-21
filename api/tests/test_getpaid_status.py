@@ -330,3 +330,33 @@ def test_the_steps_the_server_knows() -> None:
     }
     assert status.platform_step("yt-reading") is not None
     assert status.platform_step("yt-reading").manual is False  # type: ignore[union-attr]
+
+
+def test_an_old_read_never_speaks_for_a_new_connection() -> None:
+    """§40.2 freshness: after Stop and a new Allow (maybe another Google or Whop account), the old PAYSTATE# gives no
+    hold, no "last checked" and no "nothing sent yet": it is checking, then "couldn't check yet"."""
+    again = card("youtube: allowed again after Stop: an old read is checking, never last checked")
+    assert (again["status"], again["sent"]["state"]) == ("checking", "checking")
+    assert again["holds"] == []
+    assert "checkedAt" not in again
+    assert not any("last checked" in line for line in again["seen"])
+    late = card("youtube: allowed again after Stop, 26 hours and no new read: couldn't check yet")
+    assert "Clip Factory couldn't check YouTube payments yet. It tries again tomorrow." in late["seen"]
+    assert late["sent"]["state"] == "error"
+    paid = card("youtube: allowed again with a sent payment: Google sent money, no old last checked")
+    assert paid["line"] == "Google sent you money on 23 Oct. Clip Factory can't see YouTube payments now."
+    whop = card("contentrewards: Whop connected again: an old read with a hold is checking, never on hold")
+    assert (whop["status"], whop["holds"]) == ("checking", [])
+    failing = card("youtube: reads failing for 10 days: last checked, never no hold")
+    assert "Clip Factory last checked YouTube payments on 11 Nov." in failing["seen"]
+    assert failing["sent"]["state"] == "error"
+    assert not any("no hold" in line for line in [failing["line"], *failing["seen"]])
+
+
+def test_tiktok_in_sweden_says_the_creator_rewards_line_even_when_not_connected() -> None:
+    """The TikTok row of §40.2: a not_open country gives not_started with the Creator Rewards line. It comes from
+    TikTok's rules for his country, not from the connection."""
+    out = card("tiktok: not connected in Sweden: the Creator Rewards line, from TikTok's rules")
+    assert (out["status"], out["knownBy"], out["known"]) == ("not_started", "rules", "TikTok's rules for Sweden")
+    assert out["line"] == "Creator Rewards isn't open in Sweden. Gifts might be. Next: step 1, Turn on Gifts."
+    assert card("tiktok: not connected and nothing ticked: Clip Factory can't check")["status"] == "not_connected"

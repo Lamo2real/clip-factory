@@ -971,6 +971,20 @@ def _sent_cases() -> list[dict[str, Any]]:
             paystates={},
         ),
         money_case(
+            "sent to your bank: payment reading allowed again after Stop, the old read doesn't count",
+            payconns={"adsense": {**ADSENSE_ON, "connectedAt": "2026-11-19T14:00:00.000Z"}},
+            paystates={"youtube": {**READ, "lastCheckedAt": "2026-11-16T06:00:00.000Z"}},
+        ),
+        money_case(
+            "sent to your bank: reads failing for 10 days never say nothing sent yet",
+            payconns={"adsense": ADSENSE_ON, "whop": WHOP_ON},
+            paystates={
+                "youtube": {**READ, "lastCheckedAt": "2026-11-09T06:00:00.000Z", "lastError": "Google said 500"},
+                "contentrewards": {**READ, "lastCheckedAt": "2026-11-09T06:00:00.000Z", "lastError": "Whop said 500"},
+            },
+            whopOn=True,
+        ),
+        money_case(
             "sent to your bank: payment reading needs a reconnect",
             payconns={"adsense": {**ADSENSE_ON, "status": "needs_reconnect", "reason": "token_dead"}},
             paystates={"youtube": READ},

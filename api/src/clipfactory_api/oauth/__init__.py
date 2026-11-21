@@ -77,6 +77,12 @@ DEFAULT_PAYMENT_SCOPES: dict[str, tuple[str, ...]] = {
 PAYMENTS_GRANT = "payments"
 
 
+def state_label(platform: str, grant: str | None = None) -> str:
+    """What a state is signed for (§17.4's ``platform`` in the MAC). "Allow payment reading" signs for
+    ``youtube:payments``, so even an expired or reused one is known as such and sends him back to Get paid."""
+    return f"{platform}:{PAYMENTS_GRANT}" if grant == PAYMENTS_GRANT else platform
+
+
 def label(platform: str) -> str:
     return LABELS.get(platform, platform)
 

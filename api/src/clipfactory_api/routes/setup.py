@@ -30,6 +30,7 @@ from ..oauth import (
     providers,
     setup,
     state,
+    state_label,
 )
 from ..oauth.providers import AppKeys
 from ..oauth.tokens import ReconnectNeededError, SecretsTokenProvider
@@ -321,7 +322,7 @@ def connect(app: App, req: Request) -> Response:
     exp = int(now.timestamp()) + STATE_SECONDS
     key = env.state_key()
     nonce = state.new_nonce()
-    signed = state.sign(key, platform, nonce, exp)
+    signed = state.sign(key, state_label(platform, grant), nonce, exp)  # payments: its own label (§40.6)
     app.store.put(
         {
             "pk": setup.oauth_pk(nonce),

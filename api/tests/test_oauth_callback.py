@@ -581,3 +581,44 @@ def test_a_payments_grant_never_goes_through_save(
     out = hooks.handle(event, hooks_deps)
     assert out["headers"]["location"] == f"{APP_URL}/settings/posting/getpaid/youtube?result=payments_allowed"
     assert account(store, "youtube") is None  # no Account was made
+
+
+def test_a_payments_state_that_fails_goes_back_to_get_paid(
+    hooks_deps: hooks.HooksDeps, http: FakeHttp, store: db.Store
+) -> None:
+    """A payments state is signed for ``youtube:payments``: forged without its item, or carrying another grant, it
+    still lands on Get paid ("Tap Allow payment reading again"), never on the YouTube setup page."""
+    env = hooks_deps.oauth
+    assert env is not None
+    key = STATE_KEY.encode()
+
+    def result(platform: str, signed: str) -> str:
+        return callback.handle_callback(platform, {"code": "C", "state": signed}, store, env)
+
+    forged = state.sign(key, "youtube:payments", state.new_nonce(), 1_794_744_600)
+    assert result("youtube", forged) == "payments_error"
+    # The same label on a Connect item (no payments grant) is refused, never handed to Connect.
+    nonce = state.new_nonce()
+    store.put(
+        {
+            "pk": f"OAUTH#{nonce}",
+            "sk": "STATE",
+            "type": "oauth",
+            "userId": USER,
+            "platform": "youtube",
+            "redirectUri": f"{HOOKS_URL}/oauth/youtube/callback",
+        }
+    )
+    assert result("youtube", state.sign(key, "youtube:payments", nonce, 1_794_744_600)) == "payments_error"
+    # A payments label is YouTube's only: on another platform it is just a bad state.
+    assert result("tiktok", forged) == "expired"
+    assert http.calls == []
+    event = {
+        "httpMethod": "GET",
+        "resource": "/oauth/{platform}/callback",
+        "pathParameters": {"platform": "youtube"},
+        "queryStringParameters": {"code": "C", "state": forged},
+        "requestContext": {"requestId": "r"},
+    }
+    out = hooks.handle(event, hooks_deps)
+    assert out["headers"]["location"] == f"{APP_URL}/settings/posting/getpaid/youtube?result=payments_error"

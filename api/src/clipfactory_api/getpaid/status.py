@@ -27,10 +27,19 @@ from typing import Any
 
 from ..clock import parse
 from . import CR, PLACES, name
-from .sent import first_read_late, join, sent_line, short_day, whop_state, youtube_state
+from .sent import (
+    first_read_late,
+    fresh,
+    join,
+    public,
+    read_since_connect,
+    sent_line,
+    short_day,
+    whop_state,
+    youtube_state,
+)
 
 Item = dict[str, Any]
-FRESH_HOURS = 48
 HOLD_DAYS = 30
 MAX_SEEN = 6
 ADSENSE_URL = "https://adsense.google.com/"
@@ -243,26 +252,20 @@ def _int(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def fresh(conn: Mapping[str, Any], state: Mapping[str, Any], now: datetime) -> bool:
-    """A ``PAYSTATE#`` counts only when its connection is ``connected``, its first read is done and it was checked
-    within 48 hours, after the connection was made."""
-    if conn.get("status") != "connected" or not state.get("firstReadDone"):
-        return False
-    checked = parse(state.get("lastCheckedAt"))
-    if checked is None or now - checked > timedelta(hours=FRESH_HOURS):
-        return False
-    since = parse(conn.get("connectedAt"))
-    return since is None or checked >= since
-
-
 def checking_first_read(conn: Mapping[str, Any], state: Mapping[str, Any], now: datetime) -> bool:
+    """Connected, no read since this connection was made (an old read from before a Stop doesn't count), and not
+    late yet."""
     return (
-        conn.get("status") == "connected" and not state.get("firstReadDone") and not first_read_late(conn, state, now)
+        conn.get("status") == "connected"
+        and not read_since_connect(conn, state)
+        and not first_read_late(conn, state, now)
     )
 
 
 def _late(conn: Mapping[str, Any], state: Mapping[str, Any], now: datetime) -> bool:
-    return conn.get("status") == "connected" and not state.get("firstReadDone") and first_read_late(conn, state, now)
+    return (
+        conn.get("status") == "connected" and not read_since_connect(conn, state) and first_read_late(conn, state, now)
+    )
 
 
 @dataclass
@@ -721,7 +724,10 @@ def _status(f: _Facts) -> Item:
     # 8. Clip Factory can't check.
     has_reading = f.conn.get("status") in {"connected", "needs_reconnect"}
     has_tick = any(s.id in f.ticks for s in STEPS[f.place])
-    if not f.connected and not has_tick and not has_reading:
+    # TikTok in a country where Creator Rewards isn't open: that comes from TikTok's rules, not the connection, so
+    # its "not started" line (Gifts might be open) is said even when TikTok isn't connected (§40.2, the TikTok row).
+    tiktok_rules = f.place == "tiktok" and bool(f.inputs.get("notOpen"))
+    if not f.connected and not has_tick and not has_reading and not tiktok_rules:
         return {
             "status": "not_connected",
             "pill": "Clip Factory can't check",
@@ -780,7 +786,8 @@ def _said_done(f: _Facts) -> Item:
     }
     if f.place == "youtube" and f.sent_rows:
         day = _newest_day(f.sent_rows)
-        checked = short_day(f.state.get("lastCheckedAt"))
+        # Only a check made since this connection (or before a Stop) is "last checked"; never one from an old sign-in.
+        checked = short_day(f.state.get("lastCheckedAt")) if read_since_connect(f.conn, f.state) else ""
         tail = (
             f"Clip Factory last checked YouTube payments on {checked}."
             if checked
@@ -902,7 +909,7 @@ def _seen_youtube(f: _Facts) -> list[str]:
     if status == "connected" and not f.is_fresh:
         if _late(f.conn, f.state, f.now):
             out.append("Clip Factory couldn't check YouTube payments yet. It tries again tomorrow.")
-        elif f.state.get("firstReadDone") and checked:
+        elif read_since_connect(f.conn, f.state) and checked:
             out.append(f"Clip Factory last checked YouTube payments on {checked}.")
     elif status == "needs_reconnect":
         out.append("Clip Factory can't see YouTube payments anymore. Tap Allow payment reading again.")
@@ -940,7 +947,7 @@ def _seen_cr(f: _Facts) -> list[str]:
     elif status == "connected":
         if _late(f.conn, f.state, f.now):
             out.append("Clip Factory couldn't check your Whop payouts yet. It tries again tomorrow.")
-        elif f.state.get("firstReadDone") and short_day(f.state.get("lastCheckedAt")):
+        elif read_since_connect(f.conn, f.state) and short_day(f.state.get("lastCheckedAt")):
             out.append(f"Clip Factory last checked Whop on {short_day(f.state.get('lastCheckedAt'))}.")
     elif status == "needs_reconnect":
         out.append("Clip Factory can't see your Whop payouts anymore. Sign in to Whop again to see your payouts.")
@@ -1009,21 +1016,25 @@ def card(place: str, inputs: Mapping[str, Any], now: datetime) -> Item:
     out["steps"] = steps
     out["ring"] = {"done": len(f.numbered_done()), "total": len(f.numbered) or (1 if place == CR else 0)}
     out["seen"] = _seen(f)
-    out["sent"] = sent_line(
-        place,
-        [r for r in _list(inputs.get("payouts")) if isinstance(r, Mapping)],
-        _obj(inputs.get("payconn")),
-        _obj(inputs.get("paystate")),
-        whop_on=bool(inputs.get("whopOn")),
-        now=now,
+    out["sent"] = public(
+        sent_line(
+            place,
+            [r for r in _list(inputs.get("payouts")) if isinstance(r, Mapping)],
+            _obj(inputs.get("payconn")),
+            _obj(inputs.get("paystate")),
+            whop_on=bool(inputs.get("whopOn")),
+            now=now,
+        )
     )
     if place == "youtube":
         unpaid = _unpaid(f)
         if unpaid is not None:
             out["unpaid"] = {"text": unpaid["text"], "note": unpaid["note"]}
-    if f.state.get("lastCheckedAt") and (place == "youtube" or inputs.get("whopOn")):
+    # Only a check of this connection (a check from before a Stop and a new Allow is not this one's).
+    shown = place == "youtube" or inputs.get("whopOn")
+    if f.state.get("lastCheckedAt") and shown and read_since_connect(f.conn, f.state):
         out["checkedAt"] = f.state["lastCheckedAt"]
-    if f.state.get("lastError") and (place == "youtube" or inputs.get("whopOn")):
+    if f.state.get("lastError") and shown:
         out["lastError"] = str(f.state["lastError"])
     return out
 

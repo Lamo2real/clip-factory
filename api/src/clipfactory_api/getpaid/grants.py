@@ -27,7 +27,7 @@ from urllib.parse import quote, urlencode, urlsplit
 from .. import db
 from ..clock import iso
 from ..log import log
-from ..oauth import OAuthEnv, state
+from ..oauth import OAuthEnv, state, tokens
 from ..oauth.providers import FORM, GOOGLE_TOKEN, AppKeys, Fail, body, call
 from ..platforms.base import HttpRequest, HttpResponse, obj
 from . import ADSENSE, ADSENSE_SCOPE, WHOP, WHOP_API_VERSION, WHOP_SCOPES, payconn_sk
@@ -207,23 +207,31 @@ def save_payments_grant(
         "clientId": keys.client_id,
         "accounts": names,
     }
+    old = store.get(db.user_pk(user_id), payconn_sk(ADSENSE)) or {}
+    old_names = sorted(str(obj(a).get("name") or "") for a in old.get("accounts") or [])
     env.secrets.write(env.secrets.name(ADSENSE, "token"), token, platform=ADSENSE)
+    fields: Item = {
+        "status": "connected",
+        "accounts": [
+            {"name": str(a["name"]), "displayName": str(a.get("displayName") or "")[:80]}
+            for a in accounts[:MAX_ACCOUNTS]
+        ],
+        "scopes": sorted(granted),
+        "lastResult": "payments_allowed",
+    }
+    # A second Allow keeps the first moment, unless it is other AdSense accounts: then the stored read is not theirs
+    # and must not look fresh (§40.2), so the connection starts again now.
+    other = bool(old_names) and old_names != sorted(names)
+    if other:
+        fields["connectedAt"] = iso(now)
     mark(
         store,
         user_id,
         ADSENSE,
         now,
-        {
-            "status": "connected",
-            "accounts": [
-                {"name": str(a["name"]), "displayName": str(a.get("displayName") or "")[:80]}
-                for a in accounts[:MAX_ACCOUNTS]
-            ],
-            "scopes": sorted(granted),
-            "lastResult": "payments_allowed",
-        },
+        fields,
         remove=("reason", "stoppedAt"),
-        first={"connectedAt": iso(now)},  # a second Allow keeps the first moment
+        first=None if other else {"connectedAt": iso(now)},
     )
     log("info", "getpaid.payments_allowed", accounts=len(names))
     return "payments_allowed"
@@ -349,7 +357,8 @@ def save_whop_grant(
     verifier: str,
 ) -> str:
     """The public-client code exchange (``client_id`` and ``code_verifier``, no secret), the four read scopes, then
-    ``users/me`` for the ``user_`` id and name; the token secret and ``PAYCONN#whop`` only after all of that."""
+    ``users/me`` for the ``user_`` id and name; the token secret and ``PAYCONN#whop`` only after all of that, under
+    ``PAYCONN#whop``'s refresh lease (held by a refresh → ``whop_error``, nothing written)."""
     now = env.clock()
     meta = whop_metadata(env)
     if meta is None:
@@ -392,7 +401,17 @@ def save_whop_grant(
         "scope": " ".join(sorted(granted)),
         "whopUserId": whop_id,
     }
-    version = env.secrets.write(env.secrets.name(WHOP, "token"), token, platform=WHOP)
+    # Whop's refresh tokens rotate and L refreshes under PAYCONN#whop's lease: take it first, so a refresh of an old
+    # sign-in can't land between the new token and its tokenVersionId. Held → nothing is written.
+    pk, sk = db.user_pk(user_id), payconn_sk(WHOP)
+    if store.get(pk, sk) is not None and not tokens.take_lease(store, pk, sk, now):
+        log("info", "getpaid.whop_busy")
+        return "whop_error"
+    try:
+        version = env.secrets.write(env.secrets.name(WHOP, "token"), token, platform=WHOP)
+    except Exception:
+        tokens.clear_lease(store, pk, sk)
+        raise
     fields: Item = {
         "status": "connected",
         "accountId": whop_id,
@@ -403,7 +422,7 @@ def save_whop_grant(
     }
     if version:
         fields["tokenVersionId"] = version
-    mark(store, user_id, WHOP, now, fields, remove=("reason", "stoppedAt"))
+    mark(store, user_id, WHOP, now, fields, remove=("reason", "stoppedAt", "refreshLeaseUntil"))
     log("info", "getpaid.whop_connected")
     return "whop_connected"
 

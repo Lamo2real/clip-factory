@@ -10,6 +10,8 @@
 * ``sent_totals(lines)``: the "Sent to your bank, so far" block: one line per money type in the places' order, never
   added across money types and never ranked against each other.
 * ``payout_rows(place, rows)``: the place page's rows, newest first.
+* ``fresh(conn, state, now)`` / ``read_since_connect(conn, state)``: a ``PAYSTATE#`` counts only when it was read
+  after this connection was made, and within 48 hours (§40.2). "Nothing sent yet" and "last checked" say only that.
 
 "Sent to your bank" is what Google or Whop say they sent; it is never "reached your bank" (only a bank-booked credit
 is, §40.5, not built). ``web/src/api/mock/moneyEverywhere.ts`` holds a line-for-line copy of ``sent_line`` and
@@ -31,6 +33,7 @@ Item = dict[str, Any]
 MICROS = 1_000_000
 MAX_AMOUNT_CHARS = 64
 CHECKING_HOURS = 26
+FRESH_HOURS = 48
 _CODE = re.compile(r"(?<![A-Za-z])([A-Z]{3})(?![A-Za-z])")
 _SYMBOLS = {"€": "EUR", "£": "GBP", "₹": "INR"}
 _NUMBER = re.compile("[0-9](?:[0-9 \u00a0\u202f'\u2019.,]*[0-9])?")
@@ -76,6 +79,7 @@ NOT_AVAILABLE: dict[str, Item] = {
 # The block's names per place ("$210.00 · Whop (all your Whop money, Content Rewards too)").
 TOTAL_NAMES = {"youtube": "YouTube", CR: "Whop (all your Whop money, Content Rewards too)"}
 BY = {"youtube": "Google", CR: "Whop"}
+UNREAD = "_unread"
 STATE_WORDS = {
     "not_available": "not available",
     "needs_reading": "Clip Factory can't see it",
@@ -276,6 +280,28 @@ def first_read_late(conn: Mapping[str, Any], state: Mapping[str, Any], now: date
     return started is None or now is None or now - started >= timedelta(hours=CHECKING_HOURS)
 
 
+def read_since_connect(conn: Mapping[str, Any], state: Mapping[str, Any]) -> bool:
+    """The first read is done and its last check came after this connection was made. "Stop" keeps the
+    ``PAYSTATE#`` (records of real money) but removes ``connectedAt``, so after a new Allow the old read never
+    counts until a new one is done."""
+    if not state.get("firstReadDone"):
+        return False
+    since = parse(conn.get("connectedAt"))
+    if since is None:
+        return True
+    checked = parse(state.get("lastCheckedAt"))
+    return checked is not None and checked >= since
+
+
+def fresh(conn: Mapping[str, Any], state: Mapping[str, Any], now: datetime | None) -> bool:
+    """A ``PAYSTATE#`` counts only when its connection is ``connected``, its first read is done and it was checked
+    within 48 hours, after the connection was made (§40.2)."""
+    if conn.get("status") != "connected" or not read_since_connect(conn, state):
+        return False
+    checked = parse(state.get("lastCheckedAt"))
+    return checked is not None and now is not None and now - checked <= timedelta(hours=FRESH_HOURS)
+
+
 def _unread_text(by: str, count: int, *, more: bool, what: str = "payment") -> str:
     things = what if count == 1 else f"{what}s"
     extra = " more" if more else ""
@@ -329,6 +355,8 @@ def _number_line(place: str, sent: list[Mapping[str, Any]]) -> Item:
         out["arrive"] = f"Whop says it should arrive by {arrival}." if arrival else WHOP_ARRIVE_SOON
         out["note"] = WHOP_NOTE
     out["last"] = last
+    if unread:
+        out[UNREAD] = unread  # for sent_totals only; ``public`` takes it off before it leaves
     return out
 
 
@@ -343,8 +371,15 @@ def _youtube(rows: Sequence[Mapping[str, Any]], conn: Mapping[str, Any], state: 
             out["note"] = f"Clip Factory stopped reading on {short_day(conn.get('stoppedAt'))}."
         return out
     if status == "connected":
-        if state.get("firstReadDone"):
+        if fresh(conn, state, now):
             return _line("none_yet", "Nothing sent to your bank yet", tag="YouTube says")
+        if read_since_connect(conn, state):
+            checked = short_day(state.get("lastCheckedAt"))
+            return _line(
+                "error",
+                "Clip Factory couldn't check YouTube payments lately",
+                why=f"Clip Factory last checked YouTube payments on {checked}." if checked else None,
+            )
         if not first_read_late(conn, state, now):
             return _line("checking", "Checking YouTube payments…", why="This can take until tomorrow.")
         return _line("error", "Clip Factory couldn't check YouTube payments yet", why="It tries again tomorrow.")
@@ -368,8 +403,16 @@ def _whop(
         return _number_line(CR, sent)
     button = {"label": "Connect Whop", "href": WHOP_CARD, "external": False} if whop_on else None
     if status == "connected":
-        if state.get("firstReadDone"):
+        if fresh(conn, state, now):
             return _line("none_yet", "Nothing sent to your bank yet", tag="Whop says", note=WHOP_NOTE)
+        if read_since_connect(conn, state):
+            checked = short_day(state.get("lastCheckedAt"))
+            return _line(
+                "error",
+                "Clip Factory couldn't check your Whop payouts lately",
+                why=f"Clip Factory last checked Whop on {checked}." if checked else None,
+                note=WHOP_NOTE,
+            )
         if not first_read_late(conn, state, now):
             return _line("checking", "Checking your Whop payouts…", why="This can take until tomorrow.", note=WHOP_NOTE)
         return _line(
@@ -390,6 +433,11 @@ def _whop(
     )
 
 
+def public(line: Mapping[str, Any]) -> Item:
+    """The line as it leaves (a response or a golden file): without the keys only ``sent_totals`` reads."""
+    return {k: v for k, v in line.items() if not k.startswith("_")}
+
+
 def sent_line(
     place: str,
     rows: Sequence[Mapping[str, Any]] | None,
@@ -400,7 +448,8 @@ def sent_line(
     now: datetime | None = None,
 ) -> Item:
     """One place's ``SentLine``. ``rows``: its ``PAYOUT#`` items; ``conn``: its reading connection (``PAYCONN#adsense``
-    for YouTube, ``PAYCONN#whop`` for Content Rewards); ``state``: its ``PAYSTATE#``."""
+    for YouTube, ``PAYCONN#whop`` for Content Rewards); ``state``: its ``PAYSTATE#``. It may carry ``_unread`` (how
+    many sent rows couldn't be read) for ``sent_totals``: pass it through ``public`` before it leaves."""
     if place == "youtube":
         return _youtube(list(rows or []), conn or {}, state or {}, now)
     if place == CR:
@@ -412,16 +461,14 @@ def sent_line(
 # --- the block ----------------------------------------------------------------------------------------------------
 
 
-_COUNT = re.compile(r"(\d+)(?: more)? (?:payment|payout)s?\b")
-
-
 def _unread_count(line: Mapping[str, Any]) -> int:
-    found = _COUNT.search(str(line.get("notAdded") or ""))
-    return int(found.group(1)) if found else 0
+    count = line.get(UNREAD)
+    return count if isinstance(count, int) and not isinstance(count, bool) and count > 0 else 0
 
 
 def sent_totals(lines: Mapping[str, Mapping[str, Any]]) -> Item:
-    """The "Sent to your bank, so far" block from each place's ``SentLine`` (in the places' order)."""
+    """The "Sent to your bank, so far" block from each place's ``SentLine`` (in the places' order; the lines as
+    ``sent_line`` made them, with ``_unread``)."""
     by: dict[str, Item] = {}
     first: dict[str, int] = {}
     who: list[str] = []
@@ -453,7 +500,8 @@ def sent_totals(lines: Mapping[str, Mapping[str, Any]]) -> Item:
     for t in totals:
         t["names"] = join([TOTAL_NAMES.get(p, name(p)) for p in t["places"]])
     out: Item = {"totals": totals}
-    out["tag"] = f"{who[0]} says it sent it." if len(who) == 1 else "Google and Whop say they sent it."
+    # Only who really sent something speaks; with nothing sent the tag stays empty (the key stays: the same shape).
+    out["tag"] = f"{who[0]} says it sent it." if len(who) == 1 else "Google and Whop say they sent it." if who else ""
     if not_added:
         out["notAdded"] = " ".join(not_added)
     if groups:

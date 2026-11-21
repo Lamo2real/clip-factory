@@ -346,7 +346,7 @@ def everywhere(  # noqa: PLR0917 (the inputs of §39.2, in its order)
             whop_on=whop_on,
             now=today,
         )
-        row["sent"] = lines[place]
+        row["sent"] = getpaid_sent.public(lines[place])
     out: Item = {
         "from": start.isoformat(),
         "to": end.isoformat(),

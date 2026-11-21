@@ -321,6 +321,41 @@ def _youtube_cases() -> list[dict[str, Any]]:
             payouts=sent_rows,
         ),
         card_case(
+            "youtube: allowed again after Stop: an old read is checking, never last checked",
+            "youtube",
+            moneyState=IN,
+            ticks=["yt-tax"],
+            payconn={**ADSENSE, "connectedAt": "2026-11-21T11:00:00.000Z"},
+            paystate=yt_state(
+                lastCheckedAt="2026-11-18T06:00:00.000Z",
+                holds=[{"type": "payment-hold", "text": "Old hold"}],
+            ),
+        ),
+        card_case(
+            "youtube: allowed again after Stop, 26 hours and no new read: couldn't check yet",
+            "youtube",
+            moneyState=IN,
+            ticks=["yt-tax"],
+            payconn={**ADSENSE, "connectedAt": "2026-11-20T09:00:00.000Z"},
+            paystate=yt_state(lastCheckedAt="2026-11-18T06:00:00.000Z"),
+        ),
+        card_case(
+            "youtube: reads failing for 10 days: last checked, never no hold",
+            "youtube",
+            moneyState=IN,
+            ticks=YT_PAYOUT_STEPS,
+            payconn=ADSENSE,
+            paystate=yt_state(lastCheckedAt="2026-11-11T06:00:00.000Z", lastError="Google said 500"),
+        ),
+        card_case(
+            "youtube: allowed again with a sent payment: Google sent money, no old last checked",
+            "youtube",
+            moneyState=IN,
+            payconn={**ADSENSE, "connectedAt": "2026-11-19T09:00:00.000Z"},
+            paystate=yt_state(lastCheckedAt="2026-11-18T06:00:00.000Z"),
+            payouts=sent_rows,
+        ),
+        card_case(
             "youtube: a read over 48 hours old is never used",
             "youtube",
             moneyState=IN,
@@ -362,6 +397,12 @@ def _platform_cases() -> list[dict[str, Any]]:
             countryName="Somewhere else",
         ),
         card_case("tiktok: not connected and nothing ticked: Clip Factory can't check", "tiktok", connected=False),
+        card_case(
+            "tiktok: not connected in Sweden: the Creator Rewards line, from TikTok's rules",
+            "tiktok",
+            connected=False,
+            notOpen=True,
+        ),
         card_case("tiktok: Gifts on, payout not ticked is Not set up yet", "tiktok", ticks=["tt-gifts"]),
         card_case(
             "tiktok: Gifts on and payout ticked is you said it's done", "tiktok", ticks=["tt-gifts", "tt-payout"]
@@ -576,6 +617,22 @@ def _cr_cases() -> list[dict[str, Any]]:
             payconn={**WHOP_CONN, "connectedAt": "2026-11-21T11:00:00.000Z"},
         ),
         card_case(
+            "contentrewards: Whop connected again: an old read with a hold is checking, never on hold",
+            CR,
+            crMoney=MONEY,
+            ticks=["move-whop", "bank-setup"],
+            payconn={**WHOP_CONN, "connectedAt": "2026-11-21T11:00:00.000Z"},
+            paystate=whop_state(kyc="rejected", lastCheckedAt="2026-11-18T06:00:00.000Z"),
+        ),
+        card_case(
+            "contentrewards: Whop reads failing for 10 days: last checked, no Whop status",
+            CR,
+            crMoney=MONEY,
+            ticks=["move-whop", "bank-setup"],
+            payconn=WHOP_CONN,
+            paystate=whop_state(lastCheckedAt="2026-11-11T06:00:00.000Z", lastError="Whop said 500"),
+        ),
+        card_case(
             "contentrewards: Whop needs a reconnect is next when nothing else is",
             CR,
             crMoney=MONEY,
@@ -723,6 +780,24 @@ def _line_cases() -> list[dict[str, Any]]:
         ),
         line_case("youtube: the first read is late", "youtube", conn=ADSENSE),
         line_case(
+            "youtube: allowed again after Stop: the old read is not this connection's, so it is checking",
+            "youtube",
+            conn={**ADSENSE, "connectedAt": "2026-11-21T11:00:00.000Z"},
+            state={"firstReadDone": True, "lastCheckedAt": "2026-11-18T06:00:00.000Z"},
+        ),
+        line_case(
+            "youtube: allowed again after Stop, 26 hours and no new read",
+            "youtube",
+            conn={**ADSENSE, "connectedAt": "2026-11-20T09:00:00.000Z"},
+            state={"firstReadDone": True, "lastCheckedAt": "2026-11-18T06:00:00.000Z"},
+        ),
+        line_case(
+            "youtube: reads failing for 10 days never say nothing sent yet",
+            "youtube",
+            conn=ADSENSE,
+            state={"firstReadDone": True, "lastCheckedAt": "2026-11-11T06:00:00.000Z", "lastError": "Google said 500"},
+        ),
+        line_case(
             "youtube: reading needs a reconnect",
             "youtube",
             conn={**ADSENSE, "status": "needs_reconnect", "reason": "keys_changed"},
@@ -753,6 +828,20 @@ def _line_cases() -> list[dict[str, Any]]:
         ),
         line_case("contentrewards: Whop connected, nothing sent yet", CR, conn=WHOP_CONN, state=read, whopOn=True),
         line_case(
+            "contentrewards: Whop connected again: the old read is not this connection's, so it is checking",
+            CR,
+            conn={**WHOP_CONN, "connectedAt": "2026-11-21T11:00:00.000Z"},
+            state={"firstReadDone": True, "lastCheckedAt": "2026-11-18T06:00:00.000Z"},
+            whopOn=True,
+        ),
+        line_case(
+            "contentrewards: Whop reads failing for 10 days never say nothing sent yet",
+            CR,
+            conn=WHOP_CONN,
+            state={"firstReadDone": True, "lastCheckedAt": "2026-11-11T06:00:00.000Z", "lastError": "Whop said 500"},
+            whopOn=True,
+        ),
+        line_case(
             "contentrewards: Whop needs a reconnect",
             CR,
             conn={**WHOP_CONN, "status": "needs_reconnect"},
@@ -762,8 +851,14 @@ def _line_cases() -> list[dict[str, Any]]:
     ]
 
 
-def line_run(c: dict[str, Any]) -> dict[str, Any]:
+def line_full(c: dict[str, Any]) -> dict[str, Any]:
+    """The line as ``sent_totals`` gets it (with ``_unread``)."""
     return sent.sent_line(c["place"], c["rows"], c["conn"], c["state"], whop_on=c["whopOn"], now=parse(c["now"]))
+
+
+def line_run(c: dict[str, Any]) -> dict[str, Any]:
+    """The line as it leaves (``sent.public``)."""
+    return sent.public(line_full(c))
 
 
 def build_sent() -> dict[str, Any]:
@@ -774,7 +869,7 @@ def build_sent() -> dict[str, Any]:
     lines = _line_cases()
     for c in lines:
         c["expect"] = line_run(c)
-    by = {c["name"]: c["expect"] for c in lines}
+    by = {c["name"]: line_full(c) for c in lines}
     na = {p: by[f"{p}: not available, never $0"] for p in ("tiktok", "instagram", "facebook", "x")}
     totals_cases = [
         (
@@ -798,6 +893,14 @@ def build_sent() -> dict[str, Any]:
             },
         ),
         ("nothing sent at all", {"youtube": by["youtube: no payment reading"], **na}),
+        (
+            "nothing sent, Whop on: the tag names no one",
+            {
+                "youtube": by["youtube: reading on, nothing sent yet"],
+                **na,
+                CR: by["contentrewards: Whop connected, nothing sent yet"],
+            },
+        ),
     ]
     totals = [{"name": n, "lines": ls, "expect": sent.sent_totals(ls)} for n, ls in totals_cases]
     rows = [

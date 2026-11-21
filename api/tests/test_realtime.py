@@ -557,6 +557,34 @@ def test_broadcast_get_paid_is_partial(
     assert "pub-" not in json.dumps(management.sent)
 
 
+def test_broadcast_sends_get_paid_once_per_owner_per_batch(
+    bc_deps: broadcast.BroadcastDeps, management: FakeManagement, table: FakeTable
+) -> None:
+    """A first read writes many PAYOUT# rows: they are all the same partial message, so each open connection gets it
+    once; the kept change carries every record's sequence number (a failed query retries them all)."""
+
+    def payout(day: str, seq: str, user: str = USER) -> dict[str, Any]:
+        item = {"pk": f"USER#{user}", "sk": f"PAYOUT#youtube#{day}#3456", "type": "payout", "userId": user}
+        return _record(item, event="INSERT", seq=seq)
+
+    records = [payout(f"2026-0{m}-23", str(m)) for m in range(1, 6)]
+    records.append(_record(_job(), seq="20"))
+    records.append(payout("2026-07-23", "30", OTHER))
+    broadcast.process({"Records": records}, bc_deps)
+    message = {"type": "getpaid", "op": "upsert", "id": "getpaid", "partial": True}
+    mine = [(c, m) for c, m in management.sent if c in {"c1", "c2"} and m["type"] == "getpaid"]
+    assert sorted(mine, key=lambda x: x[0]) == [("c1", message), ("c2", message)]
+    assert [m["type"] for c, m in management.sent if c == "c1"] == ["getpaid", "job"]  # other changes still go
+    assert [m for c, m in management.sent if c == "o1"] == [message]  # each owner gets his own
+    changes = broadcast.collect(records, broadcast._deserializer())
+    kept = [c for c in changes if c.kind == "getpaid" and c.user_id == USER]
+    assert len(kept) == 1
+    assert kept[0].sequence_numbers == ("1", "2", "3", "4", "5")
+    table.fail_queries = True
+    out = broadcast.process({"Records": records[:5]}, bc_deps)
+    assert out == {"batchItemFailures": [{"itemIdentifier": str(m)} for m in range(1, 6)]}
+
+
 def test_broadcast_never_sends_crstate_or_crowners(
     bc_deps: broadcast.BroadcastDeps, management: FakeManagement
 ) -> None:

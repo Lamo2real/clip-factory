@@ -157,7 +157,10 @@ def test_the_payments_authorize_url_asks_for_the_adsense_scope_only(call: Call, 
     assert "include_granted_scopes" not in q
     assert (q["access_type"], q["prompt"]) == (["offline"], ["consent select_account"])
     assert q["redirect_uri"] == [f"{HOOKS_URL}/oauth/youtube/callback"]  # the same YouTube keys and redirect
-    nonce = state.verify(STATE_KEY.encode(), "youtube", signed, 1_794_744_000)
+    # Signed for its own label, so a failed one is known as payment reading and goes back to Get paid.
+    nonce = state.verify(STATE_KEY.encode(), "youtube:payments", signed, 1_794_744_000)
+    with pytest.raises(state.StateError):
+        state.verify(STATE_KEY.encode(), "youtube", signed, 1_794_744_000)
     assert q["code_challenge"] == [state.pkce(STATE_KEY.encode(), nonce)[1]]
     assert q["code_challenge_method"] == ["S256"]
     item = next(i for i in table.all() if str(i["pk"]).startswith("OAUTH#"))
@@ -291,16 +294,74 @@ def test_only_the_adsense_scope_is_checked(
     assert back(hooks_deps, "youtube", {"code": "4/CODE", "state": signed})[1] == "payments_allowed"
 
 
-def test_a_reused_or_expired_payments_state_writes_nothing(
+def test_a_reused_or_expired_payments_state_writes_nothing_and_goes_back_to_get_paid(
     call: Call, hooks_deps: hooks.HooksDeps, http: FakeHttp, table: FakeTable, clock: Clock
 ) -> None:
     signed, _ = payments_start(call)
     http.answers.extend([(200, GOOGLE_TOKEN), (200, ACCOUNTS)])
     assert back(hooks_deps, "youtube", {"code": "4/CODE", "state": signed})[1] == "payments_allowed"
     before = snapshot(table)
+    calls = len(http.calls)
+    # Used once already: back to Get paid ("Tap Allow payment reading again"), never "Press Connect YouTube again".
     page, result = back(hooks_deps, "youtube", {"code": "4/CODE", "state": signed})
-    assert (page, result) == ("/settings/posting/setup/youtube", "expired")  # no grant survives a used state
+    assert (page, result) == ("/settings/posting/getpaid/youtube", "payments_error")
+    # Expired (more than 10 minutes on Google's pages): the same.
+    late, _ = payments_start(call)
+    clock.now = clock.now.replace(minute=11)
+    page, result = back(hooks_deps, "youtube", {"code": "4/CODE", "state": late})
+    assert (page, result) == ("/settings/posting/getpaid/youtube", "payments_error")
+    assert len(http.calls) == calls
     assert snapshot(table) == before
+    # A tampered one can't be told apart from any other: the setup page's "expired", as before.
+    assert back(hooks_deps, "youtube", {"code": "4/CODE", "state": late[:-2] + "AA"}) == (
+        "/settings/posting/setup/youtube",
+        "expired",
+    )
+
+
+def test_a_failing_save_goes_back_to_get_paid(
+    call: Call,
+    hooks_deps: hooks.HooksDeps,
+    http: FakeHttp,
+    store: db.Store,
+    table: FakeTable,
+    secrets_client: FakeSecretsManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed_youtube(store, secrets_client)
+    signed, _ = payments_start(call)
+    before = snapshot(table)
+
+    def broken(*_a: Any, **_k: Any) -> Any:
+        raise RuntimeError("Secrets Manager is down")
+
+    monkeypatch.setattr(hooks_deps.oauth.secrets, "write", broken)  # type: ignore[union-attr]
+    http.answers.extend([(200, GOOGLE_TOKEN), (200, ACCOUNTS)])
+    page, result = back(hooks_deps, "youtube", {"code": "4/CODE", "state": signed})
+    assert (page, result) == ("/settings/posting/getpaid/youtube", "payments_error")
+    assert snapshot(table) == before
+    assert "cf-prod/platforms/adsense/token" not in secrets_client.values
+
+
+def test_a_second_allow_keeps_the_moment_but_other_accounts_start_again(
+    call: Call, hooks_deps: hooks.HooksDeps, http: FakeHttp, store: db.Store, clock: Clock
+) -> None:
+    signed, _ = payments_start(call)
+    http.answers.extend([(200, GOOGLE_TOKEN), (200, ACCOUNTS)])
+    assert back(hooks_deps, "youtube", {"code": "4/CODE", "state": signed})[1] == "payments_allowed"
+    first = (store.get(PK, "PAYCONN#adsense") or {})["connectedAt"]
+    clock.now = clock.now.replace(hour=13)
+    again, _ = payments_start(call)
+    http.answers.extend([(200, GOOGLE_TOKEN), (200, ACCOUNTS)])
+    assert back(hooks_deps, "youtube", {"code": "4/CODE", "state": again})[1] == "payments_allowed"
+    assert (store.get(PK, "PAYCONN#adsense") or {})["connectedAt"] == first  # the same AdSense accounts
+    clock.now = clock.now.replace(hour=14)
+    other, _ = payments_start(call)
+    one = {"accounts": [{"name": "accounts/pub-9999999999999999", "displayName": "Other"}]}
+    http.answers.extend([(200, GOOGLE_TOKEN), (200, one)])
+    assert back(hooks_deps, "youtube", {"code": "4/CODE", "state": other})[1] == "payments_allowed"
+    # Another Google account's AdSense: the stored read is not theirs, so it must not look fresh (§40.2).
+    assert (store.get(PK, "PAYCONN#adsense") or {})["connectedAt"] == "2026-11-15T14:00:00.000Z"
 
 
 def test_stop_payment_reading_never_calls_google(
@@ -482,6 +543,60 @@ def test_a_reused_whop_state_writes_nothing(
     assert back(hooks_deps, "whop", {"code": "c", "state": signed})[1] == "whop_expired"
     assert back(hooks_deps, "whop", {"code": "c", "state": "v1.forged"})[1] == "whop_expired"
     assert snapshot(table) == before
+
+
+def test_a_held_whop_refresh_lease_makes_the_grant_write_nothing(
+    call: Call,
+    whop_app: App,
+    whop_http: WhopHttp,
+    hooks_deps: hooks.HooksDeps,
+    store: db.Store,
+    table: FakeTable,
+    secrets_client: FakeSecretsManager,
+) -> None:
+    """Whop's refresh tokens rotate: a refresh of the old sign-in (L, under PAYCONN#whop's lease) must never land
+    between the new token and its tokenVersionId."""
+    signed, _ = whop_start(call, whop_http)
+    store.update(PK, "PAYCONN#whop", {"refreshLeaseUntil": "2026-11-15T12:00:20.000Z"})  # L is refreshing now
+    before = snapshot(table)
+    secrets_before = dict(secrets_client.values)
+    whop_http.answers.extend([(200, WHOP_TOKEN), (200, WHOP_ME)])
+    assert back(hooks_deps, "whop", {"code": "c", "state": signed}) == (
+        "/settings/posting/getpaid/contentrewards#whop",
+        "whop_error",
+    )
+    assert snapshot(table) == before
+    assert secrets_client.values == secrets_before
+    # A lease that ran out is taken, and the grant takes it off again with its own write.
+    again, _ = whop_start(call, whop_http)
+    whop_http.answers.clear()  # Whop's sign-in settings are kept for a day: the second Connect didn't read them
+    store.update(PK, "PAYCONN#whop", {"refreshLeaseUntil": "2026-11-15T11:59:00.000Z"})
+    whop_http.answers.extend([(200, WHOP_TOKEN), (200, WHOP_ME)])
+    assert back(hooks_deps, "whop", {"code": "c", "state": again})[1] == "whop_connected"
+    conn = store.get(PK, "PAYCONN#whop") or {}
+    assert conn["status"] == "connected"
+    assert "refreshLeaseUntil" not in conn
+
+
+def test_a_failing_whop_save_lets_the_lease_go(
+    call: Call,
+    whop_app: App,
+    whop_http: WhopHttp,
+    hooks_deps: hooks.HooksDeps,
+    store: db.Store,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signed, _ = whop_start(call, whop_http)
+
+    def broken(*_a: Any, **_k: Any) -> Any:
+        raise RuntimeError("Secrets Manager is down")
+
+    monkeypatch.setattr(hooks_deps.oauth.secrets, "write", broken)  # type: ignore[union-attr]
+    whop_http.answers.extend([(200, WHOP_TOKEN), (200, WHOP_ME)])
+    assert back(hooks_deps, "whop", {"code": "c", "state": signed})[1] == "whop_error"
+    conn = store.get(PK, "PAYCONN#whop") or {}
+    assert conn["status"] == "keys_saved"
+    assert "refreshLeaseUntil" not in conn  # L's next refresh isn't held up
 
 
 def test_whop_is_refused_on_hooks_and_is_a_fixed_page_on_the_callback(hooks_deps: hooks.HooksDeps) -> None:
