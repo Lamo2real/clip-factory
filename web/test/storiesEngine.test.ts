@@ -118,8 +118,8 @@ describe("the fixtures", () => {
     expect(s.scenes.some((sc) => sc.view === "top" && sc.beats.some((b) => b.do === "skid"))).toBe(true);
     expect(s.captions.length).toBeGreaterThan(3);
     expect(s.captions.every((c) => /^skid-recovery\.(x?\d+)$/.test(c.guidanceRef ?? ""))).toBe(true);
-    // the guidance refs are shown steps of the checked list (config/stories-guidance.json)
-    const guidance = JSON.parse(readFileSync(join(import.meta.dirname, "../../config/stories-guidance.json"), "utf8")) as {
+    // the guidance refs are shown steps of the checked list (stories/config/guidance.json)
+    const guidance = JSON.parse(readFileSync(join(import.meta.dirname, "../../stories/config/guidance.json"), "utf8")) as {
       topics: { id: string; steps: { id: string; shown: boolean }[]; donts: { id: string; shown: boolean }[] }[];
     };
     const topic = guidance.topics.find((t) => t.id === "skid-recovery")!;
@@ -496,7 +496,8 @@ describe("the engine folder is plain TypeScript (§45.10)", () => {
 
 // ---- every catalog id draws ---------------------------------------------------------------------------------
 
-const ids = <K extends keyof typeof CATALOG>(k: K) => CATALOG[k].map((e) => e.id) as (typeof CATALOG)[K][number]["id"][];
+type ListKey = Exclude<keyof typeof CATALOG, "looks">;
+const ids = <K extends ListKey>(k: K) => CATALOG[k].map((e) => e.id) as (typeof CATALOG)[K][number]["id"][];
 
 /** Looks that use every body, hair style, eye shape, brow, nose, mouth, pattern and accessory at least once. */
 function looks(): CharacterLook[] {

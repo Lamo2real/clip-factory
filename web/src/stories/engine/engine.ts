@@ -14,17 +14,18 @@ import { actorState, restPose, STYLES } from "./motion.ts";
 import { Pen } from "./pen.ts";
 import { blendPose, drawCharacter, geometry } from "./rig.ts";
 import { drawExtras, drawSceneFrame } from "./scene.ts";
-import { fitDuration, FPS, frameCount, HEIGHT, locateFrame, MAX_SECONDS, normalizeScript, sceneFrames, sceneList, validateScript, WIDTH } from "./script.ts";
+import { fitDuration, FPS, frameCount, HEIGHT, LIMITS, locateFrame, MAX_SECONDS, normalizeScript, sceneFrames, sceneList, sceneShapes, SEATS, validateCharacter, validateScript, WIDTH } from "./script.ts";
 import { audioTrack, textTrack } from "./tracks.ts";
 import type { ActionId, Beat, CharacterLook, Expression, MovementStyle, Prim, StoryScript } from "./types.ts";
 
 export { CATALOG };
 export type * from "./types.ts";
 export { prng } from "./math.ts";
-export { audioTrack, fitDuration, FPS, frameCount, HEIGHT, MAX_SECONDS, normalizeScript, sceneFrames, sceneList, textTrack, validateScript, WIDTH };
+export { audioTrack, fitDuration, FPS, frameCount, HEIGHT, LIMITS, MAX_SECONDS, normalizeScript, sceneFrames, sceneList, sceneShapes, SEATS, textTrack, validateCharacter, validateScript, WIDTH };
 
-/** Bumps whenever drawing changes; stored on each job's meta (2: the full rig, sets, props and cameras). */
-export const ENGINE_VERSION = 2;
+/** Bumps whenever drawing changes; stored on each job's meta (2: the full rig, sets, props and cameras; 3: a skid
+ * slides the rear to its dir's side, cars turn smoothly, bubbles keep clear of the end card and use scene time). */
+export const ENGINE_VERSION = 3;
 
 /** The draw list for one frame of the whole story (frames past the end show the last frame). */
 export function drawFrame(s: StoryScript, frame: number): Prim[] {

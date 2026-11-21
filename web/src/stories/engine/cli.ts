@@ -6,8 +6,10 @@
 //   deno run --allow-read cli.ts scenes <script.json>          → [{"sceneId", "from", "to", "mid"}] (frame numbers)
 //   deno run --allow-read cli.ts text <script.json>            → TextEvent[]
 //   deno run --allow-read cli.ts audio <script.json>           → AudioEvent[]
-//   deno run --allow-read cli.ts catalog                       → the CATALOG and ENGINE_VERSION
+//   deno run --allow-read cli.ts catalog                       → {"engine": n, "catalog": CATALOG, "limits": {...}}
 //   deno run --allow-read cli.ts version                       → {"engine": n}
+//   deno run --allow-read cli.ts character <character.json>    → {"ok": true} | {"ok": false, "errors": [...]}
+//                                                               (a character's look, movementStyle, voice, faces)
 // It never reads the network and writes only to stdout (errors to stderr, exit code 2).
 
 import {
@@ -17,9 +19,12 @@ import {
   ENGINE_VERSION,
   fitDuration,
   frameCount,
+  LIMITS,
   normalizeScript,
   sceneList,
+  SEATS,
   textTrack,
+  validateCharacter,
   validateScript,
 } from "./engine.ts";
 import type { StoryScript } from "./types.ts";
@@ -46,12 +51,12 @@ function fail(message: string): never {
   Deno.exit(2);
 }
 
-function readScript(path: string | undefined): unknown {
-  if (!path) fail("a script path is required");
+function readScript(path: string | undefined, what = "script"): unknown {
+  if (!path) fail(`a ${what} path is required`);
   try {
     return JSON.parse(Deno.readTextFileSync(path));
   } catch {
-    fail("the script could not be read as JSON");
+    fail(`the ${what} could not be read as JSON`);
   }
 }
 
@@ -96,13 +101,18 @@ function main(args: string[]): void {
       write(JSON.stringify(audioTrack(valid(rest[0]))) + "\n");
       return;
     case "catalog":
-      write(JSON.stringify({ engine: ENGINE_VERSION, catalog: CATALOG }) + "\n");
+      write(JSON.stringify({ engine: ENGINE_VERSION, catalog: CATALOG, limits: { ...LIMITS, seats: SEATS } }) + "\n");
       return;
+    case "character": {
+      const result = validateCharacter(readScript(rest[0], "character"));
+      write(JSON.stringify(result) + "\n");
+      return;
+    }
     case "version":
       write(JSON.stringify({ engine: ENGINE_VERSION }) + "\n");
       return;
     default:
-      fail("unknown command; use validate, normalize, fit, frames, scenes, text, audio, catalog or version");
+      fail("unknown command; use validate, normalize, fit, frames, scenes, text, audio, catalog, version or character");
   }
 }
 

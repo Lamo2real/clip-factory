@@ -9,9 +9,13 @@ import type { BubbleId } from "./types.ts";
 
 export interface Bubble {
   kind: BubbleId;
-  /** absolute seconds */
+  /** absolute seconds (the text track) */
   start: number;
   end: number;
+  /** the scene it shows in, when in that scene it starts (s), and how long it shows (s): frames use these only */
+  scene: number;
+  at: number;
+  span: number;
   /** balloon centre, screen px */
   x: number;
   y: number;
@@ -41,11 +45,11 @@ export function bubbleSpan(dur: number): number {
   return Math.min(2.6, Math.max(1.2, dur));
 }
 
-/** Pop-in and pop-out scale at absolute time t. */
+/** Pop-in and pop-out scale `t` seconds after the bubble starts. */
 export function bubbleScale(b: Bubble, t: number): number {
-  if (t < b.start || t >= b.end) return 0;
-  const inK = ease.outBack(clamp01((t - b.start) / 0.2));
-  const outK = 1 - ease.inBack(clamp01((t - (b.end - 0.16)) / 0.16));
+  if (t < 0 || t >= b.span) return 0;
+  const inK = ease.outBack(clamp01(t / 0.2));
+  const outK = 1 - ease.inBack(clamp01((t - (b.span - 0.16)) / 0.16));
   return Math.max(0, Math.min(inK, outK));
 }
 
@@ -54,6 +58,8 @@ export function symbolSpan(b: Bubble): [number, number] {
   return [b.start + 0.12, Math.max(b.start + 0.2, b.end - 0.14)];
 }
 
+/** Draws a bubble `t` seconds after it starts: scene time only, so a scene draws the same whatever the scenes
+ * before it last (only an edited scene needs animating again). */
 export function drawBubble(pen: Pen, b: Bubble, t: number): void {
   const k = bubbleScale(b, t);
   if (k <= 0.01) return;

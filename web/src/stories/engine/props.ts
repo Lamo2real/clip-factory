@@ -18,6 +18,8 @@ export const OVERLAYS: Set<PropKind> = new Set(["arrow", "check", "cross", "excl
 export const WEATHER: Set<PropKind> = new Set(["snow", "rain", "fog"]);
 
 const MOVERS: Set<PropAction> = new Set(["move", "skid", "spin", "stop", "bump"]);
+/** Side view: the prop actions whose `dir` turns the prop to face that way. */
+const FACERS: Set<PropAction> = new Set(["move", "stop", "bump", "appear"]);
 
 export interface PropState {
   prop: SceneProp;
@@ -62,10 +64,15 @@ function moveEase(a: PropAction): (t: number) => number {
   return ease.inOutSine;
 }
 
-/** The skid's drift: how far the car's nose turns away from where it travels (top view). */
-function drift(p: number, side: number): number {
-  // the rear swings out, the driver steers into it, a smaller swing back, then straight
-  return side * (34 * Math.sin(Math.PI * clamp01(p / 0.62)) * (p < 0.62 ? 1 : 0) - 12 * Math.sin(Math.PI * clamp01((p - 0.62) / 0.38)));
+/** How far a skid swings the car's rear out (top view, degrees) at progress p of the skid: positive is the car's
+ * right. `side` is the skid's `dir` (+1 right, -1 left): "rear slides right" swings the rear to the car's right, so
+ * the nose turns left of where the car travels (the body turns by minus this). It swings out, peaks at 40% of the
+ * skid and comes back straight by its end; a swing back the other way is a second skid with the other `dir`, so
+ * what the picture shows always matches what the script (and its caption) says. */
+export function rearSwing(p: number, side: number): number {
+  const q = clamp01(p);
+  const u = q < 0.4 ? (q / 0.4) * 0.5 : 0.5 + ((q - 0.4) / 0.6) * 0.5;
+  return side * 34 * Math.sin(Math.PI * u);
 }
 
 interface PathOut {
@@ -88,8 +95,9 @@ function propPath(prop: SceneProp, beats: Beat[], view: "side" | "top", t: numbe
   let dist = 0;
   for (const b of beats) {
     if (b.at > t) break;
-    if (b.dir && view === "side") facing = b.dir === "left" ? -1 : 1;
     const a = b.do as PropAction;
+    // in a side view `dir` says which way a car drives; a skid's, spin's or burst's `dir` is the side it slides to
+    if (b.dir && view === "side" && FACERS.has(a)) facing = b.dir === "left" ? -1 : 1;
     if (!MOVERS.has(a)) continue;
     let to = b.to;
     if (!to && (a === "skid" || a === "spin") && view === "top") {
@@ -100,7 +108,13 @@ function propPath(prop: SceneProp, beats: Beat[], view: "side" | "top", t: numbe
     if (view === "side" && !b.dir && Math.abs(to.x - x) > 0.005) facing = to.x < x ? -1 : 1;
     const dx = to.x - x;
     const dy = (to.y - y) * (16 / 9);
-    if (view === "top" && Math.hypot(dx, dy) > 0.01) heading = Math.atan2(dx, -dy) / DEG;
+    if (view === "top" && Math.hypot(dx, dy) > 0.01) {
+      // the car turns to its new direction over a moment instead of snapping round
+      const target = Math.atan2(dx, -dy) / DEG;
+      const turn = Math.min(0.35, b.dur * 0.3);
+      const diff = ((((target - heading) % 360) + 540) % 360) - 180;
+      heading += diff * (turn > 0 ? ease.inOutSine(clamp01((t - b.at) / turn)) : 1);
+    }
     const p = b.dur > 0 ? clamp01((t - b.at) / b.dur) : 1;
     const e = moveEase(a);
     const k = a === "bump" ? Math.min(1, Math.sin(Math.PI * Math.min(1, p * 1.6)) * 0.25 + (p > 0.6 ? e((p - 0.6) / 0.4) : 0)) : e(p);
@@ -166,10 +180,13 @@ export function propState(prop: SceneProp, beats: Beat[], view: "side" | "top", 
       case "skid":
         if (on) {
           st.skidding = Math.sin(Math.PI * Math.min(1, p * 1.3));
-          st.wheelTurn = drift(p, side) * 0.9;
+          // the front wheels point back along the travel line (steering into the skid); a driver who steers turns
+          // them their way, so the wheels, the hands and the steering arrow always agree
+          const swing = rearSwing(p, side);
+          st.wheelTurn = driver.steer !== 0 ? Math.sign(driver.steer) * Math.max(Math.abs(swing) * 0.9, Math.abs(driver.steer) * 28) : swing * 0.9;
         }
         if (view === "top") {
-          if (on) st.rot += drift(p, side);
+          if (on) st.rot -= rearSwing(p, side);
           if (marked) st.marks.push(skidMarks(prop, beats, b, Math.min(t, b.at + b.dur)));
         } else {
           if (on) st.rot += -1.2 * Math.sin(Math.PI * p) * Math.sin(tau * 24);
@@ -239,7 +256,7 @@ function skidMarks(prop: SceneProp, beats: Beat[], beat: Beat, until: number): n
     const path = propPath(prop, beats, "top", time);
     const p = beat.dur > 0 ? clamp01((time - beat.at) / beat.dur) : 1;
     let heading = path.heading;
-    if (beat.do === "skid") heading += drift(p, side);
+    if (beat.do === "skid") heading -= rearSwing(p, side);
     if (beat.do === "spin") heading += side * 360 * ease.outCubic(p);
     const hx = Math.sin(heading * DEG);
     const hy = -Math.cos(heading * DEG);
@@ -273,7 +290,7 @@ export function propBaseScale(st: PropState, view: "side" | "top"): number {
 
 /** Draws one prop at its state; the pen is in world pixels (camera applied). */
 export function drawProp(pen: Pen, st: PropState, view: "side" | "top", t: number, seed: number, occ: Occupants, night: boolean): void {
-  if (!st.visible || st.alpha <= 0.01) return;
+  if (!st.visible || st.alpha <= 0.01 || st.scale <= 0.01) return;
   const kind = st.prop.kind;
   const k = propBaseScale(st, view);
   pen.save();

@@ -1,5 +1,5 @@
 {
-  "engine": 2,
+  "engine": 3,
   "fps": 30,
   "width": 1080,
   "height": 1920,
@@ -419,7 +419,7 @@
           "x": 0.48,
           "y": 0.66,
           "scale": 1,
-          "rot": -25,
+          "rot": 8,
           "color": "#62c6ff"
         },
         {
@@ -433,9 +433,9 @@
         {
           "propId": "arrow1",
           "kind": "arrow",
-          "x": 0.74,
-          "y": 0.42,
-          "scale": 0.8,
+          "x": 0.66,
+          "y": 0.4,
+          "scale": 0.7,
           "rot": 0,
           "state": "curve_right"
         }

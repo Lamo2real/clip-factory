@@ -14,8 +14,38 @@ export const MAX_SECONDS = 89.5;
 export const SCENE_MIN = 2;
 export const SCENE_MAX = 15;
 
+/** How many people sit in each vehicle (a driver and one passenger in a car, a driver in a truck's cab). */
+export const SEATS = { car: 2, truck: 1 } as const;
+
 /** Limits that keep every frame light enough for the agent's rasterizer. */
-export const LIMITS = { scenes: 30, cast: 6, actors: 4, props: 12, beats: 40, sfx: 24, captions: 40, totalSec: 180 };
+export const LIMITS = { scenes: 30, cast: 6, actors: 4, props: 12, beats: 40, sfx: 24, captions: 40, totalSec: 180, shapes: 480 };
+
+/** About how many shapes (prims) each thing adds to a frame at its busiest (measured on the busiest sets, with every
+ * action it can do); weather draws once however many of it there are. */
+export const SHAPES = {
+  set: 60,
+  wetSet: 80,
+  actor: 70,
+  props: { car: 45, truck: 36, deer: 30, snow: 36, rain: 42, fog: 8, ice_patch: 15, tree: 15, sparkles: 15 } as Partial<Record<string, number>>,
+  prop: 12,
+} as const;
+const ONCE = new Set(["snow", "rain", "fog"]);
+
+/** A scene's busiest frame, roughly, in shapes: validateScript keeps it at most LIMITS.shapes. */
+export function sceneShapes(scene: { set?: unknown; actors?: unknown; props?: unknown }): number {
+  let n = scene.set === "snowy_road" || scene.set === "rainy_road" ? SHAPES.wetSet : SHAPES.set;
+  if (Array.isArray(scene.actors)) n += scene.actors.length * SHAPES.actor;
+  const seen = new Set<string>();
+  if (Array.isArray(scene.props)) {
+    for (const p of scene.props) {
+      const kind = isObj(p) && typeof p.kind === "string" ? p.kind : "";
+      if (ONCE.has(kind) && seen.has(kind)) continue;
+      seen.add(kind);
+      n += SHAPES.props[kind] ?? SHAPES.prop;
+    }
+  }
+  return n;
+}
 
 const ID = /^[A-Za-z0-9_-]{1,40}$/;
 const TOL = 0.05;
@@ -42,13 +72,21 @@ const FACES = new Set(catalogIds("expressions"));
 const STYLES = new Set(catalogIds("movementStyles"));
 const MOODS = new Set(catalogIds("musicMoods"));
 
+/** The look and voice choices come from the catalog (CONTRACTS §45.33), so the character agent's schema and this
+ * check can never disagree. */
+const LOOKS = CATALOG.looks;
+const choice = (list: { id: string }[]) => list.map((e) => e.id);
 const LOOK_ENUMS: Record<string, string[]> = {
-  body: ["bean", "round", "tall", "square"],
-  brows: ["thin", "thick"],
-  nose: ["dot", "button", "long", "none"],
-  mouth: ["small", "wide"],
-  accessory: ["none", "glasses", "scarf", "bowtie", "helmet", "headphones"],
+  body: choice(LOOKS.body),
+  brows: choice(LOOKS.brows),
+  nose: choice(LOOKS.nose),
+  mouth: choice(LOOKS.mouth),
+  accessory: choice(LOOKS.accessory),
 };
+const HAIR = choice(LOOKS.hair);
+const EYES = choice(LOOKS.eyes);
+const PATTERNS = choice(LOOKS.pattern);
+const VOICES = choice(LOOKS.voiceStyle);
 
 function checkLook(look: unknown, where: string, err: (m: string) => void): void {
   if (!isObj(look)) {
@@ -64,14 +102,46 @@ function checkLook(look: unknown, where: string, err: (m: string) => void): void
     if (!isNum(look[k]) || (look[k] as number) < 0.85 || (look[k] as number) > 1.15) err(`${where}: look.${k} is ${show(look[k])}; use a number from 0.85 to 1.15.`);
   }
   const hair = look.hair;
-  const styles = ["none", "short", "spiky", "curly", "long", "bun", "cap"];
-  if (!isObj(hair) || !styles.includes(hair.style as string) || !isHex(hair.color)) err(`${where}: look.hair needs a style (${styles.join(", ")}) and a colour.`);
+  if (!isObj(hair) || !HAIR.includes(hair.style as string) || !isHex(hair.color)) err(`${where}: look.hair needs a style (${HAIR.join(", ")}) and a colour.`);
   const eyes = look.eyes;
-  if (!isObj(eyes) || !["round", "oval", "sleepy"].includes(eyes.shape as string) || !isHex(eyes.color)) err(`${where}: look.eyes needs a shape (round, oval, sleepy) and a colour.`);
+  if (!isObj(eyes) || !EYES.includes(eyes.shape as string) || !isHex(eyes.color)) err(`${where}: look.eyes needs a shape (${EYES.join(", ")}) and a colour.`);
   const o = look.outfit;
-  if (!isObj(o) || !isHex(o.top) || !isHex(o.bottom) || !isHex(o.accent) || !["plain", "stripes", "dots"].includes(o.pattern as string)) {
-    err(`${where}: look.outfit needs top, bottom and accent colours and a pattern (plain, stripes, dots).`);
+  if (!isObj(o) || !isHex(o.top) || !isHex(o.bottom) || !isHex(o.accent) || !PATTERNS.includes(o.pattern as string)) {
+    err(`${where}: look.outfit needs top, bottom and accent colours and a pattern (${PATTERNS.join(", ")}).`);
   }
+}
+
+function checkVoice(v: unknown, where: string, err: (m: string) => void): void {
+  if (!isObj(v)) {
+    err(`${where}: voice is missing ({ style, pitch, noises, sfx }).`);
+    return;
+  }
+  if (!VOICES.includes(v.style as string)) err(`${where}: voice.style must be ${VOICES.join(", ").replace(/, ([^,]*)$/, " or $1")}.`);
+  if (!isNum(v.pitch) || v.pitch < 0.5 || v.pitch > 2) err(`${where}: voice.pitch is ${show(v.pitch)}; use a number from 0.5 to 2.`);
+  if (!Array.isArray(v.noises) || v.noises.length > 8 || v.noises.some((n) => !NOISES.has(n as string))) err(`${where}: voice.noises must be up to 8 of ${list([...NOISES])}.`);
+  if (!Array.isArray(v.sfx) || v.sfx.length > 8 || v.sfx.some((n) => !SFX.has(n as string))) err(`${where}: voice.sfx must be up to 8 known effects.`);
+}
+
+/** The character agent's answer, or a saved character (CONTRACTS §45.33): its look, movement style and voice follow
+ * the same rules as a script's cast; its faces (when given) are at least 3 known ones, neutral among them. */
+export function validateCharacter(input: unknown): { ok: true } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+  const err = (m: string) => {
+    if (errors.length < 40) errors.push(m);
+  };
+  if (!isObj(input)) return { ok: false, errors: ["The character must be a JSON object { look, movementStyle, voice, expressions }."] };
+  const where = typeof input.name === "string" && input.name.trim() ? `character ${input.name.trim().slice(0, 30)}` : "character";
+  if (input.name !== undefined && (typeof input.name !== "string" || !input.name.trim() || input.name.length > 30)) err(`${where}: name must be 1 to 30 characters.`);
+  checkLook(input.look, where, err);
+  if (!STYLES.has(input.movementStyle as string)) err(`${where}: movementStyle is ${show(input.movementStyle)}; use one of ${list([...STYLES])}.`);
+  checkVoice(input.voice, where, err);
+  const faces = input.expressions;
+  if (faces !== undefined) {
+    if (!Array.isArray(faces) || faces.length < 3 || faces.some((f) => !FACES.has(f as string)) || !faces.includes("neutral") || new Set(faces).size !== faces.length) {
+      err(`${where}: expressions must be at least 3 different faces of ${list([...FACES], 14)}, with neutral among them.`);
+    }
+  }
+  return errors.length ? { ok: false, errors } : { ok: true };
 }
 
 function checkCast(cast: unknown, err: (m: string) => void): string[] {
@@ -93,14 +163,7 @@ function checkCast(cast: unknown, err: (m: string) => void): string[] {
     if (typeof m.name !== "string" || !m.name.trim() || m.name.length > 30) err(`${where}: name must be 1 to 30 characters.`);
     checkLook(m.look, where, err);
     if (!STYLES.has(m.movementStyle as string)) err(`${where}: movementStyle is ${show(m.movementStyle)}; use one of ${list([...STYLES])}.`);
-    const v = m.voice;
-    if (!isObj(v)) err(`${where}: voice is missing ({ style, pitch, noises, sfx }).`);
-    else {
-      if (!["babble", "hum", "none"].includes(v.style as string)) err(`${where}: voice.style must be babble, hum or none.`);
-      if (!isNum(v.pitch) || v.pitch < 0.5 || v.pitch > 2) err(`${where}: voice.pitch is ${show(v.pitch)}; use a number from 0.5 to 2.`);
-      if (!Array.isArray(v.noises) || v.noises.length > 8 || v.noises.some((n) => !NOISES.has(n as string))) err(`${where}: voice.noises must be up to 8 of ${list([...NOISES])}.`);
-      if (!Array.isArray(v.sfx) || v.sfx.length > 8 || v.sfx.some((n) => !SFX.has(n as string))) err(`${where}: voice.sfx must be up to 8 known effects.`);
-    }
+    checkVoice(m.voice, where, err);
   }
   return ids;
 }
@@ -151,6 +214,7 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
 
   const actors = Array.isArray(sc.actors) ? sc.actors : null;
   const actorIds: string[] = [];
+  const riders = new Map<string, string[]>();
   if (!actors) err(`${where}: actors must be a list (it may be empty).`);
   else {
     if (actors.length > LIMITS.actors) err(`${where}: has ${actors.length} actors; the most is ${LIMITS.actors}.`);
@@ -166,8 +230,23 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
       if (a.inCar !== undefined) {
         const kind = propKinds.get(a.inCar as string);
         if (kind !== "car" && kind !== "truck") err(`${aw}: inCar ${show(a.inCar)} must be the propId of a car or truck in this scene.`);
+        else riders.set(a.inCar as string, [...(riders.get(a.inCar as string) ?? []), typeof cid === "string" ? cid : "?"]);
       }
     });
+    // everyone in a car must have a seat, or they would vanish from the picture
+    for (const [car, who] of riders) {
+      const seats = SEATS[propKinds.get(car) as "car" | "truck"];
+      if (who.length > seats) err(`${where}: ${car} seats ${seats === 1 ? "1 person" : `${seats} people`}, but ${who.join(", ")} sit in it. Put ${who.slice(seats).join(" and ")} in another car or outside it.`);
+    }
+  }
+
+  if (props && actors && props.length <= LIMITS.props && actors.length <= LIMITS.actors) {
+    const shapes = sceneShapes(sc);
+    if (shapes > LIMITS.shapes) {
+      const plural: Record<string, string> = { car: "cars", truck: "trucks", deer: "deer" };
+      const heavy = [...new Set(props.map((p) => plural[(isObj(p) && (p.kind as string)) || ""]).filter((v): v is string => !!v))];
+      err(`${where}: is too busy to draw quickly (about ${shapes} shapes at once; the most is ${LIMITS.shapes}). Use fewer ${[...heavy, "characters"].join(", ").replace(/, ([^,]*)$/, " or $1")} in it (a character is about ${SHAPES.actor} shapes, a car ${SHAPES.props.car}, a small prop ${SHAPES.prop}).`);
+    }
   }
 
   const beats = Array.isArray(sc.beats) ? sc.beats : null;

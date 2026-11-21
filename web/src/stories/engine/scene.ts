@@ -6,6 +6,7 @@ import { cameraAt, layerMatrix, toScreen, visibleBox, type Box, type Cam, type F
 import { DEG, TAU, clamp, clamp01, ease, hash, rand } from "./math.ts";
 import { actorState, DRIVING, STYLES, type ActorState, type Style } from "./motion.ts";
 import { Pen } from "./pen.ts";
+import { endCardFrom, endCardLayout } from "./text.ts";
 import { CARS, DECALS, drawProp, OVERLAYS, propBaseScale, propState, steerArrow, WEATHER, type DriverInput, type PropState } from "./props.ts";
 import { drawCharacter, geometry, headTop, type Geo } from "./rig.ts";
 import { drawSetBack, drawSetFront, drawSetWeatherBack, setInfo, type SetEnv } from "./sets.ts";
@@ -30,7 +31,7 @@ const CACHE = new WeakMap<StoryScript, { sig: string; prep: Prepared }>();
 
 /** Everything the cached layout depends on, so a script edited in place is laid out again. */
 function signature(s: StoryScript): string {
-  return JSON.stringify([s.seed, s.cast, s.scenes.map((sc) => [sc.sceneId, sc.durationSec, sc.seed, sc.view, sc.camera, sc.actors, sc.props, sc.beats, sc.sfx])]);
+  return JSON.stringify([s.seed, s.cast, s.safety?.citations?.map((c) => c.publisher) ?? null, s.scenes.map((sc) => [sc.sceneId, sc.durationSec, sc.seed, sc.view, sc.camera, sc.actors, sc.props, sc.beats, sc.sfx])]);
 }
 
 export function sceneStarts(s: StoryScript): number[] {
@@ -390,59 +391,93 @@ export function drawSceneFrame(s: StoryScript, index: number, t: number): Prim[]
   }
   for (const p of rt.props) if (OVERLAYS.has(p.prop.kind)) drawProp(pen, p, rt.view, t, rt.seed, {}, night);
   drawSetFront(scene.set, rt.view, env, weather);
-  const abs = prep.starts[index]! + t;
-  for (const b of prep.bubbles) if (abs >= b.start && abs < b.end) drawBubble(pen, b, abs);
+  for (const b of prep.bubbles) if (b.scene === index && t >= b.at && t < b.at + b.span) drawBubble(pen, b, t - b.at);
   return pen.out;
 }
 
 // ---- bubbles: placed once per script so the frames and the text track agree -----------------------------
 
-function headOnScreen(rt: SceneRT, castId: string): [number, number] | null {
+/** Where a character's head is on screen, and about how big it is there (px). */
+function headOnScreen(rt: SceneRT, castId: string): [number, number, number] | null {
   const a = rt.actors.find((x) => x.actor.castId === castId);
   if (!a) return null;
   let wx = a.st.x * W;
   let wy: number;
+  let wr: number;
   if (a.actor.inCar) {
     const car = rt.props.find((c) => c.prop.propId === a.actor.inCar);
     const k = car ? propBaseScale(car, rt.view) : 1;
-    if (rt.view === "top") wy = a.st.y * H;
-    else {
+    if (rt.view === "top") {
+      wy = a.st.y * H;
+      wr = 40 * k;
+    } else {
       const seat = (rt.occupants.get(a.actor.inCar) ?? []).indexOf(a);
       wx += (car?.facing ?? 1) * (seat <= 0 ? 52 : -112) * k;
       wy = a.st.y * H - 225 * k;
+      wr = 44 * k;
     }
   } else {
     const px = actorScale(a.st.y, rt.view);
     wy = a.st.y * H + (a.geo.headY + a.st.pose.dy) * px;
+    wr = Math.max(a.geo.headRX, a.geo.headRY) * px;
   }
-  return toScreen(rt.cam, wx, wy);
+  const [x, y] = toScreen(rt.cam, wx, wy);
+  return [x, y, wr * rt.cam.zoom];
 }
 
+/** The lowest a bubble's centre may sit (above the captions), and the highest (under the platforms' top tabs). */
+const BUBBLE_LOW = 1240;
+const BUBBLE_HIGH = 330;
+/** Half the widest balloon (the wide ones are 1.3 radii across), plus its outline. */
+const BALLOON = BUBBLE_R * 1.3 + 8;
+
+/** Places every bubble once per script: beside the speaker's head (never over it), clear of the bubbles showing at the
+ * same time, and in a safety story's last seconds below the end card. A bubble that cannot keep clear of the end card
+ * ends when the card starts, or is left out (the card's sources line matters more than a symbol). */
 function layoutBubbles(s: StoryScript, prep: Prepared): Bubble[] {
   const out: Bubble[] = [];
+  // a safety story's end card covers the top of the last scene's last seconds
+  const below = s.safety ? endCardLayout((s.safety.citations ?? []).map((c) => c.publisher)).bottom + BALLOON + 24 : 0;
+  const last = s.scenes.length - 1;
   s.scenes.forEach((scene, i) => {
     const start = prep.starts[i]!;
+    const cardFrom = s.safety && i === last ? endCardFrom(scene.durationSec) : Infinity;
     for (const b of [...scene.beats].sort((x, y) => x.at - y.at)) {
       if (!b.bubble || !(b.who in s.cast) || !scene.actors.some((a) => a.castId === b.who)) continue;
       const rt = sceneRuntime(s, prep, i, b.at);
       const head = headOnScreen(rt, b.who);
       if (!head) continue;
-      const [hx, hy] = head;
-      const span = Math.min(bubbleSpan(b.dur), scene.durationSec - b.at);
-      const bStart = start + b.at;
-      const bEnd = bStart + span;
-      let side = hx > W / 2 ? -1 : 1;
-      let x = clamp(hx + side * 190, 190, W - 190);
-      let y = clamp(hy - 280, 330, 1180);
-      for (const o of out) {
-        if (o.end <= bStart || o.start >= bEnd) continue;
-        if (Math.hypot(o.x - x, o.y - y) < BUBBLE_R * 2.3) {
-          side = -side;
-          x = clamp(hx + side * 190, 190, W - 190);
-          if (Math.hypot(o.x - x, o.y - y) < BUBBLE_R * 2.3) y = clamp(o.y + BUBBLE_R * 2.4, 330, 1240);
+      const [hx, hy, hr] = head;
+      const pref = hx > W / 2 ? -1 : 1;
+      const place = (top: number, span: number): { x: number; y: number } | null => {
+        const y0 = clamp(hy - 280, top, 1180);
+        const others = out.filter((o) => o.scene === i && o.at < b.at + span && o.at + o.span > b.at);
+        for (const y of [y0, y0 + BUBBLE_R * 2.4, y0 + BUBBLE_R * 4.8]) {
+          if (y > BUBBLE_LOW) break;
+          for (const side of [pref, -pref]) {
+            // far enough to the side that the balloon never covers the face
+            const need = Math.sqrt(Math.max(0, (hr + BALLOON + 12) ** 2 - (y - hy) ** 2));
+            const x = clamp(hx + side * Math.max(190, need), 190, W - 190);
+            if (Math.hypot(x - hx, y - hy) < hr + BALLOON + 12) continue;
+            if (others.some((o) => Math.hypot(o.x - x, o.y - y) < BUBBLE_R * 2.3)) continue;
+            return { x, y };
+          }
         }
+        return null;
+      };
+      let span = Math.min(bubbleSpan(b.dur), scene.durationSec - b.at);
+      let spot = place(b.at + span > cardFrom ? below : BUBBLE_HIGH, span);
+      if (!spot && b.at + span > cardFrom && cardFrom - b.at >= 0.6) {
+        span = cardFrom - b.at;
+        spot = place(BUBBLE_HIGH, span);
       }
-      out.push({ kind: b.bubble, start: bStart, end: bEnd, x, y, hx, hy });
+      if (!spot && !(b.at + span > cardFrom)) {
+        // a crowded moment: beside the head, even if it touches another bubble
+        const x = clamp(hx + pref * Math.max(190, hr + BALLOON + 12), 190, W - 190);
+        spot = { x, y: clamp(hy - 280, BUBBLE_HIGH, 1180) };
+      }
+      if (!spot) continue;
+      out.push({ kind: b.bubble, start: start + b.at, end: start + b.at + span, scene: i, at: b.at, span, x: spot.x, y: spot.y, hx, hy });
     }
   });
   return out;

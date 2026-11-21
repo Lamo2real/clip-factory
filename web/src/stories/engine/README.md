@@ -1,15 +1,15 @@
 # Lamo Stories animation engine
 
 One dependency-free TypeScript engine (CONTRACTS §45.10, ADR-71). The browser runs it for live previews
-(`web/src/stories/preview/`), and the agent runs the same files with Deno (`cli.ts`) and rasterizes its draw lists
-into the final frames (`agent/.../stories/raster.py`). This file is the one description of what a draw list means.
+(`web/src/stories/preview/`), and Lamo Stories' own agent runs the same files with Deno (`cli.ts`) and rasterizes
+its draw lists into the final frames (`stories/agent/src/lamostories_agent/raster.py`). This file is the one description of what a draw list means.
 Both drawers must follow it exactly.
 
 ## Rules for the code in this folder
 
 * Only relative `./*.ts` imports. No npm packages, DOM, network, `Date`, `performance` or `Math.random`.
   Randomness comes from `prng(seed)` or the stateless `rand(seed, i)` in `math.ts`. `Deno` appears only in `cli.ts`.
-  `web/test/storiesEngine.test.ts` scans the folder to keep it that way.
+  `web/test/storiesEngine.test.ts` scans the folder to keep it that way. Every output is 9:16, 1080 × 1920, 30 fps.
 * Everything is pure and deterministic. The same script and frame number always give the same prims, in Node, in
   Deno and in every browser. Coordinates are rounded to 0.1 px and alphas to 0.001, so the lists are short and
   compare exactly.
@@ -57,7 +57,10 @@ Text is not part of the prims. Captions and bubble symbols are drawn on top of t
 `preview/draw.ts`, and by the agent as an ASS file burned in by libass.
 
 * `x, y` is the **centre of the whole text block**. `text` may contain `\n` line breaks (captions have at most 2
-  lines, the end card at most 4). Lines are centred. Line height is 1.18 × `size`.
+  lines, the end card at most 4; a 60-character caption of very wide letters may take a third line at 40 px or
+  less). Lines are centred. Line height is 1.18 × `size`. No word is ever dropped (`text.ts`): a caption that does not
+  fit at its smallest size gets one more line, a word longer than a line is split, and the end card shortens the
+  publishers' names before it would lose a word.
 * Font: Inter, weight 800 (ExtraBold), `size` px, colour `color`. Bubble symbols (`? ! ♫ • • • ♥ #@! Zzz`) use the same
   font. A font without a glyph falls back to another font that has it.
 * `caption` and `endcard` need contrast on any background. Draw each line with a dark outline (`#1c1842`,
@@ -65,7 +68,11 @@ Text is not part of the prims. Captions and bubble symbols are drawn on top of t
   `bubble` text sits inside a balloon the frames already drew, so it has no outline and no panel.
 * Where things go: captions at y 1400 (above the platforms' bottom bar, x 520 keeps clear of the right-hand
   buttons). Scene teaching text at y 330 (under the top tabs) in sunshine yellow. The safety end card at y 420 for the
-  last 2.5 s. A bubble's symbol sits at its balloon's centre.
+  last 2.5 s of the last scene (never reaching into the scene before). A bubble's symbol sits at its balloon's centre.
+* The end card reads "Based on {who} advice. Check your local road rules.", the second sentence on its own last line.
+  `{who}` is the cited publishers in short (the part after a dash, an acronym in brackets such as RoSPA, "Department
+  of Motor Vehicles" as DMV): one or two names, or "{first}, {second} and other road safety" for three or more, or
+  "{first} and other road safety" when that would need more than 4 lines; "checked road safety" with none.
 
 ## Sound (`audioTrack`)
 
@@ -83,14 +90,42 @@ already has that sound. Music is not in the track: the mixer reads `script.music
   the centre. In side views the ground actors stand on runs from about y 0.62 to 0.85 (the road is 0.64–0.80). Things
   lower down look nearer and a little bigger.
 * `view: "top"` is a road seen from above, running up the frame between x 0.25 and 0.75. A car's `rot` is its heading
-  in degrees, clockwise from nose-up. While a car moves to a `to` point, it faces where it is going. A `skid` swings
-  its rear out to `dir`'s side and back, and leaves tyre marks. A `spin` turns it all the way round. An actor
-  `inCar` a car shows through the windows (side view) or through the glass roof (top view). Their `steer_left` /
-  `steer_right` turn the front wheels and draw a curved arrow ahead of the car.
+  in degrees, clockwise from nose-up. While a car moves to a `to` point, it turns smoothly to face where it is going.
+  A `skid` with `dir: "right"` slides the car's **rear to the car's right** (the nose turns left of the travel line),
+  peaks at 40% of the skid and comes back straight by its end, leaving tyre marks; `dir: "left"` is the mirror. A
+  swing back the other way is a second skid with the other `dir`. So "rear slides right? steer right" is a skid
+  `dir: "right"` with the driver's `steer_right` over it: the steering arrow then curves to the right too, and the
+  front wheels turn the driver's way (with nobody steering they point back along the travel line). A `spin` turns it
+  all the way round (`dir` right is clockwise). An actor `inCar` a car shows through the windows (side view) or
+  through the glass roof (top view); a car seats 2 and a truck 1. Their `steer_left` / `steer_right` turn the front
+  wheels and draw a curved arrow ahead of the car.
+* In a side view, `dir` on `move`, `stop`, `bump` or `appear` turns a prop to face that way; on a `skid`, `spin` or
+  `tyre_burst` it is the side of the slide and never turns the car round.
 * A car with people in it and no `move` beat with `to` is driving: the road and the scenery roll past. `brake` slows
   it down, `stop` (a beat on the car) brings it to a halt, and `drive` speeds it up again. A prop `state` can say
   `parked` (no rolling), `driving`, `lights`, `brakes` or `flat` (cars). For an `arrow`, `curve_left` or
   `curve_right` bends it. A `tree` can be `pine` or `snow`, and a `phone` can be `ring` or `on`.
 * An arrow points up at `rot` 0. Turn it with `rot` (degrees clockwise).
-* Bubbles hold symbols only, never words. They stay fixed on screen while they show, next to the speaker's head as it
-  was when the bubble started.
+* Bubbles hold symbols only, never words. They stay fixed on screen while they show, beside the speaker's head as it
+  was when the bubble started (never over the face), clear of the other bubbles. In a safety story's end-card seconds
+  they show below the card; one that cannot ends when the card starts, or is left out.
+
+## Limits (`validateScript`, also in `cli.ts catalog` as `limits`)
+
+A script has at most 30 scenes, 6 cast members, and per scene 4 actors, 12 props, 40 beats and 24 effects; at most 40
+captions; scenes add up to at most 180 s before `fitDuration`. A car seats 2 and a truck 1. A scene's busiest frame
+must stay under about 480 shapes (`sceneShapes`): about 60 for the set (80 on a snowy or rainy road), 70 per
+character, 45 per car, 36 per truck, 30 per deer, 36 to 42 for snow or rain (once), 15 for ice, trees and sparkles,
+12 for any other prop. A writer who goes over gets a sentence that says which things to use fewer of.
+
+## Characters (`validateCharacter`, `cli.ts character`)
+
+The look and voice choices are `CATALOG.looks` (the character agent's vocabulary). `validateCharacter({ name?, look,
+movementStyle, voice, expressions? })` checks a character the way a script's cast is checked, and its faces: at least
+3 different known expressions, `neutral` among them.
+
+## Scenes stand alone
+
+A scene's frames depend only on that scene, the cast's looks and the script's seed (and, for the last scene of a
+safety story, its end card): changing another scene's length, or giving another scene a new seed, leaves every one of
+its frames exactly the same. Only an edited scene needs animating again.
