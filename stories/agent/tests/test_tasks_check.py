@@ -1,0 +1,163 @@
+"""Check models (one tiny real call per model, MODELSTATUS# written) and Write them again (post captions)."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+
+from botocore.exceptions import ClientError
+
+from lamostories_agent import config, models
+from lamostories_agent.tasks import captions
+from lamostories_agent.tasks.check import OK_LINE, classify
+from lamostories_agent.tasks.work import run_task
+from test_tasks_support import PK, USER, WS, FakeModel, reply, services, task_item
+
+PAYLOAD = {"userId": USER, "workspaceId": WS, "taskId": "T1"}
+
+
+def run(svc) -> str:
+    return asyncio.run(run_task(svc, PAYLOAD))
+
+
+def _denied() -> Exception:
+    e = models.ModelUnavailable(
+        "Claude Fable 5.2 isn't available right now: Bedrock says this account has no access. Pick another model in Lamo Stories › Settings › AI, or try again."
+    )
+    e.__cause__ = ClientError({"Error": {"Code": "AccessDeniedException", "Message": "no access"}}, "Converse")
+    return e
+
+
+def test_check_models_calls_each_model_by_name_and_writes_its_status(tmp_path: Path) -> None:
+    missing = ClientError({"Error": {"Code": "ResourceNotFoundException", "Message": "model not found"}}, "Converse")
+    model = FakeModel(
+        _denied(),
+        reply("ok", model="fable-5-1", effort="low"),
+        reply("ok", model="opus-5-5", effort="low"),
+        missing,
+        RuntimeError("boom"),
+    )
+    svc, db, _ = services(tmp_path, model)
+    db.seed(task_item("T1", "check_models"))
+    assert run(svc) == "done"
+    keys = [m["key"] for m in config.models()["models"]]
+    assert [c["override"]["model"] for c in model.calls] == keys  # every model, by name: never another one
+    assert all(c["override"]["effort"] == "low" and c["max_tokens"] <= 512 for c in model.calls)
+    statuses = {k: db.get(PK, f"MODELSTATUS#{k}") for k in keys}
+    assert [statuses[k]["status"] for k in keys] == ["denied", "ok", "ok", "not_found", "error"]
+    assert statuses["fable-5-2"]["line"].startswith("Claude Fable 5.2 isn't available right now")
+    assert statuses["fable-5-1"]["line"] == OK_LINE
+    assert all(
+        s["type"] == "ws_modelstatus" and s["userId"] == USER and s["workspaceId"] == WS and s["checkedAt"]
+        for s in statuses.values()
+    )
+    result = db.get(PK, "TASK#T1")["result"]["models"]
+    assert [r["status"] for r in result] == ["denied", "ok", "ok", "not_found", "error"]
+    assert db.get(PK, "TASK#T1")["model"] is None
+
+
+def test_check_models_can_check_just_some(tmp_path: Path) -> None:
+    model = FakeModel(reply("ok"))
+    svc, db, _ = services(tmp_path, model)
+    db.seed(task_item("T1", "check_models", input={"models": ["haiku-5-5", "not-a-model"]}))
+    assert run(svc) == "done"
+    assert [c["override"] for c in model.calls] == [{"model": "haiku-5-5", "effort": "low"}]
+    assert db.get(PK, "MODELSTATUS#haiku-5-5")["status"] == "ok"
+
+
+def test_classify_reads_bedrock_codes_and_words() -> None:
+    assert classify(ClientError({"Error": {"Code": "AccessDeniedException"}}, "x")) == "denied"
+    assert (
+        classify(
+            ClientError(
+                {"Error": {"Code": "ValidationException", "Message": "The provided model identifier is invalid."}}, "x"
+            )
+        )
+        == "not_found"
+    )
+    assert classify(RuntimeError("timeout")) == "error"
+
+    class Own(Exception):
+        status = "not_found"
+
+    assert classify(Own("x")) == "not_found"
+
+
+SCRIPT_KEY = f"ws/{USER}/{WS}/stories/S1/script/v2.json"
+
+
+def _story(**extra) -> dict:
+    return {
+        "pk": PK,
+        "sk": "STORY#S1",
+        "userId": USER,
+        "workspaceId": WS,
+        "storyId": "S1",
+        "title": "Pip on ice",
+        "category": "driving_safety",
+        "safetyTopicId": "skid-recovery",
+        "scriptKey": SCRIPT_KEY,
+        "postCaptions": {"youtubeTitle": "old"},
+        **extra,
+    }
+
+
+def _script() -> dict:
+    return {
+        "title": "Pip on ice",
+        "durationSec": 40,
+        "cast": {"c1": {"name": "Pip"}},
+        "scenes": [{"title": "Slide", "caption": "Ease off", "beats": [{"who": "c1", "do": "gasp", "face": "scared"}]}],
+        "captions": [{"text": "Stay calm"}],
+    }
+
+
+def test_write_them_again_drafts_six_captions_with_the_sources(tmp_path: Path) -> None:
+    answer = {
+        "youtubeTitle": "Pip <slides> on ice " + "x" * 120,
+        "youtubeDescription": "Pip learns to stay calm.",
+        "instagram": "Stay calm on ice #driving",
+        "facebook": "Pip on ice",
+        "tiktok": "Pip on ice #fyp",
+        "x": "Pip on ice",
+    }
+    model = FakeModel(
+        reply(data=answer, model="haiku-5-5", effort="low"), reply(data=answer, model="haiku-5-5", effort="low")
+    )
+    svc, db, s3 = services(tmp_path, model)
+    s3.objects[SCRIPT_KEY] = json.dumps(_script()).encode()
+    db.seed(_story())
+    db.seed(task_item("T1", "captions", input={"storyId": "S1"}))
+    assert run(svc) == "done"
+    out = db.get(PK, "TASK#T1")["result"]["postCaptions"]
+    assert set(out) == set(captions.FIELDS)
+    assert len(out["youtubeTitle"]) <= 100 and "<" not in out["youtubeTitle"]
+    assert out["youtubeDescription"].endswith("Check your local road rules.") and "#shorts" in out["youtubeDescription"]
+    assert "Based on advice from" in out["instagram"] and "Based on advice from" not in out["x"]
+    assert model.calls[0]["ctx"].agent_id == "storyboard" and model.calls[0]["task"] == "captions"
+    assert "Stay calm" in model.texts(0) and "Pip" in model.texts(0)
+    assert "youtubeTitle is at most 100 characters" in model.texts(1)  # asked once more, then cut to fit
+    assert db.get(PK, "STORY#S1")["postCaptions"] == {"youtubeTitle": "old"}  # a draft: the owner saves it
+
+
+def test_write_them_again_needs_a_storyboard_in_the_workspace(tmp_path: Path) -> None:
+    svc, db, s3 = services(tmp_path, FakeModel())
+    s3.objects["jobs/x/script.json"] = b"{}"
+    db.seed(_story(scriptKey="jobs/x/script.json"))
+    db.seed(task_item("T1", "captions", input={"storyId": "S1"}))
+    assert run(svc) == "failed"
+    assert db.get(PK, "TASK#T1")["error"] == captions.NO_SCRIPT
+    assert s3.reads == []
+
+
+def test_write_them_again_uses_the_videos_own_setting_under_the_request(tmp_path: Path) -> None:
+    answer = {f: "x" for f in captions.FIELDS}
+    model = FakeModel(reply(data=answer))
+    svc, db, s3 = services(tmp_path, model)
+    s3.objects[SCRIPT_KEY] = json.dumps(_script()).encode()
+    db.seed(_story(category="comedy", safetyTopicId=None, ai={"model": "fable-5-1", "effort": "low"}))
+    db.seed(task_item("T1", "captions", input={"storyId": "S1"}, override={"effort": "high"}))
+    assert run(svc) == "done"
+    assert model.calls[0]["override"] == {"model": "fable-5-1", "effort": "high"}
+    assert "Based on advice" not in db.get(PK, "TASK#T1")["result"]["postCaptions"]["instagram"]
