@@ -20,14 +20,16 @@ the installed apps **update themselves** (see "How installed apps update" below)
 | Tells the web app its version | `window.__CF_DESKTOP_VERSION__` (`1.<n>.0`), so the page can tell copies apart. A copy with no `window.__CF_GLASS__` is from before 2026-11-16 and gets an "Update the app" button in the page. |
 | Icon | Generated from `web/public/icons/icon-512.png` by `scripts/make-icons.sh` (also run by every CI build). |
 | Gets YouTube videos the cloud cannot (Mac fetches it) | When YouTube blocks the cloud, or for a YouTube link started in this window, the page asks the app (`window.__CF_MAC_FETCH__`, four commands) to download the video on this computer's own connection and send it to the job (docs/CONTRACTS.md §35). The app downloads pinned yt-dlp, Deno and ffmpeg from the app's own CloudFront the first time, checks the ed25519-signed manifest (`downloads/tools/tools.json`) with the public key in `src/mac_fetch/tools.rs` and every file's SHA-256, and keeps them in its data folder. No cookies. Bumping a tool: `tools/tools.lock.json` (see `tools/build_tools.py`), no app release. |
+| Connects Content Rewards (the one-time sign-in door) | Content Rewards only sends a sign-in back to `http://127.0.0.1`, so for one sign-in the page asks the app (`window.__CF_CR_CONNECT__`, version 1, four commands: `listen`, `open`, `result`, `cancel`) to open a tiny door on this computer (docs/CONTRACTS.md §38.15). `listen` binds `127.0.0.1` only, on the first free port of 47811–47815, for 5 minutes; `open` opens Content Rewards' own sign-in page (`https://id.contentrewards.com/oauth2/authorize`, checked parameter by parameter, with the way back to that port only) in the system browser; the door takes one `GET /?code&state` whose `state` matches, shows "Done! Go back to Clip Factory. You can close this tab.", brings the window to the front and closes; `result` hands the code to the page once, which posts it to the API at once. The app never sees a token, and the code is never logged or written to disk. macOS only: on Windows `listen` answers `unsupported`. |
 | Installers | Mac: universal `.dmg` (Apple silicon and Intel). Windows: NSIS `-setup.exe`, installs for the current user only and fetches the WebView2 runtime if missing. |
 
 ### Security
 
 The page inside the window is a remote website, so it gets **almost no native access**: the only capability file
 (`src-tauri/capabilities/main.json`) grants nothing; at start-up `main.rs` grants the app's own address (main window
-only) the title-bar drag and the four Mac fetches it commands, which check every link, job id and upload address
-themselves (`src-tauri/src/mac_fetch/check.rs`); `withGlobalTauri` is off, and there is no file system or
+only) the title-bar drag, the four Mac fetches it commands, which check every link, job id and upload address
+themselves (`src-tauri/src/mac_fetch/check.rs`), and the four Connect Content Rewards commands, which check the
+sign-in address and every answer themselves (`src-tauri/src/cr_connect/check.rs`); `withGlobalTauri` is off, and there is no file system or
 shell plugin. Opening links, saving the window state, checking for updates and the restart question happen in Rust. The window glass is chosen and applied in
 Rust too; the page only reads `window.__CF_GLASS__`.
 
@@ -48,6 +50,22 @@ origin is cancelled in `src-tauri/src/main.rs` and handed to the system browser.
 About the user agent: web views cannot append to their default user agent, so the wrapper sets a full one in
 the usual shape for each platform's engine, with `ClipFactoryDesktop/<version>` at the end.
 
+### The Content Rewards sign-in door
+
+* **Only this computer, only one answer.** The door is a thread on `std::net::TcpListener` bound to `127.0.0.1`
+  (never `0.0.0.0` or `::`). It reads one request head per connection (at most 8 KB, 5 s), takes only `GET /` with
+  `Host` exactly `127.0.0.1:{port}`, and only a `code` (or an `error`) whose `state` equals, compared in constant
+  time, the one in the address `open` opened. A repeated `code`, `state`, `error`, `iss` or `error_description` is a
+  400; any other path (such as `/favicon.ico`) a 404; a wrong state or host a 400, and the door stays open for the
+  right answer. An `iss` is passed through; other parameters are ignored.
+* **The page it shows** has `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `Content-Security-Policy:
+  default-src 'none'; style-src 'unsafe-inline'` and `Connection: close`, and repeats nothing from the request.
+* **It closes** after one good answer, a cancel, a new `listen`, or 5 minutes (then `result` says `expired`).
+* **Ports.** 47811–47815 are the five ways back Clip Factory registers with Content Rewards; none free is the error
+  `no_port`. Command errors reach the page as `{code: "no_port" | "bad_url" | "unsupported" | "busy"}`.
+* **Tests** (`cargo test cr_connect`) use free ports the system picks and a clock moved by hand, so they never take
+  the app's ports and never wait 5 minutes.
+
 ## Files
 
 ```
@@ -65,7 +83,13 @@ desktop/
     src/main.rs                the window, its glass (and which one this computer draws), link handling,
                                user agent (+ unit tests)
     src/update.rs              the update checks, download, and the one Restart now / Later question (+ tests)
-    src/init.js                injected script (desktop flag, glass name, outward links)
+    src/mac_fetch/             Mac fetches it: the pinned tools, the download and the part uploads (+ tests)
+    src/cr_connect/            Connect Content Rewards: the four commands and their grant (mod.rs), the
+                               one-time sign-in door on 127.0.0.1 (door.rs), and the checks of the sign-in
+                               address and of the answer (check.rs) (+ tests)
+    permissions/autogenerated/ the command permissions tauri-build writes from build.rs (committed)
+    src/init.js                injected script (desktop flag, glass name, the Mac fetch and Content Rewards
+                               bridges, outward links)
 ```
 
 ## Build it yourself
