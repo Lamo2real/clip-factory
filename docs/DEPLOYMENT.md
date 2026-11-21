@@ -321,8 +321,9 @@ Content Rewards, with the last step in the Mac app ([SETUP_POSTING.md](SETUP_POS
 switched off until all its parts have merged ([Content Rewards](#content-rewards-contracts-38)).
 
 What this deploy changes for posting: `cf-prod-hooks` runs up to **28 s** (the code exchange calls the platform),
-`cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **16 secrets** (the
-state key, plus an app, token and short-lived pending secret per platform) at $0.40 each, so about $6 a month at most
+`cf-prod-clip-flow` has **1024 MB** (chunked uploads), and Secrets Manager holds at most about **18 secrets** (the
+state key, an app, token and short-lived pending secret per platform, and Content Rewards' app and token) at $0.40
+each, so about $7 a month at most
 ([ARCHITECTURE.md](ARCHITECTURE.md#lambda-functions)).
 
 For webhooks (not built yet), a platform console would need:
@@ -659,6 +660,7 @@ policy are not managed by this Terraform; delete them by hand (or `terraform des
 longer need them. The agent's log group `/aws/bedrock-agentcore/runtimes/...-DEFAULT` stays too (it expires its
 logs after 30 days); delete it in the CloudWatch console if you want it gone. GitHub Pages and the legal pages are not affected.
 The platform secrets under `cf-prod/platforms/` are created by the app, not by Terraform: press **Disconnect** on each
-platform first (which also revokes the tokens; Content Rewards too, then remove Clip Factory under **Connected apps**
-on Content Rewards), or delete them in the Secrets Manager console (eu-north-1). Remove the
+platform first (which also revokes the tokens; Content Rewards too: its Disconnect deletes only the token secret, so
+also delete `cf-prod/platforms/contentrewards/app` in the Secrets Manager console, then remove Clip Factory under
+**Connected apps** on Content Rewards), or delete them in the Secrets Manager console (eu-north-1). Remove the
 developer apps on the platforms' websites too if you no longer need them.

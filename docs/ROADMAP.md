@@ -86,9 +86,9 @@ able to understand how to navigate it"):
 - Switched off in prod until all six parts (api, posting, agent, web, desktop, docs) have merged; one line turns it on.
 
 Still open for Content Rewards: CR's sign-in pilot must grant `my_submissions:write` before Clip Factory can send by
-itself (until then: read only and reminders); campaigns that need drafts first or the brand's own sound; TikTok
-campaign clips (after TikTok's audit); uploading proof of views for the owner; and everything CR's live API may
-still change (CONTRACTS §38.21).
+itself (until then: read only and reminders, or, if the sign-in is refused, checking and sending by hand); campaigns
+that need drafts first or the brand's own sound; TikTok campaign clips (after TikTok's audit); uploading proof of
+views for the owner; and everything CR's live API may still change (CONTRACTS §38.21).
 
 Still open in phase 2:
 1. **Clips kept before a platform was connected** stay "Waiting for connection" and are **not posted automatically**
