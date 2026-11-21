@@ -3,7 +3,23 @@
 from __future__ import annotations
 
 from ..http import Route, route
-from . import ask, clips, follows, help, jobs, lessons, macfetch, money, performance, push, setup, skills, system, weeks
+from . import (
+    ask,
+    clips,
+    contentrewards,
+    follows,
+    help,
+    jobs,
+    lessons,
+    macfetch,
+    money,
+    performance,
+    push,
+    setup,
+    skills,
+    system,
+    weeks,
+)
 
 ROUTES: list[Route] = [
     route("GET", "/v1/health", system.health, public=True),
@@ -94,4 +110,29 @@ ROUTES: list[Route] = [
     route("PUT", "/v1/push/devices/{deviceId}", push.put_device),
     route("DELETE", "/v1/push/devices/{deviceId}", push.delete_device),
     route("POST", "/v1/push/test", push.send_test),
+    # §38: Content Rewards campaigns. 503 "unavailable" on every one until switched on (CONTENT_REWARDS=on).
+    route("GET", "/v1/contentrewards", contentrewards.overview),
+    route("POST", "/v1/contentrewards/connect", contentrewards.connect),
+    route("POST", "/v1/contentrewards/connect/finish", contentrewards.connect_finish),
+    route("POST", "/v1/contentrewards/check", contentrewards.check),
+    route("PATCH", "/v1/contentrewards/connection", contentrewards.patch_connection),
+    route("DELETE", "/v1/contentrewards/connection", contentrewards.delete_connection),
+    route("GET", "/v1/contentrewards/campaigns", contentrewards.list_campaigns),
+    route("POST", "/v1/contentrewards/campaigns", contentrewards.add_campaign),
+    route("GET", "/v1/contentrewards/campaigns/{campaignId}", contentrewards.get_campaign),
+    route("POST", "/v1/contentrewards/campaigns/{campaignId}/read", contentrewards.read_campaign),
+    route("PATCH", "/v1/contentrewards/campaigns/{campaignId}", contentrewards.patch_campaign),
+    route("POST", "/v1/contentrewards/campaigns/{campaignId}/logo", contentrewards.logo_upload),
+    route("POST", "/v1/contentrewards/campaigns/{campaignId}/logo/done", contentrewards.logo_done),
+    route("POST", "/v1/contentrewards/campaigns/{campaignId}/logo/link", contentrewards.logo_link),
+    route("DELETE", "/v1/contentrewards/campaigns/{campaignId}/logo", contentrewards.logo_delete),
+    route("DELETE", "/v1/contentrewards/campaigns/{campaignId}", contentrewards.delete_campaign),
+    route("GET", "/v1/contentrewards/submissions", contentrewards.list_submissions),
+    # Before "/submissions/{postId}" so "check" never reads as a post id.
+    route("POST", "/v1/contentrewards/submissions/check", contentrewards.check_submissions),
+    route("POST", "/v1/contentrewards/submissions/{postId}/send", contentrewards.send_submission),
+    route("PATCH", "/v1/contentrewards/submissions/{postId}", contentrewards.patch_submission),
+    route("GET", "/v1/contentrewards/money", contentrewards.get_money),
+    route("POST", "/v1/contentrewards/money/refresh", contentrewards.refresh_money),
+    route("POST", "/v1/contentrewards/seen", contentrewards.seen),
 ]
