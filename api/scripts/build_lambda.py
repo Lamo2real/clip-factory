@@ -5,7 +5,8 @@ too old to know "bedrock-agentcore", durable executions or "s3vectors"), the loc
 ``aws-durable-execution-sdk-python`` (AWS recommends bundling it rather than relying on the runtime's copy) and the
 built-in skills from the repository's ``skills/`` folder as package
 data (``clipfactory_api/builtin_skills/<name>/SKILL.md``) and ``config/platforms.json`` (the stats limits, §16.4) as
-``clipfactory_api/config/platforms.json``, ``config/monetization.json`` (§25.2) next to it, and the help corpus the web build commits
+``clipfactory_api/config/platforms.json``, ``config/monetization.json`` (§25.2) and ``config/stories-guidance.json`` (Lamo
+Stories' checked driving-safety guidance, §45.11.5) next to it, and the help corpus the web build commits
 (``web/src/features/help/help-corpus.json``, §19.6) as ``clipfactory_api/help/corpus.json``. Ask's knowledge pack and library
 (``clipfactory_api/ask/knowledge.json`` and ``ask/library/*.md``, §28.2) are package files already. The Anthropic SDK
 (``anthropic[bedrock]``, for Claude in Amazon Bedrock, §28.1) is vendored too; its two compiled dependencies
@@ -33,6 +34,8 @@ PLATFORMS_CONFIG = ROOT / "config" / "platforms.json"
 PLATFORMS_CONFIG_IN_ZIP = "clipfactory_api/config/platforms.json"
 MONEY_CONFIG = ROOT / "config" / "monetization.json"
 MONEY_CONFIG_IN_ZIP = "clipfactory_api/config/monetization.json"
+STORIES_GUIDANCE = ROOT / "config" / "stories-guidance.json"
+STORIES_GUIDANCE_IN_ZIP = "clipfactory_api/config/stories-guidance.json"
 HELP_CORPUS = ROOT / "web" / "src" / "features" / "help" / "help-corpus.json"
 HELP_CORPUS_IN_ZIP = "clipfactory_api/help/corpus.json"
 OUT = API / "dist" / "lambda.zip"
@@ -152,6 +155,25 @@ def _copy_money_config(dest: Path) -> None:
     print(f"  money config: {len(cfg.platforms)} platforms, checked {cfg.as_of.isoformat()}")
 
 
+def _copy_stories_guidance(dest: Path) -> None:
+    """``config/stories-guidance.json`` → ``clipfactory_api/config/stories-guidance.json``, validated first: every
+    topic, step and dont must name its checked sources (docs/CONTRACTS.md §45.11.5), so a bad edit fails the build."""
+    if not STORIES_GUIDANCE.is_file():
+        raise SystemExit(f"missing {STORIES_GUIDANCE.relative_to(ROOT)} (docs/CONTRACTS.md §45.11.5)")
+    sys.path.insert(0, str(API / "src"))
+    from clipfactory_api.workspaces import guidance
+
+    try:
+        parsed = guidance.load(STORIES_GUIDANCE)
+    except (guidance.GuidanceError, ValueError) as e:
+        raise SystemExit(f"{STORIES_GUIDANCE.relative_to(ROOT)} is not usable guidance: {e}") from e
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(STORIES_GUIDANCE, dest)
+    print(
+        f"  stories guidance: {len(parsed.topics)} topics, {len(parsed.sources)} sources, checked {parsed.checked_at}"
+    )
+
+
 def _copy_help_corpus(dest: Path) -> None:
     """``web/src/features/help/help-corpus.json`` → ``clipfactory_api/help/corpus.json``, validated first (the
     bundled fallback of Ask Clip Factory, §19.6). A bad or missing corpus fails the build, never a question."""
@@ -232,6 +254,7 @@ def main() -> int:
         skills = _copy_skills(stage / "clipfactory_api" / "builtin_skills")
         _copy_platforms_config(stage / PLATFORMS_CONFIG_IN_ZIP)
         _copy_money_config(stage / MONEY_CONFIG_IN_ZIP)
+        _copy_stories_guidance(stage / STORIES_GUIDANCE_IN_ZIP)
         _copy_help_corpus(stage / HELP_CORPUS_IN_ZIP)
         names = _zip(stage, OUT)
     missing = [
@@ -241,6 +264,7 @@ def main() -> int:
             *VENDORED,
             PLATFORMS_CONFIG_IN_ZIP,
             MONEY_CONFIG_IN_ZIP,
+            STORIES_GUIDANCE_IN_ZIP,
             HELP_CORPUS_IN_ZIP,
             ASK_KNOWLEDGE_IN_ZIP,
         )

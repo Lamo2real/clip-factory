@@ -1,10 +1,1320 @@
 """Workspaces, dashboard, ideas, characters, stories, library, providers and guidance (docs/CONTRACTS.md §45.5).
 
-SCAFFOLD (Phase 1): builder A adds the routes; tests/ws_routes_core.py lists them for test_http.py.
+Every key is built from the JWT's ``sub`` and the path's workspace id (``guard.require_workspace``: another owner's
+workspace is a 404, Lamo Clips on a Lamo Stories page a 409), and every item read is checked again with
+``guard.owned``. Nothing here reads or writes ``USER#{userId}`` (Lamo Clips' partition) or a Lamo Clips S3 prefix.
 """
 
 from __future__ import annotations
 
-from ...http import Route
+import contextlib
+import json
+import time
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
 
-ROUTES: list[Route] = []
+from ... import db, settings, validate
+from ...app import App
+from ...clock import iso, parse
+from ...errors import ApiError, bad_request, conflict, not_found, too_large
+from ...http import Request, Response, Route, no_content, ok, route
+from ...ids import is_ulid, ulid
+from ...log import log
+from ...skill_prompt import SkillsBlock, load_block
+from ...workspaces import (
+    activity,
+    characters,
+    dashboard,
+    deps,
+    guard,
+    guidance,
+    ideas,
+    jobs,
+    library,
+    media,
+    providers,
+    shapes,
+    stories,
+)
+from ...workspaces import types as ws
+from ...workspaces.expr import Update
+
+Item = dict[str, Any]
+WS_NAME_MAX = 40
+MAX_SCRIPT_BYTES = 2 * 1024 * 1024
+REFERENCE_GRACE_SECONDS = 60 * 60  # a started upload may be completed for an hour
+NO_IDEA = "We could not find that idea."
+NO_CHARACTER = "We could not find that character."
+NO_STORY = "We could not find that story."
+NO_PICTURE = "We could not find that picture."
+SETTINGS_CHANGED = "These settings changed on another screen. Reload and try again."
+CHARACTER_CHANGED = "This character changed on another screen. Reload it and try again."
+IMAGES_OFF = "AI pictures are off. Turn them on in Lamo Stories › Settings."
+SCRIPT_UNREADABLE = "We could not open the storyboard just now. Try again in a minute."
+
+
+@dataclass
+class Ctx:
+    app: App
+    req: Request
+    workspace: Item
+    now: datetime
+
+    @property
+    def user_id(self) -> str:
+        return self.req.user_id
+
+    @property
+    def ws_id(self) -> str:
+        return str(self.workspace["workspaceId"])
+
+    @property
+    def pk(self) -> str:
+        return ws.workspace_pk(self.user_id, self.ws_id)
+
+    @property
+    def store(self) -> db.Store:
+        return self.app.store
+
+    @property
+    def deps(self) -> deps.WsDeps:
+        return deps.of(self.app)
+
+    @property
+    def config(self) -> Item:
+        return shapes.stories_config(self.workspace)
+
+    def presign(self, key: str) -> str:
+        return self.app.media.presign_get(key)
+
+    def at(self) -> str:
+        return iso(self.now)
+
+    def owned(self, item: Mapping[str, Any] | None, kind: str) -> Item | None:
+        if item is None or item.get("type") != kind or not guard.owned(dict(item), self.user_id, self.ws_id):
+            return None
+        return dict(item)
+
+    def stop(self) -> Callable[[str], None] | None:
+        agent = self.deps.agent
+        return agent.stop_session if agent is not None and getattr(agent, "ready", False) else None
+
+
+def _ctx(app: App, req: Request, *, stories_only: bool = True) -> Ctx:
+    now = app.clock()
+    item = guard.require_workspace(app.store, req.user_id, req.params["ws"], stories=stories_only, now=now)
+    return Ctx(app, req, item, now)
+
+
+def _id(req: Request, name: str, message: str) -> str:
+    value = req.params[name]
+    if not is_ulid(value):
+        raise not_found(message)
+    return value
+
+
+def _get(ctx: Ctx, prefix: str, item_id: str, kind: str, message: str) -> Item:
+    found = ctx.owned(ctx.store.get(ctx.pk, f"{prefix}{item_id}"), kind)
+    if found is None:
+        raise not_found(message)
+    return found
+
+
+def _all(ctx: Ctx, prefix: str, kind: str, *, newest_first: bool = False) -> list[Item]:
+    items = ctx.store.query_all(ctx.pk, prefix, newest_first=newest_first)
+    return [i for i in (ctx.owned(x, kind) for x in items) if i is not None]
+
+
+# --- workspaces -----------------------------------------------------------------------------------------------
+
+
+def _registry(app: App, user_id: str) -> list[Item]:
+    out = []
+    for item in app.store.query_all(ws.registry_pk(user_id), ws.WS_SK):
+        workspace_id = item.get("workspaceId")
+        if (
+            item.get("type") == ws.TYPE_WORKSPACE
+            and isinstance(workspace_id, str)
+            and ws.WORKSPACE_ID.match(workspace_id)
+            and workspace_id != ws.CLIPS
+            and item.get("sk") == ws.workspace_sk(workspace_id)
+            and guard.owned(item, user_id, workspace_id)
+        ):
+            out.append(item)
+    return out
+
+
+def _with_first(app: App, user_id: str, now: datetime) -> list[Item]:
+    items = _registry(app, user_id)
+    if not any(i["workspaceId"] == ws.FIRST_STORIES_ID for i in items):
+        items.append(guard.ensure_first_stories(app.store, user_id, now))
+    # By createdAt; on a tie (made in the same millisecond) the first Lamo Stories workspace comes first.
+    return sorted(
+        items,
+        key=lambda i: (str(i.get("createdAt") or ""), i["workspaceId"] != ws.FIRST_STORIES_ID, str(i["workspaceId"])),
+    )
+
+
+def list_workspaces(app: App, req: Request) -> Response:
+    items = _with_first(app, req.user_id, app.clock())
+    return ok({"workspaces": [guard.clips_workspace(), *[shapes.public_workspace(i) for i in items]]})
+
+
+def _name_taken(items: list[Item], name: str, *, except_id: str | None = None) -> bool:
+    if characters.same_name(name, ws.WORKSPACE_TYPES[ws.CLIPS].label):
+        return True
+    return any(characters.same_name(i.get("workspaceName"), name) and i["workspaceId"] != except_id for i in items)
+
+
+def create_workspace(app: App, req: Request) -> Response:
+    body = req.json()
+    validate.only_keys(body, {"workspaceType", "workspaceName"})
+    if body.get("workspaceType") != ws.STORIES:
+        raise bad_request('workspaceType must be "stories".', "workspaceType")
+    name = validate.required_string(body, "workspaceName", max_len=WS_NAME_MAX)
+    now = app.clock()
+    items = _with_first(app, req.user_id, now)
+    if _name_taken(items, name):
+        raise conflict(f"You already have a workspace called {name}. Pick another name.", "workspaceName")
+    if len(items) >= ws.MAX_WORKSPACES:
+        raise conflict(f"You can have at most {ws.MAX_WORKSPACES} workspaces.")
+    workspace_id = ulid()
+    item = {
+        "pk": ws.registry_pk(req.user_id),
+        "sk": ws.workspace_sk(workspace_id),
+        "type": ws.TYPE_WORKSPACE,
+        "userId": req.user_id,
+        "workspaceId": workspace_id,
+        "workspaceName": name,
+        "workspaceType": ws.STORIES,
+        "configuration": guard.default_stories_config(),
+        "version": 1,
+        "createdAt": iso(now),
+        "updatedAt": iso(now),
+    }
+    app.store.put(item, if_absent=True)
+    return ok({"workspace": shapes.public_workspace(item)}, 201)
+
+
+def get_workspace(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req, stories_only=False)
+    return ok({"workspace": shapes.public_workspace(ctx.workspace)})
+
+
+CONFIG_CHOICES: dict[str, tuple[str, ...]] = {
+    "youtubeCategory": ("1", "2", "23", "24", "27"),
+    "youtubePrivacy": ("public", "unlisted", "private"),
+}
+PROVIDER_CHOICES: dict[str, tuple[str, ...]] = {
+    "images": ("builtin-rig", "nova-canvas"),
+    "animation": ("builtin-2d",),
+    "audio": ("builtin-synth",),
+}
+
+
+def _config_patch(current: Mapping[str, Any], value: Any) -> Item:
+    """Partial<StoriesConfig> (§45.6) merged onto the current configuration."""
+    body = validate.obj(value, "configuration")
+    validate.only_keys(body, current.keys())
+    out = dict(current)
+    for key, v in body.items():
+        if key == "defaultDurationSec":
+            out[key] = validate.integer(v, "configuration.defaultDurationSec", lo=15, hi=90)
+        elif key in {"captionsOn", "musicOn"}:
+            out[key] = validate.boolean(v, f"configuration.{key}")
+        elif key == "storyModel":
+            if v != "" and v not in settings.CLIP_MODELS:
+                raise bad_request("configuration.storyModel is not one of the models.", "storyModel")
+            out[key] = v
+        elif key == "providers":
+            chosen = validate.obj(v, "configuration.providers")
+            validate.only_keys(chosen, PROVIDER_CHOICES)
+            merged = dict(current.get("providers") or {})
+            for kind, provider_id in chosen.items():
+                if provider_id not in PROVIDER_CHOICES[kind]:
+                    raise bad_request(f"configuration.providers.{kind} is not a provider of that kind.")
+                merged[kind] = provider_id
+            out[key] = merged
+        elif key in CONFIG_CHOICES:
+            if v not in CONFIG_CHOICES[key]:
+                raise bad_request(f"configuration.{key} must be one of: {', '.join(CONFIG_CHOICES[key])}.")
+            out[key] = v
+    return out
+
+
+def patch_workspace(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    body = req.json()
+    validate.only_keys(body, {"workspaceName", "configuration", "version"})
+    version = validate.integer(body.get("version"), "version", lo=1, hi=10**9)
+    sets: Item = {"updatedAt": ctx.at()}
+    if "workspaceName" in body:
+        name = validate.required_string(body, "workspaceName", max_len=WS_NAME_MAX)
+        if _name_taken(_registry(app, ctx.user_id), name, except_id=ctx.ws_id):
+            raise conflict(f"You already have a workspace called {name}. Pick another name.", "workspaceName")
+        sets["workspaceName"] = name
+    if "configuration" in body:
+        sets["configuration"] = _config_patch(ctx.config, body["configuration"])
+    if int(ctx.workspace.get("version") or 1) != version:
+        raise conflict(SETTINGS_CHANGED)
+    update = Update(ws.registry_pk(ctx.user_id), ws.workspace_sk(ctx.ws_id), sets=sets).bump()
+    try:
+        item = update.equals("version", version).equals("userId", ctx.user_id).run(app.store)
+    except db.ConditionFailed as e:
+        raise conflict(SETTINGS_CHANGED) from e
+    return ok({"workspace": shapes.public_workspace(item)})
+
+
+# --- ideas ----------------------------------------------------------------------------------------------------
+
+
+def _idea_item(ctx: Ctx, fields: Mapping[str, Any], g: guidance.Guidance) -> Item:
+    idea_id = ulid()
+    item: Item = {
+        "pk": ctx.pk,
+        "sk": f"{ws.IDEA_SK}{idea_id}",
+        "type": ws.TYPE_IDEA,
+        "userId": ctx.user_id,
+        "workspaceId": ctx.ws_id,
+        "ideaId": idea_id,
+        "source": "manual",
+        "characterIds": [],
+        "status": "saved",
+        **{k: v for k, v in fields.items() if v is not None},
+        "createdAt": ctx.at(),
+        "updatedAt": ctx.at(),
+    }
+    item.update(ideas.safety_fields(g, item))
+    return item
+
+
+def _check_characters(ctx: Ctx, ids: list[str]) -> list[Item]:
+    if not ids:
+        return []
+    found = ctx.store.batch_get([(ctx.pk, f"{ws.CHAR_SK}{c}") for c in ids])
+    owned = {i["characterId"]: i for i in (ctx.owned(f, ws.TYPE_CHARACTER) for f in found) if i is not None}
+    if any(c not in owned for c in ids):
+        raise bad_request("We could not find one of those characters. Pick them again.", "characterIds")
+    return [owned[c] for c in ids]
+
+
+def list_ideas(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    status = req.query.get("status") or "all"
+    if status not in {"saved", "used", "all"}:
+        raise bad_request("status must be saved, used or all.")
+    items = _all(ctx, ws.IDEA_SK, ws.TYPE_IDEA, newest_first=True)
+    shown = [shapes.public_idea(i) for i in items]
+    return ok({"ideas": [i for i in shown if status == "all" or i["status"] == status]})
+
+
+def create_idea(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    fields = ideas.idea_input(req.json())
+    _check_characters(ctx, fields.get("characterIds") or [])
+    if fields.get("parentIdeaId") and not ctx.owned(
+        ctx.store.get(ctx.pk, f"{ws.IDEA_SK}{fields['parentIdeaId']}"), ws.TYPE_IDEA
+    ):
+        fields.pop("parentIdeaId")  # the idea it came from is gone: keep the new one anyway
+    item = _idea_item(ctx, fields, guidance.load())
+    ctx.store.put(item, if_absent=True)
+    return ok({"idea": shapes.public_idea(item)}, 201)
+
+
+def patch_idea(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    idea_id = _id(req, "ideaId", NO_IDEA)
+    current = _get(ctx, ws.IDEA_SK, idea_id, ws.TYPE_IDEA, NO_IDEA)
+    changes = ideas.idea_input(req.json(), partial=True)
+    if not changes:
+        raise bad_request("Nothing to change.")
+    _check_characters(ctx, changes.get("characterIds") or [])
+    merged = {**current, **changes}
+    update = Update(ctx.pk, current["sk"], sets={"updatedAt": ctx.at()})
+    for key, value in {**changes, **ideas.safety_fields(guidance.load(), merged)}.items():
+        if value is None:
+            update.removes.append(key)
+        else:
+            update.sets[key] = value
+    try:
+        item = update.equals("userId", ctx.user_id).equals("workspaceId", ctx.ws_id).run(ctx.store)
+    except db.ConditionFailed as e:
+        raise not_found(NO_IDEA) from e
+    return ok({"idea": shapes.public_idea(item)})
+
+
+def delete_idea(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    idea = _get(ctx, ws.IDEA_SK, _id(req, "ideaId", NO_IDEA), ws.TYPE_IDEA, NO_IDEA)
+    ctx.store.delete(ctx.pk, idea["sk"])
+    return no_content()
+
+
+def _model(app: App) -> ideas.Model:
+    if not app.help.model_id or app.help.bedrock is None:
+        raise ApiError(503, "unavailable", ideas.OFF)
+    return ideas.Model(app.help.bedrock(), app.help.model_id)
+
+
+def _skills(ctx: Ctx) -> SkillsBlock:
+    """The owner's skills block (§18.6): the model is never asked without it."""
+    try:
+        return load_block(
+            ctx.store, ctx.app.media, ctx.user_id, where="api.stories.ideas", builtins=ctx.app.builtin_skills
+        )
+    except Exception as e:
+        log("warning", "stories.skills_failed", error=type(e).__name__)
+        raise ApiError(503, "platform_down", ideas.BUSY) from e
+
+
+def _time_left(req: Request) -> Callable[[], float]:
+    return lambda: ideas.BUDGET_SECONDS - (time.monotonic() - req.started)
+
+
+def generate_ideas(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    body = req.json()
+    validate.only_keys(body, {"topic", "category", "count"})
+    topic = validate.string(body, "topic", required=False, max_len=200)
+    category = body.get("category")
+    if category is not None and category not in shapes.CATEGORIES:
+        raise bad_request("category must be driving_safety, everyday_skills, comedy or explainer.")
+    count = validate.integer(body.get("count", 4), "count", lo=1, hi=6)
+    model = _model(app)
+    drafts = ideas.generate(
+        model,
+        _skills(ctx),
+        guidance.load(),
+        topic=topic,
+        category=category,
+        count=count,
+        characters=_all(ctx, ws.CHAR_SK, ws.TYPE_CHARACTER),
+        time_left=_time_left(req),
+    )
+    return ok({"drafts": drafts})
+
+
+def expand_idea(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    idea = _get(ctx, ws.IDEA_SK, _id(req, "ideaId", NO_IDEA), ws.TYPE_IDEA, NO_IDEA)
+    body = req.json()
+    validate.only_keys(body, {"durationSec"})
+    concept = idea.get("concept") if isinstance(idea.get("concept"), Mapping) else {}
+    default = (concept or {}).get("durationSec") or ctx.config["defaultDurationSec"]
+    duration = validate.integer(body.get("durationSec", default), "durationSec", lo=15, hi=90)
+    model = _model(app)
+    g = guidance.load()
+    found, pick = ideas.expand(
+        model,
+        _skills(ctx),
+        g,
+        idea,
+        duration=duration,
+        characters=_all(ctx, ws.CHAR_SK, ws.TYPE_CHARACTER),
+        time_left=_time_left(req),
+    )
+    safety = ideas.safety_fields(g, {**idea, "concept": found}, pick)
+    update = Update(ctx.pk, idea["sk"], sets={"concept": found, **safety, "updatedAt": ctx.at()})
+    update.sets = {k: v for k, v in update.sets.items() if v is not None}
+    if safety["safetyTopicId"] is None:
+        update.removes.append("safetyTopicId")
+    try:
+        item = update.equals("userId", ctx.user_id).equals("workspaceId", ctx.ws_id).run(ctx.store)
+    except db.ConditionFailed as e:
+        raise not_found(NO_IDEA) from e
+    return ok({"idea": shapes.public_idea(item)})
+
+
+def idea_variations(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    idea = _get(ctx, ws.IDEA_SK, _id(req, "ideaId", NO_IDEA), ws.TYPE_IDEA, NO_IDEA)
+    body = req.json()
+    validate.only_keys(body, {"count"})
+    count = validate.integer(body.get("count", 3), "count", lo=1, hi=4)
+    model = _model(app)
+    drafts = ideas.variations(
+        model,
+        _skills(ctx),
+        guidance.load(),
+        idea,
+        count=count,
+        characters=_all(ctx, ws.CHAR_SK, ws.TYPE_CHARACTER),
+        time_left=_time_left(req),
+    )
+    return ok({"drafts": drafts})
+
+
+# --- characters -----------------------------------------------------------------------------------------------
+
+
+def _story_counts(ctx: Ctx) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for story in _all(ctx, ws.STORY_SK, ws.TYPE_STORY):
+        for character_id in set(story.get("characterIds") or []):
+            counts[character_id] = counts.get(character_id, 0) + 1
+    return counts
+
+
+def _with_portrait(ctx: Ctx, item: Item) -> Item:
+    """The agent's portrait file (an ``ASSET#`` of kind portrait) recorded on the character once its job is done."""
+    job_id = item.get("portraitJobId")
+    stored = item.get("portrait") if isinstance(item.get("portrait"), Mapping) else None
+    if not job_id or (stored or {}).get("jobId") == job_id:
+        return item
+    job = ctx.owned(ctx.store.get(ctx.pk, jobs.job_sk(str(job_id))), ws.TYPE_PJOB)
+    if job is None or job.get("status") != "ready":
+        return item
+    found = [
+        a
+        for a in _all(ctx, ws.ASSET_SK, ws.TYPE_ASSET, newest_first=True)
+        if a.get("kind") == "portrait" and a.get("characterId") == item["characterId"]
+    ]
+    if not found:
+        return item
+    portrait = {"assetId": found[0]["assetId"], "key": found[0].get("key"), "jobId": job_id}
+    try:
+        return Update(ctx.pk, item["sk"], sets={"portrait": portrait}).equals("portraitJobId", job_id).run(ctx.store)
+    except db.ConditionFailed:
+        return {**item, "portrait": portrait}
+
+
+def _public_character(ctx: Ctx, item: Item, counts: Mapping[str, int] | None = None) -> Item:
+    counts = _story_counts(ctx) if counts is None else counts
+    item = _with_portrait(ctx, item)
+    return shapes.public_character(item, ctx.presign, ctx.user_id, story_count=counts.get(item["characterId"], 0))
+
+
+def list_characters(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    counts = _story_counts(ctx)
+    items = sorted(_all(ctx, ws.CHAR_SK, ws.TYPE_CHARACTER), key=lambda c: str(c.get("name") or "").casefold())
+    return ok({"characters": [_public_character(ctx, c, counts) for c in items]})
+
+
+def _name_used(ctx: Ctx, name: str, *, except_id: str | None = None) -> bool:
+    return any(
+        characters.same_name(c.get("name"), name) and c["characterId"] != except_id
+        for c in _all(ctx, ws.CHAR_SK, ws.TYPE_CHARACTER)
+    )
+
+
+def create_character(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    fields = characters.character_input(req.json())
+    if _name_used(ctx, fields["name"]):
+        raise conflict(f"You already have a character called {fields['name']}. Pick another name.", "name")
+    character_id = ulid()
+    item: Item = {
+        "pk": ctx.pk,
+        "sk": f"{ws.CHAR_SK}{character_id}",
+        "type": ws.TYPE_CHARACTER,
+        "userId": ctx.user_id,
+        "workspaceId": ctx.ws_id,
+        "characterId": character_id,
+        **fields,
+        "references": [],
+        "pendingRefs": {},
+        "refsVersion": 0,
+        "version": 1,
+        "createdAt": ctx.at(),
+        "updatedAt": ctx.at(),
+    }
+    ctx.store.put(item, if_absent=True)
+    return ok({"character": _public_character(ctx, item, {})}, 201)
+
+
+def _character(ctx: Ctx) -> Item:
+    return _get(ctx, ws.CHAR_SK, _id(ctx.req, "characterId", NO_CHARACTER), ws.TYPE_CHARACTER, NO_CHARACTER)
+
+
+def get_character(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    return ok({"character": _public_character(ctx, _character(ctx))})
+
+
+def put_character(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    current = _character(ctx)
+    body = req.json()
+    fields = characters.character_input(body, extra=("version",))
+    version = validate.integer(body.get("version"), "version", lo=1, hi=10**9)
+    if int(current.get("version") or 1) != version:
+        raise conflict(CHARACTER_CHANGED)
+    if _name_used(ctx, fields["name"], except_id=current["characterId"]):
+        raise conflict(f"You already have a character called {fields['name']}. Pick another name.", "name")
+    update = Update(ctx.pk, current["sk"], sets={**fields, "updatedAt": ctx.at()}).bump()
+    try:
+        item = update.equals("version", version).equals("userId", ctx.user_id).run(ctx.store)
+    except db.ConditionFailed as e:
+        raise conflict(CHARACTER_CHANGED) from e
+    return ok({"character": _public_character(ctx, item)})
+
+
+def _active_jobs(ctx: Ctx) -> list[Item]:
+    """Every queued or running job of the workspace, after the stale-heartbeat fence."""
+    out = []
+    for job in _all(ctx, ws.PJOB_SK, ws.TYPE_PJOB):
+        if jobs.active(job):
+            settled = jobs.settle(ctx.store, job, ctx.now, stop=ctx.stop())
+            if jobs.active(settled):
+                out.append(dict(settled or job))
+    return out
+
+
+def delete_character(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    item = _character(ctx)
+    character_id = item["characterId"]
+    running = _active_jobs(ctx)
+    for job in running:
+        if job.get("contentType") == "character" and job.get("contentId") == character_id:
+            raise conflict(f"A picture of {item.get('name')} is being made. Wait until it is done.")
+    story_keys = [
+        (ctx.pk, jobs.story_sk(str(j.get("contentId")))) for j in running if j.get("contentType") == "animation"
+    ]
+    for story in ctx.store.batch_get(story_keys) if story_keys else []:
+        if guard.owned(story, ctx.user_id, ctx.ws_id) and character_id in (story.get("characterIds") or []):
+            raise conflict(f"{item.get('name')} is in a story that is being made. Wait until it is done.")
+    assets = [a for a in _all(ctx, ws.ASSET_SK, ws.TYPE_ASSET) if a.get("characterId") == character_id]
+    ctx.app.media.delete_prefix(shapes.character_prefix(ctx.user_id, ctx.ws_id, character_id))
+    for asset in assets:
+        ctx.store.delete(ctx.pk, asset["sk"])
+    ctx.store.delete(ctx.pk, item["sk"])
+    return no_content()
+
+
+def _pending(item: Mapping[str, Any], now: datetime) -> dict[str, Item]:
+    """Started uploads that may still be completed."""
+    out: dict[str, Item] = {}
+    raw = item.get("pendingRefs") if isinstance(item.get("pendingRefs"), Mapping) else {}
+    for asset_id, pending in (raw or {}).items():
+        started = parse(pending.get("startedAt")) if isinstance(pending, Mapping) else None
+        if started is not None and (now - started).total_seconds() < REFERENCE_GRACE_SECONDS:
+            out[str(asset_id)] = dict(pending)
+    return out
+
+
+def _refs_update(ctx: Ctx, item: Mapping[str, Any]) -> Update:
+    """Reference changes are fenced on their own counter, so an open editor's ``version`` stays valid."""
+    update = Update(ctx.pk, str(item["sk"]), sets={"updatedAt": ctx.at()})
+    update.adds["refsVersion"] = 1
+    current = int(item.get("refsVersion") or 0)
+    return update.missing_or_equals("refsVersion", 0) if current == 0 else update.equals("refsVersion", current)
+
+
+def reference_upload(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    item = _character(ctx)
+    body = req.json()
+    validate.only_keys(body, {"filename", "contentType", "size"})
+    validate.required_string(body, "filename", max_len=255)
+    content_type = str(body.get("contentType") or "").lower()
+    if content_type not in characters.REFERENCE_TYPES:
+        raise bad_request("Pick a PNG, JPEG or WebP picture.", "contentType")
+    size = body.get("size")
+    if isinstance(size, int) and not isinstance(size, bool) and size > characters.MAX_REFERENCE_BYTES:
+        raise too_large("The picture is larger than 10 MB. Pick a smaller one.")
+    size = validate.integer(size, "size", lo=1, hi=characters.MAX_REFERENCE_BYTES)
+    pending = _pending(item, ctx.now)
+    if len(item.get("references") or []) + len(pending) >= characters.MAX_REFERENCES:
+        raise conflict("A character can have at most 8 pictures. Delete one first.")
+    if len(pending) >= characters.PENDING_LIMIT:
+        raise conflict("Wait for the pictures you are sending to finish first.")
+    asset_id = ulid()
+    key = characters.reference_key(
+        shapes.character_prefix(ctx.user_id, ctx.ws_id, item["characterId"]), asset_id, content_type
+    )
+    pending[asset_id] = {"key": key, "contentType": content_type, "size": size, "startedAt": ctx.at()}
+    update = _refs_update(ctx, item)
+    update.sets["pendingRefs"] = pending
+    try:
+        update.run(ctx.store)
+    except db.ConditionFailed as e:
+        raise conflict(CHARACTER_CHANGED) from e
+    url = app.media.presign_put_sized(key, content_type, size, seconds=characters.UPLOAD_SECONDS)
+    return ok({"assetId": asset_id, "uploadUrl": url, "headers": {"Content-Type": content_type}})
+
+
+def _forget_pending(ctx: Ctx, item: Mapping[str, Any], pending: dict[str, Item], asset_id: str) -> None:
+    """A refused upload no longer counts towards the 8 pictures (best effort)."""
+    update = _refs_update(ctx, item)
+    update.sets["pendingRefs"] = {k: v for k, v in pending.items() if k != asset_id}
+    with contextlib.suppress(db.ConditionFailed):
+        update.run(ctx.store)
+
+
+def reference_complete(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    item = _character(ctx)
+    asset_id = _id(req, "assetId", NO_PICTURE)
+    if any(r.get("assetId") == asset_id for r in item.get("references") or []):
+        return ok({"character": _public_character(ctx, item)})
+    pending = _pending(item, ctx.now)
+    started = pending.get(asset_id)
+    if started is None:
+        raise not_found("We could not find that upload. Send the picture again.")
+    key = str(started["key"])
+    if not key.startswith(shapes.character_prefix(ctx.user_id, ctx.ws_id, item["characterId"])):
+        raise not_found(NO_PICTURE)
+    head = app.media.head(key)
+    if head is None:
+        raise bad_request("The picture did not finish sending. Try again.")
+    size = int(head.get("ContentLength") or 0)
+    stored_type = str(head.get("ContentType") or started["contentType"]).lower()
+    if not 0 < size <= characters.MAX_REFERENCE_BYTES or stored_type != started["contentType"]:
+        app.media.delete(key)
+        _forget_pending(ctx, item, pending, asset_id)
+        raise bad_request("That picture could not be used. Pick a PNG, JPEG or WebP under 10 MB.")
+    if len(item.get("references") or []) >= characters.MAX_REFERENCES:
+        app.media.delete(key)
+        raise conflict("A character can have at most 8 pictures. Delete one first.")
+    ref = {"assetId": asset_id, "key": key, "contentType": stored_type, "createdAt": ctx.at()}
+    pending.pop(asset_id)
+    update = _refs_update(ctx, item)
+    update.sets.update({"references": [*(item.get("references") or []), ref], "pendingRefs": pending})
+    asset = {
+        "pk": ctx.pk,
+        "sk": f"{ws.ASSET_SK}{asset_id}",
+        "type": ws.TYPE_ASSET,
+        "userId": ctx.user_id,
+        "workspaceId": ctx.ws_id,
+        "assetId": asset_id,
+        "kind": "character_ref",
+        "characterId": item["characterId"],
+        "key": key,
+        "contentType": stored_type,
+        "bytes": size,
+        "meta": {"current": 1},
+        "createdAt": ctx.at(),
+    }
+    try:
+        ctx.store.transact(puts=[asset], updates=[update.request()])
+    except db.ConditionFailed as e:
+        raise conflict(CHARACTER_CHANGED) from e
+    return ok({"character": _public_character(ctx, _character(ctx))})
+
+
+def reference_delete(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    item = _character(ctx)
+    asset_id = _id(req, "assetId", NO_PICTURE)
+    refs = list(item.get("references") or [])
+    ref = next((r for r in refs if r.get("assetId") == asset_id), None)
+    if ref is None:
+        raise not_found(NO_PICTURE)
+    update = _refs_update(ctx, item)
+    update.sets["references"] = [r for r in refs if r.get("assetId") != asset_id]
+    try:
+        update.run(ctx.store)
+    except db.ConditionFailed as e:
+        raise conflict(CHARACTER_CHANGED) from e
+    ctx.store.delete(ctx.pk, f"{ws.ASSET_SK}{asset_id}")
+    key = ref.get("key")
+    if isinstance(key, str) and key.startswith(shapes.character_prefix(ctx.user_id, ctx.ws_id, item["characterId"])):
+        app.media.delete(key)
+    return ok({"character": _public_character(ctx, _character(ctx))})
+
+
+def make_portrait(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    item = _character(ctx)
+    if ctx.config["providers"].get("images") != "nova-canvas":
+        raise conflict(IMAGES_OFF)
+    if item.get("portraitJobId"):
+        previous = ctx.owned(ctx.store.get(ctx.pk, jobs.job_sk(str(item["portraitJobId"]))), ws.TYPE_PJOB)
+        if jobs.active(jobs.settle(ctx.store, previous, ctx.now, stop=ctx.stop())):
+            raise conflict(f"A picture of {item.get('name')} is being made. Wait until it is done.")
+    job_id = ulid()
+    job = jobs.new_job(
+        ctx.user_id,
+        ctx.ws_id,
+        job_id=job_id,
+        content_type="character",
+        content_id=item["characterId"],
+        job_type="portrait",
+        run=["portrait"],
+        steps=[{"key": "portrait", "label": shapes.STEP_LABEL["portrait"], "status": "pending"}],
+        now=ctx.now,
+        meta={"providers": {"images": "nova-canvas"}},
+    )
+    mark = Update(ctx.pk, item["sk"], sets={"portraitJobId": job_id}).equals("userId", ctx.user_id)
+    ctx.store.transact(puts=[job], updates=[mark.request()])
+    agent = ctx.deps.agent
+    if agent is None or not getattr(agent, "ready", False):
+        return ok(
+            {"job": shapes.public_job(jobs.fail_start(ctx.store, job, None, ctx.now, jobs.PORTRAIT_NOT_SET_UP))}, 202
+        )
+    try:
+        agent.start_portrait(
+            user_id=ctx.user_id,
+            workspace_id=ctx.ws_id,
+            character_id=item["characterId"],
+            job_id=job_id,
+            session_id=job["sessionId"],
+        )
+    except Exception as e:
+        log("warning", "stories.portrait_start_failed", jobId=job_id, error=type(e).__name__)
+        job = jobs.fail_start(ctx.store, job, None, ctx.now, jobs.PORTRAIT_NOT_STARTED)
+    return ok({"job": shapes.public_job(job)}, 202)
+
+
+# --- stories --------------------------------------------------------------------------------------------------
+
+
+def _story(ctx: Ctx) -> Item:
+    return _get(ctx, ws.STORY_SK, _id(ctx.req, "storyId", NO_STORY), ws.TYPE_STORY, NO_STORY)
+
+
+def _reread_story(ctx: Ctx, story: Mapping[str, Any]) -> Item:
+    return ctx.owned(ctx.store.get(ctx.pk, str(story["sk"])), ws.TYPE_STORY) or dict(story)
+
+
+def _job_of(ctx: Ctx, story: Mapping[str, Any]) -> Item | None:
+    job_id = story.get("currentJobId") or story.get("lastJobId")
+    if not isinstance(job_id, str) or not job_id:
+        return None
+    job = ctx.owned(ctx.store.get(ctx.pk, jobs.job_sk(job_id)), ws.TYPE_PJOB)
+    return job if job is not None and job.get("contentId") == story.get("storyId") else None
+
+
+def _settled(ctx: Ctx, story: Item) -> tuple[Item, Item | None]:
+    """The story and its current (or last) job, after the stale-heartbeat fence."""
+    job = _job_of(ctx, story)
+    if job is not None and jobs.is_stale(job, ctx.now):
+        job = jobs.settle(ctx.store, job, ctx.now, stop=ctx.stop(), story=story)
+        story = _reread_story(ctx, story)
+    return story, job
+
+
+def _public_story(ctx: Ctx, story: Mapping[str, Any]) -> Item:
+    return shapes.public_story(story, ctx.presign, ctx.user_id, ctx.app.media.bucket)
+
+
+def _read_script(ctx: Ctx, story: Mapping[str, Any], *, required: bool = False) -> Item | None:
+    key = story.get("scriptKey")
+    prefix = shapes.story_prefix(ctx.user_id, ctx.ws_id, str(story["storyId"]))
+    if not isinstance(key, str) or not key.startswith(prefix):
+        return None
+    try:
+        parsed = json.loads(ctx.app.media.read(key, MAX_SCRIPT_BYTES))
+    except Exception as e:
+        log("warning", "stories.script_unreadable", storyId=story.get("storyId"), error=type(e).__name__)
+        if required:
+            raise ApiError(503, "platform_down", SCRIPT_UNREADABLE) from e
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _require_topic(story: Mapping[str, Any]) -> None:
+    if story.get("category") == "driving_safety" and not story.get("safetyTopicId"):
+        g = guidance.load()
+        raise ApiError(409, "conflict", guidance.NO_GUIDANCE, extra={"topics": guidance.topic_choices(g)})
+
+
+def _meta(ctx: Ctx, story: Mapping[str, Any]) -> Item:
+    config = ctx.config
+    return {
+        "writerModel": config.get("storyModel") or None,
+        "scriptVersion": int(story.get("scriptVersion") or 0) or None,
+        "targetSec": story.get("durationSec"),
+        "safetyTopicId": story.get("safetyTopicId"),
+        "providers": {"writer": "bedrock-claude", **dict(config.get("providers") or {})},
+    }
+
+
+def _story_job(
+    ctx: Ctx,
+    story: Mapping[str, Any],
+    *,
+    job_type: str,
+    run: list[str],
+    from_step: str | None,
+    scene_ids: list[str] | None,
+    note: str | None,
+) -> Item:
+    return jobs.new_job(
+        ctx.user_id,
+        ctx.ws_id,
+        job_id=ulid(),
+        content_type="animation",
+        content_id=str(story["storyId"]),
+        job_type=job_type,
+        run=run,
+        steps=jobs.story_steps(run, stories.done_steps(story)),
+        now=ctx.now,
+        from_step=from_step,
+        scene_ids=scene_ids,
+        note=note,
+        meta=_meta(ctx, story),
+    )
+
+
+def _start(ctx: Ctx, story: Item, job: Item) -> tuple[Item, Item]:
+    """Sends the job to the agent; a refused or impossible start fails it at once with a plain sentence."""
+    agent = ctx.deps.agent
+    sentence = None
+    if agent is None or not getattr(agent, "ready", False):
+        sentence = jobs.NOT_SET_UP
+    else:
+        try:
+            agent.start_story(
+                user_id=ctx.user_id,
+                workspace_id=ctx.ws_id,
+                story_id=str(story["storyId"]),
+                job_id=str(job["jobId"]),
+                session_id=str(job["sessionId"]),
+            )
+        except Exception as e:
+            log("warning", "stories.start_failed", jobId=job.get("jobId"), error=type(e).__name__)
+            sentence = jobs.NOT_STARTED
+    if sentence is not None:
+        job = jobs.fail_start(ctx.store, job, story, ctx.now, sentence)
+        story = _reread_story(ctx, story)
+    return story, job
+
+
+def _launch(ctx: Ctx, story: Item, job: Item, *, note: str | None = None) -> tuple[Item, Item]:
+    """Moves the story to ``producing`` with the new job, in one transaction with the job's item, then starts it."""
+    sets: Item = {
+        "status": "producing",
+        "statusBefore": story.get("status") or "draft",
+        "currentJobId": job["jobId"],
+        "lastJobId": job["jobId"],
+        "updatedAt": ctx.at(),
+    }
+    if note:
+        sets["reviewNote"] = note
+    update = Update(ctx.pk, str(story["sk"]), sets=sets).bump()
+    if "animation" in (job.get("configuration") or {}).get("run", []):
+        update.removes.append("staleScenes")
+    update.equals("version", story.get("version")).one_of("status", stories.REMAKE_STATUSES)
+    update.absent_or_null("currentJobId")
+    try:
+        ctx.store.transact(puts=[job], updates=[update.request()])
+    except db.ConditionFailed as e:
+        raise conflict(stories.CHANGED) from e
+    return _start(ctx, _reread_story(ctx, story), job)
+
+
+def list_stories(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    status = req.query.get("status") or "all"
+    if status != "all" and status not in shapes.STORY_STATUSES:
+        raise bad_request("status must be a story status or all.")
+    limit = validate.query_int(req.query, "limit", default=20, lo=1, hi=50)
+
+    def keep(item: Item) -> bool:
+        return ctx.owned(item, ws.TYPE_STORY) is not None and (status == "all" or item.get("status") == status)
+
+    items, cursor = library.filtered_page(
+        ctx.store, ctx.pk, ws.STORY_SK, keep, limit=limit, cursor=req.query.get("cursor")
+    )
+    out = []
+    for found in items:
+        story = _settled(ctx, found)[0] if found.get("status") == "producing" else found
+        out.append(_public_story(ctx, story))
+    return ok({"stories": out, "nextCursor": cursor})
+
+
+def create_story(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    fields = stories.story_input(req.json())
+    cast = _check_characters(ctx, fields["characterIds"])
+    config = ctx.config
+    g = guidance.load()
+    idea: Item | None = None
+    if "ideaId" in fields:
+        idea = _get(ctx, ws.IDEA_SK, fields["ideaId"], ws.TYPE_IDEA, NO_IDEA)
+        brief: Item = {"title": idea.get("title"), "logline": idea.get("logline"), "category": idea.get("category")}
+        if isinstance(idea.get("concept"), Mapping):
+            brief["concept"] = idea["concept"]
+        topic = idea.get("safetyTopicId") if idea.get("category") == "driving_safety" else None
+    else:
+        brief = dict(fields["brief"])
+        topic = guidance.match(g, [brief["title"], brief["logline"]]) if brief["category"] == "driving_safety" else None
+    category = str(brief.get("category") or "explainer")
+    if category == "driving_safety" and not topic:
+        raise ApiError(409, "conflict", guidance.NO_GUIDANCE, extra={"topics": guidance.topic_choices(g)})
+    concept = brief.get("concept") if isinstance(brief.get("concept"), Mapping) else {}
+    duration = fields.get("durationSec") or (concept or {}).get("durationSec") or config["defaultDurationSec"]
+    mood = fields.get("musicMood") or (stories.DEFAULT_MOOD.get(category, "calm") if config.get("musicOn") else "none")
+    story_id = ulid()
+    story: Item = {
+        "pk": ctx.pk,
+        "sk": jobs.story_sk(story_id),
+        "type": ws.TYPE_STORY,
+        "userId": ctx.user_id,
+        "workspaceId": ctx.ws_id,
+        "storyId": story_id,
+        "contentType": "animation",
+        "title": fields.get("title") or str(brief.get("title") or "")[: ideas.TITLE_MAX],
+        "status": "draft",
+        "category": category,
+        "ideaId": idea["ideaId"] if idea else None,
+        "characterIds": [c["characterId"] for c in cast],
+        "durationSec": int(duration),
+        "captionsOn": fields.get("captionsOn", config.get("captionsOn", True)),
+        "musicMood": mood,
+        "postCaptions": shapes.empty_captions(),
+        "scenes": [],
+        "scriptVersion": 0,
+        "stale": [],
+        "safetyTopicId": topic,
+        "posted": [],
+        "brief": brief,
+        "version": 1,
+        "createdAt": ctx.at(),
+        "updatedAt": ctx.at(),
+    }
+    run = list(shapes.STEP_ORDER)
+    job = _story_job(ctx, story, job_type="produce", run=run, from_step=None, scene_ids=None, note=None)
+    story.update(
+        {"status": "producing", "statusBefore": "draft", "currentJobId": job["jobId"], "lastJobId": job["jobId"]}
+    )
+    updates = []
+    if idea is not None:
+        use = Update(ctx.pk, idea["sk"], sets={"status": "used", "updatedAt": ctx.at()})
+        use.adds["storyIds"] = {story_id}
+        updates.append(use.equals("userId", ctx.user_id).request())
+    try:
+        ctx.store.transact(puts=[story, job], updates=updates)
+    except db.ConditionFailed as e:
+        raise conflict("That idea changed meanwhile. Try again.") from e
+    story, job = _start(ctx, story, job)
+    return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 201)
+
+
+def get_story(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    story, job = _settled(ctx, _story(ctx))
+    return ok(
+        {
+            "story": _public_story(ctx, story),
+            "job": shapes.public_job(job) if job else None,
+            "script": _read_script(ctx, story),
+        }
+    )
+
+
+def story_jobs(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    story = _story(ctx)
+    out = []
+    for found in _all(ctx, ws.PJOB_SK, ws.TYPE_PJOB, newest_first=True):
+        if found.get("contentType") != "animation" or found.get("contentId") != story["storyId"]:
+            continue
+        job = jobs.settle(ctx.store, found, ctx.now, stop=ctx.stop()) if jobs.is_stale(found, ctx.now) else found
+        out.append(shapes.public_job(job or found))
+    return ok({"jobs": out})
+
+
+def _merge_owner(story: Mapping[str, Any], owner: Mapping[str, list[str]]) -> Item | None:
+    """The owner's own text (never rewritten by the fact check, §45.11.5), kept per story."""
+    if not any(owner.values()):
+        return None
+    current = story.get("ownerEdits") if isinstance(story.get("ownerEdits"), Mapping) else {}
+    return {k: sorted(set((current or {}).get(k) or []) | set(v)) for k, v in owner.items()}
+
+
+def patch_story(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    story = _story(ctx)
+    patch = stories.patch_input(req.json())
+    story, job = _settled(ctx, story)
+    if jobs.active(job) or story.get("currentJobId") or story.get("status") == "producing":
+        raise conflict(stories.BUSY)
+    if int(story.get("version") or 1) != patch["version"]:
+        raise conflict(stories.CHANGED)
+    if story.get("status") not in stories.EDIT_STATUSES:
+        raise conflict("You can change a video once it is made and before it is approved.")
+    script = _read_script(ctx, story, required=True) if stories.touches_script(patch) else None
+    new_script, sets, stale_add, stale_scenes, owner = stories.apply_patch(story, script, patch)
+    if not sets and new_script is None:
+        return ok({"story": _public_story(ctx, story), "script": script or _read_script(ctx, story)})
+    update = Update(ctx.pk, story["sk"], sets={**sets, "updatedAt": ctx.at()})
+    if new_script is not None:
+        number = int(story.get("scriptVersion") or 0) + 1
+        key = f"{shapes.story_prefix(ctx.user_id, ctx.ws_id, story['storyId'])}script/v{number}.json"
+        app.media.put(key, json.dumps(new_script, ensure_ascii=False).encode(), "application/json")
+        update.sets.update({"scriptVersion": number, "scriptKey": key})
+    if stale_add:
+        update.sets["stale"] = shapes.ordered_steps([*(story.get("stale") or []), *stale_add])
+        if "safety" in stale_add and isinstance(story.get("safety"), Mapping):
+            update.sets["safety"] = {**story["safety"], "status": "pending"}
+    if stale_scenes:
+        known = story.get("staleScenes")
+        whole = "animation" in (story.get("stale") or []) and not known
+        if not whole:
+            update.sets["staleScenes"] = sorted(set(known or []) | stale_scenes)
+    edits = _merge_owner(story, owner)
+    if edits is not None:
+        update.sets["ownerEdits"] = edits
+    update.bump().equals("version", patch["version"]).one_of("status", stories.EDIT_STATUSES)
+    update.absent_or_null("currentJobId")
+    try:
+        item = update.run(ctx.store)
+    except db.ConditionFailed as e:
+        raise conflict(stories.CHANGED) from e
+    return ok({"story": _public_story(ctx, item), "script": new_script or script or _read_script(ctx, item)})
+
+
+def _stop_job(ctx: Ctx, story: Item, job: Item | None) -> tuple[Item, Item | None]:
+    """Cancels a running job (its writes fenced out by a new sessionId), then tells the agent (best effort)."""
+    if job is None or not jobs.active(job):
+        return story, job
+    if jobs.cancel(ctx.store, job, story, ctx.now):
+        agent = ctx.deps.agent
+        if agent is not None and getattr(agent, "ready", False):
+            calls: list[Callable[[], None]] = [
+                lambda: agent.cancel_story(str(job["jobId"]), str(job["sessionId"])),
+                lambda: agent.stop_session(str(job["sessionId"])),
+            ]
+            for call in calls:
+                try:
+                    call()
+                except Exception as e:
+                    log("warning", "stories.cancel_call_failed", jobId=job.get("jobId"), error=type(e).__name__)
+    return _reread_story(ctx, story), ctx.owned(ctx.store.get(ctx.pk, str(job["sk"])), ws.TYPE_PJOB)
+
+
+def delete_story(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    story, job = _settled(ctx, _story(ctx))
+    story, _ = _stop_job(ctx, story, job)
+    story_id = story["storyId"]
+    story_jobs_items = [
+        j
+        for j in _all(ctx, ws.PJOB_SK, ws.TYPE_PJOB)
+        if j.get("contentType") == "animation" and j.get("contentId") == story_id
+    ]
+    assets = [a for a in _all(ctx, ws.ASSET_SK, ws.TYPE_ASSET) if a.get("storyId") == story_id]
+    for found in story_jobs_items:
+        ctx.store.delete(ctx.pk, found["sk"])
+    app.media.delete_prefix(shapes.story_prefix(ctx.user_id, ctx.ws_id, story_id))
+    for asset in assets:
+        ctx.store.delete(ctx.pk, asset["sk"])
+    ctx.store.delete(ctx.pk, story["sk"])
+    if story.get("ideaId"):
+        forget = Update(ctx.pk, f"{ws.IDEA_SK}{story['ideaId']}", sets={"updatedAt": ctx.at()})
+        forget.deletes["storyIds"] = {story_id}
+        with contextlib.suppress(db.ConditionFailed):  # the idea was deleted already
+            forget.equals("userId", ctx.user_id).run(ctx.store)
+    return no_content()
+
+
+def _ready_to_remake(ctx: Ctx, story: Item) -> tuple[Item, Item | None]:
+    story, job = _settled(ctx, story)
+    if jobs.active(job) or story.get("status") == "producing":
+        raise conflict(stories.BUSY)
+    if story.get("status") not in stories.REMAKE_STATUSES:
+        raise conflict("This video can't be remade now.")
+    _require_topic(story)
+    return story, job
+
+
+def produce(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    story = _story(ctx)
+    from_step, scene_ids = stories.produce_input(req.json(), story)
+    story, _ = _ready_to_remake(ctx, story)
+    run, scenes = stories.produce_run(story, from_step, scene_ids)
+    job = _story_job(
+        ctx,
+        story,
+        job_type="produce",
+        run=run,
+        from_step=from_step if stories.has_script(story) else None,
+        scene_ids=scenes,
+        note=None,
+    )
+    story, job = _launch(ctx, story, job)
+    return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
+
+
+def request_changes(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    story = _story(ctx)
+    note, scene_ids = stories.changes_input(req.json(), story)
+    story, _ = _ready_to_remake(ctx, story)
+    if not stories.has_script(story):
+        raise conflict(stories.NO_SCRIPT)
+    job = _story_job(
+        ctx,
+        story,
+        job_type="changes",
+        run=list(shapes.STEP_ORDER),
+        from_step="storyboard",
+        scene_ids=scene_ids,
+        note=note,
+    )
+    story, job = _launch(ctx, story, job, note=note)
+    activity.record(ctx.store, ctx.user_id, ctx.ws_id, "changes", story, now=ctx.now)
+    return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job)}, 202)
+
+
+def cancel_story(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    story, job = _settled(ctx, _story(ctx))
+    if job is not None and story.get("currentJobId") == job.get("jobId"):
+        story, job = _stop_job(ctx, story, job)
+    return ok({"story": _public_story(ctx, story), "job": shapes.public_job(job) if job else None})
+
+
+def approve(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    story = _story(ctx)
+    body = req.json()
+    validate.only_keys(body, {"version"})
+    version = validate.integer(body.get("version"), "version", lo=1, hi=10**9)
+    story, _ = _settled(ctx, story)
+    if int(story.get("version") or 1) != version:
+        raise conflict(stories.CHANGED)
+    problem = stories.approve_problem(story)
+    if problem:
+        raise conflict(problem)
+    update = Update(ctx.pk, story["sk"], sets={"status": "approved", "approvedAt": ctx.at(), "updatedAt": ctx.at()})
+    try:
+        item = update.bump().equals("version", version).equals("status", "review").run(ctx.store)
+    except db.ConditionFailed as e:
+        raise conflict(stories.CHANGED) from e
+    activity.record(ctx.store, ctx.user_id, ctx.ws_id, "approved", item, now=ctx.now)
+    return ok({"story": _public_story(ctx, item)})
+
+
+def reject(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    story = _story(ctx)
+    body = req.json()
+    validate.only_keys(body, {"reason"})
+    reason = validate.string(body, "reason", required=False, max_len=stories.NOTE_MAX)
+    story, _ = _settled(ctx, story)
+    if story.get("status") not in stories.REJECT_STATUSES:
+        raise conflict("Only a video that is waiting for review can be rejected.")
+    update = Update(ctx.pk, story["sk"], sets={"status": "rejected", "updatedAt": ctx.at()})
+    if reason:
+        update.sets["reviewNote"] = reason
+    try:
+        item = update.bump().one_of("status", stories.REJECT_STATUSES).absent_or_null("currentJobId").run(ctx.store)
+    except db.ConditionFailed as e:
+        raise conflict(stories.CHANGED) from e
+    activity.record(ctx.store, ctx.user_id, ctx.ws_id, "rejected", item, now=ctx.now)
+    return ok({"story": _public_story(ctx, item)})
+
+
+def download(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    story = _story(ctx)
+    if story.get("status") not in stories.DOWNLOAD_STATUSES:
+        raise conflict("Approve the video first, then download it.")
+    key = story.get("videoKey")
+    if not isinstance(key, str) or not key.startswith(shapes.story_prefix(ctx.user_id, ctx.ws_id, story["storyId"])):
+        raise conflict("The video file is missing. Tap Remake the whole video.")
+    filename = f"{media.slug(str(story.get('title') or ''))}.mp4"
+    url = media.presign_download(media.client(ctx.deps), app.media.bucket, key, filename)
+    return ok({"url": url, "filename": filename})
+
+
+# --- library, providers, guidance, dashboard ------------------------------------------------------------------
+
+
+def get_library(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    kind = req.query.get("kind") or "all"
+    if kind != "all" and kind not in shapes.ASSET_KINDS:
+        raise bad_request("kind must be a file kind or all.")
+    story_id = req.query.get("storyId") or None
+    character_id = req.query.get("characterId") or None
+    for value, name in ((story_id, "storyId"), (character_id, "characterId")):
+        if value is not None and not is_ulid(value):
+            raise bad_request(f"{name} is not valid.")
+    limit = validate.query_int(req.query, "limit", default=50, lo=1, hi=100)
+    keep = library.asset_filter(
+        ctx.user_id, ctx.ws_id, kind=None if kind == "all" else kind, story_id=story_id, character_id=character_id
+    )
+    items, cursor = library.filtered_page(
+        ctx.store, ctx.pk, ws.ASSET_SK, keep, limit=limit, cursor=req.query.get("cursor")
+    )
+    return ok(
+        {"items": library.library_items(ctx.store, ctx.presign, ctx.user_id, ctx.ws_id, items), "nextCursor": cursor}
+    )
+
+
+def get_providers(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    records = _all(ctx, ws.PROVIDER_SK, ws.TYPE_PROVIDER)
+    return ok({"providers": providers.statuses(ctx.config, records)})
+
+
+def get_guidance(app: App, req: Request) -> Response:
+    _ctx(app, req)
+    g = guidance.load()
+    return ok({"topics": [guidance.public_topic(g, t) for t in g.topics], "checkedAt": g.checked_at})
+
+
+def get_dashboard(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    story_items = []
+    current_jobs: dict[str, Item] = {}
+    for found in _all(ctx, ws.STORY_SK, ws.TYPE_STORY, newest_first=True):
+        story = found
+        if found.get("status") == "producing":
+            story, job = _settled(ctx, found)
+            if job is not None:
+                current_jobs[str(job["jobId"])] = job
+        story_items.append(story)
+    activity_page = ctx.store.query_page(ctx.pk, ws.ACT_SK, newest_first=True, limit=dashboard.ACTIVITY_SHOWN * 2)
+    recent = [a for a in (ctx.owned(x, ws.TYPE_ACTIVITY) for x in activity_page.items) if a is not None]
+    built = dashboard.build(
+        story_items,
+        current_jobs,
+        _all(ctx, ws.PUBJOB_SK, ws.TYPE_PUBJOB),
+        _all(ctx, ws.SOCIAL_SK, ws.TYPE_SOCIAL),
+        recent,
+    )
+    return ok({"dashboard": built})
+
+
+BASE = "/v1/workspaces"
+W = BASE + "/{ws}"
+
+ROUTES: list[Route] = [
+    route("GET", BASE, list_workspaces),
+    route("POST", BASE, create_workspace),
+    route("GET", W, get_workspace),
+    route("PATCH", W, patch_workspace),
+    route("GET", W + "/dashboard", get_dashboard),
+    route("GET", W + "/ideas", list_ideas),
+    route("POST", W + "/ideas", create_idea),
+    # Before "/ideas/{ideaId}" so "generate" never reads as an idea id.
+    route("POST", W + "/ideas/generate", generate_ideas),
+    route("PATCH", W + "/ideas/{ideaId}", patch_idea),
+    route("DELETE", W + "/ideas/{ideaId}", delete_idea),
+    route("POST", W + "/ideas/{ideaId}/expand", expand_idea),
+    route("POST", W + "/ideas/{ideaId}/variations", idea_variations),
+    route("GET", W + "/characters", list_characters),
+    route("POST", W + "/characters", create_character),
+    route("GET", W + "/characters/{characterId}", get_character),
+    route("PUT", W + "/characters/{characterId}", put_character),
+    route("DELETE", W + "/characters/{characterId}", delete_character),
+    route("POST", W + "/characters/{characterId}/references", reference_upload),
+    route("POST", W + "/characters/{characterId}/references/{assetId}/complete", reference_complete),
+    route("DELETE", W + "/characters/{characterId}/references/{assetId}", reference_delete),
+    route("POST", W + "/characters/{characterId}/portrait", make_portrait),
+    route("GET", W + "/stories", list_stories),
+    route("POST", W + "/stories", create_story),
+    route("GET", W + "/stories/{storyId}", get_story),
+    route("GET", W + "/stories/{storyId}/jobs", story_jobs),
+    route("PATCH", W + "/stories/{storyId}", patch_story),
+    route("DELETE", W + "/stories/{storyId}", delete_story),
+    route("POST", W + "/stories/{storyId}/produce", produce),
+    route("POST", W + "/stories/{storyId}/cancel", cancel_story),
+    route("POST", W + "/stories/{storyId}/approve", approve),
+    route("POST", W + "/stories/{storyId}/reject", reject),
+    route("POST", W + "/stories/{storyId}/changes", request_changes),
+    route("GET", W + "/stories/{storyId}/download", download),
+    route("GET", W + "/library", get_library),
+    route("GET", W + "/providers", get_providers),
+    route("GET", W + "/guidance", get_guidance),
+]
