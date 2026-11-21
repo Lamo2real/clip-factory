@@ -1,5 +1,5 @@
 {
- "version": "26d70278f70f",
+ "version": "8c80a9f8df67",
  "parts": [
   {
    "id": "app-map",
@@ -645,7 +645,7 @@
    "id": "architecture-data-flows",
    "title": "ARCHITECTURE: Data flows",
    "line": "1. Sign in and token lifetimes",
-   "chars": 62064
+   "chars": 62080
   },
   {
    "id": "architecture-failure-handling",

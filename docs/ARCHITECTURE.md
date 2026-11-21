@@ -1068,7 +1068,7 @@ sequenceDiagram
   O->>A: POST /v1/contentrewards/connect {port}
   A->>ID: POST /oauth2/register (first time only)
   A->>SM: cf-prod/platforms/contentrewards/app (clientId)
-  A->>DB: CRSTATE#{nonce} (port, redirectUri, exp, TTL)
+  A->>DB: a CRSTATE item per nonce (port, redirectUri, exp, TTL)
   A-->>O: authorizeUrl (signed state, PKCE S256, one resource)
   O->>D: cr_connect_open {url} (host, S256, resource and this port checked)
   D->>B: open the URL
@@ -1078,11 +1078,11 @@ sequenceDiagram
   D-->>B: "Done! Go back to Clip Factory. You can close this tab."
   O->>D: cr_connect_result every 500 ms: {status: done, code, state, iss}
   O->>A: POST /v1/contentrewards/connect/finish {state, code, iss} (the code lives 60 s)
-  A->>DB: consume CRSTATE#{nonce} once (conditional delete)
+  A->>DB: consume that CRSTATE item once (conditional delete)
   A->>ID: POST /oauth2/token (code, verifier derived from the state, resource)
   A->>M: get_me, tools/list: can it send?
   A->>SM: under the CRCONN lease: put cf-prod/platforms/contentrewards/token, keep the VersionId
-  A->>DB: CRCONN connected or read_only, tokenVersionId, signInBy; CROWNERS
+  A->>DB: CRCONN connected or read_only, tokenVersionId, signInBy, then CROWNERS
   A-)S: async {"action": "contentrewards", "what": "campaigns"}
   A-->>O: {result, connection}: confetti or one sentence
   DB-->>O: live event "contentrewards"
