@@ -421,8 +421,10 @@ export function TaskLine({
     const line = modelLine(info, model, effort, applied);
     return (
       <Busy>
-        {t?.status === "queued" ? `Getting ${line} ready…` : `${what} with ${line}…`} <span className="st-s-ai-secs">{run.seconds} s</span>
-        <span className="st-s-sr">. This usually takes 10 to 60 seconds.</span>
+        <span>
+          {t?.status === "queued" ? `Getting ${line} ready…` : `${what} with ${line}…`} <span className="st-s-ai-secs">{run.seconds} s</span>
+          <span className="st-s-sr">. This usually takes 10 to 60 seconds.</span>
+        </span>
       </Busy>
     );
   }

@@ -1531,13 +1531,31 @@
 
 .st-s-facts {
   display: grid;
-  grid-template-columns: minmax(0, max-content) 1fr;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
   gap: 6px 16px;
   margin: 0;
 }
 
 .st-s-facts dt {
+  max-width: 15em;
   font-weight: 800;
+}
+
+/* A narrow screen or the Review side column: each name above its value. */
+.st-s-made .st-s-facts {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+@media (max-width: 560px) {
+  .st-s-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .st-s-facts dd {
+    margin-bottom: 8px;
+  }
 }
 
 .st-s-facts dd {
@@ -2377,6 +2395,7 @@ button.st-s-place:hover {
 }
 
 .st-s-ai-secs {
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   color: var(--st-sun, #ffc94a);
 }

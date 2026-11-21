@@ -1,9 +1,11 @@
-// Lamo Stories studio screens in mock mode (docs/CONTRACTS.md §45.16.5, §45.16.6, §45.19): every Ideas, Characters,
-// Production and Review page fits from 320 px (no sideways scroll), draws no edges, keeps the arrow cursor, reaches AA
-// contrast and has targets of 44 px (48 on phones), every pick-one bar has its sliding highlight, and the whole flow
-// works: idea → character → production → review → approve → the publish sheet (only connected accounts, nothing chosen
-// until tapped, Use my settings, Post it). Needs the Lamo Stories shell and the mock's workspace, social and
-// publishing parts (builder F) and the engine (builder D); the mock runs every job in a few seconds.
+// Lamo Stories studio screens in mock mode (docs/CONTRACTS.md §45.16.5, §45.16.6, §45.19, §45.25): every Ideas,
+// Characters, Production and Review page fits from 320 px (no sideways scroll), draws no edges, keeps the arrow cursor,
+// reaches AA contrast and has targets of 44 px (48 on phones), every pick-one bar has its sliding highlight; the AI
+// buttons run as tasks whose line names the model and effort, with the "Model and effort for this one" sheet; Design
+// with AI makes a character that saves; and the whole flow works: idea → character → production (with the video's own
+// model) → review → approve → the publish sheet (only connected accounts, nothing chosen until tapped, the exact
+// account with Check now, Use my settings, Upload). Needs the Lamo Stories shell and the mock's workspace, social and
+// publishing parts (builder F) and the engine (builder D); the mock runs every job and task in a few seconds.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { visibleEdges } from "./edges.ts";
@@ -18,6 +20,7 @@ const PAGES: [string, string][] = [
   ["Ideas", "/stories/ideas"],
   ["Characters", "/stories/characters"],
   ["New character", "/stories/characters/new"],
+  ["New character: Design with AI", "/stories/characters/new#design"],
   ["A character", `/stories/characters/${C.pip}`],
   ["Production", "/stories/production"],
   ["New video", `/stories/production/new?idea=${I.deer}`],
@@ -127,6 +130,105 @@ test("the publish sheet fits and follows the rules on a phone and a desktop", as
   }
 });
 
+/** The rules a sheet must keep at this size (no sideways scroll, no edges, AA contrast, the main button bottom right). */
+async function sheetRules(page: Page, w: number, name: string | RegExp) {
+  const sheet = page.getByRole("dialog", { name });
+  await expect(sheet).toBeVisible();
+  const o = await findOverflow(page);
+  expect(o.page, `${w}: sideways scroll`).toBeLessThanOrEqual(o.viewport);
+  expect((await visibleEdges(page)).filter((e) => /\.st-/.test(e)), `${w}: edges`).toEqual([]);
+  const axe = await new AxeBuilder({ page }).include(".st-s-sheet").withRules(["color-contrast"]).analyze();
+  expect(axe.violations.flatMap((v) => v.nodes.map((n) => n.target.join(" "))), `${w}: contrast`).toEqual([]);
+  const main = await sheet.locator(".st-s-sheet__actions .st-btn--main").boundingBox();
+  expect(main && main.x + main.width).toBeGreaterThan(w * 0.6);
+  for (const bar of await sheet.locator("[role=radiogroup]").all()) await expect(bar.locator(":scope > .glide")).toHaveCount(1);
+  return sheet;
+}
+
+test("Ask for ideas runs as a task whose line names the model and effort; the model menu fits on a phone and a desktop", async ({ browser }) => {
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    const page = await ctx.newPage();
+    await open(page, "/stories/ideas");
+    await page.getByRole("button", { name: "Ask for ideas" }).click();
+    const ask = page.getByRole("form", { name: "Ask for ideas" });
+    const menu = ask.getByRole("button", { name: /^Model and effort for this one: Claude Opus 5\.5/ });
+    await expect(menu).toBeVisible();
+    await menu.click();
+    const sheet = await sheetRules(page, w, "Model and effort for this one");
+    await expect(sheet).toContainText("Just for this one. Your settings stay the same.");
+    await sheet.locator(".st-s-pick__opt", { hasText: "Claude Fable 5.2" }).click();
+    await sheet.locator(".st-s-pick__opt", { hasText: "Maximum" }).click();
+    await sheet.getByRole("button", { name: "Done" }).click();
+    await expect(ask.getByRole("button", { name: /^Model and effort for this one: Claude Fable 5\.2, Maximum effort, just this one$/ })).toBeVisible();
+    await ask.getByRole("button", { name: "Get ideas" }).click();
+    await expect(ask.locator(".st-s-busy")).toContainText(/Claude Fable 5\.2 · Maximum effort/);
+    await expect(page.locator(".st-s-draft")).toHaveCount(4, { timeout: 20_000 });
+    expect(await audit(page, `Ideas with drafts ${w}`, touch && w < 768)).toEqual([]);
+    await ctx.close();
+  }
+});
+
+test("reference videos in a new video, and the model notes of a video, fit and follow the rules", async ({ browser }) => {
+  for (const [w, h, touch] of [
+    [320, 640, true],
+    [1280, 800, false],
+  ] as const) {
+    const ctx = await context(browser, w, h, touch);
+    const page = await ctx.newPage();
+    await open(page, "/stories/ideas");
+    await page.evaluate(() => {
+      const store = (window as StoriesWindow).__cfStoriesMock?.store as unknown as { references: unknown[] } | undefined;
+      const at = "2026-11-20T10:00:00.000Z";
+      const base = { bytes: 9_000_000, currentJobId: null, ai: { model: null, effort: null }, createdAt: at, updatedAt: at };
+      store?.references.push(
+        { ...base, refId: "01JSTRV0000000000000000001", title: "The banana slip, a very long reference video title to wrap", status: "analyzed", durationSec: 38, analyzedWith: { model: "opus-5-5", effort: "high" } },
+        { ...base, refId: "01JSTRV0000000000000000002", title: "Snow day sketch", status: "ready", durationSec: null, analyzedWith: null },
+      );
+    });
+    await go(page, `/stories/production/new?idea=${I.deer}`);
+    const tile = page.locator(".st-s-reftile", { hasText: "The banana slip" });
+    await expect(tile.or(page.getByText("Your reference videos could not load."))).toBeVisible();
+    // The list comes from the references part (builder H); until it is built the page says so and never blocks.
+    if (await tile.isVisible()) {
+      await tile.click();
+      await expect(tile).toHaveAttribute("aria-pressed", "true");
+      await expect(page.locator(".st-s-reftile", { hasText: "Snow day sketch" })).toHaveAttribute("aria-disabled", "true");
+    } else test.info().annotations.push({ type: "note", description: "The mock's references part is not built here yet." });
+    expect(await audit(page, `New video with references ${w}`, touch && w < 768)).toEqual([]);
+    await go(page, `/stories/production/${S.failed}`);
+    await page.locator(".st-s-details__sum", { hasText: "Production details" }).click();
+    await expect(page.locator(".st-s-used__row").first()).toBeVisible();
+    expect(await audit(page, `A stopped video, details open ${w}`, touch && w < 768)).toEqual([]);
+    await go(page, `/stories/review/${S.review}`);
+    await page.locator(".st-s-details__sum", { hasText: "How it was made" }).click();
+    await expect(page.locator(".st-s-made .st-s-used__row").first()).toBeVisible();
+    expect(await audit(page, `Review, how it was made ${w}`, touch && w < 768)).toEqual([]);
+    await ctx.close();
+  }
+});
+
+test("Design with AI: words make a first try in the editor, and it saves", async ({ browser }) => {
+  const ctx = await context(browser, 1280, 800, false);
+  const page = await ctx.newPage();
+  await open(page, "/stories/characters");
+  await page.getByRole("link", { name: "Design with AI" }).click();
+  await expect(page).toHaveURL(/\/stories\/characters\/new#design$/);
+  await page.getByLabel("What is your character like?").fill("A tall, clumsy robot called Zed with glasses who loves to dance");
+  await page.getByRole("button", { name: "Design it" }).click();
+  await expect(page.locator(".st-s-design .st-s-busy")).toContainText("Designing your character with");
+  await expect(page.getByText("Here is a first try.")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Zed");
+  expect(await audit(page, "Design with AI done", false)).toEqual([]);
+  await page.getByRole("button", { name: "Save character" }).click();
+  await expect(page).toHaveURL(/\/stories\/characters\/[0-9A-Z]{26}$/);
+  await expect(page.getByRole("heading", { name: "Zed", exact: true })).toBeVisible();
+  await ctx.close();
+});
+
 test("the whole flow: idea, character, production, review, approve and the publish sheet", async ({ browser }) => {
   test.setTimeout(120_000);
   const ctx = await context(browser, 1280, 800, false);
@@ -164,11 +266,18 @@ test("the whole flow: idea, character, production, review, approve and the publi
     const store = (window as StoriesWindow).__cfStoriesMock?.store;
     if (store) store.knobs.jobSeconds = 3;
   });
+  // This video's own model and effort, kept with it.
+  await page.getByRole("button", { name: /^Model and effort for this video/ }).click();
+  const own = page.getByRole("dialog", { name: "Model and effort for this video" });
+  await own.locator(".st-s-pick__opt", { hasText: "Claude Sonnet 5.5" }).click();
+  await own.getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: "Make the video" }).click();
   await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/);
   await expect(page.locator(".st-s-track__step")).toHaveCount(8);
   await expect(page.getByRole("link", { name: "Watch it in Review" })).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".st-s-film__card").first()).toBeVisible();
+  await page.locator(".st-s-details__sum", { hasText: "Production details" }).click();
+  await expect(page.locator(".st-s-used__row", { hasText: "Write the story" })).toContainText("Claude Sonnet 5.5");
 
   // 4. Review and approve.
   await page.getByRole("link", { name: "Watch it in Review" }).click();
@@ -196,6 +305,11 @@ test("the whole flow: idea, character, production, review, approve and the publi
   await expect(sheet.locator(".st-s-sheet__actions .st-btn--main")).toHaveAttribute("aria-disabled", "true");
   await places.first().click();
   await expect(places.first()).toHaveAttribute("aria-pressed", "true");
+  // The exact account it goes to, checked live before Upload.
+  const dest = sheet.locator(".st-s-dest").first();
+  await expect(dest).toContainText(`Goes to ${connected[0] ?? "the connected account"}`);
+  await dest.getByRole("button", { name: "Check now" }).click();
+  await expect(dest).toContainText("Checked just now");
   await sheet.getByRole("button", { name: "Use my settings" }).click();
   await expect(sheet.getByText("My settings: everyone can see it")).toBeVisible();
   await sheet.getByRole("button", { name: "More details" }).click();

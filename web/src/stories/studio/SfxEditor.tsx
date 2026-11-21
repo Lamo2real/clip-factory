@@ -109,6 +109,7 @@ export function SfxEditor({ story, script, saving, onSave }: { story: Story; scr
   return (
     <div className="st-s-editor-box">
       <Pick label="Music" value={mood} options={CATALOG.musicMoods.map((m) => ({ value: m.id, label: m.id === "none" ? "No music" : m.label }))} onChange={setMood} />
+      <p className="st-s-field__hint">Lamo Stories also adds the sound of each place by itself (rain, wind, traffic, a car&apos;s engine). Those follow the scene and are not in this list.</p>
       <ol className="st-s-sfx">
         {script.scenes.map((sc, i) => {
           const list = lists[sc.sceneId] ?? [];
