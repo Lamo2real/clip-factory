@@ -127,6 +127,9 @@ ROUTES: list[Route] = [
     route("POST", "/v1/contentrewards/campaigns/{campaignId}/logo/link", contentrewards.logo_link),
     route("DELETE", "/v1/contentrewards/campaigns/{campaignId}/logo", contentrewards.logo_delete),
     route("DELETE", "/v1/contentrewards/campaigns/{campaignId}", contentrewards.delete_campaign),
+    # §39.3: does this clip fit the campaign, and "Fix it for me".
+    route("GET", "/v1/contentrewards/fit", contentrewards.get_fit),
+    route("POST", "/v1/contentrewards/fit/captions", contentrewards.fit_captions),
     route("GET", "/v1/contentrewards/submissions", contentrewards.list_submissions),
     # Before "/submissions/{postId}" so "check" never reads as a post id.
     route("POST", "/v1/contentrewards/submissions/check", contentrewards.check_submissions),

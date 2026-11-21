@@ -639,3 +639,77 @@ def seen(app: App, req: Request) -> Response:
     if not money.seen(deps, req.user_id, key):
         raise not_found("Nothing to show.")
     return ok({"ok": True})
+
+
+# --- does this clip fit the campaign? (§39.3) ----------------------------------------------------------------------
+
+MAX_FIT_CLIPS = 20
+NOT_A_CLIP = "We could not find that clip."
+
+
+def get_fit(app: App, req: Request) -> Response:
+    """``ClipFit`` of one clip, or ``{clips}`` for up to 20 (items only: an unknown id is left out). Reads stored
+    items only: never Content Rewards, its public JSON or the network."""
+    from ..contentrewards import fit
+
+    deps = _deps(app)
+    now = _now(app)
+    one, many = req.query.get("clipId"), req.query.get("clipIds")
+    if one:
+        if not is_ulid(one):
+            raise not_found(NOT_A_CLIP)
+        return ok(fit.for_clip(deps, req.user_id, one, now))
+    if many is None:
+        raise bad_request("Send clipId or clipIds.")
+    wanted = list(dict.fromkeys(i.strip() for i in many.split(",") if i.strip()))
+    if not wanted or len(wanted) > MAX_FIT_CLIPS:
+        raise bad_request(f"Send 1 to {MAX_FIT_CLIPS} clip ids.", "clipIds")
+    loader = fit.Loader(deps, req.user_id, now)
+    found = [c for c in (loader.clip(i) for i in wanted) if c is not None]
+    return ok({"clips": [loader.clip_fit(c) for c in found]})
+
+
+def _campaign_clip_rules(deps: Any, user_id: str, clip: Mapping[str, Any], campaign_id: str) -> Mapping[str, Any]:
+    """The rules a campaign clip's posts follow (B's ``campaign_clip``): its job's copy, else the campaign's. 400 for
+    a clip that isn't a campaign clip of that campaign."""
+    from ..contentrewards import campaigns, fit
+
+    job = deps.store.get(db.user_pk(user_id), db.job_sk(str(clip.get("jobId")))) if clip.get("jobId") else None
+    rows = posts.posts_for_clip(deps.store, user_id, str(clip["clipId"]))
+    if fit.campaign_id_of(clip, job, rows) != campaign_id:
+        raise bad_request("This clip isn't a campaign clip of that campaign.", "campaignId")
+    snapshot = (job or {}).get("campaign")
+    if isinstance(snapshot, Mapping) and isinstance(snapshot.get("rules"), Mapping):
+        return snapshot["rules"]  # type: ignore[no-any-return]
+    item = campaigns.get(deps.store, user_id, campaign_id) or {}
+    found = item.get("rules")
+    return found if isinstance(found, Mapping) else {}
+
+
+def fit_captions(app: App, req: Request) -> Response:
+    """ "Fix it for me": the card's captions with the disclosure first and every required tag and phrase back, inside
+    each place's limits (B's ``campaign_caption``, the same the publishers run at upload)."""
+    from .. import clips
+    from ..contentrewards import fit, links
+    from ..platforms.campaign_caption import campaign_caption, campaign_options
+
+    deps = _deps(app)
+    body = req.json()
+    validate.only_keys(body, {"clipId", "campaignId", "captions"})
+    clip_id = validate.required_string(body, "clipId", max_len=40)
+    campaign_id = validate.required_string(body, "campaignId", max_len=60).lower()
+    if not links.UUID.match(campaign_id):
+        raise bad_request("campaignId must be a campaign id.", "campaignId")
+    if "captions" not in body:
+        raise bad_request("captions is required.", "captions")
+    patch = clips.caption_patch(body["captions"])
+    clip = deps.store.get(db.user_pk(req.user_id), db.clip_sk(clip_id)) if is_ulid(clip_id) else None
+    if clip is None:
+        raise not_found(NOT_A_CLIP)
+    if clip.get("status") != "review":
+        raise bad_request("This clip isn't waiting in Review.", "clipId")
+    options = campaign_options(_campaign_clip_rules(deps, req.user_id, clip, campaign_id))
+    out = clips.merged_captions(clip.get("captions"), patch)
+    for platform, field in fit.CAPTION_OF.items():
+        out[field] = campaign_caption(platform, out[field], options)
+    return ok({"captions": out})

@@ -115,7 +115,8 @@ def _measure(platform: str, text: str) -> int:
     return x_length(text) if unit == "x" else len(text)
 
 
-def _is_token(item: str) -> bool:
+def is_token(item: str) -> bool:
+    """A whole ``#``/``@`` token (``#FaZe``, ``@faze.clan``); anything else required is a phrase."""
     return bool(_TOKEN.fullmatch(item))
 
 
@@ -124,8 +125,10 @@ def _token_pattern(item: str) -> re.Pattern[str]:
     return re.compile(rf"(?<![\w#@]){re.escape(item)}(?![\w]|\.\w)", re.IGNORECASE)
 
 
-def _has(text: str, item: str) -> bool:
-    if _is_token(item):
+def has_item(text: str, item: str) -> bool:
+    """``text`` holds the required ``item``: a whole token, case-insensitive, or a phrase with its spaces folded
+    (the fit check of §39.3 uses the same match the publishers do)."""
+    if is_token(item):
         return bool(_token_pattern(item).search(text))
     return " ".join(item.split()).casefold() in " ".join(text.split()).casefold()
 
@@ -137,7 +140,9 @@ def _counts_as(disclosure: str) -> frozenset[str]:
     return AD_LIKE if asked == DEFAULT_DISCLOSURE.lower() else frozenset({asked})
 
 
-def _ad_first(text: str, disclosure: str) -> bool:
+def ad_first(text: str, disclosure: str) -> bool:
+    """The disclosure rule: an ``#ad``-like tag (only the brand's own one when it asked for another) starts within the
+    first ``DISCLOSURE_WINDOW`` characters (the fit check of §39.3 uses it too)."""
     counts = _counts_as(disclosure)
     for match in _HASHTAG.finditer(text):
         if match.start() >= DISCLOSURE_WINDOW:
@@ -155,7 +160,7 @@ def _tidy(text: str, one_line: bool) -> str:
 
 
 def _remove(text: str, item: str) -> str:
-    if _is_token(item):
+    if is_token(item):
         return _token_pattern(item).sub("", text)
     words = [re.escape(w) for w in item.split()]
     return re.compile(r"\s+".join(words), re.IGNORECASE).sub("", text) if words else text
@@ -235,9 +240,9 @@ def campaign_caption(platform: str, text: str, campaign: Mapping[str, Any] | Non
     required = [r for r in _strings(campaign.get("required")) if r.casefold() != disclosure.casefold()]
     one_line = platform in ONE_LINE
     out = _tidy(text, one_line)
-    if not _ad_first(out, disclosure):
+    if not ad_first(out, disclosure):
         out = _tidy(f"{disclosure} {_remove(out, disclosure)}", one_line)
-    missing = [r for r in required if not _has(out, r)]
+    missing = [r for r in required if not has_item(out, r)]
     if missing:
         sep = " " if one_line else "\n\n"
         out = f"{out}{sep}{' '.join(missing)}"

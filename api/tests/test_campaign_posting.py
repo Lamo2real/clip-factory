@@ -312,7 +312,7 @@ def test_tiktok_still_needs_the_owners_own_choice(call: Call, store: db.Store) -
     assert (status, message(body)) == (400, "Pick who can see it on TikTok.")
 
 
-def test_a_place_content_rewards_refused_as_unlinked_comes_back_after_i_linked_it(call: Call, store: db.Store) -> None:
+def test_a_place_content_rewards_refused_as_unlinked_comes_back_after_i_added_it(call: Call, store: db.Store) -> None:
     ready(store, "youtube", "instagram")
     put_campaign(store)
     put_crconn(store, crLinked={"youtube": False, "instagram": True})
@@ -320,9 +320,9 @@ def test_a_place_content_rewards_refused_as_unlinked_comes_back_after_i_linked_i
     status, body = confirm(call, clip["clipId"], {"platforms": ["youtube", "instagram"]})
     assert status == 400
     assert message(body) == (
-        "Link YouTube inside Content Rewards first. Then tap I linked it, or turn YouTube off and tap Upload."
+        "Add YouTube in Content Rewards first. Then tap I added it, or turn YouTube off and tap Upload."
     )
-    # "I linked it" (PATCH …/connection {"relinked": "youtube"}) puts it back to unknown.
+    # "I added it" (PATCH …/connection {"relinked": "youtube"}) puts it back to unknown (§39.1: "add", never "link").
     put_crconn(store, crLinked={"instagram": True})
     assert confirm(call, clip["clipId"], {"platforms": ["youtube", "instagram"]})[0] == 200
 
@@ -478,7 +478,7 @@ def test_try_again_runs_the_campaign_checks(
             "TikTok keeps Clip Factory's posts private until TikTok checks the app, and private posts can't earn. "
             "Tap Try again on another place.",
         ),
-        ("youtube", {"unlinked": True}, "Link YouTube inside Content Rewards first, then tap Try again."),
+        ("youtube", {"unlinked": True}, "Add YouTube in Content Rewards first, then tap Try again."),
     ],
 )
 def test_try_again_says_what_to_tap_on_its_own_screen(
@@ -934,3 +934,165 @@ def test_mark_posted_without_a_label_writes_none(store: db.Store) -> None:
     store.put(item)
     written = posts.mark_posted(store, item, Published("https://x.com/o/status/1", "2026-11-15T12:00:00.000Z"), NOW)
     assert "paidLabel" not in written
+
+
+# --- §39.3: the fit check at Confirm, Try again and Post now (Content Rewards switched on) -------------------------
+
+FITS = {"items": [{"key": "disclosure", "label": "'Paid partnership' shows at the start", "pass": True}], "fixes": []}
+
+
+@pytest.fixture
+def cr_on(app: Any, secrets_client: Any, clock: Any) -> Any:
+    """Content Rewards switched on (its deps exist): Confirm runs the fit after B's checks. Its fake fails any call:
+    the fit reads stored items only."""
+    from cr_support import FakeCR, make_deps
+
+    deps = make_deps(app.store, secrets_client, FakeCR(), clock)
+    app.contentrewards = deps
+    return deps
+
+
+def fitting_clip(store: db.Store, **fields: Any) -> dict[str, Any]:
+    return campaign_clip(store, checklist=fields.pop("checklist", FITS), **fields)
+
+
+def test_a_campaign_clip_that_can_earn_uploads_with_tags_and_ad_still_missing(
+    call: Call, store: db.Store, table: FakeTable, cr_on: Any
+) -> None:
+    ready(store, "youtube", "instagram")
+    put_campaign(store)
+    put_crconn(store)
+    clip = fitting_clip(store)  # CAPTIONS have neither #Ad nor #FaZe: the publisher puts them back (§38.14)
+    status, body = confirm(call, clip["clipId"], {"platforms": ["youtube", "instagram"]})
+    assert status == 200, body
+    assert {p["platform"] for p in body["posts"]} == {"youtube", "instagram"}
+    assert stored_posts(table)["instagram"]["postOptions"] == {"campaign": CAMPAIGN_OPTIONS}
+    assert cr_on.net.requests == []
+
+
+@pytest.mark.parametrize(
+    ("campaign", "clip", "sentence"),
+    [
+        (
+            {"rules": {**RULES, "clipUntil": "2026-11-01"}},
+            {},
+            "This clip can't earn on FaZe Clips: FaZe Clips stopped taking clips on 1 Nov.",
+        ),
+        (
+            {},
+            {"durationSec": 75.0},
+            "This clip can't earn on FaZe Clips: This clip is 75 seconds. FaZe Clips takes 15 to 60 seconds.",
+        ),
+        (
+            {},
+            {"checklist": {"items": [], "fixes": []}},
+            "This clip can't earn on FaZe Clips: “Paid partnership” isn't on the video. Clip Factory can't make a "
+            "FaZe Clips copy yet. Make new clips for this campaign.",
+        ),
+        (
+            {"rulesState": "reading"},
+            {},
+            "Not yet for FaZe Clips: Reading the rules… Look again in a minute.",
+        ),
+        (
+            {"logo": {"needed": True, "state": "none"}, "rules": {**RULES, "logo": {"required": True, "rules": None}}},
+            {},
+            "This clip can't earn on FaZe Clips: Add the FaZe logo on the campaign page first.",
+        ),
+        (
+            {"rules": {**RULES, "overlayRequired": True}},
+            {},
+            "This clip can't earn on FaZe Clips: This campaign wants its own picture on top of the video. Clip Factory "
+            "can't add it yet. Pick another campaign.",
+        ),
+    ],
+)
+def test_confirm_refuses_a_campaign_clip_that_cant_earn(
+    call: Call, store: db.Store, cr_on: Any, campaign: dict[str, Any], clip: dict[str, Any], sentence: str
+) -> None:
+    ready(store, "youtube", "instagram")
+    put_campaign(store, **campaign)
+    put_crconn(store)
+    found = fitting_clip(store, **clip)
+    status, body = confirm(call, found["clipId"], {"platforms": ["youtube", "instagram"]})
+    assert (status, body["error"]["code"], message(body)) == (409, "conflict", sentence)
+    assert posts.posts_for_clip(store, USER, found["clipId"], consistent=True) == []
+
+
+def test_confirm_checks_the_merged_captions_and_the_chosen_places(
+    call: Call, store: db.Store, cr_on: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from clipfactory_api import clips
+    from clipfactory_api.contentrewards import fit
+
+    ready(store, "youtube", "tiktok", audit="ok")
+    put_campaign(store, platformsPaid=["youtube", "tiktok"])
+    put_crconn(store)
+    found = fitting_clip(store)
+    seen: list[dict[str, Any]] = []
+    real = fit.for_clip
+
+    def spy(*args: Any, **kw: Any) -> Any:
+        seen.append(kw)
+        return real(*args, **kw)
+
+    monkeypatch.setattr(fit, "for_clip", spy)
+    patch = {"tiktok": "#Ad the clutch #FaZe @FaZeClan"}
+    body = {"platforms": ["tiktok"], "captions": patch, "tiktok": TIKTOK}
+    assert confirm(call, found["clipId"], body)[0] == 200
+    assert seen == [
+        {"captions": clips.merged_captions(found["captions"], patch), "chosen": ["tiktok"], "tiktok": TIKTOK}
+    ]
+
+
+def test_a_clip_without_a_campaign_never_asks_the_fit_and_posts_exactly_as_before(
+    call: Call,
+    app: Any,
+    store: db.Store,
+    table: FakeTable,
+    secrets_client: Any,
+    clock: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from clipfactory_api.contentrewards import fit
+    from cr_support import FakeCR, make_deps
+
+    ready(store, "youtube", "instagram")
+    before = seed_clip(store, clipId="01J000000000000000000NRM01")
+    assert confirm(call, before["clipId"], {"platforms": ["youtube", "instagram"]})[0] == 200
+    app.contentrewards = make_deps(app.store, secrets_client, FakeCR(), clock)
+    monkeypatch.setattr(fit, "for_clip", lambda *a, **k: pytest.fail("a normal clip never asks the fit"))
+    after = seed_clip(store, clipId="01J000000000000000000NRM02")
+    assert confirm(call, after["clipId"], {"platforms": ["youtube", "instagram"]})[0] == 200
+
+    def shape(clip_id: str) -> list[dict[str, Any]]:
+        rows = [p for p in table.all() if p.get("type") == "post" and p.get("clipId") == clip_id]
+        return sorted(
+            ({k: v for k, v in p.items() if k not in ("pk", "sk", "postId", "clipId", "gsi1pk")} for p in rows),
+            key=lambda p: str(p["platform"]),
+        )
+
+    assert shape(after["clipId"]) == shape(before["clipId"])
+
+
+def test_try_again_and_post_now_run_the_fit(call: Call, store: db.Store, cr_on: Any, lambda_client: FakeLambda) -> None:
+    ready(store, "youtube", "instagram")
+    put_campaign(store, rules={**RULES, "clipUntil": "2026-11-01"})
+    put_crconn(store)
+    clip = failed_campaign_clip(store, "instagram", status="posted")
+    store.update(PK, db.clip_sk(clip["clipId"]), {"checklist": FITS})
+    status, body = confirm(call, clip["clipId"], {"platforms": ["instagram"]})
+    assert (status, message(body)) == (
+        409,
+        "This clip can't earn on FaZe Clips: FaZe Clips stopped taking clips on 1 Nov.",
+    )
+    assert (store.get(PK, db.post_sk("Pinstagram")) or {})["status"] == "failed"
+    # Post now of a waiting campaign post: the same check
+    waiting = failed_campaign_clip(store, "youtube", status="confirmed", post_status="pending_integration")
+    store.update(PK, db.clip_sk(waiting["clipId"]), {"checklist": FITS})
+    status, body = confirm(call, waiting["clipId"], {"platforms": ["youtube"]})
+    assert status == 409
+    # once the campaign takes clips again, Try again goes
+    put_campaign(store)
+    assert confirm(call, clip["clipId"], {"platforms": ["instagram"]})[0] == 200
+    assert (store.get(PK, db.post_sk("Pinstagram")) or {})["status"] == "queued"

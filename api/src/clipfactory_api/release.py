@@ -4,7 +4,9 @@ A post is ``pending_integration`` when its place had no connected account at Con
 account gone (``NotConnectedError``). ``release_waiting`` keeps the Library's promise "Posts once these accounts are
 connected": it runs right after an account becomes ``connected`` (the OAuth callback in ``cf-prod-hooks``, the Meta
 account pick and Check it in ``cf-prod-api``) and, per clip, does what Try again does: the waiting posts go back to
-``queued`` in one transaction with a new flow run on the clip, then ``clip-{clipId}-{flowRun}`` starts.
+``queued`` in one transaction with a new flow run on the clip, then ``clip-{clipId}-{flowRun}`` starts. A Content
+Rewards campaign post (``campaignId``) is never released by itself: it waits for Post now, which goes through Try
+again and the fit check (§39.3), so it never goes up days later after the campaign ended or was held.
 
 ``restart`` and ``start_flow`` are shared with ``routes/clips.py`` (Confirm and Try again), so both Lambdas write the
 same conditional updates. Everything here is safe to repeat: the writes are conditional on the states read, and a flow
@@ -163,8 +165,8 @@ def release_waiting(
     deadline: float | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> int:
-    """Releases every ``pending_integration`` post of ``platform`` whose clip is ``posted``, ``confirmed`` or
-    ``failed``, when that platform's Account is ``connected``; returns how many clips started a new run. A clip of
+    """Releases every ``pending_integration`` post of ``platform`` (but a campaign post, §39.3) whose clip is
+    ``posted``, ``confirmed`` or ``failed``, when that platform's Account is ``connected``; returns how many clips started a new run. A clip of
     this platform whose earlier start did not go through (a ``queued`` post, ``publishState: pending``) gets its start
     finished. ``deadline`` (on ``clock``) is when the caller must answer, by default ``ANSWER_SECONDS`` from now: a
     clip only starts while ``CLIP_SECONDS`` are left. Never raises: a clip that fails is logged and skipped (the next
@@ -189,7 +191,11 @@ def release_waiting(
         by_clip.setdefault(clip_id, []).append(p)
         if p.get("platform") != platform:
             continue
-        if p.get("status") == "pending_integration" and (platform != "tiktok" or has_tiktok_choice(p)):
+        if (
+            p.get("status") == "pending_integration"
+            and not p.get("campaignId")  # §39.3: a campaign post waits for Post now, which runs the fit check
+            and (platform != "tiktok" or has_tiktok_choice(p))
+        ):
             waiting.setdefault(clip_id, []).append(p)
         elif p.get("status") == "queued":
             unstarted.add(clip_id)

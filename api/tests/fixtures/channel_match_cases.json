@@ -1,0 +1,72 @@
+[
+ {
+  "name": "a name that matches",
+  "channels": [{"name": "FaZe Clan", "url": "https://www.youtube.com/@FaZeClan"}],
+  "info": {"channel": "FaZe Clan", "channel_id": "UC1"},
+  "channelKeys": ["fazeclan", "uc1"],
+  "matches": true
+ },
+ {
+  "name": "a handle from the channel link",
+  "channels": [{"name": "FaZe Clan", "url": "https://www.youtube.com/@FaZeClan"}],
+  "info": {"channel": "Clips", "channel_url": "https://www.youtube.com/@FaZeClan"},
+  "channelKeys": ["clips", "fazeclan"],
+  "matches": true
+ },
+ {
+  "name": "a shorter name inside the campaign's",
+  "channels": [{"name": "FaZe Clan Official", "url": null}],
+  "info": {"uploader": "FaZe Clan"},
+  "channelKeys": ["fazeclan"],
+  "matches": true
+ },
+ {
+  "name": "punctuation and case don't count",
+  "channels": [{"name": "faze_clan", "url": null}],
+  "info": {"channel": "FAZE CLAN!"},
+  "channelKeys": ["fazeclan"],
+  "matches": true
+ },
+ {
+  "name": "a twitch channel link",
+  "channels": [{"name": "x", "url": "https://www.twitch.tv/fazeclan"}],
+  "info": {"uploader_id": "fazeclan"},
+  "channelKeys": ["fazeclan"],
+  "matches": true
+ },
+ {
+  "name": "a /channel/ link",
+  "channels": [{"name": "x", "url": "https://www.youtube.com/channel/UCfaze123"}],
+  "info": {"channel_id": "UCfaze123"},
+  "channelKeys": ["ucfaze123"],
+  "matches": true
+ },
+ {
+  "name": "another channel",
+  "channels": [{"name": "FaZe Clan", "url": "https://www.youtube.com/@FaZeClan"}],
+  "info": {"channel": "Valorant Daily", "channel_id": "UCvalo"},
+  "channelKeys": ["valorantdaily", "ucvalo"],
+  "matches": false
+ },
+ {
+  "name": "too short to compare",
+  "channels": [{"name": "FC", "url": null}],
+  "info": {"channel": "FaZe Clan"},
+  "channelKeys": ["fazeclan"],
+  "matches": null
+ },
+ {
+  "name": "nothing known about the video",
+  "channels": [{"name": "FaZe Clan", "url": "https://www.youtube.com/@FaZeClan"}],
+  "info": {},
+  "channelKeys": [],
+  "matches": null
+ },
+ {
+  "name": "the campaign names no channel",
+  "channels": [],
+  "info": {"channel": "FaZe Clan"},
+  "channelKeys": ["fazeclan"],
+  "matches": null
+ }
+]
