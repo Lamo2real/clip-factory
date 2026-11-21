@@ -77,6 +77,7 @@ them. `{app}` is your Clip Factory address and `{hooks}` is its sign-in return a
 | Permissions (scopes) | the list for that platform (YouTube: 3 lines) |
 | Your email | the email you sign in to Clip Factory with |
 | X use case | "Post my own short video clips to my own X account and read their view and like counts in my personal Clip Factory app." |
+| TikTok description | "My own clipping tool. It turns long videos and streams I pick (my own and other creators', including paid clipping campaigns) into short clips, and posts the ones I approve to my own accounts when I press Upload." (TikTok only, so it says the same as the form in step 24) |
 | TikTok review text | See [step 13 of TikTok](#13-fill-in-app-review-then-save). |
 
 The About, Privacy and Terms pages live on your Clip Factory address on purpose: TikTok checks that the website is
@@ -221,7 +222,7 @@ About 20 minutes · Free · Steps checked on 19 Nov 2026.
 
 ## TikTok
 
-About 40 minutes, plus the time TikTok takes to check your app · Free · Steps checked on 19 Nov 2026.
+About 40 minutes, plus the time TikTok takes to check your app · Free · Steps checked on 21 Nov 2026.
 
 **Please read first.** Until TikTok checks and approves the app, it can only post to a **private** account, and every
 post is **"Only me"**. TikTok often says no to apps that only one person uses. If it says no, Clip Factory still posts
@@ -288,7 +289,7 @@ video.** So fill in steps 7 to 13 first, and press Save only in step 13.
 #### 7. Fill in App details
 - Press **Download the icon** in Clip Factory. Upload that picture as the app icon.
 - App name: copy it. Category: pick the closest one.
-- Description: copy it.
+- Description: copy it. TikTok gets its own one: it names the other creators' videos and paid campaigns too.
 - **Terms of Service URL**: copy it. **Privacy Policy URL**: copy it.
 - Don't press **Save** yet. It stays off until **App review** has its text and a video (step 13).
 
@@ -320,7 +321,7 @@ video.** So fill in steps 7 to 13 first, and press Save only in step 13.
   video.publish: post clips I approved with Upload straight to my own TikTok (Direct Post).
   video.upload: comes with Content Posting API. Clip Factory does not ask for it; it only uses Direct Post.
   video.list: show the views and likes of my own posts on my Clip Factory dashboard.
-  user.info.stats: show my follower and like totals on my Clip Factory money tile, only after I say OK."
+  user.info.stats: show my follower count on my Clip Factory Money page, only after I say OK."
 - Record your screen for a few seconds: the About page, then the setup page. Upload that video.
 - Now press **Save**. You swap in the real demo video later (step 21).
 - Save still won't press? App review needs both: the text and a video.
@@ -367,12 +368,38 @@ stay private until TikTok approves the app.
 ### Part 4: Go public
 
 #### 21. Record the real demo video
-- Record your screen while you use Clip Factory, connected in the Sandbox. Show:
-  open Clip Factory, press **Connect TikTok**, TikTok's **Authorize** screen,
-  on a clip tap **Use my settings**, open the **TikTok** row to show who can see it (a dropdown), the
-  Comments, Duet and Stitch switches and Commercial content, then press **Upload**,
-  then the post arriving on your TikTok.
-- You can send up to 5 videos, 50 MB each.
+- Use a computer. Connect in the Sandbox, with your TikTok still private. Record your screen with the address bar in
+  sight.
+- Follow the shot list below, in order. It starts on the About page, then **Connect TikTok** and TikTok's
+  **Authorize** screen.
+- Then **Upload** one clip, choosing everything by hand in the **TikTok** row. Show each line TikTok wants to see.
+- End with the post arriving on your TikTok. Keep it short, about 1 minute. Save it as MP4, under 50 MB. You can send
+  up to 5 videos.
+- The same video goes to App review (step 22) and to the form (step 24).
+- A line from the shot list you can't find? Tap the **TikTok** row to open it. Every line is in there or right above
+  **Upload**. TikTok checks every one.
+- Your Client secret, a key or a long code on screen? Cut that part out before you upload the video.
+
+The shot list (Clip Factory has a **Copy** button for it):
+
+> 1. Start on the About page. Show the Privacy and Terms links, and keep the address bar in sight.
+> 2. Sign in. Open Settings › Posting › Set up posting › TikTok. Press Connect TikTok. Show TikTok's screen with every permission, press Authorize, then show TikTok connected.
+> 3. Show where the clip comes from: the long video or stream you picked (or the campaign brief).
+> 4. Open Review. Play the clip. Show it has no watermark or logo on it.
+> 5. Show nothing is set for TikTok yet. Tap the TikTok row (caption and settings). Show "Asking TikTok…", then "Posting as" with your name and picture.
+> 6. Change the TikTok caption: the words and the hashtags.
+> 7. Show Upload is held: "Pick who can see it on TikTok first." Open Who can see it: nothing is picked, and only TikTok's choices are there. Don't pick yet.
+> 8. Show Comments, Duet and Stitch: all off. Turn one on by hand. A switch you turned off in TikTok is grey: "Turned off in your TikTok settings."
+> 9. Turn on Commercial content. Show the line under it: "Pick Your brand, Branded content, or both." Pick Only me in Who can see it. Show Upload is still held: "Pick Your brand or Branded content on TikTok first."
+> 10. Tick Your brand. Show its "Promotional content" tag.
+> 11. Tick Branded content. Show "Paid partnership" and the Branded Content Policy line above Upload. Who can see it now says: "Branded content can't be Only me. Turn off Branded content."
+> 12. Untick Branded content. Pick Only me by hand. Turn Commercial content off.
+> 13. Show the Music Usage Confirmation line right above Upload.
+> 14. Press Upload. Show the note: "TikTok can take a few minutes to process your clip."
+> 15. Open Library. Show the clip on its way, then Posted.
+> 16. Open TikTok. Show the post: private (only you can see it), your caption as you changed it, your Comments, Duet and Stitch picks, and no watermark.
+> 17. Open Money. Show the TikTok part (it uses video.list and user.info.stats). If it asks for your OK, give it, so TikTok's screen shows user.info.stats.
+> 18. Last, on another clip: show nothing is on. Tap Use my settings: your saved TikTok choices go on with that one tap. Tap the TikTok row to show every option.
 
 #### 22. Ask TikTok to check the app
 - Switch back to **Production**. Open **App review**.
@@ -387,12 +414,70 @@ stay private until TikTok approves the app.
 - Then press **Connect again**.
 
 #### 24. Ask to post publicly
-- Press **Open** (developers.tiktok.com/application/content-posting-api) and fill in the form.
-- Until it passes, every post is "Only me".
-- TikTok may say no to a tool only you use. Then your posts stay private.
+- Only after **App review** says **Live** (step 22). In **Production**, open **Content Posting API**. Press **Apply**
+  next to **Direct Post**. (Or press **Open TikTok's form**: developers.tiktok.com/application/content-posting-api.)
+- The form has 4 pages and does not save. Paste each answer below into the box with the same name. Clip Factory has a
+  **Copy** button for each.
+- Page 1, **General Information**: your full name (type your own), the organization name, website and description.
+- Page 2, **API client information**: the app ID (the long number after /app/ in the address bar of your TikTok app
+  page), how you use Direct Post, and how many users. Pick the smallest choice, then paste how you got the number.
+- Page 3, **Supporting documents**: upload your demo video from step 21. Paste the data you store.
+- Page 4, **Review**: read the 3 boxes and tick them. Press **Next**. A spinner means your video is uploading: it can
+  take 2 minutes. Keep the page open.
+- Then it says **Under review**. TikTok often takes 1 to 3 weeks.
+- **TikTok may say no, because Clip Factory is a tool for one creator.** TikTok's rules ask for apps that many people
+  can use. Clip Factory is only for you. If it says no, your posts stay private, but they still post.
+- A no with empty **Review comments**? Ask TikTok support (developers.tiktok.com/support) for the reason before you
+  try again.
+
+The answers, word for word. They are all true today: do not change them to sound bigger.
+
+- **Organization name**: Clip Factory
+- **Organization website**: your About page (the Website URL from step 8)
+- **Organization description**:
+
+> Clip Factory is my own clipping tool, for me as one creator. Today I am its only user. Sign-up is invite-only, so it is not open to the public.
+>
+> There is no company. Clip Factory is the name of my tool, and I am one person.
+>
+> It turns long videos and streams I pick into short vertical clips. The sources are my own gameplay recordings and other creators' streams and videos, including paid clipping campaigns (such as Content Rewards), where a creator pays clippers to post clips of their content. I treat campaign clips as paid partnerships and mark them as Branded content.
+>
+> I watch every clip and post only the ones I approve, to my own TikTok account, which I connected myself with Login Kit.
+
+- **How you use Direct Post**:
+
+> Clip Factory uses Direct Post to post one clip to my own TikTok account when I press Upload. Nothing posts by itself.
+>
+> Before each post it asks TikTok for my creator info and shows my nickname and picture. I pick who can see it from TikTok's own options; nothing is picked for me. Comments, Duet and Stitch start off, and a setting I turned off in TikTok stays off and grey. I can turn on Commercial content and pick Your brand, Branded content or both; Branded content can't be Only me. I can edit the caption. TikTok's Music Usage Confirmation (and the Branded Content Policy for branded content) shows above Upload. A clip longer than TikTok allows for me can't be posted.
+>
+> After Upload, Clip Factory sends the video file, tells me TikTok can take a few minutes, and checks the post status until it is posted.
+>
+> A Use my settings button puts my saved TikTok choices on with one tap of mine, per clip. Opening the TikTok row shows every option.
+>
+> Other scopes: user.info.basic shows my name and picture. video.list shows the views and likes of my own posts. user.info.stats shows my follower count on my Money page, only after I say OK.
+
+- **How you got the number**:
+
+> Clip Factory has one user: me. Sign-up is invite-only, so at most 1 creator posts with it on any day, up to about 15 clips, which is TikTok's own daily limit for one creator. So I picked the smallest choice.
+
+- **Data you store**:
+
+> Clip Factory stores this TikTok data, for my one account only:
+> - open_id
+> - access token and refresh token (in AWS Secrets Manager, encrypted at rest), and when they expire
+> - the scopes I granted
+> - username, display name and avatar URL
+> - for each post: publish_id, the privacy level I picked, the post status, TikTok's post id, and the error if a post fails
+> - the caption I wrote
+> - views, likes, comments and shares of my own posts (video.list)
+> - a total of views and a count of long videos from my recent videos (video.list)
+> - my follower count (user.info.stats, only after I say OK)
+> Disconnect revokes the token and deletes it.
 
 #### 25. Make your account public again
 - Only after the form in step 24 passes: turn **Private account** off again.
+- Posts from before stay private. To show one, change it to **Everyone** in the TikTok app.
+- TikTok still allows about 15 posts a day.
 
 ### If TikTok says something went wrong
 
