@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Campaign, Captions, Clip, Platform, TikTokCreator, TikTokPostOptions, YoutubePrivacy } from "../../api/types.ts";
+import type { Campaign, Captions, Clip, Platform, Post, TikTokCreator, TikTokPostOptions, YoutubePrivacy } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -32,6 +32,8 @@ import { canMacFetch } from "../../lib/macFetch.ts";
 import { TikTokLegal } from "./TikTokCommercial.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
 import { useUnsaved } from "../../features/help/unsaved.ts";
+import { offerAfterUpload, TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
+import { PostYourself, PostYourselfButton } from "../library/PostYourself.tsx";
 
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
 export const MEDIA_FRESH_MS = 50 * 60 * 1000;
@@ -143,7 +145,24 @@ export function Review({ jobId }: { jobId: string | null }) {
   const setupFailed = !setup.data && !!setup.error;
   // Clips uploaded on this visit: each gets a "See how it does" link once its card has left the list.
   const [justKept, setJustKept] = useState<Clip[]>([]);
-  const kept = (clip: Clip) => setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
+  // Uploaded without TikTok while TikTok keeps Clip Factory's uploads Only me: offer Post it yourself (§42.1).
+  const [tiktokYourself, setTikTokYourself] = useState<ReadonlySet<string>>(() => new Set());
+  const [handOff, setHandOff] = useState<Clip | null>(null);
+  const kept = (clip: Clip, posts: Post[] = []) => {
+    setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
+    const after = offerAfterUpload(posts, setup.data?.platforms);
+    if (after.offer) setTikTokYourself((s) => new Set(s).add(clip.clipId));
+    // Not for a campaign clip: Content Rewards takes its TikTok post through the campaign's own places (§38).
+    if (after.open && !clip.campaignId) setHandOff(clip);
+  };
+  // I posted it hides the offer; its Undo brings it back.
+  const markedYourself = (clipId: string, out?: { posts: Post[] }) =>
+    setTikTokYourself((s) => {
+      const next = new Set(s);
+      if (out && !out.posts.some((p) => p.platform === "tiktok" && p.by === "you")) next.add(clipId);
+      else next.delete(clipId);
+      return next;
+    });
   // Where focus goes when a card leaves while it holds focus: the next card's title (or the one before, or the empty
   // state's Make clips), so keyboard and screen reader users keep their place (§12.4).
   const focusNext = useRef<string | null>(null);
@@ -241,6 +260,7 @@ export function Review({ jobId }: { jobId: string | null }) {
                 <LinkButton href={`/clips/${c.clipId}`} size="sm" icon="chart" iconAfter="chevronRight">
                   See how it does
                 </LinkButton>
+                {tiktokYourself.has(c.clipId) ? <PostYourselfButton clip={c} onMarked={(out) => markedYourself(c.clipId, out)} /> : null}
               </li>
             ))}
           </ul>
@@ -283,11 +303,20 @@ export function Review({ jobId }: { jobId: string | null }) {
                   onThrowAway={throwAway}
                   onSettling={settle}
                   copyHere={visible.some((x) => x.remakeOf?.clipId === c.clipId)}
+                  tiktokApproved={tiktokAudited(setup.data?.platforms)}
                 />
               </li>
             ))}
           </ol>
         </>
+      ) : null}
+      {handOff ? (
+        <PostYourself
+          key={handOff.clipId}
+          clip={handOff}
+          onMarked={(out) => markedYourself(handOff.clipId, out)}
+          onClose={() => setHandOff(null)}
+        />
       ) : null}
     </div>
   );
@@ -323,8 +352,11 @@ function ReviewCard({
   onThrowAway,
   onSettling,
   copyHere = false,
+  tiktokApproved = true,
 }: {
   clip: Clip;
+  /** TikTok approved Clip Factory's own public uploads (§42); until then a ticked TikTok points to Post it yourself. */
+  tiktokApproved?: boolean;
   /** A campaign copy of this clip waits right below it (§39.3). */
   copyHere?: boolean;
   /** The places that are set up (null while loading). */
@@ -338,7 +370,7 @@ function ReviewCard({
   returning: boolean;
   onDone: (clipId: string) => void;
   /** Uploaded: the list offers a link to the clip's numbers. */
-  onKept: (clip: Clip) => void;
+  onKept: (clip: Clip, posts?: Post[]) => void;
   onThrowAway: (clip: Clip) => void;
   /** Tells the list this card is leaving (or, after a failed Upload, staying after all). */
   onSettling: (clipId: string, on: boolean) => void;
@@ -686,7 +718,7 @@ function ReviewCard({
         burst(centerOf(confirmRef.current), 120);
         toast.success(uploadedMessage(out.posts));
         if (tiktok) toast.info("TikTok can take a few minutes to process your clip.");
-        onKept(out.clip);
+        onKept(out.clip, out.posts);
         leave();
         return;
       }
@@ -1061,6 +1093,8 @@ function ReviewCard({
             {uploadWhy ?? goingToLine(chosen)}
           </p>
         ) : null}
+        {/* Above TikTok's Music Usage line, which stays right above Upload (§17.8). */}
+        {placesReady && !noneReady && tiktokOn && !tiktokApproved && !keepFailed ? <p className="tt-yourself-hint">{TIKTOK_PUBLIC_HINT}</p> : null}
         {placesReady && !noneReady && tiktokOn ? (
           <TikTokLegal className="tt-legal" branded={choices.commercial && choices.branded} />
         ) : null}

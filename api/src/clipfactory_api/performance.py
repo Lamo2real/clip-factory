@@ -108,6 +108,8 @@ def platform_performance(platform: str, post: Item | None, account_status: str, 
     for key in ("url", "postedAt"):
         if post.get(key):
             out[key] = post[key]
+    if post.get("by") == "you":
+        out["by"] = "you"  # posted on TikTok by the owner himself (§42)
     if metrics:
         if metrics.get("metricsUpdatedAt"):
             out["updatedAt"] = metrics["metricsUpdatedAt"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -62,6 +63,19 @@ class Clock:
 
     def __call__(self) -> datetime:
         return self.now
+
+
+@pytest.fixture(autouse=True)
+def _finder_tests_never_touch_the_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The campaign finder's tests (modules ``test_finder_*``) fail on any real DNS look-up or socket (§41.6)."""
+    if not request.module.__name__.rsplit(".", 1)[-1].startswith("test_finder_"):
+        return
+
+    def refuse(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("a finder test tried to use the network")
+
+    monkeypatch.setattr(socket, "getaddrinfo", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
 
 
 @pytest.fixture
