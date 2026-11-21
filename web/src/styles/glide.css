@@ -11,7 +11,8 @@
 .bg-modes,
 .model-picks,
 .sidebar__list,
-.tabbar__list {
+.tabbar__list,
+.ws-switch {
   position: relative;
   isolation: isolate;
 }
@@ -46,7 +47,8 @@
 .bg-mode,
 .model-pick,
 .sidebar__list > li:not(.glide),
-.tabbar__cell {
+.tabbar__cell,
+.ws-switch__opt {
   position: relative;
   z-index: 1;
 }
@@ -56,7 +58,8 @@
 .has-glide > .tab.is-on,
 .has-glide > .lib-tab.is-on,
 .has-glide .sidebar__item.is-active,
-.has-glide .tabbar__item.is-active {
+.has-glide .tabbar__item.is-active,
+.has-glide > .ws-switch__opt.is-on {
   background: transparent;
   box-shadow: none;
 }
@@ -129,6 +132,165 @@
   border-radius: 50%;
   background: var(--vermilion);
   box-shadow: none;
+}
+
+/* The workspace switcher (docs/CONTRACTS.md §45.16.1): Lamo Clips | Lamo Stories, only while Lamo Stories is switched
+   on. In the sidebar foot it is the first thing, so the foot (pinned to the bottom) grows up into the free space and
+   nothing under it moves; Nav.tsx measures that space and uses a round toggle, or nothing, when the bar does not fit.
+   On phones it is a round toggle (a small pill with the name when there is room) between the brand and the live dot. */
+.ws-switch-host {
+  position: relative;
+}
+.ws-switch-host[hidden] {
+  display: none !important;
+}
+.ws-switch-host--sidebar[data-ws-switch="round"] {
+  display: grid;
+  justify-items: start;
+  padding-inline: 10px;
+}
+.ws-switch-host--sidebar.is-collapsed[data-ws-switch="round"] {
+  justify-items: center;
+  padding-inline: 0;
+}
+/* Next to the live dot with 4 px of air (12 px flex gap minus 8). Narrower than the round toggle (from 320 px) it is
+   slim: Nav.tsx gives it the gap's width less 4 px of air on each side, and its margins (inline) pull it into the gaps. */
+.topbar > .ws-switch-host--topbar {
+  display: flex;
+  flex: none;
+  margin-left: auto;
+  margin-right: -8px;
+}
+.topbar > .ws-switch-host--topbar:last-child {
+  margin-right: 0;
+}
+.ws-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.ws-switch--stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+.ws-switch__opt {
+  display: block;
+  min-height: 44px;
+  padding: 0 6px;
+  border-radius: calc(var(--r-md) - 4px);
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  line-height: 44px;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    color 300ms var(--ease-out),
+    background-color var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-spring);
+}
+.ws-switch__opt:not(.is-on):hover {
+  color: var(--ink);
+  background: var(--fill-hover);
+}
+.ws-switch__opt:active {
+  transform: scale(0.97);
+}
+.ws-switch__opt.is-on {
+  color: var(--on-bone);
+  text-shadow: none;
+  background: var(--selected);
+}
+/* No shadow: nothing of the switcher paints outside its own box (the before/after pixel check, §45.19). */
+.glide--ws {
+  border-radius: calc(var(--r-md) - 4px);
+  box-shadow: none;
+}
+.ws-round {
+  display: grid;
+  grid-auto-flow: column;
+  place-items: center;
+  gap: 8px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  color: var(--ink);
+  background: var(--fill);
+  font: inherit;
+  text-decoration: none;
+  transition:
+    background-color var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-spring);
+}
+.ws-round:hover {
+  background: var(--fill-hover);
+  transform: translateY(-1px);
+}
+.ws-round:active {
+  transform: scale(0.94);
+}
+.ws-round--phone {
+  width: 48px;
+  height: 48px;
+}
+/* The pill with the short name (a roomy phone) and the icon over the name (from 360 px); Nav.tsx measures the name
+   at this size (LABEL_REM, --fs-xs) before it picks one. */
+.ws-round--label {
+  width: auto;
+  gap: 6px;
+  padding: 0 12px 0 10px;
+  border-radius: var(--r-pill);
+}
+.ws-round__name {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.ws-round--stack {
+  grid-auto-flow: row;
+  align-content: center;
+  gap: 1px;
+  width: auto;
+  min-width: 48px;
+  padding: 0 6px;
+  border-radius: var(--r-md);
+}
+/* Slim: as wide (top bar) or as tall (folded sidebar) as the empty gap allows, icon only. */
+.ws-round--slim {
+  width: 100%;
+  border-radius: var(--r-pill);
+}
+.ws-switch-host--sidebar[data-ws-switch="slim"] .ws-round--slim {
+  height: 100%;
+}
+.ws-mark {
+  display: block;
+  flex: none;
+}
+.ws-menu {
+  position: absolute;
+  z-index: 50;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 220px;
+  padding: 6px;
+  border-radius: var(--r-md);
+  background: rgb(var(--green-deep-rgb) / 0.94);
+  box-shadow: 0 18px 40px -18px rgb(var(--shadow-rgb) / 0.83);
+}
+.topbar .ws-menu {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: auto;
+  right: 0;
 }
 
 /* Hover shows what can be pressed (the cursor never changes, see base.css). */
