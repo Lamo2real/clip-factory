@@ -228,4 +228,44 @@ describe("the Money page with All your money", () => {
     // Content Rewards' own part stays at the end of the page.
     expect(host.querySelector("#content-rewards")).not.toBeNull();
   });
+
+  /** The page on a phone (the dock's media query matches), with All your money answering or not (404: before §39). */
+  async function phonePage(off: boolean) {
+    window.matchMedia = ((q: string) => ({ matches: q.includes("max-width: 767px"), media: q, addEventListener() {}, removeEventListener() {} })) as unknown as typeof matchMedia;
+    sessionStorage.setItem("cf-mock-money", JSON.stringify({ scenario: "dash_many", country: null, seen: [] }));
+    const { mockApi } = await import("../src/api/mock/index.ts");
+    const { ApiError } = await import("../src/api/errors.ts");
+    current = off ? { ...mockApi(), getMoneyEverywhere: async () => Promise.reject(new ApiError(404, "not_found", "Not found")) } : mockApi();
+    const { MoneyDashboard, forgetDashCache } = await import("../src/screens/money/MoneyDashboard.tsx");
+    forgetDashCache();
+    await act(async () => root.render(<ToastProvider>{<MoneyDashboard />}</ToastProvider>));
+    for (let i = 0; i < 40 && !host.querySelector(".dash-kpi--monthly"); i++) await act(async () => await new Promise((r) => setTimeout(r, 50)));
+    if (!off) for (let i = 0; i < 40 && !host.querySelector(".cr-all__rows"); i++) await act(async () => await new Promise((r) => setTimeout(r, 50)));
+    return host.querySelector<HTMLElement>(".money-dash")!;
+  }
+
+  it("phones: the Apps and days dock sits with the cards it changes, never in All your money's part (§39.2)", async () => {
+    const page = await phonePage(false);
+    expect(page.className).toContain("dock-with-cards");
+    const filtered = page.querySelector(".dash-filtered")!;
+    const dock = page.querySelector(".money-dock")!;
+    // Its own part holds the dock and everything it changes (the cards, the chart, the clip list); All your money
+    // and its total stay outside, above it.
+    expect(filtered.contains(dock)).toBe(true);
+    expect(filtered.contains(page.querySelector(".dash-kpi--monthly"))).toBe(true);
+    expect(page.querySelector(".dash-clips")).not.toBeNull();
+    expect(filtered.contains(page.querySelector(".dash-clips"))).toBe(true);
+    expect(filtered.contains(page.querySelector(".cr-all"))).toBe(false);
+    expect(filtered.contains(page.querySelector(".cr-all__total"))).toBe(false);
+    expect(page.querySelector(".cr-all")!.compareDocumentPosition(filtered) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Still first in the reading and tab order of that part: right after All your money.
+    expect(filtered.firstElementChild).toBe(dock);
+  });
+
+  it("phones without All your money (an API from before §39): the dock is as before", async () => {
+    const page = await phonePage(true);
+    expect(page.querySelector(".cr-all")).toBeNull();
+    expect(page.className).not.toContain("dock-with-cards");
+    expect(page.querySelector(".money-dock")).not.toBeNull();
+  });
 });

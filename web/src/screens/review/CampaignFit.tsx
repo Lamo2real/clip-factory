@@ -152,10 +152,14 @@ export function CampaignFit({
         </p>
       ) : null}
 
+      {/* "I couldn't check these:" heads only its own lines: they sit together on a soft fill of their own, and the
+          fix and note lines after them come in a list apart, with room between (never read as one list of six). */}
       {fit.verdict === "cant_tell" && !checked ? (
         <div className="cr-fit__checks">
-          <p className="cr-fit__lead">{COULDNT_CHECK}</p>
-          <ul className="cr-fit__lines">
+          <p className="cr-fit__lead" id={`${id}-checks`}>
+            {COULDNT_CHECK}
+          </p>
+          <ul className="cr-fit__lines" aria-labelledby={`${id}-checks`}>
             {checks.map((i) => (
               <FitLine key={`${i.rule}:${i.platform ?? ""}:${i.text}`} item={i} text={checkLineText(i.text)} />
             ))}
@@ -164,7 +168,7 @@ export function CampaignFit({
       ) : null}
 
       {lines.length ? (
-        <ul className="cr-fit__lines">
+        <ul className="cr-fit__lines cr-fit__more">
           {lines.map((i) => (
             <FitLine key={`${i.rule}:${i.platform ?? ""}:${i.text}`} item={i} />
           ))}

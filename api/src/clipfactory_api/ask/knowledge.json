@@ -1,5 +1,5 @@
 {
- "version": "bc21c16a4b86",
+ "version": "9d4a5b1f1f10",
  "parts": [
   {
    "id": "app-map",
@@ -264,10 +264,16 @@
    "chars": 79191
   },
   {
+   "id": "contracts-40",
+   "title": "CONTRACTS: 40. Get paid: set up payouts, see if you can get paid, and what reached your bank (owner request, 2026-11-21)",
+   "line": "The owner's words: \"Does the application of Clip Factory show me exactly how much I get after or how much I earn in",
+   "chars": 118752
+  },
+  {
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Lamo Stories: a second, separate workspace (owner request, 2026-11-21)",
    "line": "The owner asked for Lamo Stories, a second content studio inside Clip Factory that makes short animated story",
-   "chars": 67614
+   "chars": 67692
   },
   {
    "id": "adr-01",
@@ -549,7 +555,7 @@
    "id": "adr-47",
    "title": "DECISIONS: ADR-47 Only platform-reported money; the estimates are removed",
    "line": "Context. The owner asked (2026-11-18) for earnings that are \"completely for real, real data, nothing that I should",
-   "chars": 3350
+   "chars": 3821
   },
   {
    "id": "adr-48",
@@ -646,6 +652,12 @@
    "title": "DECISIONS: ADR-63 Content Rewards follow-ups: one fit check in the API, a new copy instead of turning a normal clip into a campaign clip, one 30-day total that ",
    "line": "Context. After approving §38 the owner asked (2026-11-21) for three things: the Connect steps checked so they are",
    "chars": 5981
+  },
+  {
+   "id": "adr-64",
+   "title": "DECISIONS: ADR-64 Get paid: payout records count as \"sent to your bank\", statuses say how they are known, the bank waits for the owner",
+   "line": "Context. The owner asked (2026-11-21) whether Clip Factory shows exactly what he earns on YouTube, TikTok,",
+   "chars": 6402
   },
   {
    "id": "adr-70",

@@ -1410,6 +1410,11 @@ export interface CrMoney {
   waitingForBrand: number;
   campaigns: { campaignId?: string; name: string; paidCents: number; pendingCents: number }[];
   celebrations: { key: string; kind: "first_money" | "money_arrived" | "can_move"; text: string }[];
+  /**
+   * When Clip Factory last saw a move to Whop finish (On its way went back to 0 after being above 0), ISO. Additive:
+   * absent on an API from before it, null before any move. The bank step leads on every device from it (§38.7).
+   */
+  movedAt?: string | null;
 }
 /** GET /v1/contentrewards: reads items only, never calls CR. */
 export interface CrOverview {
