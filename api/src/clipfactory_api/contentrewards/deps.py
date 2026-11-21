@@ -51,6 +51,11 @@ class CrDeps:
         deadline = self.monotonic() + max(0.0, seconds)
         self.remaining = lambda: max(0.0, deadline - self.monotonic())
 
+    def for_request(self, started: float) -> None:
+        """A ``cf-prod-api`` request: its ``API_SECONDS`` count from when the request arrived (``Request.started``,
+        a ``time.monotonic`` reading), not from when the route first needed Content Rewards."""
+        self.until(config.API_SECONDS - max(0.0, time.monotonic() - started))
+
     def mcp(self, user_id: str) -> McpClient:
         """One client per owner per container (``initialize`` once: the server is sessionless)."""
         client = self._clients.get(user_id)

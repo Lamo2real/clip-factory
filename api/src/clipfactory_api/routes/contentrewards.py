@@ -22,13 +22,12 @@ UNAVAILABLE = "Content Rewards is not switched on for this app yet."
 UNDO_SECONDS = 8
 
 
-def _deps(app: App) -> Any:
-    from ..contentrewards import config
-
+def _deps(app: App, req: Request) -> Any:
     deps = getattr(app, "contentrewards", None)
     if deps is None:
         raise ApiError(503, "unavailable", UNAVAILABLE)
-    deps.until(config.API_SECONDS)  # this request's time: a token refresh starts only with ≥ 20 s of it left
+    # This request's time, counted from its start: a token refresh starts only with ≥ 20 s of it left.
+    deps.for_request(req.started)
     return deps
 
 
@@ -42,7 +41,7 @@ def _now(app: App) -> datetime:
 def overview(app: App, req: Request) -> Response:
     from ..contentrewards import campaigns, connection, money, submissions
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     now = _now(app)
     view = campaigns.View(deps, req.user_id, now)
     items = sorted(campaigns.all_for(deps.store, req.user_id), key=lambda c: str(c.get("addedAt") or ""), reverse=True)
@@ -65,7 +64,7 @@ def overview(app: App, req: Request) -> Response:
 def connect(app: App, req: Request) -> Response:
     from ..contentrewards import connect as cr_connect
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     body = req.json()
     validate.only_keys(body, {"port"})
     return ok(cr_connect.start(deps, req.user_id, body.get("port"), _now(app)))
@@ -74,7 +73,7 @@ def connect(app: App, req: Request) -> Response:
 def connect_finish(app: App, req: Request) -> Response:
     from ..contentrewards import connect as cr_connect
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     body = req.json()
     validate.only_keys(body, {"state", "code", "iss", "error", "errorDescription"})
     for name in ("state", "code", "iss", "error", "errorDescription"):
@@ -88,13 +87,13 @@ def connect_finish(app: App, req: Request) -> Response:
 def check(app: App, req: Request) -> Response:
     from ..contentrewards import connect as cr_connect
 
-    return ok(cr_connect.check(_deps(app), req.user_id, _now(app)))
+    return ok(cr_connect.check(_deps(app, req), req.user_id, _now(app)))
 
 
 def patch_connection(app: App, req: Request) -> Response:
     from ..contentrewards import connect as cr_connect
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     body = req.json()
     return ok({"connection": cr_connect.patch(deps, req.user_id, body, _now(app))})
 
@@ -102,7 +101,7 @@ def patch_connection(app: App, req: Request) -> Response:
 def delete_connection(app: App, req: Request) -> Response:
     from ..contentrewards import connect as cr_connect
 
-    cr_connect.disconnect(_deps(app), req.user_id, _now(app))
+    cr_connect.disconnect(_deps(app, req), req.user_id, _now(app))
     return no_content()
 
 
@@ -112,7 +111,7 @@ def delete_connection(app: App, req: Request) -> Response:
 def list_campaigns(app: App, req: Request) -> Response:
     from ..contentrewards import campaigns
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     view = campaigns.View(deps, req.user_id, _now(app))
     items = sorted(campaigns.all_for(deps.store, req.user_id), key=lambda c: str(c.get("addedAt") or ""), reverse=True)
     return ok({"campaigns": [view.summary(c) for c in items]})
@@ -121,7 +120,7 @@ def list_campaigns(app: App, req: Request) -> Response:
 def add_campaign(app: App, req: Request) -> Response:
     from ..contentrewards import campaigns
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     body = req.json()
     validate.only_keys(body, {"url"})
     url = validate.required_string(body, "url", max_len=2048)
@@ -149,7 +148,7 @@ def _brand_picture(deps: Any, user_id: str, item: Mapping[str, Any]) -> None:
 def _campaign(app: App, req: Request) -> tuple[Any, dict[str, Any]]:
     from ..contentrewards import campaigns
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     return deps, campaigns.get_or_404(deps.store, req.user_id, req.params["campaignId"])
 
 
@@ -456,7 +455,7 @@ def _subs_for_campaign(deps: Any, user_id: str, campaign_id: str, now: datetime)
 
 
 def list_submissions(app: App, req: Request) -> Response:
-    deps = _deps(app)
+    deps = _deps(app, req)
     now = _now(app)
     clip_id, campaign_id = req.query.get("clipId"), req.query.get("campaignId")
     if clip_id:
@@ -471,7 +470,7 @@ def list_submissions(app: App, req: Request) -> Response:
 def check_submissions(app: App, req: Request) -> Response:
     from ..contentrewards import poll, submissions
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     body = req.json()
     validate.only_keys(body, {"clipId"})
     clip_id = validate.required_string(body, "clipId", max_len=40)
@@ -517,7 +516,7 @@ def _one_sub(deps: Any, user_id: str, sub: Mapping[str, Any], now: datetime) -> 
 def send_submission(app: App, req: Request) -> Response:
     from ..contentrewards import config, submit
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     now = _now(app)
     sub = _sub_or_404(deps, req.user_id, req.params["postId"])
     by = parse(sub.get("sendBy"))
@@ -540,7 +539,7 @@ def send_submission(app: App, req: Request) -> Response:
 
 
 def patch_submission(app: App, req: Request) -> Response:
-    deps = _deps(app)
+    deps = _deps(app, req)
     now = _now(app)
     sub = _sub_or_404(deps, req.user_id, req.params["postId"])
     body = req.json()
@@ -592,14 +591,14 @@ def patch_submission(app: App, req: Request) -> Response:
 def get_money(app: App, req: Request) -> Response:
     from ..contentrewards import money
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     return ok(money.public(deps, req.user_id, _now(app)))
 
 
 def refresh_money(app: App, req: Request) -> Response:
     from ..contentrewards import config, connection, money
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     now = _now(app)
     item = money.load(deps.store, req.user_id)
     last = parse(item.get("lastManualAt"))
@@ -625,7 +624,7 @@ def refresh_money(app: App, req: Request) -> Response:
 def seen(app: App, req: Request) -> Response:
     from ..contentrewards import campaigns, links, money
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     body = req.json()
     validate.only_keys(body, {"key"})
     key = validate.required_string(body, "key", max_len=200)
@@ -652,7 +651,7 @@ def get_fit(app: App, req: Request) -> Response:
     items only: never Content Rewards, its public JSON or the network."""
     from ..contentrewards import fit
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     now = _now(app)
     one, many = req.query.get("clipId"), req.query.get("clipIds")
     if one:
@@ -693,7 +692,7 @@ def fit_captions(app: App, req: Request) -> Response:
     from ..contentrewards import fit, links
     from ..platforms.campaign_caption import campaign_caption, campaign_options
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     body = req.json()
     validate.only_keys(body, {"clipId", "campaignId", "captions"})
     clip_id = validate.required_string(body, "clipId", max_len=40)
@@ -727,7 +726,7 @@ def remake_clip(app: App, req: Request) -> Response:
     from ..ids import ulid
     from .jobs import start_job
 
-    deps = _deps(app)
+    deps = _deps(app, req)
     if not remake.enabled():
         raise ApiError(503, "unavailable", "Coming soon.")
     body = req.json()
