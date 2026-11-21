@@ -8,8 +8,12 @@ import { calmCopy } from "../src/lib/metrics.ts";
 import {
   canPostYourself,
   canPostYourselfHere,
+  failedForPublicAccount,
   handOffFor,
   offerAfterUpload,
+  postError,
+  TIKTOK_PRIVATE_ONLY,
+  tiktokAudited,
   looksLikeTikTokLink,
   steps,
   tiktokState,
@@ -75,8 +79,17 @@ describe("when Post it yourself shows", () => {
 });
 
 describe("right after Upload on Review", () => {
-  const tiktok = (ready: boolean, audit: "ok" | "limited" | "unknown") =>
-    [{ platform: "tiktok", ready, gates: [{ key: "posting_audit", state: audit }] }] as unknown as PlatformSetup[];
+  const tiktok = (ready: boolean, audit: "ok" | "limited" | "unknown", review: "ok" | "waiting" = audit === "ok" ? "ok" : "waiting") =>
+    [
+      {
+        platform: "tiktok",
+        ready,
+        gates: [
+          { key: "app_review", state: review },
+          { key: "posting_audit", state: audit },
+        ],
+      },
+    ] as unknown as PlatformSetup[];
   const yt = post({ platform: "youtube", status: "queued" });
 
   it("offers it when TikTok was not ticked and TikTok has not approved public uploads", () => {
@@ -91,6 +104,12 @@ describe("right after Upload on Review", () => {
     expect(offerAfterUpload([yt, post({ status: "queued" })], tiktok(true, "limited")).offer).toBe(false);
     expect(offerAfterUpload([yt], tiktok(true, "ok")).offer).toBe(false);
     expect(offerAfterUpload([], tiktok(true, "limited")).offer).toBe(false);
+  });
+
+  it("an audit gate that says ok while the app is still in review is not an approval", () => {
+    expect(tiktokAudited(tiktok(true, "ok", "waiting"))).toBe(false);
+    expect(tiktokAudited(tiktok(true, "ok", "ok"))).toBe(true);
+    expect(tiktokAudited(undefined)).toBe(false);
   });
 });
 
@@ -112,6 +131,29 @@ describe("the steps", () => {
   it("a campaign clip turns on Branded content (under Show more on the web)", () => {
     expect(steps("share", true).join(" ")).toContain("**Disclose post content**, then **Branded content**");
     expect(steps("save", true).join(" ")).toContain("**Show more**");
+  });
+});
+
+describe("an account that is public on purpose", () => {
+  const OLD = "Make your TikTok account private (Setup step 3), then press Try again.";
+
+  it("never tells him to make it private, also on posts that failed before", () => {
+    expect(TIKTOK_PRIVATE_ONLY).not.toMatch(/Make your TikTok account private/);
+    expect(TIKTOK_PRIVATE_ONLY).toContain("Post it yourself");
+    expect(postError(OLD)).toBe(TIKTOK_PRIVATE_ONLY);
+    expect(postError("Facebook said the video was too long for a Reel.")).toBe("Facebook said the video was too long for a Reel.");
+  });
+
+  it("offers Post it yourself instead of a Try again that would fail again", () => {
+    expect(failedForPublicAccount(post({ status: "failed", error: OLD }))).toBe(true);
+    expect(failedForPublicAccount(post({ status: "failed", error: TIKTOK_PRIVATE_ONLY }))).toBe(true);
+    expect(failedForPublicAccount(post({ status: "failed", error: "TikTok did not answer." }))).toBe(false);
+    expect(failedForPublicAccount(post({ platform: "youtube", status: "failed", error: OLD }))).toBe(false);
+  });
+
+  it("the clip page says the same", () => {
+    const row = { platform: "tiktok", status: "failed", metrics: null, error: OLD } as const;
+    expect(calmCopy(row)?.text).toBe("TikTok only takes Clip Factory's uploads on a private account until it approves the app. Go to Library and tap Post it yourself.");
   });
 });
 

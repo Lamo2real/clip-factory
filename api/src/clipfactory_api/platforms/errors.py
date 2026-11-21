@@ -15,6 +15,12 @@ from ..log import log
 from .base import HttpResponse, PublishError, ReconnectNeededError, RetryablePublishError
 from .stub import LABELS
 
+# TikTok refused an unaudited upload to a public account (§41: he posts it on TikTok himself).
+TIKTOK_PRIVATE_ONLY = (
+    "TikTok only takes Clip Factory's uploads on a private account until it approves the app. "
+    "Tap Post it yourself to post it for everyone."
+)
+
 META_RATE_CODES = frozenset({"4", "17", "32", "613", "80001", "80002"})
 # Bad file: Instagram 2207xxx, Facebook Reels specs (1363040 aspect, 1363127 resolution, 1363128 length, 1363129 fps).
 META_FILE_SUBCODES = frozenset(
@@ -136,9 +142,8 @@ def classify(platform: str, status: int, body: Any) -> Problem:
         if code in {"spam_risk_user_banned_from_posting", "spam_risk_too_many_pending_share", "spam_risk"}:
             return Problem("banned", False, "TikTok is not letting this account post right now.", code)
         if code == "unaudited_client_can_only_post_to_private_accounts":
-            return Problem(
-                "private", False, "Make your TikTok account private (Setup step 3), then press Try again.", code
-            )
+            # His account is public on purpose (§41): he posts it there himself instead of making it private.
+            return Problem("private", False, TIKTOK_PRIVATE_ONLY, code)
         if code == "reached_active_user_cap":
             return Problem("daily", False, "TikTok's daily limit for your app is reached. Try tomorrow.", code)
         if code in TIKTOK_FILE_CODES:

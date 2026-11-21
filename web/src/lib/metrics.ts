@@ -2,6 +2,7 @@
 import type { AnyExtra, PerfStatus, Platform, PlatformPerformance, PostMetrics } from "../api/types.ts";
 import type { IconName } from "../components/Icon.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER, relative, timecode } from "./format.ts";
+import { postError, TIKTOK_PRIVATE_ONLY } from "./tiktokYourself.ts";
 
 /** Platform order on the performance page and in This week: the app-wide PLATFORM_ORDER. */
 export const STATS_ORDER: readonly Platform[] = PLATFORM_ORDER;
@@ -268,6 +269,9 @@ export function calmCopy(p: Pick<PlatformPerformance, "platform" | "status" | "m
     case "posted_private":
       return { text: "Uploaded privately. TikTok shows numbers after the app is approved." };
     case "failed": {
+      // TikTok refused it because the account is public (§41): post it yourself, not Try again.
+      if (p.platform === "tiktok" && p.error && postError(p.error) === TIKTOK_PRIVATE_ONLY)
+        return { text: "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Go to Library and tap Post it yourself.", link: { href: "/library", label: "Go to Library" } };
       const why = (p.error ?? "something went wrong").replace(/[.!\s]+$/, "");
       return { text: `${why}. Go to Library and tap Try again.`, link: { href: "/library", label: "Go to Library" } };
     }

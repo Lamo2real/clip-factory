@@ -61,11 +61,34 @@ export function canPostYourselfHere(clip: Clip, tiktok: Pick<PlatformPerformance
   return tiktok.status !== "posting" && tiktok.status !== "posted";
 }
 
-/** Has TikTok passed its posting audit (Clip Factory's own TikTok uploads can be public)? Unknown counts as no. */
+/**
+ * Has TikTok approved Clip Factory's own public uploads? Both the app review (the owner's pick in setup step 22) and the
+ * posting audit must say ok: the audit gate alone is read from the creator's privacy options, which a public account
+ * may list before any audit. Unknown counts as no.
+ */
 export function tiktokAudited(setups: readonly PlatformSetup[] | undefined): boolean {
   const tiktok = setups?.find((s) => s.platform === "tiktok");
-  return tiktok?.gates.some((g) => g.key === "posting_audit" && g.state === "ok") ?? false;
+  const ok = (key: string) => tiktok?.gates.some((g) => g.key === key && g.state === "ok") ?? false;
+  return ok("app_review") && ok("posting_audit");
 }
+
+/** TikTok refused Clip Factory's upload because the account is public (§41); also the sentence posts kept from before. */
+export const TIKTOK_PRIVATE_ONLY = "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone.";
+const TIKTOK_PRIVATE_BEFORE = "Make your TikTok account private (Setup step 3), then press Try again.";
+
+/** A TikTok post that failed only because the account is public: he posts it himself, Try again would fail again. */
+export function failedForPublicAccount(post: Pick<Post, "platform" | "status" | "error">): boolean {
+  return post.platform === "tiktok" && post.status === "failed" && (post.error === TIKTOK_PRIVATE_ONLY || post.error === TIKTOK_PRIVATE_BEFORE);
+}
+
+/** The words to show for a post's error: the older "make it private" sentence reads as today's. */
+export function postError(error: string): string {
+  return error === TIKTOK_PRIVATE_BEFORE ? TIKTOK_PRIVATE_ONLY : error;
+}
+
+/** Review, TikTok ticked before TikTok approved the app: one line that points to Post it yourself. */
+export const TIKTOK_PUBLIC_HINT =
+  "Until TikTok approves the app, Clip Factory can only upload to a private TikTok account. Yours is public? Untick TikTok, tap Upload, then post it yourself.";
 
 /**
  * Right after Upload on Review (§41.1): offer Post it yourself when TikTok was not one of the places (so nothing of

@@ -286,7 +286,7 @@ def test_a_failed_tiktok_upload_becomes_posted_and_the_clip_too(call: Call, stor
         clip,
         "tiktok",
         status="failed",
-        error="Make your TikTok account private (Setup step 3), then press Try again.",
+        error="TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone.",
     )
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
     assert status == 200

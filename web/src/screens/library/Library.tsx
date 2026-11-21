@@ -22,7 +22,7 @@ import { needsTikTokChoices, needsUploadAgain, START_GRACE_MS, STILL_WORKING, up
 import { TikTokSheet } from "../review/TikTokSheet.tsx";
 import { ClipStatusPill } from "../jobs/JobDetail.tsx";
 import { useSetup } from "../settings/setup/useSetup.ts";
-import { canPostYourself } from "../../lib/tiktokYourself.ts";
+import { canPostYourself, failedForPublicAccount, postError } from "../../lib/tiktokYourself.ts";
 import { PostYourselfButton } from "./PostYourself.tsx";
 
 interface LibraryData {
@@ -317,7 +317,7 @@ function LibraryCard({
             : canPostNow(p)
               ? "Ready to post"
               : p.status === "failed" && p.error
-                ? `${postStatusLabel(p)}. ${p.error}`
+                ? `${postStatusLabel(p)}. ${postError(p.error)}`
                 : postStatusLabel(p)}
           {p.status === "posted" && !p.metrics && p.perfCheckAt && !(p.by === "you" && !p.url) && p.privacy !== "private" ? ` · numbers ${relative(p.perfCheckAt)}` : ""}
         </span>
@@ -326,7 +326,9 @@ function LibraryCard({
       {yourself && p.platform === "tiktok" ? <PostYourselfButton clip={clip} onMarked={marked} /> : null}
       {p.by === "you" && !p.url ? <PostYourselfButton clip={clip} onMarked={marked} linkOnly postedAt={p.postedAt} /> : null}
       {/* One place did not work on an uploaded clip: Try again for that place only (§33). */}
-      {p.status === "failed" && clip.status === "posted" ? <UploadAgain clip={clip} posts={posts} platform={p.platform} onKept={onKept} /> : null}
+      {p.status === "failed" && clip.status === "posted" && !failedForPublicAccount(p) ? (
+        <UploadAgain clip={clip} posts={posts} platform={p.platform} onKept={onKept} />
+      ) : null}
       {/* Waiting for a place that is set up now: send it there (§33.6). */}
       {canPostNow(p) ? <UploadAgain clip={clip} posts={posts} platform={p.platform} now onKept={onKept} /> : null}
       {p.metrics ? (

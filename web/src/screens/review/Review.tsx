@@ -32,7 +32,7 @@ import { canMacFetch } from "../../lib/macFetch.ts";
 import { TikTokLegal } from "./TikTokCommercial.tsx";
 import { TikTokSheet } from "./TikTokSheet.tsx";
 import { useUnsaved } from "../../features/help/unsaved.ts";
-import { offerAfterUpload } from "../../lib/tiktokYourself.ts";
+import { offerAfterUpload, TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { PostYourself, PostYourselfButton } from "../library/PostYourself.tsx";
 
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
@@ -300,6 +300,7 @@ export function Review({ jobId }: { jobId: string | null }) {
                   onThrowAway={throwAway}
                   onSettling={settle}
                   copyHere={visible.some((x) => x.remakeOf?.clipId === c.clipId)}
+                  tiktokApproved={tiktokAudited(setup.data?.platforms)}
                 />
               </li>
             ))}
@@ -347,8 +348,11 @@ function ReviewCard({
   onThrowAway,
   onSettling,
   copyHere = false,
+  tiktokApproved = true,
 }: {
   clip: Clip;
+  /** TikTok approved Clip Factory's own public uploads (§41); until then a ticked TikTok points to Post it yourself. */
+  tiktokApproved?: boolean;
   /** A campaign copy of this clip waits right below it (§39.3). */
   copyHere?: boolean;
   /** The places that are set up (null while loading). */
@@ -1088,6 +1092,7 @@ function ReviewCard({
         {placesReady && !noneReady && tiktokOn ? (
           <TikTokLegal className="tt-legal" branded={choices.commercial && choices.branded} />
         ) : null}
+        {placesReady && !noneReady && tiktokOn && !tiktokApproved && !keepFailed ? <p className="tt-yourself-hint">{TIKTOK_PUBLIC_HINT}</p> : null}
         <div className="review-card__actions" ref={confirmRef} data-help-dodge="">
           <Button variant="ghost" icon="trash" act="throw" data-help="throw-away" disabled={busy !== null || leaving} onClick={throwAway}>
             Throw away

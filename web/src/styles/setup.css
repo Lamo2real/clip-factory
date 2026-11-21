@@ -1142,3 +1142,11 @@
   color: var(--ink);
   font-weight: 600;
 }
+/* Review, TikTok ticked before TikTok approved the app (§41): one plain line pointing to Post it yourself. */
+.tt-yourself-hint {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink);
+  text-align: right;
+}

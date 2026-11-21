@@ -52,9 +52,16 @@ posting API. Decision record: ADR-65.
   to several places all stay. TikTok ticked there is still Clip Factory's own upload, "Only me" until TikTok approves.
 
 TikTok's rule: Everyone needs a public account, while an unaudited app may only post to a private one
-(`unaudited_client_can_only_post_to_private_accounts`). With his account public, Clip Factory's own TikTok upload fails
-with the existing sentence ("Make your TikTok account private (Setup step 3), then press Try again."), and Post it
-yourself stays on that row.
+(`unaudited_client_can_only_post_to_private_accounts`). His account is public on purpose (since 2026-11-21), so Clip
+Factory's own TikTok upload fails with "TikTok only takes Clip Factory's uploads on a private account until it approves
+the app. Tap Post it yourself to post it for everyone." (`TIKTOK_PRIVATE_ONLY`, §17.6). On that row Library shows that
+sentence, also for posts that failed earlier with the old one ("Make your TikTok account private (Setup step 3), then
+press Try again."), with **Post it yourself** and no Try again (it would fail the same way); the clip page says the
+same. On Review, while TikTok is ticked and TikTok has not approved the app (`app_review` and `posting_audit` both
+`ok`), one line above Upload says: "Until TikTok approves the app, Clip Factory can only upload to a private TikTok
+account. Yours is public? Untick TikTok, tap Upload, then post it yourself." TikTok stays ticked as it was (every set-up
+place starts ticked, §36.1); once he unticks it and uploads, Upload to remembers that (§33.2) and the sheet opens by
+itself after Upload (below).
 
 ### 41.2 API (additive, under `ANY /v1/{proxy+}`; `routes/clips.py`, `tiktok_self.py`, `tiktok_link.py`)
 
