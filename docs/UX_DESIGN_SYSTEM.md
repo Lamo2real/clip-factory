@@ -1201,9 +1201,9 @@ understand how to navigate it", from setup to joining, to "Am I in?", to getting
 
   | Screen | The vermilion button |
   |---|---|
-  | Content Rewards setup | the first open step's action ("Open Content Rewards", "Open Content Rewards settings", "Connect Content Rewards"); while "Content Rewards said no?" is open, "Open email" (Connect turns glass), and after "I sent it" Connect again; when done, "Connect again" only for a dead sign-in or in the sign-in-again week; "Add a campaign" when nothing else is left |
+  | Content Rewards setup | the first open step's action ("Open Content Rewards", "Open Content Rewards settings", "Connect Content Rewards"); while "Content Rewards said no?" is open, "Open email" (Connect turns glass), and after "I sent it" Connect again; when done, "Connect again" only for a dead sign-in or in the sign-in-again week; "Add a campaign" when nothing else is left; in a desktop browser (or a Mac app that can't update itself) "Get the app" |
   | Campaigns, empty | "Open Content Rewards" while the box is empty; "Add campaign" once a campaign link is in it |
-  | A campaign card | its next step's one button: "Connect Content Rewards", "Open campaign", "Yes, I applied", "I'm in. Read these rules", "Read these rules", "Add the logo", "Make clips anyway", "Make clips from this" or "Make clips for this campaign"; none while it waits or is paused |
+  | A campaign card | its next step's one button: "Connect Content Rewards", "Open campaign", "Yes, I applied", "I'm in. Read these rules", "Read these rules", "Add the logo", "Make clips anyway", "Make clips from this", "Make clips for this campaign" or "Find another campaign" (the brand said no); none while it waits or is paused ("Find another campaign" is glass on the other hard stops) |
   | Home | "Add campaign" when a campaign link is pasted, else "Make clips"; while the picked campaign has a hard stop, the button shows the stop's short text and can't be tapped |
   | A clip's Content Rewards line | "Copy and open" while the clip must be sent by hand (the Mac banner's "Copy and open" is green) |
   | Money's Content Rewards part | none until "Do you see **Finance**?" is answered; then "Move your money to Whop" at $1.00 or more ready, and once after a move "Your money is on Whop. Move it to your bank." |

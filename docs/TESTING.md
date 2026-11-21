@@ -1114,3 +1114,8 @@ part's tests pass on their own, whichever part merged first.
      30-minute clock started at the upload or after YouTube's processing.
    - When money arrives: the three tiles match CR's **Earnings**; follow the **Finance** or Whop steps once and note
      where Whop's screens differ.
+   - Also note: whether the sign-in works on a port other than the five (CR's docs say "at any port"); whether the
+     token request needed `resource`; the refresh answer's lifetime fields; a group link's JSON; any limit on the
+     public JSON; that Instagram and Facebook Reels show no paid-partnership option; where the first brief that
+     wants proof takes it (CR's **Support** chat is the fallback); and which Settings tab shows "Connect your Whop
+     account" (the hint says **Profile**).
