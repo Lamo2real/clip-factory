@@ -1,6 +1,6 @@
 // The whole HTTP API in memory, with fake latency, so the UI runs with no backend (npm run dev:mock, Playwright).
 import { ApiError, networkError } from "../errors.ts";
-import type { Api, Clip, ClipPostOptions, Job, JobDeleteClips, JobDeleted, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
+import type { Api, Campaign, Captions, Clip, ClipPostOptions, Job, JobDeleteClips, JobDeleted, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
 import { clipOptionsProblem, presetOf, presetProblem } from "../../lib/preset.ts";
 import { TIKTOK_PICK_AGAIN } from "../../lib/upload.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
@@ -12,9 +12,12 @@ import { statsApi, type StatsFaults } from "./stats.ts";
 import { skillsApi, type MockSkillControls } from "./skills.ts";
 import { lessonsApi, type LessonsFault } from "./lessons.ts";
 import { followsApi } from "./follows.ts";
-import { mockMoneyGrant, moneyApi } from "./money.ts";
+import { dashData, mockMoneyGrant, moneyApi } from "./money.ts";
 import { pushApi } from "./push.ts";
 import { crMockApi } from "./contentrewards.ts";
+import { clipFit, fitOne, remakeRefusal, sourceKept, uploadRefusal, type FitInputs } from "./fit.ts";
+import { everywhere, MONETARY_SCOPE } from "./moneyEverywhere.ts";
+import { adFirst, hasItem, liveFit } from "../../lib/crFit.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
 import { currentClipModel, isClipModel } from "../../lib/models.ts";
@@ -391,6 +394,15 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   }
   /** Test knob (window.__cfMock.jobs): a finished job as it was saved before the "watch" step existed (nine steps). */
   const jobKnobs = {
+    /** The newest queued or working job finishes now: its clips wait in Review (tests: "the job runs"). */
+    finish(jobId?: string): string | null {
+      const j = jobId ? store.jobs.find((x) => x.jobId === jobId) : [...store.jobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).find((x) => x.status === "queued" || x.status === "running");
+      if (!j || j.remakeOf) return null;
+      clock.delete(j.jobId);
+      finish(j);
+      publishJob(j);
+      return j.jobId;
+    },
     /** No jobs and no clips, as for a new owner, so the empty Home and Jobs can be checked (reload to see them). */
     clear() {
       store.jobs.length = 0;
@@ -442,6 +454,85 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     if (!j) throw notFound("job");
     return j;
   };
+
+  // §39.3: does this clip fit, and the campaign copy. The copy waits behind a switch, like the API's (off by default).
+  const REMAKE_KEY = "cf-mock-cr-remake";
+  const remakeOn = () => {
+    try {
+      return sessionStorage.getItem(REMAKE_KEY) === "on";
+    } catch {
+      return false;
+    }
+  };
+  const fitInputs = (c: Clip) => (campaign: Campaign): FitInputs => {
+    const original = c.remakeOf ? store.clips.find((x) => x.clipId === c.remakeOf!.clipId) : null;
+    const relatives = [original, ...store.clips.filter((x) => (original && x.remakeOf?.clipId === original.clipId) || x.remakeOf?.clipId === c.clipId)].filter(
+      (x): x is Clip => !!x && x.clipId !== c.clipId && x.status !== "declined",
+    );
+    const served = cr.served();
+    return {
+      clip: c,
+      job: store.jobs.find((j) => j.jobId === c.jobId) ?? null,
+      campaign,
+      conn: cr.connection(),
+      posts: store.posts.filter((p) => p.clipId === c.clipId),
+      others: [
+        ...relatives.filter((x) => x.campaignId).map((x) => ({ campaignId: x.campaignId!, name: served.find((s) => s.campaignId === x.campaignId)?.name ?? "" })),
+        ...Object.keys(c.remakes ?? {})
+          .filter((id) => id !== campaign.campaignId)
+          .map((id) => ({ campaignId: id, name: served.find((s) => s.campaignId === id)?.name ?? "" })),
+      ],
+      remakeOn: remakeOn(),
+      now: Date.now(),
+    };
+  };
+  const fitOf = (c: Clip) => clipFit(c, fitInputs(c), cr.served());
+  /** A campaign copy finishes like a one-clip job: the same moment, the campaign's marks, #Ad and the tags. */
+  function finishCopy(j: Job, from: Clip, campaign: Campaign) {
+    const tags = [campaign.rules?.disclosure.caption ?? "#Ad", ...(campaign.rules?.requiredHashtags ?? []), ...(campaign.rules?.requiredTags ?? [])];
+    const withTags = (t: string) => `${tags[0]} ${t.replace(/^#ad\b\s*/i, "")} ${tags.slice(1).join(" ")}`.trim();
+    const copy: Clip = {
+      ...clone(from),
+      clipId: ulid(),
+      jobId: j.jobId,
+      rank: 1,
+      status: "review",
+      createdAt: new Date().toISOString(),
+      campaignId: campaign.campaignId,
+      remakeOf: { clipId: from.clipId, jobId: from.jobId },
+      remakes: undefined,
+      uploadTo: undefined,
+      decidedAt: undefined,
+      best: undefined,
+      bestWeek: undefined,
+      totalViews: undefined,
+      captions: {
+        youtubeTitle: from.captions.youtubeTitle,
+        youtubeDescription: withTags(from.captions.youtubeDescription),
+        instagram: withTags(from.captions.instagram),
+        facebook: withTags(from.captions.facebook),
+        tiktok: withTags(from.captions.tiktok),
+        x: withTags(from.captions.x),
+      },
+      checklist: {
+        items: [
+          ...from.checklist.items.filter((x) => !["logo", "disclosure", "campaign_rules"].includes(x.key)),
+          { key: "disclosure", label: "“Paid partnership” shows for the first 3 seconds", pass: true },
+          ...(campaign.logo.needed ? [{ key: "logo", label: "The campaign's logo is on the whole clip", pass: true }] : []),
+          { key: "campaign_rules", label: "Follows the campaign's rules", pass: true },
+        ],
+        fixes: [],
+      },
+    };
+    store.clips.push(copy);
+    j.status = "ready";
+    j.clipCount = 1;
+    j.progress = 1;
+    j.steps = stepsAt(STEP_KEYS.length, "ready");
+    j.updatedAt = new Date().toISOString();
+    publishJob(j);
+    publishClip(copy);
+  }
   const clip = (clipId: string) => {
     const c = store.clips.find((x) => x.clipId === clipId);
     if (!c) throw notFound("clip");
@@ -472,6 +563,101 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
 
   const api: Api = {
     ...cr.api,
+    async crFit(clipId) {
+      await delay(80, 160);
+      cr.guard();
+      return clone(fitOf(clip(clipId)));
+    },
+    async crFits(clipIds) {
+      await delay(80, 160);
+      cr.guard();
+      if (!clipIds.length || clipIds.length > 20) throw bad("Ask for 1 to 20 clips.");
+      return clipIds.map((id) => store.clips.find((c) => c.clipId === id)).filter((c): c is Clip => !!c).map((c) => clone(fitOf(c)));
+    },
+    async crFitCaptions({ clipId, campaignId, captions }) {
+      await delay(80, 160);
+      cr.guard();
+      const c = clip(clipId);
+      if (c.campaignId !== campaignId || c.status !== "review") throw bad("This clip isn't a campaign clip waiting in Review.");
+      const campaign = cr.served().find((x) => x.campaignId === campaignId);
+      const rules = campaign?.rules;
+      const disclosure = rules?.disclosure.caption ?? "#Ad";
+      const wanted = [...(rules?.requiredHashtags ?? []), ...(rules?.requiredTags ?? [])];
+      // B's campaign_caption, in short: the disclosure first, then every required item the caption lacks.
+      const fix = (text: string) => {
+        let out = text.trim();
+        if (!adFirst(out, disclosure)) out = `${disclosure} ${out}`.trim();
+        for (const w of wanted) if (!hasItem(out, w)) out = `${out} ${w}`;
+        return out;
+      };
+      const out: Captions = { ...c.captions, ...captions };
+      for (const k of ["youtubeDescription", "instagram", "facebook", "tiktok", "x"] as const) out[k] = fix(out[k]);
+      return out;
+    },
+    async crRemake(campaignId, body) {
+      await delay();
+      cr.guard();
+      if (!remakeOn()) throw new ApiError(503, "unavailable", "Coming soon.");
+      const c = clip(body.clipId);
+      const campaign = cr.served().find((x) => x.campaignId === campaignId);
+      if (!campaign) throw notFound("campaign");
+      const had = c.remakes?.[campaignId];
+      const hadJob = had ? store.jobs.find((j) => j.jobId === had.jobId && j.status !== "failed" && j.status !== "canceled") : undefined;
+      if (hadJob) return clone(hadJob);
+      const from = store.jobs.find((j) => j.jobId === c.jobId) ?? null;
+      const found = fitOne(fitInputs(c)(campaign));
+      const refusal = remakeRefusal(found, sourceKept(from, Date.now()));
+      if (refusal) throw conflict(refusal);
+      const soft = campaign.stops.find((s) => !s.hard && s.code !== "not_connected" && !s.anyway && !(body.campaignAnyway ?? []).includes(s.code));
+      if (soft) throw conflict(soft.text);
+      const now = new Date().toISOString();
+      const j: Job = {
+        jobId: ulid(),
+        status: "running",
+        source: clone(from?.source ?? { type: "link", platform: "youtube" }),
+        clipTarget: { min: 1, max: 1 },
+        steps: stepsAt(Math.max(0, STEP_KEYS.length - 2), "running", "Cutting the clips"),
+        progress: 0.8,
+        clipCount: 0,
+        ...(from?.notes ? { notes: from.notes } : {}),
+        campaignId,
+        remakeOf: { clipId: c.clipId, jobId: c.jobId },
+        ...(from?.sourceLanguage ? { sourceLanguage: from.sourceLanguage } : {}),
+        model: currentClipModel(store.settings.clipModel),
+        createdAt: now,
+        updatedAt: now,
+      };
+      store.jobs.unshift(j);
+      c.remakes = { ...(c.remakes ?? {}), [campaignId]: { jobId: j.jobId, at: now } };
+      publishJob(j);
+      publishClip(c);
+      // "It shows here in about 3 minutes": a moment in the pretend app.
+      setTimeout(() => finishCopy(j, c, campaign), 2500);
+      return clone(j);
+    },
+    async getMoneyEverywhere() {
+      await delay();
+      const scenario = money.controls.scenario();
+      const data = dashData(scenario);
+      const items = cr.moneyItems();
+      const accounts: Parameters<typeof everywhere>[0]["accounts"] = {};
+      const states: Parameters<typeof everywhere>[0]["states"] = {};
+      for (const p of PLATFORM_ORDER) {
+        const st = data.status[p];
+        if (st?.connected) accounts[p] = { platform: p, status: "connected", scopes: p === "youtube" && st.moneyScope ? [MONETARY_SCOPE] : [] };
+        if (st) states[p] = { state: ["not_yet", "goal_reached", "in_program"].includes(scenario) ? scenario : "earning", ...(st.lastError ? { lastError: st.lastError } : {}), ...(st.checkedAt ? { lastCheckedAt: st.checkedAt } : {}) };
+      }
+      return everywhere({
+        today: new Date().toISOString(),
+        facebookVerified: data.facebookVerified,
+        accounts,
+        states,
+        rows: data.rows,
+        crOn: items.on,
+        crconn: items.crconn,
+        crmoney: items.crmoney as Parameters<typeof everywhere>[0]["crmoney"],
+      });
+    },
     async health() {
       await delay();
       return { ok: true, version: "mock" };
@@ -722,6 +908,13 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       }
       // A campaign clip (§38.14): only the campaign's places, public, never made for kids, TikTok Branded content.
       if (c.status === "review") await cr.confirmCheck(c, chosen, options, tiktok);
+      // §39.3: a campaign clip goes up the campaign way only when it can earn (the merged captions, the picked places).
+      if (c.status === "review" && c.campaignId) {
+        const own = fitOf({ ...c, captions: { ...c.captions, ...(captions ?? {}) } }).fits[0];
+        const now = own ? liveFit(own, { captions: { ...c.captions, ...(captions ?? {}) }, chosen: chosen ?? null, tiktok: chosen?.includes("tiktok") ? (tiktok ?? null) : null }) : null;
+        const refusal = now ? uploadRefusal(now) : null;
+        if (refusal) throw conflict(refusal);
+      }
       // TikTok's rules: the owner picks who can see it before anything is posted there (§17.8).
       const tiktokGoing = chosen ? chosen.includes("tiktok") : store.settings.platforms.includes("tiktok") && connected.includes("tiktok");
       if (c.status === "review" && tiktokGoing && !tiktok?.privacyLevel) throw bad("Pick who can see it on TikTok.");

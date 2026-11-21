@@ -8,6 +8,7 @@
 //   cf-mock-cr-off   = "404"     an API from before §38 (every Content Rewards part hides)
 //   cf-mock-cr-off   = "503"     switched off ("Coming soon")
 //   cf-mock-cr-review = "1"      one Review clip is for the FaZe Clips campaign
+//   cf-mock-cr-remake = "on"     campaign copies are switched on (like the API's cr_remake_enabled, off by default)
 import { ApiError } from "../errors.ts";
 import type {
   Api,
@@ -326,6 +327,8 @@ interface State {
   nextResult: CrConnectResult | null;
   seen: string[];
   lastMoveCents?: number;
+  /** Content Rewards' paid payouts by day (CRMONEY.paidByDay, §39.2): cents per yyyy-mm-dd. */
+  paidByDay?: Record<string, number>;
 }
 
 function blankConnection(): CrConnection {
@@ -401,6 +404,12 @@ function stored(campaignId: string, partial: Partial<Stored> = {}, now = Date.no
   };
 }
 
+const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+/** The seeded payouts by day: $4.21 three days ago and $3.79 twelve days ago reached the balance in the last 30 days. */
+function seedPaidByDay(now = Date.now()): Record<string, number> {
+  return { [dayOf(now - 3 * DAY)]: 421, [dayOf(now - 12 * DAY)]: 379, [dayOf(now - 45 * DAY)]: 5440 };
+}
+
 function seedFull(now = Date.now()): State {
   const campaigns: Stored[] = [
     stored(CR_IDS.faze, { listed: true, wasListed: true, rulesState: "ready", addedAt: iso(now - 1 * DAY), celebrated: true }),
@@ -416,7 +425,7 @@ function seedFull(now = Date.now()): State {
     }),
     stored(CR_IDS.money, { listed: true, wasListed: true, rulesState: "ready", addedAt: iso(now - 9 * DAY), celebrated: true }),
   ];
-  return { connection: connectedConnection(now), campaigns, subs: [], money: seedMoney(now), nextResult: null, seen: [] };
+  return { connection: connectedConnection(now), campaigns, subs: [], money: seedMoney(now), nextResult: null, seen: [], paidByDay: seedPaidByDay(now) };
 }
 
 function seedFresh(): State {
@@ -543,6 +552,12 @@ export interface CrMock {
   jobCheck(campaignId: string, anyway: readonly StopCode[]): Promise<void>;
   /** Confirm for a campaign clip (§38.14): the same refusals as the API. */
   confirmCheck(clip: Clip, chosen: Platform[] | undefined, options: ClipPostOptions | undefined, tiktok: TikTokPostOptions | undefined): Promise<void>;
+  /** §39: the campaigns as served (for the fit), the connection, and the money items for All your money. */
+  served(): Campaign[];
+  connection(): CrConnection;
+  moneyItems(): { crconn: CrConnection | null; crmoney: Record<string, unknown> | null; on: boolean };
+  /** Switched off (503) or before §38 (404): the §39 routes answer the same. */
+  guard(): void;
 }
 
 export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
@@ -688,6 +703,7 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
     if ((m === "in" || m === "manual") && c.logo.needed && c.logo.state !== "ready") add("logo_missing");
     if (r?.draftsFirst) add("drafts_first");
     if (r?.soundRequired) add("sound_needed");
+    if (r?.overlayRequired) add("overlay_needed");
     if (r?.faceOnCamera) add("face_needed");
     if (r?.disclosure.spoken) add("spoken_needed");
     if (r?.audience) add("audience");
@@ -747,6 +763,8 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
       ...(c.celebrate && !c.celebrated && m === "in" ? { celebrate: "in" as const } : {}),
       checkedAt: c.checkedAt,
       addedAt: c.addedAt,
+      sourceRuleText: sourceRuleText(cat.name, cat.brand, r),
+      languageRuleText: r?.language?.trim() ? `${cat.name} wants clips in ${languageWords(r.language)}.` : null,
     };
   }
 
@@ -766,6 +784,7 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
       chip: full.nextStep.chip,
       nextStepText: full.nextStep.text,
       hardStops: full.stops.filter((s) => s.hard).length,
+      nextStepKind: full.nextStep.kind,
     };
   }
 
@@ -963,6 +982,8 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
       changed(`submission:${postId}`);
     },
     pay(cents: number) {
+      const today = dayOf(now());
+      state.paidByDay = { ...(state.paidByDay ?? {}), [today]: (state.paidByDay?.[today] ?? 0) + cents };
       const m = state.money;
       const first = !m.paidSoFarCents;
       state.money = {
@@ -1036,6 +1057,13 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
     readFails(uuid: string) {
       const c = state.campaigns.find((x) => x.campaignId === uuid);
       if (c) c.rulesState = "failed";
+      changed(`campaign:${uuid}`);
+    },
+    /** Changes a campaign's rules in place (tests: a length, a language, a deadline, a source rule). */
+    setRules(uuid: string, patch: Partial<CampaignRules>) {
+      const cat = CATALOG[uuid];
+      if (!cat?.rules) return;
+      cat.rules = { ...cat.rules, ...patch };
       changed(`campaign:${uuid}`);
     },
     reset(start: "full" | "fresh" = "full") {
@@ -1360,7 +1388,76 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
     },
   };
 
-  return { api, onPosts, jobCheck, confirmCheck };
+  function moneyItems() {
+    const on = off !== "404" && off !== "503";
+    const m = state.money;
+    const connected = signedIn(state.connection) || state.connection.status === "needs_reconnect";
+    const crmoney: Record<string, unknown> | null = !connected
+      ? null
+      : m.state === "error"
+        ? { error: "cr_down" }
+        : m.state === "checking"
+          ? { firstReadDone: false, ...(m.asOf ? { asOf: m.asOf } : {}) }
+          : {
+              firstReadDone: true,
+              paidByDayDone: true,
+              paidTotalCents: m.paidSoFarCents ?? 0,
+              stillEarningCents: m.stillEarningCents ?? 0,
+              readyToMoveCents: m.readyToMoveCents ?? 0,
+              onItsWayCents: m.onItsWayCents ?? 0,
+              ...(m.asOf ? { asOf: m.asOf } : {}),
+              ...(m.lastPaidAt ? { lastPaidAt: m.lastPaidAt } : {}),
+              paidByDay: { ...(state.paidByDay ?? {}) },
+            };
+    return { crconn: structuredClone(state.connection), crmoney, on };
+  }
+
+  return {
+    api,
+    onPosts,
+    jobCheck,
+    confirmCheck,
+    served: () => state.campaigns.map(serve),
+    connection: () => structuredClone(state.connection),
+    moneyItems,
+    guard,
+  };
+}
+
+/** The campaign's source rule as one line under Home's link box (§39.1), as the API's campaigns.py says it. */
+function sourceRuleText(name: string, brand: string, r: CampaignRules | null): string | null {
+  if (!r) return null;
+  const a = r.allowedSources;
+  const sites = (["youtube", "twitch", "kick"] as const).filter((s) => a[s]);
+  const labels = sites.map((s) => PLATFORM_LABEL[s]);
+  const owner = brand.endsWith("s") ? `${brand}'` : `${brand}'s`;
+  const join = (l: string[]) => (l.length > 1 ? `${l.slice(0, -1).join(", ")} and ${l.at(-1)}` : (l[0] ?? ""));
+  if (a.campaignProvidedOnly) return `${name} pays only for clips of its own videos. Pick one below.`;
+  if (a.channels.some((c) => c.name)) return `${name} pays only for clips of ${owner} ${labels.length && labels.length < 3 ? join(labels) : "channels"}.`;
+  if (labels.length && labels.length < 3) return `${name} pays only for clips of ${join(labels)} videos.`;
+  return null;
+}
+
+const LANGUAGE_NAMES: [string, string][] = [
+  ["en", "English"],
+  ["es", "Spanish"],
+  ["pt", "Portuguese"],
+  ["fr", "French"],
+  ["de", "German"],
+  ["it", "Italian"],
+  ["ja", "Japanese"],
+  ["ko", "Korean"],
+  ["hi", "Hindi"],
+  ["ar", "Arabic"],
+  ["tr", "Turkish"],
+  ["ru", "Russian"],
+];
+/** The languages the fit knows in the rule text ("English or Spanish"), else the brief's own words. */
+function languageWords(text: string): string {
+  const words = new Set(text.toLowerCase().split(/[^a-z]+/).filter(Boolean));
+  const found = LANGUAGE_NAMES.filter(([code, n]) => words.has(code) || words.has(n.toLowerCase())).map(([, n]) => n);
+  if (!found.length) return text.trim();
+  return found.length > 1 ? `${found.slice(0, -1).join(", ")} or ${found.at(-1)}` : found[0]!;
 }
 
 function bestRate(cat: Catalog): number | null {

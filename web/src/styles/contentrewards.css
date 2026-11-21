@@ -837,3 +837,410 @@
   background: var(--fill);
   font-weight: 800;
 }
+
+/* §39.1: a step's lead line for someone who already did it, with its green answer right under its Open button. */
+.gstep__lead {
+  margin: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.gstep__actions--stack {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.cr-pin.cr-pin--stack {
+  flex-direction: column;
+  align-items: flex-end;
+}
+/* The shortcut above the setup steps: "Already use Content Rewards …?" and a green Yes. */
+.cr-shortcut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
+}
+.cr-shortcut > p {
+  flex: 1 1 18ch;
+  margin: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+/* Campaigns › not connected yet: setting up comes first (§39.1). */
+.cr-setup-first {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: var(--inset);
+  border-radius: var(--r-lg);
+}
+.cr-setup-first > p {
+  margin: 0;
+}
+@media (max-width: 767px), (pointer: coarse) {
+  .cr-setup-first,
+  .cr-shortcut {
+    justify-items: end;
+    justify-content: flex-end;
+  }
+}
+/* "Read the rules" lands here (/campaigns/{uuid}#rules), clear of the window's top bar. */
+#rules {
+  scroll-margin-top: 96px;
+}
+
+/* Home › the campaign way (/?campaign=, §39.1): the strip above the link box, its rule lines under it. */
+.cr-way {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--tint-leaf);
+}
+.cr-way__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.cr-way__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.cr-way__normal {
+  margin-inline-start: auto;
+}
+.cr-way__rules {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.cr-way__below {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.cr-way__lines {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.cr-way__lines li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  overflow-wrap: anywhere;
+}
+.cr-way__lines .icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* Review › the fit block of a campaign clip (§39.3): soft fills only, an icon on every line (never colour alone). */
+.cr-fit {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--tint-leaf);
+  min-width: 0;
+}
+.cr-fit.is-doesnt_fit,
+.cr-fit.is-fixable,
+.cr-fit.is-wait {
+  background: var(--tint-amber);
+}
+.cr-fit__for {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.cr-fit__headline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-size: var(--fs-h3);
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.cr-fit__headline.is-ok {
+  color: var(--green-ink);
+}
+.cr-fit__headline .icon,
+.cr-fit__line .icon {
+  flex: none;
+}
+.cr-fit__lines {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cr-fit__line {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.cr-fit__line > span {
+  min-width: 0;
+}
+.cr-fit__line .icon {
+  margin-top: 1px;
+}
+.cr-fit__lead,
+.cr-fit__keep,
+.cr-fit__copy {
+  margin: 0;
+  font-weight: 650;
+  font-size: var(--fs-small);
+}
+.cr-fit__copy.is-ok {
+  color: var(--green-ink);
+}
+.cr-fit__checks {
+  display: grid;
+  gap: 6px;
+}
+.cr-fit__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  justify-content: flex-end;
+}
+.cr-fit__actions:empty {
+  display: none;
+}
+.cr-fit__fold {
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.cr-fit__fold > .cr-fit__lines {
+  padding: 0 14px 12px;
+}
+.cr-fit__fold[open] > .cr-fold__q .cr-fold__chev {
+  transform: rotate(90deg);
+}
+
+/* Review › a normal clip that could earn: one quiet glass line, both buttons optional. */
+.cr-suggest {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+}
+.cr-suggest__title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.cr-suggest__line {
+  margin: 0;
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}
+.cr-suggest__line.is-ok {
+  color: var(--green-ink);
+  font-weight: 650;
+}
+.cr-suggest__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  justify-content: flex-end;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cr-fit__fold .cr-fold__chev {
+    transition: none;
+  }
+}
+/* The clip page's fit (§39.3). */
+.cr-clip-fit {
+  display: grid;
+  gap: 10px;
+  margin-bottom: var(--space-4);
+  border-radius: var(--r-lg);
+}
+.cr-clip-fit.glass {
+  padding: var(--inset);
+}
+.cr-clip-fit__copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+}
+.cr-clip-fit__copy p {
+  margin: 0;
+}
+.cr-clip-fit__all {
+  margin-bottom: var(--space-4);
+}
+.cr-clip-fit__all[open] > .cr-fold__q .cr-fold__chev {
+  transform: rotate(90deg);
+}
+
+/* Money › All your money (§39.2): the first card, with the page's biggest number; no vermilion, one glass button at
+   each row's right end. */
+.cr-all {
+  display: grid;
+  gap: 12px;
+  padding: var(--inset);
+  border-radius: var(--r-xl);
+  min-width: 0;
+}
+.cr-all.is-loading {
+  min-height: 160px;
+}
+.cr-all__head {
+  display: grid;
+  gap: 2px;
+}
+.cr-all__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 750;
+}
+.cr-all__period {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.cr-all__rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cr-all__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+}
+.cr-all__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--fill);
+  color: var(--green-ink);
+}
+.cr-all__words {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cr-all__words p {
+  margin: 0;
+}
+.cr-all__name {
+  font-weight: 750;
+}
+.cr-all__headline {
+  font-weight: 650;
+}
+.cr-all__amount {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-variant-numeric: tabular-nums;
+}
+.cr-all__why,
+.cr-all__note,
+.cr-all__where,
+.cr-all__total-where {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.cr-all__total-where,
+.cr-all__why,
+.cr-all__nothing,
+.cr-all__total-line {
+  margin: 0;
+}
+.cr-all__cr {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-small);
+}
+.cr-all__button {
+  display: flex;
+  justify-content: flex-end;
+  align-self: center;
+}
+.cr-all__button:empty {
+  display: none;
+}
+.cr-all__total {
+  display: grid;
+  gap: 6px;
+  padding-top: 4px;
+}
+.cr-all__sum {
+  display: grid;
+  gap: 2px;
+}
+.cr-all__total-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.cr-all__total-label {
+  font-weight: 750;
+}
+/* The biggest number on the page (§39.2); it never counts up. */
+.cr-all__total-num {
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  line-height: 1.02;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.cr-all__nothing {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+}
+/* With All your money on the page, the Monthly number is one size smaller (it keeps its card and words). */
+.money-dash.has-all-money .dash-kpi--main .dash-num {
+  font-size: var(--fs-h1);
+}
+@media (max-width: 479px) {
+  .cr-all__row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .cr-all__button {
+    grid-column: 1 / -1;
+  }
+}
