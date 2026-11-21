@@ -153,12 +153,54 @@ pub fn error_ok(error: &str) -> bool {
         && error.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
 }
 
-/// An `error_description` as it is passed on: printable characters only, cut to 300.
+/// An `error_description` as it is passed on: printable characters only, cut to 300. A line break, a tab or any other
+/// control or space character becomes one plain space (so "not\nallowed" stays two words the API can match, §38.9),
+/// invisible format characters (zero-width ones, text direction marks) are dropped, and the ends are trimmed.
 pub fn description(raw: &str) -> String {
-    raw.chars()
-        .filter(|c| !c.is_control())
-        .take(MAX_DESCRIPTION)
-        .collect()
+    let mut out = String::new();
+    let mut kept = 0;
+    let mut space = false;
+    for c in raw.chars() {
+        if invisible(c) {
+            continue;
+        }
+        if c.is_control() || c.is_whitespace() {
+            space = !out.is_empty();
+            continue;
+        }
+        if space {
+            if kept + 2 > MAX_DESCRIPTION {
+                break;
+            }
+            out.push(' ');
+            kept += 1;
+            space = false;
+        }
+        if kept == MAX_DESCRIPTION {
+            break;
+        }
+        out.push(c);
+        kept += 1;
+    }
+    out
+}
+
+/// A character that shows nothing but can change how the words around it read: soft hyphen, zero-width spaces and
+/// joiners, text direction marks and overrides, word joiners, the byte order mark, interlinear marks, tag characters.
+fn invisible(c: char) -> bool {
+    matches!(
+        c,
+        '\u{AD}'
+            | '\u{34F}'
+            | '\u{61C}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{206F}'
+            | '\u{FEFF}'
+            | '\u{FFF9}'..='\u{FFFB}'
+            | '\u{E0000}'..='\u{E007F}'
+    )
 }
 
 /// An `iss`: 1 to 200 printable characters (an address, so plain ASCII with no spaces).
@@ -409,12 +451,53 @@ pub(crate) mod tests {
         for bad in ["", "a b", "a\tb", "é", &"i".repeat(MAX_ISS + 1)] {
             assert!(!iss_ok(bad), "{bad:?}");
         }
-        assert_eq!(description("Your account\ncan't\u{7}"), "Your accountcan't");
+        assert_eq!(
+            description("Your account\ncan't\u{7}"),
+            "Your account can't"
+        );
         assert_eq!(description(&"d".repeat(500)).len(), MAX_DESCRIPTION);
         assert_eq!(
             description(&"é".repeat(500)).chars().count(),
             MAX_DESCRIPTION
         );
+    }
+
+    #[test]
+    fn a_description_keeps_its_words_apart() {
+        // Line breaks and other control characters become one space, so the API's loose match still finds
+        // "connect apps" and "not allowed" (§38.9).
+        assert_eq!(
+            description("Your account is not\nallowed to connect\r\napps"),
+            "Your account is not allowed to connect apps"
+        );
+        assert_eq!(
+            description("\t  Not\u{0}\u{0}eligible \u{85}\u{2028} now.\n"),
+            "Not eligible now."
+        );
+        assert_eq!(description("a\u{A0}b\u{3000}c"), "a b c");
+        // Invisible characters are dropped, not turned into spaces: they never split or flip words.
+        assert_eq!(
+            description("con\u{200B}nect \u{202E}apps\u{202C}\u{FEFF}\u{2066}x\u{2069}\u{AD}"),
+            "connect appsx"
+        );
+        // Nothing but spaces and invisible characters is nothing.
+        assert_eq!(description(" \n\u{200B}\t"), "");
+        // The cut to 300 counts the spaces and never ends on one.
+        let words = "ab ".repeat(200);
+        let cut = description(&words);
+        assert_eq!(cut.chars().count(), MAX_DESCRIPTION - 1);
+        assert!(cut.ends_with("ab") && !cut.contains("  "));
+        let cut = description(&format!("{} b", "a".repeat(MAX_DESCRIPTION - 1)));
+        assert_eq!(cut, "a".repeat(MAX_DESCRIPTION - 1));
+        let full = format!("{} b", "a".repeat(MAX_DESCRIPTION - 2));
+        assert_eq!(description(&full), full);
+        // Every character that is kept is printable.
+        let messy: String = (0u32..0x3000).filter_map(char::from_u32).collect();
+        let kept = description(&messy);
+        assert!(kept.chars().count() <= MAX_DESCRIPTION);
+        assert!(kept
+            .chars()
+            .all(|c| c == ' ' || !(c.is_control() || c.is_whitespace() || invisible(c))));
     }
 
     #[test]

@@ -46,11 +46,22 @@
     },
   });
 
-  // Errors always reach the page as {code}, even before Tauri's bridge is there.
+  // Errors always reach the page as one of the four {code}s: before Tauri's bridge is there, and when Tauri itself
+  // refuses a call (its own errors are plain words), the page reads "unsupported".
+  var CR_CODES = ["no_port", "bad_url", "unsupported", "busy"];
   var crCall = function (cmd, args) {
     var internals = window.__TAURI_INTERNALS__;
     if (!internals || typeof internals.invoke !== "function") return Promise.reject({ code: "unsupported" });
-    return internals.invoke(cmd, args);
+    var asked;
+    try {
+      asked = Promise.resolve(internals.invoke(cmd, args));
+    } catch (_) {
+      asked = Promise.reject(null);
+    }
+    return asked.then(undefined, function (e) {
+      var known = e !== null && typeof e === "object" && CR_CODES.indexOf(e.code) !== -1;
+      return Promise.reject(known ? { code: e.code } : { code: "unsupported" });
+    });
   };
   window.__CF_CR_CONNECT__ = Object.freeze({
     version: 1,

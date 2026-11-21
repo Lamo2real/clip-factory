@@ -450,6 +450,12 @@ mod tests {
             ] {
                 assert!(script.contains(&format!("\"{command}\"")), "{command}");
             }
+            // Its errors reach the page as one of the four codes only, Tauri's own refusals too.
+            assert!(script
+                .contains("var CR_CODES = [\"no_port\", \"bad_url\", \"unsupported\", \"busy\"];"));
+            assert!(script.contains(
+                "return Promise.reject(known ? { code: e.code } : { code: \"unsupported\" });"
+            ));
         }
     }
 

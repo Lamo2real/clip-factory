@@ -246,12 +246,15 @@ impl CrConnect {
     }
 }
 
-/// After a good answer: the Clip Factory window comes back to the front, so the owner sees what happened.
+/// After a good answer: the Clip Factory window comes back to the front, so the owner sees what happened. macOS may
+/// refuse to bring an app forward over the browser (or the window may still be coming out of the Dock), so the Dock
+/// icon also bounces once; macOS skips that when the app is already in front.
 fn bring_to_front(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(crate::WINDOW_LABEL) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+        let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
     }
 }
 
@@ -336,7 +339,7 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::check::tests::{url_with, STATE};
-    use super::door::tests::{config, free_port, get, soon, FakeClock};
+    use super::door::tests::{config, get, soon, spare_port, FakeClock, ANY_PORT};
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
@@ -344,7 +347,7 @@ mod tests {
 
     fn bridge() -> (Bridge, Arc<FakeClock>) {
         let clock = Arc::new(FakeClock::default());
-        (Bridge::new(config(vec![free_port()], clock.clone())), clock)
+        (Bridge::new(config(vec![ANY_PORT], clock.clone())), clock)
     }
 
     /// A pretend system browser that remembers what it was asked to open.
@@ -432,7 +435,7 @@ mod tests {
         let listening = bridge.listen(|| {}).unwrap();
         // A way back to another port, another host, http: never opened.
         for bad in [
-            url_with(listening.port + 1, &[]),
+            url_with(listening.port.wrapping_add(1), &[]),
             url_with(listening.port, &[]).replace("https://id.", "https://evil."),
             url_with(listening.port, &[]).replace("https://", "http://"),
         ] {
@@ -464,12 +467,12 @@ mod tests {
     #[test]
     fn a_new_listen_closes_the_old_door_and_cancel_closes_it() {
         let clock = Arc::new(FakeClock::default());
-        let (a, b) = (free_port(), free_port());
-        let bridge = Bridge::new(config(vec![a, b], clock));
+        let only = spare_port();
+        let bridge = Bridge::new(config(vec![only], clock));
         let first = bridge.listen(|| {}).unwrap();
         let second = bridge.listen(|| {}).unwrap();
-        // The first port was freed before the second door opened, so the same port came back.
-        assert_eq!(first.port, second.port);
+        // One port only: the first door was closed before the second opened, so the same port came back.
+        assert_eq!((first.port, second.port), (only, only));
         assert_eq!(bridge.result().status, Status::Waiting);
         assert_eq!(bridge.cancel(), Nothing {});
         assert_eq!(bridge.result().status, Status::None);

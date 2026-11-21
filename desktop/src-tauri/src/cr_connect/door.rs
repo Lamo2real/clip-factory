@@ -5,13 +5,14 @@
 //! * binds `127.0.0.1` (never `0.0.0.0` or `::`) on the first free port of the list it is given;
 //! * reads one request head per connection (at most 8 KB, 5 s), takes only `GET` with `Host` exactly
 //!   `127.0.0.1:{port}` on the path `/`, and only an answer whose `state` is the one the door was opened with;
-//! * answers anything else with a plain 404 or 400 and stays open;
+//! * answers a well-formed answer it cannot take (an old sign-in's `state`, or one after the answer) with a 400 page
+//!   that says what to do, anything else with a plain 404 or 400, and stays open;
 //! * closes after one good answer, a cancel, or its time (5 minutes).
 //!
 //! The code and state stay in memory until `read` hands them over, once. They are never logged or written to disk.
 
 use std::io::{Read, Write};
-use std::net::{Ipv4Addr, Shutdown, SocketAddrV4, TcpListener, TcpStream};
+use std::net::{Ipv4Addr, Shutdown, SocketAddr, SocketAddrV4, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
@@ -33,6 +34,12 @@ pub const MAX_HEAD: usize = 8 * 1024;
 const MAX_CONNECTIONS: usize = 8;
 /// How often the door looks for a new connection, a cancel or its time.
 const TICK: Duration = Duration::from_millis(20);
+/// After its reply, how long a connection is read for at most (so the browser gets the page rather than a reset)...
+const DRAIN_TIME: Duration = Duration::from_secs(1);
+/// ...waiting at most this long for each part.
+const DRAIN_IDLE: Duration = Duration::from_millis(500);
+/// ...and taking at most this much.
+const DRAIN_MAX: usize = 64 * 1024;
 
 /// A clock that only goes forward, so the door's time can be moved in tests.
 pub trait Clock: Send + Sync {
@@ -58,6 +65,7 @@ impl Clock for SystemClock {
 /// Where and for how long a door opens.
 #[derive(Clone)]
 pub struct Config {
+    /// The ports to try, in order. The app uses `PORTS`; tests use `0`, which lets the system pick a free one.
     pub ports: Vec<u16>,
     pub open_for: Duration,
     pub head_time: Duration,
@@ -120,6 +128,9 @@ pub enum Reply {
     Done,
     /// 200, the "didn't connect" page.
     Failed,
+    /// 400, the "This sign-in is old" page: a well-formed answer the door cannot take (another sign-in's `state`, no
+    /// `state` remembered yet, or the door already answered).
+    Stale,
     BadRequest,
     NotFound,
 }
@@ -143,7 +154,8 @@ struct Inner {
 }
 
 struct Shared {
-    port: u16,
+    /// Where the listener really is, as the system reports it.
+    addr: SocketAddr,
     clock: Arc<dyn Clock>,
     closes_at: Duration,
     head_time: Duration,
@@ -172,7 +184,7 @@ impl Shared {
             .as_deref()
             .is_some_and(|expected| check::same(expected, &answer.state));
         if !open || !matches {
-            return Reply::BadRequest;
+            return Reply::Stale;
         }
         let reply = match answer.kind {
             Kind::Code(_) => Reply::Done,
@@ -195,18 +207,19 @@ impl Door {
     /// Binds `127.0.0.1` on the first free port of `config.ports` and starts listening. `on_answer` runs once, after
     /// the browser got its page for a good answer (the app brings its window to the front).
     pub fn open(config: &Config, on_answer: Box<dyn Fn() + Send + Sync>) -> Result<Door, NoPort> {
-        let (listener, port) = config
+        let (listener, addr) = config
             .ports
             .iter()
             .find_map(|&port| {
-                TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
-                    .ok()
-                    .map(|l| (l, port))
+                let listener =
+                    TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).ok()?;
+                let addr = listener.local_addr().ok()?;
+                Some((listener, addr))
             })
             .ok_or(NoPort)?;
         listener.set_nonblocking(true).map_err(|_| NoPort)?;
         let shared = Arc::new(Shared {
-            port,
+            addr,
             clock: config.clock.clone(),
             closes_at: config.clock.now() + config.open_for,
             head_time: config.head_time,
@@ -227,7 +240,12 @@ impl Door {
     }
 
     pub fn port(&self) -> u16 {
-        self.shared.port
+        self.local_addr().port()
+    }
+
+    /// The address the door really listens on, as the system reports it: always `127.0.0.1:{port}`.
+    pub fn local_addr(&self) -> SocketAddr {
+        self.shared.addr
     }
 
     /// Remembers the `state` of the address being opened. Once per door.
@@ -304,7 +322,7 @@ fn serve(mut stream: TcpStream, shared: &Shared) {
         return;
     }
     let reply = match read_head(&mut stream, shared.head_time) {
-        Head::Read(head) => match parse_request(&head, shared.port) {
+        Head::Read(head) => match parse_request(&head, shared.addr.port()) {
             Parsed::Answer(answer) => shared.offer(answer),
             Parsed::BadRequest => Reply::BadRequest,
             Parsed::NotFound => Reply::NotFound,
@@ -320,9 +338,31 @@ fn serve(mut stream: TcpStream, shared: &Shared) {
     if matches!(reply, Reply::Done | Reply::Failed) {
         (shared.on_answer)();
     }
-    // Read what is left before closing, so the browser gets the page rather than a reset.
-    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
-    let _ = std::io::copy(&mut stream.take(64 * 1024), &mut std::io::sink());
+    drain(&mut stream);
+}
+
+/// Reads what is left before closing, so the browser gets the page rather than a reset: until the other side is
+/// done, nothing comes for `DRAIN_IDLE`, `DRAIN_MAX` bytes came, or `DRAIN_TIME` is up, whichever is first. So a
+/// program that sends a byte now and then cannot keep one of the `MAX_CONNECTIONS` for long.
+fn drain(stream: &mut TcpStream) {
+    let until = Instant::now() + DRAIN_TIME;
+    let mut chunk = [0u8; 1024];
+    let mut left = DRAIN_MAX;
+    while left > 0 {
+        let wait = until
+            .saturating_duration_since(Instant::now())
+            .min(DRAIN_IDLE);
+        if wait.is_zero() || stream.set_read_timeout(Some(wait)).is_err() {
+            return;
+        }
+        let room = left.min(chunk.len());
+        match stream.read(&mut chunk[..room]) {
+            Ok(0) => return,
+            Ok(n) => left -= n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(_) => return,
+        }
+    }
 }
 
 enum Head {
@@ -443,23 +483,13 @@ fn answer_from(query: &str) -> Option<Answer> {
     Some(Answer { state, iss, kind })
 }
 
-/// The page the browser shows after a good answer, in the app's colours: bone words on bottle green, soft fills,
-/// no edges. It never repeats anything from the request.
-fn page(done: bool) -> String {
-    let (mark, mark_class, title, line) = if done {
-        (
-            "&#10003;",
-            "yes",
-            "Done!",
-            "Go back to Clip Factory. You can close this tab.",
-        )
+/// The page the browser shows after a good answer (or an old one), in the app's colours: bone words on bottle green,
+/// soft fills, no edges. It never repeats anything from the request.
+fn page(done: bool, title: &str, line: &str) -> String {
+    let (mark, mark_class) = if done {
+        ("&#10003;", "yes")
     } else {
-        (
-            "!",
-            "no",
-            "Content Rewards didn't connect.",
-            "Go back to Clip Factory to see what to do.",
-        )
+        ("!", "no")
     };
     format!(
         "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\
@@ -485,8 +515,33 @@ h1{{margin:0 0 .5rem;font:600 1.6rem/1.25 \"Times New Roman\",Tinos,Times,serif}
 /// The whole response for `reply`, headers and page.
 pub fn response(reply: Reply) -> Vec<u8> {
     let (status, kind, body) = match reply {
-        Reply::Done => ("200 OK", "text/html", page(true)),
-        Reply::Failed => ("200 OK", "text/html", page(false)),
+        Reply::Done => (
+            "200 OK",
+            "text/html",
+            page(
+                true,
+                "Done!",
+                "Go back to Clip Factory. You can close this tab.",
+            ),
+        ),
+        Reply::Failed => (
+            "200 OK",
+            "text/html",
+            page(
+                false,
+                "Content Rewards didn't connect.",
+                "Go back to Clip Factory to see what to do.",
+            ),
+        ),
+        Reply::Stale => (
+            "400 Bad Request",
+            "text/html",
+            page(
+                false,
+                "This sign-in is old.",
+                "Go back to Clip Factory and tap Connect Content Rewards again.",
+            ),
+        ),
         Reply::BadRequest => ("400 Bad Request", "text/plain", "Bad request\n".to_owned()),
         Reply::NotFound => ("404 Not Found", "text/plain", "Not found\n".to_owned()),
     };
@@ -528,13 +583,25 @@ pub(crate) mod tests {
         }
     }
 
-    /// A port that was free a moment ago, outside the five real ones (so tests never take the app's ports).
-    pub fn free_port() -> u16 {
-        TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port()
+    /// Lets the system pick a free port for a door, so tests running at once never race for one number (and never
+    /// take the app's five).
+    pub const ANY_PORT: u16 = 0;
+
+    /// A free port for the few tests that must know the number before the door opens. It is taken from 20000-31999:
+    /// outside the ranges systems hand out for port 0 (macOS 49152-65535, Linux 32768-60999), so no other test's
+    /// door or connection takes it in the meantime, and a different one each call.
+    pub fn spare_port() -> u16 {
+        use std::sync::atomic::AtomicU16;
+        static NEXT: AtomicU16 = AtomicU16::new(0);
+        let start = 20_000 + (std::process::id() % 6_000) as u16;
+        loop {
+            let n = NEXT.fetch_add(1, Ordering::SeqCst);
+            assert!(n < 6_000, "no spare port");
+            let port = start + n;
+            if TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).is_ok() {
+                return port;
+            }
+        }
     }
 
     pub fn config(ports: Vec<u16>, clock: Arc<FakeClock>) -> Config {
@@ -558,7 +625,7 @@ pub(crate) mod tests {
         let fronts = Arc::new(AtomicUsize::new(0));
         let counted = fronts.clone();
         let door = Door::open(
-            &config(vec![free_port()], clock.clone()),
+            &config(vec![ANY_PORT], clock.clone()),
             Box::new(move || {
                 counted.fetch_add(1, Ordering::SeqCst);
             }),
@@ -599,15 +666,33 @@ pub(crate) mod tests {
     }
 
     /// Waits a little for the door to see a change (its thread wakes every TICK).
-    pub fn soon(mut ready: impl FnMut() -> bool) -> bool {
-        for _ in 0..100 {
+    pub fn soon(ready: impl FnMut() -> bool) -> bool {
+        within(Duration::from_secs(2), ready)
+    }
+
+    /// Whether `ready` comes true within `limit`.
+    pub fn within(limit: Duration, mut ready: impl FnMut() -> bool) -> bool {
+        let until = Instant::now() + limit;
+        loop {
             if ready() {
                 return true;
             }
+            if Instant::now() >= until {
+                return false;
+            }
             std::thread::sleep(Duration::from_millis(20));
         }
-        false
     }
+
+    fn body(response: &Option<String>) -> &str {
+        response
+            .as_deref()
+            .and_then(|r| r.split_once("\r\n\r\n"))
+            .map_or("", |(_, body)| body)
+    }
+
+    const OLD: &str = "<h1>This sign-in is old.</h1>\
+<p>Go back to Clip Factory and tap Connect Content Rewards again.</p>";
 
     #[test]
     fn the_real_ports_are_the_five_registered_ways_back() {
@@ -622,6 +707,17 @@ pub(crate) mod tests {
     fn the_door_listens_on_this_computer_only() {
         let o = opened();
         let port = o.door.port();
+        // What the system says the door is bound to: 127.0.0.1 itself, never 0.0.0.0 (every address) or `::`.
+        assert_eq!(
+            o.door.local_addr(),
+            SocketAddr::from((Ipv4Addr::LOCALHOST, port))
+        );
+        // Linux sends all of 127/8 to this computer, so a door on 0.0.0.0 would answer 127.0.0.2 too.
+        #[cfg(target_os = "linux")]
+        {
+            let other = SocketAddr::from(([127, 0, 0, 2], port));
+            assert!(TcpStream::connect_timeout(&other, Duration::from_millis(300)).is_err());
+        }
         // 127.0.0.1 answers; the IPv6 loopback (what `::` would add) does not.
         assert_eq!(status(&get(port, "/favicon.ico")), "HTTP/1.1 404 Not Found");
         let v6 = SocketAddr::from((std::net::Ipv6Addr::LOCALHOST, port));
@@ -634,10 +730,18 @@ pub(crate) mod tests {
     fn a_busy_port_is_skipped_and_none_free_is_no_port() {
         let taken = TcpListener::bind("127.0.0.1:0").unwrap();
         let busy = taken.local_addr().unwrap().port();
-        let next = free_port();
         let clock = Arc::new(FakeClock::default());
-        let door = Door::open(&config(vec![busy, next], clock.clone()), Box::new(|| {})).unwrap();
-        assert_eq!(door.port(), next);
+        let door = Door::open(
+            &config(vec![busy, ANY_PORT], clock.clone()),
+            Box::new(|| {}),
+        )
+        .unwrap();
+        assert_ne!(door.port(), busy);
+        assert_ne!(door.port(), ANY_PORT);
+        assert_eq!(
+            door.local_addr(),
+            SocketAddr::from((Ipv4Addr::LOCALHOST, door.port()))
+        );
         let none = Door::open(&config(vec![busy], clock.clone()), Box::new(|| {}));
         assert_eq!(none.err(), Some(NoPort));
         assert_eq!(
@@ -677,12 +781,25 @@ pub(crate) mod tests {
     fn a_wrong_state_is_refused_and_the_right_one_is_still_taken() {
         let o = opened();
         let port = o.door.port();
-        for wrong in ["other", &STATE[1..], &format!("{STATE}x"), ""] {
+        // Another sign-in's state (an old Content Rewards tab answering the new door): a 400 page that says what to do.
+        for wrong in ["other", &STATE[1..], &format!("{STATE}x")] {
             let r = get(port, &format!("/?code=abc&state={wrong}"));
             assert_eq!(status(&r), "HTTP/1.1 400 Bad Request", "{wrong}");
+            assert!(body(&r).contains(OLD), "{wrong}: {r:?}");
+            assert!(r
+                .unwrap()
+                .contains("Content-Type: text/html; charset=utf-8\r\n"));
+            let r = get(port, &format!("/?error=access_denied&state={wrong}"));
+            assert!(body(&r).contains(OLD), "{wrong}: {r:?}");
         }
-        assert_eq!(status(&get(port, "/?code=abc")), "HTTP/1.1 400 Bad Request");
+        // Not an answer at all: a plain 400.
+        for bad in ["/?code=abc&state=", "/?code=abc", "/?state=abc"] {
+            let r = get(port, bad);
+            assert_eq!(status(&r), "HTTP/1.1 400 Bad Request", "{bad}");
+            assert_eq!(body(&r), "Bad request\n", "{bad}");
+        }
         assert_eq!(o.door.read(), Reading::Waiting);
+        assert_eq!(o.fronts.load(Ordering::SeqCst), 0);
         let r = get(port, &format!("/?code=abc&state={STATE}"));
         assert_eq!(status(&r), "HTTP/1.1 200 OK");
         assert!(matches!(o.door.read(), Reading::Answered(_)));
@@ -691,9 +808,10 @@ pub(crate) mod tests {
     #[test]
     fn no_answer_is_taken_before_the_door_knows_its_state() {
         let clock = Arc::new(FakeClock::default());
-        let door = Door::open(&config(vec![free_port()], clock), Box::new(|| {})).unwrap();
+        let door = Door::open(&config(vec![ANY_PORT], clock), Box::new(|| {})).unwrap();
         let r = get(door.port(), &format!("/?code=abc&state={STATE}"));
         assert_eq!(status(&r), "HTTP/1.1 400 Bad Request");
+        assert!(body(&r).contains(OLD));
         // Once per door.
         door.expect(STATE.to_owned()).unwrap();
         assert_eq!(door.expect(STATE.to_owned()), Err(Busy));
@@ -711,7 +829,10 @@ pub(crate) mod tests {
             ),
             (format!("GET {good} HTTP/1.1\r\nHost: 127.0.0.1"), "400"),
             (
-                format!("GET {good} HTTP/1.1\r\nHost: 127.0.0.1:{}", port + 1),
+                format!(
+                    "GET {good} HTTP/1.1\r\nHost: 127.0.0.1:{}",
+                    port.wrapping_add(1)
+                ),
                 "400",
             ),
             (format!("GET {good} HTTP/1.1\r\nHost: evil.test"), "400"),
@@ -850,7 +971,7 @@ pub(crate) mod tests {
                 iss: None,
                 kind: Kind::Error {
                     error: "access_denied".to_owned(),
-                    description: Some("The usersaid no".to_owned()),
+                    description: Some("The user said no".to_owned()),
                 },
             })
         );
@@ -878,6 +999,70 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn the_door_closes_by_itself_after_five_minutes() {
+        let o = opened();
+        let port = o.door.port();
+        o.clock.advance(OPEN_FOR);
+        // Nobody asks the door anything (the page went away without a cancel): its port still closes.
+        assert!(soon(|| TcpStream::connect(("127.0.0.1", port)).is_err()));
+        assert!(o.door.expired());
+        assert_eq!(o.door.read(), Reading::Expired);
+        assert_eq!(o.fronts.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn an_answer_after_the_answer_is_old() {
+        let o = opened();
+        let answer = |code: &str| Answer {
+            state: STATE.to_owned(),
+            iss: None,
+            kind: Kind::Code(code.to_owned()),
+        };
+        assert_eq!(o.door.shared.offer(answer("first")), Reply::Done);
+        assert_eq!(o.door.shared.offer(answer("second")), Reply::Stale);
+        assert_eq!(
+            o.door.read(),
+            Reading::Answered(answer("first")),
+            "the first is kept"
+        );
+    }
+
+    #[test]
+    fn a_connection_that_keeps_sending_is_let_go_soon() {
+        let o = opened();
+        let port = o.door.port();
+        let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+        s.write_all(
+            format!("GET /favicon.ico HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n").as_bytes(),
+        )
+        .unwrap();
+        let mut reply = String::new();
+        s.read_to_string(&mut reply).unwrap();
+        assert!(reply.starts_with("HTTP/1.1 404 Not Found\r\n"));
+        // Then a byte every 100 ms, always sooner than DRAIN_IDLE, for 5 s.
+        let started = Instant::now();
+        let trickle = std::thread::spawn(move || {
+            while started.elapsed() < Duration::from_secs(5) {
+                if s.write_all(b"x").is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        });
+        assert!(within(DRAIN_TIME + Duration::from_secs(2), || {
+            o.door.shared.connections.load(Ordering::SeqCst) == 0
+        }));
+        assert!(started.elapsed() < DRAIN_TIME + Duration::from_secs(2));
+        trickle.join().unwrap();
+        // The door still answers.
+        assert_eq!(
+            status(&get(port, &format!("/?code=abc&state={STATE}"))),
+            "HTTP/1.1 200 OK"
+        );
+    }
+
+    #[test]
     fn dropping_the_door_frees_its_port_at_once() {
         let o = opened();
         let port = o.door.port();
@@ -888,7 +1073,7 @@ pub(crate) mod tests {
     #[test]
     fn a_silent_connection_does_not_hold_up_the_answer() {
         let clock = Arc::new(FakeClock::default());
-        let mut slow = config(vec![free_port()], clock);
+        let mut slow = config(vec![ANY_PORT], clock);
         slow.head_time = Duration::from_secs(4);
         let door = Door::open(&slow, Box::new(|| {})).unwrap();
         door.expect(STATE.to_owned()).unwrap();
@@ -935,6 +1120,28 @@ pub(crate) mod tests {
         assert!(failed.contains(
             "<h1>Content Rewards didn't connect.</h1><p>Go back to Clip Factory to see what to do.</p>"
         ));
+        // The old sign-in's page: a 400, with the same safe headers and look.
+        let old = String::from_utf8(response(Reply::Stale)).unwrap();
+        let (head, page) = old.split_once("\r\n\r\n").unwrap();
+        assert_eq!(
+            head.split("\r\n").collect::<Vec<_>>(),
+            vec![
+                "HTTP/1.1 400 Bad Request",
+                "Content-Type: text/html; charset=utf-8",
+                &format!("Content-Length: {}", page.len()),
+                "Cache-Control: no-store",
+                "Referrer-Policy: no-referrer",
+                "Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'",
+                "X-Content-Type-Options: nosniff",
+                "Connection: close",
+            ]
+        );
+        assert!(page.contains(OLD));
+        for never in [
+            "cursor:", "border:", "outline:", "<script", "src=", "href=", "url(",
+        ] {
+            assert!(!page.contains(never), "{never}");
+        }
         for (reply, first) in [
             (Reply::BadRequest, "HTTP/1.1 400 Bad Request"),
             (Reply::NotFound, "HTTP/1.1 404 Not Found"),
