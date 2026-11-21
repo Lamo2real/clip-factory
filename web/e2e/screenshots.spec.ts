@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { ACTIVE_SCENE, asDesktop, INACTIVE_FLOOR, paintGlass } from "./glass.ts";
 import { CLIPS, openClip, openTodo, settle } from "./helpers.ts";
 import { GALLERY, pauseActs, tapAct } from "./motionHelpers.ts";
@@ -334,7 +334,13 @@ for (const size of [
       await page.locator("[data-help-spotlit]").waitFor();
       await page.waitForTimeout(900);
       await page.screenshot({ path: join(dir, `help-spotlight-keep-${size.width}x${size.height}.png`) });
-      if (await panel.count()) await panel.getByRole("button", { name: "Close" }).click();
+      // The panel may still be stepping away from Keep on a busy runner: then there is nothing to close.
+      if (await panel.count())
+        await panel
+          .getByRole("button", { name: "Close" })
+          .click({ timeout: 5_000 })
+          .catch(() => undefined);
+      await expect(panel).toHaveCount(0);
       await page.evaluate(() => window.dispatchEvent(new CustomEvent("cf:help", { detail: {} })));
       // The plain answer's steps (§19), or the assistant's answer (§28).
       await panel.locator(".help-steps, .ask-answer").last().waitFor();

@@ -285,6 +285,8 @@ interface Stored {
   rulesState: Campaign["rulesState"];
   /** When a rules read started (it ends after a moment). */
   readingSince?: number;
+  /** How long this read takes, in ms (a test can make it longer than a slow machine's clicks). */
+  readingMs?: number;
   pastedRules?: string;
   logo: Campaign["logo"];
   held?: boolean;
@@ -614,19 +616,21 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
   }
 
   /** A rules read ends after a moment and says so on the live connection, like cf-prod-campaigns writing the item. */
-  function startReading(c: Stored) {
+  function startReading(c: Stored, ms = 1200) {
     c.rulesState = "reading";
     c.readingSince = now();
+    c.readingMs = ms;
     setTimeout(() => {
       tick(c);
       publish(`campaign:${c.campaignId}`);
-    }, 1300);
+    }, ms + 100);
   }
 
   function tick(c: Stored) {
-    if (c.rulesState === "reading" && c.readingSince && now() - c.readingSince > 1200) {
+    if (c.rulesState === "reading" && c.readingSince && now() - c.readingSince > (c.readingMs ?? 1200)) {
       c.rulesState = "ready";
       delete c.readingSince;
+      delete c.readingMs;
       save(state);
     }
     const m = membership(c);
@@ -1021,11 +1025,12 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
       state.connection = { ...state.connection, crLinked: { ...state.connection.crLinked, [platform]: false } };
       changed();
     },
-    /** The brand changed the rules: a read starts without any news yet (it says so when it ends, like the API). */
-    rulesChanged(uuid: string) {
+    /** The brand changed the rules: a read starts without any news yet (it says so when it ends, like the API).
+     * `ms` is how long the read takes (longer in a test, so a slow machine still sees "Reading the rules…"). */
+    rulesChanged(uuid: string, ms?: number) {
       const c = state.campaigns.find((x) => x.campaignId === uuid);
       if (!c) return;
-      startReading(c);
+      startReading(c, ms);
       save(state);
     },
     readFails(uuid: string) {

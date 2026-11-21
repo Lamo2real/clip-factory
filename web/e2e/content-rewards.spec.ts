@@ -390,8 +390,9 @@ test.describe("desktop journeys", () => {
     await settle(page);
     await page.getByLabel("YouTube, Twitch or Kick link").fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
     await expect(page.locator(".newjob")).toContainText(/YouTube/);
-    // The rules changed on Content Rewards a moment ago: Home doesn't know yet.
-    await cr(page, "rulesChanged", IDS.faze);
+    // The rules changed on Content Rewards a moment ago: Home doesn't know yet. The read takes 4 s here, so a slow
+    // machine's click still lands while it runs.
+    await cr(page, "rulesChanged", IDS.faze, 4000);
     await page.getByRole("button", { name: "Make clips", exact: true }).click();
     await expect(page.locator(".newjob")).toContainText("Reading the rules… I start your clips when they are ready.");
     await expect(page).toHaveURL(/\/jobs\/[A-Za-z0-9_-]+$/, { timeout: 10_000 });
