@@ -1,0 +1,855 @@
+{
+  "engine": 2,
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "durationSec": 45,
+  "title": "Skid on ice? Do this",
+  "seed": 20261121,
+  "cast": {
+    "c1": {
+      "characterId": "ch_lamo",
+      "name": "Lamo",
+      "look": {
+        "body": "bean",
+        "skin": "#f2c9a0",
+        "height": 1,
+        "width": 1,
+        "hair": {
+          "style": "short",
+          "color": "#3b2a1a"
+        },
+        "eyes": {
+          "shape": "round",
+          "color": "#1c1842"
+        },
+        "brows": "thick",
+        "nose": "button",
+        "mouth": "wide",
+        "outfit": {
+          "top": "#ff6f61",
+          "bottom": "#1c1842",
+          "accent": "#ffc94a",
+          "pattern": "stripes"
+        },
+        "accessory": "scarf",
+        "outline": "#1c1842"
+      },
+      "movementStyle": "bouncy",
+      "voice": {
+        "style": "babble",
+        "pitch": 1.2,
+        "noises": [
+          "gasp",
+          "phew",
+          "yay",
+          "hmm"
+        ],
+        "sfx": [
+          "boing"
+        ]
+      }
+    },
+    "c2": {
+      "characterId": "ch_pip",
+      "name": "Pip",
+      "look": {
+        "body": "round",
+        "skin": "#8d5a3b",
+        "height": 0.95,
+        "width": 1.05,
+        "hair": {
+          "style": "curly",
+          "color": "#1b1b2a"
+        },
+        "eyes": {
+          "shape": "oval",
+          "color": "#2b1a10"
+        },
+        "brows": "thin",
+        "nose": "dot",
+        "mouth": "small",
+        "outfit": {
+          "top": "#47d6a0",
+          "bottom": "#2a2466",
+          "accent": "#62c6ff",
+          "pattern": "dots"
+        },
+        "accessory": "glasses",
+        "outline": "#1c1842"
+      },
+      "movementStyle": "calm",
+      "voice": {
+        "style": "hum",
+        "pitch": 0.85,
+        "noises": [
+          "giggle",
+          "phew",
+          "hmm",
+          "sigh"
+        ],
+        "sfx": [
+          "ding"
+        ]
+      }
+    }
+  },
+  "scenes": [
+    {
+      "sceneId": "s1",
+      "title": "A frosty morning",
+      "durationSec": 4,
+      "set": "snowy_road",
+      "view": "side",
+      "camera": "wide",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.14,
+          "y": 0.75,
+          "facing": "right"
+        },
+        {
+          "castId": "c2",
+          "x": 0.8,
+          "y": 0.74,
+          "facing": "left"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "x": 0.56,
+          "y": 0.71,
+          "scale": 1,
+          "rot": 0,
+          "color": "#62c6ff",
+          "state": "parked"
+        }
+      ],
+      "beats": [
+        {
+          "at": 0.2,
+          "dur": 2.2,
+          "who": "c1",
+          "do": "walk",
+          "to": {
+            "x": 0.36,
+            "y": 0.75
+          },
+          "face": "happy",
+          "sfx": "snow_crunch"
+        },
+        {
+          "at": 0.5,
+          "dur": 1.6,
+          "who": "c2",
+          "do": "wave",
+          "face": "happy",
+          "noise": "hmm"
+        },
+        {
+          "at": 2.6,
+          "dur": 1.3,
+          "who": "c1",
+          "do": "think",
+          "bubble": "question",
+          "face": "thinking"
+        }
+      ],
+      "sfx": [
+        {
+          "id": "s1.wind",
+          "at": 0,
+          "sfx": "wind",
+          "volume": 0.3
+        }
+      ],
+      "caption": null,
+      "note": "Lamo and Pip set off on an icy morning."
+    },
+    {
+      "sceneId": "s2",
+      "title": "Off we go",
+      "durationSec": 5,
+      "set": "icy_road",
+      "view": "side",
+      "camera": "medium",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        },
+        {
+          "castId": "c2",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "x": 0.5,
+          "y": 0.75,
+          "scale": 1,
+          "rot": 0,
+          "color": "#62c6ff",
+          "state": "driving"
+        }
+      ],
+      "beats": [
+        {
+          "at": 0,
+          "dur": 5,
+          "who": "c1",
+          "do": "drive",
+          "face": "happy",
+          "sfx": "engine"
+        },
+        {
+          "at": 1.2,
+          "dur": 1.2,
+          "who": "c2",
+          "do": "nod",
+          "face": "happy"
+        },
+        {
+          "at": 2.2,
+          "dur": 2.0,
+          "who": "c1",
+          "do": "idle",
+          "bubble": "music",
+          "noise": "babble"
+        }
+      ],
+      "sfx": [],
+      "caption": null,
+      "note": null
+    },
+    {
+      "sceneId": "s3",
+      "title": "Black ice!",
+      "durationSec": 6,
+      "set": "icy_road",
+      "view": "top",
+      "camera": "wide",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        },
+        {
+          "castId": "c2",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "x": 0.5,
+          "y": 0.86,
+          "scale": 1,
+          "rot": 0,
+          "color": "#62c6ff"
+        },
+        {
+          "propId": "ice1",
+          "kind": "ice_patch",
+          "x": 0.5,
+          "y": 0.52,
+          "scale": 1.3,
+          "rot": 0
+        }
+      ],
+      "beats": [
+        {
+          "at": 0,
+          "dur": 2.0,
+          "who": "car1",
+          "do": "move",
+          "to": {
+            "x": 0.5,
+            "y": 0.6
+          }
+        },
+        {
+          "at": 2.0,
+          "dur": 3.9,
+          "who": "car1",
+          "do": "skid",
+          "dir": "right",
+          "to": {
+            "x": 0.6,
+            "y": 0.3
+          },
+          "sfx": "skid"
+        },
+        {
+          "at": 2.1,
+          "dur": 1.2,
+          "who": "c1",
+          "do": "gasp",
+          "face": "shocked",
+          "bubble": "exclaim",
+          "noise": "gasp"
+        }
+      ],
+      "sfx": [
+        {
+          "id": "s3.screech",
+          "at": 2.15,
+          "sfx": "screech",
+          "volume": 0.7
+        }
+      ],
+      "caption": "Black ice!",
+      "note": null
+    },
+    {
+      "sceneId": "s4",
+      "title": "Stay calm",
+      "durationSec": 5,
+      "set": "icy_road",
+      "view": "side",
+      "camera": "close",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        },
+        {
+          "castId": "c2",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "x": 0.5,
+          "y": 0.75,
+          "scale": 1,
+          "rot": 0,
+          "color": "#62c6ff",
+          "state": "driving"
+        }
+      ],
+      "beats": [
+        {
+          "at": 0,
+          "dur": 1.3,
+          "who": "c1",
+          "do": "gasp",
+          "face": "scared"
+        },
+        {
+          "at": 0.3,
+          "dur": 2.2,
+          "who": "c2",
+          "do": "cower",
+          "face": "scared",
+          "noise": "sigh"
+        },
+        {
+          "at": 1.5,
+          "dur": 3.4,
+          "who": "c1",
+          "do": "drive",
+          "face": "determined"
+        }
+      ],
+      "sfx": [
+        {
+          "id": "s4.beat",
+          "at": 0.2,
+          "sfx": "heartbeat",
+          "volume": 0.6
+        }
+      ],
+      "caption": null,
+      "note": null
+    },
+    {
+      "sceneId": "s5",
+      "title": "Steer into the skid",
+      "durationSec": 6,
+      "set": "icy_road",
+      "view": "top",
+      "camera": "medium",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        },
+        {
+          "castId": "c2",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "x": 0.48,
+          "y": 0.66,
+          "scale": 1,
+          "rot": -25,
+          "color": "#62c6ff"
+        },
+        {
+          "propId": "ice1",
+          "kind": "ice_patch",
+          "x": 0.45,
+          "y": 0.55,
+          "scale": 1.1,
+          "rot": 0
+        },
+        {
+          "propId": "arrow1",
+          "kind": "arrow",
+          "x": 0.74,
+          "y": 0.42,
+          "scale": 0.8,
+          "rot": 0,
+          "state": "curve_right"
+        }
+      ],
+      "beats": [
+        {
+          "at": 0,
+          "dur": 3.2,
+          "who": "car1",
+          "do": "skid",
+          "dir": "right",
+          "to": {
+            "x": 0.54,
+            "y": 0.42
+          }
+        },
+        {
+          "at": 0.5,
+          "dur": 2.8,
+          "who": "c1",
+          "do": "steer_right",
+          "face": "determined"
+        },
+        {
+          "at": 0.8,
+          "dur": 0.5,
+          "who": "arrow1",
+          "do": "appear",
+          "sfx": "pop"
+        },
+        {
+          "at": 1.4,
+          "dur": 1.8,
+          "who": "arrow1",
+          "do": "flash"
+        },
+        {
+          "at": 3.3,
+          "dur": 2.6,
+          "who": "car1",
+          "do": "move",
+          "to": {
+            "x": 0.54,
+            "y": 0.2
+          }
+        }
+      ],
+      "sfx": [],
+      "caption": null,
+      "note": null
+    },
+    {
+      "sceneId": "s6",
+      "title": "Small corrections",
+      "durationSec": 5,
+      "set": "icy_road",
+      "view": "top",
+      "camera": "wide",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        },
+        {
+          "castId": "c2",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "x": 0.53,
+          "y": 0.74,
+          "scale": 1,
+          "rot": 0,
+          "color": "#62c6ff"
+        },
+        {
+          "propId": "arrow2",
+          "kind": "arrow",
+          "x": 0.5,
+          "y": 0.2,
+          "scale": 0.8,
+          "rot": 0
+        }
+      ],
+      "beats": [
+        {
+          "at": 0.2,
+          "dur": 4.6,
+          "who": "car1",
+          "do": "move",
+          "to": {
+            "x": 0.5,
+            "y": 0.36
+          }
+        },
+        {
+          "at": 0.5,
+          "dur": 1.2,
+          "who": "c1",
+          "do": "steer_left"
+        },
+        {
+          "at": 2.0,
+          "dur": 1.0,
+          "who": "c1",
+          "do": "steer_right"
+        },
+        {
+          "at": 3.0,
+          "dur": 0.5,
+          "who": "arrow2",
+          "do": "appear",
+          "sfx": "ding"
+        }
+      ],
+      "sfx": [],
+      "caption": null,
+      "note": null
+    },
+    {
+      "sceneId": "s7",
+      "title": "Gentle brakes",
+      "durationSec": 5,
+      "set": "icy_road",
+      "view": "side",
+      "camera": "medium",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        },
+        {
+          "castId": "c2",
+          "x": 0.5,
+          "y": 0.72,
+          "facing": "right",
+          "inCar": "car1"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "x": 0.5,
+          "y": 0.75,
+          "scale": 1,
+          "rot": 0,
+          "color": "#62c6ff",
+          "state": "driving"
+        }
+      ],
+      "beats": [
+        {
+          "at": 0.4,
+          "dur": 2.4,
+          "who": "c1",
+          "do": "brake",
+          "face": "determined"
+        },
+        {
+          "at": 2.9,
+          "dur": 1.6,
+          "who": "car1",
+          "do": "stop"
+        },
+        {
+          "at": 3.3,
+          "dur": 1.5,
+          "who": "c2",
+          "do": "idle",
+          "face": "relieved",
+          "bubble": "heart",
+          "noise": "phew"
+        }
+      ],
+      "sfx": [
+        {
+          "id": "s7.brakes",
+          "at": 0.5,
+          "sfx": "brake_squeal",
+          "volume": 0.35
+        }
+      ],
+      "caption": null,
+      "note": null
+    },
+    {
+      "sceneId": "s8",
+      "title": "We did it",
+      "durationSec": 5,
+      "set": "snowy_road",
+      "view": "side",
+      "camera": "wide",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.33,
+          "y": 0.75,
+          "facing": "right"
+        },
+        {
+          "castId": "c2",
+          "x": 0.64,
+          "y": 0.74,
+          "facing": "left"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "x": 0.84,
+          "y": 0.71,
+          "scale": 1,
+          "rot": 0,
+          "color": "#62c6ff",
+          "state": "parked"
+        },
+        {
+          "propId": "check1",
+          "kind": "check",
+          "x": 0.5,
+          "y": 0.4,
+          "scale": 1,
+          "rot": 0
+        },
+        {
+          "propId": "spark1",
+          "kind": "sparkles",
+          "x": 0.5,
+          "y": 0.4,
+          "scale": 1.4,
+          "rot": 0
+        }
+      ],
+      "beats": [
+        {
+          "at": 0.3,
+          "dur": 2.2,
+          "who": "c1",
+          "do": "celebrate",
+          "face": "laughing",
+          "noise": "yay",
+          "sfx": "tada"
+        },
+        {
+          "at": 0.6,
+          "dur": 1.8,
+          "who": "c2",
+          "do": "thumbs_up",
+          "face": "proud"
+        },
+        {
+          "at": 0.4,
+          "dur": 0.5,
+          "who": "check1",
+          "do": "appear",
+          "sfx": "ding"
+        },
+        {
+          "at": 0.5,
+          "dur": 0.6,
+          "who": "spark1",
+          "do": "appear"
+        },
+        {
+          "at": 2.8,
+          "dur": 2.0,
+          "who": "c1",
+          "do": "dance",
+          "face": "happy"
+        },
+        {
+          "at": 2.9,
+          "dur": 1.0,
+          "who": "c2",
+          "do": "idle",
+          "noise": "giggle"
+        }
+      ],
+      "sfx": [],
+      "caption": null,
+      "note": null
+    },
+    {
+      "sceneId": "s9",
+      "title": "Don't do this",
+      "durationSec": 4,
+      "set": "studio",
+      "view": "side",
+      "camera": "medium",
+      "actors": [
+        {
+          "castId": "c2",
+          "x": 0.45,
+          "y": 0.74,
+          "facing": "right"
+        }
+      ],
+      "props": [
+        {
+          "propId": "cross1",
+          "kind": "cross",
+          "x": 0.74,
+          "y": 0.44,
+          "scale": 0.9,
+          "rot": 0
+        }
+      ],
+      "beats": [
+        {
+          "at": 0.3,
+          "dur": 1.6,
+          "who": "c2",
+          "do": "shake_head",
+          "face": "worried"
+        },
+        {
+          "at": 0.4,
+          "dur": 0.5,
+          "who": "cross1",
+          "do": "appear",
+          "sfx": "boing"
+        },
+        {
+          "at": 2.0,
+          "dur": 1.6,
+          "who": "c2",
+          "do": "point",
+          "dir": "right",
+          "face": "determined"
+        }
+      ],
+      "sfx": [],
+      "caption": null,
+      "note": null
+    }
+  ],
+  "music": {
+    "mood": "tense",
+    "volume": 0.35
+  },
+  "captionsOn": true,
+  "captions": [
+    {
+      "id": "cap1",
+      "at": 11.0,
+      "dur": 4.0,
+      "text": "Stay calm. You can still control the car.",
+      "guidanceRef": "skid-recovery.1"
+    },
+    {
+      "id": "cap2",
+      "at": 15.3,
+      "dur": 4.5,
+      "text": "Ease off the accelerator",
+      "guidanceRef": "skid-recovery.2"
+    },
+    {
+      "id": "cap3",
+      "at": 20.3,
+      "dur": 5.4,
+      "text": "Rear slides right? Steer right.",
+      "guidanceRef": "skid-recovery.4"
+    },
+    {
+      "id": "cap4",
+      "at": 26.2,
+      "dur": 4.6,
+      "text": "Keep steering where you want to go",
+      "guidanceRef": "skid-recovery.6"
+    },
+    {
+      "id": "cap5",
+      "at": 31.2,
+      "dur": 4.6,
+      "text": "Back in control? Brake gently.",
+      "guidanceRef": "skid-recovery.9"
+    },
+    {
+      "id": "cap6",
+      "at": 41.2,
+      "dur": 3.7,
+      "text": "Don't brake, speed up or steer harshly",
+      "guidanceRef": "skid-recovery.x1"
+    }
+  ],
+  "safety": {
+    "topicId": "skid-recovery",
+    "citations": [
+      {
+        "publisher": "UK Department for Transport (GOV.UK) - The Highway Code",
+        "title": "The Highway Code - General rules, techniques and advice for all drivers and riders (103 to 158)",
+        "url": "https://www.gov.uk/guidance/the-highway-code/general-rules-techniques-and-advice-for-all-drivers-and-riders-103-to-158",
+        "section": "Rule 119 (Skids)"
+      },
+      {
+        "publisher": "Ontario Ministry of Transportation (Government of Ontario)",
+        "title": "Driving at night and in bad weather | The Official Ministry of Transportation (MTO) Driver's Handbook",
+        "url": "https://www.ontario.ca/document/official-mto-drivers-handbook/driving-night-and-bad-weather",
+        "section": "Skids"
+      }
+    ]
+  }
+}
