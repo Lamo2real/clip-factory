@@ -1,5 +1,5 @@
 {
-  "version": "d672e0ac72b5",
+  "version": "6c44718deee6",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -3386,6 +3386,7 @@
         "money",
         "cancel",
         "upload",
+        "check",
         "make",
         "normal",
         "instead",
@@ -3398,8 +3399,7 @@
         "videos",
         "streamers",
         "follow",
-        "find",
-        "ask"
+        "find"
       ],
       "answer": "Paste a link to a stream or a video. Clip Factory finds the best moments and makes short clips. You pick the ones to upload.",
       "steps": [

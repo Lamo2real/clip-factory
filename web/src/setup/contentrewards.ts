@@ -186,7 +186,7 @@ export const CR_GUIDE: CrGuide = {
           icon: "search",
           title: "Pick a campaign",
           say: [
-            "Tap **Sort**, then **Highest CPM**. That shows the best pay first.",
+            "Tap **Sort**, then **Highest CPM**. That shows the most money for every 1,000 views first.",
             "Pick one that pays for YouTube. Skip ones that need your face, a sound, or only TikTok.",
             "Not sure? Paste its link here first. I'll check it before you join.",
           ],

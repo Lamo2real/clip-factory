@@ -192,11 +192,47 @@ export function CrStepCard({
   // §39.1: a step with a `lead` and its own answer ("I have an account") puts that green answer right under its Open
   // button, before the other lines, so someone who already did it taps once.
   const early = manual && !!onDone && !!step.doneLabel && !done;
+  // Pinned beside the vermilion, the answer is a next step too: Ask never rests on it (it fades out instead).
   const answerEl = early ? (
-    <Button size="lg" variant="glass" icon="check" act="tick" className="btn--leaf gstep__done" onClick={() => onDone!(true)} loading={busy}>
+    <Button size="lg" variant="glass" icon="check" act="tick" className="btn--leaf gstep__done" onClick={() => onDone!(true)} loading={busy} data-help-clear={pin ? "" : undefined}>
       {step.doneLabel}
     </Button>
   ) : null;
+  const rest = (
+    <>
+      <Lines lines={say ?? step.say} />
+      {openEl && !pin && !early ? <div className="gstep__actions">{openEl}</div> : null}
+      {copies?.length || step.copy?.length ? (
+        <div className="gstep__copies">
+          {(copies ?? []).map((c) => (
+            <CopyChip key={c.label} label={c.label} value={c.value} quiet />
+          ))}
+        </div>
+      ) : null}
+      {children}
+      {step.folds?.length ? (
+        <div className="cr-folds">
+          {step.folds.map((f) => (
+            <Fold key={f.id} fold={f} />
+          ))}
+        </div>
+      ) : null}
+      <Hints list={step.ifYouSee} />
+      {manual && onDone && !early ? (
+        <div className="gstep__done-row">
+          {done ? (
+            <Button size="sm" variant="ghost" icon="undo" act="undo" onClick={() => onDone(false)} loading={busy}>
+              Not done yet
+            </Button>
+          ) : (
+            <Button size="lg" variant="glass" icon="check" act="tick" className="btn--leaf gstep__done" onClick={() => onDone(true)} loading={busy}>
+              I did this
+            </Button>
+          )}
+        </div>
+      ) : null}
+    </>
+  );
   return (
     <li
       className={`gstep glass${done ? " is-done" : ""}${current ? " is-current" : ""}${open ? " is-open" : ""}${number === null ? " is-helper" : ""}`}
@@ -232,43 +268,18 @@ export function CrStepCard({
               {answerEl}
             </div>
           ) : null}
-          <Lines lines={say ?? step.say} />
-          {openEl && !pin && !early ? <div className="gstep__actions">{openEl}</div> : null}
-          {copies?.length || step.copy?.length ? (
-            <div className="gstep__copies">
-              {(copies ?? []).map((c) => (
-                <CopyChip key={c.label} label={c.label} value={c.value} quiet />
-              ))}
-            </div>
-          ) : null}
-          {children}
-          {step.folds?.length ? (
-            <div className="cr-folds">
-              {step.folds.map((f) => (
-                <Fold key={f.id} fold={f} />
-              ))}
-            </div>
-          ) : null}
-          <Hints list={step.ifYouSee} />
-          {manual && onDone && !early ? (
-            <div className="gstep__done-row">
-              {done ? (
-                <Button size="sm" variant="ghost" icon="undo" act="undo" onClick={() => onDone(false)} loading={busy}>
-                  Not done yet
-                </Button>
-              ) : (
-                <Button size="lg" variant="glass" icon="check" act="tick" className="btn--leaf gstep__done" onClick={() => onDone(true)} loading={busy}>
-                  I did this
-                </Button>
-              )}
-            </div>
-          ) : null}
           {pin ? (
-            <div className={`gstep__actions cr-pin${early ? " cr-pin--stack" : ""}`}>
-              {openEl}
-              {answerEl}
+            // The pinned pair's sticky box is this part, so it never rides up over the lead line above.
+            <div className="gstep__rest">
+              {rest}
+              <div className={`gstep__actions cr-pin${early ? " cr-pin--stack" : ""}`}>
+                {openEl}
+                {answerEl}
+              </div>
             </div>
-          ) : null}
+          ) : (
+            rest
+          )}
         </div>
       ) : null}
     </li>

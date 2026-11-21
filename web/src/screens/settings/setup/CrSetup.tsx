@@ -156,6 +156,23 @@ export function CrSetup() {
     return () => clearTimeout(t);
   }, [conn, current, count]);
 
+  // Phones: the open step's pinned Open and its answer come fully on screen, clear of the tab bar (once). A step low on
+  // the first screen would otherwise leave them under the bar until he scrolls.
+  const pinShown = useRef(false);
+  useEffect(() => {
+    if (!conn || pinShown.current || !current) return;
+    const t = setTimeout(() => {
+      pinShown.current = true;
+      const pin = document.querySelector<HTMLElement>(`#step-${current} .cr-pin`);
+      if (!pin) return;
+      const bar = document.querySelector<HTMLElement>(".tabbar")?.getBoundingClientRect();
+      const limit = (bar && bar.height > 0 ? bar.top : window.innerHeight) - 12;
+      const r = pin.getBoundingClientRect();
+      if (r.bottom > limit) window.scrollBy({ top: r.bottom - limit, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [conn, current]);
+
   const isOpen = (id: string) => (closed.has(id) ? false : opened.has(id) || current === id);
   const toggle = (id: string) => {
     const now = isOpen(id);
@@ -309,7 +326,13 @@ export function CrSetup() {
     try {
       const a = CR_SETUP_STEPS.find((st) => st.id === "ready-account")!;
       const b = CR_SETUP_STEPS.find((st) => st.id === "ready-socials")!;
-      if (await tick(a, true)) await tick(b, true);
+      if ((await tick(a, true)) && (await tick(b, true))) {
+        // Step 3 opens next: its Connect comes on screen (a short Mac window put it just below the edge).
+        setTimeout(() => {
+          const to = document.querySelector<HTMLElement>("#step-connect .gstep__connect, #step-connect .cr-place, #step-connect");
+          to?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+        }, 60);
+      }
     } finally {
       setShortcutBusy(false);
     }
@@ -320,7 +343,27 @@ export function CrSetup() {
     const last = lines.pop();
     return [...lines, ...(postsTo ? [postsTo] : []), CR_TIKTOK_WAITS, ...(last ? [last] : [])];
   };
+  // On a phone, step 3 is done on the Mac: with a way back, the page still leads back (the vermilion when step 3 is the
+  // only step left, since a phone's step 3 has no button), and says where that campaign is on the Mac.
+  const phoneBack = !!back && !on && !reconnect && run.place === "phone";
+  const phoneBackMain = phoneBack && main === "connect";
+  const phoneWords = back?.campaignId && backName ? { phone: [`Do this step on your Mac. Open ${backName} in Clip Factory there, then tap Connect Content Rewards.`] } : undefined;
   const shownCheck = check && check.key === key ? check.text : null;
+  // The way back (§39.1): the vermilion once he is signed in (glass while the pilot email waits). Right after a
+  // Connect it sits in the result card, right under "Next: back to FaZe Clips.", so it is on screen at once.
+  const backInCard = !!back && !reconnect && (run.result === "connected" || run.result === "read_only");
+  const backButton = back ? (
+    <LinkButton
+      href={back.href}
+      variant={main === "back" || phoneBackMain ? "primary" : "glass"}
+      size="lg"
+      icon="chevronLeft"
+      data-help-clear={main === "back" || phoneBackMain ? "" : undefined}
+      data-cr="back"
+    >
+      {backLabel(back, backName)}
+    </LinkButton>
+  ) : null;
 
   return (
     <div className="setup-page cr-setup">
@@ -377,7 +420,8 @@ export function CrSetup() {
                         <CrResultCard
                           result={run.result}
                           onClose={run.clear}
-                          next={back && (run.result === "connected" || run.result === "read_only") ? backNext(back, backName) : undefined}
+                          next={backInCard && back ? backNext(back, backName) : undefined}
+                          action={backInCard ? backButton : undefined}
                         />
                       </div>
                     ) : null}
@@ -388,8 +432,9 @@ export function CrSetup() {
                       </Note>
                     ) : on && bridge ? null : (
                       // Signed in, in the Mac app: Connect again lives in the panel below (one Connect on the page).
-                      <CrConnectControls run={run} primary={primary} />
+                      <CrConnectControls run={run} primary={primary} words={phoneWords} />
                     )}
+                    {phoneBack ? backButton : null}
                     {on ? (
                       <p className="gstep__note is-ok">
                         <Icon name="checkCircle" size={18} />
@@ -466,19 +511,9 @@ export function CrSetup() {
             </Button>
           </div>
           {back && !reconnect ? (
-            // §39.1: the way back is the next step once he is signed in; glass while the pilot email waits.
-            <div className="done-panel__actions">
-              <LinkButton
-                href={back.href}
-                variant={main === "back" ? "primary" : "glass"}
-                size="lg"
-                icon="chevronLeft"
-                data-help-clear={main === "back" ? "" : undefined}
-                data-cr="back"
-              >
-                {backLabel(back, backName)}
-              </LinkButton>
-            </div>
+            // §39.1: the way back is the next step once he is signed in; glass while the pilot email waits. Right
+            // after Connect it sits in the result card instead (on screen at once), never twice.
+            backInCard ? null : <div className="done-panel__actions">{backButton}</div>
           ) : main === "add" ? (
             <div className="done-panel__actions">
               <LinkButton href={CAMPAIGNS_PATH} variant="primary" size="lg" icon="plus" data-help-clear="">
