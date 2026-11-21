@@ -22,6 +22,31 @@ describe("?back=", () => {
     expect(backNext(parseBack(`/campaigns/${UUID}`)!, "FaZe Clips")).toBe("Next: back to FaZe Clips.");
   });
 
+  it("§40: Get paid's list and place pages say Back to Get paid; a setup page says its own name", () => {
+    expect(parseBack("/settings/posting/getpaid")).toEqual({ href: "/settings/posting/getpaid", kind: "getpaid" });
+    for (const p of ["youtube", "tiktok", "instagram", "facebook", "x", "contentrewards"]) {
+      const b = parseBack(`/settings/posting/getpaid/${p}`)!;
+      expect(b).toEqual({ href: `/settings/posting/getpaid/${p}`, kind: "getpaid" });
+      expect(backLabel(b)).toBe("Back to Get paid");
+    }
+    expect(backLabel(parseBack("/settings/posting/setup/youtube")!)).toBe("Back to YouTube setup");
+    expect(backLabel(parseBack("/settings/posting/setup/contentrewards")!)).toBe("Back to Content Rewards setup");
+    expect(backNext(parseBack("/settings/posting/getpaid/youtube")!)).toBe("Next: back to Get paid.");
+    // The Get paid link on a setup page, and Set up YouTube from Get paid, carry their way back.
+    expect(backLink("?back=/settings/posting/setup/youtube")?.kind).toBe("setup");
+    expect(withBack("/settings/posting/setup/youtube", "/settings/posting/getpaid/youtube")).toBe("/settings/posting/setup/youtube?back=/settings/posting/getpaid/youtube");
+    for (const bad of [
+      "/settings/posting/getpaid/myspace",
+      "/settings/posting/getpaid/youtube/x",
+      "/settings/posting/getpaid/youtube?x=1",
+      "/settings/posting/getpaid/",
+      "/settings/posting/setup/myspace",
+      "/settings/posting/setup",
+      "/settings/posting/getpaid/YouTube",
+    ])
+      expect(parseBack(bad), bad).toBeNull();
+  });
+
   it("reads the page's query, raw or encoded, and only one back", () => {
     expect(backLink(`?back=/campaigns/${UUID}`)?.kind).toBe("campaign");
     expect(backLink(`?back=${encodeURIComponent(`/review?job=${ULID}`)}`)?.href).toBe(`/review?job=${ULID}`);

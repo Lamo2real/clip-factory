@@ -1,13 +1,15 @@
 // A tiny history router: a handful of screens do not need a routing library. A page change swaps the content in
 // place, with no animation at all (docs/CONTRACTS.md §20.16): the window around it stays perfectly still.
 import { useSyncExternalStore } from "react";
-import type { Platform } from "../api/types.ts";
+import type { GetPaidPlace, Platform } from "../api/types.ts";
 import { isMock } from "./config.ts";
 import { findBranch, findTree } from "./settingsTree.ts";
 import { storiesEnabled } from "../stories/flag.ts";
 import { isStoriesPath, matchStories, type StoriesPage } from "../stories/routes.ts";
 
 const SETUP_PLATFORMS: readonly Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
+/** Settings › Posting › Get paid's place pages (§40.1): the five platforms, then Content Rewards. */
+const GETPAID_PLACES: readonly GetPaidPlace[] = [...SETUP_PLATFORMS, "contentrewards"];
 
 export type Route =
   | { name: "home" }
@@ -34,6 +36,8 @@ export type Route =
   | { name: "mock_oauth"; platform: Platform }
   /** Posting › Set up posting › Content Rewards (§38.3): its own guide, not one of the five platforms. */
   | { name: "cr_setup" }
+  /** Posting › Get paid › one place (§40.1 item 2). */
+  | { name: "getpaid"; place: GetPaidPlace }
   /** Your Content Rewards campaigns (§38.4), and one campaign's card. */
   | { name: "campaigns" }
   | { name: "campaign"; campaignId: string }
@@ -91,6 +95,8 @@ export function match(pathname: string, search = ""): Route {
     const platform = setup[1] as Platform;
     return SETUP_PLATFORMS.includes(platform) ? { name: "settings", tree: "posting", branch: "setup", platform } : { name: "not_found" };
   }
+  const getpaid = /^\/settings\/posting\/getpaid\/([a-z]{1,20})$/.exec(path);
+  if (getpaid) return GETPAID_PLACES.includes(getpaid[1] as GetPaidPlace) ? { name: "getpaid", place: getpaid[1] as GetPaidPlace } : { name: "not_found" };
   const consent = /^\/mock-oauth\/([a-z]{1,20})$/.exec(path);
   if (consent && isMock && SETUP_PLATFORMS.includes(consent[1] as Platform)) return { name: "mock_oauth", platform: consent[1] as Platform };
   if (path === "/get-app") return { name: "get_app" };
@@ -262,6 +268,7 @@ export function section(route: Route): "home" | "jobs" | "review" | "library" | 
     case "stories":
       return null;
     case "cr_setup":
+    case "getpaid":
       return "settings";
     case "campaigns":
     case "campaign":

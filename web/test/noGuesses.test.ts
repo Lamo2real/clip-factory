@@ -112,6 +112,22 @@ describe("no money guesses (§25, ADR-47)", () => {
     expect(code(join(SRC, EVERYWHERE_MOCK))).toMatch(/amountMicros \+= a\.amountMicros/);
   });
 
+  // §40.4: Get paid's screens show what Google or Whop reported, only formatted: never added, converted or guessed,
+  // and never typed in (the mock's copy of the server is the one exception).
+  it("Get paid only formats: no amount or cents worked out on its screens, no money field to type", () => {
+    const screens = ["lib/getPaid.ts", "screens/money/GetPaidCard.tsx", ...readdirSync(join(SRC, "screens/getpaid")).map((f) => `screens/getpaid/${f}`), ...readdirSync(join(SRC, "getpaid")).map((f) => `getpaid/${f}`)];
+    expect(screens.length).toBeGreaterThan(8);
+    for (const f of screens) {
+      const text = code(join(SRC, f));
+      expect(text, f).not.toMatch(/amountMicros\s*[-+*/]|[-+*/]=?\s*[\w.]*amountMicros\b/);
+      expect(text, f).not.toMatch(/Cents\b\s*[-+*/]|[-+*/]\s*[\w.]*Cents\b/);
+      expect(text, f).not.toMatch(/\.reduce\(/);
+      // No box to type money, a bank, card or tax number into (§40: Clip Factory never asks for them).
+      expect(text, f).not.toMatch(/type="number"|inputMode="(decimal|numeric)"|iban|account number|card number|tax number/i);
+    }
+    expect(read(join(SRC, "screens/getpaid/SentRows.tsx"))).toContain("formatMoney(");
+  });
+
   it("the help assistant never offers to change a rate or calls money a best guess", () => {
     const kb = read(join(SRC, "features/help/helpKb.json")).toLowerCase();
     for (const phrase of ["for 1,000 views", "best guess", "use the usual", "your amount"]) expect(kb).not.toContain(phrase);

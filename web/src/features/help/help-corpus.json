@@ -1,5 +1,5 @@
 {
-  "version": "062449557987",
+  "version": "2ee1324e6637",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -71,6 +71,7 @@
     "/settings/clip-making/streamers",
     "/settings/clip-making/youtube",
     "/settings/posting/setup",
+    "/settings/posting/getpaid",
     "/settings/posting/where",
     "/settings/posting/my-settings",
     "/settings/posting/money",
@@ -4533,11 +4534,12 @@
       "title": "Posting",
       "keywords": [
         "Set up posting",
+        "Get paid",
         "Where clips go",
         "My settings",
         "Money"
       ],
-      "answer": "Where your clips go. It has Set up posting, Where clips go, My settings, Money.",
+      "answer": "Where your clips go. It has Set up posting, Get paid, Where clips go, My settings, Money.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**."
@@ -4799,6 +4801,70 @@
       ],
       "highlight": [
         "campaigns"
+      ]
+    },
+    {
+      "id": "settings-posting-getpaid",
+      "kind": "page",
+      "route": "/settings/posting/getpaid",
+      "where": "Settings › Posting › Get paid",
+      "title": "Get paid",
+      "keywords": [
+        "Get paid"
+      ],
+      "answer": "Set up how each app pays you. See if money can reach you.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Get paid**."
+      ],
+      "actions": [
+        {
+          "id": "settings-posting-getpaid:open",
+          "label": "Open Get paid",
+          "to": "/settings/posting/getpaid"
+        }
+      ]
+    },
+    {
+      "id": "apple-getpaid",
+      "kind": "apple",
+      "route": "/settings/posting/getpaid",
+      "hash": "getpaid",
+      "where": "Settings › Posting › Get paid",
+      "title": "Get paid",
+      "keywords": [
+        "get paid",
+        "payout",
+        "payouts",
+        "bank",
+        "bank account",
+        "paypal",
+        "stripe",
+        "adsense",
+        "whop",
+        "tax",
+        "money on hold",
+        "withdraw",
+        "cash out"
+      ],
+      "answer": "One card per place. Do the steps once so money can reach you.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Posting**, then **Get paid**.",
+        "Find **Get paid**."
+      ],
+      "actions": [
+        {
+          "id": "apple-getpaid:open",
+          "label": "Open Get paid",
+          "to": "/settings/posting/getpaid#getpaid",
+          "highlight": [
+            "getpaid"
+          ]
+        }
+      ],
+      "highlight": [
+        "getpaid"
       ]
     },
     {
@@ -5388,7 +5454,7 @@
     {
       "id": "apple-money-payouts",
       "kind": "apple",
-      "route": "/settings/posting/money",
+      "route": "/settings/posting/getpaid",
       "hash": "money-payouts",
       "where": "Settings › Posting › Money",
       "title": "Getting your money out",
@@ -5407,7 +5473,7 @@
         "payment",
         "card"
       ],
-      "answer": "Each app pays you itself. Add your bank or PayPal inside each app.",
+      "answer": "Each app pays you itself. Get paid shows the steps for each one.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Money**.",
@@ -5417,7 +5483,7 @@
         {
           "id": "apple-money-payouts:open",
           "label": "Open Money",
-          "to": "/settings/posting/money#money-payouts",
+          "to": "/settings/posting/getpaid",
           "highlight": [
             "money-payouts"
           ]
@@ -5936,6 +6002,7 @@
         "Picked up again",
         "Every step",
         "Content Rewards news",
+        "Money on hold or sent to your bank",
         "Number on the app icon",
         "Lock Screen widget",
         "Send a test"
@@ -6165,6 +6232,42 @@
       ],
       "highlight": [
         "notify-contentrewards"
+      ]
+    },
+    {
+      "id": "apple-notify-getpaid",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-getpaid",
+      "where": "Settings › App & account › Notifications",
+      "title": "Money on hold or sent to your bank",
+      "keywords": [
+        "get paid",
+        "payout",
+        "bank",
+        "on hold",
+        "money sent",
+        "adsense",
+        "whop"
+      ],
+      "answer": "When Google or Whop holds your money, or sends it to your bank.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **Money on hold or sent to your bank**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-getpaid:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-getpaid",
+          "highlight": [
+            "notify-getpaid"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-getpaid"
       ]
     },
     {

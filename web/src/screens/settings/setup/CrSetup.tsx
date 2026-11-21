@@ -592,7 +592,7 @@ export function CrSetup() {
           <Icon name="layers" size={20} />
           <span className="btn__label">Your campaigns</span>
         </A>
-        <A href={CR_MONEY_PATH} className="btn btn--glass btn--md">
+        <A href="/settings/posting/getpaid/contentrewards" className="btn btn--glass btn--md" data-cr="getpaid">
           <Icon name="coin" size={20} />
           <span className="btn__label">Get paid</span>
         </A>

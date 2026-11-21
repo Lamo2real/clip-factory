@@ -230,5 +230,13 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     crFitCaptions: async (body) => (await call<{ captions: Captions }>("POST", "/contentrewards/fit/captions", body)).captions,
     crRemake: async (campaignId, body) => (await call<{ job: Job }>("POST", `/contentrewards/campaigns/${id(campaignId)}/remake`, body)).job,
     getMoneyEverywhere: () => call("GET", "/money/everywhere"),
+    // §40: Get paid.
+    getPaid: () => call("GET", "/getpaid"),
+    getPaidPlace: (place) => call("GET", `/getpaid/${id(place)}`),
+    setGetPaidStep: (step, done) => call("PATCH", "/getpaid/steps", { step, done }),
+    stopPaymentReading: () => call("DELETE", "/getpaid/connections/adsense", undefined, true),
+    saveWhopKey: (clientId) => call("PUT", "/getpaid/whop/key", { clientId }),
+    connectWhop: () => call("POST", "/getpaid/whop/connect"),
+    stopWhop: () => call("DELETE", "/getpaid/connections/whop", undefined, true),
   };
 }

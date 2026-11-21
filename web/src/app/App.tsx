@@ -65,6 +65,7 @@ const TITLES: Record<Route["name"], string> = {
   mock_oauth: "Pretend sign-in",
   mock_cr_consent: "Pretend Content Rewards",
   cr_setup: "Content Rewards setup · Settings",
+  getpaid: "Get paid · Settings",
   campaigns: "Your campaigns",
   campaign: "Campaign",
   motion_gallery: "Motion gallery",
@@ -75,6 +76,7 @@ const TITLES: Record<Route["name"], string> = {
 /** The tab title: deeper Settings pages name where you are ("Sounds · Settings"). */
 export function titleFor(route: Route): string {
   if (route.name === "settings" && route.platform) return `${GUIDES[route.platform].name} setup · Settings`;
+  if (route.name === "getpaid") return `${route.place === "contentrewards" ? "Content Rewards" : GUIDES[route.place].name} · Get paid · Settings`;
   if (route.name === "settings" && route.tree) {
     const tree = findTree(route.tree);
     const branch = tree && route.branch ? findBranch(tree, route.branch) : undefined;
@@ -249,6 +251,8 @@ function Screen({ route }: { route: Route }) {
       return <Settings tree={route.tree} branch={route.branch} platform={route.platform ?? null} />;
     case "cr_setup":
       return <Settings tree="posting" branch="setup" contentRewards />;
+    case "getpaid":
+      return <Settings tree="posting" branch="getpaid" getPaid={route.place} />;
     case "campaigns":
       return <CampaignsPage />;
     case "campaign":

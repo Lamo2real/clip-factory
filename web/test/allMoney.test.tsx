@@ -6,14 +6,14 @@ import { join } from "node:path";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Api, MoneyEverywhere, MoneyPlace } from "../src/api/types.ts";
+import type { Api, MoneyEverywhere, MoneyPlace, SentLine } from "../src/api/types.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let current: Partial<Api> = {};
 vi.mock("../src/api/index.ts", async (orig) => ({ ...(await orig<object>()), api: () => current as Api }));
 
-const { AllMoney, APPS_ONLY, NOTHING_TO_ADD, TWO_MONIES, crLines, clockTime } = await import("../src/screens/money/AllMoney.tsx");
+const { AllMoney, APPS_ONLY, NOTHING_TO_ADD, TWO_MONIES, PAID_OUT, SENT_TITLE, SENT_TWO_MONIES, crLines, clockTime, sentText } = await import("../src/screens/money/AllMoney.tsx");
 const { everywhere } = await import("../src/api/mock/moneyEverywhere.ts");
 const { ToastProvider } = await import("../src/components/Toasts.tsx");
 
@@ -31,7 +31,7 @@ const ROWS: MoneyPlace[] = [
   { place: "instagram", name: "Instagram", state: "not_available", headline: "Not available from Instagram", amounts: [], why: "Instagram doesn't tell apps what you earn.", where: { text: "Look in Instagram: Professional dashboard, then Payouts." } },
   { place: "facebook", name: "Facebook", state: "coming_soon", headline: "Coming soon", amounts: [], why: "Clip Factory can't show Facebook money yet.", where: { text: "Look in Meta Business Suite, then Payouts.", button: { label: "Open Meta Business Suite", url: "https://business.facebook.com/latest/monetization" } } },
   { place: "facebook", name: "Facebook", state: "number", headline: "Meta says", amounts: [{ currency: "EUR", amountMicros: 3_000_000 }], tag: "Meta's estimate" },
-  { place: "x", name: "X", state: "not_available", headline: "Not available from X", amounts: [], why: "X doesn't tell apps what you earn.", where: { text: "Look in X, then Monetization (paid through Stripe).", button: { label: "Open X", url: "https://x.com/settings/monetization" } } },
+  { place: "x", name: "X", state: "not_available", headline: "Not available from X", amounts: [], why: "X doesn't tell apps what you earn.", where: { text: "Look in X, then Creator Studio (paid through Stripe).", button: { label: "Open X", url: "https://x.com/i/jf/creators/studio" } } },
   { place: "contentrewards", name: "Content Rewards", state: "number", headline: "Content Rewards says", amounts: [{ currency: "USD", amountMicros: 8_000_000 }], tag: "reached your balance in these 30 days · Content Rewards' numbers", cr: CR },
   { place: "contentrewards", name: "Content Rewards", state: "not_set_up", headline: "Not set up yet", amounts: [], why: "Connect Content Rewards to see its money.", button: SETUP_CR },
   { place: "contentrewards", name: "Content Rewards", state: "waiting", headline: "Waiting for the first numbers", amounts: [], why: "Checking Content Rewards…", cr: { ...CR, paidSoFarCents: null } },
@@ -146,6 +146,94 @@ describe("All your money (AllMoney.tsx)", () => {
   });
 });
 
+// ---------- §40.4: each row's sent line and "Sent to your bank, so far" ----------
+
+const BANK = "Clip Factory can't see your bank. Look in your bank's app to see what arrived.";
+const SENT = {
+  youtube: { state: "number", headline: "Sent to your bank by Google", amounts: [{ currency: "SEK", amountMicros: 2_468_000_000 }], tag: "YouTube says", arrive: "Your bank gets it up to 7 workdays after Google sends it." },
+  youtubeUnread: { state: "number", headline: "Sent to your bank by Google", amounts: [], tag: "YouTube says", notAdded: "Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up." },
+  youtubeNoReading: { state: "needs_reading", headline: "Clip Factory can't see YouTube payments yet.", amounts: [], button: { label: "Allow payment reading", href: "/settings/posting/getpaid/youtube#yt-reading", external: false } },
+  tiktok: { state: "not_available", headline: "Not available from TikTok", amounts: [], where: { text: "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal." } },
+  x: { state: "not_available", headline: "Not available from X", amounts: [], where: { text: "Look in Stripe: Payouts.", button: { label: "Open Stripe", url: "https://connect.stripe.com/express_login" } } },
+  contentrewards: { state: "not_available", headline: "Sent to your bank: not available from Content Rewards. Look on Whop: **Balances**.", amounts: [] },
+  whop: { state: "number", headline: "Sent to your bank by Whop", amounts: [{ currency: "USD", amountMicros: 210_000_000 }], tag: "Whop says", note: "Whop counts all your Whop money, not only Content Rewards." },
+} satisfies Record<string, SentLine>;
+
+describe("All your money's sent lines (§40.4)", () => {
+  it("each row says, in one small grey line, what that place sent toward the bank, or where to look; never $0", async () => {
+    const places: MoneyPlace[] = [
+      { ...ROWS[0]!, sent: SENT.youtube },
+      { ...ROWS[5]!, sent: SENT.tiktok },
+      { ...ROWS[9]!, sent: SENT.x },
+      { ...ROWS[10]!, sent: SENT.contentrewards },
+    ];
+    await draw(card(places, [{ currency: "USD", amountMicros: 20_400_000, places: ["youtube", "contentrewards"], tag: "YouTube's estimate + Content Rewards' numbers" }]));
+    const line = (i: number) => row(i).querySelector(".cr-all__sent")!.textContent!.replace(/\u00a0/g, " ");
+    expect(line(0)).toBe("Sent to your bank by Google: SEK 2,468.00 so far · YouTube says");
+    expect(line(1)).toBe("Not available from TikTok. Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal.");
+    expect(line(2)).toBe("Not available from X. Look in Stripe: Payouts.");
+    expect(line(3)).toBe("Sent to your bank: not available from Content Rewards. Look on Whop: Balances.");
+    // Content Rewards' "Paid out to your bank" line is replaced by the row's sent line, never said twice.
+    expect(row(3).textContent).not.toContain("Paid out to your bank");
+    for (let i = 0; i < places.length; i++) {
+      expect(row(i).querySelectorAll(".btn").length).toBeLessThanOrEqual(1);
+      if (places[i]!.sent!.state !== "number") expect(row(i).querySelector(".cr-all__sent")!.textContent).not.toMatch(/\$0\b/);
+    }
+    expect(host.querySelectorAll(".btn--primary")).toHaveLength(0);
+    // Without a sent line (an API before §40), Content Rewards keeps its old words.
+    expect(crLines(CR, false).at(-1)).toBe(PAID_OUT);
+    expect(crLines(CR, true)).not.toContain(PAID_OUT);
+  });
+
+  it("the block: one line per currency in the places' order, naming who sent it; never added to the 30-day total", async () => {
+    const m: MoneyEverywhere = {
+      ...card([{ ...ROWS[0]!, sent: SENT.youtube }, { ...ROWS[10]!, sent: SENT.whop }], [{ currency: "USD", amountMicros: 20_400_000, places: ["youtube", "contentrewards"], tag: "YouTube's estimate + Content Rewards' numbers" }]),
+      sent: {
+        totals: [
+          { currency: "SEK", amountMicros: 2_468_000_000, places: ["youtube"], names: "YouTube" },
+          { currency: "USD", amountMicros: 210_000_000, places: ["contentrewards"], names: "Whop (all your Whop money, Content Rewards too)" },
+        ],
+        tag: "Google and Whop say they sent it.",
+        notCountedText: "Not in this: TikTok, Instagram, Facebook and X (not available).",
+        bankText: BANK,
+      },
+    };
+    await draw(m);
+    const block = host.querySelector<HTMLElement>(".cr-all__sentsofar")!;
+    expect(block.querySelector("h3")!.textContent).toBe(SENT_TITLE);
+    const lines = [...block.querySelectorAll("li")].map((l) => l.textContent!.replace(/\u00a0/g, " "));
+    expect(lines).toEqual(["SEK 2,468.00 · YouTube", "$210.00 · Whop (all your Whop money, Content Rewards too)"]);
+    expect(block.textContent).toContain("Google and Whop say they sent it.");
+    expect(block.textContent).toContain(SENT_TWO_MONIES);
+    expect(block.textContent).toContain("Not in this: TikTok, Instagram, Facebook and X (not available).");
+    expect(block.textContent).toContain(BANK);
+    expect(block.textContent).not.toContain("Nothing sent to your bank yet.");
+    // The 30-day total is still only the 30 days' money.
+    expect(host.querySelector(".cr-all__total-num")!.textContent).toBe("$20.40");
+    expect(block.compareDocumentPosition(host.querySelector(".cr-all__total")!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+
+  it("only unread rows: Google's words, never Nothing sent to your bank yet; no rows at all: Nothing sent to your bank yet, no total", async () => {
+    await draw({ ...card([{ ...ROWS[0]!, sent: SENT.youtubeUnread }]), sent: { totals: [], tag: "Google and Whop say they sent it.", notAdded: SENT.youtubeUnread.notAdded, bankText: BANK } });
+    let block = host.querySelector<HTMLElement>(".cr-all__sentsofar")!;
+    expect(block.textContent).toContain("Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up.");
+    expect(block.textContent).not.toContain("Nothing sent to your bank yet.");
+    expect(block.querySelectorAll("li")).toHaveLength(0);
+    expect(sentText(SENT.youtubeUnread)).toBe("Sent to your bank by Google · YouTube says · Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up.");
+    await draw({ ...card([{ ...ROWS[0]!, sent: SENT.youtubeNoReading }]), sent: { totals: [], tag: "Google and Whop say they sent it.", bankText: BANK, empty: "Nothing sent to your bank yet." } });
+    block = host.querySelector<HTMLElement>(".cr-all__sentsofar")!;
+    expect(block.textContent).toContain("Nothing sent to your bank yet.");
+    expect(block.querySelectorAll("li")).toHaveLength(0);
+    expect(block.textContent).not.toMatch(/\$0\b/);
+    expect(row(0).querySelector(".cr-all__sent")!.textContent).toBe("Clip Factory can't see YouTube payments yet.");
+  });
+
+  it("an API from before §40: no sent line and no block", async () => {
+    await draw(card(ROWS.slice(0, 2)));
+    expect(host.querySelector(".cr-all__sent, .cr-all__sentsofar")).toBeNull();
+  });
+});
+
 // ---------- the mock's numbers against the server's golden cases, when they are in the repo (G writes them) ----------
 
 const CASES = join(import.meta.dirname, "..", "..", "api", "tests", "fixtures", "money_everywhere_cases.json");
@@ -227,6 +315,13 @@ describe("the Money page with All your money", () => {
     expect(host.querySelector(".dash-notes")?.textContent).toContain("Not counted:");
     // Content Rewards' own part stays at the end of the page.
     expect(host.querySelector("#content-rewards")).not.toBeNull();
+    // §40.1 item 3: Get paid sits right after All your money, before the Apps band (nothing removed).
+    for (let i = 0; i < 40 && !host.querySelector(".gp-money__rows"); i++) await act(async () => await new Promise((r) => setTimeout(r, 50)));
+    const getPaid = host.querySelector(".gp-money")!;
+    expect(getPaid).not.toBeNull();
+    expect(all.compareDocumentPosition(getPaid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(getPaid.compareDocumentPosition(band) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(getPaid.querySelectorAll(".btn--primary")).toHaveLength(0);
   });
 
   /** The page on a phone (the dock's media query matches), with All your money answering or not (404: before §39). */

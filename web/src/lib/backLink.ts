@@ -8,7 +8,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ULID = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/i;
 const isId = (v: string) => ULID.test(v) || UUID.test(v);
 
-export type BackKind = "campaign" | "campaigns" | "clip" | "money";
+export type BackKind = "campaign" | "campaigns" | "clip" | "money" | "getpaid" | "setup";
+
+/** Get paid's places (§40.1) and the setup pages' places (§17.1, §38.3), for the back shapes. */
+const GETPAID_PLACES = ["youtube", "tiktok", "instagram", "facebook", "x", "contentrewards"];
+const SETUP_NAMES: Record<string, string> = { youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", facebook: "Facebook", x: "X", contentrewards: "Content Rewards" };
 
 export interface BackLink {
   /** The page to go back to (always a same-origin path). */
@@ -16,6 +20,8 @@ export interface BackLink {
   kind: BackKind;
   /** For `campaign`: the campaign's id (its name is looked up by the page). */
   campaignId?: string;
+  /** For `setup`: whose setup page it is ("YouTube"). */
+  placeName?: string;
 }
 
 /** Reads `?back=` from a page's query (`location.search`). */
@@ -26,7 +32,7 @@ export function backLink(search: string | URLSearchParams): BackLink | null {
   return parseBack(all[0]!);
 }
 
-/** One `back` value against the six shapes. */
+/** One `back` value against the shapes (the six of §39.1, Get paid's two of §40.1 and a setup page). */
 export function parseBack(raw: string): BackLink | null {
   if (typeof raw !== "string" || raw.length > 200 || !raw.startsWith("/") || raw.startsWith("//") || /[\\\s#]/.test(raw)) return null;
   const at = raw.indexOf("?");
@@ -43,6 +49,11 @@ export function parseBack(raw: string): BackLink | null {
   if (query !== null) return null;
   if (path === "/campaigns") return { href: "/campaigns", kind: "campaigns" };
   if (path === "/money") return { href: "/money", kind: "money" };
+  if (path === "/settings/posting/getpaid") return { href: path, kind: "getpaid" };
+  const getpaid = /^\/settings\/posting\/getpaid\/([a-z]+)$/.exec(path);
+  if (getpaid && GETPAID_PLACES.includes(getpaid[1]!)) return { href: path, kind: "getpaid" };
+  const setup = /^\/settings\/posting\/setup\/([a-z]+)$/.exec(path);
+  if (setup && SETUP_NAMES[setup[1]!]) return { href: path, kind: "setup", placeName: SETUP_NAMES[setup[1]!] };
   const campaign = /^\/campaigns\/([^/]+)$/.exec(path);
   if (campaign && UUID.test(campaign[1]!)) {
     const id = campaign[1]!.toLowerCase();
@@ -64,6 +75,10 @@ export function backLabel(back: BackLink, campaignName?: string | null): string 
       return "Back to your clip";
     case "money":
       return "Back to Money";
+    case "getpaid":
+      return "Back to Get paid";
+    case "setup":
+      return `Back to ${back.placeName ?? "the"} setup`;
   }
 }
 
