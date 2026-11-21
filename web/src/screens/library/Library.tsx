@@ -9,7 +9,7 @@ import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Segmented, Skeleton } from "../../components/ui.tsx";
-import { compact, postStatusLabel, STATUS_LABEL } from "../../lib/metrics.ts";
+import { compact, postNumbersNote, postStatusLabel, STATUS_LABEL } from "../../lib/metrics.ts";
 import { WeekView } from "./WeekView.tsx";
 import { byPlatformOrder, count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
 import { useHeld, useLoad } from "../../lib/hooks.ts";
@@ -342,7 +342,7 @@ function LibraryCard({
                 <span className="post__name">{PLATFORM_LABEL[p.platform]}</span>
                 <span className="post__status clamp-2">
                   {canPostNow(p) ? "Ready to post" : p.status === "failed" && p.error ? `${postStatusLabel(p)}. ${p.error}` : postStatusLabel(p)}
-                  {p.status === "posted" && !p.metrics && p.perfCheckAt ? ` · numbers ${relative(p.perfCheckAt)}` : ""}
+                  {postNumbersNote(p, relative)}
                 </span>
               </span>
               {/* One place did not work on an uploaded clip: Try again for that place only (§33). */}

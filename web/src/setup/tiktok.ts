@@ -13,7 +13,7 @@ const DEV = "https://developers.tiktok.com";
 /** The demo video for App review and the audit form: every point TikTok checks, in order, by the app's own words. */
 export const TIKTOK_DEMO_SHOTS = [
   "1. Start on the About page. Show the Privacy and Terms links, and keep the address bar in sight.",
-  "2. Sign in. Open Settings › Posting › Set up posting › TikTok. Press Connect TikTok. Show TikTok's screen with every permission, press Authorize, then show TikTok connected.",
+  "2. Sign in. Open Settings › Posting › Set up posting › TikTok. Press Connect TikTok. Show TikTok's screen with every permission, press Continue, then show TikTok connected.",
   "3. Show where the clip comes from: the long video or stream you picked (or the campaign brief).",
   "4. Open Review. Play the clip. Show it has no watermark or logo on it.",
   "5. Show nothing is set for TikTok yet. Tap the TikTok row (caption and settings). Show \"Asking TikTok…\", then \"Posting as\" with your name and picture.",
@@ -34,7 +34,7 @@ export const TIKTOK_DEMO_SHOTS = [
 
 /** TikTok's own app Description (App details): the same facts as the audit answers, not the shared APP_DESCRIPTION. */
 export const TIKTOK_APP_DESCRIPTION =
-  "My own clipping tool. It turns long videos and streams I pick (my own and other creators', including paid clipping campaigns) into short clips, and posts the ones I approve to my own accounts when I press Upload.";
+  "My own clipping tool: cuts videos I pick (mine, other creators', paid campaigns) into clips; posts the ones I approve.";
 
 /** Audit form, page 1: what Clip Factory is and who uses it. True today: one creator, invite-only. */
 export const TIKTOK_AUDIT_DESCRIPTION = [
@@ -302,7 +302,7 @@ export const tiktok: SetupGuide = {
           say: [
             "Press **Connect TikTok**. Log in.",
             "Check that it says Clip Factory. Leave every switch on.",
-            "Press **Authorize**.",
+            "Press **Continue**.",
           ],
           auto: "connected",
         },
@@ -318,7 +318,7 @@ export const tiktok: SetupGuide = {
           title: "Record the real demo video",
           say: [
             "Use a computer. Connect in the Sandbox, with your TikTok still private. Record your screen with the address bar in sight.",
-            "Follow the shot list below, in order. It starts on the About page, then **Connect TikTok** and TikTok's **Authorize** screen.",
+            "Follow the shot list below, in order. It starts on the About page, then **Connect TikTok** and TikTok's screen with **Continue**.",
             "Then **Upload** one clip, choosing everything by hand in the **TikTok** row. Show each line TikTok wants to see.",
             "End with the post arriving on your TikTok. Keep it short, about 1 minute. Save it as MP4, under 50 MB.",
           ],
