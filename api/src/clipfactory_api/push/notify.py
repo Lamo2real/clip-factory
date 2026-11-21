@@ -1,9 +1,10 @@
 """``cf-prod-notify``: job changes on the table's stream → notifications on the owner's devices (CONTRACTS §32.5).
 
 The event source mapping delivers only ``MODIFY`` records of ``JOB#`` items and of the Content Rewards items
-``CAMPAIGN#``, ``CRSUB#``, ``CRMONEY`` and ``CRCONN`` (§38.11: you're in, send now, approved, not approved, proof, money,
-sign in again, did they say yes; one each, deduped by ``NOTIFIED#cr#{key}``, under ``notify.contentRewards``). Each job
-record compares the job before and after the write and sends at most one notification:
+``CAMPAIGN#``, ``CRSUB#``, ``CRMONEY``, ``CRCONN`` (§38.11: you're in, send now, approved, not approved, proof, money,
+sign in again, did they say yes) and ``CRFIND`` (§41.4: new campaigns match, at most once a day); one each, deduped by
+``NOTIFIED#cr#{key}``, under ``notify.contentRewards``. Each job record compares the job before and after the write
+and sends at most one notification:
 
 - **ready**: the job became ``ready`` ("Your clips are ready. Tap to look."), when ``notify.ready`` is on;
 - **stopped**: it became ``failed`` ("It stopped. Tap Try again."), when ``notify.stopped`` is on;
@@ -304,11 +305,19 @@ def handle_change(deps: NotifyDeps, old: Mapping[str, Any], new: Mapping[str, An
 
 # --- Content Rewards (§38.11) -----------------------------------------------------------------------------------
 
-CR_PREFIXES = ("CAMPAIGN#", "CRSUB#", "CRMONEY", "CRCONN")
+CR_PREFIXES = ("CAMPAIGN#", "CRSUB#", "CRMONEY", "CRCONN", "CRFIND")
 CR_TITLE = "Content Rewards"
 CR_SIGN_IN = "Sign in to Content Rewards again on your Mac, so your clips keep getting sent."
 CR_PILOT = "Did Content Rewards say yes? Tap Connect Content Rewards on your Mac to check."
 CR_SETUP_URL = "/settings/posting/setup/contentrewards"
+CR_FIND_URL = "/campaigns/find"
+
+
+def finder_words(count: int) -> str:
+    """§41.4: "3 new campaigns match what you want." ("1 new campaign matches what you want.")."""
+    if count == 1:
+        return "1 new campaign matches what you want."
+    return f"{count} new campaigns match what you want."
 
 
 def _cut(text: Any, limit: int = TITLE_MAX) -> str:
@@ -397,6 +406,8 @@ def cr_event(
         return f"money:{fresh[0]}", webpush.Message(
             CR_TITLE, body, "crmoney", "/money#content-rewards", ttl=7 * 24 * 3600
         )
+    if sk == "CRFIND":
+        return _finder_event(old, new)
     if sk == "CRCONN":
         soon = new.get("reason") == "expires_soon" and old.get("reason") != "expires_soon"
         dead = new.get("status") == "needs_reconnect" and old.get("status") != "needs_reconnect"
@@ -409,6 +420,22 @@ def cr_event(
                 CR_TITLE, CR_PILOT, "crpilot", CR_SETUP_URL, ttl=3 * 24 * 3600
             )
     return None
+
+
+def _finder_event(old: Mapping[str, Any], new: Mapping[str, Any]) -> tuple[str, webpush.Message] | None:
+    """The look set a new ``CRFIND.notice`` (§41.4): one "3 new campaigns match" while he wants to hear about new
+    ones and didn't stop the finder. The look decides when (at most once a day); this only sends it."""
+    notice: Mapping[str, Any] = new["notice"] if isinstance(new.get("notice"), Mapping) else {}
+    before: Mapping[str, Any] = old["notice"] if isinstance(old.get("notice"), Mapping) else {}
+    key, count = notice.get("key"), notice.get("count")
+    if not isinstance(key, str) or not key or key == before.get("key"):
+        return None
+    if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+        return None
+    want: Mapping[str, Any] = new["want"] if isinstance(new.get("want"), Mapping) else {}
+    if want.get("tellMe") is False or want.get("on") is False:
+        return None
+    return f"finder:{key}", webpush.Message(CR_TITLE, finder_words(count), "crfind", CR_FIND_URL, ttl=24 * 3600)
 
 
 def _cr_first_time(deps: NotifyDeps, pk: str, key: str) -> bool:
