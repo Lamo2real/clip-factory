@@ -8,6 +8,13 @@ same upload instead of making a second one.
 * ``start``: create the upload and send the bytes → ``processing`` (or ``ready_to_finish``).
 * ``check``: read the platform's processing status → ``processing`` | ``ready_to_finish`` | ``done``.
 * ``finish``: the publish call where the platform has one (Instagram, Facebook, X) → ``done`` or ``processing``.
+
+A campaign post (its internal ``postOptions.campaign``, §38.14) also gets: the caption through ``campaign_caption``
+(the disclosure first, every required item, inside the limits), never made for kids, YouTube public with Paid
+promotion on (``paidProductPlacementDetails``), X's ``paid_partnership``. When YouTube or X refuses that switch the
+call is sent once more without it and the post is marked ``paidLabel: "not_set"``. Instagram and Facebook get nothing
+extra (Meta has no paid-partnership field for this app); TikTok's Branded content is the owner's own tap (§17.8). No
+publisher ever deletes, unpublishes or changes the privacy of a posted clip.
 """
 
 from __future__ import annotations
@@ -16,6 +23,7 @@ import json
 import re
 import secrets
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -36,9 +44,15 @@ from .base import (
     appsecret_proof,
     obj,
 )
+from .campaign_caption import campaign_caption
 
 MB = 1024 * 1024
 YOUTUBE_UPLOAD = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
+YOUTUBE_PAID_PART = "paidProductPlacementDetails"
+X_PAID_FIELD = "paid_partnership"
+# A YouTube 400 for a part it does not take may give only the reason, not the part's name.
+YOUTUBE_PART_REASONS = frozenset({"unexpectedPart", "invalidPart"})
+NOT_SET = "not_set"
 YOUTUBE_VIDEOS = "https://www.googleapis.com/youtube/v3/videos"
 YOUTUBE_CATEGORY_GAMING = "20"
 TIKTOK_API = "https://open.tiktokapis.com"
@@ -54,6 +68,20 @@ HASHTAGS_MAX = 30
 _URL = re.compile(r"(https?://\S+|www\.\S+)", re.IGNORECASE)
 _HASHTAG = re.compile(r"#\w+")
 LOOKUP_SLACK = timedelta(minutes=2)  # clock drift between Clip Factory and Meta
+
+
+@dataclass(frozen=True)
+class LabelledPublished(Published):
+    """A campaign post whose platform refused the paid-partnership switch (§38.14): ``paid_label`` is ``"not_set"``
+    and ``posts.mark_posted`` writes it as the post's public ``paidLabel``. Other posts stay plain ``Published``."""
+
+    paid_label: str | None = None
+
+
+def _published(handle: dict[str, Any], **fields: Any) -> Published:
+    if handle.get("paidLabel") == NOT_SET:
+        return LabelledPublished(**fields, paid_label=NOT_SET)
+    return Published(**fields)
 
 
 # --- shared helpers ----------------------------------------------------------------------------------------------
@@ -87,6 +115,44 @@ def _bearer(token: str, extra: dict[str, str] | None = None) -> dict[str, str]:
 def _captions(job: PublishJob) -> dict[str, Any]:
     raw = job.clip.get("captions")
     return raw if isinstance(raw, dict) else {}
+
+
+def _campaign(job: PublishJob) -> dict[str, Any] | None:
+    """The post's internal ``postOptions.campaign`` (§38.14), or None for a post without a campaign."""
+    found = job.options.get("campaign")
+    return found if isinstance(found, dict) else None
+
+
+def _paid(job: PublishJob) -> bool:
+    campaign = _campaign(job)
+    return bool(campaign and campaign.get("paidPartnership"))
+
+
+def _names(resp: HttpResponse, name: str, reasons: frozenset[str] = frozenset()) -> bool:
+    """A 400 whose answer names ``name`` (or gives one of ``reasons``): the platform refused that one field."""
+    if resp.status != 400:
+        return False
+    if name.encode() in (resp.body or b""):
+        return True
+    error = _json(resp).get("error")
+    found = error.get("errors") if isinstance(error, dict) else None
+    return any(isinstance(e, dict) and e.get("reason") in reasons for e in found or [])
+
+
+def caption(job: PublishJob, platform: str) -> str:
+    """The text sent for ``platform``: the clip's caption, through ``campaign_caption`` for a campaign post, inside
+    the platform's own limits. Used for sending and for matching what was sent (Instagram's lookup)."""
+    captions = _captions(job)
+    campaign = _campaign(job)
+    if platform == "youtube":
+        text = strip_angles(str(captions.get("youtubeDescription") or ""))
+        return cut_bytes(strip_angles(campaign_caption("youtube", text, campaign)), 5000)
+    if platform == "instagram":
+        return instagram_caption(campaign_caption("instagram", str(captions.get("instagram") or ""), campaign))
+    if platform == "x":
+        text = _URL.sub("", str(captions.get("x") or ""))
+        return x_text(campaign_caption("x", text, campaign) if campaign else text)
+    return campaign_caption(platform, str(captions.get(platform) or ""), campaign)[:CAPTION_MAX]
 
 
 def _preset(job: PublishJob, platform: str) -> dict[str, Any]:
@@ -184,38 +250,51 @@ class YouTubePublisher:
     finish_semantics = "at_least_once"
     needs_credentials = True
 
-    def metadata(self, job: PublishJob) -> dict[str, Any]:
+    def metadata(self, job: PublishJob, *, paid: bool | None = None) -> dict[str, Any]:
+        """The video resource sent at the start. ``paid`` (default: the post's campaign says so) adds Paid promotion
+        (``paidProductPlacementDetails``, §38.14)."""
         captions = _captions(job)
         title = strip_angles(str(captions.get("youtubeTitle") or job.clip.get("hook") or "Clip")).strip()[:100]
-        description = cut_bytes(strip_angles(str(captions.get("youtubeDescription") or "")), 5000)
         # This clip's choices from its YouTube row (§36.3) win; then My settings; a post without them keeps the old
         # behaviour (the saved youtubePrivacy, Gaming, not made for kids).
         opts = job.options
         preset = _preset(job, "youtube")
         privacy = str(opts.get("privacy") or job.settings.get("youtubePrivacy") or "public")
         category = str(opts.get("category") or preset.get("category") or YOUTUBE_CATEGORY_GAMING)
+        campaign = _campaign(job) is not None
         status: dict[str, Any] = {
-            "privacyStatus": privacy if privacy in {"public", "unlisted", "private"} else "public",
+            # Campaign clips are always public and never made for kids, whatever any option says (§38.14).
+            "privacyStatus": "public" if campaign or privacy not in {"public", "unlisted", "private"} else privacy,
             # Only this clip's own switch can say made for kids; My settings never do (§36.2).
-            "selfDeclaredMadeForKids": opts.get("madeForKids") is True,
+            "selfDeclaredMadeForKids": opts.get("madeForKids") is True and not campaign,
             "containsSyntheticMedia": False,
         }
         if _choice_of(opts, preset, "embeddable") is False:
             status["embeddable"] = False
-        return {
+        out: dict[str, Any] = {
             "snippet": {
                 "title": title or "Clip",
-                "description": description,
+                "description": caption(job, self.platform),
                 "categoryId": category if category.isdigit() else YOUTUBE_CATEGORY_GAMING,
             },
             "status": status,
         }
+        wants_paid = _paid(job) if paid is None else paid
+        if wants_paid:
+            out[YOUTUBE_PAID_PART] = {"hasPaidProductPlacement": True}
+        return out
 
     @staticmethod
-    def upload_url(job: PublishJob) -> str:
-        """The resumable upload URL; ``notifySubscribers=false`` only when the owner turned the bell off (§36)."""
+    def upload_url(job: PublishJob, *, paid: bool | None = None) -> str:
+        """The resumable upload URL; ``notifySubscribers=false`` only when the owner turned the bell off (§36), and
+        the ``paidProductPlacementDetails`` part for a paid campaign post (§38.14)."""
         off = _choice_of(job.options, _preset(job, "youtube"), "notifySubscribers") is False
-        return YOUTUBE_UPLOAD + ("&notifySubscribers=false" if off else "")
+        paid_part = _paid(job) if paid is None else paid
+        return (
+            YOUTUBE_UPLOAD
+            + (f",{YOUTUBE_PAID_PART}" if paid_part else "")
+            + ("&notifySubscribers=false" if off else "")
+        )
 
     def start(self, job: PublishJob) -> Progress:
         handle = job.handle
@@ -234,22 +313,8 @@ class YouTubePublisher:
             else:
                 offset = offset_or_done
         if not session:
-            body = json.dumps(self.metadata(job), separators=(",", ":")).encode()
-            headers = _bearer(
-                token,
-                {
-                    "Content-Type": "application/json; charset=UTF-8",
-                    "X-Upload-Content-Length": str(size),
-                    "X-Upload-Content-Type": "video/mp4",
-                },
-            )
-            resp = _send(job, self.platform, HttpRequest("POST", self.upload_url(job), headers, body))
-            _ok(self.platform, resp, "init")
-            session = resp.headers.get("location", "")
-            if not session.startswith("https://"):
-                raise errors.down(self.platform)
-            handle = {"sessionUri": session}
-            job.save(handle)
+            handle = self._open(job)
+            session = str(handle["sessionUri"])
         chunk = int(_publish_settings(job, "chunkMb", 8)) * MB
         while offset < size:
             end = min(offset + chunk, size)
@@ -267,8 +332,37 @@ class YouTubePublisher:
             video_id = str(data.get("id") or "")
             if not video_id:
                 raise errors.down(self.platform)
-            return self._uploaded(job, {"sessionUri": session, "videoId": video_id})
+            return self._uploaded(job, {**handle, "sessionUri": session, "videoId": video_id})
         raise errors.down(self.platform)
+
+    def _init(self, job: PublishJob, paid: bool) -> HttpResponse:
+        body = json.dumps(self.metadata(job, paid=paid), separators=(",", ":")).encode()
+        headers = _bearer(
+            job.creds.access_token,
+            {
+                "Content-Type": "application/json; charset=UTF-8",
+                "X-Upload-Content-Length": str(job.video.size),
+                "X-Upload-Content-Type": "video/mp4",
+            },
+        )
+        return _send(job, self.platform, HttpRequest("POST", self.upload_url(job, paid=paid), headers, body))
+
+    def _open(self, job: PublishJob) -> dict[str, Any]:
+        """Starts the upload session. When YouTube refuses Paid promotion on a campaign post, the start is sent once
+        more without it (nothing is uploaded before the session exists) and the post says ``paidLabel: not_set``."""
+        paid = _paid(job)
+        resp = self._init(job, paid)
+        refused = paid and _names(resp, YOUTUBE_PAID_PART, YOUTUBE_PART_REASONS)
+        if refused:
+            log("warning", "publish.youtube_paid_refused", status=resp.status)
+            resp = self._init(job, False)
+        _ok(self.platform, resp, "init")
+        session = resp.headers.get("location", "")
+        if not session.startswith("https://"):
+            raise errors.down(self.platform)
+        handle: dict[str, Any] = {"sessionUri": session, **({"paidLabel": NOT_SET} if refused else {})}
+        job.save(handle)
+        return handle
 
     def _resume(self, job: PublishJob, session: str, size: int) -> int | str:
         """The next byte to send, the video id when the upload already finished, or -1 when the session is gone."""
@@ -318,7 +412,8 @@ class YouTubePublisher:
 
     def published(self, job: PublishJob, handle: dict[str, Any]) -> Published:
         video_id = str(handle.get("videoId") or "")
-        return Published(
+        return _published(
+            handle,
             url=f"https://www.youtube.com/shorts/{video_id}",
             posted_at=_now(job),
             platform_post_id=video_id,
@@ -364,9 +459,8 @@ class TikTokPublisher:
         # TikTok's rule: branded content (a paid partnership) is only for Everyone or Friends.
         if options.get("brandContent") and privacy not in BRANDED_PRIVACY:
             raise PublishError("Pick who can see it on TikTok again, then press Try again.")
-        caption = str(_captions(job).get("tiktok") or "")
         return {
-            "title": caption[:CAPTION_MAX],
+            "title": caption(job, self.platform),
             "privacy_level": privacy,
             "disable_comment": bool(options.get("disableComment")) or bool(creator.get("comment_disabled")),
             "disable_duet": bool(options.get("disableDuet")) or bool(creator.get("duet_disabled")),
@@ -559,7 +653,7 @@ class InstagramPublisher(_Graph):
         """Creates the Reels container: resumable (the file is sent next) or video_url (Instagram fetches it)."""
         params = {
             "media_type": "REELS",
-            "caption": instagram_caption(str(_captions(job).get("instagram") or "")),
+            "caption": caption(job, self.platform),
             # Reels shared to the main feed reach more people; off only when the owner says so (§36).
             "share_to_feed": "false"
             if _choice_of(job.options, _preset(job, "instagram"), "shareToFeed") is False
@@ -608,7 +702,7 @@ class InstagramPublisher(_Graph):
         posts are matched on the caption that was sent and on being newer than the container; never a guess."""
         fields = {"fields": "id,permalink,timestamp,caption", "limit": "5"}
         found = self._get(job, f"{self._ig(job)}/media", fields, "lookup")
-        sent = _same_text(instagram_caption(str(_captions(job).get("instagram") or "")))
+        sent = _same_text(caption(job, self.platform))
         made = parse(handle.get("containerAt"))
         matches = []
         for row in found.get("data") or []:
@@ -778,7 +872,7 @@ class FacebookPublisher(_Graph):
             "upload_phase": "finish",
             "video_id": str(handle["videoId"]),
             "video_state": "PUBLISHED",
-            "description": str(_captions(job).get("facebook") or "")[:CAPTION_MAX],
+            "description": caption(job, self.platform),
         }
         data = _ok(self.platform, self._post(job, f"{page}/video_reels", params, "finish"), "finish")
         handle = {**handle, "finished": True}
@@ -880,22 +974,39 @@ class XPublisher:
         data = _ok(self.platform, resp, "status")
         return self._progress(handle, (data.get("data") or {}).get("processing_info") or {})
 
+    def _tweet(self, job: PublishJob, tweet: dict[str, Any]) -> HttpResponse:
+        body = json.dumps(tweet, separators=(",", ":")).encode()
+        headers = _bearer(job.creds.access_token, {"Content-Type": "application/json"})
+        return _send(job, self.platform, HttpRequest("POST", f"{X_API}/tweets", headers, body))
+
     def finish(self, job: PublishJob, handle: dict[str, Any]) -> Progress:
         if not handle.get("tweetId"):
-            text = x_text(str(_captions(job).get("x") or ""))
-            tweet: dict[str, Any] = {"text": text, "media": {"media_ids": [str(handle["mediaId"])]}}
+            tweet: dict[str, Any] = {
+                "text": caption(job, self.platform),
+                "media": {"media_ids": [str(handle["mediaId"])]},
+            }
             replies = _choice_of(job.options, _preset(job, "x"), "replies")
             if replies in {"following", "mentionedUsers", "verified"}:
                 tweet["reply_settings"] = replies  # "everyone" sends nothing: X's default (§36)
-            data = self._post_json(job, f"{X_API}/tweets", tweet, "tweet")
+            paid = _paid(job)
+            if paid:
+                tweet[X_PAID_FIELD] = True  # "Disclose that the tweet is a paid partnership" (§38.14)
+            resp = self._tweet(job, tweet)
+            refused = paid and _names(resp, X_PAID_FIELD)
+            if refused:
+                # A 400 creates no post, so sending it once more without the switch can never post twice.
+                log("warning", "publish.x_paid_refused", status=resp.status)
+                resp = self._tweet(job, {k: v for k, v in tweet.items() if k != X_PAID_FIELD})
+            data = _ok(self.platform, resp, "tweet")
             tweet_id = str((data.get("data") or {}).get("id") or "")
             if not tweet_id:
                 raise errors.down(self.platform)
-            handle = {**handle, "tweetId": tweet_id}
+            handle = {**handle, "tweetId": tweet_id, **({"paidLabel": NOT_SET} if refused else {})}
             job.save(handle)
         username = str(job.creds.data.get("username") or "i")
         tweet_id = str(handle["tweetId"])
-        published = Published(
+        published = _published(
+            handle,
             url=f"https://x.com/{username}/status/{tweet_id}",
             posted_at=_now(job),
             platform_post_id=tweet_id,

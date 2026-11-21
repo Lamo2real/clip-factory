@@ -19,6 +19,7 @@ from clipfactory_api.platforms.publishers import (
     TikTokPublisher,
     XPublisher,
     YouTubePublisher,
+    caption,
     chunk_plan,
     instagram_caption,
     publisher_for,
@@ -892,6 +893,23 @@ def test_meta_errors_log_subcode_type_and_trace_but_never_the_token(capsys: pyte
     )
     assert "message" not in line
     assert "ACCESS-TOKEN" not in json.dumps(line)
+
+
+def test_captions_without_a_campaign_are_sent_as_before() -> None:
+    """``caption`` (shared by sending and Instagram's lookup) only changes campaign posts (§38.14)."""
+    captions = {
+        **CAPTIONS,
+        "youtubeDescription": "<b>Full</b> stream",
+        "instagram": "#a " * 40,
+        "x": "unreal https://example.com/x",
+        "tiktok": "t" * 2300,
+    }
+    job, _, _ = make_job("youtube", FakeHttp(), captions=captions)
+    assert caption(job, "youtube") == "bFull/b stream"
+    assert caption(job, "instagram") == instagram_caption("#a " * 40)
+    assert caption(job, "x") == x_text("unreal https://example.com/x") == "unreal"
+    assert caption(job, "tiktok") == "t" * 2200
+    assert caption(job, "facebook") == "Watch this"
 
 
 def test_publisher_for_every_platform() -> None:
