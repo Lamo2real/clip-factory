@@ -9,6 +9,8 @@
 //   cf-mock-cr-off   = "503"     switched off ("Coming soon")
 //   cf-mock-cr-review = "1"      one Review clip is for the FaZe Clips campaign
 //   cf-mock-cr-remake = "on"     campaign copies are switched on (like the API's cr_remake_enabled, off by default)
+//   cf-mock-cr-remake = "fail"   on, and each copy's job fails (the copy can be asked for again)
+//   cf-mock-cr-overview = "500"  GET /v1/contentrewards fails (a 5xx; read on every call, so a test can clear it)
 import { ApiError } from "../errors.ts";
 import type {
   Api,
@@ -1127,6 +1129,7 @@ export function crMockApi({ store, setup, publish }: CrMockDeps): CrMock {
     async crOverview() {
       await wait();
       guard();
+      if (readFlag("cf-mock-cr-overview") === "500") throw new ApiError(500, "internal", "Something went wrong on our side. Try again in a moment.");
       return overview();
     },
     async crConnect(port) {

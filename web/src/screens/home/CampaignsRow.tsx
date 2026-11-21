@@ -2,6 +2,7 @@
 // says "Make campaign clips" and opens the campaign way (`/?campaign={uuid}`) in one tap; every other chip shows its
 // state and opens its card. With Content Rewards connected and no campaign yet, one chip "Add a campaign". Hidden when
 // the API has no Content Rewards (404), while it is switched off (503) and when there is nothing to show.
+import type { NextStepKind } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { A, LinkButton } from "../../components/ui.tsx";
 import { CAMPAIGNS_PATH, campaignPath, makeClipsPath, readyForClips, signedIn, useCr } from "../../lib/contentRewards.ts";
@@ -10,6 +11,13 @@ import { BrandMark } from "../campaigns/bits.tsx";
 
 const MAX_SHOWN = 8;
 export const MAKE_CAMPAIGN_CLIPS = "Make campaign clips";
+/** A joined campaign that can't make clips yet says what comes first on its chip, never only "You're in". */
+export const FIRST_THING: Partial<Record<NextStepKind, string>> = {
+  logo: "Add the logo first",
+  rules_paste: "Rules missing",
+  anyway: "Check it first",
+  pick_video: "Pick a video",
+};
 
 export function CampaignsRow() {
   const cr = useCr();
@@ -35,6 +43,8 @@ export function CampaignsRow() {
       <ul className="cr-row__list" aria-label="Your campaigns">
         {shown.map((c) => {
           const ready = readyForClips(c);
+          const joined = c.membership === "in" || c.membership === "manual";
+          const first = !ready && joined && c.nextStepKind ? FIRST_THING[c.nextStepKind] : undefined;
           return (
             <li key={c.campaignId}>
               <A
@@ -50,6 +60,8 @@ export function CampaignsRow() {
                       <>
                         <Icon name="scissors" size={14} /> {MAKE_CAMPAIGN_CLIPS}
                       </>
+                    ) : first ? (
+                      first
                     ) : c.celebrate === "in" ? (
                       "You're in!"
                     ) : (

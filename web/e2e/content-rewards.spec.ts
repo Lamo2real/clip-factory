@@ -776,6 +776,10 @@ test.describe("reduced motion", () => {
   test.use({ ...DESKTOP, reducedMotion: "reduce" });
   test("You're in! without confetti", async ({ page }) => {
     await start(page);
+    await page.goto("/");
+    await mock(page);
+    // A place it pays for is set up (else the chip says "Set up first", the API's words for that stop).
+    await finishSetup(page, "youtube");
     await page.goto(`/campaigns/${IDS.apply}`);
     await settle(page);
     await mock(page);

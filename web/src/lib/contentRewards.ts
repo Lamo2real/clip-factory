@@ -446,7 +446,8 @@ export function stopText(code: StopCode, ctx: StopContext = {}): string {
     case "spoken_needed":
       return "This brand wants you to say “paid partnership” out loud. Clip Factory can't, so clips may be turned down.";
     case "audience":
-      return `This brand wants ${ctx.audience ?? "viewers from some countries"}. In YouTube Studio tap **Analytics**, then **Audience**, then look at **Top geographies**.`;
+      // A's gates.py words (the server sends this text; the mock and the fit's soft line read the same).
+      return `This brand wants this audience: “${ctx.audience ?? "viewers from some countries"}”. In YouTube Studio tap **Analytics**, then **Audience**, then look at **Top geographies**.`;
   }
 }
 
@@ -555,6 +556,23 @@ export function membershipStop(m: Membership): StopCode | null {
   }
 }
 
+/** A hard stop's short chip (A's gates.py `_stop_chip`): the chip says what holds it up, never only "You're in". */
+export const STOP_CHIP: Partial<Record<StopCode, string>> = {
+  ended: "Ended",
+  deadline: "Ended",
+  budget_gone: "Money gone",
+  paused: "Paused",
+  held: "On hold",
+  rules_reading: "Reading the rules",
+  rules_failed: "Rules missing",
+  tiktok_only: "TikTok only",
+  no_place: "Set up first",
+  cap_reached: "Most reached",
+  drafts_first: "Can't do this one",
+  sound_needed: "Can't do this one",
+  overlay_needed: "Can't do this one",
+};
+
 /**
  * The one next step of a campaign card (§38.4), in priority order: a hard stop that ends it · the membership ·
  * the rules · the logo · soft stops not accepted · a video to pick · Make clips. `button` is the screen's only
@@ -571,7 +589,7 @@ export function nextStepFor(g: GateInput): NextStep {
     const other = PICK_ANOTHER.includes(ending.code);
     return {
       kind: other ? "pick_another" : "stop",
-      chip: ending.code === "ended" || ending.code === "deadline" ? "Ended" : chip(g.membership),
+      chip: STOP_CHIP[ending.code] ?? chip(g.membership),
       text: ending.text,
       ...(ending.fixHref && !other ? { button: { label: ending.code === "no_place" ? "Set it up" : "Fix it", href: ending.fixHref, external: false } } : {}),
       ...(other ? { glass: [findAnother] } : {}),
@@ -646,11 +664,11 @@ export function nextStepFor(g: GateInput): NextStep {
   }
   // In (listed) or manual: rules, logo, soft stops, a video, then Make clips.
   const inChip = chip(g.membership);
-  if (g.rulesState === "reading") return { kind: "stop", chip: inChip, text: stopText("rules_reading") };
+  if (g.rulesState === "reading") return { kind: "stop", chip: STOP_CHIP.rules_reading!, text: stopText("rules_reading") };
   if (g.membership === "manual" && (g.rulesState === "waiting_for_join" || (g.rulesState === "ready" && !g.hasRules)))
     return { kind: "rules_paste", chip: inChip, text: MEMBERSHIP_TEXT.rulesPaste, button: { label: "Open campaign", href: g.url, external: true } };
   if (g.rulesState === "failed")
-    return { kind: "rules_paste", chip: inChip, text: stopText("rules_failed"), button: { label: "Open campaign", href: g.url, external: true } };
+    return { kind: "rules_paste", chip: STOP_CHIP.rules_failed!, text: stopText("rules_failed"), button: { label: "Open campaign", href: g.url, external: true } };
   if (g.logoNeeded && !g.logoReady)
     return { kind: "logo", chip: inChip, text: stopText("logo_missing"), button: { label: "Add the logo", external: false, action: "logo_picker" } };
   const soft = g.stops.filter((s) => !s.hard && s.code !== "not_connected" && !g.anyway.includes(s.code));
