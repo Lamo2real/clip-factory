@@ -12,12 +12,15 @@
 #
 # One run deploys from nothing:
 #   preflight - skips everything (with a notice) until the role and the email are set
-#   build     - web bundle, Lambda zip, and the agent image tag (a hash of the agent's sources)
-#   infra     - state bucket if missing, terraform plan, then apply exactly that plan. The apply builds and
-#               pushes the agent image (scripts/push-image.sh) once the ECR repository exists.
+#   build     - web bundle, Lambda zip, and the agent image tag (a hash of the agent's sources); Lamo Stories' agent
+#               has its own tag (a hash of stories/ and the animation engine), so neither image rebuilds for the other
+#   infra     - state bucket if missing, terraform plan, the delete gate, the Clip Factory check (the plan may not
+#               change Clip Factory's agent, cf-prod-api or its routes, docs/CONTRACTS.md §45.15), then apply exactly
+#               that plan. The apply builds and pushes each agent image (scripts/push-image.sh) whose tag is new.
 #   web       - config.json from Terraform's outputs, version.json ("What's new": scripts/release-areas.sh over
 #               the commits since the live release), upload to S3, CloudFront refresh
-#   smoke     - the HTTP API answers /v1/health and the browser's CORS preflight from the app, the webhooks
+#   smoke     - the HTTP API answers /v1/health and the browser's CORS preflight from the app (also on Lamo Stories'
+#               /v1/workspaces routes), the webhooks
 #               REST API refuses a Meta challenge without the verify token (403), the WebSocket API refuses a
 #               connection without a valid token (401), Ask's worker reads a tiny picture with the real model
 #               (invoked with the deploy role; warns while Bedrock access is not set up), and the app serves this
@@ -41,6 +44,11 @@ on:
       - "style.css"
       - ".nojekyll"
   workflow_dispatch:
+    inputs:
+      allow_clip_factory_change:
+        description: "Clip Factory changes on purpose (a Clip Factory pull request changed its agent, cf-prod-api or its routes): the Clip Factory check only warns"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -102,6 +110,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       image_tag: ${{ steps.image.outputs.tag }}
+      stories_image_tag: ${{ steps.stories_image.outputs.tag }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -136,6 +145,15 @@ jobs:
         run: |
           [ -n "$SOURCES_HASH" ] || { echo "::error::No agent sources found to hash."; exit 1; }
           echo "tag=agent-${SOURCES_HASH:0:16}" >> "$GITHUB_OUTPUT"
+      # docs/CONTRACTS.md §45.15 and ADR-76: Lamo Stories' own agent image (stories/agent/Dockerfile copies stories/ and
+      # the engine folder), so a Lamo Stories change never rebuilds or redeploys Clip Factory's agent, and the other way.
+      - name: Lamo Stories agent image tag (changes only when Lamo Stories' agent or engine changes)
+        id: stories_image
+        env:
+          STORIES_HASH: ${{ hashFiles('stories/**', 'web/src/stories/engine/**') }}
+        run: |
+          [ -n "$STORIES_HASH" ] || { echo "::error::No Lamo Stories agent sources found to hash."; exit 1; }
+          echo "tag=stories-agent-${STORIES_HASH:0:16}" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: web-dist
@@ -219,6 +237,7 @@ jobs:
           # Alarm emails (docs/CONTRACTS.md §14.9) go to CF_ALARM_EMAIL, or to the owner when it is not set.
           TF_VAR_alarm_email: ${{ secrets.CF_ALARM_EMAIL || secrets.CF_OWNER_EMAIL }}
           TF_VAR_agent_image_tag: ${{ needs.build.outputs.image_tag }}
+          TF_VAR_stories_agent_image_tag: ${{ needs.build.outputs.stories_image_tag }}
           TF_VAR_lambda_zip_path: ${{ github.workspace }}/api/dist/lambda.zip
           TF_VAR_app_version: ${{ github.sha }}
           TF_VAR_manage_api_gateway_account: ${{ vars.CF_MANAGE_API_GATEWAY_ACCOUNT || 'true' }}
@@ -240,9 +259,18 @@ jobs:
         run: |
           terraform show -json prod.tfplan > "${RUNNER_TEMP}/plan.json"
           bash "${GITHUB_WORKSPACE}/scripts/check-plan-deletes.sh" "${RUNNER_TEMP}/plan.json"
+      # docs/CONTRACTS.md §45.1, §45.15 and §45.18: Lamo Stories never changes Clip Factory. The same saved plan may not
+      # change Clip Factory's agent (unless its own image tag changed), cf-prod-api's role, policy or settings (only
+      # this release's zip and VERSION, as on every deploy) or an existing route of the HTTP API. A manual run with
+      # "Clip Factory changes on purpose" only warns (for a Clip Factory pull request that changes them).
+      - name: Clip Factory check (Lamo Stories changes nothing of Clip Factory)
+        env:
+          ALLOW_CLIPS_CHANGE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_clip_factory_change && 'true' || 'false' }}
+        run: bash scripts/check-plan-clips-unchanged.sh "${RUNNER_TEMP}/plan.json"
       # docs/CONTRACTS.md §30.7: when the agent changes, wait (at most 25 minutes) for the jobs being made to finish, so
       # a deploy never stops one partway; a job still running after that resumes on the new version by itself. Reads
-      # only (one projection-only Scan every 30 s with this role), prints counts only.
+      # only (one projection-only Scan every 30 s with this role), prints counts only. §45.11.1, §45.15: when Lamo
+      # Stories' agent changes, the same for its production jobs, AI tasks and chat answers (and only then).
       - name: wait for running jobs (only when the agent changes)
         timeout-minutes: 27
         continue-on-error: true
@@ -396,6 +424,35 @@ jobs:
           done
           echo "::error::The browser's CORS preflight to ${url} from ${origin} is refused, so the web app cannot sign in in any browser."
           exit 1
+      # docs/CONTRACTS.md §45.15: Lamo Stories' own routes (ANY /v1/workspaces and /v1/workspaces/{proxy+}, on
+      # cf-prod-stories-api) are more specific than /v1/{proxy+}, so their public OPTIONS twins must answer the browser's
+      # token-less preflight; a deep path (the dashboard) proves the {proxy+} one.
+      - name: the Lamo Stories routes let the app's browsers in (CORS preflight)
+        env:
+          API_URL: ${{ needs.infra.outputs.api_url }}
+          APP_URL: ${{ needs.infra.outputs.app_url }}
+        run: |
+          origin="${APP_URL%/}"
+          headers="${RUNNER_TEMP}/stories-preflight-headers.txt"
+          for path in /v1/workspaces /v1/workspaces/stories/dashboard; do
+            url="${API_URL%/}${path}"
+            passed=false
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              status="$(curl -sS --max-time 15 -o /dev/null -D "$headers" -w '%{http_code}' -X OPTIONS "$url" \
+                -H "Origin: ${origin}" -H "Access-Control-Request-Method: GET" \
+                -H "Access-Control-Request-Headers: authorization" || echo 000)"
+              allow_origin="$(tr -d '\r' < "$headers" | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2}')"
+              allow_headers="$(tr -d '\r' < "$headers" | awk -F': ' 'tolower($1)=="access-control-allow-headers"{print tolower($2)}')"
+              if [[ "$status" == 2?? ]] && [ "$allow_origin" = "$origin" ] && [[ ",${allow_headers// /}," == *",authorization,"* ]]; then
+                echo "Lamo Stories CORS preflight passed for ${path}: ${status}, allow-origin ${allow_origin}, allow-headers ${allow_headers}."
+                passed=true
+                break
+              fi
+              echo "Attempt ${attempt} (${path}): preflight got ${status}, allow-origin '${allow_origin}', allow-headers '${allow_headers}'; retrying in 10 s."
+              sleep 10
+            done
+            [ "$passed" = true ] || { echo "::error::The browser's CORS preflight to ${url} from ${origin} is refused, so Lamo Stories cannot load in any browser (Clip Factory is not affected)."; exit 1; }
+          done
       - name: the webhooks REST API refuses a Meta challenge without the verify token
         env:
           HOOKS_URL: ${{ needs.infra.outputs.hooks_url }}

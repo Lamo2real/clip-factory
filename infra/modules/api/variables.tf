@@ -276,3 +276,33 @@ variable "permissions_boundary_arn" {
   default     = ""
   description = "Permissions boundary for this module's IAM roles (infra/bootstrap's cf-prod-role-boundary). Empty: none."
 }
+
+# ---------- Lamo Stories (docs/CONTRACTS.md §45.5, §45.13.3, §45.15): its own Lambda behind new routes ----------
+# Off (the default): no Lamo Stories route, integration, permission or route throttle. cf-prod-api's function, role
+# and environment never use these. A plain switch, because the invoke ARN is only known once the function exists.
+variable "stories_routes_enabled" {
+  type        = bool
+  default     = false
+  description = "Add Lamo Stories' five routes (ANY and public OPTIONS for /v1/workspaces and /v1/workspaces/{proxy+}, and the public GET /v1/stories-oauth/{platform}/callback), integrated with cf-prod-stories-api."
+}
+
+variable "stories_api_function_name" {
+  type        = string
+  default     = ""
+  description = "cf-prod-stories-api (modules/stories_api): API Gateway may invoke it for the Lamo Stories routes."
+  validation {
+    condition     = var.stories_api_function_name == "" || endswith(var.stories_api_function_name, "-stories-api")
+    error_message = "stories_api_function_name must be empty or Lamo Stories' own <name>-stories-api (never cf-prod-api)."
+  }
+}
+
+variable "stories_api_invoke_arn" {
+  type        = string
+  default     = ""
+  description = "cf-prod-stories-api's invoke ARN: ANY /v1/workspaces, ANY /v1/workspaces/{proxy+}, their public OPTIONS and GET /v1/stories-oauth/{platform}/callback are integrated with it."
+  validation {
+    condition = ((var.stories_api_invoke_arn != "" && var.stories_api_function_name != "") == var.stories_routes_enabled &&
+    (var.stories_api_invoke_arn == "" || strcontains(var.stories_api_invoke_arn, "-stories-api/invocations")))
+    error_message = "With stories_routes_enabled, stories_api_function_name and stories_api_invoke_arn are both set (and only then), and the invoke ARN must be cf-prod-stories-api's."
+  }
+}

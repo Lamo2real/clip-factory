@@ -17,6 +17,10 @@
 #   - desktop.yml trusts only a push or run by hand of deploy in this repository, never a fork's pull request
 #     (which can also complete as "deploy" on a branch it calls main), in its concurrency group, resolve's `if`, the
 #     run-by-hand lookup and a second look at the run through the API.
+#   - Lamo Stories (docs/CONTRACTS.md §45.15, §45.18): its agent image has its own tag (stories-agent- + a hash of
+#     stories/** and web/src/stories/engine/**) and Clip Factory's agent tag hash is unchanged; the Clip Factory check
+#     (scripts/check-plan-clips-unchanged.sh) runs on the saved plan after the delete gate and before the apply, and
+#     passes its own sample plans; the smoke job preflights the /v1/workspaces routes.
 # Run: bash scripts/test-deploy-workflow.sh   (ci.yml runs it on every push)
 set -euo pipefail
 
@@ -263,6 +267,59 @@ if ! grep -Eq '\$\{\{[^}]*github\.run_number' "$desktop_wf" \
   ok "desktop versions are 1.<deploy run number>.0, and desktop.yml never cancels a started run"
 else
   not_ok "desktop.yml must take its version from the deploy run (never github.run_number) and run in desktop-prod with cancel-in-progress: false"
+fi
+
+# 15. Two agent images, two tags (docs/CONTRACTS.md §45.15, ADR-76): Clip Factory's tag hash stays agent/**, skills/**
+#     and config/** (so a Lamo Stories change never rebuilds or drains Clip Factory's agent); Lamo Stories' tag is
+#     stories-agent- plus 16 characters of a hash of stories/** and web/src/stories/engine/**, passed to the plan.
+build="$(job build)"
+# shellcheck disable=SC2016  # the literal ${{ }} and ${...} text is what the workflow must contain
+if grep -Fxq "          SOURCES_HASH: \${{ hashFiles('agent/**', 'skills/**', 'config/**') }}" <<<"$build" \
+  && grep -Fq 'echo "tag=agent-${SOURCES_HASH:0:16}" >> "$GITHUB_OUTPUT"' <<<"$build" \
+  && [ "$(grep -c 'hashFiles(' <<<"$build")" -eq 2 ] \
+  && grep -Fxq "          STORIES_HASH: \${{ hashFiles('stories/**', 'web/src/stories/engine/**') }}" <<<"$build" \
+  && grep -Fq 'echo "tag=stories-agent-${STORIES_HASH:0:16}" >> "$GITHUB_OUTPUT"' <<<"$build" \
+  && grep -Fxq '      stories_image_tag: ${{ steps.stories_image.outputs.tag }}' <<<"$build" \
+  && grep -Fxq '          TF_VAR_stories_agent_image_tag: ${{ needs.build.outputs.stories_image_tag }}' <<<"$infra" \
+  && grep -Fxq '          TF_VAR_agent_image_tag: ${{ needs.build.outputs.image_tag }}' <<<"$infra"; then
+  ok "Clip Factory's agent tag still hashes agent/, skills/ and config/; Lamo Stories' agent has its own stories-agent- tag"
+else
+  not_ok "the build job must keep SOURCES_HASH (agent/**, skills/**, config/**) and add STORIES_HASH (stories/**, web/src/stories/engine/**) as stories-agent-<16>, passed as TF_VAR_stories_agent_image_tag"
+fi
+
+# 16. The Clip Factory check runs on the saved plan after the delete gate and before the drain and the apply; only a
+#     manual run with the "Clip Factory changes on purpose" input can make it warn instead of stopping the deploy.
+# shellcheck disable=SC2016  # the literal ${RUNNER_TEMP} and ${{ }} text is what the workflow must contain
+check_line="$(grep -n 'scripts/check-plan-clips-unchanged.sh "${RUNNER_TEMP}/plan.json"' <<<"$infra" | head -1 | cut -d: -f1)"
+# shellcheck disable=SC2016
+if [ -n "$check_line" ] && [ -n "$gate_line" ] && [ -n "$drain_line" ] && [ -n "$apply_line" ] \
+  && [ "$gate_line" -lt "$check_line" ] && [ "$check_line" -lt "$drain_line" ] && [ "$check_line" -lt "$apply_line" ] \
+  && grep -Fq "ALLOW_CLIPS_CHANGE: \${{ github.event_name == 'workflow_dispatch' && inputs.allow_clip_factory_change && 'true' || 'false' }}" <<<"$infra" \
+  && [ "$(grep -c 'ALLOW_CLIPS_CHANGE' "$deploy")" -eq 1 ] \
+  && awk '/^  workflow_dispatch:$/ { on = 1 } on && /^      allow_clip_factory_change:$/ { found = 1 } on && /^[a-z]/ { exit } END { exit !found }' "$deploy" \
+  && grep -A3 '^      allow_clip_factory_change:$' "$deploy" | grep -q '^        default: false$'; then
+  ok "the Clip Factory check runs on the saved plan between the delete gate and the apply (off only by a manual input)"
+else
+  not_ok "deploy.yml must run scripts/check-plan-clips-unchanged.sh on the plan after check-plan-deletes.sh and before the drain and the apply"
+fi
+
+# 17. The Clip Factory check passes its own sample plans (its unit test; the scripts job of ci.yml runs this file).
+if out="$(bash "${root}/scripts/test-check-plan-clips-unchanged.sh" 2>&1)"; then
+  ok "the Clip Factory check passes its sample plans ($(tail -1 <<<"$out"))"
+else
+  not_ok "scripts/test-check-plan-clips-unchanged.sh failed:"$'\n'"${out}"
+fi
+
+# 18. The smoke job also sends the browser's preflight to Lamo Stories' routes (/v1/workspaces and a deep
+#     /v1/workspaces/stories/dashboard path) and checks the CORS answer.
+# shellcheck disable=SC2016  # the literal ${API_URL%/} text is what the workflow must contain
+if grep -Fq 'for path in /v1/workspaces /v1/workspaces/stories/dashboard; do' <<<"$smoke" \
+  && grep -A12 'for path in /v1/workspaces /v1/workspaces/stories/dashboard; do' <<<"$smoke" | grep -q -- '-X OPTIONS' \
+  && grep -A20 'for path in /v1/workspaces /v1/workspaces/stories/dashboard; do' <<<"$smoke" | grep -q 'access-control-allow-origin' \
+  && grep -q 'url="${API_URL%/}/v1/jobs"' <<<"$smoke"; then
+  ok "the smoke job preflights /v1/workspaces and /v1/workspaces/stories/dashboard (and still /v1/jobs)"
+else
+  not_ok "the smoke job must send a CORS preflight to /v1/workspaces and /v1/workspaces/stories/dashboard"
 fi
 
 echo "${passed} passed, ${failed} failed"

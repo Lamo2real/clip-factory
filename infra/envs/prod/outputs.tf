@@ -34,3 +34,11 @@ output "oauth_callback_base" { value = module.hooks.oauth_callback_base }
 # deployed model must read). Read only; nothing is created for it.
 output "ask_function_name" { value = module.ask.ask_function_name }
 output "ask_enabled" { value = var.ask_enabled }
+
+# docs/CONTRACTS.md §45.15: Lamo Stories' own pieces (read by the deploy summary and the owner; config.json does not
+# need them yet). storiesCallbackBase is the redirect URI base Lamo Stories' own developer apps register (§45.30).
+output "stories_agent_runtime_arn" { value = module.stories_agent.runtime_arn }
+output "stories_ecr_repository_url" { value = module.stories_agent.ecr_repository_url }
+output "stories_api_function_name" { value = module.stories_api.function_name }
+output "story_flow_alias_arn" { value = module.flows.story_flow_alias_arn }
+output "stories_callback_base" { value = module.api.stories_callback_base }
