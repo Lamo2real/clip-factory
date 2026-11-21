@@ -1,4 +1,4 @@
-"""The shared golden cases of §39 (docs/CONTRACTS.md §39.3, §39.5).
+"""The shared golden cases of §39 (docs/CONTRACTS.md §39.3, §39.2, §39.5).
 
 * ``fixtures/cr_fit_cases.json``: stored items (a clip, its job, the campaign, ``CRCONN``, the setups, posts,
   submissions, the campaigns that own the moment elsewhere) and the ``CampaignFit`` the server answers for them: each
@@ -9,10 +9,11 @@
 * ``fixtures/channel_match_cases.json``: a campaign's channels, yt-dlp's facts about a video (``info``), the
   ``channelKeys`` the agent stores for it (``sources.channel_keys(info)``, I) and whether the fit says it matches
   (``true``, ``false``, or ``null``: nothing to compare). The agent's tests read it when present.
+* ``fixtures/money_everywhere_cases.json``: one owner's stored money items and ``GET /v1/money/everywhere``.
 
 Run ``uv run python tests/cr_fit_cases.py`` (from ``api/``) to write the files again after a deliberate change: the
 expected answers come from the code, and every case is read by hand in review (the key ones also have their own
-hand-written asserts in ``test_cr_fit.py``).
+hand-written asserts in ``test_cr_fit.py`` and ``test_money_everywhere.py``).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +32,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 FIT_FILE = FIXTURES / "cr_fit_cases.json"
 LIVE_FILE = FIXTURES / "cr_fit_live_cases.json"
 CHANNEL_FILE = FIXTURES / "channel_match_cases.json"
+MONEY_FILE = FIXTURES / "money_everywhere_cases.json"
 
 NOW = "2026-11-15T12:00:00.000Z"
 UUID = "200ea21b-be80-4db8-b552-8e32b148604e"
@@ -699,6 +702,165 @@ def _channel_cases() -> list[dict[str, Any]]:
     return out
 
 
+# --- all your money (§39.2) --------------------------------------------------------------------------------------
+
+
+MONEY_SCOPE = "https://www.googleapis.com/auth/yt-analytics-monetary.readonly"
+YT = {"platform": "youtube", "status": "connected", "scopes": [MONEY_SCOPE]}
+FB = {"platform": "facebook", "status": "connected"}
+
+
+def days(platform: str, end: str, amounts: list[int | None], currency: str = "USD") -> list[dict[str, Any]]:
+    """One row a day ending on ``end`` (None: no row that day)."""
+    last = date.fromisoformat(end)
+    first = last - timedelta(days=len(amounts) - 1)
+    return [
+        {"platform": platform, "date": (first + timedelta(days=i)).isoformat(), "amountMicros": a, "currency": currency}
+        for i, a in enumerate(amounts)
+        if a is not None
+    ]
+
+
+def crmoney(**fields: Any) -> dict[str, Any]:
+    return {
+        "firstReadDone": True,
+        "paidByDayDone": True,
+        "paidTotalCents": 6240,
+        "stillEarningCents": 420,
+        "readyToMoveCents": 1825,
+        "onItsWayCents": 0,
+        "asOf": "2026-11-19T14:10:00.000Z",
+        "lastPaidAt": "2026-11-12T09:00:00.000Z",
+        "paidByDay": {"2026-11-12": 500, "2026-11-01": 300, "2026-10-01": 999},
+        **fields,
+    }
+
+
+def money_case(name: str, **kw: Any) -> dict[str, Any]:
+    return {
+        "name": name,
+        "today": kw.pop("today", "2026-11-19T15:00:00.000Z"),
+        "facebookVerified": kw.pop("facebook_verified", False),
+        "accounts": kw.pop("accounts", {"youtube": YT}),
+        "states": kw.pop("states", {"youtube": {"state": "earning", "lastCheckedAt": "2026-11-19T06:00:00.000Z"}}),
+        "rows": kw.pop("rows", days("youtube", "2026-11-16", [400_000] * 31)),
+        "crOn": kw.pop("cr_on", True),
+        "crconn": kw.pop("crconn", {"status": "connected", "signInBy": "2027-02-01T00:00:00.000Z"}),
+        "crmoney": kw.pop("crmoney", crmoney()),
+    }
+
+
+def money_run(c: dict[str, Any]) -> dict[str, Any]:
+    from clipfactory_api.money import everywhere
+
+    today = parse(c["today"])
+    assert today is not None
+    return everywhere.everywhere(
+        monetization(c["facebookVerified"]),
+        {p: c["accounts"].get(p) for p in ("youtube", "tiktok", "instagram", "facebook", "x")},
+        c["states"],
+        c["rows"],
+        c["crconn"],
+        c["crmoney"],
+        c["crOn"],
+        today,
+    )
+
+
+def monetization(facebook_verified: bool) -> Any:
+    from dataclasses import replace
+
+    from clipfactory_api.money import rules as money_rules
+
+    cfg = money_rules.load()
+    if facebook_verified == cfg.platform("facebook").money_verified:
+        return cfg
+    platforms = dict(cfg.platforms)
+    platforms["facebook"] = replace(platforms["facebook"], money_verified=facebook_verified)
+    return replace(cfg, platforms=platforms)
+
+
+def _money_cases() -> list[dict[str, Any]]:
+    out = [
+        money_case("YouTube and Content Rewards give one USD total"),
+        money_case("Content Rewards switched off: no row", cr_on=False),
+        money_case(
+            "nothing stored: the last 30 days, nothing to add up",
+            rows=[],
+            states={},
+            crconn={"status": "not_connected"},
+            crmoney={},
+        ),
+        money_case("YouTube not set up", accounts={}, rows=[], states={}),
+        money_case("YouTube needs your OK", accounts={"youtube": {**YT, "scopes": []}}, rows=[], states={}),
+        money_case(
+            "YouTube not in the Partner Program yet",
+            rows=[],
+            states={"youtube": {"state": "not_yet", "lastCheckedAt": "2026-11-19T06:00:00.000Z"}},
+        ),
+        money_case(
+            "YouTube in the program, nothing reported yet", rows=[], states={"youtube": {"state": "in_program"}}
+        ),
+        money_case(
+            "YouTube couldn't be checked and nothing is stored",
+            rows=[],
+            states={"youtube": {"state": "earning", "lastError": "Couldn't check YouTube."}},
+        ),
+        money_case(
+            "YouTube couldn't be checked today, money stored",
+            states={"youtube": {"state": "earning", "lastError": "Couldn't check YouTube."}},
+            rows=days("youtube", "2026-11-14", [100_000] * 10),
+        ),
+        money_case(
+            "a reported $0 day is a number",
+            rows=days("youtube", "2026-11-16", [0, 0, 0]),
+        ),
+        money_case(
+            "Facebook verified, behind while YouTube is up to date",
+            facebook_verified=True,
+            accounts={"youtube": YT, "facebook": FB},
+            states={"youtube": {"state": "earning"}, "facebook": {"state": "earning"}},
+            rows=days("youtube", "2026-11-16", [400_000] * 30) + days("facebook", "2026-10-27", [50_000] * 5),
+        ),
+        money_case(
+            "two currencies are never added together",
+            facebook_verified=True,
+            accounts={"youtube": YT, "facebook": FB},
+            states={"youtube": {"state": "earning"}, "facebook": {"state": "earning"}},
+            rows=days("youtube", "2026-11-16", [400_000] * 30) + days("facebook", "2026-11-16", [900_000] * 30, "EUR"),
+        ),
+        money_case("Content Rewards not set up", crconn={"status": "not_connected"}, crmoney={}),
+        money_case("Content Rewards: sign in again", crconn={"status": "needs_reconnect"}),
+        money_case(
+            "Content Rewards past its 90 days: sign in again",
+            crconn={"status": "connected", "signInBy": "2026-11-18T00:00:00.000Z"},
+        ),
+        money_case("Content Rewards didn't answer", crmoney={"error": "cr_down"}),
+        money_case(
+            "Content Rewards: the first read is still going",
+            crmoney={"firstReadDone": False, "readyToMoveCents": 1825, "asOf": "2026-11-19T14:10:00.000Z"},
+        ),
+        money_case(
+            "Content Rewards: no campaign money yet",
+            crmoney=crmoney(paidTotalCents=0, stillEarningCents=0, readyToMoveCents=0, onItsWayCents=0, paidByDay={}),
+        ),
+        money_case("Content Rewards: paid by day not read yet", crmoney=crmoney(paidByDayDone=None)),
+        money_case(
+            "Content Rewards couldn't be checked today",
+            crmoney=crmoney(error="cr_down"),
+        ),
+        money_case(
+            "only Content Rewards: the last 30 days",
+            accounts={},
+            rows=[],
+            states={},
+        ),
+    ]
+    for c in out:
+        c["expect"] = money_run(c)
+    return out
+
+
 def build() -> dict[str, list[dict[str, Any]]]:
     fits = _fit_cases()
     for c in fits:
@@ -707,6 +869,7 @@ def build() -> dict[str, list[dict[str, Any]]]:
         "fit": fits,
         "live": _live_cases(fits),
         "channel": _channel_cases(),
+        "money": _money_cases(),
     }
 
 
@@ -742,6 +905,7 @@ def write() -> None:
     FIT_FILE.write_text(dump(found["fit"], ("expect",)))
     LIVE_FILE.write_text(dump(found["live"], ("fit", "expect")))
     CHANNEL_FILE.write_text(dump(found["channel"]))
+    MONEY_FILE.write_text(dump(found["money"]))
 
 
 if __name__ == "__main__":

@@ -91,6 +91,9 @@ ROUTES: list[Route] = [
     # §27: the money dashboard. Before "/v1/money/{platform}/days" so "summary" and "clips" never read as an app.
     route("GET", "/v1/money/summary", money.get_summary),
     route("GET", "/v1/money/clips", money.get_clips),
+    # §39.2: all your money in one place (every platform and Content Rewards, one 30-day period). Before
+    # "/v1/money/{platform}/days" too.
+    route("GET", "/v1/money/everywhere", money.get_everywhere),
     route("GET", "/v1/money/{platform}/days", money.get_days),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
