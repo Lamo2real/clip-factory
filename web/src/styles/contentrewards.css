@@ -378,7 +378,8 @@
 }
 .cr-pin {
   position: sticky;
-  bottom: calc(var(--tabbar-h, 64px) + env(safe-area-inset-bottom) + 12px);
+  /* Clear of the tab bar, which floats 10 px above the bottom edge (layout.css), with 12 px to spare. */
+  bottom: calc(var(--tabbar-h, 66px) + env(safe-area-inset-bottom) + 10px + 12px);
   z-index: 3;
   display: flex;
   flex-wrap: wrap;
@@ -702,30 +703,23 @@
   gap: 10px;
   min-width: 0;
 }
+/* "Which campaign": every campaign in view, in equal rows when they don't fit on one line (never a sideways scroll
+   that hides one past the edge). */
 .cr-for .segmented {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  justify-self: stretch;
   max-width: 100%;
+  border-radius: var(--r-lg);
 }
 .cr-for .segmented__opt {
-  flex: none;
-}
-.cr-for__bar {
-  position: relative;
   min-width: 0;
-}
-.cr-for__bar.is-more .segmented {
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 56px), transparent);
-  mask-image: linear-gradient(90deg, #000 calc(100% - 56px), transparent);
-}
-.cr-for__more {
-  position: absolute;
-  right: 2px;
-  top: 50%;
-  translate: 0 -50%;
-  color: var(--ink-2);
-  pointer-events: none;
+  padding: 6px 12px;
+  white-space: normal;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+  border-radius: calc(var(--r-lg) - 4px);
 }
 .cr-for__videos {
   display: grid;
@@ -1266,4 +1260,50 @@
   .money-dash.is-dock .cr-all__total {
     padding-inline-end: 112px;
   }
+}
+
+/* Review: the fit block (or D's strip) leads the card, above what the clip is and its Upload (§39.3 "at the top of
+   the card"). Without its own area the grid put it in a new row at the end. */
+.review-card--campaign > .cr-fit,
+.review-card--campaign > .cr-strip {
+  grid-area: fit;
+}
+.review-card.review-card--campaign {
+  grid-template-areas: "fit" "head" "media" "body";
+}
+@container review-card (min-width: 820px) {
+  .review-card.review-card--campaign {
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      "fit fit"
+      "media head"
+      "media body";
+  }
+}
+
+/* Setup steps on phones: the lines after a step's lead, with its pinned Open and answer at their end. The pair never
+   rides up over the lead line ("Have one already? Tap I have an account."). */
+.gstep__rest {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* Home's campaigns row: "campaigns." stays one word in the narrow intro column, and the chip's scissors sit on the
+   line of their words. */
+@media (min-width: 1100px) {
+  .cr-row .home-row__intro > h2 {
+    font-size: clamp(1.75rem, 2.3vw, var(--fs-h1));
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+}
+.cr-row-chip__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cr-row-chip__state > .icon {
+  flex: none;
 }
