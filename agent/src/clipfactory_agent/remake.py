@@ -20,6 +20,9 @@ from .util import UserFacingError, log
 
 CANT_COPY = "Clip Factory couldn't make this copy. Make new clips for this campaign."
 VIDEO_GONE = "This video is gone from Clip Factory. Make new clips for this campaign."  # the API's own words (§39.3)
+NEW_CLIPS = "Make new clips for this campaign."
+FAILED_CHECKS = "This copy didn't pass its checks. " + NEW_CLIPS
+MAX_REASON = 120
 SAME_SPAN = 0.05  # seconds: a saved moment is the clip's own when both of its ends are this close
 _ID = re.compile(r"[0-9A-Za-z]{1,64}")  # a ULID (or a test's short id): it becomes part of an S3 key
 MAX_TEXT = 300
@@ -50,7 +53,9 @@ def _kind(value: Any) -> str | None:
 @dataclass(frozen=True)
 class Remake:
     """``job.remake``, checked: the clip it copies (``clip_id`` of ``job_id``), that clip's moment in the video and,
-    when it is still kept, the whole video the moment is cut from (``source_key``, one of ``kept_video_keys``)."""
+    when it is still kept, the whole video the moment is cut from (``source_key``, one of ``kept_video_keys``).
+    ``layout`` is the original clip's layout name: only logged against the copy's (a name can't rebuild where the
+    facecam was; the framing comes from the original's ``done.json``)."""
 
     clip_id: str
     job_id: str
@@ -132,6 +137,21 @@ class Remake:
             summary=_text(c.get("summary")) or "",
             picked_for=self.picked_for or _text(c.get("pickedFor")),
         )
+
+
+def cant_earn(campaign: str, note: str) -> str:
+    """Why a copy's one clip failed its checks, in plain words (a copy has no other moment to swap in, and no notes
+    to add): "This copy can't earn on FaZe Clips: Shows gambling at 0:12. Make new clips for this campaign." With no
+    note to say: ``FAILED_CHECKS``."""
+    why = " ".join(note.split())
+    if len(why) > MAX_REASON:
+        why = why[:MAX_REASON].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+    if not why:
+        return FAILED_CHECKS
+    if why[-1] not in ".!?…":
+        why += "."
+    name = " ".join(campaign.split())
+    return f"This copy can't earn{f' on {name}' if name else ''}: {why} {NEW_CLIPS}"
 
 
 def saved_moment(clips_json: Any, clip_id: str) -> Moment | None:

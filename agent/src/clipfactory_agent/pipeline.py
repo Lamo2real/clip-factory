@@ -57,7 +57,7 @@ from .guard import Deadline, fable_budget, nova_budget
 from .heartbeat import free_memory
 from .jobs import StepDone, StepFn, Tracker, creep
 from .moments import Moment, length_target
-from .remake import CANT_COPY, VIDEO_GONE, Remake, saved_index, saved_moment
+from .remake import CANT_COPY, VIDEO_GONE, Remake, cant_earn, saved_index, saved_moment
 from .render import Marks, RenderResult, prepare_logo, render_clip
 from .skills import SkillsBlock, SkillSet, prepare_skills, skills_block
 from .store import CHANNEL_KEYS, REMAKE_OF, SOURCE_LANGUAGE, Fence, Store, clip_prefix, cookies_key, source_prefix
@@ -627,6 +627,11 @@ class Pipeline:
         try:
             info = await sources.video_info(url, st.cookies, proxy=st.proxy)
         except proc.CommandError as e:
+            if st.remake is not None and st.remake.source_key:
+                # A copy cut from its original's kept video needs nothing from the link (§39.3): the job's stored
+                # facts (title, channel, its keys) stand, and the owner's Mac is not asked for the video again.
+                log("warn", "remake.link_unreadable", job=st.job_id, platform=platform)
+                return
             raise sources.explain_or_mac(e, platform, st.cookies is not None, mac_ok=st.mac_ok) from e
         if info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming"):
             raise UserFacingError("This stream is still live or has not started. Try again once it has ended.")
@@ -747,7 +752,7 @@ class Pipeline:
         local = st.workdir / "source" / "audio.m4a"
         local.parent.mkdir(parents=True, exist_ok=True)
         capped = bool(total and total > cap)
-        if st.source.get("type") == "upload":
+        if st.from_file:  # an upload, or a copy's kept video (§39.3): the same test as type == "upload" for any other
             if st.meta.get("hasAudio") is False:
                 raise UserFacingError("The uploaded video has no sound, so there is nothing to transcribe.")
             await proc.run(
@@ -1580,15 +1585,30 @@ class Pipeline:
 
     async def _select_copy(self, st: JobState) -> str:
         """A campaign copy (§39.3): its one moment is the clip's own, from ``job.remake``, with the tease, payoff and
-        peak its job kept (``clips.json``) or else what the original Clip item says. No spares: it is that moment or
-        none."""
+        peak an earlier run of the copy picked (its own ``moments.json``), else its original's job kept (``clips.json``)
+        or else what the original Clip item says. No spares: it is that moment or none."""
         assert st.remake is not None
-        saved = saved_moment(await self._saved_json(self._copy_key(st, "clips.json")), st.remake.clip_id)
+        saved = await self._own_moment(st)
+        if saved is None:
+            saved = saved_moment(await self._saved_json(self._copy_key(st, "clips.json")), st.remake.clip_id)
         clip = None if saved is not None and st.remake.same_span(saved) else await self._original_clip(st)
         st.chosen, st.spares = [st.remake.moment(saved, clip)], []
         await self._after_select(st)
         log("info", "select.copy", job=st.job_id, clip=st.remake.clip_id, kept=clip is None)
         return COPY_MOMENT
+
+    async def _own_moment(self, st: JobState) -> Moment | None:
+        """The moment an earlier run of this copy picked (its own ``moments.json``), while it is the clip's span: a
+        copy tried again after its original's files expired keeps the tease, the payoff and the peak."""
+        assert st.remake is not None
+        saved = await self._saved_json(st.key("moments.json"))
+        try:
+            if isinstance(saved, dict) and saved.get("version") == MOMENTS_VERSION and saved.get("chosen"):
+                m = Moment.from_dict(saved["chosen"][0])
+                return m if st.remake.same_span(m) else None
+        except (KeyError, TypeError, ValueError, IndexError):
+            log("warn", "remake.own_moment_unreadable", job=st.job_id)
+        return None
 
     async def _original_clip(self, st: JobState) -> dict[str, Any] | None:
         """The Clip item a copy copies (read only), when it is the owner's."""
@@ -1600,16 +1620,21 @@ class Pipeline:
 
     async def _original_layout(self, st: JobState) -> FrameLayout | None:
         """The framing the original clip was cut with (where the facecam is), from its job's ``checked/NN`` or
-        ``render/NN`` while they are kept and hold the same moment; None: the copy looks at the picture again."""
+        ``render/NN`` while they are kept and hold the same moment; else the framing an earlier run of this copy cut
+        it with (its own ``checked/00`` or ``render/00``); None: the copy looks at the picture again."""
         assert st.remake is not None
         index = saved_index(await self._saved_json(self._copy_key(st, "clips.json")), st.remake.clip_id)
-        if index is None:
-            return None
-        for folder in ("checked", "render"):
-            done = await self._saved_json(self._copy_key(st, f"{folder}/{index:02d}/done.json"))
+        keys = (
+            [] if index is None else [self._copy_key(st, f"{f}/{index:02d}/done.json") for f in ("checked", "render")]
+        )
+        keys += [self._render_key(st, 0, "done.json", f) for f in ("checked", "render")]
+        for key in keys:
+            done = await self._saved_json(key)
             try:
                 if isinstance(done, dict) and st.remake.same_span(Moment.from_dict(done["moment"])):
-                    return frame_layout(done.get("frameLayout"))
+                    layout = frame_layout(done.get("frameLayout"))
+                    if layout is not None:
+                        return layout
             except (KeyError, TypeError, ValueError):
                 continue
         return None
@@ -1728,7 +1753,10 @@ class Pipeline:
 
     async def _upload_file(self, st: JobState) -> str:
         """Where the Cut step reads an upload: the copy on disk, downloaded once per run when it fits next to
-        ``UPLOAD_DISK_SPARE``; else (or when the download fails) the file in S3."""
+        ``UPLOAD_DISK_SPARE``; else (or when the download fails) the file in S3. A copy (§39.3) cuts one moment of a
+        video that may be hours long: it always reads it from S3."""
+        if st.remake is not None:
+            return self.store.presign(st.video_key)
         async with st.upload_lock:
             if st.upload_source is not None and st.upload_source.is_file():
                 return str(st.upload_source)
@@ -2158,6 +2186,11 @@ class Pipeline:
                 log("info", "render.needs_mac", job=st.job_id, why=why[:80])
                 raise NeedsMac("cut")
             raise UserFacingError(why)
+        if st.remake is not None and st.remake.layout and st.candidates[0].render.layout != st.remake.layout:
+            # Only a log (a layout name can't rebuild the framing): a copy framed unlike its original can be found.
+            log(
+                "info", "remake.layout_changed", job=st.job_id, was=st.remake.layout, now=st.candidates[0].render.layout
+            )
         failed = len(st.chosen) - len(st.candidates)
         return f"Cut {count(len(st.candidates), 'clip')}" + (f"; {failed} could not be cut." if failed else ".")
 
@@ -2385,6 +2418,8 @@ class Pipeline:
         if not passed:
             unchecked = [o.candidate for o in failed if o.reason.startswith("The clip could not be checked")]
             if not unchecked:
+                if st.remake is not None:
+                    raise UserFacingError(self._copy_failed(st, failed))
                 reasons = "; ".join(sorted({o.reason for o in failed if o.reason}))[:200]
                 raise UserFacingError(f"No clip passed the checklist ({reasons}). Try another video or add notes.")
             # Nothing passed only because nothing could be checked (not because the clips are bad): the clips go
@@ -2403,6 +2438,15 @@ class Pipeline:
         replaced = sum(1 for c in passed if c.index >= len(st.chosen))
         msg = f"{count(len(passed), 'clip')} passed"
         return msg + (f"; {replaced} swapped for other moments." if replaced else ".")
+
+    @staticmethod
+    def _copy_failed(st: JobState, failed: list[Outcome]) -> str:
+        """A copy has one moment and no spares, so a clip that fails a check that must pass fails the copy (§39.3),
+        in plain words: the campaign's own rules first, else the first such check, by its own note."""
+        bad = [i for o in failed for i in o.candidate.items if i.critical and not i.passed]
+        first = next((i for i in bad if i.key == "campaign_rules"), bad[0] if bad else None)
+        log("warn", "remake.failed_checks", job=st.job_id, item=first.key if first else "")
+        return cant_earn(st.campaign.name if st.campaign is not None else "", first.note if first else "")
 
     async def _save_checked(self, st: JobState) -> None:
         """``checked.json`` and ``checked/NN/`` (§30.6): the checked clips, so a run picking up after the checklist

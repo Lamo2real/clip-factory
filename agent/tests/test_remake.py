@@ -10,12 +10,20 @@ from typing import Any
 
 import pytest
 
-from clipfactory_agent import loudness, sources
+from clipfactory_agent import loudness, proc, sources
 from clipfactory_agent import pipeline as pipeline_mod
 from clipfactory_agent.bedrock import Facecam, FrameLayout
 from clipfactory_agent.moments import Moment
 from clipfactory_agent.pipeline import COPY_KEPT, COPY_MOMENT, COPY_SKIPPED, COPY_WORDS
-from clipfactory_agent.remake import CANT_COPY, VIDEO_GONE, Remake, saved_index, saved_moment
+from clipfactory_agent.remake import (
+    CANT_COPY,
+    FAILED_CHECKS,
+    VIDEO_GONE,
+    Remake,
+    cant_earn,
+    saved_index,
+    saved_moment,
+)
 from clipfactory_agent.render import Marks, RenderResult
 from clipfactory_agent.store import kept_video_keys
 from clipfactory_agent.util import UserFacingError
@@ -27,6 +35,7 @@ from .test_pipeline import INFO, World
 ORIG = "01ORIGJOB00000000000000000"  # the job of the clip being copied
 CLIP = "01ORIGCLIP0000000000000000"  # the clip being copied
 KEPT = f"jobs/{ORIG}/source/video.mp4"
+MAC = f"uploads/u/mac-{ORIG}/video.mp4"  # the whole video the owner's Mac sent for the original (§35.1)
 LINK = {"type": "link", "url": "https://www.youtube.com/watch?v=abc"}
 UPLOAD = {"type": "upload", "key": "uploads/u/video.mp4", "filename": "v.mp4"}
 FACECAM = {"x": 0.7, "y": 0.05, "w": 0.25, "h": 0.3}
@@ -107,6 +116,7 @@ class CopyWorld(World):
         self.original_clips: list[dict[str, Any]] = []
         self.counts = {"video_info": 0, "download_audio": 0, "loudness": 0, "section": 0}
         self.file_cuts: list[tuple[str, float, float]] = []
+        self.ffmpeg_inputs: list[str] = []
         self.rendered: list[dict[str, Any]] = []
         self.fable.handlers["submit_review"] = lambda kw: {
             **dict.fromkeys(("zero_context", "pays_off", "hook_ok", "follows_rules"), True),
@@ -141,6 +151,8 @@ class CopyWorld(World):
             return dest
 
         async def run(args: list[str], **kw: Any) -> Any:
+            if args and args[0] == "ffmpeg" and "-i" in args:
+                w.ffmpeg_inputs.append(args[args.index("-i") + 1])
             Path(args[-1]).parent.mkdir(parents=True, exist_ok=True)
             Path(args[-1]).write_bytes(b"audio")  # an upload's sound, taken out with ffmpeg
             from clipfactory_agent.proc import Result
@@ -333,11 +345,164 @@ async def test_trying_a_copy_again_reuses_its_own_words(tmp_path: Path, monkeypa
     w.original_clips = [{"jobId": ORIG, "clipId": CLIP, "userId": "u", "score": 8, "summary": "He loses it"}]
     w.store.job["sourceLanguage"] = "en-GB"
     w.store.writes.clear()
+    w.rendered.clear()
     status, _st, steps = await w.run()
     assert status == "ready" and steps["transcribe"]["message"] == "Used the words from last time."
     assert steps["download"]["message"] == COPY_KEPT and w.transcriber.runs == 0
     assert all("sourceLanguage" not in x for x in w.own_writes())  # written once
     assert len(w.store.clips) == 1 and w.store.clips[0]["remakeOf"] == {"clipId": CLIP, "jobId": ORIG}
+    # the moment and the framing the first run had, from the copy's own moments.json and render/00
+    m = w.rendered[0]["moment"]
+    assert m.tease == (125.0, 126.5) and (m.payoff_at, m.peak_at) == (128.0, 121.0)
+    assert w.rendered[0]["layout"] == FrameLayout(Facecam(**FACECAM), "gameplay")
+
+
+async def test_a_copy_tried_again_never_takes_another_spans_moment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    w = CopyWorld(tmp_path, monkeypatch, source=LINK, kept_video=False, kept_clips=False)
+    w.original_clips = [{"jobId": ORIG, "clipId": CLIP, "userId": "u", "score": 9, "summary": "He loses it"}]
+    other = make_moment(start=200.0, end=230.0, tease=(225.0, 226.0))
+    w.store.files["jobs/J/source/moments.json"] = json.dumps(
+        {"version": pipeline_mod.MOMENTS_VERSION, "chosen": [other.to_dict()], "spares": []}
+    ).encode()
+    done = {"version": 1, "moment": other.to_dict(), "frameLayout": {"scene": "gameplay", "facecam": FACECAM}}
+    w.store.files["jobs/J/source/render/00/done.json"] = json.dumps(done).encode()
+    status, _st, _ = await w.run()
+    assert status == "ready"
+    m = w.rendered[0]["moment"]
+    assert (m.start, m.end, m.tease) == (100.0, 130.0, None) and w.rendered[0]["layout"] is None
+
+
+async def test_a_copy_of_a_file_the_mac_sent_is_cut_from_that_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = {"type": "upload", "key": MAC, "filename": "video.mp4", "fetchedBy": "mac"}
+    w = CopyWorld(tmp_path, monkeypatch, source=source, kept_video=False, remake_kw={"sourceKey": MAC})
+    w.store.files[MAC] = b"the whole video"
+    status, st, steps = await w.run()
+    assert status == "ready", {k: (s["status"], s.get("message")) for k, s in steps.items()}
+    assert st.remake is not None and st.remake.source_key == MAC
+    assert w.file_cuts == [(f"https://s3.test/{MAC}", 98.0, 131.5)]
+    assert not w.store.has("video.mp4") and w.counts["section"] == 0  # no copy of it in the copy's own folder
+    assert_one_campaign_copy(w)
+
+
+async def test_a_copy_never_downloads_its_whole_kept_video(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    w = CopyWorld(tmp_path, monkeypatch, source=UPLOAD)
+    heads: list[str] = []
+
+    async def head(key: str) -> dict[str, Any]:
+        heads.append(key)
+        return {"ContentLength": 15}
+
+    w.store.head = head  # type: ignore[attr-defined]  # plenty of disk (World): a normal upload would be downloaded
+    status, st, _ = await w.run()
+    assert status == "ready" and heads == []
+    assert w.file_cuts == [(f"https://s3.test/{KEPT}", 98.0, 131.5)]
+    assert not (st.workdir / "source" / "upload.mp4").exists()
+
+
+async def test_a_link_copy_with_a_kept_video_takes_nothing_from_the_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stored = {**LINK, "platform": "youtube", "title": "Big stream", "channelKeys": ["fazeclan"], "durationSec": 600}
+    w = CopyWorld(tmp_path, monkeypatch, source=stored, kept_words=False, macFetch={})
+
+    async def blocked(*a: Any, **kw: Any) -> dict[str, Any]:
+        w.counts["video_info"] += 1
+        raise proc.CommandError("yt-dlp", 1, "ERROR: Sign in to confirm you're not a bot")
+
+    monkeypatch.setattr(sources, "video_info", blocked)
+    status, _st, steps = await w.run()
+    assert status == "ready", {k: (s["status"], s.get("message")) for k, s in steps.items()}
+    # blocked on the link, yet no wait for the Mac: the sound and the moment both come from the kept video
+    assert w.counts["video_info"] == 1 and w.counts["download_audio"] == 0 and w.counts["section"] == 0
+    assert w.ffmpeg_inputs == [f"https://s3.test/{KEPT}"] and w.transcriber.runs == 1
+    assert w.file_cuts == [(f"https://s3.test/{KEPT}", 98.0, 131.5)]
+    resolve = next(x for x in w.own_writes() if "source" in x)
+    assert resolve["source"]["channelKeys"] == ["fazeclan"] and resolve["source"]["title"] == "Big stream"
+    assert_one_campaign_copy(w)
+
+
+async def test_a_blocked_link_still_waits_for_the_mac_when_no_video_is_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    w = CopyWorld(tmp_path, monkeypatch, source=LINK, kept_video=False, macFetch={})
+
+    async def blocked(*a: Any, **kw: Any) -> dict[str, Any]:
+        raise proc.CommandError("yt-dlp", 1, "ERROR: Sign in to confirm you're not a bot")
+
+    monkeypatch.setattr(sources, "video_info", blocked)
+    status, _st, _ = await w.run()
+    assert status != "ready" and w.store.clips == [] and w.rendered == []
+
+
+def review_saying(**kw: Any) -> Any:
+    base: dict[str, Any] = {
+        **dict.fromkeys(("zero_context", "pays_off", "hook_ok", "follows_rules"), True),
+        **dict.fromkeys(("zero_context_note", "pays_off_note", "hook_note"), ""),
+        **{"follows_rules_note": "Nothing banned.", "new_hook": None, "move_start_by": 0, "move_end_by": 0},
+        "verdict": "keep",
+    }
+    return lambda _kw: {**base, **kw}
+
+
+@pytest.mark.parametrize(
+    ("review", "words"),
+    [
+        (
+            {"follows_rules": False, "follows_rules_note": "Shows gambling at 0:12."},
+            "This copy can't earn on FaZe Clips: Shows gambling at 0:12. Make new clips for this campaign.",
+        ),
+        (  # the campaign's own rules come first, before any other check that failed
+            {"follows_rules": False, "follows_rules_note": "Swears at 0:03", "zero_context": False},
+            "This copy can't earn on FaZe Clips: Swears at 0:03. Make new clips for this campaign.",
+        ),
+        (
+            {"zero_context": False, "zero_context_note": "You need to know who Tom is."},
+            "This copy can't earn on FaZe Clips: You need to know who Tom is. Make new clips for this campaign.",
+        ),
+        ({"verdict": "drop"}, FAILED_CHECKS),
+    ],
+)
+async def test_a_copy_whose_clip_fails_its_checks_says_why_in_plain_words(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, review: dict[str, Any], words: str
+) -> None:
+    w = CopyWorld(tmp_path, monkeypatch, source=UPLOAD)
+    w.fable.handlers["submit_review"] = review_saying(**review)
+    status, _st, steps = await w.run()
+    assert status == "failed" and steps["checklist"]["message"] == words
+    assert "checklist" not in words and "notes" not in words  # never the normal job's words: a copy has no notes
+    assert w.store.clips == [] and len(w.rendered) == 1  # one moment, no spare cut in its place
+    assert {k: v for k, v in w.store.files.items() if k.startswith(f"jobs/{ORIG}/")} == w.original
+
+
+def test_why_a_copy_cant_earn_is_short_and_plain() -> None:
+    assert cant_earn("FaZe Clips", "Shows gambling at 0:12.") == (
+        "This copy can't earn on FaZe Clips: Shows gambling at 0:12. Make new clips for this campaign."
+    )
+    assert cant_earn("", "The opening looks still.") == (
+        "This copy can't earn: The opening looks still. Make new clips for this campaign."
+    )
+    assert (
+        cant_earn("FaZe Clips", "  ")
+        == FAILED_CHECKS
+        == ("This copy didn't pass its checks. Make new clips for this campaign.")
+    )
+    long = cant_earn("FaZe Clips", "word " * 80)
+    assert long.endswith("… Make new clips for this campaign.") and len(long) < 200
+
+
+async def test_a_copy_framed_unlike_its_original_is_logged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    w = CopyWorld(tmp_path, monkeypatch, source=UPLOAD, remake_kw={"layout": "blur_fill"})
+    assert (await w.run())[0] == "ready"
+    out = capsys.readouterr().out
+    assert '"remake.layout_changed"' in out and '"blur_fill"' in out and '"facecam_top"' in out
+    w2 = CopyWorld(tmp_path / "same", monkeypatch, source=UPLOAD)
+    assert (await w2.run())[0] == "ready" and '"remake.layout_changed"' not in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
