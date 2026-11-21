@@ -65,3 +65,15 @@ variable "ask_tokens_alarm_threshold" {
   default     = 20000000
   description = "New input tokens (usageIn) Ask may read in 24 hours before the alarm tells the owner. It blocks nothing."
 }
+
+variable "stories_agent_alarm_enabled" {
+  type        = bool
+  default     = false
+  description = "Watch Lamo Stories' agent runtime for error lines (docs/CONTRACTS.md §45.15). A separate switch because the runtime's log group name is only known once the runtime exists."
+}
+
+variable "stories_agent_log_group_name" {
+  type        = string
+  default     = ""
+  description = "Lamo Stories' runtime log group (/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT, made by modules/stories_agent)."
+}

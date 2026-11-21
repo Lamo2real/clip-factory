@@ -46,8 +46,41 @@ describe("type and target floors", () => {
     expect(base.slice(at, base.indexOf("}", at))).toMatch(/outline:\s*none/);
   });
 
-  it("Home's review teasers fill exactly three columns from 600 px (no empty column)", () => {
-    expect(css("screens.css")).toMatch(/@media \(min-width: 600px\) \{\s*\.home-row__cards \{\s*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+  it("Home's rows lay out by Home's own width and never stretch a card to a taller neighbour", () => {
+    const screens = css("screens.css");
+    expect(screens).toMatch(/\.home \{[^}]*container: home \/ inline-size;/);
+    expect(screens).toMatch(/\.home-row \{[^}]*align-items: start;/);
+    // The old side-by-side heading column (the reason short cards were stretched) is gone from every row.
+    expect(screens).not.toMatch(/minmax\(200px, 0\.9fr\)/);
+    // No Home row (any section with class "home-row X" under screens/home) puts its boxes beside the heading block with
+    // a grid of its own, in any style file: that is what stretched a short box to the heading's height. Only the review
+    // row's views total may stand beside it (inside the `home` container rule, bottom-aligned).
+    const home = join(import.meta.dirname, "..", "src", "screens", "home");
+    const rows = new Set<string>();
+    for (const f of readdirSync(home).filter((n) => n.endsWith(".tsx")))
+      for (const m of readFileSync(join(home, f), "utf8").matchAll(/className="home-row ([\w-]+)/g)) rows.add(m[1]!);
+    expect([...rows]).toEqual(expect.arrayContaining(["home-row--review", "money-tile", "streamers-row", "cr-row"]));
+    for (const cls of rows)
+      for (const [file, text] of all) {
+        // Rules for the row itself (not what is inside it, such as the views total's own number-and-lines grid).
+        const grids = text.match(new RegExp(`\\.${cls}\\s*\\{[^}]*grid-template-columns`, "g")) ?? [];
+        expect(grids.length, `${file}: .${cls} sets its own columns`).toBe(cls === "home-row--review" && file === "screens.css" ? 1 : 0);
+      }
+  });
+
+  it("Home's review teasers run one row of 2 to 6 equal covers and draw only the ones that fit (no empty column)", () => {
+    const screens = css("screens.css");
+    expect(screens).toMatch(/\.home-row__cards \{\s*--cols: 2;[^}]*display: flex;/);
+    // One short of a full row still fills it; fewer keep their usual size (240 px at most) instead of blowing up.
+    expect(screens).toMatch(/\.home-row__cards > \* \{[^}]*flex: 1 1 0;[^}]*max-width: min\(240px, \(100% - \(var\(--grow-cols\) - 1\) \* 12px\) \/ var\(--grow-cols\)\);/);
+    for (const [cols, hide] of [
+      [3, 4],
+      [4, 5],
+      [5, 6],
+    ])
+      expect(screens).toMatch(new RegExp(`--cols: ${cols};\\s*\\}\\s*\\.home-row__cards > :nth-child\\(n \\+ ${hide}\\) \\{\\s*display: none;`));
+    expect(screens).toMatch(/@container home \(max-width: 419\.98px\) \{\s*\.home-row__cards > :nth-child\(n \+ 3\) \{\s*display: none;/);
+    expect(screens).toMatch(/@container home \(min-width: 1060px\) \{\s*\.home-row__cards \{\s*--cols: 6;/);
   });
 });
 

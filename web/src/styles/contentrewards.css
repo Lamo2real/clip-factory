@@ -152,13 +152,21 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
-.cr-login .text-link {
-  min-height: 44px;
-  background: none;
-  font: inherit;
-  font-weight: 700;
-  padding: 0;
-  margin-inline-start: 8px;
+/* "Send it from {email}." with its glass Change at the right end of the row (on a narrow screen it wraps under the
+   line, still at the right). */
+.cr-login__from {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.cr-login__from p {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.cr-login__change {
+  --btn-h: 48px;
+  margin-inline-start: auto;
 }
 .cr-place__words {
   margin: 0;
@@ -640,11 +648,6 @@
   flex-wrap: wrap;
   gap: 10px;
   min-width: 0;
-}
-@media (min-width: 1100px) {
-  .cr-row {
-    grid-template-columns: minmax(200px, 0.9fr) minmax(0, 3.2fr);
-  }
 }
 .cr-row-chip {
   display: flex;
@@ -1389,15 +1392,7 @@
   height: var(--pin-room, 0px);
 }
 
-/* Home's campaigns row: "campaigns." stays one word in the narrow intro column, and the chip's scissors sit on the
-   line of their words. */
-@media (min-width: 1100px) {
-  .cr-row .home-row__intro > h2 {
-    font-size: clamp(1.75rem, 2.3vw, var(--fs-h1));
-    overflow-wrap: normal;
-    word-break: normal;
-  }
-}
+/* Home's campaigns row: the chip's scissors sit on the line of their words. */
 .cr-row-chip__state {
   display: inline-flex;
   align-items: center;

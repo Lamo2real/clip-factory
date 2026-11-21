@@ -576,3 +576,21 @@ run "cr_finder_switch_only_sets_its_env_var" {
     error_message = "var.cr_finder_enabled is used once, as CR_FINDER = var.cr_finder_enabled ? \"on\" : \"off\"."
   }
 }
+
+# docs/CONTRACTS.md §45.13.1, §45.15 and ADR-73: Lamo Clips' stats, learn and follow-tick roles cannot reach a Lamo
+# Stories workspace token. IAM patterns are checked as globs against the sample ARN: "*" becomes ".*" and "?" becomes
+# "." in an anchored regex, dots escaped.
+run "no_lamo_stories_secrets" {
+  command = plan
+
+  assert {
+    condition = alltrue(flatten([
+      for k, p in aws_iam_role_policy.fn : [
+        for s in jsondecode(p.policy).Statement : [
+          for r in flatten([s.Resource]) : !can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/stories/youtube/token-AbC123"))
+        ] if anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:") || a == "*"])
+      ]
+    ]))
+    error_message = "…:secret:<name>/workspaces/stories/youtube/token-AbC123 must match no stats, learn or follow-tick Secrets Manager resource."
+  }
+}
