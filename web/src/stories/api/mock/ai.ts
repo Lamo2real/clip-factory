@@ -172,8 +172,12 @@ function wave(i: number, salt: number): number {
   return x - Math.floor(x);
 }
 
-const DENIED_LINE =
-  "Amazon Bedrock said this account has no access to Claude Fable 5.1. Turn it on in the Bedrock console (Model access), then tap Check models.";
+/** Amazon Bedrock's refusal, in the words the agent writes to MODELSTATUS#. */
+function deniedLine(key: string): string {
+  const label = MOCK_MODELS.find((m) => m.key === key)?.label ?? key;
+  return `Amazon Bedrock said this account has no access to ${label}. Turn it on in the Bedrock console (Model access), then tap Check models.`;
+}
+const DENIED_LINE = deniedLine("fable-5-1");
 
 export function seed(store: MockStore): void {
   const s = state(store);
@@ -441,8 +445,10 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         const when = iso(Date.now());
         const s = state(store);
         const results = keys.map((k) => {
-          const denied = k === "fable-5-1" && store.knobs.allowFable51 !== true;
-          s.status[k] = denied ? { status: "denied", line: DENIED_LINE, checkedAt: when } : { status: "ok", line: "It answered on the last call.", checkedAt: when };
+          // Knob `modelDenied` (the shell's name) picks the model Bedrock refuses; `allowFable51` lets every one answer.
+          const deniedKey = typeof store.knobs.modelDenied === "string" ? store.knobs.modelDenied : "fable-5-1";
+          const denied = k === deniedKey && store.knobs.allowFable51 !== true;
+          s.status[k] = denied ? { status: "denied", line: deniedLine(k), checkedAt: when } : { status: "ok", line: "It answered on the last call.", checkedAt: when };
           return { key: k, status: s.status[k]!.status, line: s.status[k]!.line };
         });
         Object.assign(task, { status: "done", result: { models: results }, updatedAt: when });
