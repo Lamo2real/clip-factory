@@ -12,7 +12,9 @@
 * ``{"action": "contentrewards", "userId", "what": "campaigns" | "money" | "all"}`` (async Invoke by ``cf-prod-api`` on
   Connect finish and money refresh, §38.12): ``contentrewards.poll.run_owner`` for that one owner, a 60 s budget.
 * The scheduled tick also checks Content Rewards after the platform poll when ``CONTENT_REWARDS=on``
-  (``contentrewards.poll.run_tick`` with ``min(45 s, what is left - 15 s)``); it never raises.
+  (``contentrewards.poll.run_tick`` with ``min(45 s, what is left - 15 s)``), then, when ``CR_FINDER=on`` and
+  ``CRPUBLIC/STATE`` says a finder look is due and none runs, invokes ``cf-prod-campaigns``
+  ``{"action": "find", "why": "schedule"}`` (§41.5); it never raises.
 * Anything else → log ``stats.bad_event``.
 
 Platform and network problems are handled inside ``refresh_posts`` (they become ``statsError``), so the handler
@@ -72,6 +74,9 @@ def _cr_tick(cr: Callable[[], Any], now: Any, budget: float) -> None:
         # Counts down from this tick's start: the refresh guard (≥ 20 s left) must see the time really left.
         cr_deps.until(budget + CR_MARGIN_SECONDS)
         poll.run_tick(cr_deps, now, budget)
+        from ..contentrewards import finderapi
+
+        finderapi.tick(cr_deps, now)  # §41.5: a scheduled finder look when one is due and none runs (CR_FINDER=on)
     except Exception as e:  # the platform poll's work is done; CR checking never fails the tick
         log("error", "stats.cr_tick_failed", error=type(e).__name__)
 

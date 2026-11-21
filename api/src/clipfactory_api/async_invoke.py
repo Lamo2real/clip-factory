@@ -1,6 +1,6 @@
 """Asynchronous Invokes of ``cf-prod-stats`` (manual refresh), ``cf-prod-learn`` (weekly best), §16.2,
 ``cf-prod-money`` (Check now, §25.5) and, for Content Rewards (§38), ``cf-prod-campaigns`` (rules read, logo link,
-brand picture) and ``cf-prod-stats`` (``{"action": "contentrewards"}``).
+brand picture and, since §41, the campaign finder's ``find``) and ``cf-prod-stats`` (``{"action": "contentrewards"}``).
 
 Both are plain functions (not durable), invoked on their unqualified ARN with ``InvocationType="Event"``: Lambda
 queues the event and answers 202 at once, so the API request never waits for a platform or for Bedrock.
@@ -51,6 +51,14 @@ class AsyncInvoker:
     def brand_picture(self, user_id: str, campaign_id: str) -> None:
         """``cf-prod-campaigns`` copies the brand's picture into the media bucket (§38.10)."""
         self._invoke(self.campaigns_arn, {"action": "brand_picture", "userId": user_id, "campaignId": campaign_id})
+
+    def find(self, user_id: str | None, why: str) -> None:
+        """``cf-prod-campaigns`` looks for campaigns that match (§41.5): ``why`` is ``schedule`` (the tick, no owner),
+        ``start``, ``check_now`` or ``want`` (that owner)."""
+        payload: dict[str, Any] = {"action": "find", "why": why}
+        if user_id:
+            payload["userId"] = user_id
+        self._invoke(self.campaigns_arn, payload)
 
     def cr_check(self, user_id: str, what: str) -> None:
         """``cf-prod-stats`` checks one owner's Content Rewards campaigns, money or all of it now (§38.12)."""
