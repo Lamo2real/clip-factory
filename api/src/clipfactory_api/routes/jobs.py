@@ -69,7 +69,7 @@ def create(app: App, req: Request) -> Response:
     notes = validate.string(body, "notes", required=False, max_len=MAX_NOTES)
     now = iso(app.clock())
     job_id = ulid()
-    campaign = _campaign(app, req.user_id, body, source, job_id) if "campaignId" in body else None
+    campaign = _campaign(app, req, body, source, job_id) if "campaignId" in body else None
     job = start_job(
         app,
         req.user_id,
@@ -142,7 +142,7 @@ def start_job(
 
 
 def _campaign(
-    app: App, user_id: str, body: dict[str, Any], source: dict[str, Any], job_id: str
+    app: App, req: Request, body: dict[str, Any], source: dict[str, Any], job_id: str
 ) -> tuple[dict[str, Any], str | None] | None:
     """§38.5: the campaign is checked again and its rules copied onto the job (503 while CR is switched off)."""
     if body.get("campaignId") is None:
@@ -150,11 +150,14 @@ def _campaign(
     deps = getattr(app, "contentrewards", None)
     if deps is None:
         raise ApiError(503, "unavailable", "Content Rewards is not switched on for this app yet.")
-    from ..contentrewards import config as cr_config
     from ..contentrewards import jobs as cr_jobs
 
-    deps.until(cr_config.API_SECONDS)  # this request's time: a token refresh starts only with ≥ 20 s of it left
-    return cr_jobs.prepare(deps, user_id, body["campaignId"], body.get("campaignAnyway"), source, job_id, app.clock())
+    # This request's time, counted from its start (the settings and the upload were read first): a token refresh
+    # starts only with ≥ 20 s of it left.
+    deps.for_request(req.started)
+    return cr_jobs.prepare(
+        deps, req.user_id, body["campaignId"], body.get("campaignAnyway"), source, job_id, app.clock()
+    )
 
 
 def _replaces(body: dict[str, Any], source: dict[str, Any]) -> str | None:
@@ -279,6 +282,9 @@ def retry(app: App, req: Request) -> Response:
     fresh_mac = macfetch.restarted(job.get("macFetch"))
     if fresh_mac is not None:
         fields["macFetch"] = fresh_mac
+    campaign = _campaign_logo_again(app, req.user_id, job, pick_up)
+    if campaign is not None:
+        fields["campaign"] = campaign
     try:
         updated = app.store.update(
             job["pk"],
@@ -303,6 +309,18 @@ def retry(app: App, req: Request) -> Response:
         started = jobs.start(app.store, app.flows, updated, now)
         stopping.result()
     return ok({"job": jobs.public_job(started)})
+
+
+def _campaign_logo_again(app: App, user_id: str, job: dict[str, Any], pick_up: bool) -> dict[str, Any] | None:
+    """A campaign job's Try again copies the campaign's logo onto the job again (§38.11), so a logo added (or
+    changed) on the campaign page after the job failed is the one this run uses; a run that picks up keeps the job's
+    own copy (its kept clips carry it). Only for a job that was stopped when Try again read it (a running one gets a
+    409 here). A job without a campaign is untouched."""
+    if not isinstance(job.get("campaign"), dict) or job.get("status") not in jobs.RESTARTABLE:
+        return None
+    from ..contentrewards import jobs as cr_jobs
+
+    return cr_jobs.logo_again(app.store, app.media, user_id, job, pick_up=pick_up)
 
 
 def _stop_old_session(app: App, job_id: str, session_id: str) -> None:

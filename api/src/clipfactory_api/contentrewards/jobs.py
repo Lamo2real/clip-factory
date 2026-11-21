@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
+from .. import db, s3
 from ..errors import ApiError, bad_request, conflict
 from ..log import log
 from . import campaigns, config, connection, gates, links, logo, public
@@ -72,13 +73,54 @@ def prepare(  # noqa: PLR0917 (one call site: the job route)
         if not any(_same_link(str(source.get("url")), v) for v in videos):
             raise bad_request(FOOTAGE_ONLY, "source")
     snapshot = campaigns.snapshot(item, places, now)
-    logo_key = item.get("logoKey")
-    if gates.logo_needed(item) and isinstance(logo_key, str) and deps.media is not None:
-        target = logo.job_logo_key(job_id, logo.ext_of(logo_key))
-        data = deps.media.read(logo_key, config.LOGO_MAX_BYTES)
-        deps.media.put(target, data, logo.CONTENT_TYPES.get(logo.ext_of(logo_key), "image/png"))
-        snapshot["logoKey"] = target
+    if gates.logo_needed(item):
+        target = copy_logo(deps.media, item, job_id)
+        if target is not None:
+            snapshot["logoKey"] = target
     return snapshot, note
+
+
+def copy_logo(media: s3.Media | None, item: Mapping[str, Any], job_id: str) -> str | None:
+    """The campaign's logo copied to ``jobs/{jobId}/source/campaign-logo.{ext}`` (§38.11); the copy's key, or None
+    when the campaign has no logo (or there is no bucket)."""
+    logo_key = item.get("logoKey")
+    if not isinstance(logo_key, str) or not logo_key or media is None:
+        return None
+    ext = logo.ext_of(logo_key)
+    target = logo.job_logo_key(job_id, ext)
+    data = media.read(logo_key, config.LOGO_MAX_BYTES)
+    media.put(target, data, logo.CONTENT_TYPES.get(ext, "image/png"))
+    return target
+
+
+def logo_again(
+    store: db.Store, media: s3.Media | None, user_id: str, job: Mapping[str, Any], *, pick_up: bool = False
+) -> Item | None:
+    """Try again on a campaign job: the campaign's logo as it is now is copied onto the job again (the same copy as
+    the job's start), so "Add it on the campaign page, then tap Try again" works. The job's ``campaign`` with the new
+    ``logoKey``, or None when there is nothing to copy (not a campaign job, no logo needed or added, the campaign
+    removed). ``pick_up`` (§30.6): a run that picks up keeps the job's own copy, so the clips it cuts carry the same
+    logo as the clips it keeps (a missing logo stops the run before any clip is cut, so that retry never picks up).
+    Best effort: a failed read or copy keeps the job's own copy and the retry goes on."""
+    snapshot = job.get("campaign")
+    campaign_id = job.get("campaignId")
+    if not isinstance(snapshot, Mapping) or not isinstance(campaign_id, str) or not links.UUID.match(campaign_id):
+        return None
+    own = logo.job_logo_key(str(job["jobId"]), "")  # "jobs/{jobId}/source/campaign-logo."
+    if pick_up and str(snapshot.get("logoKey") or "").startswith(own):
+        return None
+    try:
+        item = store.get(db.user_pk(user_id), db.campaign_sk(campaign_id))
+        if not isinstance(item, Mapping) or not (gates.logo_needed(item) or gates.logo_needed(snapshot)):
+            return None
+        target = copy_logo(media, item, str(job["jobId"]))
+    except Exception as e:
+        log("warning", "cr.retry_logo_failed", jobId=job.get("jobId"), error=type(e).__name__)
+        return None
+    if target is None:
+        return None
+    log("info", "cr.retry_logo_copied", jobId=job.get("jobId"))
+    return {**snapshot, "logoKey": target}
 
 
 def _fresh(deps: CrDeps, user_id: str, item: Item, conn: Mapping[str, Any], now: datetime) -> bool:
