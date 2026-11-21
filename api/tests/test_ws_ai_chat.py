@@ -1,0 +1,302 @@
+"""The creative chat (docs/CONTRACTS.md §45.5 ``…/chat``, §45.6, §45.9.1 tail, §45.25, §45.27): conversations with
+the model and effort the next message will use, sending (a ``pending`` answer with its own session, the override
+kept only on that answer), the 409 while an answer is being written, Stop, the stale-heartbeat fence, polling with
+``after``, pictures, and delete. The answer itself is written by Lamo Stories' own runtime (``chat_turn``)."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+from typing import Any
+
+import pytest
+
+from clipfactory_api import db
+from clipfactory_api.app import App
+from clipfactory_api.workspaces import ai_resolve as res
+from clipfactory_api.workspaces import types as ws
+from conftest import USER, Clock
+from fakes import FakeS3, FakeTable
+from test_ws_ai_support import BASE, FakeRuntime, WsCall, install, leaked, pk, prefix, seed_idea, ws_call
+
+
+@pytest.fixture
+def runtime(app: App) -> FakeRuntime:
+    found = install(app, FakeRuntime())
+    assert found is not None
+    return found
+
+
+@pytest.fixture
+def wcall(app: App, runtime: FakeRuntime) -> WsCall:
+    return ws_call(app)
+
+
+def _conv(wcall: WsCall, **body: Any) -> dict[str, Any]:
+    status, got = wcall("POST", f"{BASE}/chat", body)
+    assert status == 201, got
+    return dict(got["conversation"])
+
+
+def _send(wcall: WsCall, conv_id: str, text: str = "An idea about ice?", **body: Any) -> tuple[int, Any]:
+    return wcall("POST", f"{BASE}/chat/{conv_id}/messages", {"text": text, **body})
+
+
+def _finish(table: FakeTable, conv_id: str, msg_id: str, text: str = "Here it is.") -> None:
+    item = table.items[(pk(), f"MSG#{conv_id}#{msg_id}")]
+    item.update(status="done", text=text)
+
+
+def test_a_conversation_shows_what_its_next_message_uses(wcall: WsCall) -> None:
+    conv = _conv(wcall)
+    assert conv["title"] == "New chat"
+    assert (conv["model"], conv["effort"], conv["projectRef"], conv["lastMessageAt"]) == (None, None, None, None)
+    assert conv["effective"] == {"model": "opus-5-5", "effort": "high", "effortApplied": True, "from": "default"}
+    conv = _conv(wcall, title="Ice ideas", model="fable-5-2", effort="max")
+    assert conv["effective"] == {"model": "fable-5-2", "effort": "max", "effortApplied": True, "from": "conversation"}
+    status, got = wcall("PATCH", f"{BASE}/chat/{conv['convId']}", {"model": None, "effort": "low"})
+    assert status == 200
+    assert got["conversation"]["effective"] == {
+        "model": "opus-5-5",
+        "effort": "low",
+        "effortApplied": True,
+        "from": "default",
+    }
+    _, listed = wcall("GET", f"{BASE}/chat")
+    assert listed["conversations"][0]["convId"] == conv["convId"]  # newest first
+
+
+def test_a_conversation_about_a_project_of_this_workspace(wcall: WsCall, store: db.Store) -> None:
+    idea_id = seed_idea(store)
+    conv = _conv(wcall, projectRef={"kind": "idea", "id": idea_id})
+    assert conv["projectRef"] == {"kind": "idea", "id": idea_id}
+    other = seed_idea(store, user="someone-else")
+    status, body = wcall("POST", f"{BASE}/chat", {"projectRef": {"kind": "idea", "id": other}})
+    assert (status, body["error"]["message"]) == (404, "We could not find that idea.")
+    assert wcall("POST", f"{BASE}/chat", {"projectRef": {"kind": "clip", "id": idea_id}})[0] == 400
+    assert (
+        wcall("PATCH", f"{BASE}/chat/{conv['convId']}", {"projectRef": None})[1]["conversation"]["projectRef"] is None
+    )
+
+
+def test_send_writes_both_messages_and_asks_lamo_stories_runtime(
+    wcall: WsCall, runtime: FakeRuntime, table: FakeTable
+) -> None:
+    conv = _conv(wcall)
+    status, body = _send(wcall, conv["convId"], override={"model": "fable-5-2", "effort": "max"})
+    assert status == 202
+    user, answer = body["user"], body["assistant"]
+    assert (user["role"], user["text"], user["status"]) == ("user", "An idea about ice?", "done")
+    assert (answer["role"], answer["status"], answer["text"]) == ("assistant", "pending", "")
+    # "Just for this message": the answer records what it runs with; the conversation's own setting is untouched
+    assert (answer["model"], answer["effort"], answer["effortApplied"]) == ("fable-5-2", "max", True)
+    item = table.raw(pk(), f"MSG#{conv['convId']}#{answer['msgId']}")
+    assert item is not None
+    assert item["requested"] == {"model": "fable-5-2", "effort": "max"}
+    assert item["sessionId"].startswith(f"cfstory-{answer['msgId']}-")
+    assert item["heartbeatAt"] == item["createdAt"]
+    assert user["msgId"] < answer["msgId"]
+    (sent,) = runtime.calls
+    assert sent == {
+        "action": "chat_turn",
+        "user_id": USER,
+        "workspace_id": "stories",
+        "conv_id": conv["convId"],
+        "msg_id": answer["msgId"],
+        "session_id": item["sessionId"],
+    }
+    _, got = wcall("GET", f"{BASE}/chat/{conv['convId']}")
+    assert got["conversation"]["model"] is None
+    assert got["conversation"]["effective"]["model"] == "opus-5-5"
+    assert got["conversation"]["title"] == "An idea about ice?"
+    assert got["conversation"]["lastMessageAt"] == "2026-11-15T12:00:00.000Z"
+    assert [m["role"] for m in got["messages"]] == ["user", "assistant"]
+    assert leaked([body, got]) == []
+
+
+def test_a_second_message_waits_for_the_answer_or_stop(wcall: WsCall, runtime: FakeRuntime, table: FakeTable) -> None:
+    conv = _conv(wcall)
+    _, first = _send(wcall, conv["convId"])
+    status, body = _send(wcall, conv["convId"], "And another?")
+    assert (status, body["error"]["message"]) == (409, "Wait for the answer, or tap Stop.")
+    answer_id = first["assistant"]["msgId"]
+    old_session = table.raw(pk(), f"MSG#{conv['convId']}#{answer_id}")["sessionId"]
+    status, body = wcall("POST", f"{BASE}/chat/{conv['convId']}/messages/{answer_id}/stop")
+    assert (status, body["message"]["status"]) == (200, "stopped")
+    item = table.raw(pk(), f"MSG#{conv['convId']}#{answer_id}")
+    assert item["sessionId"] != old_session  # the old run can write nothing more
+    assert runtime.stopped == [old_session]
+    assert _send(wcall, conv["convId"], "And another?")[0] == 202
+    # stopping a finished answer changes nothing; a user message cannot be stopped
+    status, body = wcall("POST", f"{BASE}/chat/{conv['convId']}/messages/{answer_id}/stop")
+    assert (status, body["message"]["status"]) == (200, "stopped")
+    assert wcall("POST", f"{BASE}/chat/{conv['convId']}/messages/{first['user']['msgId']}/stop")[0] == 409
+
+
+def test_an_answer_whose_heartbeat_stopped_is_failed(
+    wcall: WsCall, runtime: FakeRuntime, table: FakeTable, clock: Clock
+) -> None:
+    conv = _conv(wcall)
+    _, first = _send(wcall, conv["convId"])
+    answer_id = first["assistant"]["msgId"]
+    clock.now += timedelta(minutes=2)
+    _, got = wcall("GET", f"{BASE}/chat/{conv['convId']}")
+    assert got["messages"][-1]["status"] == "pending"
+    clock.now += timedelta(minutes=2)
+    _, got = wcall("GET", f"{BASE}/chat/{conv['convId']}")
+    assert got["messages"][-1]["status"] == "failed"
+    assert got["messages"][-1]["error"] == "The answer stopped. Tap Try again."
+    assert len(runtime.stopped) == 1
+    assert _send(wcall, conv["convId"], "Try again")[0] == 202
+    item = table.raw(pk(), f"MSG#{conv['convId']}#{answer_id}")
+    assert item["status"] == "failed"
+
+
+def test_streaming_with_a_fresh_heartbeat_is_left_alone(wcall: WsCall, table: FakeTable, clock: Clock) -> None:
+    conv = _conv(wcall)
+    _, first = _send(wcall, conv["convId"])
+    key = (pk(), f"MSG#{conv['convId']}#{first['assistant']['msgId']}")
+    clock.now += timedelta(minutes=10)
+    table.items[key].update(status="streaming", text="Half", heartbeatAt="2026-11-15T12:09:30.000Z")
+    _, got = wcall("GET", f"{BASE}/chat/{conv['convId']}")
+    assert (got["messages"][-1]["status"], got["messages"][-1]["text"]) == ("streaming", "Half")
+
+
+def test_poll_with_after(wcall: WsCall, table: FakeTable) -> None:
+    conv = _conv(wcall)
+    _, one = _send(wcall, conv["convId"])
+    _finish(table, conv["convId"], one["assistant"]["msgId"])
+    _, two = _send(wcall, conv["convId"], "More?")
+    status, got = wcall("GET", f"{BASE}/chat/{conv['convId']}", query={"after": one["assistant"]["msgId"]})
+    assert status == 200
+    assert [m["msgId"] for m in got["messages"]] == [two["user"]["msgId"], two["assistant"]["msgId"]]
+    assert wcall("GET", f"{BASE}/chat/{conv['convId']}", query={"after": "nope"})[0] == 400
+
+
+def test_pictures_go_to_the_conversations_own_prefix(wcall: WsCall, s3_client: FakeS3, table: FakeTable) -> None:
+    conv = _conv(wcall)
+    conv_id = conv["convId"]
+    status, up = wcall(
+        "POST", f"{BASE}/chat/{conv_id}/attachments", {"filename": "a.png", "contentType": "image/png", "size": 1000}
+    )
+    assert status == 200
+    assert up["headers"] == {"Content-Type": "image/png"}
+    op, params, seconds = s3_client.presigned[-1]
+    key = params["Key"]
+    assert (op, params["ContentLength"], seconds) == ("put_object", 1000, 900)
+    assert key == f"{prefix()}chat/{conv_id}/{up['assetId']}.png"
+    status, body = _send(wcall, conv_id, attachments=[{"assetId": up["assetId"]}])
+    assert (status, body["error"]["message"]) == (400, "That picture did not finish uploading. Add it again.")
+    s3_client.objects[key] = b"\x89PNG" + b"0" * 996
+    status, body = _send(wcall, conv_id, attachments=[{"assetId": up["assetId"]}])
+    assert status == 202
+    (picture,) = body["user"]["attachments"]
+    assert picture["assetId"] == up["assetId"]
+    assert picture["contentType"] == "image/png"
+    assert picture["url"].startswith("https://")
+    item = table.raw(pk(), f"MSG#{conv_id}#{body['user']['msgId']}")
+    assert item["attachments"][0]["key"] == key  # the agent reads the key from the item
+    assert table.raw(pk(), f"CONV#{conv_id}")["uploads"] == {}
+    assert leaked([body]) == []
+    for bad in ({"contentType": "image/gif", "size": 10}, {"contentType": "image/png", "size": 0}):
+        assert wcall("POST", f"{BASE}/chat/{conv_id}/attachments", {"filename": "a", **bad})[0] == 400
+    big = {"filename": "a", "contentType": "image/jpeg", "size": 5 * 1024 * 1024 + 1}
+    assert wcall("POST", f"{BASE}/chat/{conv_id}/attachments", big)[0] == 413
+
+
+def test_a_model_that_cannot_see_pictures_is_refused(
+    wcall: WsCall, s3_client: FakeS3, table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    models = res.models()
+    for m in models:
+        if m["key"] == "haiku-5-5":
+            m["vision"] = False
+    monkeypatch.setattr(res, "models", lambda: [dict(m) for m in models])
+    conv = _conv(wcall, model="haiku-5-5")
+    _, up = wcall(
+        "POST",
+        f"{BASE}/chat/{conv['convId']}/attachments",
+        {"filename": "a.png", "contentType": "image/png", "size": 4},
+    )
+    s3_client.objects[f"{prefix()}chat/{conv['convId']}/{up['assetId']}.png"] = b"\x89PNG"
+    status, body = _send(wcall, conv["convId"], attachments=[{"assetId": up["assetId"]}])
+    assert (status, body["error"]["message"]) == (400, "Claude Haiku 5.5 can't look at pictures. Pick another model.")
+
+
+@pytest.mark.parametrize(
+    ("body", "status"),
+    [
+        ({"text": ""}, 400),
+        ({"text": "x" * 8001}, 400),
+        ({"text": "hi", "override": {"model": "gpt-9"}}, 400),
+        ({"text": "hi", "override": {"effort": "turbo"}}, 400),
+        ({"text": "hi", "override": {"temperature": 1}}, 400),
+        ({"text": "hi", "attachments": [{"assetId": "x"}] * 5}, 400),
+        ({"text": "hi", "colour": "red"}, 400),
+    ],
+)
+def test_send_validation(wcall: WsCall, table: FakeTable, body: dict[str, Any], status: int) -> None:
+    conv = _conv(wcall)
+    assert wcall("POST", f"{BASE}/chat/{conv['convId']}/messages", body)[0] == status
+    assert not [k for k in table.items if k[1].startswith(f"MSG#{conv['convId']}")]
+
+
+def test_a_switched_off_creative_director_or_no_runtime(app: App, wcall: WsCall, table: FakeTable) -> None:
+    conv = _conv(wcall)
+    assert wcall("PATCH", f"{BASE}/agents/creative_director", {"version": 1, "active": False})[0] == 200
+    status, body = _send(wcall, conv["convId"])
+    assert status == 409
+    assert (
+        body["error"]["message"]
+        == "Creative director is switched off. Switch it on in Lamo Stories › Settings › Agents."
+    )
+    assert wcall("PATCH", f"{BASE}/agents/creative_director", {"version": 2, "active": True})[0] == 200
+    install(app, None)
+    status, body = _send(wcall, conv["convId"])
+    assert status == 202
+    assert (body["assistant"]["status"], body["assistant"]["error"]) == (
+        "failed",
+        "Lamo Stories' AI helper isn't switched on yet.",
+    )
+    runtime = FakeRuntime()
+    runtime.fail = True
+    install(app, runtime)
+    status, body = _send(wcall, conv["convId"])
+    assert (body["assistant"]["status"], body["assistant"]["error"]) == (
+        "failed",
+        "The answer did not start. Tap Try again.",
+    )
+
+
+def test_delete_stops_the_answer_and_removes_everything(
+    wcall: WsCall, runtime: FakeRuntime, table: FakeTable, s3_client: FakeS3
+) -> None:
+    conv = _conv(wcall)
+    conv_id = conv["convId"]
+    _send(wcall, conv_id)
+    s3_client.objects[f"{prefix()}chat/{conv_id}/x.png"] = b"png"
+    status, _ = wcall("DELETE", f"{BASE}/chat/{conv_id}")
+    assert status == 204
+    assert not [k for k in table.items if conv_id in k[1]]
+    assert not [k for k in s3_client.objects if f"/chat/{conv_id}/" in k]
+    assert len(runtime.stopped) == 1
+    assert wcall("GET", f"{BASE}/chat/{conv_id}")[0] == 404
+    assert wcall("DELETE", f"{BASE}/chat/{conv_id}")[0] == 404
+
+
+def test_another_owners_conversation_is_never_found(app: App, wcall: WsCall, store: db.Store) -> None:
+    conv = _conv(wcall)
+    status, _ = wcall("GET", f"{BASE}/chat/{conv['convId']}", sub="99999999-8888-7777-6666-555555555555")
+    assert status == 404
+    store.put(
+        {
+            "pk": pk(),
+            "sk": f"{ws.CONV_SK}01JD0000000000000000000009",
+            "type": ws.TYPE_CONV,
+            "userId": USER,
+            "workspaceId": "another",
+            "convId": "01JD0000000000000000000009",
+        }
+    )
+    assert wcall("GET", f"{BASE}/chat/01JD0000000000000000000009")[0] == 404
+    _, listed = wcall("GET", f"{BASE}/chat")
+    assert [c["convId"] for c in listed["conversations"]] == [conv["convId"]]
