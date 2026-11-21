@@ -91,6 +91,9 @@ ROUTES: list[Route] = [
     # §27: the money dashboard. Before "/v1/money/{platform}/days" so "summary" and "clips" never read as an app.
     route("GET", "/v1/money/summary", money.get_summary),
     route("GET", "/v1/money/clips", money.get_clips),
+    # §39.2: all your money in one place (every platform and Content Rewards, one 30-day period). Before
+    # "/v1/money/{platform}/days" too.
+    route("GET", "/v1/money/everywhere", money.get_everywhere),
     route("GET", "/v1/money/{platform}/days", money.get_days),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
@@ -127,6 +130,10 @@ ROUTES: list[Route] = [
     route("POST", "/v1/contentrewards/campaigns/{campaignId}/logo/link", contentrewards.logo_link),
     route("DELETE", "/v1/contentrewards/campaigns/{campaignId}/logo", contentrewards.logo_delete),
     route("DELETE", "/v1/contentrewards/campaigns/{campaignId}", contentrewards.delete_campaign),
+    # §39.3: does this clip fit the campaign, "Fix it for me", and a campaign copy of a clip (503 until CR_REMAKE=on).
+    route("POST", "/v1/contentrewards/campaigns/{campaignId}/remake", contentrewards.remake_clip),
+    route("GET", "/v1/contentrewards/fit", contentrewards.get_fit),
+    route("POST", "/v1/contentrewards/fit/captions", contentrewards.fit_captions),
     route("GET", "/v1/contentrewards/submissions", contentrewards.list_submissions),
     # Before "/submissions/{postId}" so "check" never reads as a post id.
     route("POST", "/v1/contentrewards/submissions/check", contentrewards.check_submissions),

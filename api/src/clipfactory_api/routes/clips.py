@@ -123,8 +123,8 @@ def _require_set_up(app: App, user_id: str, platforms: list[str]) -> None:
 
 # --- Content Rewards campaign clips (docs/CONTRACTS.md §38.14) ------------------------------------------------------
 #
-# The items are read by their literal keys (CAMPAIGN#{uuid}, CRCONN, SETUP#tiktok; §38.11): this module never imports
-# the Content Rewards package.
+# The items are read by their literal keys (CAMPAIGN#{uuid}, CRCONN, SETUP#tiktok; §38.11). The one import of the
+# Content Rewards package is the fit check (§39.3), only while it is switched on (``_require_fit``).
 
 CAMPAIGN_PICK = "Pick where it goes, then tap Upload."
 CAMPAIGN_GONE = "Add the campaign again on the Campaigns page."
@@ -232,8 +232,8 @@ def _place_refusal(
             return f"{TIKTOK_PRIVATE} {then}"
     if isinstance(linked, Mapping) and linked.get(platform) is False:
         if try_again:
-            return f"Link {name} inside Content Rewards first, then tap Try again."
-        return f"Link {name} inside Content Rewards first. Then tap I linked it, or turn {name} off and tap Upload."
+            return f"Add {name} in Content Rewards first, then tap Try again."
+        return f"Add {name} in Content Rewards first. Then tap I added it, or turn {name} off and tap Upload."
     return None
 
 
@@ -258,6 +258,31 @@ def _require_campaign_tiktok(tiktok: Mapping[str, Any] | None) -> None:
         raise bad_request(CAMPAIGN_PUBLIC)
     if tiktok.get("brandContent") is not True:
         raise bad_request(CAMPAIGN_BRANDED)
+
+
+def _require_fit(
+    app: App,
+    user_id: str,
+    clip: Mapping[str, Any],
+    *,
+    captions: Mapping[str, Any] | None = None,
+    chosen: list[str] | None = None,
+    tiktok: Mapping[str, Any] | None = None,
+) -> None:
+    """§39.3: a campaign clip goes up the campaign way only when it can earn: 409 with the first ``no``, ``remake``
+    or ``todo`` item's words (a wait item: "Not yet for …"). Only while Content Rewards is switched on (its deps
+    exist); a clip without a campaign never gets here, so its Confirm is exactly as before."""
+    deps = getattr(app, "contentrewards", None)
+    if deps is None:
+        return
+    from ..contentrewards import fit
+
+    found = fit.for_clip(
+        deps, user_id, str(clip["clipId"]), app.clock(), captions=captions, chosen=chosen, tiktok=tiktok
+    )
+    refusal = fit.upload_refusal(found["fits"][0]) if found["fits"] else None
+    if refusal:
+        raise conflict(refusal)
 
 
 def _campaign_youtube(per_clip: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -308,6 +333,14 @@ def confirm(app: App, req: Request) -> Response:
             if "youtube" in chosen:
                 per_clip = {**per_clip, "youtube": _campaign_youtube(per_clip)}
             _require_campaign_tiktok(options if "tiktok" in chosen else None)
+            _require_fit(
+                app,
+                req.user_id,
+                item,
+                captions=clips.merged_captions(item.get("captions"), patch),
+                chosen=chosen,
+                tiktok=options if "tiktok" in chosen else None,
+            )
         fields: dict[str, Any] = {
             "status": "confirmed",
             "decidedAt": now,
@@ -391,6 +424,7 @@ def _try_again(
         going = [p for p in posts.UPLOAD_ORDER if any(r.get("platform") == p for r in [*failed, *waiting])]
         _require_campaign_open(app, campaign)
         _require_campaign_places(app, clip["userId"], campaign, going, try_again=True)
+        _require_fit(app, clip["userId"], clip, chosen=going, tiktok=tiktok if "tiktok" in going else None)
         if tiktok is not None and "tiktok" in going:
             _require_campaign_tiktok(tiktok)
             kept = next((r.get("postOptions") for r in rows if r.get("platform") == "tiktok"), None)

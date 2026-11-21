@@ -336,6 +336,8 @@ module "api" {
   # Content Rewards (§38.8, §38.16): 503 on every /v1/contentrewards route until the switch is on.
   content_rewards_enabled = var.content_rewards_enabled
   campaigns_function_arn  = module.contentrewards.campaigns_function_arn
+  # §39.3: the campaign copy of a clip (CR_REMAKE), off until its own switch PR.
+  cr_remake_enabled = var.cr_remake_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn

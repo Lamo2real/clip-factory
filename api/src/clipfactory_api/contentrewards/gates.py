@@ -30,7 +30,20 @@ CAN_MAKE = ("in", "manual")
 WAITING = ("not_joined", "apply_first", "waiting", "left")
 SOFT = frozenset({"not_connected", "budget_half", "low_rate", "face_needed", "spoken_needed", "audience"})
 ELSEWHERE = frozenset(
-    {"ended", "deadline", "budget_gone", "tiktok_only", "drafts_first", "sound_needed", "cap_reached", "not_accepted"}
+    {
+        "ended",
+        "deadline",
+        "budget_gone",
+        "tiktok_only",
+        "drafts_first",
+        "sound_needed",
+        "overlay_needed",
+        "cap_reached",
+        "not_accepted",
+    }
+)
+OVERLAY_NEEDED = (
+    "This campaign wants its own picture on top of the video. Clip Factory can't add it yet. Pick another campaign."
 )
 STUDIO = "https://studio.youtube.com/"
 OPEN_CAMPAIGN = "Open campaign"
@@ -44,6 +57,12 @@ def money(cents: int) -> str:
     dollars, rest = divmod(abs(int(cents)), 100)
     sign = "-" if cents < 0 else ""
     return f"{sign}${dollars:,}" if rest == 0 and dollars >= 10 else f"{sign}${dollars:,}.{rest:02d}"
+
+
+def setup_href(campaign_id: Any) -> str:
+    """The setup page with the way back to this campaign's card (§39.1 ``?back=``): the one server-made href that
+    carries one."""
+    return f"{config.SETUP_HREF}?back=/campaigns/{campaign_id}"
 
 
 def _join(items: list[str]) -> str:
@@ -113,7 +132,7 @@ def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
                 "not_connected",
                 "Clip Factory isn't connected to Content Rewards, so you send each clip yourself. Tap Connect Content "
                 "Rewards to make it automatic.",
-                config.SETUP_HREF,
+                setup_href(item.get("campaignId")),
             )
         )
     state = item.get("rulesState")
@@ -212,6 +231,8 @@ def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
                 "This campaign needs one of its own sounds. Clip Factory can't add it yet. Pick another campaign.",
             )
         )
+    if rules.get("overlayRequired"):
+        out.append(_stop("overlay_needed", OVERLAY_NEEDED))
     if rules.get("faceOnCamera") or toggled["faceOnCamera"]:
         out.append(
             _stop(
@@ -459,6 +480,7 @@ def _stop_chip(code: str, fallback: str) -> str:
         "cap_reached": "Most reached",
         "drafts_first": "Can't do this one",
         "sound_needed": "Can't do this one",
+        "overlay_needed": "Can't do this one",
     }.get(code, fallback)
 
 
@@ -495,7 +517,11 @@ def _membership_step(item: Mapping[str, Any], conn: Mapping[str, Any], chip_text
             "kind": "connect",
             "chip": chip_text,
             "text": text,
-            "button": {"label": "Connect Content Rewards", "href": config.SETUP_HREF, "external": False},
+            "button": {
+                "label": "Connect Content Rewards",
+                "href": setup_href(item.get("campaignId")),
+                "external": False,
+            },
             "asks": [{**submit_ask, "text": "Open the campaign. Does it say **Submit clip**? Then you're in."}],
             "glass": [_open(url)],
         }

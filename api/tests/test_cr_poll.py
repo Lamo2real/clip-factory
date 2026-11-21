@@ -464,3 +464,259 @@ def test_a_money_read_never_undoes_a_seen_celebration_or_the_refresh_mark(world:
     assert [c["key"] for c in item["celebrations"]] == ["money:pay_2"]  # the new one only
     assert item["lastManualAt"] == iso(NOW)
     assert item["paidTotalCents"] == 800
+
+
+# --- paid by day (§39.2): what "All your money" adds up for Content Rewards ------------------------------------------
+
+
+def paid_on(pid: str, cents: int, day: str) -> dict[str, Any]:
+    return {
+        "id": pid,
+        "amount": usd(cents),
+        "campaign": CMP,
+        "status": "paid",
+        "submission": None,
+        "paid_at": f"{day}T10:00:00Z",
+        "created_at": f"{day}T09:00:00Z",
+    }
+
+
+def payouts(paid_pages: list[dict[str, Any]], pending: list[dict[str, Any]] | None = None) -> Any:
+    """``list_my_payouts``: the paid pages in the order they are asked for (the watermark read, then the day scan),
+    and the pending list."""
+    queue = list(paid_pages)
+
+    def answer(args: dict[str, Any]) -> dict[str, Any]:
+        if args.get("status") == ["pending"]:
+            return page(pending or [])
+        return queue.pop(0)
+
+    return answer
+
+
+def older_owner(deps: Any, **fields: Any) -> None:
+    """An owner whose first read finished before ``paidByDay`` existed."""
+    deps.store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": db.CRMONEY_SK,
+            "type": "crmoney",
+            "userId": USER,
+            "firstReadDone": True,
+            "paidTotalCents": 600,
+            "paidByCampaign": {CMP: 600},
+            "payoutsSeen": ["pay_3", "pay_2", "pay_1"],
+            "paidMark": {"id": "pay_3", "createdAt": "2026-11-03T09:00:00Z"},
+            "nextCheckAt": iso(NOW - timedelta(minutes=1)),
+            **fields,
+        }
+    )
+
+
+def balance(fake: FakeCR) -> None:
+    fake.answer("get_my_balance", {"available": usd(0), "withdrawal_pending": usd(0), "as_of": iso(NOW)})
+
+
+def test_the_first_read_keeps_paid_money_by_day(world: Any) -> None:
+    deps, fake, _clock = world
+    balance(fake)
+    fake.answer(
+        "list_my_payouts",
+        payouts(
+            [
+                page(
+                    [paid_on("pay_3", 300, "2026-11-12"), paid_on("pay_2", 200, "2026-11-12")], more=True, cursor="c1"
+                ),
+                page(
+                    [paid_on("pay_1", 100, "2026-11-01"), {**paid_on("pay_x", 999, "2026-11-01"), "status": "reversed"}]
+                ),
+            ]
+        ),
+    )
+    money.read(deps, USER, NOW)
+    item = money.load(deps.store, USER)
+    assert item["paidByDay"] == {"2026-11-12": 500, "2026-11-01": 100}
+    assert (item["paidByDayDone"], item["paidTotalCents"]) == (True, 600)
+    assert "dayScan" not in item
+
+
+def test_an_older_owner_gets_one_day_scan_and_its_watermark_read_counts_once(world: Any) -> None:
+    """The scan starts before that tick's watermark read: the new row goes to paidByDay through the watermark read,
+    the scan adds only the rows at or older than the mark, and the paid total is never touched by the scan."""
+    deps, fake, _clock = world
+    older_owner(deps)
+    balance(fake)
+    new = paid_on("pay_new", 421, "2026-11-14")
+    fake.answer(
+        "list_my_payouts",
+        payouts(
+            [
+                page([new, paid_on("pay_3", 300, "2026-11-03")], more=True, cursor="w1"),  # the watermark read
+                page([new, paid_on("pay_3", 300, "2026-11-03")], more=True, cursor="s1"),  # the scan
+                page([paid_on("pay_2", 200, "2026-11-02"), paid_on("pay_1", 100, "2026-10-20")]),
+            ]
+        ),
+    )
+    poll.money_step(deps, USER, NOW)
+    item = money.load(deps.store, USER)
+    assert item["paidByDay"] == {"2026-11-14": 421, "2026-11-03": 300, "2026-11-02": 200, "2026-10-20": 100}
+    assert item["paidByDayDone"] is True
+    assert "dayScan" not in item
+    assert item["paidTotalCents"] == 1021  # 600 + the new row, once
+    assert item["paidByCampaign"] == {CMP: 1021}
+
+
+def test_a_day_scan_across_two_ticks_with_a_watermark_read_between(world: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    from clipfactory_api.contentrewards import config
+
+    deps, fake, _clock = world
+    monkeypatch.setattr(config, "PAID_PAGES_PER_TICK", 1)
+    older_owner(deps)
+    balance(fake)
+    mark = paid_on("pay_3", 300, "2026-11-03")
+    fake.answer(
+        "list_my_payouts",
+        payouts(
+            [
+                page([mark], more=True, cursor="w1"),  # tick 1: the watermark read finds nothing new
+                page([mark, paid_on("pay_2", 200, "2026-11-02")], more=True, cursor="s1"),  # tick 1: the scan
+            ]
+        ),
+    )
+    poll.money_step(deps, USER, NOW)
+    item = money.load(deps.store, USER)
+    scan = item["dayScan"]
+    assert (scan["cursor"], scan["days"], scan["passed"]) == ("s1", {"2026-11-03": 300, "2026-11-02": 200}, True)
+    assert item["nextCheckAt"] == iso(NOW + timedelta(minutes=15))  # the scan goes on at the next tick
+    assert "paidByDayDone" not in item
+    later = NOW + timedelta(minutes=15)
+    new = paid_on("pay_new", 421, "2026-11-14")
+    fake.answer(
+        "list_my_payouts",
+        payouts(
+            [
+                page([new, mark], more=True, cursor="w2"),  # tick 2: the watermark read adds the new row by day
+                page([paid_on("pay_1", 100, "2026-10-20")]),  # tick 2: the scan's last page
+            ]
+        ),
+    )
+    poll.money_step(deps, USER, later)
+    item = money.load(deps.store, USER)
+    assert item["paidByDay"] == {"2026-11-14": 421, "2026-11-03": 300, "2026-11-02": 200, "2026-10-20": 100}
+    assert item["paidByDayDone"] is True
+    assert "dayScan" not in item
+    assert item["paidTotalCents"] == 1021
+    assert fake.calls("list_my_payouts")[-2][0] == {"status": ["paid"], "limit": 25, "cursor": "s1"}
+
+
+def test_an_empty_paid_mark_needs_no_scan(world: Any) -> None:
+    deps, fake, _clock = world
+    older_owner(deps, paidMark={}, paidTotalCents=0, paidByCampaign={}, payoutsSeen=[])
+    balance(fake)
+    fake.answer("list_my_payouts", payouts([page([])]))
+    poll.money_step(deps, USER, NOW)
+    item = money.load(deps.store, USER)
+    assert (item["paidByDay"], item["paidByDayDone"]) == ({}, True)
+    assert [a for a, _h, _t in fake.calls("list_my_payouts") if a.get("status") == ["paid"]] == [
+        {"status": ["paid"], "limit": 25}
+    ]  # only the watermark read
+
+
+def test_the_first_reads_stale_scan_restart_resets_the_days(world: Any) -> None:
+    deps, fake, _clock = world
+    deps.store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": db.CRMONEY_SK,
+            "type": "crmoney",
+            "userId": USER,
+            "scan": {"status": "running", "cursor": "old", "at": iso(NOW - timedelta(days=8))},
+            "paidTotalCents": 500,
+            "paidByDay": {"2026-11-01": 500},
+            "payoutsSeen": ["pay_9"],
+        }
+    )
+    balance(fake)
+    fake.answer("list_my_payouts", payouts([page([paid_on("pay_1", 100, "2026-11-05")])]))
+    money.read(deps, USER, NOW)
+    item = money.load(deps.store, USER)
+    assert item["paidByDay"] == {"2026-11-05": 100}
+    assert (item["paidTotalCents"], item["paidByDayDone"]) == (100, True)
+    assert fake.calls("list_my_payouts")[0][0] == {"status": ["paid"], "limit": 25}  # from the top again
+
+
+def test_a_newer_row_with_the_marks_own_time_is_counted_once(world: Any) -> None:
+    """CR pays in rounds: a row newer than the mark (listed before it) can share its ``created_at``. The watermark
+    read keeps it by day; the scan must not add it again."""
+    deps, fake, _clock = world
+    older_owner(deps)
+    balance(fake)
+    same_round = {**paid_on("pay_new", 500, "2026-11-14"), "created_at": "2026-11-03T09:00:00Z"}
+    mark = paid_on("pay_3", 300, "2026-11-03")
+    fake.answer(
+        "list_my_payouts",
+        payouts(
+            [
+                page([same_round, mark], more=True, cursor="w1"),  # the watermark read
+                page([same_round, mark], more=True, cursor="s1"),  # the scan
+                page([paid_on("pay_2", 200, "2026-11-02"), paid_on("pay_1", 100, "2026-10-20")]),
+            ]
+        ),
+    )
+    poll.money_step(deps, USER, NOW)
+    item = money.load(deps.store, USER)
+    assert item["paidByDay"] == {"2026-11-14": 500, "2026-11-03": 300, "2026-11-02": 200, "2026-10-20": 100}
+    assert (item["paidTotalCents"], item["paidByDayDone"]) == (1100, True)
+
+
+def test_a_first_read_under_way_before_paid_by_day_gets_the_day_scan(world: Any) -> None:
+    """Its earlier pages were added to the total but never by day: the days it keeps are dropped and the day scan
+    reads every row up to the mark, so the 30 days are never short."""
+    deps, fake, _clock = world
+    deps.store.put(
+        {
+            "pk": db.user_pk(USER),
+            "sk": db.CRMONEY_SK,
+            "type": "crmoney",
+            "userId": USER,
+            "scan": {
+                "status": "running",
+                "cursor": "c1",
+                "at": iso(NOW - timedelta(hours=1)),
+                "mark": {"id": "pay_3", "createdAt": "2026-11-12T09:00:00Z"},
+            },
+            "paidTotalCents": 300,
+            "paidByCampaign": {CMP: 300},
+            "payoutsSeen": ["pay_3"],
+        }
+    )
+    balance(fake)
+    fake.answer(
+        "list_my_payouts",
+        payouts(
+            [
+                page([paid_on("pay_2", 200, "2026-11-12"), paid_on("pay_1", 100, "2026-11-01")]),  # the first read
+                page(  # the day scan, from the top
+                    [
+                        paid_on("pay_3", 300, "2026-11-12"),
+                        paid_on("pay_2", 200, "2026-11-12"),
+                        paid_on("pay_1", 100, "2026-11-01"),
+                    ]
+                ),
+            ]
+        ),
+    )
+    money.read(deps, USER, NOW)
+    item = money.load(deps.store, USER)
+    assert item["paidByDay"] == {"2026-11-12": 500, "2026-11-01": 100}  # pay_3 too, once
+    assert (item["paidTotalCents"], item["firstReadDone"], item["paidByDayDone"]) == (600, True, True)
+    assert "dayScan" not in item
+    assert "scan" not in item
+    paid_calls = [a for a, _h, _t in fake.calls("list_my_payouts") if a.get("status") == ["paid"]]
+    assert paid_calls == [{"status": ["paid"], "limit": 25, "cursor": "c1"}, {"status": ["paid"], "limit": 25}]
+
+
+def test_paid_day_is_the_utc_date() -> None:
+    assert money.paid_day({"paid_at": "2026-11-12T23:30:00-05:00"}) == "2026-11-13"
+    assert money.paid_day({"created_at": "2026-11-12T10:00:00Z"}) == "2026-11-12"
+    assert money.paid_day({}) is None

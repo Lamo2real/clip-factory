@@ -104,6 +104,36 @@ def test_connected_place_releases_waiting_posts_and_starts_a_new_run(
     assert sorted(_starts(lambda_client)) == sorted([f"clip-{posted['clipId']}-2", f"clip-{failed['clipId']}-2"])
 
 
+def test_a_campaign_post_waits_for_post_now_while_a_normal_one_is_released(
+    store: db.Store, table: FakeTable, flows: FlowClient, lambda_client: FakeLambda
+) -> None:
+    """§39.3: a Content Rewards campaign post is never released by itself when its account comes back (the campaign
+    may have ended or been held meanwhile): it waits for Post now, which runs the fit check. A normal post still
+    goes, and a campaign clip's start that never went through is still finished."""
+    _connect(store, "instagram")
+    campaign = _clip(store, campaignId="200ea21b-be80-4db8-b552-8e32b148604e")
+    waiting = _post(
+        store, campaign, "instagram", "pending_integration", campaignId="200ea21b-be80-4db8-b552-8e32b148604e"
+    )
+    normal = _clip(store)
+    released = _post(store, normal, "instagram", "pending_integration")
+    assert release.release_waiting(store, flows, USER, "instagram") == 1
+    assert (table.raw(PK, db.post_sk(waiting)) or {})["status"] == "pending_integration"
+    assert (table.raw(PK, db.post_sk(released)) or {})["status"] == "queued"
+    assert _starts(lambda_client) == [f"clip-{normal['clipId']}-2"]
+    unstarted = seed_clip(
+        store,
+        status="confirmed",
+        publishState="pending",
+        postsCreated=True,
+        flowRun=1,
+        campaignId="200ea21b-be80-4db8-b552-8e32b148604e",
+    )
+    _post(store, unstarted, "instagram", "queued", campaignId="200ea21b-be80-4db8-b552-8e32b148604e")
+    assert release.release_waiting(store, flows, USER, "instagram") == 0
+    assert f"clip-{unstarted['clipId']}-1" in _starts(lambda_client)  # Confirm checked the fit moments before
+
+
 def test_not_connected_changes_nothing(
     store: db.Store, table: FakeTable, flows: FlowClient, lambda_client: FakeLambda
 ) -> None:

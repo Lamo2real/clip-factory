@@ -639,3 +639,166 @@ def seen(app: App, req: Request) -> Response:
     if not money.seen(deps, req.user_id, key):
         raise not_found("Nothing to show.")
     return ok({"ok": True})
+
+
+# --- does this clip fit the campaign? (§39.3) ----------------------------------------------------------------------
+
+MAX_FIT_CLIPS = 20
+NOT_A_CLIP = "We could not find that clip."
+
+
+def get_fit(app: App, req: Request) -> Response:
+    """``ClipFit`` of one clip, or ``{clips}`` for up to 20 (items only: an unknown id is left out). Reads stored
+    items only: never Content Rewards, its public JSON or the network."""
+    from ..contentrewards import fit
+
+    deps = _deps(app)
+    now = _now(app)
+    one, many = req.query.get("clipId"), req.query.get("clipIds")
+    if one:
+        if not is_ulid(one):
+            raise not_found(NOT_A_CLIP)
+        return ok(fit.for_clip(deps, req.user_id, one, now))
+    if many is None:
+        raise bad_request("Send clipId or clipIds.")
+    wanted = list(dict.fromkeys(i.strip() for i in many.split(",") if i.strip()))
+    if not wanted or len(wanted) > MAX_FIT_CLIPS:
+        raise bad_request(f"Send 1 to {MAX_FIT_CLIPS} clip ids.", "clipIds")
+    loader = fit.Loader(deps, req.user_id, now)
+    found = [c for c in (loader.clip(i) for i in wanted) if c is not None]
+    return ok({"clips": [loader.clip_fit(c) for c in found]})
+
+
+def _campaign_clip_rules(deps: Any, user_id: str, clip: Mapping[str, Any], campaign_id: str) -> Mapping[str, Any]:
+    """The rules a campaign clip's posts follow (B's ``campaign_clip``): its job's copy, else the campaign's. 400 for
+    a clip that isn't a campaign clip of that campaign."""
+    from ..contentrewards import campaigns, fit
+
+    job = deps.store.get(db.user_pk(user_id), db.job_sk(str(clip.get("jobId")))) if clip.get("jobId") else None
+    rows = posts.posts_for_clip(deps.store, user_id, str(clip["clipId"]))
+    if fit.campaign_id_of(clip, job, rows) != campaign_id:
+        raise bad_request("This clip isn't a campaign clip of that campaign.", "campaignId")
+    snapshot = (job or {}).get("campaign")
+    if isinstance(snapshot, Mapping) and isinstance(snapshot.get("rules"), Mapping):
+        return snapshot["rules"]  # type: ignore[no-any-return]
+    item = campaigns.get(deps.store, user_id, campaign_id) or {}
+    found = item.get("rules")
+    return found if isinstance(found, Mapping) else {}
+
+
+def fit_captions(app: App, req: Request) -> Response:
+    """ "Fix it for me": the card's captions with the disclosure first and every required tag and phrase back, inside
+    each place's limits (B's ``campaign_caption``, the same the publishers run at upload)."""
+    from .. import clips
+    from ..contentrewards import fit, links
+    from ..platforms.campaign_caption import campaign_caption, campaign_options
+
+    deps = _deps(app)
+    body = req.json()
+    validate.only_keys(body, {"clipId", "campaignId", "captions"})
+    clip_id = validate.required_string(body, "clipId", max_len=40)
+    campaign_id = validate.required_string(body, "campaignId", max_len=60).lower()
+    if not links.UUID.match(campaign_id):
+        raise bad_request("campaignId must be a campaign id.", "campaignId")
+    if "captions" not in body:
+        raise bad_request("captions is required.", "captions")
+    patch = clips.caption_patch(body["captions"])
+    clip = deps.store.get(db.user_pk(req.user_id), db.clip_sk(clip_id)) if is_ulid(clip_id) else None
+    if clip is None:
+        raise not_found(NOT_A_CLIP)
+    if clip.get("status") != "review":
+        raise bad_request("This clip isn't waiting in Review.", "clipId")
+    options = campaign_options(_campaign_clip_rules(deps, req.user_id, clip, campaign_id))
+    out = clips.merged_captions(clip.get("captions"), patch)
+    for platform, field in fit.CAPTION_OF.items():
+        out[field] = campaign_caption(platform, out[field], options)
+    return ok({"captions": out})
+
+
+COPY_WAIT_TRIES = 5
+
+
+def remake_clip(app: App, req: Request) -> Response:
+    """A campaign copy of a clip (§39.3): 503 until ``CR_REMAKE=on``; 409 when the copy couldn't earn or a soft stop
+    wasn't accepted; the copy is reserved on the clip before its job is made, so a double tap makes one."""
+    from .. import jobs
+    from ..contentrewards import campaigns, fit, remake
+    from ..contentrewards import jobs as cr_jobs
+    from ..ids import ulid
+    from .jobs import start_job
+
+    deps = _deps(app)
+    if not remake.enabled():
+        raise ApiError(503, "unavailable", "Coming soon.")
+    body = req.json()
+    validate.only_keys(body, {"clipId", "macFetch", "campaignAnyway"})
+    clip_id = validate.required_string(body, "clipId", max_len=40)
+    mac_up = validate.boolean(body["macFetch"], "macFetch") if "macFetch" in body else False
+    anyway = body.get("campaignAnyway")
+    if anyway is not None and (not isinstance(anyway, list) or not all(isinstance(c, str) for c in anyway)):
+        raise bad_request("campaignAnyway must list stop codes.", "campaignAnyway")
+    item = campaigns.get_or_404(deps.store, req.user_id, req.params["campaignId"])
+    campaign_id = str(item["campaignId"])
+    now = _now(app)
+    loader = fit.Loader(deps, req.user_id, now)
+    clip = loader.clip(clip_id)
+    if clip is None:
+        raise not_found(NOT_A_CLIP)
+    original = loader.job(clip.get("jobId"))
+    found = loader.fit_one(clip, campaign_id)
+    kept = original is not None and fit.source_kept(original, now)
+    refusal = fit.remake_refusal(found, kept=kept) or fit.nothing_to_copy(found, loader.posts(clip_id))
+    if refusal is not None or original is None:
+        raise conflict(refusal or fit.GONE)
+    stops = {s["code"]: s for s in loader.stops(item)}
+    open_soft = [c for c in found["softCodes"] if c not in set(anyway or [])]
+    if open_soft:
+        raise conflict(" ".join(str(stops[c]["text"]) for c in open_soft if c in stops))
+    key = remake.source_key(deps.media, req.user_id, original)
+    source = dict(original.get("source") or {})
+    if key is None and source.get("type") != "link":
+        raise conflict(fit.GONE)
+    job_id = ulid()
+    try:
+        named = remake.reserve(
+            deps.store,
+            req.user_id,
+            clip_id,
+            campaign_id,
+            job_id=job_id,
+            now=now,
+            still=lambda entry: remake.alive(deps.store, req.user_id, entry, now),
+        )
+    except LookupError as e:
+        raise not_found(NOT_A_CLIP) from e
+    if named is not None:
+        return ok({"job": jobs.public_job(_named_job(deps, req.user_id, named))})
+    try:
+        prepared = cr_jobs.prepare(deps, req.user_id, campaign_id, anyway, source, job_id, now)
+        job = start_job(
+            app,
+            req.user_id,
+            job_id=job_id,
+            source=source,
+            target={"min": 1, "max": 1},
+            notes=str(original.get("notes") or "") or None,
+            mac_up=mac_up,
+            campaign=prepared,
+            extra=remake.fields(clip, original, key),
+        )
+    except Exception:
+        remake.free(deps.store, req.user_id, clip_id, campaign_id, job_id)
+        raise
+    log("info", "cr.remake_started", clipId=clip_id, jobId=job_id)
+    return ok({"job": jobs.public_job(job)}, 202)
+
+
+def _named_job(deps: Any, user_id: str, job_id: str) -> dict[str, Any]:
+    """The copy a double tap already started (its request may still be writing it: a few seconds at most)."""
+    for n in range(COPY_WAIT_TRIES):
+        found = deps.store.get(db.user_pk(user_id), db.job_sk(job_id))
+        if found is not None:
+            return found  # type: ignore[no-any-return]
+        if n < COPY_WAIT_TRIES - 1:
+            deps.sleep(1.0)
+    raise conflict("Making the copy… It shows here in about 3 minutes.")

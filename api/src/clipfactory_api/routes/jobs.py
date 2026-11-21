@@ -70,11 +70,44 @@ def create(app: App, req: Request) -> Response:
     now = iso(app.clock())
     job_id = ulid()
     campaign = _campaign(app, req.user_id, body, source, job_id) if "campaignId" in body else None
+    job = start_job(
+        app,
+        req.user_id,
+        now=now,
+        job_id=job_id,
+        source=source,
+        target=target,
+        notes=notes,
+        mac_up=mac_up,
+        campaign=campaign,
+        replaces=replaces,
+    )
+    return ok({"job": jobs.public_job(job)}, 201)
+
+
+def start_job(
+    app: App,
+    user_id: str,
+    *,
+    job_id: str,
+    source: dict[str, Any],
+    target: dict[str, int],
+    notes: str | None,
+    mac_up: bool,
+    campaign: tuple[dict[str, Any], str | None] | None = None,
+    replaces: str | None = None,
+    extra: dict[str, Any] | None = None,
+    now: str | None = None,
+) -> dict[str, Any]:
+    """Saves a new ``queued`` job and starts its flow: ``POST /v1/jobs`` and the Content Rewards copy (§39.3) share
+    it. ``campaign`` is ``contentrewards.jobs.prepare``'s answer; ``extra`` adds the copy's fields (``remakeOf``,
+    the internal ``remake``, ``sourceLanguage``). Raises ``db.ConditionFailed`` when the id is taken."""
+    now = now or iso(app.clock())
     item: dict[str, Any] = {
-        "pk": db.user_pk(req.user_id),
+        "pk": db.user_pk(user_id),
         "sk": db.job_sk(job_id),
         "type": "job",
-        "userId": req.user_id,
+        "userId": user_id,
         "jobId": job_id,
         "status": "queued",
         "source": source,
@@ -99,12 +132,13 @@ def create(app: App, req: Request) -> Response:
     if source["type"] == "link" and source["platform"] == "youtube":
         # Blocked by YouTube, the job waits for the owner's Mac instead of failing (§35); the agent checks for this map.
         item["macFetch"] = macfetch.new_map(up=mac_up)
+    if extra:
+        item.update(extra)
     app.store.put(item, if_absent=True)
     log("info", "job.created", jobId=job_id, platform=source["platform"])
     if replaces:
-        _replace_mac_wait(app, req.user_id, replaces, job_id)
-    job = jobs.start(app.store, app.flows, item, now)
-    return ok({"job": jobs.public_job(job)}, 201)
+        _replace_mac_wait(app, user_id, replaces, job_id)
+    return jobs.start(app.store, app.flows, item, now)
 
 
 def _campaign(

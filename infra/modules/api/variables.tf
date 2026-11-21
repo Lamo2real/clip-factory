@@ -100,6 +100,12 @@ variable "content_rewards_enabled" {
   description = "§38.16: CONTENT_REWARDS on/off. Off until every builder's part of §38.19 has merged."
 }
 
+variable "cr_remake_enabled" {
+  type        = bool
+  default     = false
+  description = "§39.3: CR_REMAKE on/off, the campaign copy of a clip. Off until G, H and I of §39.4 have merged."
+}
+
 # ---------- Set up posting (docs/CONTRACTS.md §17.4, §17.9) ----------
 variable "hooks_url" {
   type        = string

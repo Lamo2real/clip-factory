@@ -47,15 +47,15 @@ def reason_text(
         "not_listed": "I couldn't find this campaign in your Content Rewards list, so send it yourself.",
         "not_linked": (
             f"Content Rewards doesn't know this {name} account. Open Content Rewards settings, tap **Accounts**, and "
-            "connect it. Then tap I linked it."
+            "add it. Then tap I added it."
         ),
         "not_on_application": (
             f"Your {name} account isn't on your application for this campaign. Open the campaign, tap **Add "
             "accounts**, and add it. The next clip will go."
         ),
         "relink": (
-            f"This campaign needs {name} connected again on Content Rewards, with every box allowed. Open Content "
-            "Rewards settings, then tap I linked it."
+            f"This campaign needs {name} added again in Content Rewards, with every box allowed. Open Content "
+            "Rewards settings, then tap I added it."
         ),
         "wrong_place": f"This campaign doesn't pay for {name}. Pick another campaign.",
         "too_short": (
