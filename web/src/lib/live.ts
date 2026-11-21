@@ -54,7 +54,10 @@ export function backoffDelay(attempt: number, random: () => number = Math.random
   return Math.round(base * (0.8 + 0.4 * random()));
 }
 
-const TYPES: readonly LiveItemType[] = ["job", "clip", "post", "learning", "week", "setup", "follow", "jobLive"];
+const TYPES: readonly LiveItemType[] = ["job", "clip", "post", "learning", "week", "setup", "follow", "jobLive", "contentrewards"];
+
+/** Partial news only some screens refetch themselves: setup (GET /v1/setup) and Content Rewards (§38.11). */
+const OWN_REFETCH: readonly LiveItemType[] = ["setup", "contentrewards"];
 
 /** Reads one server message. Pongs, errors and anything malformed give null (they change nothing on screen). */
 export function parseLiveMessage(data: unknown): LiveEvent | null {
@@ -435,8 +438,9 @@ export function useLiveEvents(onEvent: (e: LiveEvent) => void, onResync: () => v
   useEffect(() => {
     const fn = (s: LiveSignal) => {
       if (s.kind === "resync") ref.current.onResync();
-      // A setup change (§17.4) is news only for the setup screens, which refetch GET /v1/setup themselves.
-      else if (s.event.partial && s.event.type !== "setup") ref.current.onResync();
+      // A setup change (§17.4) is news only for the setup screens, which refetch GET /v1/setup themselves; Content
+      // Rewards news (§38.11) only for its own store and screens, which refetch GET /v1/contentrewards.
+      else if (s.event.partial && !OWN_REFETCH.includes(s.event.type)) ref.current.onResync();
       else ref.current.onEvent(s.event);
     };
     hubSignals.add(fn);

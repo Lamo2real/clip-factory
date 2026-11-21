@@ -102,6 +102,10 @@ export interface Job {
   macFetch?: JobMacFetch;
   /** Stopped because the owner's video file replaced it (Use a video file, CONTRACTS §35.8): the new job's id. */
   replacedBy?: string;
+  /** The Content Rewards campaign these clips are for (CONTRACTS §38.5). */
+  campaignId?: string;
+  /** One sentence from the agent about the campaign ("This video may not be from FaZe's channels."). */
+  campaignNote?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -152,6 +156,8 @@ export interface Clip {
   totalViews?: number;
   /** The places the owner picked on Upload, in STATS_ORDER (§33). Absent on clips uploaded before §33. */
   uploadTo?: Platform[];
+  /** The Content Rewards campaign this clip is for (copied by the agent, §38.8). */
+  campaignId?: string;
   /** Uploaded, but its posting has not started yet: the start after an Upload, Try again, Post now or connect did not go
    * through (§14.5). Confirm starts it. Absent otherwise. */
   startPending?: boolean;
@@ -251,6 +257,8 @@ export interface NotifyChoices {
   /** A stopped run picked up again. Absent on servers before it: on. */
   resumed: boolean;
   steps: boolean;
+  /** Content Rewards news (§38.11): only there once the API knows it. */
+  contentRewards?: boolean;
 }
 
 /** A device that gets notifications (GET /v1/push/devices). Its address and keys never leave the server. */
@@ -528,6 +536,10 @@ export interface Post {
   /** Earliest manual refresh. */
   nextRefreshAt?: string;
   error?: string;
+  /** The Content Rewards campaign this post is for (set at creation, never changed, §38.8). */
+  campaignId?: string;
+  /** YouTube or X did not take the paid-partnership switch (§38.14). */
+  paidLabel?: "not_set";
 }
 
 export interface Learning {
@@ -814,7 +826,7 @@ export interface JobLive {
 }
 
 /** What the live connection pushes (docs/CONTRACTS.md §14.2). One message per changed item. */
-export type LiveItemType = "job" | "clip" | "post" | "learning" | "week" | "setup" | "follow" | "jobLive";
+export type LiveItemType = "job" | "clip" | "post" | "learning" | "week" | "setup" | "follow" | "jobLive" | "contentrewards";
 export type LiveEvent =
   | { type: "job"; op: "upsert"; id: string; item: Job; partial?: undefined }
   | { type: "clip"; op: "upsert"; id: string; item: Clip; partial?: undefined }
@@ -848,6 +860,10 @@ export interface NewJob {
   macFetch?: boolean;
   /** Use a video file on a link job (CONTRACTS §35.8): that job stops waiting for the Mac; this file replaces it. */
   replaces?: string;
+  /** Clips for this Content Rewards campaign (§38.5): only a campaign the API listed. */
+  campaignId?: string;
+  /** The soft stops the owner accepted with "Make clips anyway". */
+  campaignAnyway?: StopCode[];
 }
 
 // ---------- Real earnings (docs/CONTRACTS.md §25) ----------
@@ -1104,6 +1120,289 @@ export interface JobDeleted {
   clipsKept: number;
 }
 
+// ---------- Content Rewards campaigns (docs/CONTRACTS.md §38.8; shared contract, never changed alone) ----------
+
+export type StopCode =
+  | "not_connected"
+  | "not_checked"
+  | "not_joined"
+  | "apply_first"
+  | "waiting"
+  | "left"
+  | "not_accepted"
+  | "rules_reading"
+  | "rules_failed"
+  | "paused"
+  | "ended"
+  | "deadline"
+  | "budget_gone"
+  | "budget_half"
+  | "low_rate"
+  | "logo_missing"
+  | "tiktok_only"
+  | "no_place"
+  | "held"
+  | "cap_reached"
+  | "drafts_first"
+  | "sound_needed"
+  | "face_needed"
+  | "spoken_needed"
+  | "audience";
+export type Membership = "unknown" | "not_joined" | "apply_first" | "waiting" | "in" | "left" | "not_accepted" | "manual";
+export type CrConnectResult = "connected" | "read_only" | "denied" | "expired" | "not_allowed" | "no_port" | "cr_down" | "busy" | "error";
+export interface CrCheck {
+  at: string;
+  ok: boolean;
+  code: "ok" | "read_only" | "not_connected" | "token_dead" | "missing_permissions" | "blocked" | "cr_down";
+  message: string;
+}
+export interface CrConnection {
+  status: "not_connected" | "connected" | "read_only" | "needs_reconnect";
+  connectedAt?: string;
+  /** connectedAt + 90 days. */
+  signInBy?: string;
+  /** signInBy − 7 days. */
+  warnFrom?: string;
+  /** my_submissions:write granted and create_my_submission offered. */
+  canSubmit: boolean;
+  missing?: string[];
+  reason?: "token_dead" | "signed_out_90_days" | "missing_permissions" | "expires_soon";
+  blocked?: boolean;
+  /** Learned from CR's answers; absent = unknown. */
+  crLinked: Partial<Record<Platform, boolean>>;
+  /** CR_GUIDE ids the owner ticked ("I did this"). */
+  stepsDone: string[];
+  /** "Do you see Finance?" (§38.7); absent = not asked. */
+  finance?: boolean;
+  pilotSentAt?: string;
+  lastResult?: CrConnectResult;
+  check?: CrCheck;
+  pilotEmail: { to: string; subject: string; body: string; mailto: string };
+}
+export interface CrPay {
+  platform: Platform;
+  per1kCents: number | null;
+  perPostCents: number | null;
+  minPayoutCents: number | null;
+  maxPayoutCents: number | null;
+  minViews: number | null;
+  countryRates?: { name: string; per1kCents: number; countries: string[] }[];
+  otherCountriesPer1kCents?: number | null;
+  unknownCountryPer1kCents?: number | null;
+}
+export interface CampaignStop {
+  code: StopCode;
+  hard: boolean;
+  text: string;
+  fixHref?: string;
+  anyway?: boolean;
+}
+export type NextStepKind =
+  | "connect"
+  | "check_yourself"
+  | "join"
+  | "applied"
+  | "wait"
+  | "rules_paste"
+  | "logo"
+  | "anyway"
+  | "pick_video"
+  | "make_clips"
+  | "pick_another"
+  | "stop"
+  | "none";
+export type SaidAnswer = "applied" | "not_eligible" | "joined_by_hand";
+export interface NextStep {
+  kind: NextStepKind;
+  chip: string;
+  text: string;
+  sub?: string;
+  /** The vermilion one. */
+  button?: { label: string; href?: string; external: boolean; action?: "logo_picker" | "anyway" | "read_rules" | "said_applied" };
+  /** Quiet green asks. */
+  asks?: { label: string; said: SaidAnswer; text?: string }[];
+  glass?: { label: string; href: string; external: boolean }[];
+}
+export type SourceKind = "video_file" | "google_drive" | "dropbox" | "youtube" | "twitch" | "kick" | "other";
+export interface CampaignRules {
+  lengthMinSec: number | null;
+  lengthMaxSec: number | null;
+  requiredHashtags: string[];
+  requiredTags: string[];
+  requiredCaptionText: string | null;
+  disclosure: { caption: "#Ad" | "#ad" | "#Sponsored" | "#sponsored" | "#PaidPartnership"; onScreen: string; spoken: boolean };
+  logo: { required: boolean; rules: string | null };
+  overlayRequired: boolean;
+  coverImageRequired: boolean;
+  layoutNotes: string | null;
+  language: string | null;
+  bannedContent: string[];
+  sourceVideos: { url: string; kind: SourceKind; note: string | null }[];
+  allowedSources: {
+    campaignProvidedOnly: boolean;
+    youtube: boolean;
+    twitch: boolean;
+    kick: boolean;
+    channels: { name: string; url: string | null }[];
+    notes: string | null;
+  };
+  clipUntil: string | null;
+  keepPublicDays: number | null;
+  minViewsForPayout: number | null;
+  postSubmissionRules: { text: string; afterHours: number | null; atViews: number | null; where: string | null }[];
+  audience: string | null;
+  draftsFirst: boolean;
+  soundRequired: boolean;
+  faceOnCamera: boolean;
+  otherRules: string[];
+  uncertain: string[];
+}
+export interface Campaign {
+  /** CR's uuid, lowercase. */
+  campaignId: string;
+  /** https://contentrewards.com/c/campaigns/{uuid} */
+  url: string;
+  name: string;
+  brand: string;
+  /** Presigned GET, 1 h. */
+  brandPictureUrl?: string;
+  access: "open" | "application";
+  type: "cpm" | "per_post" | "pool" | "retainer" | "other";
+  state: "active" | "paused" | "ended" | "scheduled" | "unknown";
+  membership: Membership;
+  inSince?: string;
+  waitingSince?: string;
+  said?: SaidAnswer;
+  /** When "I joined, but it still says not joined" shows. */
+  canSayInBy?: string;
+  pay: CrPay[];
+  budget: { totalCents: number | null; spentCents: number | null; leftCents: number | null; usedPct: number | null; asOf?: string };
+  platformsPaid: Platform[];
+  uploadPlaces: Platform[];
+  placesNote?: string;
+  rulesState: "reading" | "ready" | "failed" | "waiting_for_join";
+  rules: CampaignRules | null;
+  plainRules: string[];
+  thingsYouDo: string[];
+  uncertain: string[];
+  rulesAt?: string;
+  logo: { needed: boolean; state: "none" | "fetching" | "ready" | "failed"; url?: string; error?: string };
+  sourceVideos: { url: string; kind: SourceKind; note: string | null; canMakeClips: boolean }[];
+  /** https, §38.10. */
+  channels: { name: string; href: string }[];
+  stops: CampaignStop[];
+  anyway: StopCode[];
+  nextStep: NextStep;
+  clipCounts: { approved: number; waiting: number; notApproved: number };
+  /** This campaign's CR submissions still pending. */
+  waitingClips: number | null;
+  celebrate?: "in";
+  checkedAt: string;
+  nextCheckAt?: string;
+  addedAt: string;
+}
+export type CampaignSummary = Pick<
+  Campaign,
+  "campaignId" | "name" | "brand" | "brandPictureUrl" | "state" | "membership" | "uploadPlaces" | "waitingClips" | "clipCounts" | "celebrate" | "checkedAt"
+> & { chip: string; nextStepText: string; hardStops: number };
+export interface GroupChoice {
+  campaignId: string;
+  url: string;
+  name: string;
+  brand: string | null;
+  access: "open" | "application" | null;
+  /** Only when the one group read had it. */
+  pay: CrPay[] | null;
+}
+export type CrReasonCode =
+  | "private"
+  | "not_listed"
+  | "not_linked"
+  | "not_on_application"
+  | "relink"
+  | "wrong_place"
+  | "too_short"
+  | "held"
+  | "account_refused"
+  | "sound_needed"
+  | "drafts_first"
+  | "campaign_closed"
+  | "campaign_refused"
+  | "refused"
+  | "banned"
+  | "cap"
+  | "not_sent_by_app"
+  | "not_visible_yet"
+  | "no_connection"
+  | "read_only"
+  | "manual"
+  | "ambiguous"
+  | "window_over";
+export type CrSubState = "waiting_for_post" | "sending" | "sent" | "approved" | "rejected" | "send_by_hand" | "sent_by_hand" | "missed" | "not_sent";
+export interface CrSubmission {
+  postId: string;
+  clipId: string;
+  clipTitle: string;
+  campaignId: string;
+  campaignName: string;
+  platform: Platform;
+  url?: string;
+  postedAt?: string;
+  state: CrSubState;
+  /** The §38.6 sentence. */
+  line: string;
+  minutesLeft?: number;
+  sendBy?: string;
+  reason?: { code: CrReasonCode; text: string; brandSaid?: string };
+  flagged?: boolean;
+  removed?: boolean;
+  postGone?: boolean;
+  paidLabel?: "not_set";
+  views: number | null;
+  viewsAt?: string;
+  /** CR's payouts for this submission, net of fees. */
+  earned: { paidCents: number; pendingCents: number } | null;
+  appeal?: { href: string; words: string; askedAt?: string };
+  proof?: { text: string; steps: string[]; dueAt: string; due: boolean; open?: { label: string; href: string }; doneAt?: string };
+  openCampaignHref: string;
+  sentAt?: string;
+  reviewedAt?: string;
+  updatedAt: string;
+}
+export interface CrMoney {
+  state: "ok" | "checking" | "none_yet" | "not_connected" | "needs_reconnect" | "error";
+  tag: "Content Rewards' numbers";
+  asOf?: string;
+  error?: string;
+  stillEarningCents: number | null;
+  onItsWayCents: number | null;
+  readyToMoveCents: number | null;
+  /** null until the list was read to its end. */
+  paidSoFarCents: number | null;
+  lastPaidAt?: string;
+  lastPaidCents?: number;
+  /** Campaign clips CR still has pending at $0. */
+  waitingForBrand: number;
+  campaigns: { campaignId?: string; name: string; paidCents: number; pendingCents: number }[];
+  celebrations: { key: string; kind: "first_money" | "money_arrived" | "can_move"; text: string }[];
+}
+/** GET /v1/contentrewards: reads items only, never calls CR. */
+export interface CrOverview {
+  connection: CrConnection;
+  campaigns: CampaignSummary[];
+  money: CrMoney;
+  /** send_by_hand with time left. */
+  waitingSends: CrSubmission[];
+}
+export type CrConnectionPatch =
+  | { said: "pilot_sent" | null }
+  | { step: string; done: boolean }
+  | { relinked: Platform }
+  | { finance: boolean | null };
+export type CrFinishBody = { state: string; code: string; iss?: string } | { state: string; error: string; errorDescription?: string };
+export type CrAddResult = { campaign: Campaign; group?: undefined } | { group: { name: string; choices: GroupChoice[] }; campaign?: undefined };
+export type CrSubmissionSaid = "sent_by_hand" | "appealed" | "proof_sent" | null;
+
 /** Everything the screens need from the backend. The HTTP client and the mock both implement it. */
 export interface Api {
   health(): Promise<{ ok: boolean; version: string }>;
@@ -1238,4 +1537,51 @@ export interface Api {
   deleteFollowKeys(platform: FollowKeyPlatform): Promise<void>;
   /** POST /v1/follows/keys/{platform}/check. */
   checkFollowKeys(platform: FollowKeyPlatform): Promise<{ check: FollowKeyCheck } & FollowsView>;
+  // Content Rewards campaigns (§38.8). An api from before §38 answers 404; switched off, 503 `unavailable`.
+  /** GET /v1/contentrewards. */
+  crOverview(): Promise<CrOverview>;
+  /** POST /v1/contentrewards/connect `{ port }` (47811–47815). */
+  crConnect(port: number): Promise<{ authorizeUrl: string; expiresAt: string }>;
+  /** POST /v1/contentrewards/connect/finish. */
+  crConnectFinish(body: CrFinishBody): Promise<{ result: CrConnectResult; connection: CrConnection }>;
+  /** POST /v1/contentrewards/check (at most once a minute; else the stored check). */
+  crCheck(): Promise<{ check: CrCheck; connection: CrConnection }>;
+  /** PATCH /v1/contentrewards/connection. */
+  crPatchConnection(body: CrConnectionPatch): Promise<CrConnection>;
+  /** DELETE /v1/contentrewards/connection: campaigns, clips and money stay. */
+  crDisconnect(): Promise<void>;
+  /** GET /v1/contentrewards/campaigns (newest added first). */
+  crCampaigns(): Promise<CampaignSummary[]>;
+  /** POST /v1/contentrewards/campaigns `{ url }`: the campaign (new or already added), or a group to pick from. */
+  crAddCampaign(url: string): Promise<CrAddResult>;
+  /** GET /v1/contentrewards/campaigns/{campaignId}. */
+  crCampaign(campaignId: string): Promise<Campaign>;
+  /** POST …/campaigns/{campaignId}/read: Check now, with the owner's pasted rules when given. */
+  crReadCampaign(campaignId: string, pastedRules?: string): Promise<Campaign>;
+  /** PATCH …/campaigns/{campaignId} `{ said?, anyway? }`. */
+  crPatchCampaign(campaignId: string, body: { said?: SaidAnswer | null; anyway?: StopCode[] }): Promise<Campaign>;
+  /** POST …/campaigns/{campaignId}/logo: a presigned PUT for the logo file. */
+  crLogoUpload(campaignId: string, body: { filename: string; contentType: "image/png" | "image/jpeg" | "image/webp"; size: number }): Promise<PresignedPut>;
+  /** POST …/campaigns/{campaignId}/logo/done `{ key }`. */
+  crLogoDone(campaignId: string, key: string): Promise<Campaign>;
+  /** POST …/campaigns/{campaignId}/logo/link `{ url }` (a Google Drive or Dropbox link). */
+  crLogoLink(campaignId: string, url: string): Promise<Campaign>;
+  /** DELETE …/campaigns/{campaignId}/logo. */
+  crDeleteLogo(campaignId: string): Promise<Campaign>;
+  /** DELETE …/campaigns/{campaignId}: only Clip Factory's copy. */
+  crRemoveCampaign(campaignId: string): Promise<void>;
+  /** GET /v1/contentrewards/submissions?clipId=&campaignId= */
+  crSubmissions(query: { clipId?: string; campaignId?: string }): Promise<CrSubmission[]>;
+  /** POST /v1/contentrewards/submissions/check `{ clipId }`. */
+  crCheckSubmissions(clipId: string): Promise<CrSubmission[]>;
+  /** POST …/submissions/{postId}/send: Try sending again. */
+  crSendSubmission(postId: string): Promise<CrSubmission>;
+  /** PATCH …/submissions/{postId} `{ said }`. */
+  crPatchSubmission(postId: string, said: CrSubmissionSaid): Promise<CrSubmission>;
+  /** GET /v1/contentrewards/money. */
+  crMoney(): Promise<CrMoney>;
+  /** POST /v1/contentrewards/money/refresh (one read every 10 minutes). */
+  crRefreshMoney(): Promise<{ started: boolean; nextAllowedAt: string }>;
+  /** POST /v1/contentrewards/seen `{ key }`: a celebration or "You're in!" was shown. */
+  crSeen(key: string): Promise<void>;
 }

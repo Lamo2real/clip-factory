@@ -14,6 +14,7 @@ import { lessonsApi, type LessonsFault } from "./lessons.ts";
 import { followsApi } from "./follows.ts";
 import { mockMoneyGrant, moneyApi } from "./money.ts";
 import { pushApi } from "./push.ts";
+import { crMockApi } from "./contentrewards.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
 import { currentClipModel, isClipModel } from "../../lib/models.ts";
@@ -317,6 +318,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         score: m.score,
         pickedFor: m.why,
         createdAt: new Date().toISOString(),
+        ...(job.campaignId ? { campaignId: job.campaignId } : {}),
       });
     }
     job.status = "ready";
@@ -428,6 +430,12 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     publish: (platform) => mockLive.publish({ type: "setup", op: "upsert", id: platform, partial: true }),
     onConnected: releaseWaiting,
   });
+  // Content Rewards (§38.18): its own state; it reads the setups for each campaign's places.
+  const cr = crMockApi({
+    store,
+    setup: () => setup.overview(),
+    publish: (id) => mockLive.publish({ type: "contentrewards", op: "upsert", id, partial: true }),
+  });
 
   const job = (jobId: string) => {
     const j = store.jobs.find((x) => x.jobId === jobId);
@@ -463,6 +471,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   }
 
   const api: Api = {
+    ...cr.api,
     async health() {
       await delay();
       return { ok: true, version: "mock" };
@@ -498,6 +507,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         faults.createJobFails!--;
         throw serverDown();
       }
+      // A campaign job (§38.5): the campaign is checked again; a hard stop or a soft one not accepted is refused.
+      if (body.campaignId) await cr.jobCheck(body.campaignId, body.campaignAnyway ?? []);
       const now = new Date().toISOString();
       const isLink = body.source.type === "link";
       const url = isLink ? (body.source as { url: string }).url : undefined;
@@ -524,6 +535,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         progress: 0,
         clipCount: 0,
         notes: body.notes,
+        ...(body.campaignId ? { campaignId: body.campaignId } : {}),
         // Like the agent (ADR-42): the job is made with the model picked in Settings at the time.
         model: currentClipModel(store.settings.clipModel),
         createdAt: now,
@@ -708,6 +720,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         const missing = chosen.find((p) => !connected.includes(p));
         if (missing) throw bad(`${PLATFORM_LABEL[missing]} is not set up yet. Turn it off, then tap Upload.`);
       }
+      // A campaign clip (§38.14): only the campaign's places, public, never made for kids, TikTok Branded content.
+      if (c.status === "review") await cr.confirmCheck(c, chosen, options, tiktok);
       // TikTok's rules: the owner picks who can see it before anything is posted there (§17.8).
       const tiktokGoing = chosen ? chosen.includes("tiktok") : store.settings.platforms.includes("tiktok") && connected.includes("tiktok");
       if (c.status === "review" && tiktokGoing && !tiktok?.privacyLevel) throw bad("Pick who can see it on TikTok.");
@@ -723,6 +737,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
           const own = options?.[p.platform as keyof ClipPostOptions];
           if (own) clipOptions.set(p.postId, clone(own));
         }
+        cr.onPosts(c, created);
         publishClip(c);
         for (const p of created) publishPost(p);
         return { clip: clone(c), posts: clone(store.posts.filter((p) => p.clipId === clipId)) };
