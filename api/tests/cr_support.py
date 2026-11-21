@@ -286,6 +286,31 @@ class FakeCR:
         return [urllib.parse.parse_qs((r.body or b"").decode()) for r, _t in self.requests if r.url == config.TOKEN_URL]
 
 
+class FakeInvoker:
+    """``async_invoke.AsyncInvoker``'s CR calls, recorded."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[Any, ...]]] = []
+        self.fail = False
+
+    def _record(self, name: str, *args: Any) -> None:
+        if self.fail:
+            raise RuntimeError("invoke failed")
+        self.calls.append((name, args))
+
+    def read_campaign(self, user_id: str, campaign_id: str) -> None:
+        self._record("read_campaign", user_id, campaign_id)
+
+    def fetch_logo(self, user_id: str, campaign_id: str, url: str) -> None:
+        self._record("fetch_logo", user_id, campaign_id, url)
+
+    def brand_picture(self, user_id: str, campaign_id: str) -> None:
+        self._record("brand_picture", user_id, campaign_id)
+
+    def cr_check(self, user_id: str, what: str) -> None:
+        self._record("cr_check", user_id, what)
+
+
 class Sleeper:
     def __init__(self, clock: Any = None) -> None:
         self.slept: list[float] = []
