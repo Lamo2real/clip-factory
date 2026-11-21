@@ -121,7 +121,8 @@ describe("busy scenes", () => {
     }
     expect(checked).toBe(300);
     expect(worst).toBeGreaterThan(250);
-  });
+    // 300 scenes x 90 frames each takes about 6 s on a CI runner, past vitest's 5 s default.
+  }, 30_000);
 
   it("every scene of the fixtures is well inside the budget", () => {
     for (const name of ["sample-script.json", "ice-skid.json"]) for (const sc of raw(name).scenes) expect(sceneShapes(sc), `${name} ${sc.sceneId}`).toBeLessThanOrEqual(400);
