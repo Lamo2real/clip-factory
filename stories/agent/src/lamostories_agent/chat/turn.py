@@ -18,14 +18,24 @@ import threading
 import time
 from typing import Any
 
-from .. import models
-from ..tasks import ideas
-from ..tasks.ask import REFUSED, assistant_turn, owner_sentence, tool_calls, usage_of, user
-from ..tasks.common import Superseded, TaskFailed, clip, log, now_iso, owned, public, ws_pk
-from ..tasks.fence import MSG_LIVE, Fence, run_with_heartbeat
-from ..tasks.services import Services
-from ..tasks.store import Expr
-from ..tasks.work import agent_off, merge_override
+from lamostories_agent import models
+from lamostories_agent.tasks import ideas
+from lamostories_agent.tasks.ask import (
+    REFUSED,
+    assistant_turn,
+    is_model_problem,
+    named,
+    owner_sentence,
+    tool_calls,
+    usage_of,
+    user,
+)
+from lamostories_agent.tasks.common import Refused, Superseded, TaskFailed, clip, log, now_iso, owned, public, ws_pk
+from lamostories_agent.tasks.fence import MSG_LIVE, Fence, run_with_heartbeat
+from lamostories_agent.tasks.services import Services
+from lamostories_agent.tasks.store import Expr
+from lamostories_agent.tasks.work import agent_off, merge_override
+
 from . import history, tools
 
 MAX_ROUNDS = 8
@@ -36,6 +46,7 @@ GONE = "This conversation was deleted."
 TOO_MANY_STEPS = "\n\n(I stopped after several steps. Ask me to carry on.)"
 EMPTY = "I don't have an answer for that. Try asking another way."
 PICK_MODEL = {"kind": "open", "label": "Pick another model", "payload": {"href": "/stories/settings/ai"}}
+STOPS_THE_TURN = frozenset({"ModelUnavailable", "EffortUnavailable", "AgentOff"})
 
 CHAT_BRIEF = """Lamo Stories studio notes for the creative chat (from the app, not the owner):
 - You can look things up and draft with your tools: ideas, characters, stories and their storyboards, reference video analyses. You may create or update ideas and remember short facts the owner wants kept.
@@ -50,34 +61,47 @@ def merged_override(requested: Any, conversation: dict[str, Any]) -> dict[str, A
 
 
 class Stream:
-    """The answer's text as it arrives, written at most every ``every_s`` seconds (each write also a heartbeat)."""
+    """The answer's text as it arrives, written at most every ``every_s`` seconds (each write also a heartbeat).
+
+    The client's ``on_text`` gets the current round's text **so far** (builder E's ConverseStream client; after a
+    temporary error it starts that round again from the beginning), so each call replaces the round's text instead of
+    adding to it. The earlier rounds of the tool loop stay, each its own paragraph."""
 
     def __init__(self, fence: Fence, every_s: float) -> None:
         self.fence = fence
         self.every_s = every_s
-        self.text = ""
+        self.rounds: list[str] = []  # the finished rounds' texts
+        self.current = ""  # this round's text so far
         self._last = 0.0
-        self._pending_gap = False
         self._lock = threading.Lock()
-        self.got_text = False
+
+    @property
+    def text(self) -> str:
+        parts = [*(r.strip() for r in self.rounds), self.current.lstrip()]
+        return "\n\n".join(p for p in parts if p.strip())
 
     def gap(self) -> None:
         """A new round of the tool loop: its text starts on a new paragraph."""
-        self._pending_gap = bool(self.text.strip())
+        with self._lock:
+            if self.current.strip():
+                self.rounds.append(self.current)
+            self.current = ""
 
-    def add(self, delta: str) -> None:
-        if not delta:
+    def add(self, so_far: str) -> None:
+        """``on_text``: the round's whole text so far."""
+        if not so_far:
             return
         with self._lock:
-            if self._pending_gap:
-                self.text = self.text.rstrip() + "\n\n"
-                self._pending_gap = False
-                delta = delta.lstrip()
-            self.text += delta
-            self.got_text = True
+            self.current = so_far
             due = time.monotonic() - self._last >= self.every_s
         if due:
             self.flush()
+
+    def settle(self, text: str) -> None:
+        """The round's final text, from the reply (the same text the stream ended with)."""
+        if text:
+            with self._lock:
+                self.current = text
 
     def flush(self) -> None:
         with self._lock:
@@ -139,7 +163,7 @@ class Turn:
         try:
             done = history.compact(self._summarize, msgs, summary)
         except Exception as e:
-            if isinstance(e, Superseded) or (owner_sentence(e) and not isinstance(e, TaskFailed)):
+            if isinstance(e, Superseded) or named(e, STOPS_THE_TURN):  # the answer itself would fail the same way
                 raise
             log("warning", "stories.compaction_failed", conv=self.conv_id, error=type(e).__name__)
             return msgs[-history.COMPACT_MESSAGES :], summary
@@ -153,7 +177,10 @@ class Turn:
             .eq("userId", self.user_id)
             .eq("workspaceId", self.workspace_id)
         )
-        self.fence.transact([("update", self.pk, f"CONV#{self.conv_id}", write), self.fence.check_op()])
+        try:
+            self.fence.transact([("update", self.pk, f"CONV#{self.conv_id}", write), self.fence.check_op()])
+        except Refused as e:  # the conversation was deleted while this answer started
+            raise TaskFailed(GONE) from e
         log("info", "stories.conversation_compacted", conv=self.conv_id, kept=len(recent))
         return recent, new_summary
 
@@ -203,7 +230,6 @@ class Turn:
         stopped_early = False
         for round_no in range(MAX_ROUNDS):
             self.stream.gap()
-            self.stream.got_text = False
             reply = self.svc.model.complete(
                 self.ctx,
                 task="chat",
@@ -217,8 +243,7 @@ class Turn:
                 raise Superseded(self.fence.sk)
             self.reply = reply
             self._count(reply)
-            if not self.stream.got_text and reply.text:
-                self.stream.add(reply.text)
+            self.stream.settle(reply.text)
             if reply.stop_reason == "refusal":
                 raise TaskFailed(REFUSED)
             calls = tool_calls(reply)
@@ -317,7 +342,7 @@ async def run_turn(svc: Services, payload: dict[str, Any]) -> str:
         return "superseded"
     except Exception as e:
         sentence = owner_sentence(e)
-        model_problem = isinstance(e, models.ModelUnavailable | models.EffortUnavailable)
+        model_problem = is_model_problem(e)
         if sentence is None:
             log("error", "stories.turn_crashed", msg=msg_id, error=type(e).__name__, detail=str(e))
         ok = await asyncio.to_thread(turn.fail, sentence or FAILED, pick_model=model_problem)

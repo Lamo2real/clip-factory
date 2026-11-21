@@ -1,21 +1,26 @@
 """Lamo Stories agent: reference-video analysis (docs/CONTRACTS.md §45.28, §45.33).
 
-Action ``process_reference { userId, workspaceId, refId, jobId }`` (answered ``{"accepted": true, "id": jobId}`` at
-once): the video analysis agent studies an uploaded video's structure and timing from its frames and measured sound
-(``reference.analyze``). Registered here unless the server already has it.
+``analyze(run)`` is what builder E's ``ReferenceJob`` (its ``process_reference``, ``refjob.find_analyze``) awaits: the
+video analysis agent studies the downloaded video's structure and timing from its frames and measured sound and
+returns the ``ReferenceAnalysis``; E's job writes ``analysis.json`` and ``REFVID#``. Only when the server has no
+``process_reference`` of its own (the scaffold) does ``register`` add this package's: the same steps on its own fence
+(``study.run_reference``).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from ..tasks import services
-from ..tasks.common import log
-from .analyze import run_reference
+from lamostories_agent.tasks import services
+from lamostories_agent.tasks.common import log
+
+from .study import analyze, run_reference
+
+__all__ = ["analyze", "register"]
 
 
 def register(actions: Any, runner: Any) -> None:
-    """Registers ``process_reference`` (see server.register_all)."""
+    """Registers ``process_reference`` unless the server already has it (see server.register_all)."""
     if "process_reference" in getattr(actions, "table", {}):
         log("info", "stories.process_reference_already_registered")
         return
@@ -29,7 +34,7 @@ def register(actions: Any, runner: Any) -> None:
         async def work() -> None:
             try:
                 svc = services.get(run)
-            except Exception as e:  # no table or client: the API's fence fails the job ("Tap Try again")
+            except Exception as e:  # no table or bucket: the API's fence fails the job ("Tap Try again")
                 log("error", "stories.services_missing", job=job_id, error=type(e).__name__, detail=str(e))
                 return
             await run_reference(svc, payload)

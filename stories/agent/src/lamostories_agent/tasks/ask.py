@@ -14,19 +14,32 @@ import re
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from .. import models
+from lamostories_agent import models
+
 from .common import TaskFailed, as_dict, log
 from .services import Services
 
 REFUSED = "The AI model said no to this request. Try other words."
-OWNER_ERRORS: tuple[type[BaseException], ...] = (models.ModelUnavailable, models.EffortUnavailable)
+# The model client's own exceptions (builder E's ``models.py``), known by name so this package needs no more than the
+# ModelClient contract: each message is the owner's sentence, shown as it is and never retried.
+OWNER_ERRORS = frozenset({"ModelUnavailable", "EffortUnavailable", "AgentOff", "ModelRefused", "UserFacingError"})
+# The ones a different model could fix ("Pick another model").
+MODEL_PROBLEMS = frozenset({"ModelUnavailable", "EffortUnavailable", "ModelRefused"})
+# A run that was stopped or taken over (ours, or builder E's job fence): it passes through untouched.
+STOPPED = frozenset({"Superseded", "JobSuperseded", "JobCanceled"})
+RETRY = "Your last answer broke these rules. Answer again with the whole JSON and fix them: "
 
 Check = Callable[[Any, bool], tuple[Any, list[str]]]
 
 
+def named(e: BaseException, names: frozenset[str] | set[str] | tuple[str, ...]) -> bool:
+    """True when ``e`` is (a subclass of) an exception class with one of these names."""
+    return any(c.__name__ in names for c in type(e).__mro__)
+
+
 def owner_sentence(e: BaseException) -> str | None:
     """The plain sentence an exception carries for the owner, if it is one of ours or the model client's."""
-    if isinstance(e, TaskFailed | models.ModelUnavailable | models.EffortUnavailable):
+    if isinstance(e, TaskFailed) or named(e, OWNER_ERRORS):
         return str(e).strip() or None
     for name in ("owner_sentence", "sentence", "plain"):
         found = getattr(e, name, None)
@@ -36,9 +49,15 @@ def owner_sentence(e: BaseException) -> str | None:
 
 
 def is_owner_error(e: BaseException) -> bool:
-    return isinstance(e, OWNER_ERRORS) or any(
-        isinstance(getattr(e, n, None), str) for n in ("owner_sentence", "sentence", "plain")
+    return (
+        isinstance(e, TaskFailed)
+        or named(e, OWNER_ERRORS)
+        or any(isinstance(getattr(e, n, None), str) for n in ("owner_sentence", "sentence", "plain"))
     )
+
+
+def is_model_problem(e: BaseException) -> bool:
+    return named(e, MODEL_PROBLEMS)
 
 
 def user(*blocks: str | dict[str, Any]) -> dict[str, Any]:
@@ -50,6 +69,19 @@ def assistant_turn(reply: models.Reply) -> dict[str, Any]:
     if not content:
         content = [{"text": reply.text or "(no answer)"}]
     return {"role": "assistant", "content": content}
+
+
+def retry_turn(reply: models.Reply, problems: Sequence[str]) -> dict[str, Any]:
+    """The owner-side turn that asks once more: a ``toolResult`` (an error) for every tool call of the answer, which
+    Converse requires after an assistant ``toolUse``, else the problems as text."""
+    text = RETRY + "; ".join(list(problems)[:10])
+    uses = [b["toolUse"] for b in reply.content or [] if isinstance(b, dict) and isinstance(b.get("toolUse"), dict)]
+    results = [
+        {"toolResult": {"toolUseId": str(u["toolUseId"]), "content": [{"text": text}], "status": "error"}}
+        for u in uses
+        if u.get("toolUseId")
+    ]
+    return {"role": "user", "content": results or [{"text": text}]}
 
 
 def usage_of(reply: models.Reply) -> dict[str, int]:
@@ -114,22 +146,42 @@ def ask_json(
     failure: str,
     max_tokens: int = 16000,
 ) -> tuple[Any, models.Reply]:
-    """The checked value and the reply it came from. ``check(parsed, final)`` returns ``(value, problems)``: the value
-    is taken when there are no problems, or on the second try when it is not ``None``. Otherwise ``failure``."""
+    """One checked structured answer through the model client (see ``ask_checked``)."""
+
+    def send(msgs: list[dict[str, Any]]) -> models.Reply:
+        return svc.model.complete(
+            ctx, task=task, messages=msgs, override=override, schema=schema, max_tokens=max_tokens
+        )
+
+    return ask_checked(send, task=task, messages=messages, check=check, failure=failure)
+
+
+def ask_checked(
+    send: Callable[[list[dict[str, Any]]], models.Reply],
+    *,
+    task: str,
+    messages: Sequence[dict[str, Any]],
+    check: Check,
+    failure: str,
+) -> tuple[Any, models.Reply]:
+    """The checked value and the reply it came from. ``send(messages)`` makes the call; ``check(parsed, final)``
+    returns ``(value, problems)``: the value is taken when there are no problems, or on the second try when it is not
+    ``None``. Otherwise ``failure``.
+
+    The client's own sentences (a model that can't be used, a refusal, an agent switched off) stop the work as they
+    are, and so does a run that was stopped. Anything else the client raises (it already retried what was temporary,
+    and already asked once more for an answer that broke the schema) fails with ``failure``, the cause kept for the
+    caller. Only code's own checks (lengths, the catalog, the guidance match) ask once more here."""
     msgs = list(messages)
-    last_error: BaseException | None = None
     for attempt in range(2):
         final = attempt == 1
         try:
-            reply = svc.model.complete(
-                ctx, task=task, messages=msgs, override=override, schema=schema, max_tokens=max_tokens
-            )
+            reply = send(msgs)
         except Exception as e:
-            if is_owner_error(e):
+            if is_owner_error(e) or named(e, STOPPED):
                 raise
             log("warning", "stories.model_call_failed", task=task, attempt=attempt + 1, error=type(e).__name__)
-            last_error = e
-            continue
+            raise TaskFailed(failure) from e
         if reply.stop_reason == "refusal":
             raise TaskFailed(REFUSED)
         try:
@@ -143,12 +195,5 @@ def ask_json(
             return value, reply
         log("info", "stories.answer_rejected", task=task, attempt=attempt + 1, problems=len(problems))
         if not final:
-            msgs = [
-                *msgs,
-                assistant_turn(reply),
-                user(
-                    "Your last answer broke these rules. Answer again with the whole JSON and fix them: "
-                    + "; ".join(problems[:10])
-                ),
-            ]
-    raise TaskFailed(failure) from last_error
+            msgs = [*msgs, assistant_turn(reply), retry_turn(reply, problems)]
+    raise TaskFailed(failure)

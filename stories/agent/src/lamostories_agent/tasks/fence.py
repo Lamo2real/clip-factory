@@ -4,7 +4,8 @@ A task (``TASK#``) and a chat answer (``MSG#``) may be written only while they s
 them and a live status (``queued``/``running``, ``pending``/``streaming``); a reference job (``PJOB#``) while it carries
 its session and is not ``canceled``. The API's stale-heartbeat fence, Stop and Cancel all change one of these, so
 the next agent write is refused and the run ends without writing anything else. Heavy work runs in a worker thread
-while the event loop heartbeats every ``heartbeat_s`` seconds; a refused heartbeat ends the run.
+while the event loop heartbeats every ``heartbeat_s`` seconds; a refused heartbeat ends the run (a heartbeat that
+fails for another reason, such as throttling, is logged and the next one tries again).
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from .common import Superseded, log, now_iso
+from .common import Refused, Superseded, log, now_iso
 from .store import Expr, Store
 
 TASK_LIVE = ("queued", "running")
@@ -66,10 +67,19 @@ class Fence:
         return ("update", self.pk, self.sk, self.expr(fields, remove))
 
     def transact(self, ops: Sequence[tuple[str, str, str, Any]]) -> None:
-        """Writes ``ops`` only while the fence holds (its own check or update must be one of them)."""
-        if self.lost.is_set() or not self.store.transact(ops):
+        """Writes ``ops`` only while the fence holds (its own check or update must be one of them). ``Superseded``
+        when the fence's own condition refused; ``Refused`` when only another item's did (it was deleted or changed):
+        then the fence still holds and the run can end its item plainly."""
+        if self.lost.is_set():
+            raise Superseded(self.sk)
+        refused = self.store.try_transact(ops)
+        if not refused:
+            return
+        own = [i for i, op in enumerate(ops) if op[1] == self.pk and op[2] == self.sk]
+        if not own or any(i in refused for i in own):
             self.lost.set()
             raise Superseded(self.sk)
+        raise Refused(", ".join(str(ops[i][2]) for i in refused))
 
 
 async def run_with_heartbeat[T](fence: Fence, every_s: float, work: Callable[[], T]) -> T:
@@ -80,7 +90,11 @@ async def run_with_heartbeat[T](fence: Fence, every_s: float, work: Callable[[],
     async def beat() -> None:
         while True:
             await asyncio.sleep(every_s)
-            ok = await asyncio.to_thread(fence.try_write, {"heartbeatAt": now_iso()})
+            try:
+                ok = await asyncio.to_thread(fence.try_write, {"heartbeatAt": now_iso()})
+            except Exception as e:  # throttling or the network after boto's own retries: the next beat tries again
+                log("warning", "stories.heartbeat_failed", sk=fence.sk, error=type(e).__name__)
+                continue
             if not ok:
                 log("info", "stories.fence_lost", sk=fence.sk)
                 lost.set()

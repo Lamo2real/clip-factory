@@ -13,7 +13,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from .. import config, models
+from lamostories_agent import config, models
+
 from .ask import ask_json, user
 from .catalog import labelled
 from .characters import character_schema, check_character

@@ -24,14 +24,24 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from .. import memory
-from ..tasks import guidance
-from ..tasks.characters import check_character
-from ..tasks.common import Superseded, TaskFailed, clip, in_workspace, now_iso, owned, public, ulid
-from ..tasks.fence import Fence
-from ..tasks.ideas import CATEGORIES, LOGLINE_MAX, TITLE_MAX, TONES, check_concept
-from ..tasks.services import Services
-from ..tasks.store import Expr
+from lamostories_agent import memory
+from lamostories_agent.tasks import guidance
+from lamostories_agent.tasks.characters import check_character
+from lamostories_agent.tasks.common import (
+    Refused,
+    Superseded,
+    TaskFailed,
+    clip,
+    in_workspace,
+    now_iso,
+    owned,
+    public,
+    ulid,
+)
+from lamostories_agent.tasks.fence import Fence
+from lamostories_agent.tasks.ideas import CATEGORIES, LOGLINE_MAX, TITLE_MAX, TONES, check_concept
+from lamostories_agent.tasks.services import Services
+from lamostories_agent.tasks.store import Expr
 
 MAX_ACTIONS = 6
 MAX_LIST = 40
@@ -69,6 +79,15 @@ PAGE_LABELS = {
     "settings_memory": "Open Memory",
 }
 STORY_STATUSES = ("draft", "producing", "needs_check", "review", "approved", "rejected", "published", "failed")
+REMAKE_STATUSES = ("draft", "review", "needs_check", "failed")  # the API's changes route takes exactly these
+NOT_REMAKABLE = {
+    "producing": "That video is still being made. Offer the change after it is ready.",
+    "approved": "That video is approved, so it can't be remade. Offer a new video with offer_make_video instead.",
+    "published": "That video is posted, so it can't be remade. Offer a new video with offer_make_video instead.",
+    "rejected": "That video was rejected, so it can't be remade. Offer a new video with offer_make_video instead.",
+}
+CHANGED = "That changed meanwhile (it may have been deleted). Read it again before you try."
+IDEA_GONE = "That idea was deleted meanwhile. Use list_ideas, or create_idea for a new one."
 
 
 class ToolError(Exception):
@@ -300,12 +319,15 @@ class Toolbox:
             out["concept"] = concept
         return out
 
-    def _gated(self, ops: list[tuple[str, str, str, Any]]) -> None:
-        """Writes only while this answer is still live (a ConditionCheck on its own ``MSG#``)."""
+    def _gated(self, ops: list[tuple[str, str, str, Any]], *, gone: str = CHANGED) -> None:
+        """Writes only while this answer is still live (a ConditionCheck on its own ``MSG#``). When only the other
+        item refused (it was deleted or changed meanwhile), the model is told ``gone`` and the answer goes on."""
         try:
             self.fence.transact([*ops, self.fence.check_op()])
         except Superseded:
             raise
+        except Refused as e:
+            raise ToolError(gone) from e
         except Exception as e:
             raise ToolError("That did not save. Try again.") from e
 
@@ -491,7 +513,8 @@ class Toolbox:
         fields = self._idea_fields({k: v for k, v in args.items() if k != "ideaId"}, partial=True)
         if not fields:
             raise ToolError("Say what to change: a title, a logline, the characters or the concept.")
-        if idea.get("category") == "driving_safety":
+        if "driving_safety" in (idea.get("category"), fields.get("category")):
+            # into, out of or inside driving safety: the owner's tap, so the API matches (or clears) the topic
             return self._safety_idea({"ideaId": idea["ideaId"], "patch": fields})
         at = now_iso()
         write = (
@@ -501,7 +524,7 @@ class Toolbox:
             .eq("userId", self.user_id)
             .eq("workspaceId", self.workspace_id)
         )
-        self._gated([("update", self.pk, str(idea["sk"]), write)])
+        self._gated([("update", self.pk, str(idea["sk"]), write)], gone=IDEA_GONE)
         return {"ok": True, "idea": public({**idea, **fields, "updatedAt": at})}
 
     def _safety_idea(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -538,8 +561,9 @@ class Toolbox:
             raise ToolError(f"These scenes are not in that story: {', '.join(bad)}. Use read_story.")
         if not note and not scene_ids:
             raise ToolError("Give a note, scene ids, or both.")
-        if story.get("status") in ("producing", "draft"):
-            raise ToolError("That story is still being made. Offer the change after it is ready.")
+        status = story.get("status")
+        if status not in REMAKE_STATUSES:
+            raise ToolError(NOT_REMAKABLE.get(str(status), "That video can't be remade now."))
         payload: dict[str, Any] = {"storyId": story["storyId"], "sceneIds": list(dict.fromkeys(scene_ids))}
         if note:
             payload["note"] = note

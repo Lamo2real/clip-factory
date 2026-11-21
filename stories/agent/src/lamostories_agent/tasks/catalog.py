@@ -14,7 +14,7 @@ import subprocess
 from functools import cache
 from typing import Any
 
-from .. import config
+from lamostories_agent import config
 
 
 def deno_bin() -> str:

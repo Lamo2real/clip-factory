@@ -3,22 +3,25 @@ picture helper and the engine's catalog (docs/CONTRACTS.md §45.11.4, §45.25, �
 
 Built lazily from the runtime's environment on the first action (``CF_STORIES_TABLE``, ``CF_MEDIA_BUCKET``,
 ``CF_REGION``, ``CF_WORK_DIR``), so importing and registering never touches AWS. Every model call goes through
-builder E's ``ModelClient`` (``models.default_client()``, or the runner's ``model_client``): it resolves the model
-and effort, adds the agent's instructions, its enabled skills and the memory, and writes ``MODELSTATUS#`` and
-``USAGE#``. Every picture goes through builder E's ``images.to_model_image``. Tests install fakes with ``install``.
+builder E's ``ModelClient`` (the runner's ``model_client``, ``models.default_client()``, or the shared
+``lamostories_agent.services.get().models``, found on the first call): it resolves the model and effort, adds the
+agent's instructions, its enabled skills and the memory, and writes ``MODELSTATUS#`` and ``USAGE#``. Every picture
+goes through builder E's ``images.to_model_image``. Tests install fakes with ``install``.
 """
 
 from __future__ import annotations
 
 import asyncio
 import importlib
+import inspect
 import os
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .. import models
+from lamostories_agent import models
+
 from .common import TaskFailed, log
 from .store import Store
 
@@ -60,15 +63,66 @@ def get(runner: Any = None) -> Services:
     return _installed
 
 
+NO_CLIENT = "The AI helper is not set up in Lamo Stories' agent yet. Tap Try again later."
+
+
 def find_model_client(runner: Any = None) -> models.ModelClient:
-    """Builder E's client: the runner's ``model_client`` when it carries one, else ``models.default_client()``."""
+    """Builder E's client (§45.33): the runner's ``model_client`` when it carries one, else ``models.default_client()``
+    (or ``get_client()``), else the shared services' client (``lamostories_agent.services.get().models``, the one the
+    story, portrait and reference jobs use)."""
     client = getattr(runner, "model_client", None)
     if client is None:
         factory = getattr(models, "default_client", None) or getattr(models, "get_client", None)
         client = factory() if callable(factory) else None
+    if client is None:
+        try:
+            shared = importlib.import_module("lamostories_agent.services")
+        except ImportError:
+            shared = None
+        getter = getattr(shared, "get", None)
+        if callable(getter):
+            try:
+                client = getattr(getter(), "models", None)
+            except Exception as e:  # its own settings are missing: a deploy problem, said plainly
+                log("error", "stories.model_client_missing", error=type(e).__name__, detail=str(e))
+                client = None
     if client is None or not callable(getattr(client, "complete", None)):
-        raise ServiceMissing("The AI helper is not set up in Lamo Stories' agent yet. Tap Try again later.")
+        raise ServiceMissing(NO_CLIENT)
     return client
+
+
+class LazyModel:
+    """The model client, found on the first call (never at startup). When it is missing, that call fails with a plain
+    sentence, so the task, the answer or the job ends at once instead of waiting for the API's stale fence."""
+
+    def __init__(self, runner: Any = None) -> None:
+        self.runner = runner
+        self._client: models.ModelClient | None = None
+
+    @property
+    def client(self) -> models.ModelClient:
+        if self._client is None:
+            self._client = find_model_client(self.runner)
+        return self._client
+
+    def complete(self, ctx: models.CallContext, **kwargs: Any) -> models.Reply:
+        return self.client.complete(ctx, **kwargs)
+
+    def accepts(self, name: str) -> bool:
+        return accepts(self.client, name)
+
+
+def accepts(client: Any, name: str) -> bool:
+    """True when the client's ``complete`` takes the keyword ``name`` (an extra the contract does not name, such as
+    builder E's ``allow_inactive``)."""
+    own = getattr(client, "accepts", None)
+    if callable(own) and not isinstance(client, type):
+        return bool(own(name))
+    try:
+        params = inspect.signature(client.complete).parameters
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return name in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
 def find_image_helper() -> Callable[[Path], Any]:
@@ -99,7 +153,7 @@ def from_env(runner: Any = None) -> Services:
         store=Store(session.client("dynamodb", config=cfg), table),
         s3=session.client("s3", config=cfg),
         bucket=bucket,
-        model=find_model_client(runner),
+        model=LazyModel(runner),
         to_model_image=_lazy_images(),
         catalog=catalog.engine_catalog,
     )

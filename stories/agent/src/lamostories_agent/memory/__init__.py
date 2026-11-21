@@ -11,8 +11,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from ..tasks.common import now_iso, owned, public, ulid, ws_pk
-from ..tasks.store import Store
+from lamostories_agent.tasks.common import now_iso, owned, public, ulid, ws_pk
+from lamostories_agent.tasks.store import Store
 
 TEXT_MAX = 300
 PROMPT_LIMIT = 50

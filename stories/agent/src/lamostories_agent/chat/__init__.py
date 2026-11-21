@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..tasks import services
-from ..tasks.common import log
+from lamostories_agent.tasks import services
+from lamostories_agent.tasks.common import log
+
 from .turn import run_turn
 
 

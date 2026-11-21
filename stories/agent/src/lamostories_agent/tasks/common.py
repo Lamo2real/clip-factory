@@ -31,6 +31,11 @@ class Superseded(Exception):
     """The item this run works for was stopped, canceled or taken over by a newer run: write nothing more."""
 
 
+class Refused(Exception):
+    """A fenced write was refused by another item's condition (that item was deleted or changed), while the fence
+    itself still holds: the run can still end its own item with a plain sentence."""
+
+
 def ulid() -> str:
     """A ULID: 48 bits of milliseconds then 80 random bits, Crockford base32 (sortable by time)."""
     value = (int(time.time() * 1000) << 80) | int.from_bytes(os.urandom(10), "big")

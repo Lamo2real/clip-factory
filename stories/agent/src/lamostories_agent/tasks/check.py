@@ -3,7 +3,9 @@
 
 ``ok`` on any answer, ``denied`` or ``not_found`` on the matching Bedrock refusal, ``error`` otherwise, each with one
 plain line and ``checkedAt``. Each call names its model explicitly (a per-request override), so nothing is ever
-checked on another model; the lowest effort the model offers keeps the call small.
+checked on another model; the lowest effort the model offers and 512 output tokens keep the call small. The check
+runs whichever agents are switched on (the client's ``allow_inactive`` when it has one), and a failure that sent
+nothing to the model never changes a status.
 """
 
 from __future__ import annotations
@@ -11,13 +13,18 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from .. import config
-from .ask import owner_sentence, usage_of, user
-from .common import Superseded, clip, log, now_iso
+from lamostories_agent import config
+
+from .ask import named, owner_sentence, usage_of, user
+from .common import Superseded, TaskFailed, clip, log, now_iso
+from .services import accepts
 from .store import Expr
 from .work import Outcome, TaskEnv
 
 OK_LINE = "It answered. Ready to use."
+NOT_SENT = "Checking the models did not finish. Tap Try again."
+NOT_A_CALL = frozenset({"AgentOff", "EffortUnavailable", "TaskFailed"})
+REFUSALS = frozenset({"ModelRefused"})
 PROMPT = "This is an availability check from Lamo Stories. Reply with the one word: ok"
 
 
@@ -28,6 +35,26 @@ def _chain(e: BaseException) -> Iterator[BaseException]:
         seen.add(id(cur))
         yield cur
         cur = cur.__cause__ or cur.__context__
+
+
+def _bedrock_code(x: BaseException) -> str:
+    response = getattr(x, "response", None)
+    error = ((response or {}).get("Error") or {}) if isinstance(response, dict) else {}
+    return str(error.get("Code") or "")
+
+
+def model_answered(e: BaseException) -> bool:
+    """True when the failure is what a real call to the model did: Bedrock's own error (or the client's sentence
+    made from one), or the call's connection. False when nothing was sent (an agent switched off, a setting, a bug):
+    then the model's status is left as it is."""
+    if named(e, NOT_A_CALL):
+        return False
+    for x in _chain(e):
+        if _bedrock_code(x) or getattr(x, "status", None) in ("denied", "not_found", "error"):
+            return True
+        if any(c.__module__.startswith(("botocore", "urllib3")) for c in type(x).__mro__ if c is not BaseException):
+            return True
+    return False
 
 
 def classify(e: BaseException) -> str:
@@ -91,6 +118,10 @@ def wanted(value: Any) -> list[str]:
 
 
 def check_models(env: TaskEnv) -> Outcome:
+    """Each model once. A failure that is not the model's (no call was made: the agent switched off, a setting) ends
+    the whole task with its sentence and leaves every status as it was."""
+    client = env.svc.model
+    extra: dict[str, Any] = {"allow_inactive": True} if accepts(client, "allow_inactive") else {}
     results: list[dict[str, Any]] = []
     for key in wanted(env.input.get("models")):
         if env.fence.lost.is_set():
@@ -102,16 +133,22 @@ def check_models(env: TaskEnv) -> Outcome:
         if efforts:
             override["effort"] = "low" if "low" in efforts else efforts[0]
         try:
-            reply = env.svc.model.complete(
-                env.ctx, task="check_models", messages=[user(PROMPT)], override=override, max_tokens=512
+            reply = client.complete(
+                env.ctx, task="check_models", messages=[user(PROMPT)], override=override, max_tokens=512, **extra
             )
             status, line = "ok", OK_LINE
             usage = usage_of(reply)
         except Exception as e:
-            status = classify(e)
-            line = _line(status, e, label)
             usage = {"input": 0, "output": 0}
-            log("info", "stories.model_check_failed", model=key, status=status, error=type(e).__name__)
+            if named(e, REFUSALS):  # a refusal is an answer: the model is there and may be used
+                status, line = "ok", OK_LINE
+            elif not model_answered(e):
+                log("warning", "stories.model_check_not_sent", model=key, error=type(e).__name__)
+                raise TaskFailed(owner_sentence(e) or NOT_SENT) from e
+            else:
+                status = classify(e)
+                line = _line(status, e, label)
+                log("info", "stories.model_check_failed", model=key, status=status, error=type(e).__name__)
         at = now_iso()
         write_status(env, key, status, line, at)
         results.append({"key": key, "label": label, "status": status, "line": line, "checkedAt": at, "usage": usage})

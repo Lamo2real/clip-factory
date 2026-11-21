@@ -116,6 +116,35 @@ def test_streaming_writes_at_most_every_half_second(tmp_path: Path) -> None:
     assert len(writes) <= 3  # 2000 pieces in well under a second: one streaming write and the end
 
 
+def test_the_text_so_far_replaces_the_rounds_text_and_a_restarted_stream_is_not_repeated(tmp_path: Path) -> None:
+    model = FakeModel(
+        reply("Let me look.", tools=[("list_ideas", {})]),
+        reply("Here is one: Bo's runaway pie rolls down the hill."),
+    )
+    model.restart_after = 3  # the client retried a temporary error: the round's text starts again
+    svc, db, _ = services(tmp_path, model)
+    svc.stream_every_s = 0.0  # every piece is written
+    seed(db)
+    seen: list[str] = []
+    db.on_write = lambda op, pk, sk: seen.append(db.get(pk, sk)["text"]) if sk == MSG_SK else None
+    assert run(svc) == "done"
+    final = "Let me look.\n\nHere is one: Bo's runaway pie rolls down the hill."
+    assert db.get(PK, MSG_SK)["text"] == final
+    assert len(seen) > 10 and all(final.startswith(t) for t in seen)  # never a piece repeated, also after a restart
+
+
+def test_the_clients_refusal_fails_the_answer_with_its_sentence_and_a_settings_button(tmp_path: Path) -> None:
+    class ModelRefused(Exception):
+        pass
+
+    sentence = "Claude Opus 5.5 said no to this request. Change the wording a little and try again."
+    svc, db, _ = services(tmp_path, FakeModel(ModelRefused(sentence)))
+    seed(db)
+    assert run(svc) == "failed"
+    answer = db.get(PK, MSG_SK)
+    assert answer["error"] == sentence and answer["actions"] == [turn.PICK_MODEL]
+
+
 def test_the_message_override_wins_over_the_conversation_model_and_effort_separately(tmp_path: Path) -> None:
     model = FakeModel(reply("ok"))
     svc, db, _ = services(tmp_path, model)

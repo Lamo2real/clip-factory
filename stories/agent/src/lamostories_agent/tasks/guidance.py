@@ -12,7 +12,7 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-from .. import config
+from lamostories_agent import config
 
 _BLOWOUT = re.compile(r"\b(?:blew|blown|blows|blowing|blow)\s*-?\s*out\b")
 

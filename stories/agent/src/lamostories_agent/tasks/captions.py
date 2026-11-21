@@ -1,8 +1,9 @@
 """Review's **Write them again**: the storyboard agent writes a story's six post captions again from its current
 script (docs/CONTRACTS.md §45.11.2, §45.6 ``Captions``).
 
-The result is a draft (``result.postCaptions``) the owner saves through ``StoryPatch.postCaptions``; nothing is
-written to the story here. Limits are the platform publishers' (§17.6): YouTube title ≤ 100 characters, YouTube
+The result is a draft (``result.postCaptions``, with ``result.storyId`` and the ``result.scriptVersion`` it was written
+from, so a screen can tell when the storyboard changed since) the owner saves through ``StoryPatch.postCaptions``;
+nothing is written to the story here. Limits are the platform publishers' (§17.6): YouTube title ≤ 100 characters, YouTube
 description ≤ 5000, Instagram and TikTok ≤ 2200, Facebook ≤ 5000, X ≤ 280. A safety story's descriptions name the
 sources its advice comes from.
 """
@@ -83,24 +84,31 @@ def _topic(story: dict[str, Any], script: dict[str, Any]) -> dict[str, Any] | No
 
 
 def check_captions(parsed: Any, *, sources: list[str]) -> tuple[dict[str, str] | None, list[str]]:
+    """The six captions within their limits. What code adds (``#shorts``, a safety story's sources line) always stays:
+    the model's own text gets the room that is left, and is shortened to it on the last try."""
     if not isinstance(parsed, dict):
         return None, ["the answer must be one object with the six captions"]
     out = {f: str(parsed.get(f) or "").strip() for f in FIELDS}
     missing = [f for f in FIELDS if not out[f]]
     if missing:
         return None, [f"write {', '.join(missing)}"]
-    problems = [f"{f} is at most {LIMITS[f]} characters" for f in FIELDS if len(out[f]) > LIMITS[f]]
     out["youtubeTitle"] = re.sub(r"[<>]", "", out["youtubeTitle"])
     out["youtubeDescription"] = re.sub(r"[<>]", "", out["youtubeDescription"])
+    added = dict.fromkeys(FIELDS, "")
     if not re.search(r"(?i)#shorts\b", out["youtubeDescription"]):
-        out["youtubeDescription"] = f"{out['youtubeDescription']} #shorts".strip()
+        added["youtubeDescription"] = " #shorts"
     if sources:
         line = f"Based on advice from {', '.join(sources)}. Check your local road rules."
         for f in ("youtubeDescription", "instagram", "facebook", "tiktok"):
             if sources[0] not in out[f]:
-                out[f] = f"{out[f]}\n\n{line}".strip()
+                added[f] += f"\n\n{line}"
+    problems: list[str] = []
     for f, limit in LIMITS.items():
-        out[f] = out[f][:limit]
+        room = max(0, limit - len(added[f]))
+        if len(out[f]) > room:
+            problems.append(f"{f} is at most {room} characters")
+            out[f] = out[f][:room].rstrip()
+        out[f] = (out[f] + added[f]).strip()
     return out, problems
 
 
@@ -123,4 +131,5 @@ def captions_again(env: TaskEnv) -> Outcome:
         override=merge_override(env.override, story.get("ai")),  # the request's, then the video's own setting
         failure=FAILED,
     )
-    return Outcome({"postCaptions": captions, "storyId": story_id}, reply)
+    version = story.get("scriptVersion")
+    return Outcome({"postCaptions": captions, "storyId": story_id, "scriptVersion": version}, reply)

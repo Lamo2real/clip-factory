@@ -4,17 +4,20 @@ cuts, frames ≤ 512 px, batches ≤ 20 pictures, a merge call, sound notes only
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import shutil
 import subprocess
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 from botocore.exceptions import ClientError
 
-from lamostories_agent.reference import analyze, media
-from lamostories_agent.reference.analyze import run_reference
+from lamostories_agent import models
+from lamostories_agent.reference import media, study
+from lamostories_agent.reference.study import run_reference
 from test_tasks_support import PK, USER, WS, FakeImages, FakeModel, reply, services
 
 pytestmark = pytest.mark.skipif(
@@ -148,24 +151,24 @@ def test_media_reads_the_fixture(clip: Path) -> None:
 
 
 def test_shots_frames_and_sound_are_code_not_guesses(tmp_path: Path) -> None:
-    shots = analyze.shots_from([4.0, 8.0], 12.0)
+    shots = study.shots_from([4.0, 8.0], 12.0)
     assert shots == [{"start": 0.0, "end": 4.0}, {"start": 4.0, "end": 8.0}, {"start": 8.0, "end": 12.0}]
-    assert analyze.cuts_per_10s([4.0, 8.0], 12.0) == 1.67
-    assert analyze.steady_rate(10) == 2.0 and analyze.steady_rate(600) == 1.0
+    assert study.cuts_per_10s([4.0, 8.0], 12.0) == 1.67
+    assert study.steady_rate(10) == 2.0 and study.steady_rate(600) == 1.0
     samples = [(i / 4, tmp_path / f"{i}.jpg") for i in range(48)]
-    picks = analyze.pick_frames(samples, shots, 12.0)
+    picks = study.pick_frames(samples, shots, 12.0)
     starts = [p.at for p in picks if p.why == "start"]
     assert starts == [0.0, 4.0, 8.0]
     assert {p.at for p in picks if p.why == "middle"} == {2.0, 6.0, 10.0}
     assert len(picks) <= 600 and [p.at for p in picks] == sorted(p.at for p in picks)
     long = [(i / 2, tmp_path / f"{i}.jpg") for i in range(1200)]  # 10 minutes at 2 frames a second
-    many = analyze.shots_from([float(t) for t in range(2, 600, 2)], 600.0)  # 300 shots
-    assert len(analyze.pick_frames(long, many, 600.0)) == 600
+    many = study.shots_from([float(t) for t in range(2, 600, 2)], 600.0)  # 300 shots
+    assert len(study.pick_frames(long, many, 600.0)) == 600
     loud = media.Loudness(-16.0, [(t / 10, -12.0 if t < 40 else -70.0) for t in range(80)], [(4.0, 8.0)])
-    overall, per_shot = analyze.sound_notes(loud, shots[:2], 8.0)
+    overall, per_shot = study.sound_notes(loud, shots[:2], 8.0)
     assert "can't hear" in overall and "silent stretch" in overall
     assert per_shot[1] == "silent" and per_shot[0].startswith(("loud", "very loud"))
-    assert analyze.sound_notes(None, shots, 12.0)[0].startswith("The video has no sound track.")
+    assert study.sound_notes(None, shots, 12.0)[0].startswith("The video has no sound track.")
 
 
 def test_the_whole_analysis_on_the_fixture(tmp_path: Path, clip: Path) -> None:
@@ -227,7 +230,7 @@ def test_a_batch_bedrock_refuses_for_size_is_split(tmp_path: Path, clip: Path) -
     assert run(svc) == "done"
     answered = [c for c in model.calls if "Merge these notes" not in c["messages"][0]["content"][0]["text"]]
     counts = [len([b for m in c["messages"] for b in m["content"] if "image" in b]) for c in answered]
-    assert counts.count(20) == 2  # refused, asked once more, refused again: then split
+    assert counts.count(20) == 1  # refused for its size: split at once (the client already retried what was temporary)
     assert all(n <= 10 for n in counts if n != 20)
 
 
@@ -236,17 +239,17 @@ def test_too_long_or_not_a_video_fails_plainly(tmp_path: Path, clip: Path, monke
     svc, db, s3 = services(tmp_path, model)
     s3.files[KEY] = clip
     seed(db)
-    monkeypatch.setattr(analyze, "MAX_SECONDS", 5.0)
+    monkeypatch.setattr(study, "MAX_SECONDS", 5.0)
     assert run(svc) == "failed"
     job = db.get(PK, "PJOB#J1")
-    assert job["status"] == "failed" and job["error"] == analyze.TOO_LONG and job["steps"][0]["status"] == "failed"
+    assert job["status"] == "failed" and job["error"] == study.TOO_LONG and job["steps"][0]["status"] == "failed"
     assert db.get(PK, "REFVID#R1")["status"] == "failed" and model.calls == []
-    monkeypatch.setattr(analyze, "MAX_SECONDS", 600.5)
+    monkeypatch.setattr(study, "MAX_SECONDS", 600.5)
     s3.files.pop(KEY)
     s3.objects[KEY] = b"this is not a video"
     seed(db)
     assert run(svc) == "failed"
-    assert db.get(PK, "PJOB#J1")["error"] == analyze.CANT_OPEN
+    assert db.get(PK, "PJOB#J1")["error"] == study.CANT_OPEN
 
 
 def test_a_failed_reanalysis_keeps_the_old_analysis(tmp_path: Path) -> None:
@@ -255,7 +258,7 @@ def test_a_failed_reanalysis_keeps_the_old_analysis(tmp_path: Path) -> None:
     db.seed({**db.get(PK, "REFVID#R1"), "analysisKey": f"ws/{USER}/{WS}/references/R1/analysis.json"})
     assert run(svc) == "failed"  # the source is missing
     assert db.get(PK, "REFVID#R1")["status"] == "analyzed"
-    assert db.get(PK, "PJOB#J1")["error"] == analyze.NO_VIDEO
+    assert db.get(PK, "PJOB#J1")["error"] == study.NO_VIDEO
 
 
 def test_a_canceled_job_writes_nothing_more(tmp_path: Path, clip: Path) -> None:
@@ -283,3 +286,146 @@ def test_a_job_that_is_not_live_or_not_a_reference_is_skipped(tmp_path: Path) ->
     seed(db, contentId="R9")
     assert run(svc) == "skipped"
     assert db.writes == []
+
+
+class FakeRun:
+    """Builder E's ``refjob.ReferenceRun`` as ``reference.analyze`` sees it: the downloaded file and its length, the
+    job's steps (an async context manager), its progress and its model call (the video analysis agent's)."""
+
+    def __init__(self, source: Path, duration: float, work: Path, model: FakeModel, images: FakeImages) -> None:
+        self.source, self.duration_sec, self.work = source, duration, work
+        self.ref = {"refId": "R1", "key": KEY}
+        self.model = model
+        self.to_model_image = images
+        self.events: list[tuple[Any, ...]] = []
+
+    @contextlib.asynccontextmanager
+    async def step(self, key: str, message: str | None = None) -> AsyncIterator[None]:
+        self.events.append(("begin", key))
+        yield
+        self.events.append(("end", key))
+
+    def report(self, i: int, n: int) -> None:
+        self.events.append(("report", i, n))
+
+    async def ask(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        schema: dict[str, Any] | None = None,
+        max_tokens: int = 16000,
+        task: str = "reference_analysis",
+    ) -> Any:
+        ctx = models.CallContext(USER, WS, "video_analysis", "cfstory-j1", job_id="J1")
+        return await asyncio.to_thread(
+            self.model.complete, ctx, task=task, messages=messages, schema=schema, max_tokens=max_tokens
+        )
+
+
+def test_builder_es_job_gets_the_whole_analysis_from_reference_analyze(tmp_path: Path, clip: Path) -> None:
+    from lamostories_agent import reference
+
+    model = FakeModel(*[answers] * 10)
+    images = FakeImages()
+    work = tmp_path / "job"
+    work.mkdir()
+    run_ = FakeRun(clip, 12.0, work, model, images)
+    analysis = asyncio.run(reference.analyze(run_))
+    assert set(analysis) == {"summary", "hook", "pacing", "shots", "gags", "sound", "captions", "borrow", "avoid"}
+    assert [(s["start"], s["end"]) for s in analysis["shots"]] == [(0.0, 4.0), (4.0, 8.0), (8.0, 12.0)]
+    assert analysis["shots"][1]["sound"] == "silent" and "can't hear" in analysis["sound"]
+    steps = [e for e in run_.events if e[0] in ("begin", "end")]
+    assert steps == [("begin", "look"), ("end", "look"), ("begin", "listen"), ("end", "listen"), ("begin", "write"),
+                     ("end", "write")]  # fmt: skip
+    assert any(e[0] == "report" for e in run_.events)
+    assert images.paths and all(c["task"] == "reference_analysis" for c in model.calls)
+    assert sum(1 for c in model.calls if "Merge these notes" in c["messages"][0]["content"][0]["text"]) == 1
+    assert not any(work.iterdir())  # its frames are cleaned up; builder E cleans the rest of the job folder
+
+
+def test_reference_analyze_raises_the_owners_sentence(tmp_path: Path, clip: Path) -> None:
+    from lamostories_agent import reference
+
+    run_ = FakeRun(clip, 12.0, tmp_path, FakeModel(), FakeImages(fail=True))
+    with pytest.raises(Exception, match="I can't open that picture"):
+        asyncio.run(reference.analyze(run_))
+
+
+class OnlyIo:
+    def __init__(self, model: FakeModel) -> None:
+        self.model = model
+
+    def ask(self, *, messages: list[dict[str, Any]], schema: dict[str, Any], max_tokens: int) -> Any:
+        ctx = models.CallContext(USER, WS, "video_analysis", "s", job_id="J1")
+        return self.model.complete(ctx, task="reference_analysis", messages=messages, schema=schema,
+                                   max_tokens=max_tokens)  # fmt: skip
+
+    def picture(self, path: Path) -> dict[str, Any]:
+        return {"image": {"format": "jpeg", "source": {"bytes": b"x"}}}
+
+    def start(self, key: str) -> None: ...
+
+    def tick(self, key: str, i: int, n: int) -> None: ...
+
+    def done(self, key: str) -> None: ...
+
+    def stopped(self) -> bool:
+        return False
+
+
+def test_the_merge_of_a_long_fast_cut_video_stays_small(tmp_path: Path) -> None:
+    shots = study.shots_from([float(t) for t in range(2, 600, 2)], 600.0)  # 300 shots, the 10-minute limit
+    notes = [
+        {"shots": [{"shot": n, "what": f"what {n}", "acting": f"acts {n}"} for n in range(b * 20 + 1, b * 20 + 21)]}
+        for b in range(15)
+    ] + [{"shots": [{"shot": 1, "what": "seen again", "acting": "acts 1"}]}]
+
+    def merged(call: dict[str, Any]) -> Any:
+        return reply(data={"summary": "s", "hook": {"atSec": 1, "what": "w"}, "pacingNotes": "fast", "gags": [],
+                           "captions": "", "borrow": [], "avoid": []})  # fmt: skip
+
+    model = FakeModel(merged)
+    out = study.Analysis(OnlyIo(model)).merge(
+        notes, shots, duration=600.0, cuts=[], sound="quiet", shot_sounds=["quiet"] * len(shots)
+    )
+    call = model.calls[0]
+    assert "shots" not in call["schema"]["properties"] and call["max_tokens"] == study.MERGE_TOKENS
+    assert "for every shot in SHOTS" not in call["messages"][0]["content"][0]["text"]
+    assert len(out["shots"]) == 300 and out["shots"][0] == {"what": "what 1 seen again", "acting": "acts 1"}
+    assert out["shots"][299] == {"what": "what 300", "acting": "acts 300"}
+
+    few = shots[:10]
+    model = FakeModel(merge_answer)
+    study.Analysis(OnlyIo(model)).merge(notes, few, duration=20.0, cuts=[], sound="", shot_sounds=[""] * 10)
+    assert "shots" in model.calls[0]["schema"]["properties"]
+    assert model.calls[0]["max_tokens"] == study.MERGE_TOKENS + study.PER_SHOT_TOKENS * 10
+
+
+def test_a_switched_off_video_analysis_agent_fails_the_job_and_keeps_the_old_analysis(tmp_path: Path) -> None:
+    model = FakeModel()
+    svc, db, s3 = services(tmp_path, model)
+    seed(db)
+    db.seed({**db.get(PK, "REFVID#R1"), "analysisKey": f"ws/{USER}/{WS}/references/R1/analysis.json"})
+    db.seed({"pk": PK, "sk": "AGENT#video_analysis", "userId": USER, "workspaceId": WS, "active": False,
+             "name": "Video analysis"})  # fmt: skip
+    assert run(svc) == "failed"
+    job = db.get(PK, "PJOB#J1")
+    assert job["error"] == "Video analysis is switched off. Switch it on in Lamo Stories › Settings › Agents."
+    assert job["steps"][0]["status"] == "failed" and model.calls == [] and s3.reads == []
+    assert db.get(PK, "REFVID#R1")["status"] == "analyzed"
+
+
+def test_a_reference_deleted_before_the_end_fails_the_job_plainly(tmp_path: Path, clip: Path) -> None:
+    svc, db, s3 = services(tmp_path, FakeModel())
+
+    def deleted_at_merge(call: dict[str, Any]) -> Any:
+        if "Merge these notes" in call["messages"][0]["content"][0]["text"]:
+            db.items.pop((PK, "REFVID#R1"), None)  # the owner deletes the reference while it is written up
+        return answers(call)
+
+    svc.model = FakeModel(*[deleted_at_merge] * 10)
+    s3.files[KEY] = clip
+    seed(db)
+    assert run(svc) == "failed"
+    job = db.get(PK, "PJOB#J1")
+    assert job["status"] == "failed" and job["error"] == study.NO_VIDEO

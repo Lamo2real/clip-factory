@@ -262,12 +262,14 @@ def reply(
 
 
 class FakeModel:
-    """Answers each ``complete`` with the next scripted reply (or raises the next scripted exception)."""
+    """Answers each ``complete`` with the next scripted reply (or raises the next scripted exception). While a reply
+    streams, ``on_text`` gets the text **so far**, as builder E's ConverseStream client sends it."""
 
     def __init__(self, *script: models.Reply | BaseException | Callable[[dict[str, Any]], models.Reply]) -> None:
         self.script = list(script)
         self.calls: list[dict[str, Any]] = []
-        self.chunk = 4  # characters per streamed piece
+        self.chunk = 4  # characters added per streamed event
+        self.restart_after: int | None = None  # stream this many events, then start again (a retried stream)
 
     def complete(
         self,
@@ -280,6 +282,7 @@ class FakeModel:
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int = 16000,
         on_text: Callable[[str], None] | None = None,
+        **extra: Any,
     ) -> models.Reply:
         call = {
             "ctx": ctx,
@@ -289,6 +292,7 @@ class FakeModel:
             "schema": schema,
             "tools": tools,
             "max_tokens": max_tokens,
+            "extra": extra,
         }
         self.calls.append(call)
         if not self.script:
@@ -300,8 +304,11 @@ class FakeModel:
             raise nxt
         assert isinstance(nxt, models.Reply)
         if on_text and nxt.text:
-            for i in range(0, len(nxt.text), self.chunk):
-                on_text(nxt.text[i : i + self.chunk])
+            ends = [*range(self.chunk, len(nxt.text), self.chunk), len(nxt.text)]
+            if self.restart_after is not None:
+                ends = ends[: self.restart_after] + ends
+            for end in ends:
+                on_text(nxt.text[:end])
         return nxt
 
     def texts(self, n: int) -> str:
@@ -491,3 +498,15 @@ def test_condition_check_carries_only_its_own_names() -> None:
 def test_plain_names_only() -> None:
     with pytest.raises(ValueError):
         Expr().set({"a.b": 1})
+
+
+def test_a_refused_transaction_names_the_ops_that_refused() -> None:
+    db = FakeDynamo()
+    store = Store(db, "t")
+    db.seed({"pk": PK, "sk": "TASK#1", "status": "running", "sessionId": "s1"})
+    live = Expr().exists().eq("sessionId", "s1")
+    gone = Expr().set({"x": 1}).exists()
+    assert store.try_transact([("update", PK, "IDEA#gone", gone), ("check", PK, "TASK#1", live)]) == [0]
+    moved = Expr().exists().eq("sessionId", "s2")
+    assert store.try_transact([("update", PK, "IDEA#gone", gone), ("check", PK, "TASK#1", moved)]) == [0, 1]
+    assert store.try_transact([("check", PK, "TASK#1", live)]) == []

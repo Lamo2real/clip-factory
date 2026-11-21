@@ -15,7 +15,8 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
-from .. import config
+from lamostories_agent import config
+
 from . import guidance
 from .ask import ask_json, user
 from .common import TaskFailed, as_dict, clip, now_iso, owned, public, registry_pk
@@ -343,4 +344,4 @@ def expand(env: TaskEnv) -> Outcome:
         .eq("workspaceId", env.workspace_id)
     )
     updated = {**idea, "concept": concept, "updatedAt": at}
-    return Outcome({"idea": public(updated)}, reply, ops=[("update", env.pk, str(idea["sk"]), write)])
+    return Outcome({"idea": public(updated)}, reply, ops=[("update", env.pk, str(idea["sk"]), write)], refused=NO_IDEA)

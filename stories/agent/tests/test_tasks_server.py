@@ -137,3 +137,57 @@ def test_the_model_client_comes_from_the_runner_or_the_models_module(monkeypatch
     assert svc_mod.find_model_client(WithClient()) is fake
     monkeypatch.setattr(models, "default_client", lambda: fake, raising=False)
     assert svc_mod.find_model_client(None) is fake
+
+
+def test_the_model_client_is_found_in_the_shared_services_of_builder_e(monkeypatch) -> None:
+    """Builder E keeps its client as ``lamostories_agent.services.get().models`` (its jobs use the same one)."""
+    import sys
+    import types
+
+    from lamostories_agent import models
+
+    monkeypatch.delattr(models, "default_client", raising=False)
+    monkeypatch.delattr(models, "get_client", raising=False)
+    fake = FakeModel()
+    shared = types.ModuleType("lamostories_agent.services")
+    shared.get = lambda: types.SimpleNamespace(models=fake)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "lamostories_agent.services", shared)
+    assert svc_mod.find_model_client(object()) is fake
+
+    def not_configured() -> Any:
+        raise RuntimeError("Lamo Stories' agent is missing its table or bucket setting.")
+
+    shared.get = not_configured  # type: ignore[attr-defined]
+    import pytest
+
+    with pytest.raises(svc_mod.ServiceMissing):
+        svc_mod.find_model_client(object())
+
+
+def test_a_missing_model_client_fails_the_task_at_once_with_a_plain_sentence(tmp_path: Path, monkeypatch) -> None:
+    from lamostories_agent import models
+    from lamostories_agent.tasks.work import run_task
+
+    monkeypatch.delattr(models, "default_client", raising=False)
+    monkeypatch.delattr(models, "get_client", raising=False)
+    svc, db, _ = services(tmp_path, FakeModel())
+    svc.model = svc_mod.LazyModel(object())
+    db.seed(task_item("T1", "brainstorm"))
+    assert asyncio.run(run_task(svc, {"userId": USER, "workspaceId": WS, "taskId": "T1"})) == "failed"
+    assert db.get(PK, "TASK#T1")["error"] == svc_mod.NO_CLIENT
+
+
+def test_reference_analyze_is_the_function_builder_es_job_awaits() -> None:
+    import inspect
+
+    assert callable(reference.analyze) and inspect.iscoroutinefunction(reference.analyze)
+
+
+def test_with_builder_es_process_reference_registered_first_the_app_still_builds() -> None:
+    actions = Actions()
+    runner = RecordingRunner()
+    actions.register("process_reference", lambda payload: {"accepted": True, "id": "E"})
+    for package in (chat, tasks, reference):  # register_all's order after builder E's own jobs
+        package.register(actions, runner)
+    assert {"run_task", "check_models", "chat_turn", "process_reference"} <= set(actions.table)
+    assert actions.table["process_reference"]({})["id"] == "E"

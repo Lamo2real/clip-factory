@@ -348,3 +348,100 @@ def test_an_unknown_kind_fails_plainly(tmp_path: Path) -> None:
     db.seed(task_item("T1", "storyboard"))
     assert run(svc) == "failed"
     assert db.get(PK, "TASK#T1")["error"] == "Lamo Stories' agent does not know that kind of AI work yet."
+
+
+class ModelRefused(Exception):
+    """Like builder E's ``models.ModelRefused`` (its message is the owner's sentence)."""
+
+
+class AnswerInvalid(Exception):
+    """Like builder E's ``models.AnswerInvalid``: the client already asked once more."""
+
+
+def test_the_clients_refusal_is_its_sentence_and_never_retried(tmp_path: Path) -> None:
+    sentence = "Claude Opus 5.5 said no to this request. Change the wording a little and try again."
+    model = FakeModel(ModelRefused(sentence))
+    svc, db, _ = services(tmp_path, model)
+    db.seed(task_item("T1", "brainstorm"))
+    assert run(svc) == "failed"
+    assert db.get(PK, "TASK#T1")["error"] == sentence and len(model.calls) == 1
+
+
+def test_an_answer_the_client_gave_up_on_is_not_asked_for_again(tmp_path: Path) -> None:
+    model = FakeModel(AnswerInvalid("The answer did not fit: ideas is required"))
+    svc, db, _ = services(tmp_path, model)
+    db.seed(task_item("T1", "brainstorm"))
+    assert run(svc) == "failed"
+    assert db.get(PK, "TASK#T1")["error"] == ideas.FAILED and len(model.calls) == 1
+
+
+def test_asking_again_after_a_tool_answer_gives_each_tool_call_its_result(tmp_path: Path) -> None:
+    first = reply(tools=[("submit_answer", {"ideas": [draft("x" * 90, "too long")]})])
+    first = models.Reply(**{**first.__dict__, "data": {"ideas": [draft("x" * 90, "too long")]}})
+    model = FakeModel(first, reply(data={"ideas": [draft("Short", "Fine.")]}))
+    svc, db, _ = services(tmp_path, model)
+    db.seed(task_item("T1", "brainstorm", input={"count": 1}))
+    assert run(svc) == "done"
+    again = model.calls[1]["messages"]
+    assert again[-2]["role"] == "assistant" and "toolUse" in again[-2]["content"][0]
+    result = again[-1]["content"][0]["toolResult"]
+    assert again[-1]["role"] == "user" and result["toolUseId"] == "t0" and result["status"] == "error"
+    assert "broke these rules" in result["content"][0]["text"]
+
+
+def test_an_idea_deleted_while_it_is_expanded_fails_the_task_plainly(tmp_path: Path) -> None:
+    concept = {
+        "premise": "p",
+        "beats": ["a", "b", "c"],
+        "lesson": "",
+        "ending": "e",
+        "tone": "funny",
+        "onScreenText": [],
+    }
+    svc, db, _ = services(tmp_path, FakeModel())
+
+    def answer(call):
+        del db.items[(PK, "IDEA#I1")]  # the owner deletes the idea while the model thinks
+        return reply(data=concept)
+
+    svc.model = FakeModel(answer)
+    db.seed(idea_item("I1"))
+    db.seed(task_item("T1", "expand_idea", input={"ideaId": "I1", "durationSec": 40}))
+    assert run(svc) == "failed"
+    task = db.get(PK, "TASK#T1")
+    assert task["status"] == "failed" and task["error"] == ideas.NO_IDEA
+    assert db.get(PK, "IDEA#I1") is None
+
+
+def test_a_heartbeat_that_fails_for_another_reason_does_not_stop_the_beat(tmp_path: Path) -> None:
+    import threading
+
+    from botocore.exceptions import ClientError
+
+    release = threading.Event()
+    svc, db, _ = services(tmp_path, FakeModel())
+    svc.heartbeat_s = 0.02
+    svc.model = FakeModel(lambda call: (release.wait(2), reply(data={"ideas": [draft("A", "B")]}))[1])
+    db.seed(task_item("T1", "brainstorm", input={"count": 1}))
+    real = db.update_item
+    failed = []
+
+    def flaky(**p):
+        beat = p.get("ExpressionAttributeNames", {}).get("#n0") == "heartbeatAt"  # a heartbeat sets only that
+        if beat and len(failed) < 2:
+            failed.append(1)
+            raise ClientError({"Error": {"Code": "ThrottlingException", "Message": "slow down"}}, "UpdateItem")
+        return real(**p)
+
+    async def go() -> str:
+        job = asyncio.create_task(run_task(svc, PAYLOAD))
+        await asyncio.sleep(0.03)
+        db.update_item = flaky  # type: ignore[method-assign]
+        await asyncio.sleep(0.2)
+        beats = len([w for w in db.writes if w[2] == "TASK#T1"])
+        release.set()
+        out = await job
+        assert failed == [1, 1] and beats >= 3  # two throttled beats, and beating went on
+        return out
+
+    assert asyncio.run(go()) == "done"

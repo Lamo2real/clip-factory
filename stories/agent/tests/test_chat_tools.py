@@ -263,6 +263,49 @@ def test_propose_story_change_checks_the_scenes(box: Any) -> None:
     assert "still being made" in error(box, "propose_story_change", storyId="S2", note="x")
 
 
+def test_propose_story_change_offers_only_what_the_changes_route_takes(box: Any) -> None:
+    for status in ("approved", "published", "rejected", "draft", "needs_check", "failed"):
+        box.db.seed(
+            {"pk": PK, "sk": f"STORY#{status}", "userId": USER, "workspaceId": WS, "storyId": status,
+             "status": status, "scenes": [{"sceneId": "s1"}]}
+        )  # fmt: skip
+    for status in ("approved", "published", "rejected"):
+        assert "can't be remade" in error(box, "propose_story_change", storyId=status, note="x")
+    for status in ("draft", "needs_check", "failed"):
+        call(box, "propose_story_change", storyId=status, note="x")
+    assert [a["payload"]["storyId"] for a in box.actions] == ["draft", "needs_check", "failed"]
+    assert tools.REMAKE_STATUSES == ("draft", "review", "needs_check", "failed")
+
+
+def test_update_idea_into_or_out_of_driving_safety_is_the_owners_tap(box: Any) -> None:
+    box.db.seed(idea_item("I1"))
+    call(box, "update_idea", ideaId="I1", category="driving_safety")
+    assert box.db.get(PK, "IDEA#I1")["category"] == "comedy"  # not written: the API matches the topic on save
+    assert box.actions[-1]["payload"] == {"ideaId": "I1", "patch": {"category": "driving_safety"}}
+    box.db.seed(idea_item("I2", category="driving_safety", safetyTopicId="skid-recovery"))
+    call(box, "update_idea", ideaId="I2", category="comedy")
+    assert box.db.get(PK, "IDEA#I2")["category"] == "driving_safety"
+    assert box.actions[-1]["payload"] == {"ideaId": "I2", "patch": {"category": "comedy"}}
+    call(box, "update_idea", ideaId="I1", category="explainer")  # an ordinary change is written
+    assert box.db.get(PK, "IDEA#I1")["category"] == "explainer"
+
+
+def test_an_idea_deleted_meanwhile_is_a_mistake_the_model_hears_about(box: Any) -> None:
+    box.db.seed(idea_item("I1"))
+    real_get = box.svc.store.get
+
+    def deleted_after_read(pk: str, sk: str) -> Any:
+        found = real_get(pk, sk)
+        if sk == "IDEA#I1":
+            box.db.items.pop((PK, "IDEA#I1"), None)  # the owner deletes it right after the tool read it
+        return found
+
+    box.svc.store.get = deleted_after_read
+    assert "deleted meanwhile" in error(box, "update_idea", ideaId="I1", title="New title")
+    assert box.db.get(PK, "IDEA#I1") is None and not box.fence.lost.is_set()
+    call(box, "remember", text="the answer goes on")  # the answer's fence still holds
+
+
 def test_offer_make_video_from_an_idea_or_a_brief(box: Any) -> None:
     box.db.seed(character_item("C1", "Bo"))
     box.db.seed(idea_item("I1"))

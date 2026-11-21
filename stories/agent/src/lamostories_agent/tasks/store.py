@@ -157,6 +157,14 @@ def _refused(e: BaseException) -> bool:
     return False
 
 
+def _refused_at(e: BaseException, n: int) -> list[int]:
+    if _code(e) != "TransactionCanceledException":
+        return list(range(n))
+    reasons = getattr(e, "response", {}).get("CancellationReasons") or []
+    found = [i for i, r in enumerate(reasons) if (r or {}).get("Code") == "ConditionalCheckFailed"]
+    return found if len(reasons) == n and found else list(range(n))
+
+
 class Store:
     """The table (``CF_STORIES_TABLE``) through the low-level client, so transactions and single writes look alike."""
 
@@ -225,6 +233,11 @@ class Store:
     def transact(self, ops: Sequence[tuple[str, str, str, Any]]) -> bool:
         """``ops``: ``("update", pk, sk, Expr)``, ``("check", pk, sk, Expr)`` or ``("put", pk, sk, item)`` (a new item).
         All or nothing; ``False`` when any condition refused."""
+        return not self.try_transact(ops)
+
+    def try_transact(self, ops: Sequence[tuple[str, str, str, Any]]) -> list[int]:
+        """Like ``transact``; the positions of the ops whose condition refused (empty when it was written). When
+        DynamoDB does not say which, every position is returned."""
         items: list[dict[str, Any]] = []
         for kind, pk, sk, body in ops:
             if kind == "update":
@@ -256,6 +269,6 @@ class Store:
             self.client.transact_write_items(TransactItems=items)
         except Exception as e:
             if _refused(e):
-                return False
+                return _refused_at(e, len(items))
             raise
-        return True
+        return []

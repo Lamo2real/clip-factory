@@ -19,9 +19,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from .. import models
-from .ask import owner_sentence
-from .common import Superseded, TaskFailed, log, now_iso, owned, ws_pk
+from lamostories_agent import models
+
+from .ask import is_owner_error, owner_sentence
+from .common import Refused, Superseded, TaskFailed, log, now_iso, owned, ws_pk
 from .fence import TASK_LIVE, Fence, run_with_heartbeat
 from .services import Services
 
@@ -53,6 +54,7 @@ FAILURE = {
     "check_models": "Checking the models did not finish. Tap Try again.",
 }
 UNKNOWN_KIND = "Lamo Stories' agent does not know that kind of AI work yet."
+GONE = "What this was for was changed or deleted meanwhile. Tap Try again."
 
 
 @dataclass
@@ -76,6 +78,7 @@ class Outcome:
     model: str | None = None  # when there is no single reply (check_models)
     effort: str | None = None
     effort_applied: bool | None = None
+    refused: str | None = None  # the sentence when another item in ``ops`` refused (it was deleted or changed)
 
 
 Handler = Callable[[TaskEnv], Outcome]
@@ -120,7 +123,7 @@ def agent_off(svc: Services, pk: str, agent_id: str) -> str | None:
 
 
 def _agent_name(agent_id: str) -> str:
-    from .. import config
+    from lamostories_agent import config
 
     for a in config.agents().get("agents") or []:
         if a.get("agentId") == agent_id:
@@ -182,8 +185,17 @@ async def run_task(svc: Services, payload: dict[str, Any], *, kinds: tuple[str, 
         return "superseded"
     except Exception as e:
         sentence = owner_sentence(e) or FAILURE.get(kind, UNKNOWN_KIND)
-        if not isinstance(e, TaskFailed | models.ModelUnavailable | models.EffortUnavailable):
-            log("error", "stories.task_crashed", task=task_id, kind=kind, error=type(e).__name__, detail=str(e))
+        if not is_owner_error(e):
+            cause = e.__cause__
+            log(
+                "error",
+                "stories.task_crashed",
+                task=task_id,
+                kind=kind,
+                error=type(e).__name__,
+                cause=type(cause).__name__ if cause else None,
+                detail=str(cause or e),
+            )
         return await _fail(fence, sentence)
     log("info", "stories.task_done", task=task_id, kind=kind)
     return "done"
@@ -201,10 +213,14 @@ def _finish(fence: Fence, outcome: Outcome) -> None:
         "effort": reply.effort if reply else outcome.effort,
         "effortApplied": reply.effort_applied if reply else outcome.effort_applied,
     }
-    if outcome.ops:
-        fence.transact([*outcome.ops, fence.update_op(fields)])
-    else:
+    if not outcome.ops:
         fence.write(fields)
+        return
+    try:
+        fence.transact([*outcome.ops, fence.update_op(fields)])
+    except Refused as e:  # the task still holds its fence: it ends failed with the plain sentence
+        log("info", "stories.task_other_item_refused", sk=fence.sk, refused=str(e))
+        raise TaskFailed(outcome.refused or GONE) from e
 
 
 async def _fail(fence: Fence, sentence: str) -> str:

@@ -13,8 +13,8 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from ..tasks.common import TaskFailed, clip, in_workspace, ulid
-from ..tasks.services import PICTURE_FAILED, Services, picture
+from lamostories_agent.tasks.common import TaskFailed, clip, in_workspace, ulid
+from lamostories_agent.tasks.services import PICTURE_FAILED, Services, picture
 
 COMPACT_MESSAGES = 40  # more messages than this after the last summary: compact
 COMPACT_CHARS = 60_000  # or more characters than this
