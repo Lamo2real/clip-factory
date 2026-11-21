@@ -154,7 +154,7 @@ All of them, `cf-prod-campaigns` too, share one zip (`api/dist/lambda.zip`), Pyt
 | `cf-prod-learn` | `cf-prod-api`, async invoke on `PUT /v1/weeks/{week}/best`; EventBridge `cf-prod-learn-daily` at 05:00 UTC | 512 MB / 900 s; async retries 1, event age 1 h | no |
 | `cf-prod-money` | EventBridge `cf-prod-money-daily` at 06:00 UTC and `cf-prod-api` (async, Check now, once an hour) | 256 MB / 300 s; stops starting work after 240 s; async retries 0, event age 1 h | no |
 | `cf-prod-campaigns` | `cf-prod-api` and `cf-prod-stats`, async only (`{"action": "read" \| "logo" \| "brand_picture", "userId", "campaignId"}`) | 512 MB / 120 s; async retries 0 | no |
-| `cf-prod-autopost` | EventBridge rule `cf-prod-autopost-hourly` (every hour at :00 UTC) only; the run-now tests run the same code inline in `cf-prod-api` | 256 MB / 300 s; a new clip only starts with 30 s left of its 240 s budget (`AUTOPOST_TIME_BUDGET_SECONDS`); async retries 2, event age 3,300 s | no |
+| `cf-prod-autopost` | EventBridge rule `cf-prod-autopost-hourly` (every hour at :00 UTC) only; the run-now tests run the same code inline in `cf-prod-api` | 256 MB / 300 s; a new clip starts only while at least 30 s of its 240 s budget are left (`AUTOPOST_TIME_BUDGET_SECONDS`); async retries 2, event age 3,300 s | no |
 
 ### What was removed
 
@@ -1522,7 +1522,7 @@ alarms.
 | An auto-posting tick arrives late, or is lost | A late tick keeps its own slot (`event.time`); a lost one is caught up by the next tick, which is due because the X hours are up: one run, never two. Event age 3,300 s keeps a retry from running into the next tick. |
 | The owner throws a clip away or taps Upload while a run is sending it | One transaction wins. The run's conditional write fails, it reads the clip and records "You threw it away first." or "You uploaded it yourself."; nothing is posted twice. |
 | A place fails at 3 a.m. | The clip flow's normal retries (up to 3 tries on "did not answer", none where a retry could post twice); that post is `failed` with its plain sentence, shows in **Didn't work** and in Library with **Try again**, and the other places of the clip still post. |
-| An auto-posting run runs out of time | A new clip starts only with 30 s left of the 240 s budget; the rest are `skipped` with "Out of time. It goes next run." and stay in Review. |
+| An auto-posting run runs out of time | A new clip starts only while at least 30 s of the 240 s budget are left; the rest are `skipped` with "Out of time. It goes next run." and stay in Review. |
 | One owner's run fails inside a tick | Logged and skipped; the other owners in `AUTOPOSTOWNERS` still run. Lambda errors raise the new auto-posting alarms. |
 | The owner turns auto-posting off while a run is sending | Clips already handed to the clip flow keep posting, as after Upload; no new run starts. |
 | A test run is tapped again within a minute | 409 "A test run just started. Wait a minute." (`AUTOPOST.lastNowAt`); the first one shows in Recent. |
