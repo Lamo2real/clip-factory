@@ -682,9 +682,16 @@ test.describe("phone: the main button stays pinned", () => {
     await settle(page);
     const main = tomatoes(page);
     await expect(main).toHaveCount(1);
+    // The page scrolls once (CrSetup, ~0.4 s after it has its data) to bring the pinned Open on screen; on a busy
+    // runner that lands after settle(), so wait for it instead of reading the box once.
+    await expect
+      .poll(async () => {
+        const b = (await main.boundingBox())!;
+        return b.y + b.height;
+      })
+      .toBeLessThanOrEqual(page.viewportSize()!.height);
     const box = (await main.boundingBox())!;
     expect(box.x + box.width).toBeGreaterThan(page.viewportSize()!.width / 2);
-    expect(box.y + box.height).toBeLessThanOrEqual(page.viewportSize()!.height);
   });
 
   test("Campaigns with none yet: the join steps come first, Paste is glass, one vermilion on the first screen", async ({ page }) => {
