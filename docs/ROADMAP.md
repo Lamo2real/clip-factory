@@ -63,6 +63,33 @@ the owner's words: one setup per platform, no code, "an 8-year-old should be abl
 | Facebook (Page Reels) | Facebook Login for Business (Page token, Graph v27.0) | `video_reels` start, binary upload, finish `PUBLISHED` | Reels insights every 30 min | Reels visible only to the owner until the app is Live; Meta may ask for App Review first (unconfirmed). |
 | X | OAuth 2.0 with PKCE (`tweet.read`, `tweet.write`, `users.read`, `media.write`, `offline.access`) | Chunked media upload (4 MB), then `POST /2/tweets` | `GET /2/tweets?ids=` every 15 min | Pay per use: about $0.015 per post plus number reads, capped at $10 a month by the app. |
 
+**Built by the Content Rewards request** ([CONTRACTS.md §38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21),
+[ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant);
+"Campaigns" moved here from Later; the owner's words: "browse Content Rewards, join a campaign there, then paste the
+campaign URL into Clip Factory … The whole flow should take 3 steps, 5 at most" and "even an 8 year old should be
+able to understand how to navigate it"):
+
+- **Connect once**: a Content Rewards card under the five on Set up posting ("Get paid by brands"), 3 numbered steps,
+  the last one in the Mac app through a one-shot loopback sign-in door; the token is kept in the cloud, so phone
+  uploads are sent too. A ready email when CR's sign-in pilot says the account can't connect apps.
+- **Each campaign in 3 steps** (5 at most): join on CR, copy its link, paste it. Clip Factory reads the pay and the
+  rules (Claude in `cf-prod-campaigns`, checked by code), finds out by itself when the owner is in, and shows one
+  next step with one vermilion button.
+- **The rules on every clip**: the length, banned content, the campaign logo, "Paid partnership" on screen, "#Ad" and
+  the required tags in every caption, only the places the campaign pays for, public and never made for kids, paid
+  partnership on where the API has it (YouTube, X, TikTok's Branded content).
+- **Sent by itself**: the clip flow sends each campaign post within CR's 30 minutes; else a "Send this to Content
+  Rewards now" reminder with one "Copy and open". Then Sent → Waiting → Approved or Not approved, views, Ask again,
+  proof-of-views reminders.
+- **Getting paid**: Content Rewards' own numbers on the Money page (Still earning, On its way, Ready to move, paid so
+  far) and the Whop steps to the bank.
+- Switched off in prod until all six parts (api, posting, agent, web, desktop, docs) have merged; one line turns it on.
+
+Still open for Content Rewards: CR's sign-in pilot must grant `my_submissions:write` before Clip Factory can send by
+itself (until then: read only and reminders); campaigns that need drafts first or the brand's own sound; TikTok
+campaign clips (after TikTok's audit); uploading proof of views for the owner; and everything CR's live API may
+still change (CONTRACTS §38.21).
+
 Still open in phase 2:
 1. **Clips kept before a platform was connected** stay "Waiting for connection" and are **not posted automatically**
    after Connect. Next step: offer "Post the waiting clips" on the platform's "Connected as" card (one tap, the clip
@@ -92,7 +119,6 @@ Still open in phase 2:
   through OpenSearch Ingestion once that integration leaves preview.
 - **AWS WAF** on the REST API stage if webhook traffic is ever abused.
 - **Live clipping**: follow a live Twitch or Kick stream and cut clips as it happens.
-- **Campaigns**: bring back the local app's Whop / Content Rewards campaign reading (rules, rates, required tags).
 - **Clip editor**: adjust start and end, swap the hook, re-render one clip. The weekly best picks could then also
   steer editing choices (layout, pacing), not only which moments are picked and how they are hooked.
 - **Clip numbers, more**: suggest the week's best picks (the owner still decides), compare two clips side by side,
