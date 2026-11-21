@@ -48,11 +48,13 @@ locals {
       handler = "clipfactory_api.stats.handler.handler"
       memory  = 256
       timeout = 300 # a tick stops starting new requests after STATS_TIME_BUDGET_SECONDS (240)
-      env = {
+      env = merge({
         TABLE_NAME                = var.table_name
         STATS_TIME_BUDGET_SECONDS = "240"
         SECRET_PREFIX             = var.secret_prefix # §17.6: real platform tokens
-      }
+        # §38.12: Content Rewards checking rides this tick (no new schedule); rules reads go to cf-prod-campaigns.
+        CONTENT_REWARDS = var.content_rewards_enabled ? "on" : "off"
+      }, var.campaigns_function_arn == "" ? {} : { CAMPAIGNS_FUNCTION_ARN = var.campaigns_function_arn })
       # A missed tick is covered by the next one; a manual refresh is pressed again. Never retry (budgets).
       max_retries   = 0
       max_event_age = 900
@@ -94,7 +96,7 @@ locals {
 
   # Exactly what the code calls (api/src/clipfactory_api/stats/** and weekly.py), beyond logs and traces.
   permissions = {
-    stats = [
+    stats = concat([
       # Due posts (gsi2 STATS), posts, accounts, STAT# snapshots, rate budgets and the manual refresh claim.
       # §17.6 "forget" (YouTube disconnect) deletes the YouTube posts' STAT# snapshots.
       { Sid = "Data", Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem"], Resource = local.table_resources },
@@ -102,7 +104,10 @@ locals {
       # Never create or delete, never write the app keys or pending choices.
       { Sid = "PlatformSecretsRead", Action = ["secretsmanager:GetSecretValue"], Resource = [var.platform_secrets_arn] },
       { Sid = "PlatformTokens", Action = ["secretsmanager:PutSecretValue"], Resource = [var.platform_token_secrets_arn] },
-    ]
+      ], var.campaigns_function_arn == "" ? [] : [
+      # §38.12: a campaign whose brief changed starts a rules read (InvocationType=Event, unqualified).
+      { Sid = "Campaigns", Action = ["lambda:InvokeFunction"], Resource = [var.campaigns_function_arn] },
+    ])
     learn = [
       # The WEEK item, the week's clips and posts, the "Best of week" learning (put, or deleted when no picks).
       # Daily (§16.12): owners through gsi2 STATS (Query, never Scan), posts, STAT# snapshots, clips, jobs, LESSON#

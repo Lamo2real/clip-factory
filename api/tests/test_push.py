@@ -289,11 +289,25 @@ def test_settings_notify_choices(call: Call) -> None:
         "stopped": True,
         "resumed": False,
         "steps": False,
+        "contentRewards": True,  # §38.11, on by default
     }
     status, body = call("PUT", "/v1/settings", {"notify": {"steps": True}})
     assert status == 200
-    assert body["settings"]["notify"] == {"ready": True, "stopped": True, "resumed": False, "steps": True}
-    assert call("PUT", "/v1/settings", {"notify": {"loud": True}})[0] == 400
+    assert body["settings"]["notify"] == {
+        "ready": True,
+        "stopped": True,
+        "resumed": False,
+        "steps": True,
+        "contentRewards": True,
+    }
+    status, body = call("PUT", "/v1/settings", {"notify": {"contentRewards": False}})
+    assert status == 200
+    assert body["settings"]["notify"]["contentRewards"] is False
+    status, body = call("PUT", "/v1/settings", {"notify": {"loud": True}})
+    assert status == 400
+    assert body["error"]["message"] == (
+        "Notifications must say on or off for: clips ready, stopped, picked up, every step, Content Rewards news."
+    )
     assert call("PUT", "/v1/settings", {"notify": {"ready": "yes"}})[0] == 400
 
 
@@ -575,3 +589,125 @@ def test_the_same_phone_under_two_device_ids_is_one_device(
     # Saving it again (the page re-sends it when it opens) changes nothing.
     assert call("PUT", "/v1/push/devices/second-id-1234", phone.json())[0] in (200, 204)
     assert [d["deviceId"] for d in devices.active(store, USER)] == ["second-id-1234"]
+
+
+# ---------- Content Rewards news (§38.11) ----------
+
+CR_UUID = "200ea21b-be80-4db8-b552-8e32b148604e"
+CR_POST = "01J0000000000000000000000P"
+CR_CLIP = "01J0000000000000000000000C"
+
+
+@pytest.fixture
+def phone(call: Call, iphone: Browser, push_app: App) -> None:
+    call("PUT", "/v1/push/devices/phone-12345678", iphone.json())
+
+
+def _cr(sk: str, **fields: Any) -> dict[str, Any]:
+    return {"pk": db.user_pk(USER), "sk": sk, "userId": USER, **fields}
+
+
+def _campaign(**fields: Any) -> dict[str, Any]:
+    return _cr(f"CAMPAIGN#{CR_UUID}", type="campaign", campaignId=CR_UUID, name="FaZe Clips", **fields)
+
+
+def _sub(**fields: Any) -> dict[str, Any]:
+    return _cr(f"CRSUB#{CR_POST}", type="crsub", postId=CR_POST, clipId=CR_CLIP, campaignId=CR_UUID, **fields)
+
+
+def test_cr_events_each_once(
+    deps: notify.NotifyDeps, phone: None, service: PushService, store: db.Store, clock: Clock
+) -> None:
+    from datetime import timedelta
+
+    from clipfactory_api.clock import iso
+
+    store.put(_campaign(membership="in"))
+    records = [
+        _record(_campaign(membership="not_joined"), _campaign(membership="in")),
+        _record(_campaign(membership="manual"), _campaign(membership="in")),  # from manual: no "You're in"
+        _record(_sub(state="sending"), _sub(state="send_by_hand", sendBy=iso(clock.now + timedelta(minutes=12)))),
+        _record(_sub(state="sent", crStatus="pending"), _sub(state="approved", crStatus="approved")),
+        _record(_sub(state="sent", crStatus="pending"), _sub(state="rejected", crStatus="rejected")),
+        _record(_sub(state="sent", proof={}), _sub(state="sent", proof={"notifiedAt": iso(clock.now)})),
+        _record(
+            _cr("CRMONEY", firstReadDone=True, paidTotalCents=500, payoutsSeen=["pay_1"]),
+            _cr("CRMONEY", firstReadDone=True, paidTotalCents=921, lastPaidCents=421, payoutsSeen=["pay_2", "pay_1"]),
+        ),
+        _record(
+            _cr("CRCONN", status="connected"),
+            _cr("CRCONN", status="connected", reason="expires_soon", signInBy="2027-02-13"),
+        ),
+        _record(
+            _cr("CRCONN", status="connected", pilotReminders=0),
+            _cr("CRCONN", status="connected", pilotReminders=1, pilotSentAt="x"),
+        ),
+    ]
+    notify.process({"Records": records}, deps)
+    notify.process({"Records": records}, deps)  # a stream retry: nothing twice
+    shown = [(m["title"], m["body"], m["tag"], m["url"]) for m in service.shown]
+    assert shown == [
+        ("FaZe Clips", "You're in! Tap to make clips.", f"cr-{CR_UUID}", f"/campaigns/{CR_UUID}"),
+        (
+            "Content Rewards",
+            "Send this to Content Rewards now (12 min left).",
+            f"crsub-{CR_CLIP}",
+            f"/clips/{CR_CLIP}?cr={CR_POST}",
+        ),
+        ("FaZe Clips", "Approved! The brand said yes to your clip.", f"crsub-{CR_POST}", f"/clips/{CR_CLIP}"),
+        ("FaZe Clips", "Not approved. Tap to see why.", f"crsub-{CR_POST}", f"/clips/{CR_CLIP}"),
+        (
+            "FaZe Clips",
+            "FaZe Clips wants proof of views now. Tap to see how.",
+            f"crproof-{CR_POST}",
+            f"/clips/{CR_CLIP}?cr={CR_POST}",
+        ),
+        (
+            "Content Rewards",
+            "Money from Content Rewards! $4.21 is in your balance.",
+            "crmoney",
+            "/money#content-rewards",
+        ),
+        (
+            "Content Rewards",
+            "Sign in to Content Rewards again on your Mac, so your clips keep getting sent.",
+            "crconn",
+            "/settings/posting/setup/contentrewards",
+        ),
+        (
+            "Content Rewards",
+            "Did Content Rewards say yes? Tap Connect Content Rewards on your Mac to check.",
+            "crpilot",
+            "/settings/posting/setup/contentrewards",
+        ),
+    ]
+    send_now = service.received[1][1]
+    assert send_now["Urgency"] == "high"
+    assert send_now["TTL"] == "720"
+
+
+def test_cr_first_money_and_old_money(deps: notify.NotifyDeps, phone: None, service: PushService) -> None:
+    first = _record(
+        _cr("CRMONEY", firstReadDone=True, paidTotalCents=0, payoutsSeen=[]),
+        _cr("CRMONEY", firstReadDone=True, paidTotalCents=500, lastPaidCents=500, payoutsSeen=["pay_1"]),
+    )
+    quiet = _record(
+        _cr("CRMONEY", firstReadDone=False, payoutsSeen=[]),
+        _cr("CRMONEY", firstReadDone=True, paidTotalCents=9000, payoutsSeen=["pay_9"]),
+    )
+    notify.process({"Records": [first, quiet]}, deps)
+    assert [m["body"] for m in service.shown] == ["Your first money from Content Rewards!"]
+
+
+def test_cr_choice_off_and_inserts_ignored(
+    deps: notify.NotifyDeps, phone: None, service: PushService, store: db.Store
+) -> None:
+    from clipfactory_api import settings
+
+    record = _record(_campaign(membership="not_joined"), _campaign(membership="in"))
+    notify.process({"Records": [_record({}, _campaign(membership="in"), event="INSERT")]}, deps)
+    settings.save(
+        store, USER, {"notify": {**settings.DEFAULTS["notify"], "contentRewards": False}}, "2026-11-15T12:00:00.000Z"
+    )
+    notify.process({"Records": [record]}, deps)
+    assert service.shown == []

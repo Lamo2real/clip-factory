@@ -533,3 +533,209 @@ def test_retrying_an_old_nine_step_job_gives_it_the_ten_steps(call: Call, store:
     status, body = call("POST", f"/v1/jobs/{job['jobId']}/retry")
     assert status == 200
     assert [(s["key"], s["label"]) for s in body["job"]["steps"]] == TEN_STEPS
+
+
+# --- campaign jobs (§38.5) ------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def cr_on(app: Any, secrets_client: Any, clock: Any, s3_client: FakeS3) -> Any:
+    from clipfactory_api.contentrewards import public
+    from cr_support import (
+        JSON_URL_FOR,
+        FakeCR,
+        FakeInvoker,
+        listed_campaign,
+        make_deps,
+        page,
+        public_campaign,
+        seed_campaign,
+        seed_connection,
+        seed_setup,
+    )
+    from cr_support import UUID as CAMPAIGN
+
+    public.reset_limit()
+    fake = FakeCR()
+    fake.public[JSON_URL_FOR(CAMPAIGN)] = public_campaign(application=False)
+    fake.answer("list_my_campaigns", page([listed_campaign(access="open")]))
+    deps = make_deps(app.store, secrets_client, fake, clock, media=app.media, invoker=FakeInvoker())
+    app.contentrewards = deps
+    seed_connection(deps, USER, clock.now)
+    seed_setup(app.store, USER, "youtube")
+    seed_campaign(app.store, USER, clock.now, briefHash=None)
+    return deps
+
+
+CAMPAIGN_ID = "200ea21b-be80-4db8-b552-8e32b148604e"
+VIDEO = {"type": "link", "url": "https://www.youtube.com/watch?v=abc"}
+
+
+def _campaign_item(cr_on: Any) -> dict[str, Any]:
+    return cr_on.store.get(db.user_pk(USER), db.campaign_sk(CAMPAIGN_ID))  # type: ignore[no-any-return]
+
+
+def test_campaign_job_copies_the_rules_and_never_returns_them(call: Call, cr_on: Any, table: FakeTable) -> None:
+    _ready(cr_on)
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert status == 201, body
+    job = body["job"]
+    assert job["campaignId"] == CAMPAIGN_ID
+    assert "campaign" not in job
+    stored = table.raw(db.user_pk(USER), db.job_sk(job["jobId"])) or {}
+    snapshot = stored["campaign"]
+    assert snapshot["campaignId"] == CAMPAIGN_ID
+    assert snapshot["crId"].startswith("cmp_")
+    assert snapshot["rules"]["requiredHashtags"] == ["#FaZe"]
+    assert snapshot["platformsPaid"] == ["youtube", "instagram"]
+    assert "Every caption has #FaZe and @FaZeClan." in snapshot["plainRules"]
+    assert "campaign" not in jobs.public_job(stored)
+
+
+def test_campaign_job_copies_the_logo(call: Call, cr_on: Any, s3_client: FakeS3) -> None:
+    from clipfactory_api.contentrewards import rules
+
+    key = f"campaigns/{USER}/{CAMPAIGN_ID}/logo-3.png"
+    s3_client.objects[key] = b"\x89PNG logo"
+    _ready(
+        cr_on,
+        logoKey=key,
+        logo={"needed": True, "state": "ready"},
+        rules={**rules.empty(), "logo": {"required": True, "rules": None}},
+    )
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert status == 201, body
+    copy = f"jobs/{body['job']['jobId']}/source/campaign-logo.png"
+    assert s3_client.objects[copy] == b"\x89PNG logo"
+    stored = cr_on.store.get(db.user_pk(USER), db.job_sk(body["job"]["jobId"])) or {}
+    assert stored["campaign"]["logoKey"] == copy  # the job's own copy: a later logo change never breaks it
+    _ready(cr_on, logo={"needed": True, "state": "none"}, logoKey=None)
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert (status, body["error"]["message"]) == (409, "This campaign needs its logo on every clip. Add it below.")
+
+
+def _ready(cr_on: Any, **fields: Any) -> None:
+    from clipfactory_api.contentrewards import campaigns
+
+    item = _campaign_item(cr_on)
+    item.update(fields)
+    item["briefHash"] = campaigns.brief_hash(
+        "Clip the draft. Caption must include #FaZe @FaZeClan.\n" + str(item.get("pastedRules") or "")
+    )
+    cr_on.store.put(item)
+
+
+def test_campaign_job_hard_and_soft_stops(call: Call, cr_on: Any) -> None:
+    from clipfactory_api.contentrewards import rules
+
+    _ready(cr_on, rules={**rules.empty(), "draftsFirst": True})
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert (status, body["error"]["code"]) == (409, "conflict")
+    assert body["error"]["message"].startswith("This campaign wants to see each clip before you post it.")
+    _ready(cr_on, rules={**rules.empty(), "faceOnCamera": True})
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert status == 409
+    assert body["error"]["message"].startswith("This brand wants your face on camera.")
+    status, body = call(
+        "POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID, "campaignAnyway": ["face_needed"]}
+    )
+    assert status == 201, body
+    assert _campaign_item(cr_on)["anyway"] == ["face_needed"]
+
+
+def test_campaign_job_rules_reading_and_changed(call: Call, cr_on: Any) -> None:
+    _ready(cr_on, rulesState="reading")
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert (status, body["error"]["retryAfter"]) == (409, 30)
+    assert body["error"]["message"] == "Reading the rules… (about 30 seconds)"
+    _ready(cr_on, rulesState="ready")
+    item = _campaign_item(cr_on)
+    item["briefHash"] = "old"
+    cr_on.store.put(item)
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert (status, body["error"]["retryAfter"]) == (409, 30)
+    assert (
+        body["error"]["message"] == "The brand changed the rules. I'm reading them again. This takes about 30 seconds."
+    )
+    assert ("read_campaign", (USER, CAMPAIGN_ID)) in cr_on.invoker.calls
+
+
+def test_campaign_job_footage_only(call: Call, cr_on: Any) -> None:
+    from clipfactory_api.contentrewards import rules
+
+    allowed = {**rules.empty()["allowedSources"], "campaignProvidedOnly": True}
+    _ready(
+        cr_on,
+        rules={
+            **rules.empty(),
+            "allowedSources": allowed,
+            "sourceVideos": [{"url": "https://youtu.be/official1", "kind": "youtube", "note": None}],
+        },
+    )
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert (status, body["error"]["message"]) == (
+        400,
+        "This campaign only pays for clips from its own videos. Pick one on the campaign page.",
+    )
+    ok_video = {"type": "link", "url": "https://www.youtube.com/watch?v=official1"}
+    status, body = call("POST", "/v1/jobs", {"source": ok_video, "campaignId": CAMPAIGN_ID, "campaignAnyway": []})
+    assert status == 201, body
+
+
+def test_campaign_job_unknown_campaign_and_cr_down(call: Call, cr_on: Any) -> None:
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": "a1cefc3b-4533-438f-8e70-a7299550f1cf"})
+    assert (status, body["error"]["message"]) == (404, "Add the campaign again.")
+    _ready(cr_on)
+    from cr_support import JSON_URL_FOR, response
+
+    cr_on.net.public[JSON_URL_FOR(CAMPAIGN_ID)] = response(500, {})
+    cr_on.net.public[f"https://contentrewards.com/c/campaigns/{CAMPAIGN_ID}"] = response(500, b"")
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert status == 201, body
+    assert body["job"]["campaignNote"] == "Couldn't check the campaign just now."
+
+
+def test_campaign_job_tries_a_failed_rules_read_again(call: Call, cr_on: Any) -> None:
+    _ready(cr_on, rulesState="failed")
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert (status, body["error"]["retryAfter"]) == (409, 30)
+    assert body["error"]["message"] == "Reading the rules… (about 30 seconds)"
+    assert ("read_campaign", (USER, CAMPAIGN_ID)) in cr_on.invoker.calls
+    assert _campaign_item(cr_on)["rulesState"] == "reading"
+
+
+class _SlowCR:
+    """CR that never answers: every request waits its whole timeout (the test clock moves on by it)."""
+
+    def __init__(self, clock: Any, fast: Any, *, only_mcp: bool = False) -> None:
+        self.clock = clock
+        self.fast = fast
+        self.only_mcp = only_mcp
+        self.waited: list[float] = []
+
+    def __call__(self, request: Any, timeout: float) -> Any:
+        from datetime import timedelta
+
+        from clipfactory_api.contentrewards import config
+        from clipfactory_api.contentrewards.net import NetworkError
+
+        if request.url == config.TOKEN_URL or (self.only_mcp and request.url != config.MCP_URL):
+            return self.fast(request, timeout)
+        self.waited.append(timeout)
+        self.clock.now += timedelta(seconds=timeout)
+        raise NetworkError("timed out", sent=True)
+
+
+@pytest.mark.parametrize("only_mcp", [False, True])
+def test_a_slow_cr_never_holds_a_job_start_past_8_seconds(call: Call, cr_on: Any, only_mcp: bool) -> None:
+    """§38.10: the job start's check (public JSON + list_my_campaigns) takes ≤ 8 s together; CR slow → the job
+    starts with the stored rules and "Couldn't check the campaign just now." (never the gateway's 504)."""
+    _ready(cr_on)
+    slow = _SlowCR(cr_on.clock, cr_on.net, only_mcp=only_mcp)
+    cr_on.net = slow
+    cr_on._clients.clear()
+    status, body = call("POST", "/v1/jobs", {"source": VIDEO, "campaignId": CAMPAIGN_ID})
+    assert status == 201, body
+    assert body["job"]["campaignNote"] == "Couldn't check the campaign just now."
+    assert slow.waited
+    assert sum(slow.waited) <= 8.0 + 0.1

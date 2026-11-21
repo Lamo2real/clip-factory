@@ -75,6 +75,12 @@ variable "retention_days" {
   }
 }
 
+variable "content_rewards_enabled" {
+  type        = bool
+  default     = false
+  description = "§38.16: CONTENT_REWARDS on/off for the clip flow's cr-send steps."
+}
+
 variable "log_retention_days" {
   type    = number
   default = 30

@@ -1,7 +1,8 @@
 """``cf-prod-broadcast``: DynamoDB Streams on ``cf-prod-data`` → the owner's open WebSockets (docs/CONTRACTS.md §14.2).
 
 The event source mapping only delivers ``JOB#``, ``CLIP#``, ``POST#``, ``LEARNING#``, ``WEEK#``, ``ACCOUNT#``,
-``SETUP#``, ``FOLLOW#`` (§24) and ``JOBLIVE#`` (§31, the live status line, ``{type: "jobLive"}``) items (``ACCOUNT#``
+``SETUP#``, ``FOLLOW#`` (§24), ``JOBLIVE#`` (§31, the live status line, ``{type: "jobLive"}``) and the Content Rewards
+items ``CAMPAIGN#``, ``CRCONN``, ``CRSUB#``, ``CRMONEY`` (§38.11, ``{type: "contentrewards", partial: true}``) items (``ACCOUNT#``
 and ``SETUP#`` become ``{type: "setup", op: "upsert", id: platform, partial: true}``, §17.4). Per batch the last
 record per item wins (job heartbeats coalesce); each becomes one ``LiveEvent``, built by the same public-shape
 functions the HTTP API uses, so internal fields never leave. An event over 24 KB is sent as ``partial: true`` (the
@@ -32,7 +33,14 @@ TYPES = {
     "SETUP#": "setup",
     "FOLLOW#": "follow",  # §24: a followed creator (name, picture, live badge); FOLLOWKEYS# never matches
     "JOBLIVE#": "jobLive",  # §31: the live status line of a working job (JOB# never matches it: "JOBL" ≠ "JOB#")
+    # §38.11: Content Rewards. Partial only: the web refetches GET /v1/contentrewards (and the open clip's or
+    # campaign's submissions), so briefs, tokens' metadata and the stored public JSON never ride along.
+    "CAMPAIGN#": "contentrewards",
+    "CRCONN": "contentrewards",
+    "CRSUB#": "contentrewards",
+    "CRMONEY": "contentrewards",
 }
+CR_IDS = {"CAMPAIGN#": "campaign:", "CRSUB#": "submission:"}
 # Setup changes carry no item: the web refetches GET /v1/setup (§17.4), so keys, hints and tokens never ride along.
 PARTIAL_ONLY = frozenset({"setup"})
 ID_FIELDS = {
@@ -115,6 +123,8 @@ def message_for(record: Mapping[str, Any], deserialize: Callable[[Mapping[str, A
         return None
     kind, item_id = found
     data = record.get("dynamodb") or {}
+    if kind == "contentrewards":
+        return _content_rewards(key[1], record)
     if kind in PARTIAL_ONLY:
         return {"type": kind, "op": "upsert", "id": item_id.split("#", 1)[0], "partial": True}
     if record.get("eventName") == "REMOVE":
@@ -133,6 +143,20 @@ def message_for(record: Mapping[str, Any], deserialize: Callable[[Mapping[str, A
     if len(encode(message)) > MAX_EVENT_BYTES:
         return {"type": kind, "op": "upsert", "id": message["id"], "partial": True}
     return message
+
+
+def _content_rewards(sk: str, record: Mapping[str, Any]) -> dict[str, Any]:
+    """``{type: "contentrewards", op, id: "campaign:{uuid}" | "connection" | "submission:{postId}" | "money",
+    partial: true}``; a removed campaign is ``op: "delete"``."""
+    if sk == "CRCONN":
+        item_id = "connection"
+    elif sk == "CRMONEY":
+        item_id = "money"
+    else:
+        prefix = next(p for p in CR_IDS if sk.startswith(p))
+        item_id = CR_IDS[prefix] + sk[len(prefix) :]
+    op = "delete" if record.get("eventName") == "REMOVE" and sk.startswith("CAMPAIGN#") else "upsert"
+    return {"type": "contentrewards", "op": op, "id": item_id, "partial": True}
 
 
 def collect(records: list[Mapping[str, Any]], deserialize: Callable[[Mapping[str, Any]], Item]) -> list[Change]:

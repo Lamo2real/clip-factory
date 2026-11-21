@@ -95,8 +95,10 @@ run "environment_names_the_flow_aliases" {
       HELP_PICTURE_QUESTIONS_PER_DAY = "40"
       # §28.12 module default: no assistant worker, so off.
       ASK_ENABLED = "false"
+      # §38.16 module default: Content Rewards off.
+      CONTENT_REWARDS = "off"
     })
-    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9 and §19.9 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
+    error_message = "cf-prod-api environment must match docs/CONTRACTS.md §9, §16.9, §17.9, §19.9 and §38.16 (HOOKS_URL, SECRET_PREFIX, OAUTH_STATE_SECRET, WEB_BUCKET, DISTRIBUTION_ID, HELP_*; no PUBLISH_QUEUE_URL, PERF_CHECK_FUNCTION_ARN, SCHEDULER_ROLE_ARN or SCHEDULE_GROUP)."
   }
 }
 
@@ -527,5 +529,53 @@ run "push_off_without_a_key" {
   assert {
     condition     = !contains(keys(aws_lambda_function.fn["api"].environment[0].variables), "PUSH_VAPID_SECRET") && length(regexall("VapidKey", aws_iam_role_policy.fn["api"].policy)) == 0
     error_message = "Without the VAPID secret there is no push environment and no permission."
+  }
+}
+
+# docs/CONTRACTS.md §38.16: Content Rewards. Off by default; on with the switch. The api invokes cf-prod-campaigns and
+# reaches only the media bucket's campaigns/ prefix for it; the CR secrets ride the existing PlatformSecrets grant.
+run "content_rewards_off_by_default_without_a_grant" {
+  command = plan
+
+  assert {
+    condition     = one(aws_lambda_function.fn["api"].environment).variables["CONTENT_REWARDS"] == "off" && !contains(keys(one(aws_lambda_function.fn["api"].environment).variables), "CAMPAIGNS_FUNCTION_ARN")
+    error_message = "Without the switch and the function, CONTENT_REWARDS is off and no CAMPAIGNS_FUNCTION_ARN is set."
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == 0
+    error_message = "No invoke grant for cf-prod-campaigns without its ARN."
+  }
+}
+
+run "content_rewards_on" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition = (one(aws_lambda_function.fn["api"].environment).variables["CONTENT_REWARDS"] == "on" &&
+    one(aws_lambda_function.fn["api"].environment).variables["CAMPAIGNS_FUNCTION_ARN"] == "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns")
+    error_message = "With the switch on, CONTENT_REWARDS is on and CAMPAIGNS_FUNCTION_ARN names cf-prod-campaigns."
+  }
+
+  assert {
+    condition = one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == {
+      Sid = "Campaigns", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"]
+    }
+    error_message = "The api may invoke cf-prod-campaigns and nothing else new."
+  }
+
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Resource if try(s.Sid, "") == "MediaObjects"]), "arn:aws:s3:::cf-test-media/campaigns/*")
+    error_message = "The api reads, writes and deletes campaign files under campaigns/ (logos, brand pictures)."
+  }
+
+  assert {
+    condition     = !contains(one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Condition.StringLike["s3:prefix"] if try(s.Sid, "") == "MediaList"]), "campaigns/*")
+    error_message = "The api never lists campaigns/: removing a campaign deletes its files by name."
   }
 }

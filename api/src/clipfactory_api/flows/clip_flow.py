@@ -8,6 +8,9 @@ Started by Confirm (``clip-{clipId}-{flowRun}`` on the alias ``live``) with ``{"
    ``wait-{platform}-{n}`` + ``check-{platform}-{n}`` → ``finish-{platform}`` → done (``posts.mark_posted``).
    3 attempts on ``RetryablePublishError``/``TransientError``. A failure → ``post-failed-{platform}`` with a plain
    sentence. A public TikTok post without its id yet → ``wait-tiktok-id-{n}`` + ``tiktok-id-{n}``.
+2b. Content Rewards (§38.12, only while switched on): after a campaign post's chain, ``cr-send-{platform}``; after a
+   later post's chain, while earlier ones still wait, ``cr-catchup-{platform}``; after ``settle-clip``,
+   ``cr-wait-{n}`` (60 s) + ``cr-retry-{n}`` (n = 1…26) while any wait. These steps never fail the flow.
 3. ``settle-clip``: the clip becomes ``posted`` (≥ 1 post posted), ``failed`` (every queued post failed) or stays
    ``confirmed`` (nothing was queued). Nothing posted → ``upsert-vector`` (``confirmed``), outcome ``not_posted``.
 4. ``wait-48h``: a durable wait, no compute and no schedule.
@@ -36,6 +39,7 @@ from aws_durable_execution_sdk_python.config import Duration, StepSemantics
 
 from .. import db, posts, s3, settings
 from ..clock import Clock, iso, utcnow
+from ..contentrewards import config as cr_config
 from ..log import log
 from ..platforms import (
     NotConnectedError,
@@ -80,6 +84,9 @@ class ClipFlowDeps:
     video: Callable[[Item], Any] | None = None  # clip → VideoSource
     graph_api_version: str = "v27.0"
     cfg: config.PlatformsConfig | None = None
+    # §38.12: the Content Rewards deps (contentrewards.deps.CrDeps); None while CR is switched off, and then a clip
+    # with campaign posts runs exactly today's steps (nothing is sent before the §38.16 switch).
+    cr: Any = None
 
     def publisher(self, platform: str) -> Any:
         if self.publishers is None:
@@ -124,11 +131,24 @@ def run_clip_flow(ctx: Any, event: Any, deps: ClipFlowDeps) -> dict[str, Any]:
         log("error", "clip_flow.bad_event")
         return {"clipId": event.get("clipId") if isinstance(event, dict) else None, "outcome": "bad_event"}
     found = ctx.step(lambda _sc: ensure_posts(deps, target), name="ensure-posts", config=retrying())
+    pending: list[list[str]] = []  # [postId, campaignId] pairs still waiting for a Content Rewards retry
     for post in found:
         if post.get("status") != "queued":
             continue  # pending_integration: no account yet, so no step
-        publish_chain(ctx, deps, target, str(post["platform"]), str(post["postId"]))
+        platform, post_id = str(post["platform"]), str(post["postId"])
+        publish_chain(ctx, deps, target, platform, post_id)
+        if deps.cr is None:
+            continue
+        if pending:
+            pending = cr_step(ctx, deps, target, f"cr-catchup-{platform}", pending)
+        if post.get("campaignId"):
+            pending += cr_step(ctx, deps, target, f"cr-send-{platform}", [[post_id, str(post["campaignId"])]])
     settled = ctx.step(lambda _sc: settle_clip(deps, target), name="settle-clip", config=retrying())
+    for n in range(1, cr_config.RETRIES + 1):
+        if not pending:
+            break
+        ctx.wait(Duration.from_seconds(60), name=f"cr-wait-{n}")
+        pending = cr_step(ctx, deps, target, f"cr-retry-{n}", pending)
     if settled["status"] in {"missing", "skipped"}:
         return _done(target, settled["status"])
     if not settled["posted"]:
@@ -240,7 +260,53 @@ def ensure_posts(deps: ClipFlowDeps, target: Target) -> list[dict[str, Any]]:
                     target.pk, target.sk, {"status": "publishing"}, expect_in={"status": ["confirmed"]}
                 )
             )
-    return [{"postId": p["postId"], "platform": p["platform"], "status": p["status"]} for p in found]
+    campaigns = _campaign_ids(deps, target, clip)
+    out = []
+    for p in found:
+        row = {"postId": p["postId"], "platform": p["platform"], "status": p["status"]}
+        if campaigns.get(str(p["postId"])):
+            row["campaignId"] = campaigns[str(p["postId"])]  # §38.12: additive key, only on campaign posts
+        out.append(row)
+    return out
+
+
+def _campaign_ids(deps: ClipFlowDeps, target: Target, clip: Item) -> dict[str, str]:
+    """Each campaign post's campaign: the post's own, else its clip's, else its job's ``campaign.campaignId`` (so
+    sending works whichever builder's part merged first)."""
+    job_campaign = None
+    if not clip.get("campaignId") and clip.get("jobId"):
+        job = _guard(lambda: deps.store.get(target.pk, db.job_sk(str(clip["jobId"])))) or {}
+        found = job.get("campaign")
+        job_campaign = found.get("campaignId") if isinstance(found, dict) else None
+    out: dict[str, str] = {}
+    for row in _post_rows(deps, target):
+        campaign = row.get("campaignId") or clip.get("campaignId") or job_campaign
+        if isinstance(campaign, str) and campaign:
+            out[str(row["postId"])] = campaign
+    return out
+
+
+# --- Content Rewards (§38.12) -----------------------------------------------------------------------------------
+
+
+def cr_send(deps: ClipFlowDeps, target: Target, posts_: list[list[str]]) -> dict[str, Any]:
+    """One CR step: every ``[postId, campaignId]`` once (``submit.send`` never raises); the pairs still pending."""
+    from ..contentrewards import submit
+
+    pairs = [(str(p[0]), str(p[1])) for p in posts_]
+    result = submit.send_many(deps.cr, target.user_id, pairs)
+    by_id = dict(pairs)
+    return {"outcomes": result["outcomes"], "pending": [[p, by_id[p]] for p in result["pending"] if p in by_id]}
+
+
+def cr_step(ctx: Any, deps: ClipFlowDeps, target: Target, name: str, posts_: list[list[str]]) -> list[list[str]]:
+    """A CR step never fails the flow: settle-clip, the 48-hour metrics and the vector step always run."""
+    try:
+        result = ctx.step(lambda _sc: cr_send(deps, target, posts_), name=name, config=retrying())
+    except StepError as e:
+        log("error", "clip_flow.cr_failed", clipId=target.clip_id, step=name, error=error_message(e))
+        return []
+    return [list(p) for p in result.get("pending") or []]
 
 
 # --- publishing (§17.6) -----------------------------------------------------------------------------------------
@@ -659,9 +725,12 @@ def _from_env() -> ClipFlowDeps:
         key = str(clip.get("videoKey") or s3.clip_prefix(str(clip.get("jobId")), str(clip.get("clipId"))) + "clip.mp4")
         return S3Video(media_client, bucket, key)
 
+    from ..contentrewards import deps as cr_deps
+
+    cr = cr_deps.from_env(store, media, None)
     if tokens is None:
         return ClipFlowDeps(
-            store=store, bedrock=bedrock, model_id=env["MODEL_ID"], vectors=vector_store, media=media, cfg=cfg
+            store=store, bedrock=bedrock, model_id=env["MODEL_ID"], vectors=vector_store, media=media, cfg=cfg, cr=cr
         )
     adapters = make_adapters(tokens=tokens, graph_api_version=cfg.graph_api_version)
     return ClipFlowDeps(
@@ -676,6 +745,7 @@ def _from_env() -> ClipFlowDeps:
         video=video,
         graph_api_version=cfg.graph_api_version,
         cfg=cfg,
+        cr=cr,
     )
 
 
@@ -686,6 +756,16 @@ def get_deps(factory: Callable[[], ClipFlowDeps] = _from_env) -> ClipFlowDeps:
     return _deps
 
 
+def _time_left(deps: ClipFlowDeps, context: Any) -> None:
+    """The CR refresh guard (≥ 20 s of the Lambda left, §38.9) reads this invocation's real time left."""
+    lambda_context = getattr(context, "lambda_context", None)
+    remaining = getattr(lambda_context, "get_remaining_time_in_millis", None)
+    if deps.cr is not None and callable(remaining):
+        deps.cr.remaining = lambda: max(0.0, float(remaining()) / 1000.0)
+
+
 @durable_execution
 def handler(event: Any, context: DurableContext) -> dict[str, Any]:
-    return run_clip_flow(context, event, get_deps())
+    deps = get_deps()
+    _time_left(deps, context)
+    return run_clip_flow(context, event, deps)

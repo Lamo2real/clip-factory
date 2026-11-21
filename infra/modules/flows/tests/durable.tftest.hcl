@@ -100,8 +100,13 @@ run "environment_matches_the_contract" {
   }
 
   assert {
-    condition     = toset(keys(one(aws_lambda_function.fn["clip-flow"].environment).variables)) == toset(["EMBED_MODEL_ID", "MEDIA_BUCKET", "MODEL_ID", "SECRET_PREFIX", "TABLE_NAME", "VECTOR_BUCKET", "VECTOR_INDEX"])
-    error_message = "clip-flow gets exactly TABLE_NAME, MEDIA_BUCKET, MODEL_ID, EMBED_MODEL_ID, VECTOR_BUCKET, VECTOR_INDEX and SECRET_PREFIX."
+    condition     = toset(keys(one(aws_lambda_function.fn["clip-flow"].environment).variables)) == toset(["CONTENT_REWARDS", "EMBED_MODEL_ID", "MEDIA_BUCKET", "MODEL_ID", "SECRET_PREFIX", "TABLE_NAME", "VECTOR_BUCKET", "VECTOR_INDEX"])
+    error_message = "clip-flow gets exactly TABLE_NAME, MEDIA_BUCKET, MODEL_ID, EMBED_MODEL_ID, VECTOR_BUCKET, VECTOR_INDEX, SECRET_PREFIX and CONTENT_REWARDS (§38.16)."
+  }
+
+  assert {
+    condition     = one(aws_lambda_function.fn["clip-flow"].environment).variables["CONTENT_REWARDS"] == "off"
+    error_message = "§38.16: the clip flow sends nothing to Content Rewards until the switch is on (default off)."
   }
 
   assert {

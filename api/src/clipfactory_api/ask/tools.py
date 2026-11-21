@@ -18,7 +18,7 @@ from typing import Any
 from ..log import log
 from . import fetch as web
 from .knowledge import Knowledge, read_section
-from .prompt import READ_MY_SECTIONS, SETUP_PLATFORMS
+from .prompt import GUIDE_NAMES, READ_MY_SECTIONS
 from .search import QUERY_CHARS, SearchError, SearchProvider
 from .state import Reader
 
@@ -120,13 +120,15 @@ def hop_check(start: str) -> Callable[[str], bool]:
 def setup_step_action(knowledge: Knowledge, action_id: str) -> dict[str, Any] | None:
     """The button for ``setup-step:{platform}:{stepId}``: opens that step of the setup guide and lights it."""
     m = SETUP_STEP_ACTION.fullmatch(action_id)
-    if not m or m.group(1) not in SETUP_PLATFORMS:
+    if not m or m.group(1) not in GUIDE_NAMES:
         return None
     platform, step_id = m.group(1), m.group(2)
     step = next((st for st in knowledge.setup_steps.get(platform, []) if st.get("id") == step_id), None)
     if step is None:
         return None
-    name = {"youtube": "YouTube", "tiktok": "TikTok", "x": "X"}.get(platform, platform.capitalize())
+    name = {"youtube": "YouTube", "tiktok": "TikTok", "x": "X", "contentrewards": "Content Rewards"}.get(
+        platform, platform.capitalize()
+    )
     return {
         "id": action_id,
         "label": f"Open {name} step {step.get('n')}",
@@ -381,11 +383,15 @@ class Toolbox:
 
     def _guide(self, args: dict[str, Any]) -> Outcome:
         platform, step_id = args.get("platform"), args.get("stepId")
-        if set(args) - {"platform", "stepId"} or platform not in SETUP_PLATFORMS:
-            return Outcome('{"INVALID_JSON": "platform must be youtube, tiktok, instagram, facebook or x"}', True)
+        if set(args) - {"platform", "stepId"} or platform not in GUIDE_NAMES:
+            return Outcome(
+                '{"INVALID_JSON": "platform must be youtube, tiktok, instagram, facebook, x or contentrewards"}', True
+            )
         if step_id is not None and not isinstance(step_id, str):
             return Outcome('{"INVALID_JSON": "stepId must be a string"}', True)
         rows = self.knowledge.setup_steps.get(str(platform), [])
+        if not rows and platform == "contentrewards":
+            return Outcome("That guide is not in this version yet.", True)
         if not rows:
             return Outcome("that guide is not in this version of the app", True)
         if step_id:

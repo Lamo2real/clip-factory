@@ -50,6 +50,9 @@ def rules(model_id: str) -> str:
 CACHE_1H = {"type": "ephemeral", "ttl": "1h"}
 
 SETUP_PLATFORMS = ("youtube", "tiktok", "instagram", "facebook", "x")
+# §38.17: the Content Rewards guide is read like the five platform guides (it is not a platform). When the knowledge
+# has no setup_steps.contentrewards (a web from before §38), the tool answers "That guide is not in this version yet."
+GUIDE_NAMES = (*SETUP_PLATFORMS, "contentrewards")
 
 READ_MY_SECTIONS = (
     "jobs",
@@ -128,7 +131,7 @@ def tools(*, web_search: bool, eager: bool) -> list[dict[str, Any]]:
             "'if you see' hints and the official page it opens, the day it was checked, and which steps the owner "
             "has done. Use it to find where he is stuck, above all when he sends a picture of another app or site.",
             {
-                "platform": {"type": "string", "enum": list(SETUP_PLATFORMS)},
+                "platform": {"type": "string", "enum": list(GUIDE_NAMES)},
                 "stepId": {"type": "string", "description": "One step id, to read only that step. Leave out for all."},
             },
             ["platform"],

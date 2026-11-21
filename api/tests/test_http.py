@@ -219,6 +219,30 @@ def test_every_contract_route_is_registered() -> None:
         # §34: delete jobs
         ("DELETE", "/v1/jobs/01J0000000000000000000000A"),
         ("POST", "/v1/jobs/delete"),
+        # §38: Content Rewards campaigns
+        ("GET", "/v1/contentrewards"),
+        ("POST", "/v1/contentrewards/connect"),
+        ("POST", "/v1/contentrewards/connect/finish"),
+        ("POST", "/v1/contentrewards/check"),
+        ("PATCH", "/v1/contentrewards/connection"),
+        ("DELETE", "/v1/contentrewards/connection"),
+        ("GET", "/v1/contentrewards/campaigns"),
+        ("POST", "/v1/contentrewards/campaigns"),
+        ("GET", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e"),
+        ("POST", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/read"),
+        ("PATCH", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e"),
+        ("POST", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/logo"),
+        ("POST", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/logo/done"),
+        ("POST", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/logo/link"),
+        ("DELETE", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e/logo"),
+        ("DELETE", "/v1/contentrewards/campaigns/200ea21b-be80-4db8-b552-8e32b148604e"),
+        ("GET", "/v1/contentrewards/submissions"),
+        ("POST", "/v1/contentrewards/submissions/check"),
+        ("POST", "/v1/contentrewards/submissions/01J0000000000000000000000A/send"),
+        ("PATCH", "/v1/contentrewards/submissions/01J0000000000000000000000A"),
+        ("GET", "/v1/contentrewards/money"),
+        ("POST", "/v1/contentrewards/money/refresh"),
+        ("POST", "/v1/contentrewards/seen"),
     }
     for method, path in expected:
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)

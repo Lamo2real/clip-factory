@@ -54,6 +54,12 @@ variable "web_dev_origin" {
   description = "Local Vite dev server, allowed by the API's and the media bucket's CORS."
 }
 
+variable "content_rewards_enabled" {
+  type        = bool
+  default     = false
+  description = "Content Rewards campaigns (docs/CONTRACTS.md §38.16). Off until every builder's part of §38.19 has merged; then one last one-line PR sets the default to true. While off, every /v1/contentrewards route answers 503 and the clip flow sends nothing."
+}
+
 variable "help_enabled" {
   type        = bool
   default     = true
