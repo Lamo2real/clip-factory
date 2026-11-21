@@ -16,7 +16,18 @@ from clipfactory_api.workspaces import ai_resolve as res
 from clipfactory_api.workspaces import types as ws
 from conftest import USER, Clock
 from fakes import FakeS3, FakeTable
-from test_ws_ai_support import BASE, FakeRuntime, WsCall, install, leaked, pk, prefix, seed_idea, ws_call
+from test_ws_ai_support import (
+    BASE,
+    FakeRuntime,
+    WsCall,
+    dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
+    install,
+    leaked,
+    pk,
+    prefix,
+    seed_idea,
+    ws_call,
+)
 
 
 @pytest.fixture
@@ -170,6 +181,11 @@ def test_poll_with_after(wcall: WsCall, table: FakeTable) -> None:
     assert status == 200
     assert [m["msgId"] for m in got["messages"]] == [two["user"]["msgId"], two["assistant"]["msgId"]]
     assert wcall("GET", f"{BASE}/chat/{conv['convId']}", query={"after": "nope"})[0] == 400
+    # older history page by page (an addition to the contract's after, so the whole history stays readable)
+    status, got = wcall("GET", f"{BASE}/chat/{conv['convId']}", query={"before": two["user"]["msgId"]})
+    assert status == 200
+    assert [m["msgId"] for m in got["messages"]] == [one["user"]["msgId"], one["assistant"]["msgId"]]
+    assert wcall("GET", f"{BASE}/chat/{conv['convId']}", query={"before": "01JD0000000000000000000000"})[0] == 404
 
 
 def test_pictures_go_to_the_conversations_own_prefix(wcall: WsCall, s3_client: FakeS3, table: FakeTable) -> None:

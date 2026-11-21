@@ -10,7 +10,17 @@ import pytest
 from clipfactory_api import db
 from clipfactory_api.app import App
 from fakes import FakeTable
-from test_ws_ai_support import BASE, FakeRuntime, WsCall, install, pk, seed_social, seed_workspace, ws_call
+from test_ws_ai_support import (
+    BASE,
+    FakeRuntime,
+    WsCall,
+    dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
+    install,
+    pk,
+    seed_social,
+    seed_workspace,
+    ws_call,
+)
 
 STEPS = ["ai", "model", "effort", "video", "agents", "instagram", "tiktok", "youtube", "facebook", "x", "done"]
 

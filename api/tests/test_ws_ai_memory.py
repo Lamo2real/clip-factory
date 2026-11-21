@@ -12,7 +12,17 @@ from clipfactory_api.ids import ulid
 from clipfactory_api.workspaces import types as ws
 from conftest import OTHER, USER
 from fakes import FakeTable
-from test_ws_ai_support import BASE, FakeRuntime, WsCall, install, leaked, pk, seed, ws_call
+from test_ws_ai_support import (
+    BASE,
+    FakeRuntime,
+    WsCall,
+    dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
+    install,
+    leaked,
+    pk,
+    seed,
+    ws_call,
+)
 
 
 @pytest.fixture

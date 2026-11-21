@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import zipfile
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from typing import Any
+
+import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App
@@ -23,7 +26,7 @@ from clipfactory_api.workspaces import deps, provider_keys
 from clipfactory_api.workspaces import types as ws
 from clipfactory_api.workspaces.routes import ROUTES
 from conftest import USER, make_event
-from fakes import FakeS3
+from fakes import FakeS3, FakeTable
 
 WS = "stories"
 BASE = f"/v1/workspaces/{WS}"
@@ -256,3 +259,44 @@ def leaked(responses: Iterable[Any], *, allowed_key_paths: Iterable[str] = (".ke
             if value.startswith("ws/") and where not in allowed:
                 found.append(f"a raw ws/ key at {where}")
     return found
+
+
+# --- what real DynamoDB refuses and the fake lets through -------------------------------------------------------
+
+PLACEHOLDER = re.compile(r"[#:][A-Za-z0-9_]+")
+EXPRESSIONS = (
+    "UpdateExpression",
+    "ConditionExpression",
+    "KeyConditionExpression",
+    "FilterExpression",
+    "ProjectionExpression",
+)
+
+
+def expression_problems(table: FakeTable) -> list[str]:
+    """What real DynamoDB refuses and the fake table lets through: a name or value placeholder that the expressions
+    do not use, or one they use that is not given."""
+    out: list[str] = []
+
+    def check(op: str, request: dict[str, Any]) -> None:
+        used = set(PLACEHOLDER.findall(" ".join(str(request.get(k) or "") for k in EXPRESSIONS)))
+        given = set(request.get("ExpressionAttributeNames") or {}) | set(request.get("ExpressionAttributeValues") or {})
+        out.extend(f"{op}: {p} is given but not used" for p in sorted(given - used))
+        out.extend(f"{op}: {p} is used but not given" for p in sorted(used - given))
+
+    for name, kw in table.calls:
+        if name == "transact_write_items":
+            for action in kw["TransactItems"]:
+                ((kind, request),) = action.items()
+                check(f"transact-{kind}", request)
+        elif name != "batch_get_item":
+            check(name, kw)
+    return out
+
+
+@pytest.fixture(autouse=True)
+def dynamodb_rules(table: FakeTable) -> Iterator[None]:
+    """Imported by every AI test module: after each test, no request may carry a placeholder its expressions do not
+    use (or use one it does not give)."""
+    yield
+    assert expression_problems(table) == []

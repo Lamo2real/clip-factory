@@ -12,7 +12,17 @@ from clipfactory_api.app import App
 from clipfactory_api.workspaces import ai_resolve as res
 from clipfactory_api.workspaces import types as ws
 from fakes import FakeTable
-from test_ws_ai_support import BASE, FakeRuntime, WsCall, install, seed, seed_asset, seed_usage, ws_call
+from test_ws_ai_support import (
+    BASE,
+    FakeRuntime,
+    WsCall,
+    dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
+    install,
+    seed,
+    seed_asset,
+    seed_usage,
+    ws_call,
+)
 
 
 @pytest.fixture

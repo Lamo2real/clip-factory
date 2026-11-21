@@ -15,7 +15,17 @@ from clipfactory_api.workspaces import agents as agents_mod
 from clipfactory_api.workspaces import ai_resolve as res
 from conftest import NOW, USER
 from fakes import FakeS3, FakeTable
-from test_ws_ai_support import BASE, FakeRuntime, WsCall, install, pk, skill_md, upload_skill, ws_call
+from test_ws_ai_support import (
+    BASE,
+    FakeRuntime,
+    WsCall,
+    dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
+    install,
+    pk,
+    skill_md,
+    upload_skill,
+    ws_call,
+)
 
 
 @pytest.fixture

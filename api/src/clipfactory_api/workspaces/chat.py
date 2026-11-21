@@ -176,17 +176,39 @@ def conversation(store: db.Store, user_id: str, workspace_id: str, conv: Mapping
     return public_conversation(conv, effective(conv, ai=ai, agent=agent))
 
 
-def get(app: Any, user_id: str, workspace_id: str, conv_id: str, after: str | None, *, now: datetime) -> dict[str, Any]:
+def get(
+    app: Any,
+    user_id: str,
+    workspace_id: str,
+    conv_id: str,
+    after: str | None,
+    *,
+    now: datetime,
+    before: str | None = None,
+) -> dict[str, Any]:
+    """The conversation and its messages, oldest first: the newest ``SHOWN``; with ``after`` (the web's poll) only
+    the newer ones; with ``before`` the ``SHOWN`` older ones, so the whole history stays readable."""
     store = app.store
     conv = _conv(store, user_id, workspace_id, conv_id)
+    for name, value in (("after", after), ("before", before)):
+        if value is not None and not is_ulid(value):
+            raise bad_request(f"{name} is not a message id.", name)
     if after:
-        if not is_ulid(after):
-            raise bad_request("after is not a message id.", "after")
         items = cfg.query_owned(store, user_id, workspace_id, msg_prefix(conv_id))
         items = [m for m in items if str(m.get("msgId") or "") > after][:SHOWN]
     else:
+        start = None
+        if before:
+            if cfg.get_owned(store, user_id, workspace_id, msg_sk(conv_id, before)) is None:
+                raise not_found(MSG_NOT_FOUND)
+            start = {"pk": cfg.pk(user_id, workspace_id), "sk": msg_sk(conv_id, before)}
         page = store.query_page(
-            cfg.pk(user_id, workspace_id), msg_prefix(conv_id), newest_first=True, limit=SHOWN, consistent=True
+            cfg.pk(user_id, workspace_id),
+            msg_prefix(conv_id),
+            newest_first=True,
+            limit=SHOWN,
+            consistent=True,
+            start_key=start,
         )
         items = [m for m in reversed(page.items) if guard.owned(m, user_id, workspace_id)]
     items = [settle(app, m, now) if m.get("role") == "assistant" else m for m in items]
@@ -212,7 +234,7 @@ def settle(app: Any, item: dict[str, Any], now: datetime) -> dict[str, Any]:
     if not is_stale(item, now):
         return item
     old_session = item.get("sessionId")
-    names = {"#st": "status", "#e": "error", "#sid": "sessionId", "#u": "updatedAt", "#hb": "heartbeatAt"}
+    names = {"#st": "status", "#e": "error", "#sid": "sessionId", "#u": "updatedAt"}
     values: dict[str, Any] = {
         ":failed": "failed",
         ":err": STOPPED_LINE,
@@ -222,8 +244,9 @@ def settle(app: Any, item: dict[str, Any], now: datetime) -> dict[str, Any]:
         ":sid": old_session,
     }
     condition = "attribute_exists(pk) AND #st = :st AND #sid = :sid"
-    if item.get("heartbeatAt"):
+    if item.get("heartbeatAt"):  # DynamoDB refuses names and values an expression does not use
         condition += " AND #hb = :hb"
+        names["#hb"] = "heartbeatAt"
         values[":hb"] = item["heartbeatAt"]
     try:
         updated = app.store.update_expr(

@@ -624,7 +624,8 @@ def restore(
     new_key = revision_key(user_id, workspace_id, skill_id, new_id, fmt)
     app.media.put(new_key, data, CONTENT_TYPES[fmt])
     kept, dropped = _kept([_revision(new_id, new_key, len(data), fmt, at), *revisions])
-    title = parse_form(item, text).title if item.get("source") == "written" else humanize(meta.name)
+    # a written skill's title is its heading (build_skill_md writes it); an uploaded one's comes from its name
+    title = _title(text, meta.name) if item.get("source") == "written" else humanize(meta.name)
     sets = {
         "title": title[:TITLE_MAX],
         "name": meta.name,

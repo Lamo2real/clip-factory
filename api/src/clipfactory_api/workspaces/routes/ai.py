@@ -155,7 +155,8 @@ def create_chat(app: App, req: Request) -> Response:
 
 def get_chat(app: App, req: Request) -> Response:
     user_id, ws_id, _, now = _open(app, req)
-    return ok(chat.get(app, user_id, ws_id, req.params["convId"], req.query.get("after") or None, now=now))
+    after, before = req.query.get("after") or None, req.query.get("before") or None
+    return ok(chat.get(app, user_id, ws_id, req.params["convId"], after, now=now, before=before))
 
 
 def patch_chat(app: App, req: Request) -> Response:

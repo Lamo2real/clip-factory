@@ -15,7 +15,17 @@ from clipfactory_api.workspaces import ai_resolve as res
 from clipfactory_api.workspaces import types as ws
 from conftest import USER
 from fakes import FakeTable
-from test_ws_ai_support import BASE, FakeRuntime, WsCall, install, leaked, pk, seed, ws_call
+from test_ws_ai_support import (
+    BASE,
+    FakeRuntime,
+    WsCall,
+    dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
+    install,
+    leaked,
+    pk,
+    seed,
+    ws_call,
+)
 
 
 @pytest.fixture
@@ -259,3 +269,20 @@ def test_a_clips_id_and_another_owners_id_are_refused(wcall: WsCall, table: Fake
     assert wcall("GET", "/v1/workspaces/01JD0000000000000000000000/ai")[0] == 404
     assert wcall("PUT", "/v1/workspaces/clips/ai", {"version": 0})[0] == 409
     assert not [i for i in table.all() if i["pk"] == f"USER#{USER}"]
+
+
+def test_the_stories_effective_values_for_the_story_routes(wcall: WsCall, store: db.Store) -> None:
+    """``ai_config.story_effective_for`` (for builder A's story routes, §45.25 "the API returns the effective values …
+    on the story"): the story's own setting is the project level, above the task, the agent and the default."""
+    from clipfactory_api.workspaces import ai_config
+
+    assert _put(wcall, tasks={"storyboard": {"model": "sonnet-5-5"}})[0] == 200
+    story = {"storyId": "s1", "ai": {"model": "fable-5-2", "effort": None}}
+    got = ai_config.story_effective_for(store, USER, "stories", story)
+    assert got == {"model": "fable-5-2", "effort": "high", "effortApplied": True, "from": "project"}
+    got = ai_config.story_effective_for(store, USER, "stories", {"ai": {"model": None, "effort": "low"}})
+    assert got == {"model": "sonnet-5-5", "effort": "low", "effortApplied": True, "from": "task"}
+    got = ai_config.story_effective_for(store, USER, "stories", {}, task="fact_check")
+    assert got["from"] == "default"
+    with pytest.raises(res.ResolveError):
+        ai_config.effective_for(store, USER, "stories", "chat", request={"model": "gpt-9"})

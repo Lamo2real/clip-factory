@@ -14,7 +14,17 @@ import pytest
 from clipfactory_api.app import App
 from conftest import USER, Clock
 from fakes import FakeS3, FakeTable
-from test_ws_ai_support import BASE, FakeRuntime, WsCall, install, leaked, pk, prefix, ws_call
+from test_ws_ai_support import (
+    BASE,
+    FakeRuntime,
+    WsCall,
+    dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
+    install,
+    leaked,
+    pk,
+    prefix,
+    ws_call,
+)
 
 MB = 1024 * 1024
 ANALYSIS = {

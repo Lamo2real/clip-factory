@@ -17,6 +17,7 @@ from test_ws_ai_support import (
     BASE,
     FakeRuntime,
     WsCall,
+    dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
     install,
     leaked,
     pk,
@@ -170,6 +171,14 @@ def test_every_save_is_a_revision_and_the_last_ten_are_kept(wcall: WsCall, s3_cl
     assert len(body["skill"]["revisions"]) == 10
     _, got = wcall("GET", f"{BASE}/skills/{skill_id}")
     assert "Take 7." in got["skill"]["content"]
+    # a renamed skill restored to an older revision gets that revision's name back
+    status, renamed = wcall(
+        "PUT", f"{BASE}/skills/{skill_id}", {"version": got["skill"]["version"], "title": "Big laughs"}
+    )
+    assert (status, renamed["skill"]["title"]) == (200, "Big laughs")
+    previous = renamed["skill"]["revisions"][1]["revisionId"]
+    _, back = wcall("POST", f"{BASE}/skills/{skill_id}/restore", {"revisionId": previous})
+    assert back["skill"]["title"] == "Funny endings"
     assert wcall("POST", f"{BASE}/skills/{skill_id}/restore", {"revisionId": "nope"})[0] == 404
     assert wcall("PUT", f"{BASE}/skills/{skill_id}", {"version": 1, "enabled": False})[0] == 409
 

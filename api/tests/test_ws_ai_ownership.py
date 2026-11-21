@@ -19,7 +19,15 @@ from clipfactory_api.workspaces import types as ws
 from clipfactory_api.workspaces.routes import ai
 from conftest import OTHER, USER
 from fakes import FakeS3, FakeTable
-from test_ws_ai_support import BASE, FakeRuntime, WsCall, install, upload_skill, ws_call
+from test_ws_ai_support import (
+    BASE,
+    FakeRuntime,
+    WsCall,
+    dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
+    install,
+    upload_skill,
+    ws_call,
+)
 
 OTHER_WS = "01JD00000000000000000000WS"
 GROUP = re.compile(r"\(\?P<(\w+)>\[\^/\]\+\)")

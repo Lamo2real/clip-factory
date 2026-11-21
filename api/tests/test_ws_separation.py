@@ -30,9 +30,22 @@ from clipfactory_api.ids import ulid
 from clipfactory_api.workspaces import deps, provider_keys
 from clipfactory_api.workspaces import types as ws
 from clipfactory_api.workspaces.routes import ROUTES
+from clipfactory_api.workspaces.routes import ai as ai_routes
 from conftest import STATE_KEY, STATE_SECRET, USER
 from fakes import FakeAgentCore, FakeLambda, FakeS3, FakeSecretsManager, FakeTable
-from test_ws_ai_support import BASE, FakeRuntime, WsCall, leaked, pk, prefix, seed, skill_md, ws_call
+from test_ws_ai_support import (
+    BASE,
+    FakeRuntime,
+    WsCall,
+    dynamodb_rules,  # noqa: F401 (the DynamoDB expression rules, after each test)
+    expression_problems,
+    leaked,
+    pk,
+    prefix,
+    seed,
+    skill_md,
+    ws_call,
+)
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "clipfactory_api"
 GROUP = re.compile(r"\(\?P<(\w+)>\[\^/\]\+\)")
@@ -457,6 +470,13 @@ def test_every_lamo_stories_route_stays_in_its_own_namespaces(
 
     _ai_flow(call, s3_client)
     flow = list(call.responses)
+    hit = {
+        (r.method, r.pattern.pattern)
+        for r in ai_routes.ROUTES
+        for m, p, s, _ in flow
+        if m == r.method and r.pattern.match(p) and s < 300
+    }
+    assert len(hit) == len(ai_routes.ROUTES) == 38  # the real flow answered every AI route
 
     # every route of Lamo Stories' own table, with every id a seeded or a made-up one, writes and reads first
     values = {"ws": "stories", "platform": "youtube", "agentId": "creative_director", "modelKey": "opus-5-5",
@@ -469,6 +489,7 @@ def test_every_lamo_stories_route_stays_in_its_own_namespaces(
             call(r.method, _path(r, {"ws": "stories"}), {} if r.method not in {"GET", "DELETE"} else None)
 
     assert ddb_problems(table) == []
+    assert expression_problems(table) == []
     assert s3_problems(s3_client) == []
     assert secret_problems(secrets_client) == []
     assert _clips_snapshot(table, secrets_client, s3_client) == before
