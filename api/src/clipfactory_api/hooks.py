@@ -9,6 +9,8 @@
   stored once by message id, then the creator's live state changes (``follow.webhooks``).
 * ``GET /oauth/{platform}/callback``: the OAuth callback of §17.5 (``oauth.callback``). It always answers ``302`` to
   ``{APP_URL}/settings/posting/setup/{platform}?result={code}`` (a fixed path and a listed code: no open redirect).
+  Get paid (§40.6) also comes back here: YouTube's "Allow payment reading" and ``whop`` ("Connect Whop", served on
+  this callback only, never on ``/hooks/whop``), each to its fixed Get paid page.
   On ``connected`` the clips waiting for that place go out (``release``, §17.6): it starts the clip flow on the alias
   in ``CLIP_FLOW_ARN``.
 
@@ -50,7 +52,9 @@ META = frozenset({"instagram", "facebook"})
 # §24: Twitch and Kick send Follow creators' webhooks. They are not posting platforms (never in settings.PLATFORMS),
 # have no OAuth callback, and every delivery must be signed.
 FOLLOW_HOOKS = ("twitch", "kick")
-HOOK_PLATFORMS: tuple[str, ...] = PLATFORMS + FOLLOW_HOOKS
+# §40.6: Connect Whop comes back on the OAuth callback only; Whop never sends webhooks here (/hooks/whop is a 404).
+CALLBACK_ONLY = ("whop",)
+HOOK_PLATFORMS: tuple[str, ...] = PLATFORMS + FOLLOW_HOOKS + CALLBACK_ONLY
 KEPT_HEADERS = (
     "content-type",
     "user-agent",
@@ -142,7 +146,11 @@ def handle(event: Mapping[str, Any], deps: HooksDeps) -> dict[str, Any]:
     params = event.get("pathParameters") or {}
     platform = str(params.get("platform") or "") if isinstance(params, Mapping) else ""
     request_id = str((event.get("requestContext") or {}).get("requestId") or "")
-    if platform not in HOOK_PLATFORMS or (platform in FOLLOW_HOOKS and resource != "/hooks/{platform}"):
+    if (
+        platform not in HOOK_PLATFORMS
+        or (platform in FOLLOW_HOOKS and resource != "/hooks/{platform}")
+        or (platform in CALLBACK_ONLY and resource != "/oauth/{platform}/callback")
+    ):
         log("info", "hooks.unknown_platform", method=method, resource=resource, requestId=request_id)
         return _error(404, "not_found", "We do not support that platform.")
     try:
@@ -284,7 +292,7 @@ def _from_env() -> HooksDeps:
     from botocore.config import Config
 
     from .app import region, table
-    from .oauth import money_scopes_from_config, scopes_from_config
+    from .oauth import money_scopes_from_config, payment_scopes_from_config, scopes_from_config
     from .oauth.secrets import PREFIX, Secrets
     from .stats import config
 
@@ -306,6 +314,7 @@ def _from_env() -> HooksDeps:
             graph_version=config.load().graph_api_version,
             scopes=scopes_from_config(),
             money_scopes=money_scopes_from_config(),
+            payment_scopes=payment_scopes_from_config(),
         )
     from .follow.platforms import FollowEnv
     from .follow.webhooks import KickKeys

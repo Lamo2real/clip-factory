@@ -183,8 +183,26 @@ def authorize_url(
     *,
     rerequest: bool = False,
     money: bool = False,
+    payments: bool = False,
 ) -> str:
     redirect = env.redirect_uri(platform)
+    if platform == "youtube" and payments:
+        # §40.6 "Allow payment reading": the AdSense scope only, on its own token (no include_granted_scopes), and
+        # Google's account picker, because the AdSense Google account can be another one than the YouTube one.
+        params = {
+            "client_id": keys.client_id,
+            "redirect_uri": redirect,
+            "response_type": "code",
+            "scope": " ".join(env.payment_scopes.get("youtube", ())),
+            "access_type": "offline",
+            "prompt": "consent select_account",
+            "state": state,
+        }
+        if challenge:
+            params |= {"code_challenge": challenge, "code_challenge_method": "S256"}
+        return f"{GOOGLE_AUTHORIZE}?{urlencode(params, quote_via=quote)}"
+    if payments:
+        raise ValueError(f"{platform} has no payment reading")
     if platform == "youtube":
         params = {
             "client_id": keys.client_id,

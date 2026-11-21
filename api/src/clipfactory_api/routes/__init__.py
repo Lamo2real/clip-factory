@@ -9,6 +9,7 @@ from . import (
     contentrewards,
     finder,
     follows,
+    getpaid,
     help,
     jobs,
     lessons,
@@ -100,6 +101,15 @@ ROUTES: list[Route] = [
     # "/v1/money/{platform}/days" too.
     route("GET", "/v1/money/everywhere", money.get_everywhere),
     route("GET", "/v1/money/{platform}/days", money.get_days),
+    # §40: Get paid. Stored items only, except Connect Whop (Whop's metadata) and the stops (Whop's revoke). The
+    # fixed paths come before "/v1/getpaid/{place}".
+    route("GET", "/v1/getpaid", getpaid.get_getpaid),
+    route("PATCH", "/v1/getpaid/steps", getpaid.patch_steps),
+    route("PUT", "/v1/getpaid/whop/key", getpaid.put_whop_key),
+    route("POST", "/v1/getpaid/whop/connect", getpaid.connect_whop),
+    route("DELETE", "/v1/getpaid/connections/adsense", getpaid.stop_adsense),
+    route("DELETE", "/v1/getpaid/connections/whop", getpaid.stop_whop),
+    route("GET", "/v1/getpaid/{place}", getpaid.get_place),
     route("GET", "/v1/weeks/{week}", weeks.get_week),
     route("PUT", "/v1/weeks/{week}/best", weeks.put_best),
     # Ask Clip Factory (§19.6): the help package loads only inside these handlers.

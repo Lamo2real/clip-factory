@@ -1,0 +1,405 @@
+{
+"amounts": [
+ {
+  "text": "kr 1 234,56 SEK",
+  "micros": 1234560000,
+  "currency": "SEK"
+ },
+ {
+  "text": "SEK 1,234.56",
+  "micros": 1234560000,
+  "currency": "SEK"
+ },
+ {
+  "text": "1 234,56 kr",
+  "micros": 1234560000,
+  "currency": null
+ },
+ {
+  "text": "$1,234.57",
+  "micros": 1234570000,
+  "currency": null
+ },
+ {
+  "text": "€87.65",
+  "micros": 87650000,
+  "currency": "EUR"
+ },
+ {
+  "text": "£87.65",
+  "micros": 87650000,
+  "currency": "GBP"
+ },
+ {
+  "text": "¥1,235 JPY",
+  "micros": 1235000000,
+  "currency": "JPY"
+ },
+ {
+  "text": "1.234,56 €",
+  "micros": 1234560000,
+  "currency": "EUR"
+ },
+ {
+  "text": "kr 1 234,56 SEK",
+  "micros": 1234560000,
+  "currency": "SEK"
+ },
+ {
+  "text": "CHF 1'234.50",
+  "micros": 1234500000,
+  "currency": "CHF"
+ },
+ {
+  "text": "₹1,00,000.50",
+  "micros": 100000500000,
+  "currency": "INR"
+ },
+ {
+  "text": "-$5.00 USD",
+  "micros": -5000000,
+  "currency": "USD"
+ },
+ {
+  "text": "1.234.56 EUR",
+  "micros": null,
+  "currency": "EUR"
+ },
+ {
+  "text": "12 SEK 34",
+  "micros": null,
+  "currency": "SEK"
+ },
+ {
+  "text": "€5 USD",
+  "micros": 5000000,
+  "currency": null
+ },
+ {
+  "text": "",
+  "micros": null,
+  "currency": null
+ }
+],
+"whopAmounts": [
+ {
+  "name": "what reached the bank wins",
+  "payout": {"destination_amount": 412.5, "destination_currency": "sek", "net_amount": 40.0, "currency": "usd"},
+  "micros": 412500000,
+  "currency": "SEK"
+ },
+ {
+  "name": "no destination: the net amount",
+  "payout": {"destination_amount": null, "net_amount": "39.70", "currency": "usd"},
+  "micros": 39700000,
+  "currency": "USD"
+ },
+ {
+  "name": "a destination amount without its money type is not used",
+  "payout": {"destination_amount": 412.5, "net_amount": 40, "currency": "usd"},
+  "micros": 40000000,
+  "currency": "USD"
+ },
+ {
+  "name": "nothing to read",
+  "payout": {"amount": 41.0},
+  "micros": null,
+  "currency": null
+ },
+ {
+  "name": "not a number",
+  "payout": {"net_amount": "lots", "currency": "usd"},
+  "micros": null,
+  "currency": null
+ }
+],
+"lines": [
+ {
+  "name": "tiktok: not available, never $0",
+  "place": "tiktok",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {},
+  "state": {},
+  "whopOn": false,
+  "expect": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}
+ },
+ {
+  "name": "instagram: not available, never $0",
+  "place": "instagram",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {},
+  "state": {},
+  "whopOn": false,
+  "expect": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}
+ },
+ {
+  "name": "facebook: not available, never $0",
+  "place": "facebook",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {},
+  "state": {},
+  "whopOn": false,
+  "expect": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}
+ },
+ {
+  "name": "x: not available, never $0",
+  "place": "x",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {},
+  "state": {},
+  "whopOn": false,
+  "expect": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}
+ },
+ {
+  "name": "youtube: no payment reading",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {},
+  "state": {},
+  "whopOn": false,
+  "expect": {"state": "needs_reading", "headline": "Clip Factory can't see YouTube payments yet", "amounts": [], "button": {"label": "Allow payment reading", "href": "/settings/posting/getpaid/youtube#yt-reading", "external": false}}
+ },
+ {
+  "name": "youtube: Google's payments in kronor, a gone one stops counting",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [{"sk": "PAYOUT#youtube#2026-10-23#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-10-23", "amountText": "kr 1 234,56 SEK", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#youtube#2026-09-22#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-09-22", "amountText": "kr 1 233,44 SEK", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#youtube#2026-08-21#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-08-21", "amountText": "kr 500,00 SEK", "state": "gone", "fetchedAt": "2026-11-21T06:00:00.000Z", "goneAt": "2026-11-01T06:00:00.000Z"}],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-21T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [{"currency": "SEK", "amountMicros": 2468000000}], "tag": "YouTube says", "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": 1234560000, "currency": "SEK"}}
+ },
+ {
+  "name": "youtube: two AdSense accounts paid on the same day stay two payments",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [{"sk": "PAYOUT#youtube#2026-10-23#1111", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "1111", "date": "2026-10-23", "amountText": "€87.65", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#youtube#2026-10-23#2222", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "2222", "date": "2026-10-23", "amountText": "€12.35", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-21T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [{"currency": "EUR", "amountMicros": 100000000}], "tag": "YouTube says", "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": 12350000, "currency": "EUR"}}
+ },
+ {
+  "name": "youtube: only unread amounts: a number line with nothing added up",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [{"sk": "PAYOUT#youtube#2026-10-23#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-10-23", "amountText": "$1,234.57", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#youtube#2026-09-22#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-09-22", "amountText": "1 234,56 kr", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#youtube#2026-08-21#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-08-21", "amountText": "$5", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-21T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [], "tag": "YouTube says", "notAdded": "Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up.", "button": {"label": "See them", "href": "/settings/posting/getpaid/youtube", "external": false}, "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": null, "currency": null, "text": "$1,234.57"}}
+ },
+ {
+  "name": "youtube: one unread amount is never summed",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [{"sk": "PAYOUT#youtube#2026-10-23#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-10-23", "amountText": "kr 1 234,56 SEK", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#youtube#2026-09-22#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-09-22", "amountText": "$1,234.57", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-21T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [{"currency": "SEK", "amountMicros": 1234560000}], "tag": "YouTube says", "notAdded": "1 payment isn't added up: Clip Factory couldn't tell its money type.", "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": 1234560000, "currency": "SEK"}}
+ },
+ {
+  "name": "youtube: reading on, nothing sent yet",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-21T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "none_yet", "headline": "Nothing sent to your bank yet", "amounts": [], "tag": "YouTube says"}
+ },
+ {
+  "name": "youtube: reading just allowed is checking",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-21T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {},
+  "whopOn": false,
+  "expect": {"state": "checking", "headline": "Checking YouTube payments…", "amounts": [], "why": "This can take until tomorrow."}
+ },
+ {
+  "name": "youtube: the first read is late",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {},
+  "whopOn": false,
+  "expect": {"state": "error", "headline": "Clip Factory couldn't check YouTube payments yet", "amounts": [], "why": "It tries again tomorrow."}
+ },
+ {
+  "name": "youtube: allowed again after Stop: the old read is not this connection's, so it is checking",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-21T11:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-18T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "checking", "headline": "Checking YouTube payments…", "amounts": [], "why": "This can take until tomorrow."}
+ },
+ {
+  "name": "youtube: allowed again after Stop, 26 hours and no new read",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-20T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-18T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "error", "headline": "Clip Factory couldn't check YouTube payments yet", "amounts": [], "why": "It tries again tomorrow."}
+ },
+ {
+  "name": "youtube: reads failing for 10 days never say nothing sent yet",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "adsense", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-11T06:00:00.000Z", "lastError": "Google said 500"},
+  "whopOn": false,
+  "expect": {"state": "error", "headline": "Clip Factory couldn't check YouTube payments lately", "amounts": [], "why": "Clip Factory last checked YouTube payments on 11 Nov."}
+ },
+ {
+  "name": "youtube: reading needs a reconnect",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "adsense", "status": "needs_reconnect", "connectedAt": "2026-11-01T09:00:00.000Z", "accounts": [{"name": "accounts/pub-1234567890123456", "displayName": "Main"}], "scopes": ["https://www.googleapis.com/auth/adsense.readonly"], "lastResult": "payments_allowed", "reason": "keys_changed"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-21T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "needs_reading", "headline": "Clip Factory can't see YouTube payments anymore", "amounts": [], "why": "Tap Allow payment reading again.", "button": {"label": "Allow payment reading", "href": "/settings/posting/getpaid/youtube#yt-reading", "external": false}}
+ },
+ {
+  "name": "youtube: reading stopped, the payments stay",
+  "place": "youtube",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [{"sk": "PAYOUT#youtube#2026-10-23#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-10-23", "amountText": "kr 1 234,56 SEK", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}],
+  "conn": {"status": "not_connected", "stoppedAt": "2026-11-20T10:00:00.000Z"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-21T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [{"currency": "SEK", "amountMicros": 1234560000}], "tag": "YouTube says", "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": 1234560000, "currency": "SEK"}, "note": "Clip Factory stopped reading on 20 Nov."}
+ },
+ {
+  "name": "contentrewards: Connect Whop off",
+  "place": "contentrewards",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "whop", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accountId": "user_abc123", "accountName": "@owner", "keyHint": "app_Ab…wxyz", "tokenVersionId": "v3"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-21T06:00:00.000Z"},
+  "whopOn": false,
+  "expect": {"state": "not_available", "headline": "Sent to your bank: not available from Content Rewards", "amounts": [], "where": {"text": "Look on Whop: **Balances**."}}
+ },
+ {
+  "name": "contentrewards: Connect Whop on, not connected",
+  "place": "contentrewards",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {},
+  "state": {},
+  "whopOn": true,
+  "expect": {"state": "not_available", "headline": "Sent to your bank: not available from Content Rewards", "amounts": [], "where": {"text": "Look on Whop: **Balances**."}, "button": {"label": "Connect Whop", "href": "/settings/posting/getpaid/contentrewards#whop", "external": false}}
+ },
+ {
+  "name": "contentrewards: Whop's statuses: completed counts, on its way and came back don't",
+  "place": "contentrewards",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [{"sk": "PAYOUT#contentrewards#2026-11-18#po_4", "type": "payout", "place": "contentrewards", "by": "whop", "source": "whop.payouts", "payoutId": "po_4", "status": "processing", "state": "on_its_way", "date": "2026-11-18", "amountMicros": 12000000, "currency": "USD", "traceCode": "UETR-secret-trace", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#contentrewards#2026-11-10#po_3", "type": "payout", "place": "contentrewards", "by": "whop", "source": "whop.payouts", "payoutId": "po_3", "status": "completed", "state": "sent", "date": "2026-11-10", "amountMicros": 40000000, "currency": "USD", "traceCode": "UETR-secret-trace", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#contentrewards#2026-11-02#po_2", "type": "payout", "place": "contentrewards", "by": "whop", "source": "whop.payouts", "payoutId": "po_2", "status": "completed", "state": "sent", "date": "2026-11-02", "amountMicros": 412000000, "currency": "SEK", "traceCode": "UETR-secret-trace", "fetchedAt": "2026-11-21T06:00:00.000Z", "estimatedArrival": "2026-11-06"}, {"sk": "PAYOUT#contentrewards#2026-10-02#po_1", "type": "payout", "place": "contentrewards", "by": "whop", "source": "whop.payouts", "payoutId": "po_1", "status": "reversed", "state": "came_back", "date": "2026-10-02", "amountMicros": 9000000, "currency": "USD", "traceCode": "UETR-secret-trace", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#contentrewards#2026-09-02#po_0", "type": "payout", "place": "contentrewards", "by": "whop", "source": "whop.payouts", "payoutId": "po_0", "status": "denied", "state": "didnt_go_through", "date": "2026-09-02", "amountMicros": 7000000, "currency": "USD", "traceCode": "UETR-secret-trace", "fetchedAt": "2026-11-21T06:00:00.000Z"}],
+  "conn": {"type": "payconn", "source": "whop", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accountId": "user_abc123", "accountName": "@owner", "keyHint": "app_Ab…wxyz", "tokenVersionId": "v3"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-21T06:00:00.000Z"},
+  "whopOn": true,
+  "expect": {"state": "number", "headline": "Sent to your bank by Whop", "amounts": [{"currency": "SEK", "amountMicros": 412000000}, {"currency": "USD", "amountMicros": 40000000}], "tag": "Whop says", "arrive": "Whop says it should arrive within 5 workdays.", "note": "Whop counts all your Whop money, not only Content Rewards.", "last": {"date": "2026-11-10", "amountMicros": 40000000, "currency": "USD"}}
+ },
+ {
+  "name": "contentrewards: Whop connected, nothing sent yet",
+  "place": "contentrewards",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "whop", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accountId": "user_abc123", "accountName": "@owner", "keyHint": "app_Ab…wxyz", "tokenVersionId": "v3"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-21T06:00:00.000Z"},
+  "whopOn": true,
+  "expect": {"state": "none_yet", "headline": "Nothing sent to your bank yet", "amounts": [], "tag": "Whop says", "note": "Whop counts all your Whop money, not only Content Rewards."}
+ },
+ {
+  "name": "contentrewards: Whop connected again: the old read is not this connection's, so it is checking",
+  "place": "contentrewards",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "whop", "status": "connected", "connectedAt": "2026-11-21T11:00:00.000Z", "accountId": "user_abc123", "accountName": "@owner", "keyHint": "app_Ab…wxyz", "tokenVersionId": "v3"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-18T06:00:00.000Z"},
+  "whopOn": true,
+  "expect": {"state": "checking", "headline": "Checking your Whop payouts…", "amounts": [], "why": "This can take until tomorrow.", "note": "Whop counts all your Whop money, not only Content Rewards."}
+ },
+ {
+  "name": "contentrewards: Whop reads failing for 10 days never say nothing sent yet",
+  "place": "contentrewards",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "whop", "status": "connected", "connectedAt": "2026-11-01T09:00:00.000Z", "accountId": "user_abc123", "accountName": "@owner", "keyHint": "app_Ab…wxyz", "tokenVersionId": "v3"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-11T06:00:00.000Z", "lastError": "Whop said 500"},
+  "whopOn": true,
+  "expect": {"state": "error", "headline": "Clip Factory couldn't check your Whop payouts lately", "amounts": [], "why": "Clip Factory last checked Whop on 11 Nov.", "note": "Whop counts all your Whop money, not only Content Rewards."}
+ },
+ {
+  "name": "contentrewards: Whop needs a reconnect",
+  "place": "contentrewards",
+  "now": "2026-11-21T12:00:00.000Z",
+  "rows": [],
+  "conn": {"type": "payconn", "source": "whop", "status": "needs_reconnect", "connectedAt": "2026-11-01T09:00:00.000Z", "accountId": "user_abc123", "accountName": "@owner", "keyHint": "app_Ab…wxyz", "tokenVersionId": "v3"},
+  "state": {"firstReadDone": true, "lastCheckedAt": "2026-11-21T06:00:00.000Z"},
+  "whopOn": true,
+  "expect": {"state": "needs_reading", "headline": "Clip Factory can't see your Whop payouts anymore", "amounts": [], "why": "Sign in to Whop again to see your payouts.", "button": {"label": "Connect Whop", "href": "/settings/posting/getpaid/contentrewards#whop", "external": false}}
+ }
+],
+"totals": [
+ {
+  "name": "kronor and dollars are never added together, in the places' order",
+  "lines": {"youtube": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [{"currency": "SEK", "amountMicros": 2468000000}], "tag": "YouTube says", "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": 1234560000, "currency": "SEK"}}, "tiktok": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}, "instagram": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}, "facebook": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}, "x": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}, "contentrewards": {"state": "number", "headline": "Sent to your bank by Whop", "amounts": [{"currency": "SEK", "amountMicros": 412000000}, {"currency": "USD", "amountMicros": 40000000}], "tag": "Whop says", "arrive": "Whop says it should arrive within 5 workdays.", "note": "Whop counts all your Whop money, not only Content Rewards.", "last": {"date": "2026-11-10", "amountMicros": 40000000, "currency": "USD"}}},
+  "expect": {"totals": [{"currency": "SEK", "amountMicros": 2880000000, "places": ["youtube", "contentrewards"], "names": "YouTube and Whop (all your Whop money, Content Rewards too)"}, {"currency": "USD", "amountMicros": 40000000, "places": ["contentrewards"], "names": "Whop (all your Whop money, Content Rewards too)"}], "tag": "Google and Whop say they sent it.", "notCountedText": "Not in this: TikTok, Instagram, Facebook and X (not available).", "bankText": "Clip Factory can't see your bank. Look in your bank's app to see what arrived."}
+ },
+ {
+  "name": "only unread amounts: not added, never Nothing sent yet",
+  "lines": {"youtube": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [], "tag": "YouTube says", "notAdded": "Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up.", "button": {"label": "See them", "href": "/settings/posting/getpaid/youtube", "external": false}, "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": null, "currency": null, "text": "$1,234.57"}, "_unread": 3}, "tiktok": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}, "instagram": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}, "facebook": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}, "x": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}},
+  "expect": {"totals": [], "tag": "Google says it sent it.", "notAdded": "Google sent 3 payments. Clip Factory couldn't tell their money type, so they aren't added up.", "notCountedText": "Not in this: TikTok, Instagram, Facebook and X (not available).", "bankText": "Clip Factory can't see your bank. Look in your bank's app to see what arrived."}
+ },
+ {
+  "name": "some unread amounts",
+  "lines": {"youtube": {"state": "number", "headline": "Sent to your bank by Google", "amounts": [{"currency": "SEK", "amountMicros": 1234560000}], "tag": "YouTube says", "notAdded": "1 payment isn't added up: Clip Factory couldn't tell its money type.", "arrive": "Your bank gets it up to 7 workdays after Google sends it.", "last": {"date": "2026-10-23", "amountMicros": 1234560000, "currency": "SEK"}, "_unread": 1}, "tiktok": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}, "instagram": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}, "facebook": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}, "x": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}, "contentrewards": {"state": "not_available", "headline": "Sent to your bank: not available from Content Rewards", "amounts": [], "where": {"text": "Look on Whop: **Balances**."}}},
+  "expect": {"totals": [{"currency": "SEK", "amountMicros": 1234560000, "places": ["youtube"], "names": "YouTube"}], "tag": "Google says it sent it.", "notAdded": "Google sent 1 more payment. Clip Factory couldn't tell its money type, so it isn't added up.", "notCountedText": "Not in this: TikTok, Instagram, Facebook, X and Content Rewards (not available).", "bankText": "Clip Factory can't see your bank. Look in your bank's app to see what arrived."}
+ },
+ {
+  "name": "nothing sent at all",
+  "lines": {"youtube": {"state": "needs_reading", "headline": "Clip Factory can't see YouTube payments yet", "amounts": [], "button": {"label": "Allow payment reading", "href": "/settings/posting/getpaid/youtube#yt-reading", "external": false}}, "tiktok": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}, "instagram": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}, "facebook": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}, "x": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}},
+  "expect": {"totals": [], "tag": "", "notCountedText": "Not in this: YouTube (Clip Factory can't see it) · TikTok, Instagram, Facebook and X (not available).", "bankText": "Clip Factory can't see your bank. Look in your bank's app to see what arrived.", "empty": "Nothing sent to your bank yet."}
+ },
+ {
+  "name": "nothing sent, Whop on: the tag names no one",
+  "lines": {"youtube": {"state": "none_yet", "headline": "Nothing sent to your bank yet", "amounts": [], "tag": "YouTube says"}, "tiktok": {"state": "not_available", "headline": "Not available from TikTok", "amounts": [], "where": {"text": "Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal."}}, "instagram": {"state": "not_available", "headline": "Not available from Instagram", "amounts": [], "where": {"text": "Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month."}}, "facebook": {"state": "not_available", "headline": "Not available from Meta", "amounts": [], "where": {"text": "Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month."}}, "x": {"state": "not_available", "headline": "Not available from X", "amounts": [], "where": {"text": "Look in Stripe: Payouts.", "button": {"label": "Open Stripe", "url": "https://connect.stripe.com/express_login"}}}, "contentrewards": {"state": "none_yet", "headline": "Nothing sent to your bank yet", "amounts": [], "tag": "Whop says", "note": "Whop counts all your Whop money, not only Content Rewards."}},
+  "expect": {"totals": [], "tag": "", "notCountedText": "Not in this: YouTube and Content Rewards (nothing sent yet) · TikTok, Instagram, Facebook and X (not available).", "bankText": "Clip Factory can't see your bank. Look in your bank's app to see what arrived.", "empty": "Nothing sent to your bank yet."}
+ }
+],
+"payoutRows": [
+ {
+  "name": "Google's payments, newest first",
+  "place": "youtube",
+  "rows": [{"sk": "PAYOUT#youtube#2026-10-23#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-10-23", "amountText": "kr 1 234,56 SEK", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#youtube#2026-09-22#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-09-22", "amountText": "kr 1 233,44 SEK", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#youtube#2026-08-21#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-08-21", "amountText": "kr 500,00 SEK", "state": "gone", "fetchedAt": "2026-11-21T06:00:00.000Z", "goneAt": "2026-11-01T06:00:00.000Z"}],
+  "expect": [{"date": "2026-10-23", "by": "Google", "state": "sent", "amountMicros": 1234560000, "currency": "SEK"}, {"date": "2026-09-22", "by": "Google", "state": "sent", "amountMicros": 1233440000, "currency": "SEK"}, {"date": "2026-08-21", "by": "Google", "state": "gone", "amountMicros": 500000000, "currency": "SEK"}]
+ },
+ {
+  "name": "Google's own words when the money type is unread",
+  "place": "youtube",
+  "rows": [{"sk": "PAYOUT#youtube#2026-10-23#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-10-23", "amountText": "kr 1 234,56 SEK", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#youtube#2026-09-22#3456", "type": "payout", "place": "youtube", "by": "google", "source": "adsense.payments", "account": "3456", "date": "2026-09-22", "amountText": "$1,234.57", "state": "sent", "fetchedAt": "2026-11-21T06:00:00.000Z"}],
+  "expect": [{"date": "2026-10-23", "by": "Google", "state": "sent", "amountMicros": 1234560000, "currency": "SEK"}, {"date": "2026-09-22", "by": "Google", "state": "sent", "amountMicros": null, "currency": null, "text": "$1,234.57"}]
+ },
+ {
+  "name": "Whop's payouts with their states",
+  "place": "contentrewards",
+  "rows": [{"sk": "PAYOUT#contentrewards#2026-11-18#po_4", "type": "payout", "place": "contentrewards", "by": "whop", "source": "whop.payouts", "payoutId": "po_4", "status": "processing", "state": "on_its_way", "date": "2026-11-18", "amountMicros": 12000000, "currency": "USD", "traceCode": "UETR-secret-trace", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#contentrewards#2026-11-10#po_3", "type": "payout", "place": "contentrewards", "by": "whop", "source": "whop.payouts", "payoutId": "po_3", "status": "completed", "state": "sent", "date": "2026-11-10", "amountMicros": 40000000, "currency": "USD", "traceCode": "UETR-secret-trace", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#contentrewards#2026-11-02#po_2", "type": "payout", "place": "contentrewards", "by": "whop", "source": "whop.payouts", "payoutId": "po_2", "status": "completed", "state": "sent", "date": "2026-11-02", "amountMicros": 412000000, "currency": "SEK", "traceCode": "UETR-secret-trace", "fetchedAt": "2026-11-21T06:00:00.000Z", "estimatedArrival": "2026-11-06"}, {"sk": "PAYOUT#contentrewards#2026-10-02#po_1", "type": "payout", "place": "contentrewards", "by": "whop", "source": "whop.payouts", "payoutId": "po_1", "status": "reversed", "state": "came_back", "date": "2026-10-02", "amountMicros": 9000000, "currency": "USD", "traceCode": "UETR-secret-trace", "fetchedAt": "2026-11-21T06:00:00.000Z"}, {"sk": "PAYOUT#contentrewards#2026-09-02#po_0", "type": "payout", "place": "contentrewards", "by": "whop", "source": "whop.payouts", "payoutId": "po_0", "status": "denied", "state": "didnt_go_through", "date": "2026-09-02", "amountMicros": 7000000, "currency": "USD", "traceCode": "UETR-secret-trace", "fetchedAt": "2026-11-21T06:00:00.000Z"}],
+  "expect": [{"date": "2026-11-18", "by": "Whop", "state": "on_its_way", "amountMicros": 12000000, "currency": "USD"}, {"date": "2026-11-10", "by": "Whop", "state": "sent", "amountMicros": 40000000, "currency": "USD"}, {"date": "2026-11-02", "by": "Whop", "state": "sent", "amountMicros": 412000000, "currency": "SEK", "arriveBy": "2026-11-06"}, {"date": "2026-10-02", "by": "Whop", "state": "came_back", "amountMicros": 9000000, "currency": "USD"}, {"date": "2026-09-02", "by": "Whop", "state": "didnt_go_through", "amountMicros": 7000000, "currency": "USD"}]
+ }
+]
+}

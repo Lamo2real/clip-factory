@@ -295,6 +295,8 @@ export interface NotifyChoices {
   steps: boolean;
   /** Content Rewards news (§38.11): only there once the API knows it. */
   contentRewards?: boolean;
+  /** "Money on hold or sent to your bank" (§40.7): only there once the API knows it (on by default). */
+  getPaid?: boolean;
 }
 
 /** A device that gets notifications (GET /v1/push/devices). Its address and keys never leave the server. */
@@ -879,7 +881,7 @@ export interface JobLive {
 }
 
 /** What the live connection pushes (docs/CONTRACTS.md §14.2). One message per changed item. */
-export type LiveItemType = "job" | "clip" | "post" | "learning" | "week" | "setup" | "follow" | "jobLive" | "contentrewards";
+export type LiveItemType = "job" | "clip" | "post" | "learning" | "week" | "setup" | "follow" | "jobLive" | "contentrewards" | "getpaid";
 export type LiveEvent =
   | { type: "job"; op: "upsert"; id: string; item: Job; partial?: undefined }
   | { type: "clip"; op: "upsert"; id: string; item: Clip; partial?: undefined }
@@ -889,7 +891,9 @@ export type LiveEvent =
   | { type: "follow"; op: "upsert"; id: string; item: Follow; partial?: undefined }
   | { type: "jobLive"; op: "upsert"; id: string; item: JobLive; partial?: undefined }
   | { type: LiveItemType; op: "delete"; id: string; item?: undefined; partial?: undefined }
-  | { type: LiveItemType; op: "upsert"; id: string; partial: true; item?: undefined };
+  | { type: LiveItemType; op: "upsert"; id: string; partial: true; item?: undefined }
+  /** §40.7: a Get paid item changed (GETPAID, PAYCONN#, PAYSTATE#, PAYOUT#): refetch GET /v1/getpaid. */
+  | { type: "getpaid"; op: "upsert"; id: "getpaid"; partial: true; item?: undefined };
 
 export interface Me {
   user: { id: string; email: string };
@@ -1571,6 +1575,8 @@ export interface MoneyPlace {
     asOf?: string;
     movedOut: "not_available";
   };
+  /** §40.4 (additive): what Google or Whop say they sent toward his bank, or where to look. */
+  sent?: SentLine;
 }
 export interface MoneyEverywhere {
   from: string;
@@ -1584,6 +1590,127 @@ export interface MoneyEverywhere {
   totals: { currency: string; amountMicros: number; places: MoneyPlaceId[]; tag: string }[];
   notCounted: { place: MoneyPlaceId; state: MoneyPlace["state"] }[];
   notCountedText?: string;
+  /** §40.4 (additive): "Sent to your bank, so far": one line per money type, never added to the 30-day total. */
+  sent?: MoneySentBlock;
+  asOf: string;
+}
+
+// ---------- Get paid (docs/CONTRACTS.md §40.7; shared contract, made by the API) ----------
+
+export type GetPaidPlace = Platform | "contentrewards";
+export type GetPaidStatus = "on_hold" | "not_allowed" | "can_get_paid" | "not_set_up" | "you_said_done" | "checking" | "not_connected" | "not_started";
+export type KnownBy = "youtube" | "whop" | "contentrewards" | "instagram" | "facebook" | "tiktok" | "x" | "rules" | "you" | "clipfactory";
+
+/** One place's "Sent to your bank" line (§40.4). Amounts only in `number`, never converted, never $0. */
+export interface SentLine {
+  state: "number" | "none_yet" | "not_available" | "needs_reading" | "checking" | "error";
+  /** "Sent to your bank by Google" | "Not available from TikTok" | … */
+  headline: string;
+  amounts: { currency: string; amountMicros: number }[];
+  /** "YouTube says" | "Whop says" */
+  tag?: string;
+  why?: string;
+  /** "1 payment isn't added up: Clip Factory couldn't tell its money type." */
+  notAdded?: string;
+  arrive?: string;
+  note?: string;
+  last?: { date: string; amountMicros: number | null; currency: string | null; text?: string };
+  where?: { text: string; button?: { label: string; url: string } };
+  button?: { label: string; href: string; external: boolean };
+}
+
+/** All your money's "Sent to your bank, so far" block (§40.4). */
+export interface MoneySentBlock {
+  totals: { currency: string; amountMicros: number; places: MoneyPlaceId[]; names: string }[];
+  /** "Google and Whop say they sent it." */
+  tag: string;
+  notAdded?: string;
+  notCountedText?: string;
+  /** "Clip Factory can't see your bank. Look in your bank's app to see what arrived." */
+  bankText: string;
+  /** Only with no sent rows at all: "Nothing sent to your bank yet." */
+  empty?: string;
+}
+
+export interface GetPaidNext {
+  /** The step whose main action is the page's vermilion; null: a hold's fix, a reconnect or the Finance question. */
+  stepId: string | null;
+  label: string;
+  href: string;
+  external: boolean;
+  /** "Next: step 3, Add your bank." (none for a null step id, except the Finance question) */
+  text?: string;
+  /** HOLD_FIX's line ("Look for the red message on **Payments**. Do what it says.") */
+  hint?: string;
+  /** false for a step that costs money (X Premium): never the vermilion. */
+  vermilion: boolean;
+}
+
+export interface GetPaidCard {
+  place: GetPaidPlace;
+  name: string;
+  status: GetPaidStatus;
+  /** "Can get paid ✓ (YouTube says)" */
+  pill: string;
+  tone: "success" | "neutral" | "warn" | "error";
+  knownBy: KnownBy;
+  /** "YouTube says" | "You said it's done" | "Your steps" | "Instagram's rules" */
+  known: string;
+  line: string;
+  missing: string[];
+  holds: string[];
+  /** X only. */
+  warning?: string;
+  /** "Clip Factory can see payments: on" | "… off" (YouTube; Content Rewards while WHOP_CONNECT is on) */
+  readingChip?: string;
+  next: GetPaidNext | null;
+  steps: { id: string; done: boolean; by: "you" | "auto" | null; auto?: string }[];
+  /** The numbered earn and payout steps only (never yt-reading or an each-time step). */
+  ring: { done: number; total: number };
+  /** "What Clip Factory can see", at most 6 lines. */
+  seen: string[];
+  sent: SentLine;
+  /** YouTube only: Google's own words for what waits to be paid (never in a total). */
+  unpaid?: { text: string; note: string };
+  checkedAt?: string;
+  lastError?: string;
+}
+
+export interface PayoutRow {
+  date: string;
+  by: "Google" | "Whop";
+  state: "sent" | "on_its_way" | "didnt_go_through" | "came_back" | "gone";
+  amountMicros: number | null;
+  currency: string | null;
+  /** Google's own words when Clip Factory couldn't read the money type. */
+  text?: string;
+  /** Whop's estimated_arrival. */
+  arriveBy?: string;
+}
+
+export interface PayConn {
+  source: "adsense" | "whop";
+  status: "not_connected" | "keys_saved" | "connected" | "needs_reconnect";
+  /** "Main AdSense (…1234)" | "@name" */
+  accountName?: string;
+  connectedAt?: string;
+  reason?: "token_dead" | "keys_changed";
+  keyHint?: string;
+  /** Whop only: the Copy chip for Whop's Redirect URIs. */
+  redirectUri?: string;
+  lastResult?: string;
+}
+
+export interface GetPaid {
+  /** YouTube, TikTok, Instagram, Facebook, X, then Content Rewards while it is on. */
+  places: GetPaidCard[];
+  summary: string;
+  country: string | null;
+  /** whop: null while WHOP_CONNECT is off. */
+  connections: { adsense: PayConn; whop: PayConn | null };
+  /** GETPAID ticks (Content Rewards' stay on CRCONN). */
+  stepsDone: string[];
+  nextCheckAllowedAt?: string;
   asOf: string;
 }
 

@@ -23,7 +23,7 @@ WHERE = {
     "tiktok": {"label": "Profile › Balance"},
     "instagram": {"label": "Professional dashboard › Payouts"},
     "facebook": {"label": "Meta Business Suite › Payouts", "url": "https://business.facebook.com/latest/monetization"},
-    "x": {"label": "X › Monetization (paid through Stripe)", "url": "https://x.com/settings/monetization"},
+    "x": {"label": "X › Creator Studio (paid through Stripe)", "url": "https://x.com/i/jf/creators/studio"},
 }
 OK = {"connected": True, "moneyScope": True, "lastError": None}
 
