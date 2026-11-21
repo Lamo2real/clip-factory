@@ -311,6 +311,125 @@ test.describe("desktop journeys", () => {
     await expect(page.locator("[data-cr='card']")).toHaveCount(0);
   });
 
+  test("Content Rewards refuses without sending the browser back: What did Content Rewards say? → the email card, from his Gmail", async ({ page }) => {
+    await start(page, { fresh: true });
+    await asMacWindow(page, { crConnect: true });
+    await page.goto(SETUP);
+    await settle(page);
+    await page.locator("#step-connect .gstep__head").click();
+    const popup = page.waitForEvent("popup");
+    await page.locator("#step-connect").getByRole("button", { name: "Connect Content Rewards", exact: true }).click();
+    // Content Rewards' "This account can't connect apps" page never sends the browser back: he just comes back.
+    await (await popup).close();
+    await expect(page.getByText("Waiting for you in the browser…")).toBeVisible();
+    await page.waitForTimeout(3_200);
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    const ask = page.locator("[data-cr='ask']");
+    await expect(ask).toContainText("What did Content Rewards say?", { timeout: 5_000 });
+    await expect(ask.getByRole("button")).toHaveText(["It said my account can't connect apps", "I tapped Allow", "Something else"]);
+    await expect(page.getByText("That took too long")).toHaveCount(0);
+    expect(await screenProblems(page, false)).toEqual([]);
+    await ask.getByRole("button", { name: "It said my account can't connect apps" }).click();
+    const pilot = page.locator("[data-help='cr-pilot-email']");
+    await expect(pilot).toContainText("Content Rewards hasn't let your account connect apps yet. Send them the email below.");
+    await expect(pilot.locator(".gstep")).toHaveClass(/is-open/);
+    // Content Rewards signed him in, so step 1 ticks itself; the pilot email is the one vermilion.
+    await expect(page.locator("#step-ready-account")).toHaveAttribute("data-done", "true");
+    await expect(tomatoes(page)).toHaveCount(1);
+    await expect(tomatoes(page)).toHaveText(/Open email/);
+    // No email in the box yet: Open email never goes to Mail's default account; it points at the box.
+    const openEmail = pilot.locator("[data-cr='open-email']");
+    await expect(openEmail).not.toHaveAttribute("href", /.*/);
+    await openEmail.click();
+    await expect(pilot.getByLabel("Which email do you sign in to Content Rewards with?")).toBeFocused();
+    await expect(pilot.getByRole("alert")).toHaveText("Type the email you use for Content Rewards first.");
+    await pilot.getByLabel("Which email do you sign in to Content Rewards with?").fill("kid.test@gmail.com");
+    await pilot.getByLabel("Which email do you sign in to Content Rewards with?").blur();
+    await expect(pilot.locator("strong").first()).toHaveText("Send it from kid.test@gmail.com.");
+    const href = (await pilot.locator("[data-cr='open-email']").getAttribute("href")) ?? "";
+    expect(href.startsWith("https://mail.google.com/mail/?view=cm&authuser=kid.test%40gmail.com&to=support%40contentrewards.com&su=")).toBe(true);
+    expect(await screenProblems(page, false)).toEqual([]);
+    // Every device knows: the API keeps lastResult (a reload opens the card by itself, the email box asks no more).
+    await page.reload();
+    await settle(page);
+    await expect(pilot).toContainText("Content Rewards hasn't let your account connect apps yet.");
+    await expect(pilot.getByLabel("Which email do you sign in to Content Rewards with?")).toHaveCount(0);
+    await expect(pilot).toContainText("Send it from kid.test@gmail.com.");
+    // The email card is the step on the first screen (step 2 waits folded until the email went).
+    await expect(page.locator("#step-ready-socials")).not.toHaveClass(/is-open/);
+    await expect(pilot.locator("[data-cr='open-email']")).toBeInViewport();
+    await expect(tomatoes(page)).toHaveText(/Open email/);
+  });
+
+  test("a narrow Mac window: What did Content Rewards say? comes on screen with all three answers above the tab bar, and no other vermilion", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await start(page, { fresh: true });
+    await asMacWindow(page, { crConnect: true });
+    await page.goto(SETUP);
+    await settle(page);
+    const ask = page.locator("[data-cr='ask']");
+    const answers = ["It said my account can't connect apps", "I tapped Allow", "Something else"];
+    /** Each answer's middle is the answer itself (nothing over it: not the tab bar, not Ask). */
+    const tappable = () =>
+      page.evaluate((names) => {
+        const bar = document.querySelector(".tabbar")?.getBoundingClientRect();
+        return names.map((n) => {
+          const b = [...document.querySelectorAll<HTMLElement>("[data-cr='ask'] button")].find((x) => x.textContent?.trim() === n);
+          if (!b) return `${n}: missing`;
+          const r = b.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (bar && bar.height > 0 && r.bottom > bar.top) return `${n}: under the tab bar`;
+          return hit && b.contains(hit) ? "ok" : `${n}: covered by ${hit?.className || hit?.tagName}`;
+        });
+      }, answers);
+    await page.locator("#step-connect .gstep__head").click();
+    let popup = page.waitForEvent("popup");
+    await page.locator("#step-connect").getByRole("button", { name: "Connect Content Rewards", exact: true }).click();
+    await (await popup).close();
+    // He comes back from Content Rewards' page while it still waits: the question comes on screen by itself.
+    await page.waitForTimeout(3_200);
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(ask).toContainText("What did Content Rewards say?", { timeout: 5_000 });
+    await expect.poll(tappable, { timeout: 5_000 }).toEqual(["ok", "ok", "ok"]);
+    await expect(tomatoes(page)).toHaveCount(0);
+    // Cancel: asked again, still all on screen; Something else points at Connect, which is then the vermilion.
+    await page.locator(".cr-waiting").getByRole("button", { name: "Cancel" }).click();
+    await expect(ask.getByRole("button")).toHaveText(answers);
+    await expect.poll(tappable, { timeout: 5_000 }).toEqual(["ok", "ok", "ok"]);
+    await expect(tomatoes(page)).toHaveCount(0);
+    expect(await screenProblems(page, false)).toEqual([]);
+    await ask.getByRole("button", { name: "Something else" }).click();
+    await expect(page.getByText("Close that tab. Then tap Connect Content Rewards again.")).toBeVisible();
+    await expect(tomatoes(page)).toHaveCount(1);
+    await expect(tomatoes(page)).toHaveText("Connect Content Rewards");
+    // A good answer: never the question, straight to connected.
+    popup = page.waitForEvent("popup");
+    await tomatoes(page).click();
+    // (Tapped right after Cancel: the stopped run never closes this run's door.)
+    await (await popup).getByRole("button", { name: "Allow" }).click();
+    await expect(page.locator("#step-connect .result-card")).toContainText("Content Rewards is connected!");
+    await expect(ask).toHaveCount(0);
+  });
+
+  test("Set up posting: a failed read says Couldn't load with Try again, never Not started", async ({ page }) => {
+    await start(page, { fresh: true });
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem("cf-e2e-cr-500")) {
+        sessionStorage.setItem("cf-e2e-cr-500", "1");
+        sessionStorage.setItem("cf-mock-cr-overview", "500");
+      }
+    });
+    await page.goto("/settings/posting/setup");
+    await settle(page);
+    const card = page.locator("[data-cr='card']");
+    await expect(card).toContainText("Couldn't load.");
+    await expect(card).not.toContainText("Not started");
+    await page.evaluate(() => sessionStorage.removeItem("cf-mock-cr-overview"));
+    await page.locator("[data-cr='retry']").getByRole("button", { name: "Try again" }).click();
+    await expect(page.locator("[data-cr='card']")).toContainText("Not started");
+    await expect(page.locator("[data-cr='retry']")).toHaveCount(0);
+  });
+
   test("Connect before ticking step 2: the answer is on screen, and step 2's Open is the one vermilion (no Add a campaign yet)", async ({ page }) => {
     await start(page, { fresh: true });
     await asMacWindow(page, { crConnect: true });

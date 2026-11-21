@@ -173,8 +173,8 @@ describe("Library's Content Rewards lines (§38.6, §38.8)", () => {
 });
 
 describe("the setup page (§38.3)", () => {
-  it("connected, step 2 not done, no campaigns: exactly one vermilion (step 2's Open), no Add a campaign", async () => {
-    current = { crOverview: async () => overview(conn({ stepsDone: ["ready-account"] })), getSetup: async () => setupNone };
+  it("connected, but Content Rewards doesn't know a place (step 2 reopens), no campaigns: exactly one vermilion (step 2's Open), no Add a campaign", async () => {
+    current = { crOverview: async () => overview(conn({ stepsDone: ["ready-account"], crLinked: { youtube: false } })), getSetup: async () => setupNone };
     await draw(<CrSetup />);
     expect(vermilion()).toEqual(["Open Content Rewards settings (opens in a new tab)"]);
     expect(host.textContent).not.toContain("Add a campaign");

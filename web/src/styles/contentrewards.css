@@ -111,6 +111,55 @@
   min-width: 12ch;
   font-weight: 650;
 }
+/* "What did Content Rewards say?": one question, three big answers (they wrap one under the other when narrow).
+   Its own names: campaigns' older .cr-ask (NextStep) is another thing. */
+.cr-waiting-wrap,
+.cr-said {
+  display: grid;
+  gap: 12px;
+}
+.cr-said__lead,
+.cr-said__q {
+  margin: 0;
+}
+.cr-said__q {
+  font-weight: 700;
+  font-size: var(--fs-h3);
+}
+/* Focus lands on the question after Cancel so screen readers read it; it is not a control, so no ring. */
+.cr-said__q:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.cr-said__answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cr-said__answers .btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: start;
+}
+/* The pilot email's box (kept on this device) and the bold From lines. */
+.cr-login {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  max-width: 34rem;
+}
+.cr-login p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.cr-login .text-link {
+  min-height: 44px;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  margin-inline-start: 8px;
+}
 .cr-place__words {
   margin: 0;
 }

@@ -1425,7 +1425,9 @@ export interface CrOverview {
   waitingSends: CrSubmission[];
 }
 export type CrConnectionPatch =
-  | { said: "pilot_sent" | null }
+  /** "cant_connect": he says Content Rewards refused at sign-in (it never sends the browser back). The API sets
+   * lastResult not_allowed and ticks ready-account; an older API answers 400. */
+  | { said: "pilot_sent" | "cant_connect" | null }
   | { step: string; done: boolean }
   | { relinked: Platform }
   | { finance: boolean | null };
