@@ -163,7 +163,7 @@ export function Portrait({ ws, character, aiOn, onChange }: { ws: string; charac
         </>
       ) : (
         <p className="st-s-refs__lede">
-          AI pictures are off. You can turn them on in <A href={storiesHref({ name: "settings" })}>Settings</A>.
+          AI pictures are off. You can turn them on in <A href={storiesHref({ name: "settings", section: "ai" })}>Settings</A>.
         </p>
       )}
       {problem ? <Notice tone="bad">{problem}</Notice> : null}

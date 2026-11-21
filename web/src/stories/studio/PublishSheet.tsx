@@ -4,7 +4,10 @@
 // and stitches on, never made for kids); More details opens every option. TikTok follows its rules: who can see it is
 // picked from a dropdown with no default (TikTok's own choices for this account), and Comments, Duet and Stitch are
 // shown and start off. An account that is not connected (or needs connecting again) only offers Connect in
-// Connections. After Post it, the sheet shows each publishing job's status, its sentence and Try again.
+// Connections. Each chosen place shows the exact account the video goes to (name, handle and id) with Check now
+// (a live check with the platform, §45.16.7); Upload checks every chosen account that was not checked in the sheet and
+// stops, saying what changed, when one is no longer connected or is now a different account. After Upload, the sheet
+// shows each publishing job's status, its sentence and Try again.
 import { useEffect, useId, useMemo, useState } from "react";
 import { Dropdown } from "../../components/Dropdown.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
@@ -31,7 +34,7 @@ import { STORIES_PLATFORMS, type Platform, type PublishOptions, type PublishingJ
 import { storiesHref } from "../routes.ts";
 import { Busy, Notice, Pick, StSheet, Switch } from "./kit.tsx";
 import { PostRow } from "./PostsPanel.tsx";
-import { PLATFORM_LABEL, say } from "./words.ts";
+import { ago, PLATFORM_LABEL, say } from "./words.ts";
 
 type YouTubeOptions = { privacy: "public" | "unlisted" | "private"; category: string; notifySubscribers: boolean };
 
@@ -64,6 +67,25 @@ export function accountState(a: SocialAccount): string {
     default:
       return "Not connected yet.";
   }
+}
+
+/** What a check found about one chosen account: still the one shown, or why the upload must wait. */
+export function checkProblem(before: SocialAccount, after: SocialAccount): string | null {
+  const place = PLATFORM_LABEL[after.platform];
+  if (after.connectionStatus !== "connected") {
+    const state =
+      after.connectionStatus === "needs_reconnect"
+        ? "needs connecting again"
+        : after.connectionStatus === "choose_account"
+          ? "needs you to pick the account first"
+          : after.connectionStatus === "same_as_clips"
+            ? "is Lamo Clips' own account right now"
+            : "is not connected any more";
+    return `Lamo Stories' ${place} ${state}. Fix it in Connections, or leave ${place} out.`;
+  }
+  if (before.externalAccountId && after.externalAccountId !== before.externalAccountId)
+    return `Lamo Stories' ${place} is now ${after.accountName ?? "a different account"}${after.handle ? ` (${after.handle})` : ""}. Look at it below, then tap Upload again.`;
+  return null;
 }
 
 /** The Lamo Clips-shaped creator the shared TikTok rules read (the same fields, §17.4). */
@@ -110,6 +132,10 @@ export function PublishSheet({
   const [sending, setSending] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [sentIds, setSentIds] = useState<string[] | null>(null);
+  /** The accounts checked live in this sheet (when), and the one being checked now. */
+  const [checked, setChecked] = useState<Partial<Record<Platform, number>>>({});
+  const [checking, setChecking] = useState<Platform[]>([]);
+  const [checkNote, setCheckNote] = useState<Partial<Record<Platform, string>>>({});
 
   useEffect(() => {
     let live = true;
@@ -153,6 +179,28 @@ export function PublishSheet({
     setChosen((c) => (c.includes(p) ? c.filter((x) => x !== p) : [...c, p]));
   }
 
+  /** Asks the platform which account Lamo Stories' connection is now; returns the problem, or null when it is the same. */
+  async function check(p: Platform): Promise<string | null> {
+    const before = byPlatform.get(p);
+    if (!before) return `${PLATFORM_LABEL[p]} is not connected.`;
+    setChecking((c) => [...c, p]);
+    try {
+      const after = await storiesApi().checkSocial(ws, p);
+      setAccounts((list) => (list ? list.map((a) => (a.platform === p ? after : a)) : list));
+      const why = checkProblem(before, after);
+      setChecked((m) => ({ ...m, [p]: Date.now() }));
+      setCheckNote((m) => ({ ...m, [p]: why ?? "Checked just now: this is the account the video goes to." }));
+      if (why && after.connectionStatus !== "connected") setChosen((c) => c.filter((x) => x !== p));
+      return why;
+    } catch (e) {
+      const why = say(e, `${PLATFORM_LABEL[p]} did not answer. Try Check now again in a minute.`);
+      setCheckNote((m) => ({ ...m, [p]: why }));
+      return why;
+    } finally {
+      setChecking((c) => c.filter((x) => x !== p));
+    }
+  }
+
   function useMine() {
     setMine(true);
     setYt({ privacy: "public", category: config.youtubeCategory ?? "27", notifySubscribers: true });
@@ -180,6 +228,13 @@ export function PublishSheet({
     setSending(true);
     setProblem(null);
     try {
+      // Verify before publishing: every chosen account not checked in this sheet is checked now.
+      const waiting = chosen.filter((p) => !checked[p]);
+      const found = (await Promise.all(waiting.map((p) => check(p)))).filter((x): x is string => !!x);
+      if (found.length) {
+        setProblem(found.join(" "));
+        return;
+      }
       const targets: PublishTarget[] = chosen.map((p) => {
         const account = byPlatform.get(p)!;
         const options = optionsFor(p, yt, shareToFeed, tt, creator);
@@ -233,8 +288,8 @@ export function PublishSheet({
           <button type="button" className="st-btn" onClick={onClose}>
             Not now
           </button>
-          <button type="button" className="st-btn st-btn--main st-s-big" aria-disabled={!!why || sending || undefined} title={why ?? undefined} onClick={() => void post()}>
-            {sending ? "Sending…" : chosen.length > 1 ? `Post to ${chosen.length} places` : "Post it"}
+          <button type="button" className="st-btn st-btn--main st-s-big st-s-upload" aria-disabled={!!why || sending || checking.length > 0 || undefined} title={why ?? undefined} onClick={() => checking.length === 0 && void post()}>
+            {sending ? "Checking and sending…" : chosen.length > 1 ? `Upload to ${chosen.length} places` : "Upload"}
           </button>
         </>
       }
@@ -250,8 +305,10 @@ export function PublishSheet({
             <ul className="st-s-places" aria-label="Where to post">
               {connected.map((a) => {
                 const on = chosen.includes(a.platform);
+                const busy = checking.includes(a.platform);
+                const when = checked[a.platform] ? "just now" : a.lastCheckedAt ? ago(a.lastCheckedAt) : null;
                 return (
-                  <li key={a.platform}>
+                  <li key={a.platform} className="st-s-places__item">
                     <button type="button" className={`st-s-place${on ? " is-on" : ""}`} aria-pressed={on} onClick={() => toggle(a.platform)}>
                       <span className="st-s-place__mark">
                         <PlatformMark platform={a.platform} size={26} />
@@ -265,6 +322,21 @@ export function PublishSheet({
                         {on ? "✓" : "+"}
                       </span>
                     </button>
+                    {on ? (
+                      <div className="st-s-dest" aria-label={`Where it goes on ${PLATFORM_LABEL[a.platform]}`}>
+                        <p className="st-s-dest__who">
+                          Goes to <strong>{a.accountName ?? "the connected account"}</strong>
+                          {a.handle ? ` (${a.handle})` : ""}
+                        </p>
+                        {a.externalAccountId ? <p className="st-s-dest__id">Account id {a.externalAccountId}</p> : null}
+                        <p className={`st-s-dest__note${checkNote[a.platform] && checkNote[a.platform] !== "Checked just now: this is the account the video goes to." ? " is-bad" : ""}`} role="status">
+                          {checkNote[a.platform] ?? (when ? `Last checked ${when}.` : "Not checked yet.")}
+                        </p>
+                        <button type="button" className="st-btn st-s-small" aria-disabled={busy || sending || undefined} onClick={() => !busy && !sending && void check(a.platform)}>
+                          {busy ? "Checking…" : "Check now"}
+                        </button>
+                      </div>
+                    ) : null}
                   </li>
                 );
               })}
@@ -275,7 +347,7 @@ export function PublishSheet({
             </Notice>
           )}
           {others.length ? (
-            <ul className="st-s-places st-places--off" aria-label="Not ready to post">
+            <ul className="st-s-places st-s-places--off" aria-label="Not ready to post">
               {others.map((a) => (
                 <li key={a.platform} className="st-s-place st-s-place--off">
                   <span className="st-s-place__mark">
@@ -306,7 +378,7 @@ export function PublishSheet({
           {mine ? <p className="st-s-field__hint">My settings: everyone can see it, comments, duets and stitches on, not made for kids.</p> : null}
 
           {tiktokOn ? (
-            <fieldset className="st-s-group st-tiktok">
+            <fieldset className="st-s-group st-s-tiktok">
               <legend className="st-s-group__title">TikTok</legend>
               {creatorProblem ? (
                 <Notice tone="bad" action={<button type="button" className="st-btn" onClick={() => setAsked((n) => n + 1)}>Ask TikTok again</button>}>

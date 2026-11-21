@@ -1,6 +1,7 @@
-// The Lamo Stories studio screens (docs/CONTRACTS.md §45.16.5, §45.16.6; spec §5.B–E): Ideas, Characters, Production
-// and Review, rendered with a fake StoriesApi (setStoriesApi) built from the mock's ideas, characters and stories parts
-// plus small stand-ins for the rest. Only storiesApi() is used; nothing leaves the machine.
+// The Lamo Stories studio screens (docs/CONTRACTS.md §45.16.5, §45.16.6, §45.25; spec §5.B–E and the second request
+// §3–§5): Ideas, Characters, Production and Review, rendered with a fake StoriesApi (setStoriesApi) built from the
+// mock's ideas, characters and stories parts plus small stand-ins for the rest (Lamo Stories' own models from
+// stories/config/models.json, reference videos, social accounts). Only storiesApi() is used; nothing leaves the machine.
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +13,7 @@ import * as characters from "../src/stories/api/mock/characters.ts";
 import * as ideas from "../src/stories/api/mock/ideas.ts";
 import { createStore, type MockStore } from "../src/stories/api/mock/store.ts";
 import * as stories from "../src/stories/api/mock/stories.ts";
-import type { GuidanceTopic, PublishingJob, SocialAccount, StoriesApi, TikTokCreator, Workspace } from "../src/stories/api/types.ts";
+import type { GuidanceTopic, ModelInfo, PublishingJob, ReferenceVideo, SocialAccount, StoriesApi, StoriesConfig, TikTokCreator, Workspace } from "../src/stories/api/types.ts";
 import type { StoriesPage } from "../src/stories/routes.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -25,6 +26,7 @@ const { ProductionScreen } = await import("../src/stories/screens/Production.tsx
 const { ReviewScreen, approveBlock } = await import("../src/stories/screens/Review.tsx");
 const { optionsFor, PublishSheet } = await import("../src/stories/studio/PublishSheet.tsx");
 const { NO_TIKTOK_CHOICES } = await import("../src/lib/tiktokChoices.ts");
+const { LISTED_INFO } = await import("../src/stories/studio/ai.tsx");
 
 const S = stories.SEED_IDS.stories;
 const C = stories.SEED_IDS.characters;
@@ -39,11 +41,13 @@ const WS: Workspace = {
     defaultDurationSec: 50,
     captionsOn: false,
     musicOn: true,
-    storyModel: "claude-sonnet",
-    providers: { images: "builtin-rig", animation: "builtin-2d", audio: "builtin-synth" },
+    providers: { images: "builtin-rig", video: "builtin-2d", audio: "builtin-synth" },
+    video: { resolution: "1080x1920", aspect: "9:16", quality: "high", fps: 30 },
+    production: { burnCaptions: true, scenesAtOnce: 2, keepVersions: "all" },
     youtubeCategory: "1",
     youtubePrivacy: "unlisted",
-  },
+    xMonthlyLimitUsd: null,
+  } satisfies StoriesConfig,
   version: 1,
 };
 
@@ -51,6 +55,8 @@ const account = (platform: SocialAccount["platform"], connectionStatus: SocialAc
   socialAccountId: `stories.${platform}`,
   workspaceId: "stories",
   platform,
+  app: { choice: platform === "instagram" || platform === "facebook" ? "own" : "clips", saved: true },
+  lastCheckedAt: accountName ? "2026-11-21T09:00:00.000Z" : null,
   connectionStatus,
   externalAccountId: accountName ? `ext-${platform}` : null,
   accountName,
@@ -79,6 +85,14 @@ const CREATOR: TikTokCreator = {
 
 const TOPICS: GuidanceTopic[] = ideas.guidanceTopicIds().map((id) => ({ id, title: ideas.topicTitle(id)!, steps: [], donts: [], caveats: [], citations: ideas.citationsFor(id) }));
 
+/** Lamo Stories' own models as Settings › AI would answer once they were checked (one refused). */
+const MODELS: ModelInfo[] = LISTED_INFO.models.map((m) => (m.key === "haiku-5-5" ? { ...m, status: "denied", statusLine: "Bedrock says this account can't use it yet." } : { ...m, status: "ok", statusLine: "Ready." }));
+
+const REFS: ReferenceVideo[] = [
+  { refId: "01JSTRV0000000000000000001", title: "The banana slip", status: "analyzed", durationSec: 38, bytes: 9_000_000, currentJobId: null, ai: { model: null, effort: null }, analyzedWith: { model: "opus-5-5", effort: "high" }, createdAt: "2026-11-20T10:00:00.000Z", updatedAt: "2026-11-20T10:00:00.000Z" },
+  { refId: "01JSTRV0000000000000000002", title: "Snow day sketch", status: "ready", durationSec: null, bytes: 5_000_000, currentJobId: null, ai: { model: null, effort: null }, analyzedWith: null, createdAt: "2026-11-20T11:00:00.000Z", updatedAt: "2026-11-20T11:00:00.000Z" },
+];
+
 let store: MockStore;
 let api: StoriesApi;
 let pubs: PublishingJob[];
@@ -92,9 +106,10 @@ function makeApi(): StoriesApi {
   characters.seed(store);
   stories.seed(store);
   store.social.push(account("youtube", "connected", "Lamo Stories Channel"), account("tiktok", "connected", "Lamo Stories TikTok"), account("instagram", "needs_reconnect", "lamo.stories"), account("facebook", "not_connected", null), account("x", "not_connected", null));
+  store.references.push(...structuredClone(REFS));
   pubs = [];
   const now = "2026-11-21T12:00:00.000Z";
-  return {
+  const impl: Partial<StoriesApi> = {
     ...ideas.api(store),
     ...characters.api(store),
     ...stories.api(store),
@@ -109,7 +124,6 @@ function makeApi(): StoriesApi {
     connectSocial: async () => ({ authorizeUrl: "/", expiresAt: now }),
     chooseSocial: async () => store.social[0]!,
     shareWithClips: async () => store.social[0]!,
-    checkSocial: async () => store.social[0]!,
     tiktokCreatorInfo: async () => CREATOR,
     disconnectSocial: async () => undefined,
     publish: async (ws, storyId, targets) => {
@@ -124,7 +138,16 @@ function makeApi(): StoriesApi {
       delete j.error;
       return structuredClone(j);
     },
+    getAi: async () => ({ ai: { defaultModel: "opus-5-5", defaultEffort: "high", tasks: {}, prices: {}, version: 1 }, models: structuredClone(MODELS), agents: [], tasks: structuredClone(LISTED_INFO.tasks) }),
+    listReferences: async () => structuredClone(store.references),
   };
+  impl.checkSocial = async (_ws, platform) => {
+    const a = store.social.find((x) => x.platform === platform)!;
+    a.lastCheckedAt = new Date().toISOString();
+    return structuredClone(a);
+  };
+  // Anything a studio screen never calls answers "not used".
+  return new Proxy(impl, { get: (t, k: string) => (t as Record<string, unknown>)[k] ?? (() => Promise.reject(new Error(`not used: ${k}`))) }) as StoriesApi;
 }
 
 beforeEach(() => {
@@ -148,6 +171,11 @@ async function wait(ms = 1500) {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
   });
+}
+
+/** Lets an AI task run to its end the way the page reads it (every second), one short act at a time. */
+async function untilTask(seconds = 5) {
+  for (let i = 0; i < seconds * 4; i += 1) await wait(250);
 }
 
 async function show(node: ReactNode) {
@@ -235,32 +263,99 @@ describe("Ideas", () => {
     expect(Array.from(document.querySelectorAll(".st-s-idea__title")).map((e) => e.textContent)).toContain("Dash learns to juggle");
   });
 
-  it("Ask for ideas: a topic and a kind make drafts; each is saved only when Save is tapped", async () => {
+  it("Ask for ideas: a task read every second with the model and effort named, then drafts; each is saved only when Save is tapped", async () => {
     const gen = vi.spyOn(api, "generateIdeas");
+    const read = vi.spyOn(api, "getTask");
     const create = vi.spyOn(api, "createIdea");
     await show(<IdeasScreen {...page({ name: "ideas" })} />);
     await click(control("Ask for ideas"), 50);
     type(field(/What about/), "a snowy day");
     await pick("What kind?", "Everyday skills");
-    await click(control("Get ideas"));
+    // The menu's button says what will run before anything is sent.
+    expect(control(/^Model and effort for this one: Claude Opus 5\.5, High effort$/).textContent).toContain("Opus 5.5 · High");
+    await click(control("Get ideas"), 250);
     expect(gen).toHaveBeenCalledWith("stories", { topic: "a snowy day", category: "everyday_skills", count: 4 });
+    await untilTask(1.25);
+    expect(document.querySelector(".st-s-busy")?.textContent).toMatch(/Thinking of ideas with Claude Opus 5\.5 · High effort…/);
+    expect(read.mock.calls.length).toBeGreaterThanOrEqual(1);
+    await untilTask();
+    expect(read.mock.calls.length).toBeGreaterThanOrEqual(2);
     const drafts = Array.from(document.querySelectorAll(".st-s-draft"));
     expect(drafts).toHaveLength(4);
+    expect(document.querySelector(".st-s-panel .st-s-busy")).toBeNull();
     expect(create).not.toHaveBeenCalled();
     await click(control("Save", drafts[1]!));
     expect(create).toHaveBeenCalledTimes(1);
     expect(drafts[1]!.textContent).toContain("Saved");
   });
 
-  it("Make it a full idea shows the concept; More like this adds drafts that point at it", async () => {
+  it("Model and effort for this one: the pick goes with that request only, and the line names it", async () => {
+    const gen = vi.spyOn(api, "generateIdeas");
+    await show(<IdeasScreen {...page({ name: "ideas" })} />);
+    await click(control("Ask for ideas"), 50);
+    await click(control(/^Model and effort for this one/), 50);
+    const dialog = () => document.querySelector('[role="dialog"]')!;
+    expect(dialog().textContent).toContain("Just for this one. Your settings stay the same.");
+    expect(dialog().textContent).toContain("Usual: Claude Opus 5.5");
+    expect(dialog().textContent).toContain("Bedrock says this account can't use it yet.");
+    await pick("Model", "Claude Fable 5.2");
+    await pick("Effort", "Maximum");
+    await click(control("Done", dialog()), 50);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(control(/^Model and effort for this one: Claude Fable 5\.2, Maximum effort, just this one$/)).toBeDefined();
+    await click(control("Get ideas"), 250);
+    expect(gen).toHaveBeenLastCalledWith("stories", { count: 4, override: { model: "fable-5-2", effort: "max" } });
+    await untilTask(1.25);
+    expect(document.querySelector(".st-s-busy")?.textContent).toContain("with Claude Fable 5.2 · Maximum effort");
+    await untilTask();
+    // Back to the usual: nothing is sent but the request.
+    await click(control(/^Model and effort for this one/), 50);
+    await click(control("Use the usual", document.querySelector('[role="dialog"]')!), 50);
+    await click(control("Get ideas"), 50);
+    expect(gen).toHaveBeenLastCalledWith("stories", { count: 4 });
+  });
+
+  it("a task that fails shows its plain sentence with Try again (and the way to Settings › AI for a refused model)", async () => {
+    store.knobs.taskFail = true;
+    const gen = vi.spyOn(api, "generateIdeas");
+    await show(<IdeasScreen {...page({ name: "ideas" })} />);
+    await click(control("Ask for ideas"), 50);
+    await click(control("Get ideas"), 250);
+    await untilTask();
+    expect(text()).toContain("The idea helper could not finish. Tap Try again.");
+    await click(control("Try again", document.querySelector(".st-s-panel")!), 250);
+    await untilTask();
+    expect(gen).toHaveBeenCalledTimes(2);
+    expect(document.querySelectorAll(".st-s-draft")).toHaveLength(4);
+    store.knobs.deniedModels = ["opus-5-5"];
+    await click(control("Ask for ideas"), 50);
+    await click(control("Ask for ideas"), 50);
+    await click(control("Get ideas"), 250);
+    await untilTask();
+    expect(text()).toContain("Claude Opus 5.5 isn't available right now");
+    expect(control("Open Settings › AI").getAttribute("href")).toBe("/stories/settings/ai");
+  });
+
+  it("Make it a full idea shows the concept; More like this adds drafts that point at it; each has its own menu", async () => {
     const vary = vi.spyOn(api, "ideaVariations");
+    const expand = vi.spyOn(api, "expandIdea");
     await show(<IdeasScreen {...page({ name: "ideas" })} />);
     const gps = () => Array.from(document.querySelectorAll(".st-s-idea")).find((c) => c.textContent?.includes("sleepy GPS"))!;
-    await click(control("Make it a full idea", gps()));
+    const menus = gps().querySelectorAll(".st-s-aipair .st-s-ai-btn");
+    expect(menus).toHaveLength(2);
+    await click(control("Make it a full idea", gps()), 250);
+    expect(expand).toHaveBeenCalledWith("stories", I.gps, { durationSec: 50 });
+    await untilTask(1.25);
+    expect(gps().textContent).toContain("Writing the full idea with Claude Opus 5.5 · High effort…");
+    await untilTask();
     expect(gps().querySelector(".st-s-concept")).not.toBeNull();
     expect(gps().querySelectorAll(".st-s-concept__beats li").length).toBeGreaterThanOrEqual(3);
-    await click(control("More like this", gps()));
-    expect(vary).toHaveBeenCalledWith("stories", I.gps, { count: 3 });
+    await click(control(/^Model and effort for this one/, gps().querySelectorAll(".st-s-aipair")[1]!), 50);
+    await pick("Effort", "Low");
+    await click(control("Done", document.querySelector('[role="dialog"]')!), 50);
+    await click(control("More like this", gps()), 250);
+    await untilTask();
+    expect(vary).toHaveBeenCalledWith("stories", I.gps, { count: 3, override: { effort: "low" } });
     expect(document.querySelector(".st-s-drafts__title")?.textContent).toContain("More like");
     expect(document.querySelectorAll(".st-s-draft")).toHaveLength(3);
   });
@@ -359,6 +454,62 @@ describe("Characters", () => {
     await click(control(/Remove picture 1/));
     expect(document.querySelectorAll(".st-s-refs__item")).toHaveLength(0);
   });
+
+  it("Design with AI: words and a picture make a first try in the editor; nothing is saved until Save", async () => {
+    const upload = vi.spyOn(api, "designUpload");
+    const design = vi.spyOn(api, "designCharacter");
+    const create = vi.spyOn(api, "createCharacter");
+    await show(<CharactersScreen {...page({ name: "character_new" })} />);
+    await click(control("Design with AI"), 50);
+    await click(control("Design it"), 50);
+    expect(text()).toContain("Say what your character is like, or add a picture.");
+    expect(design).not.toHaveBeenCalled();
+    type(field("What is your character like?"), "A tall, clumsy robot called Zed with a blue cap who loves to dance");
+    const input = document.querySelector<HTMLInputElement>('.st-s-design input[type="file"]')!;
+    const file = new File([new Uint8Array(3000)], "zed.png", { type: "image/png" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    await wait(3000);
+    expect(upload).toHaveBeenCalledWith("stories", { filename: "zed.png", contentType: "image/png", size: 3000 });
+    const assetId = (await upload.mock.results[0]!.value).assetId;
+    await click(control("Design it"), 250);
+    expect(design).toHaveBeenCalledWith("stories", { description: "A tall, clumsy robot called Zed with a blue cap who loves to dance", referenceAssetId: assetId });
+    await untilTask(1.25);
+    expect(document.querySelector(".st-s-design .st-s-busy")?.textContent).toContain("Designing your character with Claude Opus 5.5 · High effort");
+    await untilTask();
+    expect(text()).toContain("Here is a first try.");
+    // The draft is in the editor, open on its name and personality to check.
+    expect(field("Name").value).toBe("Zed");
+    expect(create).not.toHaveBeenCalled();
+    await click(control("Save character"));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]![1]).toMatchObject({ name: "Zed", movementStyle: "clumsy", look: { body: "tall", hair: { style: "cap" } } });
+  });
+
+  it("Design with AI on a character's page keeps its name and can start from one of its own pictures", async () => {
+    const design = vi.spyOn(api, "designCharacter");
+    const put = vi.spyOn(api, "putCharacter");
+    await show(<CharactersScreen {...page({ name: "character", characterId: C.pip })} />);
+    await click(control("Design with AI"), 50);
+    const pipRef = store.characters.find((c) => c.characterId === C.pip)!.references[0]!.assetId;
+    await click(control("Use picture 1"), 50);
+    await click(control("Design it"), 250);
+    expect(design).toHaveBeenCalledWith("stories", { referenceAssetId: pipRef });
+    await untilTask();
+    expect(text()).toContain("This is the AI's new look for Pip. Nothing changes until you tap Save changes.");
+    expect(put).not.toHaveBeenCalled();
+    await click(control("Save changes"));
+    expect(put.mock.calls[0]![2]).toMatchObject({ name: "Pip" });
+  });
+
+  it("the gallery's Design with AI opens a new character with the design panel open", async () => {
+    await show(<CharactersScreen {...page({ name: "characters" })} />);
+    expect(control("Design with AI").getAttribute("href")).toBe("/stories/characters/new#design");
+    history.replaceState(null, "", "/stories/characters/new#design");
+    await act(async () => root.render(<ToastProvider><CharactersScreen {...page({ name: "character_new" })} /></ToastProvider>));
+    await wait();
+    expect(document.querySelector(".st-s-design textarea")).not.toBeNull();
+  });
 });
 
 // ---------- Production ----------
@@ -380,6 +531,59 @@ describe("Production", () => {
     await click(control("Make the video"));
     expect(create).toHaveBeenCalledWith("stories", { characterIds: [C.pip, C.dash, C.bolt], durationSec: 50, captionsOn: false, musicMood: "comedic", ideaId: I.sandwich });
     expect(location.pathname).toMatch(/^\/stories\/production\/[0-9A-Z]{26}$/);
+  });
+
+  it("New: up to 3 studied reference videos and this video's own model and effort go with the story", async () => {
+    const create = vi.spyOn(api, "createStory");
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich })} />);
+    const tile = (name: string) => Array.from(document.querySelectorAll<HTMLElement>(".st-s-reftile")).find((t) => t.textContent?.includes(name))!;
+    expect(tile("Snow day sketch").getAttribute("aria-disabled")).toBe("true");
+    expect(tile("Snow day sketch").textContent).toContain("Not studied yet");
+    await click(tile("Snow day sketch"), 50);
+    await click(tile("The banana slip"), 50);
+    expect(tile("The banana slip").getAttribute("aria-pressed")).toBe("true");
+    await click(control(/^Model and effort for this video/), 50);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Kept with this video.");
+    await pick("Model", "Claude Sonnet 5.5");
+    await pick("Effort", "Extra high");
+    await click(control("Done", document.querySelector('[role="dialog"]')!), 50);
+    await click(control("Make the video"));
+    expect(create.mock.calls[0]![1]).toMatchObject({ referenceIds: [REFS[0]!.refId], ai: { model: "sonnet-5-5", effort: "xhigh" }, ideaId: I.sandwich });
+    const made = store.stories.find((x) => x.title === "The sandwich tower" && x.status === "producing")!;
+    expect(made.ai).toEqual({ model: "sonnet-5-5", effort: "xhigh" });
+  });
+
+  it("New: with no reference videos it says where to add one, and making the video never waits for them", async () => {
+    store.references = [];
+    const create = vi.spyOn(api, "createStory");
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich })} />);
+    expect(text()).toContain("No reference videos yet.");
+    await click(control("Make the video"));
+    expect(create.mock.calls[0]![1]).not.toHaveProperty("referenceIds");
+    expect(create.mock.calls[0]![1]).not.toHaveProperty("ai");
+  });
+
+  it("a video's page shows which model and effort made each step, its own setting, and Try again's pick for that run only", async () => {
+    const produce = vi.spyOn(api, "produce");
+    const patch = vi.spyOn(api, "patchStory");
+    await show(<ProductionScreen {...page({ name: "production_story", storyId: S.failed })} />);
+    document.querySelector<HTMLDetailsElement>(".st-s-details")!.open = true;
+    const used = () => Array.from(document.querySelectorAll(".st-s-used__row")).map((r) => r.textContent);
+    expect(used()).toEqual(["Write the storyClaude Opus 5.5 · High effortStoryboard", "Check the factsClaude Opus 5.5 · High effortQuality check"]);
+    expect(text()).toContain("Your usual settings");
+    // The video's own setting (kept): it can change while the video waits.
+    await click(control(/^Model and effort for this video/), 50);
+    await pick("Model", "Claude Fable 5.1");
+    await click(control("Done", document.querySelector('[role="dialog"]')!));
+    expect(patch.mock.calls[0]![2]).toMatchObject({ ai: { model: "fable-5-1", effort: null } });
+    expect(text()).toContain("Claude Fable 5.1 (kept with this video)");
+    // Try again with a pick for this run only.
+    await click(control(/^Model and effort for this one/), 50);
+    await pick("Effort", "Low");
+    await click(control("Done", document.querySelector('[role="dialog"]')!), 50);
+    await click(control("Try again from “Animate”"));
+    expect(produce).toHaveBeenCalledWith("stories", S.failed, { override: { effort: "low" } });
+    expect(store.stories.find((x) => x.storyId === S.failed)!.ai).toEqual({ model: "fable-5-1", effort: null });
   });
 
   it("New: a safety idea without checked advice can't start, and a typed safety concept outside the list is refused with the list", async () => {
@@ -493,6 +697,31 @@ describe("Review", () => {
     expect(changes).toHaveBeenLastCalledWith("stories", S.review, { note: "More snow, please", sceneIds: [store.stories.find((s) => s.storyId === S.review)!.scenes[0]!.sceneId] });
   });
 
+  it("a remake's model and effort are for that job only; How it was made lists each step's model", async () => {
+    const changes = vi.spyOn(api, "requestChanges");
+    const produce = vi.spyOn(api, "produce");
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
+    document.querySelector<HTMLDetailsElement>(".st-s-made")!.open = true;
+    expect(Array.from(document.querySelectorAll(".st-s-made .st-s-used__row")).map((r) => r.querySelector(".st-s-used__step")?.textContent)).toEqual(["Write the story", "Check the facts", "Last look"]);
+    const remakes = document.querySelector(".st-s-decide__ai")!;
+    await click(control(/^Model and effort for this one/, remakes), 50);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Just for the next remake.");
+    await pick("Model", "Claude Fable 5.2");
+    await click(control("Done", document.querySelector('[role="dialog"]')!), 50);
+    const second = store.stories.find((x) => x.storyId === S.review)!.scenes[1]!.sceneId;
+    await click(control("Remake this scene", document.querySelectorAll(".st-s-film__card")[1]!));
+    expect(changes).toHaveBeenLastCalledWith("stories", S.review, { sceneIds: [second], override: { model: "fable-5-2" } });
+    expect(store.stories.find((x) => x.storyId === S.review)!.ai).toEqual({ model: null, effort: null });
+    await wait(12_000);
+    // The pick was used once; the next remake is back to the usual.
+    await click(control("Remake the whole video"), 50);
+    await click(control("Remake it"));
+    expect(produce).toHaveBeenLastCalledWith("stories", S.review, { from: "storyboard" });
+    await wait(12_000);
+    const job = store.jobs.filter((j) => j.contentId === S.review).at(-2)!;
+    expect(job.meta.models.find((m) => m.step === "storyboard")).toMatchObject({ model: "fable-5-2" });
+  });
+
   it("Reject keeps the reason", async () => {
     const reject = vi.spyOn(api, "reject");
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
@@ -560,7 +789,7 @@ describe("Post it", () => {
     const places = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button.st-s-place"));
     expect(places.map((p) => p.querySelector(".st-s-place__name")?.textContent)).toEqual(["Lamo Stories Channel", "Lamo Stories TikTok"]);
     expect(places.every((p) => p.getAttribute("aria-pressed") === "false")).toBe(true);
-    expect(control(/Post it|Post to/, dialog).getAttribute("aria-disabled")).toBe("true");
+    expect(control(/^Upload/, dialog).getAttribute("aria-disabled")).toBe("true");
     const off = Array.from(dialog.querySelectorAll(".st-s-place--off"));
     expect(off.map((o) => o.querySelector(".st-s-place__platform")?.textContent)).toEqual(["Instagram", "Facebook", "X"]);
     expect(off.every((o) => o.querySelector('a[href="/stories/connections"]'))).toBe(true);
@@ -573,16 +802,16 @@ describe("Post it", () => {
     const dialog = () => document.querySelector('[role="dialog"]')!;
     await click(control(/Lamo Stories TikTok/, dialog()));
     expect(dialog().querySelector(".dropdown__value")?.textContent).toBe("Pick who can see it");
-    const switches = () => Array.from(dialog().querySelectorAll<HTMLElement>(".st-tiktok [role=switch]"));
+    const switches = () => Array.from(dialog().querySelectorAll<HTMLElement>(".st-s-tiktok [role=switch]"));
     expect(switches().slice(0, 3).map((s) => s.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
-    expect(control(/Post it|Post to/, dialog()).getAttribute("aria-disabled")).toBe("true");
+    expect(control(/^Upload/, dialog()).getAttribute("aria-disabled")).toBe("true");
     await click(control(/Lamo Stories Channel/, dialog()), 50);
     await click(control("Use my settings", dialog()), 50);
     expect(dialog().querySelector(".dropdown__value")?.textContent).toBe("Everyone");
     expect(switches().slice(0, 3).map((s) => s.getAttribute("aria-checked"))).toEqual(["true", "true", "true"]);
     await click(control("More details", dialog()), 50);
     expect(dialog().textContent).toContain("Made for kids: No");
-    await click(control("Post to 2 places", dialog()));
+    await click(control("Upload to 2 places", dialog()));
     expect(publish).toHaveBeenCalledWith("stories", S.approved, [
       { platform: "tiktok", socialAccountId: "stories.tiktok", options: { privacyLevel: "PUBLIC_TO_EVERYONE", disableComment: false, disableDuet: false, disableStitch: false, brandContent: false, brandOrganic: false } },
       { platform: "youtube", socialAccountId: "stories.youtube", options: { privacy: "public", category: "1", notifySubscribers: true } },
@@ -622,7 +851,7 @@ describe("Post it", () => {
     retry.mockRejectedValueOnce(new ApiError(409, "conflict", "Lamo Stories' YouTube is now Lamo Stories Channel. Check it, then tap Try again."));
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
     expect(document.querySelector(".st-s-post__why")?.textContent).toContain("needs connecting again");
-    await click(control("Try again", document.querySelector(".st-postspanel")!));
+    await click(control("Try again", document.querySelector(".st-s-postspanel")!));
     expect(retry).toHaveBeenCalledWith("stories", "pj-old", undefined);
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain("Lamo Stories Channel");
@@ -648,6 +877,51 @@ describe("Post it", () => {
     await show(<PublishSheet ws="stories" story={story} config={{}} jobs={[]} onSent={() => undefined} onRetry={() => undefined} onClose={() => undefined} />);
     expect(document.querySelectorAll("button.st-s-place")).toHaveLength(0);
     expect(text()).toContain("No Lamo Stories account is connected yet.");
-    expect(control("Post it").getAttribute("aria-disabled")).toBe("true");
+    expect(control("Upload").getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("each chosen place shows the exact account it goes to with Check now; Upload checks every account not checked yet first", async () => {
+    const check = vi.spyOn(api, "checkSocial");
+    const publish = vi.spyOn(api, "publish");
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
+    await click(control("Post it"));
+    const dialog = () => document.querySelector('[role="dialog"]')!;
+    expect(dialog().querySelector(".st-s-dest")).toBeNull();
+    await click(control(/Lamo Stories Channel/, dialog()), 50);
+    const dest = () => dialog().querySelector(".st-s-dest")!;
+    expect(dest().textContent).toContain("Goes to Lamo Stories Channel");
+    expect(dest().textContent).toContain("Account id ext-youtube");
+    expect(dest().textContent).toContain("Last checked 3 hours ago.");
+    await click(control("Check now", dest()));
+    expect(check).toHaveBeenCalledWith("stories", "youtube");
+    expect(dest().textContent).toContain("Checked just now: this is the account the video goes to.");
+    await click(control(/Lamo Stories TikTok/, dialog()), 50);
+    await click(control("Use my settings", dialog()), 50);
+    await click(control("Upload to 2 places", dialog()));
+    // YouTube was checked in the sheet; TikTok is checked at the tap, then the video goes.
+    expect(check.mock.calls.map((c) => c[1])).toEqual(["youtube", "tiktok"]);
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(check.mock.invocationCallOrder[1]!).toBeLessThan(publish.mock.invocationCallOrder[0]!);
+  });
+
+  it("Upload stops when a check finds another account or a lost connection, and says which", async () => {
+    const publish = vi.spyOn(api, "publish");
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
+    await click(control("Post it"));
+    const dialog = () => document.querySelector('[role="dialog"]')!;
+    await click(control(/Lamo Stories Channel/, dialog()), 50);
+    await click(control(/Lamo Stories TikTok/, dialog()), 50);
+    await click(control("Use my settings", dialog()), 50);
+    // Meanwhile YouTube was connected to another channel and TikTok's sign-in ran out.
+    Object.assign(store.social.find((a) => a.platform === "youtube")!, { externalAccountId: "ext-other", accountName: "Someone Else", handle: "@someone" });
+    store.social.find((a) => a.platform === "tiktok")!.connectionStatus = "needs_reconnect";
+    await click(control("Upload to 2 places", dialog()));
+    expect(publish).not.toHaveBeenCalled();
+    expect(dialog().textContent).toContain("Lamo Stories' YouTube is now Someone Else (@someone). Look at it below, then tap Upload again.");
+    expect(dialog().textContent).toContain("Lamo Stories' TikTok needs connecting again. Fix it in Connections, or leave TikTok out.");
+    expect(dialog().querySelector(".st-s-dest")?.textContent).toContain("Goes to Someone Else (@someone)");
+    // TikTok left the list of chosen places; the owner has seen the new YouTube account, so the next tap sends.
+    await click(control("Upload", dialog()));
+    expect(publish).toHaveBeenCalledWith("stories", S.approved, [{ platform: "youtube", socialAccountId: "stories.youtube", options: { privacy: "public", category: "1", notifySubscribers: true } }]);
   });
 });

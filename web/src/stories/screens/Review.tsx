@@ -1,8 +1,9 @@
 // Lamo Stories › Review (docs/CONTRACTS.md §45.9, §45.14, §45.16.6; spec §5.E). Its own queue (videos to watch and
 // videos whose facts need checking; never Lamo Clips' Review), and each video's review page: the player (the MP4, else
 // the live preview), Approve (only when the approve rule holds; the fact problems and the sources shown), Reject, Ask
-// for changes, Remake this scene, Remake the whole video, Remake and Check again, the captions and sound effects
-// editors, Download, Post it (the publish sheet) and the Posts panel.
+// for changes, Remake this scene, Remake the whole video, Remake and Check again (each with the "Model and effort for
+// this one" menu: this job only, never saved), the captions and sound effects editors, which model and effort made each
+// step, Download, Post it (the publish sheet, with the exact account each platform sends to) and the Posts panel.
 import "../styles/studio.css";
 import { useEffect, useRef, useState } from "react";
 import { A } from "../../components/ui.tsx";
@@ -12,8 +13,9 @@ import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { cheerOnNextTap } from "../../lib/sound.ts";
 import { sounds } from "../../lib/sounds.ts";
 import { storiesApi } from "../api/client.ts";
-import type { PublishingJob, SocialAccount, StoriesConfig, Story, StoryPatch, StoryStatus } from "../api/types.ts";
+import type { ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
+import { cleanPick, ModelMenu, ModelsUsed, StoryAi, storyUsual, useAiInfo } from "../studio/ai.tsx";
 import { CaptionEditor } from "../studio/CaptionEditor.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { useSameScript, useWidth, useWorkspace } from "../studio/hooks.ts";
@@ -40,7 +42,7 @@ export function approveBlock(story: Story): string | null {
   if (story.status === "needs_check") return "Check the facts first.";
   if (story.status !== "review") return null;
   if (story.stale.length) return "Your changes aren't in the video yet. Tap Remake first.";
-  if (story.safety && (story.safety.status !== "ok" || story.safety.checkedScriptVersion !== story.scriptVersion)) return "Your changes aren't in the video yet. Tap Remake first.";
+  if (story.safety && ((story.safety.status !== "ok" && story.safety.status !== "skipped") || story.safety.checkedScriptVersion !== story.scriptVersion)) return "Your changes aren't in the video yet. Tap Remake first.";
   return null;
 }
 
@@ -136,6 +138,9 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const [posting, setPosting] = useState(false);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
+  /** The model and effort for the next remake only (never saved). */
+  const [pick, setPick] = useState<ModelOverride | null>(null);
+  const info = useAiInfo(ws);
   const [col, colWidth] = useWidth<HTMLDivElement>(300);
   const seen = useRef<Map<string, PublishingJob["publishingStatus"]> | null>(null);
   const wasLive = useRef(false);
@@ -198,7 +203,29 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const startRun = (r: { story: Story; job: typeof job }) => {
     loaded.setData((d) => (d ? { ...d, story: r.story, job: r.job } : d));
     setForm("none");
+    setPick(null);
   };
+
+  /** This remake's own model and effort, when the owner picked one. */
+  const once = (): { override?: ModelOverride } => {
+    const o = cleanPick(pick);
+    return o ? { override: o } : {};
+  };
+
+  /** A produce call that carries a body only when there is something in it. */
+  const produceNow = (body?: { from: StepKey }) => {
+    const b = { ...body, ...once() };
+    return Object.keys(b).length ? storiesApi().produce(ws, storyId, b) : storiesApi().produce(ws, storyId);
+  };
+
+  async function keepAi(next: ModelOverride | null) {
+    await act("ai", async () => {
+      if (!story) return;
+      const r = await storiesApi().patchStory(ws, storyId, { version: story.version, ai: { model: next?.model ?? null, effort: next?.effort ?? null } });
+      loaded.setData((d) => (d ? { ...d, story: r.story, script: r.script ?? d.script } : d));
+      toast.success(next ? "Kept with this video. Its next remake uses it." : "This video uses your usual settings again.");
+    });
+  }
 
   async function save(edit: Omit<StoryPatch, "version">) {
     if (!story) return;
@@ -278,6 +305,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const problems = story.safety?.status === "problems" ? story.safety.problems : [];
   const citations = story.safety?.citations ?? [];
   const checkAgain = story.status === "needs_check";
+  const remakeMenu = <ModelMenu info={info} usual={storyUsual(info, story)} value={pick} onChange={setPick} note="Just for the next remake. This video's own setting and yours stay the same." />;
   // Phones get a smaller player, so the decision is close below it.
   const width = colWidth < 500 ? Math.max(180, Math.min(250, colWidth - 40)) : Math.max(200, Math.min(340, colWidth));
 
@@ -332,14 +360,17 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             <Notice
               tone="info"
               action={
-                <button
-                  type="button"
-                  className="st-btn st-btn--main"
-                  aria-disabled={busy !== null || undefined}
-                  onClick={() => void act("remake", async () => startRun(await storiesApi().produce(ws, storyId)))}
-                >
-                  {busy === "remake" ? "Starting…" : checkAgain ? "Check again" : story.status === "failed" ? "Try again" : "Remake"}
-                </button>
+                <span className="st-s-ai-fix">
+                  {!deciding ? remakeMenu : null}
+                  <button
+                    type="button"
+                    className="st-btn st-btn--main"
+                    aria-disabled={busy !== null || undefined}
+                    onClick={() => void act("remake", async () => startRun(await produceNow()))}
+                  >
+                    {busy === "remake" ? "Starting…" : checkAgain ? "Check again" : story.status === "failed" ? "Try again" : "Remake"}
+                  </button>
+                </span>
               }
             >
               {story.status === "failed" ? "Making this video stopped." : checkAgain ? "Your fixes are saved. Tap Check again to check the facts and update the video." : "Your changes aren't in the video yet. Tap Remake to put them in."}
@@ -353,7 +384,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   type="button"
                   className="st-btn"
                   aria-disabled={busy !== null || undefined}
-                  onClick={() => void act("check", async () => startRun(await storiesApi().produce(ws, storyId, { from: "safety" })))}
+                  onClick={() => void act("check", async () => startRun(await produceNow({ from: "safety" })))}
                 >
                   {busy === "check" ? "Starting…" : "Check again"}
                 </button>
@@ -393,6 +424,10 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   </p>
                 ) : null}
               </div>
+              <div className="st-s-decide__ai">
+                <span className="st-s-field__hint">Remakes use</span>
+                {remakeMenu}
+              </div>
               <div className="st-s-decide__more">
                 <button type="button" className="st-btn" aria-expanded={form === "changes"} onClick={() => setForm((f) => (f === "changes" ? "none" : "changes"))}>
                   Ask for changes
@@ -412,7 +447,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                     e.preventDefault();
                     if (!note.trim() && !picked.length) return setProblem("Say what to change, or pick a scene.");
                     void act("changes", async () => {
-                      const body: { note?: string; sceneIds?: string[] } = {};
+                      const body: { note?: string; sceneIds?: string[]; override?: ModelOverride } = { ...once() };
                       if (note.trim()) body.note = note.trim();
                       if (picked.length) body.sceneIds = picked;
                       startRun(await storiesApi().requestChanges(ws, storyId, body));
@@ -493,6 +528,17 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
               <p className="st-s-field__hint">The video ends with “Check your local road rules.”</p>
             </section>
           ) : null}
+          <details className="st-s-details st-s-made">
+            <summary className="st-s-details__sum">How it was made</summary>
+            <dl className="st-s-facts">
+              <dt>Model and effort for this video</dt>
+              <dd>
+                <StoryAi info={info} story={story} editable={editable && busy === null} onChange={(v) => void keepAi(v)} />
+              </dd>
+            </dl>
+            <ModelsUsed info={info} job={job} title={live ? "Models working on it" : "Made with"} />
+            {!job?.meta.models.length ? <p className="st-s-field__hint">No model notes for this version.</p> : null}
+          </details>
         </div>
       </div>
 
@@ -513,7 +559,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                       aria-disabled={busy !== null || undefined}
                       onClick={() =>
                         void act(`scene:${sceneId}`, async () => {
-                          startRun(await storiesApi().requestChanges(ws, storyId, { sceneIds: [sceneId] }));
+                          startRun(await storiesApi().requestChanges(ws, storyId, { sceneIds: [sceneId], ...once() }));
                           toast.success("Making a new take of that scene.");
                         })
                       }
@@ -567,7 +613,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 aria-disabled={busy !== null || undefined}
                 onClick={() =>
                   void act("whole", async () => {
-                    startRun(await storiesApi().produce(ws, storyId, { from: "storyboard" }));
+                    startRun(await produceNow({ from: "storyboard" }));
                     setAsking("none");
                     toast.success("Making the whole video again.");
                   })
@@ -579,6 +625,10 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           }
         >
           <p>Lamo Stories writes a new storyboard with your characters as they look now, then makes every step again. This one is kept in the Library.</p>
+          <div className="st-s-decide__ai">
+            <span className="st-s-field__hint">This remake uses</span>
+            {remakeMenu}
+          </div>
         </StSheet>
       ) : null}
 

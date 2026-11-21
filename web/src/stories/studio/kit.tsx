@@ -50,7 +50,7 @@ export function Pick<T extends string>({
         {options.map((o) => (
           <label key={o.value} className={`st-s-pick__opt${o.value === value ? " is-on" : ""}`}>
             <input type="radio" className="st-s-sr" name={name} value={o.value} checked={o.value === value} onChange={() => onChange(o.value)} />
-            {o.art ? <span className="st-pick__art">{o.art}</span> : null}
+            {o.art ? <span className="st-s-pick__art">{o.art}</span> : null}
             <span className="st-s-pick__text">
               <span className="st-s-pick__label">{o.label}</span>
               {o.line ? <span className="st-s-pick__line">{o.line}</span> : null}
@@ -239,7 +239,7 @@ export function Slider({
   const id = useId();
   const pct = (n: number) => ((n - min) / (max - min)) * 100;
   return (
-    <div className="st-s-field st-slider">
+    <div className="st-s-field st-s-slider">
       <span className="st-s-slider__top">
         <label className="st-s-field__label" htmlFor={id}>
           {label}

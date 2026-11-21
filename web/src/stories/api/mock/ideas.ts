@@ -1,9 +1,15 @@
-// Lamo Stories mock: the ideas part (docs/CONTRACTS.md §45.7, §45.16.8). Builder G.
-// Manual ideas, "Ask for ideas" drafts, Expand and More like this, all in memory. Topic matching runs here once, like
-// the API: a driving-safety idea gets the checked guidance topic its words match (config/stories-guidance.json,
+// Lamo Stories mock: the ideas part and the AI tasks (docs/CONTRACTS.md §45.7, §45.25, §45.16.8). Builder G.
+// Manual ideas, and "Ask for ideas", "Make it a full idea" and "More like this" as AI tasks of the creative director:
+// each answers 202 with a task at once, then GET …/tasks/{id} walks it queued → running → done (about 2.5 s; knob
+// taskSeconds) with the drafts or the concept, or failed with its plain sentence (knob taskFail: the next task fails;
+// knob deniedModels: model keys Bedrock "refuses", which fail the task with the no-substitution sentence). The model
+// and effort of every task follow the same levels as the API (a per-request override, the task's, the agent's, the
+// workspace default; Lamo Stories' own stories/config/models.json), merged separately. Topic matching runs here once,
+// like the API: a driving-safety idea gets the checked guidance topic its words match (stories/config/guidance.json,
 // §45.11.5), else needsGuidance and it cannot be made into a video.
-import guidanceFile from "../../../../../config/stories-guidance.json";
-import type { Idea, IdeaCategory, IdeaInput, StoriesApi, VideoConcept } from "../types.ts";
+import guidanceFile from "../../../../../stories/config/guidance.json";
+import modelsFile from "../../../../../stories/config/models.json";
+import type { AgentId, AiTask, Effort, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesApi, TaskKind, VideoConcept } from "../types.ts";
 import { delay, type MockStore } from "./store.ts";
 import { clone, fail, guardWs, iso, mockId, SEED_IDS } from "./stories.ts";
 
@@ -94,6 +100,158 @@ export function topicFor(text: string): string | null {
     if (score > 0 && score > (best?.score ?? 0)) best = { id: topic.id, score };
   }
   return best?.id ?? null;
+}
+
+// ---------- Models, effort and AI tasks (shared with the characters and stories parts) ----------
+
+interface ListedModel {
+  key: string;
+  label: string;
+  efforts: string[];
+  defaultEffort: string | null;
+}
+
+const MODELS = (modelsFile as unknown as { models: ListedModel[] }).models;
+const DEFAULT_MODEL = (modelsFile as unknown as { defaultModel: string }).defaultModel;
+const DEFAULT_EFFORT = (modelsFile as unknown as { defaultEffort: Effort }).defaultEffort;
+const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
+const EFFORT_WORD: Record<Effort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Maximum" };
+
+/** The agent each task belongs to (CONTRACTS §45.26). */
+export const TASK_AGENT: Record<TaskKind, AgentId> = {
+  chat: "creative_director",
+  brainstorm: "creative_director",
+  expand_idea: "creative_director",
+  variations: "creative_director",
+  storyboard: "storyboard",
+  scene_rewrite: "storyboard",
+  captions: "storyboard",
+  character_design: "character",
+  reference_analysis: "video_analysis",
+  fact_check: "quality_assurance",
+  final_review: "quality_assurance",
+};
+
+export function modelLabel(key: string): string {
+  return MODELS.find((m) => m.key === key)?.label ?? key;
+}
+
+/** A per-request pick the API refuses (unknown model, an effort the model does not offer) answers 400 with its sentence. */
+export function checkOverride(o: ModelOverride | { model?: string | null; effort?: Effort | null } | undefined | null): void {
+  if (!o) return;
+  if (o.model && !MODELS.some((m) => m.key === o.model)) fail(400, "bad_request", "We don't know that model. Pick one from the list.");
+  if (o.effort && !EFFORTS.includes(o.effort)) fail(400, "bad_request", "Pick Low, Medium, High, Extra high or Maximum.");
+  const m = o.model ? MODELS.find((x) => x.key === o.model) : undefined;
+  if (m && o.effort && m.efforts.length && !m.efforts.includes(o.effort)) fail(400, "bad_request", `${m.label} does not offer ${EFFORT_WORD[o.effort]}. Pick another level.`);
+}
+
+type Level = { model?: string | null; effort?: Effort | null } | null | undefined;
+
+/**
+ * The model and effort a call uses (CONTRACTS §45.25): the request's pick, then the video's own setting, the task's,
+ * the agent's and the workspace default, model and effort merged separately. An effort the model does not offer
+ * stops the call with its sentence; a model with no effort setting runs at its own level (effortApplied false).
+ */
+export function effectiveFor(
+  store: MockStore,
+  kind: TaskKind,
+  o: { request?: Level; project?: Level } = {},
+): { model: string; effort: Effort | null; effortApplied: boolean; agentId: AgentId; problem: string | null; off: string | null } {
+  const agentId = TASK_AGENT[kind];
+  const agent = store.agents.find((a) => a.agentId === agentId);
+  const off = agent && !agent.active ? `${agent.name} is switched off. Switch it on in Lamo Stories › Settings › Agents.` : null;
+  const ai = store.ai;
+  const levels: Level[] = [o.request, o.project, ai?.tasks?.[kind], agent ? { model: agent.model, effort: agent.effort } : null, { model: ai?.defaultModel ?? DEFAULT_MODEL, effort: ai?.defaultEffort ?? DEFAULT_EFFORT }];
+  const model = levels.find((l) => l?.model)?.model ?? DEFAULT_MODEL;
+  const effort = levels.find((l) => l?.effort)?.effort ?? DEFAULT_EFFORT;
+  const m = MODELS.find((x) => x.key === model);
+  const applied = !!m && m.efforts.length > 0;
+  let problem: string | null = null;
+  if (!m) problem = `We don't know the model "${model}". Pick another model in Lamo Stories › Settings › AI.`;
+  else if (applied && !m.efforts.includes(effort)) problem = `${m.label} does not offer ${EFFORT_WORD[effort]}. Pick another level.`;
+  const denied = Array.isArray(store.knobs.deniedModels) ? (store.knobs.deniedModels as string[]) : [];
+  if (!problem && denied.includes(model))
+    problem = `${modelLabel(model)} isn't available right now: Bedrock says this account can't use it yet. Pick another model in Lamo Stories › Settings › AI, or try again.`;
+  return { model, effort: applied ? effort : null, effortApplied: applied, agentId, problem, off };
+}
+
+interface TaskPlan {
+  ws: string;
+  runningAt: number;
+  doneAt: number;
+  /** null: it finishes; a sentence: it fails with it */
+  fails: string | null;
+  finish: () => Record<string, unknown>;
+}
+
+const plans = new WeakMap<MockStore, Map<string, TaskPlan>>();
+
+function plansOf(store: MockStore): Map<string, TaskPlan> {
+  let p = plans.get(store);
+  if (!p) {
+    p = new Map();
+    plans.set(store, p);
+  }
+  return p;
+}
+
+/** The plain sentence a task fails with when its helper could not finish (§45.7). */
+const TASK_FAILED: Partial<Record<TaskKind, string>> = {
+  brainstorm: "The idea helper could not finish. Tap Try again.",
+  expand_idea: "The idea helper could not finish. Tap Try again.",
+  variations: "The idea helper could not finish. Tap Try again.",
+  character_design: "The character helper could not finish. Tap Try again.",
+};
+
+/**
+ * Starts one AI task in the practice app: the TASK# item at once (queued), running a moment later, then done with
+ * `finish()`'s result (worked out at the end, as the agent writes it) or failed with its sentence. Other parts may
+ * start their own tasks with it, and GET …/tasks/{id} (getTask) reads every task in the store.
+ */
+export function startMockTask(store: MockStore, ws: string, kind: TaskKind | "check_models", override: ModelOverride | undefined, finish: () => Record<string, unknown>, project?: Level): AiTask {
+  checkOverride(override);
+  const eff = effectiveFor(store, kind === "check_models" ? "chat" : kind, { request: override, project });
+  const now = Date.now();
+  const secs = Number(store.knobs.taskSeconds);
+  const total = Number.isFinite(secs) && secs > 0 ? secs * 1000 : 2500;
+  const knob = store.knobs.taskFail;
+  let fails: string | null = eff.off ?? eff.problem;
+  if (!fails && knob) {
+    fails = typeof knob === "string" ? knob : (TASK_FAILED[kind as TaskKind] ?? "The helper stopped. Tap Try again.");
+    store.knobs.taskFail = null;
+  }
+  const task: AiTask = { taskId: mockId(), kind, status: "queued", model: eff.model, effort: eff.effort, effortApplied: eff.effortApplied, result: null, createdAt: iso(now), updatedAt: iso(now) };
+  store.tasks.push(task);
+  plansOf(store).set(task.taskId, { ws, runningAt: now + Math.min(400, total / 4), doneAt: now + total, fails, finish });
+  // The agent finishes its work whether or not anyone is watching (an expanded idea gets its concept).
+  setTimeout(() => settleTasks(store), total + 20);
+  return clone(task);
+}
+
+/** Moves every planned task on to where its time says it is. */
+export function settleTasks(store: MockStore, now = Date.now()): void {
+  for (const [id, plan] of plansOf(store)) {
+    const task = store.tasks.find((t) => t.taskId === id);
+    if (!task || task.status === "done" || task.status === "failed") continue;
+    if (now >= plan.doneAt) {
+      if (plan.fails) {
+        task.status = "failed";
+        task.error = plan.fails;
+      } else {
+        try {
+          task.result = plan.finish();
+          task.status = "done";
+        } catch (e) {
+          task.status = "failed";
+          task.error = e instanceof Error && e.message ? e.message : "The helper stopped. Tap Try again.";
+        }
+      }
+      task.updatedAt = iso(now);
+    } else if (now >= plan.runningAt && task.status === "queued") {
+      task.status = "running";
+      task.updatedAt = iso(now);
+    }
+  }
 }
 
 const CATEGORIES: IdeaCategory[] = ["driving_safety", "everyday_skills", "comedy", "explainer"];
@@ -287,11 +445,15 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async generateIdeas(ws, body) {
       guardWs(store, ws);
       const count = body.count ?? 4;
-      if (count < 1 || count > 6) fail(400, "bad_request", "Ask for 1 to 6 ideas.");
+      if (!Number.isInteger(count) || count < 1 || count > 6) fail(400, "bad_request", "Ask for 1 to 6 ideas.");
       if ((body.topic ?? "").length > 200) fail(400, "bad_request", "Keep the topic to 200 letters.");
       if (body.category && !CATEGORIES.includes(body.category)) fail(400, "bad_request", "Pick a kind of video.");
-      await delay(900);
-      return draftsFor(store, ws, body.topic ?? "", body.category, count);
+      checkOverride(body.override);
+      await delay(160);
+      const topic = body.topic ?? "";
+      const category = body.category;
+      // Nothing is saved: the owner taps Save on each draft.
+      return startMockTask(store, ws, "brainstorm", body.override, () => ({ drafts: draftsFor(store, ws, topic, category, count) }));
     },
     async expandIdea(ws, ideaId, body) {
       guardWs(store, ws);
@@ -300,17 +462,24 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (durationSec < 15 || durationSec > 90) fail(400, "bad_request", "Pick a length from 15 to 90 seconds.");
       if (idea.needsGuidance)
         fail(409, "conflict", "Lamo Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet.");
-      await delay(800);
-      idea.concept = conceptFor(store, idea, durationSec);
-      idea.updatedAt = iso();
-      return out(idea);
+      checkOverride(body?.override);
+      await delay(160);
+      // The finished task writes `concept` on the idea (keeping its title) and returns the idea.
+      return startMockTask(store, ws, "expand_idea", body?.override, () => {
+        const now = store.ideas.find((i) => i.ideaId === ideaId && i.workspaceId === ws);
+        if (!now) throw new Error("That idea was deleted while the helper worked on it.");
+        now.concept = conceptFor(store, now, durationSec);
+        now.updatedAt = iso();
+        return { idea: out(now) };
+      });
     },
     async ideaVariations(ws, ideaId, body) {
       guardWs(store, ws);
       const idea = find(store, ws, ideaId);
       const count = body?.count ?? 3;
-      if (count < 1 || count > 4) fail(400, "bad_request", "Ask for 1 to 4 more ideas.");
-      await delay(700);
+      if (!Number.isInteger(count) || count < 1 || count > 4) fail(400, "bad_request", "Ask for 1 to 4 more ideas.");
+      checkOverride(body?.override);
+      await delay(160);
       // Never "faster" or "riskier" for driving: nothing dangerous for fun (§45.7).
       const twists =
         idea.category === "driving_safety"
@@ -326,14 +495,27 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
               ["in a hurry", "Everything has to happen fast, and that makes it funnier."],
               ["the next day", "The next day it happens again, but now they know the trick."],
             ] as const);
-      return twists.slice(0, count).map(([t, line]) => ({
-        title: `${idea.title}: ${t}`.slice(0, 80),
-        logline: `${line} ${idea.logline}`.slice(0, 280),
-        category: idea.category,
-        ...(idea.characterIds ? { characterIds: [...idea.characterIds] } : {}),
-        source: "variation" as const,
-        parentIdeaId: idea.ideaId,
+      const base = clone(idea);
+      return startMockTask(store, ws, "variations", body?.override, () => ({
+        drafts: twists.slice(0, count).map(([t, line]) => ({
+          title: `${base.title}: ${t}`.slice(0, 80),
+          logline: `${line} ${base.logline}`.slice(0, 280),
+          category: base.category,
+          ...(base.characterIds ? { characterIds: [...base.characterIds] } : {}),
+          source: "variation" as const,
+          parentIdeaId: base.ideaId,
+        })),
       }));
+    },
+    async getTask(ws, taskId) {
+      guardWs(store, ws);
+      settleTasks(store);
+      await delay(80);
+      settleTasks(store);
+      const plan = plansOf(store).get(taskId);
+      const task = store.tasks.find((t) => t.taskId === taskId);
+      if (!task || (plan && plan.ws !== ws)) fail(404, "not_found", "We could not find that task. It may have finished long ago.");
+      return clone(task);
     },
   };
 }

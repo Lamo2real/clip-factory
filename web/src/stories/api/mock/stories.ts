@@ -1,13 +1,16 @@
 // Lamo Stories mock: the stories part (docs/CONTRACTS.md §45.9, §45.16.8). Builder G.
 // Stories in every status, a practice "writer" that makes real engine scripts (they pass validateScript), and
 // production jobs that walk their `configuration.run` steps in about 10 seconds (knobs: jobSeconds, failStep,
-// safetyProblems on window.__cfStoriesMock.store.knobs). The status table, the stale rules and the approve rule of
-// §45.9 hold here as they do in the API. In mock mode the "final video" is the engine's live preview (no videoUrl);
-// stills and the cover are the engine's middle frames drawn on a small canvas when the browser has one.
+// safetyProblems, deniedModels on window.__cfStoriesMock.store.knobs). The status table, the stale rules and the
+// approve rule of §45.9 hold here as they do in the API. Each step that asks a model (writing, the fact check, the
+// last look) records the model and effort it used in job.meta.models, from the same levels as the API: this job's
+// own pick (a remake's "just this one"), the video's own setting (Story.ai), the task's, the agent's, the default;
+// a model Bedrock refuses stops the job with its sentence (never another model). In mock mode the "final video" is
+// the engine's live preview (no videoUrl); stills and the cover are the engine's middle frames drawn on a small
+// canvas when the browser has one.
 //
 // Also the small helpers the ideas and characters parts share (ids, errors, the workspace check, the seed ids).
 import { ApiError, type ErrorCode } from "../../../api/errors.ts";
-import { DEFAULT_CLIP_MODEL } from "../../../lib/models.ts";
 import { CATALOG, drawFrame, ENGINE_VERSION, fitDuration, normalizeScript, sceneFrames, validateScript } from "../../engine/engine.ts";
 import type { ActionId, Beat, CameraId, CastMember, Expression, NoiseId, PropAction, PropKind, Scene, SceneActor, SceneProp, SetId, SfxId, StoryScript } from "../../engine/types.ts";
 import { drawPrims } from "../../preview/draw.ts";
@@ -18,6 +21,7 @@ import {
   type Character,
   type IdeaCategory,
   type LibraryItem,
+  type ModelOverride,
   type MusicMood,
   type ProductionJob,
   type StepKey,
@@ -26,8 +30,9 @@ import {
   type Story,
   type StorySafety,
   type StoryStatus,
+  type TaskKind,
 } from "../types.ts";
-import { citationsFor, shownSteps, topicFor } from "./ideas.ts";
+import { checkOverride, citationsFor, effectiveFor, shownSteps, topicFor } from "./ideas.ts";
 import { delay, type MockStore } from "./store.ts";
 
 export const KEYS = ["listStories", "createStory", "getStory", "storyJobs", "patchStory", "deleteStory", "produce", "cancelStory", "approve", "reject", "requestChanges", "download"] as const;
@@ -484,6 +489,8 @@ interface Run {
   done: number;
   fail: StepKey | null;
   problems: string[] | null;
+  /** this job's own model and effort (a remake's "just this one"); never saved as a setting */
+  override?: ModelOverride;
 }
 
 interface Extra {
@@ -520,6 +527,44 @@ const order = (keys: Iterable<StepKey>) => {
 function seconds(store: MockStore): number {
   const s = Number(store.knobs.jobSeconds);
   return Number.isFinite(s) && s > 0 ? s : 10;
+}
+
+/** An ACT# line for the dashboard's recent activity (only when the shell's store keeps them). */
+export function addActivity(store: MockStore, kind: "made" | "approved" | "rejected" | "changes" | "posted" | "failed", story: Story): void {
+  const list = (store as unknown as { activity?: { at: string; kind: string; storyId: string; title: string }[] }).activity;
+  if (Array.isArray(list)) list.unshift({ at: iso(), kind, storyId: story.storyId, title: story.title });
+}
+
+/** The task a step asks a model for, or null for a step the engine does alone. */
+function stepTask(job: ProductionJob, key: StepKey): TaskKind | null {
+  if (key === "storyboard") return job.configuration.sceneIds?.length && !job.configuration.note ? "scene_rewrite" : "storyboard";
+  if (key === "safety") return "fact_check";
+  if (key === "preview") return "final_review";
+  return null;
+}
+
+/**
+ * When a model step starts: which model and effort it uses (recorded in meta.models, and the writer's in
+ * writerModel), or the sentence that stops the job (a refused model, a switched-off agent). The quality agent's
+ * checks are skipped when it is switched off, except the fact check of a driving-safety story (§45.33).
+ */
+function startModelStep(store: MockStore, job: ProductionJob, story: Story, key: StepKey, run: Run): string | null {
+  const kind = stepTask(job, key);
+  if (!kind) return null;
+  const e = effectiveFor(store, kind, { request: run.override, project: story.ai });
+  const mustCheck = kind === "fact_check" && story.category === "driving_safety";
+  if (e.off && kind !== "fact_check" && kind !== "final_review") return e.off;
+  if (e.off && !mustCheck) return null;
+  if (e.problem) return e.problem;
+  job.meta.models = [...job.meta.models.filter((m) => m.step !== key), { step: key, agentId: e.agentId, model: e.model, effort: e.effort, effortApplied: e.effortApplied }];
+  if (key === "storyboard") job.meta.writerModel = e.model;
+  return null;
+}
+
+/** True when the quality agent is switched off (its checks are skipped, never for driving safety). */
+function qualityOff(store: MockStore): boolean {
+  const qa = store.agents.find((a) => a.agentId === "quality_assurance");
+  return !!qa && !qa.active;
 }
 
 function progressOf(job: ProductionJob): number {
@@ -582,9 +627,13 @@ function finishStep(store: MockStore, job: ProductionJob, key: StepKey, run: Run
     job.meta.seed = next.seed;
     addAsset(store, story, "storyboard", `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(next))}`, "application/json", JSON.stringify(next).length);
   } else if (key === "safety" && script) {
-    const problems = run.problems ?? problemsIn(script);
     const topicId = story.category === "driving_safety" ? story.safetyTopicId : null;
-    story.safety = { topicId, status: problems.length ? "problems" : "ok", problems, checkedScriptVersion: story.scriptVersion, citations: citationsFor(topicId) };
+    if (qualityOff(store) && story.category !== "driving_safety") {
+      story.safety = { topicId, status: "skipped", problems: [], checkedScriptVersion: story.scriptVersion, citations: [] };
+    } else {
+      const problems = run.problems ?? problemsIn(script);
+      story.safety = { topicId, status: problems.length ? "problems" : "ok", problems, checkedScriptVersion: story.scriptVersion, citations: citationsFor(topicId) };
+    }
   } else if (key === "scenes" && script) {
     extra.stills = true;
     for (const sc of script.scenes) if (!job.configuration.sceneIds || job.configuration.sceneIds.includes(sc.sceneId)) addAsset(store, story, "scene_still", stillOf(story.storyId, script, sc.sceneId), "image/jpeg", 24_000, sc.sceneId);
@@ -620,17 +669,18 @@ function endJob(store: MockStore, job: ProductionJob, now: number): void {
   story.currentJobId = null;
   story.version += 1;
   story.updatedAt = iso(now);
+  addActivity(store, "made", story);
 }
 
-function failJob(store: MockStore, job: ProductionJob, key: StepKey, now: number): void {
+function failJob(store: MockStore, job: ProductionJob, key: StepKey, now: number, why?: string): void {
   const step = job.steps.find((s) => s.key === key);
   if (step) {
     step.status = "failed";
-    step.message = "This step stopped.";
+    step.message = why ?? "This step stopped.";
     step.finishedAt = iso(now);
   }
   job.status = "failed";
-  job.error = `Making the video stopped at “${STEP_LABEL[key]}”. Tap Try again.`;
+  job.error = why ?? `Making the video stopped at “${STEP_LABEL[key]}”. Tap Try again.`;
   job.updatedAt = iso(now);
   job.progress = progressOf(job);
   const story = store.stories.find((s) => s.storyId === job.contentId);
@@ -640,6 +690,7 @@ function failJob(store: MockStore, job: ProductionJob, key: StepKey, now: number
   story.currentJobId = null;
   story.version += 1;
   story.updatedAt = iso(now);
+  addActivity(store, "failed", story);
 }
 
 /** Moves every running job on to where its time says it is (each read calls this; so does a small timer). */
@@ -666,6 +717,12 @@ export function advanceJobs(store: MockStore, now = Date.now()): void {
       if (step.status === "pending") {
         step.status = "running";
         step.startedAt = iso(run.start + run.done * per);
+        const story = store.stories.find((s) => s.storyId === job.contentId);
+        const stop = story ? startModelStep(store, job, story, key, run) : null;
+        if (stop) {
+          failJob(store, job, key, now, stop);
+          break;
+        }
       }
       const n = sceneCount(store, job, key);
       if (elapsed < (run.done + 1) * per) {
@@ -723,7 +780,15 @@ function running(store: MockStore, story: Story): ProductionJob | null {
   return job && (job.status === "queued" || job.status === "running") ? job : null;
 }
 
-function startJob(store: MockStore, story: Story, jobType: ProductionJob["jobType"], run: StepKey[], conf: { from: StepKey | null; sceneIds: string[] | null; note: string | null }, now = Date.now()): ProductionJob {
+function startJob(
+  store: MockStore,
+  story: Story,
+  jobType: ProductionJob["jobType"],
+  run: StepKey[],
+  conf: { from: StepKey | null; sceneIds: string[] | null; note: string | null },
+  now = Date.now(),
+  override?: ModelOverride,
+): ProductionJob {
   const cfg = wsConfig(store, story.workspaceId);
   const job: ProductionJob = {
     jobId: mockId(),
@@ -736,14 +801,15 @@ function startJob(store: MockStore, story: Story, jobType: ProductionJob["jobTyp
     progress: 0,
     configuration: { run, ...conf },
     meta: {
-      writerModel: run.includes("storyboard") ? (cfg.storyModel ?? DEFAULT_CLIP_MODEL) : null,
+      writerModel: null,
       engineVersion: ENGINE_VERSION,
       seed: store.scripts[story.storyId]?.seed ?? null,
       scriptVersion: story.scriptVersion || null,
       targetSec: story.durationSec,
       actualSec: story.actualDurationSec,
       safetyTopicId: story.safetyTopicId,
-      providers: { writer: "bedrock-claude", images: cfg.providers?.images ?? "builtin-rig", animation: "builtin-2d", audio: "builtin-synth" },
+      providers: { writer: "bedrock-claude", images: cfg.providers?.images ?? "builtin-rig", animation: cfg.providers?.video ?? "builtin-2d", audio: "builtin-synth" },
+      models: [],
     },
     createdAt: iso(now),
     updatedAt: iso(now),
@@ -753,7 +819,7 @@ function startJob(store: MockStore, story: Story, jobType: ProductionJob["jobTyp
   const failAt = knob && run.includes(knob) ? knob : null;
   if (failAt) store.knobs.failStep = null;
   const problems = Array.isArray(store.knobs.safetyProblems) ? (store.knobs.safetyProblems as string[]) : null;
-  runs.set(job, { start: now, done: 0, fail: failAt, problems });
+  runs.set(job, override ? { start: now, done: 0, fail: failAt, problems, override: clone(override) } : { start: now, done: 0, fail: failAt, problems });
   store.jobs.push(job);
   extraOf(store, story.storyId).statusBefore = story.status === "producing" ? "draft" : story.status;
   story.status = "producing";
@@ -799,11 +865,20 @@ const CAPTION_LIMITS: Record<keyof Captions, number> = { youtubeTitle: 100, yout
 const SFX_IDS = new Set<string>(CATALOG.sfx.map((e) => e.id));
 const MOODS = new Set<string>(CATALOG.musicMoods.map((e) => e.id));
 
+/** A video's reference videos (≤ 3, each one of this workspace's, §45.28), or the sentence that refuses them. */
+function checkReferences(store: MockStore, ids: string[] | undefined): string[] {
+  if (!ids) return [];
+  if (!Array.isArray(ids) || ids.length > 3) fail(400, "bad_request", "Pick up to 3 reference videos.");
+  const unique = [...new Set(ids)];
+  for (const id of unique) if (!store.references.some((r) => r.refId === id)) fail(404, "not_found", "We could not find one of those reference videos. It may have been deleted.");
+  return unique;
+}
+
 /** The approve rule (§45.9), as the sentence the 409 carries, or null when it holds. */
 function approveProblem(story: Story): string | null {
   if (story.safety?.status === "problems") return `Fix the facts first: ${story.safety.problems.join(" ")}`;
   if (story.status !== "review" || story.stale.length) return "Your changes aren't in the video yet. Tap Remake first.";
-  if (story.safety && (story.safety.status !== "ok" || story.safety.checkedScriptVersion !== story.scriptVersion)) return "Your changes aren't in the video yet. Tap Remake first.";
+  if (story.safety && ((story.safety.status !== "ok" && story.safety.status !== "skipped") || story.safety.checkedScriptVersion !== story.scriptVersion)) return "Your changes aren't in the video yet. Tap Remake first.";
   return null;
 }
 
@@ -823,6 +898,8 @@ interface SeedSpec {
   badCaption?: string;
   failAt?: StepKey;
   reviewNote?: string;
+  /** the video's own model and effort (Story.ai) */
+  ai?: { model: string | null; effort: "low" | "medium" | "high" | "xhigh" | "max" | null };
 }
 
 function seedStory(store: MockStore, spec: SeedSpec, now: number): void {
@@ -850,6 +927,8 @@ function seedStory(store: MockStore, spec: SeedSpec, now: number): void {
     stale: [],
     safetyTopicId: topicId,
     safety: null,
+    ai: spec.ai ? { ...spec.ai } : { model: null, effort: null },
+    referenceIds: [],
     reviewNote: spec.reviewNote ?? null,
     currentJobId: null,
     posted: [],
@@ -870,11 +949,14 @@ function seedStory(store: MockStore, spec: SeedSpec, now: number): void {
     steps: STEP_ORDER.map((key) => ({ key, label: STEP_LABEL[key], status: "done", startedAt: iso(at), finishedAt: iso(at + 300_000) })),
     progress: 1,
     configuration: { run: [...STEP_ORDER], from: null, sceneIds: null, note: null },
-    meta: { writerModel: DEFAULT_CLIP_MODEL, engineVersion: ENGINE_VERSION, seed: null, scriptVersion: 1, targetSec: spec.durationSec, actualSec: null, safetyTopicId: topicId, providers: { writer: "bedrock-claude", images: "builtin-rig", animation: "builtin-2d", audio: "builtin-synth" } },
+    meta: { writerModel: null, engineVersion: ENGINE_VERSION, seed: null, scriptVersion: 1, targetSec: spec.durationSec, actualSec: null, safetyTopicId: topicId, providers: { writer: "bedrock-claude", images: "builtin-rig", animation: "builtin-2d", audio: "builtin-synth" }, models: [] },
     createdAt: iso(at),
     updatedAt: iso(at + 300_000),
   };
   store.jobs.push(job);
+  // The seeded runs record the models they used, as a real run does (the writer's in writerModel too).
+  const seedRun: Run = { start: at, done: 0, fail: null, problems: null };
+  for (const key of ["storyboard", "safety", "preview"] as StepKey[]) if (spec.status !== "producing" && spec.status !== "draft" && (spec.failAt === undefined || STEP_ORDER.indexOf(key) < STEP_ORDER.indexOf(spec.failAt))) startModelStep(store, job, story, key, seedRun);
   if (spec.status === "producing") {
     store.jobs.pop();
     story.status = "draft";
@@ -945,7 +1027,7 @@ export function seed(store: MockStore): void {
       ageDays: 1.5,
       badCaption: "Turn on your full beam lights",
     },
-    { id: S.approved, ideaId: I.shoes, brief: { title: "Bolt ties his shoes", logline: "Bolt keeps tripping on his laces until he learns the bunny-ears trick.", category: "everyday_skills" }, cast: [C.bolt], status: "approved", durationSec: 35, musicMood: "playful", ageDays: 3 },
+    { id: S.approved, ideaId: I.shoes, brief: { title: "Bolt ties his shoes", logline: "Bolt keeps tripping on his laces until he learns the bunny-ears trick.", category: "everyday_skills" }, cast: [C.bolt], status: "approved", durationSec: 35, musicMood: "playful", ageDays: 3, ai: { model: "fable-5-2", effort: "high" } },
     { id: S.published, ideaId: I.sandwich, brief: { title: "The sandwich tower", logline: "Pip builds the tallest sandwich ever. Dash wants a bite. The tower wobbles.", category: "comedy" }, cast: [C.pip, C.dash], status: "published", durationSec: 30, musicMood: "comedic", ageDays: 5 },
     { id: S.rejected, ideaId: I.sandwich, brief: { title: "The sandwich tower (first try)", logline: "Pip builds a sandwich tower and Dash knocks it over.", category: "comedy" }, cast: [C.pip, C.dash], status: "rejected", durationSec: 30, musicMood: "comedic", ageDays: 6, reviewNote: "Too short, and the ending was flat." },
     { id: S.failed, ideaId: null, brief: { title: "Why do leaves fall?", logline: "Bolt wonders why the trees drop their leaves every autumn.", category: "explainer" }, cast: [C.bolt, C.nana], status: "failed", durationSec: 30, musicMood: "wonder", ageDays: 2, failAt: "animation" },
@@ -993,6 +1075,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (durationSec < 15 || durationSec > 90) fail(400, "bad_request", "Pick a length from 15 to 90 seconds.");
       const musicMood = body.musicMood ?? (cfg.musicOn === false ? "none" : "playful");
       if (!MOODS.has(musicMood)) fail(400, "bad_request", "Pick a music mood.");
+      const referenceIds = checkReferences(store, body.referenceIds);
+      if (body.ai) checkOverride(body.ai);
       await delay(220);
       const now = Date.now();
       const storyId = mockId();
@@ -1016,6 +1100,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         stale: [],
         safetyTopicId,
         safety: null,
+        ai: { model: body.ai?.model ?? null, effort: body.ai?.effort ?? null },
+        referenceIds,
         reviewNote: null,
         currentJobId: null,
         posted: [],
@@ -1071,6 +1157,12 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         if (script) script.title = t;
         for (const a of store.assets) if (a.storyId === storyId) a.title = t;
       }
+      // The video's own model and effort, and its reference videos: for its next jobs; nothing in the video changes.
+      if (patch.ai !== undefined) {
+        checkOverride(patch.ai);
+        story.ai = { model: patch.ai.model ?? null, effort: patch.ai.effort ?? null };
+      }
+      if (patch.referenceIds !== undefined) story.referenceIds = checkReferences(store, patch.referenceIds);
       if (patch.postCaptions) {
         const next = { ...story.postCaptions };
         for (const [k, v] of Object.entries(patch.postCaptions) as [keyof Captions, string][]) {
@@ -1171,9 +1263,10 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (body.sceneIds && (!body.from || !["scenes", "animation"].includes(body.from))) fail(400, "bad_request", "Scenes can only be picked from Draw the scenes or Animate.");
       if (body.sceneIds?.some((id) => !story.scenes.some((sc) => sc.sceneId === id))) fail(400, "bad_request", "One of those scenes is not in this video.");
       if (!store.scripts[storyId] && body.from && body.from !== "storyboard") fail(409, "conflict", "This video has no storyboard yet. Tap Try again first.");
+      checkOverride(body.override);
       const run = body.from ? STEP_ORDER.slice(STEP_ORDER.indexOf(body.from)) : order(story.stale);
       if (!run.length) fail(409, "conflict", "Nothing needs making again: the video already has every change.");
-      const job = startJob(store, story, "produce", run, { from: body.from ?? null, sceneIds: body.sceneIds ?? null, note: null });
+      const job = startJob(store, story, "produce", run, { from: body.from ?? null, sceneIds: body.sceneIds ?? null, note: null }, Date.now(), body.override);
       return { story: storyOut(store, story), job: clone(job) };
     },
     async cancelStory(ws, storyId) {
@@ -1204,6 +1297,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       story.approvedAt = iso();
       story.version += 1;
       story.updatedAt = iso();
+      addActivity(store, "approved", story);
       return storyOut(store, story);
     },
     async reject(ws, storyId, reason) {
@@ -1217,6 +1311,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       story.reviewNote = reason?.trim() || null;
       story.version += 1;
       story.updatedAt = iso();
+      addActivity(store, "rejected", story);
       return storyOut(store, story);
     },
     async requestChanges(ws, storyId, body) {
@@ -1232,8 +1327,10 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (!["review", "needs_check", "failed"].includes(story.status)) fail(409, "conflict", "This video can't be changed now.");
       if (!store.scripts[storyId]) fail(409, "conflict", "This video has no storyboard yet. Tap Try again first.");
       if (sceneIds?.some((id) => !story.scenes.some((sc) => sc.sceneId === id))) fail(400, "bad_request", "One of those scenes is not in this video.");
+      checkOverride(body.override);
       if (note) story.reviewNote = note;
-      const job = startJob(store, story, "changes", [...STEP_ORDER], { from: "storyboard", sceneIds, note });
+      const job = startJob(store, story, "changes", [...STEP_ORDER], { from: "storyboard", sceneIds, note }, Date.now(), body.override);
+      addActivity(store, "changes", story);
       return { story: storyOut(store, story), job: clone(job) };
     },
     async download(ws, storyId) {

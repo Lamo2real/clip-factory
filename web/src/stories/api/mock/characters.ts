@@ -1,9 +1,12 @@
 // Lamo Stories mock: the characters part (docs/CONTRACTS.md §45.8, §45.16.8). Builder G.
 // Saved rigs with their faces, moves and sounds; edits carry a version (409 when it is stale); delete refuses while a
 // story with the character is being made; reference pictures go through a pretend presigned PUT (mock:// URLs, which
-// web/src/api/upload.ts plays out with progress); a portrait only when AI pictures are on in Settings.
+// web/src/api/upload.ts plays out with progress); a portrait only when AI pictures are on in Settings; and "Design
+// with AI": a picture for it (designUpload, a design_ref the Library never lists) and the character agent's task that
+// suggests a whole CharacterInput from the owner's words and/or that picture (a draft: nothing is saved).
 import type { Character, CharacterInput, LibraryItem, ProductionJob, StoriesApi, StoriesConfig } from "../types.ts";
-import type { CharacterLook } from "../../engine/types.ts";
+import type { CharacterLook, Expression, MovementStyle, NoiseId, SfxId } from "../../engine/types.ts";
+import { startMockTask } from "./ideas.ts";
 import { delay, type MockStore } from "./store.ts";
 import { clone, fail, guardWs, iso, mockId, SEED_IDS } from "./stories.ts";
 
@@ -116,6 +119,117 @@ function settlePortraits(store: MockStore, now = Date.now()): void {
     c.portrait = { assetId, url };
     addAsset(store, c, assetId, "portrait", url, "image/png", 48_000);
   }
+}
+
+// ---------- Design with AI (the practice character agent) ----------
+
+/** Pictures sent for "Design with AI": assetId → the workspace, its type and a pretend picture. Never in the Library. */
+const designs = new WeakMap<MockStore, Map<string, { ws: string; contentType: string; filename: string }>>();
+
+function designsOf(store: MockStore) {
+  let d = designs.get(store);
+  if (!d) {
+    d = new Map();
+    designs.set(store, d);
+  }
+  return d;
+}
+
+const COLOR_WORDS: [RegExp, string][] = [
+  [/\b(yellow|sunny|gold(en)?)\b/i, "#ffc94a"],
+  [/\b(red|coral|orange)\b/i, "#ff6f61"],
+  [/\b(green|mint)\b/i, "#47d6a0"],
+  [/\b(blue|sky)\b/i, "#62c6ff"],
+  [/\b(purple|violet|lilac)\b/i, "#8b6cff"],
+  [/\bpink\b/i, "#ff9ec7"],
+  [/\b(white|cream)\b/i, "#fff6e5"],
+  [/\b(black|dark)\b/i, "#2b2f45"],
+  [/\bbrown\b/i, "#a33b2f"],
+];
+
+const HAIR_COLOR_WORDS: [RegExp, string][] = [
+  [/\b(blond|blonde|golden) hair\b/i, "#e8c15a"],
+  [/\b(ginger|red) hair\b/i, "#c8501e"],
+  [/\b(grey|gray|silver|white) hair\b/i, "#d9d6d0"],
+  [/\bblack hair\b/i, "#1f1a17"],
+  [/\bbrown hair\b/i, "#8a5a2b"],
+  [/\b(blue) hair\b/i, "#62c6ff"],
+  [/\b(pink|coral) hair\b/i, "#ff6f61"],
+];
+
+const NAMES = ["Zuzu", "Momo", "Taz", "Kiki", "Bix", "Lulu", "Rolo", "Fizz"];
+
+function pickBy<T>(text: string, table: [RegExp, T][], fallback: T): T {
+  return table.find(([re]) => re.test(text))?.[1] ?? fallback;
+}
+
+/**
+ * The practice character agent: a whole rig, faces, moves and sounds from the owner's words (and, when there is one,
+ * a picture), using only the engine's own look choices, so the draft always draws and always saves.
+ */
+export function designFromWords(words: string, withPicture: boolean, salt: number): CharacterInput {
+  const t = words.trim();
+  const named = /\b(?:called|named)\s+([A-Z][A-Za-z'-]{0,20}(?:\s+[A-Z][A-Za-z'-]{0,20})?)/.exec(t)?.[1];
+  const name = (named ?? NAMES[salt % NAMES.length]!).slice(0, 30);
+  const body: CharacterLook["body"] = /\btall\b|\blanky\b/i.test(t) ? "tall" : /\bround\b|\bchubby\b|\bplump\b/i.test(t) ? "round" : /\bsquare\b|\bboxy\b|\brobot\b/i.test(t) ? "square" : "bean";
+  const hairStyle: CharacterLook["hair"]["style"] = /\bbald\b|\bno hair\b/i.test(t)
+    ? "none"
+    : /\bcurly\b/i.test(t)
+      ? "curly"
+      : /\bspiky\b/i.test(t)
+        ? "spiky"
+        : /\blong hair\b/i.test(t)
+          ? "long"
+          : /\bbun\b/i.test(t)
+            ? "bun"
+            : /\bcap\b|\bhat\b/i.test(t)
+              ? "cap"
+              : "short";
+  const accessory: CharacterLook["accessory"] = /\bglasses|specs\b/i.test(t)
+    ? "glasses"
+    : /\bscarf\b/i.test(t)
+      ? "scarf"
+      : /\bbow ?tie\b/i.test(t)
+        ? "bowtie"
+        : /\bhelmet\b/i.test(t)
+          ? "helmet"
+          : /\bheadphones\b/i.test(t)
+            ? "headphones"
+            : "none";
+  const movementStyle: MovementStyle = /\bclumsy|wobbly|silly\b/i.test(t) ? "clumsy" : /\bfast|quick|speedy|zippy|rush/i.test(t) ? "zippy" : /\bcalm|slow|wise|gentle\b/i.test(t) ? "calm" : /\bbig|heavy|strong\b/i.test(t) ? "heavy" : "bouncy";
+  const top = pickBy(t, COLOR_WORDS, withPicture ? "#62c6ff" : "#ffc94a");
+  const hair = pickBy(t, HAIR_COLOR_WORDS, hairStyle === "cap" ? top : "#3b2a1a");
+  const robot = /\brobot\b/i.test(t);
+  const look: CharacterLook = {
+    body,
+    skin: robot ? "#9be3c4" : /\bdark skin|brown skin\b/i.test(t) ? "#8d5a3b" : "#f2c9a0",
+    height: body === "tall" ? 1.1 : body === "round" ? 0.95 : 1,
+    width: body === "round" ? 1.1 : 1,
+    hair: { style: hairStyle, color: hair },
+    eyes: { shape: /\bsleepy|tired\b/i.test(t) ? "sleepy" : "round", color: "#1c1842" },
+    brows: movementStyle === "calm" ? "thin" : "thick",
+    nose: robot ? "dot" : "button",
+    mouth: /\bshy|quiet\b/i.test(t) ? "small" : "wide",
+    outfit: { top, bottom: top === "#2b2f45" ? "#62c6ff" : "#2b2f45", accent: top === "#ff6f61" ? "#ffc94a" : "#ff6f61", pattern: /\bstripe/i.test(t) ? "stripes" : /\bdots|spotty|spots\b/i.test(t) ? "dots" : "plain" },
+    accessory,
+    outline: "#1c1842",
+  };
+  const shy = /\bshy|quiet\b/i.test(t);
+  const expressions: Expression[] = ["neutral", "happy", "surprised", movementStyle === "clumsy" ? "dizzy" : "worried", shy ? "worried" : "laughing", "determined", "relieved"].filter((e, i, a) => a.indexOf(e) === i) as Expression[];
+  const noises: NoiseId[] = shy ? ["hmm", "giggle", "sigh"] : movementStyle === "clumsy" ? ["oops", "whoa", "laugh"] : ["gasp", "yay", "phew"];
+  const sfx: SfxId[] = robot ? ["beep", "click"] : movementStyle === "zippy" ? ["whoosh", "pop"] : ["boing", "ding"];
+  const traits = [...new Set((t.match(/\b(brave|kind|funny|shy|clumsy|curious|calm|wise|cheeky|careful|cheerful|speedy|grumpy|happy)\b/gi) ?? []).map((w) => w.toLowerCase()))].slice(0, 8);
+  const description = (t || "Designed from your picture.").slice(0, 400);
+  return {
+    name,
+    description,
+    personality: (traits.length ? `${traits.map((w) => w[0]!.toUpperCase() + w.slice(1)).join(", ")}.` : withPicture ? "Friendly and curious, like in your picture." : "Friendly and curious.").slice(0, 400),
+    traits: traits.length ? traits : ["friendly", "curious"],
+    movementStyle,
+    expressions,
+    look,
+    voice: { style: robot ? "hum" : "babble", pitch: shy ? 1.3 : movementStyle === "heavy" ? 0.7 : 1, noises, sfx },
+  };
 }
 
 export function seed(store: MockStore): void {
@@ -256,15 +370,23 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       addAsset(store, c, assetId, "character_ref", url, up.contentType, up.size);
       return out(store, c);
     },
-    async deleteReference(ws, id, assetId) {
+    // Two routes share this name in StoriesApi: a character's reference picture (ws, characterId, assetId) and a
+    // reference video (ws, refId; builder H's part answers that one when it is built).
+    deleteReference: (async (ws: string, id: string, assetId?: string) => {
       guardWs(store, ws);
+      if (assetId === undefined) {
+        await delay(120);
+        if (!store.references.some((r) => r.refId === id)) fail(404, "not_found", "We could not find that reference video.");
+        store.references = store.references.filter((r) => r.refId !== id);
+        return undefined;
+      }
       const c = find(store, ws, id);
       await delay(120);
       if (!c.references.some((r) => r.assetId === assetId)) fail(404, "not_found", "That picture is already gone.");
       c.references = c.references.filter((r) => r.assetId !== assetId);
       store.assets = store.assets.filter((a) => a.assetId !== assetId);
       return out(store, c);
-    },
+    }) as StoriesApi["deleteReference"],
     async makePortrait(ws, id) {
       guardWs(store, ws);
       const c = find(store, ws, id);
@@ -282,7 +404,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         steps: [{ key: "portrait", label: "Draw the picture", status: "pending" }],
         progress: 0,
         configuration: { run: ["portrait"], from: null, sceneIds: null, note: null },
-        meta: { writerModel: null, engineVersion: null, seed: 7, scriptVersion: null, targetSec: null, actualSec: null, safetyTopicId: null, providers: { images: "nova-canvas" } },
+        meta: { writerModel: null, engineVersion: null, seed: 7, scriptVersion: null, targetSec: null, actualSec: null, safetyTopicId: null, providers: { images: "nova-canvas" }, models: [] },
         createdAt: at,
         updatedAt: at,
       };
@@ -290,5 +412,31 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       portraits.set(job, Date.now());
       return clone(job);
     },
+    async designUpload(ws, file) {
+      guardWs(store, ws);
+      if (!TYPES.includes(file.contentType)) fail(400, "bad_request", "Pick a PNG, JPG or WebP picture.");
+      if (file.size > MAX_BYTES) fail(413, "too_large", "That picture is too big. Pick one under 10 MB.");
+      await delay(120);
+      const assetId = mockId();
+      designsOf(store).set(assetId, { ws, contentType: file.contentType, filename: file.filename });
+      return { assetId, uploadUrl: `mock://stories/design/${assetId}`, headers: { "Content-Type": file.contentType } };
+    },
+    async designCharacter(ws, body) {
+      guardWs(store, ws);
+      const words = (body.description ?? "").trim();
+      if (words.length > 600) fail(400, "bad_request", "Keep the description to 600 letters.");
+      const ref = body.referenceAssetId;
+      if (!words && !ref) fail(400, "bad_request", "Say what your character is like, or add a picture.");
+      if (ref) {
+        const design = designsOf(store).get(ref);
+        const charRef = store.assets.some((a) => a.assetId === ref && a.kind === "character_ref" && store.characters.some((c) => c.workspaceId === ws && c.characterId === a.characterId));
+        if (!(design && design.ws === ws) && !charRef) fail(404, "not_found", "We could not find that picture. Add it again.");
+      }
+      await delay(160);
+      const salt = store.characters.length + store.tasks.length;
+      // The character agent's suggestion; nothing is saved until the owner taps Save.
+      return startMockTask(store, ws, "character_design", body.override, () => ({ character: designFromWords(words, !!ref, salt) }));
+    },
   };
 }
+

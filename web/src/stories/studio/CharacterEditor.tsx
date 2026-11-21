@@ -55,8 +55,11 @@ export function CharacterEditor({
   onSave,
   serverProblem,
   aside,
+  startPart,
 }: {
   initial: CharacterInput;
+  /** the part to open first (after Design with AI: the name and personality, to check them) */
+  startPart?: EditorPart;
   mode: "new" | "edit";
   saving: boolean;
   onSave: (c: CharacterInput) => void;
@@ -66,7 +69,7 @@ export function CharacterEditor({
   aside?: ReactNode;
 }) {
   const [c, setC] = useState<CharacterInput>(initial);
-  const [part, setPart] = useState<EditorPart>("looks");
+  const [part, setPart] = useState<EditorPart>(startPart ?? "looks");
   const [face, setFace] = useState<Expression>("happy");
   const [move, setMove] = useState<ActionId>("idle");
   const [problem, setProblem] = useState<string | null>(null);
@@ -132,7 +135,7 @@ export function CharacterEditor({
       </div>
 
       <div className="st-s-editor__panel">
-        <Pick label="Make your character" hideLabel value={part} options={PARTS} onChange={setPart} className="st-editor__parts" />
+        <Pick label="Make your character" hideLabel value={part} options={PARTS} onChange={setPart} className="st-s-editor__parts" />
 
         {part === "looks" ? (
           <div className="st-s-editor__part" aria-label="Looks">

@@ -1,20 +1,38 @@
-// Lamo Stories › Production (docs/CONTRACTS.md §45.9, §45.16.5; spec §5.D). Make a new video (an idea or a short
-// concept, the cast of 1 to 3, the length, captions, music), the list of every video being made or made with its
-// eight-step track, and each video's own page: the step track, the storyboard filmstrip (live previews and the
-// finished stills), Cancel, Try again and the production details. A running job is checked every 2 seconds.
+// Lamo Stories › Production (docs/CONTRACTS.md §45.9, §45.16.5, §45.25, §45.28; spec §5.D). Make a new video (an idea
+// or a short concept, the cast of 1 to 3, the length, captions, music, up to 3 reference videos to learn from, and the
+// model and effort for this video, kept with it), the list of every video being made or made with its eight-step
+// track, and each video's own page: the step track, the storyboard filmstrip (live previews and the finished stills),
+// Cancel, Try again (with its own "just this one" model and effort), and the production details with the model and
+// effort that made each step. A running job is checked every 2 seconds.
 import "../styles/studio.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { A } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { burst } from "../../lib/confetti.ts";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
-import { CLIP_MODELS } from "../../lib/models.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
-import { STEP_LABEL, STEP_ORDER, type Character, type GuidanceTopic, type Idea, type IdeaCategory, type MusicMood, type ProductionJob, type StoriesConfig, type Story, type StoryInput, type StoryScript } from "../api/types.ts";
+import {
+  STEP_LABEL,
+  STEP_ORDER,
+  type AiSetting,
+  type Character,
+  type GuidanceTopic,
+  type Idea,
+  type IdeaCategory,
+  type ModelOverride,
+  type MusicMood,
+  type ProductionJob,
+  type ReferenceVideo,
+  type StoriesConfig,
+  type Story,
+  type StoryInput,
+  type StoryScript,
+} from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
+import { cleanPick, effortName, ModelMenu, modelName, ModelsUsed, shortName, StoryAi, storyUsual, useAiInfo, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { useSameScript, useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Notice, Pick, Slider, Switch, Tag, TextField } from "../studio/kit.tsx";
@@ -180,6 +198,10 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [noAdvice, setNoAdvice] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [refIds, setRefIds] = useState<string[]>([]);
+  const [ai, setAi] = useState<ModelOverride | null>(null);
+  const info = useAiInfo(ws);
+  const refs = useLoad(() => storiesApi().listReferences(ws), ws, "st-s-refvids");
 
   useEffect(() => {
     let live = true;
@@ -239,6 +261,10 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
     setBusy(true);
     setProblem(null);
     const body: StoryInput = { characterIds: cast, durationSec: lengthSec, captionsOn, musicMood: music };
+    const own = cleanPick(ai);
+    if (own) body.ai = { model: own.model ?? null, effort: own.effort ?? null };
+    const usable = refIds.filter((id) => refs.data?.some((r) => r.refId === id));
+    if (usable.length) body.referenceIds = usable;
     if (source === "idea" && idea) body.ideaId = idea.ideaId;
     else body.brief = { title: title.trim(), logline: logline.trim(), category: category as IdeaCategory };
     try {
@@ -272,7 +298,7 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
             ‹ Production
           </A>
           <h1 className="st-s-head__title">Make a new video</h1>
-          <p className="st-s-head__lede">Four quick picks, then Lamo Stories writes, draws, animates and puts it all together.</p>
+          <p className="st-s-head__lede">A few quick picks, then Lamo Stories writes, draws, animates and puts it all together.</p>
         </div>
       </header>
       {!data.data ? (
@@ -367,6 +393,30 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
             <Pick label="Music" value={music} options={CATALOG.musicMoods.map((m) => ({ value: m.id, label: m.id === "none" ? "No music" : m.label }))} onChange={setMood} />
           </section>
 
+          <section className="st-s-panel" aria-labelledby="st-nv-5">
+            <h2 className="st-s-panel__title" id="st-nv-5">
+              <span className="st-s-num">5</span> Videos to learn from <span className="st-s-panel__hint">(you can skip this)</span>
+            </h2>
+            <RefPicker refs={refs.data} error={refs.error} onRetry={() => void refs.reload()} picked={refIds} onChange={setRefIds} />
+          </section>
+
+          <section className="st-s-panel" aria-labelledby="st-nv-6">
+            <h2 className="st-s-panel__title" id="st-nv-6">
+              <span className="st-s-num">6</span> Model and effort for this video
+            </h2>
+            <p className="st-s-field__hint">The AI that writes and checks this video. It stays with the video, so its remakes use it too.</p>
+            <div className="st-s-aiwho">
+              <ModelMenu
+                info={info}
+                usual={usualFor(info, "storyboard")}
+                value={ai}
+                onChange={setAi}
+                title="Model and effort for this video"
+                note="Kept with this video. Its remakes use it too. Your other settings stay the same."
+              />
+            </div>
+          </section>
+
           {problem ? (
             <Notice tone="bad">
               {problem}
@@ -388,6 +438,76 @@ function NewVideo({ ws, ideaId }: { ws: string; ideaId: string | null }) {
   );
 }
 
+/** Up to 3 reference videos whose analyses the writer reads (§45.28); only analysed ones can be picked. */
+function RefPicker({
+  refs,
+  error,
+  onRetry,
+  picked,
+  onChange,
+}: {
+  refs: ReferenceVideo[] | null;
+  error: string | null;
+  onRetry: () => void;
+  picked: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  if (error && !refs)
+    return (
+      <Notice tone="info" action={<button type="button" className="st-btn" onClick={onRetry}>Try again</button>}>
+        Your reference videos could not load. You can make the video without them.
+      </Notice>
+    );
+  if (!refs) return <p className="st-s-field__hint">Getting your reference videos…</p>;
+  if (!refs.length)
+    return (
+      <p className="st-s-field__hint">
+        No reference videos yet. Upload one in <A href={storiesHref({ name: "references" })}>References</A> and Lamo Stories studies how it is made.
+      </p>
+    );
+  const full = picked.length >= 3;
+  return (
+    <>
+      <p className="st-s-field__hint">Pick up to 3. Lamo Stories borrows their timing and structure, never their characters or footage.</p>
+      <ul className="st-s-refpick">
+        {refs.map((r) => {
+          const on = picked.includes(r.refId);
+          const ready = r.status === "analyzed";
+          const off = !on && (full || !ready);
+          return (
+            <li key={r.refId}>
+              <button
+                type="button"
+                className={`st-s-reftile${on ? " is-on" : ""}`}
+                aria-pressed={on}
+                aria-disabled={off || undefined}
+                title={!ready ? "Analyze it first in References." : off ? "Pick up to 3 reference videos." : undefined}
+                onClick={() => {
+                  if (off) return;
+                  onChange(on ? picked.filter((x) => x !== r.refId) : [...picked, r.refId]);
+                }}
+              >
+                <span className="st-s-reftile__tick" aria-hidden="true">
+                  {on ? "✓" : "+"}
+                </span>
+                <span className="st-s-reftile__text">
+                  <span className="st-s-reftile__title">{r.title}</span>
+                  <span className="st-s-reftile__meta">{ready ? (r.durationSec ? seconds(r.durationSec) : "Studied") : r.status === "analyzing" ? "Being studied now" : "Not studied yet"}</span>
+                </span>
+              </button>
+              {!ready && r.status !== "analyzing" ? (
+                <A href={storiesHref({ name: "reference", refId: r.refId })} className="st-btn st-s-small">
+                  Study it
+                </A>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
 function CastTile({ c, on, full, onToggle }: { c: Character; on: boolean; full: boolean; onToggle: () => void }) {
   const off = !on && full;
   return (
@@ -401,7 +521,7 @@ function CastTile({ c, on, full, onToggle }: { c: Character; on: boolean; full: 
         onClick={() => !off && onToggle()}
       >
         <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression={on ? "happy" : "neutral"} action={on ? "wave" : "idle"} size={88} playing={on} label={c.name} />
-        <span className="st-casttile__name">{c.name}</span>
+        <span className="st-s-casttile__name">{c.name}</span>
         <span className="st-s-casttile__tick" aria-hidden="true">
           {on ? "✓" : "+"}
         </span>
@@ -416,8 +536,11 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
   const toast = useToast();
   const loaded = useLoad(() => storiesApi().getStory(ws, storyId), `${ws}:${storyId}`);
   const jobs = useLoad(() => storiesApi().storyJobs(ws, storyId), `${ws}:${storyId}:jobs`);
-  const [busy, setBusy] = useState<"none" | "cancel" | "again">("none");
+  const [busy, setBusy] = useState<"none" | "cancel" | "again" | "ai">("none");
   const [problem, setProblem] = useState<string | null>(null);
+  const [pick, setPick] = useState<ModelOverride | null>(null);
+  const info = useAiInfo(ws);
+  const refs = useLoad(() => storiesApi().listReferences(ws), ws, "st-s-refvids");
   const wasLive = useRef(false);
   const story = loaded.data?.story ?? null;
   const job = loaded.data?.job ?? null;
@@ -463,9 +586,28 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
     setBusy("again");
     setProblem(null);
     try {
-      const r = await storiesApi().produce(ws, storyId);
+      const override = cleanPick(pick);
+      const r = override ? await storiesApi().produce(ws, storyId, { override }) : await storiesApi().produce(ws, storyId);
       loaded.setData((d) => (d ? { ...d, story: r.story, job: r.job } : d));
+      setPick(null);
       void jobs.reload();
+    } catch (e) {
+      setProblem(say(e));
+    } finally {
+      setBusy("none");
+    }
+  }
+
+  /** The video's own model and effort (kept with it); only while it waits for review, never during a run. */
+  async function keepAi(next: ModelOverride | null) {
+    if (!story) return;
+    setBusy("ai");
+    setProblem(null);
+    try {
+      const ai: AiSetting = { model: next?.model ?? null, effort: next?.effort ?? null };
+      const r = await storiesApi().patchStory(ws, storyId, { version: story.version, ai });
+      loaded.setData((d) => (d ? { ...d, story: r.story, script: r.script ?? d.script } : d));
+      toast.success(next ? "Kept with this video. Its next remake uses it." : "This video uses your usual settings again.");
     } catch (e) {
       setProblem(say(e));
     } finally {
@@ -492,7 +634,9 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
 
   const canTryAgain = !live && ["draft", "failed", "review", "needs_check"].includes(story.status) && story.stale.length > 0;
   const watch = ["review", "needs_check", "approved", "published"].includes(story.status);
-  const writer = job?.meta.writerModel ? (CLIP_MODELS.find((m) => m.key === job.meta.writerModel)?.label ?? job.meta.writerModel) : null;
+  const writer = job?.meta.writerModel ? modelName(info, job.meta.writerModel) : null;
+  const editable = !live && ["review", "needs_check", "failed"].includes(story.status);
+  const usual = storyUsual(info, story);
 
   return (
     <section className="st-page st-studio">
@@ -525,9 +669,12 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
             </button>
           ) : null}
           {canTryAgain ? (
-            <button type="button" className="st-btn st-btn--main" aria-disabled={busy !== "none" || undefined} onClick={() => busy === "none" && void again()}>
-              {busy === "again" ? "Starting…" : story.status === "draft" && story.stale.length === STEP_ORDER.length ? "Make the video" : firstStale ? `Try again from “${STEP_LABEL[firstStale]}”` : "Try again"}
-            </button>
+            <>
+              <ModelMenu info={info} usual={usual} value={pick} onChange={setPick} note="Just for this run. This video's own setting and yours stay the same." />
+              <button type="button" className="st-btn st-btn--main" aria-disabled={busy !== "none" || undefined} onClick={() => busy === "none" && void again()}>
+                {busy === "again" ? "Starting…" : story.status === "draft" && story.stale.length === STEP_ORDER.length ? "Make the video" : firstStale ? `Try again from “${STEP_LABEL[firstStale]}”` : "Try again"}
+              </button>
+            </>
           ) : null}
         </div>
       </section>
@@ -582,9 +729,20 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
               <dd>{Object.values(job.meta.providers).join(", ") || "Built-in"}</dd>
             </>
           ) : null}
+          <dt>Model and effort for this video</dt>
+          <dd>
+            <StoryAi info={info} story={story} editable={editable && busy === "none"} onChange={(v) => void keepAi(v)} />
+          </dd>
+          {story.referenceIds.length ? (
+            <>
+              <dt>Videos it learns from</dt>
+              <dd>{story.referenceIds.map((id) => refs.data?.find((r) => r.refId === id)?.title ?? "A reference video").join(", ")}</dd>
+            </>
+          ) : null}
           <dt>Saved in</dt>
           <dd className="st-s-facts__mono">{story.storageLocation}</dd>
         </dl>
+        <ModelsUsed info={info} job={job} title={live ? "Models working on it" : "Made with"} />
         {jobs.data?.length ? (
           <>
             <h3 className="st-s-details__title">Every run</h3>
@@ -595,6 +753,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
                     {j.status === "ready" ? "Done" : j.status === "needs_check" ? "Facts to check" : j.status === "failed" ? "Stopped" : j.status === "canceled" ? "Cancelled" : "Working"}
                   </Tag>{" "}
                   {j.jobType === "changes" ? (j.configuration.note ? "Changes" : "New take of a scene") : j.configuration.from ? `Again from “${STEP_LABEL[j.configuration.from as keyof typeof STEP_LABEL] ?? j.configuration.from}”` : "Made"} · {ago(j.createdAt)}
+                  {j.meta.models.length ? <span className="st-s-jobs__models">{runModels(info, j)}</span> : null}
                 </li>
               ))}
             </ul>
@@ -603,4 +762,10 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
       </details>
     </section>
   );
+}
+
+/** One run's models in a line: "Write the story: Opus 5.5 · High". */
+function runModels(info: AiInfo, j: ProductionJob): string {
+  const word: Record<string, string> = { storyboard: "Write", safety: "Check", preview: "Last look" };
+  return j.meta.models.map((m) => `${word[m.step] ?? m.step}: ${shortName(modelName(info, m.model))}${m.effortApplied && m.effort ? ` · ${effortName(m.effort)}` : ""}`).join(" · ");
 }

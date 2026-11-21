@@ -63,7 +63,7 @@ export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; on
 
 export function PostsPanel({ jobs, onRetry, busyId }: { jobs: PublishingJob[] | null; onRetry: (j: PublishingJob) => void; busyId: string | null }) {
   return (
-    <section className="st-s-panel st-postspanel" aria-labelledby="st-posts-title">
+    <section className="st-s-panel st-s-postspanel" aria-labelledby="st-posts-title">
       <h2 className="st-s-panel__title" id="st-posts-title">
         Posts
       </h2>

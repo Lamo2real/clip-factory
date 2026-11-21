@@ -69,7 +69,7 @@ export function Filmstrip({
               {words.length ? (
                 <span className="st-s-film__words">
                   {words.map((w, k) => (
-                    <span key={k} className="st-film__word">
+                    <span key={k} className="st-s-film__word">
                       “{w}”
                     </span>
                   ))}

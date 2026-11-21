@@ -9,7 +9,7 @@ export function Player({ story, script, width }: { story: Story; script: StorySc
     <div className="st-s-player" style={{ width }}>
       {story.videoUrl ? (
         <video
-          className="st-player__video"
+          className="st-s-player__video"
           src={story.videoUrl}
           poster={story.coverUrl}
           controls

@@ -1,6 +1,8 @@
 // Lamo Stories › Characters (docs/CONTRACTS.md §45.8, §45.16.5; spec §5.C). The cast gallery (each rig moving), New
-// character (the five-part stepper with a live preview), and each character's own page: edit with its version (a 409
-// means it changed elsewhere: a friendly Reload), the reference pictures, the AI picture when it is on, and Delete.
+// character (the five-part stepper with a live preview, and Design with AI: the character agent's first try from the
+// owner's words and/or a picture, which the owner changes and saves), and each character's own page: edit with its
+// version (a 409 means it changed elsewhere: a friendly Reload), Design with AI from words or its own pictures, the
+// reference pictures, the AI picture when it is on, and Delete.
 import "../styles/studio.css";
 import { useState, type ReactNode } from "react";
 import { A } from "../../components/ui.tsx";
@@ -12,7 +14,9 @@ import type { Character, CharacterInput, StoriesConfig } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
+import { useAiInfo } from "../studio/ai.tsx";
 import { CharacterEditor } from "../studio/CharacterEditor.tsx";
+import { DesignPanel } from "../studio/Design.tsx";
 import { useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Notice, StSheet, Tag } from "../studio/kit.tsx";
 import { DEFAULT_LOOK, inputOf, MOVE_LINE, newCharacter } from "../studio/looks.ts";
@@ -47,9 +51,14 @@ function Gallery({ ws }: { ws: string }) {
           <h1 className="st-s-head__title">Characters</h1>
           <p className="st-s-head__lede">Your cast. Each one looks and moves the same in every video.</p>
         </div>
-        <A href={storiesHref({ name: "character_new" })} className="st-btn st-btn--main">
-          New character
-        </A>
+        <div className="st-s-head__actions">
+          <A href={`${storiesHref({ name: "character_new" })}#design`} className="st-btn">
+            Design with AI
+          </A>
+          <A href={storiesHref({ name: "character_new" })} className="st-btn st-btn--main">
+            New character
+          </A>
+        </div>
       </header>
       {list.error && !list.data ? (
         <Notice tone="bad" action={<button type="button" className="st-btn" onClick={() => void list.reload()}>Try again</button>}>
@@ -84,8 +93,12 @@ function Gallery({ ws }: { ws: string }) {
 
 function NewCharacter({ ws }: { ws: string }) {
   const toast = useToast();
+  const info = useAiInfo(ws);
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  /** The editor starts again from the AI's first try (each try is a new round). */
+  const [draft, setDraft] = useState<{ round: number; input: CharacterInput } | null>(null);
+  const [design] = useState(() => typeof location !== "undefined" && location.hash === "#design");
 
   async function save(c: CharacterInput) {
     setSaving(true);
@@ -112,7 +125,16 @@ function NewCharacter({ ws }: { ws: string }) {
           <p className="st-s-head__lede">Pick how they look, their faces, how they move and their sounds. Then give them a name.</p>
         </div>
       </header>
-      <CharacterEditor initial={newCharacter()} mode="new" saving={saving} onSave={(c) => void save(c)} serverProblem={problem ? <Notice tone="bad">{problem}</Notice> : null} />
+      <DesignPanel ws={ws} info={info} startOpen={design} onDraft={(input) => setDraft((d) => ({ round: (d?.round ?? 0) + 1, input }))} />
+      <CharacterEditor
+        key={`new:${draft?.round ?? 0}`}
+        initial={draft?.input ?? newCharacter()}
+        startPart={draft ? "name" : undefined}
+        mode="new"
+        saving={saving}
+        onSave={(c) => void save(c)}
+        serverProblem={problem ? <Notice tone="bad">{problem}</Notice> : null}
+      />
     </section>
   );
 }
@@ -121,6 +143,8 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
   const toast = useToast();
   const loaded = useLoad(() => storiesApi().getCharacter(ws, characterId), `${ws}:${characterId}`);
   const workspace = useWorkspace(ws);
+  const info = useAiInfo(ws);
+  const [draft, setDraft] = useState<CharacterInput | null>(null);
   const aiOn = ((workspace?.configuration ?? {}) as Partial<StoriesConfig>).providers?.images === "nova-canvas";
   const [saving, setSaving] = useState(false);
   const [stale, setStale] = useState(false);
@@ -141,6 +165,7 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
     try {
       const next = await storiesApi().putCharacter(ws, characterId, { ...input, version: c.version });
       replace(next);
+      setDraft(null);
       celebrate(document.querySelector(".st-s-editor__preview"), 90);
       toast.success(`${next.name} is saved.`);
     } catch (e) {
@@ -154,6 +179,7 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
   async function reload() {
     await loaded.reload();
     setStale(false);
+    setDraft(null);
     setRound((n) => n + 1);
   }
 
@@ -203,9 +229,20 @@ function CharacterPage({ ws, characterId }: { ws: string; characterId: string })
           Delete
         </button>
       </header>
+      <DesignPanel
+        ws={ws}
+        info={info}
+        name={c.name}
+        pictures={c.references.map((r) => ({ assetId: r.assetId, url: r.url }))}
+        onDraft={(input) => {
+          setDraft(input);
+          setRound((n) => n + 1);
+        }}
+      />
+      {draft ? <Notice tone="info">This is the AI&apos;s new look for {c.name}. Nothing changes until you tap Save changes.</Notice> : null}
       <CharacterEditor
         key={`${c.characterId}:${round}`}
-        initial={inputOf(c)}
+        initial={draft ?? inputOf(c)}
         mode="edit"
         saving={saving}
         onSave={(input) => void save(input)}

@@ -1,15 +1,19 @@
 // Lamo Stories › Ideas (docs/CONTRACTS.md §45.7, §45.16.5; spec §5.B). A board of idea cards (saved and used), New idea
 // (typed by hand), Ask for ideas (a topic and a kind: drafts the owner saves one by one), and on each card Make it a
-// full idea (the whole concept), More like this (more drafts), Make the video and Delete (with Undo). A driving-safety
-// idea shows the checked advice it is based on, or "Needs checked advice" and then cannot become a video.
+// full idea (the whole concept), More like this (more drafts), Make the video and Delete (with Undo). Ask for ideas,
+// Make it a full idea and More like this are tasks of Lamo Stories' creative director: each one is read every second
+// with a line that names the model and the effort, ends with the drafts or a plain sentence and Try again, and has its
+// own small "Model and effort for this one" menu (never saved). A driving-safety idea shows the checked advice it is
+// based on, or "Needs checked advice" and then cannot become a video.
 import "../styles/studio.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
-import type { GuidanceTopic, Idea, IdeaCategory, IdeaInput, StoriesConfig } from "../api/types.ts";
+import type { AiTask, GuidanceTopic, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesConfig } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
+import { cleanPick, merged, ModelMenu, TaskLine, useAiInfo, useAiTask, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Notice, Pick, Tag, TextField } from "../studio/kit.tsx";
 import { CATEGORIES, CATEGORY_LABEL, CATEGORY_LINE, NO_GUIDANCE, say, seconds, TONE_LABEL } from "../studio/words.ts";
@@ -33,6 +37,21 @@ interface DraftSet {
   drafts: { input: IdeaInput; saved: boolean; saving: boolean }[];
 }
 
+/** The drafts a finished task carries (result.drafts), kept to the fields an idea has. */
+export function draftsOf(task: AiTask): IdeaInput[] {
+  const raw = (task.result as { drafts?: unknown } | null)?.drafts;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((d): d is IdeaInput => !!d && typeof d === "object" && typeof (d as IdeaInput).title === "string" && typeof (d as IdeaInput).logline === "string" && typeof (d as IdeaInput).category === "string")
+    .map((d) => {
+      const out: IdeaInput = { title: d.title, logline: d.logline, category: d.category, source: d.source ?? "ai" };
+      if (d.characterIds?.length) out.characterIds = [...d.characterIds];
+      if (d.parentIdeaId) out.parentIdeaId = d.parentIdeaId;
+      if (d.concept) out.concept = d.concept;
+      return out;
+    });
+}
+
 /** The checked advice an idea is based on, in one line. */
 export function adviceLine(idea: Pick<Idea, "category" | "safetyTopicId" | "needsGuidance">, topics: GuidanceTopic[] | null): string | null {
   if (idea.category !== "driving_safety") return null;
@@ -48,6 +67,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
   const ideas = useLoad(() => storiesApi().listIdeas(ws, "all"), ws, "st-ideas");
   const [topics, setTopics] = useState<GuidanceTopic[] | null>(null);
   const workspace = useWorkspace(ws);
+  const info = useAiInfo(ws);
   const length = ((workspace?.configuration ?? {}) as Partial<StoriesConfig>).defaultDurationSec ?? 45;
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<"none" | "new" | "ask">("none");
@@ -146,7 +166,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
           }}
         />
       ) : null}
-      {open === "ask" ? <AskForIdeas ws={ws} onCancel={() => setOpen("none")} onDrafts={(list, from) => showDrafts({ from, drafts: list.map((input) => ({ input, saved: false, saving: false })) })} /> : null}
+      {open === "ask" ? <AskForIdeas ws={ws} info={info} onCancel={() => setOpen("none")} onDrafts={(list, from) => showDrafts({ from, drafts: list.map((input) => ({ input, saved: false, saving: false })) })} /> : null}
 
       {drafts ? (
         <section className="st-s-drafts" ref={draftsRef} aria-labelledby="st-drafts-title">
@@ -205,6 +225,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
             <IdeaCard
               key={idea.ideaId}
               ws={ws}
+              info={info}
               idea={idea}
               topics={topics}
               length={length}
@@ -269,28 +290,30 @@ function NewIdeaForm({ onSave, onCancel }: { onSave: (i: IdeaInput) => Promise<v
   );
 }
 
-function AskForIdeas({ ws, onDrafts, onCancel }: { ws: string; onDrafts: (d: IdeaInput[], from: string) => void; onCancel: () => void }) {
+function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInfo; onDrafts: (d: IdeaInput[], from: string) => void; onCancel: () => void }) {
   const [topic, setTopic] = useState("");
   const [kind, setKind] = useState<Kind>("any");
-  const [busy, setBusy] = useState(false);
+  const [pick, setPick] = useState<ModelOverride | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const asked = useRef("");
+  const run = useAiTask(ws, (task) => {
+    const drafts = draftsOf(task);
+    if (!drafts.length) setProblem("No ideas came back. Try another topic.");
+    else onDrafts(drafts, asked.current ? `Ideas about “${asked.current}”` : "Fresh ideas");
+  });
+  const usual = usualFor(info, "brainstorm");
+  const busy = run.phase === "working";
 
-  async function ask() {
+  function ask() {
     if (topic.length > 200) return setProblem("Keep the topic to 200 letters.");
-    setBusy(true);
     setProblem(null);
-    try {
-      const body: { topic?: string; category?: IdeaCategory; count: number } = { count: 4 };
-      if (topic.trim()) body.topic = topic.trim();
-      if (kind !== "any") body.category = kind;
-      const drafts = await storiesApi().generateIdeas(ws, body);
-      if (!drafts.length) setProblem("No ideas came back. Try another topic.");
-      else onDrafts(drafts, topic.trim() ? `Ideas about “${topic.trim()}”` : "Fresh ideas");
-    } catch (e) {
-      setProblem(say(e, "The idea helper is busy. Try again in a minute."));
-    } finally {
-      setBusy(false);
-    }
+    const body: { topic?: string; category?: IdeaCategory; count: number; override?: ModelOverride } = { count: 4 };
+    if (topic.trim()) body.topic = topic.trim();
+    if (kind !== "any") body.category = kind;
+    const override = cleanPick(pick);
+    if (override) body.override = override;
+    asked.current = topic.trim();
+    void run.start(() => storiesApi().generateIdeas(ws, body));
   }
 
   return (
@@ -299,18 +322,19 @@ function AskForIdeas({ ws, onDrafts, onCancel }: { ws: string; onDrafts: (d: Ide
       aria-label="Ask for ideas"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!busy) void ask();
+        if (!busy) ask();
       }}
     >
       <h2 className="st-s-panel__title">Ask for ideas</h2>
       <TextField label="What about? (you can leave this empty)" value={topic} onChange={setTopic} max={200} placeholder="For example: a snowy day" />
       <Pick label="What kind?" big value={kind} options={[{ value: "any", label: "Any kind", line: "A mix of everything" }, ...KIND_OPTIONS]} onChange={setKind} />
       {problem ? <Notice tone="bad">{problem}</Notice> : null}
-      {busy ? <Busy>Thinking of ideas…</Busy> : null}
+      <TaskLine info={info} kind="brainstorm" run={run} expected={merged(info, usual, pick)} />
       <div className="st-s-actionbar">
         <button type="button" className="st-btn" onClick={onCancel}>
           Cancel
         </button>
+        <ModelMenu info={info} usual={usual} value={pick} onChange={setPick} />
         <button type="submit" className="st-btn st-btn--main" aria-disabled={busy || undefined}>
           {busy ? "Thinking…" : "Get ideas"}
         </button>
@@ -321,6 +345,7 @@ function AskForIdeas({ ws, onDrafts, onCancel }: { ws: string; onDrafts: (d: Ide
 
 function IdeaCard({
   ws,
+  info,
   idea,
   topics,
   length,
@@ -329,6 +354,7 @@ function IdeaCard({
   onDrafts,
 }: {
   ws: string;
+  info: AiInfo;
   idea: Idea;
   topics: GuidanceTopic[] | null;
   length: number;
@@ -336,38 +362,46 @@ function IdeaCard({
   onDelete: () => void;
   onDrafts: (d: IdeaInput[]) => void;
 }) {
-  const [busy, setBusy] = useState<"none" | "expand" | "more">("none");
   const [problem, setProblem] = useState<string | null>(null);
   const [showConcept, setShowConcept] = useState(false);
+  const [expandPick, setExpandPick] = useState<ModelOverride | null>(null);
+  const [morePick, setMorePick] = useState<ModelOverride | null>(null);
   const advice = adviceLine(idea, topics);
   const blocked = idea.category === "driving_safety" && (idea.needsGuidance || !idea.safetyTopicId);
-
-  async function expand() {
-    if (blocked || busy !== "none") return;
-    setBusy("expand");
-    setProblem(null);
-    try {
-      const next = await storiesApi().expandIdea(ws, idea.ideaId, { durationSec: Math.min(90, Math.max(15, length)) });
+  const expanding = useAiTask(ws, (task) => {
+    const next = (task.result as { idea?: Idea } | null)?.idea;
+    if (next && next.ideaId === idea.ideaId) {
       onChange(next);
       setShowConcept(true);
-    } catch (e) {
-      setProblem(say(e, "The idea helper is busy. Try again in a minute."));
-    } finally {
-      setBusy("none");
-    }
+    } else setProblem("The full idea did not come back. Tap Try again.");
+  });
+  const varying = useAiTask(ws, (task) => {
+    const drafts = draftsOf(task);
+    if (drafts.length) onDrafts(drafts);
+    else setProblem("No ideas came back. Tap More like this again.");
+  });
+  const busy = expanding.phase === "working" || varying.phase === "working";
+  const expandUsual = usualFor(info, "expand_idea");
+  const moreUsual = usualFor(info, "variations");
+
+  function expand() {
+    if (blocked || busy) return;
+    setProblem(null);
+    varying.reset();
+    const body: { durationSec: number; override?: ModelOverride } = { durationSec: Math.min(90, Math.max(15, length)) };
+    const override = cleanPick(expandPick);
+    if (override) body.override = override;
+    void expanding.start(() => storiesApi().expandIdea(ws, idea.ideaId, body));
   }
 
-  async function more() {
-    if (busy !== "none") return;
-    setBusy("more");
+  function more() {
+    if (busy) return;
     setProblem(null);
-    try {
-      onDrafts(await storiesApi().ideaVariations(ws, idea.ideaId, { count: 3 }));
-    } catch (e) {
-      setProblem(say(e, "The idea helper is busy. Try again in a minute."));
-    } finally {
-      setBusy("none");
-    }
+    expanding.reset();
+    const body: { count: number; override?: ModelOverride } = { count: 3 };
+    const override = cleanPick(morePick);
+    if (override) body.override = override;
+    void varying.start(() => storiesApi().ideaVariations(ws, idea.ideaId, body));
   }
 
   const c = idea.concept;
@@ -404,7 +438,7 @@ function IdeaCard({
             <Tag>{seconds(c.durationSec)}</Tag>
           </p>
           {c.onScreenText.length ? (
-            <p className="st-concept__words">
+            <p className="st-s-concept__words">
               <strong>Words on screen:</strong> {c.onScreenText.map((t) => `“${t}”`).join(" · ")}
             </p>
           ) : null}
@@ -412,7 +446,8 @@ function IdeaCard({
       ) : null}
 
       {problem ? <Notice tone="bad">{problem}</Notice> : null}
-      {busy === "expand" ? <Busy>Writing the full idea…</Busy> : busy === "more" ? <Busy>Thinking of more…</Busy> : null}
+      <TaskLine info={info} kind="expand_idea" run={expanding} expected={merged(info, expandUsual, expandPick)} />
+      <TaskLine info={info} kind="variations" run={varying} expected={merged(info, moreUsual, morePick)} />
 
       <span className="st-s-idea__actions">
         <button
@@ -430,19 +465,21 @@ function IdeaCard({
           <button type="button" className="st-btn" aria-expanded={showConcept} onClick={() => setShowConcept((s) => !s)}>
             {showConcept ? "Hide the full idea" : "See the full idea"}
           </button>
-        ) : (
-          <button type="button" className="st-btn" aria-disabled={blocked || busy !== "none" || undefined} title={blocked ? NO_GUIDANCE : undefined} onClick={() => void expand()}>
-            Make it a full idea
-          </button>
-        )}
-        {c && showConcept ? (
-          <button type="button" className="st-btn" aria-disabled={blocked || busy !== "none" || undefined} onClick={() => void expand()}>
-            Write it again
-          </button>
         ) : null}
-        <button type="button" className="st-btn" aria-disabled={busy !== "none" || undefined} onClick={() => void more()}>
-          More like this
-        </button>
+        {!c || showConcept ? (
+          <span className="st-s-aipair">
+            <button type="button" className="st-btn" aria-disabled={blocked || busy || undefined} title={blocked ? NO_GUIDANCE : undefined} onClick={expand}>
+              {expanding.phase === "working" ? "Writing…" : c ? "Write it again" : "Make it a full idea"}
+            </button>
+            <ModelMenu info={info} usual={expandUsual} value={expandPick} onChange={setExpandPick} compact />
+          </span>
+        ) : null}
+        <span className="st-s-aipair">
+          <button type="button" className="st-btn" aria-disabled={busy || undefined} onClick={more}>
+            {varying.phase === "working" ? "Thinking…" : "More like this"}
+          </button>
+          <ModelMenu info={info} usual={moreUsual} value={morePick} onChange={setMorePick} compact />
+        </span>
         <button type="button" className="st-btn st-s-quiet" onClick={onDelete}>
           Delete
         </button>

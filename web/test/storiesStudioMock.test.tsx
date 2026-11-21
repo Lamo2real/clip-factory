@@ -1,6 +1,8 @@
-// The Lamo Stories mock's ideas, characters and stories parts (docs/CONTRACTS.md §45.7–§45.9, §45.16.8): the seed
-// covers every story status, every script passes the engine's validator, a production job walks its run in about 10 s,
-// and the status table, the stale rules and the approve rule hold as they do in the API.
+// The Lamo Stories mock's ideas, characters and stories parts (docs/CONTRACTS.md §45.7–§45.9, §45.25, §45.16.8): the
+// seed covers every story status, every script passes the engine's validator, a production job walks its run in about
+// 10 s, the status table, the stale rules and the approve rule hold as they do in the API, the AI work runs as tasks
+// (getTask walks them; their model and effort follow the API's levels; a refused model fails, never swapped), and each
+// model step of a job records its model and effort.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +11,7 @@ import * as characters from "../src/stories/api/mock/characters.ts";
 import * as ideas from "../src/stories/api/mock/ideas.ts";
 import { createStore, type MockStore } from "../src/stories/api/mock/store.ts";
 import * as stories from "../src/stories/api/mock/stories.ts";
-import { STEP_ORDER, type StoriesApi, type Workspace } from "../src/stories/api/types.ts";
+import { STEP_ORDER, type AiTask, type CharacterInput, type Idea, type IdeaInput, type StoriesApi, type StoriesConfig, type Workspace } from "../src/stories/api/types.ts";
 import { validateScript } from "../src/stories/engine/engine.ts";
 
 const WS: Workspace = {
@@ -21,11 +23,13 @@ const WS: Workspace = {
     defaultDurationSec: 40,
     captionsOn: true,
     musicOn: true,
-    storyModel: "claude-sonnet",
-    providers: { images: "builtin-rig", animation: "builtin-2d", audio: "builtin-synth" },
+    providers: { images: "builtin-rig", video: "builtin-2d", audio: "builtin-synth" },
+    video: { resolution: "1080x1920", aspect: "9:16", quality: "high", fps: 30 },
+    production: { burnCaptions: true, scenesAtOnce: 2, keepVersions: "all" },
     youtubeCategory: "27",
     youtubePrivacy: "public",
-  },
+    xMonthlyLimitUsd: null,
+  } satisfies StoriesConfig,
   version: 1,
 };
 
@@ -75,6 +79,16 @@ async function refused(p: Promise<unknown>): Promise<ApiError> {
 /** Lets a production job walk to its end (10 s by default). */
 async function finish(seconds = 12) {
   await vi.advanceTimersByTimeAsync(seconds * 1000);
+}
+
+/** Reads a task every second, as the screens do, until it is done or failed. */
+async function settled(first: Promise<AiTask>): Promise<AiTask> {
+  let task = await call(first);
+  for (let i = 0; i < 30 && (task.status === "queued" || task.status === "running"); i += 1) {
+    await vi.advanceTimersByTimeAsync(1000);
+    task = await call(api.getTask("stories", task.taskId));
+  }
+  return task;
 }
 
 describe("the seed", () => {
@@ -128,21 +142,73 @@ describe("ideas", () => {
     expect(fun).toMatchObject({ safetyTopicId: null, needsGuidance: false });
   });
 
-  it("Ask for ideas makes drafts and saves nothing; Expand fills the concept; More like this points at its idea", async () => {
+  it("Ask for ideas is a task: queued at once, then running, then done with drafts; nothing is saved", async () => {
     const before = store.ideas.length;
-    const drafts = await call(api.generateIdeas("stories", { topic: "snow", category: "comedy", count: 3 }));
+    const first = await call(api.generateIdeas("stories", { topic: "snow", category: "comedy", count: 3 }));
+    expect(first).toMatchObject({ kind: "brainstorm", status: "queued", result: null, model: "opus-5-5", effort: "high", effortApplied: true });
+    await vi.advanceTimersByTimeAsync(600);
+    expect((await call(api.getTask("stories", first.taskId))).status).toBe("running");
+    const task = await settled(Promise.resolve(first));
+    expect(task.status).toBe("done");
+    const drafts = (task.result as { drafts: IdeaInput[] }).drafts;
     expect(drafts).toHaveLength(3);
     expect(drafts.every((d) => d.category === "comedy" && d.source === "ai")).toBe(true);
     expect(store.ideas.length).toBe(before);
-    const grown = await call(api.expandIdea("stories", I.deer, { durationSec: 45 }));
+  });
+
+  it("Make it a full idea is a task that writes the concept on the idea; More like this returns drafts that point at it", async () => {
+    const grownTask = await settled(api.expandIdea("stories", I.deer, { durationSec: 45 }));
+    expect(grownTask).toMatchObject({ kind: "expand_idea", status: "done" });
+    const grown = (grownTask.result as { idea: Idea }).idea;
     expect(grown.concept?.beats.length).toBeGreaterThanOrEqual(3);
     expect(grown.concept?.beats.length).toBeLessThanOrEqual(8);
     expect(grown.concept?.onScreenText.length).toBeLessThanOrEqual(6);
     expect(grown.title).toBe("A deer on the road");
-    const more = await call(api.ideaVariations("stories", I.gps, { count: 2 }));
+    expect(store.ideas.find((i) => i.ideaId === I.deer)?.concept).toEqual(grown.concept);
+    const moreTask = await settled(api.ideaVariations("stories", I.gps, { count: 2 }));
+    const more = (moreTask.result as { drafts: IdeaInput[] }).drafts;
     expect(more).toHaveLength(2);
     expect(more.every((d) => d.source === "variation" && d.parentIdeaId === I.gps)).toBe(true);
     expect((await refused(api.expandIdea("stories", I.tractor))).code).toBe("conflict");
+    expect((await refused(api.ideaVariations("stories", I.gps, { count: 9 }))).code).toBe("bad_request");
+  });
+
+  it("the agent finishes a task even when nobody reads it (the concept is written)", async () => {
+    store.ideas.find((i) => i.ideaId === I.gps)!.concept = undefined;
+    await call(api.expandIdea("stories", I.gps));
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(store.ideas.find((i) => i.ideaId === I.gps)?.concept?.beats.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("a task's model and effort: the per-request pick, else the task's, the agent's, the default (merged apart); never saved", async () => {
+    const own = await call(api.generateIdeas("stories", { override: { model: "fable-5-2", effort: "max" } }));
+    expect(own).toMatchObject({ model: "fable-5-2", effort: "max", effortApplied: true });
+    const effortOnly = await call(api.generateIdeas("stories", { override: { effort: "low" } }));
+    expect(effortOnly).toMatchObject({ model: "opus-5-5", effort: "low" });
+    store.ai = { defaultModel: "sonnet-5-5", defaultEffort: "medium", tasks: { variations: { model: "haiku-5-5" } }, prices: {}, version: 1 };
+    expect(await call(api.ideaVariations("stories", I.gps))).toMatchObject({ model: "haiku-5-5", effort: "medium" });
+    expect(await call(api.expandIdea("stories", I.gps))).toMatchObject({ model: "sonnet-5-5", effort: "medium" });
+    // The override was never kept anywhere.
+    expect(store.ai.tasks.brainstorm).toBeUndefined();
+    expect((await refused(api.generateIdeas("stories", { override: { model: "gpt-9" } }))).code).toBe("bad_request");
+  });
+
+  it("a model Bedrock refuses fails the task with its sentence and never runs another model; taskFail fails the next one", async () => {
+    store.knobs.deniedModels = ["fable-5-2"];
+    const denied = await settled(api.generateIdeas("stories", { override: { model: "fable-5-2" } }));
+    expect(denied).toMatchObject({ status: "failed", model: "fable-5-2", result: null });
+    expect(denied.error).toMatch(/^Claude Fable 5.2 isn't available right now: .* Pick another model in Lamo Stories › Settings › AI, or try again\.$/);
+    store.knobs.taskFail = true;
+    const failed = await settled(api.generateIdeas("stories", {}));
+    expect(failed).toMatchObject({ status: "failed", error: "The idea helper could not finish. Tap Try again." });
+    expect((await settled(api.generateIdeas("stories", {}))).status).toBe("done");
+  });
+
+  it("getTask refuses another workspace's task and an unknown one", async () => {
+    const task = await call(api.generateIdeas("stories", {}));
+    store.workspaces.push({ ...structuredClone(WS), workspaceId: "01JZZZZZZZZZZZZZZZZZZZZZZY", workspaceName: "Lamo Cars" });
+    expect((await refused(api.getTask("01JZZZZZZZZZZZZZZZZZZZZZZY", task.taskId))).status).toBe(404);
+    expect((await refused(api.getTask("stories", "01JNOPE0000000000000000000"))).status).toBe(404);
   });
 
   it("are refused on Lamo Clips' workspace and on an unknown one", async () => {
@@ -178,6 +244,34 @@ describe("characters", () => {
     await finish(4);
     expect((await call(api.getCharacter("stories", C.bolt))).portrait).not.toBeNull();
   });
+
+  it("Design with AI: a picture goes up, the character agent's task suggests a whole character that saves as it is", async () => {
+    expect((await refused(api.designCharacter("stories", {}))).code).toBe("bad_request");
+    expect((await refused(api.designCharacter("stories", { referenceAssetId: "01JNOPE0000000000000000000" }))).code).toBe("not_found");
+    expect((await refused(api.designUpload("stories", { filename: "a.gif", contentType: "image/gif", size: 10 }))).code).toBe("bad_request");
+    const up = await call(api.designUpload("stories", { filename: "zed.png", contentType: "image/png", size: 4000 }));
+    expect(up.uploadUrl.startsWith("mock:")).toBe(true);
+    // The design picture is not a Library item.
+    expect(store.assets.some((a) => a.assetId === up.assetId)).toBe(false);
+    const before = store.characters.length;
+    const task = await settled(api.designCharacter("stories", { description: "A tall, clumsy robot called Zed with a blue cap and glasses who loves dancing", referenceAssetId: up.assetId, override: { effort: "low" } }));
+    expect(task).toMatchObject({ kind: "character_design", status: "done", effort: "low" });
+    const draft = (task.result as { character: CharacterInput }).character;
+    expect(draft).toMatchObject({ name: "Zed", movementStyle: "clumsy", look: { body: "tall", accessory: "glasses", hair: { style: "cap" } } });
+    expect(draft.expressions).toContain("neutral");
+    expect(store.characters.length).toBe(before);
+    const saved = await call(api.createCharacter("stories", draft));
+    expect(saved.name).toBe("Zed");
+    // A character's own reference picture can be the start too.
+    const pip = await call(api.getCharacter("stories", C.pip));
+    expect((await settled(api.designCharacter("stories", { referenceAssetId: pip.references[0]!.assetId }))).status).toBe("done");
+  });
+
+  it("deleteReference with a character and a picture removes the picture", async () => {
+    const pip = await call(api.getCharacter("stories", C.pip));
+    const next = await call(api.deleteReference("stories", C.pip, pip.references[0]!.assetId));
+    expect(next.references).toHaveLength(0);
+  });
 });
 
 describe("a new story", () => {
@@ -207,6 +301,45 @@ describe("a new story", () => {
     expect(store.ideas.find((i) => i.ideaId === I.deer)).toMatchObject({ status: "used" });
     expect(store.ideas.find((i) => i.ideaId === I.deer)!.storyIds).toContain(story.storyId);
     expect(store.assets.filter((a) => a.storyId === story.storyId).map((a) => a.kind)).toEqual(expect.arrayContaining(["storyboard", "scene_still", "final_video", "cover"]));
+    // Each model step recorded its model and effort (the writer's in writerModel too).
+    expect(done.job?.meta.models.map((m) => [m.step, m.agentId, m.model, m.effort, m.effortApplied])).toEqual([
+      ["storyboard", "storyboard", "opus-5-5", "high", true],
+      ["safety", "quality_assurance", "opus-5-5", "high", true],
+      ["preview", "quality_assurance", "opus-5-5", "high", true],
+    ]);
+    expect(done.job?.meta.writerModel).toBe("opus-5-5");
+    expect(done.story).toMatchObject({ ai: { model: null, effort: null }, referenceIds: [] });
+  });
+
+  it("keeps the video's own model and effort and its reference videos; a remake's pick is for that job only", async () => {
+    store.references.push({ refId: "01JSTRV0000000000000000001", title: "A funny short", status: "analyzed", durationSec: 42, bytes: 1000, currentJobId: null, ai: { model: null, effort: null }, analyzedWith: { model: "opus-5-5", effort: "high" }, createdAt: "2026-11-20T10:00:00.000Z", updatedAt: "2026-11-20T10:00:00.000Z" });
+    expect((await refused(api.createStory("stories", { brief: { title: "Hats", logline: "Pip tries on hats.", category: "comedy" }, characterIds: [C.pip], referenceIds: ["01JNOPE0000000000000000000"] }))).code).toBe("not_found");
+    expect((await refused(api.createStory("stories", { brief: { title: "Hats", logline: "Pip tries on hats.", category: "comedy" }, characterIds: [C.pip], referenceIds: ["a", "b", "c", "d"] }))).code).toBe("bad_request");
+    const { story } = await call(api.createStory("stories", { brief: { title: "Hats", logline: "Pip tries on hats.", category: "comedy" }, characterIds: [C.pip], referenceIds: ["01JSTRV0000000000000000001"], ai: { model: "fable-5-2", effort: "xhigh" } }));
+    expect(story).toMatchObject({ ai: { model: "fable-5-2", effort: "xhigh" }, referenceIds: ["01JSTRV0000000000000000001"] });
+    await finish();
+    const made = await call(api.getStory("stories", story.storyId));
+    expect(made.job?.meta.models.every((m) => m.model === "fable-5-2" && m.effort === "xhigh")).toBe(true);
+    const remake = await call(api.produce("stories", story.storyId, { from: "storyboard", override: { model: "sonnet-5-5" } }));
+    expect(remake.story.ai).toEqual({ model: "fable-5-2", effort: "xhigh" });
+    await finish();
+    const after = await call(api.getStory("stories", story.storyId));
+    expect(after.job?.meta.models.find((m) => m.step === "storyboard")).toMatchObject({ model: "sonnet-5-5", effort: "xhigh" });
+    expect(after.story.ai).toEqual({ model: "fable-5-2", effort: "xhigh" });
+    const patched = await call(api.patchStory("stories", story.storyId, { version: after.story.version, ai: { model: null, effort: null } }));
+    expect(patched.story.ai).toEqual({ model: null, effort: null });
+    expect(patched.story.stale).toEqual([]);
+  });
+
+  it("a refused model stops the job at its step with the plain sentence; nothing runs on another model", async () => {
+    store.knobs.deniedModels = ["haiku-5-5"];
+    const { story } = await call(api.createStory("stories", { brief: { title: "Kites", logline: "Bolt flies a kite.", category: "comedy" }, characterIds: [C.bolt], ai: { model: "haiku-5-5", effort: null } }));
+    await finish();
+    const r = await call(api.getStory("stories", story.storyId));
+    expect(r.story.status).toBe("failed");
+    expect(r.job?.error).toMatch(/^Claude Haiku 5.5 isn't available right now/);
+    expect(r.job?.meta.models).toEqual([]);
+    expect(r.story.stale).toEqual(STEP_ORDER);
   });
 
   it("refuses a driving-safety concept that no checked advice covers", async () => {
