@@ -14,9 +14,10 @@ locals {
   data_rw         = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:BatchWriteItem", "dynamodb:TransactWriteItems", "dynamodb:ConditionCheckItem"]
   table_resources = [var.table_arn, "${var.table_arn}/index/*"]
   # "ask": the question's files (§28.7): presigned PUTs and DELETE /v1/help/files/{fileId}.
-  # "campaigns": a Content Rewards campaign's logo and brand picture (§38.11, §38.16); listing it is what removing a
-  # campaign needs to delete its files. The logo copy into jobs/* uses the jobs prefix above.
-  media_prefixes = ["uploads", "jobs", "skills", "private", "ask", "campaigns"]
+  media_prefixes = ["uploads", "jobs", "skills", "private", "ask"]
+  # "campaigns": a Content Rewards campaign's logo and brand picture (§38.11, §38.16): get, put and delete only, no
+  # listing (removing a campaign deletes its files by name). The logo copy into jobs/* uses the jobs prefix above.
+  object_prefixes = concat(local.media_prefixes, ["campaigns"])
 
   # Content Rewards (docs/CONTRACTS.md §38.8, §38.16): every /v1/contentrewards route answers 503 until
   # CONTENT_REWARDS=on (and the names below are set). The stats invoke ({"action": "contentrewards"}) uses the
@@ -100,7 +101,7 @@ locals {
       # Confirm writes the clip and its posts in one transaction.
       { Sid = "Data", Action = local.data_rw, Resource = local.table_resources },
       # Presigned uploads and downloads, decline (deletes the clip's files), skill and cookie files.
-      { Sid = "MediaObjects", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource = [for p in local.media_prefixes : "${var.media_bucket_arn}/${p}/*"] },
+      { Sid = "MediaObjects", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], Resource = [for p in local.object_prefixes : "${var.media_bucket_arn}/${p}/*"] },
       { Sid = "MediaList", Action = ["s3:ListBucket"], Resource = [var.media_bucket_arn], Condition = { StringLike = { "s3:prefix" = [for p in local.media_prefixes : "${p}/*"] } } },
       # Cancel a job on the agent (process_job is sent by cf-prod-job-flow); session sub-resources are part of it.
       { Sid = "Agent", Action = ["bedrock-agentcore:InvokeAgentRuntime", "bedrock-agentcore:StopRuntimeSession"], Resource = [var.agent_runtime_arn, "${var.agent_runtime_arn}/*"] },

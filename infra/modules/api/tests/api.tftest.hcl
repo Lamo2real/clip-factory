@@ -573,4 +573,9 @@ run "content_rewards_on" {
     condition     = contains(one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Resource if try(s.Sid, "") == "MediaObjects"]), "arn:aws:s3:::cf-test-media/campaigns/*")
     error_message = "The api reads, writes and deletes campaign files under campaigns/ (logos, brand pictures)."
   }
+
+  assert {
+    condition     = !contains(one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Condition.StringLike["s3:prefix"] if try(s.Sid, "") == "MediaList"]), "campaigns/*")
+    error_message = "The api never lists campaigns/: removing a campaign deletes its files by name."
+  }
 }
