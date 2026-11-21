@@ -62,8 +62,8 @@ variable "content_rewards_enabled" {
 
 variable "cr_remake_enabled" {
   type        = bool
-  default     = false
-  description = "The campaign copy of a clip (docs/CONTRACTS.md §39.3, CR_REMAKE). Off until G, H and I of §39.4 have merged; then one last one-line PR sets the default to true. While off, the copy route answers 503 \"Coming soon.\" and no fit offers a copy."
+  default     = true
+  description = "The campaign copy of a clip (docs/CONTRACTS.md §39.3, CR_REMAKE). On: G, H and I of §39.4 have merged. Set false to turn it off again; then the copy route answers 503 \"Coming soon.\" and no fit offers a copy."
 }
 
 variable "help_enabled" {

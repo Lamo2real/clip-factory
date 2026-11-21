@@ -323,26 +323,27 @@ run "content_rewards_switch_off_plans" {
   }
 }
 
-# docs/CONTRACTS.md §39.3: the campaign copy (CR_REMAKE) defaults to off and only changes the api's environment.
-run "cr_remake_is_wired_and_off" {
+# docs/CONTRACTS.md §39.3: the campaign copy (CR_REMAKE) defaults to on (G, H and I of §39.4 have merged) and only
+# changes the api's environment; the stack still plans with it off.
+run "cr_remake_is_wired_and_on" {
   command = plan
 
   assert {
-    condition     = var.cr_remake_enabled == false
-    error_message = "cr_remake_enabled must default to false until G, H and I of §39.4 have merged."
+    condition     = var.cr_remake_enabled == true
+    error_message = "cr_remake_enabled defaults to true now that G, H and I of §39.4 have merged."
   }
 }
 
-run "cr_remake_switch_on_plans" {
+run "cr_remake_switch_off_plans" {
   command = plan
 
   variables {
     content_rewards_enabled = true
-    cr_remake_enabled       = true
+    cr_remake_enabled       = false
   }
 
   assert {
     condition     = module.api.function_names == { api = "cf-prod-api" }
-    error_message = "With the copy switched on the stack still plans and cf-prod-api is the same function."
+    error_message = "With the copy switched off the stack still plans and cf-prod-api is the same function."
   }
 }
