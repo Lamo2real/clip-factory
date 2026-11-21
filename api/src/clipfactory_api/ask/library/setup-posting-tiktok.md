@@ -147,7 +147,7 @@ stay private until TikTok approves the app.
 #### 20. Connect TikTok
 - Press the big **Connect TikTok** button.
 - Log in. Check that it says Clip Factory. Leave every switch on.
-- Press **Authorize**. You come back with confetti. This step ticks itself.
+- Press **Continue**. You come back with confetti. This step ticks itself.
 - Status: "Works now, but your TikTok posts stay private until TikTok says yes."
 
 ### Part 4: Go public
@@ -156,7 +156,7 @@ stay private until TikTok approves the app.
 - Use a computer. Connect in the Sandbox, with your TikTok still private. Record your screen with the address bar in
   sight.
 - Follow the shot list below, in order. It starts on the About page, then **Connect TikTok** and TikTok's
-  **Authorize** screen.
+  screen with **Continue**.
 - Then **Upload** one clip, choosing everything by hand in the **TikTok** row. Show each line TikTok wants to see.
 - End with the post arriving on your TikTok. Keep it short, about 1 minute. Save it as MP4, under 50 MB. You can send
   up to 5 videos.
@@ -168,7 +168,7 @@ stay private until TikTok approves the app.
 The shot list (Clip Factory has a **Copy** button for it):
 
 > 1. Start on the About page. Show the Privacy and Terms links, and keep the address bar in sight.
-> 2. Sign in. Open Settings › Posting › Set up posting › TikTok. Press Connect TikTok. Show TikTok's screen with every permission, press Authorize, then show TikTok connected.
+> 2. Sign in. Open Settings › Posting › Set up posting › TikTok. Press Connect TikTok. Show TikTok's screen with every permission, press Continue, then show TikTok connected.
 > 3. Show where the clip comes from: the long video or stream you picked (or the campaign brief).
 > 4. Open Review. Play the clip. Show it has no watermark or logo on it.
 > 5. Show nothing is set for TikTok yet. Tap the TikTok row (caption and settings). Show "Asking TikTok…", then "Posting as" with your name and picture.

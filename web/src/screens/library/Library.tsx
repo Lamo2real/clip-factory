@@ -9,7 +9,7 @@ import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Segmented, Skeleton } from "../../components/ui.tsx";
-import { compact, postStatusLabel, STATUS_LABEL } from "../../lib/metrics.ts";
+import { compact, postNumbersNote, postStatusLabel, STATUS_LABEL } from "../../lib/metrics.ts";
 import { WeekView } from "./WeekView.tsx";
 import { byPlatformOrder, count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
 import { useHeld, useLoad } from "../../lib/hooks.ts";
@@ -319,7 +319,7 @@ function LibraryCard({
               : p.status === "failed" && p.error
                 ? `${postStatusLabel(p)}. ${postError(p.error)}`
                 : postStatusLabel(p)}
-          {p.status === "posted" && !p.metrics && p.perfCheckAt && !(p.by === "you" && !p.url) && p.privacy !== "private" ? ` · numbers ${relative(p.perfCheckAt)}` : ""}
+          {p.by === "you" && !p.url ? "" : postNumbersNote(p, relative)}
         </span>
       </span>
       {/* TikTok only lets Clip Factory post Only me for now: the owner posts it there himself (§41). */}
