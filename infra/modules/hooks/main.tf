@@ -155,15 +155,18 @@ resource "aws_lambda_function" "fn" {
     log_format = "JSON"
     log_group  = aws_cloudwatch_log_group.fn.name
   }
+  # docs/CONTRACTS.md §45.13.3: STORIES_OAUTH_CALLBACK is where a w1. (Lamo Stories) state is forwarded, the query
+  # passed byte for byte; it comes from configuration, never from the request. The only Lamo Stories change here: no
+  # new IAM, no workspace secret, no workspace code path in this Lambda.
   environment {
-    variables = {
+    variables = merge({
       TABLE_NAME         = var.table_name
       APP_URL            = var.app_url
       VERIFY_TOKEN_PARAM = local.verify_token_name
       SECRET_PREFIX      = local.secret_prefix
       OAUTH_STATE_SECRET = local.state_key_name
       CLIP_FLOW_ARN      = var.clip_flow_alias_arn
-    }
+    }, var.stories_oauth_callback == "" ? {} : { STORIES_OAUTH_CALLBACK = var.stories_oauth_callback })
   }
   tags       = local.tags
   depends_on = [aws_iam_role_policy.fn]

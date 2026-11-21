@@ -118,3 +118,19 @@ run "secret_pattern_is_validated" {
 
   expect_failures = [var.platform_secrets_arn]
 }
+
+# docs/CONTRACTS.md §45.13.1, §45.15 and ADR-73: Lamo Clips' money role cannot reach a Lamo Stories workspace token.
+# IAM patterns are checked as globs against the sample ARN: "*" becomes ".*" and "?" becomes "." in an anchored regex,
+# dots escaped.
+run "no_lamo_stories_secrets" {
+  command = plan
+
+  assert {
+    condition = alltrue(flatten([
+      for s in jsondecode(aws_iam_role_policy.money.policy).Statement : [
+        for r in flatten([s.Resource]) : !can(regex("^${replace(replace(replace(r, ".", "\\."), "?", "."), "*", ".*")}$", "arn:aws:secretsmanager:eu-north-1:123456789012:secret:cf-test/workspaces/stories/youtube/token-AbC123"))
+      ] if anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:") || a == "*"])
+    ]))
+    error_message = "…:secret:<name>/workspaces/stories/youtube/token-AbC123 must match no money Secrets Manager resource."
+  }
+}
