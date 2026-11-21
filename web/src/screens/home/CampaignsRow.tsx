@@ -29,7 +29,7 @@ export function CampaignsRow() {
   return (
     <section className="home-row cr-row" aria-labelledby="cr-row-title">
       <div className="home-row__intro">
-        {/* No nowrap: in the narrow intro column (1100 px and up) "campaigns." takes a line of its own. */}
+        {/* No nowrap: the heading sits on top of its row at every width, and a narrow phone may wrap "campaigns." */}
         <h2 className="display-2" id="cr-row-title">
           Your <em>campaigns</em>.
         </h2>
