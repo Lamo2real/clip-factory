@@ -5178,9 +5178,11 @@ and the money screens are gone. Where this section and an earlier one disagree, 
 **The rule.** Clip Factory shows only money a platform's API reported about the owner's account. It never calculates,
 guesses, converts or accepts typed-in money. Every API number is the platform's own estimate (YouTube's
 `estimatedRevenue`, Meta's earnings metrics), so every money figure carries the tag "YouTube's estimate" or "Meta's
-estimate"; the words "paid", "received" and "actual" never sit next to one. No API reports paid-out money: the app links
-to each platform's payout page instead. Every stored money row has `platform`, `source` (the metric), `unit`,
-`currency` and `fetchedAt`.
+estimate"; the words "paid", "received" and "actual" never sit next to one. Two APIs report money sent toward the
+bank: AdSense `payments` (YouTube) and Whop `payouts` (Content Rewards' money after Whop). They show as "Sent to your
+bank by Google/Whop", tagged "YouTube says"/"Whop says" (§40.4); "paid", "received" and "actual" still never sit next
+to an amount; the other places link to their payout pages (§40.8 change 1). Every stored money row has `platform`,
+`source` (the metric), `unit`, `currency` and `fetchedAt`.
 
 ### 25.1 States (never down by themselves)
 

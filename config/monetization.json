@@ -1,6 +1,6 @@
 {
   "$comment": "Real earnings (docs/CONTRACTS.md §25, docs/DECISIONS.md ADR-47). The paid-programme goals each platform publishes, with the official page each number comes from. No rates, no guesses: Clip Factory shows only numbers a platform reported. A goal without an official source fails CI (api/tests/test_money.py, web/test/money.test.ts). Change values here only.",
-  "asOf": "2026-11-18",
+  "asOf": "2026-11-21",
   "countries": [
     { "code": "US", "name": "United States" },
     { "code": "GB", "name": "United Kingdom" },
@@ -82,19 +82,19 @@
             {
               "key": "subscribers", "metric": "subscribers", "goal": 1000, "label": "subscribers",
               "note": "YouTube rounds this",
-              "source": "https://support.google.com/youtube/answer/72851", "verifiedHow": "official-page"
+              "source": "https://support.google.com/youtube/answer/12843009", "verifiedHow": "official-page"
             },
             {
               "key": "watchHours", "metric": "watchHours365", "goal": 8000, "label": "watch hours in 12 months",
               "approx": true, "or": "shortsViews", "windowDays": 365,
               "help": "Our count of long videos and lives. YouTube Studio's number is the official one.",
-              "source": "https://support.google.com/youtube/answer/72851", "verifiedHow": "official-page"
+              "source": "https://support.google.com/youtube/answer/12843009", "verifiedHow": "official-page"
             },
             {
               "key": "shortsViews", "metric": "shortsViews90", "goal": 20000000, "label": "Shorts views in 90 days",
               "or": "watchHours", "windowDays": 90,
               "help": "YouTube's engaged Shorts views, up to the last day YouTube finished counting.",
-              "source": "https://support.google.com/youtube/answer/72851", "verifiedHow": "official-page"
+              "source": "https://support.google.com/youtube/answer/12843009", "verifiedHow": "official-page"
             }
           ]
         },
@@ -108,7 +108,7 @@
               "key": "keepShorts", "metric": "shortsViews90", "goal": 10000000,
               "label": "Shorts views in 90 days to keep Shorts money", "windowDays": 90,
               "help": "Keep 10M Shorts views in 90 days to earn from Shorts.",
-              "source": "https://support.google.com/youtube/answer/72851", "verifiedHow": "official-page"
+              "source": "https://support.google.com/youtube/answer/12843009", "verifiedHow": "official-page"
             }
           ]
         }
@@ -146,7 +146,7 @@
     },
     "tiktok": {
       "programme": "Creator Rewards",
-      "statusWhere": { "label": "Creator tools › Creator Rewards" },
+      "statusWhere": { "label": "TikTok Studio › Monetization" },
       "paidWhere": { "label": "Profile › Balance" },
       "warning": "Don't switch to a Business account. Creator Rewards won't pay it.",
       "rules": [
@@ -154,17 +154,17 @@
           "id": "tiktok-rewards",
           "for": "not_in_program",
           "effectiveFrom": "2024-01-01",
-          "countries": ["US", "GB", "DE", "FR", "ES", "IT", "NL", "SE", "IE", "BR"],
+          "countries": ["US", "GB", "DE", "FR", "BR"],
           "goals": [
             {
               "key": "followers", "metric": "followers", "goal": 10000, "label": "followers",
-              "source": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+              "source": "https://www.tiktok.com/creator-academy/en/article/creator-rewards-program",
               "verifiedHow": "official-snippet"
             },
             {
               "key": "views30", "metric": "views30", "goal": 100000, "label": "views in 30 days", "windowDays": 30,
               "approx": true, "help": "Our count from your public videos. TikTok only counts views it calls real.",
-              "source": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+              "source": "https://www.tiktok.com/creator-academy/en/article/creator-rewards-program",
               "verifiedHow": "official-snippet"
             }
           ]
@@ -177,13 +177,13 @@
           "goals": [
             {
               "key": "followers", "metric": "followers", "goal": 50000, "label": "followers",
-              "source": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+              "source": "https://www.tiktok.com/creator-academy/en/article/creator-rewards-program",
               "verifiedHow": "official-snippet"
             },
             {
               "key": "views30", "metric": "views30", "goal": 100000, "label": "views in 30 days", "windowDays": 30,
               "approx": true, "help": "Our count from your public videos. TikTok only counts views it calls real.",
-              "source": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+              "source": "https://www.tiktok.com/creator-academy/en/article/creator-rewards-program",
               "verifiedHow": "official-snippet"
             }
           ]
@@ -191,9 +191,9 @@
       ]
     },
     "x": {
-      "programme": "Creator Revenue Sharing",
-      "statusWhere": { "label": "X › Monetization", "url": "https://x.com/settings/monetization" },
-      "paidWhere": { "label": "X › Monetization (paid through Stripe)", "url": "https://x.com/settings/monetization" },
+      "programme": "Original Content Rewards",
+      "statusWhere": { "label": "X › Creator Studio", "url": "https://x.com/i/jf/creators/studio" },
+      "paidWhere": { "label": "X › Creator Studio (paid through Stripe)", "url": "https://x.com/i/jf/creators/studio" },
       "rules": [
         {
           "id": "x-revenue-sharing",
@@ -204,18 +204,18 @@
             {
               "key": "premium", "metric": "premium", "goal": 1, "label": "Premium", "kind": "tick",
               "note": "X's rule, from X's help page",
-              "source": "https://help.x.com/en/using-x/creator-revenue-sharing", "verifiedHow": "official-snippet"
+              "source": "https://help.x.com/en/using-x/original-content-rewards", "verifiedHow": "official-snippet"
             },
             {
               "key": "verifiedFollowers", "metric": "verifiedFollowers", "goal": 500, "label": "verified followers",
               "note": "X's rule, from X's help page",
-              "source": "https://help.x.com/en/using-x/creator-revenue-sharing", "verifiedHow": "official-snippet"
+              "source": "https://help.x.com/en/using-x/original-content-rewards", "verifiedHow": "official-snippet"
             },
             {
               "key": "impressions90", "metric": "impressions90", "label": "impressions in 90 days", "kind": "number",
               "windowDays": 90, "approx": true,
               "help": "Upper guess from the posts Clip Factory made. X only counts verified people on Home.",
-              "source": "https://help.x.com/en/using-x/creator-revenue-sharing", "verifiedHow": "official-snippet"
+              "source": "https://help.x.com/en/using-x/original-content-rewards", "verifiedHow": "official-snippet"
             }
           ]
         }

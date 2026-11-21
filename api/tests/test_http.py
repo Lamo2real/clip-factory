@@ -204,6 +204,14 @@ def test_every_contract_route_is_registered() -> None:
         ("GET", "/v1/money/summary"),
         ("GET", "/v1/money/everywhere"),
         ("GET", "/v1/money/clips"),
+        # §40: Get paid
+        ("GET", "/v1/getpaid"),
+        ("GET", "/v1/getpaid/youtube"),
+        ("PATCH", "/v1/getpaid/steps"),
+        ("PUT", "/v1/getpaid/whop/key"),
+        ("POST", "/v1/getpaid/whop/connect"),
+        ("DELETE", "/v1/getpaid/connections/adsense"),
+        ("DELETE", "/v1/getpaid/connections/whop"),
         # §19.6: Ask Clip Factory
         ("GET", "/v1/help"),
         ("POST", "/v1/help/answers"),
