@@ -82,9 +82,10 @@ locals {
   # is updated in place.
   # FOLLOW# (§24) becomes { type: "follow" }: a followed creator's name, picture and live badge. FOLLOWKEYS# never
   # matches (its prefix differs after "FOLLOW"). JOBLIVE# (§31) becomes { type: "jobLive" }: the one-line live status
-  # of a working job (allowed fields only; JOB# never matches it).
+  # of a working job (allowed fields only; JOB# never matches it). GETPAID, PAYCONN#, PAYSTATE# and PAYOUT# (§40.7)
+  # become { type: "getpaid", partial: true } (no item rides along; they hold no tokens or bank details).
   stream_filter = jsonencode({
-    dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }, { prefix = "JOBLIVE#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRCONN" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRFIND" }] } } }
+    dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CLIP#" }, { prefix = "POST#" }, { prefix = "LEARNING#" }, { prefix = "WEEK#" }, { prefix = "ACCOUNT#" }, { prefix = "SETUP#" }, { prefix = "FOLLOW#" }, { prefix = "JOBLIVE#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRCONN" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRFIND" }, { prefix = "GETPAID" }, { prefix = "PAYCONN#" }, { prefix = "PAYSTATE#" }, { prefix = "PAYOUT#" }] } } }
   })
 }
 
