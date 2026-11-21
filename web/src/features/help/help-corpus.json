@@ -1,5 +1,5 @@
 {
-  "version": "639e092225ad",
+  "version": "062449557987",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -34,6 +34,7 @@
     "src/screens/jobs/mergeJobs.ts",
     "src/screens/jobs/pendingStops.ts",
     "src/screens/library/Library.tsx",
+    "src/screens/library/PostYourself.tsx",
     "src/screens/library/WeekView.tsx",
     "src/screens/review/CampaignFit.tsx",
     "src/screens/review/CampaignStrip.tsx",
@@ -3769,9 +3770,14 @@
         "not",
         "done",
         "yet",
+        "save",
+        "video",
+        "tiktok",
+        "paste",
+        "close",
+        "link",
         "fix",
         "ask",
-        "tiktok",
         "made",
         "kids",
         "tell",
@@ -3789,9 +3795,7 @@
         "throw",
         "away",
         "post",
-        "close",
-        "rewards",
-        "settings"
+        "rewards"
       ],
       "answer": "These clips all come from one job. Tap Upload to post one, or Throw away if you do not like it. Tap Show every job to see the rest.",
       "steps": [
@@ -3836,15 +3840,15 @@
         "review",
         "show",
         "views",
+        "save",
+        "video",
+        "tiktok",
+        "paste",
+        "close",
         "make",
         "earlier",
         "week",
-        "later",
-        "best",
-        "commercial",
-        "post",
-        "tiktok",
-        "close"
+        "later"
       ],
       "answer": "Library has every clip you uploaded.",
       "steps": [
@@ -3889,6 +3893,11 @@
         "loading",
         "check",
         "views",
+        "save",
+        "video",
+        "tiktok",
+        "paste",
+        "close",
         "fix"
       ],
       "answer": "A clip's page shows how it does on each app. Tap a clip in Library to open it.",

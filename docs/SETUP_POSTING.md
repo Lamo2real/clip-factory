@@ -232,6 +232,13 @@ About 40 minutes, plus the time TikTok takes to check your app · Free · Steps 
 post is **"Only me"**. TikTok often says no to apps that only one person uses. If it says no, Clip Factory still posts
 to TikTok, but only you can see those posts, and TikTok gives no numbers for them.
 
+**Want everyone to see it now? Post it yourself** (docs/CONTRACTS.md §42). On any uploaded clip in Library, or on its
+page, tap **Post it yourself**. Clip Factory copies the caption and saves the video to your phone (or your computer).
+You post it in TikTok and pick **Everyone**, then tap **I posted it**, and Clip Factory finds the post and counts its
+views. **Everyone** needs a public TikTok account. While your account is public, TikTok will not let Clip Factory upload
+there for you (its rule for apps it has not approved). That upload then says to tap **Post it yourself**, and the
+button is right there. Keep your account public.
+
 | # | Step | Part |
 |---|---|---|
 | 1 | Have your TikTok account | Get ready |
@@ -492,7 +499,7 @@ The answers, word for word. They are all true today: do not change them to sound
 | "The key does not work. Copy the Client key and secret again (step 15)." | Do step 15 again (in the Sandbox: step 19). |
 | "The return address does not match. Copy it again in step 10." | Do step 10 again with the **Copy** button. |
 | "A permission box was not ticked. Connect again and tick every box." | Do step 12, then connect again and leave every switch on. |
-| "Make your TikTok account private (Setup step 3), then press Try again." | Do step 3, then press **Try again** on the clip. |
+| "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone." | Tap **Post it yourself** on the clip and post it in TikTok, picking **Everyone**. Keep your account public. |
 | "TikTok did not answer. Try again in a few minutes." | Wait, then press **Connect TikTok**. |
 | "Finish the TikTok review steps to post outside the Sandbox." | Do steps 21 to 23. |
 
