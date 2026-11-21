@@ -1,0 +1,15 @@
+{
+  "error": {
+    "code": 400,
+    "message": "'paidProductPlacementDetails'",
+    "errors": [
+      {
+        "message": "'paidProductPlacementDetails'",
+        "domain": "youtube.part",
+        "reason": "unexpectedPart",
+        "location": "part",
+        "locationType": "parameter"
+      }
+    ]
+  }
+}

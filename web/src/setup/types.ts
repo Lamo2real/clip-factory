@@ -81,3 +81,55 @@ export interface GuideStep {
 }
 
 export type ResultCopy = Record<ConnectResult, string>;
+
+// ---------- Content Rewards (docs/CONTRACTS.md §38.3, §38.4, §38.7) ----------
+// Its own guide, never one of the five above: SetupGuide is unchanged and CR_GUIDE is not in GUIDES.
+
+/** What a Content Rewards step ticks itself from (GET /v1/contentrewards). */
+export type CrAuto = "connected" | "can_submit" | "linked" | "membership" | "logo" | "job" | "money_moving" | "whop_linked" | "money_moved";
+
+/** An unnumbered helper inside a step: a question that opens more lines. */
+export interface CrFold {
+  id: string;
+  /** "Instagram says **Not a professional account**?" */
+  question: string;
+  say: string[];
+  open?: { label: string; url: string };
+  ifYouSee?: { see: string; do: string }[];
+  openWhen?: "not_allowed_or_read_only";
+}
+
+export interface CrStep extends Omit<GuideStep, "auto" | "paste" | "upload" | "gate" | "extra"> {
+  /** Also ticks itself from GET /v1/contentrewards; "I did this" stays unless manual: false. */
+  auto?: CrAuto;
+  /** Default true: shows "I did this" (PATCH /v1/contentrewards/connection {step, done}). */
+  manual?: boolean;
+  /** "Open email" (a mailto: link; the desktop app hands it to Mail). */
+  mailto?: { label: string; href: string };
+  /** A green answer button. */
+  ask?: { label: string; said: "pilot_sent" };
+  /** Unnumbered helpers inside the step. */
+  folds?: CrFold[];
+  /**
+   * Money steps (§38.7): shown only for that answer to "Do you see Finance?". "both" is a step every answer shows
+   * (Move money to Whop): the contract's table marks it "both", so it needs a value of its own here.
+   */
+  finance?: "yes" | "no" | "both";
+  /** Done once (it folds away), or each time money moves. */
+  repeat?: "once" | "each_time";
+  /**
+   * The step's first line, for someone who already did it ("Have one already? Tap I have an account.", §39.1). With
+   * `doneLabel`, the step's green answer sits right under its Open button, before the other lines.
+   */
+  lead?: string;
+  /** The green answer's words instead of "I did this" ("I have an account", "I added them"). */
+  doneLabel?: string;
+}
+
+export interface CrGuide {
+  name: "Content Rewards";
+  checkedOn: "2026-11-21";
+  minutes: number;
+  cost: "Free";
+  parts: { id: "setup" | "move" | "bank" | "join"; title: string; steps: CrStep[] }[];
+}

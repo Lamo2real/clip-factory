@@ -27,7 +27,7 @@ DEFAULTS = {
     "followPaused": False,
     "followDailyMax": 0,
     "followMinMinutes": 30,
-    "notify": {"ready": True, "stopped": True, "resumed": False, "steps": False},
+    "notify": {"ready": True, "stopped": True, "resumed": False, "steps": False, "contentRewards": True},
     # §36 My settings: the owner's own post choices per platform, never made for kids.
     "postPreset": {
         "youtube": {"category": "20", "notifySubscribers": True, "embeddable": True},

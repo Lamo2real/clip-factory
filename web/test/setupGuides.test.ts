@@ -3,6 +3,7 @@ import type { Platform } from "../src/api/types.ts";
 import {
   allSteps,
   checkedOnText,
+  gateLine,
   GUIDES,
   RESULT_CODES,
   resolveValue,
@@ -84,6 +85,7 @@ const CONTRACT: Record<Platform, [string, string][]> = {
     ["key-redirect-check", "Double-check the return address"],
     ["key-paste", "Paste the 3 values"],
     ["connect", "Connect Instagram"],
+    ["public-live", "Make the app Live"],
     ["public-try", "Post one test clip"],
   ],
   facebook: [
@@ -335,6 +337,24 @@ describe("the five setup guides (§17.2)", () => {
     // Every quoted line is one the app really shows (no TikTok wording the app doesn't have).
     expect(TIKTOK_DEMO_SHOTS).not.toMatch(/You need to indicate|will be labeled as|is grey now|Only me is grey/);
     expect(steps("tiktok").find((s) => s.id === "public-demo")!.copy![0]!.value).toBe(TIKTOK_DEMO_SHOTS);
+  });
+
+  it("asks for Go live on both Meta apps, with the button Meta really shows, and the right Reels in the gate line", () => {
+    for (const p of ["instagram", "facebook"] as const) {
+      const live = steps(p).find((s) => s.id === "public-live")!;
+      expect(live.gate).toBe("app_live");
+      expect(live.say.join(" ")).toContain("Press **Go live** at the bottom right.");
+      expect(live.say.join(" ")).toContain("when the top bar says **Live**");
+      expect(JSON.stringify(live.ifYouSee)).not.toMatch(/support/i);
+      const name = GUIDES[p].name;
+      expect(gateLine({ key: "app_live", state: "limited" }, { platform: p })).toBe(`Works now, but only you can see your ${name} Reels until the app is Live.`);
+      expect(gateLine({ key: "app_live", state: "ok" }, { platform: p })).toBe(`Works now. Everyone can see your ${name} Reels.`);
+    }
+    // Go live needs the App icon and the rest of Basic settings on Instagram too.
+    const basic = steps("instagram").find((s) => s.id === "key-basic")!;
+    expect(basic.download?.href).toBe("/brand/clip-factory-1024.png");
+    expect(basic.copy!.map((c) => c.label)).toContain("App domains");
+    expect(stepNumber(GUIDES.instagram, "public-live")).toBeLessThan(stepNumber(GUIDES.instagram, "public-try"));
   });
 
   it("copies the shared values the contract names", () => {

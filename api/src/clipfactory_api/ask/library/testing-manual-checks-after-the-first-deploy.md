@@ -65,3 +65,51 @@
      share this".
    - Open the official pages linked in `config/monetization.json` for TikTok, Instagram and X and confirm each number
      (`verifiedHow: official-snippet` today).
+15. **Content Rewards** ([CONTRACTS §38.21](CONTRACTS.md#3821-not-verified-live-each-is-checked-at-the-owners-first-connect-or-first-campaign-post)):
+   these were not checked against the live Content Rewards when the feature was built. Do them after the switch PR
+   ([DEPLOYMENT.md](DEPLOYMENT.md#content-rewards-contracts-38)), with the steps in
+   [SETUP_POSTING.md](SETUP_POSTING.md#content-rewards).
+   - In the deploy log of the first §38 deploy, the plan adds `cf-prod-campaigns` and replaces nothing; the delete
+     gate passes. Until the switch PR, Set up posting shows the Content Rewards card as "Coming soon".
+   - In the Mac app, **Connect Content Rewards**. Note CR's approve screen and its words, whether CR took the
+     registration from AWS and the five loopback redirects (a "Sign-in failed" page says no), and whether the answer
+     carries `iss`. Secrets Manager (eu-north-1) now has `cf-prod/platforms/contentrewards/app` and `…/token`; the
+     `CRCONN` item has no token. The card says "Ready: sends your clips for you" (the pilot granted
+     `my_submissions:write`) or "Ready: you send clips yourself" (then send the email on "Content Rewards said no?").
+   - Paste a campaign you joined: the card says "You're in" within a minute; check whether its rules came from CR's
+     listed description or need the paste box, and that the TypeID match was logged as `cr.typeid_verified`.
+   - Post the first campaign clip to YouTube: the post line goes "Sending…" → "Sent ✓" within a few minutes (or the
+     "Send this to Content Rewards now" reminder arrives); YouTube Studio shows "Includes paid promotion" (no
+     "YouTube didn't take the Paid promotion switch" line); an X post shows "Paid partnership". Note whether CR's
+     30-minute clock started at the upload or after YouTube's processing.
+   - When money arrives: the three tiles match CR's **Earnings**; follow the **Finance** or Whop steps once and note
+     where Whop's screens differ.
+   - Also note: whether the sign-in works on a port other than the five (CR's docs say "at any port"); whether the
+     token request needed `resource`; the refresh answer's lifetime fields; a group link's JSON; any limit on the
+     public JSON; that Instagram and Facebook Reels show no paid-partnership option; where the first brief that
+     wants proof takes it (CR's **Support** chat is the fallback); and which Settings tab shows "Connect your Whop
+     account" (the hint says **Profile**).
+16. **Content Rewards: the two ways, all your money and the fit** ([CONTRACTS §39.6](CONTRACTS.md#396-not-verified-live)):
+   not checked live when built. Do them after the §38 checks, and the copy ones after the `cr_remake_enabled` PR.
+   - In the deploy log, the plan changes only the api's environment (`CR_REMAKE`) in place and replaces nothing.
+   - Make normal clips from a link at `/` and count the taps to an upload: 5, with no campaign word on the form.
+   - On the setup page, note whether **Continue with Google** is still on Content Rewards' sign-up page, how many
+     taps Google's screens take and how many questions Content Rewards asks after sign-up; whether signing in at
+     Content Rewards' sign-in page with a new email makes an account (then step 1 could fold into step 3).
+   - Check whether Content Rewards' `mcp-tools.json` now has a tool that lists the accounts added there or says an
+     account exists (then steps 1 and 2 could tick themselves).
+   - A campaign clip on Review: the fit headline matches what Content Rewards later says about the clip (a brand that
+     turns down a "Can earn" clip, or a channel the check called "I couldn't check", is worth a note). Check that
+     the rules reader set `overlayRequired` only for a brief that asks for its own picture on top.
+   - Note when the fit's language line says "I couldn't check the language" for a clip in a common language (the
+     table may need that language).
+   - On a campaign clip with banned content in its rules, a `no` for banned content matches what the clip shows (that
+     `no` blocks the campaign upload).
+   - Tap "Make a FaZe Clips copy" on a normal clip that fits: the copy shows right below in about 3 minutes, with the
+     logo, "Paid partnership" for 3 seconds and #Ad. Note whether the brand or YouTube treats the copy and an earlier
+     normal post of the same moment as reused content.
+   - All your money: the YouTube row equals the Monthly card when YouTube is the only money place; the Content Rewards
+     row equals Content Rewards' **Earnings** for the same days (note whether every paid payout has `paid_at` in UTC).
+     Whether X's media revenue answers for the owner (then X could move from "not available" to a number later).
+     Whether Meta's earnings metrics still answer
+     ([CONTRACTS §25.8](CONTRACTS.md#258-not-verified-live-each-failure-becomes-a-not-available-label-never-a-number)).

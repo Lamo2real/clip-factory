@@ -51,6 +51,8 @@ locals {
         VECTOR_BUCKET  = var.vector_bucket
         VECTOR_INDEX   = var.vector_index
         SECRET_PREFIX  = var.secret_prefix # §17.6: the owner's platform keys and tokens
+        # §38.12: campaign posts are sent to Content Rewards only while this is "on".
+        CONTENT_REWARDS = var.content_rewards_enabled ? "on" : "off"
       }
     }
   }

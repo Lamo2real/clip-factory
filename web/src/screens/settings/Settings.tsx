@@ -45,6 +45,7 @@ import { AskBranch } from "./AskBranch.tsx";
 import { NotifyBranch } from "./NotifyBranch.tsx";
 import { SetupList } from "./setup/SetupList.tsx";
 import { SetupPlatform } from "./setup/SetupPlatform.tsx";
+import { CrSetup } from "./setup/CrSetup.tsx";
 import { openHelp } from "../../features/help/context.ts";
 import { useHelpSwitch } from "../../features/help/status.ts";
 
@@ -77,6 +78,7 @@ export function Settings({
   branch: branchSlug = null,
   skill = null,
   platform = null,
+  contentRewards = false,
 }: {
   tree?: string | null;
   branch?: string | null;
@@ -84,6 +86,8 @@ export function Settings({
   skill?: Omit<Extract<Route, { name: "skill" }>, "name"> | null;
   /** Posting › Set up posting › one platform's steps (§17.1). */
   platform?: Platform | null;
+  /** Posting › Set up posting › Content Rewards (§38.3): its own page, not a sixth platform. */
+  contentRewards?: boolean;
 }) {
   const { installed } = useInstall();
   const trees = useMemo(() => visibleTrees(installed), [installed]);
@@ -101,6 +105,11 @@ export function Settings({
         <div className="settings-content">
           {skill && tree && branch ? (
             <SkillScreen tree={tree} branch={branch} mode={skill.mode} skillId={skill.skillId} />
+          ) : tree && branch && contentRewards ? (
+            <>
+              <Trail tree={tree} branch={branch} extra={[{ name: "Content Rewards" }]} />
+              <CrSetup />
+            </>
           ) : tree && branch && platform ? (
             <>
               <Trail tree={tree} branch={branch} extra={[{ name: GUIDES[platform].name }]} />

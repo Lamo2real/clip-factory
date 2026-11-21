@@ -1,0 +1,1 @@
+{"status": {"video_status": "error", "uploading_phase": {"status": "complete", "bytes_transfered": 3145728}, "processing_phase": {"status": "error", "errors": [{"code": 1363008, "message": "Resolution too low. Video must have a minimum resolution of 540p."}]}, "publishing_phase": {"status": "not_started"}}, "id": "1234567890123"}

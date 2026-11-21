@@ -50,7 +50,7 @@ export function redact(text) {
  * parameter it is kept whole, so Ask can read and name the exact page (Facebook step 1 opens
  * /pages/?category=your_pages). Anything else still goes through redact().
  */
-const SETUP_LINK_HOSTS = /^(?:[a-z0-9-]+\.)*(?:facebook\.com|instagram\.com|tiktok\.com|google\.com|youtube\.com|x\.com)$/;
+const SETUP_LINK_HOSTS = /^(?:[a-z0-9-]+\.)*(?:facebook\.com|instagram\.com|tiktok\.com|google\.com|youtube\.com|x\.com|contentrewards\.com|whop\.com)$/;
 const SECRET_PARAM = /(?:^|[_-])(?:token|key|secret|code|password|pass|sig|signature|auth|session)(?:$|[_-])/i;
 export function setupLink(url) {
   try {
@@ -181,7 +181,36 @@ export async function setupSteps() {
       return row;
     });
   }
-  return { steps: out, names: Object.fromEntries(SETUP_ORDER.map((p) => [p, GUIDES[p].name])) };
+  // Content Rewards (docs/CONTRACTS.md §38.17): its own guide, CR_GUIDE, under `contentrewards` next to the five.
+  // Each part is numbered 1…N as its own screen numbers it (setup, Join a campaign on Campaigns, the money steps for
+  // each Finance answer), so Ask never calls a money step "step 5" and its button never reads "step None". The
+  // unnumbered "said no?" card belongs to step 3 (Connect), so it carries 3.
+  const cr = await import(pathToFileURL(join(web, "src/setup/contentrewards.ts")).href);
+  const crRows = [];
+  // The money steps are one list per answer to "Do you see Finance?" (Money › Content Rewards numbers them so).
+  const money = cr.CR_GUIDE.parts.filter((p) => p.id === "move" || p.id === "bank").flatMap((p) => p.steps);
+  const moneyN = (s) => money.filter((x) => x.finance === (s.finance === "yes" ? "yes" : "no") || x.finance === "both").indexOf(s) + 1;
+  for (const part of cr.CR_GUIDE.parts) {
+    part.steps.forEach((s, i) => {
+      const n = part.id === "move" || part.id === "bank" ? moneyN(s) : i + 1;
+      const row = { id: s.id, n, part: part.id, partTitle: part.title, title: s.title };
+      row.say = s.say.map(redact);
+      if (s.ifYouSee?.length) row.ifYouSee = s.ifYouSee.map((x) => ({ see: redact(x.see), do: redact(x.do) }));
+      if (s.open && /^https:\/\//.test(s.open.url)) row.open = { label: s.open.label, url: setupLink(s.open.url) };
+      if (s.folds?.length) row.folds = s.folds.map((f) => ({ question: redact(f.question), say: f.say.map(redact) }));
+      row.checkedOn = cr.CR_GUIDE.checkedOn;
+      if (s.auto) row.auto = s.auto;
+      if (s.finance) row.finance = s.finance;
+      crRows.push(row);
+    });
+    if (part.id === "setup") {
+      const p = cr.CR_PILOT;
+      const connectN = part.steps.findIndex((s) => s.id === "connect") + 1;
+      crRows.push({ id: p.id, n: connectN, part: "setup", partTitle: part.title, title: p.title, say: p.say.map(redact), checkedOn: cr.CR_GUIDE.checkedOn, auto: p.auto });
+    }
+  }
+  out.contentrewards = crRows;
+  return { steps: out, names: { ...Object.fromEntries(SETUP_ORDER.map((p) => [p, GUIDES[p].name])), contentrewards: cr.CR_GUIDE.name } };
 }
 
 function stepsText({ steps, names }) {
@@ -194,7 +223,7 @@ function stepsText({ steps, names }) {
           part = s.partTitle;
           lines.push(`Part: ${part}`);
         }
-        lines.push(`${s.n}. ${s.id} · ${s.title}${s.optional ? " (optional)" : ""}${s.auto ? ` (ticks itself: ${s.auto})` : ""}`);
+        lines.push(`${s.n === null ? "-" : `${s.n}.`} ${s.id} · ${s.title}${s.optional ? " (optional)" : ""}${s.auto ? ` (ticks itself: ${s.auto})` : ""}`);
       }
       return lines.join("\n");
     })

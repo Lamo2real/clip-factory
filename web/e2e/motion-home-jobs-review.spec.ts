@@ -179,7 +179,8 @@ test.describe("motion: Review (APPLY a)", () => {
     await page.getByRole("button", { name: "Undo" }).click();
     const back = page.locator(".review-card", { has: page.locator(".review-card__hook", { hasText: hook }) });
     await expect(back).toHaveClass(/is-returning/);
-    await expect(back).not.toHaveClass(/is-returning/, { timeout: ACT_REWIND_MS + 400 });
+    // The return ends on a timer of ACT_REWIND_MS; a busy machine can run that timer late, so allow it time to end.
+    await expect(back).not.toHaveClass(/is-returning/, { timeout: ACT_REWIND_MS + 2000 });
   });
 
   test("a place row's chevron turns when it opens; the checks chevron turns with the state", async ({ page }) => {

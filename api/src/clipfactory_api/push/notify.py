@@ -1,7 +1,9 @@
 """``cf-prod-notify``: job changes on the table's stream → notifications on the owner's devices (CONTRACTS §32.5).
 
-The event source mapping delivers only ``MODIFY`` records of ``JOB#`` items. Each record compares the job before and
-after the write and sends at most one notification:
+The event source mapping delivers only ``MODIFY`` records of ``JOB#`` items and of the Content Rewards items
+``CAMPAIGN#``, ``CRSUB#``, ``CRMONEY`` and ``CRCONN`` (§38.11: you're in, send now, approved, not approved, proof, money,
+sign in again, did they say yes; one each, deduped by ``NOTIFIED#cr#{key}``, under ``notify.contentRewards``). Each job
+record compares the job before and after the write and sends at most one notification:
 
 - **ready**: the job became ``ready`` ("Your clips are ready. Tap to look."), when ``notify.ready`` is on;
 - **stopped**: it became ``failed`` ("It stopped. Tap Try again."), when ``notify.stopped`` is on;
@@ -33,7 +35,7 @@ from datetime import timedelta
 from typing import Any
 
 from .. import db, settings
-from ..clock import Clock, iso, utcnow
+from ..clock import Clock, iso, parse, utcnow
 from ..log import log
 from . import devices, webpush
 
@@ -300,19 +302,169 @@ def handle_change(deps: NotifyDeps, old: Mapping[str, Any], new: Mapping[str, An
     return event
 
 
+# --- Content Rewards (§38.11) -----------------------------------------------------------------------------------
+
+CR_PREFIXES = ("CAMPAIGN#", "CRSUB#", "CRMONEY", "CRCONN")
+CR_TITLE = "Content Rewards"
+CR_SIGN_IN = "Sign in to Content Rewards again on your Mac, so your clips keep getting sent."
+CR_PILOT = "Did Content Rewards say yes? Tap Connect Content Rewards on your Mac to check."
+CR_SETUP_URL = "/settings/posting/setup/contentrewards"
+
+
+def _cut(text: Any, limit: int = TITLE_MAX) -> str:
+    clean = " ".join(str(text or "").split()) or CR_TITLE
+    return clean if len(clean) <= limit else clean[: limit - 1].rstrip() + "…"
+
+
+def _dollars(cents: int) -> str:
+    whole, rest = divmod(int(cents), 100)
+    return f"${whole:,}.{rest:02d}"
+
+
+def _campaign_name(deps: NotifyDeps, user_id: str, campaign_id: Any) -> str:
+    if not isinstance(campaign_id, str) or not campaign_id:
+        return CR_TITLE
+    item = deps.store.get(db.user_pk(user_id), f"CAMPAIGN#{campaign_id}") or {}
+    return _cut(item.get("name"))
+
+
+def cr_event(
+    deps: NotifyDeps, user_id: str, sk: str, old: Mapping[str, Any], new: Mapping[str, Any]
+) -> tuple[str, webpush.Message] | None:
+    """(dedupe key, message) for one Content Rewards change, or None."""
+    now = deps.clock()
+    if sk.startswith("CAMPAIGN#"):
+        before, after = old.get("membership"), new.get("membership")
+        if after == "in" and before not in ("in", "manual"):
+            uuid = sk.removeprefix("CAMPAIGN#")
+            return f"in:{uuid}", webpush.Message(
+                _cut(new.get("name")),
+                "You're in! Tap to make clips.",
+                f"cr-{uuid}",
+                f"/campaigns/{uuid}",
+                ttl=24 * 3600,
+                urgency="high",
+            )
+        return None
+    if sk.startswith("CRSUB#"):
+        post_id, clip_id = str(new.get("postId") or sk.removeprefix("CRSUB#")), str(new.get("clipId") or "")
+        if new.get("state") == "send_by_hand" and old.get("state") != "send_by_hand":
+            send_by = parse(new.get("sendBy"))
+            seconds = int((send_by - now).total_seconds()) if send_by else 0
+            if seconds <= 0:
+                return None
+            minutes = max(1, -(-seconds // 60))
+            return f"send:{post_id}", webpush.Message(
+                CR_TITLE,
+                f"Send this to Content Rewards now ({minutes} min left).",
+                f"crsub-{clip_id}",
+                f"/clips/{clip_id}?cr={post_id}",
+                ttl=seconds,
+                urgency="high",
+            )
+        if new.get("crStatus") != old.get("crStatus") and new.get("crStatus") in ("approved", "rejected"):
+            name = _campaign_name(deps, user_id, new.get("campaignId"))
+            body = (
+                "Approved! The brand said yes to your clip."
+                if new["crStatus"] == "approved"
+                else "Not approved. Tap to see why."
+            )
+            return f"{new['crStatus']}:{post_id}", webpush.Message(
+                name, body, f"crsub-{post_id}", f"/clips/{clip_id}", ttl=7 * 24 * 3600
+            )
+        old_proof: Mapping[str, Any] = old["proof"] if isinstance(old.get("proof"), Mapping) else {}
+        new_proof: Mapping[str, Any] = new["proof"] if isinstance(new.get("proof"), Mapping) else {}
+        if new_proof.get("notifiedAt") and not old_proof.get("notifiedAt"):
+            name = _campaign_name(deps, user_id, new.get("campaignId"))
+            return f"proof:{post_id}", webpush.Message(
+                name,
+                f"{name} wants proof of views now. Tap to see how.",
+                f"crproof-{post_id}",
+                f"/clips/{clip_id}?cr={post_id}",
+                ttl=3 * 24 * 3600,
+                urgency="high",
+            )
+        return None
+    if sk == "CRMONEY":
+        seen_before = set(old.get("payoutsSeen") or [])
+        fresh = [p for p in new.get("payoutsSeen") or [] if p not in seen_before]
+        if not fresh or not old.get("firstReadDone"):
+            return None
+        if int(old.get("paidTotalCents") or 0) == 0:
+            body = "Your first money from Content Rewards!"
+        else:
+            body = f"Money from Content Rewards! {_dollars(int(new.get('lastPaidCents') or 0))} is in your balance."
+        return f"money:{fresh[0]}", webpush.Message(
+            CR_TITLE, body, "crmoney", "/money#content-rewards", ttl=7 * 24 * 3600
+        )
+    if sk == "CRCONN":
+        soon = new.get("reason") == "expires_soon" and old.get("reason") != "expires_soon"
+        dead = new.get("status") == "needs_reconnect" and old.get("status") != "needs_reconnect"
+        if soon or dead:
+            return f"signin:{'dead' if dead else 'soon'}:{new.get('signInBy') or ''}", webpush.Message(
+                CR_TITLE, CR_SIGN_IN, "crconn", CR_SETUP_URL, ttl=7 * 24 * 3600, urgency="high"
+            )
+        if int(new.get("pilotReminders") or 0) > int(old.get("pilotReminders") or 0):
+            return f"pilot:{new.get('pilotReminders')}:{new.get('pilotSentAt') or ''}", webpush.Message(
+                CR_TITLE, CR_PILOT, "crpilot", CR_SETUP_URL, ttl=3 * 24 * 3600
+            )
+    return None
+
+
+def _cr_first_time(deps: NotifyDeps, pk: str, key: str) -> bool:
+    now = deps.clock()
+    item = {
+        "pk": pk,
+        "sk": f"NOTIFIED#cr#{key}",
+        "type": "notified",
+        "at": iso(now),
+        "ttl": int((now + timedelta(days=DEDUPE_DAYS)).timestamp()),
+    }
+    try:
+        deps.store.put(item, if_absent=True)
+    except db.ConditionFailed:
+        return False
+    return True
+
+
+def handle_cr_change(deps: NotifyDeps, sk: str, old: Mapping[str, Any], new: Mapping[str, Any]) -> str | None:
+    """Sends the one notification a Content Rewards change calls for (under ``notify.contentRewards``)."""
+    user_id = str(new.get("userId") or "")
+    if not user_id:
+        pk = str(new.get("pk") or "")
+        user_id = pk.removeprefix("USER#") if pk.startswith("USER#") else ""
+    if not user_id:
+        return None
+    found = cr_event(deps, user_id, sk, old, new)
+    if found is None:
+        return None
+    key, message = found
+    prefs = settings.load(deps.store, user_id).get("notify") or {}
+    if not prefs.get("contentRewards", True):
+        return None
+    subs = devices.active(deps.store, user_id)
+    if not subs or not _cr_first_time(deps, db.user_pk(user_id), key):
+        return None
+    send_to_devices(deps, user_id, message, subs)
+    return key
+
+
 def process(event: Mapping[str, Any], deps: NotifyDeps) -> dict[str, list[Any]]:
     records = [r for r in event.get("Records", []) if isinstance(r, Mapping)]
     sent = 0
     for record in records:
         data = record.get("dynamodb") or {}
-        sk = ((data.get("Keys") or {}).get("sk") or {}).get("S", "")
-        if record.get("eventName") != "MODIFY" or not str(sk).startswith("JOB#"):
+        sk = str(((data.get("Keys") or {}).get("sk") or {}).get("S", ""))
+        if record.get("eventName") != "MODIFY" or not (sk.startswith("JOB#") or sk.startswith(CR_PREFIXES)):
             continue
         old, new = data.get("OldImage"), data.get("NewImage")
         if not isinstance(old, Mapping) or not isinstance(new, Mapping):
             continue
         try:
-            if handle_change(deps, deps.deserialize(old), deps.deserialize(new)):
+            if sk.startswith(CR_PREFIXES):
+                if handle_cr_change(deps, sk, deps.deserialize(old), deps.deserialize(new)):
+                    sent += 1
+            elif handle_change(deps, deps.deserialize(old), deps.deserialize(new)):
                 sent += 1
         except Exception as e:  # one bad record or device never holds up the stream
             log("error", "notify.failed", error=type(e).__name__)

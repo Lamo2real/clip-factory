@@ -580,3 +580,311 @@ def test_no_chat_changes_nothing() -> None:
     b.chat = None
     assert CHAT_NOTE not in system_prompt(b) and "chat" not in brief_json(b)
     assert "Chat spikes" not in hints(b, 0, 4000)
+
+
+# --- Content Rewards campaigns (§38.13): without a campaign, every prompt, schema, brief and file is byte for byte ---
+
+# sha256 (first 16 hex) of what origin/main at b4f8149 (before §38 was built) produced for the inputs below.
+BEFORE_CAMPAIGNS = {
+    "look": "c3f809d4c79def9d",
+    "verify_system": "47e573279efb94d1",
+    "review": "07e4a087d695bb30",
+    "review_schema": "f5b829f9e890f57d",
+    "captions": "c8493cf1bf35dba3",
+    "ass": "376959cb8d5c466e",
+    "graph": "2fdfeb0d00f77998",
+    "fill": "99603f0175dc0463",
+}
+
+
+def test_without_a_campaign_every_prompt_and_file_is_byte_identical_to_before() -> None:
+    from clipfactory_agent import captions, checklist, render, verify
+    from clipfactory_agent.moments import Moment
+
+    m = Moment(
+        start=100.0,
+        end=130.0,
+        moment_type="rage",
+        hook="he thought he got away with it",
+        first_words="No way!",
+        payoff_at=128.0,
+        peak_at=120.0,
+        why="Big reaction",
+        score=7.0,
+        summary="He loses it",
+        people=["Sam"],
+        tease=(125.0, 126.5),
+    )
+    words = [[110.0, 110.4, "watch"], [110.5, 110.9, "this"]]
+    caps = [{"t0": 0.5, "t1": 1.0, "text": "WATCH THIS"}]
+    r = render.RenderResult(Path("clip.mp4"), Path("cover.jpg"), 27.5, [(100, 127.5)], caps, "facecam_top", True)
+    ph = render.phrases([render.TimedWord(0.5, 0.8, "no"), render.TimedWord(0.8, 1.1, "way")])
+    parts = render.layout_parts(Facecam(0.7, 0.05, 0.25, 0.3), 1920, 1080, peak=5.0)
+    graph = render.filter_graph(
+        [(20.0, 21.5), (2.0, 10.0)], parts, Path("/tmp/cf-work/J/clips/00/captions.ass"), True, tease=True
+    )
+    now = {
+        "look": digest(verify.look_text(m, words, None, 97, 133)),
+        "verify_system": digest(verify.VERIFY_SYSTEM),
+        "review": digest(checklist.review_prompt(m, r, "#GTA6", seen="[1.0s] (seen) crash 9/10")),
+        "review_schema": digest(json.dumps(checklist.review_schema(None), sort_keys=True)),
+        "captions": digest(captions.prompt([captions.ClipText("c1", m, "watch this")], "#GTA6")),
+        "ass": digest(render.build_ass("he thought he got away with it", ph, 20.0)),
+        "graph": digest(graph),
+        "fill": digest(";".join(render.layout_parts(None, 1920, 1080))),
+    }
+    assert now == BEFORE_CAMPAIGNS
+    b = brief()
+    assert b.campaign is None
+    assert digest(system_prompt(b)) == BEFORE["system"]
+    assert digest(json.dumps(brief_json(b), sort_keys=True)) == BEFORE["brief"]
+    assert "campaign" not in brief_json(b) and "Campaign:" not in system_prompt(b)
+    assert checklist.review_schema(None) is checklist.REVIEW_SCHEMA
+
+
+# --- §39.3: a job without ``remake`` sends and writes exactly what it did before the campaign copy ----------------
+
+from clipfactory_agent import pipeline as pipeline_mod  # noqa: E402
+from clipfactory_agent import proc, sources  # noqa: E402
+from clipfactory_agent.render import RenderResult  # noqa: E402
+
+# sha256 (first 16 hex) of what origin/main at 806deb9 (before §39 was built) sent and wrote for the runs below: every
+# model request, every file, the finder's brief, every clip, every section the Cut step read and the pipeline's own
+# job writes. Only two job fields are new since, on every job: ``source.channelKeys`` and ``sourceLanguage``.
+BEFORE_COPIES = {
+    "link": {
+        "requests": "66a839bd7d370f8a",
+        "files": "82d3faa27d45fe43",
+        "brief": "cc9e3d975250db60",
+        "clips": "e60154a4f029e310",
+        "cuts": "bac985facdf5a632",
+        "writes": "04949f4b7f964eb7",
+    },
+    "upload": {
+        "requests": "66a839bd7d370f8a",
+        "files": "0872a31b19b0464a",
+        "brief": "d5bb1a0c6b6095c3",
+        "clips": "6c6257697968d5b5",
+        "cuts": "e086ea24508c5744",
+        "writes": "9bc3d175be732c53",
+    },
+    "campaign": {
+        "requests": "b22e45e284152ca2",
+        "files": "1c98321fd1db6b58",
+        "brief": "2e61c767507848aa",
+        "clips": "6ec5edfc51f70291",
+        "cuts": "bac985facdf5a632",
+        "writes": "5f6649f69e7d32e0",
+    },
+}
+
+
+def _plain(value: Any) -> Any:
+    if isinstance(value, bytes):
+        return {"bytes": hashlib.sha256(value).hexdigest()}
+    return str(value)
+
+
+def _dump(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, default=_plain)
+
+
+def frozen_run(world: Any, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Makes a World run repeatable (ids, times) and has its Cut step read the video the way the real one does."""
+    ids = iter(f"01ID{n:022d}" for n in range(1000))
+    monkeypatch.setattr(pipeline_mod, "ulid", lambda: next(ids))
+    monkeypatch.setattr(pipeline_mod, "now_iso", lambda: "2026-11-21T10:00:00.000Z")
+    cuts: list[dict[str, Any]] = []
+    inner = pipeline_mod.render_clip
+
+    async def render_clip(m: Any, *, workdir: Path, fetch_section: Any, **kw: Any) -> RenderResult:
+        await fetch_section(m.start - 2, m.end + 1.5, workdir / "section.mp4")
+        return await inner(m, workdir=workdir, fetch_section=fetch_section, **kw)
+
+    async def download_section(url: str, start: float, end: float, dest: Path, *a: Any, **kw: Any) -> Path:
+        cuts.append({"how": "section", "url": url, "start": start, "end": end, "dest": dest.name})
+        return dest
+
+    async def ffmpeg_cut(src: str, start: float, end: float, dest: Path) -> Path:
+        cuts.append({"how": "file", "src": src, "start": start, "end": end, "dest": dest.name})
+        return dest
+
+    async def run(args: list[str], **kw: Any) -> proc.Result:
+        Path(args[-1]).parent.mkdir(parents=True, exist_ok=True)
+        Path(args[-1]).write_bytes(b"audio")  # an upload's sound, taken out with ffmpeg
+        return proc.Result(b"", "")
+
+    monkeypatch.setattr(pipeline_mod, "render_clip", render_clip)
+    monkeypatch.setattr(pipeline_mod.sources, "download_section", download_section)
+    monkeypatch.setattr(pipeline_mod.Pipeline, "_ffmpeg_cut", staticmethod(ffmpeg_cut))
+    monkeypatch.setattr(proc, "run", run)
+    return cuts
+
+
+def run_digests(world: Any, cuts: list[dict[str, Any]]) -> dict[str, str]:
+    requests = sorted(digest(_dump(r)) for r in [*world.fable.requests, *world.nova.requests])
+    files = sorted(f"{k} {hashlib.sha256(v).hexdigest()}" for k, v in world.store.files.items())
+    writes = []
+    for write in world.store.writes:
+        if "heartbeatAt" in write:
+            continue  # the Tracker's steps and progress (timed)
+        w = {k: v for k, v in write.items() if k != "sourceLanguage"}
+        if "source" in w:
+            w["source"] = {k: v for k, v in w["source"].items() if k != "channelKeys"}
+        if w:
+            writes.append(w)
+    b = world.briefs[0]
+    return {
+        "requests": digest("\n".join(requests)),
+        "files": digest("\n".join(files)),
+        "brief": digest(system_prompt(b) + _dump(brief_json(b))),
+        "clips": digest(_dump(world.store.clips)),
+        "cuts": digest(_dump(sorted(cuts, key=_dump))),
+        "writes": digest(_dump(writes)),
+    }
+
+
+def copy_world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str) -> Any:
+    from .test_campaign import UUID, job_campaign
+    from .test_pipeline import World
+
+    w = World(tmp_path, monkeypatch)
+    if kind == "upload":
+        w.store.job["source"] = {"type": "upload", "key": "uploads/u/video.mp4", "filename": "v.mp4"}
+        w.store.files["uploads/u/video.mp4"] = b"mp4"
+    if kind == "campaign":
+        w.store.job["campaignId"] = UUID
+        w.store.job["campaign"] = job_campaign(logo={"required": False, "rules": None})
+        del w.store.job["campaign"]["logoKey"]
+        w.info = {**w.info, "channel": "FaZe Clan", "uploader_id": "@FaZeClan"}
+        w.fable.handlers["submit_review"] = lambda kw: {
+            **dict.fromkeys(("zero_context", "pays_off", "hook_ok", "follows_rules"), True),
+            **dict.fromkeys(("zero_context_note", "pays_off_note", "hook_note", "follows_rules_note"), ""),
+            **{"new_hook": None, "move_start_by": 0, "move_end_by": 0, "verdict": "keep"},
+        }
+
+        async def render_clip(m: Any, *, workdir: Path, marks: Any = None, **kw: Any) -> RenderResult:
+            workdir.mkdir(parents=True, exist_ok=True)
+            (workdir / "clip.mp4").write_bytes(b"clip")
+            (workdir / "cover.jpg").write_bytes(b"cover")
+            caps = [{"t0": 0.0, "t1": 1.0, "text": "w1 w2"}]
+            return RenderResult(
+                workdir / "clip.mp4", workdir / "cover.jpg", 30.0, [(m.start, m.end)], caps, "blur_fill", False,
+                logo=False, disclosure=bool(marks and marks.disclosure),
+            )  # fmt: skip
+
+        monkeypatch.setattr(pipeline_mod, "render_clip", render_clip)
+    return w
+
+
+@pytest.mark.parametrize("kind", ["link", "upload", "campaign"])
+async def test_a_job_without_remake_sends_and_writes_what_it_did_before(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    w = copy_world(tmp_path, monkeypatch, kind)
+    cuts = frozen_run(w, monkeypatch)
+    status, _, _ = await w.run()
+    assert status == "ready" and "remake" not in w.store.job
+    assert run_digests(w, cuts) == BEFORE_COPIES[kind]
+    # the only new job fields: the video channel's keys (a link) and the language Transcribe heard; no copy fields
+    source = next(x for x in w.store.writes if "source" in x)["source"]
+    if kind == "upload":
+        assert "channelKeys" not in source
+    else:
+        assert source["channelKeys"] == sources.channel_keys(w.info)
+    assert [x for x in w.store.writes if "sourceLanguage" in x] == [{"sourceLanguage": "en-US"}]
+    assert all("remakeOf" not in c and "remakes" not in c for c in w.store.clips)
+
+
+# --- the API's channel cases (§39.5): its fit check ports the agent's channel rule, so both read one file ---------
+
+CHANNEL_CASES = Path(__file__).resolve().parents[2] / "api" / "tests" / "fixtures" / "channel_match_cases.json"
+INFO_FIELDS = ("channel", "uploader", "creator", "uploader_id", "channel_id")  # what sources.channel_keys reads
+VERDICT_KEYS = ("matches", "match")  # the API's file says "matches"; both names are read, so neither is missed
+
+
+def verdict(case: dict[str, Any]) -> tuple[bool, Any]:
+    """Whether the case gives the API's answer, and that answer (true, false, or null: nothing can be said)."""
+    for key in VERDICT_KEYS:
+        if key in case:
+            return True, case[key]
+    return False, None
+
+
+def case_info(case: dict[str, Any]) -> dict[str, Any] | None:
+    """The video's yt-dlp fields for one case: its own ``info``; else made from the stored facts the API reads
+    (``channelKeys`` whenever the case has it, even empty, as the API's rule reads it; else ``channel`` and
+    ``channelId``), which the agent's rule then reads the same way. None: a case the agent can't put as yt-dlp's."""
+    if isinstance(case.get("info"), dict):
+        return dict(case["info"])
+    keys = case["channelKeys"] if "channelKeys" in case else case.get("keys")
+    if isinstance(keys, list):
+        if len(keys) > len(INFO_FIELDS) or not all(isinstance(k, str) for k in keys):
+            return None
+        return dict(zip(INFO_FIELDS, keys, strict=False))
+    facts = {"channel": case.get("channel"), "channel_id": case.get("channelId")}
+    return {k: v for k, v in facts.items() if isinstance(v, str) and v}
+
+
+def channel_cases() -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """``channel_match_cases.json`` (written by the API's ``cr_fit_cases.py``): a list of cases, or ``{"cases": [...]}``,
+    each with the campaign's ``channels``, the video's facts and the API's answer ``matches`` (true, false, or null
+    when nothing can be said)."""
+    doc = json.loads(CHANNEL_CASES.read_text(encoding="utf-8"))
+    cases = doc.get("cases") if isinstance(doc, dict) else doc
+    out = []
+    for case in cases or []:
+        if isinstance(case, dict) and isinstance(case.get("channels"), list):
+            info = case_info(case)
+            if info is not None:
+                out.append((case, info))
+    return out
+
+
+def assert_channel_case(case: dict[str, Any], info: dict[str, Any]) -> None:
+    """One case: the keys the agent writes on the job (when the case gives yt-dlp's fields and the keys), and the
+    agent's rule giving the API's answer; null (the API can't tell) is where the agent lets the job go on."""
+    name = case.get("name")
+    if isinstance(case.get("info"), dict) and isinstance(case.get("channelKeys"), list):
+        assert sources.channel_keys(info) == case["channelKeys"], name
+    has, expected = verdict(case)
+    if not has:
+        return
+    got = sources.from_allowed_channel(info, case["channels"])
+    assert expected is None or isinstance(expected, bool), (name, expected)
+    assert got is (True if expected is None else expected), (name, expected, got)
+
+
+@pytest.mark.skipif(not CHANNEL_CASES.is_file(), reason="written by the API's cr_fit_cases.py (§39.4, builder G)")
+def test_the_apis_channel_cases_hold_for_the_agents_rule() -> None:
+    cases = channel_cases()
+    assert cases, "channel_match_cases.json has no case the agent can read"
+    assert any(verdict(case)[0] for case, _ in cases), f"no case gives its answer as one of {VERDICT_KEYS}"
+    for case, info in cases:
+        assert_channel_case(case, info)
+
+
+SAMPLE_CASES = [  # the shapes the API's file may take; each passes, and a wrong answer is caught
+    {"channels": [{"name": "FaZe Clan", "url": None}], "info": {"channel": "FaZe Clan"}, "matches": True},
+    {"channels": [{"name": "FaZe Clan", "url": None}], "info": {"channel": "Valorant Daily"}, "matches": False},
+    {"channels": [{"name": "FaZe Clan", "url": None}], "info": {"channel": "FaZe Clan"}, "match": True},
+    {"channels": [{"name": "FaZe Clan", "url": None}], "channelKeys": ["valorantdaily"], "matches": False},
+    {"channels": [{"name": "FaZe Clan", "url": None}], "channelKeys": [], "channel": "FaZe Clan", "matches": None},
+    {"channels": [{"name": "FaZe Clan", "url": None}], "channel": "FaZe Clan", "channelId": "UC1", "matches": True},
+    {"channels": [], "info": {"channel": "FaZe Clan"}, "channelKeys": ["fazeclan"], "matches": None},
+]
+
+
+@pytest.mark.parametrize("case", SAMPLE_CASES)
+def test_every_shape_of_a_channel_case_is_checked(case: dict[str, Any]) -> None:
+    info = case_info(case)
+    assert info is not None
+    assert_channel_case(case, info)
+    has, expected = verdict(case)
+    assert has
+    if isinstance(expected, bool):  # the opposite answer fails: the verdict really is compared
+        with pytest.raises(AssertionError):
+            assert_channel_case({**case, VERDICT_KEYS[0]: not expected, VERDICT_KEYS[1]: not expected}, info)
+    # keys given, even none, are the only facts read: "channel" beside an empty list is not looked at
+    if case.get("channelKeys") == [] and "info" not in case:
+        assert info == {}

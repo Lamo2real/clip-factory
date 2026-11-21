@@ -28,6 +28,10 @@ export const facebook: SetupGuide = {
           open: { label: "Open your Pages", url: "https://www.facebook.com/pages/?category=your_pages" },
           ifYouSee: [
             {
+              see: "your Page in a business portfolio",
+              do: "Keep your own access too: Page **Settings** › **Page access**. Your account needs **Full control**.",
+            },
+            {
               see: "**Manage connection** after **Edit profile** on your Page",
               do: "If it shows your Instagram name, it is linked. Close it. Never press **Disconnect**. Press I did this.",
             },
@@ -197,15 +201,16 @@ export const facebook: SetupGuide = {
           icon: "globe",
           title: "Make the app Live",
           say: [
-            "In the left menu, press **Publish**. Check the list, then press **Publish** at the bottom right.",
+            "In the left menu, press **Publish**. Check the list. Press **Go live** at the bottom right.",
             "No **Publish** in the menu? Flip the **App Mode** switch to **Live**.",
             "Meta says info is missing? Go back to Fill in Basic settings.",
+            "Press I did this when the top bar says **Live**.",
           ],
           gate: "app_live",
           ifYouSee: [
             {
-              see: "Meta asking for **App Review** first",
-              do: "Your Reels stay visible only to you for now. Tell Clip Factory support.",
+              see: "**App Review** or **Advanced access**",
+              do: "You do not need it for your own Page. Skip it. Press **Go live**. Meta still says no? It lists what is missing. Go back to Fill in Basic settings.",
             },
           ],
         },

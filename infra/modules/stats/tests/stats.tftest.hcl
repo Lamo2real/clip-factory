@@ -208,8 +208,9 @@ run "functions_match_the_contract" {
       TABLE_NAME                = "cf-test-data"
       STATS_TIME_BUDGET_SECONDS = "240"
       SECRET_PREFIX             = "cf-test/platforms/"
+      CONTENT_REWARDS           = "off" # §38.16 module default
     })
-    error_message = "cf-prod-stats gets exactly TABLE_NAME, STATS_TIME_BUDGET_SECONDS = 240 and SECRET_PREFIX (§17.9)."
+    error_message = "cf-prod-stats gets exactly TABLE_NAME, STATS_TIME_BUDGET_SECONDS = 240, SECRET_PREFIX (§17.9) and CONTENT_REWARDS off (§38.16)."
   }
 
   assert {
@@ -479,4 +480,28 @@ run "hooks_url_must_be_https" {
   }
 
   expect_failures = [var.hooks_url]
+}
+
+# docs/CONTRACTS.md §38.16: Content Rewards checking rides the stats tick (no new schedule). Off by default; on with
+# the switch, and a changed brief may start a rules read on cf-prod-campaigns.
+run "content_rewards_switch_and_grant" {
+  command = plan
+
+  variables {
+    content_rewards_enabled = true
+    campaigns_function_arn  = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"
+  }
+
+  assert {
+    condition = (one(aws_lambda_function.fn["stats"].environment).variables["CONTENT_REWARDS"] == "on" &&
+    one(aws_lambda_function.fn["stats"].environment).variables["CAMPAIGNS_FUNCTION_ARN"] == "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns")
+    error_message = "cf-prod-stats gets CONTENT_REWARDS on and CAMPAIGNS_FUNCTION_ARN."
+  }
+
+  assert {
+    condition = one([for s in jsondecode(aws_iam_role_policy.fn["stats"].policy).Statement : s if try(s.Sid, "") == "Campaigns"]) == {
+      Sid = "Campaigns", Effect = "Allow", Action = ["lambda:InvokeFunction"], Resource = ["arn:aws:lambda:eu-north-1:123456789012:function:cf-test-campaigns"]
+    }
+    error_message = "cf-prod-stats may invoke cf-prod-campaigns (a rules read) and nothing else new."
+  }
 }

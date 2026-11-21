@@ -15,3 +15,5 @@ posted by themselves after you connect. New clips you keep are posted.
 
 **If a clip did not post**, its page says why in one sentence and what to press, for example "Connect YouTube again
 in Settings › Posting › Set up posting, then press Try again."
+
+---

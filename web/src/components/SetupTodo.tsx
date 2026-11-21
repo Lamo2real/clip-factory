@@ -391,6 +391,9 @@ function TodoPanel({ onClose, finished, total, children }: { onClose: () => void
 }
 
 function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Platform) => void; onUnskip: (p: Platform) => Promise<boolean> }) {
+  // The Content Rewards pages have their own one vermilion button (§38.1): there the list's Set up is glass.
+  const routeName = useRoute().name;
+  const quietGo = routeName === "cr_setup" || routeName === "campaigns" || routeName === "campaign";
   return (
     <ul className="setup-todo__rows" aria-label="Places to set up">
       {rows.map((row) => {
@@ -412,7 +415,7 @@ function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Pla
             </span>
             {row.state === "ready" ? null : (
               <span className="todo-row__actions">
-                <LinkButton href={`/settings/posting/setup/${row.platform}`} size="sm" variant="action" className="todo-row__go" aria-label={`Set up ${name}`}>
+                <LinkButton href={`/settings/posting/setup/${row.platform}`} size="sm" variant={quietGo ? "glass" : "action"} className="todo-row__go" aria-label={`Set up ${name}`}>
                   Set up
                 </LinkButton>
                 {finished ? (

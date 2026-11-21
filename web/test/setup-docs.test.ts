@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { allSteps, GUIDES, SETUP_ORDER } from "../src/setup/index.ts";
+import { crAllSteps } from "../src/setup/contentrewards.ts";
 
 // docs/SETUP_POSTING.md says the same steps as the app (docs/CONTRACTS.md §17.12): under each platform's heading,
 // every step title appears. The docs builder writes that file; until it lands this check waits for it.
@@ -28,4 +29,13 @@ describe.skipIf(!present)("docs/SETUP_POSTING.md matches the in-app steps", () =
       for (const s of allSteps(GUIDES[p])) expect(section, s.title).toContain(s.title);
     });
   }
+
+  // §38.19 (F writes it): the Content Rewards titles sit under "## Content Rewards", checked once that heading exists.
+  const crHeading = lines.some((l) => /^##\s+Content Rewards\b/.test(l));
+  it.skipIf(!crHeading)("has every Content Rewards step title under ## Content Rewards", () => {
+    const at = lines.findIndex((l) => /^##\s+Content Rewards\b/.test(l));
+    const end = lines.findIndex((l, i) => i > at && /^##\s/.test(l));
+    const section = lines.slice(at, end < 0 ? lines.length : end).join("\n");
+    for (const s of crAllSteps()) expect(section, s.title).toContain(s.title);
+  });
 });

@@ -44,14 +44,19 @@ fn main() {
     }
     println!("cargo:rustc-env=CF_MEDIA_HOST_RESOLVED={media}");
 
-    // The page may call exactly these app commands, and only through the runtime capability main.rs adds for the
-    // app's own address (mac_fetch::capability). capabilities/main.json grants none of them.
+    // The page may call exactly these app commands, and only through the runtime capabilities main.rs adds for the
+    // app's own address (mac_fetch::capability, cr_connect::capability). capabilities/main.json grants none of them.
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "mac_fetch_start",
             "mac_fetch_status",
             "mac_fetch_upload",
             "mac_fetch_cancel",
+            // Connect Content Rewards (docs/CONTRACTS.md §38.15): the one-time sign-in door.
+            "cr_connect_listen",
+            "cr_connect_open",
+            "cr_connect_result",
+            "cr_connect_cancel",
         ]),
     ))
     .expect("tauri build step");

@@ -57,8 +57,8 @@ run "notify_reads_job_changes_and_can_never_delete" {
   command = plan
 
   assert {
-    condition     = one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern == jsonencode({ eventName = ["MODIFY"], dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }] } } } })
-    error_message = "cf-test-notify reads only MODIFY records of JOB# items."
+    condition     = one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern == jsonencode({ eventName = ["MODIFY"], dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }] } } } })
+    error_message = "cf-test-notify reads only MODIFY records of JOB# items and the Content Rewards CAMPAIGN#, CRSUB#, CRMONEY and CRCONN items (§38.11), one pattern."
   }
 
   assert {

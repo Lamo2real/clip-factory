@@ -1,0 +1,216 @@
+// Money › All your money (docs/CONTRACTS.md §39.2): every place's money over one 30-day period, in one glass card at the
+// top of the page, with one total per currency. Only money a platform or Content Rewards reported, never calculated,
+// guessed, converted or typed in: every sum is the server's (GET /v1/money/everywhere), the web only formats it. A
+// place that tells apps nothing says "Not available from TikTok" and where to look, never $0. No vermilion here: at
+// most one glass button at each row's right end. An API from before §39 (404) shows nothing.
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { api, friendlyMessage } from "../../api/index.ts";
+import { ApiError } from "../../api/errors.ts";
+import type { MoneyEverywhere, MoneyPlace } from "../../api/types.ts";
+import { Icon } from "../../components/Icon.tsx";
+import { PlatformMark } from "../../components/PlatformMark.tsx";
+import { Button, LinkButton } from "../../components/ui.tsx";
+import { usd } from "../../lib/contentRewards.ts";
+import { onLiveSignal } from "../../lib/live.ts";
+import { formatMoney } from "../../lib/money.ts";
+import { OpenButton } from "../campaigns/bits.tsx";
+import { Rich } from "../settings/setup/bits.tsx";
+
+export const ALL_MONEY_TITLE = "All your money";
+export const NOTHING_TO_ADD = "Nothing to add up yet.";
+export const TWO_MONIES = "Different money, like dollars and euros, is never added together.";
+export const PAID_OUT = "Paid out to your bank: not available from Content Rewards. Look on Whop: **Balances**.";
+/** The Monthly card's line while Content Rewards is on All your money (§39.2). */
+export const APPS_ONLY = "Apps only. Content Rewards is in All your money.";
+
+export type EverywhereLoad = { state: "loading"; data: null } | { state: "off"; data: null } | { state: "error"; data: null; error: string } | { state: "ok"; data: MoneyEverywhere };
+
+/** GET /v1/money/everywhere, read again on live news (a resync, Content Rewards' money). 404: an API before §39. */
+export function useMoneyEverywhere(): EverywhereLoad & { reload: () => void } {
+  const [load, setLoad] = useState<EverywhereLoad>({ state: "loading", data: null });
+  const seq = useRef(0);
+  const reload = useCallback(() => {
+    const mine = ++seq.current;
+    api()
+      .getMoneyEverywhere()
+      .then((data) => mine === seq.current && setLoad({ state: "ok", data }))
+      .catch((e: unknown) => {
+        if (mine !== seq.current) return;
+        if (e instanceof ApiError && e.status === 404) setLoad({ state: "off", data: null });
+        else setLoad((l) => (l.state === "ok" ? l : { state: "error", data: null, error: friendlyMessage(e) }));
+      });
+  }, []);
+  useEffect(() => {
+    reload();
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const off = onLiveSignal((s) => {
+      if (s.kind !== "resync" && s.event.type !== "contentrewards" && s.event.type !== "setup") return;
+      if (t) clearTimeout(t);
+      t = setTimeout(reload, 800);
+    });
+    return () => {
+      off();
+      if (t) clearTimeout(t);
+    };
+  }, [reload]);
+  return { ...load, reload };
+}
+
+/** "2:10 pm" (the time Content Rewards' numbers are from, in this device's time). */
+export function clockTime(iso: string | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(d).replace(/\s?([AP])M$/i, (_m, x: string) => ` ${x.toLowerCase()}m`);
+}
+
+/** The Content Rewards row's small lines, in money's time order; each number only when Content Rewards reported it. */
+export function crLines(cr: NonNullable<MoneyPlace["cr"]>): string[] {
+  const now = [
+    cr.stillEarningCents !== null ? `Still earning ${usd(cr.stillEarningCents)}` : null,
+    cr.readyToMoveCents !== null ? `Ready to move to Whop ${usd(cr.readyToMoveCents)}` : null,
+    cr.onItsWayCents !== null ? `On its way to Whop ${usd(cr.onItsWayCents)}` : null,
+  ].filter((x): x is string => !!x);
+  const at = clockTime(cr.asOf);
+  return [
+    ...(now.length ? [`Right now (Content Rewards says${at ? `, ${at}` : ""}): ${now.join(" · ")}`] : []),
+    `Earned so far, since you started: ${cr.paidSoFarCents == null ? "Checking…" : usd(cr.paidSoFarCents)}`,
+    PAID_OUT,
+  ];
+}
+
+function Mark({ place }: { place: MoneyPlace["place"] }) {
+  return (
+    <span className={`cr-all__mark is-${place}`} aria-hidden="true">
+      {place === "contentrewards" ? <Icon name="coin" size={20} /> : <PlatformMark platform={place} size={20} />}
+    </span>
+  );
+}
+
+/** The row's one glass button at its right end: its own, else the where line's Open, else Content Rewards' "See it all". */
+function RowButton({ p }: { p: MoneyPlace }) {
+  if (p.button) {
+    return p.button.external ? (
+      <OpenButton label={p.button.label} href={p.button.href} size="sm" />
+    ) : (
+      <LinkButton href={p.button.href} variant="glass" size="sm" iconAfter="chevronRight">
+        {p.button.label}
+      </LinkButton>
+    );
+  }
+  if (p.where?.button) return <OpenButton label={p.where.button.label} href={p.where.button.url} size="sm" />;
+  if (p.place === "contentrewards" && p.state !== "not_set_up")
+    return (
+      <LinkButton href="/money#content-rewards" variant="glass" size="sm" iconAfter="chevronRight">
+        See it all
+      </LinkButton>
+    );
+  return null;
+}
+
+function Row({ p }: { p: MoneyPlace }) {
+  const number = p.state === "number";
+  return (
+    <li className={`cr-all__row is-${p.state}`} data-place={p.place} data-state={p.state}>
+      <Mark place={p.place} />
+      <div className="cr-all__words">
+        <p className="cr-all__name">{p.name}</p>
+        <p className="cr-all__headline">{p.headline}</p>
+        {number
+          ? p.amounts.map((a) => (
+              <p key={a.currency} className="cr-all__amount" data-currency={a.currency}>
+                {formatMoney(a.amountMicros, a.currency)}
+              </p>
+            ))
+          : null}
+        {number && p.tag ? <p className="cr-all__tag money-tag">{p.tag}</p> : null}
+        {p.why ? <p className="cr-all__why">{p.why}</p> : null}
+        {p.note ? <p className="cr-all__note">{p.note}</p> : null}
+        {p.where ? <p className="cr-all__where">{p.where.text}</p> : null}
+        {p.cr && p.state !== "not_set_up" ? (
+          <ul className="cr-all__cr">
+            {crLines(p.cr).map((l) => (
+              <li key={l}>
+                <Rich text={l} />
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      <div className="cr-all__button">
+        <RowButton p={p} />
+      </div>
+    </li>
+  );
+}
+
+/** "YouTube + Content Rewards". */
+function namesOf(m: MoneyEverywhere, ids: readonly string[]): string {
+  return ids.map((id) => m.places.find((p) => p.place === id)?.name ?? id).join(" + ");
+}
+
+export function AllMoney({ load }: { load: EverywhereLoad & { reload: () => void } }) {
+  const id = useId();
+  if (load.state === "off") return null;
+  if (load.state === "loading") return <section className="cr-all glass is-loading" aria-hidden="true" data-help="money-everywhere" />;
+  if (load.state === "error")
+    return (
+      <section className="cr-all glass" data-help="money-everywhere" aria-labelledby={`${id}-t`}>
+        <h2 className="cr-all__title" id={`${id}-t`}>
+          {ALL_MONEY_TITLE}
+        </h2>
+        <p className="cr-all__why" role="alert">
+          {load.error}
+        </p>
+        <div className="cr-all__button">
+          <Button variant="glass" size="sm" icon="retry" act="retry" onClick={load.reload}>
+            Try again
+          </Button>
+        </div>
+      </section>
+    );
+  const m = load.data;
+  return (
+    <section className="cr-all glass" data-help="money-everywhere" aria-labelledby={`${id}-t`}>
+      <div className="cr-all__head">
+        <h2 className="cr-all__title" id={`${id}-t`}>
+          {ALL_MONEY_TITLE}
+        </h2>
+        <p className="cr-all__period">
+          Every place · {m.periodText}
+          {m.lagNote ? ` · ${m.lagNote}` : ""}
+        </p>
+      </div>
+      <ul className="cr-all__rows" aria-label="Every place">
+        {m.places.map((p) => (
+          <Row key={p.place} p={p} />
+        ))}
+      </ul>
+      <div className="cr-all__total" data-total={m.totals.length ? "yes" : "none"}>
+        {m.totals.length ? (
+          m.totals.map((t) => (
+            <div key={t.currency} className="cr-all__sum" data-currency={t.currency}>
+              <p className="cr-all__total-line">
+                <span className="cr-all__total-label">Total: </span>
+                <span className="cr-all__total-num">{formatMoney(t.amountMicros, t.currency)}</span>
+              </p>
+              <p className="cr-all__total-where">
+                {namesOf(m, t.places)} · {m.periodText}
+              </p>
+              <p className="cr-all__tag money-tag">{t.tag}</p>
+            </div>
+          ))
+        ) : (
+          <p className="cr-all__nothing">{NOTHING_TO_ADD}</p>
+        )}
+        {m.totals.length > 1 ? <p className="cr-all__why">{TWO_MONIES}</p> : null}
+        {m.notCountedText ? <p className="cr-all__why">{m.notCountedText}</p> : null}
+      </div>
+    </section>
+  );
+}
+
+/** Whether All your money has a Content Rewards row (then the Monthly card says it is apps only). */
+export function crRowOf(load: EverywhereLoad): MoneyPlace | null {
+  return load.state === "ok" ? (load.data.places.find((p) => p.place === "contentrewards") ?? null) : null;
+}

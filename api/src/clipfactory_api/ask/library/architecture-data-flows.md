@@ -764,7 +764,8 @@ holds the Instagram account id, the Page id and that Page's access token, which 
 
 **Gates.** What each platform still has to allow is a gate on the setup: YouTube `published_app` (the Google app must
 be **In production**, or tokens die after 7 days), TikTok `app_review` and `posting_audit` (until both pass, posts are
-"Only me"), Facebook `app_live` (Reels stay visible to the owner until the app is Live), X `credits`. A platform is
+"Only me"), Instagram and Facebook `app_live` (Reels stay visible to the owner until each Meta app is Live), X
+`credits`. A platform is
 **ready** when it is connected and no gate needs the owner.
 
 **Posting.** The clip flow ([flow 7](#7-clip-flow-publish-wait-48-hours-learn)) asks `SecretsTokenProvider` for the
@@ -853,3 +854,286 @@ events on the WebSocket the app already holds. The search key is the owner's own
 (`cf-prod/ask/search-key`). Everything Ask knows about the app is a generated pack shipped in the zip
 (`api/src/clipfactory_api/ask/knowledge.json`, `ask/library/`), behind the owner's skills and cached for an hour.
 When the socket, the model or the assistant switch is not there, the panel answers with §17 (above) instead.
+
+### 19. Content Rewards campaigns (CONTRACTS §38, ADR-62)
+
+The owner joins a paid clipping campaign on Content Rewards (CR), pastes its link into Clip Factory, and every clip
+made for it follows its rules and is sent to CR inside CR's 30-minute window
+([CONTRACTS.md §38](CONTRACTS.md#38-content-rewards-campaigns-owner-request-2026-11-21),
+[ADR-62](DECISIONS.md#adr-62-content-rewards-the-official-sign-in-through-the-desktop-apps-loopback-door-sending-from-the-cloud-a-reminder-when-it-cant),
+the owner's steps in [SETUP_POSTING.md](SETUP_POSTING.md#content-rewards)). Numbered **13** in the diagram.
+
+CR is **not** a sixth `Platform`: it is its own connection (`CRCONN`), its own card on Set up posting, its own routes
+under `/v1/contentrewards` and its own items. The five platforms, `GET /v1/setup`, the setup to-do list and the
+publish chain behave exactly as before when no campaign is involved. The whole feature ships switched off
+(`content_rewards_enabled = false` → `CONTENT_REWARDS=off`: every `/v1/contentrewards*` route answers 503
+`unavailable` and the clip flow sends nothing) until every part of §38.19 has merged; one last one-line PR switches it
+on ([DEPLOYMENT.md](DEPLOYMENT.md#content-rewards-contracts-38)).
+
+**Who talks to Content Rewards.** Only `cf-prod-api`, `cf-prod-clip-flow` and `cf-prod-stats`, server to server.
+Never the browser (CR answers 403 to any MCP request that carries an `Origin` header, and the token lives only in
+Secrets Manager), never the Mac (it only carries a one-time code) and never `cf-prod-campaigns` (it reads untrusted
+brand text and outside links, and has no secret access).
+
+| Host | Used for | By |
+|---|---|---|
+| `id.contentrewards.com` | OAuth: `/oauth2/register` (RFC 7591, once per install, `client_name` "Clip Factory", five loopback redirects, no secret), `/oauth2/authorize` (in the owner's system browser), `/oauth2/token`, `/oauth2/revoke` | `cf-prod-api` (register, code exchange, revoke); the three Lambdas (refresh, under the lease) |
+| `mcp.contentrewards.com/mcp` | MCP JSON-RPC: `get_me`, `list_my_campaigns`, `create_my_submission`, `list_my_submissions`, `get_my_submission`, `get_my_balance`, `list_my_payouts`, `send_feedback`; headers `Api-Version: 2026-10-01`, `MCP-Protocol-Version: 2025-11-25`, `Mcp-Name`, never `Origin`; at most 2 calls a second per container | `cf-prod-api`, `cf-prod-clip-flow`, `cf-prod-stats` |
+| `contentrewards.com/api/campaign/campaigns/{uuid}` | the public campaign JSON (undocumented): a preview for the card, read only when the owner acts (add, Check now, a card older than 10 minutes, a job's start), at most 6 a minute, cached on the item, never on a schedule and never to submit | `cf-prod-api` |
+| `crusercontent.com`, `docs.google.com`, Google Drive, Dropbox | the brand's picture (copied once, only `https://crusercontent.com/…`, ≤ 1 MB), the Google Docs a brief links to, logo links; the Google Docs and logo links go through the `ask/fetch.py` SSRF guard on every hop | `cf-prod-campaigns` |
+
+**Sign-in: the desktop app's one-shot door.** CR's sign-in only returns to `http://127.0.0.1` (no https), so the
+Mac app listens once on the computer, and the cloud keeps everything else.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Owner (Mac app window)
+  participant D as Desktop door (127.0.0.1, ports 47811-47815)
+  participant A as cf-prod-api
+  participant DB as DynamoDB
+  participant SM as Secrets Manager
+  participant B as System browser
+  participant ID as id.contentrewards.com
+  participant M as mcp.contentrewards.com
+  participant S as cf-prod-stats
+  O->>D: cr_connect_listen: first free port of five, closes after 5 minutes
+  O->>A: POST /v1/contentrewards/connect {port}
+  A->>ID: POST /oauth2/register (first time only)
+  A->>SM: cf-prod/platforms/contentrewards/app (clientId)
+  A->>DB: a CRSTATE item per nonce (port, redirectUri, exp, TTL)
+  A-->>O: authorizeUrl (signed state, PKCE S256, one resource)
+  O->>D: cr_connect_open {url} (host, S256, resource and this port checked)
+  D->>B: open the URL
+  B->>ID: sign in, allow
+  ID-->>B: 302 to the door on 127.0.0.1 with code, state and iss
+  B->>D: GET / (Host and state checked in constant time)
+  D-->>B: "Done! Go back to Clip Factory. You can close this tab."
+  O->>D: cr_connect_result every 500 ms: {status: done, code, state, iss}
+  O->>A: POST /v1/contentrewards/connect/finish {state, code, iss} (the code lives 60 s)
+  A->>DB: consume that CRSTATE item once (conditional delete)
+  A->>ID: POST /oauth2/token (code, verifier derived from the state, resource)
+  A->>M: get_me, tools/list: can it send?
+  A->>SM: under the CRCONN lease: put cf-prod/platforms/contentrewards/token, keep the VersionId
+  A->>DB: CRCONN connected or read_only, tokenVersionId, signInBy, then CROWNERS
+  A-)S: async {"action": "contentrewards", "what": "campaigns"}
+  A-->>O: {result, connection}: confetti or one sentence
+  DB-->>O: live event "contentrewards"
+```
+
+The door is macOS only (on Windows `listen` answers `unsupported` and the page shows the "browser on a computer"
+words); it binds `127.0.0.1` only, answers one good request, never sees a token and never logs or stores the code.
+The PKCE verifier is derived from the signed state, never stored. A phone or a plain browser gets "Do this step on
+your Mac"; after this one sign-in everything runs in the cloud, so a phone upload is sent too.
+
+**Tokens.** CR's access token lives 10 minutes; its refresh token is single use and rotates (a reuse more than a few
+seconds later ends the connection), dies after 30 days unused and lasts 90 days at most. So exactly one process ever
+refreshes: the `CRCONN` lease (as in §17.6), taken only with at least 20 s of Lambda time left; the secret is always
+read by the `VersionId` recorded on `CRCONN`, never a cached or "current" copy; a lost answer is retried at once with
+the same refresh token; the new secret is written put-only (a refresh can never re-create a disconnected secret)
+before the token is used. Connect and Disconnect take the same lease. The stats tick refreshes once a day to keep
+the sign-in alive, warns 7 days before `signInBy` (card and notification) and marks `needs_reconnect` after it.
+
+**Adding a campaign.** `POST /v1/contentrewards/campaigns {url}` parses the link (campaign, Discover, the Whop copy, a
+group; invite, checkout and other CR pages are refused with a sentence), reads the public preview, writes
+`CAMPAIGN#{uuid}` and starts the rules read. Membership comes from `list_my_campaigns` (pending applications are not
+listed): the page's UUID is matched to CR's `cmp_` id by its TypeID encoding, else by name, organization, access and
+rates; two same-name siblings are `ambiguous` and never sent automatically. Joining stays in the CR app (there is no
+tool to browse, join or apply). Pure code (`contentrewards/gates.py`, ported from the local app's `ruleCheck.js`)
+makes the stops, the one next step and the `uploadPlaces` every time a campaign is served.
+
+**Reading the rules** (`cf-prod-campaigns` `read`, async). The api and the stats tick store CR's listed
+`description` on the item as `brief` before they start a read, so the reader needs nothing from CR. One Bedrock
+Converse call with the clip agent's model and the local app's `RULES_SCHEMA` (ported) as a forced tool; the brief,
+the owner's pasted rules and up to 3 public Google Docs the brief links to go in as JSON-encoded untrusted blocks
+(`<` and `>` escaped). Code then checks every field: anything that can reach a caption, the screen or a link must
+appear word for word in the input; fixed disclosure words (`#Ad`, "Paid partnership"); at most 8 hashtags and 5 tags;
+CR's own toggles (drafts first, a sound, the logo) can only add stops; pay, budget, status, access and platforms
+come only from CR's own fields. A read that fails or runs past 3 minutes is `rules_failed` ("I couldn't read the
+rules. Tap Check now, or paste them below.").
+
+**A campaign job.** `POST /v1/jobs {campaignId, campaignAnyway}` checks the campaign again (`list_my_campaigns` and
+the public JSON, at most 8 s together; CR down → the stored rules and status), copies the rules onto the job
+(`Job.campaign`, internal `JobCampaign`) and the ready logo to `jobs/{jobId}/source/campaign-logo.{ext}`, so a later
+change never breaks a queued job. The agent follows `job.campaign` ([AGENT.md](AGENT.md#campaign-clips)): the length,
+banned content, the logo in a taller band above the picture, "Paid partnership" on screen for the first 3 seconds,
+"#Ad" first and every required tag in each caption. Without a campaign every prompt and file is byte for byte as
+before.
+
+**Posting a campaign clip.** Confirm (and Try again) accept only the campaign's `uploadPlaces` (paid for, ready in
+Clip Factory, not refused by CR as unlinked, TikTok only after its audit), public, never made for kids, TikTok with
+Branded content (the owner's own tap). Each post gets `campaignId` (fixed forever) and the internal
+`postOptions.campaign`. The publishers turn on paid partnership where the API has it (YouTube
+`paidProductPlacementDetails`, X `paid_partnership`, TikTok `brand_content_toggle`; Meta has no field for this kind
+of app, so the caption's `#Ad` and the words on the video carry it), and `campaign_caption` puts the disclosure and
+every required item back into a caption the owner edited. No publisher has a delete or unpublish call.
+
+**Sending** (new steps in `cf-prod-clip-flow`, [CONTRACTS.md §38.12](CONTRACTS.md#3812-submitting-a-new-step-chain-in-cf-prod-clip-flow-and-checking-folded-into-cf-prod-stats)).
+CR takes a post only while it is less than 30 minutes live, so the cloud sends it the moment it is live and public:
+
+```
+ensure-posts → publish-{platform} … finish-{platform} → cr-send-{platform}      (a post with campaignId)
+             → (each later post's chain) → cr-catchup-{platform}                  (while earlier ones still wait)
+settle-clip  → [cr-wait-{n} (60 s, no compute) → cr-retry-{n}] n = 1…26           (while any still wait)
+             → wait-48h → metrics → distil                                        (as before)
+```
+
+`submit.send` writes `CRSUB#{postId}` once (`sending`, with the `idempotency_key`, URL and CR campaign id frozen,
+`deadline` = posted + 25 min, `sendBy` = posted + 30 min) and calls `create_my_submission`. Retryable answers
+(the post not visible yet, CR busy, 5xx, a timeout that may still have gone through) are tried again with the same key
+every minute until `deadline`; then the post goes `send_by_hand` (time is left until `sendBy`) or `missed`. A CR step
+never fails the flow: any exception sets `send_by_hand` / `missed`, and `settle-clip`, the 48-hour metrics and the
+vector step always run. A clip with no campaign post has exactly the old step names.
+
+**When Clip Factory can't send** (not connected, the pilot has not granted the write scope, a campaign the owner said
+he is in by hand, an error that isn't his, or the 25 minutes ran out): the owner gets a notification "Send this to
+Content Rewards now (N min left)" that opens the clip with one "Copy and open" button. In the Mac app, which has no
+Web Push, a green banner (`CrSendNow`) shows the same line on every page.
+
+**Checking** (`contentrewards.poll.run_tick`, called by the `cf-prod-stats` tick after the platform poll, with at most
+45 s; it never raises and one owner's failure never stops another). For each `CROWNERS` owner, in this order:
+1. time only, no CR call: `send_by_hand` past `sendBy` → `missed`; a stuck `sending` → `send_by_hand`; proofs due →
+   one notification each; the pilot reminder every 3 days (at most 5); a rules read older than 3 minutes → failed;
+2. the daily keep-alive refresh and the 90-day warning;
+3. membership (`list_my_campaigns` to the end): waiting campaigns every tick for 7 days, then every 6 hours to day
+   30; joined ones every 6 hours. Newly in → "You're in!" (confetti once, a notification) and a rules read;
+4. money: `get_my_balance`, then `list_my_payouts` paid rows newest first down to a watermark (the first read pages
+   to the end across ticks and shows "Checking…" until done, with no celebration for old money), then the pending
+   rows; `reversed` rows never count;
+5. submissions due: `list_my_submissions` newest first, then `get_my_submission` for the rest; a post the owner sent
+   by hand is found by its normalized link; status, flags, removal, views, the brand's note.
+At most 25 CR calls per owner per tick. Check now on a campaign runs step 3 for it at once; the clip page's Check now
+runs step 5 for that clip; money refresh invokes step 4 through `cf-prod-stats`.
+
+**Live and notifications.** The broadcast filter gains `CAMPAIGN#`, `CRCONN`, `CRSUB#` and `CRMONEY`, each sent as one
+`contentrewards` event (`partial: true`) after which the web refetches `GET /v1/contentrewards`; `CRSTATE#` and
+`CROWNERS` never travel and internal attributes are stripped. `cf-prod-notify` takes `MODIFY` records of the same
+four, under the owner's choice "Content Rewards news" (`notify.contentRewards`, on by default): you're in, send now
+(high urgency, its TTL the seconds left), approved, not approved, proof, money, sign in again, the pilot reminder;
+each once (`NOTIFIED#cr#{key}`).
+
+**Money.** Only CR's own numbers (§25 extended): `get_my_balance` and `list_my_payouts`, in USD cents, formatted
+only. "Paid" may stand only next to CR's paid payouts. A campaign's rate × views is a guess and is never shown or
+added anywhere; CR money is never added into the MRR cards. Its paid payouts of the last 30 days are added in one
+place only: the total of All your money ([flow 20](#20-content-rewards-the-fit-check-the-copy-and-all-your-money-contracts-39-adr-63)).
+
+**Data** (additive only, [CONTRACTS.md §38.11](CONTRACTS.md#3811-data-additive-only-new-sort-keys-new-attributes-a-new-s3-prefix-new-runtime-secrets)):
+
+| Item or place | Holds |
+|---|---|
+| `USER#{id}` / `CRCONN` | the connection: status, can send, linked accounts learned from CR's answers, ticked steps, the Finance answer, pilot reminders, the lease and the token's `VersionId` (internal) |
+| `USER#{id}` / `CRSTATE#{nonce}` | one Connect in progress (TTL) |
+| `USER#{id}` / `CAMPAIGN#{uuid}` | one campaign: CR's id and match, the public copy, the brief, pasted rules, the checked rules, membership, the logo state |
+| `USER#{id}` / `CRSUB#{postId}` | one campaign post's send: the frozen key, URL and campaign, state, deadlines, CR's review, views, earned money, appeal and proof |
+| `USER#{id}` / `CRMONEY` | balance, paid total and its watermark, pending, celebrations |
+| `CROWNERS` / `USER#{id}` | the poller's list of owners |
+| `JOB#`, `CLIP#`, `POST#`, `SETTINGS` | + `campaignId`, `campaignNote`, the internal `campaign` snapshot, `paidLabel`, `postOptions.campaign`, `notify.contentRewards` |
+| media bucket `campaigns/{userId}/{uuid}/` | the logo (`logo-{rev}.{ext}`) and the brand's picture; the job's copy goes to `jobs/{jobId}/source/` |
+| Secrets Manager `cf-prod/platforms/contentrewards/{app,token}` | the registration and the token, made at runtime, never in Terraform |
+
+No table, index, Cognito pool, bucket or secret is replaced; removing a campaign or disconnecting deletes nothing on
+CR or any platform.
+
+### 20. Content Rewards: the fit check, the copy and all your money (CONTRACTS §39, ADR-63)
+
+The owner's follow-up the same day: Connect in time order, a pleasant choice between campaign clips and normal clips,
+all his money in one place, and knowing before an upload whether a clip can earn on a campaign
+([CONTRACTS.md §39](CONTRACTS.md#39-content-rewards-the-two-ways-all-your-money-and-does-this-clip-fit-owner-request-2026-11-21),
+[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards)).
+No new Lambda, table, index, bucket or secret: three routes under `/v1/contentrewards`, one under `/v1/money`, new
+attributes and one api setting. It is part of **13** in the diagram.
+
+**The two ways** live in the web. Home at `/` is frozen (no campaign field on the normal form, 5 taps to an upload,
+held by click-count tests); the campaign way is Home at `/?campaign={uuid}`, reached only from a campaign (the
+"Your campaigns" row chip, the card, a campaign video, the fit). The API helps with three public fields made in
+`contentrewards/campaigns.py`: `CampaignSummary.nextStepKind` (the row chip says "Make campaign clips" when it is
+`make_clips`), and `sourceRuleText` and `languageRuleText` (the rule lines under the link box). Every link to a setup
+page carries the `?back=` of the page it came from (`gates.next_step`'s Connect button and the `not_connected` stop's
+`fixHref` use `?back=/campaigns/{uuid}`); the web accepts only six exact same-origin shapes.
+
+**The fit check** (`contentrewards/fit.py`). One pure function, computed every time it is asked from stored items only
+(never Content Rewards, the public campaign JSON or the network), so it can never go stale and Confirm can trust it:
+
+```mermaid
+flowchart LR
+  items[("stored items: CLIP#, JOB#, CAMPAIGN#, CRCONN, POST#, CRSUB#<br/>+ gates.stops and gates.upload_places")] --> fit["contentrewards/fit.py<br/>fit(clip, job, campaign, ...) → CampaignFit"]
+  fit --> get["GET /v1/contentrewards/fit<br/>Review card, clip page (no-store)"]
+  fit --> caps["POST /v1/contentrewards/fit/captions<br/>campaign_caption per platform"]
+  fit --> gate["Confirm, Try again, Post now<br/>409 on a no, remake or todo item"]
+  fit --> copy["POST /v1/contentrewards/campaigns/{id}/remake<br/>409 unless canRemake"]
+  get --> web["web lib/crFit.ts<br/>re-checks tags, #Ad, the paid switch and the places while he types"]
+```
+
+A campaign clip (`clip.campaignId ?? job.campaignId`) is checked against its own campaign only; a normal clip against
+every campaign he is in (`in` or `manual`), newest first, at most 10, and `ClipFit.suggestion` is the first one a copy
+could fix with a `source` item that passed. Each rule is one item (`campaign`, `soft`, `deadline`, `length`,
+`places`, `place_link`, `tags`, `ad`, `paid_switch`, `logo`, `on_screen`, `source`, `language`, `banned`, `spoken`,
+`uncertain`, `brief_only`, `posted`, `one_campaign`, `send`) with a state (`ok`, `fix`, `remake`, `todo`, `no`,
+`check`, `note`) and the server's own words. The verdict, in this order: any `no` → `doesnt_fit`; a wait item (a held,
+paused or re-read campaign) → `wait`; a `remake`, `todo` or paid-switch `fix` → `fixable`; a `check` → `cant_tell`;
+else `fits`. Tag and #Ad fixes never change it, since the publisher puts them back at upload. Only exact facts can say
+no: a channel that doesn't match by name, an unknown language or a rule the reader couldn't pin down is "I couldn't
+check", never a pass and never a block. The source and language checks read `job.source.channelKeys` and
+`job.sourceLanguage`, which the agent writes; without them they say "I couldn't check". The web refetches the fit
+(debounced 1 s) on a `contentrewards` event, a `clip` event of the clip or its copy, a `post` event of the clip and a
+`setup` event; there is no new live type.
+
+**The gate on posting.** For a clip with a campaign (and `CONTENT_REWARDS=on`), Confirm runs the fit with the merged
+captions, the chosen places and the TikTok choices; any `no`, `remake` or `todo` item answers 409 `conflict` "This
+clip can't earn on FaZe Clips: {its words}" (a wait item: "Not yet for FaZe Clips: {its words}"), and `_try_again`
+(Try again and Post now) does the same. A clip without a campaign never calls the fit and posts byte for byte as
+before. `release.release_waiting` (§33.6) no longer restarts a waiting campaign post when its account comes back: it
+waits for Post now, which goes through the fit, so a campaign post never goes up days later after the campaign ended
+or was held.
+
+**The copy (remake).** A normal clip that could earn is never turned into a campaign clip in place (it has no logo and
+no "Paid partnership" on the video); a new one-clip campaign job is made from the same moment:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as Owner (Review)
+  participant A as cf-prod-api
+  participant DB as DynamoDB
+  participant S3 as S3 cf-prod-media
+  participant JF as cf-prod-job-flow
+  participant AG as Agent
+  O->>A: POST /v1/contentrewards/campaigns/{id}/remake {clipId, macFetch?, campaignAnyway?}
+  A->>DB: fit.for_clip: canRemake, and every soft stop accepted
+  A->>DB: reserve first: SET remakes.{campaignId} = {jobId, at} on the original CLIP# (conditional)
+  A->>S3: HEAD the original's kept video (jobs/{jobId}/source/video.mp4, else the Mac upload)
+  A->>DB: new JOB# like POST /v1/jobs (start_job): source, notes, one clip, campaignId, rules snapshot, logo copy, remakeOf, internal remake
+  A-)JF: async invoke, alias live
+  A-->>O: 202 {job} ("Making a FaZe Clips copy… It shows here in about 3 minutes.")
+  JF->>AG: process_job: the one moment of job.remake, no analyze, watch or select
+  AG->>DB: one CLIP# with campaignId and remakeOf {clipId, jobId}
+  DB-->>O: live clip event: the copy shows right after its original on the same Review page
+```
+
+A second call answers 200 with the job already named, so a double tap makes one copy; a failed, canceled or deleted
+job, or a declined copy, frees the reservation. A link job whose kept video is gone fetches the link again; a video file
+answers 409 "This video is gone from Clip Factory. Make new clips for this campaign." The agent's side is in
+[AGENT.md](AGENT.md#a-campaign-copy). The copy waits behind `CR_REMAKE` (Terraform `cr_remake_enabled`, default
+`false`): until then the route answers 503 "Coming soon." and `canRemake` is false, so no "could earn" line shows.
+
+**All your money** (`GET /v1/money/everywhere`, `money/everywhere.py`, pure). One period for the whole card, the 30
+days up to the Monthly card's `through` (today when no platform money is stored). It reads `MONEYSTATE#`,
+`REVENUE#{platform}#` (YouTube, and Facebook once `moneyVerified`), the Accounts, `config/monetization.json` and, while
+`CONTENT_REWARDS=on`, `CRCONN` and `CRMONEY`; it never calls a platform or Content Rewards. Platform rows sum their
+reported days in the period; Content Rewards sums `CRMONEY.paidByDay` over the same days (CR's `usd` written `USD`,
+cents to micros × 10,000: units, never a conversion). The total adds only reported rows, one per currency, biggest
+first. TikTok, Instagram and X are `not_available` with the "Look in …" line made from the config's `paidWhere`.
+`paidByDay` is filled by the money read of `cf-prod-stats` (§38.12 step 4) from the paid rows' `paid_at` day; for an
+owner whose first read finished before §39, a one-time `dayScan` (at most 8 pages a tick, only rows at or older than
+the watermark) fills it and never touches the paid total.
+
+**Data** (additive only, [CONTRACTS.md §39.3](CONTRACTS.md#393-does-this-clip-fit-the-campaign-the-fit-check)):
+
+| Item or place | New attributes |
+|---|---|
+| `JOB#{jobId}` | `remakeOf` (public), `remake` (internal), `sourceLanguage` (public, from Transcribe), `source.channelKeys` (public) |
+| `CLIP#{clipId}` | `remakes` (public, campaign → {jobId, at}), `remakeOf` (public) |
+| `CRMONEY` | `paidByDay`, `paidByDayDone`, `dayScan` (internal) |
+| api env | `CR_REMAKE` from `cr_remake_enabled` (default `false`), an in-place change |
+
+No sort key, index, table, bucket, secret or Lambda is added, and nothing that holds the owner's data is replaced.

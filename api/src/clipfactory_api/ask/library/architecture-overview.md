@@ -51,5 +51,18 @@ flowchart LR
   evl[EventBridge rule cf-prod-learn-daily, 05:00 UTC] -- "12 daily: day-7 numbers, winners, lessons" --> lrn
   lapi -- "11 help answer, optional" --> haiku[Bedrock: Claude Haiku 5.5, EU profile]
   lapi -- "11 help corpus, cached 10 min" --> cf
+  owner -- "13 Connect Content Rewards: the Mac app opens a one-shot door" --> door[["Desktop door 127.0.0.1:47811-47815, 5 minutes"]]
+  owner -- "13 sign in and allow, system browser" --> crid["id.contentrewards.com: sign-in"]
+  crid -- "13 302 to 127.0.0.1 with code and state" --> door
+  lapi -- "13 register, exchange the code, refresh, revoke" --> crid
+  lapi -- "13 Connect, Check now, Try sending again" --> crmcp["mcp.contentrewards.com/mcp: MCP, never an Origin header"]
+  lapi -- "13 public campaign JSON, only when the owner acts" --> crpub["contentrewards.com public campaign JSON"]
+  lapi -- "13 read the rules, fetch the logo: async" --> camp["Lambda cf-prod-campaigns: no secrets, no CR call"]
+  camp -- "13 rules from the brief" --> bedrock
+  camp -- "13 CAMPAIGN# rules, logo state" --> ddb
+  camp -- "13 campaigns/*" --> media
+  lapi -- "13 the CR token" --> sm
+  clf -- "13 cr-send: create_my_submission within 25 minutes" --> crmcp
+  st -- "13 tick: membership, reviews, views, money" --> crmcp
   classDef off stroke-dasharray: 5 5
 ```

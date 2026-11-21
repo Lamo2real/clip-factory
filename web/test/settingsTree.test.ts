@@ -31,6 +31,7 @@ describe("the settings tree", () => {
       "notify-stopped",
       "notify-resumed",
       "notify-steps",
+      "notify-contentrewards",
       "notify-badge",
       "notify-lock-screen",
       "notify-test",

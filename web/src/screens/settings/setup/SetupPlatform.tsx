@@ -10,7 +10,8 @@ import { Icon } from "../../../components/Icon.tsx";
 import { PlatformMark } from "../../../components/PlatformMark.tsx";
 import { ProgressRing } from "../../../components/ProgressRing.tsx";
 import { useToast } from "../../../components/Toasts.tsx";
-import { Button, ErrorPanel, Segmented, Skeleton } from "../../../components/ui.tsx";
+import { Button, ErrorPanel, LinkButton, Segmented, Skeleton } from "../../../components/ui.tsx";
+import { backLabel, backLink, parseBack, type BackLink } from "../../../lib/backLink.ts";
 import { burst } from "../../../lib/confetti.ts";
 import { useAction } from "../../../lib/motion.ts";
 import { config } from "../../../lib/config.ts";
@@ -57,7 +58,26 @@ function takeResult(): ConnectResult | null {
   return isResultCode(code) ? code : "error";
 }
 
+/**
+ * `?back=` (§39.1): the page the owner came from. It is kept for this tab while the platform's own sign-in runs, so
+ * the page still knows the way back when the platform sends him here again with `?result=`.
+ */
+function takeBack(platform: Platform): BackLink | null {
+  if (typeof location === "undefined") return null;
+  const key = `cf-setup-back:${platform}`;
+  const here = backLink(location.search);
+  try {
+    if (here) sessionStorage.setItem(key, here.href);
+    else if (new URLSearchParams(location.search).has("result")) return parseBack(sessionStorage.getItem(key) ?? "");
+    else sessionStorage.removeItem(key);
+  } catch {
+    /* no storage: the way back holds for this visit only */
+  }
+  return here;
+}
+
 export function SetupPlatform({ platform }: { platform: Platform }) {
+  const [back] = useState(() => takeBack(platform));
   const guide = GUIDES[platform];
   const { data, error, reload, put } = useSetup();
   const setup = data?.platforms.find((p) => p.platform === platform) ?? null;
@@ -90,7 +110,9 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
   const reconnect = setup?.account.status === "needs_reconnect";
   const choosing = setup?.account.status === "choose_account" && (setup.account.choices?.length ?? 0) > 0;
   // The step whose main action is the vermilion button: the current one, unless the account needs connecting again.
-  const mainStep = reconnect || choosing ? null : (progress.current?.id ?? null);
+  // With a way back (§39.1), once the platform is connected the back button is the next step.
+  const backMain = !!back && setup?.account.status === "connected";
+  const mainStep = reconnect || choosing || backMain ? null : (progress.current?.id ?? null);
 
   // ?result= from the platform: read once on arrival.
   useEffect(() => {
@@ -302,7 +324,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
           <p className={`gate-line is-${g.state}`} key="gate" role="status">
             <Icon name={g.state === "ok" ? "checkCircle" : g.state === "action" ? "alert" : "info"} size={18} />
             <span>
-              <Rich text={gateLine(g, { reviewState: reviewValue, youtubePrivacy })} />
+              <Rich text={gateLine(g, { reviewState: reviewValue, youtubePrivacy, platform })} />
             </span>
           </p>,
         );
@@ -498,6 +520,13 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
               <Icon name="info" size={18} />
               <span>{xLeaf} Clip Factory never puts links in X posts (a link costs $0.20).</span>
             </p>
+          ) : null}
+          {backMain && back ? (
+            <div className="done-panel__actions">
+              <LinkButton href={back.href} variant="primary" size="lg" icon="chevronLeft" data-help-clear="" data-setup="back">
+                {backLabel(back)}
+              </LinkButton>
+            </div>
           ) : null}
           <div className="done-panel__actions">
             <Button variant={reconnect ? "primary" : "glass"} icon="link" act="connect" loading={connecting} disabled={leaving} onClick={() => connect()}>

@@ -13,6 +13,8 @@ import { progressOf, stateLine } from "../../../lib/setupProgress.ts";
 import { isFinished, skippedNote, todoCount, todoRows, todoVisible } from "../../../lib/setupTodo.ts";
 import { GUIDES, SETUP_ORDER, timeLine } from "../../../setup/index.ts";
 import { Apple, Panel } from "../parts.tsx";
+import { CR_SETUP_PATH, crCardLine, crSetupCount, useCr } from "../../../lib/contentRewards.ts";
+import { crBridge } from "../../../lib/crConnect.ts";
 import { useSetup } from "./useSetup.ts";
 import { useSkips } from "./useSkips.ts";
 
@@ -104,6 +106,7 @@ export function SetupList() {
           );
         })}
       </ul>
+      <CrCardPart />
       {asking ? (
         <SkipConfirm
           platform={asking}
@@ -116,5 +119,54 @@ export function SetupList() {
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * "Get paid by brands" (§38.3): one glass card for Content Rewards, apart from the five platforms. It never joins the
+ * "2 of 5 ready" ring, the count or the floating setup list. An API from before §38 (404): nothing here at all.
+ */
+function CrCardPart() {
+  const cr = useCr();
+  if (cr.state === "missing" || cr.state === "loading") return null;
+  const conn = cr.state === "ok" ? cr.data.connection : (cr.data?.connection ?? null);
+  const n = crSetupCount(conn);
+  const soon = cr.state === "soon";
+  return (
+    <section className="cr-part" aria-labelledby="cr-part-title">
+      <h2 className="setup-part__title cr-part__title" id="cr-part-title">
+        Get paid by brands
+      </h2>
+      <ul className="setup-cards" aria-label="Get paid by brands">
+        <li className="setup-card-wrap glass">
+          {soon ? (
+            <div className="setup-card is-soon" data-help="cr-setup-card">
+              <span className="setup-card__mark cr-mark" aria-hidden="true">
+                <Icon name="coin" size={28} />
+              </span>
+              <span className="setup-card__text">
+                <span className="setup-card__name">Content Rewards</span>
+                <span className="setup-card__state">Coming soon</span>
+              </span>
+            </div>
+          ) : (
+            <A href={CR_SETUP_PATH} className={`setup-card cr-setup-card${n === 3 ? " is-cr-ready" : ""}`} data-cr="card" data-help="cr-setup-card">
+              <span className="setup-card__mark cr-mark" aria-hidden="true">
+                <Icon name="coin" size={28} />
+              </span>
+              <span className="setup-card__text">
+                <span className="setup-card__name">Content Rewards</span>
+                <span className="setup-card__state">{crCardLine(conn, !!crBridge())}</span>
+                <span className="setup-card__time">About 10 minutes · Free</span>
+              </span>
+              <ProgressRing value={n / 3} size={48} stroke={6} label="Content Rewards progress">
+                {n === 3 ? <Icon name="check" size={18} /> : null}
+              </ProgressRing>
+              <Icon name="chevronRight" size={20} className="icon setup-card__go" />
+            </A>
+          )}
+        </li>
+      </ul>
+    </section>
   );
 }

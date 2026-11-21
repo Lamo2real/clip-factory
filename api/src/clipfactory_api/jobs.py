@@ -42,6 +42,10 @@ INTERNAL_FIELDS = (
     "runStartedAt",
     "macCallbackId",  # the job flow's mac-done callback (§35); macFetch itself goes out through macfetch.public
     "deletingAt",  # §34: a delete fenced the job and is still removing its clips and files
+    "campaign",  # §38.5: the internal JobCampaign (the rules this job follows); campaignId and campaignNote are public
+    # §39.3: a campaign copy's moment (clipId, jobId, sourceStart, sourceEnd, layout, momentType, hook, pickedFor,
+    # sourceKey) for the agent; the public remakeOf {clipId, jobId}, sourceLanguage and source.channelKeys go out.
+    "remake",
 )
 
 START_FAILED = "Could not start. Press Try again."

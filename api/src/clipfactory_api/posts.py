@@ -23,6 +23,8 @@ POST_FIELDS = (
     "privacy",
     "nextRefreshAt",
     "error",
+    "campaignId",  # the Content Rewards campaign the post is for: set at creation, never changed (§38.11)
+    "paidLabel",  # "not_set" when the platform refused the paid-partnership switch (§38.14)
 )
 COMMON_METRICS = ("views", "likes", "comments", "shares")
 REFRESH_CLAIM = timedelta(minutes=5)  # a manual refresh counts as running for this long (§16.2)
@@ -69,7 +71,8 @@ def mark_posted(store: db.Store, post: Mapping[str, Any], published: Any, now: d
     """Writes a queued post as ``posted`` with the stats fields of §16.3 (conditional on ``status = queued``).
 
     ``published`` is a ``platforms.Published``. A post with a ``statsId`` joins the poller's sparse ``gsi2`` with its
-    first poll ``minIntervalMinutes`` after posting; a private TikTok post (no ``statsId``) never does.
+    first poll ``minIntervalMinutes`` after posting; a private TikTok post (no ``statsId``) never does. A campaign
+    post whose platform refused the paid-partnership switch (``published.paid_label``, §38.14) gets ``paidLabel``.
     Raises ``db.ConditionFailed`` when the post is no longer queued."""
     from .stats import config
 
@@ -83,6 +86,8 @@ def mark_posted(store: db.Store, post: Mapping[str, Any], published: Any, now: d
     }
     if published.platform_post_id:
         fields["platformPostId"] = published.platform_post_id
+    if getattr(published, "paid_label", None) == "not_set":
+        fields["paidLabel"] = "not_set"
     if published.stats_id and fields["privacy"] == "public":
         cfg = config.load()
         due = iso(posted_at + timedelta(minutes=cfg.platform(str(post["platform"])).min_interval))
@@ -178,6 +183,8 @@ def create_for_clip(
     clip_fields: Mapping[str, Any] | None = None,
     expect_status: Iterable[str] | None = None,
     post_options: Mapping[str, Mapping[str, Any]] | None = None,
+    campaign_id: str | None = None,
+    campaign_options: Mapping[str, Any] | None = None,
 ) -> list[Item]:
     """Creates the clip's Posts, one per chosen platform (the clip's ``uploadTo``, §33) or, when the clip has none,
     one per platform enabled in settings, and returns all its posts (public shape).
@@ -187,6 +194,8 @@ def create_for_clip(
     posts are created exactly once even when Confirm and the clip-flow's ``ensure-posts`` step race or repeat.
     When the flag is already set nothing is written. Raises ``db.ConditionFailed`` if the condition fails.
     ``post_options`` (per platform) are stored on that platform's post as the internal ``postOptions`` (§17.8).
+    A campaign clip's posts (§38.14) get the public ``campaignId`` and, in every post's ``postOptions``, the internal
+    ``campaign`` (``campaign_options``: paid partnership, disclosure, required items).
     """
     clip_id = str(clip["clipId"])
     if clip.get("postsCreated"):
@@ -212,7 +221,11 @@ def create_for_clip(
             "clipId": clip_id,
             "platform": platform,
             "status": "queued" if platform in connected else "pending_integration",
+            **({"campaignId": campaign_id} if campaign_id else {}),
         }
+        options = dict((post_options or {}).get(platform) or {})
+        if campaign_options is not None:
+            options["campaign"] = dict(campaign_options)
         created.append(post)
         items.append(
             {
@@ -225,7 +238,7 @@ def create_for_clip(
                 "createdAt": now,
                 "flowRun": run,
                 **post,
-                **({"postOptions": dict(post_options[platform])} if post_options and platform in post_options else {}),
+                **({"postOptions": options} if options or (post_options and platform in post_options) else {}),
             }
         )
     update = db.update_request(

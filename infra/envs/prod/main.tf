@@ -205,6 +205,9 @@ module "flows" {
   platform_secrets_arn       = module.hooks.platform_secrets_arn
   platform_token_secrets_arn = module.hooks.platform_token_secrets_arn
 
+  # §38.12: campaign posts go to Content Rewards only while the switch is on.
+  content_rewards_enabled = var.content_rewards_enabled
+
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
 }
@@ -234,6 +237,31 @@ module "stats" {
   platform_token_secrets_arn = module.hooks.platform_token_secrets_arn
   # §24: the follow tick gives Twitch {hooks_url}/hooks/twitch as the webhook callback.
   hooks_url = module.hooks.hooks_url
+  # §38.12: Content Rewards checking rides the stats tick; a changed brief starts a rules read.
+  content_rewards_enabled = var.content_rewards_enabled
+  campaigns_function_arn  = module.contentrewards.campaigns_function_arn
+
+  # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
+  permissions_boundary_arn = var.role_permissions_boundary_arn
+}
+
+# Content Rewards campaigns (docs/CONTRACTS.md §38.16): cf-prod-campaigns reads a campaign's rules, fetches a logo
+# link and copies the brand's picture. Additive: a new function, role, policy and log group; no secret access at all,
+# and the CR secrets are made at runtime, never here. Off (CONTENT_REWARDS=off) until the switch PR.
+module "contentrewards" {
+  source                  = "../../modules/contentrewards"
+  name                    = local.name
+  region                  = var.region
+  account_id              = local.account_id
+  lambda_zip_path         = var.lambda_zip_path
+  table_name              = module.data.table_name
+  table_arn               = module.data.table_arn
+  media_bucket            = module.storage.media_bucket
+  media_bucket_arn        = module.storage.media_bucket_arn
+  model_id                = local.model_id
+  model_invoke_arns       = local.model_invoke_arns
+  app_url                 = module.frontend.app_url
+  content_rewards_enabled = var.content_rewards_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
@@ -305,6 +333,11 @@ module "api" {
   # Notifications (§32.3): read the VAPID key (its public half, "Send a test").
   vapid_secret_name = module.notify.vapid_secret_name
   vapid_secret_arn  = module.notify.vapid_secret_arn
+  # Content Rewards (§38.8, §38.16): 503 on every /v1/contentrewards route until the switch is on.
+  content_rewards_enabled = var.content_rewards_enabled
+  campaigns_function_arn  = module.contentrewards.campaigns_function_arn
+  # §39.3: the campaign copy of a clip (CR_REMAKE), on since its switch PR.
+  cr_remake_enabled = var.cr_remake_enabled
 
   # Every cf-prod-* role carries the deploy role's permissions boundary (docs/DEPLOYMENT.md, infra/bootstrap).
   permissions_boundary_arn = var.role_permissions_boundary_arn
@@ -405,6 +438,7 @@ module "monitoring" {
     module.money.function_names,
     module.ask.function_names,
     module.notify.function_names,
+    module.contentrewards.function_names,
   )
   schedule_rule_names    = merge(module.stats.schedule_rule_names, module.money.schedule_rule_names)
   durable_function_names = module.flows.durable_function_names
