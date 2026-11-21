@@ -1,6 +1,7 @@
 /* The campaign finder (docs/CONTRACTS.md §41.1): the Campaigns page's entry card, Home's chips, and /campaigns/find.
    Glass and soft fills only (no lines), the arrow cursor everywhere (no cursor rules), targets of 44 px (48 on phones),
-   and on phones the screen's one vermilion pinned at the bottom right (the shared .cr-pin). */
+   and the screen's one vermilion pinned at the bottom right while its card is on screen (the shared .cr-pin): on
+   phones as everywhere, and on this page at every width (on a wide screen it was below the fold). */
 
 /* ---------- The entry card on /campaigns ---------- */
 .finder-entry {
@@ -113,6 +114,15 @@
   padding: 16px var(--inset);
   border-radius: var(--r-lg);
 }
+/* Focused by the page when the add by itself brings it (its button takes the focus ring when it has one). */
+.finder-in:focus {
+  outline: none;
+}
+.finder-in__sub {
+  margin: 0;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
 .finder-in__text {
   display: flex;
   align-items: flex-start;
@@ -197,12 +207,6 @@
 }
 .finder-chip[aria-disabled="true"]:active {
   transform: none;
-}
-.finder-chip-note {
-  padding-inline: 6px;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  color: var(--ink-2);
 }
 .finder-want__note {
   margin: 0;
@@ -371,11 +375,24 @@
   gap: 12px;
   min-width: 0;
 }
+.finder-steps__lead {
+  margin: 0;
+  font-weight: 650;
+}
 .finder-match__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+}
+
+/* The rules box's foot (NextStep's RulesBox, here and on the §38.4 card): a glass Paste at the left, the count. */
+.cr-rules-box__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
 }
 
 /* ---------- Under the matches ---------- */

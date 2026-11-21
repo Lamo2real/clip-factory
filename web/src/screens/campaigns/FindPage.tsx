@@ -1,16 +1,18 @@
 // Find campaigns (/campaigns/find, docs/CONTRACTS.md §41.1): what the owner wants, set once; the campaigns on Content
 // Rewards' public pages that match it, ranked by the server; "Open on Content Rewards" on every match, and once he
 // joined there, "I joined: add it" (or, signed in, the add by itself when he comes back). The web never decides a
-// match: every match, line and count is the server's. One vermilion button on the screen, or none while he waits.
+// match: every match, line and count is the server's. One vermilion button on the screen, or none while he waits; on
+// this page it is pinned at the bottom right at every width while its card is on screen (on a wide screen it was
+// below the fold).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { CampaignSummary, FinderMatch, FinderWant } from "../../api/types.ts";
+import type { Campaign, CampaignSummary, FinderMatch, FinderWant } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { Button, ErrorPanel, LinkButton, PageHeader, Skeleton } from "../../components/ui.tsx";
-import { CAMPAIGNS_PATH, campaignPath, makeClipsPath, reloadCr, shortDay, useCrOnReturn, useNow, usePinMain } from "../../lib/contentRewards.ts";
+import { Button, LinkButton, PageHeader, Skeleton } from "../../components/ui.tsx";
+import { CAMPAIGNS_PATH, campaignPath, makeClipsPath, reloadCr, shortDay, useCrOnReturn, useNow } from "../../lib/contentRewards.ts";
 import {
   ASK_MESSAGE,
   FIRST_SHOWN,
@@ -37,12 +39,13 @@ import { PLATFORM_LABEL } from "../../lib/format.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { navigate } from "../../lib/router.ts";
 import { CR_DISCOVER } from "../../setup/contentrewards.ts";
+import { Rich } from "../settings/setup/bits.tsx";
 import { useSetup } from "../settings/setup/useSetup.ts";
 import { accountLinks } from "./CampaignsPage.tsx";
 import { Note, OpenButton } from "./bits.tsx";
 import { FinderMatchCard } from "./FinderMatchCard.tsx";
 import { FinderWant as WantCard } from "./FinderWant.tsx";
-import { RULES_MAX } from "./NextStep.tsx";
+import { RULES_MAX, anywayCodes } from "./NextStep.tsx";
 
 export const FIND_LEDE = "Campaigns on Content Rewards that pay what you want. I look 4 times a day.";
 export const LOAD_FAILED = "Couldn't load. Tap Try again.";
@@ -54,12 +57,25 @@ function useNewsOff(): boolean {
   return session.me?.settings.notify?.contentRewards === false;
 }
 
-/** One "You're in!" row of this visit (§41.1). The newest row's button is the screen's vermilion. */
-function InRow({ c, main, pinned }: { c: CampaignSummary; main: boolean; pinned: boolean }) {
+/** The row's fields a campaign's newer copy updates. */
+function fromCampaign(r: CampaignSummary, c: Campaign): CampaignSummary {
+  return { ...r, nextStepKind: c.nextStep.kind, nextStepText: c.nextStep.text, chip: c.nextStep.chip, membership: c.membership, name: c.name };
+}
+
+/**
+ * One "You're in!" row of this visit (§41.1). The newest row's button is the screen's vermilion. A soft stop (§38.4's
+ * `anyway`, e.g. half the money used) shows its sentence here with "Make clips anyway", so he never needs the card.
+ */
+function InRow({ c, main, pinned, busy, onAnyway }: { c: CampaignSummary; main: boolean; pinned: boolean; busy: boolean; onAnyway: () => void }) {
   const reading = c.nextStepKind === "stop" && /^Reading the rules/.test(c.nextStepText);
+  const anyway = c.nextStepKind === "anyway";
   const btn = reading ? (
     <Button variant="glass" size="lg" disabled icon="clock">
       {READING}
+    </Button>
+  ) : anyway ? (
+    <Button variant={main ? "primary" : "glass"} size={main ? "lg" : "md"} icon="scissors" loading={busy} data-help-clear={main ? "" : undefined} onClick={onAnyway}>
+      Make clips anyway
     </Button>
   ) : c.nextStepKind === "make_clips" ? (
     <LinkButton href={makeClipsPath(c.campaignId)} variant={main ? "primary" : "glass"} size={main ? "lg" : "md"} icon="scissors" data-help-clear={main ? "" : undefined}>
@@ -71,13 +87,18 @@ function InRow({ c, main, pinned }: { c: CampaignSummary; main: boolean; pinned:
     </LinkButton>
   );
   return (
-    <li className="finder-in glass" data-campaign={c.campaignId}>
+    <li className="finder-in glass" data-campaign={c.campaignId} tabIndex={-1}>
       <p className="finder-in__text">
         <Icon name="checkCircle" size={22} />
         <span>
           <strong>You&apos;re in!</strong> <span className="user-text">{c.name.slice(0, 300)}</span> is in your campaigns.
         </span>
       </p>
+      {anyway && c.nextStepText ? (
+        <p className="finder-in__sub">
+          <Rich text={c.nextStepText} />
+        </p>
+      ) : null}
       <div className={pinned && main && !reading ? "finder-in__main cr-pin" : "finder-in__main"}>{btn}</div>
     </li>
   );
@@ -85,9 +106,15 @@ function InRow({ c, main, pinned }: { c: CampaignSummary; main: boolean; pinned:
 
 export function FindPage() {
   const f = useFinder();
+  // Every visit reads GET …/finder again (the first one of the app's session is the store's own read): a place set
+  // up meanwhile sends no live news, and the GET also starts the match-only look for it (§41.5).
+  const firstState = useRef(f.state);
+  useEffect(() => {
+    if (firstState.current !== "loading") void reloadFinder();
+  }, []);
   const setup = useSetup();
   const toast = useToast();
-  const pin = usePinMain();
+  const pin = true;
   const newsOff = useNewsOff();
   const saver = useWantSaver((m) => toast.error(m));
   const now = useNow(true, 60_000);
@@ -109,6 +136,10 @@ export function FindPage() {
   const [checking, setChecking] = useState(false);
   const [limitedUntil, setLimitedUntil] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
+  const [anywayBusy, setAnywayBusy] = useState<string | null>(null);
+  // Bumped when the add by itself brings new rows: the newest is scrolled to and focused (it shows above the matches).
+  const [cheer, setCheer] = useState(0);
+  const insRef = useRef<HTMLUListElement>(null);
 
   // The "New" chips: every uuid new on this visit stays new until he leaves (§41.4).
   useEffect(() => {
@@ -121,24 +152,43 @@ export function FindPage() {
     if (data && data.state !== "looking") setSent(false);
   }, [data, setSent]);
 
-  // seenAll 2 s after the matches showed while the page is visible (and again after a live refresh).
-  const newKey = (data?.matches ?? [])
-    .filter((m) => m.isNew)
-    .map((m) => m.campaignId)
-    .join(",");
+  // seenAll once the new matches he can see have been on screen for 2 s (and again after a live refresh): only the
+  // ones drawn, and when the tab is hidden at that moment, 2 s after it shows again.
+  const newKey =
+    data && !fresh && data.state !== "off"
+      ? shownMatches(data, hidden, added)
+          .filter((m) => m.isNew)
+          .map((m) => m.campaignId)
+          .join(",")
+      : "";
   useEffect(() => {
     if (!newKey) return;
-    const t = setTimeout(() => {
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const onShow = () => {
       if (document.visibilityState !== "visible") return;
-      void api()
-        .crPatchFinder({ seenAll: true })
-        .then((next) => {
-          putFinder(next);
-          void reloadCr();
-        })
-        .catch(() => undefined);
-    }, 2000);
-    return () => clearTimeout(t);
+      document.removeEventListener("visibilitychange", onShow);
+      arm();
+    };
+    function arm() {
+      t = setTimeout(() => {
+        if (document.visibilityState !== "visible") {
+          document.addEventListener("visibilitychange", onShow);
+          return;
+        }
+        void api()
+          .crPatchFinder({ seenAll: true })
+          .then((next) => {
+            putFinder(next);
+            void reloadCr();
+          })
+          .catch(() => undefined);
+      }, 2000);
+    }
+    arm();
+    return () => {
+      if (t) clearTimeout(t);
+      document.removeEventListener("visibilitychange", onShow);
+    };
   }, [newKey]);
 
   // A look runs: read again now and then too, in case the live news is late.
@@ -148,11 +198,7 @@ export function FindPage() {
   const refreshRow = useCallback(async (campaignId: string) => {
     try {
       const c = await api().crCampaign(campaignId);
-      setAdded((rows) =>
-        rows.map((r) =>
-          r.campaignId === campaignId ? { ...r, nextStepKind: c.nextStep.kind, nextStepText: c.nextStep.text, chip: c.nextStep.chip, membership: c.membership, name: c.name } : r,
-        ),
-      );
+      setAdded((rows) => rows.map((r) => (r.campaignId === campaignId ? fromCampaign(r, c) : r)));
     } catch {
       /* the row keeps what it has */
     }
@@ -190,6 +236,9 @@ export function FindPage() {
       .then((list) => {
         if (!list.length) return;
         setAdded((rows) => mergeAdded(rows, list));
+        // The joined match leaves the list; no other match opens in its place: the row above holds the vermilion.
+        setOpenId("");
+        setCheer((n) => n + 1);
         void reloadCr();
         void reloadFinder();
       })
@@ -197,7 +246,45 @@ export function FindPage() {
   }, []);
   useCrOnReturn(onReturn, recentOpen);
 
-  const ready = useMemo(() => readyPlaces(setup.data, data?.tiktokWaits ?? true), [setup.data, data?.tiktokWaits]);
+  // The newest "You're in!" row comes into view, its button focused (the window stayed where the match was).
+  useEffect(() => {
+    if (!cheer) return;
+    const raf = requestAnimationFrame(() => {
+      const row = insRef.current?.querySelector<HTMLElement>(":scope > li");
+      if (!row) return;
+      const still = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      row.scrollIntoView?.({ block: "center", behavior: still ? "auto" : "smooth" });
+      (row.querySelector<HTMLElement>(".finder-in__main a, .finder-in__main button") ?? row).focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [cheer]);
+
+  // "Make clips anyway" on a row: the same accept the card sends (§38.4), then Make clips when that was the last stop.
+  async function makeAnyway(campaignId: string) {
+    setAnywayBusy(campaignId);
+    try {
+      const full = await api().crCampaign(campaignId);
+      const next = await api().crPatchCampaign(campaignId, { anyway: anywayCodes(full) });
+      void reloadCr();
+      if (next.nextStep.kind === "make_clips") {
+        navigate(makeClipsPath(campaignId));
+        return true;
+      }
+      setAdded((rows) => rows.map((r) => (r.campaignId === campaignId ? fromCampaign(r, next) : r)));
+      return true;
+    } catch (e) {
+      toast.error(friendlyMessage(e));
+      return false;
+    } finally {
+      setAnywayBusy(null);
+    }
+  }
+
+  // GET /v1/setup still loading (or failed): the places the server matched on, so the chips never all look unset.
+  const ready = useMemo(
+    () => (setup.data ? readyPlaces(setup.data, data?.tiktokWaits ?? true) : (data?.resolvedPlaces ?? [])),
+    [setup.data, data?.tiktokWaits, data?.resolvedPlaces],
+  );
   const accountCopies = useMemo(() => accountLinks(setup.data?.platforms), [setup.data]);
 
   if (f.state === "missing" || f.state === "soon")
@@ -217,7 +304,14 @@ export function FindPage() {
       <div className="page page--narrow finder-page" data-help="cr-finder">
         <PageHeader title="Find campaigns" lede={FIND_LEDE} />
         {f.state === "error" ? (
-          <ErrorPanel message={LOAD_FAILED} onRetry={() => void f.reload()} />
+          // The shared ErrorPanel's words, with "Try again" as this screen's one vermilion (§41.1's table).
+          <div className="error-panel glass" role="alert">
+            <Icon name="alert" />
+            <p className="error-panel__text">{LOAD_FAILED}</p>
+            <Button variant="primary" size="lg" icon="retry" act="retry" data-help-clear="" onClick={() => void f.reload()}>
+              Try again
+            </Button>
+          </div>
         ) : (
           <>
             <Skeleton className="setup-skel" />
@@ -228,8 +322,7 @@ export function FindPage() {
     );
 
   const want: FinderWant = fresh ? { ...WANT_DEFAULTS, ...data.want, ...draft } : { ...data.want, ...saver.shown };
-  const placesNow = setup.data ? ready : data.resolvedPlaces;
-  const noPlace = (fresh && placesNow.length === 0) || (data.state === "ok" && data.resolvedPlaces.length === 0);
+  const noPlace = (fresh && ready.length === 0) || (data.state === "ok" && data.resolvedPlaces.length === 0);
   const setUpFirst = placeToSetUp(setup.data);
   const off = data.state === "off";
   const looking = data.state === "looking";
@@ -238,6 +331,8 @@ export function FindPage() {
   const visible = list.slice(0, more ? 20 : FIRST_SHOWN);
   const openMatch = openId === "" ? null : (visible.find((m) => m.campaignId === openId) ?? visible[0] ?? null);
   const sourceTrouble = data.state === "down" || data.state === "blocked" || data.state === "not_allowed" || data.state === "unreadable";
+  // "Tap Look on Content Rewards yourself": that button sits right under the sentence that names it.
+  const selfInBox = sourceTrouble && data.state !== "down";
 
   // The one vermilion (§41.1's table): never two, none while a look runs.
   const main: "start" | "setup" | "again" | "row" | "match" | null = off
@@ -259,6 +354,8 @@ export function FindPage() {
   const showWant = !off && (fresh || wantOpen);
   const limited = limitedUntil && Date.parse(limitedUntil) > now ? limitedUntil : data.nextAllowedAt && Date.parse(data.nextAllowedAt) > now ? data.nextAllowedAt : null;
   const line = noPlace && !fresh ? NO_PLACE_LINE : stateLine(data, updating);
+  // No match: the state box's "Change what you want" (the folded card's Change would be a twin of it).
+  const noneBox = data.state === "ok" && !noPlace && !list.length && !data.looked.pending && !wantOpen;
 
   function change(patch: Partial<FinderWant>) {
     if (fresh) setDraft((d) => ({ ...d, ...patch }));
@@ -443,10 +540,20 @@ export function FindPage() {
     <div className="page page--narrow finder-page" data-help="cr-finder" data-state={data.state}>
       {header}
 
+      <p className="sr-only" aria-live="polite">
+        {added[0] ? `You're in! ${added[0].name.slice(0, 300)} is in your campaigns.` : ""}
+      </p>
       {added.length ? (
-        <ul className="finder-ins" aria-label="You're in">
+        <ul className="finder-ins" aria-label="You're in" ref={insRef}>
           {added.map((c, i) => (
-            <InRow key={c.campaignId} c={c} main={main === "row" && i === 0} pinned={pin} />
+            <InRow
+              key={c.campaignId}
+              c={c}
+              main={main === "row" && i === 0}
+              pinned={pin}
+              busy={anywayBusy === c.campaignId}
+              onAnyway={() => void makeAnyway(c.campaignId)}
+            />
           ))}
         </ul>
       ) : null}
@@ -467,7 +574,12 @@ export function FindPage() {
               </LinkButton>
             </div>
           ) : null}
-          {data.state === "ok" && !noPlace && !list.length && !data.looked.pending && !wantOpen ? (
+          {selfInBox ? (
+            <div className="finder-state__main">
+              <OpenButton label="Look on Content Rewards yourself" href={CR_DISCOVER} icon="search" />
+            </div>
+          ) : null}
+          {noneBox ? (
             <div className="finder-state__main">
               <Button variant="glass" icon="sliders" onClick={() => setWantOpen(true)}>
                 Change what you want
@@ -494,10 +606,11 @@ export function FindPage() {
         onDone={() => setWantOpen(false)}
         onStart={start}
         onKeepOne={() => toast.info("Keep at least one place.")}
+        hideChange={noneBox}
       />
 
       {!fresh && visible.length ? (
-        <section className={`finder-matches${updating ? " is-dim" : ""}`} aria-labelledby="finder-matches-title" inert={looking || undefined}>
+        <section className={`finder-matches${updating ? " is-dim" : ""}`} aria-labelledby="finder-matches-title">
           <h2 className="cr-section__title" id="finder-matches-title">
             Campaigns that match
           </h2>
@@ -569,9 +682,11 @@ export function FindPage() {
         </div>
       ) : null}
 
-      <div className="cr-below">
-        <OpenButton label="Look on Content Rewards yourself" href={CR_DISCOVER} icon="search" />
-      </div>
+      {selfInBox ? null : (
+        <div className="cr-below">
+          <OpenButton label="Look on Content Rewards yourself" href={CR_DISCOVER} icon="search" />
+        </div>
+      )}
 
       {data.signedIn && !fresh ? (
         <section className="finder-ask" data-help="cr-finder-ask" aria-labelledby="finder-ask-title">

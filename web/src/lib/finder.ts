@@ -17,8 +17,7 @@ export { FIND_PATH };
 
 /** What the Find page says while the API is before §41 (404) or the finder is switched off (503). */
 export const FINDER_SOON = "Find campaigns is coming soon to Clip Factory.";
-/** The page's way back to Settings' setup list, and the one setup page the no-place state sends him to. */
-export const SETUP_ANOTHER = `/settings/posting/setup?back=${FIND_PATH}`;
+/** A place's setup page, with the way back to the Find page (§41.6 change 7: only a place's own page reads `back`). */
 export const setupPlaceHref = (p: Platform) => `/settings/posting/setup/${p}?back=${FIND_PATH}`;
 
 /** The defaults literal of §41.3 (the same in the api's finder/config.py and finderapi.py). */
@@ -158,7 +157,7 @@ export function resetFinder(): void {
   for (const fn of listeners) fn();
 }
 
-/** The finder every part of the Find page shares (reads GET /v1/contentrewards/finder once per visit). */
+/** The finder every part of the Find page shares (the page reads GET /v1/contentrewards/finder again on each visit). */
 export function useFinder(): FinderSnap & { reload: () => Promise<void> } {
   const state = useSyncExternalStore(
     (fn) => {

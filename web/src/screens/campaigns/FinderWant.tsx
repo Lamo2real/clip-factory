@@ -14,7 +14,6 @@ import {
   LEFT_CHOICES,
   NO_PLACE_LINE,
   PAY_CHOICES,
-  SETUP_ANOTHER,
   pickedPlaces,
   setupPlaceHref,
   toggleIn,
@@ -39,13 +38,14 @@ function Row({ label, line, children, id }: { label: string; line?: string; chil
   );
 }
 
-function Chip({ on, disabled, onToggle, children }: { on: boolean; disabled?: boolean; onToggle: () => void; children: ReactNode }) {
+function Chip({ on, disabled, describedBy, onToggle, children }: { on: boolean; disabled?: boolean; describedBy?: string; onToggle: () => void; children: ReactNode }) {
   return (
     <button
       type="button"
       className={`check-chip upload-chip finder-chip${on ? " is-on" : ""}`}
       aria-pressed={on}
       aria-disabled={disabled || undefined}
+      aria-describedby={describedBy}
       onClick={() => {
         if (!disabled) onToggle();
       }}
@@ -75,6 +75,7 @@ export function FinderWant({
   onDone,
   onStart,
   onKeepOne,
+  hideChange = false,
 }: {
   finder: Finder;
   /** The want as it shows now (the store's copy with the changes not saved yet over it). */
@@ -97,11 +98,15 @@ export function FinderWant({
   onDone: () => void;
   onStart: () => unknown;
   onKeepOne: () => void;
+  /** The state box above already shows "Change what you want" (no match): the folded card's Change would be a twin. */
+  hideChange?: boolean;
 }) {
   const id = useId();
   const picked = pickedPlaces(want, ready);
   const notSetUp = PLATFORM_ORDER.filter((p) => p !== "tiktok" && !ready.includes(p));
   const tiktokWaits = finder.tiktokWaits;
+  // No place but TikTok is ready: "Set up a place" (there is no other one yet).
+  const noneReady = !ready.some((p) => p !== "tiktok");
 
   if (!open)
     return (
@@ -112,9 +117,11 @@ export function FinderWant({
           </h2>
           <p className="finder-want__summary">{wantSummary(want, finder.resolvedPlaces, finder.categories)}</p>
         </div>
-        <Button variant="glass" icon="sliders" onClick={onOpen}>
-          Change
-        </Button>
+        {hideChange ? null : (
+          <Button variant="glass" icon="sliders" onClick={onOpen}>
+            Change
+          </Button>
+        )}
       </section>
     );
 
@@ -164,19 +171,25 @@ export function FinderWant({
             const off = waits || !ready.includes(p);
             return (
               <li key={p} className="finder-chip-wrap">
-                <Chip on={!off && picked.includes(p)} disabled={off} onToggle={() => toggle(p)}>
+                <Chip on={!off && picked.includes(p)} disabled={off} describedBy={off && !waits && !noPlace ? `${id}-first` : undefined} onToggle={() => toggle(p)}>
                   <PlatformMark platform={p} size={18} />
                   <span className={p === "x" ? "sr-only" : undefined}>{PLATFORM_LABEL[p]}</span>
                 </Chip>
-                {off && !waits ? <span className="finder-chip-note">Set it up first.</span> : null}
               </li>
             );
           })}
         </ul>
+        {/* Once under the row (the no-place line above already says it when nothing is set up). */}
+        {notSetUp.length && !noPlace ? (
+          <p className="finder-want__note" id={`${id}-first`}>
+            Set it up first.
+          </p>
+        ) : null}
         {tiktokWaits ? <p className="finder-want__note">{TIKTOK_NOT_YET}</p> : null}
         {notSetUp.length ? (
-          <A href={SETUP_ANOTHER} className="text-link finder-want__more">
-            Set up another place
+          // A place's own setup page reads `?back=`, so "Back to Find campaigns" shows there (§41.6 change 7).
+          <A href={setupPlaceHref(notSetUp[0]!)} className="text-link finder-want__more">
+            {noneReady ? "Set up a place" : "Set up another place"}
           </A>
         ) : null}
       </Row>

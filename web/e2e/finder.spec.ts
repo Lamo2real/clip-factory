@@ -7,8 +7,8 @@ import { findOverflow, settle } from "./helpers.ts";
 // for me" → looking → six matches; "Who can join" brings the apply ones; Open → I joined: add it → the card; signed
 // in, back to the window → "You're in!" → Reading the rules… → Make clips; Home's chips and the Campaigns card; the
 // notification's page; 404, 503 and switched off hide every entry; and on every new screen: no sideways scroll, no
-// edges, big targets, the arrow cursor, AA contrast light and dark, reduced motion, the phone's vermilion bottom right
-// and Ask never over it.
+// edges, big targets, the arrow cursor, AA contrast light and dark, reduced motion, the vermilion bottom right and on
+// screen at 375 and 1440 (the Find page pins it at every width) and Ask never over it.
 
 const PHONE = { viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true } as const;
 const DESKTOP = { viewport: { width: 1440, height: 900 } } as const;
@@ -97,7 +97,7 @@ async function screenProblems(page: Page, phone: boolean): Promise<string[]> {
   return out;
 }
 
-/** The phone's vermilion: at the right, on screen (on the first screen when `first`, else once scrolled to), Ask clear. */
+/** The vermilion: at the right, on screen (on the first screen when `first`, else once scrolled to), Ask clear. */
 async function mainOnTheRight(page: Page, first = true): Promise<string[]> {
   const main = tomatoes(page);
   if (!(await main.count())) return [];
@@ -150,7 +150,7 @@ for (const [name, use] of [
       await expect(tomatoes(page)).toHaveCount(1);
       await expect(tomatoes(page)).toHaveText(/Find campaigns for me/);
       expect(await screenProblems(page, phone)).toEqual([]);
-      if (phone) expect(await mainOnTheRight(page)).toEqual([]);
+      expect(await mainOnTheRight(page)).toEqual([]);
       await tomatoes(page).click();
       await expect(page.getByText("Looking at Content Rewards' campaigns… This takes a minute or two.")).toBeVisible();
       await expect(tomatoes(page)).toHaveCount(0);
@@ -170,7 +170,34 @@ for (const [name, use] of [
       await expect(page.locator(".finder-match").nth(2).locator(".btn--primary")).toHaveCount(1);
       await expect(tomatoes(page)).toHaveCount(1);
       expect(await screenProblems(page, phone)).toEqual([]);
-      if (phone) expect(await mainOnTheRight(page)).toEqual([]);
+      expect(await mainOnTheRight(page)).toEqual([]);
+    });
+
+    test("signed in, a match that isn't the first: back from Content Rewards, the You're in! row comes into view", async ({ page, context }) => {
+      await start(page);
+      await fourPlaces(page);
+      await firstLook(page);
+      const pickle = page.locator(".finder-match", { hasText: "Clip Pro Pickleball" });
+      await pickle.locator(".finder-match__head").click();
+      await knob(page, "finder", "joinedOnCr", IDS.pickleball);
+      const popup = context.waitForEvent("page");
+      await pickle.getByRole("link", { name: /Open on Content Rewards/ }).click();
+      await (await popup).close();
+      await expect.poll(() => calls(page, "crFinderSaid")).toBeGreaterThanOrEqual(1);
+      // Where the window was: the Pickleball card, well below the top of the page.
+      await pickle.getByRole("link", { name: /Open on Content Rewards/ }).scrollIntoViewIfNeeded();
+      await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+      const row = page.locator(".finder-in").first();
+      await expect(row).toContainText("You're in! Clip Pro Pickleball: CNPL Rallies & Highlights is in your campaigns.");
+      await expect(page.locator(".finder-match.is-open")).toHaveCount(0);
+      const vh = page.viewportSize()!.height;
+      await expect
+        .poll(async () => {
+          const b = await row.locator(".finder-in__main .btn").boundingBox();
+          return !!b && b.y >= 0 && b.y + b.height <= vh;
+        })
+        .toBe(true);
+      await expect(row.locator(".finder-in__main .btn")).toBeFocused();
     });
 
     test("Who can join › Also ones I apply to brings UnGodly and Hablando", async ({ page }) => {
@@ -226,12 +253,20 @@ test.describe("desktop journeys", () => {
     await knob(page, "finder", "signedIn", false);
     await firstLook(page);
     const first = page.locator(".finder-match").first();
+    // The steps go with him: shown before Open, under On Content Rewards:.
+    await expect(first.locator(".finder-steps")).toContainText("On Content Rewards:");
+    await expect(first.locator(".finder-steps")).toContainText("Copy everything under Brief and Content requirements.");
     const popup = context.waitForEvent("page");
     await first.getByRole("link", { name: /Open on Content Rewards/ }).click();
     await (await popup).close();
     await expect(first).toContainText("Copy everything under Brief and Content requirements.");
     await expect(page.locator("[data-help='cr-finder-ask']")).toHaveCount(0);
+    // The box empty: no vermilion; I joined: add it waits, glass, right under the box.
+    await expect(tomatoes(page)).toHaveCount(0);
+    await expect(first.getByRole("button", { name: "I joined: add it" })).toHaveClass(/btn--glass/);
     await first.getByLabel("The campaign's rules").fill("Clips 20 to 60 seconds. Use #Funding in every caption.");
+    await expect(tomatoes(page)).toHaveText(/I joined: add it/);
+    expect(await mainOnTheRight(page)).toEqual([]);
     await first.getByRole("button", { name: "I joined: add it" }).click();
     await expect(page).toHaveURL(new RegExp(`/campaigns/${IDS.fundingpips}$`));
     await expect.poll(() => calls(page, "crReadCampaign")).toBeGreaterThanOrEqual(1);
@@ -268,6 +303,26 @@ test.describe("desktop journeys", () => {
       await row.getByRole("link", { name: "Make clips for this campaign" }).click();
       await expect(page).toHaveURL(new RegExp(`/\\?campaign=${IDS.pickleball}$`));
     });
+
+  test("signed in, half the money used: the row says so and Make clips anyway goes straight to Make clips", async ({ page, context }) => {
+    await start(page);
+    await fourPlaces(page);
+    await firstLook(page);
+    const first = page.locator(".finder-match").first();
+    await knob(page, "finder", "joinedOnCr", IDS.fundingpips);
+    const popup = context.waitForEvent("page");
+    await first.getByRole("link", { name: /Open on Content Rewards/ }).click();
+    await (await popup).close();
+    await expect.poll(() => calls(page, "crFinderSaid")).toBeGreaterThanOrEqual(1);
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    const row = page.locator(".finder-in", { hasText: "Fundingpips Clipping" });
+    const anyway = row.getByRole("button", { name: "Make clips anyway" });
+    await expect(anyway).toHaveClass(/btn--primary/, { timeout: 15_000 });
+    await expect(row.locator(".finder-in__sub")).not.toBeEmpty();
+    await expect(tomatoes(page)).toHaveCount(1);
+    await anyway.click();
+    await expect(page).toHaveURL(new RegExp(`/\\?campaign=${IDS.fundingpips}$`));
+  });
 
   test("an application: the apply steps with the Copy chips, then I applied: add it waits for the brand", async ({ page, context }) => {
     await start(page);
@@ -402,7 +457,32 @@ test.describe("desktop journeys", () => {
     await expect(tomatoes(page)).toHaveCount(1);
     await expect(tomatoes(page)).toHaveText(/Set up YouTube/);
     await expect(tomatoes(page)).toHaveAttribute("href", "/settings/posting/setup/youtube?back=/campaigns/find");
-    await expect(page.getByRole("link", { name: "Set up another place" })).toHaveAttribute("href", "/settings/posting/setup?back=/campaigns/find");
+    expect(await mainOnTheRight(page)).toEqual([]);
+    await expect(page.getByRole("link", { name: "Set up a place", exact: true })).toHaveAttribute("href", "/settings/posting/setup/youtube?back=/campaigns/find");
+  });
+
+  test("Set up another place opens a place's own setup, which leads back to Find campaigns", async ({ page }) => {
+    await start(page);
+    await page.goto("/");
+    await settle(page);
+    await mock(page);
+    await page.evaluate(() => (window as MockWin).__cfMock!.setup!.finish!("youtube"));
+    await page.goto(FIND);
+    await settle(page);
+    const link = page.getByRole("link", { name: "Set up another place" });
+    await expect(link).toHaveAttribute("href", "/settings/posting/setup/instagram?back=/campaigns/find");
+    await link.click();
+    await expect(page).toHaveURL(/\/settings\/posting\/setup\/instagram\?back=\/campaigns\/find$/);
+    // He finishes Instagram: the way back is the vermilion.
+    await mock(page);
+    await page.evaluate(() => (window as MockWin).__cfMock!.setup!.finish!("instagram"));
+    await page.reload();
+    await settle(page);
+    const back = page.locator("[data-setup='back']");
+    await expect(back).toHaveText(/Back to Find campaigns/);
+    await expect(back).toHaveAttribute("href", FIND);
+    await back.click();
+    await expect(page).toHaveURL(new RegExp(`${FIND}$`));
   });
 
   test("Ask Content Rewards: only while signed in, one tap, then the date", async ({ page }) => {
@@ -499,7 +579,8 @@ for (const scheme of ["light", "dark"] as const)
               .map((a) => String(((a.effect as KeyframeEffect).target as Element).className)),
           );
           for (const m of moving) failures.push(`${label}: an animation runs on ${m}`);
-          if (phone) for (const p of await mainOnTheRight(page, first)) failures.push(`${label}: ${p}`);
+          // The Find page pins its vermilion at every width; the other pages only on phones.
+          if (phone || page.url().includes(FIND)) for (const p of await mainOnTheRight(page, first)) failures.push(`${label}: ${p}`);
         };
         await page.goto(FIND);
         await check("never started");

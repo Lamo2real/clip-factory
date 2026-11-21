@@ -45,6 +45,8 @@ const { resetCr } = await import("../src/lib/contentRewards.ts");
 const { resetFinder, WANT_DEFAULTS, LIVE_DEBOUNCE_MS } = await import("../src/lib/finder.ts");
 const { CampaignsRow } = await import("../src/screens/home/CampaignsRow.tsx");
 const { CampaignsPage } = await import("../src/screens/campaigns/CampaignsPage.tsx");
+const { FindAnother } = await import("../src/components/CrPostLine.tsx");
+const { CampaignFit } = await import("../src/screens/review/CampaignFit.tsx");
 
 const U = {
   a: "c0c37381-e244-4643-98bd-edbff4bc1465",
@@ -281,11 +283,38 @@ describe("every state of §41.1's table, with its single vermilion", () => {
     expect(fake.crPatchFinder).toHaveBeenCalledWith({ want: { on: true } });
   });
 
-  it("GET failed: the shared ErrorPanel says Couldn't load. Tap Try again.", async () => {
+  it("GET failed: Couldn't load. Tap Try again., and Try again is the vermilion", async () => {
     fake.crFinder = vi.fn(async () => Promise.reject(new ApiError(500, "internal", "x")));
     await draw();
     expect(text()).toContain("Couldn't load. Tap Try again.");
-    expect(button("Try again")).toBeTruthy();
+    expect(main().map((b) => b.textContent?.trim())).toEqual(["Try again"]);
+    current = finder();
+    fake.crFinder = vi.fn(async () => structuredClone(current));
+    await tap(main()[0]);
+    expect(cards()).toHaveLength(3);
+  });
+
+  it("blocked: Look on Content Rewards yourself sits right under the sentence that names it, once", async () => {
+    current = finder({ state: "blocked" });
+    await draw();
+    const box = host.querySelector<HTMLElement>(".finder-state")!;
+    expect(button(/Look on Content Rewards yourself/, box).getAttribute("href")).toBe("https://contentrewards.com/c/discover");
+    expect([...host.querySelectorAll("a")].filter((a) => a.textContent?.includes("Look on Content Rewards yourself"))).toHaveLength(1);
+  });
+
+  it("looking again with matches: no vermilion, but every match can still be opened (nothing inert)", async () => {
+    current = finder({ state: "looking" });
+    await draw();
+    expect(main()).toHaveLength(0);
+    expect(host.querySelector("[inert]")).toBeNull();
+    for (const c of cards()) expect(button(/Open on Content Rewards/, c)).toBeTruthy();
+  });
+
+  it("no match: one Change what you want (the folded card's Change hides)", async () => {
+    current = finder({ matches: [] });
+    await draw();
+    expect([...host.querySelectorAll("button")].filter((b) => /^Change/.test(b.textContent?.trim() ?? ""))).toHaveLength(1);
+    expect(button("Change what you want")).toBeTruthy();
   });
 
   for (const err of [new ApiError(404, "not_found", "x"), new ApiError(503, "unavailable", "x")])
@@ -299,6 +328,29 @@ describe("every state of §41.1's table, with its single vermilion", () => {
 });
 
 describe("a match", () => {
+  it("Open on Content Rewards is built from the uuid, never the reply's url", async () => {
+    current = finder({ matches: [match(U.a, { url: "https://evil.example/x" }), match("not-a-uuid", { url: "https://evil.example/y" })] });
+    await draw();
+    expect(button(/Open on Content Rewards/, cards()[0]!).getAttribute("href")).toBe(`https://contentrewards.com/c/campaigns/${U.a}`);
+    expect(button(/Open on Content Rewards/, cards()[1]!).getAttribute("href")).toBe("https://contentrewards.com/c/discover");
+  });
+
+  it("the steps show before Open, under On Content Rewards:, above the vermilion Open", async () => {
+    current = finder({ signedIn: false });
+    await draw();
+    const card = cards()[0]!;
+    const steps = card.querySelector<HTMLElement>(".finder-steps")!;
+    expect(steps.textContent).toContain("On Content Rewards:");
+    expect(steps.textContent).toContain("Tap Join Campaign.");
+    expect(steps.textContent).toContain("Copy everything under Brief and Content requirements.");
+    // The fold, the box and the add only after Open.
+    expect(card.textContent).not.toContain("If you see…");
+    expect(card.querySelector("textarea")).toBeNull();
+    const open = main()[0]!;
+    expect(open.textContent).toContain("Open on Content Rewards");
+    expect(steps.compareDocumentPosition(open) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("Not for me on the open match hides it and opens the next; Undo takes it back", async () => {
     await draw();
     await tap(button("Not for me", cards()[0]!));
@@ -324,6 +376,10 @@ describe("a match", () => {
     await tap(button(/Open on Content Rewards/, cards()[0]!));
     expect(text()).toContain("Tap Join Campaign.");
     expect(text()).toContain("Does the big button now say Submit clip? Then tap I joined: add it.");
+    // What to do now comes first, right under the head: the steps, then the add, then the pay.
+    const body = cards()[0]!.querySelector<HTMLElement>(".finder-match__body")!;
+    expect(body.firstElementChild!.classList.contains("finder-steps")).toBe(true);
+    expect(body.textContent).not.toContain("On Content Rewards:");
     expect(main().map((b) => b.textContent?.trim())).toEqual(["I joined: add it"]);
     expect(button(/Open on Content Rewards/, cards()[0]!).className).toContain("btn--glass");
     await act(async () => {
@@ -358,16 +414,34 @@ describe("a match", () => {
     expect(text()).toContain("Copy everything under Brief and Content requirements.");
     expect(text()).toContain("Come back. Paste it below, then tap I joined: add it.");
     expect(host.querySelector("[data-help='cr-finder-ask']")).toBeNull();
+    // The box empty: I joined: add it is glass, in place right under the box, never pinned; no vermilion yet.
+    expect(main()).toHaveLength(0);
+    expect(button("I joined: add it").className).toContain("btn--glass");
+    expect(host.querySelector(".cr-pin")).toBeNull();
     const box = host.querySelector<HTMLTextAreaElement>("textarea")!;
     await act(async () => {
       const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
       set.call(box, "Clips 20 to 60 seconds. Use #Ad.");
       box.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    // The rules in the box: now it is the vermilion, pinned at the end of the card.
+    expect(main().map((b) => b.textContent?.trim())).toEqual(["I joined: add it"]);
+    expect(main()[0]!.closest(".cr-pin")).not.toBeNull();
     await tap(button("I joined: add it"));
     expect(fake.crFinderAdd).toHaveBeenCalledWith(U.a);
     expect(fake.crReadCampaign).toHaveBeenCalledWith(U.a, "Clips 20 to 60 seconds. Use #Ad.");
     expect(location.pathname).toBe(`/campaigns/${U.a}`);
+  });
+
+  it("the rules box's Paste puts in what he copied", async () => {
+    const readText = vi.fn(async () => "Clips 20 to 60 seconds.");
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { readText } });
+    current = finder({ signedIn: false, matches: [match(U.a, { opened: new Date().toISOString() })] });
+    await draw();
+    await tap(button("Paste", cards()[0]!));
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("Clips 20 to 60 seconds.");
+    expect(main().map((b) => b.textContent?.trim())).toEqual(["I joined: add it"]);
   });
 
   it("There are no rules to copy adds it without rules", async () => {
@@ -429,6 +503,13 @@ describe("by itself, once signed in", () => {
     const reading = button("Reading the rules… (about 30 seconds)");
     expect(reading.getAttribute("aria-disabled")).toBe("true");
     expect(main()).toHaveLength(0);
+    // No other match opens in its place; the row is said out loud and its button takes the focus.
+    expect(host.querySelector(".finder-match.is-open")).toBeNull();
+    expect(host.querySelector("[aria-live='polite'].sr-only")!.textContent).toBe("You're in! Clip Pro Pickleball is in your campaigns.");
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    });
+    expect(document.activeElement).toBe(button("Reading the rules… (about 30 seconds)"));
     // The campaign's live update: its rules are read.
     fake.crCampaign = vi.fn(async () => ({ campaignId: U.b, name: "Clip Pro Pickleball", membership: "in", nextStep: { kind: "make_clips", chip: "You're in", text: "You're in! Make clips for this campaign." } }) as Campaign);
     await live({ type: "contentrewards", op: "upsert", id: `campaign:${U.b}`, partial: true });
@@ -446,6 +527,42 @@ describe("by itself, once signed in", () => {
     expect(text()).toContain("You're in! Clip Pro Pickleball is in your campaigns.");
     expect(main().map((b) => b.textContent?.trim())).toEqual(["Make clips for this campaign"]);
     expect(cards()).toHaveLength(1);
+  });
+
+  it("a soft stop on the row (half the money used): its sentence and Make clips anyway, then straight to Make clips", async () => {
+    current = finder({ matches: [match(U.a, { opened: new Date().toISOString() }), match(U.b)] });
+    const row = {
+      campaignId: U.a,
+      name: "Fundingpips Clipping",
+      brand: "Fundingpips",
+      state: "active",
+      membership: "in",
+      uploadPlaces: ["youtube"],
+      waitingClips: 0,
+      clipCounts: { approved: 0, waiting: 0, notApproved: 0 },
+      checkedAt: "2026-11-21T14:10:00Z",
+      chip: "You're in",
+      nextStepText: "Half the money is used. Post soon, before it runs out.",
+      hardStops: 0,
+      nextStepKind: "anyway",
+    } as CampaignSummary;
+    fake.crFinderJoined = vi.fn(async () => [row]);
+    fake.crCampaign = vi.fn(
+      async () =>
+        ({ campaignId: U.a, name: "Fundingpips Clipping", membership: "in", anyway: ["low_rate"], stops: [{ code: "budget_half", hard: false, text: "Half the money is used." }], nextStep: { kind: "anyway", chip: "You're in", text: "Half the money is used." } }) as unknown as Campaign,
+    );
+    fake.crPatchCampaign = vi.fn(async () => ({ campaignId: U.a, name: "Fundingpips Clipping", membership: "in", nextStep: { kind: "make_clips", chip: "You're in", text: "Make clips." } }) as unknown as Campaign);
+    await draw();
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await flush();
+    const r = host.querySelector<HTMLElement>(".finder-in")!;
+    expect(r.textContent).toContain("Half the money is used. Post soon, before it runs out.");
+    expect(main().map((b) => b.textContent?.trim())).toEqual(["Make clips anyway"]);
+    await tap(main()[0]);
+    expect(fake.crPatchCampaign).toHaveBeenCalledWith(U.a, { anyway: ["low_rate", "budget_half"] });
+    expect(`${location.pathname}${location.search}`).toBe(`/?campaign=${U.a}`);
   });
 
   it("not signed in: coming back adds nothing by itself", async () => {
@@ -510,8 +627,44 @@ describe("what you want and the rest of the page", () => {
     expect(chip("TikTok").getAttribute("aria-pressed")).toBe("false");
     expect(text()).toContain("TikTok: not yet. TikTok keeps Clip Factory's posts private until it checks the app, and private posts can't earn.");
     expect(chip("Facebook").getAttribute("aria-disabled")).toBe("true");
-    expect(text()).toContain("Set it up first.");
-    expect(button("Set up another place").getAttribute("href")).toBe("/settings/posting/setup?back=/campaigns/find");
+    // Said once under the row, and each place not set up points to it.
+    expect(text().split("Set it up first.")).toHaveLength(2);
+    const note = [...host.querySelectorAll("p")].find((p) => p.textContent === "Set it up first.")!;
+    expect(chip("Facebook").getAttribute("aria-describedby")).toBe(note.id);
+    expect(chip("X").getAttribute("aria-describedby")).toBe(note.id);
+    // The first place not set up, whose own page reads back= (Back to Find campaigns, change 7).
+    expect(button("Set up another place").getAttribute("href")).toBe("/settings/posting/setup/facebook?back=/campaigns/find");
+  });
+
+  it("nothing set up: the link says Set up a place, and the no-place line says Set it up first once", async () => {
+    fake.getSetup = vi.fn(async () => setupOf([]));
+    current = finder({ state: "new", matches: [], resolvedPlaces: [] });
+    await draw();
+    expect(button("Set up a place").getAttribute("href")).toBe("/settings/posting/setup/youtube?back=/campaigns/find");
+    expect(text()).not.toContain("Set it up first.");
+  });
+
+  it("GET /v1/setup failed: the chips follow the places the server matched on", async () => {
+    const { forgetLoaded } = await import("../src/lib/hooks.ts");
+    forgetLoaded();
+    fake.getSetup = vi.fn(async () => Promise.reject(new ApiError(500, "internal", "x")));
+    await draw();
+    await tap(button("Change"));
+    const chip = (name: string) => [...host.querySelectorAll<HTMLElement>(".finder-chip")].find((c) => c.textContent?.includes(name))!;
+    expect(chip("YouTube").getAttribute("aria-pressed")).toBe("true");
+    expect(chip("YouTube").getAttribute("aria-disabled")).toBeNull();
+    expect(chip("Instagram").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("each visit reads the finder again: a place set up meanwhile shows when he comes back", async () => {
+    await draw();
+    expect(fake.crFinder).toHaveBeenCalledTimes(1);
+    act(() => root.unmount());
+    root = createRoot(host);
+    current = finder({ resolvedPlaces: ["youtube", "instagram", "facebook"] });
+    await draw();
+    expect(fake.crFinder).toHaveBeenCalledTimes(2);
+    expect(text()).toContain("YouTube, Instagram, Facebook");
   });
 
   it("Tell me about new ones says when Content Rewards news is off in Settings", async () => {
@@ -554,6 +707,42 @@ describe("what you want and the rest of the page", () => {
     expect(host.querySelector("[data-help='cr-finder-ask']")!.textContent).toContain("You asked Content Rewards on 21 Nov.");
   });
 
+  it("seenAll never goes while the finder is stopped (no match is drawn)", async () => {
+    current = finder({ state: "off", want: { ...WANT_DEFAULTS, on: false }, matches: [match(U.a, { isNew: true })], newCount: 1 });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await draw();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500);
+    });
+    expect(fake.crPatchFinder).not.toHaveBeenCalled();
+  });
+
+  it("seenAll waits for the tab to show, then 2 s more", async () => {
+    let vis: DocumentVisibilityState = "hidden";
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => vis });
+    try {
+      current = finder({ matches: [match(U.a, { isNew: true }), match(U.b)], newCount: 1 });
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      await draw();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100);
+      });
+      expect(fake.crPatchFinder).not.toHaveBeenCalled();
+      vis = "visible";
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(fake.crPatchFinder).not.toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1100);
+      });
+      expect(fake.crPatchFinder).toHaveBeenCalledWith({ seenAll: true });
+    } finally {
+      Reflect.deleteProperty(document, "visibilityState");
+    }
+  });
+
   it("New chips come from the visit's frozen set, and seenAll goes 2 s after", async () => {
     current = finder({ matches: [match(U.a, { isNew: true }), match(U.b)], newCount: 1 });
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -570,6 +759,40 @@ describe("what you want and the rest of the page", () => {
 });
 
 describe("the entries elsewhere", () => {
+  it("§38.6's post line and §39.3's fit block: Find another campaign opens the Find page while the finder is on, else Discover", async () => {
+    const fit = {
+      campaignId: U.a,
+      campaignName: "FaZe Clips",
+      verdict: "doesnt_fit",
+      headline: "This clip can't earn on FaZe Clips.",
+      canUpload: false,
+      canRemake: false,
+      items: [{ rule: "campaign", state: "no", text: "FaZe Clips has ended.", fix: { kind: "open", label: "Find another campaign", href: "https://contentrewards.com/c/discover", external: true } }],
+      softCodes: [],
+      required: { disclosure: "#ad", tokens: [], phrase: null },
+      uploadPlaces: ["youtube"],
+      checkedAt: "2026-11-21T14:10:00Z",
+    } as unknown as Parameters<typeof CampaignFit>[0]["fit"];
+    const find = () => [...host.querySelectorAll<HTMLAnchorElement>("a")].filter((a) => a.textContent?.includes("Find another campaign"));
+    await draw(
+      <>
+        <FindAnother />
+        <CampaignFit clipId="clip1" fit={fit} primary={false} />
+      </>,
+    );
+    expect(find().map((a) => a.getAttribute("href"))).toEqual(["/campaigns/find", "/campaigns/find"]);
+    for (const a of find()) expect(a.getAttribute("target")).toBeNull();
+    resetCr();
+    fake.crOverview = vi.fn(async () => overview({ finder: undefined }));
+    await draw(
+      <>
+        <FindAnother />
+        <CampaignFit clipId="clip1" fit={fit} primary={false} />
+      </>,
+    );
+    expect(find().map((a) => a.getAttribute("href"))).toEqual(["https://contentrewards.com/c/discover", "https://contentrewards.com/c/discover"]);
+  });
+
   it("Home: a first chip with new matches (alone too), a last Find campaigns chip, none while stopped", async () => {
     fake.crOverview = vi.fn(async () => overview({ connection: { ...overview().connection, status: "not_connected" }, finder: { on: true, started: true, newCount: 3, matches: 6 } }));
     await draw(<CampaignsRow />);

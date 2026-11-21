@@ -44,7 +44,8 @@ OSES = frozenset({"mac", "windows", "linux", "chromeos", "ios", "android", "unkn
 # Every route name in web/src/lib/router.ts (HelpContext.page is Route["name"], §19.6; tests/test_help_pages.py checks
 # it). A skill page ranks like Settings (retrieve.boost_page); the mock-only pages (mock_oauth, motion_gallery,
 # mock_cr_consent) never reach a real API, the client sends them as "not_found", and they are accepted here only so a
-# page name can never be the reason Ask fails. The Content Rewards pages (cr_setup, campaigns, campaign) are §38.
+# page name can never be the reason Ask fails. The Content Rewards pages (cr_setup, campaigns, campaigns_find, campaign)
+# are §38/§41.
 PAGES = frozenset(
     {
         "home",
@@ -62,6 +63,7 @@ PAGES = frozenset(
         "not_found",
         "cr_setup",
         "campaigns",
+        "campaigns_find",
         "campaign",
         "mock_cr_consent",
     }

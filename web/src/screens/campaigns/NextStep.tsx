@@ -25,9 +25,26 @@ const SAID_SAVED: Record<SaidAnswer, string> = {
   joined_by_hand: "Saved: you're in.",
 };
 
-/** The rules box (≤ 8,000 characters): "Copy everything under Brief and Content requirements. Paste it here." */
+/**
+ * The rules box (≤ 8,000 characters): "Copy everything under Brief and Content requirements. Paste it here." A glass
+ * "Paste" puts in what he copied in one tap (a phone's own paste is tap, hold, Paste).
+ */
 export function RulesBox({ value, onChange, label = "The campaign's rules" }: { value: string; onChange: (v: string) => void; label?: string }) {
   const id = useId();
+  const toast = useToast();
+  async function paste() {
+    try {
+      const got = await navigator.clipboard.readText();
+      if (!got.trim()) {
+        toast.info("Nothing is copied yet. Copy everything under Brief and Content requirements first.");
+        return;
+      }
+      onChange(got.slice(0, RULES_MAX));
+    } catch {
+      document.getElementById(`${id}-rules`)?.focus();
+      toast.info("Press and hold in the box, then choose Paste.");
+    }
+  }
   return (
     <div className="field cr-rules-box">
       <label className="field__label" htmlFor={`${id}-rules`}>
@@ -42,11 +59,26 @@ export function RulesBox({ value, onChange, label = "The campaign's rules" }: { 
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
-      <span className="counter">
-        {value.length} / {RULES_MAX.toLocaleString("en-US")}
-      </span>
+      <div className="cr-rules-box__foot">
+        <Button variant="glass" size="sm" icon="paste" act="paste" onClick={() => void paste()}>
+          Paste
+        </Button>
+        <span className="counter">
+          {value.length} / {RULES_MAX.toLocaleString("en-US")}
+        </span>
+      </div>
     </div>
   );
+}
+
+/**
+ * Every soft stop "Make clips anyway" accepts for this campaign: the ones he accepted before and the ones it shows now.
+ * The API keeps exactly the list it gets (PATCH replaces `anyway`), so the old ones go with the new: else each tap
+ * would un-accept the one before. `not_connected` is a note only and is never accepted.
+ */
+export function anywayCodes(campaign: Pick<Campaign, "stops" | "anyway">): StopCode[] {
+  const now = campaign.stops.filter((s) => !s.hard && SOFT_STOPS.includes(s.code) && s.code !== "not_connected").map((s) => s.code);
+  return [...new Set([...campaign.anyway.filter((c) => SOFT_STOPS.includes(c) && c !== "not_connected"), ...now])];
 }
 
 /** "Check it yourself" and "paste the rules" as two short numbered lines (one action each, §38.1). */
@@ -187,10 +219,7 @@ export function NextStepPanel({
         </Button>
       );
     else if (b.action === "anyway") {
-      // The API keeps exactly the list it gets (PATCH replaces `anyway`), so every soft stop he ever accepted goes
-      // with the new one: else each tap would un-accept the one before.
-      const now = campaign.stops.filter((s) => !s.hard && SOFT_STOPS.includes(s.code) && s.code !== "not_connected").map((s) => s.code);
-      const codes = [...new Set([...campaign.anyway.filter((c) => SOFT_STOPS.includes(c) && c !== "not_connected"), ...now])];
+      const codes = anywayCodes(campaign);
       mainEl = (
         <Button variant={v} size="lg" icon="scissors" loading={busy === "anyway"} data-help-clear={clear} onClick={() => patch({ anyway: codes }, "anyway")}>
           {b.label}
