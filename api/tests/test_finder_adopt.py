@@ -274,6 +274,7 @@ def test_joined_adds_what_he_opened_and_joined_as_a_modify_to_in(call: Call, cr:
     item = item_of(cr) or {}
     assert (item["membership"], item["celebrate"], item["publicAt"]) == ("in", "in", read_at)
     assert crfind(cr)["added"] == {UUID: iso(now)}
+    assert ("brand_picture", (USER, UUID)) in cr.invoker.calls  # §41.2: the brand's picture, as for any add
     from clipfactory_api.push import notify
 
     class Deps:
@@ -342,6 +343,30 @@ def test_joined_at_most_every_30_seconds(call: Call, cr: Any, clock: Clock) -> N
     assert len(cr.net.calls("list_my_campaigns")) == 1
     clock.now += timedelta(minutes=3)  # past the 2-minute list cache too
     assert [s["campaignId"] for s in call("POST", f"{BASE}/joined")[1]["added"]] == [UUID]
+
+
+def test_joined_reads_a_fresh_list_after_he_joins(call: Call, cr: Any, clock: Clock) -> None:
+    seed_connection(cr, USER, clock.now)
+    seed_finder(cr, opened={UUID: iso(clock.now)})
+    seed_copy(cr, application=False)
+    cr.net.answer("list_my_campaigns", page([]))
+    assert call("POST", f"{BASE}/joined")[1] == {"added": []}  # back before he joined: an empty list, cached
+    clock.now += timedelta(seconds=31)  # he tapped Join Campaign and came back, inside the 2-minute cache
+    cr.net.answer("list_my_campaigns", page([listed(access="open")]))
+    assert [s["campaignId"] for s in call("POST", f"{BASE}/joined")[1]["added"]] == [UUID]
+    assert len(cr.net.calls("list_my_campaigns")) == 2  # one call each time: adopt's check used the fresh list
+
+
+def test_an_adopted_campaign_without_a_brand_picture_from_content_rewards(call: Call, cr: Any, clock: Clock) -> None:
+    seed_connection(cr, USER, clock.now)
+    seed_finder(cr, opened={UUID: iso(clock.now)})
+    seed_copy(cr, application=False)
+    copy = cr.store.get("CRPUBLIC", f"PUB#{UUID}")
+    copy["public"]["organization"]["logoUrl"] = "https://evil.example/y.png"
+    cr.store.put(copy)
+    cr.net.answer("list_my_campaigns", page([listed(access="open")]))
+    assert [s["campaignId"] for s in call("POST", f"{BASE}/joined")[1]["added"]] == [UUID]
+    assert not [c for c in cr.invoker.calls if c[0] == "brand_picture"]  # only a crusercontent.com picture
 
 
 def test_joined_adds_at_most_5(call: Call, cr: Any, clock: Clock) -> None:

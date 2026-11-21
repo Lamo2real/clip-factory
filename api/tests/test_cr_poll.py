@@ -771,6 +771,7 @@ def test_the_finder_hook_adopts_a_joined_campaign_with_one_list_call(
     assert (item["membership"], item["celebrate"], item["addedBy"]) == ("in", "in", "finder")
     finder = deps.store.get(db.user_pk(USER), "CRFIND") or {}
     assert finder["added"] == {UUID: iso(NOW)}
+    assert ("brand_picture", (USER, UUID)) in deps.invoker.calls  # the brand's picture, as for any add
     assert poll.membership(deps, USER, NOW) == {"due": 0}  # added: no candidate any more, no call
     assert len(fake.calls("list_my_campaigns")) == 1
 

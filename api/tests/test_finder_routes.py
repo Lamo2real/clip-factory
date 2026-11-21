@@ -36,7 +36,12 @@ ROUTES = [
 
 
 class FinderInvoker(FakeInvoker):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tries = 0  # every find invoke, the failed ones too
+
     def find(self, user_id: str | None, why: str) -> None:
+        self.tries += 1
         self._record("find", user_id, why)
 
 
@@ -338,12 +343,32 @@ def test_get_with_a_stale_matched_want_starts_one_match_only_look_per_10_minutes
     assert finds(cr) == [(USER, "want"), (USER, "want")]
 
 
-def test_a_failed_invoke_takes_looking_back(call: Call, cr: Any) -> None:
+def test_a_failed_invoke_on_get_waits_the_10_minutes(call: Call, cr: Any, clock: Clock) -> None:
+    # Taking lookingSince back is a CRFIND MODIFY: its live event makes the page GET again, which would try at once.
     seed_finder(cr, matchedWant=None)
     cr.invoker.fail = True
     body = call("GET", BASE)[1]
     assert body["state"] == "ok"
+    assert cr.invoker.tries == 1
+    kept = crfind(cr)
+    assert kept["lookingSince"] == iso(clock.now)
+    clock.now += timedelta(minutes=1)
+    call("GET", BASE)  # the live refetch
+    assert cr.invoker.tries == 1  # no invoke
+    assert crfind(cr) == kept  # and no write
+    clock.now += timedelta(minutes=10)
+    call("GET", BASE)
+    assert cr.invoker.tries == 2  # one try per 10 minutes
+
+
+def test_a_failed_invoke_after_his_tap_takes_looking_back(call: Call, cr: Any) -> None:
+    seed_finder(cr)
+    cr.invoker.fail = True
+    status, body = call("PATCH", BASE, {"want": {"access": "any"}})
+    assert status == 200
+    assert cr.invoker.tries == 1
     assert "lookingSince" not in crfind(cr)
+    assert body["finder"]["state"] == "ok"
 
 
 # --- the view -------------------------------------------------------------------------------------------------------------
@@ -409,6 +434,37 @@ def test_the_view_drops_hidden_added_and_own_and_says_opened(call: Call, cr: Any
     assert body["asOf"] == iso(now - timedelta(hours=2))
 
 
+def test_a_match_carries_only_finder_match_keys_and_short_brand_text(call: Call, cr: Any) -> None:
+    long = "B" * 400
+    stored = match(UUID, long, link="https://evil.example", isNew=False, opened="x")
+    stored["brand"] = long
+    stored["why"] = "W" * 400
+    stored["pay"][0]["link"] = "https://evil.example/pay"
+    stored["budget"]["link"] = "https://evil.example/budget"
+    stored["categories"] = [{"id": "gaming", "name": "G" * 400, "link": "https://evil.example/c"}]
+    stored["notes"] = ["one", "two", "three", "four", 5]
+    seed_finder(
+        cr,
+        matches=[stored],
+        categories=[{"id": "gaming", "name": "G" * 400, "count": 9, "link": "https://evil.example/c"}],
+        skipped=[{"code": "apply", "count": 2, "text": "2 want you to apply first.", "link": "https://evil.example"}],
+    )
+    body = call("GET", BASE)[1]
+    [shown] = body["matches"]
+    kept = {k for k, v in stored.items() if k in finderapi.MATCH_KEYS and v is not None}  # DynamoDB keeps no null
+    assert set(shown) == {*kept, "isNew"}  # no "link"; isNew from CRFIND, never the stored one
+    assert shown["isNew"] is True
+    assert (len(shown["name"]), len(shown["brand"]), len(shown["why"])) == (300, 300, 300)
+    assert "link" not in shown["pay"][0]
+    assert shown["pay"][0]["line"] == "$6.00 per 1,000 views"
+    assert set(shown["budget"]) == set(finderapi.BUDGET_KEYS)
+    assert shown["categories"] == [{"id": "gaming", "name": "G" * 300}]
+    assert shown["notes"] == ["one", "two", "three"]  # ≤ 3, text only
+    assert body["categories"] == [{"id": "gaming", "name": "G" * 300, "count": 9}]
+    assert body["skipped"] == [{"code": "apply", "count": 2, "text": "2 want you to apply first."}]
+    assert "evil" not in json.dumps(body)
+
+
 def test_resolved_places_with_tiktok_before_and_after_its_audit(call: Call, cr: Any) -> None:
     seed_setup(cr.store, USER, "youtube")
     seed_setup(cr.store, USER, "tiktok", audit="unknown")
@@ -420,6 +476,12 @@ def test_resolved_places_with_tiktok_before_and_after_its_audit(call: Call, cr: 
     seed_finder(cr, want={**finderapi.DEFAULT_WANT, "places": ["youtube", "instagram"]})
     body = call("GET", BASE)[1]
     assert (body["resolvedPlaces"], body["tiktokWaits"]) == (["youtube"], False)  # only ready places count
+    seed_setup(cr.store, USER, "tiktok", audit="unknown")  # TikTok connected, its audit not passed yet
+    body = call("GET", BASE)[1]
+    # §41.1: the TikTok chip stays off while the audit waits, whatever he picked (here a list without TikTok).
+    assert (body["resolvedPlaces"], body["tiktokWaits"]) == (["youtube"], True)
+    seed_finder(cr, want={**finderapi.DEFAULT_WANT, "places": ["youtube", "tiktok"]})
+    assert call("GET", BASE)[1]["tiktokWaits"] is True
 
 
 @pytest.mark.parametrize(

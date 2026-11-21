@@ -70,6 +70,31 @@ OPENED_MAX = 50
 ADDED_MAX = 100
 HIDDEN_MAX = 500
 MATCHES_MAX = 20
+TEXT_MAX = 300  # §41.1: brand text is plain, at most 300 characters
+LINES_MAX = 3  # §41.5: notes, headsUp and cantTell, ≤ 3 each
+
+# §41.5's FinderMatch, key by key: only these travel (``isNew`` and ``opened`` are added here, ``url`` is rebuilt).
+MATCH_KEYS = (
+    "campaignId",
+    "url",
+    "name",
+    "brand",
+    "access",
+    "kind",
+    "pay",
+    "maxPerClipCents",
+    "budget",
+    "categories",
+    "why",
+    "notes",
+    "headsUp",
+    "cantTell",
+    "hiddenRules",
+    "launchedAt",
+    "rank",
+)
+PAY_KEYS = ("platform", "line", "per1kCents", "topPer1kCents", "perPostCents", "maxPayoutCents", "geo")
+BUDGET_KEYS = ("totalCents", "leftCents", "usedPct", "line", "asOf", "tag")
 
 PICK = "Pick one of the choices shown."
 NOT_A_MATCH = "That campaign isn't in your matches any more. Tap Look again now."
@@ -255,6 +280,35 @@ def _is_new(shown_at: str | None, seen_at: datetime | None) -> bool:
     return shown is not None and shown > seen_at
 
 
+def _text(value: Any) -> Any:
+    return value[:TEXT_MAX] if isinstance(value, str) else value
+
+
+def _pick(found: Mapping[str, Any], keys: tuple[str, ...]) -> Item:
+    """Only ``keys`` of a stored row, each string cut to 300 characters (brand text is untrusted)."""
+    return {k: _text(found[k]) for k in keys if k in found}
+
+
+def _rows_of(value: Any, keys: tuple[str, ...]) -> list[Item]:
+    return [_pick(r, keys) for r in value if isinstance(r, Mapping)] if isinstance(value, list) else []
+
+
+def _match(found: Mapping[str, Any]) -> Item:
+    """A stored match as ``FinderMatch``: the §41.5 keys only, never another link or an over-long text."""
+    out = _pick(found, MATCH_KEYS)
+    if "pay" in out:
+        out["pay"] = _rows_of(out["pay"], PAY_KEYS)
+    if isinstance(out.get("budget"), Mapping):
+        out["budget"] = _pick(out["budget"], BUDGET_KEYS)
+    if "categories" in out:
+        out["categories"] = _rows_of(out["categories"], ("id", "name"))
+    for name in ("notes", "headsUp", "cantTell"):
+        if name in out:
+            lines = out[name] if isinstance(out[name], list) else []
+            out[name] = [_text(s) for s in lines if isinstance(s, str)][:LINES_MAX]
+    return out
+
+
 def shown_matches(item: Mapping[str, Any], own: Iterable[str]) -> list[Item]:
     """The stored matches minus the ones now hidden, added or already his, each with ``isNew`` and ``opened``."""
     if not started(item) or not full_want(item.get("want"))["on"]:
@@ -267,7 +321,7 @@ def shown_matches(item: Mapping[str, Any], own: Iterable[str]) -> list[Item]:
         uuid = str(found.get("campaignId") or "").lower() if isinstance(found, Mapping) else ""
         if not links.UUID.match(uuid) or uuid in drop:
             continue
-        match = {k: v for k, v in found.items() if k not in ("isNew", "opened")}
+        match = _match(found)
         match["campaignId"] = uuid
         match["url"] = links.campaign_url(uuid)  # only a link Clip Factory made
         match["isNew"] = _is_new(shown.get(uuid), seen_at)
@@ -301,10 +355,12 @@ def _looked(value: Any) -> Item:
     return {"campaigns": value if isinstance(value, int) and not isinstance(value, bool) else 0, "pending": 0}
 
 
-def _rows(value: Any, keys: tuple[str, ...], limit: int) -> list[Item]:
+def _rows(value: Any, keys: tuple[str, ...], limit: int, *, also: tuple[str, ...] = ()) -> list[Item]:
+    """The rows that have every one of ``keys``, with only ``keys`` and ``also`` (strings ≤ 300 characters)."""
     if not isinstance(value, list):
         return []
-    return [dict(r) for r in value if isinstance(r, Mapping) and all(k in r for k in keys)][:limit]
+    rows = [r for r in value if isinstance(r, Mapping) and all(k in r for k in keys)]
+    return [_pick(r, keys + also) for r in rows][:limit]
 
 
 class Context:
@@ -339,7 +395,8 @@ class Context:
             "state": state_of(item, self.reader, now),
             "want": want,
             "resolvedPlaces": self.places,
-            "tiktokWaits": gates.tiktok_waits(want_places(want), self.setups),
+            # §41.1: the TikTok chip stays off until TikTok's posting audit passes, whatever he picked.
+            "tiktokWaits": gates.tiktok_waits(STATS_ORDER, self.setups),
             "matches": [],
             "newCount": 0,
             "hiddenCount": 0,
@@ -360,7 +417,7 @@ class Context:
         out["hiddenCount"] = len(_strings(item.get("hidden")))
         out["skipped"] = _rows(item.get("skipped"), ("code", "count", "text"), 20)
         out["looked"] = _looked(item.get("looked"))
-        out["categories"] = _rows(item.get("categories"), ("id", "name"), MAX_CATEGORIES)
+        out["categories"] = _rows(item.get("categories"), ("id", "name"), MAX_CATEGORIES, also=("count",))
         if item.get("matchedAt"):
             looked_at = _when(self.reader.get("lastLookAt")) or parse(item.get("matchedAt"))
             if looked_at is not None:
@@ -401,8 +458,10 @@ def overview(store: db.Store, user_id: str, own: Iterable[str]) -> Item:
 
 
 def start_look(deps: CrDeps, user_id: str, why: str, now: datetime, *, idle_only: bool = False) -> bool:
-    """Sets ``lookingSince`` and invokes ``cf-prod-campaigns`` ``find`` for this owner (async). ``idle_only``: only
-    when no look was started in the last 10 minutes. A failed invoke takes its ``lookingSince`` back."""
+    """Sets ``lookingSince`` and invokes ``cf-prod-campaigns`` ``find`` for this owner (async). ``idle_only`` (GET's
+    look): only when no look was started in the last 10 minutes. A failed invoke after his tap takes its
+    ``lookingSince`` back; GET's keeps it, so the next try waits the 10 minutes (taking it back is a ``CRFIND``
+    ``MODIFY``: its live event makes the page GET again, which would try again at once, every second)."""
     pk, sk = key(user_id)
     condition = "attribute_exists(pk)"
     values: Item = {":now": iso(now)}
@@ -421,8 +480,9 @@ def start_look(deps: CrDeps, user_id: str, why: str, now: datetime, *, idle_only
         deps.invoker.find(user_id, why)
     except Exception as e:
         log("warning", "cr.finder_invoke_failed", why=why, error=type(e).__name__)
-        with contextlib.suppress(db.ConditionFailed):
-            deps.store.update(pk, sk, {}, remove=["lookingSince"], expect_in={"lookingSince": [iso(now)]})
+        if not idle_only:
+            with contextlib.suppress(db.ConditionFailed):
+                deps.store.update(pk, sk, {}, remove=["lookingSince"], expect_in={"lookingSince": [iso(now)]})
         return False
     log("info", "cr.finder_look", why=why)
     return True
@@ -698,6 +758,23 @@ def add(deps: CrDeps, user_id: str, campaign_id: str, now: datetime) -> tuple[in
 # --- adopting what he joined --------------------------------------------------------------------------------------------
 
 
+def _brand_picture(deps: CrDeps, user_id: str, item: Mapping[str, Any]) -> None:
+    """The brand's picture for an adopted campaign, by the same rule as ``add_campaign``'s
+    (``routes/contentrewards._brand_picture``; not imported, since the stats tick adopts too): only when it has none
+    yet and Content Rewards gave a ``crusercontent.com`` picture. A failed invoke leaves the round letter."""
+    from . import logo
+
+    found = item.get("public")
+    org = found.get("organization") if isinstance(found, Mapping) else None
+    url = org.get("logoUrl") if isinstance(org, Mapping) else None
+    if item.get("brandKey") or logo.brand_url(url) is None or deps.invoker is None:
+        return
+    try:
+        deps.invoker.brand_picture(user_id, str(item["campaignId"]))
+    except Exception as e:
+        log("warning", "cr.brand_invoke_failed", error=type(e).__name__)
+
+
 def candidates(
     deps: CrDeps, user_id: str, now: datetime, item: Mapping[str, Any] | None = None
 ) -> list[tuple[str, Item]]:
@@ -772,6 +849,7 @@ def adopt(
             continue
         campaigns.check_membership(deps, user_id, item, conn, now, fresh=False)
         saved = campaigns.save(deps, user_id, item)
+        _brand_picture(deps, user_id, saved)
         view = view or campaigns.View(deps, user_id, now)
         out.append(view.summary(saved))
         log("info", "cr.finder_adopted", how=how, membership=saved.get("membership"))
@@ -780,7 +858,8 @@ def adopt(
 
 def joined(deps: CrDeps, user_id: str, now: datetime) -> list[Item]:
     """``POST …/finder/joined`` (the page came back into view): signed in only, at most every 30 seconds per owner,
-    one ``list_my_campaigns`` (cached 2 minutes per container), then ``adopt``."""
+    one fresh ``list_my_campaigns`` (a list cached before he tapped Join Campaign would miss it; the read refills the
+    2-minute cache, which ``adopt``'s membership check then uses), then ``adopt``."""
     if not gates.looking(connection.load(deps.store, user_id)):
         return []
     item = load(deps.store, user_id)
@@ -794,7 +873,7 @@ def joined(deps: CrDeps, user_id: str, now: datetime) -> list[Item]:
         return []
     deps.store.update(*key(user_id), {"joinedAt": iso(now)})
     try:
-        listed, _complete = campaigns.list_campaigns(deps, user_id)
+        listed, _complete = campaigns.list_campaigns(deps, user_id, fresh=True)
     except CrError as e:
         log("info", "cr.finder_list_failed", code=e.code)
         return []
